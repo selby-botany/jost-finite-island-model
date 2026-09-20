@@ -63,10 +63,10 @@ from fim import engine as engine_module
 from fim import logging_setup, paths, update
 from fim.cli import load_config
 from fim.engine import (
+    FinalReport,
     RunResult,
     deterministic_run_id,
     pooled_convergence_histories,
-    replicate_summary,
     report_for_state,
     reports_summary,
 )
@@ -3466,6 +3466,200 @@ class Api:
         }
 
     @_log_bridge_call
+    def open_batch(self, directory: str) -> dict[str, Any]:
+        """Reopen a persisted batch, matching `open_run`'s own semantics one level up.
+
+        `20260919-claude-sonnet-5-unified-batch-and-study-results-
+        reopen-design.md` (`selby/restricted`), §1: every replicate's
+        own final `state`/`report` is rediscovered fresh from its own
+        `trajectory.jsonl` (`reanalyze_trajectory`, the identical
+        function `open_run`/`get_batch_deme_pair_panel` already use),
+        never from a possibly-stale `report.json`/`summary.json` --
+        this gets the identical tamper/corruption check a scalar reopen
+        already has, for free, once per replicate.
+
+        The one field a live batch's own "done" payload carries that
+        this cannot reconstruct is `pooledConvergenceHistories`: a
+        byproduct of a live run's own `ConvergenceMonitor`, computed
+        nowhere else and not persisted anywhere on disk. Reported here
+        as an empty `{}`, exactly matching `open_run`'s own already-
+        shipped precedent of a reopened *scalar* run carrying no
+        `convergenceGenerations`/`convergenceHistories` either --
+        "opened" has shown less than "just finished" since before this
+        method existed, not a new, batch-specific compromise.
+
+        Args:
+            directory: The batch's own top-level output directory
+                (`RecentRun.directory`/`Api.list_home_runs`'s own
+                `"directory"` field, for a row where `isBatch` is
+                true).
+
+        Returns:
+            The identical shape `_batch_done_payload` returns (see its
+            own docstring for every field), so `window.fim.
+            enterCompletedState(result, true)` renders it exactly as it
+            would a batch that just finished live. `{"ok": False,
+            "message": ...}` if the batch manifest cannot be read, or
+            any one replicate's own trajectory fails its integrity
+            check (`reanalyze_trajectory`'s own `ValueError`/`OSError`
+            cases) -- the identical failure shape `open_run` already
+            uses for the same class of problem, one level up.
+        """
+        batch_directory = Path(directory)
+        try:
+            manifest = read_batch_manifest(batch_directory / "manifest.json")
+        except (OSError, ValueError) as error:
+            return {"ok": False, "message": str(error)}
+        params = manifest.params()
+        reports: list[FinalReport] = []
+        final_states: list[ModelState] = []
+        trajectory_paths: list[Path] = []
+        try:
+            for replicate_run_id in manifest.replicate_run_ids:
+                replicate_directory = batch_runner.replicate_output_directory(
+                    batch_directory, manifest.run_id, replicate_run_id
+                )
+                trajectory_path = replicate_directory / "trajectory.jsonl"
+                reanalyzed = reanalyze_trajectory(trajectory_path)
+                # `ReanalyzedGeneration.report` is typed as the broader
+                # `dict[str, object]` since a caller *could* pass
+                # `differentiation_orders` and get an extra key back
+                # (`reanalyze_trajectory`'s own docstring) -- this call
+                # never does, so the result is always genuinely
+                # `FinalReport`-shaped in practice.
+                reports.append(cast("FinalReport", reanalyzed.report))
+                final_states.append(reanalyzed.state)
+                trajectory_paths.append(trajectory_path)
+        except (OSError, ValueError) as error:
+            return {"ok": False, "message": str(error)}
+        payload = _pooled_batch_payload(
+            params,
+            manifest.run_id,
+            batch_directory,
+            replicate_ids=manifest.replicate_run_ids,
+            reports=reports,
+            final_states=final_states,
+            trajectory_paths=trajectory_paths,
+            digits=self._significant_digits,
+            pooled_convergence_histories_payload={},
+        )
+        return {"ok": True, **payload}
+
+    @_log_bridge_call
+    def open_study(self, study_id: str) -> dict[str, Any]:
+        """Reopen a whole Study, pooling every member run/replicate one level up.
+
+        `20260919-claude-sonnet-5-unified-batch-and-study-results-
+        reopen-design.md` (`selby/restricted`), §2: a Study's own
+        member runs are flattened to individual-replicate granularity
+        before pooling -- a batch member contributes each of its own
+        published replicates individually, exactly as if they had been
+        separate scalar runs in the Study directly, rather than
+        contributing one already-pooled mean as a single data point
+        (every individual simulation is an independent draw; a batch is
+        not one observation). The rest of the aggregation is `Api.
+        open_batch`'s own §1 aggregation, via the same shared `_pooled_
+        batch_payload`.
+
+        Pooling never refuses on a mismatched configuration (the
+        project owner's own resolution to this document's first open
+        question) -- there are legitimate reasons to intentionally pool
+        runs in the same parameter neighborhood. `parameterMismatches`
+        instead names every field, among `N`/`d`/`m`/`mu`/`loci`/
+        `mutation_model`/`migrant_sampling`, that actually varies across
+        the pooled members, each with the distinct values seen -- the
+        botanist, not this method, decides whether that variation is
+        meaningful. Present only when something actually does vary; the
+        common, homogeneous case carries no such key at all.
+
+        Unlike `Api.open_batch`, `outputDirectory` in the returned
+        payload is this checkout's own results root, not any one
+        member's own directory -- a Study's own members are not all
+        replicates of one shared batch directory, so there is no single
+        directory "Open output folder" could point at more precisely.
+        The completed view's own animated scatter scrubber
+        (`get_batch_animation_frames`, keyed on exactly one batch
+        manifest) does not resolve against that root and simply stays
+        hidden, the identical graceful degradation it already has for
+        any directory with too few frames to animate — the static
+        pooled scatter (`payload.panels`, built directly from every
+        member's own already-collected final state) still renders
+        whenever every member shares one deme count, and degrades to an
+        empty panel rather than raising when a `parameterMismatches`
+        `"d"` entry means they do not (`_pooled_batch_payload`'s own
+        `ValueError` fallback -- `pooled_frequency_points` cannot
+        concatenate final states of differing deme shape into one
+        panel, an unavoidable structural consequence of "warn, never
+        refuse," not a bug).
+
+        Args:
+            study_id: The Study to reopen.
+
+        Returns:
+            The identical shape `open_batch` returns, plus
+            `parameterMismatches` when present. `{"ok": False,
+            "message": ...}` if no such Study exists, it has no
+            readable member runs at all, or any one member's own
+            trajectory fails its integrity check.
+        """
+        try:
+            study = groups.get_study(study_id)
+        except ValueError as error:
+            return {"ok": False, "message": str(error)}
+        reports: list[FinalReport] = []
+        final_states: list[ModelState] = []
+        replicate_ids: list[str] = []
+        trajectory_paths: list[Path] = []
+        params_list: list[SimulationParams] = []
+        try:
+            for directory in groups.study_run_directories(study):
+                recent = _recent_run_at_directory(directory)
+                if recent is None:
+                    continue
+                if recent.is_batch:
+                    batch_manifest = read_batch_manifest(directory / "manifest.json")
+                    batch_params = batch_manifest.params()
+                    for replicate_run_id in batch_manifest.replicate_run_ids:
+                        replicate_directory = batch_runner.replicate_output_directory(
+                            directory, batch_manifest.run_id, replicate_run_id
+                        )
+                        trajectory_path = replicate_directory / "trajectory.jsonl"
+                        reanalyzed = reanalyze_trajectory(trajectory_path)
+                        reports.append(cast("FinalReport", reanalyzed.report))
+                        final_states.append(reanalyzed.state)
+                        replicate_ids.append(replicate_run_id)
+                        trajectory_paths.append(trajectory_path)
+                        params_list.append(batch_params)
+                else:
+                    trajectory_path = directory / "trajectory.jsonl"
+                    reanalyzed = reanalyze_trajectory(trajectory_path)
+                    reports.append(cast("FinalReport", reanalyzed.report))
+                    final_states.append(reanalyzed.state)
+                    replicate_ids.append(reanalyzed.manifest.run_id)
+                    trajectory_paths.append(trajectory_path)
+                    params_list.append(reanalyzed.params)
+        except (OSError, ValueError) as error:
+            return {"ok": False, "message": str(error)}
+        if not reports:
+            return {"ok": False, "message": f"study {study_id} has no readable runs"}
+        payload = _pooled_batch_payload(
+            params_list[0],
+            study.study_id,
+            paths.results_directory(),
+            replicate_ids=replicate_ids,
+            reports=reports,
+            final_states=final_states,
+            trajectory_paths=trajectory_paths,
+            digits=self._significant_digits,
+            pooled_convergence_histories_payload={},
+        )
+        result = {"ok": True, **payload}
+        mismatches = _study_parameter_mismatches(params_list)
+        if mismatches:
+            result["parameterMismatches"] = mismatches
+        return result
+
+    @_log_bridge_call
     def compare_runs(self, trajectory_paths: list[str]) -> dict[str, Any]:
         """Overlay two or more previously completed runs (design doc §8).
 
@@ -4567,53 +4761,6 @@ def _batch_done_payload(
     same abstraction... no matter how large the set is." The identical
     pooling `panels`, just above, already applies to the scatter panel.
     """
-    replicates = [
-        {
-            "generation": result.report["generation"],
-            "converged": result.report["converged"],
-            "reason": result.report["reason"],
-            "statistics": {
-                name: format_statistic(result.report[name], digits)
-                for name in _RESULT_STATISTIC_NAMES
-            },
-            "trajectoryPath": str(
-                batch_runner.replicate_output_directory(
-                    output_directory, run_id, result.run_id
-                )
-                / "trajectory.jsonl"
-            ),
-            # `result.run_id` (`"{run_id}-r{index:03}"`, `batch_runner.
-            # replicate_output_directory`'s own naming convention) --
-            # `webui/screens/run-view-completed.js`'s own `replicateLabel`
-            # extracts the short `#NNN` suffix for display. Multiple
-            # replicates legitimately converging at the same generation
-            # is unremarkable, not a bug, so the table needs this to
-            # tell those rows apart.
-            "replicateId": result.run_id,
-        }
-        for result in results
-    ]
-    try:
-        raw_summary = replicate_summary(results)
-    except ValueError:
-        raw_summary = {}
-    summary = {
-        name: _interval_payload(interval, digits)
-        for name, interval in raw_summary.items()
-    }
-    effective_alleles = _effective_allele_interval_summary(raw_summary, digits)
-    p0_state = generate_initial_state(params)
-    p0_report = report_for_state(
-        p0_state,
-        params,
-        run_id=run_id,
-        converged=False,
-        reason="initial conditions",
-    )
-    p0_statistics = {
-        name: format_statistic(p0_report[name], digits)
-        for name in _RESULT_STATISTIC_NAMES
-    }
     try:
         raw_pooled_histories = pooled_convergence_histories(results)
     except ValueError:
@@ -4631,18 +4778,205 @@ def _batch_done_payload(
         ]
         for name, points in raw_pooled_histories.items()
     }
-    final_states = [result.final_state for result in results]
+    return _pooled_batch_payload(
+        params,
+        run_id,
+        output_directory,
+        replicate_ids=[result.run_id for result in results],
+        reports=[result.report for result in results],
+        final_states=[result.final_state for result in results],
+        trajectory_paths=[
+            batch_runner.replicate_output_directory(
+                output_directory, run_id, result.run_id
+            )
+            / "trajectory.jsonl"
+            for result in results
+        ],
+        digits=digits,
+        pooled_convergence_histories_payload=pooled_convergence_histories_payload,
+    )
+
+
+# The "scientifically meaningful" subset a Study's own members are
+# checked against before pooling (`Api.open_study`) -- everything that
+# changes what the simulation itself actually models, deliberately
+# excluding execution/administrative fields (`engine_backend`, `jit`,
+# `n_replicates`, convergence/replicate tuning, `track_expensive_
+# statistics`) that two runs of "the same underlying question" can
+# reasonably differ on without ceasing to be poolable candidates for
+# it (`20260919-claude-sonnet-5-unified-batch-and-study-results-
+# reopen-design.md`, `selby/restricted`, §2, open questions).
+_STUDY_HOMOGENEITY_FIELDS: Final = (
+    "N",
+    "d",
+    "m",
+    "mu",
+    "loci",
+    "mutation_model",
+    "migrant_sampling",
+)
+
+
+def _study_parameter_mismatches(
+    params_list: Sequence[SimulationParams],
+) -> dict[str, list[str]]:
+    """Name every `_STUDY_HOMOGENEITY_FIELDS` entry that varies across `params_list`.
+
+    A warning, never a refusal (§2's own resolution: pooling runs in
+    the same parameter neighborhood is a legitimate, intentional
+    choice, not always a mistake) -- `Api.open_study` pools every
+    member regardless of this function's own result, surfacing it only
+    so nothing is silently hidden from whoever is looking at the
+    pooled numbers afterward.
+
+    Returns:
+        `{field: [distinct value, ...]}` for every field with more than
+        one distinct value across `params_list`, each value `json.
+        dumps`'d (a plain scalar for `N`/`d`/`m`/`mu` in the common
+        case, a compact literal list/mapping for a per-deme table or a
+        multi-locus list, either way something a human can read
+        directly in a "varies across members" note) — empty when every
+        member agrees on every field, or when given fewer than two
+        members to compare at all.
+    """
+    _minimum_comparable_count = 2
+    if len(params_list) < _minimum_comparable_count:
+        return {}
+    serialized = [params.to_dict() for params in params_list]
+    mismatches: dict[str, list[str]] = {}
+    for field in _STUDY_HOMOGENEITY_FIELDS:
+        distinct_values: list[str] = []
+        for entry in serialized:
+            text = json.dumps(entry[field], sort_keys=True)
+            if text not in distinct_values:
+                distinct_values.append(text)
+        if len(distinct_values) > 1:
+            mismatches[field] = distinct_values
+    return mismatches
+
+
+def _pooled_batch_payload(
+    params: SimulationParams,
+    run_id: str,
+    output_directory: Path,
+    *,
+    replicate_ids: Sequence[str],
+    reports: Sequence[FinalReport],
+    final_states: Sequence[ModelState],
+    trajectory_paths: Sequence[Path],
+    digits: int,
+    pooled_convergence_histories_payload: dict[str, Any],
+) -> dict[str, Any]:
+    """Shared aggregation behind a batch's own "done" payload (`_batch_
+    done_payload`, above), a reopened batch's own payload (`Api.open_
+    batch`), and a reopened Study's own pooled payload (`Api.open_
+    study`) -- everything a batch's own completed Results card needs
+    except the convergence-history trajectory panel, the one piece a
+    live run's own `ConvergenceMonitor` produces as a byproduct that
+    nothing persists to disk (`20260919-claude-sonnet-5-unified-batch-
+    and-study-results-reopen-design.md`, `selby/restricted`, §1) --
+    each caller computes that piece for itself (or passes `{}` when
+    unavailable) rather than this function guessing at its source.
+
+    `replicate_ids`/`reports`/`final_states`/`trajectory_paths` are
+    four parallel sequences, one entry per published replicate, rather
+    than a single sequence of `RunResult`-shaped objects: a live
+    batch's own results genuinely are `RunResult` tuples (`_batch_done_
+    payload`'s own caller), but a reopened batch or Study has no
+    `RunResult` at all -- only each replicate's own id and whatever
+    `reanalyze_trajectory` returns per replicate (`Api.open_batch`/
+    `open_study`) -- and this function's own job (build the table, the
+    pooled CI, the pooled scatter, `p0Statistics`) never actually reads
+    anything else a full `RunResult` would have offered. `trajectory_
+    paths` is taken as given rather than re-derived from `output_
+    directory`/`run_id` (`batch_runner.replicate_output_directory`'s
+    own convention, which `_batch_done_payload`'s own caller still uses
+    to build it): a Study's own members are not all replicates of one
+    shared batch directory the way that convention assumes, so each
+    caller resolves its own paths and hands them over directly.
+    """
+    replicates = [
+        {
+            "generation": report["generation"],
+            "converged": report["converged"],
+            "reason": report["reason"],
+            "statistics": {
+                name: format_statistic(report[name], digits)
+                for name in _RESULT_STATISTIC_NAMES
+            },
+            "trajectoryPath": str(trajectory_path),
+            # `replicate_id` (`"{run_id}-r{index:03}"` for a batch's own
+            # replicate, `batch_runner.replicate_output_directory`'s own
+            # naming convention, or a bare run's own `run_id` for a
+            # Study member that is not itself a batch) --
+            # `webui/screens/run-view-completed.js`'s own `replicateLabel`
+            # extracts the short `#NNN` suffix when present for display.
+            # Multiple replicates legitimately converging at the same
+            # generation is unremarkable, not a bug, so the table needs
+            # this to tell those rows apart.
+            "replicateId": replicate_id,
+        }
+        for replicate_id, report, trajectory_path in zip(
+            replicate_ids, reports, trajectory_paths, strict=True
+        )
+    ]
+    # `reports_summary` (unlike `replicate_summary`, the `RunResult`-only
+    # wrapper this used to call) never raises -- it already omits any
+    # statistic short of two defined values, "including every statistic,
+    # given fewer than two reports overall" (its own docstring) -- so
+    # fewer than two `reports` here already yields the identical `{}`
+    # this function's own callers have always gotten from that case, no
+    # `try`/`except` needed to reach it.
+    raw_summary = reports_summary(reports)
+    summary = {
+        name: _interval_payload(interval, digits)
+        for name, interval in raw_summary.items()
+    }
+    effective_alleles = _effective_allele_interval_summary(raw_summary, digits)
+    p0_state = generate_initial_state(params)
+    p0_report = report_for_state(
+        p0_state,
+        params,
+        run_id=run_id,
+        converged=False,
+        reason="initial conditions",
+    )
+    p0_statistics = {
+        name: format_statistic(p0_report[name], digits)
+        for name in _RESULT_STATISTIC_NAMES
+    }
+    # A live batch's own replicates, or a reopened batch's own, always
+    # share one `d`/locus shape by construction -- neither ever reaches
+    # the `except` branches below. A reopened Study's own members are
+    # the one caller that can genuinely disagree (§2's own "warn, never
+    # refuse" resolution: a mismatched `d` is reported via `Api.open_
+    # study`'s own `parameterMismatches`, not blocked) -- pooling their
+    # own frequency points into one panel is then a real shape mismatch,
+    # not a bug, so this degrades to "nothing to plot" rather than
+    # crashing the whole reopen over it.
+    try:
+        panels = pooled_scatter_panels(final_states, params.d)
+    except ValueError:
+        panels = pooled_scatter_panels((), params.d)
+    try:
+        literature_visuals = pooled_literature_visual_payload(final_states, params)
+    except ValueError:
+        literature_visuals = {
+            "alleleComposition": {},
+            "frequencySpectrum": {},
+            "isolationByDistance": None,
+        }
     return {
         "runId": run_id,
         "outputDirectory": str(output_directory),
-        "panels": pooled_scatter_panels(final_states, params.d),
+        "panels": panels,
         "replicates": replicates,
         "summary": summary,
         "effectiveAlleles": effective_alleles,
         "demeCount": params.d,
         "p0Statistics": p0_statistics,
         "pooledConvergenceHistories": pooled_convergence_histories_payload,
-        "literatureVisuals": pooled_literature_visual_payload(final_states, params),
+        "literatureVisuals": literature_visuals,
     }
 
 

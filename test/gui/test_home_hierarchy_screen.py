@@ -67,7 +67,12 @@ setField('locus_lengths', '200');
 
 
 def _write_run(
-    results: Path, name: str, seed: int, *, study_id: str | None = None
+    results: Path,
+    name: str,
+    seed: int,
+    *,
+    study_id: str | None = None,
+    **overrides: object,
 ) -> Path:
     """Write a small, real completed run under `results / name`.
 
@@ -76,9 +81,11 @@ def _write_run(
     now attaches to the always-present default Study instead (`20260918-
     claude-sonnet-5-home-tree-reorg-design.md`, `selby/restricted`, §2),
     so an explicit `study_id` is the only way a test can put a run
-    somewhere else.
+    somewhere else. `**overrides` layers onto the base config below --
+    e.g. `d=4` for a test that needs a Study member disagreeing with
+    another on deme count.
     """
-    config = {
+    config: dict[str, object] = {
         "N": 20,
         "d": 2,
         "m": 0.1,
@@ -91,6 +98,7 @@ def _write_run(
         "n_replicates": 1,
         "replicate_tolerance": None,
     }
+    config.update(overrides)
     config_path = results / f"{name}.yaml"
     config_path.write_text(yaml.safe_dump(config, sort_keys=False), encoding="utf-8")
     output_directory = results / name
@@ -1218,3 +1226,108 @@ def test_home_selection_toolbar_sits_on_the_filter_line(
     )
 
     assert nested is True
+
+
+def test_opening_a_study_row_pools_its_own_member_runs(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A Study row's own "Open…" pools every member run into the batch
+    Results card.
+
+    `20260919-claude-sonnet-5-unified-batch-and-study-results-reopen-
+    design.md` (`selby/restricted`), §2/§3.
+    """
+    results = tmp_path / "results"
+    results.mkdir()
+    monkeypatch.setattr(paths_module, "results_directory", lambda: results)
+    study = groups.create_study("Ring sweep", results=results)
+    _write_run(results, "run-a", seed=1, study_id=study.study_id)
+    _write_run(results, "run-b", seed=2, study_id=study.study_id)
+
+    window = create_window(hidden=True)
+    outcome: queue.Queue[dict[str, Any] | None] = queue.Queue(maxsize=1)
+
+    def _drive() -> None:
+        try:
+            _poll_until(window, _INPUT_SCREEN_READY, lambda value: value is True)
+            window.evaluate_js("window.fim.menu.openRun();")
+            _poll_until(
+                window,
+                "window.__fimOpenRunRecentRunsLoaded === true",
+                lambda value: value is True,
+            )
+            _click_group_button(window, "Ring sweep", "Open…")
+            settled = _poll_until(
+                window,
+                "({"
+                "runViewState: window.fim.getRunViewState(), "
+                "batchTableHidden: "
+                "document.getElementById('batch-results-table').hidden, "
+                "replicateRowCount: document.querySelectorAll("
+                "'#batch-results-table-body tr').length"
+                "})",
+                lambda value: (
+                    value is not None and value.get("runViewState") == "completed"
+                ),
+            )
+            outcome.put(settled)
+        finally:
+            window.destroy()
+
+    webview.start(_drive)
+    settled = outcome.get(timeout=_DRIVE_TIMEOUT_SECONDS)
+
+    assert settled is not None
+    assert settled["runViewState"] == "completed"
+    assert settled["batchTableHidden"] is False
+    # 3, not 2: `renderBatchTable` prepends its own p0 baseline row.
+    assert settled["replicateRowCount"] == 3
+
+
+def test_opening_a_study_with_a_mismatched_parameter_shows_a_note_but_still_pools(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A mismatched `d` across a Study's own members still pools, with a
+    visible note naming it -- never a refusal."""
+    results = tmp_path / "results"
+    results.mkdir()
+    monkeypatch.setattr(paths_module, "results_directory", lambda: results)
+    study = groups.create_study("Ring sweep", results=results)
+    _write_run(results, "run-a", seed=1, d=2, study_id=study.study_id)
+    _write_run(results, "run-b", seed=2, d=4, study_id=study.study_id)
+
+    window = create_window(hidden=True)
+    outcome: queue.Queue[dict[str, Any] | None] = queue.Queue(maxsize=1)
+
+    def _drive() -> None:
+        try:
+            _poll_until(window, _INPUT_SCREEN_READY, lambda value: value is True)
+            window.evaluate_js("window.fim.menu.openRun();")
+            _poll_until(
+                window,
+                "window.__fimOpenRunRecentRunsLoaded === true",
+                lambda value: value is True,
+            )
+            _click_group_button(window, "Ring sweep", "Open…")
+            settled = _poll_until(
+                window,
+                "({"
+                "runViewState: window.fim.getRunViewState(), "
+                "outcomeText: "
+                "document.getElementById('results-outcome').textContent"
+                "})",
+                lambda value: (
+                    value is not None and value.get("runViewState") == "completed"
+                ),
+            )
+            outcome.put(settled)
+        finally:
+            window.destroy()
+
+    webview.start(_drive)
+    settled = outcome.get(timeout=_DRIVE_TIMEOUT_SECONDS)
+
+    assert settled is not None
+    assert settled["runViewState"] == "completed"
+    assert "varies across members" in settled["outcomeText"]
+    assert "d" in settled["outcomeText"]

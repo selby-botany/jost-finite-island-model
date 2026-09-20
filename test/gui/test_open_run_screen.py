@@ -409,18 +409,20 @@ def test_double_clicking_a_recent_run_row_opens_it_directly(
     assert output.exists()
 
 
-def test_double_clicking_a_batch_row_does_not_open_it(
+def test_double_clicking_a_batch_row_opens_its_pooled_results(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """A batch row's own double-click is a safe no-op, not a crash or a
-    (nonsensical) attempt to open a manifest with no single trajectory.
+    """Double-clicking a batch row opens the identical batch Results card
+    a live batch's own completion already shows.
 
-    `open-run.js`'s own single-click handler already draws this exact
-    "no single trajectory" boundary for a batch row (`showOpenRunBanner`)
-    -- the double-click handler only needs to defer to it, not repeat
-    the message, so this test's own bar is simply "still on Home, still
-    `initial`," not a duplicated banner assertion.
+    `20260919-claude-sonnet-5-unified-batch-and-study-results-reopen-
+    design.md` (`selby/restricted`), §3: batch and scalar rows are
+    symmetric now -- `open-run.js`'s own `openBatch`, reached the
+    identical way `openTrajectory` already is for a scalar row (the
+    test right above this one). "Open replicate," reached by expanding
+    the row instead, is a separate, still-available way to open one
+    specific replicate's own scalar result.
     """
     monkeypatch.setattr(paths_module, "results_directory", lambda: tmp_path / "results")
     _write_batch_run(tmp_path)
@@ -443,25 +445,106 @@ def test_double_clicking_a_batch_row_does_not_open_it(
                 ".dispatchEvent(new MouseEvent("
                 "'dblclick', {bubbles: true}));"
             )
-            # Nothing async to await on a no-op -- read state directly
-            # rather than polling for a change that should never happen.
-            outcome.put(
-                {
-                    "runViewState": window.evaluate_js("window.fim.getRunViewState()"),
-                    "screenOpenRunHidden": window.evaluate_js(
-                        "document.getElementById('screen-open-run').hidden"
-                    ),
-                }
+            settled = _poll_until(
+                window,
+                "({"
+                "runViewState: window.fim.getRunViewState(), "
+                "runId: "
+                "document.getElementById('results-run-id').textContent, "
+                "screenOpenRunHidden: "
+                "document.getElementById('screen-open-run').hidden, "
+                "batchTableHidden: "
+                "document.getElementById('batch-results-table').hidden, "
+                "replicateRowCount: document.querySelectorAll("
+                "'#batch-results-table-body tr').length"
+                "})",
+                lambda value: (
+                    value is not None and value.get("runViewState") == "completed"
+                ),
             )
+            outcome.put(settled)
         finally:
             window.destroy()
 
     webview.start(_drive)
     settled = outcome.get(timeout=_DRIVE_TIMEOUT_SECONDS)
 
-    assert settled is not None
-    assert settled["runViewState"] == "initial"
-    assert settled["screenOpenRunHidden"] is False
+    assert settled is not None, "`completed` was never reached after double-clicking"
+    assert settled["runViewState"] == "completed"
+    assert settled["runId"].startswith("run-")
+    assert settled["screenOpenRunHidden"] is True
+    assert settled["batchTableHidden"] is False
+    # 4, not 3: `renderBatchTable` prepends a p0 baseline row (the
+    # shared initial conditions) ahead of the batch's own 3 replicate
+    # rows -- `open_batch` recomputes `p0Statistics` fresh from the
+    # batch's own manifest params, exactly like a live batch's own
+    # "done" payload already does.
+    assert settled["replicateRowCount"] == 4
+
+
+def test_selecting_and_opening_a_batch_row_via_the_open_button(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A single click selects a batch row and enables "Open," exactly
+    like a scalar row -- no more early-return banner (`20260919-claude-
+    sonnet-5-unified-batch-and-study-results-reopen-design.md`,
+    `selby/restricted`, §3)."""
+    monkeypatch.setattr(paths_module, "results_directory", lambda: tmp_path / "results")
+    _write_batch_run(tmp_path)
+
+    window = create_window(hidden=True)
+    outcome: queue.Queue[dict[str, Any] | None] = queue.Queue(maxsize=1)
+
+    def _drive() -> None:
+        try:
+            _poll_until(window, _INPUT_SCREEN_READY, lambda value: value is True)
+            window.evaluate_js("window.fim.menu.openRun();")
+            _expand_all_recent_run_groups(window)
+            _poll_until(
+                window,
+                f"document.querySelectorAll({_REAL_ROW_SELECTOR}).length",
+                lambda value: value is not None and value > 0,
+            )
+            window.evaluate_js(f"document.querySelector({_REAL_ROW_SELECTOR}).click();")
+            open_button_disabled_after_select = window.evaluate_js(
+                "document.getElementById('open-run-open-button').disabled"
+            )
+            banner_hidden_after_select = window.evaluate_js(
+                "document.getElementById('open-run-banner').hidden"
+            )
+            window.evaluate_js(
+                "document.getElementById('open-run-open-button').click();"
+            )
+            settled = _poll_until(
+                window,
+                "({"
+                "runViewState: window.fim.getRunViewState(), "
+                "batchTableHidden: "
+                "document.getElementById('batch-results-table').hidden"
+                "})",
+                lambda value: (
+                    value is not None and value.get("runViewState") == "completed"
+                ),
+            )
+            outcome.put(
+                {
+                    "openButtonDisabledAfterSelect": open_button_disabled_after_select,
+                    "bannerHiddenAfterSelect": banner_hidden_after_select,
+                    "settled": settled,
+                }
+            )
+        finally:
+            window.destroy()
+
+    webview.start(_drive)
+    result = outcome.get(timeout=_DRIVE_TIMEOUT_SECONDS)
+
+    assert result is not None
+    assert result["openButtonDisabledAfterSelect"] is False
+    assert result["bannerHiddenAfterSelect"] is True
+    assert result["settled"]["runViewState"] == "completed"
+    assert result["settled"]["batchTableHidden"] is False
 
 
 def test_reanalyzing_at_a_chosen_generation_updates_the_outcome_text(

@@ -44,6 +44,13 @@ const deleteSelectedButton = document.getElementById(
 const selectionCountLabel = document.getElementById("open-run-selection-count");
 
 let selectedTrajectoryPath = null;
+// A batch row's own counterpart to `selectedTrajectoryPath` -- a batch
+// has no single trajectory of its own to select (`run.trajectoryPath`
+// is `null` for one), so it needs its own directory-shaped selection
+// instead. The two are mutually exclusive by construction
+// (`setSelectedTrajectory`/`setSelectedBatch` each clear the other),
+// never both non-null at once.
+let selectedBatchDirectory = null;
 
 // Every run/Study/Experiment fetched for this visit (`refreshRecentRuns`),
 // unfiltered and ungrouped -- `renderRecentRuns` derives the actual
@@ -470,7 +477,21 @@ function showOpenRunBanner(message) {
 
 function setSelectedTrajectory(path) {
     selectedTrajectoryPath = path;
+    selectedBatchDirectory = null;
     openButton.disabled = path === null;
+}
+
+/**
+ * A batch row's own counterpart to `setSelectedTrajectory` -- see
+ * `selectedBatchDirectory`'s own comment for why a batch needs a
+ * separate, directory-shaped selection rather than reusing the same
+ * variable a trajectory path already occupies.
+ * @param {string | null} directory
+ */
+function setSelectedBatch(directory) {
+    selectedBatchDirectory = directory;
+    selectedTrajectoryPath = null;
+    openButton.disabled = directory === null;
 }
 
 /**
@@ -753,31 +774,31 @@ function buildRunRow(run) {
             sibling.classList.remove("selected");
         }
         row.classList.add("selected");
+        showOpenRunBanner("");
+        // A batch row selects its own directory rather than a
+        // trajectory path -- it has none of its own (`run.
+        // trajectoryPath` is `null` for a batch) -- but is otherwise
+        // symmetric with a scalar row from here on: select on click,
+        // "Open"/double-click opens it (`20260919-claude-sonnet-5-
+        // unified-batch-and-study-results-reopen-design.md`, `selby/
+        // restricted`, §3). "Open replicate," reached by expanding the
+        // row instead, is unchanged and still the way to open one
+        // specific replicate's own scalar result.
         if (run.isBatch) {
-            // Design §0, §4.0 #9: a batch manifest has no single
-            // trajectory of its own to verify or re-analyze here --
-            // named explicitly rather than silently doing nothing
-            // or attempting (and failing) to re-analyze it anyway.
-            setSelectedTrajectory(null);
-            showOpenRunBanner(
-                "batch runs have no single trajectory — open a replicate " +
-                    "from its own batch results screen instead"
-            );
+            setSelectedBatch(run.directory);
             return;
         }
-        showOpenRunBanner("");
         setSelectedTrajectory(run.trajectoryPath);
     });
     // Double-clicking a run row opens it directly (item 5) -- final
     // generation, no differentiation-q sweep, exactly what the "Open"
     // button does once a row is selected, without the intermediate
-    // click. A batch row has no single trajectory to open this way
-    // (the single-click handler above already explains why and shows
-    // the banner saying so); the batch's own click already fired by
-    // the time a real double-click's second `dblclick` event reaches
-    // here, so this only needs to skip it, not repeat that message.
+    // click. A batch row opens through the identical Results card too
+    // (§3, above) -- `openBatch` in place of `openTrajectory`, nothing
+    // else about this handler's own shape changes.
     row.addEventListener("dblclick", async () => {
         if (run.isBatch) {
+            await openBatch(run.directory);
             return;
         }
         await openTrajectory(run.trajectoryPath);
@@ -1050,6 +1071,9 @@ function buildGroupActionControls(group) {
     }
     if (group.kind === "experiment") {
         container.appendChild(buildCreateStudyButton(group));
+    }
+    if (group.kind === "study") {
+        container.appendChild(buildOpenStudyButton(group));
     }
 
     const copyButton = document.createElement("button");
@@ -1554,7 +1578,77 @@ async function openTrajectory(trajectoryPath) {
     window.fim.enterCompletedState(result, false);
 }
 
+/**
+ * `openTrajectory`'s own batch counterpart -- `Api.open_batch`
+ * (`20260919-claude-sonnet-5-unified-batch-and-study-results-reopen-
+ * design.md`, `selby/restricted`, §1) reconstructs the identical
+ * shape a live batch's own "done" payload has, minus the convergence-
+ * history trajectory panel, so this hands its result to `enter
+ * CompletedState` with `isBatch: true` exactly like `onBatchDone`
+ * already does for a batch that just finished live.
+ * @param {string} directory
+ */
+async function openBatch(directory) {
+    const result = await window.pywebview.api.open_batch(directory);
+    if (!result.ok) {
+        showOpenRunBanner(result.message);
+        return;
+    }
+    showOpenRunBanner("");
+    window.fim.resetTrajectoryLegendVisibility();
+    window.fim.enterCompletedState(result, true);
+}
+
+/**
+ * `openBatch`'s own Study counterpart -- `Api.open_study` pools every
+ * member run/replicate one level up (`20260919-claude-sonnet-5-
+ * unified-batch-and-study-results-reopen-design.md`, `selby/
+ * restricted`, §2), returning the identical shape `enterCompletedState`
+ * already renders for a batch. A `parameterMismatches` key, when
+ * present, is shown once the completed view itself is up
+ * (`run-view-completed.js`'s own `resultsOutcome`), not as a banner
+ * here -- this screen is about to be hidden by `enterCompletedState`,
+ * so a banner set on it first would never actually be seen.
+ * @param {string} studyId
+ */
+async function openStudy(studyId) {
+    const result = await window.pywebview.api.open_study(studyId);
+    if (!result.ok) {
+        showOpenRunBanner(result.message);
+        return;
+    }
+    showOpenRunBanner("");
+    window.fim.resetTrajectoryLegendVisibility();
+    window.fim.enterCompletedState(result, true);
+}
+
+/**
+ * "Open…" on a Study row -- pools every member run/replicate and opens
+ * the identical Results card a batch already uses (§3, above). No
+ * select-then-"Open"-button step the way a Run/batch row has: a Study
+ * row's own toggle is already the row's primary click target (expand/
+ * collapse), so this lives beside "Create run…"/"Copy" instead of
+ * needing a second interaction.
+ * @param {{studyId: string}} group
+ * @returns {HTMLButtonElement}
+ */
+function buildOpenStudyButton(group) {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "open-run-group-action-button";
+    button.textContent = "Open…";
+    button.addEventListener("click", async (event) => {
+        event.stopPropagation();
+        await openStudy(group.studyId);
+    });
+    return button;
+}
+
 openButton.addEventListener("click", async () => {
+    if (selectedBatchDirectory !== null) {
+        await openBatch(selectedBatchDirectory);
+        return;
+    }
     if (selectedTrajectoryPath === null) {
         showOpenRunBanner("no trajectory selected");
         return;

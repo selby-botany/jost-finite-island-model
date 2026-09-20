@@ -8179,6 +8179,111 @@ def test_batch_done_payload_honors_an_explicit_digits_count(
 reaches every formatted statistic in both `replicates` and `summary` —
 not only the bare-call default the tests above exercise.
 
+<a id="gui.test_app_api.test_open_batch_matches_a_live_batchs_own_done_payload"></a>
+
+#### test\_open\_batch\_matches\_a\_live\_batchs\_own\_done\_payload
+
+```python
+def test_open_batch_matches_a_live_batchs_own_done_payload(
+        tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None
+```
+
+Reopening a real, persisted batch reproduces `_batch_done_payload`'s
+own shape, minus the convergence-history panel.
+
+`20260919-claude-sonnet-5-unified-batch-and-study-results-reopen-
+design.md` (`selby/restricted`), §1: every field is rebuilt from
+disk (`reanalyze_trajectory` per replicate), not from any live
+`RunResult` -- confirmed here by comparing against the *real*
+on-disk artifacts a real `fim run` batch actually wrote, not
+against a second, independently constructed expectation that could
+drift from what the CLI truly persists.
+
+<a id="gui.test_app_api.test_open_batch_reports_a_missing_manifest"></a>
+
+#### test\_open\_batch\_reports\_a\_missing\_manifest
+
+```python
+def test_open_batch_reports_a_missing_manifest(tmp_path: Path) -> None
+```
+
+A directory naming no batch manifest is a clean failure, not a crash.
+
+<a id="gui.test_app_api.test_open_batch_reports_a_tampered_replicate_trajectory"></a>
+
+#### test\_open\_batch\_reports\_a\_tampered\_replicate\_trajectory
+
+```python
+def test_open_batch_reports_a_tampered_replicate_trajectory(
+        tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None
+```
+
+A single replicate's own edited trajectory fails the whole reopen,
+matching `open_run`'s own integrity-check precedent for a scalar run.
+
+<a id="gui.test_app_api.test_open_study_pools_a_homogeneous_studys_own_scalar_runs"></a>
+
+#### test\_open\_study\_pools\_a\_homogeneous\_studys\_own\_scalar\_runs
+
+```python
+def test_open_study_pools_a_homogeneous_studys_own_scalar_runs(
+        tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None
+```
+
+Two same-configuration runs in a Study pool with no mismatch note.
+
+`20260919-claude-sonnet-5-unified-batch-and-study-results-reopen-
+design.md` (`selby/restricted`), §2.
+
+<a id="gui.test_app_api.test_open_study_flattens_a_batch_members_own_replicates"></a>
+
+#### test\_open\_study\_flattens\_a\_batch\_members\_own\_replicates
+
+```python
+def test_open_study_flattens_a_batch_members_own_replicates(
+        tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None
+```
+
+A batch member contributes each of its own replicates individually,
+not one already-pooled point.
+
+<a id="gui.test_app_api.test_open_study_pools_regardless_of_a_mismatched_parameter"></a>
+
+#### test\_open\_study\_pools\_regardless\_of\_a\_mismatched\_parameter
+
+```python
+def test_open_study_pools_regardless_of_a_mismatched_parameter(
+        tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None
+```
+
+A mismatched `d` across members is warned about, never refused.
+
+Project owner's own resolution: there are legitimate reasons to
+intentionally pool runs in the same parameter neighborhood, so this
+is a check/suggestion, not a gate.
+
+<a id="gui.test_app_api.test_open_study_reports_an_unknown_study"></a>
+
+#### test\_open\_study\_reports\_an\_unknown\_study
+
+```python
+def test_open_study_reports_an_unknown_study(tmp_path: Path) -> None
+```
+
+Reopening a nonexistent Study is a clean failure, not a crash.
+
+<a id="gui.test_app_api.test_open_study_reports_no_readable_runs"></a>
+
+#### test\_open\_study\_reports\_no\_readable\_runs
+
+```python
+def test_open_study_reports_no_readable_runs(
+        tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None
+```
+
+An existing, empty Study cannot be pooled -- named explicitly, not a
+silent empty success.
+
 <a id="gui.test_app_api.test_push_batch_progress_pushes_a_pooled_scatter_from_real_sidecars"></a>
 
 #### test\_push\_batch\_progress\_pushes\_a\_pooled\_scatter\_from\_real\_sidecars
@@ -9315,8 +9420,11 @@ def test_a_completed_batch_hides_the_reanalyze_controls(
 A batch's own `completed` view hides item 6's re-analysis controls.
 
 A batch manifest has no single trajectory of its own to re-analyze
-(the same "no single trajectory" boundary `open-run.js`'s own
-single-click row handler already draws for a batch row on Home) --
+at a chosen generation -- unlike a scalar run, this is not something
+`Api.open_batch` changes (`20260919-claude-sonnet-5-unified-batch-
+and-study-results-reopen-design.md`, `selby/restricted`, §1: the
+reopened batch card still has no single trajectory, only a pooled
+one, exactly like a live batch's own completion) --
 `enterCompletedState`'s own `resultsReanalyzeControls.hidden = isBatch`
 is what enforces this; the scalar counterpart (hidden is `False`) is
 `test/gui/test_running_screen.py`'s own `test_a_live_runs_own_done_
@@ -12126,6 +12234,33 @@ The Select/Select all/Clear selection/Delete selected group nests
 inside the same row as the filter input, not a separate line below
 it.
 
+<a id="gui.test_home_hierarchy_screen.test_opening_a_study_row_pools_its_own_member_runs"></a>
+
+#### test\_opening\_a\_study\_row\_pools\_its\_own\_member\_runs
+
+```python
+def test_opening_a_study_row_pools_its_own_member_runs(
+        tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None
+```
+
+A Study row's own "Open…" pools every member run into the batch
+Results card.
+
+`20260919-claude-sonnet-5-unified-batch-and-study-results-reopen-
+design.md` (`selby/restricted`), §2/§3.
+
+<a id="gui.test_home_hierarchy_screen.test_opening_a_study_with_a_mismatched_parameter_shows_a_note_but_still_pools"></a>
+
+#### test\_opening\_a\_study\_with\_a\_mismatched\_parameter\_shows\_a\_note\_but\_still\_pools
+
+```python
+def test_opening_a_study_with_a_mismatched_parameter_shows_a_note_but_still_pools(
+        tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None
+```
+
+A mismatched `d` across a Study's own members still pools, with a
+visible note naming it -- never a refusal.
+
 <a id="gui.test_input_screen"></a>
 
 # gui.test\_input\_screen
@@ -13160,23 +13295,39 @@ single click plus the "Open" button already gives (the test right
 above this one), reached in one interaction instead of two --
 `open-run.js`'s own `openTrajectory`, shared by both paths.
 
-<a id="gui.test_open_run_screen.test_double_clicking_a_batch_row_does_not_open_it"></a>
+<a id="gui.test_open_run_screen.test_double_clicking_a_batch_row_opens_its_pooled_results"></a>
 
-#### test\_double\_clicking\_a\_batch\_row\_does\_not\_open\_it
+#### test\_double\_clicking\_a\_batch\_row\_opens\_its\_pooled\_results
 
 ```python
-def test_double_clicking_a_batch_row_does_not_open_it(
+def test_double_clicking_a_batch_row_opens_its_pooled_results(
         tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None
 ```
 
-A batch row's own double-click is a safe no-op, not a crash or a
-(nonsensical) attempt to open a manifest with no single trajectory.
+Double-clicking a batch row opens the identical batch Results card
+a live batch's own completion already shows.
 
-`open-run.js`'s own single-click handler already draws this exact
-"no single trajectory" boundary for a batch row (`showOpenRunBanner`)
--- the double-click handler only needs to defer to it, not repeat
-the message, so this test's own bar is simply "still on Home, still
-`initial`," not a duplicated banner assertion.
+`20260919-claude-sonnet-5-unified-batch-and-study-results-reopen-
+design.md` (`selby/restricted`), §3: batch and scalar rows are
+symmetric now -- `open-run.js`'s own `openBatch`, reached the
+identical way `openTrajectory` already is for a scalar row (the
+test right above this one). "Open replicate," reached by expanding
+the row instead, is a separate, still-available way to open one
+specific replicate's own scalar result.
+
+<a id="gui.test_open_run_screen.test_selecting_and_opening_a_batch_row_via_the_open_button"></a>
+
+#### test\_selecting\_and\_opening\_a\_batch\_row\_via\_the\_open\_button
+
+```python
+def test_selecting_and_opening_a_batch_row_via_the_open_button(
+        tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None
+```
+
+A single click selects a batch row and enables "Open," exactly
+like a scalar row -- no more early-return banner (`20260919-claude-
+sonnet-5-unified-batch-and-study-results-reopen-design.md`,
+`selby/restricted`, §3).
 
 <a id="gui.test_open_run_screen.test_reanalyzing_at_a_chosen_generation_updates_the_outcome_text"></a>
 

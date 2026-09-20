@@ -451,8 +451,11 @@ def test_a_completed_batch_hides_the_reanalyze_controls(
     """A batch's own `completed` view hides item 6's re-analysis controls.
 
     A batch manifest has no single trajectory of its own to re-analyze
-    (the same "no single trajectory" boundary `open-run.js`'s own
-    single-click row handler already draws for a batch row on Home) --
+    at a chosen generation -- unlike a scalar run, this is not something
+    `Api.open_batch` changes (`20260919-claude-sonnet-5-unified-batch-
+    and-study-results-reopen-design.md`, `selby/restricted`, §1: the
+    reopened batch card still has no single trajectory, only a pooled
+    one, exactly like a live batch's own completion) --
     `enterCompletedState`'s own `resultsReanalyzeControls.hidden = isBatch`
     is what enforces this; the scalar counterpart (hidden is `False`) is
     `test/gui/test_running_screen.py`'s own `test_a_live_runs_own_done_

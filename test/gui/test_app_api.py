@@ -1958,6 +1958,168 @@ def test_batch_done_payload_honors_an_explicit_digits_count(
         assert summary[name]["mean"] == format_statistic(interval["mean"], 2)
 
 
+def test_open_batch_matches_a_live_batchs_own_done_payload(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Reopening a real, persisted batch reproduces `_batch_done_payload`'s
+    own shape, minus the convergence-history panel.
+
+    `20260919-claude-sonnet-5-unified-batch-and-study-results-reopen-
+    design.md` (`selby/restricted`), §1: every field is rebuilt from
+    disk (`reanalyze_trajectory` per replicate), not from any live
+    `RunResult` -- confirmed here by comparing against the *real*
+    on-disk artifacts a real `fim run` batch actually wrote, not
+    against a second, independently constructed expectation that could
+    drift from what the CLI truly persists.
+    """
+    results = _use_isolated_results_directory(tmp_path, monkeypatch)
+    output_directory = _write_run_under(results, "batch-a", n_replicates=3)
+
+    result = Api().open_batch(str(output_directory))
+
+    assert result["ok"] is True
+    assert result["outputDirectory"] == str(output_directory)
+    replicates = result["replicates"]
+    assert isinstance(replicates, list)
+    assert len(replicates) == 3
+    for row in replicates:
+        assert isinstance(row["replicateId"], str)
+        assert set(row["statistics"]) >= {"D", "G_ST", "E_ST"}
+    summary = result["summary"]
+    assert isinstance(summary, dict)
+    assert "D" in summary
+    assert summary["D"]["sampleCount"] == 3
+    p0 = result["p0Statistics"]
+    assert isinstance(p0, dict)
+    assert set(p0) == set(app_module._RESULT_STATISTIC_NAMES)
+    assert isinstance(result["panels"], list)
+    assert len(result["panels"]) > 0
+    # The one field a reopened batch cannot reconstruct -- matches a
+    # reopened *scalar* run's own already-shipped "no history panel"
+    # precedent (`Api.open_run`), not a new, batch-specific gap.
+    assert result["pooledConvergenceHistories"] == {}
+
+
+def test_open_batch_reports_a_missing_manifest(tmp_path: Path) -> None:
+    """A directory naming no batch manifest is a clean failure, not a crash."""
+    empty_directory = tmp_path / "not-a-batch"
+    empty_directory.mkdir()
+
+    result = Api().open_batch(str(empty_directory))
+
+    assert result["ok"] is False
+    assert "message" in result
+
+
+def test_open_batch_reports_a_tampered_replicate_trajectory(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A single replicate's own edited trajectory fails the whole reopen,
+    matching `open_run`'s own integrity-check precedent for a scalar run."""
+    results = _use_isolated_results_directory(tmp_path, monkeypatch)
+    output_directory = _write_run_under(results, "batch-a", n_replicates=2)
+    first_replicate = sorted(output_directory.glob("replicate-*"))[0]
+    trajectory_path = first_replicate / "trajectory.jsonl"
+    trajectory_path.write_text(
+        trajectory_path.read_text(encoding="utf-8") + "\n", encoding="utf-8"
+    )
+
+    result = Api().open_batch(str(output_directory))
+
+    assert result["ok"] is False
+    assert "message" in result
+
+
+def test_open_study_pools_a_homogeneous_studys_own_scalar_runs(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Two same-configuration runs in a Study pool with no mismatch note.
+
+    `20260919-claude-sonnet-5-unified-batch-and-study-results-reopen-
+    design.md` (`selby/restricted`), §2.
+    """
+    results = _use_isolated_results_directory(tmp_path, monkeypatch)
+    api = Api()
+    study_id = api.create_study("Ring sweep")["studyId"]
+    _write_run_under(results, "run-a", seed=1, study_id=study_id)
+    _write_run_under(results, "run-b", seed=2, study_id=study_id)
+
+    result = api.open_study(study_id)
+
+    assert result["ok"] is True
+    assert "parameterMismatches" not in result
+    summary = result["summary"]
+    assert isinstance(summary, dict)
+    assert summary["D"]["sampleCount"] == 2
+    assert len(result["replicates"]) == 2
+
+
+def test_open_study_flattens_a_batch_members_own_replicates(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A batch member contributes each of its own replicates individually,
+    not one already-pooled point."""
+    results = _use_isolated_results_directory(tmp_path, monkeypatch)
+    api = Api()
+    study_id = api.create_study("Ring sweep")["studyId"]
+    _write_run_under(results, "run-a", seed=1, study_id=study_id)
+    _write_run_under(results, "batch-a", n_replicates=3, study_id=study_id)
+
+    result = api.open_study(study_id)
+
+    assert result["ok"] is True
+    assert len(result["replicates"]) == 4
+    assert result["summary"]["D"]["sampleCount"] == 4
+
+
+def test_open_study_pools_regardless_of_a_mismatched_parameter(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A mismatched `d` across members is warned about, never refused.
+
+    Project owner's own resolution: there are legitimate reasons to
+    intentionally pool runs in the same parameter neighborhood, so this
+    is a check/suggestion, not a gate.
+    """
+    results = _use_isolated_results_directory(tmp_path, monkeypatch)
+    api = Api()
+    study_id = api.create_study("Ring sweep")["studyId"]
+    _write_run_under(results, "run-a", seed=1, d=2, study_id=study_id)
+    _write_run_under(results, "run-b", seed=2, d=4, study_id=study_id)
+
+    result = api.open_study(study_id)
+
+    assert result["ok"] is True
+    assert result["summary"]["D"]["sampleCount"] == 2
+    mismatches = result["parameterMismatches"]
+    assert set(mismatches["d"]) == {"2", "4"}
+    # A field every member actually agrees on is never listed.
+    assert "mu" not in mismatches
+
+
+def test_open_study_reports_an_unknown_study(tmp_path: Path) -> None:
+    """Reopening a nonexistent Study is a clean failure, not a crash."""
+    result = Api().open_study("study-ffffffff")
+
+    assert result["ok"] is False
+    assert "message" in result
+
+
+def test_open_study_reports_no_readable_runs(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """An existing, empty Study cannot be pooled -- named explicitly, not a
+    silent empty success."""
+    _use_isolated_results_directory(tmp_path, monkeypatch)
+    api = Api()
+    study_id = api.create_study("Empty study")["studyId"]
+
+    result = api.open_study(study_id)
+
+    assert result["ok"] is False
+    assert "message" in result
+
+
 class _FakeWindow:
     """A `webview.Window` stand-in exposing only `evaluate_js`.
 
