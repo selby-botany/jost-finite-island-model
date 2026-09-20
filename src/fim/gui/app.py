@@ -37,6 +37,7 @@ import faulthandler
 import functools
 import json
 import logging
+import multiprocessing
 import os
 import queue
 import random
@@ -4028,7 +4029,10 @@ class Api:
         check rather than only discovering a failure three layers away
         inside a real batch run.
         """
-        with ProcessPoolExecutor(max_workers=1) as executor:
+        with ProcessPoolExecutor(
+            max_workers=1,
+            mp_context=multiprocessing.get_context("spawn"),
+        ) as executor:
             return executor.submit(_worker_ping).result()
 
     @_log_bridge_call

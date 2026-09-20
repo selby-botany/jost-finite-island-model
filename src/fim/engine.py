@@ -101,6 +101,7 @@ import importlib.util
 import json
 import logging
 import math
+import multiprocessing
 import os
 import pickle
 from collections.abc import Callable, Collection, Mapping, Sequence
@@ -2925,7 +2926,10 @@ def _run_batch_parallel(
     """
     results: list[RunResult] = []
     replicate_index = 0
-    with ProcessPoolExecutor(max_workers=max_workers) as executor:
+    with ProcessPoolExecutor(
+        max_workers=max_workers,
+        mp_context=multiprocessing.get_context("spawn"),
+    ) as executor:
         while replicate_index < params.n_replicates:
             batch_end = min(replicate_index + max_workers, params.n_replicates)
             logger.debug(
@@ -3058,18 +3062,11 @@ def _run_replicate_worker(
     this very function, by reference, to each worker process it starts,
     and only a plain, named, module-level function can be sent that way.
 
-    Whether the `logger.debug` call below is actually visible anywhere
-    depends on the worker process's own start method (`multiprocessing`'s
-    own `"fork"`/`"spawn"`/`"forkserver"` — not chosen here, and not
-    something this module controls): a forked worker inherits the parent
-    process's already-`fim.logging_setup.configure`d logging state
-    verbatim (the default on Linux), so this line reaches the same
-    handlers the parent process's own log lines do; a spawned worker (the
-    default on macOS and Windows) starts with a freshly imported,
-    unconfigured `fim` logger — this line still runs, but goes nowhere
-    (`fim.__init__`'s own `NullHandler`) until/unless something
-    reconfigures logging inside that worker process, which nothing here
-    currently does.
+    The pool explicitly uses multiprocessing's `"spawn"` context so a
+    batch cannot fork a process that already owns test-runner or GUI
+    threads. A spawned worker starts with a freshly imported, unconfigured
+    `fim` logger, so this line normally goes nowhere (`fim.__init__`'s own
+    `NullHandler`) until something reconfigures logging inside that worker.
     """
     logger.debug("worker process starting replicate %s", run_id)
     store = (

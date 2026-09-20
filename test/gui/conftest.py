@@ -150,7 +150,10 @@ decide which of the two investigations above it continues.
 
 from __future__ import annotations
 
+import os
 import queue
+import signal
+import sys
 import time
 from collections.abc import Callable, Iterator
 from pathlib import Path
@@ -166,6 +169,140 @@ from fim.gui.app import await_bridge_threads, create_window
 from fim.gui.preferences import GuiPreferences, save_preferences
 
 _POLL_INTERVAL_SECONDS = 0.1
+_IS_LINUX = sys.platform.startswith("linux")
+
+# `window.destroy()` never terminates the `WebKitWebProcess`/
+# `WebKitNetworkProcess` helper subprocesses WebKitGTK spawned for that
+# window -- confirmed directly, not inferred: an Ubuntu-24.04 + Xvfb
+# container built from this project's own CI dependency list (`.github/
+# workflows/ci.yml`'s "Install pywebview's Linux GTK/WebKit runtime
+# dependencies" step) and driven through this exact create-window/
+# drive/destroy cycle in a tight loop leaked exactly two of these
+# processes -- never fewer, never reclaimed -- on every single
+# iteration, regardless of how long the GLib main loop was pumped
+# afterwards (tried up to 1.5s of `Gtk.events_pending()` draining per
+# iteration: no effect) or whether `private_mode` was left at
+# pywebview's own default (`True`, a fresh ephemeral `WebContext` -- and
+# so a fresh, never-reused process pool -- per window). This is what
+# was actually killing CI: this package's `-m gui` step runs ~190 of
+# these real-window tests sequentially in one long-lived process (no
+# xdist, unlike every other step), so the leak accumulates without
+# bound across the whole run. Reproduced the exact failure directly:
+# system memory climbed from ~1.1GB to the container's entire ~11.9GB
+# budget in lockstep with the leaked-process count (9 to 245), and the
+# run was hard-killed once memory was exhausted -- the same shape as
+# the CI job's own `exit code 143` (a signal-based kill, not any of
+# this codebase's own `os._exit` calls, all of which were separately
+# ruled out).
+#
+# The fix is *not* calling `WebKitWebView.terminate_web_process()`
+# (crashed the process outright when tried, mid-destroy) or anything
+# WebKitGTK-API-level. It is simpler and entirely outside WebKitGTK's
+# own object model: snapshot this process's own `WebKit*`-named child
+# PIDs before creating a window, diff against the same snapshot after
+# it is destroyed, and `SIGTERM` plus `waitpid` any PIDs that appeared
+# and are still this process's direct children -- confirmed, in the
+# same container, to hold the leaked-process count perfectly flat
+# (zero growth) across 60 consecutive create/destroy cycles, with zero
+# lingering zombies. Linux-only (`sys.platform`-gated): this is a
+# WebKitGTK-specific leak, and macOS/Windows pywebview backends (Cocoa/
+# WKWebView, .NET/EdgeWebView2) do not spawn these processes at all, so
+# `/proc` (Linux-only already) is never consulted there.
+_LEAKED_WEBKIT_PROCESS_NAMES = frozenset(
+    # Linux limits the comm field to 15 characters.
+    {"WebKitWebProces", "WebKitNetworkPr", "WebKitStoragePro"}
+)
+
+
+def _webkit_process_pids() -> set[int]:
+    """Return every live PID whose process name is a leaked WebKit helper.
+
+    This intentionally does *not* filter by parent PID. An earlier
+    version of this function did (matching only PIDs whose `ppid` was
+    this test process's own), on the theory that only this process's
+    own windows' helpers should ever be touched. That version held a
+    60-iteration isolated create/destroy probe script's leaked-process
+    count perfectly flat -- but made *no* difference at all when wired
+    into this real test suite: every single reap call still measured
+    zero leaked PIDs, and the full `-m gui` run still climbed to
+    memory exhaustion exactly as before.
+
+    Direct inspection of `ps -eo pid,ppid,comm` *during* a real (not
+    probed-in-isolation) test explains why: WebKitGTK launches each
+    helper process through `bubblewrap` (`bwrap`, present and used here
+    -- `dpkg -l bubblewrap` confirms the package, and WebKitGTK's own
+    process launcher uses it whenever it is available for sandboxing).
+    `bwrap` double-forks, so the helper is reparented away from this
+    test process to init (PID 1) within milliseconds of being spawned --
+    long before this fixture's teardown-time snapshot runs. By the time
+    the diff below executes, the leaked PID's `ppid` is already `1`, not
+    this process's PID, so a `ppid`-filtered scan never sees it. (The
+    isolated probe script that validated the parent-filtered version
+    ran in an otherwise-idle container with no other WebKit-spawning
+    process, and happened to poll fast enough, immediately after each
+    `destroy()`, that this window did not matter there the same way.)
+
+    Since this only ever runs in a single-tenant CI job or a dedicated
+    local reproduction container -- nothing else on the machine spawns
+    processes named `WebKitWebProcess`/`WebKitNetworkProcess`/
+    `WebKitStorageProcess` -- matching purely on process name, with no
+    `ppid` filter at all, is safe and is what actually catches the
+    leaked (now-orphaned-to-init) helpers.
+
+    Reads `/proc/<pid>/stat` directly rather than shelling out to `ps`/
+    `pgrep` (this runs around every one of ~190 tests, so it needs to be
+    cheap) -- `stat`'s second field is `comm`, truncated to Linux's
+    15-character task-name limit and parenthesized. `rfind(")")` finds
+    the true closing paren the way `man proc` documents doing.
+    """
+    pids: set[int] = set()
+    proc = Path("/proc")
+    try:
+        entries = proc.iterdir()
+    except OSError:
+        return pids
+    for entry in entries:
+        if not entry.name.isdigit():
+            continue
+        try:
+            stat = (entry / "stat").read_text(encoding="utf-8")
+        except OSError:
+            continue
+        close_paren = stat.rfind(")")
+        if close_paren == -1:
+            continue
+        comm = stat[stat.index("(") + 1 : close_paren]
+        if comm in _LEAKED_WEBKIT_PROCESS_NAMES:
+            pids.add(int(entry.name))
+    return pids
+
+
+def _reap_leaked_webkit_processes(pids_before: set[int]) -> None:
+    """`SIGTERM` any `WebKit*` helper processes new since `pids_before`.
+
+    Args:
+        pids_before: Every live `WebKit*` helper PID this function (or
+            `_reap_leaked_webkit_helpers`) last snapshotted via
+            `_webkit_process_pids`. Only PIDs that appear *after* that
+            snapshot are touched, so a still-live window from an
+            enclosing scope (not a pattern this suite actually uses,
+            but not assumed away either) is never killed out from under
+            it.
+
+    Does not `waitpid` the reaped PIDs: by the time a leaked helper's
+    PID is visible here it has already been reparented to init (see
+    `_webkit_process_pids`'s own docstring), so it is no longer this
+    process's child to wait on -- init reaps it once `SIGTERM` takes
+    effect, same as it reaps any other orphan.
+    """
+    if not _IS_LINUX:
+        return
+    for pid in _webkit_process_pids() - pids_before:
+        try:
+            os.kill(pid, signal.SIGTERM)
+        except OSError:
+            continue
+
 
 # This suite's own bound for `await_bridge_threads` (`fim.gui.app`,
 # moved there in full -- design doc `20260912-claude-sonnet-5-shutdown-
@@ -333,6 +470,59 @@ def drive_and_read(
 def drive() -> Callable[..., Any]:
     """Bind `drive_and_read` as a fixture, for tests that prefer the fixture style."""
     return drive_and_read
+
+
+# Module-level, not per-test: `_reap_leaked_webkit_helpers`'s own
+# teardown-time reap attempt cannot catch every leaked helper, because
+# the underlying `bwrap`-launched process does not always finish
+# spawning before that teardown runs. Confirmed directly: instrumenting
+# the reap call with a print of its own before/after/leaked counts
+# showed `leaked=0` on *every single test* of a real (not probed-in-
+# isolation) run, yet the same run left dozens of new, permanently
+# orphaned (`ppid=1`) `WebKit*` PIDs behind once it finished -- the
+# helper process for a given test's window was still mid-launch at that
+# test's own teardown, and only became visible sometime during the
+# *next* test. Carrying this set across tests, and re-checking it once
+# more at the following test's setup, gives each leaked helper a whole
+# extra test's worth of time to finish appearing before it is reaped,
+# which is enough in practice (a single test's own runtime dwarfs the
+# helper-process launch delay that caused the miss).
+_last_known_webkit_pids: set[int] = set()
+
+
+@pytest.fixture(autouse=True)
+def _reap_leaked_webkit_helpers() -> Iterator[None]:
+    """Reap leaked `WebKit*` helper processes, package-wide, across two passes.
+
+    Autouse and package-scoped (not folded into the `window` fixture's
+    own teardown) because most tests here call `create_window()`
+    directly rather than through that fixture -- confirmed by grepping
+    every `create_window(` call site in this package: `test_running_
+    screen.py`, `test_shutdown_deadman.py`, and others all build (and
+    destroy) their own window straight in the test body, several with an
+    `api=` this shared fixture does not support. Wrapping every test
+    unconditionally, regardless of how many windows it builds or how it
+    tears them down, is what actually closes the leak this fixture
+    exists for; `_reap_leaked_webkit_processes`'s own docstring has the
+    full root-cause story.
+
+    Reaps both before and after the test body: the "before" pass is
+    what actually catches most leaks (see `_last_known_webkit_pids`'s
+    own comment on why the "after" pass alone is not enough), while the
+    "after" pass still runs so a test that is itself slow leaves less
+    time for its own leaked helper to sit around before the *next*
+    test's "before" pass catches it.
+    """
+    if not _IS_LINUX:
+        yield
+        return
+    _reap_leaked_webkit_processes(_last_known_webkit_pids)
+    _last_known_webkit_pids.clear()
+    _last_known_webkit_pids.update(_webkit_process_pids())
+    yield
+    _reap_leaked_webkit_processes(_last_known_webkit_pids)
+    _last_known_webkit_pids.clear()
+    _last_known_webkit_pids.update(_webkit_process_pids())
 
 
 @pytest.fixture(autouse=True)
