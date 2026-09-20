@@ -710,6 +710,26 @@ project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   instead). See `20260918-claude-sonnet-5-home-tree-reorg-design.md`
   (`selby/restricted`) for the full design, the critique that motivated
   it, and each amendment made while building it.
+- Double-clicking (or selecting and clicking "Open") a batch row on
+  Home now opens the identical Results card a live batch's own
+  completion shows, rebuilt fresh from its own persisted replicates
+  (`Api.open_batch`) rather than the former "batch runs have no single
+  trajectory" dead end — batch and scalar rows are symmetric now, with
+  "Open replicate" (reached by expanding the row) unchanged as a
+  separate way to open one specific replicate's own scalar result. A
+  Study row's own new "Open…" pools every member run, and every
+  replicate of every member batch, into that same card one level up;
+  pooling never refuses on a mismatched parameter across members (say,
+  two different `d` values) — only names it in a "varies across
+  members" note, since intentionally pooling runs in the same
+  parameter neighborhood is a legitimate, botanist's-own choice, not
+  always a mistake. See `20260919-claude-sonnet-5-unified-batch-and-
+  study-results-reopen-design.md` (`selby/restricted`) for the full
+  design, including the supporting finding that motivated it: `fim.
+  engine.deterministic_run_id` genuinely is a pure function of a run's
+  own full configuration, engine backend included, so two runs sharing
+  one deterministic id really are the identical computation, not merely
+  similar ones.
 
 ### Changed
 
