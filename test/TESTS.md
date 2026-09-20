@@ -9600,6 +9600,48 @@ def batch_params(tiny_params: SimulationParams) -> SimulationParams
 
 A small, fast three-replicate batch configuration.
 
+<a id="gui.test_batch_runner._ConcurrentStartClock"></a>
+
+## \_ConcurrentStartClock Objects
+
+```python
+class _ConcurrentStartClock()
+```
+
+Block each worker at its first timestamp until another worker arrives.
+
+<a id="gui.test_batch_runner._ConcurrentStartClock.__init__"></a>
+
+#### \_\_init\_\_
+
+```python
+def __init__(arrival_directory: Path,
+             *,
+             release_at: int,
+             timeout_seconds: float = 10.0) -> None
+```
+
+Configure the filesystem gate shared by spawned worker processes.
+
+**Arguments**:
+
+- `arrival_directory` - Directory where each worker writes its PID
+  marker before waiting for other workers.
+- `release_at` - Number of distinct worker PIDs required to release
+  the gate.
+- `timeout_seconds` - Bound for a genuinely sequential regression,
+  so the test fails instead of hanging.
+
+<a id="gui.test_batch_runner._ConcurrentStartClock.__call__"></a>
+
+#### \_\_call\_\_
+
+```python
+def __call__() -> datetime
+```
+
+Return the current UTC time, gating once at worker start.
+
 <a id="gui.test_batch_runner.test_replicate_index_recovers_the_ordinal_from_the_run_id"></a>
 
 #### test\_replicate\_index\_recovers\_the\_ordinal\_from\_the\_run\_id
@@ -9806,41 +9848,26 @@ An explicit `max_workers` argument is used verbatim, not the default.
 
 ```python
 def test_batch_replicates_actually_run_concurrently(
-        tmp_path: Path, batch_params: SimulationParams) -> None
+        tmp_path: Path, batch_params: SimulationParams,
+        monkeypatch: pytest.MonkeyPatch) -> None
 ```
 
-Direct regression test for H5: replicates genuinely overlap in real time.
+Direct regression test for H5: replicates genuinely overlap.
 
-Not a wall-clock-duration/ratio assertion — this project's
-determinism rules forbid a timing race — a structural fact about one
-real run: while the batch is still in flight, poll every replicate's
-own `.progress` sidecar (`fim.gui.store`) and record the timestamp it
-reports; if at least two replicates' observed windows overlap in
-real time, they were genuinely running at once, something purely
-sequential (one-replicate-at-a-time) execution could never produce
-no matter how fast each replicate ran. A sequential regression here
-(`max_workers` silently dropped back to `None`) makes every window
-strictly disjoint and fails this test every time, not intermittently.
+This used to poll per-replicate progress sidecars and infer overlap
+from timestamp ranges. That was still a timing assertion: after Linux
+process pools switched from `fork` to `spawn`, the same commit failed
+this test on `dev` and passed it on `staging` solely because worker
+startup and polling interleaved differently.
 
-Overrides `batch_params`'s own `convergence_tolerance`/
-`max_generations` to force a genuinely multi-generation run, rather
-than using the shared fixture's own loose tolerance (which this test
-alone does not want widened — many sibling tests in this file want
-`batch_params` to stay fast). Found deterministically broken on real
-Linux (reproduced 5/5 on native, non-emulated arm64 and x86_64-under-
-QEMU Docker containers; never on macOS): `batch_params`'s own
-`convergence_tolerance=1.0` converges within the first few
-generations, and Linux's `fork()`-based `multiprocessing` start
-method (versus macOS's `spawn`) launches each worker process fast
-enough that a whole tiny replicate can start and finish between two
-of this test's own 5ms polls — every replicate's own observed window
-collapses to a single instant, and three near-simultaneous instants
-can easily land as non-overlapping by pure scheduling luck, exactly
-as this test's own pre-existing docstring already anticipated
-("widen the polling window or slow tiny_params down if this ever
-flakes"). A real convergence run over many more generations gives
-each replicate a genuinely wide window to be observed within,
-independent of any one platform's own process-startup speed.
+The replacement is structural. The real batch runner still reaches
+the real `fim.engine.fim` and its real `ProcessPoolExecutor`; the only
+injected dependency is a picklable `clock`. Every worker calls that
+clock while building its replicate lane. The first worker writes its
+PID marker and blocks until a second worker reaches the same point.
+Sequential execution cannot satisfy that gate and fails with a
+bounded error; concurrent execution releases without depending on
+sampled wall-clock overlap.
 
 <a id="gui.test_batch_running"></a>
 
