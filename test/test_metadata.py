@@ -103,11 +103,11 @@ def test_dev_commit_suffix_reads_short_sha_from_a_clean_checkout(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """A clean `git` checkout gets a bare `g<sha>` label."""
+    """A clean `git` checkout gets a bare `<sha>` label."""
     (tmp_path / ".git").mkdir()
     monkeypatch.setattr(subprocess, "run", _stub_git_run())
 
-    assert fim._dev_commit_suffix(tmp_path) == "g1fbfb4e"
+    assert fim._dev_commit_suffix(tmp_path) == "1fbfb4e"
 
 
 def test_dev_commit_suffix_flags_an_uncommitted_working_tree(
@@ -126,7 +126,7 @@ def test_dev_commit_suffix_flags_an_uncommitted_working_tree(
         _stub_git_run(status_stdout=" M src/fim/gui/app.py\n"),
     )
 
-    assert fim._dev_commit_suffix(tmp_path) == "g1fbfb4e-dirty"
+    assert fim._dev_commit_suffix(tmp_path) == "1fbfb4e-dirty"
 
 
 def test_dev_commit_suffix_is_none_without_a_git_directory(tmp_path: Path) -> None:
@@ -186,7 +186,7 @@ def test_load_version_sets_dev_commit_for_a_real_source_checkout(
 
     fim._load_version()
 
-    assert fim.__dev_commit__ == "gabc1234"
+    assert fim.__dev_commit__ == "abc1234"
 
 
 def test_mplconfigdir_pinned_only_when_frozen_and_darwin(

@@ -1021,7 +1021,7 @@ def test_dev_commit_suffix_reads_short_sha_from_a_clean_checkout(
         tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None
 ```
 
-A clean `git` checkout gets a bare `g<sha>` label.
+A clean `git` checkout gets a bare `<sha>` label.
 
 <a id="test.test_metadata.test_dev_commit_suffix_flags_an_uncommitted_working_tree"></a>
 

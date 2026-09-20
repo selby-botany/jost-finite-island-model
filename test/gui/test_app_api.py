@@ -4033,11 +4033,11 @@ def test_get_about_info_reports_the_dev_checkout_commit(
     docstring. Monkeypatched here rather than relying on this test
     process's own live value, so the assertion is exact either way.
     """
-    monkeypatch.setattr(app_module, "fim_dev_commit", "gabc1234-dirty")
+    monkeypatch.setattr(app_module, "fim_dev_commit", "abc1234-dirty")
 
     info = Api().get_about_info()
 
-    assert info["commit"] == "gabc1234-dirty"
+    assert info["commit"] == "abc1234-dirty"
 
 
 # --- _save_dialog_path ---
