@@ -353,7 +353,31 @@ def test_a_completed_batchs_own_supplemental_panels_render(
                     ".textContent, "
                     "spectrumTitle: "
                     "document.getElementById('frequency-spectrum-title')"
-                    ".textContent"
+                    ".textContent, "
+                    "ibdHidden: document.getElementById('ibd-card').hidden, "
+                    "layout: (() => {"
+                    "const rect = (selector) => {"
+                    "const el = document.querySelector(selector);"
+                    "const box = el.getBoundingClientRect();"
+                    "const style = getComputedStyle(el);"
+                    "return {"
+                    "left: box.left, top: box.top, right: box.right, "
+                    "bottom: box.bottom, width: box.width, height: box.height, "
+                    "gridColumnStart: style.gridColumnStart, "
+                    "gridRowStart: style.gridRowStart, "
+                    "gridRowEnd: style.gridRowEnd"
+                    "};"
+                    "};"
+                    "return {"
+                    "rowDisplay: getComputedStyle("
+                    "document.getElementById('run-plot-row')).display, "
+                    "scatter: rect('.run-canvas-frame'), "
+                    "trajectory: rect('#run-trajectory-frame'), "
+                    "composition: rect('#allele-composition-card'), "
+                    "spectrum: rect('#frequency-spectrum-card'), "
+                    "stats: rect('#batch-results-summary')"
+                    "};"
+                    "})()"
                     "})"
                 )
             outcome.put(settled)
@@ -372,6 +396,26 @@ def test_a_completed_batchs_own_supplemental_panels_render(
     assert settled["spectrumHidden"] is False
     assert settled["compositionTitle"] == "Allele composition by deme"
     assert settled["spectrumTitle"] == "Allele-frequency spectrum"
+    assert settled["ibdHidden"] is True
+    layout = settled["layout"]
+    assert layout["rowDisplay"] == "grid"
+    assert layout["scatter"]["gridColumnStart"] == "1"
+    assert layout["scatter"]["gridRowStart"] == "1"
+    assert layout["trajectory"]["gridColumnStart"] == "2"
+    assert layout["trajectory"]["gridRowStart"] == "1"
+    assert layout["composition"]["gridColumnStart"] == "1"
+    assert layout["composition"]["gridRowStart"] == "2"
+    assert layout["spectrum"]["gridColumnStart"] == "2"
+    assert layout["spectrum"]["gridRowStart"] == "2"
+    assert layout["stats"]["gridColumnStart"] == "3"
+    assert layout["stats"]["gridRowStart"] == "1"
+    assert layout["stats"]["gridRowEnd"] == "4"
+    assert layout["trajectory"]["left"] > layout["scatter"]["right"]
+    assert layout["composition"]["top"] > layout["scatter"]["bottom"]
+    assert layout["spectrum"]["top"] > layout["trajectory"]["bottom"]
+    assert abs(layout["composition"]["left"] - layout["scatter"]["left"]) < 5
+    assert abs(layout["spectrum"]["left"] - layout["trajectory"]["left"]) < 5
+    assert layout["stats"]["left"] > layout["trajectory"]["right"]
 
 
 def test_a_completed_batchs_own_effective_allele_rows_render(

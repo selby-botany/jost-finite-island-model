@@ -126,6 +126,30 @@ def test_a_completed_run_renders_the_run_view(
             "const stat = document.getElementById('stat-A_CGD');"
             "return stat ? stat.title : null;"
             "})(), "
+            "ibdHidden: document.getElementById('ibd-card').hidden, "
+            "layout: (() => {"
+            "const rect = (selector) => {"
+            "const el = document.querySelector(selector);"
+            "const box = el.getBoundingClientRect();"
+            "const style = getComputedStyle(el);"
+            "return {"
+            "left: box.left, top: box.top, right: box.right, "
+            "bottom: box.bottom, width: box.width, height: box.height, "
+            "gridColumnStart: style.gridColumnStart, "
+            "gridRowStart: style.gridRowStart, "
+            "gridRowEnd: style.gridRowEnd"
+            "};"
+            "};"
+            "return {"
+            "rowDisplay: getComputedStyle("
+            "document.getElementById('run-plot-row')).display, "
+            "scatter: rect('.run-canvas-frame'), "
+            "trajectory: rect('#run-trajectory-frame'), "
+            "composition: rect('#allele-composition-card'), "
+            "spectrum: rect('#frequency-spectrum-card'), "
+            "stats: rect('#results-stats')"
+            "};"
+            "})(), "
             "scrubberHidden: document.getElementById('scrubber-controls').hidden, "
             "scrubberPlayDisabled: "
             "document.getElementById('scrubber-play-button').disabled, "
@@ -188,6 +212,26 @@ def test_a_completed_run_renders_the_run_view(
     # generic `X_YZ` split of "A_CGD", tags stripped), not "A_CGD".
     assert settled["statACgdTitle"].startswith("ACGD = ")
     assert settled["supplementalHidden"] is False
+    assert settled["ibdHidden"] is True
+    layout = settled["layout"]
+    assert layout["rowDisplay"] == "grid"
+    assert layout["scatter"]["gridColumnStart"] == "1"
+    assert layout["scatter"]["gridRowStart"] == "1"
+    assert layout["trajectory"]["gridColumnStart"] == "2"
+    assert layout["trajectory"]["gridRowStart"] == "1"
+    assert layout["composition"]["gridColumnStart"] == "1"
+    assert layout["composition"]["gridRowStart"] == "2"
+    assert layout["spectrum"]["gridColumnStart"] == "2"
+    assert layout["spectrum"]["gridRowStart"] == "2"
+    assert layout["stats"]["gridColumnStart"] == "3"
+    assert layout["stats"]["gridRowStart"] == "1"
+    assert layout["stats"]["gridRowEnd"] == "4"
+    assert layout["trajectory"]["left"] > layout["scatter"]["right"]
+    assert layout["composition"]["top"] > layout["scatter"]["bottom"]
+    assert layout["spectrum"]["top"] > layout["trajectory"]["bottom"]
+    assert abs(layout["composition"]["left"] - layout["scatter"]["left"]) < 5
+    assert abs(layout["spectrum"]["left"] - layout["trajectory"]["left"]) < 5
+    assert layout["stats"]["left"] > layout["trajectory"]["right"]
     # `tiny_params`-scale runs always persist more than one generation
     # (`convergence_window`'s own minimum of 2 forces at least one step
     # past generation 0 before stability can first be evaluated), so the

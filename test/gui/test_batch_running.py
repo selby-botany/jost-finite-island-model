@@ -191,6 +191,28 @@ def _wait_for_progress_with_statistics(
             return payload
 
 
+def _assert_run_card_grid_layout(layout: dict[str, Any]) -> None:
+    """Assert the requested 3-column/3-row Run/Result card graph layout."""
+    assert layout["rowDisplay"] == "grid"
+    assert layout["scatter"]["gridColumnStart"] == "1"
+    assert layout["scatter"]["gridRowStart"] == "1"
+    assert layout["trajectory"]["gridColumnStart"] == "2"
+    assert layout["trajectory"]["gridRowStart"] == "1"
+    assert layout["composition"]["gridColumnStart"] == "1"
+    assert layout["composition"]["gridRowStart"] == "2"
+    assert layout["spectrum"]["gridColumnStart"] == "2"
+    assert layout["spectrum"]["gridRowStart"] == "2"
+    assert layout["trajectory"]["left"] > layout["scatter"]["right"]
+    assert layout["composition"]["top"] > layout["scatter"]["bottom"]
+    assert layout["spectrum"]["top"] > layout["trajectory"]["bottom"]
+    assert abs(layout["composition"]["left"] - layout["scatter"]["left"]) < 5
+    assert abs(layout["spectrum"]["left"] - layout["trajectory"]["left"]) < 5
+    assert layout["stats"]["left"] > layout["trajectory"]["right"]
+    assert layout["stats"]["gridColumnStart"] == "3"
+    assert layout["stats"]["gridRowStart"] == "1"
+    assert layout["stats"]["gridRowEnd"] == "4"
+
+
 def test_a_live_batch_shows_a_trajectory_panel_once_two_replicates_report(
     unreachable_batch_run_settings: Path,
 ) -> None:
@@ -249,6 +271,42 @@ def test_a_live_batch_shows_a_trajectory_panel_once_two_replicates_report(
                     "({"
                     "frameHidden: "
                     "document.getElementById('run-trajectory-frame').hidden, "
+                    "alleleCompHidden: "
+                    "document.getElementById('allele-composition-card').hidden, "
+                    "freqSpecHidden: "
+                    "document.getElementById('frequency-spectrum-card').hidden, "
+                    "progressLabel: "
+                    "document.getElementById('progress-generation-label').textContent, "
+                    "progressValue: Number("
+                    "document.getElementById('progress-generation').value), "
+                    "progressMax: Number("
+                    "document.getElementById('progress-generation').max), "
+                    "ibdHidden: "
+                    "document.getElementById('ibd-card').hidden, "
+                    "layout: (() => {"
+                    "const rect = (selector) => {"
+                    "const el = document.querySelector(selector);"
+                    "const box = el.getBoundingClientRect();"
+                    "const style = getComputedStyle(el);"
+                    "return {"
+                    "left: box.left, top: box.top, right: box.right, "
+                    "bottom: box.bottom, width: box.width, height: box.height, "
+                    "gridColumnStart: style.gridColumnStart, "
+                    "gridColumnEnd: style.gridColumnEnd, "
+                    "gridRowStart: style.gridRowStart, "
+                    "gridRowEnd: style.gridRowEnd"
+                    "};"
+                    "};"
+                    "return {"
+                    "rowDisplay: getComputedStyle("
+                    "document.getElementById('run-plot-row')).display, "
+                    "scatter: rect('.run-canvas-frame'), "
+                    "trajectory: rect('#run-trajectory-frame'), "
+                    "composition: rect('#allele-composition-card'), "
+                    "spectrum: rect('#frequency-spectrum-card'), "
+                    "stats: rect('#batch-results-summary')"
+                    "};"
+                    "})(), "
                     "statisticRowCount: document.querySelectorAll("
                     "'#batch-results-summary tr[data-trajectory-statistic]'"
                     ").length"
@@ -265,6 +323,13 @@ def test_a_live_batch_shows_a_trajectory_panel_once_two_replicates_report(
 
     assert settled is not None, "never saw a progress push with statistics in time"
     assert settled["frameHidden"] is False
+    assert settled["alleleCompHidden"] is False
+    assert settled["freqSpecHidden"] is False
+    assert settled["ibdHidden"] is True
+    assert "replicates reporting; mean generation" in settled["progressLabel"]
+    assert settled["progressLabel"].endswith(" / 10000")
+    assert settled["progressValue"] < settled["progressMax"]
+    _assert_run_card_grid_layout(settled["layout"])
     # All ten report statistics (the original seven plus the expensive,
     # opt-in "bonus" measurements A_CGD/Delta/MI, which joined the live
     # table unconditionally), matching the scalar live trajectory's own

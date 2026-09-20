@@ -241,7 +241,11 @@ function drawIbdCurve(canvas, payload) {
 function renderSupplementalPanels(visuals) {
     alleleCompositionCard.hidden = !visuals || !visuals.alleleComposition;
     frequencySpectrumCard.hidden = !visuals || !visuals.frequencySpectrum;
-    ibdCard.hidden = !visuals || !visuals.isolationByDistance;
+    // The Run/Result card is a fixed four-graph card: scatter,
+    // trajectory, allele composition, and allele-frequency spectrum.
+    // IBD stays available in the Python payload for future/specialized
+    // views, but this card does not allocate a fifth graph slot for it.
+    ibdCard.hidden = true;
     if (!visuals) {
         return;
     }
@@ -266,7 +270,7 @@ function renderSupplementalPanels(visuals) {
         frequencySpectrumNote.textContent = visuals.frequencySpectrum.note;
         drawFrequencySpectrum(frequencySpectrumCanvas, visuals.frequencySpectrum);
     }
-    if (visuals.isolationByDistance) {
+    if (!ibdCard.hidden && visuals.isolationByDistance) {
         ibdTitle.textContent = visuals.isolationByDistance.title;
         ibdNote.textContent = visuals.isolationByDistance.note;
         drawIbdCurve(ibdCanvas, visuals.isolationByDistance);

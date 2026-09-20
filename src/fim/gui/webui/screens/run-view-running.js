@@ -22,7 +22,7 @@
  * shared canvas either way (design §4.4's "the same screen, not two
  * different ones" principle, applied here too): the batch handlers
  * repurpose the same progress bar/label/canvas the scalar ones use,
- * showing replicate-reporting progress and a *pooled* scatter
+ * showing mean-generation progress and a *pooled* scatter
  * (`fim.viz.scatter.pooled_scatter_panels`) instead of one run's own
  * generation and single-state scatter.
  *
@@ -65,10 +65,6 @@
 // `progressBar` and `progressLabel` are declared in run-view-initial.js
 // (loads first) and shared via the page's one global scope.
 
-// Whether the selector below has been wired for *this* run yet --
-// `onBatchProgress` last reported -- see that handler's own comment for
-// why the raw reported count can legitimately regress mid-batch.
-let batchProgressHighWaterMark = 0;
 // Whether the selector below has been wired for *this* run yet --
 // re-wiring on every single push (they can arrive many times a second)
 // would rebuild the dropdowns and reset whatever pair the user already
@@ -172,7 +168,6 @@ let liveIdentityRecoveryReference = null;
  */
 function enterRunningState(isBatch = false) {
     window.fim.setRunViewState("running");
-    batchProgressHighWaterMark = 0;
     liveDemeSelectorWired = false;
     showingLiveDemePair = false;
     liveTrajectoryGenerations = [];
@@ -208,11 +203,8 @@ function enterRunningState(isBatch = false) {
     // Same "never leave a previous run's own stale content on screen
     // until the first tick repopulates it" reasoning as the trajectory
     // panel just above -- a real, reported symptom this specific gap
-    // produced: starting a smaller batch (n_replicates: 100, say)
-    // right after a larger one (200) briefly showed "200 / 100
-    // replicates reporting," `batchProgressHighWaterMark`'s own reset
-    // just above notwithstanding, since nothing had told the label
-    // itself to stop showing the *previous* run's own last text yet.
+    // produced: starting a new run briefly showed the previous run's
+    // own final progress text until the first tick arrived.
     progressLabel.textContent = "";
     runProgress.hidden = false;
     if (initialStats) {
@@ -545,26 +537,13 @@ window.fim.onRunError = function onRunError(message) {
 };
 
 window.fim.onBatchProgress = function onBatchProgress(payload) {
-    // `payload.reportedReplicateCount` can legitimately regress between
-    // two ticks, late in a batch with an adaptive `replicate_tolerance`
-    // stop set: that stop is only decided after a whole concurrent
-    // worker wave completes (`fim.engine._run_batch_parallel`), so a
-    // worker beyond the replicate that triggered it can still be
-    // mid-run -- and counted by this same poll -- when the decision
-    // lands. Once the batch prunes that now-orphaned replicate's
-    // directory (`cli._prune_orphan_replicate_directories`'s own
-    // docstring), the very next poll sees one fewer valid replicate
-    // than a moment before. Real, reported behavior ("the generation
-    // tracking bar jumps around during the last ~20%"), not a
-    // hypothetical -- the displayed count only ever moves forward.
-    batchProgressHighWaterMark = Math.max(
-        batchProgressHighWaterMark,
-        payload.reportedReplicateCount
-    );
-    progressBar.max = payload.replicateCount;
-    progressBar.value = batchProgressHighWaterMark;
+    const meanGeneration = payload.meanReportedGeneration ?? 0;
+    progressBar.max = payload.maxGenerations;
+    progressBar.value = meanGeneration;
     progressLabel.textContent =
-        `${batchProgressHighWaterMark} / ${payload.replicateCount} replicates reporting`;
+        `${payload.reportedReplicateCount} / ${payload.replicateCount} ` +
+        `replicates reporting; mean generation ${meanGeneration} / ` +
+        `${payload.maxGenerations}`;
     if (!liveDemeSelectorWired) {
         wireLiveDemePairSelector(payload.demeCount);
         liveDemeSelectorWired = true;
@@ -588,6 +567,9 @@ window.fim.onBatchProgress = function onBatchProgress(payload) {
         renderBatchTrajectory(liveBatchTrajectory);
     }
     drawProgressPanels(payload);
+    if (typeof renderSupplementalPanels === "function" && payload.literatureVisuals) {
+        renderSupplementalPanels(payload.literatureVisuals);
+    }
 };
 
 window.fim.onBatchDone = function onBatchDone(payload) {

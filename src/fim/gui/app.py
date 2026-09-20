@@ -4656,11 +4656,16 @@ def _push_batch_progress(
     progress_payload: dict[str, object] = {
         "replicateCount": params.n_replicates,
         "reportedReplicateCount": len(states),
+        "maxGenerations": params.max_generations,
         "panels": panels,
         "demeCount": params.d,
         "statistics": statistics,
         "initialStatistics": initial_statistics,
     }
+    if states:
+        progress_payload["literatureVisuals"] = pooled_literature_visual_payload(
+            states, params
+        )
     if states:
         # The live batch trajectory panel's own x-axis (batch trajectory
         # panel design `20260912-claude-sonnet-5-batch-trajectory-panel-

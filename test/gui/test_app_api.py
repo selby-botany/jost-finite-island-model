@@ -2189,6 +2189,7 @@ def test_push_batch_progress_pushes_a_pooled_scatter_from_real_sidecars(
     payload = _one_call_payload(window, "onBatchProgress")
     assert payload["replicateCount"] == 2
     assert payload["reportedReplicateCount"] == 1
+    assert payload["maxGenerations"] == params.max_generations
     panels = payload["panels"]
     assert isinstance(panels, list)
     assert len(panels) == 1
@@ -2199,6 +2200,10 @@ def test_push_batch_progress_pushes_a_pooled_scatter_from_real_sidecars(
     # define any interval — one reporting replicate summarizes to
     # nothing yet, not an error (see `reports_summary`'s own docstring).
     assert payload["statistics"] == {}
+    literature_visuals = payload["literatureVisuals"]
+    assert isinstance(literature_visuals, dict)
+    assert literature_visuals["alleleComposition"] is not None
+    assert literature_visuals["frequencySpectrum"] is not None
 
 
 def test_push_batch_progress_includes_a_generation_zero_baseline(
@@ -2289,7 +2294,9 @@ def test_push_batch_progress_reports_nothing_before_any_replicate_starts(
     payload = _one_call_payload(window, "onBatchProgress")
     assert payload["replicateCount"] == 2
     assert payload["reportedReplicateCount"] == 0
+    assert payload["maxGenerations"] == params.max_generations
     assert payload["panels"] == []
+    assert "literatureVisuals" not in payload
 
 
 def test_push_batch_progress_includes_a_live_deme_pair_panel_when_selected(

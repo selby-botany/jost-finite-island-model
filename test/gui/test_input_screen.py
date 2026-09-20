@@ -559,39 +559,35 @@ def test_navigating_to_configure_does_not_reset_run_view_state(
     assert settled["runViewState"] == "initial"
 
 
-def test_batch_progress_display_never_regresses(
+def test_batch_progress_display_tracks_mean_generation_not_replicate_high_water(
     window: webview.Window, drive: Callable[..., Any]
 ) -> None:
-    """`onBatchProgress` shows a high-water mark, not the raw reported count.
+    """`onBatchProgress` uses generation progress, not replicate high-water.
 
-    Real, reported behavior, not a hypothetical one: an adaptive
-    `replicate_tolerance` stop is only decided after a whole concurrent
-    worker wave completes, so a worker beyond the replicate that
-    triggered it can still be mid-run -- and counted by a live poll --
-    when the decision lands; once that now-orphaned replicate's
-    directory is pruned, the very next poll legitimately reports fewer
-    valid replicates than a moment before ("the generation tracking bar
-    jumps around during the last ~20%"). Fired here as two synthetic
-    `fim.onBatchProgress` calls (5 reporting, then 3) rather than
-    orchestrating a real batch that actually overshoots and prunes --
-    this is `screens/run-view-running.js`'s own display logic under
-    test, not the batch-execution timing that triggers it. No explicit
-    reset call needed first: every test gets a fresh page load of its
-    own, so the module-scoped high-water mark this proves already
-    starts at its own initial `0` regardless.
+    Real, reported symptom: a long batch showed a full "200 / 200
+    replicates reporting" progress bar almost immediately because every
+    replicate had emitted an early sidecar, even though the plots kept
+    changing for many more generations. Fired here as two synthetic
+    `fim.onBatchProgress` calls, first with every replicate reporting
+    at mean generation 4, then with fewer current sidecars at mean
+    generation 6. The bar must advance by generation, and the label must
+    report the current sidecar count separately.
     """
     settled = drive(
         window,
         ready=_INPUT_SCREEN_READY,
         trigger=(
             "window.fim.onBatchProgress("
-            "{replicateCount: 10, reportedReplicateCount: 5, panels: []});"
+            "{replicateCount: 10, reportedReplicateCount: 10, "
+            "meanReportedGeneration: 4, maxGenerations: 100, panels: []});"
             "window.fim.onBatchProgress("
-            "{replicateCount: 10, reportedReplicateCount: 3, panels: []});"
+            "{replicateCount: 10, reportedReplicateCount: 3, "
+            "meanReportedGeneration: 6, maxGenerations: 100, panels: []});"
         ),
         read=(
             "({"
             "barValue: document.getElementById('progress-generation').value, "
+            "barMax: document.getElementById('progress-generation').max, "
             "labelText: "
             "document.getElementById('progress-generation-label').textContent"
             "})"
@@ -599,8 +595,11 @@ def test_batch_progress_display_never_regresses(
         is_ready=lambda value: value is not None and value.get("barValue") != 0,
     )
 
-    assert settled["barValue"] == 5
-    assert settled["labelText"] == "5 / 10 replicates reporting"
+    assert settled["barValue"] == 6
+    assert settled["barMax"] == 100
+    assert (
+        settled["labelText"] == "3 / 10 replicates reporting; mean generation 6 / 100"
+    )
 
 
 def test_ci_tooltip_states_its_symmetric_summary_only_when_one_exists(
@@ -629,9 +628,9 @@ def test_ci_tooltip_states_its_symmetric_summary_only_when_one_exists(
     interval today (`bootstrap_replicate_summary` has no caller outside
     its own tests), so no real run can put the two shapes in the same
     table at all — the display logic is still what needs proving, the
-    same reasoning `test_batch_progress_display_never_regresses` above
-    applies to its own two synthetic calls. The positive case is *also*
-    covered against a real batch, end to end, in
+    same reasoning `test_batch_progress_display_tracks_mean_generation_
+    not_replicate_high_water` above applies to its own synthetic calls.
+    The positive case is *also* covered against a real batch, end to end, in
     `test_batch_results_screen.py`.
     """
     settled = drive(
@@ -640,6 +639,7 @@ def test_ci_tooltip_states_its_symmetric_summary_only_when_one_exists(
         trigger=(
             "window.fim.onBatchProgress({"
             "replicateCount: 2, reportedReplicateCount: 2, panels: [], "
+            "meanReportedGeneration: 1, maxGenerations: 10, "
             "demeCount: 2, statistics: {"
             "D: {mean: '0.0588333', low: '0.0156696', high: '0.101997', "
             "sampleCount: 2, halfWidth: '0.0431637', sampleStd: '0.0347684'}, "
