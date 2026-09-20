@@ -252,6 +252,69 @@ def test_a_completed_run_renders_the_run_view(
     assert settled["resultsHistoryForwardHidden"] is False
 
 
+def test_differently_scaled_statistics_start_off_the_trajectory_panel(
+    fast_scalar_run_settings: Path, window: webview.Window, drive: Callable[..., Any]
+) -> None:
+    """`A_CGD`, `Delta`, and `MI` start hidden; the rest start plotted.
+
+    The trajectory panel draws every statistic against one shared
+    y-axis, so a statistic that is not a `[0, 1]` differentiation
+    measure decides the axis for all of them: `A_CGD` is an effective-
+    allele *count* and routinely reads above 1, which flattens `D`,
+    `G_ST`, `E_ST`, `K_ST`, `H_S`, `H_T`, and `H_ST` into an unreadable
+    band along the bottom of the panel. They are hidden by default, not
+    removed -- this test also clicks `A_CGD`'s own row back on to prove
+    the legend toggle still reaches it.
+    """
+    settled = drive(
+        window,
+        ready=_INPUT_SCREEN_READY,
+        trigger=(
+            _SET_TINY_FIELDS
+            + "document.getElementById('run-button').click(); "
+            + "const pollCompleted = () => { "
+            + "if (window.fim.getRunViewState() === 'completed') { "
+            + "const state = {}; "
+            + "for (const row of document.querySelectorAll("
+            + "'#results-stats tr[data-trajectory-statistic]')) { "
+            + "state[row.dataset.trajectoryStatistic] = "
+            + "row.getAttribute('aria-pressed'); "
+            + "} "
+            + "window.__fimDefaultPressed = state; "
+            + "document.getElementById('stat-A_CGD').click(); "
+            + "window.__fimReinstated = document.getElementById("
+            + "'stat-A_CGD').getAttribute('aria-pressed'); "
+            + "return; "
+            + "} "
+            + "setTimeout(pollCompleted, 50); "
+            + "}; "
+            + "setTimeout(pollCompleted, 50);"
+        ),
+        read=(
+            "({"
+            "pressed: window.__fimDefaultPressed || null, "
+            "reinstated: window.__fimReinstated || null, "
+            "scrubberPending: window.__fimScrubberPending"
+            "})"
+        ),
+        is_ready=lambda value: (
+            value is not None
+            and value.get("pressed") is not None
+            and value.get("reinstated") is not None
+            and value.get("scrubberPending") == 0
+        ),
+        poll_attempts=_POLL_ATTEMPTS,
+    )
+
+    pressed = settled["pressed"]
+    assert pressed["A_CGD"] == "false"
+    assert pressed["Delta"] == "false"
+    assert pressed["MI"] == "false"
+    for name in ("D", "G_ST", "E_ST", "K_ST", "H_S", "H_T", "H_ST"):
+        assert pressed[name] == "true", f"{name} should start plotted"
+    assert settled["reinstated"] == "true"
+
+
 def test_completed_run_shows_title_above_canvas_and_back_returns_to_initial(
     fast_scalar_run_settings: Path, window: webview.Window, drive: Callable[..., Any]
 ) -> None:
@@ -730,10 +793,12 @@ def test_run_view_fits_the_default_window_without_excess_scrolling(
                 "(function() {"
                 "var row = document.getElementById('run-plot-row');"
                 "var canvas = document.getElementById('run-canvas');"
+                "var scatter = document.querySelector('.run-canvas-frame');"
                 "var trajectory = document.getElementById('run-trajectory-frame');"
                 "var stats = document.getElementById('results-stats');"
                 "if (trajectory.hidden || stats.hidden) { return null; }"
                 "var canvasRect = canvas.getBoundingClientRect();"
+                "var scatterRect = scatter.getBoundingClientRect();"
                 "var trajectoryRect = trajectory.getBoundingClientRect();"
                 "var statsRect = stats.getBoundingClientRect();"
                 "return {"
@@ -741,6 +806,7 @@ def test_run_view_fits_the_default_window_without_excess_scrolling(
                 "row.classList.contains('run-plot-row-has-trajectory'), "
                 "innerHeight: window.innerHeight, "
                 "canvasTop: canvasRect.top, canvasBottom: canvasRect.bottom, "
+                "scatterTop: scatterRect.top, "
                 "trajectoryTop: trajectoryRect.top, "
                 "trajectoryBottom: trajectoryRect.bottom, "
                 "statsTop: statsRect.top, statsBottom: statsRect.bottom"
@@ -759,9 +825,11 @@ def test_run_view_fits_the_default_window_without_excess_scrolling(
     assert settled["rowHasTrajectoryClass"] is True
     # Same line as the scatter plot, not wrapped onto a line below it --
     # a small tolerance for sub-pixel layout rounding, matching this
-    # project's other bounding-box assertions.
-    assert abs(settled["trajectoryTop"] - settled["canvasTop"]) < 5
-    assert abs(settled["statsTop"] - settled["canvasTop"]) < 30
+    # project's other bounding-box assertions. Both frames are titled
+    # cards now, so the comparable edge is the frame's own top, not the
+    # canvas inside it (which sits below its card's `<h4>`).
+    assert abs(settled["trajectoryTop"] - settled["scatterTop"]) < 5
+    assert abs(settled["statsTop"] - settled["scatterTop"]) < 30
     # Fully visible within the actual window -- not merely reachable by
     # scrolling -- which is the whole point of the fix.
     assert settled["trajectoryBottom"] <= settled["innerHeight"]

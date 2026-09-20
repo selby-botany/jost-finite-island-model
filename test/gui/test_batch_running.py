@@ -283,6 +283,14 @@ def test_a_live_batch_shows_a_trajectory_panel_once_two_replicates_report(
                     "document.getElementById('progress-generation').max), "
                     "ibdHidden: "
                     "document.getElementById('ibd-card').hidden, "
+                    "scrubberHidden: "
+                    "document.getElementById('scrubber-controls').hidden, "
+                    "scrubberLabel: "
+                    "document.getElementById('scrubber-label').textContent, "
+                    "scatterTitle: "
+                    "document.getElementById('run-scatter-title').textContent, "
+                    "trajectoryTitle: "
+                    "document.getElementById('run-trajectory-title').textContent, "
                     "layout: (() => {"
                     "const rect = (selector) => {"
                     "const el = document.querySelector(selector);"
@@ -326,9 +334,19 @@ def test_a_live_batch_shows_a_trajectory_panel_once_two_replicates_report(
     assert settled["alleleCompHidden"] is False
     assert settled["freqSpecHidden"] is False
     assert settled["ibdHidden"] is True
-    assert "replicates reporting; mean generation" in settled["progressLabel"]
-    assert settled["progressLabel"].endswith(" / 10000")
+    # The label answers "how far along is this?" with a generation, the
+    # unit the plots beside it are drawn in -- never a replicate count,
+    # which reaches its own maximum within seconds of a batch starting.
+    assert settled["progressLabel"].startswith("mean completed generation ")
+    assert "replicates reporting" not in settled["progressLabel"]
     assert settled["progressValue"] < settled["progressMax"]
+    # A live batch scrubs back through its own earlier pooled ticks, the
+    # same as a live scalar run already did.
+    assert settled["scrubberHidden"] is False
+    assert "Generation" in settled["scrubberLabel"]
+    # Every graph on the card is a titled card, not a bare canvas.
+    assert settled["scatterTitle"] == "Allele frequencies by deme pair"
+    assert settled["trajectoryTitle"] == "Statistic trajectories"
     _assert_run_card_grid_layout(settled["layout"])
     # All ten report statistics (the original seven plus the expensive,
     # opt-in "bonus" measurements A_CGD/Delta/MI, which joined the live

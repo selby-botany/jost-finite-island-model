@@ -118,7 +118,18 @@ window.__fimScrubberPending = 0;
 // file's own `showingLiveDemePair`-style precedent (`run-view-
 // running.js`) for "a user-driven, page-local display toggle" -- no
 // need to survive a reload.
-let hiddenTrajectoryStatistics = new Set();
+// Statistics whose trajectory curve starts hidden. `A_CGD`, `Delta`
+// (δ_G), and `MI` (I) are not differentiation measures on the same
+// `[0, 1]` scale the six report statistics share -- `A_CGD` is an
+// effective-allele *count*, so a single one of them can stretch the
+// shared y-axis far enough to flatten every curve that does live on
+// `[0, 1]` into a band near the bottom of the panel. They stay in the
+// legend and in the statistics table, one click away, rather than
+// being dropped: this is the panel's own default reading, not a
+// restriction on what can be plotted.
+const DEFAULT_HIDDEN_TRAJECTORY_STATISTICS = ["A_CGD", "Delta", "MI"];
+
+let hiddenTrajectoryStatistics = new Set(DEFAULT_HIDDEN_TRAJECTORY_STATISTICS);
 
 // The most recent `renderTrajectory` call's own arguments, so a legend
 // click can re-render the panel with the same underlying data (whatever
@@ -139,14 +150,16 @@ let lastPooledConvergenceHistories = null;
 let activeTrajectoryRenderMode = null;
 
 /**
- * Reset the trajectory legend's own hidden-statistic set to "everything
- * visible" -- called whenever a genuinely new run starts or a different
- * persisted run is opened (see `hiddenTrajectoryStatistics`'s own
- * comment for why this is not reset on every `enterCompletedState`
+ * Reset the trajectory legend's own hidden-statistic set to this
+ * panel's own default (`DEFAULT_HIDDEN_TRAJECTORY_STATISTICS`, i.e.
+ * every `[0, 1]`-scaled statistic shown and the differently-scaled
+ * ones hidden) -- called whenever a genuinely new run starts or a
+ * different persisted run is opened (see `hiddenTrajectoryStatistics`'s
+ * own comment for why this is not reset on every `enterCompletedState`
  * call).
  */
 window.fim.resetTrajectoryLegendVisibility = function resetTrajectoryLegendVisibility() {
-    hiddenTrajectoryStatistics = new Set();
+    hiddenTrajectoryStatistics = new Set(DEFAULT_HIDDEN_TRAJECTORY_STATISTICS);
 };
 
 const resultsRunId = document.getElementById("results-run-id");
@@ -1013,8 +1026,12 @@ function computeBatchTrajectoryValueDomain(visiblePooled) {
  *     what it is given, the same division of responsibility
  *     `drawTrajectoryCurve` already established for its own
  *     `visiblePlottable` argument.
+ * @param {number|null} [scrubGeneration] the generation currently being
+ *     inspected, drawn as the same dashed vertical marker
+ *     `drawTrajectoryCurve` uses; `null`/omitted while the view tracks
+ *     the newest tick, so no marker is drawn at all.
  */
-function drawBatchTrajectoryCurve(canvas, visiblePooled) {
+function drawBatchTrajectoryCurve(canvas, visiblePooled, scrubGeneration) {
     const context = canvas.getContext("2d");
     const width = canvas.width;
     const height = canvas.height;
@@ -1115,6 +1132,21 @@ function drawBatchTrajectoryCurve(canvas, visiblePooled) {
         });
         context.stroke();
     }
+
+    // The same dashed "you are looking at this generation" marker the
+    // scalar panel draws (`drawTrajectoryCurve`), so a live batch's own
+    // scrubber reads identically to a scalar run's.
+    if (scrubGeneration !== null && scrubGeneration !== undefined) {
+        context.setLineDash([4, 3]);
+        context.strokeStyle = mutedColor;
+        context.lineWidth = 1;
+        const x = xToPixel(scrubGeneration);
+        context.beginPath();
+        context.moveTo(x, plotTop);
+        context.lineTo(x, plotBottom);
+        context.stroke();
+        context.setLineDash([]);
+    }
 }
 
 /**
@@ -1126,8 +1158,11 @@ function drawBatchTrajectoryCurve(canvas, visiblePooled) {
  *
  * @param {Record<string, Array<{generation: number, mean: string,
  *     low: string, high: string, sampleCount: number}>> | undefined} pooledConvergenceHistories
+ * @param {number|null} [scrubGeneration] forwarded to `drawBatchTrajectoryCurve`
+ *     -- the generation a live batch's own scrubber is currently parked
+ *     on, or `null`/omitted while it tracks the newest tick.
  */
-function renderBatchTrajectory(pooledConvergenceHistories) {
+function renderBatchTrajectory(pooledConvergenceHistories, scrubGeneration) {
     lastPooledConvergenceHistories = pooledConvergenceHistories;
     const names = pooledConvergenceHistories ? Object.keys(pooledConvergenceHistories) : [];
     if (names.length === 0) {
@@ -1146,7 +1181,7 @@ function renderBatchTrajectory(pooledConvergenceHistories) {
             .filter((name) => !hiddenTrajectoryStatistics.has(name))
             .map((name) => [name, pooledConvergenceHistories[name]])
     );
-    drawBatchTrajectoryCurve(canvas, visiblePooled);
+    drawBatchTrajectoryCurve(canvas, visiblePooled, scrubGeneration);
     refreshTrajectoryStatisticRowStates();
     runTrajectoryLegend.replaceChildren();
 }

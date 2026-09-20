@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import pytest
+
 from fim.gui.literature_visuals import (
     literature_visual_payload,
     pooled_allele_composition_payload,
@@ -50,6 +52,15 @@ def test_literature_visual_payload_carries_a_wright_beta_overlay() -> None:
     assert len(spectrum["bins"]) == 20
     assert sum(bin_["count"] for bin_ in spectrum["bins"]) == 8
     assert spectrum["betaOverlay"] is not None
+    # The overlay is a *comparable* expectation, drawn on the same axes
+    # as the bars: its own expected counts therefore sum to the same
+    # sample count the bars do. Regression guard for a real defect --
+    # the overlay used to approximate each bin as one midpoint density
+    # times the bin width, which loses nearly all the mass of the
+    # sharply-peaked mixture components a realistic mutation rate
+    # produces, so the drawn curve collapsed onto the axis.
+    overlay_total = sum(point["expectedCount"] for point in spectrum["betaOverlay"])
+    assert overlay_total == pytest.approx(8.0)
 
 
 def test_literature_visual_payload_remaps_allele_composition_legend_labels() -> None:

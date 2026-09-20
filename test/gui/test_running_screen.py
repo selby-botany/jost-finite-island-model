@@ -410,8 +410,13 @@ def test_run_button_shows_the_trajectory_panel_for_the_watched_statistic(
         "K_ST",
         "MI",
     ]
-    for row in rows_by_name.values():
-        assert row["ariaPressed"] == "true"
+    for name, row in rows_by_name.items():
+        # `A_CGD`, `Delta`, and `MI` are not `[0, 1]`-scaled measures and
+        # start hidden so they do not flatten the rest against a shared
+        # y-axis (`DEFAULT_HIDDEN_TRAJECTORY_STATISTICS`); every row is
+        # still present and still toggleable.
+        expected = "false" if name in ("A_CGD", "Delta", "MI") else "true"
+        assert row["ariaPressed"] == expected
         assert row["cellClasses"][:3] == [
             "stat-name",
             "stat-plot-toggle",

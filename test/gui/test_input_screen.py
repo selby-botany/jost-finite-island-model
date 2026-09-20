@@ -570,8 +570,10 @@ def test_batch_progress_display_tracks_mean_generation_not_replicate_high_water(
     changing for many more generations. Fired here as two synthetic
     `fim.onBatchProgress` calls, first with every replicate reporting
     at mean generation 4, then with fewer current sidecars at mean
-    generation 6. The bar must advance by generation, and the label must
-    report the current sidecar count separately.
+    generation 6. The bar must advance by generation, and the label
+    must name the generation the plots are showing -- a replicate count
+    is not an answer to "how far along is this run?", which is the
+    question a progress bar's own label is read for.
     """
     settled = drive(
         window,
@@ -597,9 +599,8 @@ def test_batch_progress_display_tracks_mean_generation_not_replicate_high_water(
 
     assert settled["barValue"] == 6
     assert settled["barMax"] == 100
-    assert (
-        settled["labelText"] == "3 / 10 replicates reporting; mean generation 6 / 100"
-    )
+    assert settled["labelText"] == "mean completed generation 6"
+    assert "replicates reporting" not in settled["labelText"]
 
 
 def test_ci_tooltip_states_its_symmetric_summary_only_when_one_exists(

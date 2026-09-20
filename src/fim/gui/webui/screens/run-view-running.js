@@ -217,7 +217,10 @@ function enterRunningState(isBatch = false) {
     }
     runCompleted.hidden = true;
     batchResultsTable.hidden = true;
-    scrubberControls.hidden = isBatch;
+    // Both run kinds scrub live: every progress tick is retained, so
+    // the view can be dragged back to an earlier generation while the
+    // simulation keeps going (`scrubber.js`'s own "live" mode).
+    scrubberControls.hidden = false;
     alleleCompositionCard.hidden = isBatch;
     frequencySpectrumCard.hidden = isBatch;
     ibdCard.hidden = true;
@@ -228,9 +231,7 @@ function enterRunningState(isBatch = false) {
     resultsHistoryBackButton.hidden = true;
     resultsHistoryForwardButton.hidden = true;
     window.fim.resetScrubber();
-    if (!isBatch) {
-        window.fim.setScrubberMode("live");
-    }
+    window.fim.setScrubberMode("live");
     clearRunCanvas();
 }
 
@@ -540,36 +541,49 @@ window.fim.onBatchProgress = function onBatchProgress(payload) {
     const meanGeneration = payload.meanReportedGeneration ?? 0;
     progressBar.max = payload.maxGenerations;
     progressBar.value = meanGeneration;
-    progressLabel.textContent =
-        `${payload.reportedReplicateCount} / ${payload.replicateCount} ` +
-        `replicates reporting; mean generation ${meanGeneration} / ` +
-        `${payload.maxGenerations}`;
+    progressLabel.textContent = `mean completed generation ${meanGeneration}`;
     if (!liveDemeSelectorWired) {
         wireLiveDemePairSelector(payload.demeCount);
         liveDemeSelectorWired = true;
     }
-    // `renderBatchSummary` (`run-view-completed.js`) already renders
-    // "omitted (fewer than two defined replicates)" for any statistic
-    // `payload.statistics` leaves out -- which, early in a batch, is
-    // every statistic (`_push_batch_progress`'s own `reports_summary`
-    // needs at least two currently-reporting replicates to define an
-    // interval at all). That omitted-row rendering *is* "populated"
-    // here, not a placeholder for it: the table always shows something
-    // meaningful for the batch's current state, never blank.
-    renderBatchSummary(payload.statistics);
     setLiveBatchTrajectoryInitialPoint(payload.initialStatistics);
     accumulateLiveBatchTrajectory(payload.meanReportedGeneration, payload.statistics);
-    // `renderBatchTrajectory`, not `renderTrajectory` -- declared in
-    // `run-view-completed.js`, which loads after this file, guarded the
-    // same way that function's own scalar counterpart already is
-    // immediately below `onRunProgress`.
-    if (typeof renderBatchTrajectory === "function") {
-        renderBatchTrajectory(liveBatchTrajectory);
-    }
-    drawProgressPanels(payload);
-    if (typeof renderSupplementalPanels === "function" && payload.literatureVisuals) {
-        renderSupplementalPanels(payload.literatureVisuals);
-    }
+
+    // The batch counterpart to `onRunProgress`'s own live frame: every
+    // tick is retained so the scrubber can go back to an earlier pooled
+    // snapshot while the batch is still running, rather than only ever
+    // showing the newest one (`scrubber.js`'s own "live" mode).
+    const liveFrame = {
+        generation: meanGeneration,
+        panels: payload.panels,
+        pairPanel: payload.pairPanel,
+        statistics: payload.statistics,
+        literatureVisuals: payload.literatureVisuals,
+    };
+
+    window.fim.appendLiveFrame(liveFrame, (f, _index, isLiveHead) => {
+        // `renderBatchSummary` (`run-view-completed.js`) already renders
+        // "omitted (fewer than two defined replicates)" for any statistic
+        // `f.statistics` leaves out -- which, early in a batch, is
+        // every statistic (`_push_batch_progress`'s own `reports_summary`
+        // needs at least two currently-reporting replicates to define an
+        // interval at all). That omitted-row rendering *is* "populated"
+        // here, not a placeholder for it: the table always shows something
+        // meaningful for the batch's current state, never blank.
+        renderBatchSummary(f.statistics);
+        // `renderBatchTrajectory`, not `renderTrajectory` -- declared in
+        // `run-view-completed.js`, which loads after this file, guarded the
+        // same way that function's own scalar counterpart already is
+        // immediately below `onRunProgress`. The accumulated band always
+        // shows in full; only the scrub marker moves back with the frame.
+        if (typeof renderBatchTrajectory === "function") {
+            renderBatchTrajectory(liveBatchTrajectory, isLiveHead ? null : f.generation);
+        }
+        drawProgressPanels(f);
+        if (typeof renderSupplementalPanels === "function" && f.literatureVisuals) {
+            renderSupplementalPanels(f.literatureVisuals);
+        }
+    });
 };
 
 window.fim.onBatchDone = function onBatchDone(payload) {

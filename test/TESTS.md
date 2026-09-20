@@ -12610,8 +12610,10 @@ replicate had emitted an early sidecar, even though the plots kept
 changing for many more generations. Fired here as two synthetic
 `fim.onBatchProgress` calls, first with every replicate reporting
 at mean generation 4, then with fewer current sidecars at mean
-generation 6. The bar must advance by generation, and the label must
-report the current sidecar count separately.
+generation 6. The bar must advance by generation, and the label
+must name the generation the plots are showing -- a replicate count
+is not an answer to "how far along is this run?", which is the
+question a progress bar's own label is read for.
 
 <a id="gui.test_input_screen.test_ci_tooltip_states_its_symmetric_summary_only_when_one_exists"></a>
 
@@ -14535,6 +14537,27 @@ def test_a_completed_run_renders_the_run_view(
 ```
 
 A finished run shows its run id, outcome, all six statistics, and a scatter.
+
+<a id="gui.test_results_screen.test_differently_scaled_statistics_start_off_the_trajectory_panel"></a>
+
+#### test\_differently\_scaled\_statistics\_start\_off\_the\_trajectory\_panel
+
+```python
+def test_differently_scaled_statistics_start_off_the_trajectory_panel(
+        fast_scalar_run_settings: Path, window: webview.Window,
+        drive: Callable[..., Any]) -> None
+```
+
+`A_CGD`, `Delta`, and `MI` start hidden; the rest start plotted.
+
+The trajectory panel draws every statistic against one shared
+y-axis, so a statistic that is not a `[0, 1]` differentiation
+measure decides the axis for all of them: `A_CGD` is an effective-
+allele *count* and routinely reads above 1, which flattens `D`,
+`G_ST`, `E_ST`, `K_ST`, `H_S`, `H_T`, and `H_ST` into an unreadable
+band along the bottom of the panel. They are hidden by default, not
+removed -- this test also clicks `A_CGD`'s own row back on to prove
+the legend toggle still reaches it.
 
 <a id="gui.test_results_screen.test_completed_run_shows_title_above_canvas_and_back_returns_to_initial"></a>
 

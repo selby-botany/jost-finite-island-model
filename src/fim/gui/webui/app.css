@@ -816,23 +816,48 @@ fieldset.composite > label {
     flex-wrap: wrap;
 }
 
+/* The scatter and trajectory frames wear the same card chrome and
+ * carry the same `<h4>` title as the two supplemental panels below
+ * them, so the Run/Result card reads as four graphs of one kind rather
+ * than two titled cards beside two bare canvases. */
+.run-canvas-frame,
+.run-trajectory-frame {
+    box-sizing: border-box;
+    border: 1px solid var(--fim-border);
+    border-radius: 8px;
+    padding: 0.8rem;
+    background: var(--fim-background);
+}
+
+.run-canvas-frame > h4,
+.run-trajectory-frame > h4 {
+    margin: 0 0 0.5rem;
+    font-size: 0.9rem;
+}
+
 .run-canvas-frame {
     display: grid;
     grid-template-columns: 2.75rem minmax(0, 1fr);
-    /* A third row for `.self-comparison-note` (design doc `20260907-
+    /* Row 1 is the card title; row 2 the plot itself; row 3 the x-axis
+     * selector; row 4 `.self-comparison-note` (design doc `20260907-
      * claude-sonnet-5-botanist-gui-redesign.md` §7.3's own "changes the
      * plot's own caption to name what is being shown" -- a full
-     * sentence, not the short badge the row 2 empty corner cell it used
-     * to occupy could ever fit). */
-    grid-template-rows: minmax(0, 1fr) auto auto;
+     * sentence, not the short badge the empty corner cell beside the
+     * y-axis selector could ever fit). */
+    grid-template-rows: auto minmax(0, 1fr) auto auto;
     column-gap: 0.35rem;
     row-gap: 0.35rem;
     width: min(100%, 760px, calc(100vh - 220px));
 }
 
+.run-canvas-frame > h4 {
+    grid-column: 1 / 3;
+    grid-row: 1;
+}
+
 #run-canvas {
     grid-column: 2;
-    grid-row: 1;
+    grid-row: 2;
     border: 1px solid var(--fim-border);
     border-radius: 4px;
     background: var(--fim-background);
@@ -952,14 +977,14 @@ fieldset.composite > label {
 
 .axis-selector-y {
     grid-column: 1;
-    grid-row: 1;
+    grid-row: 2;
     justify-self: end;
     align-self: center;
 }
 
 .axis-selector-x {
     grid-column: 2;
-    grid-row: 2;
+    grid-row: 3;
     justify-self: center;
 }
 
@@ -975,7 +1000,7 @@ fieldset.composite > label {
  * left corner cell `.axis-selector-y`'s own column width would allow). */
 .self-comparison-note {
     grid-column: 1 / 3;
-    grid-row: 3;
+    grid-row: 4;
     justify-self: center;
     text-align: center;
     max-width: 640px;

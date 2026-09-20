@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from collections import deque
 from collections.abc import Mapping, Sequence
-from math import exp, isfinite, lgamma, log
+from math import exp, inf, isfinite, lgamma, log, log1p
 from typing import Any, Final, TypedDict
 
 from fim.model.params import Migration, SimulationParams
@@ -15,6 +15,12 @@ _HISTOGRAM_BIN_COUNT: Final = 20
 _MAX_BETA_COMPONENTS: Final = 64
 _MAX_COMPOSITION_ALLELES: Final = 8
 _MINIMUM_DECAY_CLASSES: Final = 2
+# Lentz's algorithm needs a stand-in for an exactly-zero term; these
+# are the conventional double-precision values for a beta continued
+# fraction (Numerical Recipes' `betacf`).
+_CONTINUED_FRACTION_TINY: Final = 1e-30
+_CONTINUED_FRACTION_EPSILON: Final = 3e-16
+_CONTINUED_FRACTION_MAX_ITERATIONS: Final = 300
 _COMPOSITION_COLORS: Final = (
     "#0072b2",
     "#d55e00",
@@ -376,12 +382,60 @@ def _aggregate_frequencies_by_allele(states: Sequence[ModelState]) -> dict[int, 
     return totals
 
 
-def _beta_density(x: float, alpha: float, beta: float) -> float:
-    """Return the beta density at ``x`` from log-gamma arithmetic."""
-    if x <= 0.0 or x >= 1.0:
-        return 0.0
-    log_beta = lgamma(alpha) + lgamma(beta) - lgamma(alpha + beta)
-    return exp((alpha - 1.0) * log(x) + (beta - 1.0) * log(1.0 - x) - log_beta)
+def _beta_continued_fraction(x: float, alpha: float, beta: float) -> float:
+    """Return the continued fraction used by `_regularized_incomplete_beta`.
+
+    Args:
+        x: Point in ``(0, 1)`` at which the fraction is evaluated.
+        alpha: First beta shape parameter.
+        beta: Second beta shape parameter.
+
+    Returns:
+        The value of the modified Lentz continued fraction; the caller
+        multiplies it by the front factor to obtain ``I_x(alpha, beta)``.
+    """
+    qab = alpha + beta
+    qap = alpha + 1.0
+    qam = alpha - 1.0
+    c = 1.0
+    d = 1.0 - qab * x / qap
+    if abs(d) < _CONTINUED_FRACTION_TINY:
+        d = _CONTINUED_FRACTION_TINY
+    d = 1.0 / d
+    result = d
+    for iteration in range(1, _CONTINUED_FRACTION_MAX_ITERATIONS + 1):
+        even = (
+            iteration
+            * (beta - iteration)
+            * x
+            / ((qam + 2 * iteration) * (alpha + 2 * iteration))
+        )
+        d = 1.0 + even * d
+        if abs(d) < _CONTINUED_FRACTION_TINY:
+            d = _CONTINUED_FRACTION_TINY
+        c = 1.0 + even / c
+        if abs(c) < _CONTINUED_FRACTION_TINY:
+            c = _CONTINUED_FRACTION_TINY
+        d = 1.0 / d
+        result *= d * c
+        odd = (
+            -(alpha + iteration)
+            * (qab + iteration)
+            * x
+            / ((alpha + 2 * iteration) * (qap + 2 * iteration))
+        )
+        d = 1.0 + odd * d
+        if abs(d) < _CONTINUED_FRACTION_TINY:
+            d = _CONTINUED_FRACTION_TINY
+        c = 1.0 + odd / c
+        if abs(c) < _CONTINUED_FRACTION_TINY:
+            c = _CONTINUED_FRACTION_TINY
+        d = 1.0 / d
+        step = d * c
+        result *= step
+        if abs(step - 1.0) < _CONTINUED_FRACTION_EPSILON:
+            break
+    return result
 
 
 def _histogram(values: Sequence[float], bin_count: int) -> list[dict[str, float | int]]:
@@ -467,6 +521,45 @@ def _pairwise_identity(state: ModelState, left: int, right: int) -> float:
     return total / state.locus_count
 
 
+def _regularized_incomplete_beta(x: float, alpha: float, beta: float) -> float:
+    """Return the beta cumulative distribution ``I_x(alpha, beta)``.
+
+    Args:
+        x: Point at which the distribution is evaluated; values outside
+            ``[0, 1]`` are clamped to the nearest endpoint.
+        alpha: First beta shape parameter.
+        beta: Second beta shape parameter.
+
+    Returns:
+        0 and the probability mass at or below ``x``.
+
+    A beta *CDF*, not a beta density, because the overlay is an
+    expected bin *count*: integrating each bin exactly is the only
+    way its total can equal the sample count it is drawn against. The
+    midpoint-density approximation this replaced silently lost most of
+    the mass whenever a mixture component was sharply peaked (a rare
+    allele, whose whole distribution sits inside the leftmost bin),
+    which is what made the overlay read as a flat line along the axis.
+    """
+    if x <= 0.0:
+        return 0.0
+    if x >= 1.0:
+        return 1.0
+    log_front = (
+        lgamma(alpha + beta)
+        - lgamma(alpha)
+        - lgamma(beta)
+        + alpha * log(x)
+        + beta * log1p(-x)
+    )
+    front = exp(log_front) if log_front > -inf else 0.0
+    # The fraction converges quickly only on its own side of the
+    # distribution's mode; past it, evaluate the mirrored problem.
+    if x < (alpha + 1.0) / (alpha + beta + 2.0):
+        return front * _beta_continued_fraction(x, alpha, beta) / alpha
+    return 1.0 - front * _beta_continued_fraction(1.0 - x, beta, alpha) / beta
+
+
 def _shortest_paths(adjacency: Sequence[Sequence[int]], start: int) -> list[int | None]:
     """Return breadth-first shortest paths from one start node."""
     distances: list[int | None] = [None] * len(adjacency)
@@ -509,21 +602,52 @@ def _wright_beta_overlay(
     if not eligible:
         return None
     width = 1.0 / bin_count
-    overlay = []
-    for index in range(bin_count):
-        x = (index + 0.5) * width
-        mixture = 0.0
-        for mean in eligible:
-            concentration = (1.0 - theta) / theta
-            mixture += _beta_density(
-                x,
-                max(mean * concentration, 1e-9),
-                max((1.0 - mean) * concentration, 1e-9),
-            )
-        overlay.append(
-            {
-                "x": x,
-                "expectedCount": (mixture / len(eligible)) * sample_count * width,
-            }
+    concentration = (1.0 - theta) / theta
+    components = [
+        (
+            max(mean * concentration, 1e-9),
+            max((1.0 - mean) * concentration, 1e-9),
         )
-    return overlay
+        for mean in eligible
+    ]
+    # Drift resamples `N` gene copies per deme, so a real frequency is
+    # always a multiple of `1 / N` and "absent" is the exact atom 0 --
+    # which `pooled_frequency_spectrum_payload` drops from its own
+    # histogram (`if frequency > 0.0`). The continuous beta has no such
+    # atom, so its mass below one gene copy describes samples the bars
+    # never counted; integrating from there instead of from 0 compares
+    # like with like. Without this the leftmost bin's own overlay point
+    # absorbs every rare allele's near-zero mass and towers over the
+    # histogram it is meant to be read against.
+    smallest_observable = 1.0 / params.N
+    masses = []
+    for index in range(bin_count):
+        low = max(index * width, smallest_observable)
+        high = (index + 1) * width
+        # Exact probability mass in this bin, summed over the mixture --
+        # not a density sampled at the bin's own midpoint, which loses
+        # nearly all of a sharply-peaked component's own mass (see
+        # `_regularized_incomplete_beta`'s own docstring). That loss is
+        # what flattened this overlay onto the axis.
+        masses.append(
+            sum(
+                _regularized_incomplete_beta(high, alpha, beta)
+                - _regularized_incomplete_beta(low, alpha, beta)
+                for alpha, beta in components
+            )
+            if high > low
+            else 0.0
+        )
+    total_mass = sum(masses)
+    if total_mass <= 0.0:
+        return None
+    # Expected counts, not densities: the overlay sums to exactly the
+    # number of frequencies the histogram itself binned, so the two are
+    # on one shared vertical scale.
+    return [
+        {
+            "x": index * width + width / 2.0,
+            "expectedCount": (mass / total_mass) * sample_count,
+        }
+        for index, mass in enumerate(masses)
+    ]
