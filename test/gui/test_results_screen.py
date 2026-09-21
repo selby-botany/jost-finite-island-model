@@ -1264,7 +1264,7 @@ def test_deme_pair_selectors_stay_glued_to_the_scatter_axes(
             + "bottom: b.bottom, cx: (b.left + b.right) / 2, "
             + "cy: (b.top + b.bottom) / 2}; }; "
             + "window.__fimAxes = {canvas: box('#run-canvas'), "
-            + "y: box('.axis-selector-y'), x: box('.axis-selector-x'), "
+            + "y: box('#run-y-deme'), x: box('#run-x-deme'), "
             + "parent: document.getElementById("
             + "'run-deme-pair-selector').parentElement.id}; "
             + "return; } setTimeout(poll, 50); }; setTimeout(poll, 50);"
@@ -1280,6 +1280,14 @@ def test_deme_pair_selectors_stay_glued_to_the_scatter_axes(
 
     axes = settled["axes"]
     assert axes["parent"] == "run-scatter-card"
+    # Measured on the `<select>`s themselves, not their labels: the y
+    # control is rotated, and `getBoundingClientRect` reports the
+    # transformed box -- the strip a reader actually sees -- whereas the
+    # label's box is the control's un-rotated width, four times wider
+    # and centered on the strip. Reading the label is what made an
+    # earlier version of this test pass while the selector visibly
+    # floated well clear of the plot.
+    #
     # The y selector sits wholly left of the plot and is centered on it
     # vertically; the x selector sits wholly below the plot and is
     # centered on it horizontally. A generous 12px tolerance on the two
@@ -1289,3 +1297,18 @@ def test_deme_pair_selectors_stay_glued_to_the_scatter_axes(
     assert abs(axes["y"]["cy"] - axes["canvas"]["cy"]) <= 12
     assert axes["x"]["top"] >= axes["canvas"]["bottom"]
     assert abs(axes["x"]["cx"] - axes["canvas"]["cx"]) <= 12
+
+    # Both controls stand off the plot by the same distance, which is
+    # the frame grid's own gap in each direction. Reported as the left
+    # selector sitting far further out than the bottom one (measured
+    # then: 38px beside the plot against 8px below it). The 2px
+    # tolerance is for sub-pixel rounding of a single `0.35rem` gap, not
+    # for slack -- it is deliberately tight enough to fail if the y
+    # label's box ever stops hugging its rotated control, which is the
+    # thing that actually went wrong.
+    gap_beside = axes["canvas"]["left"] - axes["y"]["right"]
+    gap_below = axes["x"]["top"] - axes["canvas"]["bottom"]
+    assert abs(gap_beside - gap_below) <= 2, (
+        f"y selector stands {gap_beside}px from the plot but the x "
+        f"selector stands {gap_below}px from it"
+    )
