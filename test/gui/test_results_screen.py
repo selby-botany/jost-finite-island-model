@@ -1228,3 +1228,64 @@ def test_graph_zoom_frame_takes_the_pane_and_gives_it_back(
     # pane would keep the frame's dimensions back on the stage.
     assert settled["restored"]["placeholder"] is False
     assert settled["restored"]["inlineWidth"] == ""
+
+
+def test_deme_pair_selectors_stay_glued_to_the_scatter_axes(
+    fast_scalar_run_settings: Path, window: webview.Window, drive: Callable[..., Any]
+) -> None:
+    """Both deme selectors sit on the axes they label, not adrift.
+
+    They are positioned purely by `grid-column`/`grid-row` inside `.run-
+    canvas-frame`'s own grid -- the y selector rotated in the column
+    beside the plot, the x selector centered in the row beneath it --
+    so they are glued to the canvas only for as long as they remain
+    children of that frame.
+
+    Reported once already: the graph-stage rewrite hoisted them into
+    the stage toolbar, where those placements resolved against the
+    wrong container and both selectors floated away from the plot (the
+    y selector landed over the card's own title). Nothing failed; the
+    layout was simply wrong. Hence this check on the geometry itself
+    rather than on the markup: the selectors must straddle the canvas.
+    """
+    settled = drive(
+        window,
+        ready=_INPUT_SCREEN_READY,
+        trigger=(
+            _SET_TINY_FIELDS
+            + "document.getElementById('run-button').click(); "
+            + "const poll = () => { "
+            + "if (window.fim.getRunViewState() === 'completed') { "
+            + "window.fim.showGraph('scatter'); "
+            + "const box = (selector) => { "
+            + "const el = document.querySelector(selector); "
+            + "const b = el.getBoundingClientRect(); "
+            + "return {left: b.left, top: b.top, right: b.right, "
+            + "bottom: b.bottom, cx: (b.left + b.right) / 2, "
+            + "cy: (b.top + b.bottom) / 2}; }; "
+            + "window.__fimAxes = {canvas: box('#run-canvas'), "
+            + "y: box('.axis-selector-y'), x: box('.axis-selector-x'), "
+            + "parent: document.getElementById("
+            + "'run-deme-pair-selector').parentElement.id}; "
+            + "return; } setTimeout(poll, 50); }; setTimeout(poll, 50);"
+        ),
+        read=("({runViewState: window.fim.getRunViewState(), axes: window.__fimAxes})"),
+        is_ready=lambda value: (
+            value is not None
+            and value.get("runViewState") == "completed"
+            and value.get("axes") is not None
+        ),
+        poll_attempts=_POLL_ATTEMPTS,
+    )
+
+    axes = settled["axes"]
+    assert axes["parent"] == "run-scatter-card"
+    # The y selector sits wholly left of the plot and is centered on it
+    # vertically; the x selector sits wholly below the plot and is
+    # centered on it horizontally. A generous 12px tolerance on the two
+    # centerings -- this is asserting "attached to the axis", not
+    # pixel-exact placement that font metrics could shift.
+    assert axes["y"]["right"] <= axes["canvas"]["left"]
+    assert abs(axes["y"]["cy"] - axes["canvas"]["cy"]) <= 12
+    assert axes["x"]["top"] >= axes["canvas"]["bottom"]
+    assert abs(axes["x"]["cx"] - axes["canvas"]["cx"]) <= 12

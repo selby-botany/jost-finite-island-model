@@ -37,12 +37,6 @@ const RUN_GRAPHS = [
     { key: "ibd", paneId: "ibd-card", titleId: "ibd-title" },
 ];
 
-// Which graphs carry their own extra controls in the stage toolbar.
-// The deme-pair selector belongs to the scatter and nothing else, so it
-// is hidden whenever another graph is showing even if the run itself
-// has demes to choose between.
-const TOOLBAR_EXTRAS = { scatter: "run-deme-pair-selector" };
-
 const ZOOM_STEP = 0.25;
 const ZOOM_MIN = 0.5;
 const ZOOM_MAX = 4;
@@ -183,18 +177,6 @@ function syncRunGraphStage() {
         }
         const shown = entry.key === selectedGraphKey && graphAvailability.get(entry.key) === true;
         pane.hidden = !shown;
-    }
-    // Per-graph toolbar extras are gated in CSS off this class rather
-    // than by forcing their `hidden` here: `hidden` on the deme-pair
-    // selector is the render functions' own signal ("this run has demes
-    // to choose between"), and overwriting it would lose that answer
-    // the moment another graph was selected.
-    for (const [key, extraId] of Object.entries(TOOLBAR_EXTRAS)) {
-        const extra = document.getElementById(extraId);
-        if (extra) {
-            extra.classList.add("run-graph-extra");
-            extra.classList.toggle("run-graph-extra-active", key === selectedGraphKey);
-        }
     }
     if (selectedGraphKey !== null && !redrawingActiveGraph) {
         redrawingActiveGraph = true;

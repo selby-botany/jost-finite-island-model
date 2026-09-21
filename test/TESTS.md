@@ -14884,6 +14884,31 @@ ever one canvas holding the drawing. The risk that buys is losing
 the pane: if it is not put back exactly where it came from, the
 stage is left permanently blank with no error anywhere.
 
+<a id="gui.test_results_screen.test_deme_pair_selectors_stay_glued_to_the_scatter_axes"></a>
+
+#### test\_deme\_pair\_selectors\_stay\_glued\_to\_the\_scatter\_axes
+
+```python
+def test_deme_pair_selectors_stay_glued_to_the_scatter_axes(
+        fast_scalar_run_settings: Path, window: webview.Window,
+        drive: Callable[..., Any]) -> None
+```
+
+Both deme selectors sit on the axes they label, not adrift.
+
+They are positioned purely by `grid-column`/`grid-row` inside `.run-
+canvas-frame`'s own grid -- the y selector rotated in the column
+beside the plot, the x selector centered in the row beneath it --
+so they are glued to the canvas only for as long as they remain
+children of that frame.
+
+Reported once already: the graph-stage rewrite hoisted them into
+the stage toolbar, where those placements resolved against the
+wrong container and both selectors floated away from the plot (the
+y selector landed over the card's own title). Nothing failed; the
+layout was simply wrong. Hence this check on the geometry itself
+rather than on the markup: the selectors must straddle the canvas.
+
 <a id="gui.test_runner"></a>
 
 # gui.test\_runner

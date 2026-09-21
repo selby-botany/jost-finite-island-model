@@ -853,14 +853,6 @@ fieldset.composite > label {
     min-width: 0;
 }
 
-.run-graph-extra {
-    display: none;
-}
-
-.run-graph-extra.run-graph-extra-active {
-    display: contents;
-}
-
 .run-graph-body .scrubber-controls {
     margin: 0;
     flex-direction: column;

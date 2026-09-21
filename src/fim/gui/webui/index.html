@@ -303,25 +303,9 @@
                cannot be drawn into correctly, so whichever pane becomes
                visible is always repainted at that moment. -->
           <div class="run-graph-stage" id="run-graph-stage">
-            <div class="run-graph-toolbar">
-              <select id="run-graph-select" aria-label="Choose which graph to show"></select>
-              <div id="run-deme-pair-selector" class="run-axis-selectors" hidden>
-                <label for="run-y-deme" class="axis-selector axis-selector-y">
-                  <select id="run-y-deme" aria-label="Y deme selector"></select>
-                </label>
-                <label for="run-x-deme" class="axis-selector axis-selector-x">
-                  <select id="run-x-deme" aria-label="X deme selector"></select>
-                </label>
-                <!-- Shown only while the two selectors above name the
-                     same deme (`app.js`'s own `wireDemePairSelector`) --
-                     P1 item 6 of the 2026-09-06 open-issues doc permits
-                     this as a deliberate diagonal-baseline self-
-                     comparison rather than forcing the selectors apart. -->
-                <span id="run-deme-pair-self-note" class="self-comparison-note" hidden
-                  >Self-comparison</span
-                >
-              </div>
-            </div>
+          <div class="run-graph-toolbar">
+            <select id="run-graph-select" aria-label="Choose which graph to show"></select>
+          </div>
             <div class="run-graph-body">
               <!-- `completed`-only this phase (design §3.2.4: no
                    separate "Animate" button anywhere -- the scrubber is
@@ -348,6 +332,34 @@
               <div class="run-visual-panels" id="run-visual-panels">
             <div class="run-canvas-frame" id="run-scatter-card">
               <h4 id="run-scatter-title">Allele frequencies by deme pair</h4>
+              <!-- Inside this frame, not up in the stage toolbar: both
+                   selectors are placed by `grid-column`/`grid-row` in
+                   `.run-canvas-frame`'s own grid, which is what glues
+                   them to the plot -- the y selector rotated in the
+                   column beside it, the x selector centered in the row
+                   beneath it. Hoisting them into the toolbar (tried
+                   once, and visible in the report that prompted this
+                   comment) leaves those placements resolving against
+                   the wrong container, so both selectors float free of
+                   the axes they label. They need no separate hiding
+                   either: when another graph is showing, this whole
+                   pane is hidden and they go with it. -->
+              <div id="run-deme-pair-selector" class="run-axis-selectors" hidden>
+                <label for="run-y-deme" class="axis-selector axis-selector-y">
+                  <select id="run-y-deme" aria-label="Y deme selector"></select>
+                </label>
+                <label for="run-x-deme" class="axis-selector axis-selector-x">
+                  <select id="run-x-deme" aria-label="X deme selector"></select>
+                </label>
+                <!-- Shown only while the two selectors above name the
+                     same deme (`app.js`'s own `wireDemePairSelector`) --
+                     P1 item 6 of the 2026-09-06 open-issues doc permits
+                     this as a deliberate diagonal-baseline self-
+                     comparison rather than forcing the selectors apart. -->
+                <span id="run-deme-pair-self-note" class="self-comparison-note" hidden
+                  >Self-comparison</span
+                >
+              </div>
             <!-- Shared across all three states: `running`/`completed`
                  draw into it; `initial` now draws the p_0 scatter
                  (Phase F). No width/height attributes -- sized entirely
