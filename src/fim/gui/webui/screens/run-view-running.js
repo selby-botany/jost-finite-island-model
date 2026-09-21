@@ -217,6 +217,7 @@ function enterRunningState(isBatch = false) {
     }
     runCompleted.hidden = true;
     batchResultsTable.hidden = true;
+    runResultsTable.hidden = true;
     // Both run kinds scrub live: every progress tick is retained, so
     // the view can be dragged back to an earlier generation while the
     // simulation keeps going (`scrubber.js`'s own "live" mode).

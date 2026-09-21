@@ -198,6 +198,10 @@ const gStCautionNote = document.getElementById("g-st-caution-note");
 const batchResultsTableEl = document.getElementById("batch-results-summary");
 const batchResultsSummary = document.getElementById("batch-results-summary-body");
 const batchResultsTableBody = document.getElementById("batch-results-table-body");
+// The scalar counterpart to `batchResultsTableBody`: one row per
+// sampled generation rather than one row per replicate.
+const runResultsTableEl = document.getElementById("run-results-table");
+const runResultsTableBody = document.getElementById("run-results-table-body");
 const resultsBackButton = document.getElementById("results-back-button");
 const resultsHistoryBackButton = document.getElementById("results-history-back-button");
 const resultsHistoryForwardButton = document.getElementById(
@@ -255,6 +259,11 @@ let completedIdentityRecovery = null;
 let completedGenerationCount = null;
 let completedFinalStatistics = null;
 let completedFinalLiteratureVisuals = null;
+// The scalar per-generation results table's own one extra fact: the
+// stop reason to print on its own final row. Kept beside the scrub-
+// replay state above because it shares that lifetime exactly -- set by
+// `enterCompletedState`'s own scalar branch, nulled by its batch one.
+let completedReportReason = null;
 
 /**
  * Add or refresh one statistic row's plot color tile and display-toggle
@@ -1373,6 +1382,89 @@ function renderBatchTable(replicates, p0Statistics) {
     }
 }
 
+/**
+ * Render the scalar run's own per-generation results table -- the
+ * single-replicate counterpart to `renderBatchTable` immediately
+ * above, closing a real gap a user reported between the two completed
+ * views: a batch got a full-width table of its own results, a single
+ * run got only the point-value stats panel beside the plot.
+ *
+ * A batch's rows are its replicates. A single run has exactly one, so
+ * listing replicates here would say nothing the stats panel does not
+ * already say; its rows are generations instead. They are *the
+ * scrubber's own* sampled generations (`frameGenerations`, at most
+ * `GUI_ANIMATION_MAX_FRAMES`, `fim.gui.animation.select_sample_
+ * generations`) rather than every recorded generation, for two
+ * reasons: a row and a scrub position then always denote the same
+ * instant, and a 10,000-generation run does not build 10,000 table
+ * rows.
+ *
+ * Statistic values come from the retained per-generation histories the
+ * scrubber already reads (`completedTrajectoryHistories`), looked up
+ * through the same `nearestGeneration` match `updateScrubbedTrajectory`
+ * uses, so a table cell and the stats panel at that same scrub
+ * position always agree. The final row is the exception, and
+ * deliberately so: it shows `completedFinalStatistics` -- the run's
+ * own authoritative, server-formatted final values -- exactly as
+ * `updateScrubbedTrajectory`'s own `isFinalFrame` branch does.
+ *
+ * Renders nothing and stays hidden when there is no per-generation
+ * history at all (a reopened run, `Api.open_run`, whose payload
+ * carries no `convergenceHistories` -- the same named scope boundary
+ * `updateScrubbedTrajectory` already observes).
+ *
+ * @param {number[]} frameGenerations - The scrubber's own frame
+ *     generations, ascending.
+ */
+function renderScalarTable(frameGenerations) {
+    runResultsTableBody.replaceChildren();
+    if (
+        !completedTrajectoryGenerations ||
+        completedTrajectoryGenerations.length === 0 ||
+        !frameGenerations ||
+        frameGenerations.length === 0
+    ) {
+        runResultsTableEl.hidden = true;
+        return;
+    }
+    const lastIndex = frameGenerations.length - 1;
+    for (const [index, generation] of frameGenerations.entries()) {
+        const isFinal = index === lastIndex;
+        const scrubGeneration = nearestGeneration(
+            completedTrajectoryGenerations,
+            generation
+        );
+        const scrubIndex = completedTrajectoryGenerations.indexOf(scrubGeneration);
+        let outcome = "";
+        if (generation === 0) {
+            outcome = "initial";
+        } else if (isFinal && completedReportReason) {
+            outcome = completedReportReason;
+        }
+        const values = STATISTIC_NAMES.map((name) => {
+            if (isFinal && completedFinalStatistics) {
+                return completedFinalStatistics[name];
+            }
+            const history = completedTrajectoryHistories
+                ? completedTrajectoryHistories[name]
+                : undefined;
+            const value = history && scrubIndex >= 0 ? history[scrubIndex] : undefined;
+            // Same raw-float-to-display rounding `updateScrubbedTrajectory`
+            // applies to these same history values, for the same reason:
+            // `ConvergenceMonitor.histories` holds unformatted floats.
+            return Number.isFinite(value) ? Number(value).toPrecision(6) : "—";
+        });
+        const row = document.createElement("tr");
+        for (const value of [generation, outcome, ...values]) {
+            const cell = document.createElement("td");
+            cell.textContent = value === undefined || value === null ? "—" : String(value);
+            row.appendChild(cell);
+        }
+        runResultsTableBody.appendChild(row);
+    }
+    runResultsTableEl.hidden = false;
+}
+
 function drawCompletedOverview(panels) {
     if (!panels || panels.length === 0) {
         return;
@@ -1520,6 +1612,7 @@ function updateScrubbedTrajectory(frameGeneration, isFinalFrame) {
 async function wireCompletedScrubber(outputDirectory, generationCount) {
     if (generationCount <= 1) {
         scrubberControls.hidden = true;
+        runResultsTableEl.hidden = true;
         window.fim.resetScrubber();
         return;
     }
@@ -1544,10 +1637,16 @@ async function wireCompletedScrubber(outputDirectory, generationCount) {
         }
         if (!result.ok || result.frames.length === 0) {
             scrubberControls.hidden = true;
+            runResultsTableEl.hidden = true;
             window.fim.resetScrubber();
             return;
         }
         scrubberControls.hidden = false;
+        // The results table's own rows are exactly these frames' own
+        // generations (`renderScalarTable`'s own docstring), so it is
+        // built here, where that sampled list first exists client-side,
+        // rather than in `enterCompletedState`, which never sees it.
+        renderScalarTable(result.frames.map((frame) => frame.generation));
         window.fim.setScrubberFrames(result.frames, (frame, index) => {
             const isFinal = index === result.frames.length - 1;
             drawCompletedOverview(frame.panels);
@@ -1651,6 +1750,11 @@ window.fim.enterCompletedState = function enterCompletedState(payload, isBatch) 
     resultsStats.hidden = isBatch;
     batchResultsTableEl.hidden = !isBatch;
     batchResultsTable.hidden = !isBatch;
+    // Hidden until `wireCompletedScrubber` actually has frames to build
+    // rows from (scalar branch only) -- never left showing the previous
+    // run's own rows while this one's are still in flight.
+    runResultsTableEl.hidden = true;
+    runResultsTableBody.replaceChildren();
     // Item 6: a batch has no single trajectory of its own to re-analyze
     // at a chosen generation -- unrelated to whether the batch itself
     // can be opened at all (`open-run.js`'s own `openBatch` opens one
@@ -1707,6 +1811,7 @@ window.fim.enterCompletedState = function enterCompletedState(payload, isBatch) 
         completedGenerationCount = null;
         completedFinalStatistics = null;
         completedFinalLiteratureVisuals = null;
+        completedReportReason = null;
         renderBatchTrajectory(payload.pooledConvergenceHistories);
     } else {
         // A different run just opened (or a live run just finished) --
@@ -1724,6 +1829,7 @@ window.fim.enterCompletedState = function enterCompletedState(payload, isBatch) 
         const report = payload.report;
         const reason = report.reason.charAt(0).toUpperCase() + report.reason.slice(1);
         resultsOutcome.textContent = `${reason}: generation ${report.generation}`;
+        completedReportReason = reason;
         for (const name of STATISTIC_NAMES) {
             const value = payload.statistics[name];
             const element = document.getElementById(`stat-${name}`);

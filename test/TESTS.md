@@ -14561,6 +14561,32 @@ band along the bottom of the panel. They are hidden by default, not
 removed -- this test also clicks `A_CGD`'s own row back on to prove
 the legend toggle still reaches it.
 
+<a id="gui.test_results_screen.test_a_single_replicate_run_gets_a_per_generation_results_table"></a>
+
+#### test\_a\_single\_replicate\_run\_gets\_a\_per\_generation\_results\_table
+
+```python
+def test_a_single_replicate_run_gets_a_per_generation_results_table(
+        fast_scalar_run_settings: Path, window: webview.Window,
+        drive: Callable[..., Any]) -> None
+```
+
+A single-replicate run gets the same full-width results table a batch gets.
+
+Reported as a gap between the two completed views: a batch showed a
+full-width table of its own per-replicate results below the graphs,
+while a single run showed only the point-value stats panel beside
+them. A batch's rows are its replicates and a single run has
+exactly one, so this table's rows are generations instead --
+specifically the scrubber's own sampled generations, so that a row
+and a scrub position always denote the same instant
+(`renderScalarTable`).
+
+Checks the two rows whose contents are fully determined regardless
+of how many generations this particular run takes: the first
+(generation 0, outcome "initial") and the last (the run's own stop
+reason, the same text ``results`-outcome` reports above the plot).
+
 <a id="gui.test_results_screen.test_completed_run_shows_title_above_canvas_and_back_returns_to_initial"></a>
 
 #### test\_completed\_run\_shows\_title\_above\_canvas\_and\_back\_returns\_to\_initial

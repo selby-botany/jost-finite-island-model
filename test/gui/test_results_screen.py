@@ -315,6 +315,87 @@ def test_differently_scaled_statistics_start_off_the_trajectory_panel(
     assert settled["reinstated"] == "true"
 
 
+def test_a_single_replicate_run_gets_a_per_generation_results_table(
+    fast_scalar_run_settings: Path, window: webview.Window, drive: Callable[..., Any]
+) -> None:
+    """A single-replicate run gets the same full-width results table a batch gets.
+
+    Reported as a gap between the two completed views: a batch showed a
+    full-width table of its own per-replicate results below the graphs,
+    while a single run showed only the point-value stats panel beside
+    them. A batch's rows are its replicates and a single run has
+    exactly one, so this table's rows are generations instead --
+    specifically the scrubber's own sampled generations, so that a row
+    and a scrub position always denote the same instant
+    (`renderScalarTable`).
+
+    Checks the two rows whose contents are fully determined regardless
+    of how many generations this particular run takes: the first
+    (generation 0, outcome "initial") and the last (the run's own stop
+    reason, the same text `#results-outcome` reports above the plot).
+    """
+    settled = drive(
+        window,
+        ready=_INPUT_SCREEN_READY,
+        trigger=(_SET_TINY_FIELDS + "document.getElementById('run-button').click();"),
+        read=(
+            "({"
+            "runViewState: window.fim.getRunViewState(), "
+            "scrubberPending: window.__fimScrubberPending, "
+            "tableHidden: document.getElementById('run-results-table').hidden, "
+            "batchTableHidden: "
+            "document.getElementById('batch-results-table').hidden, "
+            "headers: Array.from(document.querySelectorAll("
+            "'#run-results-table thead th')).map((th) => th.textContent), "
+            "rowCount: "
+            "document.getElementById('run-results-table-body').children.length, "
+            # `scrubber.js` keeps its frame list private; its range's own
+            # `max` is the index of the last frame, so the count is that
+            # plus one.
+            "frameCount: Number("
+            "document.getElementById('scrubber-range').max) + 1, "
+            "firstRowCells: (() => {"
+            "const row = document.getElementById("
+            "'run-results-table-body').children[0];"
+            "return row ? Array.from(row.children).map((c) => c.textContent) : null;"
+            "})(), "
+            "lastRowCells: (() => {"
+            "const rows = document.getElementById('run-results-table-body').children;"
+            "const row = rows[rows.length - 1];"
+            "return row ? Array.from(row.children).map((c) => c.textContent) : null;"
+            "})(), "
+            "outcome: document.getElementById('results-outcome').textContent"
+            "})"
+        ),
+        is_ready=lambda value: (
+            value is not None
+            and value.get("runViewState") == "completed"
+            and value.get("scrubberPending") == 0
+            and value.get("rowCount", 0) > 0
+        ),
+        poll_attempts=_POLL_ATTEMPTS,
+    )
+
+    assert settled["tableHidden"] is False
+    # The batch table stays hidden -- this is a second table, not the
+    # batch one repurposed.
+    assert settled["batchTableHidden"] is True
+    assert settled["headers"][:2] == ["Generation", "Outcome"]
+    # Ten statistics, no "Replicate" column and no "Open" column: a
+    # single run has neither a sibling replicate to name nor a separate
+    # trajectory to open, since this card is already showing it.
+    assert len(settled["headers"]) == 12
+    # One row per scrubber frame, exactly -- the alignment that lets a
+    # row and a scrub position mean the same generation.
+    assert settled["rowCount"] == settled["frameCount"]
+    first = settled["firstRowCells"]
+    assert first[0] == "0"
+    assert first[1] == "initial"
+    last = settled["lastRowCells"]
+    assert last[1] != ""
+    assert settled["outcome"].startswith(last[1])
+
+
 def test_completed_run_shows_title_above_canvas_and_back_returns_to_initial(
     fast_scalar_run_settings: Path, window: webview.Window, drive: Callable[..., Any]
 ) -> None:

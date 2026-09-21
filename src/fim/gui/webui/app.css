@@ -1361,7 +1361,10 @@ fieldset.composite > label {
     grid-row: 3;
 }
 
-.batch-results-table {
+/* Shared by both full-width results tables: the batch's own per-
+ * replicate table and the scalar run's own per-generation one. */
+.batch-results-table,
+.results-table {
     width: 100%;
     border-collapse: collapse;
     margin-bottom: 1rem;
@@ -1369,7 +1372,9 @@ fieldset.composite > label {
 }
 
 .batch-results-table th,
-.batch-results-table td {
+.batch-results-table td,
+.results-table th,
+.results-table td {
     text-align: left;
     padding: 0.3rem 0.6rem;
     border-bottom: 1px solid var(--fim-border);

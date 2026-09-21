@@ -19,6 +19,7 @@ const runPlotTitle = document.getElementById("run-plot-title");
 const runProgress = document.getElementById("run-progress");
 const runCompleted = document.getElementById("run-completed");
 const batchResultsTable = document.getElementById("batch-results-table");
+const runResultsTable = document.getElementById("run-results-table");
 const scrubberControls = document.getElementById("scrubber-controls");
 const runDemePairSelector = document.getElementById("run-deme-pair-selector");
 const runXDeme = document.getElementById("run-x-deme");
@@ -357,6 +358,7 @@ function enterInitialState(renderPreview = true) {
     window.fim.setCompletedOutputDirectory(null);
     runCompleted.hidden = true;
     batchResultsTable.hidden = true;
+    runResultsTable.hidden = true;
     scrubberControls.hidden = true;
     runDemePairSelector.hidden = true;
     runProgress.hidden = true;

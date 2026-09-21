@@ -527,7 +527,7 @@
     </div>
     <!-- Batch `completed`-only: the replicate table, full width below
          the flex row above rather than squeezed into it. -->
-    <table class="batch-results-table" id="batch-results-table" hidden>
+    <table class="batch-results-table results-table" id="batch-results-table" hidden>
       <thead>
         <tr>
           <th>Generation</th>
@@ -547,6 +547,31 @@
         </tr>
       </thead>
       <tbody id="batch-results-table-body"></tbody>
+    </table>
+
+    <!-- Scalar `completed`-only: the same full-width results table one
+         level down. A single-replicate run has no replicates to list,
+         so its rows are its own sampled generations instead -- the
+         exact generations the scrubber steps through, so a row and a
+         scrub position always mean the same thing. -->
+    <table class="results-table" id="run-results-table" hidden>
+      <thead>
+        <tr>
+          <th>Generation</th>
+          <th>Outcome</th>
+          <th>D</th>
+          <th>G<sub>ST</sub></th>
+          <th>E<sub>ST</sub></th>
+          <th>K<sub>ST</sub></th>
+          <th>H<sub>S</sub></th>
+          <th>H<sub>T</sub></th>
+          <th>H<sub>ST</sub></th>
+          <th>A<sub>CGD</sub></th>
+          <th>δ<sub>G</sub></th>
+          <th>I</th>
+        </tr>
+      </thead>
+      <tbody id="run-results-table-body"></tbody>
     </table>
 
     <!-- Always present, regardless of state (design §3.1.4). -->
