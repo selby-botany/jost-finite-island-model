@@ -12447,17 +12447,19 @@ convenience): calling an `async` `fim.menu.*` method directly as an
 test — the same pywebview behavior `conftest.py`'s own `drive_and_
 read` docstring already documents for its `ready`-polling case.
 
-Polls for `window.__fimRunViewReady` alongside the field's own
-value, not the field alone: `newConfiguration` cycles that flag
-false-then-true around the whole reset, and `field-N` already shows
-the new value while `resetInputForm` still has a real bridge call in
-flight (`revalidate`) — reading only the field risked `drive`'s own
-window teardown racing it, the same class of failure `test_open_run_
-screen.py`'s own
-`window.__fimOpenRunRecentRunsLoaded` flag exists to prevent for
-`refreshRecentRuns`, confirmed as a real, reproducible
-`JavascriptException` (not merely theoretical) against a `results/`
-directory large enough for the bridge call it raced to take real time.
+Polls for a completion flag this test's own trigger sets *after*
+awaiting `newConfiguration()`, not for `window.__fimRunViewReady`
+alone. That flag was already `true` when the trigger fired --
+`newConfiguration` only cycles it false-then-true from inside the
+`setTimeout` callback -- so a first `read` poll landing before that
+callback ran observed a fully "ready" page that had not started
+resetting anything yet, and read back the edited `999999`. Seen
+once for real in a full serial GUI run; the test's own outcome
+depended on whether a Python poll or a JS timer won a race, which
+makes it a function of its scheduler rather than of its commit.
+Awaiting inside the `setTimeout` callback is safe (and is not the
+deadlocking case above): the callback runs on the page's own event
+loop, not inside an `evaluate_js` expression.
 
 <a id="gui.test_input_screen.test_initial_launch_prefers_a_saved_form_over_starter_values"></a>
 
