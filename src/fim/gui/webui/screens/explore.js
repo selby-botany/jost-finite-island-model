@@ -24,10 +24,9 @@ const exploreM = document.getElementById("explore-m");
 const exploreMu = document.getElementById("explore-mu");
 const exploreAxis = document.getElementById("explore-axis");
 const exploreCanvas = document.getElementById("explore-canvas");
-const exploreLegend = document.getElementById("explore-legend");
 const exploreScrubRange = document.getElementById("explore-scrub-range");
 const exploreScrubLabel = document.getElementById("explore-scrub-label");
-const exploreScrubReset = document.getElementById("explore-scrub-reset");
+const exploreScrubHome = document.getElementById("explore-scrub-home");
 const explorePredictions = document.getElementById("explore-predictions");
 
 let exploreSeeded = false;
@@ -36,27 +35,32 @@ let _currentSweep = null;
 // table can be restored exactly when the scrubber returns to it.
 let _committedPredictions = null;
 
-// Display label for each predicted quantity's own table row --
-// `meters.js`'s `formatStatisticLabel` only special-cases the `X_YZ`
-// subscript shape the six `FinalReport` names use (and passes any other
-// string through unchanged); `identity_recovery_half_life` is not one
-// of those six, so it gets an explicit, readable label instead of a
-// mis-split subscript.
-const EXPLORE_PREDICTION_LABELS = {
-    D: "D",
-    G_ST: "G_ST",
-    E_ST: "E_ST",
-    H_S: "H_S (within-deme heterozygosity)",
-    H_T: "H_T (pooled heterozygosity)",
-    S_S: "S_S (within-deme entropy, nats)",
-    S_T: "S_T (pooled entropy, nats)",
-    A_S: "A_S (effective alleles/deme)",
-    A_T: "A_T (effective alleles pooled)",
-    identity_recovery_half_life: "Half-life (generations)",
-    identity_recovery_rate: "Identity retention rate",
-    identity_recovery_equilibrium: "Equilibrium identity",
-    mutation_negligible_equilibrium: "Mutation negligible at equilibrium",
-};
+// The predicted quantities Explore shows, in table order. The value is
+// the sweep-series key; the visible label and the hover gloss both come
+// from `meters.js` (`formatStatisticLabel`/`STATISTIC_DESCRIPTIONS`),
+// the one place either is defined, so this table renders identically to
+// Results' and its tooltips differ only in having no CI clause.
+//
+// These labels used to carry a parenthetical gloss ("H_S (within-deme
+// heterozygosity)"); that is now tooltip-only, which both matches
+// Results and unbreaks subscript rendering -- `formatStatisticLabel`
+// splits on the first underscore, so the parenthetical was being drawn
+// *inside* the subscript.
+const EXPLORE_PREDICTION_NAMES = [
+    "D",
+    "G_ST",
+    "E_ST",
+    "H_S",
+    "H_T",
+    "S_S",
+    "S_T",
+    "A_S",
+    "A_T",
+    "identity_recovery_half_life",
+    "identity_recovery_rate",
+    "identity_recovery_equilibrium",
+    "mutation_negligible_equilibrium",
+];
 
 // Which unit family each predicted quantity lives in. Every statistic
 // can be drawn against every one of the four sweep axes -- each is a
@@ -128,6 +132,13 @@ let exploreVisibleSeries = new Set(["D", "G_ST", "E_ST"]);
 // axis scrubber below.
 let exploreScrubIndex = null;
 
+// The range input's own thumb width, in CSS pixels -- see `.explore-
+// scrubber input[type="range"]::-webkit-slider-thumb` in `app.css`,
+// which is where this number is actually set. `syncExploreScrubHome`
+// needs it to line its pointer up with the thumb's travel, which is
+// inset by half a thumb at each end of the track.
+const EXPLORE_SCRUB_THUMB_WIDTH_PX = 14;
+
 /**
  * Index into `sweep.points` the dashed marker is currently on.
  * @param {{current_index: number, points: Array<object>}} sweep
@@ -150,12 +161,12 @@ function exploreSeriesColor(name) {
 }
 
 /**
- * The currently plotted series, in `EXPLORE_PREDICTION_LABELS` order so
+ * The currently plotted series, in `EXPLORE_PREDICTION_NAMES` order so
  * the legend and the table agree on ordering.
  * @returns {string[]}
  */
 function exploreSeriesInPlot() {
-    return Object.keys(EXPLORE_PREDICTION_LABELS).filter((name) =>
+    return EXPLORE_PREDICTION_NAMES.filter((name) =>
         exploreVisibleSeries.has(name)
     );
 }
@@ -229,28 +240,6 @@ function syncExploreCanvasSize() {
 }
 
 new ResizeObserver(syncExploreCanvasSize).observe(exploreCanvas);
-
-/**
- * Rebuild the sweep curve's own legend -- one swatch per plotted series,
- * the same "swatch span plus a text node" shape `run-view-completed.js`'s
- * own `renderTrajectory` already builds its legend from. Unlike that
- * screen's, this legend does change between redraws (toggling a table
- * row adds or removes a series, and picking one from another unit family
- * replaces the whole set), so it is rebuilt on every draw rather than
- * once at module load.
- */
-function renderExploreLegend() {
-    exploreLegend.replaceChildren();
-    for (const name of exploreSeriesInPlot()) {
-        const item = document.createElement("span");
-        const swatch = document.createElement("span");
-        swatch.className = "swatch";
-        swatch.style.backgroundColor = exploreSeriesColor(name);
-        item.appendChild(swatch);
-        item.appendChild(document.createTextNode(name));
-        exploreLegend.appendChild(item);
-    }
-}
 
 /**
  * Choose readable axis ticks spanning `[minValue, maxValue]`.
@@ -363,7 +352,6 @@ function drawSweepCurve(canvas, sweep) {
     const width = canvas.width;
     const height = canvas.height;
     context.clearRect(0, 0, width, height);
-    renderExploreLegend();
     if (!sweep.points || sweep.points.length === 0) {
         return;
     }
@@ -551,13 +539,41 @@ function updateExploreRowState(row, name) {
     row.tabIndex = 0;
     row.setAttribute("role", "button");
     row.setAttribute("aria-pressed", String(plotted));
+    paintExploreRowSwatch(row, name);
+}
+
+/**
+ * Fill one prediction row's leading color-key cell with this series'
+ * own plot color.
+ *
+ * Explore's color key used to live in a separate swatch strip under the
+ * chart (`#explore-legend`). Moving it into the table's own first
+ * column -- where Results already puts it -- means one place to read
+ * "which curve is this," and one fewer thing under the chart competing
+ * with the scrubber for the reader's attention.
+ *
+ * `buildStatCells` guarantees the cell exists on every row, so this
+ * only ever fills it.
+ *
+ * @param {HTMLTableRowElement} row
+ * @param {string} name
+ */
+function paintExploreRowSwatch(row, name) {
+    const toggleCell = row.querySelector(".stat-plot-toggle");
+    if (toggleCell === null) {
+        return;
+    }
+    const swatch = document.createElement("span");
+    swatch.className = "stat-plot-swatch";
+    swatch.style.backgroundColor = exploreSeriesColor(name);
+    toggleCell.replaceChildren(swatch);
 }
 
 /**
  * Re-apply every prediction row's own plot-toggle state.
  */
 function refreshExploreRowStates() {
-    for (const name of Object.keys(EXPLORE_PREDICTION_LABELS)) {
+    for (const name of EXPLORE_PREDICTION_NAMES) {
         const row = document.getElementById(`explore-stat-${name}`);
         if (row !== null) {
             updateExploreRowState(row, name);
@@ -572,14 +588,14 @@ function refreshExploreRowStates() {
  * @param {Object<string, string>} [qualifications]
  */
 function renderExplorePredictionRows(predictions, qualifications) {
-    for (const [name, label] of Object.entries(EXPLORE_PREDICTION_LABELS)) {
+    for (const name of EXPLORE_PREDICTION_NAMES) {
         const row = document.getElementById(`explore-stat-${name}`);
         if (row !== null) {
             const rawValue = predictions[name];
             const value = typeof rawValue === "boolean"
                 ? (rawValue ? "yes" : "no")
                 : rawValue;
-            applyStatRow(row, buildPointMeter(label, value));
+            applyStatRow(row, buildPointMeter(name, value));
             const qualification = qualifications?.[name];
             if (qualification) {
                 row.title = `${row.title}; ${qualification}`;
@@ -633,7 +649,7 @@ function renderExploreScrubbedPredictions() {
     const point = _currentSweep.points[exploreMarkerIndex(_currentSweep)];
     const digits = _currentSweep.digits ?? 4;
     const predictions = {};
-    for (const name of Object.keys(EXPLORE_PREDICTION_LABELS)) {
+    for (const name of EXPLORE_PREDICTION_NAMES) {
         predictions[name] = formatExploreSweepValue(point[name], digits);
     }
     renderExplorePredictionRows(predictions, _committedPredictions?.qualifications);
@@ -649,15 +665,15 @@ function renderExploreScrubbedPredictions() {
 function syncExploreScrubber() {
     if (_currentSweep === null) {
         exploreScrubRange.disabled = true;
-        exploreScrubReset.disabled = true;
         exploreScrubLabel.textContent = "";
+        exploreScrubHome.hidden = true;
         return;
     }
     const index = exploreMarkerIndex(_currentSweep);
     exploreScrubRange.disabled = false;
     exploreScrubRange.max = String(_currentSweep.points.length - 1);
     exploreScrubRange.value = String(index);
-    exploreScrubReset.disabled = exploreScrubIndex === null;
+    syncExploreScrubHome();
     const shown = formatExploreTick(_currentSweep.points[index].x);
     const axisName = exploreAxisLabel(_currentSweep.axis);
     exploreScrubLabel.textContent =
@@ -668,6 +684,36 @@ function syncExploreScrubber() {
         "explore-scrubbed",
         exploreScrubIndex !== null
     );
+}
+
+/**
+ * Place the committed-configuration marker under the scrubber track.
+ *
+ * Replaces the former "Back to current" button. A button said nothing
+ * about *where* the committed configuration sits on the swept axis;
+ * this puts a small upward pointer directly beneath that position, so
+ * the committed value is visible at a glance and clicking the pointer
+ * returns to it.
+ *
+ * The pointer's horizontal position is computed the same way a range
+ * input places its own thumb: the thumb's center travels only between
+ * half a thumb-width from each end, never the full track, so the
+ * fraction is inset by that much. Without the inset the marker would
+ * drift away from the thumb toward either end.
+ */
+function syncExploreScrubHome() {
+    const lastIndex = _currentSweep.points.length - 1;
+    const committedIndex = _currentSweep.current_index ?? 0;
+    exploreScrubHome.hidden = false;
+    const fraction = lastIndex > 0 ? committedIndex / lastIndex : 0;
+    exploreScrubHome.style.left = `calc(${fraction * 100}% + ${
+        (0.5 - fraction) * EXPLORE_SCRUB_THUMB_WIDTH_PX
+    }px)`;
+    const shown = formatExploreTick(_currentSweep.points[committedIndex].x);
+    const axisName = exploreAxisLabel(_currentSweep.axis);
+    exploreScrubHome.title =
+        `Back to the configuration you entered (${axisName} = ${shown})`;
+    exploreScrubHome.classList.toggle("explore-scrub-home-active", exploreScrubIndex === null);
 }
 
 /**
@@ -737,7 +783,7 @@ exploreScrubRange.addEventListener("input", () => {
     setExploreScrubIndex(Number(exploreScrubRange.value));
 });
 
-exploreScrubReset.addEventListener("click", () => {
+exploreScrubHome.addEventListener("click", () => {
     setExploreScrubIndex(null);
 });
 
@@ -755,7 +801,7 @@ for (const field of [exploreN, exploreD, exploreM, exploreMu, exploreAxis]) {
 // Prediction rows double as plot toggles. Registered once at module
 // load: `applyStatRow` replaces a row's children on every refresh, but
 // never the `<tr>` itself, so these listeners survive each redraw.
-for (const name of Object.keys(EXPLORE_PREDICTION_LABELS)) {
+for (const name of EXPLORE_PREDICTION_NAMES) {
     const row = document.getElementById(`explore-stat-${name}`);
     if (row === null) {
         continue;

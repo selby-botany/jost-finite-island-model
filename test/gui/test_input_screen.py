@@ -670,11 +670,17 @@ def test_ci_tooltip_states_its_symmetric_summary_only_when_one_exists(
         is_ready=lambda value: bool(value) and all(value),
     )
 
+    # Every statistics tooltip, on Results and Explore alike, ends with
+    # that statistic's own short gloss -- the *only* difference between
+    # the two screens' tooltips is the confidence-interval clause here,
+    # which Explore's theoretical predictions have nothing to put in.
     assert settled[0] == (
         "0.0588333 [0.0156696, 0.101997] — "
         "uncertainty across 2 independent replicates; "
         "half-width 0.0431637, equivalent sample standard deviation 0.0347684"
+        " — allelic differentiation, weighting alleles by frequency (Jost's D, q=2)"
     )
     assert settled[1] == (
         "0.0549477 [0.0323088, 0.0845805] — uncertainty across 2 independent replicates"
+        " — nearness to fixation (Nei's G_ST), not a measure of differentiation"
     )

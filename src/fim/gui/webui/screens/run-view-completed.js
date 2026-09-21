@@ -67,8 +67,12 @@ const STATISTIC_NAMES = [
 // differentiation-measures.md`) for the effective number of alleles
 // derived from `H_S`/`H_T` via `{}^{H}D = 1/(1-H)`.
 const EFFECTIVE_ALLELE_LABELS = [
-    ["<sup>H</sup>D<sub>S</sub>", "H_S"],
-    ["<sup>H</sup>D<sub>T</sub>", "H_T"],
+    ["<sup>H</sup>D<sub>S</sub>", "H_S", "effective number of alleles per deme"],
+    [
+        "<sup>H</sup>D<sub>T</sub>",
+        "H_T",
+        "effective number of alleles pooled across demes",
+    ],
 ];
 
 // A fixed, colorblind-safe qualitative palette (Okabe-Ito), one color
@@ -290,8 +294,7 @@ function decorateTrajectoryStatisticRow(row, name) {
     if (toggleCell === null) {
         toggleCell = document.createElement("td");
         toggleCell.className = "stat-plot-toggle";
-        const valueCell = row.querySelector(".stat-value");
-        row.insertBefore(toggleCell, valueCell);
+        row.insertBefore(toggleCell, row.firstChild);
     }
     toggleCell.replaceChildren();
     const swatch = document.createElement("span");
@@ -376,9 +379,18 @@ function renderEffectiveAlleles(effectiveAlleles) {
         gStCautionNote.hidden = true;
         return;
     }
-    const [[withinLabel, withinKey], [totalLabel, totalKey]] = EFFECTIVE_ALLELE_LABELS;
-    applyStatRow(neSRow, buildPointMeter(withinLabel, effectiveAlleles[withinKey]));
-    applyStatRow(neTRow, buildPointMeter(totalLabel, effectiveAlleles[totalKey]));
+    const [
+        [withinLabel, withinKey, withinDescription],
+        [totalLabel, totalKey, totalDescription],
+    ] = EFFECTIVE_ALLELE_LABELS;
+    applyStatRow(
+        neSRow,
+        buildPointMeter(withinLabel, effectiveAlleles[withinKey], withinDescription)
+    );
+    applyStatRow(
+        neTRow,
+        buildPointMeter(totalLabel, effectiveAlleles[totalKey], totalDescription)
+    );
     gStCautionNote.hidden = !effectiveAlleles.gStCaution;
 }
 
@@ -1266,12 +1278,12 @@ function renderBatchSummary(summary, effectiveAlleles) {
         decorateTrajectoryStatisticRow(row, name);
         batchResultsSummary.appendChild(row);
     }
-    for (const [label, key] of EFFECTIVE_ALLELE_LABELS) {
+    for (const [label, key, description] of EFFECTIVE_ALLELE_LABELS) {
         const interval = effectiveRows[key];
         const cells =
             interval === undefined
-                ? buildOmittedMeter(label, OMITTED_SUMMARY_TEXT)
-                : buildCiMeter(label, interval);
+                ? buildOmittedMeter(label, OMITTED_SUMMARY_TEXT, description)
+                : buildCiMeter(label, interval, description);
         const row = document.createElement("tr");
         applyStatRow(row, cells);
         batchResultsSummary.appendChild(row);

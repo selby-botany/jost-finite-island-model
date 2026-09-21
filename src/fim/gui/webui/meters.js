@@ -42,7 +42,70 @@ function formatToTwoDigits(formattedValue) {
 const STATISTIC_LABEL_OVERRIDES = {
     Delta: "δ<sub>G</sub>",
     MI: "I",
+    // Explore's own predicted quantities. The four identity/regime
+    // names are ordinary prose, not `X_YZ` statistic names, so generic
+    // subscript splitting would mangle them (`identity_recovery_half_
+    // life` into `identity<sub>recovery_half_life</sub>`); they are
+    // listed here so every screen gets the same label from the same
+    // one function rather than each keeping its own display map.
+    identity_recovery_half_life: "Half-life",
+    identity_recovery_rate: "Retention rate",
+    identity_recovery_equilibrium: "Equilibrium identity",
+    mutation_negligible_equilibrium: "Mutation negligible",
 };
+
+/* Short plain-text gloss for each named quantity, shown in the row's
+ * own hover tooltip (`buildPointMeter`/`buildCiMeter`/`buildOmitted
+ * Meter`, below) rather than in the table itself.
+ *
+ * These were previously baked into Explore's own visible row labels as
+ * a parenthetical, which made its table look nothing like Results' --
+ * and, worse, broke the subscript rendering both tables rely on, since
+ * `formatStatisticLabel` splits on the *first* underscore and so read
+ * "H_S (within-deme heterozygosity)" as the base `H` subscripted by
+ * everything after it. Keeping the gloss out of the label fixes both
+ * at once: the two tables now render identically, and every name is a
+ * clean `X_YZ` that subscripts correctly.
+ *
+ * Wording follows `doc/jost-differentiation-measures.md` Part VIII's
+ * own two-family framing -- `G_ST`/`H_ST` measure nearness to
+ * fixation, `D`/`E_ST`/`K_ST` measure allelic differentiation -- so a
+ * reader who hovers a row is told which question that number answers,
+ * not merely what its letters stand for.
+ */
+const STATISTIC_DESCRIPTIONS = {
+    D: "allelic differentiation, weighting alleles by frequency (Jost's D, q=2)",
+    G_ST: "nearness to fixation (Nei's G_ST), not a measure of differentiation",
+    E_ST: "allelic differentiation, weighting every allele by its information (q=1)",
+    K_ST: "allelic differentiation, counting alleles unique to a deme (q=0)",
+    H_S: "within-deme heterozygosity",
+    H_T: "pooled heterozygosity across all demes",
+    H_ST: "nearness to fixation, Hedrick's maximum-standardized form",
+    A_CGD: "coancestry-based genetic distance",
+    Delta: "Gregorius's δ — mean pairwise allelic differentiation over deme pairs",
+    MI: "Sherwin's mutual information between allele and deme",
+    S_S: "within-deme entropy, in nats",
+    S_T: "pooled entropy across all demes, in nats",
+    A_S: "effective number of alleles per deme",
+    A_T: "effective number of alleles pooled across demes",
+    identity_recovery_half_life:
+        "generations for identity to fall halfway to its equilibrium",
+    identity_recovery_rate: "per-generation identity retention rate",
+    identity_recovery_equilibrium: "identity by descent at equilibrium",
+    mutation_negligible_equilibrium:
+        "whether mutation is negligible against migration at equilibrium",
+};
+
+/**
+ * The short gloss for `name`, or the empty string for a name with none
+ * (the two effective-allele rows, which pass their own).
+ *
+ * @param {string} name
+ * @returns {string}
+ */
+function statisticDescription(name) {
+    return STATISTIC_DESCRIPTIONS[name] || "";
+}
 
 /**
  * Render a statistic name's own `_`-suffix as a real subscript -- `"G_ST"`
@@ -72,6 +135,42 @@ function formatStatisticLabel(name) {
 }
 
 /**
+ * The plain-text form of `formatStatisticLabel`'s own HTML -- a native
+ * `title` tooltip cannot render markup, so `<sub>ST</sub>` has to come
+ * back as the `_ST` a reader already recognizes rather than being
+ * flattened to a run-together `ST`.
+ *
+ * Restoring the underscore matters: stripping tags alone turned `H_S`
+ * into `HS` and `δ<sub>G</sub>` into `δG`, neither of which names
+ * anything.
+ *
+ * @param {string} name
+ * @returns {string}
+ */
+function plainStatisticLabel(name) {
+    return formatStatisticLabel(name)
+        .replace(/<sub>([^<]*)<\/sub>/g, "_$1")
+        .replace(/<sup>([^<]*)<\/sup>/g, "$1")
+        .replace(/<[^>]*>/g, "");
+}
+
+/**
+ * Assemble one row's own hover tooltip: the leading value clause, then
+ * the statistic's short gloss when it has one.
+ *
+ * Every table row on both Results and Explore goes through here, so
+ * the two screens' tooltips differ only in that clause -- a batch
+ * summary's carries its confidence interval, a point value does not.
+ *
+ * @param {string} valueClause - e.g. `"H_S = 0.348"`.
+ * @param {string} description - May be empty.
+ * @returns {string}
+ */
+function withStatisticDescription(valueClause, description) {
+    return description ? `${valueClause} — ${description}` : valueClause;
+}
+
+/**
  * Build the two `<td>` cells (name, value) shared by every row shape
  * below, as a `DocumentFragment` -- both slot-based call sites
  * (`replaceChildren` on a pre-existing `<tr>`) and the batch call site
@@ -88,6 +187,17 @@ function formatStatisticLabel(name) {
  */
 function buildStatCells(name, valueText) {
     const cells = document.createDocumentFragment();
+    // The color-key column, always present and always first so every
+    // row on both Results and Explore lines up on the same three
+    // columns -- `decorateTrajectoryStatisticRow` (Results) and
+    // `decorateExploreStatisticRow` (Explore) fill it with a swatch
+    // for a row whose statistic is plottable, and it stays empty for
+    // one that is not (the two effective-allele rows). Leaving it out
+    // of the non-plottable rows instead would shift their name and
+    // value one column left.
+    const toggleCell = document.createElement("td");
+    toggleCell.className = "stat-plot-toggle";
+    cells.appendChild(toggleCell);
     const nameCell = document.createElement("td");
     nameCell.className = "stat-name";
     nameCell.innerHTML = formatStatisticLabel(name);
@@ -109,9 +219,12 @@ function buildStatCells(name, valueText) {
  * @param {string} omittedText
  * @returns {DocumentFragment}
  */
-function buildOmittedMeter(name, omittedText) {
+function buildOmittedMeter(name, omittedText, description) {
     const cells = buildStatCells(name, "—");
-    cells.tooltip = omittedText;
+    cells.tooltip = withStatisticDescription(
+        omittedText,
+        description === undefined ? statisticDescription(name) : description
+    );
     return cells;
 }
 
@@ -170,7 +283,7 @@ function ciCaption(sampleCount) {
  *     halfWidth?: string, sampleStd?: string}} interval
  * @returns {DocumentFragment}
  */
-function buildCiMeter(name, interval) {
+function buildCiMeter(name, interval, description) {
     const cells = buildStatCells(name, formatToTwoDigits(interval.mean));
     const caption = ciCaption(interval.sampleCount);
     let tooltip =
@@ -180,7 +293,10 @@ function buildCiMeter(name, interval) {
             `; half-width ${interval.halfWidth}` +
             `, equivalent sample standard deviation ${interval.sampleStd}`;
     }
-    cells.tooltip = tooltip;
+    cells.tooltip = withStatisticDescription(
+        tooltip,
+        description === undefined ? statisticDescription(name) : description
+    );
     return cells;
 }
 
@@ -194,12 +310,18 @@ function buildCiMeter(name, interval) {
  * @param {string} formattedValue - The already `format_statistic`-formatted
  *     value -- shown in the tooltip verbatim, rounded to two digits for
  *     the value column.
+ * @param {string} [description] - Overrides the `STATISTIC_DESCRIPTIONS`
+ *     lookup, for a row whose `name` is a ready-made HTML label rather
+ *     than a key (the two effective-allele rows).
  * @returns {DocumentFragment}
  */
-function buildPointMeter(name, formattedValue) {
+function buildPointMeter(name, formattedValue, description) {
     const cells = buildStatCells(name, formatToTwoDigits(formattedValue));
-    const plainName = formatStatisticLabel(name).replace(/<[^>]*>/g, "");
-    cells.tooltip = `${plainName} = ${formattedValue}`;
+    const plainName = plainStatisticLabel(name);
+    cells.tooltip = withStatisticDescription(
+        `${plainName} = ${formattedValue}`,
+        description === undefined ? statisticDescription(name) : description
+    );
     return cells;
 }
 

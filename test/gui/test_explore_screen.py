@@ -168,7 +168,13 @@ def test_changing_a_field_recomputes_predictions(
 def test_sweep_curve_has_a_legend_matching_the_shared_statistic_color_palette(
     window: webview.Window,
 ) -> None:
-    """`#explore-legend` names all three plotted lines in the shared statistic colors.
+    """The table's color-key column marks the plotted lines in the shared colors.
+
+    Explore's color key used to be a separate swatch strip under the
+    chart (`#explore-legend`); it is now the statistics table's own
+    leading column, exactly where Results puts it, so the two panels
+    read identically and there is one place to look up "which curve is
+    this."
 
     Botanist GUI design doc `20260907-claude-sonnet-5-botanist-gui-
     redesign.md` §11.3: "the axis label on Explore" is named directly as
@@ -200,11 +206,10 @@ def test_sweep_curve_has_a_legend_matching_the_shared_statistic_color_palette(
             )
             result = window.evaluate_js(
                 "({"
-                "items: Array.from("
-                "document.getElementById('explore-legend').children"
-                ").map((span) => ({"
-                "text: span.textContent, "
-                "color: span.querySelector('.swatch').style.backgroundColor"
+                "items: exploreSeriesInPlot().map((name) => ({"
+                "text: name, "
+                "color: document.getElementById('explore-stat-' + name)"
+                ".querySelector('.stat-plot-swatch').style.backgroundColor"
                 "})), "
                 "expectedColors: {"
                 "D: STATISTIC_TRAJECTORY_COLORS.D, "
@@ -330,10 +335,7 @@ def test_clicking_a_prediction_row_plots_it_and_switches_unit_family(
                 "window.__fimExploreReady === true", lambda value: value is True
             )
             before = window.evaluate_js(
-                "({family: exploreUnitFamily, "
-                "legend: Array.from("
-                "document.getElementById('explore-legend').children"
-                ").map((span) => span.textContent)})"
+                "({family: exploreUnitFamily, legend: exploreSeriesInPlot()})"
             )
             window.evaluate_js(
                 "document.getElementById("
@@ -342,9 +344,7 @@ def test_clicking_a_prediction_row_plots_it_and_switches_unit_family(
             )
             after = window.evaluate_js(
                 "({family: exploreUnitFamily, "
-                "legend: Array.from("
-                "document.getElementById('explore-legend').children"
-                ").map((span) => span.textContent), "
+                "legend: exploreSeriesInPlot(), "
                 "pressed: document.getElementById("
                 "'explore-stat-identity_recovery_half_life'"
                 ").getAttribute('aria-pressed'), "
@@ -377,7 +377,8 @@ def test_axis_scrubber_moves_the_marker_and_repredicts(
     completed-run view has had exactly this instrument over generations
     since `scrubber.js`. Moving it must change the predictions, mark the
     table as showing something other than the typed configuration, and
-    come back to the committed numbers on reset.
+    come back to the committed numbers when the committed-position
+    pointer beneath the scrubber is clicked.
     """
     outcome: queue.Queue[dict[str, Any]] = queue.Queue(maxsize=1)
 
@@ -397,7 +398,8 @@ def test_axis_scrubber_moves_the_marker_and_repredicts(
         "label: document.getElementById('explore-scrub-label').textContent, "
         "scrubbed: document.getElementById('explore-predictions')"
         ".classList.contains('explore-scrubbed'), "
-        "resetDisabled: document.getElementById('explore-scrub-reset').disabled})"
+        "atCommitted: document.getElementById('explore-scrub-home')"
+        ".classList.contains('explore-scrub-home-active')})"
     )
 
     def _drive() -> None:
@@ -418,7 +420,7 @@ def test_axis_scrubber_moves_the_marker_and_repredicts(
                 "})()"
             )
             scrubbed = window.evaluate_js(snapshot_script)
-            window.evaluate_js("document.getElementById('explore-scrub-reset').click()")
+            window.evaluate_js("document.getElementById('explore-scrub-home').click()")
             restored = window.evaluate_js(snapshot_script)
             outcome.put(
                 {
@@ -437,14 +439,15 @@ def test_axis_scrubber_moves_the_marker_and_repredicts(
     scrubbed = result["scrubbed"]
     restored = result["restored"]
 
-    # The committed view is not marked as scrubbed and has nothing to reset.
+    # The committed view is not marked as scrubbed, and the pointer under
+    # the scrubber shows filled to say the marker is parked on it.
     assert committed["scrubbed"] is False
-    assert committed["resetDisabled"] is True
+    assert committed["atCommitted"] is True
     assert "(current)" in committed["label"]
 
     # Scrubbing moves to a different swept value and repredicts there.
     assert scrubbed["scrubbed"] is True
-    assert scrubbed["resetDisabled"] is False
+    assert scrubbed["atCommitted"] is False
     assert "(exploring)" in scrubbed["label"]
     assert scrubbed["label"] != committed["label"]
     assert scrubbed["d"] != committed["d"]
@@ -452,7 +455,7 @@ def test_axis_scrubber_moves_the_marker_and_repredicts(
     # the whole table, not only the charted series.
     assert scrubbed["halfLife"] != committed["halfLife"]
 
-    # Reset restores the committed configuration's own numbers exactly.
+    # Clicking the committed-position pointer restores those numbers exactly.
     assert restored == committed
 
 

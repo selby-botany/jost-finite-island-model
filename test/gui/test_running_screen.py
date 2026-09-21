@@ -417,9 +417,12 @@ def test_run_button_shows_the_trajectory_panel_for_the_watched_statistic(
         # still present and still toggleable.
         expected = "false" if name in ("A_CGD", "Delta", "MI") else "true"
         assert row["ariaPressed"] == expected
+        # The color key is the *first* column on both Results and
+        # Explore, so the two statistics panels line up column for
+        # column.
         assert row["cellClasses"][:3] == [
-            "stat-name",
             "stat-plot-toggle",
+            "stat-name",
             "stat-value",
         ]
     assert settled["overlayLegendNames"] == [

@@ -11484,7 +11484,13 @@ def test_sweep_curve_has_a_legend_matching_the_shared_statistic_color_palette(
         window: webview.Window) -> None
 ```
 
-``explore`-legend` names all three plotted lines in the shared statistic colors.
+The table's color-key column marks the plotted lines in the shared colors.
+
+Explore's color key used to be a separate swatch strip under the
+chart (``explore`-legend`); it is now the statistics table's own
+leading column, exactly where Results puts it, so the two panels
+read identically and there is one place to look up "which curve is
+this."
 
 Botanist GUI design doc `20260907-claude-sonnet-5-botanist-gui-
 redesign.md` §11.3: "the axis label on Explore" is named directly as
@@ -11547,7 +11553,8 @@ move it -- the one screen with that marker and no scrubber, while the
 completed-run view has had exactly this instrument over generations
 since `scrubber.js`. Moving it must change the predictions, mark the
 table as showing something other than the typed configuration, and
-come back to the committed numbers on reset.
+come back to the committed numbers when the committed-position
+pointer beneath the scrubber is clicked.
 
 <a id="gui.test_explore_screen.test_run_this_for_real_seeds_configure_and_preselects_new_study"></a>
 

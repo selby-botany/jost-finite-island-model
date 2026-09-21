@@ -185,8 +185,8 @@ def test_scrubbing_to_an_earlier_generation_updates_the_stats_table_and_marker(
     # always-tracked statistics (`fim.engine._ALWAYS_TRACKED_STATISTICS`)
     # -- it shows a real, per-generation value too, the same shape `D`
     # does, not "not known."
-    assert at0["statGSTTitle"].startswith("GST = ")
-    assert at1["statGSTTitle"].startswith("GST = ")
+    assert at0["statGSTTitle"].startswith("G_ST = ")
+    assert at1["statGSTTitle"].startswith("G_ST = ")
     assert at0["statGSTTitle"] != at1["statGSTTitle"]
     # `E_ST` is neither watched nor opted into via `track_expensive_
     # statistics` (`_SET_TINY_FIELDS` never sets it) -- nothing was ever
@@ -194,9 +194,11 @@ def test_scrubbing_to_an_earlier_generation_updates_the_stats_table_and_marker(
     # "not known" placeholder `buildOmittedMeter` already establishes for
     # a batch summary statistic with no defined interval, reused verbatim
     # here.
-    assert at0["statESTTitle"] == "not known at this generation"
+    assert at0["statESTTitle"].startswith("not known at this generation")
+    # The gloss is appended to every tooltip shape, including this one.
+    assert "allelic differentiation" in at0["statESTTitle"]
     assert at0["statESTValue"] == "—"
-    assert at1["statESTTitle"] == "not known at this generation"
+    assert at1["statESTTitle"].startswith("not known at this generation")
     # The trajectory canvas's own pixels differ once scrubbed away from
     # the run's final state -- proof the marker (or the whole panel)
     # actually redrew, not just the scatter -- and differ again between
@@ -275,5 +277,5 @@ def test_scrubbing_back_to_the_final_frame_restores_the_real_statistics_and_mark
     settled = outcome.get(timeout=_DRIVE_TIMEOUT_SECONDS)
 
     assert settled["statGTitle"] == settled["finalStatGTitle"]
-    assert settled["statGTitle"].startswith("GST = ")
+    assert settled["statGTitle"].startswith("G_ST = ")
     assert settled["trajectorySnapshot"] == settled["finalSnapshot"]

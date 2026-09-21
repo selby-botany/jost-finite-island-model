@@ -201,16 +201,19 @@ def test_a_completed_run_renders_the_run_view(
     # `formatStatisticLabel` renders `_`-suffix as a real `<sub>` in the
     # name cell's innerHTML.
     assert "<sub>ST</sub>" in settled["statGSTLabel"]
-    # The row title for G_ST is "GST = <value>" (strip-tag form used in
-    # `buildPointMeter`'s own title construction).
-    assert settled["statGSTTrackTitle"].startswith("GST = ")
+    # The row title for G_ST keeps the underscore a reader recognizes:
+    # a native `title` tooltip cannot render `<sub>`, so
+    # `plainStatisticLabel` restores `_ST` rather than flattening the
+    # name to a run-together "GST".
+    assert settled["statGSTTrackTitle"].startswith("G_ST = ")
+    # Both screens' tooltips carry the statistic's own short gloss,
+    # which is why it no longer appears in the visible table.
+    assert "nearness to fixation" in settled["statGSTTrackTitle"]
     # `A_CGD` -- one of the three expensive, opt-in "bonus" measurements
     # (`SimulationParams.track_expensive_statistics`) -- now renders as an
     # ordinary stats-table row exactly like every other statistic, no
-    # longer a separate "Supplemental statistics" table of its own; its
-    # tag-stripped tooltip name is "ACGD" (`formatStatisticLabel`'s own
-    # generic `X_YZ` split of "A_CGD", tags stripped), not "A_CGD".
-    assert settled["statACgdTitle"].startswith("ACGD = ")
+    # longer a separate "Supplemental statistics" table of its own.
+    assert settled["statACgdTitle"].startswith("A_CGD = ")
     assert settled["supplementalHidden"] is False
     assert settled["ibdHidden"] is True
     layout = settled["layout"]

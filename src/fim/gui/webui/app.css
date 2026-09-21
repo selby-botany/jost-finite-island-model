@@ -1158,6 +1158,19 @@ fieldset.composite > label {
     font-variant-numeric: tabular-nums;
 }
 
+/* The panel title above every statistics table, on Results and Explore
+   alike. Its `title` attribute carries the click-to-plot reminder that
+   used to be a paragraph below Explore's chart. */
+.stats-table-caption {
+    caption-side: top;
+    text-align: left;
+    font-weight: 600;
+    font-size: 0.85rem;
+    padding: 0 0.6rem 0.35rem;
+    color: var(--fim-muted);
+    cursor: help;
+}
+
 .stats-table td {
     padding: 0.25rem 0.6rem;
     border-bottom: 1px solid var(--fim-border);
@@ -1702,9 +1715,52 @@ fieldset.composite > label {
     margin-top: 0.35rem;
 }
 
-.explore-scrubber input[type="range"] {
+/* Wraps the range input so the committed-configuration pointer below
+   it can be absolutely positioned against the same track the thumb
+   travels along. */
+.explore-scrub-track {
+    position: relative;
     flex: 1 1 auto;
     min-width: 0;
+    padding-bottom: 0.55rem;
+}
+
+.explore-scrub-track input[type="range"] {
+    width: 100%;
+    min-width: 0;
+}
+
+/* The upward pointer marking where on the swept axis the configuration
+   in the four fields sits. A CSS triangle (a zero-size box with one
+   colored border edge) rather than a glyph, so it stays crisp and needs
+   no font. `left` is set per-sweep by `syncExploreScrubHome`;
+   `translateX(-50%)` centers it on that position. */
+.explore-scrub-home {
+    position: absolute;
+    bottom: 0;
+    transform: translateX(-50%);
+    width: 0;
+    height: 0;
+    padding: 0;
+    background: none;
+    border-left: 5px solid transparent;
+    border-right: 5px solid transparent;
+    border-bottom: 7px solid var(--fim-muted);
+    border-top: none;
+    border-radius: 0;
+    cursor: pointer;
+}
+
+/* Filled in while the scrubber is actually parked on it, so "you are
+   looking at the configuration you entered" and "the configuration you
+   entered is over there" are told apart at a glance. */
+.explore-scrub-home.explore-scrub-home-active {
+    border-bottom-color: var(--fim-accent);
+}
+
+.explore-scrub-home:focus-visible {
+    outline: 2px solid var(--fim-accent);
+    outline-offset: 3px;
 }
 
 .explore-scrub-label {
@@ -1723,15 +1779,6 @@ fieldset.composite > label {
     padding-left: 0.5rem;
 }
 
-/* Names the prediction table's own click-to-plot affordance beneath the
-   legend. `.stat-plot-toggle-row`/`.stat-plot-hidden` (above) already
-   supply the per-row cursor and dimmed-when-unplotted treatment, shared
-   with the completed-run trajectory panel's identical toggles. */
-.explore-hint {
-    margin: 0.35rem 0 0;
-    color: var(--fim-muted);
-    font-size: 0.8rem;
-}
 
 /* The Presets picker (`modal-presets`) -- one worked example per row,
  * each a plain button filling its own `<li>` so the whole row is

@@ -414,6 +414,13 @@
              `meters.js`'s `buildPointMeter`; the row itself carries the
              hover tooltip with the full value. -->
         <table id="initial-stats" class="stats-table" hidden>
+          <!-- Same panel title and same hover reminder Explore's own
+               predictions table carries, so the two screens' statistics
+               panels read identically. -->
+          <caption class="stats-table-caption"
+                   title="Click any statistic to plot it on the trajectory chart.">
+            Statistics
+          </caption>
           <tbody>
             <tr data-stat="D"></tr>
             <tr data-stat="G_ST"></tr>
@@ -436,6 +443,13 @@
              keyed by id instead of `data-stat` (`run-view-completed.js`
              looks these up via `getElementById`). -->
         <table id="results-stats" class="stats-table" hidden>
+          <!-- Same panel title and same hover reminder Explore's own
+               predictions table carries, so the two screens' statistics
+               panels read identically. -->
+          <caption class="stats-table-caption"
+                   title="Click any statistic to plot it on the trajectory chart.">
+            Statistics
+          </caption>
           <tbody>
             <tr id="stat-D"></tr>
             <tr id="stat-G_ST"></tr>
@@ -471,6 +485,13 @@
              slot-based tables above), so only the `<tbody>` needs to
              exist up front. -->
         <table id="batch-results-summary" class="stats-table" hidden>
+          <!-- Same panel title and same hover reminder Explore's own
+               predictions table carries, so the two screens' statistics
+               panels read identically. -->
+          <caption class="stats-table-caption"
+                   title="Click any statistic to plot it on the trajectory chart.">
+            Statistics
+          </caption>
           <tbody id="batch-results-summary-body"></tbody>
         </table>
       </div>
@@ -805,33 +826,36 @@
              parameter instead of over time -- Explore previously drew
              the marker with no way to move it. -->
         <div class="explore-scrubber">
-          <input type="range" id="explore-scrub-range" min="0" max="0" value="0"
-                 aria-label="Swept parameter value">
+          <div class="explore-scrub-track">
+            <input type="range" id="explore-scrub-range" min="0" max="0" value="0"
+                   aria-label="Swept parameter value">
+            <!-- Marks where on the swept axis the configuration in the
+                 four fields above actually sits, and returns the
+                 scrubber there when clicked. Replaces a former "Back
+                 to current" button, which did the same job without
+                 ever showing *where* "current" was. -->
+            <button type="button" id="explore-scrub-home"
+                    class="explore-scrub-home" hidden
+                    aria-label="Back to the configuration you entered"></button>
+          </div>
           <span id="explore-scrub-label" class="explore-scrub-label"></span>
-          <button type="button" id="explore-scrub-reset" disabled>
-            Back to current
-          </button>
         </div>
-        <!-- Reuses `run-view-completed.js`'s own `.run-trajectory-legend`/
-             `.swatch` classes unmodified -- one canvas plus a swatch-per-
-             series legend beneath it, the identical shape
-             `#compare-trajectory-legend`, below, also reuses those same
-             classes for. -->
-        <div id="explore-legend" class="run-trajectory-legend"></div>
-        <!-- Says out loud that the table rows are clickable; without
-             it the plot toggles are discoverable only by accident. -->
-        <p class="explore-hint">
-          Click any statistic below to plot it. Statistics measured in
-          different units are charted separately.
-        </p>
       </div>
       <table class="stats-table" id="explore-predictions">
+        <!-- Names the panel, and carries as a tooltip the reminder that
+             used to sit in a paragraph below the chart ("Click any
+             statistic below to plot it"), far from the rows it
+             described. -->
+        <caption class="stats-table-caption"
+                 title="Click any statistic to plot it. Statistics measured in different units are charted separately.">
+          Statistics
+        </caption>
         <tbody>
           <tr id="explore-stat-D"></tr>
           <tr id="explore-stat-G_ST"></tr>
           <tr id="explore-stat-E_ST"></tr>
           <tr class="explore-stat-group">
-            <th colspan="2">Equilibrium diversity</th>
+            <th colspan="3">Equilibrium diversity</th>
           </tr>
           <tr id="explore-stat-H_S"></tr>
           <tr id="explore-stat-H_T"></tr>
@@ -840,7 +864,7 @@
           <tr id="explore-stat-A_S"></tr>
           <tr id="explore-stat-A_T"></tr>
           <tr class="explore-stat-group">
-            <th colspan="2">Identity and regime</th>
+            <th colspan="3">Identity and regime</th>
           </tr>
           <tr id="explore-stat-identity_recovery_half_life"></tr>
           <tr id="explore-stat-identity_recovery_rate"></tr>
