@@ -153,12 +153,30 @@ function syncRunGraphStage() {
     const signature = available.map((key, index) => `${key}\u0000${labels[index]}`).join("\u0001");
     if (select.dataset.optionSignature !== signature) {
         select.dataset.optionSignature = signature;
-        select.replaceChildren();
+
+        // Reuse each existing `<option>` rather than replacing the lot.
+        // The set really does change mid-run -- the scatter is the only
+        // graph with data until the first progress message arrives, and
+        // then three more appear at once -- so this rebuild runs while
+        // the user may already have chosen something. Discarding and
+        // recreating the selected option leaves the native popup button
+        // able to paint a stale label beside a correct `value`, which is
+        // what a reported "the pull-down disagrees with the graph"
+        // screenshot looks like. Appending an existing child moves it,
+        // so order still follows `available`.
+        const existing = new Map(
+            Array.from(select.options).map((option) => [option.value, option])
+        );
         for (let index = 0; index < available.length; index += 1) {
-            const option = document.createElement("option");
-            option.value = available[index];
+            const key = available[index];
+            const option = existing.get(key) ?? document.createElement("option");
+            option.value = key;
             option.textContent = labels[index];
             select.appendChild(option);
+            existing.delete(key);
+        }
+        for (const option of existing.values()) {
+            option.remove();
         }
     }
     if (selectedGraphKey !== null) {
@@ -249,17 +267,21 @@ window.fim.getActiveGraph = function getActiveGraph() {
 };
 
 /**
- * Forget every graph's data and repaint state.
+ * Forget which graphs have data, so a stale pane from the previous
+ * state cannot appear on the next one's stage.
  *
- * Called when the Run card leaves a state, so a stale pane from the
- * previous run cannot appear on the next one's stage.
+ * Deliberately leaves `preferredGraphKey` alone. Resetting it here made
+ * a run's end yank the stage back to the trajectory out from under
+ * whoever was reading a different graph at the time -- reported as
+ * unexpected. The preference is the user's, so it is sticky for the
+ * session: only the resolution against what currently has data is
+ * thrown away and recomputed.
  *
  * @returns {void}
  */
 window.fim.resetGraphStage = function resetGraphStage() {
     graphAvailability.clear();
-    preferredGraphKey = DEFAULT_GRAPH_KEY;
-    selectedGraphKey = DEFAULT_GRAPH_KEY;
+    selectedGraphKey = null;
     syncRunGraphStage();
 };
 

@@ -14909,6 +14909,35 @@ y selector landed over the card's own title). Nothing failed; the
 layout was simply wrong. Hence this check on the geometry itself
 rather than on the markup: the selectors must straddle the canvas.
 
+<a id="gui.test_results_screen.test_the_graph_you_are_watching_survives_the_run_finishing"></a>
+
+#### test\_the\_graph\_you\_are\_watching\_survives\_the\_run\_finishing
+
+```python
+def test_the_graph_you_are_watching_survives_the_run_finishing(
+        fast_scalar_run_settings: Path, window: webview.Window,
+        drive: Callable[..., Any]) -> None
+```
+
+Completion leaves the stage on whatever graph the user chose.
+
+Reported directly: mid-run, the pull-down was set to the scatter;
+when the run finished the stage jumped to the trajectory, which was
+both unasked-for and inconsistent with the pull-down still showing
+the old choice.
+
+The cause was `resetGraphStage`, called on the way into `completed`
+to drop the previous state's stale availability, also resetting the
+*preference* back to the default. Clearing what has data is right --
+the panes re-declare themselves immediately after; discarding the
+user's choice is not.
+
+The selection is driven here through a real `change` event on the
+`<select>`, not `showGraph`, because the option list is rebuilt in
+between (the scatter is the only graph with data until the first
+progress message lands) and the point is that the control and the
+stage still agree afterwards.
+
 <a id="gui.test_runner"></a>
 
 # gui.test\_runner

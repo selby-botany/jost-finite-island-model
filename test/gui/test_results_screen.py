@@ -1312,3 +1312,85 @@ def test_deme_pair_selectors_stay_glued_to_the_scatter_axes(
         f"y selector stands {gap_beside}px from the plot but the x "
         f"selector stands {gap_below}px from it"
     )
+
+
+def test_the_graph_you_are_watching_survives_the_run_finishing(
+    fast_scalar_run_settings: Path, window: webview.Window, drive: Callable[..., Any]
+) -> None:
+    """Completion leaves the stage on whatever graph the user chose.
+
+    Reported directly: mid-run, the pull-down was set to the scatter;
+    when the run finished the stage jumped to the trajectory, which was
+    both unasked-for and inconsistent with the pull-down still showing
+    the old choice.
+
+    The cause was `resetGraphStage`, called on the way into `completed`
+    to drop the previous state's stale availability, also resetting the
+    *preference* back to the default. Clearing what has data is right --
+    the panes re-declare themselves immediately after; discarding the
+    user's choice is not.
+
+    The selection is driven here through a real `change` event on the
+    `<select>`, not `showGraph`, because the option list is rebuilt in
+    between (the scatter is the only graph with data until the first
+    progress message lands) and the point is that the control and the
+    stage still agree afterwards.
+    """
+    settled = drive(
+        window,
+        ready=_INPUT_SCREEN_READY,
+        trigger=(
+            _SET_TINY_FIELDS
+            + "window.__fimSwitched = false; "
+            + "document.getElementById('run-button').click(); "
+            + "const poll = () => { "
+            + "const state = window.fim.getRunViewState(); "
+            + "const select = document.getElementById('run-graph-select'); "
+            + "if (state === 'running' && !window.__fimSwitched) { "
+            + "select.value = 'scatter'; "
+            + "select.dispatchEvent(new Event('change', {bubbles: true})); "
+            + "window.__fimSwitched = window.fim.getActiveGraph() === 'scatter'; } "
+            + "if (state === 'completed' && window.__fimSwitched) { "
+            + "window.__fimAfter = {active: window.fim.getActiveGraph(), "
+            + "value: select.value, "
+            + "text: select.selectedOptions[0].textContent, "
+            + "options: Array.from(select.options).map((o) => o.value), "
+            + "visible: ['run-scatter-card', 'run-trajectory-frame', "
+            + "'allele-composition-card', 'frequency-spectrum-card']"
+            + ".filter((id) => !document.getElementById(id).hidden)}; "
+            + "return; } setTimeout(poll, 20); }; setTimeout(poll, 20);"
+        ),
+        read=(
+            "({runViewState: window.fim.getRunViewState(), "
+            "switched: window.__fimSwitched === true, "
+            "after: window.__fimAfter})"
+        ),
+        is_ready=lambda value: (
+            value is not None
+            and value.get("runViewState") == "completed"
+            and value.get("after") is not None
+        ),
+        poll_attempts=_POLL_ATTEMPTS,
+    )
+
+    # The switch really happened while the run was still going, so the
+    # assertions below are about surviving completion rather than about
+    # a selection made after the fact.
+    assert settled["switched"] is True
+
+    after = settled["after"]
+    assert after["active"] == "scatter"
+    assert after["visible"] == ["run-scatter-card"]
+
+    # The control agrees with the stage -- in both its value and the
+    # label a reader actually sees, which is the half that was reported
+    # as wrong. By this point the option list has grown from one entry
+    # to four underneath the selection.
+    assert after["options"] == [
+        "scatter",
+        "trajectory",
+        "alleleComposition",
+        "frequencySpectrum",
+    ]
+    assert after["value"] == "scatter"
+    assert after["text"] == "Allele frequencies by deme pair"
