@@ -55,22 +55,51 @@ const COLOR_RARE = "#d97a26";
 let _currentPanel = null;
 
 /**
+ * Point `canvas`'s drawing buffer at its current CSS layout size.
+ *
+ * Canvas HTML `width`/`height` attributes define the drawing-buffer
+ * resolution independently of the CSS layout size, so a canvas drawn
+ * before the browser has applied a pending layout change renders into
+ * a stale buffer and is then stretched or squeezed into the real box.
+ * Every draw therefore syncs first rather than trusting the
+ * `ResizeObserver` below to correct it a frame later: that correction
+ * is asynchronous, so relying on it means the very first paint of a
+ * completed run is visibly wrong-resolution until the next frame.
+ *
+ * Returns `true` when the buffer was actually changed. A zero CSS size
+ * (an element not laid out yet) is left alone -- there is no useful
+ * size to adopt, and a zero-sized buffer cannot be drawn into at all.
+ *
+ * @param {HTMLCanvasElement} canvas
+ * @returns {boolean}
+ */
+function resizeCanvasToCssSize(canvas) {
+    const cssW = canvas.clientWidth;
+    const cssH = canvas.clientHeight;
+    if (cssW === 0 || cssH === 0) {
+        return false;
+    }
+    if (canvas.width === cssW && canvas.height === cssH) {
+        return false;
+    }
+    canvas.width = cssW;
+    canvas.height = cssH;
+    return true;
+}
+
+/**
  * Update `canvas.width`/`canvas.height` to match the element's current
  * CSS layout size and redraw the stored panels.
  *
- * Canvas HTML attributes define the drawing-buffer resolution
- * independently of the CSS layout size.  Keeping them in sync ensures
- * drawings are never stretched or clipped as the window resizes.
- * Called once at startup and then by the ResizeObserver below.
+ * Called once at startup and then by the ResizeObserver below, so a
+ * window resize that triggers no redraw of its own still repaints at
+ * the new resolution. Ordinary draws do not depend on this: they sync
+ * their own size via `resizeCanvasToCssSize`.
  */
 function syncCanvasSize() {
-    const cssW = runCanvas.clientWidth;
-    const cssH = runCanvas.clientHeight;
-    if (cssW === 0 || cssH === 0) {
+    if (!resizeCanvasToCssSize(runCanvas)) {
         return;
     }
-    runCanvas.width = cssW;
-    runCanvas.height = cssH;
     if (_currentPanel) {
         drawScatter(runCanvas, _currentPanel);
     }
@@ -123,6 +152,7 @@ const DOMAIN_PADDING_FRACTION = 0.08;
  */
 function drawScatter(canvas, panel) {
     _currentPanel = panel;
+    resizeCanvasToCssSize(canvas);
     const context = canvas.getContext("2d");
     context.clearRect(0, 0, canvas.width, canvas.height);
     drawScatterCell(

@@ -14561,6 +14561,40 @@ band along the bottom of the panel. They are hidden by default, not
 removed -- this test also clicks `A_CGD`'s own row back on to prove
 the legend toggle still reaches it.
 
+<a id="gui.test_results_screen.test_drawing_a_scatter_sizes_the_canvas_buffer_before_it_paints"></a>
+
+#### test\_drawing\_a\_scatter\_sizes\_the\_canvas\_buffer\_before\_it\_paints
+
+```python
+def test_drawing_a_scatter_sizes_the_canvas_buffer_before_it_paints(
+        window: webview.Window, drive: Callable[..., Any]) -> None
+```
+
+`drawScatter` adopts the canvas' current CSS size in the same synchronous turn.
+
+A canvas' `width`/`height` attributes are its drawing-buffer
+resolution, independent of the CSS box it is displayed in. Drawing
+into a stale buffer therefore paints at the wrong resolution and
+lets the browser stretch or squeeze the result into the real box.
+
+`scatter.js` has always had a `ResizeObserver` that corrects the
+buffer, but an observer callback is delivered *asynchronously*, on a
+later frame. Between the draw and that callback the canvas holds a
+wrong-resolution image -- a visible flash on every completed run,
+and, because `toDataURL()` serializes the buffer rather than the
+displayed box, two renderings of the very same panel that do not
+compare equal. That is exactly how `test_batch_results_screen.py`'s
+own deme-pair revert test intermittently failed: its "default"
+snapshot was occasionally captured in that window, at a 403x403
+buffer inside a 218x218 box, and so could never match the reverted
+snapshot drawn a moment later at the corrected 218x218.
+
+This drives the whole sequence inside one synchronous JS statement,
+so no observer callback, timer, or animation frame can possibly run
+partway through: force a known-wrong buffer size, force the layout
+to a known CSS size, draw, and read the buffer back. Passing means
+the sync happened in `drawScatter` itself, not a frame later.
+
 <a id="gui.test_results_screen.test_a_single_replicate_run_gets_a_per_generation_results_table"></a>
 
 #### test\_a\_single\_replicate\_run\_gets\_a\_per\_generation\_results\_table

@@ -315,6 +315,70 @@ def test_differently_scaled_statistics_start_off_the_trajectory_panel(
     assert settled["reinstated"] == "true"
 
 
+def test_drawing_a_scatter_sizes_the_canvas_buffer_before_it_paints(
+    window: webview.Window, drive: Callable[..., Any]
+) -> None:
+    """`drawScatter` adopts the canvas' current CSS size in the same synchronous turn.
+
+    A canvas' `width`/`height` attributes are its drawing-buffer
+    resolution, independent of the CSS box it is displayed in. Drawing
+    into a stale buffer therefore paints at the wrong resolution and
+    lets the browser stretch or squeeze the result into the real box.
+
+    `scatter.js` has always had a `ResizeObserver` that corrects the
+    buffer, but an observer callback is delivered *asynchronously*, on a
+    later frame. Between the draw and that callback the canvas holds a
+    wrong-resolution image -- a visible flash on every completed run,
+    and, because `toDataURL()` serializes the buffer rather than the
+    displayed box, two renderings of the very same panel that do not
+    compare equal. That is exactly how `test_batch_results_screen.py`'s
+    own deme-pair revert test intermittently failed: its "default"
+    snapshot was occasionally captured in that window, at a 403x403
+    buffer inside a 218x218 box, and so could never match the reverted
+    snapshot drawn a moment later at the corrected 218x218.
+
+    This drives the whole sequence inside one synchronous JS statement,
+    so no observer callback, timer, or animation frame can possibly run
+    partway through: force a known-wrong buffer size, force the layout
+    to a known CSS size, draw, and read the buffer back. Passing means
+    the sync happened in `drawScatter` itself, not a frame later.
+    """
+    settled = drive(
+        window,
+        ready=_INPUT_SCREEN_READY,
+        trigger=(
+            "window.fim.showScreen('screen-run');"
+            "const c = document.getElementById('run-canvas');"
+            "c.style.setProperty('width', '321px', 'important');"
+            "c.style.setProperty('height', '321px', 'important');"
+            # Read a layout property to flush the pending style change
+            # before drawing, so `clientWidth` below is already the new
+            # box and the test is measuring `drawScatter`, not layout.
+            "void c.offsetWidth;"
+            "c.width = 64; c.height = 64;"
+            "drawScatter(c, {x_label: 'x', y_label: 'y', points: ["
+            "{x: 0.25, y: 0.5, count: 1, common: true}]});"
+            "window.__fimCanvasSizeProbe = {"
+            "bufferW: c.width, bufferH: c.height,"
+            "cssW: c.clientWidth, cssH: c.clientHeight};"
+        ),
+        read="window.__fimCanvasSizeProbe",
+        is_ready=lambda value: value is not None,
+    )
+
+    assert settled["cssW"] > 0, (
+        "the run canvas must be laid out for this to mean anything"
+    )
+    assert settled["bufferW"] == settled["cssW"], (
+        "drawScatter painted into a stale buffer: "
+        f"{settled['bufferW']} wide inside a {settled['cssW']}px box"
+    )
+    assert settled["bufferH"] == settled["cssH"]
+    assert settled["bufferW"] != 64, (
+        "the deliberately-wrong buffer size survived the draw"
+    )
+
+
 def test_a_single_replicate_run_gets_a_per_generation_results_table(
     fast_scalar_run_settings: Path, window: webview.Window, drive: Callable[..., Any]
 ) -> None:
