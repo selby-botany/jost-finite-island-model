@@ -273,9 +273,38 @@
            established for the canvas itself. -->
       <div class="run-plot-row" id="run-plot-row">
         <div class="run-visual-column">
-          <div class="run-visual-panels">
-            <div class="run-canvas-frame">
-              <h4 id="run-scatter-title">Allele frequencies by deme pair</h4>
+          <!-- One graph at a time, on one shared stage (the "graph
+               canvas"). An earlier revision of this card showed all
+               four graphs at once as a wrapping quadrant of small
+               panels; that was reported as ergonomically unworkable --
+               every panel was too small to read, the row wrapped
+               unpredictably with window width, and the scrubber that
+               drives all of them sat below the fold at the bottom of
+               the whole stack.
+               The stage replaces that with the arrangement below:
+                 - a selector across the top, exactly where each panel's
+                   own `<h4>` title used to be, naming which graph is
+                   showing (the `<h4>`s remain in the DOM as the source
+                   of those option labels and as each pane's accessible
+                   name, but are visually hidden -- `app.css`);
+                 - the generation scrubber down the left edge, inside
+                   the stage, so it is on screen whenever the graph it
+                   drives is on screen and costs no vertical room;
+                 - the panes themselves, all but one hidden, sized so
+                   the stage and the statistics table beside it both fit
+                   above the fold of the default window.
+               Double-clicking the stage opens the active pane in the
+               zoom frame (`#graph-zoom-modal`, below) for a large,
+               scrollable, zoomable look at it.
+               `run-graph-stage.js` owns which pane is showing; the
+               render functions in `run-view-*.js` only declare whether
+               a graph has data (`setGraphAvailable`) and how to repaint
+               it (`registerGraphDraw`) -- a pane with no layout box
+               cannot be drawn into correctly, so whichever pane becomes
+               visible is always repainted at that moment. -->
+          <div class="run-graph-stage" id="run-graph-stage">
+            <div class="run-graph-toolbar">
+              <select id="run-graph-select" aria-label="Choose which graph to show"></select>
               <div id="run-deme-pair-selector" class="run-axis-selectors" hidden>
                 <label for="run-y-deme" class="axis-selector axis-selector-y">
                   <select id="run-y-deme" aria-label="Y deme selector"></select>
@@ -292,6 +321,33 @@
                   >Self-comparison</span
                 >
               </div>
+            </div>
+            <div class="run-graph-body">
+              <!-- `completed`-only this phase (design §3.2.4: no
+                   separate "Animate" button anywhere -- the scrubber is
+                   simply part of `completed`'s own view). Runs down the
+                   left edge of the stage, vertically, so it is visible
+                   whenever the graph it drives is visible without
+                   taking a horizontal band of the stage's own height
+                   (which is what pushed the statistics table below the
+                   fold when it sat underneath the panels). -->
+              <div class="scrubber-controls" id="scrubber-controls" hidden>
+                <button type="button" id="scrubber-play-button" disabled>Play</button>
+                <input
+                  type="range"
+                  id="scrubber-range"
+                  min="0"
+                  max="0"
+                  value="0"
+                  step="1"
+                  orient="vertical"
+                  disabled
+                >
+                <span id="scrubber-label"></span>
+              </div>
+              <div class="run-visual-panels" id="run-visual-panels">
+            <div class="run-canvas-frame" id="run-scatter-card">
+              <h4 id="run-scatter-title">Allele frequencies by deme pair</h4>
             <!-- Shared across all three states: `running`/`completed`
                  draw into it; `initial` now draws the p_0 scatter
                  (Phase F). No width/height attributes -- sized entirely
@@ -384,24 +440,8 @@
               <canvas id="ibd-canvas"></canvas>
               <p id="ibd-note" class="hint"></p>
             </div>
-          </div>
-
-          <!-- `completed`-only this phase (design §3.2.4: no separate
-               "Animate" button anywhere -- the scrubber is simply part
-               of `completed`'s own view), placed directly beneath the
-               scatter/trajectory plot pair it controls. -->
-          <div class="scrubber-controls" id="scrubber-controls" hidden>
-            <button type="button" id="scrubber-play-button" disabled>Play</button>
-            <input
-              type="range"
-              id="scrubber-range"
-              min="0"
-              max="0"
-              value="0"
-              step="1"
-              disabled
-            >
-            <span id="scrubber-label"></span>
+              </div>
+            </div>
           </div>
         </div>
 
@@ -1440,6 +1480,33 @@
        clicked. Not a `.config-modal` structurally different from
        `modal-presets`/`modal-save-preset` below -- same visual
        language, no fields of its own to edit. -->
+  <!-- The graph zoom frame. Double-clicking the Run card's graph stage
+       (`#run-graph-stage`) moves the active pane -- the real element,
+       canvas, legend, and note together, not a copy -- into the body
+       below, resizes it, and repaints it at the new size, so zooming in
+       gains real resolution rather than magnifying a bitmap. Closing
+       moves the pane back to its own placeholder on the stage and
+       repaints it there.
+       A native `<dialog>` opened with `showModal()`, so Escape and the
+       backdrop already close it the way every other dialog in this app
+       closes; `#graph-zoom-close` is the explicit button the request
+       asked for and the dialog's own default (autofocus) action. The
+       graph selector is deliberately absent here: the frame shows the
+       one graph it was opened on. -->
+  <dialog id="graph-zoom-modal" class="graph-zoom-modal">
+    <div class="graph-zoom-header">
+      <h2 id="graph-zoom-title"></h2>
+      <div class="graph-zoom-controls">
+        <button type="button" id="graph-zoom-out" aria-label="Zoom out">&minus;</button>
+        <span id="graph-zoom-level" aria-live="polite">100%</span>
+        <button type="button" id="graph-zoom-in" aria-label="Zoom in">+</button>
+        <button type="button" id="graph-zoom-fit">Fit</button>
+        <button type="button" id="graph-zoom-close" autofocus>Close</button>
+      </div>
+    </div>
+    <div class="graph-zoom-body" id="graph-zoom-body"></div>
+  </dialog>
+
   <dialog class="config-modal" id="modal-welcome">
     <h2>Welcome to fim</h2>
     <p>
@@ -1825,6 +1892,7 @@
 <script src="scatter.js"></script>
 <script src="meters.js"></script>
 <script src="scrubber.js"></script>
+<script src="run-graph-stage.js"></script>
 <script src="screens/config-modals.js"></script>
 <script src="screens/migration-matrix.js"></script>
 <script src="screens/loci-grid.js"></script>

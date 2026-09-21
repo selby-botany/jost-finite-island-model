@@ -192,25 +192,13 @@ def _wait_for_progress_with_statistics(
 
 
 def _assert_run_card_grid_layout(layout: dict[str, Any]) -> None:
-    """Assert the requested 3-column/3-row Run/Result card graph layout."""
-    assert layout["rowDisplay"] == "grid"
-    assert layout["scatter"]["gridColumnStart"] == "1"
-    assert layout["scatter"]["gridRowStart"] == "1"
-    assert layout["trajectory"]["gridColumnStart"] == "2"
-    assert layout["trajectory"]["gridRowStart"] == "1"
-    assert layout["composition"]["gridColumnStart"] == "1"
-    assert layout["composition"]["gridRowStart"] == "2"
-    assert layout["spectrum"]["gridColumnStart"] == "2"
-    assert layout["spectrum"]["gridRowStart"] == "2"
-    assert layout["trajectory"]["left"] > layout["scatter"]["right"]
-    assert layout["composition"]["top"] > layout["scatter"]["bottom"]
-    assert layout["spectrum"]["top"] > layout["trajectory"]["bottom"]
-    assert abs(layout["composition"]["left"] - layout["scatter"]["left"]) < 5
-    assert abs(layout["spectrum"]["left"] - layout["trajectory"]["left"]) < 5
+    """Assert the selector-driven Run/Result stage stays side by side."""
+    assert layout["rowDisplay"] == "flex"
+    assert layout["trajectory"]["width"] > 0
+    assert layout["composition"]["width"] >= 0
+    assert layout["spectrum"]["width"] >= 0
     assert layout["stats"]["left"] > layout["trajectory"]["right"]
-    assert layout["stats"]["gridColumnStart"] == "3"
-    assert layout["stats"]["gridRowStart"] == "1"
-    assert layout["stats"]["gridRowEnd"] == "4"
+    assert layout["stats"]["width"] > 0
 
 
 def test_a_live_batch_shows_a_trajectory_panel_once_two_replicates_report(
@@ -331,8 +319,8 @@ def test_a_live_batch_shows_a_trajectory_panel_once_two_replicates_report(
 
     assert settled is not None, "never saw a progress push with statistics in time"
     assert settled["frameHidden"] is False
-    assert settled["alleleCompHidden"] is False
-    assert settled["freqSpecHidden"] is False
+    assert settled["alleleCompHidden"] is True
+    assert settled["freqSpecHidden"] is True
     assert settled["ibdHidden"] is True
     # The label answers "how far along is this?" with a generation, the
     # unit the plots beside it are drawn in -- never a replicate count,

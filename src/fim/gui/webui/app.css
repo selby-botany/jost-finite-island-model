@@ -808,12 +808,104 @@ fieldset.composite > label {
     min-width: 0;
 }
 
+.run-graph-stage {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+    min-width: 0;
+}
+
+.run-graph-stage h4 {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+    border: 0;
+}
+
+.run-graph-toolbar {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    flex-wrap: wrap;
+    min-width: 0;
+}
+
+.run-graph-toolbar select {
+    font: inherit;
+    color: var(--fim-foreground);
+    background: var(--fim-background);
+    border: 1px solid var(--fim-border);
+    border-radius: 4px;
+    padding: 0.15rem 0.4rem;
+    min-width: 15rem;
+}
+
+.run-graph-body {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr);
+    gap: 0.75rem;
+    align-items: start;
+    min-width: 0;
+}
+
+.run-graph-extra {
+    display: none;
+}
+
+.run-graph-extra.run-graph-extra-active {
+    display: contents;
+}
+
+.run-graph-body .scrubber-controls {
+    margin: 0;
+    flex-direction: column;
+    align-items: stretch;
+    justify-content: flex-start;
+    width: 3rem;
+    min-height: 22rem;
+}
+
+.run-graph-body .scrubber-controls input[type="range"] {
+    writing-mode: bt-lr;
+    -webkit-appearance: slider-vertical;
+    width: 100%;
+    max-width: none;
+    flex: 1;
+    margin: 0.35rem 0;
+}
+
+.run-graph-body .scrubber-controls #scrubber-label {
+    text-align: center;
+}
+
 .run-visual-panels {
     display: flex;
     align-items: flex-start;
     justify-content: center;
     gap: 1rem;
     flex-wrap: wrap;
+}
+
+/* Keep the whole stage -- toolbar, graph, legend -- inside the window
+ * at the app's own 900x700 default, which is the entire point of
+ * showing one graph instead of four. The panes' own canvases are sized
+ * by `aspect-ratio` off a full-width box, so on a short window that
+ * height alone overran the viewport (measured: a 906px stage against
+ * 672px of usable height). Clamping against `100vh` rather than a
+ * fixed pixel budget lets the graph grow on a taller window instead of
+ * staying stuck at the smallest size that happens to fit the default
+ * one. The `19rem` allowance covers the card's own chrome above the
+ * stage plus the toolbar and legend within it, with deliberate slack:
+ * an earlier cap in this file was tuned to ~2px of margin on
+ * macOS/Cocoa and promptly failed on CI's WebKitGTK, which lays the
+ * same content out slightly taller. */
+.run-graph-body canvas {
+    max-height: calc(100vh - 19rem);
 }
 
 /* The scatter and trajectory frames wear the same card chrome and
@@ -1301,61 +1393,65 @@ fieldset.composite > label {
     border-radius: 2px;
 }
 
-/* Fixed Run/Result card graph layout:
+/* Run/Result card graph layout: one graph at a time on a "graph stage"
+ * (selector on top, scrubber down the left edge) beside the statistics
+ * table.
  *
- *   row 1: scatter                  trajectory              statistics
- *   row 2: allele composition       frequency spectrum      statistics
- *   row 3: scrubber / controls      scrubber / controls     statistics
+ * This replaced a fixed 3x3 quadrant grid -- scatter/trajectory on row
+ * 1, allele composition/frequency spectrum on row 2, scrubber spanning
+ * row 3, statistics merged down column 3 -- which was reported as
+ * ergonomically unworkable: four simultaneous panels left each one too
+ * small to read at the app's own 900x700 default, and the shared
+ * scrubber sat under the whole stack, below the fold.
  *
- * The DOM still groups graphs inside `.run-visual-column`/
- * `.run-visual-panels` so older tests and comments can find the same
- * structural landmarks, but `display: contents` lets the actual graph
- * cards participate directly in the three-column grid requested for the
- * card. The IBD payload remains available to Python callers, but this
- * card intentionally has four graph slots, not five.
+ * Those quadrant rules placed the graph cards by `grid-column`/`grid-
+ * row` and dissolved `.run-visual-panels` with `display: contents` so
+ * they could participate in the grid directly. They are deleted rather
+ * than merely overridden: `display: contents` on the panels container
+ * survived an earlier attempt to override only `#run-plot-row` itself,
+ * which collapsed `.run-visual-panels` to a zero-height box and
+ * re-placed the scrubber into the old row 3 -- measured live at 906px
+ * of stage against a 672px viewport, the very overflow the stage was
+ * built to end. Two competing layout systems for one element cannot
+ * both be right; only one is kept.
+ *
+ * The IBD payload remains available to Python callers, but this card
+ * intentionally offers four graphs, not five.
  */
 #run-plot-row.run-plot-row-has-trajectory {
-    display: grid;
-    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) max-content;
-    grid-template-rows: auto auto auto;
-    align-items: start;
-    justify-content: stretch;
+    display: flex;
+    gap: 1rem;
+    align-items: flex-start;
 }
 
-#run-plot-row.run-plot-row-has-trajectory .run-visual-column,
+#run-plot-row.run-plot-row-has-trajectory .run-visual-column {
+    display: block;
+    flex: 1 1 auto;
+    min-width: 0;
+}
+
+#run-plot-row.run-plot-row-has-trajectory .run-graph-stage {
+    width: 100%;
+}
+
+/* The panes stack in one place and the stage shows exactly one of
+ * them, so this is a plain block: the old flex row (with its
+ * `flex-wrap`, which is what used to drop panels to a second line) has
+ * nothing left to lay out side by side. */
 #run-plot-row.run-plot-row-has-trajectory .run-visual-panels {
-    display: contents;
+    display: block;
+    min-width: 0;
 }
 
-#run-plot-row.run-plot-row-has-trajectory .run-canvas-frame {
-    grid-column: 1;
-    grid-row: 1;
+/* Each pane fills the stage rather than keeping the per-panel width
+ * caps the quadrant needed (480px for the trajectory, a vh-based
+ * formula for the scatter) -- with one graph on screen there is no
+ * second panel to leave room for. */
+#run-plot-row.run-plot-row-has-trajectory .run-canvas-frame,
+#run-plot-row.run-plot-row-has-trajectory .run-trajectory-frame,
+#run-plot-row.run-plot-row-has-trajectory .run-supplemental-panel {
     width: 100%;
     max-width: 100%;
-}
-
-#run-plot-row.run-plot-row-has-trajectory #run-canvas {
-    max-height: none;
-}
-
-#run-plot-row.run-plot-row-has-trajectory .run-trajectory-frame {
-    grid-column: 2;
-    grid-row: 1;
-    width: 100%;
-    min-width: 0;
-}
-
-#run-plot-row.run-plot-row-has-trajectory #allele-composition-card {
-    grid-column: 1;
-    grid-row: 2;
-    width: 100%;
-    min-width: 0;
-}
-
-#run-plot-row.run-plot-row-has-trajectory #frequency-spectrum-card {
-    grid-column: 2;
-    grid-row: 2;
-    width: 100%;
     min-width: 0;
 }
 
@@ -1364,14 +1460,8 @@ fieldset.composite > label {
 }
 
 #run-plot-row.run-plot-row-has-trajectory > .stats-table:not([hidden]) {
-    grid-column: 3;
-    grid-row: 1 / 4;
+    flex: 0 0 auto;
     margin-top: 0;
-}
-
-#run-plot-row.run-plot-row-has-trajectory .scrubber-controls {
-    grid-column: 1 / 3;
-    grid-row: 3;
 }
 
 /* Shared by both full-width results tables: the batch's own per-
@@ -2162,4 +2252,82 @@ fieldset.composite > label {
     line-height: 1.35;
     box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
     pointer-events: none;
+}
+
+/* Graph zoom frame (`#graph-zoom-modal`, opened by double-clicking the
+ * stage): a large, scrollable, zoomable look at whichever single graph
+ * the stage is showing.
+ *
+ * Sized against the viewport rather than the graph so the frame is
+ * always the bigger surface the stage is not -- that is the whole
+ * reason to open it. The body scrolls because zooming in sets a real
+ * pixel size on the pane (`run-graph-stage.js`'s `applyGraphZoom`,
+ * which re-draws the canvas at that size so zoom gains resolution
+ * instead of magnifying a bitmap); once the pane is larger than the
+ * frame, scrolling is how the rest of it is reached. */
+.graph-zoom-modal {
+    width: min(96vw, 1400px);
+    height: min(92vh, 1000px);
+    max-width: none;
+    max-height: none;
+    padding: 0;
+    border: 1px solid var(--fim-border);
+    border-radius: 6px;
+    background: var(--fim-surface, var(--fim-background));
+    color: inherit;
+}
+
+.graph-zoom-modal::backdrop {
+    background: rgb(0 0 0 / 45%);
+}
+
+.graph-zoom-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+    padding: 0.6rem 0.9rem;
+    border-bottom: 1px solid var(--fim-border);
+}
+
+.graph-zoom-header h2 {
+    margin: 0;
+    font-size: 1rem;
+}
+
+.graph-zoom-controls {
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+}
+
+.graph-zoom-controls #graph-zoom-level {
+    min-width: 3.5rem;
+    text-align: center;
+    font-variant-numeric: tabular-nums;
+}
+
+/* `height` off the header's own measured band rather than `flex: 1`:
+ * a `<dialog>` is not a flex container by default, and making it one
+ * would re-lay-out the header too. */
+.graph-zoom-body {
+    height: calc(100% - 3.1rem);
+    overflow: auto;
+    padding: 0.9rem;
+}
+
+/* The stage's own pane, moved here bodily for the duration (not
+ * cloned, so there is only ever one canvas holding the drawing). The
+ * width/height are set inline by `applyGraphZoom`; these rules only
+ * undo the stage's own full-width sizing so that inline size wins. */
+.graph-zoom-pane {
+    width: auto;
+    max-width: none;
+    margin: 0 auto;
+}
+
+.graph-zoom-pane canvas {
+    width: 100%;
+    height: auto;
+    max-height: none;
 }

@@ -155,8 +155,9 @@ def test_a_completed_run_renders_the_run_view(
             "document.getElementById('scrubber-play-button').disabled, "
             "scrubberParentClass: "
             "document.getElementById('scrubber-controls').parentElement.className, "
-            "scrubberPreviousClass: document.getElementById("
-            "'scrubber-controls').previousElementSibling.className, "
+            "scrubberIsFirstInGraphBody: document.getElementById("
+            "'scrubber-controls') === document.querySelector("
+            "'.run-graph-body > *'), "
             "trajectoryParentClass: document.getElementById("
             "'run-trajectory-frame').parentElement.className, "
             "resultsHistoryBackHidden: "
@@ -214,26 +215,12 @@ def test_a_completed_run_renders_the_run_view(
     # ordinary stats-table row exactly like every other statistic, no
     # longer a separate "Supplemental statistics" table of its own.
     assert settled["statACgdTitle"].startswith("A_CGD = ")
-    assert settled["supplementalHidden"] is False
+    assert settled["supplementalHidden"] is True
     assert settled["ibdHidden"] is True
     layout = settled["layout"]
-    assert layout["rowDisplay"] == "grid"
-    assert layout["scatter"]["gridColumnStart"] == "1"
-    assert layout["scatter"]["gridRowStart"] == "1"
-    assert layout["trajectory"]["gridColumnStart"] == "2"
-    assert layout["trajectory"]["gridRowStart"] == "1"
-    assert layout["composition"]["gridColumnStart"] == "1"
-    assert layout["composition"]["gridRowStart"] == "2"
-    assert layout["spectrum"]["gridColumnStart"] == "2"
-    assert layout["spectrum"]["gridRowStart"] == "2"
-    assert layout["stats"]["gridColumnStart"] == "3"
-    assert layout["stats"]["gridRowStart"] == "1"
-    assert layout["stats"]["gridRowEnd"] == "4"
-    assert layout["trajectory"]["left"] > layout["scatter"]["right"]
-    assert layout["composition"]["top"] > layout["scatter"]["bottom"]
-    assert layout["spectrum"]["top"] > layout["trajectory"]["bottom"]
-    assert abs(layout["composition"]["left"] - layout["scatter"]["left"]) < 5
-    assert abs(layout["spectrum"]["left"] - layout["trajectory"]["left"]) < 5
+    assert layout["rowDisplay"] == "flex"
+    assert layout["trajectory"]["width"] > 0
+    assert layout["stats"]["width"] > 0
     assert layout["stats"]["left"] > layout["trajectory"]["right"]
     # `tiny_params`-scale runs always persist more than one generation
     # (`convergence_window`'s own minimum of 2 forces at least one step
@@ -243,13 +230,14 @@ def test_a_completed_run_renders_the_run_view(
     # enabled here, not just present.
     assert settled["scrubberHidden"] is False
     assert settled["scrubberPlayDisabled"] is False
-    assert settled["scrubberParentClass"] == "run-visual-column"
-    # `.run-visual-panels` -- now the shared flex-wrap row holding all
-    # four graphs (scatter, trajectory, and the two supplemental graphs
-    # folded in alongside them, replacing the old standalone "Literature
-    # visualizations" panel/section) -- still sits immediately above the
-    # scrubber, unchanged from before that panel existed at all.
-    assert settled["scrubberPreviousClass"] == "run-visual-panels"
+    # The scrubber moved out from under the whole graph stack and onto
+    # the stage's own left edge, so it stays on screen alongside
+    # whichever single graph is showing. Assert that position directly:
+    # "not below the fold" is the entire point of the move, and a
+    # scrubber that silently drifted back under the graphs would still
+    # satisfy every other assertion here.
+    assert settled["scrubberParentClass"] == "run-graph-body"
+    assert settled["scrubberIsFirstInGraphBody"] is True
     assert settled["trajectoryParentClass"] == "run-visual-panels"
     assert settled["resultsHistoryBackHidden"] is False
     assert settled["resultsHistoryForwardHidden"] is False
@@ -957,7 +945,9 @@ def test_run_view_fits_the_default_window_without_excess_scrolling(
                 "scatterTop: scatterRect.top, "
                 "trajectoryTop: trajectoryRect.top, "
                 "trajectoryBottom: trajectoryRect.bottom, "
-                "statsTop: statsRect.top, statsBottom: statsRect.bottom"
+                "trajectoryRight: trajectoryRect.right, "
+                "statsTop: statsRect.top, statsBottom: statsRect.bottom, "
+                "statsLeft: statsRect.left"
                 "};"
                 "})()",
                 lambda value: value is not None,
@@ -971,13 +961,13 @@ def test_run_view_fits_the_default_window_without_excess_scrolling(
 
     assert settled is not None
     assert settled["rowHasTrajectoryClass"] is True
-    # Same line as the scatter plot, not wrapped onto a line below it --
-    # a small tolerance for sub-pixel layout rounding, matching this
-    # project's other bounding-box assertions. Both frames are titled
-    # cards now, so the comparable edge is the frame's own top, not the
-    # canvas inside it (which sits below its card's `<h4>`).
-    assert abs(settled["trajectoryTop"] - settled["scatterTop"]) < 5
-    assert abs(settled["statsTop"] - settled["scatterTop"]) < 30
+    # The graph and the statistics sit side by side, not stacked: the
+    # stage occupies the left of the row and the statistics table the
+    # right. (This replaced a `trajectoryTop < statsTop` check, which
+    # described the older stacked layout and is simply not a property of
+    # the side-by-side one -- the stats now start *above* the graph,
+    # level with the stage's selector.)
+    assert settled["statsLeft"] >= settled["trajectoryRight"]
     # Fully visible within the actual window -- not merely reachable by
     # scrolling -- which is the whole point of the fix.
     assert settled["trajectoryBottom"] <= settled["innerHeight"]
@@ -1086,6 +1076,155 @@ def test_completed_scrubber_updates_supplemental_panels_on_scrub_ticks(
     )
 
     assert settled["runViewState"] == "completed"
-    assert settled["alleleCompositionHidden"] is False
-    assert settled["frequencySpectrumHidden"] is False
+    assert settled["alleleCompositionHidden"] is True
+    assert settled["frequencySpectrumHidden"] is True
     assert "Generation 0" in settled["scrubberLabel"]
+
+
+def test_graph_stage_shows_one_graph_and_the_selector_switches_it(
+    fast_scalar_run_settings: Path, window: webview.Window, drive: Callable[..., Any]
+) -> None:
+    """The stage shows exactly one graph, and the selector changes which.
+
+    The Run card used to show four graphs at once in a 3x3 quadrant.
+    That was reported as unworkable -- each panel too small to read at
+    the app's own 900x700 default -- and was replaced by a "graph
+    stage": one graph, chosen from a selector where the per-panel title
+    used to be.
+
+    "Exactly one" is the part worth guarding. The stage decides pane
+    visibility centrally, but the render functions still report *whether*
+    each graph has data, and an earlier version of that split let a
+    graph un-hide itself behind the stage's back.
+    """
+    settled = drive(
+        window,
+        ready=_INPUT_SCREEN_READY,
+        trigger=(
+            _SET_TINY_FIELDS
+            + "document.getElementById('run-button').click(); "
+            + "const pollCompleted = () => { "
+            + "if (window.fim.getRunViewState() === 'completed') { "
+            + "const select = document.getElementById('run-graph-select'); "
+            + "window.__fimOptions = Array.from(select.options)"
+            + ".map((option) => option.value); "
+            + "window.__fimDefault = window.fim.getActiveGraph(); "
+            + "window.fim.showGraph('alleleComposition'); "
+            + "window.__fimSwitched = window.fim.getActiveGraph(); "
+            + "return; "
+            + "} "
+            + "setTimeout(pollCompleted, 50); "
+            + "}; "
+            + "setTimeout(pollCompleted, 50);"
+        ),
+        read=(
+            "({"
+            "runViewState: window.fim.getRunViewState(), "
+            "options: window.__fimOptions, "
+            "defaultGraph: window.__fimDefault, "
+            "switchedGraph: window.__fimSwitched, "
+            "visible: ['run-scatter-card', 'run-trajectory-frame', "
+            "'allele-composition-card', 'frequency-spectrum-card']"
+            ".filter((id) => !document.getElementById(id).hidden)"
+            "})"
+        ),
+        is_ready=lambda value: (
+            value is not None
+            and value.get("runViewState") == "completed"
+            and value.get("switchedGraph") is not None
+        ),
+        poll_attempts=_POLL_ATTEMPTS,
+    )
+
+    # Four graphs on offer, never the fifth: the IBD payload is still
+    # produced for Python callers, but this card does not show it.
+    assert settled["options"] == [
+        "scatter",
+        "trajectory",
+        "alleleComposition",
+        "frequencySpectrum",
+    ]
+    # The trajectory is the requested default even though the scatter
+    # declares itself available first, during page load, long before any
+    # run exists.
+    assert settled["defaultGraph"] == "trajectory"
+    assert settled["switchedGraph"] == "alleleComposition"
+    assert settled["visible"] == ["allele-composition-card"]
+
+
+def test_graph_zoom_frame_takes_the_pane_and_gives_it_back(
+    fast_scalar_run_settings: Path, window: webview.Window, drive: Callable[..., Any]
+) -> None:
+    """Double-click zoom moves the real pane out and restores it on close.
+
+    The frame moves the pane rather than cloning it, so the legend and
+    every wired handler come along and stay live -- and so there is only
+    ever one canvas holding the drawing. The risk that buys is losing
+    the pane: if it is not put back exactly where it came from, the
+    stage is left permanently blank with no error anywhere.
+    """
+    settled = drive(
+        window,
+        ready=_INPUT_SCREEN_READY,
+        trigger=(
+            _SET_TINY_FIELDS
+            + "document.getElementById('run-button').click(); "
+            + "const pollCompleted = () => { "
+            + "if (window.fim.getRunViewState() === 'completed') { "
+            + "const pane = document.getElementById('run-trajectory-frame'); "
+            + "window.__fimHomeBefore = pane.parentElement.className; "
+            + "window.fim.openGraphZoom(); "
+            + "window.__fimZoom = {"
+            + "open: document.getElementById('graph-zoom-modal').open, "
+            + "parent: pane.parentElement.id, "
+            + "title: document.getElementById('graph-zoom-title').textContent, "
+            + "active: window.fim.getActiveGraph()"
+            + "}; "
+            + "document.getElementById('graph-zoom-close').click(); "
+            + "setTimeout(() => { "
+            + "window.__fimRestored = {"
+            + "open: document.getElementById('graph-zoom-modal').open, "
+            + "parent: pane.parentElement.className, "
+            + "hidden: pane.hidden, "
+            + "placeholder: !!document.getElementById('graph-zoom-placeholder'), "
+            + "inlineWidth: pane.style.width"
+            + "}; "
+            + "}, 50); "
+            + "return; "
+            + "} "
+            + "setTimeout(pollCompleted, 50); "
+            + "}; "
+            + "setTimeout(pollCompleted, 50);"
+        ),
+        read=(
+            "({"
+            "runViewState: window.fim.getRunViewState(), "
+            "homeBefore: window.__fimHomeBefore, "
+            "zoom: window.__fimZoom, "
+            "restored: window.__fimRestored"
+            "})"
+        ),
+        is_ready=lambda value: (
+            value is not None
+            and value.get("runViewState") == "completed"
+            and value.get("restored") is not None
+        ),
+        poll_attempts=_POLL_ATTEMPTS,
+    )
+
+    assert settled["homeBefore"] == "run-visual-panels"
+    assert settled["zoom"]["open"] is True
+    assert settled["zoom"]["parent"] == "graph-zoom-body"
+    assert settled["zoom"]["title"] == "Statistic trajectories"
+    # Zooming does not change which graph the stage considers active, so
+    # closing returns to the same one.
+    assert settled["zoom"]["active"] == "trajectory"
+
+    assert settled["restored"]["open"] is False
+    assert settled["restored"]["parent"] == "run-visual-panels"
+    assert settled["restored"]["hidden"] is False
+    # The placeholder that marked the pane's home is cleaned up, and the
+    # explicit pixel size the zoom frame set is cleared -- otherwise the
+    # pane would keep the frame's dimensions back on the stage.
+    assert settled["restored"]["placeholder"] is False
+    assert settled["restored"]["inlineWidth"] == ""

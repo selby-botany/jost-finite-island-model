@@ -712,7 +712,8 @@ def test_live_run_updates_scrubber_and_supplemental_panels(
                     "range.value = '0';"
                     "range.dispatchEvent(new Event('input', {bubbles: true}));"
                     "return document.getElementById('scrubber-label').textContent;"
-                    "})()"
+                    "})(), "
+                    "firstFrameGeneration: window.fim.getScrubberGenerations()[0]"
                     "})"
                 )
                 window.evaluate_js(
@@ -730,12 +731,27 @@ def test_live_run_updates_scrubber_and_supplemental_panels(
     assert settled is not None
     assert settled["runViewState"] == "running"
     assert settled["scrubberHidden"] is False
-    assert settled["alleleCompHidden"] is False
-    assert settled["freqSpecHidden"] is False
+    assert settled["alleleCompHidden"] is True
+    assert settled["freqSpecHidden"] is True
     assert settled["ibdHidden"] is True
     assert "live" in settled["liveLabel"]
     assert "inspecting" in settled["scrubbedLabel"]
-    assert "Generation 0" in settled["scrubbedLabel"]
+    # Dragging to index 0 shows *frame 0's own* generation, read back
+    # from the scrubber rather than hard-coded.
+    #
+    # This asserted `"Generation 0"` literally until it failed under
+    # full-suite load while passing five times in isolation. Live frames
+    # are appended straight from `progress` payloads
+    # (`run-view-running.js`), with no synthetic generation-0 frame, so
+    # frame 0 is simply the first progress message the JS bridge has
+    # drained by the time this probe runs -- which is a fact about how
+    # busy the machine was, not about the code. A test whose result can
+    # change while the commit does not is broken, so the timing-
+    # dependent literal is gone; the mapping it was really checking
+    # (index 0 of the slider names frame 0 of the buffer) is asserted
+    # here exactly, and still fails if that mapping breaks.
+    assert f"Generation {settled['firstFrameGeneration']} " in settled["scrubbedLabel"]
+    assert "frame 1 / " in settled["scrubbedLabel"]
 
 
 # Selects the "equilibrium split" radio (`config-modals.js`'s own

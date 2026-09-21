@@ -237,20 +237,17 @@ function drawIbdCurve(canvas, payload) {
 /**
  * Render the three literature-derived supplemental graphs.
  *
+ * Does not draw them: fills in each pane's title, legend, and note,
+ * tells the graph stage which of them now have data, and registers how
+ * to repaint each one. The stage draws whichever is showing, because a
+ * hidden pane has no layout box to size a canvas against.
+ *
  * @param {{alleleComposition: object, frequencySpectrum: object, isolationByDistance: object|null}|undefined} visuals
  */
 function renderSupplementalPanels(visuals) {
-    alleleCompositionCard.hidden = !visuals || !visuals.alleleComposition;
-    frequencySpectrumCard.hidden = !visuals || !visuals.frequencySpectrum;
-    // The Run/Result card is a fixed four-graph card: scatter,
-    // trajectory, allele composition, and allele-frequency spectrum.
-    // IBD stays available in the Python payload for future/specialized
-    // views, but this card does not allocate a fifth graph slot for it.
-    ibdCard.hidden = true;
-    if (!visuals) {
-        return;
-    }
-    if (visuals.alleleComposition) {
+    const hasComposition = Boolean(visuals && visuals.alleleComposition);
+    const hasSpectrum = Boolean(visuals && visuals.frequencySpectrum);
+    if (hasComposition) {
         alleleCompositionTitle.textContent = visuals.alleleComposition.title;
         alleleCompositionNote.textContent = visuals.alleleComposition.note;
         alleleCompositionLegend.replaceChildren();
@@ -264,18 +261,33 @@ function renderSupplementalPanels(visuals) {
             item.append(allele.label);
             alleleCompositionLegend.appendChild(item);
         }
-        drawAlleleComposition(alleleCompositionCanvas, visuals.alleleComposition);
+        const composition = visuals.alleleComposition;
+        window.fim.registerGraphDraw("alleleComposition", () =>
+            drawAlleleComposition(alleleCompositionCanvas, composition)
+        );
     }
-    if (visuals.frequencySpectrum) {
+    if (hasSpectrum) {
         frequencySpectrumTitle.textContent = visuals.frequencySpectrum.title;
         frequencySpectrumNote.textContent = visuals.frequencySpectrum.note;
-        drawFrequencySpectrum(frequencySpectrumCanvas, visuals.frequencySpectrum);
+        const spectrum = visuals.frequencySpectrum;
+        window.fim.registerGraphDraw("frequencySpectrum", () =>
+            drawFrequencySpectrum(frequencySpectrumCanvas, spectrum)
+        );
     }
-    if (!ibdCard.hidden && visuals.isolationByDistance) {
+    window.fim.setGraphAvailable("alleleComposition", hasComposition);
+    window.fim.setGraphAvailable("frequencySpectrum", hasSpectrum);
+    // The Run/Result card is a fixed four-graph card: scatter,
+    // trajectory, allele composition, and allele-frequency spectrum.
+    // IBD stays available in the Python payload for future/specialized
+    // views, so its pane is still populated and its repaint still
+    // registered -- but the stage does not offer it a selector slot.
+    if (visuals && visuals.isolationByDistance) {
         ibdTitle.textContent = visuals.isolationByDistance.title;
         ibdNote.textContent = visuals.isolationByDistance.note;
-        drawIbdCurve(ibdCanvas, visuals.isolationByDistance);
+        const isolationByDistance = visuals.isolationByDistance;
+        window.fim.registerGraphDraw("ibd", () => drawIbdCurve(ibdCanvas, isolationByDistance));
     }
+    window.fim.setGraphAvailable("ibd", false);
 }
 
 /**
@@ -317,6 +329,9 @@ async function renderInitialPreview() {
     // Scatter panel.
     const panels = result.panels;
     if (panels && panels.length > 0) {
+        if (window.fim.setGraphAvailable) {
+            window.fim.setGraphAvailable("scatter", true);
+        }
         drawScatter(runCanvas, panels[0]);
     }
 

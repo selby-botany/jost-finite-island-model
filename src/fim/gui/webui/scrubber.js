@@ -113,6 +113,20 @@ scrubberRange.addEventListener("input", () => {
 });
 
 /**
+ * Report the generation number of every frame the scrubber holds, in
+ * slider order.
+ *
+ * Read-only introspection. Returns generations rather than the frames
+ * themselves so callers cannot reach the panel payloads hanging off
+ * them, and so crossing the Python bridge stays cheap.
+ *
+ * @returns {Array<number>}
+ */
+window.fim.getScrubberGenerations = function getScrubberGenerations() {
+    return frames.map((frame) => frame.generation);
+};
+
+/**
  * Set the operational mode of the scrubber ("live" | "replay").
  *
  * @param {"live"|"replay"} mode

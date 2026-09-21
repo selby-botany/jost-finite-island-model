@@ -113,6 +113,17 @@ window.addEventListener("load", () => {
         syncCanvasSize();
         new ResizeObserver(syncCanvasSize).observe(runCanvas);
     }
+    // The scatter is the Run card's primary graph and is offered on
+    // every state the card has, so it is available from the start; with
+    // no panel drawn yet the repaint below is simply a no-op.
+    if (window.fim && window.fim.registerGraphDraw) {
+        window.fim.registerGraphDraw("scatter", () => {
+            if (_currentPanel) {
+                drawScatter(runCanvas, _currentPanel);
+            }
+        });
+        window.fim.setGraphAvailable("scatter", true);
+    }
 });
 
 // The one panel always fills the whole canvas (simplify-main-plot

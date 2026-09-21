@@ -323,18 +323,31 @@ function refreshTrajectoryStatisticRowStates() {
  *
  * @param {string} name
  */
-function toggleTrajectoryStatistic(name) {
-    if (hiddenTrajectoryStatistics.has(name)) {
-        hiddenTrajectoryStatistics.delete(name);
-    } else {
-        hiddenTrajectoryStatistics.add(name);
-    }
+/**
+ * Repaint the trajectory panel from whichever data it last drew.
+ *
+ * The two render paths each cache their own arguments, so this needs
+ * no data of its own -- it is both the legend-toggle re-render and the
+ * graph stage's registered repaint for this pane.
+ *
+ * @returns {void}
+ */
+function repaintTrajectory() {
     if (activeTrajectoryRenderMode === "scalar" && lastTrajectoryRenderArgs) {
         renderTrajectory(...lastTrajectoryRenderArgs);
     }
     if (activeTrajectoryRenderMode === "batch" && lastPooledConvergenceHistories) {
         renderBatchTrajectory(lastPooledConvergenceHistories);
     }
+}
+
+function toggleTrajectoryStatistic(name) {
+    if (hiddenTrajectoryStatistics.has(name)) {
+        hiddenTrajectoryStatistics.delete(name);
+    } else {
+        hiddenTrajectoryStatistics.add(name);
+    }
+    repaintTrajectory();
     refreshTrajectoryStatisticRowStates();
 }
 
@@ -737,25 +750,21 @@ function drawTrajectoryCurve(
 }
 
 /**
- * Show or hide the trajectory panel, and keep `#run-plot-row`'s own
- * `run-plot-row-has-trajectory` class in sync with it.
+ * Declare whether the trajectory graph has anything to show.
  *
- * `app.css`'s own `@media (max-width: 1300px)` rules for `.run-canvas-
- * frame`/`.run-trajectory-frame` key off this class rather than
- * shrinking unconditionally at a narrow window: the scatter plot only
- * needs to give up room to fit a *third* item — the trajectory panel —
- * onto the same row (or, wrapped, to keep the wrapped line's own
- * height down), never for the `initial` p_0 view or a scalar/batch
- * `completed` view with no trajectory of its own to show, where the
- * canvas is already alone (or paired with just one stats table) and
- * has no overflow problem to solve. Every caller that sets `run
- * TrajectoryFrame.hidden` (`renderTrajectory`, `renderBatchTrajectory`)
- * goes through this instead of setting it directly.
+ * The graph stage owns `#run-trajectory-frame`'s own `hidden` (one
+ * graph is on screen at a time), so this only reports availability and
+ * keeps `#run-plot-row`'s own `run-plot-row-has-trajectory` class in
+ * sync as the "this run produced a trajectory at all" signal. Every
+ * caller (`renderTrajectory`, `renderBatchTrajectory`) goes through
+ * this rather than touching either directly.
+ *
  * @param {boolean} hidden
  */
 function setTrajectoryFrameHidden(hidden) {
-    runTrajectoryFrame.hidden = hidden;
     runPlotRow.classList.toggle("run-plot-row-has-trajectory", !hidden);
+    window.fim.registerGraphDraw("trajectory", repaintTrajectory);
+    window.fim.setGraphAvailable("trajectory", !hidden);
 }
 
 /**
@@ -1481,6 +1490,9 @@ function drawCompletedOverview(panels) {
     if (!panels || panels.length === 0) {
         return;
     }
+    if (window.fim.setGraphAvailable) {
+        window.fim.setGraphAvailable("scatter", true);
+    }
     drawScatter(runCanvas, panels[0]);
 }
 
@@ -1734,6 +1746,9 @@ async function wireCompletedBatchScrubber(outputDirectory) {
  */
 window.fim.enterCompletedState = function enterCompletedState(payload, isBatch) {
     window.fim.setRunViewState("completed");
+    if (window.fim.resetGraphStage) {
+        window.fim.resetGraphStage();
+    }
     window.fim.setCompletedOutputDirectory(payload.outputDirectory);
     // `undefined` (a batch's own payload carries no such key at all) is
     // normalized to `null` here rather than left as `undefined` -- the
@@ -1910,6 +1925,9 @@ window.fim.enterCompletedState = function enterCompletedState(payload, isBatch) 
 };
 
 window.fim.returnToInitialState = function returnToInitialState() {
+    if (window.fim.resetGraphStage) {
+        window.fim.resetGraphStage();
+    }
     resultsBackButton.hidden = true;
     window.fim.showScreen("screen-run");
     window.fim.enterInitialState();

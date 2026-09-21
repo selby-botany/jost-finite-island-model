@@ -14843,6 +14843,47 @@ def test_completed_scrubber_updates_supplemental_panels_on_scrub_ticks(
 
 Stepping the completed scrubber updates allele composition & spectrum.
 
+<a id="gui.test_results_screen.test_graph_stage_shows_one_graph_and_the_selector_switches_it"></a>
+
+#### test\_graph\_stage\_shows\_one\_graph\_and\_the\_selector\_switches\_it
+
+```python
+def test_graph_stage_shows_one_graph_and_the_selector_switches_it(
+        fast_scalar_run_settings: Path, window: webview.Window,
+        drive: Callable[..., Any]) -> None
+```
+
+The stage shows exactly one graph, and the selector changes which.
+
+The Run card used to show four graphs at once in a 3x3 quadrant.
+That was reported as unworkable -- each panel too small to read at
+the app's own 900x700 default -- and was replaced by a "graph
+stage": one graph, chosen from a selector where the per-panel title
+used to be.
+
+"Exactly one" is the part worth guarding. The stage decides pane
+visibility centrally, but the render functions still report *whether*
+each graph has data, and an earlier version of that split let a
+graph un-hide itself behind the stage's back.
+
+<a id="gui.test_results_screen.test_graph_zoom_frame_takes_the_pane_and_gives_it_back"></a>
+
+#### test\_graph\_zoom\_frame\_takes\_the\_pane\_and\_gives\_it\_back
+
+```python
+def test_graph_zoom_frame_takes_the_pane_and_gives_it_back(
+        fast_scalar_run_settings: Path, window: webview.Window,
+        drive: Callable[..., Any]) -> None
+```
+
+Double-click zoom moves the real pane out and restores it on close.
+
+The frame moves the pane rather than cloning it, so the legend and
+every wired handler come along and stay live -- and so there is only
+ever one canvas holding the drawing. The risk that buys is losing
+the pane: if it is not put back exactly where it came from, the
+stage is left permanently blank with no error anywhere.
+
 <a id="gui.test_runner"></a>
 
 # gui.test\_runner
