@@ -1626,6 +1626,56 @@ def test_browsing_to_a_trajectory_opens_it_directly(
     assert settled["runId"].startswith("run-")
 
 
+def test_selecting_a_study_checkbox_also_checks_its_own_run_rows(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Checking a Study's own selection checkbox also checks its own run
+    rows (item 6), rather than leaving them separately un-checked while
+    still being included in a bulk delete.
+    """
+    results = tmp_path / "results"
+    monkeypatch.setattr(paths_module, "results_directory", lambda: results)
+    study = groups.create_study("Ring sweep", results=results)
+    _write_run(tmp_path, study_id=study.study_id)
+
+    window = create_window(hidden=True)
+    outcome: queue.Queue[list[bool] | None] = queue.Queue(maxsize=1)
+
+    def _drive() -> None:
+        try:
+            _poll_until(window, _INPUT_SCREEN_READY, lambda value: value is True)
+            window.evaluate_js("window.fim.menu.openRun();")
+            window.evaluate_js(
+                "document.getElementById('open-run-toggle-select-button').click();"
+            )
+            _expand_all_recent_run_groups(window)
+            _poll_until(
+                window,
+                f"document.querySelectorAll({_REAL_ROW_SELECTOR}).length",
+                lambda value: value is not None and value == 1,
+            )
+            window.evaluate_js(
+                "document.querySelector("
+                "'.open-run-group-header .open-run-select-checkbox').click();"
+            )
+            after = _poll_until(
+                window,
+                "Array.from(document.querySelectorAll("
+                f"{_REAL_ROW_SELECTOR})).map("
+                "(row) => row.querySelector('.open-run-select-checkbox').checked)",
+                lambda value: value is not None and all(value),
+            )
+            outcome.put(after)
+        finally:
+            window.destroy()
+
+    webview.start(_drive)
+    settled = outcome.get(timeout=_DRIVE_TIMEOUT_SECONDS)
+
+    assert settled == [True]
+
+
 def test_result_table_cells_are_user_selectable_for_copy(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,

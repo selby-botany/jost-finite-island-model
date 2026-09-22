@@ -13820,6 +13820,19 @@ run -o` pointed elsewhere): browsing to it is now the same one
 action a double-click on a row already is, with no second click to
 remember.
 
+<a id="gui.test_open_run_screen.test_selecting_a_study_checkbox_also_checks_its_own_run_rows"></a>
+
+#### test\_selecting\_a\_study\_checkbox\_also\_checks\_its\_own\_run\_rows
+
+```python
+def test_selecting_a_study_checkbox_also_checks_its_own_run_rows(
+        tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None
+```
+
+Checking a Study's own selection checkbox also checks its own run
+rows (item 6), rather than leaving them separately un-checked while
+still being included in a bulk delete.
+
 <a id="gui.test_open_run_screen.test_result_table_cells_are_user_selectable_for_copy"></a>
 
 #### test\_result\_table\_cells\_are\_user\_selectable\_for\_copy

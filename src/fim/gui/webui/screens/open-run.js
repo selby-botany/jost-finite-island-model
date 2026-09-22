@@ -1223,6 +1223,52 @@ function buildAddToExperimentSelect(studyId) {
  * @returns {HTMLTableRowElement}
  */
 /**
+ * Add or remove every run directory `group` (a Study) or every Study id
+ * and run directory `group` (an Experiment) reaches, in `selectedRun
+ * Directories`/`selectedStudyIds` -- item 6: "selecting a Study selects
+ * its runs, and selecting an experiment selects all its Studies," so a
+ * botanist checking one box sees every row it implies checked too, not
+ * an abstract "1 study selected" that quietly also deletes runs whose
+ * own checkboxes still read unchecked. Symmetric: unchecking cascades
+ * the same way, clearing every descendant rather than leaving them
+ * stuck selected once their own parent no longer is.
+ *
+ * Reads `group.runDirectories` (a Study) or `group.subgroups` (an
+ * Experiment's own already-built Study groups, each carrying its own
+ * `runDirectories`) -- both already in hand from `buildHomeGroups`,
+ * needing no bridge call and no dependency on whether the affected
+ * Study is currently expanded: a still-collapsed Study's own runs are
+ * selected exactly as correctly as an expanded one's, the identical
+ * "reach everything loaded, not just what is currently rendered"
+ * precedent `selectAllButton`'s own handler already established.
+ * @param {object} group
+ * @param {boolean} selected
+ */
+function cascadeGroupSelection(group, selected) {
+    const applyRunDirectories = (directories) => {
+        for (const directory of directories) {
+            if (selected) {
+                selectedRunDirectories.add(directory);
+            } else {
+                selectedRunDirectories.delete(directory);
+            }
+        }
+    };
+    if (group.kind === "study") {
+        applyRunDirectories(group.runDirectories);
+        return;
+    }
+    for (const subgroup of group.subgroups) {
+        if (selected) {
+            selectedStudyIds.add(subgroup.studyId);
+        } else {
+            selectedStudyIds.delete(subgroup.studyId);
+        }
+        applyRunDirectories(subgroup.runDirectories);
+    }
+}
+
+/**
  * A Study/Experiment group header's own selection checkbox -- the
  * identical bulk Select/Select all/Delete idiom a Run row's own
  * checkbox already established, generalized to these two kinds
@@ -1230,7 +1276,10 @@ function buildAddToExperimentSelect(studyId) {
  * restricted`, §5), replacing each row's own former standalone
  * "Delete…" button in favor of one selection, reviewed as a whole,
  * before the one "Delete selected" action that actually removes
- * anything.
+ * anything. Toggling it also cascades into every descendant
+ * (`cascadeGroupSelection`), then re-renders so those descendants'
+ * own checkboxes -- whether currently visible or not -- immediately
+ * reflect it.
  * @param {{kind: "study" | "experiment", studyId?: string,
  *     experimentId?: string, label: string}} group
  * @returns {HTMLInputElement}
@@ -1250,7 +1299,9 @@ function buildGroupSelectCheckbox(group) {
         } else {
             selected.delete(id);
         }
+        cascadeGroupSelection(group, checkbox.checked);
         updateSelectionToolbar();
+        renderRecentRuns();
     });
     return checkbox;
 }
