@@ -9652,6 +9652,30 @@ awaiting it. See `test_running_screen.py`'s own `_wait_for_cancel_
 run_settled` for the full mechanism, traced there via `sample <pid>`
 on a `git push`'s own hung pre-push `pytest` run.
 
+<a id="gui.test_batch_results_screen.test_scrubbing_a_completed_batch_moves_the_statistics_panel"></a>
+
+#### test\_scrubbing\_a\_completed\_batch\_moves\_the\_statistics\_panel
+
+```python
+def test_scrubbing_a_completed_batch_moves_the_statistics_panel(
+        staggered_batch_run_settings: Path) -> None
+```
+
+The pooled statistics panel tracks the batch scrubber, not just the plots.
+
+Reported directly against a reopened batch: scrubbing back to an
+early generation moved the trajectory's own scrub marker while the
+Statistics panel kept showing the final values. The plots already
+moved (the pixel-comparison test immediately above); the panel did
+not -- `wireCompletedBatchScrubber`'s own per-tick callback simply
+never touched it.
+
+The panel's own per-generation source is the same pooled
+convergence histories the batch trajectory already draws; the final
+frame restores the authoritative final summary verbatim. Checked on
+the D row's own value cell, with the scrubber label proving the
+scrub itself actually moved.
+
 <a id="gui.test_batch_runner"></a>
 
 # gui.test\_batch\_runner
@@ -15265,6 +15289,28 @@ they never had.
 Measured on the canvas pixels themselves, in the strip just outside
 each axis line where only a tick mark can draw: a count of dark
 pixels there is the behavior a reader sees, not a markup detail.
+
+<a id="gui.test_results_screen.test_scrubbing_a_completed_scalar_run_moves_every_stats_row"></a>
+
+#### test\_scrubbing\_a\_completed\_scalar\_run\_moves\_every\_stats\_row
+
+```python
+def test_scrubbing_a_completed_scalar_run_moves_every_stats_row(
+        fast_scalar_run_settings: Path, window: webview.Window,
+        drive: Callable[..., Any]) -> None
+```
+
+The scalar stats panel -- including the derived Ne rows -- tracks the scrubber.
+
+The named-statistic rows have moved with the scrubber since the
+completed-state scrubber first existed (`updateScrubbedTrajectory`);
+the two derived effective-allele rows (`Ne_S`/`Ne_T`, each a
+closed-form `1 / (1 - H)` transform of the same run's own H_S/H_T
+history value at that generation) did not -- the panel again showed
+two different generations at once, the same staleness class the
+batch panel's own version of this fix was reported for. This pins
+both halves plus the exact restore at the final frame, so the
+connection cannot quietly drop again on either one.
 
 <a id="gui.test_runner"></a>
 

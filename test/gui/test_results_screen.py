@@ -1532,3 +1532,62 @@ def test_every_run_card_graph_draws_tick_marks_on_its_axes(
     assert settled["trajectoryX"] > 0
     assert settled["compositionY"] > 0
     assert settled["spectrumX"] > 0
+
+
+def test_scrubbing_a_completed_scalar_run_moves_every_stats_row(
+    fast_scalar_run_settings: Path, window: webview.Window, drive: Callable[..., Any]
+) -> None:
+    """The scalar stats panel -- including the derived Ne rows -- tracks the scrubber.
+
+    The named-statistic rows have moved with the scrubber since the
+    completed-state scrubber first existed (`updateScrubbedTrajectory`);
+    the two derived effective-allele rows (`Ne_S`/`Ne_T`, each a
+    closed-form `1 / (1 - H)` transform of the same run's own H_S/H_T
+    history value at that generation) did not -- the panel again showed
+    two different generations at once, the same staleness class the
+    batch panel's own version of this fix was reported for. This pins
+    both halves plus the exact restore at the final frame, so the
+    connection cannot quietly drop again on either one.
+    """
+    settled = drive(
+        window,
+        ready=_INPUT_SCREEN_READY,
+        trigger=(
+            _SET_TINY_FIELDS
+            + "document.getElementById('run-button').click(); "
+            + "const pollStats = () => { "
+            + "if (window.fim.getRunViewState() === 'completed' && "
+            + "window.__fimScrubberPending === 0) { "
+            + "const read = () => { "
+            + "const rows = document.querySelectorAll('#results-stats tr'); "
+            + "return {"
+            + "d: document.querySelector('#stat-D .stat-value').textContent, "
+            + "ne: document.querySelector('#stat-Ne_S .stat-value').textContent, "
+            + "label: document.getElementById('scrubber-label').textContent"
+            + "}; }; "
+            + "window.__fimStatScrub = {final: read()}; "
+            + "const range = document.getElementById('scrubber-range'); "
+            + "range.value = '0'; "
+            + "range.dispatchEvent(new Event('input', {bubbles: true})); "
+            + "window.__fimStatScrub.scrubbed = read(); "
+            + "range.value = range.max; "
+            + "range.dispatchEvent(new Event('input', {bubbles: true})); "
+            + "window.__fimStatScrub.restored = read(); "
+            + "return; } setTimeout(pollStats, 50); }; setTimeout(pollStats, 50);"
+        ),
+        read="window.__fimStatScrub || null",
+        is_ready=lambda value: value is not None and value.get("restored") is not None,
+        poll_attempts=_POLL_ATTEMPTS,
+    )
+
+    assert settled is not None
+    # The scrub really moved to the run's own first generation.
+    assert settled["scrubbed"]["label"].startswith("Generation 0 ")
+    # Both the watched statistic and the derived row moved with it.
+    assert settled["scrubbed"]["d"] != settled["final"]["d"]
+    assert settled["scrubbed"]["ne"] != settled["final"]["ne"]
+    assert settled["scrubbed"]["ne"] != "—"
+    # Back at the final frame, the authoritative final values restore
+    # verbatim, both rows.
+    assert settled["restored"]["d"] == settled["final"]["d"]
+    assert settled["restored"]["ne"] == settled["final"]["ne"]

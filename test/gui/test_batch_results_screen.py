@@ -1085,3 +1085,103 @@ def test_open_folder_button_reaches_the_injected_opener_and_settles(
 
     assert settled is True
     assert len(opened) == 1
+
+
+def test_scrubbing_a_completed_batch_moves_the_statistics_panel(
+    staggered_batch_run_settings: Path,
+) -> None:
+    """The pooled statistics panel tracks the batch scrubber, not just the plots.
+
+    Reported directly against a reopened batch: scrubbing back to an
+    early generation moved the trajectory's own scrub marker while the
+    Statistics panel kept showing the final values. The plots already
+    moved (the pixel-comparison test immediately above); the panel did
+    not -- `wireCompletedBatchScrubber`'s own per-tick callback simply
+    never touched it.
+
+    The panel's own per-generation source is the same pooled
+    convergence histories the batch trajectory already draws; the final
+    frame restores the authoritative final summary verbatim. Checked on
+    the D row's own value cell, with the scrubber label proving the
+    scrub itself actually moved.
+    """
+    done_event = threading.Event()
+
+    def on_message(message: RunMessage | BatchMessage) -> None:
+        if message[0] in ("done", "cancelled", "error"):
+            done_event.set()
+
+    window = create_window(api=Api(on_message=on_message), hidden=True)
+    outcome: queue.Queue[dict[str, Any] | None] = queue.Queue(maxsize=1)
+
+    read_panel = (
+        "(function(){"
+        "var rows = document.querySelectorAll('#batch-results-summary-body tr');"
+        "return {"
+        "rowCount: rows.length, "
+        "dValue: rows[0].querySelector('.stat-value').textContent, "
+        "neValue: rows[rows.length - 2].querySelector('.stat-value').textContent, "
+        "label: document.getElementById('scrubber-label').textContent"
+        "};})()"
+    )
+
+    def _drive() -> None:
+        try:
+            _wait_for_input_screen_ready(window)
+            window.evaluate_js(
+                _SET_STAGGERED_BATCH_FIELDS
+                + "document.getElementById('run-button').click();"
+            )
+            settled = None
+            if done_event.wait(timeout=_EVENT_WAIT_TIMEOUT_SECONDS):
+                for _ in range(_READY_POLL_ATTEMPTS):
+                    if not window.evaluate_js("window.__fimScrubberPending"):
+                        break
+                    time.sleep(_READY_POLL_INTERVAL_SECONDS)
+                final = window.evaluate_js(read_panel)
+                # Frame 0 is the run's own first generation, as far from
+                # the final state as this run's history goes.
+                window.evaluate_js(
+                    "(function(){"
+                    "var range = document.getElementById('scrubber-range');"
+                    "range.value = '0';"
+                    "range.dispatchEvent(new Event('input', {bubbles: true}));"
+                    "})();"
+                )
+                scrubbed = window.evaluate_js(read_panel)
+                # And back to the final frame, to prove the
+                # authoritative restore rather than a one-way drift.
+                window.evaluate_js(
+                    "(function(){"
+                    "var range = document.getElementById('scrubber-range');"
+                    "range.value = range.max;"
+                    "range.dispatchEvent(new Event('input', {bubbles: true}));"
+                    "})();"
+                )
+                restored = window.evaluate_js(read_panel)
+                settled = {"final": final, "scrubbed": scrubbed, "restored": restored}
+            outcome.put(settled)
+        finally:
+            window.destroy()
+
+    webview.start(_drive)
+    settled = outcome.get(timeout=_OUTCOME_TIMEOUT_SECONDS)
+
+    assert settled is not None, "batch never reached done within the wait budget"
+    # The scrub really moved to the run's own first generation.
+    assert settled["scrubbed"]["label"].startswith("Generation 0 ")
+    # Every row is present in every state (omitted rows included).
+    assert settled["scrubbed"]["rowCount"] == settled["final"]["rowCount"]
+    # The panel actually tracked the scrub: D's own pooled value at the
+    # first generation is a real CI meter (not the omitted dash), and
+    # it is not the final value the panel was stuck on before this fix.
+    assert settled["scrubbed"]["dValue"] != "—"
+    assert settled["scrubbed"]["dValue"] != settled["final"]["dValue"]
+    # The effective-allele rows have no per-generation source at all --
+    # they render omitted while scrubbed rather than a stale final value.
+    assert settled["final"]["neValue"] != "—"
+    assert settled["scrubbed"]["neValue"] == "—"
+    # Back at the final frame, the authoritative final summary restores
+    # verbatim, both rows.
+    assert settled["restored"]["dValue"] == settled["final"]["dValue"]
+    assert settled["restored"]["neValue"] == settled["final"]["neValue"]

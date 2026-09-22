@@ -262,6 +262,23 @@ let completedIdentityRecovery = null;
 let completedGenerationCount = null;
 let completedFinalStatistics = null;
 let completedFinalLiteratureVisuals = null;
+// The batch entry's own counterpart to `completedFinalStatistics`: the
+// authoritative final pooled summary and effective-allele rows, kept
+// so a scrub tick that lands back on the final frame restores them
+// exactly (`updateScrubbedBatchSummary`), rather than re-deriving them
+// from the per-generation pooled points -- which could never restore
+// `effectiveAlleles`'s own rows anyway, those having no per-generation
+// source. Set by `enterCompletedState`'s own batch branch, nulled by
+// its scalar one, matching the lifetime every `completed*` variable
+// above already observes.
+let completedBatchSummary = null;
+let completedBatchEffectiveAlleles = null;
+// The scalar entry's own final `effectiveAlleles` payload, retained for
+// the same reason and on the same lifetime: a scrub tick back at the
+// final frame restores the two derived rows (`renderEffectiveAlleles`)
+// verbatim rather than re-deriving them from the pooled histories it
+// never came from.
+let completedEffectiveAlleles = null;
 // The scalar per-generation results table's own one extra fact: the
 // stop reason to print on its own final row. Kept beside the scrub-
 // replay state above because it shares that lifetime exactly -- set by
@@ -1626,8 +1643,10 @@ function nearestGeneration(generations, target) {
 }
 
 /**
- * Answer one completed-state scrubber tick: update the six-row stats
- * table and the trajectory panel's own scrub-position marker to match
+ * Answer one completed-state scrubber tick: update the stats
+ * table (every named-statistic row, plus the two effective-allele rows
+ * derived from H_S/H_T at that same generation) and the trajectory
+ * panel's own scrub-position marker to match
  * `frameGeneration` (botanist GUI design doc §6.3's "a scrubber...
  * letting a user drag back through already-computed history," applied
  * here to the completed-state scrubber replaying a finished run, not
@@ -1664,6 +1683,10 @@ function updateScrubbedTrajectory(frameGeneration, isFinalFrame) {
             applyStatRow(element, buildPointMeter(name, completedFinalStatistics[name]));
             decorateTrajectoryStatisticRow(element, name);
         }
+        // The two derived rows restore from the retained final payload,
+        // not from a history lookup -- they were computed from the
+        // run's own final report server-side.
+        renderEffectiveAlleles(completedEffectiveAlleles);
         renderTrajectory(
             completedTrajectoryGenerations,
             completedTrajectoryHistories,
@@ -1704,6 +1727,35 @@ function updateScrubbedTrajectory(frameGeneration, isFinalFrame) {
         }
         decorateTrajectoryStatisticRow(element, name);
     }
+    // The two derived effective-allele rows track the scrub too: each
+    // is a closed-form transform (`1 / (1 - H)`) of this same run's own
+    // H_S/H_T history value at this generation, exact for a scalar run
+    // (no aggregation involved, unlike the batch panel's own pooled
+    // rows, which omit instead). `H === 1` has no finite answer --
+    // omitted rather than rendered as "Infinity". The G_ST caution
+    // note, computed from the final state, hides until the final
+    // frame's own restore brings it back.
+    const [
+        [withinLabel, withinHistoryKey, withinDescription],
+        [totalLabel, totalHistoryKey, totalDescription],
+    ] = EFFECTIVE_ALLELE_LABELS;
+    for (const [rowId, label, historyKey, description] of [
+        ["stat-Ne_S", withinLabel, withinHistoryKey, withinDescription],
+        ["stat-Ne_T", totalLabel, totalHistoryKey, totalDescription],
+    ]) {
+        const history = completedTrajectoryHistories[historyKey];
+        const value = history && scrubIndex >= 0 ? history[scrubIndex] : undefined;
+        const cells =
+            Number.isFinite(value) && value < 1
+                ? buildPointMeter(
+                      label,
+                      (1 / (1 - value)).toPrecision(6),
+                      description
+                  )
+                : buildOmittedMeter(label, OMITTED_SCRUB_TEXT, description);
+        applyStatRow(document.getElementById(rowId), cells);
+    }
+    gStCautionNote.hidden = true;
     renderTrajectory(
         completedTrajectoryGenerations,
         completedTrajectoryHistories,
@@ -1713,6 +1765,88 @@ function updateScrubbedTrajectory(frameGeneration, isFinalFrame) {
         completedIdentityRecovery,
         scrubGeneration
     );
+}
+
+/**
+ * Answer one completed-batch scrubber tick: re-render the pooled
+ * statistics panel to match `frameGeneration` -- the batch counterpart
+ * to `updateScrubbedTrajectory`, which updates the *scalar* panel.
+ * Reported directly: scrubbing a reopened batch back to generation 1
+ * moved the trajectory's own scrub marker while the statistics panel
+ * kept showing the final values, the card again presenting two
+ * different times at once.
+ *
+ * Each statistic's own per-generation pooled points
+ * (`lastPooledConvergenceHistories` -- real monitor output for a batch
+ * that just finished live, rebuilt from disk for a reopened one,
+ * `fim.reanalyze.replicate_convergence_history`) are already exactly
+ * `buildCiMeter`'s own input shape (`{mean, low, high, sampleCount}`,
+ * `_pooled_histories_payload`), so the scrubbed row is the same meter
+ * the final row is, rather than a second, driftable rendering. A
+ * statistic with no pooled point at all (never tracked this run) --
+ * and the two effective-allele rows, which have no per-generation
+ * source at any point -- render as omitted, never a stale or padded
+ * value; the G_ST caution note, computed from the run's own final
+ * state, hides until the final frame restores it.
+ *
+ * At the final frame the real, authoritative final summary
+ * (`completedBatchSummary`, retained by `enterCompletedState`) comes
+ * back verbatim -- the per-generation pooled points are a close
+ * approximation of it but not its equal (they were computed by a
+ * different aggregation path over the same replicates), and exactness
+ * is what that one frame is for, the identical division of labor
+ * `updateScrubbedTrajectory`'s own `isFinalFrame` branch already
+ * established for the scalar panel.
+ *
+ * A no-op when this completed batch has no pooled histories at all
+ * (fewer than two replicates to pool, `pooled_convergence_histories`'s
+ * own minimum) -- the panel then keeps its final summary, the only
+ * values there are.
+ *
+ * @param {number} frameGeneration - `frame.generation` for the
+ *     currently-scrubbed animation frame.
+ * @param {boolean} isFinalFrame - whether this is the scrubber's last
+ *     frame (see `updateScrubbedTrajectory`'s own docstring for why the
+ *     index comparison, not a generation-number comparison).
+ */
+function updateScrubbedBatchSummary(frameGeneration, isFinalFrame) {
+    if (!lastPooledConvergenceHistories) {
+        return;
+    }
+    if (isFinalFrame) {
+        renderBatchSummary(completedBatchSummary, completedBatchEffectiveAlleles);
+        return;
+    }
+    batchResultsSummary.replaceChildren();
+    for (const name of STATISTIC_NAMES) {
+        const points = lastPooledConvergenceHistories[name];
+        // Each statistic's own point list carries its own generation
+        // per point (a replicate whose own history dropped an interior
+        // gap shifts every later point's own alignment), so the nearest
+        // match is found per point, not by index into a shared list.
+        let point;
+        let bestDistance = Infinity;
+        for (const candidate of points || []) {
+            const distance = Math.abs(candidate.generation - frameGeneration);
+            if (distance < bestDistance) {
+                bestDistance = distance;
+                point = candidate;
+            }
+        }
+        const cells = point
+            ? buildCiMeter(name, point)
+            : buildOmittedMeter(name, OMITTED_SCRUB_TEXT);
+        const row = document.createElement("tr");
+        applyStatRow(row, cells);
+        decorateTrajectoryStatisticRow(row, name);
+        batchResultsSummary.appendChild(row);
+    }
+    for (const [label, , description] of EFFECTIVE_ALLELE_LABELS) {
+        const row = document.createElement("tr");
+        applyStatRow(row, buildOmittedMeter(label, OMITTED_SCRUB_TEXT, description));
+        batchResultsSummary.appendChild(row);
+    }
+    gStCautionNote.hidden = true;
 }
 
 /**
@@ -1796,12 +1930,10 @@ async function wireCompletedScrubber(outputDirectory, generationCount) {
  * design). Shares `scrubberControls`/`window.fim.setScrubberFrames`
  * unchanged with the scalar case; only the bridge call
  * (`get_batch_animation_frames`, not `get_animation_frames`) and the
- * per-tick redraw differ -- no `updateScrubbedTrajectory` call here,
- * since that function updates the *scalar* stats table/trajectory
- * marker specifically, neither of which a batch's own completed view
- * has (`renderBatchSummary`'s own always-current final summary, and
- * `renderBatchTrajectory`'s own pooled band, are not scrub-tick-aware
- * yet -- left as a future enhancement, not attempted here).
+ * per-tick redraw differ -- `updateScrubbedBatchSummary` answers the
+ * statistics panel (`updateScrubbedTrajectory`'s own batch
+ * counterpart), and the pooled trajectory's own scrub marker moves
+ * through `renderBatchTrajectory`'s own `scrubGeneration` argument.
  *
  * @param {string} outputDirectory
  */
@@ -1841,13 +1973,14 @@ async function wireCompletedBatchScrubber(outputDirectory) {
                 if (frame.literatureVisuals) {
                     renderSupplementalPanels(frame.literatureVisuals);
                 }
+                const isFinal = index === result.frames.length - 1;
                 if (lastPooledConvergenceHistories) {
-                    const isFinal = index === result.frames.length - 1;
                     renderBatchTrajectory(
                         lastPooledConvergenceHistories,
                         isFinal ? null : frame.generation
                     );
                 }
+                updateScrubbedBatchSummary(frame.generation, isFinal);
             },
             result.frames.length - 1
         );
@@ -1961,6 +2094,9 @@ window.fim.enterCompletedState = function enterCompletedState(payload, isBatch) 
         completedFinalStatistics = null;
         completedFinalLiteratureVisuals = null;
         completedReportReason = null;
+        completedEffectiveAlleles = null;
+        completedBatchSummary = payload.summary || null;
+        completedBatchEffectiveAlleles = payload.effectiveAlleles || null;
         renderBatchTrajectory(payload.pooledConvergenceHistories);
     } else {
         // A different run just opened (or a live run just finished) --
@@ -2005,6 +2141,9 @@ window.fim.enterCompletedState = function enterCompletedState(payload, isBatch) 
         completedGenerationCount = payload.generationCount;
         completedFinalStatistics = payload.statistics;
         completedFinalLiteratureVisuals = payload.literatureVisuals || null;
+        completedBatchSummary = null;
+        completedBatchEffectiveAlleles = null;
+        completedEffectiveAlleles = payload.effectiveAlleles || null;
         renderTrajectory(
             payload.convergenceGenerations,
             payload.convergenceHistories,
