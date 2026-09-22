@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import math
+import random
 import unittest
 from collections.abc import Mapping, Sequence
 from pathlib import Path
@@ -765,6 +766,78 @@ class DifferentiationStatisticsTests(unittest.TestCase):
 
         three_demes = [{0: 1.0}, {1: 1.0}, {0: 0.5, 1: 0.5}]
         self.assertAlmostEqual(gregorius_delta(three_demes), 0.5)
+
+    def test_gregorius_delta_matches_a_direct_per_deme_rest_sum_at_scale(self) -> None:
+        """The shared-total form agrees with the formula's own direct reading.
+
+        `_gregorius_delta_from_demes` used to recompute each deme's own
+        "rest of the other demes" mixture as a fresh `d - 1`-term sum,
+        once per deme -- an O(d^2) cost in deme count that a reopened
+        batch's own convergence-history reconstruction (`fim.reanalyze.
+        replicate_convergence_history`) pays for every persisted
+        generation of every replicate, back to back, with nothing else
+        happening meanwhile. Measured directly on a real `d=70` batch:
+        74s to reopen 10 replicates, 96% of it in this one function.
+        Rewritten to precompute the grand weighted total once and
+        subtract each deme's own contribution instead (O(d) overall) --
+        algebraically identical, but only proven so here by comparing
+        against `_direct_rest_sum_gregorius_delta`, an independent
+        reimplementation of the formula's own literal per-deme reading
+        (a fresh `d - 1`-term sum, exactly what the production code use
+        to do), never sharing a line with the production function, at a
+        deme count (`d=70`) matching the real batch that exposed the
+        cost in the first place.
+        """
+
+        def _direct_rest_sum_gregorius_delta(
+            demes: Sequence[Mapping[int, float]], weights: Sequence[float]
+        ) -> float:
+            """Gregorius delta read literally: one direct sum per deme."""
+            allele_ids = {allele_id for deme in demes for allele_id in deme}
+            value = 0.0
+            for index, (deme, weight) in enumerate(zip(demes, weights, strict=True)):
+                other_weight = 1.0 - weight
+                rest = {
+                    allele_id: math.fsum(
+                        weights[other_index] * other_deme.get(allele_id, 0.0)
+                        for other_index, other_deme in enumerate(demes)
+                        if other_index != index
+                    )
+                    / other_weight
+                    for allele_id in allele_ids
+                }
+                distance = 0.5 * math.fsum(
+                    abs(deme.get(allele_id, 0.0) - rest[allele_id])
+                    for allele_id in allele_ids
+                )
+                value += weight * distance
+            return value
+
+        rng = random.Random(20260922)
+        for n_demes, n_alleles in ((2, 3), (5, 12), (70, 40)):
+            raw_demes = [
+                {
+                    allele_id: rng.random()
+                    for allele_id in range(n_alleles)
+                    if rng.random() > 0.3
+                }
+                or {0: 1.0}
+                for _ in range(n_demes)
+            ]
+            demes = [
+                {
+                    allele_id: value / sum(deme.values())
+                    for allele_id, value in deme.items()
+                }
+                for deme in raw_demes
+            ]
+            raw_weights = [rng.random() + 0.05 for _ in range(n_demes)]
+            weight_total = sum(raw_weights)
+            weights = [weight / weight_total for weight in raw_weights]
+
+            expected = _direct_rest_sum_gregorius_delta(demes, weights)
+            actual = gregorius_delta(demes, weights)
+            self.assertAlmostEqual(actual, expected, places=9)
 
     def test_mutual_information_is_entropy_gain_from_deme_membership(self) -> None:
         """Sherwin's MI equals H_T minus the weighted mean within entropy."""

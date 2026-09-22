@@ -12393,6 +12393,38 @@ def test_opening_a_study_with_a_mismatched_parameter_shows_a_note_but_still_pool
 A mismatched `d` across a Study's own members still pools, with a
 visible note naming it -- never a refusal.
 
+<a id="gui.test_home_hierarchy_screen.test_home_run_count_label_never_shows_more_visible_than_total"></a>
+
+#### test\_home\_run\_count\_label\_never\_shows\_more\_visible\_than\_total
+
+```python
+def test_home_run_count_label_never_shows_more_visible_than_total(
+        tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None
+```
+
+The count label never claims more runs are visible than exist.
+
+A real, reported bug, distinct from the "722 of 2" double-counting
+one above: a Study can legitimately reference a run entirely outside
+`results/` (`fim.persistence.groups._run_reference_string`'s own
+absolute-path fallback), which `Api.list_home_runs`'s own flat,
+one-level scan of `results/` never finds and never counts. The label
+used to compare `distinctRunCount` (every group's own reachable
+runs, which *does* see that externally-referenced run) against
+`allRecentRuns.length` (which never can) -- comparing two counts of
+different things, not a subset relationship, so "visible" could
+exceed "total" outright with no filter text even typed. Reported
+directly as a real, live "60 of 14 runs" -- traced, in that specific
+case, to years of stale test-run references rather than a genuine
+external reference, but the label's own comparison was equally
+nonsensical either way.
+
+Reproduced here with a genuine external reference (a run whose own
+files live under `tmp_path`, entirely outside this test's own
+`results/`), added to a Study by absolute path -- the same shape
+`_run_reference_string` documents as a supported, legitimate case,
+not a corrupted one.
+
 <a id="gui.test_input_screen"></a>
 
 # gui.test\_input\_screen
@@ -22385,6 +22417,34 @@ def test_gregorius_delta_is_mean_total_variation_from_the_rest() -> None
 ```
 
 Gregorius delta matches hand-computed two- and three-deme cases.
+
+<a id="statistics.test_differentiation.DifferentiationStatisticsTests.test_gregorius_delta_matches_a_direct_per_deme_rest_sum_at_scale"></a>
+
+#### test\_gregorius\_delta\_matches\_a\_direct\_per\_deme\_rest\_sum\_at\_scale
+
+```python
+def test_gregorius_delta_matches_a_direct_per_deme_rest_sum_at_scale() -> None
+```
+
+The shared-total form agrees with the formula's own direct reading.
+
+`_gregorius_delta_from_demes` used to recompute each deme's own
+"rest of the other demes" mixture as a fresh `d - 1`-term sum,
+once per deme -- an O(d^2) cost in deme count that a reopened
+batch's own convergence-history reconstruction (`fim.reanalyze.
+replicate_convergence_history`) pays for every persisted
+generation of every replicate, back to back, with nothing else
+happening meanwhile. Measured directly on a real `d=70` batch:
+74s to reopen 10 replicates, 96% of it in this one function.
+Rewritten to precompute the grand weighted total once and
+subtract each deme's own contribution instead (O(d) overall) --
+algebraically identical, but only proven so here by comparing
+against `_direct_rest_sum_gregorius_delta`, an independent
+reimplementation of the formula's own literal per-deme reading
+(a fresh `d - 1`-term sum, exactly what the production code use
+to do), never sharing a line with the production function, at a
+deme count (`d=70`) matching the real batch that exposed the
+cost in the first place.
 
 <a id="statistics.test_differentiation.DifferentiationStatisticsTests.test_mutual_information_is_entropy_gain_from_deme_membership"></a>
 
