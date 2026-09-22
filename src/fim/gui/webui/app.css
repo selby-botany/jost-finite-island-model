@@ -1068,19 +1068,23 @@ fieldset.composite > label {
 /* The y selector is a rotated `<select>`, and `transform` does not
  * change layout: the label's box stays as wide as the *un*-rotated
  * control (~87px measured), while the strip the user actually sees is
- * only as wide as that control is tall (~22px), centered in it. With
+ * only as wide as that control is tall, centered in it. With
  * `justify-self: end` the box's edge lands against the plot, so the
  * visible strip stopped ~38px short of it -- against the 8px the x
  * selector sits below the plot. Reported as "the left deme selector is
  * not glued to the graph like the bottom one".
  *
- * Hugging the strip with an explicit width makes the box and what is
- * seen the same thing, so `justify-self: end` puts the *visible* edge
- * one grid gap from the plot, exactly as the x selector's own row gap
- * does beneath it. The width tracks the control's rendered height, so
- * it is checked rather than trusted: `test_deme_pair_selectors_stay_
- * glued_to_the_scatter_axes` asserts the two gaps match, and fails if a
- * font or padding change moves the real thickness away from this. */
+ * Constraining the label's width makes the box and what is seen the
+ * same thing, so `justify-self: end` puts the *visible* edge one grid
+ * gap from the plot, exactly as the x selector's own row gap does
+ * beneath it. The `1.4rem` here is only the pre-measurement fallback
+ * (a reasonable first paint before layout runs): the real width is the
+ * control's own rendered height, synced at runtime from
+ * `offsetHeight` (`app.js`'s own `wireDemePairSelector`) because that
+ * height is the platform's native-widget metric and is not portable
+ * across macOS/Linux. `test_deme_pair_selectors_stay_glued_to_the_
+ * scatter_axes` asserts the two gaps match; it caught the hard-coded
+ * width on Linux CI, where the select renders ~9px taller. */
 .axis-selector-y {
     grid-column: 1;
     grid-row: 2;

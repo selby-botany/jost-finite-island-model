@@ -249,6 +249,32 @@ const fim = {
         xSelect.onchange = applyPairSelection;
         ySelect.onchange = applyPairSelection;
         updateSelfComparisonNote();
+
+        // The y control is a rotated `<select>`, and `transform` does
+        // not change layout: its wrapper (`.axis-selector-y`) has to be
+        // exactly as wide as the rotated control is *thick* -- the
+        // select's own rendered height -- or the visible strip drifts
+        // off the plot's own left edge. That height is the platform's
+        // native-widget metric and is NOT portable (measured ~22px on
+        // macOS, ~31px under Linux WebKitGTK, where CI caught the
+        // previously hard-coded `1.4rem` width producing a 1.2px gap
+        // beside the plot against the x selector's own 5.6px gap below
+        // it). Sync the width from the real height, here and on any
+        // later size change: a hidden ancestor (the graph stage showing
+        // a different graph) reports `offsetHeight` 0 until the scatter
+        // is shown again, and a late-loading font nudges the control's
+        // own height by a pixel or two after first paint.
+        const yLabel = ySelect.closest(".axis-selector-y");
+        const syncYLabelWidth = () => {
+            if (yLabel && ySelect.offsetHeight > 0) {
+                yLabel.style.width = `${ySelect.offsetHeight}px`;
+            }
+        };
+        syncYLabelWidth();
+        if (!ySelect.dataset.fimAxisWidthObserved) {
+            ySelect.dataset.fimAxisWidthObserved = "true";
+            new ResizeObserver(syncYLabelWidth).observe(ySelect);
+        }
     },
 
     /**
