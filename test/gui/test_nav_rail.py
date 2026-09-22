@@ -106,6 +106,39 @@ def test_rail_has_the_five_destinations_plus_help_in_order(
     ]
 
 
+def test_run_destinations_own_icon_is_the_results_chart_not_a_play_triangle(
+    window: webview.Window,
+) -> None:
+    """The "Run" rail button's own icon is `icon-results` (a chart), not
+    `icon-run` (a bare play-triangle) -- the label text stays "Run".
+
+    This one destination has drawn Run and Results together since
+    before this rail existed (see this file's own top-of-file comment,
+    reproduced in `index.html`): a fresh run and an already-completed
+    one both land here, so a chart reads truer to what a botanist
+    actually lands on most of the time than a play-triangle does.
+    Reported directly: "the icon still reads 'Run'" -- true of the
+    label text, which this change deliberately leaves alone; only the
+    icon changes.
+    """
+    icon_and_label = _drive(
+        window,
+        lambda _poll_until: window.evaluate_js(
+            "({"
+            "icon: document.querySelector("
+            "'.rail-item[data-destination=\"run\"] use')"
+            ".getAttribute('href'), "
+            "label: document.querySelector("
+            "'.rail-item[data-destination=\"run\"] span').textContent"
+            "})"
+        ),
+    )
+    assert icon_and_label == {
+        "icon": "icons/fim-icons.svg#icon-results",
+        "label": "Run",
+    }
+
+
 def test_card_navigation_buttons_have_directional_icons(
     window: webview.Window,
 ) -> None:

@@ -13148,6 +13148,27 @@ Run and Results were two separate buttons here until they were
 collapsed into one "Run" destination on a real, reported request
 (`screens/nav-rail.js`'s own top comment has the full account).
 
+<a id="gui.test_nav_rail.test_run_destinations_own_icon_is_the_results_chart_not_a_play_triangle"></a>
+
+#### test\_run\_destinations\_own\_icon\_is\_the\_results\_chart\_not\_a\_play\_triangle
+
+```python
+def test_run_destinations_own_icon_is_the_results_chart_not_a_play_triangle(
+        window: webview.Window) -> None
+```
+
+The "Run" rail button's own icon is `icon-results` (a chart), not
+`icon-run` (a bare play-triangle) -- the label text stays "Run".
+
+This one destination has drawn Run and Results together since
+before this rail existed (see this file's own top-of-file comment,
+reproduced in `index.html`): a fresh run and an already-completed
+one both land here, so a chart reads truer to what a botanist
+actually lands on most of the time than a play-triangle does.
+Reported directly: "the icon still reads 'Run'" -- true of the
+label text, which this change deliberately leaves alone; only the
+icon changes.
+
 <a id="gui.test_nav_rail.test_card_navigation_buttons_have_directional_icons"></a>
 
 #### test\_card\_navigation\_buttons\_have\_directional\_icons

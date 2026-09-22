@@ -68,7 +68,16 @@
         </button>
         <button type="button" class="rail-item" data-destination="run">
           <svg class="rail-icon" aria-hidden="true">
-            <use href="icons/fim-icons.svg#icon-run"></use>
+            <!-- `icon-results` (a chart, not `icon-run`'s own bare
+                 play-triangle), even though this destination is still
+                 labeled "Run" -- it opens directly on a running or
+                 already-completed Results card just as often as a
+                 fresh Configure form (this button's own destination
+                 has drawn Run and Results together since before this
+                 rail existed, see the comment above), so a chart reads
+                 truer to what the botanist actually lands on than a
+                 bare triangle does. -->
+            <use href="icons/fim-icons.svg#icon-results"></use>
           </svg>
           <span>Run</span>
         </button>
