@@ -10114,16 +10114,18 @@ All six destinations use the bundled monochrome SVG symbols.
 Run and Results were two separate rail buttons/icons until they
 were collapsed into one "Run" destination on a real, reported
 request (`screens/nav-rail.js`'s own top comment has the full
-account) -- `icon-results` stays defined in the sprite (below, the
-`icon_id` loop still checks for it) even though nothing references
-it anymore, so this count is six, not seven.
+account) -- so this count is six, not seven, even though
+`icon-results` is still in use: the merged "Run" button itself
+references it (a chart, not `icon-run`'s own bare play-triangle).
 
-22, not 24: Home's own `.home-cards` were removed outright
+21, not 24: Home's own `.home-cards` were removed outright
 (`20260918-claude-sonnet-5-home-tree-reorg-design.md`, `selby/
 restricted`, §7) -- their "New run" button's own trailing
 `icon-forward` and the "Explore" card's own `icon-explore` went
 with them, each action now living on the row that receives it
-instead, with no icon of its own.
+instead, with no icon of its own -- and Home's own per-screen Back
+button (`open-run-back-button`, one `icon-back`) followed later,
+redundant with the shared top-strip history controls.
 
 <a id="gui.test_branding.test_home_and_about_carry_restrained_selby_identity"></a>
 
