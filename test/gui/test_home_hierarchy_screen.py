@@ -1331,3 +1331,63 @@ def test_opening_a_study_with_a_mismatched_parameter_shows_a_note_but_still_pool
     assert settled["runViewState"] == "completed"
     assert "varies across members" in settled["outcomeText"]
     assert "d" in settled["outcomeText"]
+
+
+def test_home_run_count_label_never_shows_more_visible_than_total(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The count label never claims more runs are visible than exist.
+
+    A real, reported bug, distinct from the "722 of 2" double-counting
+    one above: a Study can legitimately reference a run entirely outside
+    `results/` (`fim.persistence.groups._run_reference_string`'s own
+    absolute-path fallback), which `Api.list_home_runs`'s own flat,
+    one-level scan of `results/` never finds and never counts. The label
+    used to compare `distinctRunCount` (every group's own reachable
+    runs, which *does* see that externally-referenced run) against
+    `allRecentRuns.length` (which never can) -- comparing two counts of
+    different things, not a subset relationship, so "visible" could
+    exceed "total" outright with no filter text even typed. Reported
+    directly as a real, live "60 of 14 runs" -- traced, in that specific
+    case, to years of stale test-run references rather than a genuine
+    external reference, but the label's own comparison was equally
+    nonsensical either way.
+
+    Reproduced here with a genuine external reference (a run whose own
+    files live under `tmp_path`, entirely outside this test's own
+    `results/`), added to a Study by absolute path -- the same shape
+    `_run_reference_string` documents as a supported, legitimate case,
+    not a corrupted one.
+    """
+    results = tmp_path / "results"
+    results.mkdir()
+    monkeypatch.setattr(paths_module, "results_directory", lambda: results)
+    external_run = _write_run(tmp_path, "external-run", seed=2)
+    study = groups.create_study("Alpha", results=results)
+    groups.add_run_to_study(study.study_id, external_run, results=results)
+
+    window = create_window(hidden=True)
+    outcome: queue.Queue[str | None] = queue.Queue(maxsize=1)
+
+    def _drive() -> None:
+        try:
+            _poll_until(window, _INPUT_SCREEN_READY, lambda value: value is True)
+            window.evaluate_js("window.fim.menu.openRun();")
+            count_text = _poll_until(
+                window,
+                "document.getElementById('open-run-count').textContent",
+                lambda value: value not in (None, ""),
+            )
+            outcome.put(count_text)
+        finally:
+            window.destroy()
+
+    webview.start(_drive)
+    count_text = outcome.get(timeout=_DRIVE_TIMEOUT_SECONDS)
+
+    assert count_text is not None
+    # `allRecentRuns` (Home's own flat scan) found zero runs under this
+    # test's own empty `results/` -- the old, broken comparison would
+    # have rendered "1 of 0 runs"; this must never claim more runs are
+    # visible than the tree itself actually has.
+    assert count_text == "1 run"

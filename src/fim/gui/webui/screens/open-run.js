@@ -1308,7 +1308,24 @@ function renderRecentRuns() {
     for (const group of groups) {
         renderGroup(group);
     }
-    const totalRuns = allRecentRuns.length;
+    // The denominator is `distinctRunCount` over the *unfiltered* tree,
+    // not `allRecentRuns.length` -- a Study can legitimately reference a
+    // run outside `results/` entirely (`fim.persistence.groups.
+    // _run_reference_string`'s own absolute-path fallback, for a run
+    // published somewhere else on purpose), which `Api.list_home_runs`'s
+    // own flat, one-level scan never finds and never counts. Comparing
+    // against `allRecentRuns.length` instead produced a real, reported
+    // "60 of 14 runs" -- in that specific case traced to a stale-
+    // reference data problem (`test/test_reanalyze.py`'s own
+    // `_isolate_results_directory`, added alongside this fix), but the
+    // comparison itself would have looked exactly as nonsensical for a
+    // legitimate external reference too, since `visibleRuns` was never
+    // actually a subset of `totalRuns` to begin with. Comparing two
+    // counts of the *same* thing (every group's own reachable runs,
+    // filtered vs. not) instead guarantees `visibleRuns <= totalRuns`
+    // always, by construction -- filtering only ever removes groups,
+    // never adds one.
+    const totalRuns = distinctRunCount(buildHomeGroups(allStudies, allExperiments, ""));
     const visibleRuns = distinctRunCount(groups);
     recentRunsCountLabel.textContent =
         visibleRuns === totalRuns

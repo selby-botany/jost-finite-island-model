@@ -18,7 +18,7 @@ from pathlib import Path
 import pytest
 import yaml
 
-from fim import cli, engine, reanalyze
+from fim import cli, engine, paths, reanalyze
 from fim.persistence.jsonl_store import JSONLTrajectoryStore
 from fim.persistence.manifest import hash_file, read_manifest, write_manifest
 
@@ -32,6 +32,39 @@ def _isolate_logging(log_isolation: None) -> None:
     the same as any other real `cli.main` call — see `log_isolation`'s
     own docstring for why that matters here.
     """
+
+
+@pytest.fixture(autouse=True)
+def _isolate_results_directory(
+    tmp_path_factory: pytest.TempPathFactory, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Never let `_write_run`'s own `cli.main(["run", ...])` call attach a
+    Study to this checkout's own real `results/`.
+
+    `_record_run_organization` (`fim.cli`) attaches every successful run
+    to a Study regardless of where `-o`/`--output` sent its own files —
+    by design (an out-of-tree run should still show up in Home) it
+    resolves `ensure_default_study`/`add_run_to_study` through `fim.
+    paths.results_directory`, not through `-o`'s own directory. Left
+    unguarded here, every test in this file that calls `_write_run`
+    (most of them) silently appended its own throwaway `tmp_path` output
+    directory into this checkout's real `results/.fim/studies/study-
+    default.json` -- confirmed directly: found live, 2137 accumulated
+    stale references, the overwhelming majority `pytest-of-jim` tmp
+    paths from this exact file's own historical test runs, surfacing as
+    a "60 of 14 runs" GUI defect several sessions later that had nothing
+    to do with the file that had actually caused it.
+
+    Same fix `test/gui/conftest.py`'s own `_isolate_gui_results` and
+    `test/cli/conftest.py` already apply to their own directories --
+    patches `project_root` itself (not `results_directory` directly),
+    for the identical "a test that specifically needs the real
+    derivation chain keeps working" reason `log_isolation`'s own
+    docstring gives; nothing in this file needs that chain, so no such
+    test exists here to conflict with it.
+    """
+    root = tmp_path_factory.mktemp("reanalyze-test-results-root")
+    monkeypatch.setattr(paths, "project_root", lambda: root)
 
 
 def _write_run(tmp_path: Path, **overrides: object) -> Path:
