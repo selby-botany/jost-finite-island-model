@@ -1756,6 +1756,23 @@ fieldset.composite > label {
     white-space: nowrap;
 }
 
+/* Item 5: any read-only result field is selectable for copy (never
+ * cut or paste -- these are plain `<td>` text, not editable fields) so
+ * a botanist can paste a value into another application. Shared and
+ * reusable, not specific to this one table -- apply the identical
+ * class to any other result field elsewhere that wants the same
+ * affordance. The `-webkit-` prefixed property first: confirmed live,
+ * this project's own bundled WebKit only recognizes the prefixed form
+ * here (`getComputedStyle(...).userSelect` came back empty/`"none"`
+ * with the unprefixed property alone; `webkitUserSelect` is what
+ * actually took effect) -- both are declared so a standards-only
+ * WebKit is covered too. */
+.fim-copyable-text {
+    cursor: text;
+    -webkit-user-select: text;
+    user-select: text;
+}
+
 /* A batch row's own expand/collapse toggle (design §9, `screens/
  * open-run.js`'s own `toggleBatchRow`) and the replicate rows it
  * reveals -- indented and muted so they read as subordinate to the

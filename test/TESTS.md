@@ -13820,6 +13820,26 @@ run -o` pointed elsewhere): browsing to it is now the same one
 action a double-click on a row already is, with no second click to
 remember.
 
+<a id="gui.test_open_run_screen.test_result_table_cells_are_user_selectable_for_copy"></a>
+
+#### test\_result\_table\_cells\_are\_user\_selectable\_for\_copy
+
+```python
+def test_result_table_cells_are_user_selectable_for_copy(
+        tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None
+```
+
+A run row's own data cells are selectable text, not cut-or-paste
+editable, for a botanist copying a value into another application
+(item 5) -- `.fim-copyable-text`, a shared class any other read-only
+result field elsewhere can reuse identically.
+
+Checks `-webkit-user-select` specifically, not the unprefixed
+`user-select` `getComputedStyle` property: confirmed live, this
+project's own bundled WebKit only recognizes the prefixed form (the
+unprefixed one came back empty), which is why the CSS rule declares
+both.
+
 <a id="gui.test_p0_grid_screen"></a>
 
 # gui.test\_p0\_grid\_screen

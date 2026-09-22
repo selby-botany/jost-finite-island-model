@@ -1624,3 +1624,51 @@ def test_browsing_to_a_trajectory_opens_it_directly(
     assert settled is not None, "browsing to a trajectory never reached `completed`"
     assert settled["runViewState"] == "completed"
     assert settled["runId"].startswith("run-")
+
+
+def test_result_table_cells_are_user_selectable_for_copy(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A run row's own data cells are selectable text, not cut-or-paste
+    editable, for a botanist copying a value into another application
+    (item 5) -- `.fim-copyable-text`, a shared class any other read-only
+    result field elsewhere can reuse identically.
+
+    Checks `-webkit-user-select` specifically, not the unprefixed
+    `user-select` `getComputedStyle` property: confirmed live, this
+    project's own bundled WebKit only recognizes the prefixed form (the
+    unprefixed one came back empty), which is why the CSS rule declares
+    both.
+    """
+    monkeypatch.setattr(paths_module, "results_directory", lambda: tmp_path / "results")
+    _write_run(tmp_path)
+
+    window = create_window(hidden=True)
+    outcome: queue.Queue[str | None] = queue.Queue(maxsize=1)
+
+    def _drive() -> None:
+        try:
+            _poll_until(window, _INPUT_SCREEN_READY, lambda value: value is True)
+            window.evaluate_js("window.fim.menu.openRun();")
+            _expand_all_recent_run_groups(window)
+            _poll_until(
+                window,
+                f"document.querySelectorAll({_REAL_ROW_SELECTOR}).length",
+                lambda value: value is not None and value == 1,
+            )
+            user_select = _poll_until(
+                window,
+                "getComputedStyle(document.querySelector("
+                f"{_REAL_ROW_SELECTOR}).querySelector('.fim-copyable-text')"
+                ").webkitUserSelect",
+                lambda value: value is not None,
+            )
+            outcome.put(user_select)
+        finally:
+            window.destroy()
+
+    webview.start(_drive)
+    settled = outcome.get(timeout=_DRIVE_TIMEOUT_SECONDS)
+
+    assert settled == "text"

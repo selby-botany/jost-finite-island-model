@@ -486,6 +486,7 @@ function buildReplicateRow(replicate) {
             cell.className = "open-run-summary-cell";
             cell.title = value;
         }
+        cell.classList.add("fim-copyable-text");
         row.appendChild(cell);
     });
     row.addEventListener("click", (event) => {
@@ -805,6 +806,14 @@ function buildRunRow(run, showRunId = true, nested = false) {
             cell.className = className;
             cell.title = value;
         }
+        // Every data cell's own text is user-selectable for copy
+        // (item 5: "any result field should for sure be copyable" --
+        // a botanist pasting a value into another application, not
+        // cutting or editing it in place). `.fim-copyable-text` is a
+        // shared, reusable class, not a one-off rule for this table --
+        // any other read-only result field elsewhere in the app that
+        // wants the identical affordance should use the same class.
+        cell.classList.add("fim-copyable-text");
         row.appendChild(cell);
     }
     const actionsCell = document.createElement("td");
