@@ -61,10 +61,11 @@ let _currentPanel = null;
  * resolution independently of the CSS layout size, so a canvas drawn
  * before the browser has applied a pending layout change renders into
  * a stale buffer and is then stretched or squeezed into the real box.
- * Every draw therefore syncs first rather than trusting the
- * `ResizeObserver` below to correct it a frame later: that correction
- * is asynchronous, so relying on it means the very first paint of a
- * completed run is visibly wrong-resolution until the next frame.
+ * Every draw therefore syncs first rather than trusting the graph
+ * stage's own `ResizeObserver` (`run-graph-stage.js`) to correct it a
+ * frame later: that correction is asynchronous, so relying on it means
+ * the very first paint of a completed run is visibly wrong-resolution
+ * until the next frame.
  *
  * Returns `true` when the buffer was actually changed. A zero CSS size
  * (an element not laid out yet) is left alone -- there is no useful
@@ -91,10 +92,10 @@ function resizeCanvasToCssSize(canvas) {
  * Update `canvas.width`/`canvas.height` to match the element's current
  * CSS layout size and redraw the stored panels.
  *
- * Called once at startup and then by the ResizeObserver below, so a
- * window resize that triggers no redraw of its own still repaints at
- * the new resolution. Ordinary draws do not depend on this: they sync
- * their own size via `resizeCanvasToCssSize`.
+ * Called once at startup; resize-driven repaints are the graph
+ * stage's own job (`run-graph-stage.js`'s per-pane observer wiring),
+ * uniform across every pane. Ordinary draws do not depend on this
+ * either way: they sync their own size via `resizeCanvasToCssSize`.
  */
 function syncCanvasSize() {
     if (!resizeCanvasToCssSize(runCanvas)) {
@@ -105,13 +106,15 @@ function syncCanvasSize() {
     }
 }
 
-// Wire the ResizeObserver after the state scripts have declared
+// Wire the initial size sync after the state scripts have declared
 // `runCanvas` (scatter.js loads before them, so the `load` event is
-// the earliest safe attachment point).
+// the earliest safe attachment point). Resize-driven repaints are the
+// graph stage's own job (`run-graph-stage.js`'s per-pane
+// `ResizeObserver` wiring, uniform across every pane) -- this module
+// used to keep its own observer for that, before the stage existed.
 window.addEventListener("load", () => {
     if (typeof runCanvas !== "undefined" && runCanvas) {
         syncCanvasSize();
-        new ResizeObserver(syncCanvasSize).observe(runCanvas);
     }
     // The scatter is the Run card's primary graph and is offered on
     // every state the card has, so it is available from the start; with

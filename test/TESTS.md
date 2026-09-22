@@ -13829,6 +13829,31 @@ project's own bundled WebKit only recognizes the prefixed form (the
 unprefixed one came back empty), which is why the CSS rule declares
 both.
 
+<a id="gui.test_open_run_screen.test_a_reopened_runs_graphs_repaint_at_the_real_pane_size"></a>
+
+#### test\_a\_reopened\_runs\_graphs\_repaint\_at\_the\_real\_pane\_size
+
+```python
+def test_a_reopened_runs_graphs_repaint_at_the_real_pane_size(
+        tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None
+```
+
+An opened run's graphs redraw at the pane's real size, not the default buffer.
+
+Reported live: immediately after opening a run, the trajectory read
+blurry with crowded axis labels, and stayed that way until the
+scrubber moved. `enterCompletedState` draws before its own
+`showScreen("screen-run")` (a reopened run comes from the Home card,
+with the Run card still hidden), so every canvas in it has
+`clientWidth === 0` at draw time and keeps the default 300x150
+buffer, which CSS then stretches to the real pane size. The graph
+stage's per-pane `ResizeObserver` wiring (`run-graph-stage.js`)
+repaints each pane the moment its layout box actually exists; this
+checks exactly that convergence: the buffer ends up matching the
+pane's own CSS size, and content really was drawn across that width
+(a resized-but-never-redrawn canvas would be blank past its own old
+300px).
+
 <a id="gui.test_p0_grid_screen"></a>
 
 # gui.test\_p0\_grid\_screen

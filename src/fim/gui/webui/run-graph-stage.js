@@ -14,7 +14,12 @@
  * is on screen. That split matters because a hidden pane has no layout
  * box, so a canvas inside it cannot be sized or drawn correctly -- the
  * pane that becomes visible is therefore always repainted at the moment
- * it becomes visible, never earlier.
+ * it becomes visible, never earlier. The same holds one level up, when
+ * the whole Run card was hidden at draw time (an opened run draws
+ * before its own `showScreen`): the per-pane `ResizeObserver` wiring
+ * below repaints again the moment the pane's box actually exists, so
+ * "repaint at visibility" means the *layout* kind, not only the
+ * attribute kind.
  */
 
 // The panes this stage can show, in selector order. `key` is the name
@@ -112,6 +117,36 @@ function redrawGraph(key) {
     if (typeof redraw === "function") {
         redraw();
     }
+}
+
+// A pane can also *gain* a layout box without the stage itself changing
+// anything: `enterCompletedState` draws a freshly opened run while the
+// whole Run card is still hidden (its own `showScreen("screen-run")`
+// runs last), so every canvas in it has `clientWidth === 0` and draws
+// at the default 300x150 buffer, which CSS then stretches to the real
+// pane size -- reported live as a blurry trajectory with crowded axis
+// labels, staying that way until the next explicit redraw (a scrubber
+// move) repainted at the now-real size. The scatter pane alone escaped
+// this by having its own `ResizeObserver` (`scatter.js`); the same
+// treatment is now the stage's own, uniform across every pane: repaint
+// whenever a pane's layout box actually changes size, which is exactly
+// what "the pane became drawable" means -- it covers the screen-unhide
+// case, the zoom frame, and window resizes alike. A zero-sized
+// transition (the pane or its screen just got hidden) is skipped:
+// there is nothing to size a redraw to, and the draw itself is what
+// syncs the buffer (`canvas.width = canvas.clientWidth || ...`), so
+// this settles after at most one repaint per real size change.
+for (const entry of RUN_GRAPHS) {
+    const pane = document.getElementById(entry.paneId);
+    const canvas = pane ? pane.querySelector("canvas") : null;
+    if (canvas === null) {
+        continue;
+    }
+    new ResizeObserver(() => {
+        if (canvas.clientWidth > 0) {
+            redrawGraph(entry.key);
+        }
+    }).observe(canvas);
 }
 
 /**

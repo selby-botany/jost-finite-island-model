@@ -1664,3 +1664,70 @@ def test_result_table_cells_are_user_selectable_for_copy(
     settled = outcome.get(timeout=_DRIVE_TIMEOUT_SECONDS)
 
     assert settled == "text"
+
+
+def test_a_reopened_runs_graphs_repaint_at_the_real_pane_size(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """An opened run's graphs redraw at the pane's real size, not the default buffer.
+
+    Reported live: immediately after opening a run, the trajectory read
+    blurry with crowded axis labels, and stayed that way until the
+    scrubber moved. `enterCompletedState` draws before its own
+    `showScreen("screen-run")` (a reopened run comes from the Home card,
+    with the Run card still hidden), so every canvas in it has
+    `clientWidth === 0` at draw time and keeps the default 300x150
+    buffer, which CSS then stretches to the real pane size. The graph
+    stage's per-pane `ResizeObserver` wiring (`run-graph-stage.js`)
+    repaints each pane the moment its layout box actually exists; this
+    checks exactly that convergence: the buffer ends up matching the
+    pane's own CSS size, and content really was drawn across that width
+    (a resized-but-never-redrawn canvas would be blank past its own old
+    300px).
+    """
+    monkeypatch.setattr(paths_module, "results_directory", lambda: tmp_path / "results")
+    output_directory = _write_run_with_sigma_band(tmp_path)
+    trajectory_path = output_directory / "trajectory.jsonl"
+
+    window = create_window(hidden=True)
+    outcome: queue.Queue[dict[str, Any] | None] = queue.Queue(maxsize=1)
+
+    def _drive() -> None:
+        try:
+            _poll_until(window, _INPUT_SCREEN_READY, lambda value: value is True)
+            window.evaluate_js(
+                "window.pywebview.api.open_run({trajectoryPath: "
+                f"{json.dumps(str(trajectory_path))}"
+                "}).then((result) => { window.fim.enterCompletedState("
+                "result, false); });"
+            )
+            settled = _poll_until(
+                window,
+                "(window.fim.getRunViewState() === 'completed' && "
+                "window.__fimScrubberPending === 0) ? (() => {"
+                "const c = document.getElementById('run-trajectory-canvas');"
+                "const ctx = c.getContext('2d');"
+                "let far = 0;"
+                "if (c.width > 312) {"
+                "const data = ctx.getImageData(310, c.height - 23, "
+                "c.width - 12 - 310, 3).data;"
+                "for (let i = 3; i < data.length; i += 4) {"
+                "if (data[i] !== 0) { far += 1; } } }"
+                "return {bufferW: c.width, cssW: c.clientWidth, farContent: far};"
+                "})() : null",
+                lambda value: (
+                    value is not None and value.get("bufferW") == value.get("cssW")
+                ),
+            )
+            outcome.put(settled)
+        finally:
+            window.destroy()
+
+    webview.start(_drive)
+    settled = outcome.get(timeout=_DRIVE_TIMEOUT_SECONDS)
+
+    assert settled is not None, "`completed` was never reached after reopening"
+    assert settled["bufferW"] == settled["cssW"]
+    assert settled["bufferW"] > 300
+    assert settled["farContent"] > 0

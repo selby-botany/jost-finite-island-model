@@ -71,11 +71,13 @@ async function onRunClicked() {
     // Width`/`clientHeight` at draw time -- a canvas drawn while its
     // section is `hidden` (`display: none`, `clientWidth === 0`) sticks
     // at a stale, wrong size until something else happens to redraw it
-    // later, `scatter.js`'s own `ResizeObserver` safety net notwith-
-    // standing (`run-trajectory-canvas` has no such observer at all).
-    // Showing the real destination unconditionally, before any of that
-    // drawing starts, is simpler and more robust than teaching every
-    // canvas its own resize-recovery path.
+    // later. Showing the real destination unconditionally, before any
+    // of that drawing starts, is simpler and more robust than teaching
+    // every canvas its own resize-recovery path; the graph stage's own
+    // per-pane `ResizeObserver` wiring (`run-graph-stage.js`) is the
+    // uniform backstop for any draw path that still lands on a hidden
+    // section (an opened run's own `enterCompletedState` draws before
+    // its own `showScreen`).
     window.fim.showScreen("screen-run");
     const values = collectFormValues();
     // Enter `running` now, synchronously, before awaiting the bridge
