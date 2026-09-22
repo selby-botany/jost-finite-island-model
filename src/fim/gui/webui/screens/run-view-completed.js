@@ -460,18 +460,28 @@ function drawDifferentiationQCurve(canvas, points) {
     context.lineTo(plotRight, plotBottom);
     context.stroke();
 
+    context.strokeStyle = borderColor;
     context.fillStyle = mutedColor;
-    context.font = "10px sans-serif";
-    context.textAlign = "right";
-    context.textBaseline = "middle";
-    for (const tick of PROBABILITY_TICK_VALUES) {
-        context.fillText(tick.toFixed(1), plotLeft - 6, yToPixel(tick));
-    }
-    context.textAlign = "center";
-    context.textBaseline = "top";
-    for (const point of points) {
-        context.fillText(`q=${point.order}`, xToPixel(point.order), plotBottom + 4);
-    }
+    drawAxisTickMarks(
+        context,
+        "y",
+        plotLeft,
+        plotBottom,
+        yToPixel,
+        PROBABILITY_TICK_VALUES,
+        10,
+        (value) => value.toFixed(1)
+    );
+    drawAxisTickMarks(
+        context,
+        "x",
+        plotLeft,
+        plotBottom,
+        xToPixel,
+        points.map((point) => point.order),
+        10,
+        (order) => `q=${order}`
+    );
 
     context.strokeStyle = accentColor;
     context.lineWidth = 2;
@@ -490,6 +500,60 @@ function drawDifferentiationQCurve(canvas, points) {
         context.fill();
     });
     context.stroke();
+}
+
+/**
+ * Draw the interior tick marks and labels a trajectory panel's own
+ * corner labels leave out: nicely-rounded reference values (1/2/5
+ * times a power of ten -- `niceAxisTicks`, the standard scientific-plot
+ * convention) along both axes, so intermediate positions read at a
+ * glance at any scale -- a `[0, 1]` statistic axis ticks at every 0.2,
+ * a generations axis at every 10 for a 67-generation run or every 2000
+ * for a 10000-generation one. The corner labels themselves (the exact
+ * domain endpoints, including a sigma band's own overshoot past 1)
+ * are unchanged: a nice tick that coincides with a corner is skipped
+ * here, not drawn twice.
+ *
+ * Shared by `drawTrajectoryCurve` and `drawBatchTrajectoryCurve`, whose
+ * axis blocks are identical.
+ *
+ * @param {CanvasRenderingContext2D} context - Colors already set.
+ * @param {number} plotLeft
+ * @param {number} plotBottom
+ * @param {number} minGeneration
+ * @param {number} maxGeneration
+ * @param {number} minValue
+ * @param {number} maxValue
+ * @param {(value: number) => number} xToPixel
+ * @param {(value: number) => number} yToPixel
+ */
+function drawTrajectoryAxisTicks(
+    context,
+    plotLeft,
+    plotBottom,
+    minGeneration,
+    maxGeneration,
+    minValue,
+    maxValue,
+    xToPixel,
+    yToPixel
+) {
+    const yTicks = niceAxisTicks(minValue, maxValue, 6).filter(
+        (value) => value > minValue && value < maxValue
+    );
+    // Generations are whole numbers -- a sub-integer step (a very short
+    // run) keeps only whichever nice values happen to be integers, or
+    // no interior ticks at all when none are (a 2-generation run).
+    const xTicks = niceAxisTicks(minGeneration, maxGeneration, 6).filter(
+        (value) =>
+            Number.isInteger(value) && value > minGeneration && value < maxGeneration
+    );
+    drawAxisTickMarks(context, "y", plotLeft, plotBottom, yToPixel, yTicks, 10, (v) =>
+        v.toFixed(1)
+    );
+    drawAxisTickMarks(context, "x", plotLeft, plotBottom, xToPixel, xTicks, 10, (v) =>
+        String(v)
+    );
 }
 
 /**
@@ -631,6 +695,20 @@ function drawTrajectoryCurve(
     context.fillText(`gen ${maxGeneration}`, plotRight, plotBottom + 4);
     context.textAlign = "left";
     context.fillText(`gen ${minGeneration}`, plotLeft, plotBottom + 4);
+
+    context.strokeStyle = borderColor;
+    context.fillStyle = mutedColor;
+    drawTrajectoryAxisTicks(
+        context,
+        plotLeft,
+        plotBottom,
+        minGeneration,
+        maxGeneration,
+        minValue,
+        maxValue,
+        xToPixel,
+        yToPixel
+    );
 
     // The sigma band itself: a translucent rect from `lower` to
     // `upper`, spanning the trailing window the extension actually
@@ -1117,6 +1195,20 @@ function drawBatchTrajectoryCurve(canvas, visiblePooled, scrubGeneration) {
     context.fillText(`gen ${maxGeneration}`, plotRight, plotBottom + 4);
     context.textAlign = "left";
     context.fillText(`gen ${minGeneration}`, plotLeft, plotBottom + 4);
+
+    context.strokeStyle = borderColor;
+    context.fillStyle = mutedColor;
+    drawTrajectoryAxisTicks(
+        context,
+        plotLeft,
+        plotBottom,
+        minGeneration,
+        maxGeneration,
+        minValue,
+        maxValue,
+        xToPixel,
+        yToPixel
+    );
 
     for (const name of names) {
         const points = visiblePooled[name];

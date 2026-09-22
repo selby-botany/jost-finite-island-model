@@ -15198,6 +15198,49 @@ between (the scatter is the only graph with data until the first
 progress message lands) and the point is that the control and the
 stage still agree afterwards.
 
+<a id="gui.test_results_screen.test_nice_axis_ticks_round_to_human_steps_at_every_scale"></a>
+
+#### test\_nice\_axis\_ticks\_round\_to\_human\_steps\_at\_every\_scale
+
+```python
+def test_nice_axis_ticks_round_to_human_steps_at_every_scale(
+        fast_scalar_run_settings: Path, window: webview.Window,
+        drive: Callable[..., Any]) -> None
+```
+
+`niceAxisTicks` returns 1/2/5-times-a-power-of-ten steps at any scale.
+
+The shared convention behind every Run-card graph's own tick marks
+(design intent, per the project owner: ticks should feel natural
+whether the axis is `[0, 1]` or generations into the thousands).
+Evaluated against the real page's own global, not a Python
+reimplementation that could drift from it.
+
+<a id="gui.test_results_screen.test_every_run_card_graph_draws_tick_marks_on_its_axes"></a>
+
+#### test\_every\_run\_card\_graph\_draws\_tick\_marks\_on\_its\_axes
+
+```python
+def test_every_run_card_graph_draws_tick_marks_on_its_axes(
+        fast_scalar_run_settings: Path, window: webview.Window,
+        drive: Callable[..., Any]) -> None
+```
+
+Every stage graph's axes carry real tick marks, not bare frames.
+
+Reported directly: "All graphs have axes needing 'ticks'." The
+trajectory drew only corner labels, the allele-composition and
+frequency-spectrum panels drew bare frames -- nothing to read an
+intermediate value against. The scatter already ticked at fifths
+(`PROBABILITY_TICK_VALUES`); it is included here as the control:
+its strip must keep its marks after the shared tick-drawing
+refactor (`drawAxisTickMarks`), while the other three gain marks
+they never had.
+
+Measured on the canvas pixels themselves, in the strip just outside
+each axis line where only a tick mark can draw: a count of dark
+pixels there is the behavior a reader sees, not a markup detail.
+
 <a id="gui.test_runner"></a>
 
 # gui.test\_runner

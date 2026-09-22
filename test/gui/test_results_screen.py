@@ -1394,3 +1394,141 @@ def test_the_graph_you_are_watching_survives_the_run_finishing(
     ]
     assert after["value"] == "scatter"
     assert after["text"] == "Allele frequencies by deme pair"
+
+
+def test_nice_axis_ticks_round_to_human_steps_at_every_scale(
+    fast_scalar_run_settings: Path, window: webview.Window, drive: Callable[..., Any]
+) -> None:
+    """`niceAxisTicks` returns 1/2/5-times-a-power-of-ten steps at any scale.
+
+    The shared convention behind every Run-card graph's own tick marks
+    (design intent, per the project owner: ticks should feel natural
+    whether the axis is `[0, 1]` or generations into the thousands).
+    Evaluated against the real page's own global, not a Python
+    reimplementation that could drift from it.
+    """
+    settled = drive(
+        window,
+        ready=_INPUT_SCREEN_READY,
+        trigger="void 0;",
+        read=(
+            "({"
+            "probability: niceAxisTicks(0, 1, 6), "
+            "shortRun: niceAxisTicks(0, 9, 6), "
+            "mediumRun: niceAxisTicks(0, 67, 6), "
+            "longRun: niceAxisTicks(0, 10000, 6), "
+            "narrow: niceAxisTicks(0.13, 0.47, 6), "
+            "degenerate: niceAxisTicks(2, 2, 6)"
+            "})"
+        ),
+        is_ready=lambda value: (
+            value is not None and value.get("probability") is not None
+        ),
+    )
+
+    # The reference fifths a `[0, 1]` axis has always shown -- the nice-
+    # number convention reproduces them exactly, by construction.
+    assert settled["probability"] == [0.0, 0.2, 0.4, 0.6, 0.8, 1.0]
+    # Whole-generation steps, growing with the run's own length -- the
+    # "thousands of generations" case reads as 2000, 4000, ... not as a
+    # label every generation or none at all.
+    assert settled["shortRun"] == [0, 2, 4, 6, 8]
+    assert settled["mediumRun"] == [0, 10, 20, 30, 40, 50, 60]
+    assert settled["longRun"] == [0, 2000, 4000, 6000, 8000, 10000]
+    # A narrow sub-unit range still gets round steps, at a finer power
+    # of ten.
+    assert settled["narrow"] == [0.15, 0.2, 0.25, 0.3, 0.35, 0.4, 0.45]
+    assert settled["degenerate"] == []
+
+
+def test_every_run_card_graph_draws_tick_marks_on_its_axes(
+    fast_scalar_run_settings: Path, window: webview.Window, drive: Callable[..., Any]
+) -> None:
+    """Every stage graph's axes carry real tick marks, not bare frames.
+
+    Reported directly: "All graphs have axes needing 'ticks'." The
+    trajectory drew only corner labels, the allele-composition and
+    frequency-spectrum panels drew bare frames -- nothing to read an
+    intermediate value against. The scatter already ticked at fifths
+    (`PROBABILITY_TICK_VALUES`); it is included here as the control:
+    its strip must keep its marks after the shared tick-drawing
+    refactor (`drawAxisTickMarks`), while the other three gain marks
+    they never had.
+
+    Measured on the canvas pixels themselves, in the strip just outside
+    each axis line where only a tick mark can draw: a count of dark
+    pixels there is the behavior a reader sees, not a markup detail.
+    """
+    settled = drive(
+        window,
+        ready=_INPUT_SCREEN_READY,
+        trigger=(
+            _SET_TINY_FIELDS
+            + "document.getElementById('run-button').click(); "
+            + "const finish = () => { "
+            + "const dark = (id, x0, x1, y0, y1) => { "
+            + "const c = document.getElementById(id); "
+            + "const ctx = c.getContext('2d'); "
+            + "const w = Math.max(1, Math.ceil(x1) - Math.floor(x0)); "
+            + "const h = Math.max(1, Math.ceil(y1) - Math.floor(y0)); "
+            + "const data = ctx.getImageData("
+            + "Math.floor(x0), Math.floor(y0), w, h).data; "
+            + "let n = 0; "
+            + "for (let i = 3; i < data.length; i += 4) { "
+            + "if (data[i] !== 0) { n += 1; } } return n; }; "
+            # The trajectory panel's own geometry: plotLeft 42,
+            # plotTop 12, plotBottom = height - 22.
+            "window.fim.showGraph('trajectory'); "
+            "const tC = document.getElementById('run-trajectory-canvas'); "
+            "const tLeft = 42, tTop = 12, tBottom = tC.height - 22; "
+            "const tY = dark('run-trajectory-canvas', "
+            "tLeft - 4, tLeft - 1, tTop + 15, tBottom - 15); "
+            "const tX = dark('run-trajectory-canvas', "
+            "tLeft + 40, tC.width - 12 - 40, tBottom + 1, tBottom + 3); "
+            # The allele-composition panel: plotLeft 36, plotTop 12,
+            # plotBottom = height - 28.
+            "window.fim.showGraph('alleleComposition'); "
+            "const aC = document.getElementById('allele-composition-canvas'); "
+            "const aY = dark('allele-composition-canvas', "
+            "36 - 4, 36 - 1, 12 + 15, (aC.height - 28) - 15); "
+            # The frequency-spectrum panel: same margins; its x ticks
+            # sit just below the frame.
+            "window.fim.showGraph('frequencySpectrum'); "
+            "const sC = document.getElementById('frequency-spectrum-canvas'); "
+            "const sX = dark('frequency-spectrum-canvas', "
+            "36 + 1, sC.width - 12 - 1, (sC.height - 28) + 1, (sC.height - 28) + 3); "
+            # The scatter (control): `drawScatterCell`'s own geometry
+            # for a single panel -- adaptive padding, square plot. Tick
+            # position 0.5, the one value present at every density
+            # level (full fifths and compact thirds alike).
+            "window.fim.showGraph('scatter'); "
+            "const rC = document.getElementById('run-canvas'); "
+            "const side = Math.min(rC.width, rC.height); "
+            "const pad = side < 520 ? Math.max(28, Math.floor(side * 0.09)) : 44; "
+            "const plotSize = side - 2 * pad; "
+            "const sTickX = pad + 0.5 * plotSize; "
+            "const sTick = dark('run-canvas', "
+            "sTickX - 1, sTickX + 1, (rC.height - pad) + 1, (rC.height - pad) + 3); "
+            "window.__fimTickPixels = {"
+            "trajectoryY: tY, trajectoryX: tX, compositionY: aY, "
+            "spectrumX: sX, scatterControl: sTick}; "
+            + "}; "
+            + "const pollTicks = () => { "
+            + "if (window.fim.getRunViewState() === 'completed' && "
+            + "window.__fimScrubberPending === 0) { finish(); return; } "
+            + "setTimeout(pollTicks, 50); }; setTimeout(pollTicks, 50);"
+        ),
+        read="window.__fimTickPixels || null",
+        is_ready=lambda value: value is not None,
+        poll_attempts=_POLL_ATTEMPTS,
+    )
+
+    assert settled is not None
+    # The control: the scatter's own fifths ticks survive the refactor.
+    assert settled["scatterControl"] > 0
+    # The three graphs that drew no tick marks before: each now leaves
+    # real marks in the strip just outside its own axis.
+    assert settled["trajectoryY"] > 0
+    assert settled["trajectoryX"] > 0
+    assert settled["compositionY"] > 0
+    assert settled["spectrumX"] > 0

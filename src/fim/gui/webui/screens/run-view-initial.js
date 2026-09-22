@@ -93,6 +93,32 @@ function drawAlleleComposition(canvas, payload) {
 
     context.strokeStyle = borderColor;
     context.strokeRect(plotLeft, plotTop, plotRight - plotLeft, plotBottom - plotTop);
+    // The y axis is a proportion scale, `[0, 1]` by construction --
+    // the same fifths tick spacing every other probability-scale axis
+    // here uses; the x axis is categorical (one bar per deme), so its
+    // marks sit beneath each bar's own center, labels already drawn
+    // below them.
+    context.fillStyle = mutedColor;
+    drawAxisTickMarks(
+        context,
+        "y",
+        plotLeft,
+        plotBottom,
+        (value) => plotBottom - value * (plotBottom - plotTop),
+        PROBABILITY_TICK_VALUES,
+        10,
+        (value) => value.toFixed(1)
+    );
+    drawAxisTickMarks(
+        context,
+        "x",
+        plotLeft,
+        plotBottom,
+        (index) => plotLeft + index * (barWidth + barGap) + barWidth / 2,
+        payload.demes.map((_, index) => index),
+        10,
+        null
+    );
     context.font = "10px sans-serif";
     context.textAlign = "center";
     context.textBaseline = "top";
@@ -138,6 +164,34 @@ function drawFrequencySpectrum(canvas, payload) {
 
     context.strokeStyle = borderColor;
     context.strokeRect(plotLeft, plotTop, plotRight - plotLeft, plotBottom - plotTop);
+    // Axis ticks: the x axis is a frequency scale, `[0, 1]` by
+    // construction -- the same fifths every probability-scale axis here
+    // uses; the y axis is a bar count, so it ticks at nicely-rounded
+    // whole numbers fit to the actual maximum (`niceAxisTicks`), the
+    // endpoints already read off the frame itself.
+    context.fillStyle = mutedColor;
+    drawAxisTickMarks(
+        context,
+        "x",
+        plotLeft,
+        plotBottom,
+        (value) => plotLeft + value * (plotRight - plotLeft),
+        PROBABILITY_TICK_VALUES,
+        10,
+        (value) => value.toFixed(1)
+    );
+    drawAxisTickMarks(
+        context,
+        "y",
+        plotLeft,
+        plotBottom,
+        (value) => plotBottom - (value / maxCount) * (plotBottom - plotTop),
+        niceAxisTicks(0, maxCount, 5).filter(
+            (value) => Number.isInteger(value) && value > 0 && value < maxCount
+        ),
+        10,
+        (value) => String(value)
+    );
     context.fillStyle = accentColor;
     bins.forEach((bin, index) => {
         const left = plotLeft + (index / bins.length) * (plotRight - plotLeft);

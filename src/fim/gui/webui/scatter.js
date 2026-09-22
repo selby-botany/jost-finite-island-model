@@ -412,25 +412,6 @@ function drawMarkerLegend(context, originX, originY, plotSize, fontSize) {
 }
 
 /**
- * Return `count` evenly spaced values across `[min, max]`, inclusive of
- * both ends. Not "nice round numbers" -- purely even spacing across an
- * auto-scaled (`"pca"`) domain, matching what `computeDomain` itself
- * already produces from the panel's own real data.
- *
- * @param {number} min
- * @param {number} max
- * @param {number} count
- */
-function evenlySpacedTicks(min, max, count) {
-    const step = (max - min) / (count - 1);
-    const ticks = [];
-    for (let index = 0; index < count; index += 1) {
-        ticks.push(min + step * index);
-    }
-    return ticks;
-}
-
-/**
  * Format one auto-scaled tick value, with more decimal places for a
  * narrower domain -- a fixed `.toFixed(1)` (right for the `[0, 1]`
  * `"frequency"` case) would round an entire narrow-range `"pca"` axis
@@ -450,10 +431,114 @@ function formatAutoTick(value, range) {
 }
 
 /**
+ * Return nicely-rounded tick values spanning `[min, max]` -- the
+ * standard "1, 2 or 5 times a power of ten" steps of scientific plots
+ * (d3's own convention), so an axis reads the same way at any scale:
+ * generations 0-67 tick at every 10, generations 0-10000 at every
+ * 2000, a `[0, 1]` probability axis at every 0.2. Both endpoints are
+ * included whenever they land on the step; a degenerate (empty or
+ * zero-width) domain returns no ticks rather than dividing by zero.
+ *
+ * @param {number} min
+ * @param {number} max
+ * @param {number} targetCount - Roughly how many ticks to aim for; the
+ *     step rounding means the actual count lands within about a factor
+ *     of two of it.
+ * @returns {number[]}
+ */
+function niceAxisTicks(min, max, targetCount) {
+    if (!(max > min) || targetCount < 2) {
+        return [];
+    }
+    const rawStep = (max - min) / (targetCount - 1);
+    const power = Math.floor(Math.log10(rawStep));
+    const base = 10 ** power;
+    const error = rawStep / base;
+    const step =
+        error >= 7.5 ? 10 * base : error >= 3.5 ? 5 * base : error >= 1.5 ? 2 * base : base;
+    // Round every tick back to the step's own decimal precision:
+    // `index * step` otherwise leaves floating dust (`3 * 0.2` is
+    // 0.6000000000000001), harmless to a pixel position but wrong for
+    // any caller comparing tick values for equality.
+    const decimals = Math.max(0, -power);
+    const ticks = [];
+    const start = Math.ceil(min / step - 1e-9);
+    const end = Math.floor(max / step + 1e-9);
+    for (let index = start; index <= end; index += 1) {
+        ticks.push(Number((index * step).toFixed(decimals)));
+    }
+    return ticks;
+}
+
+/**
+ * Draw plain tick marks and labels along one axis -- the shared
+ * mechanic behind every graph's own axes, so "ticks" look and sit the
+ * same on a scatter, a trajectory, and a bar plot alike.
+ * `orientation: "x"` draws marks dropping below the horizontal axis
+ * (labels beneath); `"y"` draws marks reaching left of the vertical
+ * axis (labels left). `format` maps a tick value to its label text;
+ * `null` draws marks only (a categorical axis whose own labels already
+ * exist, e.g. deme numbers beneath stacked bars). Caller sets the
+ * stroke/fill colors beforehand; both are preserved.
+ *
+ * @param {CanvasRenderingContext2D} context
+ * @param {"x"|"y"} orientation
+ * @param {number} axisX - The vertical axis's own x (for `"y"`), or
+ *     the horizontal axis's left edge (unused for `"x"`).
+ * @param {number} axisY - The horizontal axis's own y (for `"x"`), or
+ *     the vertical axis's bottom edge (unused for `"y"`).
+ * @param {(value: number) => number} toPixel - Tick value to pixel
+ *     coordinate along the axis.
+ * @param {number[]} ticks
+ * @param {number} fontSize
+ * @param {((value: number) => string)|null} format
+ */
+function drawAxisTickMarks(
+    context,
+    orientation,
+    axisX,
+    axisY,
+    toPixel,
+    ticks,
+    fontSize,
+    format
+) {
+    context.save();
+    context.lineWidth = 1;
+    context.font = `${fontSize}px -apple-system, sans-serif`;
+    for (const value of ticks) {
+        const position = toPixel(value);
+        context.beginPath();
+        if (orientation === "x") {
+            context.moveTo(position, axisY);
+            context.lineTo(position, axisY + TICK_LENGTH);
+        } else {
+            context.moveTo(axisX - TICK_LENGTH, position);
+            context.lineTo(axisX, position);
+        }
+        context.stroke();
+        if (format) {
+            if (orientation === "x") {
+                context.textAlign = "center";
+                context.textBaseline = "top";
+                context.fillText(format(value), position, axisY + TICK_LENGTH + 1);
+            } else {
+                context.textAlign = "right";
+                context.textBaseline = "middle";
+                context.fillText(format(value), axisX - TICK_LENGTH - 2, position);
+            }
+        }
+    }
+    context.restore();
+}
+
+/**
  * Draw the axis tick marks and labels -- the fixed `0.0`-`1.0`
  * probability scale for a bounded (`"frequency"`) panel, matching
  * `Dear-NolanMarch17Final.pdf` Figs. 1-2's own tick spacing exactly;
- * an auto-scaled numeric scale fit to the panel's own domain otherwise.
+ * nicely-rounded 1/2/5-times-a-power-of-ten steps fit to the panel's
+ * own domain otherwise (`niceAxisTicks`, the same convention the other
+ * graphs' own numeric axes use).
  *
  * @param {CanvasRenderingContext2D} context
  * @param {number} originX
@@ -474,53 +559,28 @@ function drawAxisTicks(
     bounded,
     compact
 ) {
+    const targetCount = compact ? COMPACT_AUTO_TICK_COUNT : AUTO_TICK_COUNT;
     const xTicks = bounded
         ? compact
             ? COMPACT_PROBABILITY_TICK_VALUES
             : PROBABILITY_TICK_VALUES
-        : evenlySpacedTicks(
-              domain.xMin,
-              domain.xMax,
-              compact ? COMPACT_AUTO_TICK_COUNT : AUTO_TICK_COUNT
-          );
+        : niceAxisTicks(domain.xMin, domain.xMax, targetCount + 1);
     const yTicks = bounded
         ? compact
             ? COMPACT_PROBABILITY_TICK_VALUES
             : PROBABILITY_TICK_VALUES
-        : evenlySpacedTicks(
-              domain.yMin,
-              domain.yMax,
-              compact ? COMPACT_AUTO_TICK_COUNT : AUTO_TICK_COUNT
-          );
+        : niceAxisTicks(domain.yMin, domain.yMax, targetCount + 1);
     const xRange = domain.xMax - domain.xMin;
     const yRange = domain.yMax - domain.yMin;
     const formatX = (value) => (bounded ? value.toFixed(1) : formatAutoTick(value, xRange));
     const formatY = (value) => (bounded ? value.toFixed(1) : formatAutoTick(value, yRange));
+    const toPixelX = (value) => originX + ((value - domain.xMin) / xRange) * plotSize;
+    const toPixelY = (value) => originY - ((value - domain.yMin) / yRange) * plotSize;
 
     context.save();
     context.strokeStyle = "#9a9a9a";
     context.fillStyle = "#6b6b6b";
-    context.font = `${fontSize}px -apple-system, sans-serif`;
-    context.lineWidth = 1;
-    for (const value of xTicks) {
-        const x = originX + ((value - domain.xMin) / xRange) * plotSize;
-        context.beginPath();
-        context.moveTo(x, originY);
-        context.lineTo(x, originY + TICK_LENGTH);
-        context.stroke();
-        context.textAlign = "center";
-        context.textBaseline = "top";
-        context.fillText(formatX(value), x, originY + TICK_LENGTH + 1);
-    }
-    for (const value of yTicks) {
-        const y = originY - ((value - domain.yMin) / yRange) * plotSize;
-        context.beginPath();
-        context.moveTo(originX - TICK_LENGTH, y);
-        context.lineTo(originX, y);
-        context.stroke();
-        context.textAlign = "right";
-        context.textBaseline = "middle";
-        context.fillText(formatY(value), originX - TICK_LENGTH - 2, y);
-    }
+    drawAxisTickMarks(context, "x", originX, originY, toPixelX, xTicks, fontSize, formatX);
+    drawAxisTickMarks(context, "y", originX, originY, toPixelY, yTicks, fontSize, formatY);
     context.restore();
 }
