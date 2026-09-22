@@ -13195,16 +13195,22 @@ Botanist GUI design doc §9: "Home replaces the current 'Open a run'
 screen with a richer landing destination" -- a fresh launch shows
 Home, not Run, and the rail agrees.
 
-<a id="gui.test_nav_rail.test_home_back_button_is_disabled_on_launch"></a>
+<a id="gui.test_nav_rail.test_top_strip_back_and_forward_are_disabled_on_launch"></a>
 
-#### test\_home\_back\_button\_is\_disabled\_on\_launch
+#### test\_top\_strip\_back\_and\_forward\_are\_disabled\_on\_launch
 
 ```python
-def test_home_back_button_is_disabled_on_launch(
+def test_top_strip_back_and_forward_are_disabled_on_launch(
         window: webview.Window) -> None
 ```
 
-Home is the startup screen, so its Back button has no destination yet.
+The shared top-strip Back/Forward controls have no destination yet at launch.
+
+Home used to carry its own per-screen Back button, asserted here
+alongside these; that button is gone (Home is reachable from the
+rail at all times, so its own Back was redundant with the shared
+strip) -- the strip's own empty-history state is what remains to
+prove.
 
 <a id="gui.test_nav_rail.test_top_strip_back_and_forward_walk_screen_history"></a>
 
@@ -13227,17 +13233,6 @@ def test_settings_dialog_controls_startup_behavior(
 ```
 
 The top-strip settings button persists the startup behavior choice.
-
-<a id="gui.test_nav_rail.test_home_back_button_returns_to_the_screen_that_opened_home"></a>
-
-#### test\_home\_back\_button\_returns\_to\_the\_screen\_that\_opened\_home
-
-```python
-def test_home_back_button_returns_to_the_screen_that_opened_home(
-        window: webview.Window) -> None
-```
-
-Home's Back button is enabled only after Home has a real return target.
 
 <a id="gui.test_nav_rail.test_parameter_strip_shows_the_starter_configuration_on_launch"></a>
 
@@ -13798,27 +13793,6 @@ def test_dragging_a_column_resize_handle_widens_it_for_the_whole_table(
 Dragging one column's own resize handle widens that `<col>` --
 table-wide, since every Study's own column header row and every run
 row share the identical underlying columns (item 4).
-
-<a id="gui.test_open_run_screen.test_browsing_to_a_trajectory_opens_it_directly"></a>
-
-#### test\_browsing\_to\_a\_trajectory\_opens\_it\_directly
-
-```python
-def test_browsing_to_a_trajectory_opens_it_directly(
-        tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None
-```
-
-"Browse for trajectory.jsonl…" opens the browsed file immediately.
-
-Item 8: reported directly as "doesn't appear to do anything" --
-traced to a two-step flow where browsing only *selected* a path,
-leaving a separate, seemingly unrelated "Open" button below as the
-one remaining step. Its own real justification is unchanged (a
-trajectory outside every Study/Experiment this tree scans -- copied
-in from a colleague, restored from a backup, or produced by a `fim
-run -o` pointed elsewhere): browsing to it is now the same one
-action a double-click on a row already is, with no second click to
-remember.
 
 <a id="gui.test_open_run_screen.test_selecting_a_study_checkbox_also_checks_its_own_run_rows"></a>
 

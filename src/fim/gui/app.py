@@ -131,7 +131,6 @@ from fim.viz.scatter import (
 logger = logging.getLogger(__name__)
 
 _YAML_FILE_TYPES = ("YAML files (*.yaml;*.yml)", "All files (*.*)")
-_TRAJECTORY_FILE_TYPES = ("trajectory.jsonl files (*.jsonl)", "All files (*.*)")
 
 _MACOS_APPLICATION_NAME = "FIM"
 
@@ -2701,9 +2700,11 @@ class Api:
 
         Returns:
             `{"ok": True, "path": "..."}` on a real selection;
-            `{"ok": False, "path": ""}` for a cancelled dialog — the
-            same shape `browse_for_trajectory` already establishes,
-            `webview.FileDialog.FOLDER` in place of `OPEN`.
+            `{"ok": False, "path": ""}` for a cancelled dialog —
+            mirrors `load_yaml`'s own cancelled-dialog shape exactly,
+            the established convention every dialog-backed bridge
+            method here follows, `webview.FileDialog.FOLDER` in place
+            of `OPEN`.
         """
         window = _active_window()
         if window is None:
@@ -3304,38 +3305,13 @@ class Api:
         return {"ok": True, "replicates": replicates}
 
     @_log_bridge_call
-    def browse_for_trajectory(self) -> dict[str, Any]:
-        """Browse for a `trajectory.jsonl` via the OS's own native file picker.
-
-        `window.create_file_dialog(...)`, not an HTML `<input
-        type="file">`: a better native-feel win than even Tk's own
-        `filedialog.askopenfilename`, since pywebview's dialog is the
-        OS's own file picker on every platform.
-
-        Returns:
-            `{"ok": True, "path": "..."}` on a real selection;
-            `{"ok": False, "path": ""}` for a cancelled dialog —
-            mirrors `load_yaml`'s own cancelled-dialog shape exactly,
-            the established convention every dialog-backed bridge
-            method here follows.
-        """
-        window = _active_window()
-        if window is None:
-            return {"ok": False, "path": ""}
-        selection = window.create_file_dialog(
-            webview.FileDialog.OPEN, file_types=_TRAJECTORY_FILE_TYPES
-        )
-        if not selection or Path(selection[0]).is_dir():
-            return {"ok": False, "path": ""}
-        return {"ok": True, "path": selection[0]}
-
-    @_log_bridge_call
     def open_run(self, values: dict[str, str]) -> dict[str, Any]:
         """Re-analyze a persisted trajectory, matching `fim stats`'s own semantics.
 
-        Reached from the recent-runs picker (a row, or a browsed path)
-        or "Open replicate" on a batch's own results table — the exact
-        same operation over one replicate's own `trajectory.jsonl`. The
+        Reached from the recent-runs picker (a run row, a batch row's
+        own "Open…", or "Open replicate" on an expanded batch) — the
+        exact same operation over one replicate's own
+        `trajectory.jsonl`. The
         returned payload is deliberately shaped exactly like
         `_drain_run_messages`'s own `"done"` payload, so the caller can
         hand it straight to the already-built `window.fim.showResults`

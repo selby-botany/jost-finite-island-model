@@ -133,7 +133,6 @@ Return to the [source-tree orientation](../README.md) or the [developer guide](.
     * [delete\_runs](#fim.gui.app.Api.delete_runs)
     * [delete\_selected](#fim.gui.app.Api.delete_selected)
     * [get\_batch\_replicate\_summary](#fim.gui.app.Api.get_batch_replicate_summary)
-    * [browse\_for\_trajectory](#fim.gui.app.Api.browse_for_trajectory)
     * [open\_run](#fim.gui.app.Api.open_run)
     * [open\_batch](#fim.gui.app.Api.open_batch)
     * [open\_study](#fim.gui.app.Api.open_study)
@@ -4244,9 +4243,11 @@ Browse for a results/logs directory via the OS's own native folder picker.
 **Returns**:
 
 - ``{"ok"` - True, "path": "..."}` on a real selection;
-- ``{"ok"` - False, "path": ""}` for a cancelled dialog — the
-  same shape `browse_for_trajectory` already establishes,
-  `webview.FileDialog.FOLDER` in place of `OPEN`.
+- ``{"ok"` - False, "path": ""}` for a cancelled dialog —
+  mirrors `load_yaml`'s own cancelled-dialog shape exactly,
+  the established convention every dialog-backed bridge
+  method here follows, `webview.FileDialog.FOLDER` in place
+  of `OPEN`.
 
 <a id="fim.gui.app.Api.get_welcome_dismissed"></a>
 
@@ -4801,30 +4802,6 @@ already uses — no second naming scheme.
   file is missing). `{"ok": False, "message": ...}` if
   `directory` names no readable batch manifest at all.
 
-<a id="fim.gui.app.Api.browse_for_trajectory"></a>
-
-#### browse\_for\_trajectory
-
-```python
-@_log_bridge_call
-def browse_for_trajectory() -> dict[str, Any]
-```
-
-Browse for a `trajectory.jsonl` via the OS's own native file picker.
-
-`window.create_file_dialog(...)`, not an HTML `<input
-type="file">`: a better native-feel win than even Tk's own
-`filedialog.askopenfilename`, since pywebview's dialog is the
-OS's own file picker on every platform.
-
-**Returns**:
-
-- ``{"ok"` - True, "path": "..."}` on a real selection;
-- ``{"ok"` - False, "path": ""}` for a cancelled dialog —
-  mirrors `load_yaml`'s own cancelled-dialog shape exactly,
-  the established convention every dialog-backed bridge
-  method here follows.
-
 <a id="fim.gui.app.Api.open_run"></a>
 
 #### open\_run
@@ -4836,9 +4813,10 @@ def open_run(values: dict[str, str]) -> dict[str, Any]
 
 Re-analyze a persisted trajectory, matching `fim stats`'s own semantics.
 
-Reached from the recent-runs picker (a row, or a browsed path)
-or "Open replicate" on a batch's own results table — the exact
-same operation over one replicate's own `trajectory.jsonl`. The
+Reached from the recent-runs picker (a run row, a batch row's
+own "Open…", or "Open replicate" on an expanded batch) — the
+exact same operation over one replicate's own
+`trajectory.jsonl`. The
 returned payload is deliberately shaped exactly like
 `_drain_run_messages`'s own `"done"` payload, so the caller can
 hand it straight to the already-built `window.fim.showResults`

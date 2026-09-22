@@ -170,7 +170,6 @@ const resultsRunId = document.getElementById("results-run-id");
 const resultsOutcome = document.getElementById("results-outcome");
 const resultsStats = document.getElementById("results-stats");
 const runPlotRow = document.getElementById("run-plot-row");
-const runTrajectoryFrame = document.getElementById("run-trajectory-frame");
 const runTrajectoryCanvas = document.getElementById("run-trajectory-canvas");
 const runTrajectoryLegend = document.getElementById("run-trajectory-legend");
 const runTrajectorySigmaBandCaption = document.getElementById(

@@ -799,22 +799,6 @@
            Study at once). -->
       <tbody id="open-run-recent-runs-body"></tbody>
     </table>
-    <div class="actions">
-      <button type="button" id="browse-trajectory-button">
-        Browse for trajectory.jsonl…
-      </button>
-    </div>
-    <!-- For a trajectory that exists but was never added to any Study
-         -- copied in from a colleague, restored from an old backup, or
-         produced by a `fim run` invocation that pointed `-o` somewhere
-         this checkout's own tree never scans -- the list above has no
-         row for it at all (design doc `20260917-claude-sonnet-5-run-
-         study-experiment-hierarchy-design.md`, `selby/restricted`, §6:
-         no "Unsorted" catch-all any more). This is that file's own
-         escape hatch: browsing to it directly opens it immediately
-         (`open-run.js`'s own `browseButton` handler), the same "Open"
-         a double-clicked row gives, with no separate button to
-         remember afterward. -->
     <!-- Generation/differentiation-q sweep selection used to live here
          (design item 6) -- opening a run now always means "final
          generation, no sweep"; choosing a different generation or a
@@ -823,12 +807,6 @@
          changed choice re-renders the same run in place rather than
          requiring "guess the right settings, then open." -->
     <div class="actions">
-      <button type="button" id="open-run-back-button" data-history-back disabled>
-        <svg class="button-icon" aria-hidden="true">
-          <use href="icons/fim-icons.svg#icon-back"></use>
-        </svg>
-        Back
-      </button>
       <button type="button" id="open-run-open-button" disabled>
         Open
         <svg class="button-icon button-icon-trailing" aria-hidden="true">

@@ -151,7 +151,6 @@ def test_card_navigation_buttons_have_directional_icons(
             "'history-back-button', "
             "'results-history-back-button', "
             "'results-back-button', "
-            "'open-run-back-button', "
             "'help-back-button', "
             "'explore-back-button', "
             "'compare-back-button', "
@@ -168,7 +167,6 @@ def test_card_navigation_buttons_have_directional_icons(
     )
     assert icons == {
         "backButtons": [
-            "icons/fim-icons.svg#icon-back",
             "icons/fim-icons.svg#icon-back",
             "icons/fim-icons.svg#icon-back",
             "icons/fim-icons.svg#icon-back",
@@ -216,19 +214,27 @@ def test_home_is_the_default_highlighted_destination(window: webview.Window) -> 
     }
 
 
-def test_home_back_button_is_disabled_on_launch(window: webview.Window) -> None:
-    """Home is the startup screen, so its Back button has no destination yet."""
+def test_top_strip_back_and_forward_are_disabled_on_launch(
+    window: webview.Window,
+) -> None:
+    """The shared top-strip Back/Forward controls have no destination yet at launch.
+
+    Home used to carry its own per-screen Back button, asserted here
+    alongside these; that button is gone (Home is reachable from the
+    rail at all times, so its own Back was redundant with the shared
+    strip) -- the strip's own empty-history state is what remains to
+    prove.
+    """
     disabled = _drive(
         window,
         lambda _poll_until: window.evaluate_js(
             "({"
-            "homeBack: document.getElementById('open-run-back-button').disabled, "
             "stripBack: document.getElementById('history-back-button').disabled, "
             "stripForward: document.getElementById('history-forward-button').disabled"
             "})"
         ),
     )
-    assert disabled == {"homeBack": True, "stripBack": True, "stripForward": True}
+    assert disabled == {"stripBack": True, "stripForward": True}
 
 
 def test_top_strip_back_and_forward_walk_screen_history(
@@ -299,40 +305,6 @@ def test_settings_dialog_controls_startup_behavior(
         )
 
     assert _drive(window, steps) == "restart"
-
-
-def test_home_back_button_returns_to_the_screen_that_opened_home(
-    window: webview.Window,
-) -> None:
-    """Home's Back button is enabled only after Home has a real return target."""
-
-    def steps(poll_until: Callable[[str, Callable[[Any], bool]], Any]) -> Any:
-        window.evaluate_js("window.fim.showConfigureScreen();")
-        poll_until(
-            "!document.getElementById('screen-configure').hidden",
-            lambda value: value is True,
-        )
-        window.evaluate_js("window.fim.showOpenRunScreen();")
-        poll_until(
-            "!document.getElementById('screen-open-run').hidden",
-            lambda value: value is True,
-        )
-        window.evaluate_js("document.getElementById('open-run-back-button').click();")
-        return poll_until(
-            "({"
-            "backDisabled: document.getElementById('open-run-back-button').disabled, "
-            "configureVisible: !document.getElementById('screen-configure').hidden, "
-            "homeVisible: !document.getElementById('screen-open-run').hidden"
-            "})",
-            lambda value: value is not None and value["configureVisible"] is True,
-        )
-
-    result = _drive(window, steps)
-    assert result == {
-        "backDisabled": False,
-        "configureVisible": True,
-        "homeVisible": False,
-    }
 
 
 def test_parameter_strip_shows_the_starter_configuration_on_launch(

@@ -165,7 +165,7 @@ as a structured `{"error": ...}` payload the page renders).
 | `get_significant_digits` / `set_significant_digits` | The View menu's numeric-precision setting. |
 | `get_live_deme_pair` / `set_live_deme_pair` | The deme-pair selector for a `d > 3` scatter (matching `fim.viz.scatter`'s own large-`d` fallback). |
 | `list_recent_runs` | Screen 6's/File-menu's recent-runs list (§9). |
-| `browse_for_trajectory` / `open_run` | Open an arbitrary persisted run by file dialog. |
+| `open_run` | Reopen a persisted run into the unified results view. |
 | `compare_runs` | The Compare workspace: overlay two or more completed runs' own final-state scatter panels, naming which configuration field(s) differ (botanist GUI design doc `20260907-claude-sonnet-5-botanist-gui-redesign.md` §8). |
 | `get_animation_frames` / `get_animation_deme_pair_frames` | Sampled scatter coordinates for the scrubber (§8). |
 | `get_deme_pair_panel` / `get_batch_deme_pair_panel` | Re-render a completed run's scatter at a different deme pair. |
