@@ -12296,26 +12296,29 @@ run count once it resolves -- `test/gui/test_app_api.py`'s own
 tests already prove `rerun_study` itself correct as a plain Python
 call.
 
-<a id="gui.test_home_hierarchy_screen.test_home_shows_only_the_most_recent_run_for_a_repeated_configuration"></a>
+<a id="gui.test_home_hierarchy_screen.test_home_shows_both_runs_of_a_repeated_configuration_but_blanks_the_repeat"></a>
 
-#### test\_home\_shows\_only\_the\_most\_recent\_run\_for\_a\_repeated\_configuration
+#### test\_home\_shows\_both\_runs\_of\_a\_repeated\_configuration\_but\_blanks\_the\_repeat
 
 ```python
-def test_home_shows_only_the_most_recent_run_for_a_repeated_configuration(
+def test_home_shows_both_runs_of_a_repeated_configuration_but_blanks_the_repeat(
         tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None
 ```
 
-Two runs of the identical configuration share a `run_id`; only the
-newer one renders.
+Two runs of the identical configuration share a `run_id`; both
+still render, but only the first (newest) shows the id text.
 
 Reported live: a Study's own expanded view showed the same `run-
 <hash>` label twice, a run apart in time -- `run_id` is a
 deterministic hash of the configuration itself (`fim.engine.
 deterministic_run_id`), not a per-invocation random id, so two
 genuinely distinct run directories sharing an identical
-configuration also share one `run_id`. Showing both is noise;
-`dedupeMostRecentPerRunId` keeps only the one with the later
-`endedAt`.
+configuration also share one `run_id`. Both are real, distinct
+executions worth keeping visible (a botanist re-running the same
+configuration on purpose, say, to confirm reproducibility) -- only
+the repeated *label* is noise, so `renderGroup`'s own `showRunId`
+blanks it on the second (older) row rather than hiding the row
+outright.
 
 <a id="gui.test_home_hierarchy_screen.test_home_select_button_toggles_the_checkbox_column"></a>
 
@@ -13650,31 +13653,31 @@ Unchanged behavior — the trajectory panel's own pre-existing
 "nothing to show" case, confirmed still correct now that it shares
 a gate with the new sigma-band-alone case above.
 
-<a id="gui.test_open_run_screen.test_recent_runs_group_by_date_bucket_and_can_be_collapsed"></a>
+<a id="gui.test_open_run_screen.test_expanding_a_study_shows_every_run_directly_with_no_date_subgroups"></a>
 
-#### test\_recent\_runs\_group\_by\_date\_bucket\_and\_can\_be\_collapsed
+#### test\_expanding\_a\_study\_shows\_every\_run\_directly\_with\_no\_date\_subgroups
 
 ```python
-def test_recent_runs_group_by_date_bucket_and_can_be_collapsed(
+def test_expanding_a_study_shows_every_run_directly_with_no_date_subgroups(
         tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None
 ```
 
-Design proposal for "a fantastically long results scroll": a Study's
-own expanded runs render grouped into date-bucket sections, each with
-its own collapsible header naming its member count. Every group
-starts collapsed by default (`ensureGroupDefaults`), so opening the
-screen shows headers only; expanding a header adds only its own rows
-(`open-run.js`'s own `renderRecentRuns`/`buildGroupHeaderRow`), and
-collapsing it again removes only its own rows, the other bucket's
-own rows unaffected.
+A Study's own expanded runs render as one flat list, not nested
+further into date-bucket sections.
+
+Every run now belongs to some real Study or Experiment, so the
+date-bucket grouping this tree used to add one level inside each
+Study (Today/Yesterday/Earlier, further split by calendar day) no
+longer separated anything meaningful -- only three more collapsed
+toggles to open before reaching an actual run row. Removed: a Study
+collapsed by default (`ensureGroupDefaults`) shows zero run rows;
+expanding it directly reveals every one of its own runs, with no
+further per-date grouping to expand.
 
 Both runs here are bare (`--study` unset), so both land in the
 always-present default Study inside its own default Experiment
 (`20260918-claude-sonnet-5-home-tree-reorg-design.md`, `selby/
-restricted`, §1/§2) — the date-bucket grouping this test cares about
-is nested two levels deep (Experiment > Study > date bucket), not at
-the tree's own top level the way the now-removed "Unsorted" bucket's
-date grouping once was.
+restricted`, §1/§2).
 
 <a id="gui.test_open_run_screen.test_recent_runs_filter_narrows_the_visible_rows_and_updates_the_count"></a>
 
@@ -13743,6 +13746,37 @@ the indicator's own visibility at the moment it is entered -- a
 real reopen of a test-sized batch finishes far too quickly to
 catch by polling, which would make the test a race rather than a
 measurement.
+
+<a id="gui.test_open_run_screen.test_clicking_a_column_header_sorts_that_studys_own_runs"></a>
+
+#### test\_clicking\_a\_column\_header\_sorts\_that\_studys\_own\_runs
+
+```python
+def test_clicking_a_column_header_sorts_that_studys_own_runs(
+        tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None
+```
+
+Clicking "Ended" toggles that Study's own run rows between
+newest-first and oldest-first (item 4).
+
+Only one Study is involved, so this also proves sorting is scoped
+per-Study rather than reaching into some other Study's own rows --
+there being only one here is itself part of what is being checked:
+a single click must not need a second Study to prove it never
+touches.
+
+<a id="gui.test_open_run_screen.test_dragging_a_column_resize_handle_widens_it_for_the_whole_table"></a>
+
+#### test\_dragging\_a\_column\_resize\_handle\_widens\_it\_for\_the\_whole\_table
+
+```python
+def test_dragging_a_column_resize_handle_widens_it_for_the_whole_table(
+        tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None
+```
+
+Dragging one column's own resize handle widens that `<col>` --
+table-wide, since every Study's own column header row and every run
+row share the identical underlying columns (item 4).
 
 <a id="gui.test_p0_grid_screen"></a>
 

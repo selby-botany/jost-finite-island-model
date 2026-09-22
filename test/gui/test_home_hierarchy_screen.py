@@ -999,20 +999,23 @@ def test_rerun_all_re_runs_every_configuration_in_a_study(
     assert "Ring sweep (2 runs)" in tree_text
 
 
-def test_home_shows_only_the_most_recent_run_for_a_repeated_configuration(
+def test_home_shows_both_runs_of_a_repeated_configuration_but_blanks_the_repeat(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """Two runs of the identical configuration share a `run_id`; only the
-    newer one renders.
+    """Two runs of the identical configuration share a `run_id`; both
+    still render, but only the first (newest) shows the id text.
 
     Reported live: a Study's own expanded view showed the same `run-
     <hash>` label twice, a run apart in time -- `run_id` is a
     deterministic hash of the configuration itself (`fim.engine.
     deterministic_run_id`), not a per-invocation random id, so two
     genuinely distinct run directories sharing an identical
-    configuration also share one `run_id`. Showing both is noise;
-    `dedupeMostRecentPerRunId` keeps only the one with the later
-    `endedAt`.
+    configuration also share one `run_id`. Both are real, distinct
+    executions worth keeping visible (a botanist re-running the same
+    configuration on purpose, say, to confirm reproducibility) -- only
+    the repeated *label* is noise, so `renderGroup`'s own `showRunId`
+    blanks it on the second (older) row rather than hiding the row
+    outright.
     """
     results = tmp_path / "results"
     results.mkdir()
@@ -1022,10 +1025,7 @@ def test_home_shows_only_the_most_recent_run_for_a_repeated_configuration(
     newer = _write_run(results, "run-b", seed=1, study_id=study.study_id)
     # Both finish within the same instant in practice -- push `newer`'s
     # own `ended_at` forward by hand, rather than a real sleep, so the
-    # two are unambiguously ordered without slowing this test down
-    # (`test_open_run_screen.py`'s own `test_recent_runs_group_by_date_
-    # bucket_and_can_be_collapsed` already establishes this same direct-
-    # manifest-edit precedent for date-bucket testing).
+    # two are unambiguously ordered without slowing this test down.
     newer_manifest_path = newer / "manifest.json"
     newer_manifest = json.loads(newer_manifest_path.read_text(encoding="utf-8"))
     newer_manifest["ended_at"] = (
@@ -1049,11 +1049,22 @@ def test_home_shows_only_the_most_recent_run_for_a_repeated_configuration(
             row_count = _poll_until(
                 window,
                 "document.querySelectorAll("
-                "'#open-run-recent-runs-body tr:not(.open-run-group-header)').length",
+                "'#open-run-recent-runs-body tr.open-run-run-row').length",
                 lambda value: value is not None and value > 0,
             )
+            run_id_texts = window.evaluate_js(
+                "Array.from(document.querySelectorAll("
+                "'#open-run-recent-runs-body tr.open-run-run-row'))"
+                ".map((row) => row.querySelector('td').textContent.trim())"
+            )
             tree_text = window.evaluate_js(_TREE_TEXT)
-            outcome.put({"rowCount": row_count, "treeText": tree_text})
+            outcome.put(
+                {
+                    "rowCount": row_count,
+                    "runIdTexts": run_id_texts,
+                    "treeText": tree_text,
+                }
+            )
         finally:
             window.destroy()
 
@@ -1061,17 +1072,25 @@ def test_home_shows_only_the_most_recent_run_for_a_repeated_configuration(
     result = outcome.get(timeout=_DRIVE_TIMEOUT_SECONDS)
 
     assert result is not None
-    assert result["rowCount"] == 1
+    # Two distinct run directories, both rendered -- not deduped away.
+    assert result["rowCount"] == 2
     older_manifest = json.loads((older / "manifest.json").read_text(encoding="utf-8"))
     newer_manifest = json.loads((newer / "manifest.json").read_text(encoding="utf-8"))
     assert older_manifest["run_id"] == newer_manifest["run_id"]
-    # `formatEndedAt` (`screens/open-run.js`) strips sub-second precision
-    # for display; compare against the same trimmed form rather than the
-    # raw manifest value.
+    run_id_texts = result["runIdTexts"]
+    assert len(run_id_texts) == 2
+    # Newest-first: the first row shows the shared run id, the second
+    # (the older run, immediately following in the same sorted list)
+    # leaves it blank.
+    assert older_manifest["run_id"] in run_id_texts[0]
+    assert run_id_texts[1] == ""
+    # Both timestamps are still on screen -- only the id text is
+    # blanked, everything else about the older row (Ended, Outcome,
+    # Configuration, Statistics) still renders normally.
     newer_ended_at = re.sub(r"\.\d+(?=Z?$)", "", newer_manifest["ended_at"])
     older_ended_at = re.sub(r"\.\d+(?=Z?$)", "", older_manifest["ended_at"])
     assert newer_ended_at in result["treeText"]
-    assert older_ended_at not in result["treeText"]
+    assert older_ended_at in result["treeText"]
 
 
 def test_home_select_button_toggles_the_checkbox_column(

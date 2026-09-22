@@ -89,72 +89,86 @@ const collapsedGroupIds = new Set();
 // already explicitly opened on an earlier visit.
 const knownGroupIds = new Set();
 
-const _ONE_DAY_MS = 24 * 60 * 60 * 1000;
-// Priority order for rendering -- runs are already newest-first
-// (`Api.list_home_runs`), but this makes bucket ordering an explicit,
-// tested invariant rather than an accident of that sort order.
-const _DATE_BUCKET_ORDER = ["Today", "Yesterday", "Earlier", "Unknown date"];
+// One `{key, direction}` per Study id, read/written by the column
+// header row's own click handler (`buildColumnHeaderRow`) -- a Study's
+// own run list is re-sorted by this every render (`sortRunsForStudy`),
+// so a chosen sort survives a filter keystroke or a checkbox toggle
+// exactly the way `collapsedGroupIds` already survives one. Absent
+// (the common case, nothing ever clicked) sorts newest-first, matching
+// this tree's own pre-existing default before per-column sorting
+// existed at all.
+const studySortState = new Map();
+
+// Every column `buildColumnHeaderRow`/`buildRunRow` render, in table
+// order -- `key` is what `studySortState` stores and `sortRunsForStudy`
+// reads; `value` extracts one run's own sortable field, always a
+// plain string/number so `<`/`>` compare correctly regardless of
+// column. `sortable: false` (Actions only) gets a plain, unclickable
+// header cell instead of a sort button. Defined once, here, so
+// `buildColumnHeaderRow`'s own header text and `sortRunsForStudy`'s own
+// comparator can never independently drift apart on what column N
+// actually means.
+const _RUN_TABLE_COLUMNS = [
+    {
+        key: "run",
+        label: "Run",
+        sortable: true,
+        value: (run) => (run.name ? `${run.name} (${run.runId})` : run.runId),
+    },
+    { key: "ended", label: "Ended", sortable: true, value: (run) => run.endedAt },
+    { key: "outcome", label: "Outcome", sortable: true, value: (run) => run.label ?? "" },
+    {
+        key: "configuration",
+        label: "Configuration",
+        sortable: true,
+        value: (run) => formatRowConfigSummary(run.configSummary),
+    },
+    {
+        key: "statistics",
+        label: "Statistics",
+        sortable: true,
+        value: (run) => formatRowStatistics(run.statistics),
+    },
+    { key: "actions", label: "Actions", sortable: false, value: null },
+];
 
 /**
- * Bucket one run's own `endedAt` into a coarse "Today"/"Yesterday"/
- * "Earlier" label -- the only grouping signal `RecentRun` exposes today
- * (large-sweep architecture roadmap doc `20260907-claude-sonnet-5-
- * large-sweep-architecture-roadmap.md`, `selby/restricted`, describes a
- * future `SweepManifest` one level above today's `BatchManifest`; once
- * that exists, a sweep-id group key can be added as a second, preferred
- * bucketing source here without touching `renderRecentRuns` itself).
- * `"Earlier"` is further broken down by its own literal calendar date
- * (`groupRecentRuns`, below) -- this function only ever needs to tell
- * "today," "yesterday," and "everything else" apart.
- * @param {string} endedAt
- * @returns {string}
+ * Sort one Study's own run list per its own current `studySortState`
+ * entry -- newest-first (`"ended"`, descending) absent any entry, the
+ * identical default order this tree always rendered before per-column
+ * sorting existed. A plain string/number `<`/`>` compare on each
+ * column's own `value` extractor (`_RUN_TABLE_COLUMNS`) is enough for
+ * every column here: `"ended"` is an ISO-8601 timestamp, whose lexical
+ * order already matches chronological order (the same shortcut `Api.
+ * list_recent_runs`'s own sort already relies on).
+ * @param {string} studyId
+ * @param {Array<object>} runs
+ * @returns {Array<object>}
  */
-function dateBucketFor(endedAt) {
-    const parsed = new Date(endedAt);
-    if (Number.isNaN(parsed.getTime())) {
-        return "Unknown date";
-    }
-    const now = new Date();
-    const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-    const startOfParsedDay = new Date(
-        parsed.getFullYear(),
-        parsed.getMonth(),
-        parsed.getDate()
-    );
-    const ageDays = Math.round(
-        (startOfToday.getTime() - startOfParsedDay.getTime()) / _ONE_DAY_MS
-    );
-    if (ageDays <= 0) {
-        return "Today";
-    }
-    if (ageDays === 1) {
-        return "Yesterday";
-    }
-    return "Earlier";
-}
-
-/**
- * Format one run's own `endedAt` as a literal `YYYY-MM-DD` calendar
- * date, in local time (matching `dateBucketFor`'s own local-time day
- * boundary) -- `"Earlier"`'s own per-date sub-group label/id.
- * @param {string} endedAt
- * @returns {string}
- */
-function calendarDateLabel(endedAt) {
-    const parsed = new Date(endedAt);
-    const year = parsed.getFullYear();
-    const month = String(parsed.getMonth() + 1).padStart(2, "0");
-    const day = String(parsed.getDate()).padStart(2, "0");
-    return `${year}-${month}-${day}`;
+function sortRunsForStudy(studyId, runs) {
+    const state = studySortState.get(studyId) ?? { key: "ended", direction: "desc" };
+    const column = _RUN_TABLE_COLUMNS.find((candidate) => candidate.key === state.key);
+    const getValue = column?.value ?? _RUN_TABLE_COLUMNS[1].value;
+    const sign = state.direction === "asc" ? 1 : -1;
+    return [...runs].sort((left, right) => {
+        const leftValue = getValue(left);
+        const rightValue = getValue(right);
+        if (leftValue < rightValue) {
+            return -sign;
+        }
+        if (leftValue > rightValue) {
+            return sign;
+        }
+        return 0;
+    });
 }
 
 /**
  * Strip sub-second precision from an ISO-8601 `endedAt` timestamp for
  * display (`.292444Z` -> `Z`) -- the underlying value (used unchanged
- * for date-bucketing and free-text filtering) keeps its full precision;
- * only the rendered "Ended" column text is trimmed, since a human
- * reader never needs microsecond resolution to recognize when a run
- * finished.
+ * for sorting and free-text filtering) keeps its full precision; only
+ * the rendered "Ended" column text is trimmed, since a human reader
+ * never needs microsecond resolution to recognize when a run finished.
  * @param {string} endedAt
  * @returns {string}
  */
@@ -163,126 +177,13 @@ function formatEndedAt(endedAt) {
 }
 
 /**
- * Keep only the most recent run for each distinct `runId` -- `run.
- * runId` is a deterministic hash of the run's own configuration
- * (`fim.engine.deterministic_run_id`), not a per-invocation random id,
- * so running the identical configuration more than once produces
- * several real, distinct run directories that all share one `runId`.
- * Showing every one of those inside the same Study's own expanded row
- * is just noise -- reported live: two rows reading the exact same
- * `run-<hash>` label, a few dozen seconds apart, both under one
- * Study's own "Today" bucket. Compares `endedAt` directly (ISO-8601,
- * `Z`-suffixed, so a plain string compare already sorts chronologically)
- * rather than assuming `runs` arrives in any particular order --
- * `Api.get_study_run_summary`'s own list follows `study_run_
- * directories`'s storage order, not necessarily newest-first the way
- * `Api.list_home_runs`'s own already is.
- * @param {Array<object>} runs
- * @returns {Array<object>}
- */
-function dedupeMostRecentPerRunId(runs) {
-    const mostRecentById = new Map();
-    for (const run of runs) {
-        const existing = mostRecentById.get(run.runId);
-        if (!existing || run.endedAt > existing.endedAt) {
-            mostRecentById.set(run.runId, run);
-        }
-    }
-    return runs.filter((run) => mostRecentById.get(run.runId) === run);
-}
-
-/**
- * Split `runs` into date-bucket groups, in `_DATE_BUCKET_ORDER`.
- * `"Earlier"` is itself a parent group whose own `subgroups` further
- * split its runs by literal calendar date (newest first -- `runs`
- * itself already arrives newest-first from `Api.list_home_runs`, and
- * `Map` iteration order is insertion order, so no separate sort is
- * needed) -- every other top-level bucket is a plain leaf group, its
- * own `runs` rendered directly. Every group carries its own precomputed
- * `runCount` (a plain leaf-run total, used by `renderRecentRuns`'s own
- * bottom summary) and `countLabel` (the exact text `buildGroupHeaderRow`
- * shows in parentheses) -- `buildHomeGroups`, below, gives a Study/
- * Experiment group the identical two fields, so every group in the tree
- * is rendered by the same code with no per-kind special-casing.
- *
- * `idPrefix` namespaces every id this call produces (including the
- * nested per-date ids under "Earlier") -- needed once this function
- * became callable more than once per render, one call per expanded
- * Study (`studyGroup`, above): `collapsedGroupIds`/`knownGroupIds` are
- * flat sets keyed by plain string id, so two different Studies each
- * showing their own "Today" bucket would otherwise collide under the
- * identical bare id `"Today"`, collapsing one when the botanist meant
- * to collapse only the other. Empty (the historical, single-caller
- * default) when omitted, matching this function's own original
- * behavior exactly for its one remaining bare caller, if any.
- * @param {Array<object>} runs
- * @param {string} [idPrefix]
- * @returns {Array<{id: string, label: string, runCount: number,
- *     countLabel: string, runs?: Array<object>,
- *     subgroups?: Array<{id: string, label: string, runs: Array<object>,
- *         runCount: number, countLabel: string}>}>}
- */
-function groupRecentRuns(runs, idPrefix = "") {
-    const buckets = new Map();
-    for (const run of runs) {
-        const bucketId = dateBucketFor(run.endedAt);
-        if (!buckets.has(bucketId)) {
-            buckets.set(bucketId, []);
-        }
-        buckets.get(bucketId).push(run);
-    }
-    return _DATE_BUCKET_ORDER.filter((bucketId) => buckets.has(bucketId)).map(
-        (bucketId) => {
-            const bucketRuns = buckets.get(bucketId);
-            if (bucketId !== "Earlier") {
-                return {
-                    id: `${idPrefix}${bucketId}`,
-                    label: bucketId,
-                    runs: bucketRuns,
-                    runCount: bucketRuns.length,
-                    countLabel: String(bucketRuns.length),
-                };
-            }
-            const dateGroups = new Map();
-            for (const run of bucketRuns) {
-                const dateLabel = calendarDateLabel(run.endedAt);
-                if (!dateGroups.has(dateLabel)) {
-                    dateGroups.set(dateLabel, []);
-                }
-                dateGroups.get(dateLabel).push(run);
-            }
-            const subgroups = Array.from(dateGroups.entries()).map(
-                ([dateLabel, dateRuns]) => ({
-                    id: `${idPrefix}Earlier:${dateLabel}`,
-                    label: dateLabel,
-                    runs: dateRuns,
-                    runCount: dateRuns.length,
-                    countLabel: String(dateRuns.length),
-                })
-            );
-            const runCount = subgroups.reduce(
-                (total, subgroup) => total + subgroup.runCount,
-                0
-            );
-            return {
-                id: `${idPrefix}${bucketId}`,
-                label: bucketId,
-                subgroups,
-                runCount,
-                countLabel: String(runCount),
-            };
-        }
-    );
-}
-
-/**
  * First-visit-only bookkeeping: any group id not already seen this
  * launch defaults to collapsed (design ask: closed submenus by
  * default) and is recorded as seen, so a *later* re-render (a filter
  * keystroke, a fresh fetch) never re-applies that default over
- * whatever the user has since done to it -- recurses into a parent
- * group's own `subgroups` so a newly-appeared per-date sub-group under
- * "Earlier" gets the identical treatment its own top-level siblings do.
+ * whatever the user has since done to it -- recurses into an
+ * Experiment's own `subgroups` (its member Studies) so a newly-created
+ * Study gets the identical treatment its own siblings already have.
  * @param {Array<object>} groups
  */
 function ensureGroupDefaults(groups) {
@@ -318,17 +219,16 @@ function nameMatchesFilter(name, filterText) {
  * `toggleBatchRow`'s own `window.__fimBatchReplicateCache` already
  * established one level down.
  *
- * Once fetched, the flat cached list is wrapped into the identical
- * Today/Yesterday/Earlier(-by-date) `subgroups` shape `groupRecentRuns`
- * already built for the now-removed "Unsorted" bucket (`20260918-
- * claude-sonnet-5-home-tree-reorg-design.md`, `selby/restricted`, §6):
- * every unattached run now lands in the always-present default Study
- * (§1/§2 of that same document) rather than a separate, larger
- * "Unsorted" group, so a real Study's own row needs this same
- * chronological browsing aid, not only a flat list -- a real
- * regression that document flags explicitly if left unaddressed. The
- * *not-yet-fetched* case is untouched: still a bare `runs: null`, never
- * reached by `renderGroup` for a still-collapsed group either way.
+ * Once fetched, the cached list renders as a flat, sorted `runs` array
+ * directly -- no more Today/Yesterday/Earlier(-by-date) date-bucket
+ * subgroups (removed: now that every run belongs to some real Study or
+ * Experiment, those buckets no longer separated anything meaningful,
+ * only added three more collapsed toggles a botanist had to open before
+ * reaching an actual run row). `sortRunsForStudy` re-sorts fresh on
+ * every render, so a chosen column sort (`studySortState`) never goes
+ * stale. The *not-yet-fetched* case is untouched: still a bare `runs:
+ * null`, never reached by `renderGroup` for a still-collapsed group
+ * either way.
  * @param {{studyId: string, name: string, runCount: number,
  *     runDirectories: Array<string>}} study
  * @returns {object}
@@ -352,7 +252,7 @@ function studyGroup(study) {
     }
     return {
         ...base,
-        subgroups: groupRecentRuns(cachedRuns, `${base.id}:`),
+        runs: sortRunsForStudy(study.studyId, cachedRuns),
     };
 }
 
@@ -693,6 +593,135 @@ function buildAddToStudySelect(directory) {
 }
 
 /**
+ * Persisted widths for every column resize handle sets, keyed by
+ * `_RUN_TABLE_COLUMNS` index -- applied to the table's own `<colgroup>`
+ * (`index.html`), which sits outside `#open-run-recent-runs-body` and
+ * so, unlike every header/run row, is never rebuilt or discarded by a
+ * re-render: a resize made under one Study stays in effect for every
+ * Study's own column header row and every run row alike, since they
+ * are all genuinely one table's own columns, not one per Study.
+ * `null` (the default, every column) leaves that column at its own
+ * ordinary auto width.
+ * @type {Array<number | null>}
+ */
+const columnWidthsPx = new Array(_RUN_TABLE_COLUMNS.length).fill(null);
+
+const _MIN_COLUMN_WIDTH_PX = 48;
+
+/**
+ * Apply `columnWidthsPx` to the table's own `<colgroup>` -- called once
+ * up front (`refreshRecentRuns`) and again every time a drag actually
+ * moves a column's own width, so the persisted state and what is
+ * actually on screen never drift apart.
+ */
+function applyColumnWidths() {
+    const cols = openRunTable.querySelectorAll("colgroup col");
+    cols.forEach((col, index) => {
+        const width = columnWidthsPx[index];
+        col.style.width = width === null ? "" : `${width}px`;
+    });
+}
+
+/**
+ * Wire one column header cell's own resize handle -- a thin strip along
+ * its right edge; dragging it left/right sets that column's own
+ * `columnWidthsPx` entry from the header's own current rendered width
+ * plus the drag delta, clamped to `_MIN_COLUMN_WIDTH_PX` so a column can
+ * be narrowed but never dragged out of existence. Several fields
+ * (Configuration, Statistics) truncate with an ellipsis and rely on a
+ * hover tooltip for the rest (`.open-run-summary-cell`) -- this is what
+ * lets a botanist widen one instead, when the tooltip alone is not
+ * convenient.
+ * @param {HTMLTableCellElement} headerCell
+ * @param {number} columnIndex
+ */
+function wireColumnResizeHandle(headerCell, columnIndex) {
+    const handle = document.createElement("span");
+    handle.className = "open-run-column-resize-handle";
+    handle.addEventListener("mousedown", (event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        const startX = event.clientX;
+        const startWidth = headerCell.getBoundingClientRect().width;
+        const onMouseMove = (moveEvent) => {
+            const width = Math.max(
+                _MIN_COLUMN_WIDTH_PX,
+                startWidth + (moveEvent.clientX - startX)
+            );
+            columnWidthsPx[columnIndex] = width;
+            applyColumnWidths();
+        };
+        const onMouseUp = () => {
+            document.removeEventListener("mousemove", onMouseMove);
+            document.removeEventListener("mouseup", onMouseUp);
+        };
+        document.addEventListener("mousemove", onMouseMove);
+        document.addEventListener("mouseup", onMouseUp);
+    });
+    headerCell.appendChild(handle);
+}
+
+/**
+ * Build one Study's own column header row (item 4: moved off the
+ * table's own former single, top-of-table `<thead>` and repeated
+ * directly above each Study's own run rows instead, since sorting is
+ * now per-Study -- a header shared by every Study at once could not
+ * honestly show which one a click had actually sorted). Italic, not
+ * bold, to read as a lighter, secondary label repeated many times down
+ * the page rather than shouting the same six words at equal weight
+ * every time.
+ *
+ * Every sortable column (all but "Actions") is a clickable button that
+ * toggles `studySortState` for this Study alone and re-renders --
+ * ascending on a column not already active, descending on a second
+ * click of the one already active, so two clicks in a row always
+ * reverses the current order rather than requiring a third click back
+ * to "unsorted" (there is no unsorted state; newest-first, the
+ * original default, is just `{key: "ended", direction: "desc"}` under
+ * the same mechanism). A small ▲/▼ marks whichever column is currently
+ * active. Every column also carries its own resize handle
+ * (`wireColumnResizeHandle`) -- table-wide, not per-Study, since every
+ * instance of this row shares the identical underlying columns.
+ * @param {string} studyId
+ * @param {boolean} nested See `buildGroupHeaderRow`.
+ * @returns {HTMLTableRowElement}
+ */
+function buildColumnHeaderRow(studyId, nested) {
+    const row = document.createElement("tr");
+    row.className = "open-run-column-header-row";
+    if (nested) {
+        row.classList.add("open-run-nested");
+    }
+    const state = studySortState.get(studyId) ?? { key: "ended", direction: "desc" };
+    _RUN_TABLE_COLUMNS.forEach((column, index) => {
+        const cell = document.createElement("th");
+        if (!column.sortable) {
+            cell.textContent = column.label;
+            wireColumnResizeHandle(cell, index);
+            row.appendChild(cell);
+            return;
+        }
+        const button = document.createElement("button");
+        button.type = "button";
+        button.className = "open-run-column-sort-button";
+        const active = state.key === column.key;
+        button.textContent = active
+            ? `${column.label} ${state.direction === "asc" ? "▲" : "▼"}`
+            : column.label;
+        button.setAttribute("aria-label", `Sort by ${column.label}`);
+        button.addEventListener("click", () => {
+            const direction = active && state.direction === "asc" ? "desc" : "asc";
+            studySortState.set(studyId, { key: column.key, direction });
+            renderRecentRuns();
+        });
+        cell.appendChild(button);
+        wireColumnResizeHandle(cell, index);
+        row.appendChild(cell);
+    });
+    return row;
+}
+
+/**
  * Build one run's own `<tr>` -- factored out of `refreshRecentRuns` so
  * `renderRecentRuns` can call it once per group member on every filter/
  * collapse re-render, not only on a fresh fetch. The first cell also
@@ -701,13 +730,23 @@ function buildAddToStudySelect(directory) {
  * Experiment hierarchy design's own §10 bulk-delete idiom and §6 "Add to
  * study…" affordance.
  * @param {object} run
+ * @param {boolean} showRunId Whether to render this run's own id text
+ *     (`false` for a run immediately following another with the
+ *     identical `runId` in the same Study's own sorted list -- see
+ *     `renderGroup`).
+ * @param {boolean} nested See `buildGroupHeaderRow`.
  * @returns {HTMLTableRowElement}
  */
-function buildRunRow(run) {
+function buildRunRow(run, showRunId = true, nested = false) {
     const row = document.createElement("tr");
+    row.className = "open-run-run-row";
+    if (nested) {
+        row.classList.add("open-run-nested");
+    }
     const configText = formatRowConfigSummary(run.configSummary);
     const statisticsText = formatRowStatistics(run.statistics);
-    const runLabel = run.name ? `${run.name} (${run.runId})` : run.runId;
+    const fullRunLabel = run.name ? `${run.name} (${run.runId})` : run.runId;
+    const runLabel = showRunId ? fullRunLabel : "";
     for (const [value, className, isLabelCell, isRunIdCell] of [
         [runLabel, null, false, true],
         [formatEndedAt(run.endedAt), null, false, false],
@@ -732,7 +771,9 @@ function buildRunRow(run) {
                 updateSelectionToolbar();
             });
             cell.appendChild(checkbox);
-            cell.appendChild(document.createTextNode(` ${value}`));
+            if (value) {
+                cell.appendChild(document.createTextNode(` ${value}`));
+            }
         } else if (isLabelCell && run.isBatch) {
             // A batch row's own label cell gets an expand/collapse
             // toggle beside its text (design §9: "expandable to its
@@ -1212,7 +1253,7 @@ function buildGroupHeaderRow(group, nested = false) {
         row.classList.add("open-run-group-header-nested");
     }
     const cell = document.createElement("td");
-    cell.colSpan = 6;
+    cell.colSpan = _RUN_TABLE_COLUMNS.length;
     // A `<td>` itself as the flex container (an earlier version of this
     // function) computed `display: flex` correctly but did not actually
     // lay its children out that way under this project's own bundled
@@ -1242,9 +1283,7 @@ function buildGroupHeaderRow(group, nested = false) {
             const result = await window.pywebview.api.get_study_run_summary(
                 group.studyId
             );
-            window.__fimStudyRunsCache[group.studyId] = result.ok
-                ? dedupeMostRecentPerRunId(result.runs)
-                : [];
+            window.__fimStudyRunsCache[group.studyId] = result.ok ? result.runs : [];
         }
         if (expanding) {
             collapsedGroupIds.delete(group.id);
@@ -1263,8 +1302,8 @@ function buildGroupHeaderRow(group, nested = false) {
 
 /**
  * Append one group's own header row and, if expanded, its own content
- * -- recurses into `subgroups` for a parent group like `"Earlier"` or an
- * Experiment, so a leaf group (plain `runs`) and a parent group (nested
+ * -- recurses into an Experiment's own `subgroups` (its member
+ * Studies), so a leaf group (plain `runs`) and a parent group (nested
  * `subgroups`) render through the identical function, one level deeper
  * each time, rather than `renderRecentRuns` needing to know the tree's
  * own depth or shape up front. A Study group not yet expanded has `runs
@@ -1272,6 +1311,19 @@ function buildGroupHeaderRow(group, nested = false) {
  * before touching `group.runs` for any still-collapsed group, and
  * `buildGroupHeaderRow`'s own toggle handler always populates it before
  * ever un-collapsing one.
+ *
+ * A Study's own run rows (the leaf branch, below) get their own column
+ * header row directly above them (`buildColumnHeaderRow`) -- skipped
+ * for a Study with nothing to show yet (`group.runs.length === 0`), so
+ * "Study 2 (0 runs)" reads exactly as empty as it is, no header floating
+ * over nothing. Two runs adjacent in this same sorted list that share a
+ * `run_id` (`fim.engine.deterministic_run_id` is a hash of the
+ * configuration, not a per-invocation random id, so re-running the
+ * identical configuration genuinely produces this) render with that id
+ * shown once, on the first of them -- `showRunId` blank on every run
+ * whose own predecessor in this same list already showed it, making
+ * plain at a glance that these are repeats of one configuration, not
+ * `runCount` distinct ones.
  * @param {object} group
  * @param {boolean} [nested] See `buildGroupHeaderRow`.
  */
@@ -1284,9 +1336,13 @@ function renderGroup(group, nested = false) {
         for (const subgroup of group.subgroups) {
             renderGroup(subgroup, true);
         }
-    } else {
+    } else if (group.runs.length > 0) {
+        recentRunsBody.appendChild(buildColumnHeaderRow(group.studyId, nested));
+        let previousRunId = null;
         for (const run of group.runs) {
-            recentRunsBody.appendChild(buildRunRow(run));
+            const showRunId = run.runId !== previousRunId;
+            recentRunsBody.appendChild(buildRunRow(run, showRunId, nested));
+            previousRunId = run.runId;
         }
     }
 }
@@ -1308,6 +1364,14 @@ function renderRecentRuns() {
     for (const group of groups) {
         renderGroup(group);
     }
+    // `<colgroup>` sits outside `#open-run-recent-runs-body`, so a
+    // resize made earlier this visit survives the wholesale rebuild
+    // just above unaffected -- this only matters the very first render
+    // (nothing has been dragged yet, so every entry is still `null`)
+    // and after `refreshRecentRuns`'s own fresh fetch, so the header
+    // cells this render just rebuilt line up with whatever widths are
+    // already in effect rather than one repaint behind them.
+    applyColumnWidths();
     // The denominator is `distinctRunCount` over the *unfiltered* tree,
     // not `allRecentRuns.length` -- a Study can legitimately reference a
     // run outside `results/` entirely (`fim.persistence.groups.

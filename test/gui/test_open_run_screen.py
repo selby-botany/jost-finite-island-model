@@ -56,7 +56,10 @@ _DRIVE_TIMEOUT_SECONDS = 3 * _POLL_ATTEMPTS * _POLL_INTERVAL_SECONDS + 10.0
 # row (`open-run.js`'s own `buildGroupHeaderRow`) -- shared so every
 # "count/select an actual run row" query below stays under this
 # project's own 88-column line limit.
-_REAL_ROW_SELECTOR = "'#open-run-recent-runs-body tr:not(.open-run-group-header)'"
+_REAL_ROW_SELECTOR = (
+    "'#open-run-recent-runs-body "
+    "tr:not(.open-run-group-header):not(.open-run-column-header-row)'"
+)
 
 
 def _write_batch_run(tmp_path: Path, *, study_id: str | None = None) -> Path:
@@ -746,8 +749,7 @@ def test_recent_runs_row_shows_config_summary_and_statistics(
             settled = _poll_until(
                 window,
                 "(function(){"
-                "var row = document.querySelector("
-                "'#open-run-recent-runs-body tr:not(.open-run-group-header)'); "
+                f"var row = document.querySelector({_REAL_ROW_SELECTOR}); "
                 "if (!row) { return null; } "
                 "var cells = row.children; "
                 "return {"
@@ -810,8 +812,7 @@ def test_recent_runs_row_hides_fractional_seconds_in_the_ended_column(
             settled = _poll_until(
                 window,
                 "(function(){"
-                "var row = document.querySelector("
-                "'#open-run-recent-runs-body tr:not(.open-run-group-header)'); "
+                f"var row = document.querySelector({_REAL_ROW_SELECTOR}); "
                 "if (!row) { return null; } "
                 "return {endedAtCell: row.children[1].textContent};"
                 "})()",
@@ -863,8 +864,7 @@ def test_a_batch_rows_statistics_cell_names_its_own_replicate_count(
             statistics_text = _poll_until(
                 window,
                 "(function(){"
-                "var row = document.querySelector("
-                "'#open-run-recent-runs-body tr:not(.open-run-group-header)'); "
+                f"var row = document.querySelector({_REAL_ROW_SELECTOR}); "
                 "return row ? row.children[4].textContent : null;"
                 "})()",
                 lambda value: value is not None,
@@ -1107,26 +1107,26 @@ def test_opening_a_run_without_a_sigma_band_still_hides_the_trajectory_panel(
     assert settled["frameHidden"] is True
 
 
-def test_recent_runs_group_by_date_bucket_and_can_be_collapsed(
+def test_expanding_a_study_shows_every_run_directly_with_no_date_subgroups(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """Design proposal for "a fantastically long results scroll": a Study's
-    own expanded runs render grouped into date-bucket sections, each with
-    its own collapsible header naming its member count. Every group
-    starts collapsed by default (`ensureGroupDefaults`), so opening the
-    screen shows headers only; expanding a header adds only its own rows
-    (`open-run.js`'s own `renderRecentRuns`/`buildGroupHeaderRow`), and
-    collapsing it again removes only its own rows, the other bucket's
-    own rows unaffected.
+    """A Study's own expanded runs render as one flat list, not nested
+    further into date-bucket sections.
+
+    Every run now belongs to some real Study or Experiment, so the
+    date-bucket grouping this tree used to add one level inside each
+    Study (Today/Yesterday/Earlier, further split by calendar day) no
+    longer separated anything meaningful -- only three more collapsed
+    toggles to open before reaching an actual run row. Removed: a Study
+    collapsed by default (`ensureGroupDefaults`) shows zero run rows;
+    expanding it directly reveals every one of its own runs, with no
+    further per-date grouping to expand.
 
     Both runs here are bare (`--study` unset), so both land in the
     always-present default Study inside its own default Experiment
     (`20260918-claude-sonnet-5-home-tree-reorg-design.md`, `selby/
-    restricted`, §1/§2) — the date-bucket grouping this test cares about
-    is nested two levels deep (Experiment > Study > date bucket), not at
-    the tree's own top level the way the now-removed "Unsorted" bucket's
-    date grouping once was.
+    restricted`, §1/§2).
     """
     monkeypatch.setattr(paths_module, "results_directory", lambda: tmp_path / "results")
     _write_run(tmp_path)
@@ -1149,52 +1149,29 @@ def test_recent_runs_group_by_date_bucket_and_can_be_collapsed(
                 "var headers = Array.from(document.querySelectorAll("
                 "'.open-run-group-header .open-run-group-toggle'))"
                 ".map((b) => b.textContent);"
-                "var rows = document.querySelectorAll("
-                "'#open-run-recent-runs-body tr:not(.open-run-group-header)')"
-                ".length;"
+                f"var rows = document.querySelectorAll({_REAL_ROW_SELECTOR}).length;"
                 "return {headers: headers, rowCount: rows};"
                 "})()",
                 lambda value: value is not None and len(value.get("headers", [])) == 1,
             )
-            # Every group starts collapsed -- expand everything (Default
-            # experiment > Default study > "Earlier"'s own nested
-            # per-date sub-group, item 3) to see every row.
+            # Every group starts collapsed -- expand Default experiment
+            # and Default study (only two levels now) to see every row.
             _expand_all_recent_run_groups(window)
             after_expand = _poll_until(
                 window,
                 "({"
-                "rowCount: document.querySelectorAll("
-                "'#open-run-recent-runs-body tr:not(.open-run-group-header)').length, "
+                f"rowCount: document.querySelectorAll({_REAL_ROW_SELECTOR}).length, "
                 "headers: Array.from(document.querySelectorAll("
                 "'.open-run-group-header .open-run-group-toggle'))"
-                ".map((b) => b.textContent)"
+                ".map((b) => b.textContent), "
+                "dateHeaders: Array.from(document.querySelectorAll("
+                "'.open-run-group-header .open-run-group-toggle'))"
+                ".filter((b) => /Today|Yesterday|Earlier/.test(b.textContent))"
+                ".length"
                 "})",
                 lambda value: value is not None and value.get("rowCount") == 2,
             )
-            window.evaluate_js(
-                "(function(){"
-                "var toggles = document.querySelectorAll("
-                "'.open-run-group-toggle');"
-                "for (var toggle of toggles) {"
-                "  if (toggle.textContent.includes('Today')) {"
-                "    toggle.click(); return;"
-                "  }"
-                "}"
-                "})()"
-            )
-            after_collapse = _poll_until(
-                window,
-                "document.querySelectorAll("
-                "'#open-run-recent-runs-body tr:not(.open-run-group-header)').length",
-                lambda value: value is not None and value == 1,
-            )
-            outcome.put(
-                {
-                    "collapsed": collapsed,
-                    "afterExpand": after_expand,
-                    "afterCollapse": after_collapse,
-                }
-            )
+            outcome.put({"collapsed": collapsed, "afterExpand": after_expand})
         finally:
             window.destroy()
 
@@ -1203,20 +1180,16 @@ def test_recent_runs_group_by_date_bucket_and_can_be_collapsed(
 
     assert settled is not None
     # Collapsed by default: one top-level group header ("Default
-    # experiment"), zero run rows -- "Default study" and the date
-    # buckets inside it are nested, not rendered until each ancestor is
-    # itself expanded.
+    # experiment"), zero run rows -- "Default study" is nested, not
+    # rendered until it, too, is expanded.
     assert settled["collapsed"]["rowCount"] == 0
     assert any(
         "Default experiment" in header for header in settled["collapsed"]["headers"]
     )
+    # Both runs render directly once Default study is expanded -- no
+    # "Today"/"Yesterday"/"Earlier" date-bucket header anywhere.
     assert settled["afterExpand"]["rowCount"] == 2
-    assert any("Today" in header for header in settled["afterExpand"]["headers"])
-    assert any("Earlier" in header for header in settled["afterExpand"]["headers"])
-    # Collapsing the "Today" group's header removes only its own one
-    # row, leaving the "Earlier" batch row (still inside its own
-    # expanded per-date sub-group) rendered.
-    assert settled["afterCollapse"] == 1
+    assert settled["afterExpand"]["dateHeaders"] == 0
 
 
 def test_recent_runs_filter_narrows_the_visible_rows_and_updates_the_count(
@@ -1256,8 +1229,7 @@ def test_recent_runs_filter_narrows_the_visible_rows_and_updates_the_count(
             _expand_all_recent_run_groups(window)
             _poll_until(
                 window,
-                "document.querySelectorAll("
-                "'#open-run-recent-runs-body tr:not(.open-run-group-header)').length",
+                f"document.querySelectorAll({_REAL_ROW_SELECTOR}).length",
                 lambda value: value is not None and value == 2,
             )
             window.evaluate_js(
@@ -1270,8 +1242,7 @@ def test_recent_runs_filter_narrows_the_visible_rows_and_updates_the_count(
             settled = _poll_until(
                 window,
                 "({"
-                "rowCount: document.querySelectorAll("
-                "'#open-run-recent-runs-body tr:not(.open-run-group-header)').length, "
+                f"rowCount: document.querySelectorAll({_REAL_ROW_SELECTOR}).length, "
                 "countText: document.getElementById('open-run-count').textContent"
                 "})",
                 lambda value: value is not None and value.get("rowCount") == 1,
@@ -1421,3 +1392,177 @@ def test_reopening_shows_a_busy_indicator_while_the_bridge_call_runs(
     # Cleared on the failure path too, so a failed open leaves the
     # screen usable rather than permanently "opening".
     assert settled["hiddenAfter"] is True
+
+
+def test_clicking_a_column_header_sorts_that_studys_own_runs(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Clicking "Ended" toggles that Study's own run rows between
+    newest-first and oldest-first (item 4).
+
+    Only one Study is involved, so this also proves sorting is scoped
+    per-Study rather than reaching into some other Study's own rows --
+    there being only one here is itself part of what is being checked:
+    a single click must not need a second Study to prove it never
+    touches.
+    """
+    results = tmp_path / "results"
+    monkeypatch.setattr(paths_module, "results_directory", lambda: results)
+    study = groups.create_study("Ring sweep", results=results)
+    older = _write_run(tmp_path, study_id=study.study_id)
+    newer_directory = tmp_path / "results" / "run-output-2"
+    config_path = tmp_path / "run2.yaml"
+    config_path.write_text(
+        yaml.safe_dump(
+            {
+                "N": 20,
+                "d": 2,
+                "m": 0.1,
+                "mu": 0.01,
+                "seed": 2,
+                "loci": [{"locus_id": 1, "length": 200}],
+                "convergence_window": 4,
+                "convergence_tolerance": 1.0,
+                "max_generations": 10,
+                "n_replicates": 1,
+                "replicate_tolerance": None,
+            },
+            sort_keys=False,
+        ),
+        encoding="utf-8",
+    )
+    assert (
+        cli.main(
+            [
+                "run",
+                str(config_path),
+                "-o",
+                str(newer_directory),
+                "--quiet",
+                "--study",
+                study.study_id,
+            ]
+        )
+        == 0
+    )
+    newer_manifest_path = newer_directory / "manifest.json"
+    newer_manifest = json.loads(newer_manifest_path.read_text(encoding="utf-8"))
+    older_manifest = json.loads((older / "manifest.json").read_text(encoding="utf-8"))
+    # Force an unambiguous order rather than trusting the two real
+    # `cli.main` calls above to land in different wall-clock seconds --
+    # deterministic, not a race.
+    newer_manifest["ended_at"] = (
+        datetime.fromisoformat(older_manifest["ended_at"]) + timedelta(minutes=5)
+    ).isoformat()
+    newer_manifest_path.write_text(json.dumps(newer_manifest), encoding="utf-8")
+
+    window = create_window(hidden=True)
+    outcome: queue.Queue[dict[str, Any] | None] = queue.Queue(maxsize=1)
+
+    def _drive() -> None:
+        try:
+            _poll_until(window, _INPUT_SCREEN_READY, lambda value: value is True)
+            window.evaluate_js("window.fim.menu.openRun();")
+            _expand_all_recent_run_groups(window)
+            _poll_until(
+                window,
+                f"document.querySelectorAll({_REAL_ROW_SELECTOR}).length",
+                lambda value: value is not None and value == 2,
+            )
+            newest_first = window.evaluate_js(
+                "Array.from(document.querySelectorAll("
+                f"{_REAL_ROW_SELECTOR})).map((row) => row.cells[1].textContent)"
+            )
+            window.evaluate_js(
+                "document.querySelector("
+                "'.open-run-column-sort-button[aria-label=\"Sort by Ended\"]').click();"
+            )
+            first_click = window.evaluate_js(
+                "Array.from(document.querySelectorAll("
+                f"{_REAL_ROW_SELECTOR})).map((row) => row.cells[1].textContent)"
+            )
+            window.evaluate_js(
+                "document.querySelector("
+                "'.open-run-column-sort-button[aria-label=\"Sort by Ended\"]').click();"
+            )
+            second_click = window.evaluate_js(
+                "Array.from(document.querySelectorAll("
+                f"{_REAL_ROW_SELECTOR})).map((row) => row.cells[1].textContent)"
+            )
+            outcome.put(
+                {
+                    "newestFirst": newest_first,
+                    "firstClick": first_click,
+                    "secondClick": second_click,
+                }
+            )
+        finally:
+            window.destroy()
+
+    webview.start(_drive)
+    settled = outcome.get(timeout=_DRIVE_TIMEOUT_SECONDS)
+
+    assert settled is not None
+    # Default (nothing clicked yet): newest-first.
+    assert settled["newestFirst"][0] >= settled["newestFirst"][1]
+    # First click on "Ended": ascending (oldest-first) -- the reverse.
+    assert settled["firstClick"] == list(reversed(settled["newestFirst"]))
+    # Second click on the same column: descending again.
+    assert settled["secondClick"] == settled["newestFirst"]
+
+
+def test_dragging_a_column_resize_handle_widens_it_for_the_whole_table(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Dragging one column's own resize handle widens that `<col>` --
+    table-wide, since every Study's own column header row and every run
+    row share the identical underlying columns (item 4).
+    """
+    monkeypatch.setattr(paths_module, "results_directory", lambda: tmp_path / "results")
+    _write_run(tmp_path)
+
+    window = create_window(hidden=True)
+    outcome: queue.Queue[dict[str, Any] | None] = queue.Queue(maxsize=1)
+
+    def _drive() -> None:
+        try:
+            _poll_until(window, _INPUT_SCREEN_READY, lambda value: value is True)
+            window.evaluate_js("window.fim.menu.openRun();")
+            _expand_all_recent_run_groups(window)
+            _poll_until(
+                window,
+                f"document.querySelectorAll({_REAL_ROW_SELECTOR}).length",
+                lambda value: value is not None and value == 1,
+            )
+            before = window.evaluate_js(
+                "document.querySelectorAll('colgroup col')[0].style.width"
+            )
+            window.evaluate_js(
+                "(function(){"
+                "var handle = document.querySelector("
+                "'.open-run-column-resize-handle');"
+                "var rect = handle.getBoundingClientRect();"
+                "handle.dispatchEvent(new MouseEvent('mousedown', "
+                "{bubbles: true, clientX: rect.left}));"
+                "document.dispatchEvent(new MouseEvent('mousemove', "
+                "{bubbles: true, clientX: rect.left + 80}));"
+                "document.dispatchEvent(new MouseEvent('mouseup', "
+                "{bubbles: true}));"
+                "})();"
+            )
+            after = window.evaluate_js(
+                "document.querySelectorAll('colgroup col')[0].style.width"
+            )
+            outcome.put({"before": before, "after": after})
+        finally:
+            window.destroy()
+
+    webview.start(_drive)
+    settled = outcome.get(timeout=_DRIVE_TIMEOUT_SECONDS)
+
+    assert settled is not None
+    assert settled["before"] == ""
+    assert settled["after"] != ""
+    assert settled["after"].endswith("px")

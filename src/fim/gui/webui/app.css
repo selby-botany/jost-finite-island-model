@@ -1659,13 +1659,83 @@ fieldset.composite > label {
     text-align: left;
 }
 
-/* A per-date sub-group nested inside a parent bucket (currently only
- * "Earlier", broken down into its own calendar days -- item 3) --
- * indented and de-emphasized relative to its parent's own top-level
- * toggle so the hierarchy reads at a glance without a second column. */
+/* A Study nested inside an Experiment (`renderGroup`'s own `nested`
+ * parameter) -- indented and de-emphasized relative to its own parent
+ * Experiment's top-level toggle so the hierarchy reads at a glance
+ * without a second column. */
 .open-run-group-header-nested .open-run-group-toggle {
     padding-left: 1.5rem;
     font-weight: 600;
+}
+
+/* One column-header step (item 4) and one run-row step (item 2) --
+ * both share this exact value so a run row indents from its own
+ * column header by the identical amount a Study indents from its own
+ * Experiment. `.open-run-nested` adds a second step on top, for a run
+ * (or its own column header) that belongs to a Study nested inside an
+ * Experiment rather than sitting at the top level on its own. */
+.open-run-table tbody tr.open-run-column-header-row th:first-child,
+.open-run-table tbody tr.open-run-run-row td:first-child {
+    padding-left: 1.5rem;
+}
+
+.open-run-table tbody tr.open-run-column-header-row.open-run-nested th:first-child,
+.open-run-table tbody tr.open-run-run-row.open-run-nested td:first-child {
+    padding-left: 3rem;
+}
+
+/* One Study's own column header row (`open-run.js`'s own
+ * `buildColumnHeaderRow`), repeated directly above that Study's own run
+ * rows rather than once for the whole table -- italic, not bold, to
+ * read as a lighter, secondary label repeated many times down a long
+ * page instead of shouting the same six words at equal weight every
+ * time. */
+.open-run-table tbody tr.open-run-column-header-row {
+    cursor: default;
+}
+
+.open-run-table tbody tr.open-run-column-header-row:hover {
+    background: none;
+}
+
+.open-run-table tbody tr.open-run-column-header-row th {
+    position: relative;
+    font-style: italic;
+    font-weight: 400;
+    color: var(--fim-muted);
+}
+
+.open-run-column-sort-button {
+    font: inherit;
+    font-style: inherit;
+    color: inherit;
+    background: none;
+    border: none;
+    cursor: pointer;
+    padding: 0;
+    text-align: left;
+}
+
+.open-run-column-sort-button:hover {
+    color: var(--fim-accent);
+}
+
+/* A thin drag handle along a column header's own right edge (item 4:
+ * "resizable" -- several fields truncate with an ellipsis and no other
+ * way to see the whole cell than the hover tooltip). Widening it only
+ * on hover keeps it from reading as a stray vertical rule the rest of
+ * the time. */
+.open-run-column-resize-handle {
+    position: absolute;
+    top: 0;
+    right: 0;
+    bottom: 0;
+    width: 6px;
+    cursor: col-resize;
+}
+
+.open-run-column-resize-handle:hover {
+    background: var(--fim-accent);
 }
 
 /* Home enrichment (design doc `20260909-claude-sonnet-5-home-
@@ -1674,7 +1744,11 @@ fieldset.composite > label {
  * one line) -- capped and ellipsized rather than forcing the whole
  * table wider or wrapping to several lines per row; the full text is
  * still reachable via the cell's own `title` attribute (`open-run.js`'s
- * own `refreshRecentRuns`), a native hover tooltip, not lost. */
+ * own `refreshRecentRuns`), a native hover tooltip, not lost, and by
+ * widening the column itself (the resize handle, just above).
+ * `max-width` alone would otherwise fight a manually widened `<col>`,
+ * so this only takes effect at the column's own default,
+ * not-yet-resized width. */
 .open-run-summary-cell {
     max-width: 16rem;
     overflow: hidden;

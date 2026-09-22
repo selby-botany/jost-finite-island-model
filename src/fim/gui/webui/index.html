@@ -767,16 +767,27 @@
       </span>
     </div>
     <table class="open-run-table" id="open-run-table">
-      <thead>
-        <tr>
-          <th>Run</th>
-          <th>Ended</th>
-          <th>Outcome</th>
-          <th>Configuration</th>
-          <th>Statistics</th>
-          <th>Actions</th>
-        </tr>
-      </thead>
+      <!-- Six `<col>`s, positionally matching `_RUN_TABLE_COLUMNS`
+           (`screens/open-run.js`) one to one -- no class of their own:
+           a resize handle sets a `<col>`'s own width by its position
+           in this list (`applyColumnWidths`), not by name, so a class
+           here would be inert markup nothing reads. -->
+      <colgroup>
+        <col>
+        <col>
+        <col>
+        <col>
+        <col>
+        <col>
+      </colgroup>
+      <!-- No static `<thead>` -- the column header row (`screens/
+           open-run.js`'s own `buildColumnHeaderRow`) is repeated once
+           per Study, right above that Study's own run rows, rather
+           than once for the whole table: a single header at the very
+           top read as belonging to every Study equally, which stopped
+           being true the moment sorting became per-Study (clicking
+           "Ended" sorts the Study you clicked it under, not every
+           Study at once). -->
       <tbody id="open-run-recent-runs-body"></tbody>
     </table>
     <div class="actions">
