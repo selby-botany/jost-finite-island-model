@@ -67,9 +67,13 @@ class AnimationFrame:
             client-side Canvas draw itself; this module never touches
             either.
         allele_composition: Per-deme stacked allele-composition barplot
-            payload, or ``None`` when unavailable (e.g. pooled batch frames).
+            payload, or ``None`` when unavailable. Populated for batch
+            frames too (pooled across the batch's own replicates), so
+            that scrubbing a completed batch moves every panel rather
+            than the scatter alone.
         frequency_spectrum: Empirical allele-frequency spectrum payload,
-            or ``None`` when unavailable.
+            or ``None`` when unavailable. Pooled for batch frames, as
+            `allele_composition` is.
     """
 
     generation: int

@@ -1701,6 +1701,32 @@ def test_group_rows_by_generation_groups_every_persisted_generation(
 
 Every persisted generation appears, keyed by its own generation number.
 
+<a id="test.test_reanalyze.test_a_rebuilt_convergence_history_matches_the_live_one"></a>
+
+#### test\_a\_rebuilt\_convergence\_history\_matches\_the\_live\_one
+
+```python
+def test_a_rebuilt_convergence_history_matches_the_live_one(
+        tmp_path: Path) -> None
+```
+
+Reopening a run must reconstruct exactly what watching it recorded.
+
+Pooled convergence histories are a byproduct of the live
+`ConvergenceMonitor` and are never persisted, so a reopened batch
+had no trajectory curve at all and the Run card dropped the graph
+from its selector. `replicate_convergence_history` rebuilds it from
+the persisted states -- and "rebuilds" is only worth anything if it
+is the *same* measurement, not a similar-looking second one, so
+this compares every value against the live monitor's own.
+
+Deliberately run with three replicates: at these parameters one of
+them leaves an interior gap in `G_ST` (every tracked locus briefly
+monomorphic), which the reconstruction must reproduce as the same
+short list rather than papering over with a placeholder -- that
+shape is what `pooled_convergence_histories` keys its own
+drop-rather-than-guess rule off.
+
 <a id="test.test_shutdown_diagnostics"></a>
 
 # test.test\_shutdown\_diagnostics
@@ -8210,7 +8236,7 @@ def test_open_batch_matches_a_live_batchs_own_done_payload(
 ```
 
 Reopening a real, persisted batch reproduces `_batch_done_payload`'s
-own shape, minus the convergence-history panel.
+own shape.
 
 `20260919-claude-sonnet-5-unified-batch-and-study-results-reopen-
 design.md` (`selby/restricted`), §1: every field is rebuilt from
@@ -13640,6 +13666,51 @@ bucket it only ever applied to (`20260918-claude-sonnet-5-home-
 tree-reorg-design.md`, `selby/restricted`, §5's own amendment) --
 every run now belongs to some real Study, and a Study's own expanded
 view was never filtered by free text even before that change.
+
+<a id="gui.test_open_run_screen.test_a_reopened_batch_still_offers_its_trajectory_graph"></a>
+
+#### test\_a\_reopened\_batch\_still\_offers\_its\_trajectory\_graph
+
+```python
+def test_a_reopened_batch_still_offers_its_trajectory_graph(
+        tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None
+```
+
+A batch opened from the Home list keeps the trajectory in the selector.
+
+Pooled convergence histories are a byproduct of the live
+`ConvergenceMonitor` and are never written to disk, so a reopened
+batch used to arrive with none -- and since a pooled curve is the
+only trajectory a batch has, `renderBatchTrajectory({})` found zero
+statistic names and hid the pane, taking the entry out of the graph
+selector entirely. Reported directly: "the trajectory graph is
+missing from the pull-down."
+
+`_rebuilt_pooled_histories` now recomputes them from each
+replicate's own persisted states, so this asserts the end of that
+chain -- what the reader can actually choose to look at.
+
+<a id="gui.test_open_run_screen.test_reopening_shows_a_busy_indicator_while_the_bridge_call_runs"></a>
+
+#### test\_reopening\_shows\_a\_busy\_indicator\_while\_the\_bridge\_call\_runs
+
+```python
+def test_reopening_shows_a_busy_indicator_while_the_bridge_call_runs(
+        tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None
+```
+
+Opening a batch puts a spinner up for as long as the work takes.
+
+Reopening is no longer a lookup: every member replicate's own
+trajectory is re-read and its convergence history recomputed
+(`Api._rebuilt_pooled_histories`), which on a large batch runs for
+seconds with nothing else on screen to say so.
+
+Observed by standing in for the bridge call itself and recording
+the indicator's own visibility at the moment it is entered -- a
+real reopen of a test-sized batch finishes far too quickly to
+catch by polling, which would make the test a race rather than a
+measurement.
 
 <a id="gui.test_p0_grid_screen"></a>
 

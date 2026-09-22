@@ -1962,7 +1962,7 @@ def test_open_batch_matches_a_live_batchs_own_done_payload(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """Reopening a real, persisted batch reproduces `_batch_done_payload`'s
-    own shape, minus the convergence-history panel.
+    own shape.
 
     `20260919-claude-sonnet-5-unified-batch-and-study-results-reopen-
     design.md` (`selby/restricted`), §1: every field is rebuilt from
@@ -1994,10 +1994,24 @@ def test_open_batch_matches_a_live_batchs_own_done_payload(
     assert set(p0) == set(app_module._RESULT_STATISTIC_NAMES)
     assert isinstance(result["panels"], list)
     assert len(result["panels"]) > 0
-    # The one field a reopened batch cannot reconstruct -- matches a
-    # reopened *scalar* run's own already-shipped "no history panel"
-    # precedent (`Api.open_run`), not a new, batch-specific gap.
-    assert result["pooledConvergenceHistories"] == {}
+    # Pooled histories are never persisted -- they are recomputed from
+    # each replicate's own stored states (`replicate_convergence_
+    # history`), because without them a reopened batch had no
+    # trajectory curve at all and the Run card dropped the graph from
+    # its selector outright.
+    histories = result["pooledConvergenceHistories"]
+    assert isinstance(histories, dict)
+    assert set(histories) >= {"D", "G_ST", "H_S", "H_T"}
+    for points in histories.values():
+        assert points
+        for point in points:
+            assert set(point) == {
+                "generation",
+                "mean",
+                "low",
+                "high",
+                "sampleCount",
+            }
 
 
 def test_open_batch_reports_a_missing_manifest(tmp_path: Path) -> None:

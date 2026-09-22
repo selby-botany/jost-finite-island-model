@@ -18,7 +18,7 @@ from pathlib import Path
 import pytest
 import yaml
 
-from fim import cli, reanalyze
+from fim import cli, engine, reanalyze
 from fim.persistence.jsonl_store import JSONLTrajectoryStore
 from fim.persistence.manifest import hash_file, read_manifest, write_manifest
 
@@ -333,3 +333,71 @@ def test_group_rows_by_generation_groups_every_persisted_generation(
         for generation, rows in grouped.items()
         for row in rows
     )
+
+
+def test_a_rebuilt_convergence_history_matches_the_live_one(tmp_path: Path) -> None:
+    """Reopening a run must reconstruct exactly what watching it recorded.
+
+    Pooled convergence histories are a byproduct of the live
+    `ConvergenceMonitor` and are never persisted, so a reopened batch
+    had no trajectory curve at all and the Run card dropped the graph
+    from its selector. `replicate_convergence_history` rebuilds it from
+    the persisted states -- and "rebuilds" is only worth anything if it
+    is the *same* measurement, not a similar-looking second one, so
+    this compares every value against the live monitor's own.
+
+    Deliberately run with three replicates: at these parameters one of
+    them leaves an interior gap in `G_ST` (every tracked locus briefly
+    monomorphic), which the reconstruction must reproduce as the same
+    short list rather than papering over with a placeholder -- that
+    shape is what `pooled_convergence_histories` keys its own
+    drop-rather-than-guess rule off.
+    """
+    config = {
+        "N": 20,
+        "d": 2,
+        "m": 0.1,
+        "mu": 0.01,
+        "seed": 7,
+        "loci": [{"locus_id": 1, "length": 200}],
+        "convergence_window": 4,
+        "convergence_tolerance": 0.02,
+        "max_generations": 20,
+        "n_replicates": 3,
+        "replicate_tolerance": None,
+    }
+    config_path = tmp_path / "batch.yaml"
+    config_path.write_text(yaml.safe_dump(config, sort_keys=False), encoding="utf-8")
+    params = cli.load_config(config_path)
+
+    trajectory_paths: dict[str, Path] = {}
+
+    def _store_factory(run_id: str) -> JSONLTrajectoryStore:
+        path = tmp_path / f"{run_id}.jsonl"
+        trajectory_paths[run_id] = path
+        return JSONLTrajectoryStore(path)
+
+    results = engine.fim(
+        params.N,
+        params.m,
+        params.mu,
+        params.d,
+        params=params,
+        store_factory=_store_factory,
+    )
+    # Three replicates, so `fim` returns the batch tuple rather than a
+    # lone `RunResult` -- narrowed for the type checker, not defensive.
+    assert isinstance(results, tuple)
+
+    saw_an_interior_gap = False
+    for result in results:
+        generations, histories = reanalyze.replicate_convergence_history(
+            trajectory_paths[result.run_id], result.run_id, params
+        )
+        assert tuple(generations) == tuple(result.convergence_generations)
+        assert set(histories) == set(result.convergence_histories)
+        for name, live_values in result.convergence_histories.items():
+            assert histories[name] == pytest.approx(list(live_values))
+            if len(live_values) != len(generations):
+                saw_an_interior_gap = True
+    assert saw_an_interior_gap, "fixture no longer exercises the interior-gap shape"

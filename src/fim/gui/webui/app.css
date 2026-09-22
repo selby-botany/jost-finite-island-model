@@ -2352,3 +2352,59 @@ fieldset.composite > label {
     height: auto;
     max-height: none;
 }
+
+/* The reopen busy indicator (`#open-run-busy`). Reopening a large
+   batch or Study re-reads every member replicate's own trajectory and
+   recomputes its convergence history, which takes long enough to look
+   like nothing happened. */
+.open-run-busy {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.5rem 0.75rem;
+    margin-bottom: 1rem;
+    border: 1px solid #b8c4d0;
+    border-radius: 4px;
+    background: #eef3f8;
+    color: #2c3e50;
+}
+
+.open-run-busy[hidden] {
+    display: none;
+}
+
+.open-run-busy-spinner {
+    width: 1rem;
+    height: 1rem;
+    border: 2px solid #b8c4d0;
+    border-top-color: #2c3e50;
+    border-radius: 50%;
+    animation: open-run-busy-spin 0.8s linear infinite;
+}
+
+@keyframes open-run-busy-spin {
+    to {
+        transform: rotate(360deg);
+    }
+}
+
+/* Honor a reader who has asked for less motion: the indicator still
+   appears and still says what is happening, it just stops spinning. */
+@media (prefers-reduced-motion: reduce) {
+    .open-run-busy-spinner {
+        animation: none;
+    }
+}
+
+@media (prefers-color-scheme: dark) {
+    .open-run-busy {
+        background: #1f2a33;
+        color: #d6e2ee;
+        border-color: #3d4c5a;
+    }
+
+    .open-run-busy-spinner {
+        border-color: #3d4c5a;
+        border-top-color: #d6e2ee;
+    }
+}

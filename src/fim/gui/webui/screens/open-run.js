@@ -1553,6 +1553,39 @@ browseButton.addEventListener("click", async () => {
 });
 
 /**
+ * Run `work` with this screen's own busy indicator up.
+ *
+ * Reopening is not instant: `Api.open_batch`/`open_study` re-read
+ * every member replicate's own trajectory from disk and recompute its
+ * convergence history (`_rebuilt_pooled_histories`), which on a large
+ * batch takes long enough that the window would otherwise sit
+ * motionless with no sign the click was heard at all.
+ *
+ * The indicator is cleared in a `finally` so a failed open leaves the
+ * screen usable rather than permanently "opening" -- the failure
+ * itself is still reported the way it always was, by each caller's own
+ * banner.
+ * @param {string} label What is being opened, shown beside the spinner
+ * @param {() => Promise<void>} work
+ * @returns {Promise<void>}
+ */
+async function withOpenRunBusy(label, work) {
+    const busy = document.getElementById("open-run-busy");
+    const busyLabel = document.getElementById("open-run-busy-label");
+    if (busy !== null && busyLabel !== null) {
+        busyLabel.textContent = label;
+        busy.hidden = false;
+    }
+    try {
+        await work();
+    } finally {
+        if (busy !== null) {
+            busy.hidden = true;
+        }
+    }
+}
+
+/**
  * Open `trajectoryPath` at its final generation, no differentiation-q
  * sweep, landing on the unified run view's own `completed` state --
  * the one operation both the "Open" button and a run row's own
@@ -1568,14 +1601,16 @@ browseButton.addEventListener("click", async () => {
  * @returns {Promise<void>}
  */
 async function openTrajectory(trajectoryPath) {
-    const result = await window.pywebview.api.open_run({ trajectoryPath });
-    if (!result.ok) {
-        showOpenRunBanner(result.message);
-        return;
-    }
-    showOpenRunBanner("");
-    window.fim.resetTrajectoryLegendVisibility();
-    window.fim.enterCompletedState(result, false);
+    await withOpenRunBusy("Opening run\u2026", async () => {
+        const result = await window.pywebview.api.open_run({ trajectoryPath });
+        if (!result.ok) {
+            showOpenRunBanner(result.message);
+            return;
+        }
+        showOpenRunBanner("");
+        window.fim.resetTrajectoryLegendVisibility();
+        window.fim.enterCompletedState(result, false);
+    });
 }
 
 /**
@@ -1589,14 +1624,16 @@ async function openTrajectory(trajectoryPath) {
  * @param {string} directory
  */
 async function openBatch(directory) {
-    const result = await window.pywebview.api.open_batch(directory);
-    if (!result.ok) {
-        showOpenRunBanner(result.message);
-        return;
-    }
-    showOpenRunBanner("");
-    window.fim.resetTrajectoryLegendVisibility();
-    window.fim.enterCompletedState(result, true);
+    await withOpenRunBusy("Opening batch\u2026", async () => {
+        const result = await window.pywebview.api.open_batch(directory);
+        if (!result.ok) {
+            showOpenRunBanner(result.message);
+            return;
+        }
+        showOpenRunBanner("");
+        window.fim.resetTrajectoryLegendVisibility();
+        window.fim.enterCompletedState(result, true);
+    });
 }
 
 /**
@@ -1612,14 +1649,16 @@ async function openBatch(directory) {
  * @param {string} studyId
  */
 async function openStudy(studyId) {
-    const result = await window.pywebview.api.open_study(studyId);
-    if (!result.ok) {
-        showOpenRunBanner(result.message);
-        return;
-    }
-    showOpenRunBanner("");
-    window.fim.resetTrajectoryLegendVisibility();
-    window.fim.enterCompletedState(result, true);
+    await withOpenRunBusy("Opening study\u2026", async () => {
+        const result = await window.pywebview.api.open_study(studyId);
+        if (!result.ok) {
+            showOpenRunBanner(result.message);
+            return;
+        }
+        showOpenRunBanner("");
+        window.fim.resetTrajectoryLegendVisibility();
+        window.fim.enterCompletedState(result, true);
+    });
 }
 
 /**

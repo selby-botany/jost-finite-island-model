@@ -1286,3 +1286,138 @@ def test_recent_runs_filter_narrows_the_visible_rows_and_updates_the_count(
     assert settled is not None
     assert settled["rowCount"] == 1
     assert settled["countText"] == "1 of 2 runs"
+
+
+def test_a_reopened_batch_still_offers_its_trajectory_graph(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A batch opened from the Home list keeps the trajectory in the selector.
+
+    Pooled convergence histories are a byproduct of the live
+    `ConvergenceMonitor` and are never written to disk, so a reopened
+    batch used to arrive with none -- and since a pooled curve is the
+    only trajectory a batch has, `renderBatchTrajectory({})` found zero
+    statistic names and hid the pane, taking the entry out of the graph
+    selector entirely. Reported directly: "the trajectory graph is
+    missing from the pull-down."
+
+    `_rebuilt_pooled_histories` now recomputes them from each
+    replicate's own persisted states, so this asserts the end of that
+    chain -- what the reader can actually choose to look at.
+    """
+    monkeypatch.setattr(paths_module, "results_directory", lambda: tmp_path / "results")
+    _write_batch_run(tmp_path)
+
+    window = create_window(hidden=True)
+    outcome: queue.Queue[dict[str, Any] | None] = queue.Queue(maxsize=1)
+
+    def _drive() -> None:
+        try:
+            _poll_until(window, _INPUT_SCREEN_READY, lambda value: value is True)
+            window.evaluate_js("window.fim.menu.openRun();")
+            _expand_all_recent_run_groups(window)
+            _poll_until(
+                window,
+                f"document.querySelectorAll({_REAL_ROW_SELECTOR}).length",
+                lambda value: value is not None and value > 0,
+            )
+            window.evaluate_js(
+                f"document.querySelector({_REAL_ROW_SELECTOR})"
+                ".dispatchEvent(new MouseEvent("
+                "'dblclick', {bubbles: true}));"
+            )
+            settled = _poll_until(
+                window,
+                "({"
+                "runViewState: window.fim.getRunViewState(), "
+                "graphKeys: Array.from(document.getElementById("
+                "'run-graph-select').options).map((option) => option.value)"
+                "})",
+                lambda value: (
+                    value is not None and value.get("runViewState") == "completed"
+                ),
+            )
+            outcome.put(settled)
+        finally:
+            window.destroy()
+
+    webview.start(_drive)
+    settled = outcome.get(timeout=_DRIVE_TIMEOUT_SECONDS)
+
+    assert settled is not None, "`completed` was never reached after double-clicking"
+    assert "trajectory" in settled["graphKeys"]
+
+
+def test_reopening_shows_a_busy_indicator_while_the_bridge_call_runs(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Opening a batch puts a spinner up for as long as the work takes.
+
+    Reopening is no longer a lookup: every member replicate's own
+    trajectory is re-read and its convergence history recomputed
+    (`Api._rebuilt_pooled_histories`), which on a large batch runs for
+    seconds with nothing else on screen to say so.
+
+    Observed by standing in for the bridge call itself and recording
+    the indicator's own visibility at the moment it is entered -- a
+    real reopen of a test-sized batch finishes far too quickly to
+    catch by polling, which would make the test a race rather than a
+    measurement.
+    """
+    monkeypatch.setattr(paths_module, "results_directory", lambda: tmp_path / "results")
+    _write_batch_run(tmp_path)
+
+    window = create_window(hidden=True)
+    outcome: queue.Queue[dict[str, Any] | None] = queue.Queue(maxsize=1)
+
+    def _drive() -> None:
+        try:
+            _poll_until(window, _INPUT_SCREEN_READY, lambda value: value is True)
+            window.evaluate_js("window.fim.menu.openRun();")
+            _expand_all_recent_run_groups(window)
+            _poll_until(
+                window,
+                f"document.querySelectorAll({_REAL_ROW_SELECTOR}).length",
+                lambda value: value is not None and value > 0,
+            )
+            window.evaluate_js(
+                "window.__fimBusyProbe = null;"
+                "window.pywebview.api.open_batch = function () {"
+                "  const busy = document.getElementById('open-run-busy');"
+                "  window.__fimBusyProbe = {"
+                "    hiddenDuring: busy.hidden,"
+                "    label: document.getElementById("
+                "      'open-run-busy-label').textContent"
+                "  };"
+                "  return Promise.resolve({ok: false, message: 'stubbed'});"
+                "};"
+            )
+            window.evaluate_js(
+                f"document.querySelector({_REAL_ROW_SELECTOR})"
+                ".dispatchEvent(new MouseEvent("
+                "'dblclick', {bubbles: true}));"
+            )
+            settled = _poll_until(
+                window,
+                "(window.__fimBusyProbe === null ? null : {"
+                "hiddenDuring: window.__fimBusyProbe.hiddenDuring, "
+                "label: window.__fimBusyProbe.label, "
+                "hiddenAfter: document.getElementById('open-run-busy').hidden"
+                "})",
+                lambda value: value is not None and value.get("hiddenAfter") is True,
+            )
+            outcome.put(settled)
+        finally:
+            window.destroy()
+
+    webview.start(_drive)
+    settled = outcome.get(timeout=_DRIVE_TIMEOUT_SECONDS)
+
+    assert settled is not None, "the reopen bridge call was never reached"
+    assert settled["hiddenDuring"] is False
+    assert settled["label"] == "Opening batch\u2026"
+    # Cleared on the failure path too, so a failed open leaves the
+    # screen usable rather than permanently "opening".
+    assert settled["hiddenAfter"] is True

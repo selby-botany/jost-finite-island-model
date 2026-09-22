@@ -660,6 +660,16 @@
 
   <section id="screen-open-run" class="screen">
     <div id="open-run-banner" class="banner" hidden></div>
+    <!-- Shown while a reopen is in flight. Reopening a large batch or
+         Study is measurably multi-second: every member replicate's own
+         trajectory is re-read from disk and its convergence history
+         recomputed (`Api._rebuilt_pooled_histories`), so without this
+         the window simply sits still with no sign it heard the click. -->
+    <div id="open-run-busy" class="open-run-busy" hidden role="status"
+         aria-live="polite">
+      <span class="open-run-busy-spinner" aria-hidden="true"></span>
+      <span id="open-run-busy-label"></span>
+    </div>
     <header class="home-identity">
       <img
         src="assets/selby-orchid-logo.jpeg"

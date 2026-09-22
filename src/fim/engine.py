@@ -2502,10 +2502,46 @@ def pooled_convergence_histories(
             `replicate_summary` already applies to its own single-value
             case.
     """
-    if len(results) < _MINIMUM_REPLICATE_SUMMARY_COUNT:
+    return pooled_convergence_histories_from_pairs(
+        [
+            (result.convergence_generations, result.convergence_histories)
+            for result in results
+        ],
+        confidence=confidence,
+    )
+
+
+def pooled_convergence_histories_from_pairs(
+    histories: Sequence[tuple[Sequence[int], Mapping[str, Sequence[float]]]],
+    *,
+    confidence: float = 0.95,
+) -> dict[str, tuple[dict[str, float], ...]]:
+    """`pooled_convergence_histories`'s own core, over bare history pairs.
+
+    Identical semantics -- see that function's own docstring for every
+    rule this applies, none of which differ here. Split out because a
+    reopened batch has no `RunResult` objects to hand: its replicates'
+    histories are rebuilt from their persisted trajectories
+    (`fim.reanalyze.replicate_convergence_history`), which produces
+    exactly this pair and nothing else a `RunResult` would carry.
+
+    Args:
+        histories: One `(generations, {name: values})` pair per
+            replicate, each pair shaped exactly like `RunResult.
+            convergence_generations`/`convergence_histories`.
+        confidence: Two-tailed confidence level; see
+            `fim.statistics.interval.confidence_interval`.
+
+    Returns:
+        The identical shape `pooled_convergence_histories` returns.
+
+    Raises:
+        ValueError: If fewer than two replicates are supplied.
+    """
+    if len(histories) < _MINIMUM_REPLICATE_SUMMARY_COUNT:
         raise ValueError("pooled_convergence_histories requires at least two results")
     statistic_names = sorted(
-        {name for result in results for name in result.convergence_histories}
+        {name for _, replicate_histories in histories for name in replicate_histories}
     )
     # Built once per replicate, not re-scanned per generation: an O(1)
     # generation -> value lookup per statistic, plus that same
@@ -2518,23 +2554,19 @@ def pooled_convergence_histories(
     # "drop rather than guess" choice that same docstring explains.
     per_replicate_lookup: list[dict[str, dict[int, float]]] = []
     per_replicate_last_value: list[dict[str, float]] = []
-    for result in results:
+    for generations, replicate_histories in histories:
         lookup: dict[str, dict[int, float]] = {}
         last_value: dict[str, float] = {}
-        for name, values in result.convergence_histories.items():
-            if len(values) != len(result.convergence_generations):
+        for name, values in replicate_histories.items():
+            if len(values) != len(generations):
                 continue
-            by_generation = dict(
-                zip(result.convergence_generations, values, strict=True)
-            )
+            by_generation = dict(zip(generations, values, strict=True))
             lookup[name] = by_generation
             last_value[name] = by_generation[max(by_generation)]
         per_replicate_lookup.append(lookup)
         per_replicate_last_value.append(last_value)
     max_generation = max(
-        generation
-        for result in results
-        for generation in result.convergence_generations
+        generation for generations, _ in histories for generation in generations
     )
     pooled: dict[str, list[dict[str, float]]] = {name: [] for name in statistic_names}
     for generation in range(max_generation + 1):
@@ -3502,6 +3534,37 @@ def _convergence_values(
         for locus_index in range(state.locus_count)
     )
     return _watched_statistic_values(locus_reports, params, deme_count=state.deme_count)
+
+
+def tracked_statistic_values(
+    state: ModelState,
+    params: SimulationParams,
+) -> dict[str, float]:
+    """Return one state's tracked statistic values, as a live run records them.
+
+    The public entry point to `_convergence_values`, for callers
+    rebuilding a convergence history from a persisted trajectory rather
+    than watching one being produced (`fim.reanalyze.replicate_
+    convergence_history`). Sharing the private function outright, rather
+    than reimplementing the same aggregation, is the point: a
+    reconstructed history has to be comparable with a live one, and two
+    separate implementations of "which statistics, aggregated how"
+    would diverge the first time either changed.
+
+    Args:
+        state: The population state to summarize.
+        params: The run's own validated parameters -- `convergence_
+            statistics`/`track_expensive_statistics` decide which names
+            beyond `_ALWAYS_TRACKED_STATISTICS` are computed at all.
+
+    Returns:
+        Every currently-defined tracked statistic's value, keyed by
+        name. A statistic that is undefined for this state (`G_ST` when
+        every tracked locus is monomorphic, say) is absent rather than
+        present as a placeholder, matching what the live monitor
+        records for that same generation.
+    """
+    return _convergence_values(state, params)
 
 
 def _convergence_values_vectorized(

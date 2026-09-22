@@ -29,7 +29,7 @@ from collections.abc import Sequence
 from dataclasses import dataclass
 from pathlib import Path
 
-from fim.engine import report_for_state
+from fim.engine import report_for_state, tracked_statistic_values
 from fim.model.params import SimulationParams
 from fim.model.state import ModelState
 from fim.persistence.jsonl_store import JSONLTrajectoryStore
@@ -322,3 +322,56 @@ def reanalyze_trajectory(
     return ReanalyzedGeneration(
         manifest=manifest, params=params, state=state, report=report
     )
+
+
+def replicate_convergence_history(
+    trajectory_path: Path,
+    run_id: str,
+    params: SimulationParams,
+) -> tuple[tuple[int, ...], dict[str, list[float]]]:
+    """Rebuild one replicate's per-generation statistic history from disk.
+
+    A live run records this as a byproduct of its own
+    `ConvergenceMonitor`; nothing writes it to disk. A run reopened
+    later therefore had no trajectory curve to draw at all -- for a
+    reopened *batch*, where the pooled curve is the only trajectory
+    there is, that meant the graph simply vanished from the Run card's
+    own selector, reported directly as "the trajectory graph is missing
+    from the pull-down".
+
+    Recomputes it instead, from the states the trajectory does persist,
+    through `fim.engine.tracked_statistic_values` -- the identical
+    function the live monitor is fed from, so a reopened run's curve
+    and a live one's are the same measurement rather than two
+    independently plausible ones.
+
+    Args:
+        trajectory_path: The replicate's own `trajectory.jsonl`.
+        run_id: The run identity every row must belong to (a batch
+            replicate's own id, not the batch's).
+        params: That run's own validated parameters.
+
+    Returns:
+        `(generations, {name: values})`, shaped exactly like
+        `RunResult.convergence_generations`/`convergence_histories` and
+        directly poolable by `fim.engine.pooled_convergence_histories_
+        from_pairs`. A statistic undefined for some generations appears
+        with a shorter `values` list than `generations`, which is the
+        same shape a live run produces for an interior gap and is
+        handled identically by the pooling (dropped rather than
+        guessed at). Empty if the trajectory holds nothing.
+    """
+    grouped = group_rows_by_generation(trajectory_path, run_id)
+    generations = tuple(sorted(grouped))
+    histories: dict[str, list[float]] = {}
+    for generation in generations:
+        state = ModelState.from_rows(grouped[generation], params.loci)
+        for name, value in tracked_statistic_values(state, params).items():
+            histories.setdefault(name, []).append(value)
+    logger.debug(
+        "rebuilt %d generation(s) of convergence history for %s from %s",
+        len(generations),
+        run_id,
+        trajectory_path,
+    )
+    return generations, histories

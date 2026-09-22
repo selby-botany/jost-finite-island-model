@@ -63,7 +63,9 @@ Return to the [source-tree orientation](../README.md) or the [developer guide](.
   * [reports\_summary](#fim.engine.reports_summary)
   * [replicate\_summary](#fim.engine.replicate_summary)
   * [pooled\_convergence\_histories](#fim.engine.pooled_convergence_histories)
+  * [pooled\_convergence\_histories\_from\_pairs](#fim.engine.pooled_convergence_histories_from_pairs)
   * [bootstrap\_replicate\_summary](#fim.engine.bootstrap_replicate_summary)
+  * [tracked\_statistic\_values](#fim.engine.tracked_statistic_values)
 * [fim.gui](#fim.gui)
 * [fim.gui.animation](#fim.gui.animation)
   * [AnimationFrame](#fim.gui.animation.AnimationFrame)
@@ -451,6 +453,7 @@ Return to the [source-tree orientation](../README.md) or the [developer guide](.
   * [differentiation\_q\_for\_state](#fim.reanalyze.differentiation_q_for_state)
   * [group\_rows\_by\_generation](#fim.reanalyze.group_rows_by_generation)
   * [reanalyze\_trajectory](#fim.reanalyze.reanalyze_trajectory)
+  * [replicate\_convergence\_history](#fim.reanalyze.replicate_convergence_history)
 * [fim.statistics](#fim.statistics)
 * [fim.statistics.differentiation](#fim.statistics.differentiation)
   * [DifferentiationReport](#fim.statistics.differentiation.DifferentiationReport)
@@ -2736,6 +2739,45 @@ future version place these correctly instead of dropping them.
   `replicate_summary` already applies to its own single-value
   case.
 
+<a id="fim.engine.pooled_convergence_histories_from_pairs"></a>
+
+#### pooled\_convergence\_histories\_from\_pairs
+
+```python
+def pooled_convergence_histories_from_pairs(
+        histories: Sequence[tuple[Sequence[int], Mapping[str,
+                                                         Sequence[float]]]],
+        *,
+        confidence: float = 0.95) -> dict[str, tuple[dict[str, float], ...]]
+```
+
+`pooled_convergence_histories`'s own core, over bare history pairs.
+
+Identical semantics -- see that function's own docstring for every
+rule this applies, none of which differ here. Split out because a
+reopened batch has no `RunResult` objects to hand: its replicates'
+histories are rebuilt from their persisted trajectories
+(`fim.reanalyze.replicate_convergence_history`), which produces
+exactly this pair and nothing else a `RunResult` would carry.
+
+**Arguments**:
+
+- `histories` - One `(generations, {name: values})` pair per
+  replicate, each pair shaped exactly like `RunResult.
+  convergence_generations`/`convergence_histories`.
+- `confidence` - Two-tailed confidence level; see
+  `fim.statistics.interval.confidence_interval`.
+
+
+**Returns**:
+
+  The identical shape `pooled_convergence_histories` returns.
+
+
+**Raises**:
+
+- `ValueError` - If fewer than two replicates are supplied.
+
 <a id="fim.engine.bootstrap_replicate_summary"></a>
 
 #### bootstrap\_replicate\_summary
@@ -2809,6 +2851,42 @@ fundamentally different treatment, not as a general replacement.
 - `ValueError` - If fewer than two results are supplied, `confidence`
   is not in `(0, 1)`, or `bootstrap_samples` is not positive.
 
+<a id="fim.engine.tracked_statistic_values"></a>
+
+#### tracked\_statistic\_values
+
+```python
+def tracked_statistic_values(state: ModelState,
+                             params: SimulationParams) -> dict[str, float]
+```
+
+Return one state's tracked statistic values, as a live run records them.
+
+The public entry point to `_convergence_values`, for callers
+rebuilding a convergence history from a persisted trajectory rather
+than watching one being produced (`fim.reanalyze.replicate_
+convergence_history`). Sharing the private function outright, rather
+than reimplementing the same aggregation, is the point: a
+reconstructed history has to be comparable with a live one, and two
+separate implementations of "which statistics, aggregated how"
+would diverge the first time either changed.
+
+**Arguments**:
+
+- `state` - The population state to summarize.
+- `params` - The run's own validated parameters -- `convergence_
+  statistics`/`track_expensive_statistics` decide which names
+  beyond `_ALWAYS_TRACKED_STATISTICS` are computed at all.
+
+
+**Returns**:
+
+  Every currently-defined tracked statistic's value, keyed by
+  name. A statistic that is undefined for this state (`G_ST` when
+  every tracked locus is monomorphic, say) is absent rather than
+  present as a placeholder, matching what the live monitor
+  records for that same generation.
+
 <a id="fim.gui"></a>
 
 # fim.gui
@@ -2880,9 +2958,13 @@ One sampled animation frame's raw scatter coordinates and supplemental payloads.
   client-side Canvas draw itself; this module never touches
   either.
 - `allele_composition` - Per-deme stacked allele-composition barplot
-  payload, or ``None`` when unavailable (e.g. pooled batch frames).
+  payload, or ``None`` when unavailable. Populated for batch
+  frames too (pooled across the batch's own replicates), so
+  that scrubbing a completed batch moves every panel rather
+  than the scatter alone.
 - `frequency_spectrum` - Empirical allele-frequency spectrum payload,
-  or ``None`` when unavailable.
+  or ``None`` when unavailable. Pooled for batch frames, as
+  `allele_composition` is.
 
 <a id="fim.gui.animation.pre_render_frames"></a>
 
@@ -4826,15 +4908,22 @@ never from a possibly-stale `report.json`/`summary.json` --
 this gets the identical tamper/corruption check a scalar reopen
 already has, for free, once per replicate.
 
-The one field a live batch's own "done" payload carries that
-this cannot reconstruct is `pooledConvergenceHistories`: a
-byproduct of a live run's own `ConvergenceMonitor`, computed
-nowhere else and not persisted anywhere on disk. Reported here
-as an empty `{}`, exactly matching `open_run`'s own already-
-shipped precedent of a reopened *scalar* run carrying no
-`convergenceGenerations`/`convergenceHistories` either --
-"opened" has shown less than "just finished" since before this
-method existed, not a new, batch-specific compromise.
+`pooledConvergenceHistories` is a byproduct of a live run's own
+`ConvergenceMonitor` and is not persisted anywhere on disk, so
+it is recomputed here rather than read: each replicate's own
+history is rebuilt from its stored states and the results
+pooled by the same function the live path uses (`_rebuilt_
+pooled_histories`). Reported as an empty `{}` only when that
+genuinely cannot be done -- fewer than two readable replicates,
+or an unreadable trajectory.
+
+This used to be reported as `{}` unconditionally, and because
+a pooled curve is the only trajectory a batch has, the Run
+card's own graph selector dropped the trajectory entry
+outright for every reopened batch. Reconstructing it is
+measurably multi-second on a large batch, which is what the
+Home screen's own reopen spinner (`open-run.js`'s own
+`withOpenRunBusy`) exists to cover.
 
 **Arguments**:
 
@@ -13777,6 +13866,51 @@ generation's own report.
 - `ValueError` - If the trajectory has been edited, truncated, or
   replaced since the run completed, has no rows, or the
   requested generation does not exist.
+
+<a id="fim.reanalyze.replicate_convergence_history"></a>
+
+#### replicate\_convergence\_history
+
+```python
+def replicate_convergence_history(
+    trajectory_path: Path, run_id: str, params: SimulationParams
+) -> tuple[tuple[int, ...], dict[str, list[float]]]
+```
+
+Rebuild one replicate's per-generation statistic history from disk.
+
+A live run records this as a byproduct of its own
+`ConvergenceMonitor`; nothing writes it to disk. A run reopened
+later therefore had no trajectory curve to draw at all -- for a
+reopened *batch*, where the pooled curve is the only trajectory
+there is, that meant the graph simply vanished from the Run card's
+own selector, reported directly as "the trajectory graph is missing
+from the pull-down".
+
+Recomputes it instead, from the states the trajectory does persist,
+through `fim.engine.tracked_statistic_values` -- the identical
+function the live monitor is fed from, so a reopened run's curve
+and a live one's are the same measurement rather than two
+independently plausible ones.
+
+**Arguments**:
+
+- `trajectory_path` - The replicate's own `trajectory.jsonl`.
+- `run_id` - The run identity every row must belong to (a batch
+  replicate's own id, not the batch's).
+- `params` - That run's own validated parameters.
+
+
+**Returns**:
+
+  `(generations, {name: values})`, shaped exactly like
+  `RunResult.convergence_generations`/`convergence_histories` and
+  directly poolable by `fim.engine.pooled_convergence_histories_
+  from_pairs`. A statistic undefined for some generations appears
+  with a shorter `values` list than `generations`, which is the
+  same shape a live run produces for an interior gap and is
+  handled identically by the pooling (dropped rather than
+  guessed at). Empty if the trajectory holds nothing.
 
 <a id="fim.statistics"></a>
 

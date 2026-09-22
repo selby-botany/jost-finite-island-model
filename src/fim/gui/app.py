@@ -68,6 +68,7 @@ from fim.engine import (
     RunResult,
     deterministic_run_id,
     pooled_convergence_histories,
+    pooled_convergence_histories_from_pairs,
     report_for_state,
     reports_summary,
 )
@@ -103,7 +104,7 @@ from fim.model.state import ModelState
 from fim.persistence import groups
 from fim.persistence.manifest import RunManifest, read_batch_manifest, read_manifest
 from fim.persistence.run_metadata import run_metadata_path
-from fim.reanalyze import reanalyze_trajectory
+from fim.reanalyze import reanalyze_trajectory, replicate_convergence_history
 from fim.statistics import (
     effective_allele_count,
     equilibrium_d,
@@ -3479,15 +3480,22 @@ class Api:
         this gets the identical tamper/corruption check a scalar reopen
         already has, for free, once per replicate.
 
-        The one field a live batch's own "done" payload carries that
-        this cannot reconstruct is `pooledConvergenceHistories`: a
-        byproduct of a live run's own `ConvergenceMonitor`, computed
-        nowhere else and not persisted anywhere on disk. Reported here
-        as an empty `{}`, exactly matching `open_run`'s own already-
-        shipped precedent of a reopened *scalar* run carrying no
-        `convergenceGenerations`/`convergenceHistories` either --
-        "opened" has shown less than "just finished" since before this
-        method existed, not a new, batch-specific compromise.
+        `pooledConvergenceHistories` is a byproduct of a live run's own
+        `ConvergenceMonitor` and is not persisted anywhere on disk, so
+        it is recomputed here rather than read: each replicate's own
+        history is rebuilt from its stored states and the results
+        pooled by the same function the live path uses (`_rebuilt_
+        pooled_histories`). Reported as an empty `{}` only when that
+        genuinely cannot be done -- fewer than two readable replicates,
+        or an unreadable trajectory.
+
+        This used to be reported as `{}` unconditionally, and because
+        a pooled curve is the only trajectory a batch has, the Run
+        card's own graph selector dropped the trajectory entry
+        outright for every reopened batch. Reconstructing it is
+        measurably multi-second on a large batch, which is what the
+        Home screen's own reopen spinner (`open-run.js`'s own
+        `withOpenRunBusy`) exists to cover.
 
         Args:
             directory: The batch's own top-level output directory
@@ -3542,7 +3550,12 @@ class Api:
             final_states=final_states,
             trajectory_paths=trajectory_paths,
             digits=self._significant_digits,
-            pooled_convergence_histories_payload={},
+            pooled_convergence_histories_payload=_rebuilt_pooled_histories(
+                manifest.replicate_run_ids,
+                trajectory_paths,
+                [params] * len(trajectory_paths),
+                self._significant_digits,
+            ),
         )
         return {"ok": True, **payload}
 
@@ -3652,7 +3665,9 @@ class Api:
             final_states=final_states,
             trajectory_paths=trajectory_paths,
             digits=self._significant_digits,
-            pooled_convergence_histories_payload={},
+            pooled_convergence_histories_payload=_rebuilt_pooled_histories(
+                replicate_ids, trajectory_paths, params_list, self._significant_digits
+            ),
         )
         result = {"ok": True, **payload}
         mismatches = _study_parameter_mismatches(params_list)
@@ -4783,19 +4798,9 @@ def _batch_done_payload(
         raw_pooled_histories = pooled_convergence_histories(results)
     except ValueError:
         raw_pooled_histories = {}
-    pooled_convergence_histories_payload = {
-        name: [
-            {
-                "generation": point["generation"],
-                "mean": format_statistic(point["mean"], digits),
-                "low": format_statistic(point["low"], digits),
-                "high": format_statistic(point["high"], digits),
-                "sampleCount": point["sample_count"],
-            }
-            for point in points
-        ]
-        for name, points in raw_pooled_histories.items()
-    }
+    pooled_convergence_histories_payload = _pooled_histories_payload(
+        raw_pooled_histories, digits
+    )
     return _pooled_batch_payload(
         params,
         run_id,
@@ -4813,6 +4818,94 @@ def _batch_done_payload(
         digits=digits,
         pooled_convergence_histories_payload=pooled_convergence_histories_payload,
     )
+
+
+def _pooled_histories_payload(
+    raw_pooled_histories: Mapping[str, Sequence[Mapping[str, float]]],
+    digits: int,
+) -> dict[str, list[dict[str, Any]]]:
+    """Format pooled convergence histories for the client.
+
+    Shared by the live "done" push and by a reopened batch/Study, whose
+    histories are rebuilt from disk rather than watched (`_rebuilt_
+    pooled_histories`). One formatter so the two cannot drift into
+    describing the same curve differently.
+
+    Args:
+        raw_pooled_histories: `pooled_convergence_histories`' own
+            return, or an empty mapping.
+        digits: Significant digits for every formatted value.
+
+    Returns:
+        One list of `{"generation", "mean", "low", "high",
+        "sampleCount"}` entries per statistic name.
+    """
+    return {
+        name: [
+            {
+                "generation": point["generation"],
+                "mean": format_statistic(point["mean"], digits),
+                "low": format_statistic(point["low"], digits),
+                "high": format_statistic(point["high"], digits),
+                "sampleCount": point["sample_count"],
+            }
+            for point in points
+        ]
+        for name, points in raw_pooled_histories.items()
+    }
+
+
+def _rebuilt_pooled_histories(
+    replicate_ids: Sequence[str],
+    trajectory_paths: Sequence[Path],
+    params_list: Sequence[SimulationParams],
+    digits: int,
+) -> dict[str, list[dict[str, Any]]]:
+    """Recompute a reopened batch's/Study's own pooled trajectory from disk.
+
+    Pooled convergence histories are a byproduct of a live run's own
+    `ConvergenceMonitor` and are never persisted, so a reopened batch
+    used to carry none at all -- and, the pooled curve being the only
+    trajectory a batch has, the Run card dropped the trajectory graph
+    from its selector entirely. Reported directly.
+
+    Each replicate's own history is rebuilt from its persisted states
+    (`fim.reanalyze.replicate_convergence_history`) and then pooled by
+    the same function the live path uses, so the reopened curve is the
+    same measurement rather than a second, similar-looking one.
+
+    Args:
+        replicate_ids: Each replicate's own run id, positionally
+            matching `trajectory_paths` and `params_list`.
+        trajectory_paths: Each replicate's own `trajectory.jsonl`.
+        params_list: Each replicate's own validated parameters (a
+            Study's members are separate runs, so these are read per
+            replicate rather than shared).
+        digits: Significant digits for every formatted value.
+
+    Returns:
+        `_pooled_histories_payload`'s own shape -- empty if fewer than
+        two replicates are readable (no interval to define), or if any
+        replicate's trajectory cannot be read, which is a degraded
+        graph rather than a failed reopen.
+    """
+    pairs: list[tuple[Sequence[int], Mapping[str, Sequence[float]]]] = []
+    try:
+        for replicate_id, trajectory_path, replicate_params in zip(
+            replicate_ids, trajectory_paths, params_list, strict=True
+        ):
+            generations, histories = replicate_convergence_history(
+                trajectory_path, replicate_id, replicate_params
+            )
+            if generations:
+                pairs.append((generations, histories))
+    except (OSError, ValueError):
+        return {}
+    try:
+        raw = pooled_convergence_histories_from_pairs(pairs)
+    except ValueError:
+        return {}
+    return _pooled_histories_payload(raw, digits)
 
 
 # The "scientifically meaningful" subset a Study's own members are
@@ -4888,13 +4981,16 @@ def _pooled_batch_payload(
     """Shared aggregation behind a batch's own "done" payload (`_batch_
     done_payload`, above), a reopened batch's own payload (`Api.open_
     batch`), and a reopened Study's own pooled payload (`Api.open_
-    study`) -- everything a batch's own completed Results card needs
-    except the convergence-history trajectory panel, the one piece a
-    live run's own `ConvergenceMonitor` produces as a byproduct that
-    nothing persists to disk (`20260919-claude-sonnet-5-unified-batch-
-    and-study-results-reopen-design.md`, `selby/restricted`, §1) --
-    each caller computes that piece for itself (or passes `{}` when
-    unavailable) rather than this function guessing at its source.
+    study`) -- everything a batch's own completed Results card needs.
+
+    The convergence-history trajectory panel is the one piece each
+    caller computes for itself rather than this function guessing at
+    its source: a live run's own `ConvergenceMonitor` produces it as a
+    byproduct, and nothing persists it to disk, so a reopened batch or
+    Study instead rebuilds it from each replicate's own stored states
+    (`_rebuilt_pooled_histories`). It is still passed in rather than
+    computed here because only the caller knows which of those two it
+    has.
 
     `replicate_ids`/`reports`/`final_states`/`trajectory_paths` are
     four parallel sequences, one entry per published replicate, rather
