@@ -688,6 +688,105 @@ def test_a_completed_batchs_own_scrubber_replays_the_pooled_scatter(
     assert "Generation" in settled["afterScrubLabel"]
 
 
+def test_scrubbing_a_completed_batch_moves_every_panel_not_just_the_scatter(
+    staggered_batch_run_settings: Path,
+) -> None:
+    """The generation scan applies to all the plots, not the scatter alone.
+
+    Reported directly against a reopened batch: dragging the scrubber
+    back through the run's history moved the scatter while the allele
+    composition and frequency spectrum stayed at the final generation.
+    Nothing threw and nothing looked broken -- the card simply showed
+    two different generations side by side with no indication of it.
+
+    The cause was in the payload, not the page: pooled batch frames
+    carried no supplemental visuals at all (`AnimationFrame.allele_
+    composition` was left `None` for batches), so the scrubber had
+    nothing to redraw them from.
+
+    Compares canvas pixels rather than payload fields because the claim
+    is about what a reader sees. Each panel is selected onto the graph
+    stage before it is snapshotted: a hidden pane has no layout box, so
+    its canvas cannot be drawn or meaningfully compared.
+    """
+    done_event = threading.Event()
+
+    def on_message(message: RunMessage | BatchMessage) -> None:
+        if message[0] in ("done", "cancelled", "error"):
+            done_event.set()
+
+    window = create_window(api=Api(on_message=on_message), hidden=True)
+    outcome: queue.Queue[dict[str, Any] | None] = queue.Queue(maxsize=1)
+
+    def _snapshot(graph_key: str, canvas_id: str) -> str:
+        return str(
+            window.evaluate_js(
+                f"(function(){{ window.fim.showGraph('{graph_key}'); "
+                f"return document.getElementById('{canvas_id}').toDataURL(); }})();"
+            )
+        )
+
+    def _drive() -> None:
+        try:
+            _wait_for_input_screen_ready(window)
+            window.evaluate_js(
+                _SET_STAGGERED_BATCH_FIELDS
+                + "document.getElementById('run-button').click();"
+            )
+            settled = None
+            if done_event.wait(timeout=_EVENT_WAIT_TIMEOUT_SECONDS):
+                for _ in range(_READY_POLL_ATTEMPTS):
+                    if not window.evaluate_js("window.__fimScrubberPending"):
+                        break
+                    time.sleep(_READY_POLL_INTERVAL_SECONDS)
+                final = {
+                    "composition": _snapshot(
+                        "alleleComposition", "allele-composition-canvas"
+                    ),
+                    "spectrum": _snapshot(
+                        "frequencySpectrum", "frequency-spectrum-canvas"
+                    ),
+                }
+                # Frame 0 is the run's own first generation, as far from
+                # the final state as this run's history goes.
+                window.evaluate_js(
+                    "(function(){"
+                    "var range = document.getElementById('scrubber-range');"
+                    "range.value = '0';"
+                    "range.dispatchEvent(new Event('input', {bubbles: true}));"
+                    "})();"
+                )
+                scrubbed = {
+                    "composition": _snapshot(
+                        "alleleComposition", "allele-composition-canvas"
+                    ),
+                    "spectrum": _snapshot(
+                        "frequencySpectrum", "frequency-spectrum-canvas"
+                    ),
+                    "label": window.evaluate_js(
+                        "document.getElementById('scrubber-label').textContent"
+                    ),
+                }
+                settled = {"final": final, "scrubbed": scrubbed}
+            outcome.put(settled)
+        finally:
+            window.destroy()
+
+    webview.start(_drive)
+    settled = outcome.get(timeout=_OUTCOME_TIMEOUT_SECONDS)
+
+    assert settled is not None, "batch never reached done within the wait budget"
+    # The scrub really moved to the run's first generation, so the
+    # comparisons below are between two genuinely different moments.
+    assert settled["scrubbed"]["label"].startswith("Generation 0 ")
+    # Both panels are really drawn, not blank -- an empty canvas would
+    # otherwise satisfy "changed" trivially in one direction.
+    assert len(settled["final"]["composition"]) > 1000
+    assert len(settled["final"]["spectrum"]) > 1000
+    assert settled["scrubbed"]["composition"] != settled["final"]["composition"]
+    assert settled["scrubbed"]["spectrum"] != settled["final"]["spectrum"]
+
+
 def test_the_ci_meter_names_the_replicate_count_in_its_own_tooltip(
     fast_batch_run_settings: Path,
 ) -> None:

@@ -277,6 +277,52 @@ def test_pre_render_batch_frames_is_empty_for_no_replicates(tmp_path: Path) -> N
     assert animation.pre_render_batch_frames([], params) == []
 
 
+def test_pre_render_batch_frames_carry_pooled_supplemental_payloads(
+    tmp_path: Path,
+) -> None:
+    """Every pooled batch frame describes one generation on every panel.
+
+    The scatter was pooled per frame from the start, but the allele
+    composition and frequency spectrum were left `None` for batches, so
+    the completed-batch scrubber moved the scatter alone while those two
+    panels stayed frozen at the run's final generation -- reported
+    directly, and silently wrong rather than visibly broken: the card
+    showed two different generations at once with nothing to say so.
+
+    Pooled across the same states the scatter pools, so all three panels
+    describe the same cohort at the same moment.
+    """
+    output = _write_batch_run(tmp_path)
+    manifest = read_batch_manifest(output / "manifest.json")
+    params = manifest.params()
+    replicates = [
+        (
+            replicate_run_id,
+            batch_runner.replicate_output_directory(
+                output, manifest.run_id, replicate_run_id
+            )
+            / "trajectory.jsonl",
+        )
+        for replicate_run_id in manifest.replicate_run_ids
+    ]
+
+    frames = animation.pre_render_batch_frames(replicates, params)
+
+    # More than one frame, so "varies by generation" below is a real
+    # claim about this data rather than vacuously true.
+    assert len(frames) > 1
+    for frame in frames:
+        assert frame.allele_composition is not None
+        assert frame.frequency_spectrum is not None
+        # One bar per deme, the same shape the scalar path produces.
+        assert len(frame.allele_composition["demes"]) == params.d
+
+    # The payloads really track the generation rather than being one
+    # value copied onto every frame: an early, drifting population does
+    # not have the same allele composition as a converged one.
+    assert frames[0].allele_composition != frames[-1].allele_composition
+
+
 def test_animation_module_never_imports_matplotlib() -> None:
     """Direct regression test: no rendering happens on this path.
 

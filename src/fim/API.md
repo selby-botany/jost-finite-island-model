@@ -5177,10 +5177,13 @@ recent_runs`/`open_run` already use.
 **Returns**:
 
 - ``{"ok"` - True, "demeCount", "frames": [{"generation",
-  "panels"}, ...]}` -- identical shape to `get_animation_
-  frames`'s own return, so the page's existing scrubber
-  machinery (`webui/screens/run-view-controls.js`'s own
-  `setScrubberFrames`) needs no batch-specific branch at all.
+  "panels", "literatureVisuals"}, ...]}` -- identical shape
+  to `get_animation_frames`'s own return, so the page's
+  existing scrubber machinery (`webui/screens/run-view-
+  controls.js`'s own `setScrubberFrames`) needs no
+  batch-specific branch at all. `literatureVisuals` is pooled
+  across every replicate at that generation, matching the
+  pooling `panels` already uses.
 - ``{"ok"` - False, "message": ...}` if the batch manifest or
   any replicate's own trajectory cannot be read.
 

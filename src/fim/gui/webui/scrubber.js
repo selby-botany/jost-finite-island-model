@@ -171,27 +171,34 @@ window.fim.appendLiveFrame = function appendLiveFrame(frame, drawFrame) {
  * Load a fresh set of frames and (re)enable/disable the controls to
  * match -- the entry point for completed-run playback.
  *
+ * Does not draw: the caller has already painted whichever frame it
+ * wants on screen, and `startIndex` tells this module which one that
+ * was so the slider and the label agree with it.
+ *
  * @param {Array<{generation: number}>} newFrames
  * @param {(frame: object, index: number) => void} drawFrame - Called
  *     with the currently-displayed frame whenever it changes (an
  *     explicit scrub, playback, or this call itself) -- owns actually
  *     drawing it; this module knows nothing about panels or canvases.
+ * @param {number} [startIndex=0] - Which frame is already on screen.
+ *     Clamped into range, so a caller may pass `frames.length - 1`
+ *     without first checking that the list is non-empty.
  */
-window.fim.setScrubberFrames = function setScrubberFrames(newFrames, drawFrame) {
+window.fim.setScrubberFrames = function setScrubberFrames(newFrames, drawFrame, startIndex = 0) {
     stopScrubber();
     scrubberMode = "replay";
     isLiveTracking = false;
     onFrame = null;
     frames = newFrames;
-    currentIndex = 0;
+    currentIndex = Math.min(Math.max(startIndex, 0), Math.max(frames.length - 1, 0));
     const canAnimate = frames.length >= MINIMUM_FRAMES_TO_ANIMATE;
     scrubberPlayButton.disabled = !canAnimate;
     scrubberRange.disabled = !canAnimate;
     scrubberRange.max = String(Math.max(frames.length - 1, 0));
-    scrubberRange.value = "0";
+    scrubberRange.value = String(currentIndex);
     scrubberLabel.textContent =
         frames.length > 0
-            ? `Generation ${frames[0].generation} (frame 1 / ${frames.length})`
+            ? `Generation ${frames[currentIndex].generation} (frame ${currentIndex + 1} / ${frames.length})`
             : "";
     // Only now does scrubbing/playback start actually drawing.
     onFrame = drawFrame;

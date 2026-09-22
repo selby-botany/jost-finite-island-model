@@ -38,6 +38,8 @@ from typing import Any, Final
 from fim.gui.literature_visuals import (
     allele_composition_payload,
     frequency_spectrum_payload,
+    pooled_allele_composition_payload,
+    pooled_frequency_spectrum_payload,
 )
 from fim.model.params import SimulationParams
 from fim.model.state import ModelState
@@ -188,7 +190,21 @@ def pre_render_batch_frames(
             use_generation = generations[index]
             states.append(ModelState.from_rows(grouped[use_generation], params.loci))
         points = pooled_frequency_points(states)
-        frames.append(AnimationFrame(generation=generation, points=points))
+        frames.append(
+            AnimationFrame(
+                generation=generation,
+                points=points,
+                # Pooled across the same `states` the scatter pools, so
+                # every panel on the card describes one generation of
+                # one cohort. Reported directly: scrubbing a completed
+                # batch moved the scatter alone while the allele
+                # composition and spectrum stayed frozen at the final
+                # generation, silently mixing two different times in
+                # one view.
+                allele_composition=pooled_allele_composition_payload(states),
+                frequency_spectrum=pooled_frequency_spectrum_payload(states, params),
+            )
+        )
     logger.debug(
         "pre-rendered %d pooled batch animation frame(s) from %d replicate(s)",
         len(frames),

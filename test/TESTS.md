@@ -6407,6 +6407,27 @@ def test_pre_render_batch_frames_is_empty_for_no_replicates(
 
 No replicates at all is a degenerate, non-erroring input, not a crash.
 
+<a id="gui.test_animation.test_pre_render_batch_frames_carry_pooled_supplemental_payloads"></a>
+
+#### test\_pre\_render\_batch\_frames\_carry\_pooled\_supplemental\_payloads
+
+```python
+def test_pre_render_batch_frames_carry_pooled_supplemental_payloads(
+        tmp_path: Path) -> None
+```
+
+Every pooled batch frame describes one generation on every panel.
+
+The scatter was pooled per frame from the start, but the allele
+composition and frequency spectrum were left `None` for batches, so
+the completed-batch scrubber moved the scatter alone while those two
+panels stayed frozen at the run's final generation -- reported
+directly, and silently wrong rather than visibly broken: the card
+showed two different generations at once with nothing to say so.
+
+Pooled across the same states the scatter pools, so all three panels
+describe the same cohort at the same moment.
+
 <a id="gui.test_animation.test_animation_module_never_imports_matplotlib"></a>
 
 #### test\_animation\_module\_never\_imports\_matplotlib
@@ -9481,6 +9502,33 @@ __fimScrubberPending` settling (`wireCompletedScrubber`'s own
 established pattern, extended to its batch counterpart) rather than
 guessing a delay is enough for the un-awaited bridge call to land.
 
+<a id="gui.test_batch_results_screen.test_scrubbing_a_completed_batch_moves_every_panel_not_just_the_scatter"></a>
+
+#### test\_scrubbing\_a\_completed\_batch\_moves\_every\_panel\_not\_just\_the\_scatter
+
+```python
+def test_scrubbing_a_completed_batch_moves_every_panel_not_just_the_scatter(
+        staggered_batch_run_settings: Path) -> None
+```
+
+The generation scan applies to all the plots, not the scatter alone.
+
+Reported directly against a reopened batch: dragging the scrubber
+back through the run's history moved the scatter while the allele
+composition and frequency spectrum stayed at the final generation.
+Nothing threw and nothing looked broken -- the card simply showed
+two different generations side by side with no indication of it.
+
+The cause was in the payload, not the page: pooled batch frames
+carried no supplemental visuals at all (`AnimationFrame.allele_
+composition` was left `None` for batches), so the scrubber had
+nothing to redraw them from.
+
+Compares canvas pixels rather than payload fields because the claim
+is about what a reader sees. Each panel is selected onto the graph
+stage before it is snapshotted: a hidden pane has no layout box, so
+its canvas cannot be drawn or meaningfully compared.
+
 <a id="gui.test_batch_results_screen.test_the_ci_meter_names_the_replicate_count_in_its_own_tooltip"></a>
 
 #### test\_the\_ci\_meter\_names\_the\_replicate\_count\_in\_its\_own\_tooltip
@@ -10240,6 +10288,30 @@ Scrubbing away and then back to the scrubber's own last frame
 restores the exact statistics table and trajectory canvas the run
 first completed with -- the marker is specific to a non-final
 scrub position, not a permanent addition to the panel.
+
+<a id="gui.test_completed_scrubber.test_the_scrubber_starts_on_the_frame_that_is_actually_drawn"></a>
+
+#### test\_the\_scrubber\_starts\_on\_the\_frame\_that\_is\_actually\_drawn
+
+```python
+def test_the_scrubber_starts_on_the_frame_that_is_actually_drawn(
+        fast_scalar_run_settings: Path, window: webview.Window) -> None
+```
+
+A completed run opens with the scrubber at its final frame.
+
+`enterCompletedState` paints the run's *final* panels, but the
+scrubber used to load its frame list pinned to index 0. Reported
+directly from a run re-opened through the Home screen's run list:
+the converged scatter on the canvas, over a label reading
+"Generation 0 (frame 1 / 67)". Nothing was wrong with either half
+on its own -- they simply described different generations.
+
+The check is a correspondence, not a fixed number: whatever the
+canvas shows, the slider and the label must name it. So this reads
+the final generation from the frame list itself rather than
+hard-coding a value that depends on when this particular seed
+converges.
 
 <a id="gui.test_config_form"></a>
 

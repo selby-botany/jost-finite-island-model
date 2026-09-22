@@ -1671,16 +1671,25 @@ async function wireCompletedScrubber(outputDirectory, generationCount) {
         // built here, where that sampled list first exists client-side,
         // rather than in `enterCompletedState`, which never sees it.
         renderScalarTable(result.frames.map((frame) => frame.generation));
-        window.fim.setScrubberFrames(result.frames, (frame, index) => {
-            const isFinal = index === result.frames.length - 1;
-            drawCompletedOverview(frame.panels);
-            updateScrubbedTrajectory(frame.generation, isFinal);
-            if (isFinal && completedFinalLiteratureVisuals) {
-                renderSupplementalPanels(completedFinalLiteratureVisuals);
-            } else if (frame.literatureVisuals) {
-                renderSupplementalPanels(frame.literatureVisuals);
-            }
-        });
+        window.fim.setScrubberFrames(
+            result.frames,
+            (frame, index) => {
+                const isFinal = index === result.frames.length - 1;
+                drawCompletedOverview(frame.panels);
+                updateScrubbedTrajectory(frame.generation, isFinal);
+                if (isFinal && completedFinalLiteratureVisuals) {
+                    renderSupplementalPanels(completedFinalLiteratureVisuals);
+                } else if (frame.literatureVisuals) {
+                    renderSupplementalPanels(frame.literatureVisuals);
+                }
+            },
+            // `enterCompletedState` has already drawn the run's *final*
+            // panels, so the scrubber starts at the end, not the
+            // beginning. Reported directly: a run re-opened from the
+            // Home list showed its converged plot above a scrubber
+            // reading "Generation 0 (frame 1 / 67)".
+            result.frames.length - 1
+        );
     } finally {
         window.__fimScrubberPending -= 1;
     }
@@ -1726,9 +1735,31 @@ async function wireCompletedBatchScrubber(outputDirectory) {
             return;
         }
         scrubberControls.hidden = false;
-        window.fim.setScrubberFrames(result.frames, (frame) => {
-            drawCompletedOverview(frame.panels);
-        });
+        // As in `wireCompletedScrubber`: the pooled final panels are
+        // already on the canvas, so the scrubber starts at the end.
+        window.fim.setScrubberFrames(
+            result.frames,
+            (frame, index) => {
+                drawCompletedOverview(frame.panels);
+                // Every panel on the card follows the scrubber, not
+                // the scatter alone. Reported directly: scrubbing a
+                // completed batch back through its history moved the
+                // scatter while the allele composition and spectrum
+                // stayed at the final generation, so the card showed
+                // two different times at once with nothing to say so.
+                if (frame.literatureVisuals) {
+                    renderSupplementalPanels(frame.literatureVisuals);
+                }
+                if (lastPooledConvergenceHistories) {
+                    const isFinal = index === result.frames.length - 1;
+                    renderBatchTrajectory(
+                        lastPooledConvergenceHistories,
+                        isFinal ? null : frame.generation
+                    );
+                }
+            },
+            result.frames.length - 1
+        );
     } finally {
         window.__fimScrubberPending -= 1;
     }

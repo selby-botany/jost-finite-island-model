@@ -3970,10 +3970,13 @@ class Api:
 
         Returns:
             `{"ok": True, "demeCount", "frames": [{"generation",
-            "panels"}, ...]}` -- identical shape to `get_animation_
-            frames`'s own return, so the page's existing scrubber
-            machinery (`webui/screens/run-view-controls.js`'s own
-            `setScrubberFrames`) needs no batch-specific branch at all.
+            "panels", "literatureVisuals"}, ...]}` -- identical shape
+            to `get_animation_frames`'s own return, so the page's
+            existing scrubber machinery (`webui/screens/run-view-
+            controls.js`'s own `setScrubberFrames`) needs no
+            batch-specific branch at all. `literatureVisuals` is pooled
+            across every replicate at that generation, matching the
+            pooling `panels` already uses.
             `{"ok": False, "message": ...}` if the batch manifest or
             any replicate's own trajectory cannot be read.
         """
@@ -4001,6 +4004,12 @@ class Api:
                 {
                     "generation": frame.generation,
                     "panels": panels_from_points(frame.points, params.d),
+                    "literatureVisuals": {
+                        "alleleComposition": frame.allele_composition,
+                        "frequencySpectrum": frame.frequency_spectrum,
+                    }
+                    if frame.allele_composition is not None
+                    else None,
                 }
                 for frame in frames
             ],

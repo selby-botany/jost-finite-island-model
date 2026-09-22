@@ -279,3 +279,78 @@ def test_scrubbing_back_to_the_final_frame_restores_the_real_statistics_and_mark
     assert settled["statGTitle"] == settled["finalStatGTitle"]
     assert settled["statGTitle"].startswith("G_ST = ")
     assert settled["trajectorySnapshot"] == settled["finalSnapshot"]
+
+
+def test_the_scrubber_starts_on_the_frame_that_is_actually_drawn(
+    fast_scalar_run_settings: Path,
+    window: webview.Window,
+) -> None:
+    """A completed run opens with the scrubber at its final frame.
+
+    `enterCompletedState` paints the run's *final* panels, but the
+    scrubber used to load its frame list pinned to index 0. Reported
+    directly from a run re-opened through the Home screen's run list:
+    the converged scatter on the canvas, over a label reading
+    "Generation 0 (frame 1 / 67)". Nothing was wrong with either half
+    on its own -- they simply described different generations.
+
+    The check is a correspondence, not a fixed number: whatever the
+    canvas shows, the slider and the label must name it. So this reads
+    the final generation from the frame list itself rather than
+    hard-coding a value that depends on when this particular seed
+    converges.
+    """
+    outcome: queue.Queue[dict[str, Any]] = queue.Queue(maxsize=1)
+
+    def _drive() -> None:
+        try:
+            _poll_until(window, _INPUT_SCREEN_READY, lambda value: value is True)
+            window.evaluate_js(
+                _SET_TINY_FIELDS + "document.getElementById('run-button').click();"
+            )
+            _poll_until(
+                window,
+                "window.fim.getRunViewState()",
+                lambda value: value == "completed",
+            )
+            _poll_until(window, "window.__fimScrubberPending", lambda value: value == 0)
+            # Snapshot the canvas as opened, then scrub deliberately to
+            # the last frame. If the view already sat there, the two
+            # images are identical -- which is the real claim: the
+            # opening view *is* the final frame's view.
+            opened = window.evaluate_js(
+                "({"
+                "label: document.getElementById('scrubber-label').textContent, "
+                "rangeValue: document.getElementById('scrubber-range').value, "
+                "rangeMax: document.getElementById('scrubber-range').max, "
+                "generations: window.fim.getScrubberGenerations(), "
+                "snapshot: document.getElementById('run-canvas').toDataURL()"
+                "})"
+            )
+            _scrub_to(window, len(opened["generations"]) - 1)
+            at_final = window.evaluate_js(
+                "document.getElementById('run-canvas').toDataURL()"
+            )
+            outcome.put({"opened": opened, "finalSnapshot": at_final})
+        finally:
+            window.destroy()
+
+    webview.start(_drive)
+    settled = outcome.get(timeout=_DRIVE_TIMEOUT_SECONDS)
+
+    opened = settled["opened"]
+    generations = opened["generations"]
+    # The run has real history to scrub through, so "last frame" and
+    # "first frame" are genuinely different positions and the assertions
+    # below are not trivially true.
+    assert len(generations) > 1
+
+    last_index = len(generations) - 1
+    assert opened["rangeValue"] == str(last_index)
+    assert opened["rangeMax"] == str(last_index)
+    assert opened["label"] == (
+        f"Generation {generations[last_index]} "
+        f"(frame {last_index + 1} / {len(generations)})"
+    )
+    # And the canvas the user is looking at really is that frame's.
+    assert opened["snapshot"] == settled["finalSnapshot"]
