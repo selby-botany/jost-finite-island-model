@@ -1624,13 +1624,28 @@ deleteSelectedButton.addEventListener("click", () => {
     });
 });
 
+// Browses to, then immediately opens, a trajectory outside this tree
+// entirely (item 8) -- its own real, still-current justification: a
+// trajectory copied in from a colleague, restored from an old backup,
+// or produced by a `fim run` invocation whose own `-o` pointed
+// somewhere this checkout's tree never scans has no row anywhere above
+// to click (design doc `20260917-claude-sonnet-5-run-study-experiment-
+// hierarchy-design.md`, `selby/restricted`, §6: no "Unsorted" catch-all
+// any more), so there is no double-click, no "Open…" row button, and no
+// Study to add it to first. It used to only *select* the browsed path,
+// leaving the separate "Open" button below (a plain click target with
+// no visible link back to what was just browsed) as the one remaining
+// step -- reported directly as "doesn't appear to do anything," since
+// nothing on screen visibly changed until that second, seemingly
+// unrelated click. Opening directly removes that step: browsing to a
+// file is now the same one action a double-click on a row already is.
 browseButton.addEventListener("click", async () => {
     const result = await window.pywebview.api.browse_for_trajectory();
     if (!result.ok) {
         return;
     }
     showOpenRunBanner("");
-    setSelectedTrajectory(result.path);
+    await openTrajectory(result.path);
 });
 
 /**

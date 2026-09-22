@@ -13799,6 +13799,27 @@ Dragging one column's own resize handle widens that `<col>` --
 table-wide, since every Study's own column header row and every run
 row share the identical underlying columns (item 4).
 
+<a id="gui.test_open_run_screen.test_browsing_to_a_trajectory_opens_it_directly"></a>
+
+#### test\_browsing\_to\_a\_trajectory\_opens\_it\_directly
+
+```python
+def test_browsing_to_a_trajectory_opens_it_directly(
+        tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None
+```
+
+"Browse for trajectory.jsonl…" opens the browsed file immediately.
+
+Item 8: reported directly as "doesn't appear to do anything" --
+traced to a two-step flow where browsing only *selected* a path,
+leaving a separate, seemingly unrelated "Open" button below as the
+one remaining step. Its own real justification is unchanged (a
+trajectory outside every Study/Experiment this tree scans -- copied
+in from a colleague, restored from a backup, or produced by a `fim
+run -o` pointed elsewhere): browsing to it is now the same one
+action a double-click on a row already is, with no second click to
+remember.
+
 <a id="gui.test_p0_grid_screen"></a>
 
 # gui.test\_p0\_grid\_screen

@@ -1566,3 +1566,61 @@ def test_dragging_a_column_resize_handle_widens_it_for_the_whole_table(
     assert settled["before"] == ""
     assert settled["after"] != ""
     assert settled["after"].endswith("px")
+
+
+def test_browsing_to_a_trajectory_opens_it_directly(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """ "Browse for trajectory.jsonl…" opens the browsed file immediately.
+
+    Item 8: reported directly as "doesn't appear to do anything" --
+    traced to a two-step flow where browsing only *selected* a path,
+    leaving a separate, seemingly unrelated "Open" button below as the
+    one remaining step. Its own real justification is unchanged (a
+    trajectory outside every Study/Experiment this tree scans -- copied
+    in from a colleague, restored from a backup, or produced by a `fim
+    run -o` pointed elsewhere): browsing to it is now the same one
+    action a double-click on a row already is, with no second click to
+    remember.
+    """
+    monkeypatch.setattr(paths_module, "results_directory", lambda: tmp_path / "results")
+    output_directory = _write_run(tmp_path)
+    trajectory_path = output_directory / "trajectory.jsonl"
+
+    window = create_window(hidden=True)
+    outcome: queue.Queue[dict[str, Any] | None] = queue.Queue(maxsize=1)
+
+    def _drive() -> None:
+        try:
+            _poll_until(window, _INPUT_SCREEN_READY, lambda value: value is True)
+            window.evaluate_js("window.fim.menu.openRun();")
+            window.evaluate_js(
+                "window.pywebview.api.browse_for_trajectory = function () {"
+                "  return Promise.resolve("
+                f"{{ok: true, path: {str(trajectory_path)!r}}});"
+                "};"
+            )
+            window.evaluate_js(
+                "document.getElementById('browse-trajectory-button').click();"
+            )
+            settled = _poll_until(
+                window,
+                "({"
+                "runViewState: window.fim.getRunViewState(), "
+                "runId: document.getElementById('results-run-id').textContent"
+                "})",
+                lambda value: (
+                    value is not None and value.get("runViewState") == "completed"
+                ),
+            )
+            outcome.put(settled)
+        finally:
+            window.destroy()
+
+    webview.start(_drive)
+    settled = outcome.get(timeout=_DRIVE_TIMEOUT_SECONDS)
+
+    assert settled is not None, "browsing to a trajectory never reached `completed`"
+    assert settled["runViewState"] == "completed"
+    assert settled["runId"].startswith("run-")
