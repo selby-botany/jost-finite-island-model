@@ -383,7 +383,7 @@ def _write_json_atomically(path: Path, payload: object, *, prefix: str) -> None:
     try:
         with os.fdopen(descriptor, "w", encoding="utf-8") as temp_file:
             temp_file.write(text)
-        temp_path.replace(path)
+        paths.replace_with_retry(temp_path, path)
     except BaseException:
         temp_path.unlink(missing_ok=True)
         raise

@@ -342,6 +342,7 @@ Return to the [source-tree orientation](../README.md) or the [developer guide](.
   * [results\_directory\_override](#fim.paths.results_directory_override)
   * [set\_log\_directory\_override](#fim.paths.set_log_directory_override)
   * [log\_directory\_override](#fim.paths.log_directory_override)
+  * [replace\_with\_retry](#fim.paths.replace_with_retry)
   * [atomic\_directory](#fim.paths.atomic_directory)
   * [default\_output\_directory](#fim.paths.default_output_directory)
   * [project\_root](#fim.paths.project_root)
@@ -11464,6 +11465,38 @@ def log_directory_override() -> Path | None
 ```
 
 The current `log_directory()` override, if any.
+
+<a id="fim.paths.replace_with_retry"></a>
+
+#### replace\_with\_retry
+
+```python
+def replace_with_retry(source: Path, target: Path) -> None
+```
+
+Rename `source` over `target`, retrying briefly on `PermissionError`.
+
+`Path.replace` is atomic on POSIX regardless of who has `target`
+open. On Windows it is not: Python opens files without
+`FILE_SHARE_DELETE`, so replacing a file that another thread or
+process (the GUI polling a replicate's `.progress` sidecar, an
+antivirus scanner, the search indexer) has open at that instant
+raises `PermissionError` (`[WinError 5] Access is denied`). That is
+a transient collision, not a real refusal -- the reader closes the
+file within microseconds -- and it killed a 150-replicate batch on
+a botanist's first Windows run. Retrying a fixed, small number of
+times with a fixed delay rides it out; a target that stays locked
+for the whole window still raises the original error.
+
+**Arguments**:
+
+- `source` - The completed temporary file (or directory) to publish.
+- `target` - The path to replace.
+
+
+**Raises**:
+
+- `PermissionError` - If every attempt was refused.
 
 <a id="fim.paths.atomic_directory"></a>
 

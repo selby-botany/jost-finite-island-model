@@ -393,3 +393,23 @@ def test_read_live_state_returns_none_for_a_different_run_id(tmp_path: Path) -> 
     result = read_live_state(trajectory_path, "run-2", 0, (LocusSpec(1, 200),))
 
     assert result is None
+
+
+def test_read_progress_sidecar_treats_a_windows_sharing_refusal_as_nothing_yet(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """A read refused while a writer swaps the file in is "no update yet".
+
+    Windows refuses to open a file in the instant it is being replaced
+    (`PermissionError`). The batch poller reads again on its next tick,
+    so this must not fail the batch.
+    """
+    sidecar = tmp_path / ".progress"
+    sidecar.write_text('{"generation": 1}', encoding="utf-8")
+
+    def refuse(self: Path, *args: object, **kwargs: object) -> str:
+        raise PermissionError(5, "Access is denied")
+
+    monkeypatch.setattr(Path, "read_text", refuse)
+
+    assert read_progress_sidecar(sidecar) is None

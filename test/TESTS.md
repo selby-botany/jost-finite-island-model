@@ -1571,6 +1571,38 @@ def test_atomic_directory_discards_the_temporary_directory_on_failure(
 
 A raised exception leaves neither the target nor an orphaned temp dir.
 
+<a id="test.test_paths.test_replace_with_retry_rides_out_transient_permission_errors"></a>
+
+#### test\_replace\_with\_retry\_rides\_out\_transient\_permission\_errors
+
+```python
+def test_replace_with_retry_rides_out_transient_permission_errors(
+        monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None
+```
+
+A rename refused a few times, then allowed, succeeds.
+
+<a id="test.test_paths.test_replace_with_retry_gives_up_after_a_bounded_number_of_attempts"></a>
+
+#### test\_replace\_with\_retry\_gives\_up\_after\_a\_bounded\_number\_of\_attempts
+
+```python
+def test_replace_with_retry_gives_up_after_a_bounded_number_of_attempts(
+        monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None
+```
+
+A target that stays locked raises the original error, not a hang.
+
+<a id="test.test_paths.test_replace_with_retry_really_replaces_a_file"></a>
+
+#### test\_replace\_with\_retry\_really\_replaces\_a\_file
+
+```python
+def test_replace_with_retry_really_replaces_a_file(tmp_path: Path) -> None
+```
+
+The happy path on a real filesystem: content is swapped in.
+
 <a id="test.test_reanalyze"></a>
 
 # test.test\_reanalyze
@@ -16727,6 +16759,21 @@ def test_read_live_state_returns_none_for_a_different_run_id(
 ```
 
 Rows from a different run id are never mistaken for this replicate's own.
+
+<a id="gui.test_store.test_read_progress_sidecar_treats_a_windows_sharing_refusal_as_nothing_yet"></a>
+
+#### test\_read\_progress\_sidecar\_treats\_a\_windows\_sharing\_refusal\_as\_nothing\_yet
+
+```python
+def test_read_progress_sidecar_treats_a_windows_sharing_refusal_as_nothing_yet(
+        monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None
+```
+
+A read refused while a writer swaps the file in is "no update yet".
+
+Windows refuses to open a file in the instant it is being replaced
+(`PermissionError`). The batch poller reads again on its next tick,
+so this must not fail the batch.
 
 <a id="gui.test_trajectory_history"></a>
 

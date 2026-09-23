@@ -29,6 +29,8 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
+from fim.paths import replace_with_retry
+
 logger = logging.getLogger(__name__)
 
 # Bumped whenever RunMetadata's on-disk shape changes incompatibly —
@@ -165,7 +167,7 @@ def write_run_metadata(path: Path | str, metadata: RunMetadata) -> None:
     try:
         with os.fdopen(descriptor, "w", encoding="utf-8") as temp_file:
             temp_file.write(payload)
-        temp_path.replace(metadata_path)
+        replace_with_retry(temp_path, metadata_path)
     except BaseException:
         temp_path.unlink(missing_ok=True)
         raise

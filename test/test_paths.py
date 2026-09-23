@@ -350,3 +350,59 @@ def test_atomic_directory_discards_the_temporary_directory_on_failure(
 
     assert not target.exists()
     assert not list(tmp_path.glob(".output.*"))
+
+
+class _RefusingSource:
+    """A stand-in for `Path` whose `replace` refuses a fixed number of times.
+
+    Models Windows refusing to rename over a file another thread has
+    open (`[WinError 5] Access is denied`), deterministically: no real
+    lock, no timing.
+    """
+
+    def __init__(self, refusals: int) -> None:
+        self.refusals = refusals
+        self.calls = 0
+
+    def replace(self, _target: Path) -> None:
+        self.calls += 1
+        if self.calls <= self.refusals:
+            raise PermissionError(5, "Access is denied")
+
+
+def test_replace_with_retry_rides_out_transient_permission_errors(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """A rename refused a few times, then allowed, succeeds."""
+    monkeypatch.setattr(paths.time, "sleep", lambda _seconds: None)
+    source = _RefusingSource(refusals=3)
+
+    paths.replace_with_retry(source, tmp_path / "target")  # type: ignore[arg-type]
+
+    assert source.calls == 4
+
+
+def test_replace_with_retry_gives_up_after_a_bounded_number_of_attempts(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """A target that stays locked raises the original error, not a hang."""
+    monkeypatch.setattr(paths.time, "sleep", lambda _seconds: None)
+    source = _RefusingSource(refusals=10**6)
+
+    with pytest.raises(PermissionError):
+        paths.replace_with_retry(source, tmp_path / "target")  # type: ignore[arg-type]
+
+    assert source.calls == 10
+
+
+def test_replace_with_retry_really_replaces_a_file(tmp_path: Path) -> None:
+    """The happy path on a real filesystem: content is swapped in."""
+    target = tmp_path / "target"
+    target.write_text("old", encoding="utf-8")
+    source = tmp_path / "source"
+    source.write_text("new", encoding="utf-8")
+
+    paths.replace_with_retry(source, target)
+
+    assert target.read_text(encoding="utf-8") == "new"
+    assert not source.exists()

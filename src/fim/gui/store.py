@@ -45,6 +45,7 @@ from typing import Any
 
 from fim.model.locus import LocusSpec
 from fim.model.state import ModelState
+from fim.paths import replace_with_retry
 from fim.persistence.store import TrajectoryRow, TrajectoryStore
 from fim.reanalyze import group_rows_by_generation
 
@@ -242,7 +243,7 @@ def write_progress_sidecar(progress_path: Path, generation: int) -> None:
     try:
         with os.fdopen(descriptor, "w", encoding="utf-8") as temp_file:
             temp_file.write(payload)
-        temp_path.replace(progress_path)
+        replace_with_retry(temp_path, progress_path)
     except BaseException:
         temp_path.unlink(missing_ok=True)
         raise
@@ -272,6 +273,12 @@ def read_progress_sidecar(progress_path: Path) -> dict[str, Any] | None:
     try:
         text = progress_path.read_text(encoding="utf-8")
     except FileNotFoundError:
+        return None
+    except PermissionError:
+        # Windows only: opening the file in the instant a writer's
+        # `replace_with_retry` is swapping it in is refused. The caller
+        # polls again on its next tick, so "nothing new yet" is the
+        # right answer, not an error worth failing a batch over.
         return None
     result: dict[str, Any] = json.loads(text)
     return result

@@ -56,6 +56,7 @@ import os
 import shutil
 import sys
 import tempfile
+import time
 from collections.abc import Callable, Iterator
 from datetime import UTC, datetime
 from pathlib import Path
@@ -146,6 +147,45 @@ def set_log_directory_override(path: Path | None) -> None:
 def log_directory_override() -> Path | None:
     """The current `log_directory()` override, if any."""
     return _log_directory_override
+
+
+# Bounded, fixed retry for `replace_with_retry`: 10 attempts 20 ms apart,
+# so a genuinely stuck target fails after about 0.2 s rather than hanging.
+_REPLACE_ATTEMPTS = 10
+_REPLACE_RETRY_DELAY_SECONDS = 0.02
+
+
+def replace_with_retry(source: Path, target: Path) -> None:
+    """Rename `source` over `target`, retrying briefly on `PermissionError`.
+
+    `Path.replace` is atomic on POSIX regardless of who has `target`
+    open. On Windows it is not: Python opens files without
+    `FILE_SHARE_DELETE`, so replacing a file that another thread or
+    process (the GUI polling a replicate's `.progress` sidecar, an
+    antivirus scanner, the search indexer) has open at that instant
+    raises `PermissionError` (`[WinError 5] Access is denied`). That is
+    a transient collision, not a real refusal -- the reader closes the
+    file within microseconds -- and it killed a 150-replicate batch on
+    a botanist's first Windows run. Retrying a fixed, small number of
+    times with a fixed delay rides it out; a target that stays locked
+    for the whole window still raises the original error.
+
+    Args:
+        source: The completed temporary file (or directory) to publish.
+        target: The path to replace.
+
+    Raises:
+        PermissionError: If every attempt was refused.
+    """
+    for attempt in range(1, _REPLACE_ATTEMPTS + 1):
+        try:
+            source.replace(target)
+        except PermissionError:
+            if attempt == _REPLACE_ATTEMPTS:
+                raise
+            time.sleep(_REPLACE_RETRY_DELAY_SECONDS)
+        else:
+            return
 
 
 @contextlib.contextmanager
@@ -254,7 +294,7 @@ def atomic_directory(target: Path) -> Iterator[Path]:
         # possible: from this point on, `target` either did not exist
         # (a moment ago) or exists fully complete (now), with no
         # observable moment in between.
-        working_directory.replace(target)
+        replace_with_retry(working_directory, target)
         logger.info("published %s", target)
 
 

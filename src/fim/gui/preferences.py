@@ -103,6 +103,8 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any, Final
 
+from fim.paths import replace_with_retry
+
 logger = logging.getLogger(__name__)
 
 # Bumped whenever `GuiPreferences`'s on-disk shape changes incompatibly.
@@ -548,7 +550,7 @@ def save_preferences(path: Path, preferences: GuiPreferences) -> None:
     try:
         with os.fdopen(descriptor, "w", encoding="utf-8") as temp_file:
             temp_file.write(payload)
-        temp_path.replace(path)
+        replace_with_retry(temp_path, path)
     except BaseException:
         temp_path.unlink(missing_ok=True)
         raise
