@@ -1236,11 +1236,11 @@ def test_graph_zoom_frame_takes_the_pane_and_gives_it_back(
     assert settled["homeBefore"]["stats"] == "run-plot-row"
     assert settled["zoom"]["open"] is True
     # All three land inside the frame: the pane and the scrubber inside
-    # the graph column `openGraphZoom` builds, the stats table directly
-    # in the body beside that column.
+    # the graph column `openGraphZoom` builds, the stats table inside
+    # its own scrolling wrapper beside that column.
     assert settled["zoom"]["paneParent"] == "graph-zoom-graph-column"
     assert settled["zoom"]["scrubberParent"] == "graph-zoom-graph-column"
-    assert settled["zoom"]["statsParent"] == "graph-zoom-body"
+    assert settled["zoom"]["statsParent"] == "graph-zoom-stats-column"
     assert settled["zoom"]["title"] == "Statistic trajectories"
     # Zooming does not change which graph the stage considers active, so
     # closing returns to the same one.
@@ -1261,6 +1261,81 @@ def test_graph_zoom_frame_takes_the_pane_and_gives_it_back(
     assert settled["restored"]["statsPlaceholder"] is False
     assert settled["restored"]["graphColumn"] is False
     assert settled["restored"]["inlineWidth"] == ""
+
+
+def test_graph_zoom_sizes_are_a_function_of_the_frame_not_of_the_last_zoom(
+    fast_scalar_run_settings: Path, window: webview.Window, drive: Callable[..., Any]
+) -> None:
+    """Zoom levels scale from the frame, and the stats table stays put.
+
+    Reported from the zoom frame: at 150% the statistics table vanished,
+    at 50% the graph drew at about a quarter of the frame while the
+    label still said 50%, and Fit did not return to the opening size.
+    Two causes, both pinned here. The graph column's flex basis was its
+    own content (so zooming in pushed the table out), and the base size
+    was measured off the pane itself (so every step compounded on the
+    previous one). Also pinned: the table keeps its natural height
+    instead of spreading its rows across a stretched box.
+    """
+    settled = drive(
+        window,
+        ready=_INPUT_SCREEN_READY,
+        trigger=(
+            _SET_TINY_FIELDS
+            + "document.getElementById('run-button').click(); "
+            + "const poll = () => { "
+            + "if (window.fim.getRunViewState() === 'completed' && "
+            + "window.__fimScrubberPending === 0) { "
+            + "const pane = document.getElementById('run-trajectory-frame'); "
+            + "const stats = document.getElementById('results-stats'); "
+            + "const column = () => "
+            + "document.getElementById('graph-zoom-graph-column'); "
+            + "const click = (id) => document.getElementById(id).click(); "
+            + "const read = () => ({"
+            + "level: document.getElementById('graph-zoom-level').textContent, "
+            + "paneWidth: pane.getBoundingClientRect().width, "
+            + "columnWidth: column().getBoundingClientRect().width, "
+            + "statsHeight: stats.getBoundingClientRect().height, "
+            + "statsVisible: stats.getBoundingClientRect().width > 0"
+            + "}); "
+            + "window.fim.openGraphZoom(); "
+            + "const fit = read(); "
+            + "click('graph-zoom-in'); click('graph-zoom-in'); "
+            + "const zoomedIn = read(); "
+            + "click('graph-zoom-fit'); "
+            + "const refit = read(); "
+            + "click('graph-zoom-out'); click('graph-zoom-out'); "
+            + "const zoomedOut = read(); "
+            + "click('graph-zoom-fit'); "
+            + "window.__fimZoomSizes = {fit, zoomedIn, refit, zoomedOut, "
+            + "final: read()}; "
+            + "return; "
+            + "} "
+            + "setTimeout(poll, 50); "
+            + "}; "
+            + "setTimeout(poll, 50);"
+        ),
+        read="window.__fimZoomSizes || null",
+        is_ready=lambda value: value is not None,
+        poll_attempts=_POLL_ATTEMPTS,
+    )
+
+    fit = settled["fit"]
+    assert fit["level"] == "100%"
+    # The stats table never leaves the frame, at any level.
+    for name in ("fit", "zoomedIn", "refit", "zoomedOut", "final"):
+        assert settled[name]["statsVisible"] is True, name
+        # Natural height: identical at every level, not stretched.
+        assert settled[name]["statsHeight"] == fit["statsHeight"], name
+        # The column keeps its width: it does not grow with the pane.
+        assert settled[name]["columnWidth"] == fit["columnWidth"], name
+    assert settled["zoomedIn"]["level"] == "150%"
+    assert settled["zoomedIn"]["paneWidth"] > fit["paneWidth"] * 1.4
+    assert settled["zoomedOut"]["level"] == "50%"
+    assert abs(settled["zoomedOut"]["paneWidth"] - fit["paneWidth"] * 0.5) < 3
+    # Fit returns to exactly the opening size, however it got there.
+    assert settled["refit"]["paneWidth"] == fit["paneWidth"]
+    assert settled["final"]["paneWidth"] == fit["paneWidth"]
 
 
 def test_deme_pair_selectors_stay_glued_to_the_scatter_axes(

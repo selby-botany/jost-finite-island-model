@@ -1185,3 +1185,68 @@ def test_scrubbing_a_completed_batch_moves_the_statistics_panel(
     # verbatim, both rows.
     assert settled["restored"]["dValue"] == settled["final"]["dValue"]
     assert settled["restored"]["neValue"] == settled["final"]["neValue"]
+
+
+def test_a_batch_repaint_keeps_the_scrub_position_marker(
+    staggered_batch_run_settings: Path,
+) -> None:
+    """Repainting the batch trajectory redraws it at the scrubbed generation.
+
+    A repaint that only knows the data (a legend toggle, or the zoom
+    frame resizing the canvas) used to call `renderBatchTrajectory`
+    without its scrub argument, so the position marker vanished while
+    the scrubber's own label still named a generation -- reported from
+    the zoom frame, where it stayed gone until the next scrubber nudge.
+    The scalar path already cached its scrub argument; this pins the
+    batch path doing the same, reading the cache itself rather than
+    comparing pixels (the two draws are at different canvas sizes).
+    """
+    done_event = threading.Event()
+
+    def on_message(message: RunMessage | BatchMessage) -> None:
+        if message[0] in ("done", "cancelled", "error"):
+            done_event.set()
+
+    window = create_window(api=Api(on_message=on_message), hidden=True)
+    outcome: queue.Queue[dict[str, Any] | None] = queue.Queue(maxsize=1)
+
+    def _drive() -> None:
+        try:
+            _wait_for_input_screen_ready(window)
+            window.evaluate_js(
+                _SET_STAGGERED_BATCH_FIELDS
+                + "document.getElementById('run-button').click();"
+            )
+            settled = None
+            if done_event.wait(timeout=_EVENT_WAIT_TIMEOUT_SECONDS):
+                for _ in range(_READY_POLL_ATTEMPTS):
+                    if not window.evaluate_js("window.__fimScrubberPending"):
+                        break
+                    time.sleep(_READY_POLL_INTERVAL_SECONDS)
+                window.evaluate_js(
+                    "(function(){"
+                    "var range = document.getElementById('scrubber-range');"
+                    "range.value = '0';"
+                    "range.dispatchEvent(new Event('input', {bubbles: true}));"
+                    "})();"
+                )
+                settled = window.evaluate_js(
+                    "({"
+                    "expected: window.fim.getScrubberGenerations()[0], "
+                    "cached: lastBatchScrubGeneration, "
+                    "afterRepaint: (() => {"
+                    "repaintTrajectory();"
+                    "return lastBatchScrubGeneration;"
+                    "})()"
+                    "})"
+                )
+            outcome.put(settled)
+        finally:
+            window.destroy()
+
+    webview.start(_drive)
+    settled = outcome.get(timeout=_OUTCOME_TIMEOUT_SECONDS)
+
+    assert settled is not None, "batch never reached done within the wait budget"
+    assert settled["cached"] == settled["expected"]
+    assert settled["afterRepaint"] == settled["expected"]

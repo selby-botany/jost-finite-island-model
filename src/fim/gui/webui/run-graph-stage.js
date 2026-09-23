@@ -359,25 +359,38 @@ function applyGraphZoom() {
     }
     const pane = runGraphPane(zoomedGraphKey);
     if (pane) {
-        // Width: clear the inline override and let the grid column
-        // (`.run-graph-body`'s own `minmax(0, 1fr)`, reused verbatim
-        // for this wrapper) give the pane's natural, unconstrained
-        // width -- already correctly excluding both the scrubber's own
-        // column beside it and the stats table beside *that*, with no
-        // arithmetic here that could drift out of sync with either
-        // one's own CSS.
-        pane.style.width = "";
-        const baseWidth = Math.max(pane.clientWidth, 320);
-        // Height: the grid does not stretch its cross axis
-        // (`align-items: start`, the same choice the stage itself
-        // makes), so the natural pane height is just its own content
-        // height -- far short of "as tall as the frame allows", which
-        // is the whole point of zooming. The column's own rendered
-        // height (forced to fill the frame by `#graph-zoom-body`'s
-        // `align-items: stretch`) is the one that means that.
-        const baseHeight = Math.max(graphColumn.clientHeight, 240);
-        pane.style.width = `${Math.round(baseWidth * zoomScale)}px`;
-        pane.style.height = `${Math.round(baseHeight * zoomScale)}px`;
+        // Scale 1 means "exactly as large as the frame's graph column
+        // leaves room for", so both base sizes come from that column
+        // and never from the pane itself. An earlier version measured
+        // the pane's own natural width instead, which is a function of
+        // its canvas buffer -- i.e. of the *previous* zoom level's
+        // size. Every step therefore compounded on the last one: 50%
+        // drew at roughly a quarter, and Fit did not return to the
+        // opening size.
+        //
+        // Width: the column minus the scrubber's own column and the
+        // grid gap between the two tracks (present even when the
+        // scrubber is hidden and its track is empty). Height: the
+        // column's own rendered height, which `#graph-zoom-body`
+        // stretches to fill the frame -- the grid itself does not
+        // stretch its cross axis (`align-items: start`, as on the
+        // stage), so the pane's natural height would only be its
+        // content height.
+        const scrubber = document.getElementById("scrubber-controls");
+        const scrubberWidth =
+            scrubber && scrubber.parentElement === graphColumn ? scrubber.offsetWidth : 0;
+        const gap = parseFloat(getComputedStyle(graphColumn).columnGap) || 0;
+        //
+        // Measured off the column's border box (floored), not its
+        // `clientWidth`/`clientHeight`: those shrink by a classic
+        // scrollbar's thickness whenever the previous zoom level left
+        // one showing, so Fit came back a scrollbar narrower than the
+        // opening size. The border box is the same at every level.
+        const columnBox = graphColumn.getBoundingClientRect();
+        const baseWidth = Math.max(Math.floor(columnBox.width) - scrubberWidth - gap, 320);
+        const baseHeight = Math.max(Math.floor(columnBox.height), 240);
+        pane.style.width = `${Math.floor(baseWidth * zoomScale)}px`;
+        pane.style.height = `${Math.floor(baseHeight * zoomScale)}px`;
     }
     if (level) {
         level.textContent = `${Math.round(zoomScale * 100)}%`;
@@ -498,7 +511,19 @@ window.fim.openGraphZoom = function openGraphZoom() {
     }
     graphColumn.appendChild(pane);
 
-    body.replaceChildren(graphColumn, ...(statsTable ? [statsTable] : []));
+    // The table goes inside its own block wrapper rather than straight
+    // into the body: a table stretched to the row's height hands the
+    // extra height to its rows (they spread apart), and `overflow` does
+    // not reliably create a scrollport on a table box at all. The
+    // wrapper stretches and scrolls; the table keeps its natural size.
+    const statsColumn = document.createElement("div");
+    statsColumn.id = "graph-zoom-stats-column";
+    statsColumn.className = "graph-zoom-stats-column";
+    if (statsTable) {
+        statsColumn.appendChild(statsTable);
+    }
+
+    body.replaceChildren(graphColumn, ...(statsTable ? [statsColumn] : []));
     modal.showModal();
     applyGraphZoom();
 };
@@ -531,6 +556,10 @@ function restoreZoomedPane() {
     const graphColumn = document.getElementById("graph-zoom-graph-column");
     if (graphColumn) {
         graphColumn.remove();
+    }
+    const statsColumn = document.getElementById("graph-zoom-stats-column");
+    if (statsColumn) {
+        statsColumn.remove();
     }
     zoomedGraphKey = null;
     zoomedStatsTable = null;

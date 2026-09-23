@@ -9676,6 +9676,26 @@ frame restores the authoritative final summary verbatim. Checked on
 the D row's own value cell, with the scrubber label proving the
 scrub itself actually moved.
 
+<a id="gui.test_batch_results_screen.test_a_batch_repaint_keeps_the_scrub_position_marker"></a>
+
+#### test\_a\_batch\_repaint\_keeps\_the\_scrub\_position\_marker
+
+```python
+def test_a_batch_repaint_keeps_the_scrub_position_marker(
+        staggered_batch_run_settings: Path) -> None
+```
+
+Repainting the batch trajectory redraws it at the scrubbed generation.
+
+A repaint that only knows the data (a legend toggle, or the zoom
+frame resizing the canvas) used to call `renderBatchTrajectory`
+without its scrub argument, so the position marker vanished while
+the scrubber's own label still named a generation -- reported from
+the zoom frame, where it stayed gone until the next scrubber nudge.
+The scalar path already cached its scrub argument; this pins the
+batch path doing the same, reading the cache itself rather than
+comparing pixels (the two draws are at different canvas sizes).
+
 <a id="gui.test_batch_runner"></a>
 
 # gui.test\_batch\_runner
@@ -15198,6 +15218,27 @@ move the same way, for the same reason (full parity with the Run
 card's own graph-plus-scrubber-plus-statistics experience, at no
 cost of a second implementation) -- this pins their own round trip
 too, not only the pane's.
+
+<a id="gui.test_results_screen.test_graph_zoom_sizes_are_a_function_of_the_frame_not_of_the_last_zoom"></a>
+
+#### test\_graph\_zoom\_sizes\_are\_a\_function\_of\_the\_frame\_not\_of\_the\_last\_zoom
+
+```python
+def test_graph_zoom_sizes_are_a_function_of_the_frame_not_of_the_last_zoom(
+        fast_scalar_run_settings: Path, window: webview.Window,
+        drive: Callable[..., Any]) -> None
+```
+
+Zoom levels scale from the frame, and the stats table stays put.
+
+Reported from the zoom frame: at 150% the statistics table vanished,
+at 50% the graph drew at about a quarter of the frame while the
+label still said 50%, and Fit did not return to the opening size.
+Two causes, both pinned here. The graph column's flex basis was its
+own content (so zooming in pushed the table out), and the base size
+was measured off the pane itself (so every step compounded on the
+previous one). Also pinned: the table keeps its natural height
+instead of spreading its rows across a stretched box.
 
 <a id="gui.test_results_screen.test_deme_pair_selectors_stay_glued_to_the_scatter_axes"></a>
 

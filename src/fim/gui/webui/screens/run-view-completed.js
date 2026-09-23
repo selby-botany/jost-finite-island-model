@@ -151,6 +151,15 @@ let lastTrajectoryRenderArgs = null;
 // of the two views ever shows at once, so there is no risk of one
 // view's own toggle silently fighting the other's).
 let lastPooledConvergenceHistories = null;
+// The scrub position that accompanied `lastPooledConvergenceHistories`,
+// cached for the same reason as the rest of the pair: a repaint that
+// only knows the data (a legend toggle, a zoom-frame resize) would
+// otherwise redraw the batch panel *without* its position marker while
+// the scrubber's own label still names a generation -- reported from
+// the zoom frame, where every resize dropped the marker until the next
+// scrubber nudge. The scalar path never had this gap, since
+// `lastTrajectoryRenderArgs` already carries its scrub argument.
+let lastBatchScrubGeneration = null;
 let activeTrajectoryRenderMode = null;
 
 /**
@@ -353,7 +362,7 @@ function repaintTrajectory() {
         renderTrajectory(...lastTrajectoryRenderArgs);
     }
     if (activeTrajectoryRenderMode === "batch" && lastPooledConvergenceHistories) {
-        renderBatchTrajectory(lastPooledConvergenceHistories);
+        renderBatchTrajectory(lastPooledConvergenceHistories, lastBatchScrubGeneration);
     }
 }
 
@@ -1302,6 +1311,7 @@ function drawBatchTrajectoryCurve(canvas, visiblePooled, scrubGeneration) {
  */
 function renderBatchTrajectory(pooledConvergenceHistories, scrubGeneration) {
     lastPooledConvergenceHistories = pooledConvergenceHistories;
+    lastBatchScrubGeneration = scrubGeneration ?? null;
     const names = pooledConvergenceHistories ? Object.keys(pooledConvergenceHistories) : [];
     if (names.length === 0) {
         activeTrajectoryRenderMode = null;
