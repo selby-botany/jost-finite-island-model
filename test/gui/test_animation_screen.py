@@ -128,10 +128,10 @@ def _open_run(window: webview.Window, trajectory_path: Path) -> Any:
     )
 
 
-def test_opening_a_run_populates_the_scrubber_and_playing_moves_the_frame(
+def test_opening_a_run_populates_the_scrubber_and_scrubbing_moves_the_frame(
     tmp_path: Path,
 ) -> None:
-    """Re-opening a multi-generation run auto-populates and plays the scrubber."""
+    """Re-opening a multi-generation run auto-populates and scrubs the scrubber."""
     output = _write_run(tmp_path)
     window = create_window(hidden=True)
     outcome: queue.Queue[dict[str, Any] | None] = queue.Queue(maxsize=1)
@@ -156,7 +156,8 @@ def test_opening_a_run_populates_the_scrubber_and_playing_moves_the_frame(
                     "forwardDisabled: "
                     "document.getElementById('scrubber-step-forward')"
                     ".disabled, "
-                    "generations: window.fim.getScrubberGenerations()"
+                    "scrubberMax: "
+                    "document.getElementById('scrubber-range').max"
                     "})",
                     lambda value: (
                         value is not None
@@ -165,24 +166,32 @@ def test_opening_a_run_populates_the_scrubber_and_playing_moves_the_frame(
                     ),
                 )
                 if not after_load["scrubberHidden"]:
-                    # Click "play forward" and let it run to the last
-                    # frame, then confirm the generation readout landed
-                    # on the last sampled generation -- direct proof
-                    # playback actually moved the displayed frame, not
-                    # just that the controls became enabled.
-                    last_generation = after_load["generations"][-1]
+                    # Scrub to the last frame (index == scrubberMax) and
+                    # confirm the label's own generation number updates
+                    # to match -- direct proof the scrub input actually
+                    # moved the displayed frame, not just that the
+                    # controls became enabled.
+                    scrubber_max = int(after_load["scrubberMax"])
                     window.evaluate_js(
-                        "document.getElementById('scrubber-step-forward').click();"
+                        "const scrubber = "
+                        "document.getElementById('scrubber-range');"
+                        f"scrubber.value = '{scrubber_max}';"
+                        "scrubber.dispatchEvent("
+                        "new Event('input', {bubbles: true}));"
                     )
-                    after_play = _poll_until(
+                    last_generation = window.evaluate_js(
+                        f"window.fim.getScrubberGenerations()[{scrubber_max}]"
+                    )
+                    expected_label = f"Generation {last_generation}"
+                    after_scrub = _poll_until(
                         window,
                         "document.getElementById('scrubber-label').textContent",
-                        lambda value: value == f"Generation {last_generation}",
+                        lambda value: value == expected_label,
                     )
                     settled = {
                         "afterLoad": after_load,
-                        "afterPlayLabel": after_play,
-                        "lastGeneration": last_generation,
+                        "afterScrubLabel": after_scrub,
+                        "expectedLabel": expected_label,
                     }
             outcome.put(settled)
         finally:
@@ -194,5 +203,5 @@ def test_opening_a_run_populates_the_scrubber_and_playing_moves_the_frame(
     assert settled is not None, "the scrubber was never populated"
     assert settled["afterLoad"]["scrubberHidden"] is False
     assert settled["afterLoad"]["forwardDisabled"] is False
-    assert len(settled["afterLoad"]["generations"]) >= 2
-    assert settled["afterPlayLabel"] == f"Generation {settled['lastGeneration']}"
+    assert int(settled["afterLoad"]["scrubberMax"]) >= 1
+    assert settled["afterScrubLabel"] == settled["expectedLabel"]

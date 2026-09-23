@@ -1039,27 +1039,24 @@ def test_completed_scrubber_updates_supplemental_panels_on_scrub_ticks(
         trigger=(
             _SET_TINY_FIELDS
             + "document.getElementById('run-button').click(); "
-            # No slider to jump to 0 directly any more -- click "play
-            # backward" once the scrubber is ready and let it walk back
-            # on its own; `stepBackward` (`scrubber.js`) stops itself
-            # the moment it reaches the first frame, so this settles at
-            # generation 0 without any further driving from here.
-            + "const clickBackwardWhenReady = () => { "
+            + "const pollScrubber = () => { "
             + "if (window.fim.getRunViewState() === 'completed' && "
             + "window.__fimScrubberPending === 0) { "
-            + "document.getElementById('scrubber-step-backward').click(); "
-            + "window.__fimScrubBackwardStarted = true; "
+            + "const range = document.getElementById('scrubber-range'); "
+            + "range.value = '0'; "
+            + "range.dispatchEvent(new Event('input', {bubbles: true})); "
+            + "window.__fimScrubbedToZero = true; "
             + "return; "
             + "} "
-            + "setTimeout(clickBackwardWhenReady, 50); "
+            + "setTimeout(pollScrubber, 50); "
             + "}; "
-            + "setTimeout(clickBackwardWhenReady, 50);"
+            + "setTimeout(pollScrubber, 50);"
         ),
         read=(
             "({"
             "runViewState: window.fim.getRunViewState(), "
             "scrubberPending: window.__fimScrubberPending, "
-            "scrubBackwardStarted: !!window.__fimScrubBackwardStarted, "
+            "scrubbedToZero: !!window.__fimScrubbedToZero, "
             "alleleCompositionHidden: "
             "document.getElementById('allele-composition-card').hidden, "
             "frequencySpectrumHidden: "
@@ -1071,8 +1068,7 @@ def test_completed_scrubber_updates_supplemental_panels_on_scrub_ticks(
             value is not None
             and value.get("runViewState") == "completed"
             and value.get("scrubberPending") == 0
-            and value.get("scrubBackwardStarted") is True
-            and value.get("scrubberLabel") == "Generation 0"
+            and value.get("scrubbedToZero") is True
         ),
         poll_attempts=_POLL_ATTEMPTS,
     )
@@ -1557,45 +1553,24 @@ def test_scrubbing_a_completed_scalar_run_moves_every_stats_row(
         trigger=(
             _SET_TINY_FIELDS
             + "document.getElementById('run-button').click(); "
-            + "const readStats = () => { "
+            + "const pollStats = () => { "
+            + "if (window.fim.getRunViewState() === 'completed' && "
+            + "window.__fimScrubberPending === 0) { "
+            + "const read = () => { "
             + "return {"
             + "d: document.querySelector('#stat-D .stat-value').textContent, "
             + "ne: document.querySelector('#stat-Ne_S .stat-value').textContent, "
             + "label: document.getElementById('scrubber-label').textContent"
             + "}; }; "
-            # No slider left to jump to a generation directly -- this
-            # walks the same "final -> generation 0 -> back to final"
-            # round trip by playing backward then forward and waiting
-            # for each leg's label to settle (`scrubber.js`'s own
-            # `stepBackward`/`stepForward` stop themselves at either
-            # end, so no further driving is needed once a leg starts).
-            + "let phase = 'wait-ready'; "
-            + "let finalLabel = null; "
-            + "const tick = () => { "
-            + "const label = document.getElementById('scrubber-label').textContent; "
-            + "if (phase === 'wait-ready') { "
-            + "if (window.fim.getRunViewState() === 'completed' && "
-            + "window.__fimScrubberPending === 0) { "
-            + "window.__fimStatScrub = {final: readStats()}; "
-            + "finalLabel = window.__fimStatScrub.final.label; "
-            + "document.getElementById('scrubber-step-backward').click(); "
-            + "phase = 'playing-back'; "
-            + "} "
-            + "} else if (phase === 'playing-back') { "
-            + "if (label === 'Generation 0') { "
-            + "window.__fimStatScrub.scrubbed = readStats(); "
-            + "document.getElementById('scrubber-step-forward').click(); "
-            + "phase = 'playing-forward'; "
-            + "} "
-            + "} else if (phase === 'playing-forward') { "
-            + "if (label === finalLabel) { "
-            + "window.__fimStatScrub.restored = readStats(); "
-            + "phase = 'done'; "
-            + "} "
-            + "} "
-            + "if (phase !== 'done') { setTimeout(tick, 50); } "
-            + "}; "
-            + "setTimeout(tick, 50);"
+            + "window.__fimStatScrub = {final: read()}; "
+            + "const range = document.getElementById('scrubber-range'); "
+            + "range.value = '0'; "
+            + "range.dispatchEvent(new Event('input', {bubbles: true})); "
+            + "window.__fimStatScrub.scrubbed = read(); "
+            + "range.value = range.max; "
+            + "range.dispatchEvent(new Event('input', {bubbles: true})); "
+            + "window.__fimStatScrub.restored = read(); "
+            + "return; } setTimeout(pollStats, 50); }; setTimeout(pollStats, 50);"
         ),
         read="window.__fimStatScrub || null",
         is_ready=lambda value: value is not None and value.get("restored") is not None,

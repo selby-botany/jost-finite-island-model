@@ -6519,16 +6519,16 @@ live window, every wait Python-side polling of a real `window.
 evaluate_js` read, never a `setTimeout` loop inside a trigger — see
 `test/gui/conftest.py`'s own module docstring for why.
 
-<a id="gui.test_animation_screen.test_opening_a_run_populates_the_scrubber_and_playing_moves_the_frame"></a>
+<a id="gui.test_animation_screen.test_opening_a_run_populates_the_scrubber_and_scrubbing_moves_the_frame"></a>
 
-#### test\_opening\_a\_run\_populates\_the\_scrubber\_and\_playing\_moves\_the\_frame
+#### test\_opening\_a\_run\_populates\_the\_scrubber\_and\_scrubbing\_moves\_the\_frame
 
 ```python
-def test_opening_a_run_populates_the_scrubber_and_playing_moves_the_frame(
+def test_opening_a_run_populates_the_scrubber_and_scrubbing_moves_the_frame(
         tmp_path: Path) -> None
 ```
 
-Re-opening a multi-generation run auto-populates and plays the scrubber.
+Re-opening a multi-generation run auto-populates and scrubs the scrubber.
 
 <a id="gui.test_app"></a>
 

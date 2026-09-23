@@ -93,35 +93,13 @@ def _poll_until(
 
 
 def _scrub_to(window: webview.Window, index: int) -> None:
-    """Play the scrubber to frame `index` and pause it there.
-
-    There is no direct-jump slider any more (2026-09-23 decluttering): a
-    real botanist reaches a specific frame by clicking "play forward" or
-    "play backward" and clicking that same triangle button again once
-    the generation they want is on screen -- `scrubber.js`'s own
-    play/pause toggle, one button per direction. This drives exactly
-    that: picks a direction from the scrubber's current position versus
-    the target, clicks to start, polls the generation label, then
-    clicks the same button again to stop once it matches.
-    """
-    target_generation = window.evaluate_js(
-        f"window.fim.getScrubberGenerations()[{index}]"
+    """Drag `#scrubber-range` to `index` and fire the same `"input"` event
+    a real drag dispatches (`scrubber.js`'s own listener)."""
+    window.evaluate_js(
+        f"document.getElementById('scrubber-range').value = '{index}';"
+        "document.getElementById('scrubber-range').dispatchEvent("
+        "new Event('input', {bubbles: true}));"
     )
-    current_label = window.evaluate_js(
-        "document.getElementById('scrubber-label').textContent"
-    )
-    current_generation = int(current_label.removeprefix("Generation "))
-    if current_generation == target_generation:
-        return
-    direction = "forward" if target_generation > current_generation else "backward"
-    button_id = f"scrubber-step-{direction}"
-    window.evaluate_js(f"document.getElementById('{button_id}').click();")
-    _poll_until(
-        window,
-        "document.getElementById('scrubber-label').textContent",
-        lambda value: value == f"Generation {target_generation}",
-    )
-    window.evaluate_js(f"document.getElementById('{button_id}').click();")
 
 
 def test_scrubbing_to_an_earlier_generation_updates_the_stats_table_and_marker(

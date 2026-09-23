@@ -325,18 +325,20 @@
                    (which is what pushed the statistics table below the
                    fold when it sat underneath the panels).
                    2026-09-23 decluttering: the earlier single centered
-                   "Play"/"Pause" button, the vertical range slider, and
-                   the verbose bottom label ("Generation N (frame X / Y)",
-                   plus a parenthetical live/inspecting note) are all
-                   gone -- there is no longer any drag-to-scrub affordance
-                   at all. In their place: a bare generation-number
-                   readout at the top, styled like the axis text
-                   `run-view-completed.js` itself draws onto the canvas
-                   (same 10px sans-serif, same muted color), and two
-                   small triangle buttons that play forward (up) or
-                   backward (down) from the current generation, each
-                   acting as its own play/pause toggle for that one
-                   direction (`scrubber.js`'s own `playDirection`). -->
+                   "Play"/"Pause" button and the verbose bottom label
+                   ("Generation N (frame X / Y)", plus a parenthetical
+                   live/inspecting note) are gone. In their place: a
+                   bare generation-number readout at the top, styled
+                   like the axis text `run-view-completed.js` itself
+                   draws onto the canvas (same 10px sans-serif, same
+                   muted color), and two small triangle buttons -- one
+                   on each side of the slider's own handle -- that play
+                   forward (up) or backward (down) from wherever that
+                   handle currently sits, each acting as its own
+                   play/pause toggle for that one direction
+                   (`scrubber.js`'s own `playDirection`). The slider
+                   itself is unchanged: dragging it still jumps straight
+                   to any generation, exactly as before. -->
               <div class="scrubber-controls" id="scrubber-controls" hidden>
                 <span id="scrubber-label" class="scrubber-generation"></span>
                 <button
@@ -347,6 +349,16 @@
                   aria-pressed="false"
                   aria-label="Play forward from the current generation"
                 >&#9650;</button>
+                <input
+                  type="range"
+                  id="scrubber-range"
+                  min="0"
+                  max="0"
+                  value="0"
+                  step="1"
+                  orient="vertical"
+                  disabled
+                >
                 <button
                   type="button"
                   id="scrubber-step-backward"

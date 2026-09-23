@@ -660,30 +660,20 @@ def test_a_completed_batchs_own_scrubber_replays_the_pooled_scatter(
                     "({"
                     "scrubberHidden: "
                     "document.getElementById('scrubber-controls').hidden, "
-                    "generations: window.fim.getScrubberGenerations()"
+                    "scrubberMax: "
+                    "document.getElementById('scrubber-range').max"
                     "})"
                 )
-                # No slider left to jump to the midpoint directly
-                # (2026-09-23 decluttering) -- click "play forward" and
-                # poll for the label to reach the last frame; `step
-                # Forward` (`scrubber.js`) stops itself there, so this
-                # still proves scrubbing through real frames updates the
-                # label without error, just via every frame in between
-                # rather than one chosen one.
                 window.evaluate_js(
-                    "document.getElementById('scrubber-step-forward').click();"
+                    "(function(){"
+                    "var range = document.getElementById('scrubber-range');"
+                    "range.value = Math.floor(Number(range.max) / 2);"
+                    "range.dispatchEvent(new Event('input', {bubbles: true}));"
+                    "})();"
                 )
-                last_generation = (
-                    before["generations"][-1] if before["generations"] else None
+                after_scrub_label = window.evaluate_js(
+                    "document.getElementById('scrubber-label').textContent"
                 )
-                after_scrub_label = None
-                for _ in range(_READY_POLL_ATTEMPTS):
-                    after_scrub_label = window.evaluate_js(
-                        "document.getElementById('scrubber-label').textContent"
-                    )
-                    if after_scrub_label == f"Generation {last_generation}":
-                        break
-                    time.sleep(_READY_POLL_INTERVAL_SECONDS)
                 settled = {"before": before, "afterScrubLabel": after_scrub_label}
             outcome.put(settled)
         finally:
@@ -694,7 +684,7 @@ def test_a_completed_batchs_own_scrubber_replays_the_pooled_scatter(
 
     assert settled is not None, "batch never reached done within the wait budget"
     assert settled["before"]["scrubberHidden"] is False
-    assert len(settled["before"]["generations"]) > 0
+    assert int(settled["before"]["scrubberMax"]) > 0
     assert "Generation" in settled["afterScrubLabel"]
 
 
@@ -758,23 +748,14 @@ def test_scrubbing_a_completed_batch_moves_every_panel_not_just_the_scatter(
                     ),
                 }
                 # Frame 0 is the run's own first generation, as far from
-                # the final state as this run's history goes. No slider
-                # left to jump there directly (2026-09-23 decluttering)
-                # -- click "play backward" and poll for the label to
-                # settle at "Generation 0"; `stepBackward` (`scrubber.
-                # js`) stops itself there.
+                # the final state as this run's history goes.
                 window.evaluate_js(
-                    "document.getElementById('scrubber-step-backward').click();"
+                    "(function(){"
+                    "var range = document.getElementById('scrubber-range');"
+                    "range.value = '0';"
+                    "range.dispatchEvent(new Event('input', {bubbles: true}));"
+                    "})();"
                 )
-                for _ in range(_READY_POLL_ATTEMPTS):
-                    if (
-                        window.evaluate_js(
-                            "document.getElementById('scrubber-label').textContent"
-                        )
-                        == "Generation 0"
-                    ):
-                        break
-                    time.sleep(_READY_POLL_INTERVAL_SECONDS)
                 scrubbed = {
                     "composition": _snapshot(
                         "alleleComposition", "allele-composition-canvas"
@@ -1159,40 +1140,24 @@ def test_scrubbing_a_completed_batch_moves_the_statistics_panel(
                     time.sleep(_READY_POLL_INTERVAL_SECONDS)
                 final = window.evaluate_js(read_panel)
                 # Frame 0 is the run's own first generation, as far from
-                # the final state as this run's history goes. No slider
-                # left to jump there directly (2026-09-23 decluttering)
-                # -- click "play backward" and poll for the label to
-                # settle at "Generation 0"; `stepBackward` (`scrubber.
-                # js`) stops itself there.
+                # the final state as this run's history goes.
                 window.evaluate_js(
-                    "document.getElementById('scrubber-step-backward').click();"
+                    "(function(){"
+                    "var range = document.getElementById('scrubber-range');"
+                    "range.value = '0';"
+                    "range.dispatchEvent(new Event('input', {bubbles: true}));"
+                    "})();"
                 )
-                for _ in range(_READY_POLL_ATTEMPTS):
-                    if (
-                        window.evaluate_js(
-                            "document.getElementById('scrubber-label').textContent"
-                        )
-                        == "Generation 0"
-                    ):
-                        break
-                    time.sleep(_READY_POLL_INTERVAL_SECONDS)
                 scrubbed = window.evaluate_js(read_panel)
                 # And back to the final frame, to prove the
-                # authoritative restore rather than a one-way drift --
-                # "play forward" now, polling for the same label
-                # `final` was read at.
+                # authoritative restore rather than a one-way drift.
                 window.evaluate_js(
-                    "document.getElementById('scrubber-step-forward').click();"
+                    "(function(){"
+                    "var range = document.getElementById('scrubber-range');"
+                    "range.value = range.max;"
+                    "range.dispatchEvent(new Event('input', {bubbles: true}));"
+                    "})();"
                 )
-                for _ in range(_READY_POLL_ATTEMPTS):
-                    if (
-                        window.evaluate_js(
-                            "document.getElementById('scrubber-label').textContent"
-                        )
-                        == final["label"]
-                    ):
-                        break
-                    time.sleep(_READY_POLL_INTERVAL_SECONDS)
                 restored = window.evaluate_js(read_panel)
                 settled = {"final": final, "scrubbed": scrubbed, "restored": restored}
             outcome.put(settled)

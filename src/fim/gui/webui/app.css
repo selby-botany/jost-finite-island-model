@@ -869,6 +869,7 @@ fieldset.composite > label {
     justify-content: flex-start;
     gap: 0.35rem;
     width: 3rem;
+    min-height: 22rem;
 }
 
 /* Mirrors the font/color `run-view-completed.js` uses for the axis
@@ -881,10 +882,19 @@ fieldset.composite > label {
     text-align: center;
 }
 
-/* The two play/pause toggles that replaced the slider (2026-09-23):
- * an up triangle steps forward from the current generation, a down
- * triangle steps backward, each button its own independent play/pause
- * for that one direction. */
+.run-graph-body .scrubber-controls input[type="range"] {
+    writing-mode: bt-lr;
+    -webkit-appearance: slider-vertical;
+    width: 100%;
+    max-width: none;
+    flex: 1;
+    margin: 0.35rem 0;
+}
+
+/* The two play/pause toggles flanking the slider's own handle: an up
+ * triangle plays forward from wherever the handle currently sits, a
+ * down triangle plays backward, each button its own independent
+ * play/pause for that one direction. */
 .run-graph-body .scrubber-controls .scrubber-step-button {
     width: 1.75rem;
     height: 1.5rem;
