@@ -4,6 +4,7 @@ from pathlib import Path
 
 import pytest
 
+from fim.engine import deterministic_run_id
 from fim.model.locus import LocusSpec
 from fim.model.params import _CONFIG_KEYS, PARAMETER_DEFAULTS, SimulationParams
 
@@ -1199,3 +1200,44 @@ def test_migration_accepts_a_torus_topology_and_rejects_a_mismatched_shape() -> 
         SimulationParams.from_mapping(
             {**config, "m": {**config["m"], "rows": 3.0}}  # type: ignore[dict-item]
         )
+
+
+def test_ploidy_defaults_to_unset_and_leaves_run_ids_alone() -> None:
+    """An unset ploidy is omitted from `to_dict`, so existing run ids hold."""
+    params = SimulationParams.from_mapping(_valid_config())
+
+    assert params.ploidy is None
+    assert "ploidy" not in params.to_dict()
+
+
+def test_ploidy_round_trips_through_to_dict_and_changes_the_run_id() -> None:
+    """A set ploidy is recorded in the manifest mapping and round-trips."""
+    plain = SimulationParams.from_mapping({**_valid_config(), "N": 40})
+    diploid = SimulationParams.from_mapping({**_valid_config(), "N": 40, "ploidy": 2})
+
+    assert diploid.ploidy == 2
+    assert diploid.to_dict()["ploidy"] == 2
+    assert SimulationParams.from_mapping(diploid.to_dict()) == diploid
+    # Same dynamics, different provenance: a deliberately different id.
+    assert deterministic_run_id(diploid) != deterministic_run_id(plain)
+
+
+@pytest.mark.parametrize("ploidy", [0, 5, -1])
+def test_ploidy_outside_one_to_four_is_rejected(ploidy: int) -> None:
+    """Only haploid through tetraploid are accepted."""
+    with pytest.raises(ValueError, match="ploidy must be 1, 2, 3, or 4"):
+        SimulationParams.from_mapping({**_valid_config(), "N": 60, "ploidy": ploidy})
+
+
+def test_ploidy_must_divide_every_demes_gene_copies() -> None:
+    """A deme's N must be a whole number of individuals."""
+    with pytest.raises(ValueError, match=r"N\[1\] is 41 gene copies"):
+        SimulationParams.from_mapping(
+            {**_valid_config(), "d": 2, "N": [40, 41], "ploidy": 2, "m": 0.1}
+        )
+
+
+def test_ploidy_rejects_non_integers() -> None:
+    """A float or a bool is not a ploidy."""
+    with pytest.raises(ValueError, match="ploidy must be an integer"):
+        SimulationParams.from_mapping({**_valid_config(), "N": 40, "ploidy": 2.0})

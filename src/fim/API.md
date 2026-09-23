@@ -295,6 +295,7 @@ Return to the [source-tree orientation](../README.md) or the [developer guide](.
   * [mutate](#fim.model.operators.mutate)
   * [step](#fim.model.operators.step)
 * [fim.model.params](#fim.model.params)
+  * [ALLOWED\_PLOIDIES](#fim.model.params.ALLOWED_PLOIDIES)
   * [DEFAULT\_AUTO\_VECTOR\_MIN\_D](#fim.model.params.DEFAULT_AUTO_VECTOR_MIN_D)
   * [DEFAULT\_AUTO\_VECTOR\_MAX\_CAPACITY](#fim.model.params.DEFAULT_AUTO_VECTOR_MAX_CAPACITY)
   * [DEFAULT\_N\_REPLICATES](#fim.model.params.DEFAULT_N_REPLICATES)
@@ -9750,6 +9751,12 @@ validated `SimulationParams`. See `doc/configuration.md` for what each
 configuration field means and its accepted range, in plain language,
 independent of this file's own more code-oriented documentation.
 
+<a id="fim.model.params.ALLOWED_PLOIDIES"></a>
+
+#### ALLOWED\_PLOIDIES
+
+Ploidy levels the configuration accepts: haploid through tetraploid.
+
 <a id="fim.model.params.DEFAULT_AUTO_VECTOR_MIN_D"></a>
 
 #### DEFAULT\_AUTO\_VECTOR\_MIN\_D
@@ -9974,6 +9981,9 @@ functions that actually use each one.
 **Arguments**:
 
 - `N` - Gene-copy count shared by all demes, or one count per deme.
+  Always gene copies, whatever the ploidy: `ploidy` below
+  records how many copies each individual carries, so the
+  number of individuals per deme is `N / ploidy`.
 - `m` - Symmetric migration rate, or a row-stochastic migration matrix.
 - `mu` - Per-copy mutation probability per generation — shared by every
   locus, or one rate per locus. `SimulationParams.from_mapping`
@@ -10217,6 +10227,15 @@ functions that actually use each one.
   independent of `convergence_window`, since the two describe
   different things (whether the run has settled, versus how
   much it still wobbles once settled).
+- `ploidy` - Gene copies per individual -- 1 (haploid) through 4
+- `(tetraploid)` - or `None` (the default) when unspecified.
+  Pure provenance: the simulator's dynamics run on gene
+  copies (`N`) and never read it, so it changes no result.
+  It exists so a run can say "225 diploid individuals" rather
+  than an unexplained `N = 450`, and so the desktop app,
+  which asks for individuals, can show them again when a run
+  is reopened. When set, every deme's `N` must be a multiple
+  of it.
 
 <a id="fim.model.params.SimulationParams.__post_init__"></a>
 

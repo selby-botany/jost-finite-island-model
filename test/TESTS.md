@@ -19901,6 +19901,57 @@ def test_migration_accepts_a_torus_topology_and_rejects_a_mismatched_shape(
 
 `m: {topology: torus, rate, rows, columns}` expands to the dense matrix.
 
+<a id="model.test_params.test_ploidy_defaults_to_unset_and_leaves_run_ids_alone"></a>
+
+#### test\_ploidy\_defaults\_to\_unset\_and\_leaves\_run\_ids\_alone
+
+```python
+def test_ploidy_defaults_to_unset_and_leaves_run_ids_alone() -> None
+```
+
+An unset ploidy is omitted from `to_dict`, so existing run ids hold.
+
+<a id="model.test_params.test_ploidy_round_trips_through_to_dict_and_changes_the_run_id"></a>
+
+#### test\_ploidy\_round\_trips\_through\_to\_dict\_and\_changes\_the\_run\_id
+
+```python
+def test_ploidy_round_trips_through_to_dict_and_changes_the_run_id() -> None
+```
+
+A set ploidy is recorded in the manifest mapping and round-trips.
+
+<a id="model.test_params.test_ploidy_outside_one_to_four_is_rejected"></a>
+
+#### test\_ploidy\_outside\_one\_to\_four\_is\_rejected
+
+```python
+@pytest.mark.parametrize("ploidy", [0, 5, -1])
+def test_ploidy_outside_one_to_four_is_rejected(ploidy: int) -> None
+```
+
+Only haploid through tetraploid are accepted.
+
+<a id="model.test_params.test_ploidy_must_divide_every_demes_gene_copies"></a>
+
+#### test\_ploidy\_must\_divide\_every\_demes\_gene\_copies
+
+```python
+def test_ploidy_must_divide_every_demes_gene_copies() -> None
+```
+
+A deme's N must be a whole number of individuals.
+
+<a id="model.test_params.test_ploidy_rejects_non_integers"></a>
+
+#### test\_ploidy\_rejects\_non\_integers
+
+```python
+def test_ploidy_rejects_non_integers() -> None
+```
+
+A float or a bool is not a ploidy.
+
 <a id="model.test_state"></a>
 
 # model.test\_state

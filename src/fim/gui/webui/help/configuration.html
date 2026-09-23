@@ -41,8 +41,11 @@ engine_backend: auto   # recommended choice; the library default is lineal
 <li><strong>Required:</strong> yes</li>
 <li><strong>Meaning:</strong> gene copies per deme</li>
 </ul>
-<p><code>N</code> is deliberately ploidy-neutral. Pass <code>2 * individuals</code> for a diploid
-autosomal locus and pass census individuals unchanged for a haploid locus.
+<p><code>N</code> is deliberately ploidy-neutral: the simulator counts gene copies. Pass
+<code>2 * individuals</code> for a diploid autosomal locus and pass census individuals
+unchanged for a haploid locus. Set <a href="#ploidy"><code>ploidy</code></a> as well to record how
+many copies each individual carries; the desktop app always does, and asks
+you for individuals rather than gene copies.
 Per-deme lists model unequal island sizes: every stage of the update
 pipeline (<code>migrate</code>, <code>mutate</code>, <code>drift</code>), the founding-allele-count bound
 (checked against the smallest N<sub>i</sub>), and deme_weighting: size (when chosen) all use
@@ -52,6 +55,23 @@ d: 3
 </code></pre>
 <p>A scalar <code>N</code> and a list of <code>d</code> equal values are numerically identical;
 prefer the scalar form when every deme is the same size.</p>
+<h3 id="ploidy"><code>ploidy</code></h3>
+<ul>
+<li><strong>Type:</strong> <code>1</code>, <code>2</code>, <code>3</code>, or <code>4</code> (haploid, diploid, triploid, tetraploid)</li>
+<li><strong>Default:</strong> unset</li>
+<li><strong>Meaning:</strong> gene copies per individual</li>
+</ul>
+<p>Pure provenance. The simulator runs on gene copies (<code>N</code>) and never reads
+<code>ploidy</code>, so it changes no result. It is recorded so a run can say &quot;225
+diploid individuals&quot; instead of an unexplained <code>N: 450</code>, and so the desktop
+app can show individuals again when you reopen a run. When set, every deme's
+<code>N</code> must be a multiple of it.</p>
+<pre><code class="language-yaml">N: 450        # gene copies
+ploidy: 2     # so 225 diploid individuals per deme
+</code></pre>
+<p>Because it is part of the recorded configuration, two runs that differ only
+in <code>ploidy</code> get different auto-generated run ids. A configuration that does
+not set it is unchanged, and keeps its existing run id.</p>
 <h3 id="d"><code>d</code></h3>
 <ul>
 <li><strong>Type:</strong> integer at least 2</li>
@@ -834,6 +854,10 @@ execution-flavored defaults.</p>
 <tbody>
 <tr>
 <td><code>N &lt; 1</code>, <code>d &lt; 2</code></td>
+<td>rejected</td>
+</tr>
+<tr>
+<td><code>ploidy</code> not <code>1</code>-<code>4</code>, or a deme's <code>N</code> not a multiple of it</td>
 <td>rejected</td>
 </tr>
 <tr>

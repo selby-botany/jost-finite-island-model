@@ -47,8 +47,11 @@ engine_backend: auto   # recommended choice; the library default is lineal
 - **Required:** yes
 - **Meaning:** gene copies per deme
 
-`N` is deliberately ploidy-neutral. Pass `2 * individuals` for a diploid
-autosomal locus and pass census individuals unchanged for a haploid locus.
+`N` is deliberately ploidy-neutral: the simulator counts gene copies. Pass
+`2 * individuals` for a diploid autosomal locus and pass census individuals
+unchanged for a haploid locus. Set [`ploidy`](#ploidy) as well to record how
+many copies each individual carries; the desktop app always does, and asks
+you for individuals rather than gene copies.
 Per-deme lists model unequal island sizes: every stage of the update
 pipeline (`migrate`, `mutate`, `drift`), the founding-allele-count bound
 (checked against the smallest N<sub>i</sub>), and deme_weighting: size (when chosen) all use
@@ -61,6 +64,27 @@ d: 3
 
 A scalar `N` and a list of `d` equal values are numerically identical;
 prefer the scalar form when every deme is the same size.
+
+### `ploidy`
+
+- **Type:** `1`, `2`, `3`, or `4` (haploid, diploid, triploid, tetraploid)
+- **Default:** unset
+- **Meaning:** gene copies per individual
+
+Pure provenance. The simulator runs on gene copies (`N`) and never reads
+`ploidy`, so it changes no result. It is recorded so a run can say "225
+diploid individuals" instead of an unexplained `N: 450`, and so the desktop
+app can show individuals again when you reopen a run. When set, every deme's
+`N` must be a multiple of it.
+
+```yaml
+N: 450        # gene copies
+ploidy: 2     # so 225 diploid individuals per deme
+```
+
+Because it is part of the recorded configuration, two runs that differ only
+in `ploidy` get different auto-generated run ids. A configuration that does
+not set it is unchanged, and keeps its existing run id.
 
 ### `d`
 
@@ -941,6 +965,7 @@ execution-flavored defaults.
 | Condition | Result |
 |---|---|
 | `N < 1`, `d < 2` | rejected |
+| `ploidy` not `1`-`4`, or a deme's `N` not a multiple of it | rejected |
 | `m` or `mu` outside `[0, 1]` | rejected |
 | missing `seed`, or `seed < 0` | rejected |
 | empty or duplicate loci | rejected |

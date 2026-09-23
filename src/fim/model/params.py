@@ -38,6 +38,8 @@ from fim.model.topology import (
 )
 
 PopulationSize = int | tuple[int, ...]
+ALLOWED_PLOIDIES: Final = (1, 2, 3, 4)
+"""Ploidy levels the configuration accepts: haploid through tetraploid."""
 Migration = float | tuple[tuple[float, ...], ...]
 MutationRate = float | tuple[float, ...]
 DemeWeighting = Literal["equal", "size"]
@@ -262,6 +264,7 @@ PARAMETER_DEFAULTS: Final[dict[str, object]] = {
     "equilibrium_max_generations": None,
     "sigma_band_multiplier": None,
     "sigma_band_window": None,
+    "ploidy": None,
 }
 
 _CONFIG_KEYS: Final = frozenset(
@@ -279,6 +282,7 @@ _CONFIG_KEYS: Final = frozenset(
         "initial_concentration",
         "deme_weighting",
         "locus_aggregation",
+        "ploidy",
         "convergence_statistic",
         "convergence_combinator",
         "convergence_window",
@@ -355,6 +359,9 @@ class SimulationParams:
 
     Args:
         N: Gene-copy count shared by all demes, or one count per deme.
+            Always gene copies, whatever the ploidy: `ploidy` below
+            records how many copies each individual carries, so the
+            number of individuals per deme is `N / ploidy`.
         m: Symmetric migration rate, or a row-stochastic migration matrix.
         mu: Per-copy mutation probability per generation — shared by every
             locus, or one rate per locus. `SimulationParams.from_mapping`
@@ -598,6 +605,15 @@ class SimulationParams:
             independent of `convergence_window`, since the two describe
             different things (whether the run has settled, versus how
             much it still wobbles once settled).
+        ploidy: Gene copies per individual -- 1 (haploid) through 4
+            (tetraploid) -- or `None` (the default) when unspecified.
+            Pure provenance: the simulator's dynamics run on gene
+            copies (`N`) and never read it, so it changes no result.
+            It exists so a run can say "225 diploid individuals" rather
+            than an unexplained `N = 450`, and so the desktop app,
+            which asks for individuals, can show them again when a run
+            is reopened. When set, every deme's `N` must be a multiple
+            of it.
     """
 
     N: PopulationSize
@@ -635,6 +651,7 @@ class SimulationParams:
     equilibrium_max_generations: int | None = None
     sigma_band_multiplier: float | None = None
     sigma_band_window: int | None = None
+    ploidy: int | None = None
 
     def __post_init__(self) -> None:
         """Normalize sequence inputs and validate every parameter.
@@ -687,6 +704,7 @@ class SimulationParams:
         ):
             raise ValueError("initial_concentration must be greater than 0")
         _validate_weighting_and_aggregation(self.deme_weighting, self.locus_aggregation)
+        _validate_ploidy(self.ploidy, population_sizes)
         convergence_statistics = _normalize_convergence_statistic(
             self.convergence_statistic
         )
@@ -949,6 +967,12 @@ class SimulationParams:
             # this one is.
             result["sigma_band_multiplier"] = self.sigma_band_multiplier
             result["sigma_band_window"] = self.sigma_band_window
+        if self.ploidy is not None:
+            # Omitted when unset, like `initial_frequencies`: the field's
+            # default is already `None`, so an absent key and an explicit
+            # `None` mean the same thing, and configurations that never
+            # mention ploidy keep their existing run ids.
+            result["ploidy"] = self.ploidy
         if self.initial_frequencies is not None:
             result["p_0"] = [
                 [
@@ -1186,6 +1210,10 @@ class SimulationParams:
                     "sigma_band_window",
                     PARAMETER_DEFAULTS["sigma_band_window"],
                 ),
+            ),
+            ploidy=_parse_optional_int(
+                "ploidy",
+                config.get("ploidy", PARAMETER_DEFAULTS["ploidy"]),
             ),
         )
 
@@ -1709,6 +1737,29 @@ def _parse_population_size(value: Any) -> PopulationSize:
     if not isinstance(value, Sequence) or isinstance(value, str):
         raise ValueError("N must be an integer or a list of integers")
     return tuple(_parse_int(f"N[{index}]", item) for index, item in enumerate(value))
+
+
+def _validate_ploidy(ploidy: int | None, population_sizes: tuple[int, ...]) -> None:
+    """Check `ploidy` is 1 through 4 and divides every deme's gene-copy count.
+
+    Args:
+        ploidy: Gene copies per individual, or `None` when unspecified.
+        population_sizes: Every deme's gene-copy count (`N`, expanded).
+
+    Raises:
+        ValueError: If `ploidy` is not 1, 2, 3, or 4, or a deme's `N` is
+            not a whole number of individuals of that ploidy.
+    """
+    if ploidy is None:
+        return
+    if isinstance(ploidy, bool) or ploidy not in ALLOWED_PLOIDIES:
+        raise ValueError("ploidy must be 1, 2, 3, or 4")
+    for index, gene_copies in enumerate(population_sizes):
+        if gene_copies % ploidy != 0:
+            raise ValueError(
+                f"N[{index}] is {gene_copies} gene copies, which is not a whole "
+                f"number of ploidy-{ploidy} individuals"
+            )
 
 
 def _parse_string(name: str, value: Any) -> str:
