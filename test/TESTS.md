@@ -15811,6 +15811,39 @@ function, so the only thing worth proving is that calling it
 clears pre-existing stale text, with no timing window for a real
 background thread's own progress ticks to race.
 
+<a id="gui.test_running_screen.test_correcting_the_run_kind_keeps_live_state_a_tick_already_delivered"></a>
+
+#### test\_correcting\_the\_run\_kind\_keeps\_live\_state\_a\_tick\_already\_delivered
+
+```python
+def test_correcting_the_run_kind_keeps_live_state_a_tick_already_delivered(
+) -> None
+```
+
+Learning "scalar or batch" mid-run must not discard progress already on screen.
+
+`run-view-controls.js`'s own `onRunClicked` enters the running
+state optimistically as a scalar run, then corrects that guess from
+`Api.start_run`'s own real answer once the bridge call resolves.
+The run is *already going* by then -- `start_run` starts the
+background thread server-side, so its first `fim.onRunProgress`
+pushes can land while `onRunClicked` is still awaiting the very
+same call -- so that correction must touch only the run-kind
+panels (`window.fim.applyRunKind`), never re-enter the whole
+running state.
+
+It used to call `enterRunningState` a second time, which resets
+everything a new run needs reset: the progress label went blank
+again, the live trajectory/scrubber ticks so far were dropped, the
+scatter was cleared, and the "Compare demes directly" selector a
+tick had already wired was re-hidden with `liveDemeSelectorWired`
+cleared, leaving it hidden until some later tick re-wired it.
+`test_live_deme_pair_selector_shows_a_chosen_pair_during_a_real_
+run`, above, caught that intermittently on CI (`selectorHidden`
+`True` right after the first progress message); this pins the same
+invariant with no timing window at all, driving the three steps in
+their real order synchronously.
+
 <a id="gui.test_settings_modal"></a>
 
 # gui.test\_settings\_modal

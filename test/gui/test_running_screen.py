@@ -1158,3 +1158,77 @@ def test_entering_running_state_clears_a_previous_runs_stale_progress_label() ->
     settled = outcome.get(timeout=_OUTCOME_TIMEOUT_SECONDS)
 
     assert settled == ""
+
+
+def test_correcting_the_run_kind_keeps_live_state_a_tick_already_delivered() -> None:
+    """Learning "scalar or batch" mid-run must not discard progress already on screen.
+
+    `run-view-controls.js`'s own `onRunClicked` enters the running
+    state optimistically as a scalar run, then corrects that guess from
+    `Api.start_run`'s own real answer once the bridge call resolves.
+    The run is *already going* by then -- `start_run` starts the
+    background thread server-side, so its first `fim.onRunProgress`
+    pushes can land while `onRunClicked` is still awaiting the very
+    same call -- so that correction must touch only the run-kind
+    panels (`window.fim.applyRunKind`), never re-enter the whole
+    running state.
+
+    It used to call `enterRunningState` a second time, which resets
+    everything a new run needs reset: the progress label went blank
+    again, the live trajectory/scrubber ticks so far were dropped, the
+    scatter was cleared, and the "Compare demes directly" selector a
+    tick had already wired was re-hidden with `liveDemeSelectorWired`
+    cleared, leaving it hidden until some later tick re-wired it.
+    `test_live_deme_pair_selector_shows_a_chosen_pair_during_a_real_
+    run`, above, caught that intermittently on CI (`selectorHidden`
+    `True` right after the first progress message); this pins the same
+    invariant with no timing window at all, driving the three steps in
+    their real order synchronously.
+    """
+    window = create_window(hidden=True)
+    outcome: queue.Queue[dict[str, Any] | None] = queue.Queue(maxsize=1)
+
+    def _drive() -> None:
+        try:
+            _wait_for_input_screen_ready(window)
+            settled = window.evaluate_js(
+                "(function () {"
+                "  const selector ="
+                "    document.getElementById('run-deme-pair-selector');"
+                "  const label ="
+                "    document.getElementById('progress-generation-label');"
+                # 1. `onRunClicked`'s own optimistic entry, before it
+                #    awaits `Api.start_run`.
+                "  window.fim.enterRunningState(false);"
+                "  const hiddenBeforeTick = selector.hidden;"
+                # 2. A real progress push landing while that await is
+                #    still outstanding -- `d = 20`, so the selector is
+                #    wired and shown.
+                "  window.fim.onRunProgress({generation: 3,"
+                "    maxGenerations: 10, panels: [], demeCount: 20,"
+                "    statistics: {}, literatureVisuals: null});"
+                "  const afterTick = {hidden: selector.hidden,"
+                "    label: label.textContent};"
+                # 3. The correction, once `start_run` finally resolves.
+                "  window.fim.applyRunKind(false);"
+                "  return {hiddenBeforeTick: hiddenBeforeTick,"
+                "    hiddenAfterTick: afterTick.hidden,"
+                "    labelAfterTick: afterTick.label,"
+                "    hiddenAfterCorrection: selector.hidden,"
+                "    labelAfterCorrection: label.textContent};"
+                "})()"
+            )
+            outcome.put(settled)
+        finally:
+            window.destroy()
+
+    webview.start(_drive)
+    settled = outcome.get(timeout=_OUTCOME_TIMEOUT_SECONDS)
+
+    assert settled is not None
+    assert settled["hiddenBeforeTick"] is True
+    assert settled["hiddenAfterTick"] is False
+    assert settled["labelAfterTick"] == "3 / 10"
+    # The correction leaves both exactly as the tick left them.
+    assert settled["hiddenAfterCorrection"] is False
+    assert settled["labelAfterCorrection"] == "3 / 10"

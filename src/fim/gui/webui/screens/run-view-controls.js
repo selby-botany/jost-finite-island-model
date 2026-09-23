@@ -128,7 +128,14 @@ async function onRunClicked() {
         showRunBanner(started.message);
         return;
     }
-    window.fim.enterRunningState(Boolean(started.isBatch));
+    // Only the run-kind-dependent panels, not the whole running state:
+    // the run has been going since `start_run` executed server-side, so
+    // its first progress pushes can already have landed while this same
+    // call was still being awaited. Re-entering the full state here
+    // would throw those away -- see `applyRunKind`'s own comment
+    // (`run-view-running.js`) for the list, and for the intermittent CI
+    // failure that surfaced it.
+    window.fim.applyRunKind(Boolean(started.isBatch));
     // The live trajectory panel's own predicted-equilibrium reference
     // line (design §6.2) -- `started.equilibrium` is `undefined` for a
     // batch (`_start_batch_run` sends no such field at all) and `null`

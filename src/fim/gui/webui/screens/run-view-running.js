@@ -149,6 +149,42 @@ let liveEquilibriumReference = null;
 let liveIdentityRecoveryReference = null;
 
 /**
+ * Apply just the run-kind-dependent parts of the running state.
+ *
+ * Split out of `enterRunningState` so `run-view-controls.js`'s own
+ * `onRunClicked` can correct its optimistic "scalar" guess once
+ * `Api.start_run` reports the real answer, *without* re-running
+ * everything else in that function. The rest of `enterRunningState`
+ * resets state for a **new** run -- and the run is already under way
+ * by the time that answer arrives: `Api.start_run` starts the
+ * background thread (and its first `fim.onRunProgress` pushes land)
+ * while `onRunClicked` is still awaiting the very same bridge call.
+ *
+ * Re-entering the whole running state at that point discards whatever
+ * those early pushes already delivered: the live trajectory points so
+ * far (`liveTrajectoryGenerations`/`liveTrajectoryHistories`), the
+ * scatter frames already drawn (`clearRunCanvas`), the live scrubber's
+ * own retained ticks (`resetScrubber`), the progress label -- and
+ * re-hides the "Compare demes directly" selector a tick had already
+ * wired, clearing `liveDemeSelectorWired` so it stays hidden until
+ * some *later* tick happens to wire it again. `test_live_deme_pair_
+ * selector_shows_a_chosen_pair_during_a_real_run` caught exactly that
+ * on CI, intermittently: the selector read `hidden` right after the
+ * first progress message, because the correction landed between that
+ * tick and the test's own read.
+ *
+ * @param {boolean} isBatch
+ */
+function applyRunKind(isBatch) {
+    resultsStats.hidden = isBatch;
+    batchResultsTableEl.hidden = !isBatch;
+    alleleCompositionCard.hidden = isBatch;
+    frequencySpectrumCard.hidden = isBatch;
+}
+
+window.fim.applyRunKind = applyRunKind;
+
+/**
  * Enter `running`: reset every per-run tracking variable above, show
  * the progress indicator, hide `completed`'s own content, and enable
  * Cancel -- the shared entry point `run-view-controls.js`'s own
@@ -210,8 +246,7 @@ function enterRunningState(isBatch = false) {
     if (initialStats) {
         initialStats.hidden = true;
     }
-    resultsStats.hidden = isBatch;
-    batchResultsTableEl.hidden = !isBatch;
+    applyRunKind(isBatch);
     if (runPlotTitle) {
         runPlotTitle.textContent = "FIM simulation — in progress";
     }
@@ -222,8 +257,6 @@ function enterRunningState(isBatch = false) {
     // the view can be dragged back to an earlier generation while the
     // simulation keeps going (`scrubber.js`'s own "live" mode).
     scrubberControls.hidden = false;
-    alleleCompositionCard.hidden = isBatch;
-    frequencySpectrumCard.hidden = isBatch;
     ibdCard.hidden = true;
     runDemePairSelector.hidden = true;
     cancelButton.disabled = false;

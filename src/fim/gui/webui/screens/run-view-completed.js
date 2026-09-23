@@ -1850,6 +1850,43 @@ function updateScrubbedBatchSummary(frameGeneration, isFinalFrame) {
 }
 
 /**
+ * Show or hide the scrubber controls, repainting the graph stage
+ * whenever that actually changes.
+ *
+ * The scrubber shares `#run-graph-body`'s own grid column with the
+ * graph panes, so its own appearance *widens* that column: measured on
+ * a reopened run, the trajectory canvas is 302px wide while the
+ * scrubber is hidden and 541px once it shows. Both scrubber wirings
+ * below reach that change only after their own `get_animation_frames`/
+ * `get_batch_animation_frames` bridge call resolves -- long after
+ * `enterCompletedState` already drew every graph at the narrower
+ * width. A canvas keeps whatever buffer it was last drawn at, so
+ * without an explicit repaint here the graph stays a stretched, blurry
+ * copy of its own pre-scrubber size.
+ *
+ * The stage's own per-pane `ResizeObserver` (`run-graph-stage.js`) is
+ * meant to cover exactly this, and does under macOS/WebKit -- but not
+ * under the WebKitGTK build CI runs, where `test_a_reopened_runs_
+ * graphs_repaint_at_the_real_pane_size` caught the stretched buffer
+ * twice (a 300px buffer against a 553px pane, then 325 against 553
+ * once `9371d71` moved `showScreen` ahead of the draws). Repainting at
+ * the one point that actually changes the width removes the dependence
+ * on the observer firing at all; the observer stays as the backstop
+ * for window resizes and the zoom frame.
+ *
+ * @param {boolean} hidden
+ */
+function setScrubberControlsHidden(hidden) {
+    if (scrubberControls.hidden === hidden) {
+        return;
+    }
+    scrubberControls.hidden = hidden;
+    if (window.fim.redrawActiveGraph) {
+        window.fim.redrawActiveGraph();
+    }
+}
+
+/**
  * Fetch and wire the scrubber over a just-completed scalar run's own
  * persisted trajectory -- the direct successor to the old, separate
  * "Animate" button's own `Api.get_animation_frames` call, now made
@@ -1860,7 +1897,7 @@ function updateScrubbedBatchSummary(frameGeneration, isFinalFrame) {
  */
 async function wireCompletedScrubber(outputDirectory, generationCount) {
     if (generationCount <= 1) {
-        scrubberControls.hidden = true;
+        setScrubberControlsHidden(true);
         runResultsTableEl.hidden = true;
         window.fim.resetScrubber();
         return;
@@ -1885,12 +1922,12 @@ async function wireCompletedScrubber(outputDirectory, generationCount) {
             return;
         }
         if (!result.ok || result.frames.length === 0) {
-            scrubberControls.hidden = true;
+            setScrubberControlsHidden(true);
             runResultsTableEl.hidden = true;
             window.fim.resetScrubber();
             return;
         }
-        scrubberControls.hidden = false;
+        setScrubberControlsHidden(false);
         // The results table's own rows are exactly these frames' own
         // generations (`renderScalarTable`'s own docstring), so it is
         // built here, where that sampled list first exists client-side,
@@ -1953,11 +1990,11 @@ async function wireCompletedBatchScrubber(outputDirectory) {
             return;
         }
         if (!result.ok || result.frames.length === 0) {
-            scrubberControls.hidden = true;
+            setScrubberControlsHidden(true);
             window.fim.resetScrubber();
             return;
         }
-        scrubberControls.hidden = false;
+        setScrubberControlsHidden(false);
         // As in `wireCompletedScrubber`: the pooled final panels are
         // already on the canvas, so the scrubber starts at the end.
         window.fim.setScrubberFrames(
