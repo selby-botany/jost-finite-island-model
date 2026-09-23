@@ -2449,11 +2449,38 @@ fieldset.composite > label {
 
 /* `height` off the header's own measured band rather than `flex: 1`:
  * a `<dialog>` is not a flex container by default, and making it one
- * would re-lay-out the header too. */
+ * would re-lay-out the header too.
+ *
+ * `display: flex` (2026-09-23 follow-up): the graph-plus-scrubber
+ * column and the stats table now sit side by side here, the same
+ * "graph left, statistics right" arrangement `.run-plot-row` already
+ * uses on the stage itself -- `flex-wrap` lets the table drop below
+ * the column on a narrow window rather than forcing horizontal
+ * scroll, same reason `.run-plot-row` wraps. `overflow` moves from
+ * this element to its own two children below: each scrolls on its
+ * own now that there are two of them, rather than one scrollport
+ * shared by everything. */
 .graph-zoom-body {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: stretch;
+    gap: 1rem;
     height: calc(100% - 3.1rem);
-    overflow: auto;
+    overflow: hidden;
     padding: 0.9rem;
+}
+
+/* The scrubber/pane wrapper `run-graph-stage.js`'s `openGraphZoom`
+ * builds fresh on every open: `run-graph-body` (also applied) gives it
+ * the stage's own `auto minmax(0, 1fr)` grid verbatim, so a hidden
+ * scrubber collapses to nothing exactly as it does there; this rule
+ * only adds how it behaves as a flex child of `.graph-zoom-body`
+ * beside the stats table -- taking whatever width that leaves it, and
+ * scrolling its own contents rather than the whole frame. */
+.graph-zoom-graph-column {
+    flex: 1 1 auto;
+    min-width: 0;
+    overflow: auto;
 }
 
 /* The stage's own pane, moved here bodily for the duration (not
@@ -2470,6 +2497,25 @@ fieldset.composite > label {
     width: 100%;
     height: auto;
     max-height: none;
+}
+
+/* Whichever statistics table `openGraphZoom` moved in beside the graph
+ * column (2026-09-23 follow-up: the frame used to show no statistics
+ * at all) -- its own natural content width, not stretched or shrunk,
+ * with its own scroll if the frame is short. `margin-top: 0` drops the
+ * ordinary layout's alignment nudge (`.stats-table`'s own comment: "
+ * roughly level with the canvas, below its own axis-selector row"),
+ * which has nothing to align against here. */
+.graph-zoom-body > .stats-table {
+    flex: 0 0 auto;
+    /* Overrides `.stats-table`'s own `align-self: flex-start` (natural
+     * content height) so this stretches to the row's full height, the
+     * same as `.graph-zoom-graph-column` beside it -- `overflow: auto`
+     * then has an actual box to scroll within, rather than a height
+     * that is only ever its own unclipped content. */
+    align-self: stretch;
+    overflow: auto;
+    margin-top: 0;
 }
 
 /* The reopen busy indicator (`#open-run-busy`). Reopening a large

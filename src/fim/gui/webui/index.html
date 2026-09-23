@@ -1549,9 +1549,22 @@
        (`#run-graph-stage`) moves the active pane -- the real element,
        canvas, legend, and note together, not a copy -- into the body
        below, resizes it, and repaints it at the new size, so zooming in
-       gains real resolution rather than magnifying a bitmap. Closing
-       moves the pane back to its own placeholder on the stage and
-       repaints it there.
+       gains real resolution rather than magnifying a bitmap. Alongside
+       it (2026-09-23 follow-up: the popup used to show only the bare
+       graph, with no scrubber and no legend/values, which "would need
+       a lot of futzing to make as usable as the Run card itself"),
+       `#scrubber-controls` and whichever `.stats-table` under
+       `#run-plot-row` is not `[hidden]` (`initial-stats`/`results-
+       stats`/`batch-results-summary` -- exactly one, always, the same
+       "only one of the three tables below is ever visible at once"
+       invariant that container's own comment establishes) move here
+       too, real elements again, not copies -- full parity with the Run
+       card's own graph-plus-scrubber-plus-statistics experience,
+       reusing every bit of existing scrubbing/rendering code rather
+       than rebuilding a second copy of it (`run-graph-stage.js`'s own
+       `openGraphZoom` comment has the fuller reasoning). Closing moves
+       all three back to their own placeholders and repaints the pane
+       there.
        A native `<dialog>` opened with `showModal()`, so Escape and the
        backdrop already close it the way every other dialog in this app
        closes; `#graph-zoom-close` is the explicit button the request

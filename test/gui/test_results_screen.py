@@ -1160,6 +1160,12 @@ def test_graph_zoom_frame_takes_the_pane_and_gives_it_back(
     ever one canvas holding the drawing. The risk that buys is losing
     the pane: if it is not put back exactly where it came from, the
     stage is left permanently blank with no error anywhere.
+
+    2026-09-23 follow-up: the scrubber and the active statistics table
+    move the same way, for the same reason (full parity with the Run
+    card's own graph-plus-scrubber-plus-statistics experience, at no
+    cost of a second implementation) -- this pins their own round trip
+    too, not only the pane's.
     """
     settled = drive(
         window,
@@ -1170,11 +1176,19 @@ def test_graph_zoom_frame_takes_the_pane_and_gives_it_back(
             + "const pollCompleted = () => { "
             + "if (window.fim.getRunViewState() === 'completed') { "
             + "const pane = document.getElementById('run-trajectory-frame'); "
-            + "window.__fimHomeBefore = pane.parentElement.className; "
+            + "const scrubber = document.getElementById('scrubber-controls'); "
+            + "const stats = document.getElementById('results-stats'); "
+            + "window.__fimHomeBefore = {"
+            + "pane: pane.parentElement.className, "
+            + "scrubber: scrubber.parentElement.className, "
+            + "stats: stats.parentElement.id"
+            + "}; "
             + "window.fim.openGraphZoom(); "
             + "window.__fimZoom = {"
             + "open: document.getElementById('graph-zoom-modal').open, "
-            + "parent: pane.parentElement.id, "
+            + "paneParent: pane.parentElement.id, "
+            + "scrubberParent: scrubber.parentElement.id, "
+            + "statsParent: stats.parentElement.id, "
             + "title: document.getElementById('graph-zoom-title').textContent, "
             + "active: window.fim.getActiveGraph()"
             + "}; "
@@ -1182,9 +1196,16 @@ def test_graph_zoom_frame_takes_the_pane_and_gives_it_back(
             + "setTimeout(() => { "
             + "window.__fimRestored = {"
             + "open: document.getElementById('graph-zoom-modal').open, "
-            + "parent: pane.parentElement.className, "
+            + "paneParent: pane.parentElement.className, "
+            + "scrubberParent: scrubber.parentElement.className, "
+            + "statsParent: stats.parentElement.id, "
             + "hidden: pane.hidden, "
             + "placeholder: !!document.getElementById('graph-zoom-placeholder'), "
+            + "scrubberPlaceholder: "
+            + "!!document.getElementById('graph-zoom-scrubber-placeholder'), "
+            + "statsPlaceholder: "
+            + "!!document.getElementById('graph-zoom-stats-placeholder'), "
+            + "graphColumn: !!document.getElementById('graph-zoom-graph-column'), "
             + "inlineWidth: pane.style.width"
             + "}; "
             + "}, 50); "
@@ -1210,21 +1231,35 @@ def test_graph_zoom_frame_takes_the_pane_and_gives_it_back(
         poll_attempts=_POLL_ATTEMPTS,
     )
 
-    assert settled["homeBefore"] == "run-visual-panels"
+    assert settled["homeBefore"]["pane"] == "run-visual-panels"
+    assert settled["homeBefore"]["scrubber"] == "run-graph-body"
+    assert settled["homeBefore"]["stats"] == "run-plot-row"
     assert settled["zoom"]["open"] is True
-    assert settled["zoom"]["parent"] == "graph-zoom-body"
+    # All three land inside the frame: the pane and the scrubber inside
+    # the graph column `openGraphZoom` builds, the stats table directly
+    # in the body beside that column.
+    assert settled["zoom"]["paneParent"] == "graph-zoom-graph-column"
+    assert settled["zoom"]["scrubberParent"] == "graph-zoom-graph-column"
+    assert settled["zoom"]["statsParent"] == "graph-zoom-body"
     assert settled["zoom"]["title"] == "Statistic trajectories"
     # Zooming does not change which graph the stage considers active, so
     # closing returns to the same one.
     assert settled["zoom"]["active"] == "trajectory"
 
     assert settled["restored"]["open"] is False
-    assert settled["restored"]["parent"] == "run-visual-panels"
+    assert settled["restored"]["paneParent"] == "run-visual-panels"
+    assert settled["restored"]["scrubberParent"] == "run-graph-body"
+    assert settled["restored"]["statsParent"] == "run-plot-row"
     assert settled["restored"]["hidden"] is False
-    # The placeholder that marked the pane's home is cleaned up, and the
-    # explicit pixel size the zoom frame set is cleared -- otherwise the
-    # pane would keep the frame's dimensions back on the stage.
+    # Every placeholder and the graph column itself -- all transient,
+    # built or created fresh on the next open -- are cleaned up, and the
+    # explicit pixel size the zoom frame set on the pane is cleared;
+    # otherwise the pane would keep the frame's dimensions back on the
+    # stage.
     assert settled["restored"]["placeholder"] is False
+    assert settled["restored"]["scrubberPlaceholder"] is False
+    assert settled["restored"]["statsPlaceholder"] is False
+    assert settled["restored"]["graphColumn"] is False
     assert settled["restored"]["inlineWidth"] == ""
 
 

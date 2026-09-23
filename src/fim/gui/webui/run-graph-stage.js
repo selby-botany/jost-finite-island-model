@@ -61,6 +61,11 @@ let preferredGraphKey = DEFAULT_GRAPH_KEY;
 let selectedGraphKey = DEFAULT_GRAPH_KEY;
 let zoomedGraphKey = null;
 let zoomScale = 1;
+// Which statistics table `openGraphZoom` moved, if any -- remembered
+// rather than re-queried at close time, because by then it has been
+// moved *out* of `#run-plot-row`, so `activeStatsTable()`'s own
+// `#run-plot-row > ...` scope would no longer find it.
+let zoomedStatsTable = null;
 // Guards the repaint at the end of `syncRunGraphStage`, not the sync
 // itself. A render function is allowed to call `setGraphAvailable` --
 // `renderTrajectory` does, every time it decides it has something to
@@ -321,6 +326,23 @@ window.fim.resetGraphStage = function resetGraphStage() {
 };
 
 /**
+ * Return whichever of the Run card's own statistics tables is
+ * currently showing.
+ *
+ * `initial-stats`/`results-stats`/`batch-results-summary` sit as direct
+ * children of `#run-plot-row`, and exactly one is ever visible at once
+ * (the same invariant `#results-stats`'s own comment in `index.html`
+ * establishes) -- whichever that is, is the one the zoom frame should
+ * show beside the graph too, without this module needing to know which
+ * run state produced it.
+ *
+ * @returns {HTMLElement|null}
+ */
+function activeStatsTable() {
+    return document.querySelector("#run-plot-row > table.stats-table:not([hidden])");
+}
+
+/**
  * Apply the current zoom factor to the pane inside the zoom frame.
  *
  * Sets an explicit pixel size rather than a CSS transform so the canvas
@@ -330,17 +352,30 @@ window.fim.resetGraphStage = function resetGraphStage() {
  * @returns {void}
  */
 function applyGraphZoom() {
-    const body = document.getElementById("graph-zoom-body");
+    const graphColumn = document.getElementById("graph-zoom-graph-column");
     const level = document.getElementById("graph-zoom-level");
-    if (!body || zoomedGraphKey === null) {
+    if (!graphColumn || zoomedGraphKey === null) {
         return;
     }
     const pane = runGraphPane(zoomedGraphKey);
     if (pane) {
-        // `clientWidth` is the frame's own scrollport, so scale 1 means
-        // "as large as the frame", and anything above it scrolls.
-        const baseWidth = Math.max(body.clientWidth - 32, 320);
-        const baseHeight = Math.max(body.clientHeight - 32, 240);
+        // Width: clear the inline override and let the grid column
+        // (`.run-graph-body`'s own `minmax(0, 1fr)`, reused verbatim
+        // for this wrapper) give the pane's natural, unconstrained
+        // width -- already correctly excluding both the scrubber's own
+        // column beside it and the stats table beside *that*, with no
+        // arithmetic here that could drift out of sync with either
+        // one's own CSS.
+        pane.style.width = "";
+        const baseWidth = Math.max(pane.clientWidth, 320);
+        // Height: the grid does not stretch its cross axis
+        // (`align-items: start`, the same choice the stage itself
+        // makes), so the natural pane height is just its own content
+        // height -- far short of "as tall as the frame allows", which
+        // is the whole point of zooming. The column's own rendered
+        // height (forced to fill the frame by `#graph-zoom-body`'s
+        // `align-items: stretch`) is the one that means that.
+        const baseHeight = Math.max(graphColumn.clientHeight, 240);
         pane.style.width = `${Math.round(baseWidth * zoomScale)}px`;
         pane.style.height = `${Math.round(baseHeight * zoomScale)}px`;
     }
@@ -362,11 +397,60 @@ function stepGraphZoom(delta) {
 }
 
 /**
+ * Move one real element into the zoom frame, leaving a marker behind so
+ * `restoreZoomedElement` can put it back in exactly the same spot.
+ *
+ * Shared by the pane, the scrubber, and the stats table -- moving the
+ * real, live elements rather than cloning them means their canvases,
+ * their wired handlers, and their module-level state (`scrubber.js`'s
+ * own `document.getElementById` references, captured once at load,
+ * stay valid no matter where the element currently sits) all keep
+ * working unchanged; the zoom frame is not a second, parallel copy of
+ * any of this to maintain.
+ *
+ * @param {HTMLElement} element
+ * @param {string} placeholderId
+ * @returns {void}
+ */
+function moveIntoZoomFrame(element, placeholderId) {
+    const placeholder = document.createElement("div");
+    placeholder.id = placeholderId;
+    placeholder.hidden = true;
+    element.parentElement.insertBefore(placeholder, element);
+}
+
+/**
+ * Move one element moved by `moveIntoZoomFrame` back to its placeholder
+ * and remove the placeholder.
+ *
+ * @param {HTMLElement|null} element
+ * @param {string} placeholderId
+ * @returns {void}
+ */
+function restoreFromZoomFrame(element, placeholderId) {
+    const placeholder = document.getElementById(placeholderId);
+    if (element && placeholder && placeholder.parentElement) {
+        placeholder.parentElement.insertBefore(element, placeholder);
+        placeholder.remove();
+    }
+}
+
+/**
  * Open the showing graph in the zoom frame.
  *
- * Moves the real pane rather than cloning it, so its legend, note, and
- * every wired handler come along and stay live; a placeholder marks
- * where it goes back.
+ * Moves the real pane, the real scrubber, and whichever real statistics
+ * table is currently showing rather than cloning any of them, so full
+ * parity with the Run card's own graph-plus-scrubber-plus-statistics
+ * experience costs no second implementation to keep in sync -- see
+ * `index.html`'s own comment on `#graph-zoom-modal` for the fuller
+ * reasoning (2026-09-23 follow-up: the frame used to show the bare
+ * graph alone). A placeholder for each marks where it goes back.
+ *
+ * The scrubber and pane land in a wrapper that reuses `.run-graph-
+ * body`'s own grid (`auto minmax(0, 1fr)`) verbatim, so a hidden
+ * scrubber (a graph other than the trajectory, or a single-generation
+ * run) collapses to nothing exactly as it does on the stage, with no
+ * separate zoom-frame layout rule needed for that case.
  *
  * @returns {void}
  */
@@ -387,21 +471,41 @@ window.fim.openGraphZoom = function openGraphZoom() {
         heading.textContent = title ? title.textContent : "";
     }
 
-    const placeholder = document.createElement("div");
-    placeholder.id = "graph-zoom-placeholder";
-    placeholder.hidden = true;
-    pane.parentElement.insertBefore(placeholder, pane);
+    const scrubberControls = document.getElementById("scrubber-controls");
+    const statsTable = activeStatsTable();
+
+    if (scrubberControls) {
+        moveIntoZoomFrame(scrubberControls, "graph-zoom-scrubber-placeholder");
+    }
+    moveIntoZoomFrame(pane, "graph-zoom-placeholder");
+    if (statsTable) {
+        moveIntoZoomFrame(statsTable, "graph-zoom-stats-placeholder");
+    }
+    zoomedStatsTable = statsTable;
 
     zoomedGraphKey = selectedGraphKey;
     zoomScale = 1;
     pane.classList.add("graph-zoom-pane");
-    body.replaceChildren(pane);
+
+    const graphColumn = document.createElement("div");
+    graphColumn.id = "graph-zoom-graph-column";
+    // `run-graph-body`: the stage's own scrubber/pane grid, reused
+    // verbatim. `graph-zoom-graph-column`: this wrapper's own sizing
+    // beside the stats table (`app.css`).
+    graphColumn.className = "run-graph-body graph-zoom-graph-column";
+    if (scrubberControls) {
+        graphColumn.appendChild(scrubberControls);
+    }
+    graphColumn.appendChild(pane);
+
+    body.replaceChildren(graphColumn, ...(statsTable ? [statsTable] : []));
     modal.showModal();
     applyGraphZoom();
 };
 
 /**
- * Return the zoomed pane to the stage and repaint it there.
+ * Return the zoomed pane, scrubber, and stats table to the stage and
+ * repaint the pane there.
  *
  * Wired to the frame's own `close` event, so Escape, the backdrop, and
  * the Close button all take the same path.
@@ -413,15 +517,23 @@ function restoreZoomedPane() {
         return;
     }
     const pane = runGraphPane(zoomedGraphKey);
-    const placeholder = document.getElementById("graph-zoom-placeholder");
-    if (pane && placeholder && placeholder.parentElement) {
+    restoreFromZoomFrame(
+        document.getElementById("scrubber-controls"),
+        "graph-zoom-scrubber-placeholder"
+    );
+    if (pane) {
         pane.classList.remove("graph-zoom-pane");
         pane.style.width = "";
         pane.style.height = "";
-        placeholder.parentElement.insertBefore(pane, placeholder);
-        placeholder.remove();
+    }
+    restoreFromZoomFrame(pane, "graph-zoom-placeholder");
+    restoreFromZoomFrame(zoomedStatsTable, "graph-zoom-stats-placeholder");
+    const graphColumn = document.getElementById("graph-zoom-graph-column");
+    if (graphColumn) {
+        graphColumn.remove();
     }
     zoomedGraphKey = null;
+    zoomedStatsTable = null;
     zoomScale = 1;
     syncRunGraphStage();
 }

@@ -15193,6 +15193,12 @@ ever one canvas holding the drawing. The risk that buys is losing
 the pane: if it is not put back exactly where it came from, the
 stage is left permanently blank with no error anywhere.
 
+2026-09-23 follow-up: the scrubber and the active statistics table
+move the same way, for the same reason (full parity with the Run
+card's own graph-plus-scrubber-plus-statistics experience, at no
+cost of a second implementation) -- this pins their own round trip
+too, not only the pane's.
+
 <a id="gui.test_results_screen.test_deme_pair_selectors_stay_glued_to_the_scatter_axes"></a>
 
 #### test\_deme\_pair\_selectors\_stay\_glued\_to\_the\_scatter\_axes
