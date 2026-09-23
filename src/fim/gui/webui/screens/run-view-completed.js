@@ -2004,6 +2004,19 @@ window.fim.enterCompletedState = function enterCompletedState(payload, isBatch) 
     if (window.fim.resetGraphStage) {
         window.fim.resetGraphStage();
     }
+    // Shown before anything below draws, not after: every graph render
+    // in this function sizes its own canvas buffer from `clientWidth`,
+    // and a reopened run reaches here with the Home card still showing
+    // and this one hidden -- drawn then, each canvas keeps the default
+    // 300x150 buffer and CSS stretches it to the real pane size (a
+    // reported "blurry right after opening" defect). The same
+    // show-first order the live-run path already follows
+    // (`run-view-controls.js`'s own `run-button` handler) -- and the
+    // same behavior `aadb8b23` established for the scatter's own first
+    // frame. The graph stage's own per-pane `ResizeObserver` wiring
+    // remains the backstop for any future draw path that still lands
+    // here hidden.
+    window.fim.showScreen("screen-run");
     window.fim.setCompletedOutputDirectory(payload.outputDirectory);
     // `undefined` (a batch's own payload carries no such key at all) is
     // normalized to `null` here rather than left as `undefined` -- the
@@ -2182,7 +2195,6 @@ window.fim.enterCompletedState = function enterCompletedState(payload, isBatch) 
         });
     }
 
-    window.fim.showScreen("screen-run");
 };
 
 window.fim.returnToInitialState = function returnToInitialState() {
