@@ -5988,7 +5988,8 @@ Build `m`'s payload from the selector's mode and its own sub-fields.
 **Arguments**:
 
 - `values` - The full form-values mapping; only `m_mode`, `m_rate`,
-  `m_topology`, and `m_topology_rate` are read.
+  `m_topology`, `m_topology_rate`, and (for a torus)
+  `m_topology_rows`/`m_topology_columns` are read.
 
 
 **Returns**:
@@ -10616,8 +10617,13 @@ the simulator never needs to know a sparse map was ever involved.
 #### stepping\_stone\_neighbors
 
 ```python
-def stepping_stone_neighbors(d: int, *, topology: Topology,
-                             rate: float) -> dict[int, dict[int, float]]
+def stepping_stone_neighbors(
+        d: int,
+        *,
+        topology: Topology,
+        rate: float,
+        rows: int | None = None,
+        columns: int | None = None) -> dict[int, dict[int, float]]
 ```
 
 Build a sparse nearest-neighbor migration map.
@@ -10637,7 +10643,16 @@ expands into the full matrix the rest of the simulator actually uses.
   or ring.
 - `topology` - ``"ring"`` wraps deme ``d``'s next neighbor back to
   deme ``1``; ``"linear"`` is a bounded chain where the two end
-  demes have only one neighbor instead of two.
+  demes have only one neighbor instead of two; ``"torus"`` is
+  a ``rows`` by ``columns`` lattice with wraparound in both
+  directions, so no deme is on an edge and every deme has
+  exactly four neighbors (up, down, left, right). Demes are
+  numbered row by row: deme ``1`` is the top-left cell, deme
+  ``columns`` the top-right, deme ``columns + 1`` the first
+  of the second row.
+- `rows` - Lattice rows; required for (and only for) ``"torus"``.
+- `columns` - Lattice columns; required for (and only for)
+  ``"torus"``. ``rows * columns`` must equal ``d``.
 - `rate` - Every deme's total outgoing migration fraction, split evenly
   among its actual neighbors — the same meaning ``m`` already
   has in the symmetric island model (§4.3), applied locally

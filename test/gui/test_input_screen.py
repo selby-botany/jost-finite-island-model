@@ -410,6 +410,53 @@ def test_checking_a_second_convergence_statistic_reveals_the_combinator(
     assert settled["combinatorHidden"] is False
 
 
+def test_choosing_the_torus_topology_reveals_rows_and_columns(
+    window: webview.Window, drive: Callable[..., Any]
+) -> None:
+    """Rows and columns show for the torus only.
+
+    A torus (a grid that wraps in both directions, so no deme is on an
+    edge) is the common stepping-stone topology; unlike a ring or a
+    linear chain it needs a grid shape, revealed by
+    `syncConditionalVisibility` (`config-modals.js`) only while it is
+    the selected topology. (Whether a given shape is valid for `d` is the
+    model's own check, covered by `test_topology.py`.)
+    """
+    settled = drive(
+        window,
+        ready=_INPUT_SCREEN_READY,
+        trigger=(
+            "const set = (name, value) => { "
+            "const field = document.getElementById(`field-${name}`); "
+            "field.value = value; "
+            "field.dispatchEvent(new Event('change', {bubbles: true})); }; "
+            "const radio = document.querySelector("
+            '\'input[name="m_mode"][value="topology"]\'); '
+            "radio.checked = true; "
+            "radio.dispatchEvent(new Event('change', {bubbles: true})); "
+            "set('m_topology', 'ring'); "
+            "window.__fimRingHidden = "
+            "document.getElementById('m-torus-fields').hidden; "
+            "set('m_topology_rate', '0.05'); "
+            "set('m_topology', 'torus'); "
+            "set('m_topology_rows', '4'); "
+            "set('m_topology_columns', '5'); "
+            "window.__fimTorusTouched = true;"
+        ),
+        read=(
+            "({"
+            "touched: !!window.__fimTorusTouched, "
+            "ringHidden: window.__fimRingHidden, "
+            "torusHidden: document.getElementById('m-torus-fields').hidden"
+            "})"
+        ),
+        is_ready=lambda value: value is not None and value.get("touched") is True,
+    )
+
+    assert settled["ringHidden"] is True
+    assert settled["torusHidden"] is False
+
+
 def test_checking_the_sigma_band_toggle_reveals_and_seeds_its_own_fields(
     window: webview.Window, drive: Callable[..., Any]
 ) -> None:

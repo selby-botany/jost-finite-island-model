@@ -38,16 +38,22 @@ const FIELD_HELP = {
     n_mode: "Same for every deme uses one N for all demes; per-deme " +
         "lets each deme have its own population size.",
     m_mode: "How migration between demes is configured: a single scalar " +
-        "rate, a named spatial topology (ring/linear), or a full d-by-d " +
-        "matrix.",
+        "rate, a named spatial topology (ring/linear/torus), or a full " +
+        "d-by-d matrix.",
     m_rate: "Migration rate — the fraction of each deme's own frequency " +
         "vector replaced by migrants each generation (symmetric island " +
         "model).",
     m_topology: "ring wraps around in a circle; linear is a bounded chain " +
-        "with no wraparound. Each deme migrates only with its actual " +
-        "neighbors.",
+        "with no wraparound; torus is a rows-by-columns grid that wraps in " +
+        "both directions, so no deme is on an edge. Each deme migrates only " +
+        "with its actual neighbors (two for a ring, four for a torus).",
     m_topology_rate: "Each deme's total outgoing migration fraction, split " +
         "evenly among its actual neighbors.",
+    m_topology_rows: "Torus only: grid rows. Rows times columns must equal " +
+        "d, and each side must be at least 3. Demes are numbered row by " +
+        "row.",
+    m_topology_columns: "Torus only: grid columns. Rows times columns must " +
+        "equal d, and each side must be at least 3.",
     mu_mode: "Specify the per-generation mutation rate directly, or derive " +
         "it from a per-base rate that scales with each locus's own length.",
     mu_value: "Per-gene-copy mutation probability per generation, applied " +

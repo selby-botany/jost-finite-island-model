@@ -278,6 +278,40 @@ def test_m_to_payload_topology_mode_returns_a_topology_mapping() -> None:
     assert payload == {"topology": "linear", "rate": 0.2}
 
 
+def test_m_to_payload_torus_carries_rows_and_columns_as_integers() -> None:
+    """A torus needs its grid shape; the other topologies never send one."""
+    payload = config_form.m_to_payload(
+        {
+            "m_mode": "topology",
+            "m_rate": "",
+            "m_topology": "torus",
+            "m_topology_rate": "0.2",
+            "m_topology_rows": "4",
+            "m_topology_columns": "5",
+        }
+    )
+
+    assert payload == {"topology": "torus", "rate": 0.2, "rows": 4, "columns": 5}
+
+
+def test_m_to_payload_torus_rejects_a_missing_or_non_integer_side() -> None:
+    """Blank or fractional rows/columns fail with the field's own name."""
+    base = {
+        "m_mode": "topology",
+        "m_rate": "",
+        "m_topology": "torus",
+        "m_topology_rate": "0.2",
+        "m_topology_rows": "4",
+        "m_topology_columns": "5",
+    }
+    with pytest.raises(ValueError, match=r"m\.rows must be an integer"):
+        config_form.m_to_payload({**base, "m_topology_rows": "4.5"})
+    # A form saved before the torus existed has no columns key at all.
+    without_columns = {k: v for k, v in base.items() if k != "m_topology_columns"}
+    with pytest.raises(ValueError, match=r"m\.columns must be an integer"):
+        config_form.m_to_payload(without_columns)
+
+
 def test_m_to_payload_rejects_an_unknown_mode() -> None:
     """An unrecognized mode is a clear programming error, not a silent default."""
     with pytest.raises(ValueError, match="unknown m selector mode"):

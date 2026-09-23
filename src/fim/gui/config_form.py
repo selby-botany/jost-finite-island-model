@@ -58,7 +58,7 @@ FieldKind = Literal[
 # accepts — kept here, not imported from there, since the GUI only ever
 # needs the two literal option strings, not the topology machinery.
 MigrationMode = Literal["scalar", "topology", "matrix"]
-MIGRATION_TOPOLOGIES: Final[tuple[str, ...]] = ("ring", "linear")
+MIGRATION_TOPOLOGIES: Final[tuple[str, ...]] = ("ring", "linear", "torus")
 
 
 @dataclass(frozen=True, slots=True)
@@ -299,6 +299,8 @@ _COMPOSITE_FIELD_TABS: Final[Mapping[str, str]] = {
     "m": "migration",
     "m.topology": "migration",
     "m.rate": "migration",
+    "m.rows": "migration",
+    "m.columns": "migration",
     "mu": "mutation",
     "mu_b": "mutation",
     "convergence_statistic": "convergence",
@@ -362,6 +364,8 @@ def tab_for_error(message: str) -> str | None:
     for name in (
         "m.topology",
         "m.rate",
+        "m.rows",
+        "m.columns",
         "mu_b",
         "mu",
         "m",
@@ -513,7 +517,8 @@ def m_to_payload(
 
     Args:
         values: The full form-values mapping; only `m_mode`, `m_rate`,
-            `m_topology`, and `m_topology_rate` are read.
+            `m_topology`, `m_topology_rate`, and (for a torus)
+            `m_topology_rows`/`m_topology_columns` are read.
 
     Returns:
         A bare scalar rate (`m_mode == "scalar"`), a `{"topology",
@@ -538,10 +543,19 @@ def m_to_payload(
     if mode == "scalar":
         return _parse_float_named("m", values["m_rate"])
     if mode == "topology":
-        return {
+        topology_payload: dict[str, object] = {
             "topology": values["m_topology"],
             "rate": _parse_float_named("m.rate", values["m_topology_rate"]),
         }
+        if values["m_topology"] == "torus":
+            # `.get`: a form saved before the torus existed has neither key.
+            topology_payload["rows"] = _parse_int_named(
+                "m.rows", values.get("m_topology_rows", "")
+            )
+            topology_payload["columns"] = _parse_int_named(
+                "m.columns", values.get("m_topology_columns", "")
+            )
+        return topology_payload
     if mode == "matrix":
         return _parse_m_matrix_json(values["m_matrix_json"])
     raise ValueError(f"unknown m selector mode: {mode!r}")
@@ -612,6 +626,8 @@ def m_from_params(params: SimulationParams) -> dict[str, str]:
             "m_rate": str(params.m),
             "m_topology": MIGRATION_TOPOLOGIES[0],
             "m_topology_rate": "",
+            "m_topology_rows": "",
+            "m_topology_columns": "",
             "m_matrix_json": "",
         }
     return {
@@ -619,6 +635,8 @@ def m_from_params(params: SimulationParams) -> dict[str, str]:
         "m_rate": "",
         "m_topology": MIGRATION_TOPOLOGIES[0],
         "m_topology_rate": "",
+        "m_topology_rows": "",
+        "m_topology_columns": "",
         "m_matrix_json": json.dumps([list(row) for row in params.m]),
     }
 

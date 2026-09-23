@@ -116,8 +116,9 @@ d: 4
 <p>This is fully general — weights need not be symmetric, and this is the
 right form for any irregular adjacency (real geography, an arbitrary graph),
 not only the two named topologies below.</p>
-<p><strong>Named topology sugar</strong>, for the common stepping-stone case: a compact
-<code>{topology, rate}</code> mapping that expands to the sparse form above.
+<p><strong>Named topology sugar</strong>, for the common stepping-stone cases: a compact
+<code>{topology, rate}</code> mapping (plus <code>rows</code> and <code>columns</code> for a torus) that
+expands to the sparse form above.
 <code>rate</code> is every deme's total outgoing migration fraction, split evenly among
 its actual neighbors — the same meaning <code>m</code> already has as a scalar, applied
 locally instead of globally.</p>
@@ -127,11 +128,31 @@ locally instead of globally.</p>
 d: 100
 </code></pre>
 <ul>
-<li><code>ring</code> — a circular chain; deme <code>d</code>'s next neighbor wraps back to deme
-<code>1</code>. Every deme has exactly two neighbors. Requires <code>d</code> at least <code>3</code>.</li>
-<li><code>linear</code> — a bounded chain, no wraparound. The two end demes have one
+<li>
+<p><code>ring</code> — a circular chain; deme <code>d</code>'s next neighbor wraps back to deme
+<code>1</code>. Every deme has exactly two neighbors. Requires <code>d</code> at least <code>3</code>.</p>
+</li>
+<li>
+<p><code>linear</code> — a bounded chain, no wraparound. The two end demes have one
 neighbor instead of two, so an end deme's entire <code>rate</code> goes to its
-single neighbor rather than being split.</li>
+single neighbor rather than being split.</p>
+</li>
+<li>
+<p><code>torus</code> — a <code>rows</code> by <code>columns</code> grid that wraps in both directions, so
+no deme is on an edge: every deme has exactly four neighbors (up, down,
+left, right) and splits its <code>rate</code> four ways. Demes are numbered row by
+row (deme <code>1</code> is the top-left cell, deme <code>columns</code> the top-right, deme
+<code>columns + 1</code> the start of the second row). <code>rows * columns</code> must equal
+<code>d</code>, and each side must be at least <code>3</code> (a side of 2 would make a
+deme's up and down neighbors the same deme).</p>
+<pre><code class="language-yaml">m:
+  topology: torus
+  rate: 0.01
+  rows: 10
+  columns: 10
+d: 100
+</code></pre>
+</li>
 </ul>
 <p>Both the sparse map and the topology sugar are config-file conveniences:
 they expand to the ordinary dense matrix at load time (visible as such in
@@ -141,10 +162,12 @@ involved. Building a <code>SimulationParams</code> directly in Python (bypassing
 from_mapping) still needs an already-dense matrix; call
 fim.model.topology.stepping_stone_neighbors and
 fim.model.topology.dense_matrix_from_neighbors yourself to get one.</p>
-<p>Migration topologies that no fixed matrix can express — a 2D lattice, or
-neighbor selection that changes over a run — are outside the current
-configuration surface. Both have named landing spots in the design
-document (§9.2, §11); neither is silently missing.</p>
+<p>Migration topologies that no fixed matrix can express — neighbor
+selection that changes over a run — are outside the current configuration
+surface. It has a named landing spot in the design document (§9.2, §11);
+it is not silently missing. (A plain bounded 2D lattice is expressible
+today as a sparse neighbor map; the <code>torus</code> sugar covers the wrapped
+case.)</p>
 <h3 id="mu"><code>mu</code></h3>
 <ul>
 <li><strong>Type:</strong> number in <code>[0, 1]</code>, or a list of exactly one rate per locus</li>
@@ -847,6 +870,10 @@ execution-flavored defaults.</p>
 </tr>
 <tr>
 <td><code>m</code> topology mapping missing <code>topology</code>/<code>rate</code>, an unknown key, or an unrecognized topology name</td>
+<td>rejected</td>
+</tr>
+<tr>
+<td><code>m</code> torus topology missing <code>rows</code>/<code>columns</code>, a side below <code>3</code>, <code>rows * columns</code> not equal to <code>d</code>, or <code>rows</code>/<code>columns</code> given with <code>ring</code>/<code>linear</code></td>
 <td>rejected</td>
 </tr>
 <tr>

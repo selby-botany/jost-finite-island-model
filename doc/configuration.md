@@ -137,8 +137,9 @@ This is fully general — weights need not be symmetric, and this is the
 right form for any irregular adjacency (real geography, an arbitrary graph),
 not only the two named topologies below.
 
-**Named topology sugar**, for the common stepping-stone case: a compact
-`{topology, rate}` mapping that expands to the sparse form above.
+**Named topology sugar**, for the common stepping-stone cases: a compact
+`{topology, rate}` mapping (plus `rows` and `columns` for a torus) that
+expands to the sparse form above.
 `rate` is every deme's total outgoing migration fraction, split evenly among
 its actual neighbors — the same meaning `m` already has as a scalar, applied
 locally instead of globally.
@@ -155,6 +156,22 @@ d: 100
 - `linear` — a bounded chain, no wraparound. The two end demes have one
   neighbor instead of two, so an end deme's entire `rate` goes to its
   single neighbor rather than being split.
+- `torus` — a `rows` by `columns` grid that wraps in both directions, so
+  no deme is on an edge: every deme has exactly four neighbors (up, down,
+  left, right) and splits its `rate` four ways. Demes are numbered row by
+  row (deme `1` is the top-left cell, deme `columns` the top-right, deme
+  `columns + 1` the start of the second row). `rows * columns` must equal
+  `d`, and each side must be at least `3` (a side of 2 would make a
+  deme's up and down neighbors the same deme).
+
+  ```yaml
+  m:
+    topology: torus
+    rate: 0.01
+    rows: 10
+    columns: 10
+  d: 100
+  ```
 
 Both the sparse map and the topology sugar are config-file conveniences:
 they expand to the ordinary dense matrix at load time (visible as such in
@@ -165,10 +182,12 @@ from_mapping) still needs an already-dense matrix; call
 fim.model.topology.stepping_stone_neighbors and
 fim.model.topology.dense_matrix_from_neighbors yourself to get one.
 
-Migration topologies that no fixed matrix can express — a 2D lattice, or
-neighbor selection that changes over a run — are outside the current
-configuration surface. Both have named landing spots in the design
-document (§9.2, §11); neither is silently missing.
+Migration topologies that no fixed matrix can express — neighbor
+selection that changes over a run — are outside the current configuration
+surface. It has a named landing spot in the design document (§9.2, §11);
+it is not silently missing. (A plain bounded 2D lattice is expressible
+today as a sparse neighbor map; the `torus` sugar covers the wrapped
+case.)
 
 ### `mu`
 
@@ -931,6 +950,7 @@ execution-flavored defaults.
 | unrecognized or repeated convergence_statistic entry | rejected |
 | `m` sparse-map deme/neighbor id outside `[1..d]`, a self-loop, or weights summing past `1` | rejected |
 | `m` topology mapping missing `topology`/`rate`, an unknown key, or an unrecognized topology name | rejected |
+| `m` torus topology missing `rows`/`columns`, a side below `3`, `rows * columns` not equal to `d`, or `rows`/`columns` given with `ring`/`linear` | rejected |
 | `m` ring topology with `d < 3` | rejected |
 | migrant_sampling not `continuous` or `stochastic` | rejected |
 | mutation_model not infinite_alleles or finite_alleles | rejected |

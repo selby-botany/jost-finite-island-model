@@ -1175,9 +1175,21 @@
             <select id="field-m_topology" name="m_topology" form="input-form">
               <option value="ring">ring</option>
               <option value="linear">linear</option>
+              <option value="torus">torus</option>
             </select>
             <label for="field-m_topology_rate">rate</label>
             <input type="text" id="field-m_topology_rate" name="m_topology_rate" form="input-form">
+            <!-- Torus only (`config-modals.js` shows this row for it and
+                 hides it otherwise): a rows-by-columns lattice with
+                 wraparound in both directions, so no deme is on an edge.
+                 rows x columns must equal d -- checked by the model, not
+                 here -- and each side is at least 3. -->
+            <span id="m-torus-fields" hidden>
+              <label for="field-m_topology_rows">rows</label>
+              <input type="text" id="field-m_topology_rows" name="m_topology_rows" form="input-form" size="4">
+              <label for="field-m_topology_columns">columns</label>
+              <input type="text" id="field-m_topology_columns" name="m_topology_columns" form="input-form" size="4">
+            </span>
           </div>
           <!-- The migration-matrix grid editor: `webui/screens/
                migration-matrix.js` builds a d-by-d table of cells into

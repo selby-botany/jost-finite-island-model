@@ -843,7 +843,10 @@ def test_migration_accepts_a_hand_authored_sparse_neighbor_map() -> None:
     [
         ({"topology": "ring"}, "is missing rate"),
         ({"rate": 0.1}, "is missing topology"),
-        ({"topology": "square", "rate": 0.1}, "must be 'ring' or 'linear'"),
+        (
+            {"topology": "square", "rate": 0.1},
+            "must be 'ring', 'linear', or 'torus'",
+        ),
         ({"topology": "ring", "rate": 0.1, "extra": 1}, "unknown m topology"),
         ({1: {2: 0.6, 3: 0.6}}, "sum to more than 1"),
         ({1: {1: 0.1}}, "cannot list itself"),
@@ -1173,3 +1176,26 @@ def test_every_accepted_config_key_appears_in_configuration_md() -> None:
         f"configuration keys accepted by SimulationParams.from_mapping but "
         f"absent from doc/configuration.md: {', '.join(undocumented)}"
     )
+
+
+def test_migration_accepts_a_torus_topology_and_rejects_a_mismatched_shape() -> None:
+    """`m: {topology: torus, rate, rows, columns}` expands to the dense matrix."""
+    config = {
+        **_valid_config(),
+        "d": 12,
+        "N": 100,
+        "m": {"topology": "torus", "rate": 0.4, "rows": 3, "columns": 4},
+    }
+    params = SimulationParams.from_mapping(config)
+
+    assert isinstance(params.m, tuple)
+    assert params.m[0][1] == pytest.approx(0.1)
+    assert params.m[0][8] == pytest.approx(0.1)
+    assert params.m[0][0] == pytest.approx(0.6)
+
+    with pytest.raises(ValueError, match="has 12 demes, but d is 6"):
+        SimulationParams.from_mapping({**config, "d": 6})
+    with pytest.raises(ValueError, match=r"m\.rows must be an integer"):
+        SimulationParams.from_mapping(
+            {**config, "m": {**config["m"], "rows": 3.0}}  # type: ignore[dict-item]
+        )

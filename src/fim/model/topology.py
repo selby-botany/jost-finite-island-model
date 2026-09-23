@@ -22,8 +22,12 @@ from typing import Final, Literal
 
 MINIMUM_DEMES: Final = 2
 MINIMUM_RING_DEMES: Final = 3
-Topology = Literal["ring", "linear"]
-_TOPOLOGIES: Final = frozenset({"ring", "linear"})
+# A torus side below 3 would make a deme's "up" and "down" (or "left" and
+# "right") neighbor the same deme, quietly turning four neighbors into
+# three or two -- the same reason a ring needs at least 3 demes.
+MINIMUM_TORUS_SIDE: Final = 3
+Topology = Literal["ring", "linear", "torus"]
+_TOPOLOGIES: Final = frozenset({"ring", "linear", "torus"})
 
 
 def stepping_stone_neighbors(
@@ -31,6 +35,8 @@ def stepping_stone_neighbors(
     *,
     topology: Topology,
     rate: float,
+    rows: int | None = None,
+    columns: int | None = None,
 ) -> dict[int, dict[int, float]]:
     """Build a sparse nearest-neighbor migration map.
 
@@ -48,7 +54,16 @@ def stepping_stone_neighbors(
             or ring.
         topology: ``"ring"`` wraps deme ``d``'s next neighbor back to
             deme ``1``; ``"linear"`` is a bounded chain where the two end
-            demes have only one neighbor instead of two.
+            demes have only one neighbor instead of two; ``"torus"`` is
+            a ``rows`` by ``columns`` lattice with wraparound in both
+            directions, so no deme is on an edge and every deme has
+            exactly four neighbors (up, down, left, right). Demes are
+            numbered row by row: deme ``1`` is the top-left cell, deme
+            ``columns`` the top-right, deme ``columns + 1`` the first
+            of the second row.
+        rows: Lattice rows; required for (and only for) ``"torus"``.
+        columns: Lattice columns; required for (and only for)
+            ``"torus"``. ``rows * columns`` must equal ``d``.
         rate: Every deme's total outgoing migration fraction, split evenly
             among its actual neighbors — the same meaning ``m`` already
             has in the symmetric island model (§4.3), applied locally
@@ -72,6 +87,10 @@ def stepping_stone_neighbors(
         raise ValueError("a ring topology needs at least 3 demes")
     if not math.isfinite(rate) or not 0.0 <= rate <= 1.0:
         raise ValueError("rate must be between 0 and 1")
+    if topology == "torus":
+        return _torus_neighbors(d, rate, rows, columns)
+    if rows is not None or columns is not None:
+        raise ValueError("rows and columns apply only to a torus topology")
 
     return {
         deme: _neighbor_weights(deme, d, topology, rate) for deme in range(1, d + 1)
@@ -160,3 +179,44 @@ def _neighbor_weights(
 def _wrap(deme: int, d: int) -> int:
     """Wrap a one-based deme index around a ring of size ``d``."""
     return (deme - 1) % d + 1
+
+
+def _torus_neighbors(
+    d: int,
+    rate: float,
+    rows: int | None,
+    columns: int | None,
+) -> dict[int, dict[int, float]]:
+    """Return the four-neighbor map of a ``rows`` by ``columns`` torus.
+
+    Every deme splits ``rate`` evenly among its up, down, left, and right
+    neighbors, wrapping at the edges. Both sides are at least
+    ``MINIMUM_TORUS_SIDE``, so the four neighbors are always four
+    distinct demes and the split is always by exactly four.
+    """
+    if rows is None or columns is None:
+        raise ValueError("a torus topology needs rows and columns")
+    if rows < MINIMUM_TORUS_SIDE or columns < MINIMUM_TORUS_SIDE:
+        raise ValueError(
+            f"a torus topology needs at least {MINIMUM_TORUS_SIDE} rows "
+            f"and {MINIMUM_TORUS_SIDE} columns"
+        )
+    if rows * columns != d:
+        raise ValueError(
+            f"a torus of {rows} rows by {columns} columns has "
+            f"{rows * columns} demes, but d is {d}"
+        )
+    weight = rate / 4
+    neighbors: dict[int, dict[int, float]] = {}
+    for deme in range(1, d + 1):
+        row, column = divmod(deme - 1, columns)
+        neighbors[deme] = dict.fromkeys(
+            (
+                ((row - 1) % rows) * columns + column + 1,
+                ((row + 1) % rows) * columns + column + 1,
+                row * columns + (column - 1) % columns + 1,
+                row * columns + (column + 1) % columns + 1,
+            ),
+            weight,
+        )
+    return neighbors

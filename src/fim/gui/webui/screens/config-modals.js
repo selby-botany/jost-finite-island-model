@@ -128,6 +128,8 @@ function syncConditionalVisibility() {
     const mMode = form.elements.namedItem("m_mode").value;
     document.getElementById("m-scalar-fields").hidden = mMode !== "scalar";
     document.getElementById("m-topology-fields").hidden = mMode !== "topology";
+    document.getElementById("m-torus-fields").hidden =
+        form.elements.namedItem("m_topology").value !== "torus";
     document.getElementById("m-matrix-fields").hidden = mMode !== "matrix";
 
     const muMode = form.elements.namedItem("mu_mode").value;

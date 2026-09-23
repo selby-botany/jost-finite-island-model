@@ -134,3 +134,71 @@ def test_dense_matrix_from_neighbors_rejects_malformed_maps(
     """Every documented validation rule rejects its invalid sparse map."""
     with pytest.raises(ValueError, match=message):
         dense_matrix_from_neighbors(neighbors, d)
+
+
+def test_torus_gives_every_deme_four_wrapped_neighbors() -> None:
+    """A 3x4 torus: hand-derived neighbors, including all four wraparound edges.
+
+    Demes are numbered row by row, so the grid is
+
+        1  2  3  4
+        5  6  7  8
+        9 10 11 12
+
+    Deme 1 (top-left corner) reaches 5 (down), 9 (up, wrapping), 2
+    (right) and 4 (left, wrapping); deme 6 (interior) has no wrap.
+    """
+    neighbors = stepping_stone_neighbors(
+        12, topology="torus", rate=0.4, rows=3, columns=4
+    )
+
+    assert set(neighbors[1]) == {2, 4, 5, 9}
+    assert set(neighbors[12]) == {8, 4, 11, 9}
+    assert set(neighbors[6]) == {2, 10, 5, 7}
+    assert all(len(row) == 4 for row in neighbors.values())
+    assert all(
+        weight == pytest.approx(0.1)
+        for row in neighbors.values()
+        for weight in row.values()
+    )
+
+
+def test_torus_matrix_is_symmetric_and_row_stochastic() -> None:
+    """Every row sums to 1 and every link is reciprocal, so no deme is an edge."""
+    matrix = dense_matrix_from_neighbors(
+        stepping_stone_neighbors(20, topology="torus", rate=0.3, rows=4, columns=5),
+        20,
+    )
+
+    for i, row in enumerate(matrix):
+        assert math.isclose(sum(row), 1.0)
+        for j, value in enumerate(row):
+            assert value == pytest.approx(matrix[j][i])
+
+
+@pytest.mark.parametrize(
+    ("kwargs", "message"),
+    [
+        ({"d": 12, "topology": "torus", "rate": 0.1}, "needs rows and columns"),
+        (
+            {"d": 12, "topology": "torus", "rate": 0.1, "rows": 3},
+            "needs rows and columns",
+        ),
+        (
+            {"d": 8, "topology": "torus", "rate": 0.1, "rows": 2, "columns": 4},
+            "at least 3 rows",
+        ),
+        (
+            {"d": 13, "topology": "torus", "rate": 0.1, "rows": 3, "columns": 4},
+            "has 12 demes, but d is 13",
+        ),
+        (
+            {"d": 12, "topology": "ring", "rate": 0.1, "rows": 3, "columns": 4},
+            "apply only to a torus",
+        ),
+    ],
+)
+def test_torus_rejects_invalid_shapes(kwargs: dict[str, object], message: str) -> None:
+    """Missing, too-small, mismatched, or misplaced lattice dimensions are refused."""
+    with pytest.raises(ValueError, match=message):
+        stepping_stone_neighbors(**kwargs)  # type: ignore[arg-type]

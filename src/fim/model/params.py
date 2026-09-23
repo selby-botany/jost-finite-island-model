@@ -1275,8 +1275,12 @@ def _migration_from_sparse_map(value: Mapping[Any, Any], d: int) -> Migration:
 
 
 def _migration_from_topology(value: Mapping[str, Any], d: int) -> Migration:
-    """Expand a compact ``{topology, rate}`` mapping into a full matrix."""
-    unknown = set(value) - {"topology", "rate"}
+    """Expand a compact ``{topology, rate}`` mapping into a full matrix.
+
+    A ``torus`` mapping also carries ``rows`` and ``columns``; the other
+    topologies reject them.
+    """
+    unknown = set(value) - {"topology", "rate", "rows", "columns"}
     if unknown:
         names = ", ".join(sorted(str(key) for key in unknown))
         raise ValueError(f"unknown m topology key(s): {names}")
@@ -1286,10 +1290,14 @@ def _migration_from_topology(value: Mapping[str, Any], d: int) -> Migration:
         raise ValueError(f"m topology mapping is missing {names}")
     topology = _parse_string("m.topology", value["topology"])
     rate = _parse_float("m.rate", value["rate"])
-    if topology not in {"ring", "linear"}:
-        raise ValueError("m.topology must be 'ring' or 'linear'")
+    if topology not in {"ring", "linear", "torus"}:
+        raise ValueError("m.topology must be 'ring', 'linear', or 'torus'")
     validated_topology = cast(Topology, topology)
-    neighbors = stepping_stone_neighbors(d, topology=validated_topology, rate=rate)
+    rows = _parse_int("m.rows", value["rows"]) if "rows" in value else None
+    columns = _parse_int("m.columns", value["columns"]) if "columns" in value else None
+    neighbors = stepping_stone_neighbors(
+        d, topology=validated_topology, rate=rate, rows=rows, columns=columns
+    )
     return dense_matrix_from_neighbors(neighbors, d)
 
 

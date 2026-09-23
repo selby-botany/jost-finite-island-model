@@ -10613,6 +10613,26 @@ def test_m_to_payload_topology_mode_returns_a_topology_mapping() -> None
 
 Topology mode's payload matches `_migration_from_topology`'s expected shape.
 
+<a id="gui.test_config_form.test_m_to_payload_torus_carries_rows_and_columns_as_integers"></a>
+
+#### test\_m\_to\_payload\_torus\_carries\_rows\_and\_columns\_as\_integers
+
+```python
+def test_m_to_payload_torus_carries_rows_and_columns_as_integers() -> None
+```
+
+A torus needs its grid shape; the other topologies never send one.
+
+<a id="gui.test_config_form.test_m_to_payload_torus_rejects_a_missing_or_non_integer_side"></a>
+
+#### test\_m\_to\_payload\_torus\_rejects\_a\_missing\_or\_non\_integer\_side
+
+```python
+def test_m_to_payload_torus_rejects_a_missing_or_non_integer_side() -> None
+```
+
+Blank or fractional rows/columns fail with the field's own name.
+
 <a id="gui.test_config_form.test_m_to_payload_rejects_an_unknown_mode"></a>
 
 #### test\_m\_to\_payload\_rejects\_an\_unknown\_mode
@@ -12733,6 +12753,24 @@ the field's own real interaction now that the native Configure
 menu's own `toggleConvergenceStatistic` quick-toggle no longer
 exists — every field is reachable the same way regardless of how
 quick a toggle it used to be (design §3.3).
+
+<a id="gui.test_input_screen.test_choosing_the_torus_topology_reveals_rows_and_columns"></a>
+
+#### test\_choosing\_the\_torus\_topology\_reveals\_rows\_and\_columns
+
+```python
+def test_choosing_the_torus_topology_reveals_rows_and_columns(
+        window: webview.Window, drive: Callable[..., Any]) -> None
+```
+
+Rows and columns show for the torus only.
+
+A torus (a grid that wraps in both directions, so no deme is on an
+edge) is the common stepping-stone topology; unlike a ring or a
+linear chain it needs a grid shape, revealed by
+`syncConditionalVisibility` (`config-modals.js`) only while it is
+the selected topology. (Whether a given shape is valid for `d` is the
+model's own check, covered by `test_topology.py`.)
 
 <a id="gui.test_input_screen.test_checking_the_sigma_band_toggle_reveals_and_seeds_its_own_fields"></a>
 
@@ -19486,10 +19524,13 @@ are already coerced).
         ({
             "rate": 0.1
         }, "is missing topology"),
-        ({
-            "topology": "square",
-            "rate": 0.1
-        }, "must be 'ring' or 'linear'"),
+        (
+            {
+                "topology": "square",
+                "rate": 0.1
+            },
+            "must be 'ring', 'linear', or 'torus'",
+        ),
         ({
             "topology": "ring",
             "rate": 0.1,
@@ -19848,6 +19889,17 @@ properly covered — `mu_b`, `n_loci`, and `locus_lengths` are each
 documented inside their parent key's own section, and the three
 `equilibrium_*` keys share one section because they must be set
 together.
+
+<a id="model.test_params.test_migration_accepts_a_torus_topology_and_rejects_a_mismatched_shape"></a>
+
+#### test\_migration\_accepts\_a\_torus\_topology\_and\_rejects\_a\_mismatched\_shape
+
+```python
+def test_migration_accepts_a_torus_topology_and_rejects_a_mismatched_shape(
+) -> None
+```
+
+`m: {topology: torus, rate, rows, columns}` expands to the dense matrix.
 
 <a id="model.test_state"></a>
 
@@ -20371,6 +20423,95 @@ def test_dense_matrix_from_neighbors_rejects_malformed_maps(
 ```
 
 Every documented validation rule rejects its invalid sparse map.
+
+<a id="model.test_topology.test_torus_gives_every_deme_four_wrapped_neighbors"></a>
+
+#### test\_torus\_gives\_every\_deme\_four\_wrapped\_neighbors
+
+```python
+def test_torus_gives_every_deme_four_wrapped_neighbors() -> None
+```
+
+A 3x4 torus: hand-derived neighbors, including all four wraparound edges.
+
+Demes are numbered row by row, so the grid is
+
+    1  2  3  4
+    5  6  7  8
+    9 10 11 12
+
+Deme 1 (top-left corner) reaches 5 (down), 9 (up, wrapping), 2
+(right) and 4 (left, wrapping); deme 6 (interior) has no wrap.
+
+<a id="model.test_topology.test_torus_matrix_is_symmetric_and_row_stochastic"></a>
+
+#### test\_torus\_matrix\_is\_symmetric\_and\_row\_stochastic
+
+```python
+def test_torus_matrix_is_symmetric_and_row_stochastic() -> None
+```
+
+Every row sums to 1 and every link is reciprocal, so no deme is an edge.
+
+<a id="model.test_topology.test_torus_rejects_invalid_shapes"></a>
+
+#### test\_torus\_rejects\_invalid\_shapes
+
+```python
+@pytest.mark.parametrize(
+    ("kwargs", "message"),
+    [
+        ({
+            "d": 12,
+            "topology": "torus",
+            "rate": 0.1
+        }, "needs rows and columns"),
+        (
+            {
+                "d": 12,
+                "topology": "torus",
+                "rate": 0.1,
+                "rows": 3
+            },
+            "needs rows and columns",
+        ),
+        (
+            {
+                "d": 8,
+                "topology": "torus",
+                "rate": 0.1,
+                "rows": 2,
+                "columns": 4
+            },
+            "at least 3 rows",
+        ),
+        (
+            {
+                "d": 13,
+                "topology": "torus",
+                "rate": 0.1,
+                "rows": 3,
+                "columns": 4
+            },
+            "has 12 demes, but d is 13",
+        ),
+        (
+            {
+                "d": 12,
+                "topology": "ring",
+                "rate": 0.1,
+                "rows": 3,
+                "columns": 4
+            },
+            "apply only to a torus",
+        ),
+    ],
+)
+def test_torus_rejects_invalid_shapes(kwargs: dict[str, object],
+                                      message: str) -> None
+```
+
+Missing, too-small, mismatched, or misplaced lattice dimensions are refused.
 
 <a id="model.test_vectorized"></a>
 
