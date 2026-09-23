@@ -20,9 +20,11 @@ for that first. For parameter types and defaults, use the
 <h2 id="create-a-configuration">Create a configuration</h2>
 <pre><code class="language-console">fim init [--output PATH] [--force]
 </code></pre>
-<p><code>fim init</code> writes the documented development scenario (<code>N</code> is gene copies per deme; the file also records <code>ploidy</code>, so <code>N: 450</code> with <code>ploidy: 2</code> is 225 diploid individuals). Without <code>--output</code>, the
-path is <code>project-root/results/example-run.yaml</code>. Existing files are protected
-unless <code>--force</code> is present.</p>
+<p><code>fim init</code> writes the documented development scenario. <code>N</code> is gene copies
+per deme, and the file also records <code>ploidy</code>, so <code>N: 450</code> with <code>ploidy: 2</code> is
+225 diploid individuals. Without <code>--output</code>, the path is
+<code>project-root/results/example-run.yaml</code>. Existing files are protected unless
+<code>--force</code> is present.</p>
 <h2 id="run-a-simulation">Run a simulation</h2>
 <pre><code class="language-console">fim run CONFIG [-o DIRECTORY | --output DIRECTORY] [--quiet]
     [--workers N] [--sequential] [--max-concurrent-replicates N]

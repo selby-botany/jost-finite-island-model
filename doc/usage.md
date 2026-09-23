@@ -25,9 +25,11 @@ for that first. For parameter types and defaults, use the
 fim init [--output PATH] [--force]
 ```
 
-`fim init` writes the documented development scenario (`N` is gene copies per deme; the file also records `ploidy`, so `N: 450` with `ploidy: 2` is 225 diploid individuals). Without `--output`, the
-path is `project-root/results/example-run.yaml`. Existing files are protected
-unless `--force` is present.
+`fim init` writes the documented development scenario. `N` is gene copies
+per deme, and the file also records `ploidy`, so `N: 450` with `ploidy: 2` is
+225 diploid individuals. Without `--output`, the path is
+`project-root/results/example-run.yaml`. Existing files are protected unless
+`--force` is present.
 
 ## Run a simulation
 
