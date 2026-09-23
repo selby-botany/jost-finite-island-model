@@ -2,15 +2,23 @@
 
 /* Shared player mechanics (unified-run-view design §3.7, §8 Phase E,
  * and live supplemental animation design 20260915-claude-sonnet-5-
- * live-animation-scrubber-design.md) -- play/pause/scrub through an
- * array of frames across both completed-run replay and live running
- * states.
+ * live-animation-scrubber-design.md) -- play/pause through an array of
+ * frames across both completed-run replay and live running states.
  *
  * Supports two operational modes:
- * 1. "replay" (completed run): time slider over sampled trajectory frames.
+ * 1. "replay" (completed run): step/play through sampled trajectory frames.
  * 2. "live" (running simulation): dynamically growing frame buffer with
  *    "live-tracking" by default (pinning to the latest reported generation)
- *    and "inspecting" mode when dragged back to a historical generation.
+ *    and "inspecting" mode when played back to a historical generation.
+ *
+ * 2026-09-23 decluttering pass: the earlier centered "Play"/"Pause"
+ * button, the vertical range slider, and the verbose bottom label
+ * ("Generation N (frame X / Y)", plus a parenthetical live/inspecting
+ * note) are gone -- there is no drag-to-scrub affordance any more.
+ * What remains is a bare generation-number readout and two triangle
+ * buttons, one per direction, each its own play/pause toggle
+ * (`playDirection`, below) -- see `index.html`'s own comment on
+ * `#scrubber-controls` for the fuller rationale.
  */
 
 // A watchable cadence: fast enough to read as motion rather than a
@@ -20,27 +28,37 @@
 // own animation.js predecessor, both used.
 const STEP_INTERVAL_MS = 150;
 
-// A single-frame set has nothing to play -- Play stays disabled and
-// scrubbing has nowhere to go.
+// A single-frame set has nothing to play -- both buttons stay disabled
+// and there is nowhere to step to.
 const MINIMUM_FRAMES_TO_ANIMATE = 2;
 
-const scrubberPlayButton = document.getElementById("scrubber-play-button");
-const scrubberRange = document.getElementById("scrubber-range");
+const scrubberForwardButton = document.getElementById("scrubber-step-forward");
+const scrubberBackwardButton = document.getElementById("scrubber-step-backward");
 const scrubberLabel = document.getElementById("scrubber-label");
 
 let frames = [];
 let currentIndex = 0;
 let playIntervalId = null;
+// +1 while playing forward, -1 while playing backward, 0 while stopped --
+// which button (if either) is currently the active play/pause toggle.
+let playDirection = 0;
 let onFrame = null;
 let scrubberMode = "replay";
 let isLiveTracking = true;
+
+function setButtonActive(button, active) {
+    button.classList.toggle("scrubber-step-active", active);
+    button.setAttribute("aria-pressed", active ? "true" : "false");
+}
 
 function stopScrubber() {
     if (playIntervalId !== null) {
         clearInterval(playIntervalId);
         playIntervalId = null;
     }
-    scrubberPlayButton.textContent = "Play";
+    playDirection = 0;
+    setButtonActive(scrubberForwardButton, false);
+    setButtonActive(scrubberBackwardButton, false);
 }
 
 function showCurrentFrame(isLiveHead = false) {
@@ -48,17 +66,7 @@ function showCurrentFrame(isLiveHead = false) {
     if (!frame) {
         return;
     }
-    scrubberRange.value = String(currentIndex);
-    if (scrubberMode === "live" && isLiveTracking) {
-        scrubberLabel.textContent =
-            `Generation ${frame.generation} (live, frame ${currentIndex + 1} / ${frames.length})`;
-    } else if (scrubberMode === "live") {
-        scrubberLabel.textContent =
-            `Generation ${frame.generation} (inspecting, frame ${currentIndex + 1} / ${frames.length})`;
-    } else {
-        scrubberLabel.textContent =
-            `Generation ${frame.generation} (frame ${currentIndex + 1} / ${frames.length})`;
-    }
+    scrubberLabel.textContent = `Generation ${frame.generation}`;
     if (onFrame !== null) {
         onFrame(frame, currentIndex, isLiveHead);
     }
@@ -92,29 +100,45 @@ function stepForward() {
     }
 }
 
-scrubberPlayButton.addEventListener("click", () => {
-    if (playIntervalId !== null) {
+function stepBackward() {
+    if (currentIndex <= 0) {
         stopScrubber();
         return;
     }
-    if (currentIndex >= frames.length - 1) {
-        setCurrentIndex(0, false);
+    setCurrentIndex(currentIndex - 1, true);
+}
+
+// Each button is its own play/pause toggle for its own direction:
+// clicking a playing button stops it; clicking the other one switches
+// direction without needing a separate stop first.
+function togglePlay(direction) {
+    if (playDirection === direction) {
+        stopScrubber();
+        return;
     }
-    if (scrubberMode === "live") {
+    stopScrubber();
+    if (direction === 1 && currentIndex >= frames.length - 1) {
+        // Looping playback, same as the single "Play" button this
+        // replaced: restart from the beginning rather than doing
+        // nothing when already parked at the last frame.
+        setCurrentIndex(0, false);
+    } else if (direction === -1 && currentIndex <= 0) {
+        setCurrentIndex(frames.length - 1, false);
+    }
+    if (scrubberMode === "live" && direction === 1) {
         isLiveTracking = false;
     }
-    scrubberPlayButton.textContent = "Pause";
-    playIntervalId = setInterval(stepForward, STEP_INTERVAL_MS);
-});
+    playDirection = direction;
+    setButtonActive(direction === 1 ? scrubberForwardButton : scrubberBackwardButton, true);
+    playIntervalId = setInterval(direction === 1 ? stepForward : stepBackward, STEP_INTERVAL_MS);
+}
 
-scrubberRange.addEventListener("input", () => {
-    stopScrubber();
-    setCurrentIndex(Number(scrubberRange.value), true);
-});
+scrubberForwardButton.addEventListener("click", () => togglePlay(1));
+scrubberBackwardButton.addEventListener("click", () => togglePlay(-1));
 
 /**
  * Report the generation number of every frame the scrubber holds, in
- * slider order.
+ * playback order.
  *
  * Read-only introspection. Returns generations rather than the frames
  * themselves so callers cannot reach the panel payloads hanging off
@@ -151,18 +175,15 @@ window.fim.appendLiveFrame = function appendLiveFrame(frame, drawFrame) {
     onFrame = drawFrame;
     frames.push(frame);
     const canAnimate = frames.length >= MINIMUM_FRAMES_TO_ANIMATE;
-    scrubberPlayButton.disabled = !canAnimate;
-    scrubberRange.disabled = !canAnimate;
-    scrubberRange.max = String(Math.max(frames.length - 1, 0));
+    scrubberForwardButton.disabled = !canAnimate;
+    scrubberBackwardButton.disabled = !canAnimate;
     if (isLiveTracking) {
         currentIndex = frames.length - 1;
         showCurrentFrame(true);
     } else {
-        scrubberRange.value = String(currentIndex);
         const curFrame = frames[currentIndex];
         if (curFrame) {
-            scrubberLabel.textContent =
-                `Generation ${curFrame.generation} (inspecting, frame ${currentIndex + 1} / ${frames.length})`;
+            scrubberLabel.textContent = `Generation ${curFrame.generation}`;
         }
     }
 };
@@ -173,13 +194,13 @@ window.fim.appendLiveFrame = function appendLiveFrame(frame, drawFrame) {
  *
  * Does not draw: the caller has already painted whichever frame it
  * wants on screen, and `startIndex` tells this module which one that
- * was so the slider and the label agree with it.
+ * was so the label agrees with it.
  *
  * @param {Array<{generation: number}>} newFrames
  * @param {(frame: object, index: number) => void} drawFrame - Called
- *     with the currently-displayed frame whenever it changes (an
- *     explicit scrub, playback, or this call itself) -- owns actually
- *     drawing it; this module knows nothing about panels or canvases.
+ *     with the currently-displayed frame whenever it changes (playback
+ *     or this call itself) -- owns actually drawing it; this module
+ *     knows nothing about panels or canvases.
  * @param {number} [startIndex=0] - Which frame is already on screen.
  *     Clamped into range, so a caller may pass `frames.length - 1`
  *     without first checking that the list is non-empty.
@@ -192,15 +213,10 @@ window.fim.setScrubberFrames = function setScrubberFrames(newFrames, drawFrame, 
     frames = newFrames;
     currentIndex = Math.min(Math.max(startIndex, 0), Math.max(frames.length - 1, 0));
     const canAnimate = frames.length >= MINIMUM_FRAMES_TO_ANIMATE;
-    scrubberPlayButton.disabled = !canAnimate;
-    scrubberRange.disabled = !canAnimate;
-    scrubberRange.max = String(Math.max(frames.length - 1, 0));
-    scrubberRange.value = String(currentIndex);
-    scrubberLabel.textContent =
-        frames.length > 0
-            ? `Generation ${frames[currentIndex].generation} (frame ${currentIndex + 1} / ${frames.length})`
-            : "";
-    // Only now does scrubbing/playback start actually drawing.
+    scrubberForwardButton.disabled = !canAnimate;
+    scrubberBackwardButton.disabled = !canAnimate;
+    scrubberLabel.textContent = frames.length > 0 ? `Generation ${frames[currentIndex].generation}` : "";
+    // Only now does playback start actually drawing.
     onFrame = drawFrame;
 };
 
@@ -217,10 +233,7 @@ window.fim.resetScrubber = function resetScrubber() {
     currentIndex = 0;
     scrubberMode = "replay";
     isLiveTracking = true;
-    scrubberPlayButton.disabled = true;
-    scrubberRange.disabled = true;
-    scrubberRange.max = "0";
-    scrubberRange.value = "0";
+    scrubberForwardButton.disabled = true;
+    scrubberBackwardButton.disabled = true;
     scrubberLabel.textContent = "";
 };
-

@@ -707,15 +707,28 @@ def test_live_run_updates_scrubber_and_supplemental_panels(
                     "document.getElementById('frequency-spectrum-card').hidden, "
                     "ibdHidden: document.getElementById('ibd-card').hidden, "
                     "liveLabel: document.getElementById('scrubber-label').textContent, "
-                    "scrubbedLabel: (() => {"
-                    "const range = document.getElementById('scrubber-range');"
-                    "range.value = '0';"
-                    "range.dispatchEvent(new Event('input', {bubbles: true}));"
-                    "return document.getElementById('scrubber-label').textContent;"
-                    "})(), "
                     "firstFrameGeneration: window.fim.getScrubberGenerations()[0]"
                     "})"
                 )
+                # No slider left to jump to index 0 directly (2026-09-23
+                # decluttering) -- click "play backward" and poll the
+                # label until it settles on frame 0's own generation;
+                # `stepBackward` (`scrubber.js`) stops itself there.
+                window.evaluate_js(
+                    "document.getElementById('scrubber-step-backward').click();"
+                )
+                expected_scrubbed_label = (
+                    f"Generation {settled['firstFrameGeneration']}"
+                )
+                scrubbed_label = None
+                for _ in range(_READY_POLL_ATTEMPTS):
+                    scrubbed_label = window.evaluate_js(
+                        "document.getElementById('scrubber-label').textContent"
+                    )
+                    if scrubbed_label == expected_scrubbed_label:
+                        break
+                    time.sleep(_READY_POLL_INTERVAL_SECONDS)
+                settled["scrubbedLabel"] = scrubbed_label
                 window.evaluate_js(
                     "document.getElementById('cancel-run-button').click();"
                 )
@@ -734,9 +747,8 @@ def test_live_run_updates_scrubber_and_supplemental_panels(
     assert settled["alleleCompHidden"] is True
     assert settled["freqSpecHidden"] is True
     assert settled["ibdHidden"] is True
-    assert "live" in settled["liveLabel"]
-    assert "inspecting" in settled["scrubbedLabel"]
-    # Dragging to index 0 shows *frame 0's own* generation, read back
+    assert "Generation" in settled["liveLabel"]
+    # Playing backward reaches *frame 0's own* generation, read back
     # from the scrubber rather than hard-coded.
     #
     # This asserted `"Generation 0"` literally until it failed under
@@ -748,10 +760,9 @@ def test_live_run_updates_scrubber_and_supplemental_panels(
     # busy the machine was, not about the code. A test whose result can
     # change while the commit does not is broken, so the timing-
     # dependent literal is gone; the mapping it was really checking
-    # (index 0 of the slider names frame 0 of the buffer) is asserted
-    # here exactly, and still fails if that mapping breaks.
-    assert f"Generation {settled['firstFrameGeneration']} " in settled["scrubbedLabel"]
-    assert "frame 1 / " in settled["scrubbedLabel"]
+    # (index 0 of the button's own walk names frame 0 of the buffer) is
+    # asserted here exactly, and still fails if that mapping breaks.
+    assert settled["scrubbedLabel"] == f"Generation {settled['firstFrameGeneration']}"
 
 
 # Selects the "equilibrium split" radio (`config-modals.js`'s own

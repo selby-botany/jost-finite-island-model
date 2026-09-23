@@ -93,13 +93,35 @@ def _poll_until(
 
 
 def _scrub_to(window: webview.Window, index: int) -> None:
-    """Drag `#scrubber-range` to `index` and fire the same `"input"` event
-    a real drag dispatches (`scrubber.js`'s own listener)."""
-    window.evaluate_js(
-        f"document.getElementById('scrubber-range').value = '{index}';"
-        "document.getElementById('scrubber-range').dispatchEvent("
-        "new Event('input', {bubbles: true}));"
+    """Play the scrubber to frame `index` and pause it there.
+
+    There is no direct-jump slider any more (2026-09-23 decluttering): a
+    real botanist reaches a specific frame by clicking "play forward" or
+    "play backward" and clicking that same triangle button again once
+    the generation they want is on screen -- `scrubber.js`'s own
+    play/pause toggle, one button per direction. This drives exactly
+    that: picks a direction from the scrubber's current position versus
+    the target, clicks to start, polls the generation label, then
+    clicks the same button again to stop once it matches.
+    """
+    target_generation = window.evaluate_js(
+        f"window.fim.getScrubberGenerations()[{index}]"
     )
+    current_label = window.evaluate_js(
+        "document.getElementById('scrubber-label').textContent"
+    )
+    current_generation = int(current_label.removeprefix("Generation "))
+    if current_generation == target_generation:
+        return
+    direction = "forward" if target_generation > current_generation else "backward"
+    button_id = f"scrubber-step-{direction}"
+    window.evaluate_js(f"document.getElementById('{button_id}').click();")
+    _poll_until(
+        window,
+        "document.getElementById('scrubber-label').textContent",
+        lambda value: value == f"Generation {target_generation}",
+    )
+    window.evaluate_js(f"document.getElementById('{button_id}').click();")
 
 
 def test_scrubbing_to_an_earlier_generation_updates_the_stats_table_and_marker(
@@ -172,8 +194,8 @@ def test_scrubbing_to_an_earlier_generation_updates_the_stats_table_and_marker(
 
     at0 = settled["atGeneration0"]
     at1 = settled["atGeneration1"]
-    assert at0["label"].startswith("Generation 0 ")
-    assert at1["label"].startswith("Generation 1 ")
+    assert at0["label"] == "Generation 0"
+    assert at1["label"] == "Generation 1"
     # `D` is the only *watched* statistic here (the form's own default
     # `cs_D` checkbox, untouched by `_SET_TINY_FIELDS`) -- both rows keep
     # showing a real value, each generation's own recorded value, not the
@@ -231,8 +253,8 @@ def test_scrubbing_back_to_the_final_frame_restores_the_real_statistics_and_mark
                 lambda value: value == "completed",
             )
             _poll_until(window, "window.__fimScrubberPending", lambda value: value == 0)
-            final_index = window.evaluate_js(
-                "Number(document.getElementById('scrubber-range').max)"
+            final_index = (
+                len(window.evaluate_js("window.fim.getScrubberGenerations()")) - 1
             )
             final_snapshot = window.evaluate_js(
                 "document.getElementById('run-trajectory-canvas').toDataURL()"
@@ -321,8 +343,6 @@ def test_the_scrubber_starts_on_the_frame_that_is_actually_drawn(
             opened = window.evaluate_js(
                 "({"
                 "label: document.getElementById('scrubber-label').textContent, "
-                "rangeValue: document.getElementById('scrubber-range').value, "
-                "rangeMax: document.getElementById('scrubber-range').max, "
                 "generations: window.fim.getScrubberGenerations(), "
                 "snapshot: document.getElementById('run-canvas').toDataURL()"
                 "})"
@@ -346,11 +366,6 @@ def test_the_scrubber_starts_on_the_frame_that_is_actually_drawn(
     assert len(generations) > 1
 
     last_index = len(generations) - 1
-    assert opened["rangeValue"] == str(last_index)
-    assert opened["rangeMax"] == str(last_index)
-    assert opened["label"] == (
-        f"Generation {generations[last_index]} "
-        f"(frame {last_index + 1} / {len(generations)})"
-    )
+    assert opened["label"] == f"Generation {generations[last_index]}"
     # And the canvas the user is looking at really is that frame's.
     assert opened["snapshot"] == settled["finalSnapshot"]

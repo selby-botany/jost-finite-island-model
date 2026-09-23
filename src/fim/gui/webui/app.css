@@ -853,26 +853,60 @@ fieldset.composite > label {
     min-width: 0;
 }
 
+/* The scrubber (design §3.2.4/§3.3): `completed`-only this phase, no
+ * separate "Animate" screen or button -- draws into the same
+ * `#run-canvas` above via `scrubber.js`. Its only instance sits down
+ * the left edge of the graph stage, one column of `.run-graph-body`'s
+ * own grid; a former, unscoped `.scrubber-controls` rule block that
+ * duplicated part of this one (dating from before the scrubber moved
+ * here) was folded into it as part of the 2026-09-23 decluttering
+ * pass. */
 .run-graph-body .scrubber-controls {
+    display: flex;
     margin: 0;
     flex-direction: column;
-    align-items: stretch;
+    align-items: center;
     justify-content: flex-start;
+    gap: 0.35rem;
     width: 3rem;
-    min-height: 22rem;
 }
 
-.run-graph-body .scrubber-controls input[type="range"] {
-    writing-mode: bt-lr;
-    -webkit-appearance: slider-vertical;
-    width: 100%;
-    max-width: none;
-    flex: 1;
-    margin: 0.35rem 0;
-}
-
-.run-graph-body .scrubber-controls #scrubber-label {
+/* Mirrors the font/color `run-view-completed.js` uses for the axis
+ * ticks it draws directly onto the canvas ("10px sans-serif" /
+ * `--fim-muted`), so the one number this control shows reads as part
+ * of the graph rather than as a separate widget's label. */
+.run-graph-body .scrubber-controls .scrubber-generation {
+    font: 10px sans-serif;
+    color: var(--fim-muted);
     text-align: center;
+}
+
+/* The two play/pause toggles that replaced the slider (2026-09-23):
+ * an up triangle steps forward from the current generation, a down
+ * triangle steps backward, each button its own independent play/pause
+ * for that one direction. */
+.run-graph-body .scrubber-controls .scrubber-step-button {
+    width: 1.75rem;
+    height: 1.5rem;
+    padding: 0;
+    line-height: 1;
+    font-size: 0.85rem;
+    border: 1px solid var(--fim-border);
+    border-radius: 4px;
+    background: var(--fim-background);
+    color: var(--fim-foreground);
+    cursor: pointer;
+}
+
+.run-graph-body .scrubber-controls .scrubber-step-button:disabled {
+    opacity: 0.4;
+    cursor: default;
+}
+
+.run-graph-body .scrubber-controls .scrubber-step-button.scrubber-step-active {
+    background: var(--fim-accent);
+    border-color: var(--fim-accent);
+    color: var(--fim-background);
 }
 
 .run-visual-panels {
@@ -1506,26 +1540,6 @@ fieldset.composite > label {
     text-align: left;
     padding: 0.3rem 0.6rem;
     border-bottom: 1px solid var(--fim-border);
-}
-
-/* The scrubber (design §3.2.4/§3.3): `completed`-only this phase, no
- * separate "Animate" screen or button -- draws into the same
- * `#run-canvas` above via `scrubber.js`. */
-.scrubber-controls {
-    display: flex;
-    align-items: center;
-    gap: 0.75rem;
-    margin: 0.75rem 0;
-}
-
-.scrubber-controls input[type="range"] {
-    flex: 1;
-    max-width: 24rem;
-}
-
-.scrubber-controls #scrubber-label {
-    color: var(--fim-muted);
-    font-size: 0.85rem;
 }
 
 /* Home identity and shortcut cards use Selby's orchid/plum/green language
