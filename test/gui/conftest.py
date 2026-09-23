@@ -642,7 +642,14 @@ def _isolate_gui_preferences(
     # already uses for `dark_mode_override`/`significant_digits` --
     # every other test in this package never has to know this dialog
     # exists.
-    save_preferences(preferences_path, GuiPreferences(welcome_dismissed=True))
+    # `default_ploidy="1"`: the app makes the botanist choose a ploidy, so
+    # without a default no test could submit a run. Haploid (individuals
+    # equal gene copies) keeps every explicit `N` a test types meaning
+    # exactly what it always did.
+    save_preferences(
+        preferences_path,
+        GuiPreferences(welcome_dismissed=True, default_ploidy="1"),
+    )
     return preferences_path
 
 
@@ -734,6 +741,7 @@ def fast_scalar_run_settings(_isolate_gui_preferences: Path) -> Path:
         _isolate_gui_preferences,
         GuiPreferences(
             welcome_dismissed=True,
+            default_ploidy="1",
             default_run_settings={
                 "n_replicates": "1",
                 "max_generations": "10",
@@ -782,6 +790,7 @@ def unreachable_convergence_run_settings(_isolate_gui_preferences: Path) -> Path
         _isolate_gui_preferences,
         GuiPreferences(
             welcome_dismissed=True,
+            default_ploidy="1",
             default_run_settings={
                 "n_replicates": "1",
                 "convergence_window": "10000",
@@ -805,6 +814,7 @@ def fast_batch_run_settings(_isolate_gui_preferences: Path) -> Path:
         _isolate_gui_preferences,
         GuiPreferences(
             welcome_dismissed=True,
+            default_ploidy="1",
             default_run_settings={
                 "n_replicates": "2",
                 "max_generations": "10",
@@ -836,6 +846,7 @@ def unreachable_batch_run_settings(_isolate_gui_preferences: Path) -> Path:
         _isolate_gui_preferences,
         GuiPreferences(
             welcome_dismissed=True,
+            default_ploidy="1",
             default_run_settings={
                 "n_replicates": "2",
                 "max_generations": "10000",
@@ -863,6 +874,7 @@ def staggered_batch_run_settings(_isolate_gui_preferences: Path) -> Path:
         _isolate_gui_preferences,
         GuiPreferences(
             welcome_dismissed=True,
+            default_ploidy="1",
             default_run_settings={
                 "n_replicates": "5",
                 "max_generations": "30",

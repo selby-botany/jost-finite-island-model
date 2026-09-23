@@ -8,6 +8,20 @@ project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- **Migration topology `torus`**: `m: {topology: torus, rate, rows,
+  columns}`, a rows-by-columns grid that wraps in both directions so no
+  deme is on an edge (the usual stepping-stone topology); every deme has
+  four neighbors and splits `rate` four ways. `rows * columns` must equal
+  `d` and each side is at least 3. Available in the desktop app's
+  topology selector too.
+- **`ploidy`** (1-4, optional) in the configuration and the run manifest:
+  gene copies per individual, recorded so a run can say "225 diploid
+  individuals" and the app can show individuals again when a run is
+  reopened. Provenance only: the simulator runs on gene copies (`N`) and
+  never reads it, so it changes no result; when set, each deme's `N` must
+  be a multiple of it. Omitted from the recorded configuration when
+  unset, so existing run ids are unchanged.
+
 - Four new worked examples in `doc/usage.md` (ten → fourteen), each
   actually run to record its own real numbers before being written up:
   "Equilibrium-split founding" and "Within-run sigma band" fill genuine
@@ -733,6 +747,25 @@ project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Changed
 
+- **`deme_weighting` now defaults to `equal`** (was `size`). It only
+  affects E_ST, and only when demes differ in size; `D` and K_ST already
+  weight demes equally, so E_ST now follows the same convention unless
+  `size` is asked for. Because the value is part of the recorded
+  configuration, a configuration that omits the key gets a different
+  auto-generated run id than before (so earlier default runs are not
+  cache hits); set `deme_weighting: size` to reproduce them.
+- **The desktop app asks for ploidy, then individuals, instead of gene
+  copies.** Configure's first population field is now **ploidy** (haploid,
+  diploid, triploid, tetraploid) with no default, and `N` is the number of
+  *individuals* per deme; the app multiplies them into the gene-copy `N`
+  the simulator and the YAML format use. A blank ploidy is refused with
+  "ploidy must be chosen". Settings gains a **Default ploidy** so new
+  configurations can start on one. The Run card's parameter strip and
+  Home's run summaries show individuals with their ploidy ("225
+  diploid"); Explore stays in gene copies and converts when handing off to
+  Configure. Worked examples declare `ploidy: 2` (their `N` is unchanged,
+  so every documented number still holds).
+
 - The desktop app's Settings dialog (top-right of the top menu bar) now
   holds every field that describes *how the computation runs*, as
   global defaults every new configuration starts from: execution
@@ -999,6 +1032,18 @@ project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   public name.
 
 ### Fixed
+
+- **Windows: a large batch no longer dies with `[WinError 5] Access is
+  denied` on a replicate's `.progress` file.** Every replicate rewrites its
+  `.progress` sidecar each generation (write a temporary file, rename it
+  over the old one) while the app reads it; on Windows the rename is
+  refused if the reader has the file open at that instant, and with
+  enough replicates the collision is certain. The rename is now retried
+  briefly (`fim.paths.replace_with_retry`, ten attempts 20 ms apart),
+  the reader treats a refused open as "nothing new yet", and the same
+  helper covers every other write-then-rename in the package. Found on a
+  botanist's first Windows run of a beta build; modeled by tests, not yet
+  observed on a Windows machine here.
 
 - Six worked examples in `doc/usage.md` had their own documented
   generation/statistic numbers corrected against a real re-run:

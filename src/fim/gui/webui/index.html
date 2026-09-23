@@ -1135,12 +1135,28 @@
              grid, the same "one hidden field, driven by a visible grid"
              shape `field-m_matrix_json`/`field-loci_json`/`field-
              p0_json` already established. -->
+        <!-- Ploidy first, then individuals (botanist feedback, first
+             real beta run): the form asks in the botanist's own terms and
+             `config_form.form_values_to_payload` multiplies individuals
+             by ploidy into the simulator's gene-copy `N`. No default:
+             a blank choice is refused ("ploidy must be chosen") rather
+             than guessed, unless Settings supplies a default ploidy. -->
+        <div class="field">
+          <label for="field-ploidy" data-field-help="ploidy">ploidy</label>
+          <select id="field-ploidy" name="ploidy" form="input-form">
+            <option value="">choose…</option>
+            <option value="1">haploid (1)</option>
+            <option value="2">diploid (2)</option>
+            <option value="3">triploid (3)</option>
+            <option value="4">tetraploid (4)</option>
+          </select>
+        </div>
         <fieldset class="composite" id="n-selector">
-          <legend data-field-help="n_mode">N (population size)</legend>
+          <legend data-field-help="n_mode">N (individuals per deme)</legend>
           <label><input type="radio" name="n_mode" value="same" checked> same for every deme</label>
           <label><input type="radio" name="n_mode" value="per_deme"> per-deme</label>
           <div class="field" id="n-same-fields">
-            <label for="field-N">N (gene copies/deme)</label>
+            <label for="field-N">N (individuals/deme)</label>
             <input type="text" id="field-N" name="N" form="input-form">
           </div>
           <div class="field" id="n-per-deme-fields" hidden>
@@ -1756,6 +1772,25 @@
          run-handoff-design.md`, `selby/restricted`, §4/§5): the
          botanist's own call for what a Study group's own "Re-run all…"
          action (`open-run.js`) does with each configuration's seed. -->
+    <!-- Default ploidy (botanist feedback, first real beta run): what a
+         fresh configuration's ploidy starts on. Blank keeps the "choose
+         every time" behavior. Applied to new configurations only --
+         never to a run already being edited or reopened. -->
+    <div class="field">
+      <label for="settings-default-ploidy">Default ploidy</label>
+      <select id="settings-default-ploidy">
+        <option value="">Ask me each time</option>
+        <option value="1">Haploid (1)</option>
+        <option value="2">Diploid (2)</option>
+        <option value="3">Triploid (3)</option>
+        <option value="4">Tetraploid (4)</option>
+      </select>
+      <p class="hint">
+        The ploidy a new configuration starts on. Leave it on "Ask me each
+        time" to choose for every configuration.
+      </p>
+    </div>
+
     <div class="field">
       <label for="settings-rerun-seed-mode">When re-running a study</label>
       <select id="settings-rerun-seed-mode">

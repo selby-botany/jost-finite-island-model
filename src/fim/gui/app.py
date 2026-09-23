@@ -76,6 +76,7 @@ from fim.gui import batch_runner, presets, recent_runs, runner
 from fim.gui.animation import pre_render_batch_frames, pre_render_frames
 from fim.gui.config_form import (
     DEFAULT_RUN_SETTING_FIELD_NAMES,
+    PLOIDY_NAMES,
     field_for_error,
     form_values_to_payload,
     m_from_params,
@@ -892,11 +893,14 @@ def _run_config_summary(params: SimulationParams) -> dict[str, str]:
         matrix or a `mu_b`-derived rate compares as a single field like
         every other, not several.
     """
-    n_text = (
-        str(params.N)
-        if isinstance(params.N, int)
-        else ",".join(str(value) for value in params.N)
-    )
+    # Individuals with their ploidy when the run recorded one ("225
+    # diploid"), gene copies otherwise -- the same two things the
+    # Configure form shows and asks for.
+    ploidy = params.ploidy or 1
+    counts = [params.N] * 1 if isinstance(params.N, int) else list(params.N)
+    n_text = ",".join(str(value // ploidy) for value in counts)
+    if params.ploidy is not None:
+        n_text = f"{n_text} {PLOIDY_NAMES[params.ploidy]}"
     m_values = m_from_params(params)
     if m_values["m_mode"] == "scalar":
         m_text = m_values["m_rate"]
@@ -1606,12 +1610,25 @@ class Api:
         initial_form` already applies to a stale `form_values` restore,
         below.
         """
-        if self._preferences.default_run_settings is None:
+        overrides = self._starter_overrides()
+        if not overrides:
             return starter_form_values()
         try:
-            return starter_form_values(overrides=self._preferences.default_run_settings)
+            return starter_form_values(overrides=overrides)
         except ValueError:
             return starter_form_values()
+
+    def _starter_overrides(self) -> dict[str, str]:
+        """Saved Settings that seed a *fresh* form: run defaults and default ploidy.
+
+        The ploidy is kept out of `default_run_settings` on purpose (see
+        `GuiPreferences.default_ploidy`): those are merged into every
+        submission, which would overwrite a ploidy chosen for one run.
+        """
+        overrides = dict(self._preferences.default_run_settings or {})
+        if self._preferences.default_ploidy:
+            overrides["ploidy"] = self._preferences.default_ploidy
+        return overrides
 
     def _merge_default_run_settings(self, values: dict[str, str]) -> dict[str, str]:
         """Fill in Configure-absent execution-default fields before using a submission.
@@ -1720,8 +1737,20 @@ class Api:
             `{"ok": True, "values": ...}` on success; `{"ok": False,
             "message": ...}` if the merged whole does not validate.
         """
-        merged_overrides = dict(self._preferences.default_run_settings or {})
+        merged_overrides = self._starter_overrides()
+        overrides = dict(overrides)
+        gene_copies = overrides.pop("gene_copies", None)
         merged_overrides.update(overrides)
+        if gene_copies is not None:
+            # Explore counts gene copies; the form asks for individuals.
+            # With no ploidy known (none chosen, no Settings default) the
+            # count cannot be converted honestly, so the form keeps its
+            # own individuals and the botanist chooses a ploidy.
+            ploidy = merged_overrides.get("ploidy", "")
+            if ploidy and gene_copies.strip().isdigit():
+                merged_overrides["N"] = str(
+                    max(1, round(int(gene_copies) / int(ploidy)))
+                )
         try:
             values = starter_form_values(overrides=merged_overrides)
         except ValueError as error:
@@ -1783,6 +1812,32 @@ class Api:
                 ),
             }
         self._preferences = self._preferences.with_startup_behavior(value)
+        save_preferences(self._preferences_path, self._preferences)
+        return {"ok": True, "value": value}
+
+    @_log_bridge_call
+    def get_default_ploidy(self) -> str:
+        """Return Settings' default ploidy: `""` (choose every time) or `"1"`-`"4"`."""
+        return self._preferences.default_ploidy
+
+    @_log_bridge_call
+    def set_default_ploidy(self, value: str) -> dict[str, Any]:
+        """Set the ploidy a fresh configuration's form starts on.
+
+        Args:
+            value: `""` for no default (the botanist chooses each time),
+                or `"1"` through `"4"` (haploid through tetraploid).
+
+        Returns:
+            `{"ok": True, "value": value}` on success; otherwise
+            `{"ok": False, "message": ...}`.
+        """
+        if value not in ("", "1", "2", "3", "4"):
+            return {
+                "ok": False,
+                "message": f"default ploidy must be blank or 1-4: {value!r}",
+            }
+        self._preferences = self._preferences.with_default_ploidy(value)
         save_preferences(self._preferences_path, self._preferences)
         return {"ok": True, "value": value}
 

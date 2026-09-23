@@ -83,6 +83,16 @@ from fim.statistics import (
 from fim.viz.scatter import frequency_points, pooled_scatter_panels
 
 
+def _submittable_starter() -> dict[str, str]:
+    """The starter form with a ploidy chosen, i.e. one a run can be submitted with.
+
+    A fresh form deliberately leaves ploidy blank so the botanist must
+    choose it; diploid pairs the starter's 225 individuals with its
+    historical 450 gene copies, so payload numbers keep their old values.
+    """
+    return {**starter_form_values(), "ploidy": "2"}
+
+
 def test_get_starter_form_matches_config_form_directly() -> None:
     """With nothing saved, the bridge method matches `starter_form_values` exactly."""
     assert Api().get_starter_form() == starter_form_values()
@@ -107,6 +117,76 @@ def test_get_starter_form_applies_saved_default_run_settings(tmp_path: Path) -> 
     assert result["n_replicates"] == "16"
     # Untouched by the overlay -- still the true starter value.
     assert result["N"] == starter_form_values()["N"]
+
+
+def test_default_ploidy_seeds_a_fresh_form_and_makes_it_submittable(
+    tmp_path: Path,
+) -> None:
+    """A saved default ploidy starts new forms on it; unset leaves it to choose."""
+    preferences_path = tmp_path / "preferences.json"
+    api = Api(preferences_path=preferences_path)
+
+    assert api.get_default_ploidy() == ""
+    assert api.get_starter_form()["ploidy"] == ""
+    assert api.validate_form(api.get_starter_form())["ok"] is False
+
+    assert api.set_default_ploidy("2") == {"ok": True, "value": "2"}
+    reloaded = Api(preferences_path=preferences_path)
+    form = reloaded.get_starter_form()
+
+    assert reloaded.get_default_ploidy() == "2"
+    assert form["ploidy"] == "2"
+    assert reloaded.validate_form(form)["ok"] is True
+
+
+def test_default_ploidy_does_not_overwrite_a_ploidy_chosen_for_one_run(
+    tmp_path: Path,
+) -> None:
+    """Unlike the run-settings defaults, it is never merged into a submission."""
+    api = Api(preferences_path=tmp_path / "preferences.json")
+    api.set_default_ploidy("2")
+    form = {**api.get_starter_form(), "ploidy": "4"}
+
+    result = api.validate_form(form)
+
+    assert result["ok"] is True
+
+
+def test_set_default_ploidy_rejects_an_unknown_value(tmp_path: Path) -> None:
+    """Only blank and 1-4 are accepted, and a rejection saves nothing."""
+    api = Api(preferences_path=tmp_path / "preferences.json")
+
+    result = api.set_default_ploidy("7")
+
+    assert result["ok"] is False
+    assert api.get_default_ploidy() == ""
+
+
+def test_explore_handoff_converts_gene_copies_using_the_default_ploidy(
+    tmp_path: Path,
+) -> None:
+    """Explore counts gene copies; the form gets individuals plus a ploidy."""
+    api = Api(preferences_path=tmp_path / "preferences.json")
+    api.set_default_ploidy("2")
+
+    result = api.get_starter_form_with_overrides({"gene_copies": "600", "d": "4"})
+
+    assert result["ok"] is True
+    assert result["values"]["ploidy"] == "2"
+    assert result["values"]["N"] == "300"
+
+
+def test_explore_handoff_without_a_ploidy_leaves_it_to_be_chosen(
+    tmp_path: Path,
+) -> None:
+    """With no default ploidy the count cannot be converted honestly."""
+    api = Api(preferences_path=tmp_path / "preferences.json")
+
+    result = api.get_starter_form_with_overrides({"gene_copies": "600", "d": "4"})
+
+    assert result["ok"] is True
+    assert result["values"]["ploidy"] == ""
+    assert result["values"]["N"] == starter_form_values()["N"]
 
 
 def test_get_starter_form_falls_back_when_saved_default_run_settings_is_invalid(
@@ -397,7 +477,7 @@ def test_list_presets_matches_presets_module_directly() -> None:
 def test_save_current_as_preset_then_list_and_load_it_back() -> None:
     """A saved preset appears in `list_presets` and loads back its own values."""
     api = Api()
-    save_result = api.save_current_as_preset("My scenario", starter_form_values())
+    save_result = api.save_current_as_preset("My scenario", _submittable_starter())
     assert save_result == {"ok": True}
 
     list_result = api.list_presets()
@@ -421,13 +501,13 @@ def test_save_current_as_preset_then_list_and_load_it_back() -> None:
     # those and so is newly added.
     assert load_result == {
         "ok": True,
-        "values": {**starter_form_values(), "max_workers": ""},
+        "values": {**_submittable_starter(), "max_workers": ""},
     }
 
 
 def test_save_current_as_preset_rejects_an_empty_name() -> None:
     """A blank (or all-whitespace) name is rejected, not silently accepted."""
-    result = Api().save_current_as_preset("   ", starter_form_values())
+    result = Api().save_current_as_preset("   ", _submittable_starter())
 
     assert result["ok"] is False
     assert "name" in result["message"]
@@ -435,7 +515,7 @@ def test_save_current_as_preset_rejects_an_empty_name() -> None:
 
 def test_save_current_as_preset_rejects_an_invalid_configuration() -> None:
     """An invalid form is rejected at save time, not deferred to load time."""
-    values = dict(starter_form_values())
+    values = dict(_submittable_starter())
     values["N"] = "not-a-number"
 
     result = Api().save_current_as_preset("Broken", values)
@@ -446,8 +526,8 @@ def test_save_current_as_preset_rejects_an_invalid_configuration() -> None:
 def test_save_current_as_preset_overwrites_an_existing_name() -> None:
     """Saving under an existing name replaces its own values."""
     api = Api()
-    api.save_current_as_preset("My scenario", starter_form_values())
-    other_values = dict(starter_form_values())
+    api.save_current_as_preset("My scenario", _submittable_starter())
+    other_values = dict(_submittable_starter())
     other_values["N"] = "999"
 
     api.save_current_as_preset("My scenario", other_values)
@@ -467,7 +547,7 @@ def test_get_preset_form_values_rejects_an_unknown_user_preset() -> None:
 def test_delete_user_preset_removes_it_from_the_list() -> None:
     """A deleted preset no longer appears in `list_presets`."""
     api = Api()
-    api.save_current_as_preset("Temporary", starter_form_values())
+    api.save_current_as_preset("Temporary", _submittable_starter())
 
     delete_result = api.delete_user_preset("Temporary")
 
@@ -494,7 +574,7 @@ def test_named_presets_persist_across_a_second_api(tmp_path: Path) -> None:
     """
     preferences_path = tmp_path / "preferences.json"
     first = Api(preferences_path=preferences_path)
-    first.save_current_as_preset("Persisted", starter_form_values())
+    first.save_current_as_preset("Persisted", _submittable_starter())
 
     second = Api(preferences_path=preferences_path)
 
@@ -530,7 +610,10 @@ def test_get_preset_form_values_loads_a_representable_preset() -> None:
     result = Api().get_preset_form_values("stepping-stone-spatial-migration")
 
     assert result["ok"] is True
-    assert result["values"]["N"] == "150"
+    # The example's 150 gene copies at its declared diploid ploidy: 75
+    # individuals in the form.
+    assert result["values"]["ploidy"] == "2"
+    assert result["values"]["N"] == "75"
     assert result["values"]["m_mode"] == "matrix"
     matrix = json.loads(result["values"]["m_matrix_json"])
     assert len(matrix) == 6
@@ -575,7 +658,7 @@ def test_load_preset_syncs_settings_execution_defaults() -> None:
     `get_preset_form_values` it wraps, closes that gap.
     """
     api = Api()
-    values = dict(starter_form_values())
+    values = dict(_submittable_starter())
     values["engine_backend"] = "generational"
     values["n_replicates"] = "16"
     api.save_current_as_preset("Generational scenario", values)
@@ -594,7 +677,7 @@ def test_load_preset_leaves_max_workers_untouched() -> None:
     set_result = api.set_default_run_settings({"max_workers": "3"})
     assert set_result == {"ok": True}
 
-    api.save_current_as_preset("Plain scenario", starter_form_values())
+    api.save_current_as_preset("Plain scenario", _submittable_starter())
     api.load_preset("user:Plain scenario")
 
     assert api.get_default_run_settings()["max_workers"] == "3"
@@ -706,11 +789,11 @@ def test_get_preset_yaml_renders_a_user_saved_preset() -> None:
     not a second, independent rendering path.
     """
     api = Api()
-    api.save_current_as_preset("My scenario", starter_form_values())
+    api.save_current_as_preset("My scenario", _submittable_starter())
 
     result = api.get_preset_yaml("user:My scenario")
 
-    expected_yaml = payload_to_yaml_text(form_values_to_payload(starter_form_values()))
+    expected_yaml = payload_to_yaml_text(form_values_to_payload(_submittable_starter()))
     assert result == {"ok": True, "title": "My scenario", "yaml": expected_yaml}
 
 
@@ -724,14 +807,14 @@ def test_get_preset_yaml_rejects_an_unknown_user_preset() -> None:
 
 def test_validate_form_accepts_the_starter_values() -> None:
     """The starter form is valid on its own — no field left in a rejecting state."""
-    result = Api().validate_form(starter_form_values())
+    result = Api().validate_form(_submittable_starter())
 
     assert result == {"ok": True}
 
 
 def test_validate_form_rejects_and_locates_an_invalid_population_field() -> None:
     """An invalid `N` is rejected, named, and routed to the Population tab."""
-    values = dict(starter_form_values())
+    values = dict(_submittable_starter())
     values["N"] = "not-a-number"
 
     result = Api().validate_form(values)
@@ -744,7 +827,7 @@ def test_validate_form_rejects_and_locates_an_invalid_population_field() -> None
 
 def test_validate_form_rejects_and_locates_an_invalid_migration_rate() -> None:
     """An invalid scalar `m` rate routes to Migration via the composite selector."""
-    values = dict(starter_form_values())
+    values = dict(_submittable_starter())
     values["m_mode"] = "scalar"
     values["m_rate"] = "not-a-number"
 
@@ -756,7 +839,7 @@ def test_validate_form_rejects_and_locates_an_invalid_migration_rate() -> None:
 
 def test_validate_form_rejects_an_invalid_choice_field() -> None:
     """A "choice"-kind field's own error is located exactly like an "int" field's."""
-    values = dict(starter_form_values())
+    values = dict(_submittable_starter())
     values["deme_weighting"] = "not-a-real-choice"
 
     result = Api().validate_form(values)
@@ -1539,7 +1622,7 @@ def test_set_startup_behavior_persists_across_a_second_api(tmp_path: Path) -> No
 def test_restart_startup_behavior_ignores_a_saved_form(tmp_path: Path) -> None:
     """Restart mode uses starter values even when a valid saved form exists."""
     preferences_path = tmp_path / "preferences.json"
-    saved_values = dict(starter_form_values())
+    saved_values = dict(_submittable_starter())
     saved_values["N"] = "999"
     save_preferences(
         preferences_path,
@@ -1548,13 +1631,13 @@ def test_restart_startup_behavior_ignores_a_saved_form(tmp_path: Path) -> None:
 
     api = Api(preferences_path=preferences_path)
 
-    assert api.get_initial_form()["N"] == starter_form_values()["N"]
+    assert api.get_initial_form()["N"] == _submittable_starter()["N"]
 
 
 def test_restore_startup_behavior_uses_a_valid_saved_form(tmp_path: Path) -> None:
     """Restore mode reuses the last valid submitted form."""
     preferences_path = tmp_path / "preferences.json"
-    saved_values = dict(starter_form_values())
+    saved_values = dict(_submittable_starter())
     saved_values["N"] = "999"
     save_preferences(
         preferences_path,
@@ -3775,7 +3858,7 @@ def test_get_batch_replicate_summary_rejects_an_unreadable_directory(
 def test_get_initial_state_deme_pair_panel_names_the_requested_pair() -> None:
     """The Initial-state preview's on-demand pair view names its own axes."""
     result = Api().get_initial_state_deme_pair_panel(
-        starter_form_values(), first_deme=2, second_deme=4
+        _submittable_starter(), first_deme=2, second_deme=4
     )
 
     assert result["ok"] is True
@@ -3787,7 +3870,7 @@ def test_get_initial_state_deme_pair_panel_names_the_requested_pair() -> None:
 def test_get_initial_state_deme_pair_panel_permits_a_self_comparison() -> None:
     """`first_deme == second_deme` succeeds for the initial-state preview too."""
     result = Api().get_initial_state_deme_pair_panel(
-        starter_form_values(), first_deme=5, second_deme=5
+        _submittable_starter(), first_deme=5, second_deme=5
     )
 
     assert result["ok"] is True
@@ -3797,7 +3880,7 @@ def test_get_initial_state_deme_pair_panel_permits_a_self_comparison() -> None:
 
 def test_get_initial_state_deme_pair_panel_rejects_an_out_of_range_deme() -> None:
     result = Api().get_initial_state_deme_pair_panel(
-        starter_form_values(), first_deme=1, second_deme=999
+        _submittable_starter(), first_deme=1, second_deme=999
     )
 
     assert result["ok"] is False

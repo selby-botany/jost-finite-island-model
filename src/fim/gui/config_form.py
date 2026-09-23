@@ -58,6 +58,17 @@ FieldKind = Literal[
 # accepts — kept here, not imported from there, since the GUI only ever
 # needs the two literal option strings, not the topology machinery.
 MigrationMode = Literal["scalar", "topology", "matrix"]
+PLOIDY_REQUIRED_MESSAGE: Final = "ploidy must be chosen"
+"""The refusal when the form's ploidy is blank (see `POPULATION_FIELDS`)."""
+
+PLOIDY_NAMES: Final[Mapping[int, str]] = {
+    1: "haploid",
+    2: "diploid",
+    3: "triploid",
+    4: "tetraploid",
+}
+"""Display names for `SimulationParams.ploidy`'s allowed values."""
+
 MIGRATION_TOPOLOGIES: Final[tuple[str, ...]] = ("ring", "linear", "torus")
 
 
@@ -120,8 +131,17 @@ class TabSpec:
     fields: tuple[FormField, ...]
 
 
+# `ploidy` and `N` are asked in that order and in the botanist's own
+# terms: first how many gene copies each individual carries, then how
+# many *individuals* each deme holds. The form's `N` is therefore
+# individuals; `form_values_to_payload` multiplies by `ploidy` to give
+# `SimulationParams.N` (always gene copies), and `params_to_form_values`
+# divides back. `ploidy` is deliberately not a default: a blank choice is
+# refused (`PLOIDY_REQUIRED_MESSAGE`) rather than silently guessed, since
+# a wrong guess halves or doubles the gene-copy count of every deme.
 POPULATION_FIELDS: Final[tuple[FormField, ...]] = (
-    FormField("N", "N (gene copies/deme)", "int_list"),
+    FormField("ploidy", "ploidy", "optional_int"),
+    FormField("N", "N (individuals/deme)", "int_list"),
     FormField("d", "d (demes)", "int"),
     FormField("seed", "seed", "int"),
     FormField("deme_weighting", "deme weighting", "choice", choices=("equal", "size")),
@@ -499,6 +519,7 @@ def form_values_to_payload(values: Mapping[str, str]) -> dict[str, object]:
                 payload[field.name] = text == "true"
             else:
                 payload[field.name] = text
+        _individuals_to_gene_copies(payload)
         payload["m"] = m_to_payload(values)
         payload.update(mu_to_payload(values))
         payload.update(initial_conditions_to_payload(values))
@@ -508,6 +529,28 @@ def form_values_to_payload(values: Mapping[str, str]) -> dict[str, object]:
     except KeyError as error:
         raise ValueError(f"missing field: {error}") from error
     return payload
+
+
+def _individuals_to_gene_copies(payload: dict[str, object]) -> None:
+    """Turn the form's individuals-per-deme `N` into gene copies, in place.
+
+    The form asks for individuals; `SimulationParams.N` is gene copies
+    (`individuals * ploidy`). A blank ploidy is refused rather than
+    guessed.
+
+    Raises:
+        ValueError: If ploidy is blank (`PLOIDY_REQUIRED_MESSAGE`).
+    """
+    ploidy = payload["ploidy"]
+    if ploidy is None:
+        raise ValueError(PLOIDY_REQUIRED_MESSAGE)
+    assert isinstance(ploidy, int)
+    individuals = payload["N"]
+    if isinstance(individuals, list):
+        payload["N"] = [count * ploidy for count in individuals]
+    else:
+        assert isinstance(individuals, int)
+        payload["N"] = individuals * ploidy
 
 
 def m_to_payload(
@@ -1214,12 +1257,22 @@ def params_to_form_values(params: SimulationParams) -> dict[str, str]:
             longer trigger this, `loci_from_params` below now renders
             those as a real, editable grid instead).
     """
-    n_text = (
-        str(params.N)
-        if isinstance(params.N, int)
-        else ",".join(str(value) for value in params.N)
-    )
+    # The form shows individuals (`N / ploidy`). A configuration with no
+    # recorded ploidy (written by hand or by the command line) cannot be
+    # divided honestly, so both fields come back blank for the botanist
+    # to fill in, rather than showing gene copies under an individuals
+    # label.
+    if params.ploidy is None:
+        n_text = ""
+    else:
+        ploidy = params.ploidy
+        n_text = (
+            str(params.N // ploidy)
+            if isinstance(params.N, int)
+            else ",".join(str(value // ploidy) for value in params.N)
+        )
     values: dict[str, str] = {
+        "ploidy": "" if params.ploidy is None else str(params.ploidy),
         "N": n_text,
         "d": str(params.d),
         "seed": str(params.seed),
@@ -1349,10 +1402,20 @@ def starter_form_values(overrides: Mapping[str, str] | None = None) -> dict[str,
     """
     starter_params = SimulationParams.from_mapping(yaml.safe_load(STARTER_CONFIG))
     starter_values = params_to_form_values(starter_params)
+    # The starter config records a ploidy so `fim init` writes a complete
+    # file, but a fresh form must make the botanist choose (or take their
+    # saved default, which arrives as an override). The individuals count
+    # stays: it is the same number of individuals whatever the ploidy.
+    starter_values["ploidy"] = ""
     if not overrides:
         return starter_values
     merged = {**starter_values, **overrides}
-    payload = form_values_to_payload(merged)
+    # A blank ploidy is the starter's normal state, not a stale overlay:
+    # validate everything else as if it were chosen (haploid changes no
+    # other field's validity), so a saved run-settings overlay is not
+    # discarded merely because ploidy is still to be chosen.
+    to_validate = {**merged, "ploidy": merged["ploidy"] or "1"}
+    payload = form_values_to_payload(to_validate)
     SimulationParams.from_mapping(payload)
     return merged
 
@@ -1365,6 +1428,7 @@ def starter_form_values(overrides: Mapping[str, str] | None = None) -> dict[str,
 # actually present, in this order.
 _YAML_KEY_ORDER: Final[tuple[str, ...]] = (
     "N",
+    "ploidy",
     "d",
     "m",
     "mu",

@@ -29,14 +29,18 @@
  * -> per-locus mu) rather than only in the longer reference.
  */
 const FIELD_HELP = {
-    N: "Gene copies per deme — 2× individuals for a diploid locus, " +
-        "individuals unchanged for haploid. Per-deme mode gives each deme " +
-        "its own size.",
+    N: "Individuals per deme. The simulator counts gene copies, so this is " +
+        "multiplied by the ploidy you chose (diploid: 2 gene copies per " +
+        "individual). Per-deme mode gives each deme its own count.",
     d: "Number of demes (islands). At least 2.",
     seed: "Seed for this run's random number generator. The same seed and " +
         "configuration always produce byte-identical results.",
-    n_mode: "Same for every deme uses one N for all demes; per-deme " +
-        "lets each deme have its own population size.",
+    ploidy: "How many gene copies each individual carries: haploid 1, " +
+        "diploid 2, triploid 3, tetraploid 4. Choose it first; the " +
+        "simulator counts gene copies, so it multiplies your individuals " +
+        "by this number.",
+    n_mode: "Same for every deme uses one count of individuals for all " +
+        "demes; per-deme lets each deme have its own.",
     m_mode: "How migration between demes is configured: a single scalar " +
         "rate, a named spatial topology (ring/linear/torus), or a full " +
         "d-by-d matrix.",

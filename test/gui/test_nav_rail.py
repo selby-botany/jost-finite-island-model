@@ -320,7 +320,8 @@ def test_parameter_strip_shows_the_starter_configuration_on_launch(
             " mu: document.getElementById('parameter-strip-mu').textContent})"
         ),
     )
-    assert values == {"N": "450", "d": "20", "m": "0.001", "mu": "3e-05"}
+    # Individuals with the ploidy the test fixtures seed as the default.
+    assert values == {"N": "225 haploid", "d": "20", "m": "0.001", "mu": "3e-05"}
 
 
 def test_clicking_configure_shows_the_landing_screen_and_updates_the_rail(
@@ -416,10 +417,10 @@ def test_parameter_strip_updates_live_as_a_field_changes(
         )
         return poll_until(
             "document.getElementById('parameter-strip-N').textContent",
-            lambda value: value == "999",
+            lambda value: value == "999 haploid",
         )
 
-    assert _drive(window, steps) == "999"
+    assert _drive(window, steps) == "999 haploid"
 
 
 def test_clicking_the_brand_mark_opens_the_about_dialog(
@@ -560,7 +561,8 @@ def test_choosing_a_configure_example_applies_it_without_leaving_configure(
     result = _drive(window, steps)
     assert result["configureVisible"] is True
     assert result["mMode"] == "matrix"
-    assert result["nValue"] == "150"
+    # 150 gene copies at the example's declared diploid ploidy.
+    assert result["nValue"] == "75"
     # Reset to its own placeholder afterward — the control always reads
     # as an action, never as "currently showing example X."
     assert result["selectValue"] == ""

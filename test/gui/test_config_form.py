@@ -20,11 +20,24 @@ from fim.model.locus import LocusSpec
 from fim.model.params import SimulationParams
 
 
+def _starter() -> dict[str, str]:
+    """The starter form with a ploidy chosen, i.e. a submittable form.
+
+    A fresh form deliberately has no ploidy (the botanist must choose);
+    diploid pairs the starter's 225 individuals with its historical 450
+    gene copies, so every payload assertion below keeps its old numbers.
+    """
+    return {**config_form.starter_form_values(), "ploidy": "2"}
+
+
 def test_starter_form_values_reflects_the_cli_starter_config() -> None:
     """`starter_form_values` matches `fim.cli.STARTER_CONFIG`'s own values."""
     values = config_form.starter_form_values()
 
-    assert values["N"] == "450"
+    # Individuals, with no ploidy chosen: 225 individuals is the 450 gene
+    # copies `fim init` writes, at its recorded diploid ploidy.
+    assert values["N"] == "225"
+    assert values["ploidy"] == ""
     assert values["d"] == "20"
     assert values["seed"] == "20260814"
     assert values["deme_weighting"] == "equal"
@@ -49,7 +62,7 @@ def test_starter_form_values_applies_a_valid_overlay() -> None:
     assert values["engine_backend"] == "generational"
     assert values["n_replicates"] == "16"
     # Untouched by the overlay -- still the true starter value.
-    assert values["N"] == "450"
+    assert values["N"] == "225"
     assert values["d"] == "20"
 
 
@@ -96,6 +109,7 @@ def test_all_fields_covers_every_tabs_plain_fields() -> None:
     names = {field.name for field in config_form.all_fields()}
 
     assert names == {
+        "ploidy",
         "N",
         "d",
         "seed",
@@ -138,7 +152,7 @@ def test_config_form_round_trips_starter_config() -> None:
     """
     starter_params = SimulationParams.from_mapping(yaml.safe_load(STARTER_CONFIG))
 
-    payload = config_form.form_values_to_payload(config_form.starter_form_values())
+    payload = config_form.form_values_to_payload(_starter())
     restored = SimulationParams.from_mapping(payload)
 
     assert restored == starter_params
@@ -146,7 +160,7 @@ def test_config_form_round_trips_starter_config() -> None:
 
 def test_form_values_to_payload_parses_every_plain_field_kind() -> None:
     """Int, choice, and int_list fields all coerce to the right Python type."""
-    values = dict(config_form.starter_form_values())
+    values = dict(_starter())
     values.update(
         {
             "N": "450",
@@ -162,7 +176,9 @@ def test_form_values_to_payload_parses_every_plain_field_kind() -> None:
 
     payload = config_form.form_values_to_payload(values)
 
-    assert payload["N"] == 450
+    # 450 individuals, diploid: 900 gene copies.
+    assert payload["N"] == 900
+    assert payload["ploidy"] == 2
     assert payload["d"] == 20
     assert payload["seed"] == 7
     assert payload["deme_weighting"] == "equal"
@@ -179,9 +195,9 @@ def test_form_values_to_payload_coerces_a_bool_field_from_true_false_text() -> N
     `*_to_payload` function of its own; the generic `all_fields()`
     dispatch loop in `form_values_to_payload` handles it directly.
     """
-    checked = dict(config_form.starter_form_values())
+    checked = dict(_starter())
     checked["track_expensive_statistics"] = "true"
-    unchecked = dict(config_form.starter_form_values())
+    unchecked = dict(_starter())
     unchecked["track_expensive_statistics"] = "false"
 
     checked_payload = config_form.form_values_to_payload(checked)
@@ -209,17 +225,18 @@ def test_params_to_form_values_renders_track_expensive_statistics_as_text() -> N
 
 def test_form_values_to_payload_accepts_a_per_deme_n_list() -> None:
     """A comma-separated `N` becomes a list — the O(d) cardinality-rule case."""
-    values = dict(config_form.starter_form_values())
+    values = dict(_starter())
     values.update({"N": "200, 300, 150", "d": "3"})
 
     payload = config_form.form_values_to_payload(values)
 
-    assert payload["N"] == [200, 300, 150]
+    # Individuals per deme, times the starter's diploid ploidy.
+    assert payload["N"] == [400, 600, 300]
 
 
 def test_form_values_to_payload_rejects_a_non_integer_n_item() -> None:
     """A bad per-deme N entry names its own index, matching `_parse_population_size`."""
-    values = dict(config_form.starter_form_values())
+    values = dict(_starter())
     values.update({"N": "200, oops", "d": "2"})
 
     with pytest.raises(ValueError, match=r"N\[1\] must be an integer"):
@@ -243,7 +260,7 @@ def test_form_values_to_payload_raises_value_error_for_a_missing_field() -> None
     only prints an uncaught bridge exception to a terminal nothing
     launched from Finder has.
     """
-    values = dict(config_form.starter_form_values())
+    values = dict(_starter())
     del values["loci_mode"]
 
     with pytest.raises(ValueError, match=r"missing field.*loci_mode"):
@@ -378,7 +395,7 @@ def test_form_values_to_payload_accepts_a_per_locus_length_list() -> None:
     `mu`/`mu_b` to shared scalars only; see `mu_from_params`'s own
     per-locus rejection below).
     """
-    values = dict(config_form.starter_form_values())
+    values = dict(_starter())
     values["locus_lengths"] = "50, 8000"
 
     payload = config_form.form_values_to_payload(values)
@@ -389,7 +406,7 @@ def test_form_values_to_payload_accepts_a_per_locus_length_list() -> None:
 
 def test_form_values_to_payload_derives_n_loci_one_from_a_bare_length() -> None:
     """A single, comma-free `locus_lengths` value means `n_loci == 1`."""
-    values = dict(config_form.starter_form_values())
+    values = dict(_starter())
     values["locus_lengths"] = "200"
 
     payload = config_form.form_values_to_payload(values)
@@ -400,7 +417,7 @@ def test_form_values_to_payload_derives_n_loci_one_from_a_bare_length() -> None:
 
 def test_form_values_to_payload_treats_replicate_tolerance_empty_as_unset() -> None:
     """An empty `replicate_tolerance` field submits `None`, not an error."""
-    values = dict(config_form.starter_form_values())
+    values = dict(_starter())
     values["replicate_tolerance"] = ""
 
     payload = config_form.form_values_to_payload(values)
@@ -410,7 +427,7 @@ def test_form_values_to_payload_treats_replicate_tolerance_empty_as_unset() -> N
 
 def test_form_values_to_payload_parses_a_set_replicate_tolerance() -> None:
     """A non-empty `replicate_tolerance` field parses as a float."""
-    values = dict(config_form.starter_form_values())
+    values = dict(_starter())
     values["replicate_tolerance"] = "0.05"
 
     payload = config_form.form_values_to_payload(values)
@@ -420,7 +437,7 @@ def test_form_values_to_payload_parses_a_set_replicate_tolerance() -> None:
 
 def test_form_values_to_payload_converts_replicate_confidence_to_a_float() -> None:
     """`replicate_confidence`'s "float_choice" kind submits a float, not a string."""
-    values = dict(config_form.starter_form_values())
+    values = dict(_starter())
     values["replicate_confidence"] = "0.99"
 
     payload = config_form.form_values_to_payload(values)
@@ -438,7 +455,7 @@ def test_form_values_to_payload_treats_max_concurrent_replicates_empty_as_unset(
     "optional_float" test, above — `20260914-claude-sonnet-5-non-lineal-
     batch-execution-design.md` (`selby/restricted`), §5.5.
     """
-    values = dict(config_form.starter_form_values())
+    values = dict(_starter())
     values["max_concurrent_replicates"] = ""
 
     payload = config_form.form_values_to_payload(values)
@@ -448,7 +465,7 @@ def test_form_values_to_payload_treats_max_concurrent_replicates_empty_as_unset(
 
 def test_form_values_to_payload_parses_a_set_max_concurrent_replicates() -> None:
     """A non-empty `max_concurrent_replicates` field parses as an int, not a float."""
-    values = dict(config_form.starter_form_values())
+    values = dict(_starter())
     values["max_concurrent_replicates"] = "4"
 
     payload = config_form.form_values_to_payload(values)
@@ -468,7 +485,7 @@ def test_form_values_to_payload_rejects_a_non_integer_max_concurrent_replicates(
     layer rather than silently truncating or deferring to a less clear
     error further down the validation chain.
     """
-    values = dict(config_form.starter_form_values())
+    values = dict(_starter())
     values["max_concurrent_replicates"] = "3.5"
 
     with pytest.raises(
@@ -497,7 +514,7 @@ def test_params_to_form_values_round_trips_max_concurrent_replicates() -> None:
 def test_starter_form_values_leaves_max_concurrent_replicates_unset() -> None:
     """The starter config never sets `max_concurrent_replicates` — a fresh form
     shows it blank, matching `SimulationParams`'s own `None` default."""
-    assert config_form.starter_form_values()["max_concurrent_replicates"] == ""
+    assert _starter()["max_concurrent_replicates"] == ""
 
 
 def test_mu_to_payload_mu_mode_returns_a_bare_mu_key() -> None:
@@ -683,7 +700,7 @@ def test_initial_conditions_from_params_explicit_p0_round_trips() -> None:
 
 def test_initial_conditions_to_payload_fixed_per_deme_all_different() -> None:
     """ "All different" fixes deme *i* for allele *i*, for every locus."""
-    values = dict(config_form.starter_form_values())
+    values = dict(_starter())
     values.update(
         {
             "initial_conditions_mode": "fixed_per_deme",
@@ -701,7 +718,7 @@ def test_initial_conditions_to_payload_fixed_per_deme_all_different() -> None:
 
 def test_initial_conditions_to_payload_fixed_per_deme_all_same() -> None:
     """ "All same" fixes every deme for allele 0 -- the no-differentiation baseline."""
-    values = dict(config_form.starter_form_values())
+    values = dict(_starter())
     values.update(
         {
             "initial_conditions_mode": "fixed_per_deme",
@@ -719,7 +736,7 @@ def test_initial_conditions_to_payload_fixed_per_deme_all_same() -> None:
 
 def test_initial_conditions_to_payload_fixed_per_deme_all_but_one() -> None:
     """ "All but one": every deme but the last is allele 0; the last is allele 1."""
-    values = dict(config_form.starter_form_values())
+    values = dict(_starter())
     values.update(
         {
             "initial_conditions_mode": "fixed_per_deme",
@@ -737,7 +754,7 @@ def test_initial_conditions_to_payload_fixed_per_deme_all_but_one() -> None:
 
 def test_initial_conditions_to_payload_fixed_per_deme_applies_to_every_locus() -> None:
     """Every locus gets the identical per-deme fixation pattern."""
-    values = dict(config_form.starter_form_values())
+    values = dict(_starter())
     values.update(
         {
             "initial_conditions_mode": "fixed_per_deme",
@@ -762,7 +779,7 @@ def test_initial_conditions_to_payload_fixed_per_deme_rejects_an_unknown_choice(
     None
 ):
     """An unrecognized sub-choice is a clear programming error, not a silent default."""
-    values = dict(config_form.starter_form_values())
+    values = dict(_starter())
     values.update(
         {
             "initial_conditions_mode": "fixed_per_deme",
@@ -777,7 +794,7 @@ def test_initial_conditions_to_payload_fixed_per_deme_rejects_an_unknown_choice(
 
 def test_form_values_to_payload_fixed_per_deme_round_trips() -> None:
     """A full form submission in fixed-per-deme mode builds a valid configuration."""
-    values = dict(config_form.starter_form_values())
+    values = dict(_starter())
     values.update(
         {
             "initial_conditions_mode": "fixed_per_deme",
@@ -794,7 +811,7 @@ def test_form_values_to_payload_fixed_per_deme_round_trips() -> None:
 
 def test_form_values_to_payload_equilibrium_split_round_trips() -> None:
     """A full form submission in equilibrium-split mode builds a valid configuration."""
-    values = dict(config_form.starter_form_values())
+    values = dict(_starter())
     values.update(
         config_form.initial_conditions_from_params(
             _params(
@@ -820,7 +837,7 @@ def test_form_values_to_payload_explicit_p0_round_trips() -> None:
     (`fim.cli.STARTER_CONFIG`) so the grid's own deme/locus counts are
     accepted without also having to override `d`/`loci` in `values`.
     """
-    values = dict(config_form.starter_form_values())
+    values = dict(_starter())
     values.update(
         config_form.initial_conditions_from_params(
             _params(d=20, initial_frequencies=tuple(({0: 1.0},) for _ in range(20)))
@@ -1266,7 +1283,7 @@ def test_starter_form_values_seeds_the_recommended_auto_engine_backend() -> None
     fresh form's own real, functional starting value now actually is
     what the page has always visually claimed.
     """
-    assert config_form.starter_form_values()["engine_backend"] == "auto"
+    assert _starter()["engine_backend"] == "auto"
 
 
 def test_payload_to_yaml_text_orders_engine_backend_last() -> None:
@@ -1279,9 +1296,7 @@ def test_payload_to_yaml_text_orders_engine_backend_last() -> None:
     append it in whatever order the payload dict happened to build.
     """
     text = config_form.payload_to_yaml_text(
-        config_form.form_values_to_payload(
-            {**config_form.starter_form_values(), "engine_backend": "auto"}
-        )
+        config_form.form_values_to_payload({**_starter(), "engine_backend": "auto"})
     )
     keys = [
         line.split(":", 1)[0] for line in text.splitlines() if not line.startswith(" ")
@@ -1289,3 +1304,60 @@ def test_payload_to_yaml_text_orders_engine_backend_last() -> None:
 
     assert "engine_backend: auto" in text
     assert keys.index("engine_backend") > keys.index("migrant_sampling")
+
+
+def test_form_values_to_payload_turns_individuals_into_gene_copies() -> None:
+    """The form's N is individuals; the payload's N is `individuals * ploidy`."""
+    for ploidy in (1, 2, 3, 4):
+        values = {**_starter(), "ploidy": str(ploidy), "N": "100"}
+
+        payload = config_form.form_values_to_payload(values)
+
+        assert payload["N"] == 100 * ploidy
+        assert payload["ploidy"] == ploidy
+        assert SimulationParams.from_mapping(payload).ploidy == ploidy
+
+
+def test_form_values_to_payload_refuses_a_blank_ploidy() -> None:
+    """A blank ploidy is refused, never guessed, and names the field."""
+    values = {**config_form.starter_form_values()}
+
+    with pytest.raises(ValueError, match="ploidy must be chosen") as error:
+        config_form.form_values_to_payload(values)
+
+    assert config_form.field_for_error(str(error.value)) == "ploidy"
+
+
+def test_params_to_form_values_divides_gene_copies_back_into_individuals() -> None:
+    """Round trip: a diploid run's 450 gene copies reopen as 225 individuals."""
+    params = SimulationParams.from_mapping(yaml.safe_load(STARTER_CONFIG))
+
+    values = config_form.params_to_form_values(params)
+
+    assert values["ploidy"] == "2"
+    assert values["N"] == "225"
+    per_deme = SimulationParams.from_mapping(
+        {**yaml.safe_load(STARTER_CONFIG), "d": 3, "N": [100, 200, 60], "ploidy": 2}
+    )
+    assert config_form.params_to_form_values(per_deme)["N"] == "50,100,30"
+
+
+def test_params_to_form_values_blanks_a_config_with_no_recorded_ploidy() -> None:
+    """Gene copies must not appear under an individuals label."""
+    config = {**yaml.safe_load(STARTER_CONFIG)}
+    del config["ploidy"]
+
+    values = config_form.params_to_form_values(SimulationParams.from_mapping(config))
+
+    assert values["ploidy"] == ""
+    assert values["N"] == ""
+
+
+def test_starter_form_values_overlay_may_choose_the_ploidy() -> None:
+    """A saved default ploidy arrives as an override and makes the starter valid."""
+    values = config_form.starter_form_values(overrides={"ploidy": "3"})
+
+    assert values["ploidy"] == "3"
+    assert values["N"] == "225"
+    payload = config_form.form_values_to_payload(values)
+    assert payload["N"] == 675

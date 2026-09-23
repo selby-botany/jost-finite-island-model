@@ -115,6 +115,73 @@ def test_input_screen_run_button_enabled_for_the_valid_starter_form(
     assert settled["disabled"] is False
 
 
+def test_a_fresh_form_makes_the_botanist_choose_a_ploidy(
+    tmp_path: Path, drive: Callable[..., Any]
+) -> None:
+    """With no default ploidy, Run is blocked until one is chosen.
+
+    Botanist feedback on the first real beta run: ask for ploidy and then
+    individuals, rather than gene copies. The choice is never guessed, so
+    a fresh form (no saved default in Settings) opens on "choose..." with
+    "Run simulation" disabled; picking a ploidy is what enables it.
+    """
+    preferences_path = tmp_path / "preferences.json"
+    save_preferences(preferences_path, GuiPreferences(welcome_dismissed=True))
+    window = create_window(api=Api(preferences_path=preferences_path), hidden=True)
+
+    settled = drive(
+        window,
+        trigger=(
+            "window.__fimBefore = {"
+            "ploidy: document.getElementById('field-ploidy').value, "
+            "disabled: document.getElementById('run-button').disabled}; "
+            "var select = document.getElementById('field-ploidy'); "
+            "select.value = '2'; "
+            "select.dispatchEvent(new Event('change', {bubbles: true}));"
+        ),
+        read=(
+            "({before: window.__fimBefore, "
+            "disabled: document.getElementById('run-button').disabled, "
+            "strip: document.getElementById('parameter-strip-N').textContent})"
+        ),
+        ready=_INPUT_SCREEN_READY,
+        is_ready=lambda value: (
+            value is not None
+            and value["before"] is not None
+            and value["strip"] == "225 diploid"
+        ),
+    )
+
+    assert settled["before"]["ploidy"] == ""
+    assert settled["before"]["disabled"] is True
+    assert settled["disabled"] is False
+
+
+def test_a_saved_default_ploidy_starts_the_form_on_it(
+    tmp_path: Path, drive: Callable[..., Any]
+) -> None:
+    """Settings' default ploidy pre-selects a new configuration's ploidy."""
+    preferences_path = tmp_path / "preferences.json"
+    save_preferences(
+        preferences_path,
+        GuiPreferences(welcome_dismissed=True, default_ploidy="4"),
+    )
+    window = create_window(api=Api(preferences_path=preferences_path), hidden=True)
+
+    settled = drive(
+        window,
+        trigger="null",
+        read=(
+            "({ploidy: document.getElementById('field-ploidy').value, "
+            "disabled: document.getElementById('run-button').disabled})"
+        ),
+        ready=_INPUT_SCREEN_READY,
+    )
+
+    assert settled["ploidy"] == "4"
+    assert settled["disabled"] is False
+
+
 def test_initial_view_shows_axis_selectors_for_deme_pair_choice(
     window: webview.Window, drive: Callable[..., Any]
 ) -> None:
@@ -336,7 +403,7 @@ def test_initial_launch_prefers_a_saved_form_over_starter_values(
     takes any `target_window`, not only the fixture's own.
     """
     preferences_path = tmp_path / "preferences.json"
-    saved_values = dict(starter_form_values())
+    saved_values = {**starter_form_values(), "ploidy": "2"}
     saved_values["N"] = "424242"
     save_preferences(preferences_path, GuiPreferences(form_values=saved_values))
     window = create_window(api=Api(preferences_path=preferences_path), hidden=True)

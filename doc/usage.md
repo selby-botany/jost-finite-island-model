@@ -25,7 +25,7 @@ for that first. For parameter types and defaults, use the
 fim init [--output PATH] [--force]
 ```
 
-`fim init` writes the documented development scenario. Without `--output`, the
+`fim init` writes the documented development scenario (`N` is gene copies per deme; the file also records `ploidy`, so `N: 450` with `ploidy: 2` is 225 diploid individuals). Without `--output`, the
 path is `project-root/results/example-run.yaml`. Existing files are protected
 unless `--force` is present.
 
@@ -118,6 +118,7 @@ where deme 4 is both the largest and the best-connected:
 
 ```yaml
 N: [200, 200, 200, 800]
+ploidy: 2
 d: 4
 m:
   - [0.95, 0.02, 0.02, 0.01]
@@ -160,6 +161,7 @@ of hand-writing all 36 matrix entries:
 
 ```yaml
 N: 150
+ploidy: 2
 d: 6
 m:
   topology: ring
@@ -204,6 +206,7 @@ before that point.
 
 ```yaml
 N: 200
+ploidy: 2
 d: 3
 m: 0.0
 mu: 0.0
@@ -248,6 +251,7 @@ happened to receive, a genuine founder effect rather than an assumption:
 
 ```yaml
 N: 200
+ploidy: 2
 d: 3
 m: 0.005
 mu: 0.001
@@ -289,6 +293,7 @@ of randomness some studies want counted:
 
 ```yaml
 N: 100
+ploidy: 2
 d: 4
 m: 0.05
 mu: 0.001
@@ -325,6 +330,7 @@ actually likely within the run, not just theoretically possible:
 
 ```yaml
 N: 100
+ploidy: 2
 d: 3
 m: 0.02
 mu: 0.02
@@ -362,6 +368,7 @@ fixed moves G<sub>ST</sub> toward the infinite-island approximation.
 
 ```yaml
 N: 500
+ploidy: 2
 d: 8
 m: 0.003
 mu: 0.0002
@@ -395,6 +402,7 @@ but large enough that distances 1 through 10 exist on the ring.
 
 ```yaml
 N: 200
+ploidy: 2
 d: 20
 m:
   topology: ring
@@ -430,6 +438,7 @@ different lengths do not silently mutate at the same rate:
 
 ```yaml
 N: 150
+ploidy: 2
 d: 3
 m: 0.02
 mu_b: 0.00002
@@ -463,6 +472,7 @@ of them stable (convergence_combinator: all, the default) or just one
 
 ```yaml
 N: 150
+ploidy: 2
 d: 3
 m: 0.02
 mu: 0.001
@@ -497,6 +507,7 @@ of them still is:
 
 ```yaml
 N: 150
+ploidy: 2
 d: 4
 m: 0.02
 mu: 0.001
@@ -536,6 +547,7 @@ enough have run:
 
 ```yaml
 N: 100
+ploidy: 2
 d: 5
 m: 0.001
 mu: 0.00003
@@ -583,6 +595,7 @@ full measured comparison this example's own shape is drawn from:
 
 ```yaml
 N: 500
+ploidy: 2
 d: 70
 m: 0.05
 mu: 0.001
@@ -624,6 +637,7 @@ region (moderate `d`, a longer locus):
 
 ```yaml
 N: 500
+ploidy: 2
 d: 35
 m: 0.05
 mu: 0.001
@@ -743,10 +757,10 @@ action the matching on-screen control already performs.
 | Screen/state | What it does | Same as |
 |---|---|---|
 | Home | An Experiment/Study/Run tree: every Experiment expands to its own Studies, each expanding to its own Runs, each row carrying a config-summary and a final-statistics/outcome column read from that run's own `report.json`/`summary.json` — a batch row's outcome is its own confidence interval, and is expandable to its individual replicates, each independently reachable for re-analysis. Selecting a scalar or batch row and clicking "Open" (or double-clicking it directly) opens the identical Results card either way — a batch's own pooled statistics, table, and scatter, rebuilt fresh from its own persisted replicates, not only what a live batch's own completion shows. A Study row's own "Open…" goes one level up: every member run, and every replicate of every member batch, pooled together the same way — a mismatched parameter across members (say, two different `d` values) is never refused, only named in a "varies across members" note, since intentionally pooling runs in the same parameter neighborhood is a legitimate choice a botanist is free to make. A run always belongs to a Study; a botanist who never organizes anything still has one to start from — a default Study, inside a default Experiment, created automatically the first time it's needed. An Experiment row's own "Create study…" and a Study row's own "Create run…" (which opens Configure with that Study already selected) put creation on the row that receives it, rather than a separate step elsewhere; "Create experiment…" beside the filter bar is the one page-level exception, since a new Experiment has no row of its own yet to hang the action off of. Deletion is Select/Select all/Delete: every row (Run, Study, Experiment) gets a checkbox, hidden until "Select" is toggled on, and "Delete selected" removes exactly what was checked — deleting a Study or Experiment cascades to its own Runs, named explicitly in the confirmation so a botanist never underestimates what is about to disappear. A recent-runs row, or browsing for a `trajectory.jsonl` directly, re-renders its summary and scatter (and, for a multi-generation run, its own scrubber) at any persisted generation, with the same optional differentiation-`q` sweep. A Study's own "Re-run all…" action re-submits every one of its member configurations as brand-new runs (a fresh seed by default, or each run's own original seed — see Settings) and attaches the results to the same Study. Reachable from the rail's own Home button, or the File menu's "Open run…", from any screen | [Re-analyze a trajectory](#re-analyze-a-trajectory) |
-| Configure | Two always-visible, independently scrollable panels: FIM parameters (N — scalar or a per-deme table, d, m, mu, seed — the five values that together are "the finite island model") and Structure (initial conditions, migrant sampling, mutation model, deme weighting, loci, which convergence statistic(s) to watch, replicate tolerance/minimum, and the within-run σ band) — one per [configuration reference](configuration.md) section, no dialog to open for any of them; every field and mode-selector group has a hover/focus tooltip. Execution engine, n<sub>replicates</sub>, max_generations, convergence window/tolerance, replicate confidence, and the batch-execution tuning fields (JIT, the `auto` engine's own two thresholds, parallel workers, max concurrent replicates) live in Settings instead, as defaults every fresh configuration starts from — loading a saved configuration or a worked example updates them to match what was loaded. "Load configuration…"/"Save configuration…" read and write the exact YAML file format above, "Load example…" opens the Presets picker (each preset also viewable as plain YAML, with a copy-to-clipboard action, and a loaded preset can be duplicated under a new name), and "▶ Run"/"🔮 Explore" jump to those destinations with the configuration exactly as shown. An invalid field on "Run simulation" (from anywhere) navigates here and marks the specific field, not only the section it lives in | [Create a configuration](#create-a-configuration) |
+| Configure | Two always-visible, independently scrollable panels: FIM parameters (ploidy — chosen first, never guessed, unless Settings supplies a default — then N, the number of *individuals* per deme, scalar or a per-deme table, then d, m, mu, seed: the values that together are "the finite island model"; the app multiplies individuals by ploidy into the gene-copy `N` the simulator and the YAML format use) and Structure (initial conditions, migrant sampling, mutation model, deme weighting, loci, which convergence statistic(s) to watch, replicate tolerance/minimum, and the within-run σ band) — one per [configuration reference](configuration.md) section, no dialog to open for any of them; every field and mode-selector group has a hover/focus tooltip. Default ploidy, execution engine, n<sub>replicates</sub>, max_generations, convergence window/tolerance, replicate confidence, and the batch-execution tuning fields (JIT, the `auto` engine's own two thresholds, parallel workers, max concurrent replicates) live in Settings instead, as defaults every fresh configuration starts from — loading a saved configuration or a worked example updates them to match what was loaded. "Load configuration…"/"Save configuration…" read and write the exact YAML file format above, "Load example…" opens the Presets picker (each preset also viewable as plain YAML, with a copy-to-clipboard action, and a loaded preset can be duplicated under a new name), and "▶ Run"/"🔮 Explore" jump to those destinations with the configuration exactly as shown. An invalid field on "Run simulation" (from anywhere) navigates here and marks the specific field, not only the section it lives in | [Create a configuration](#create-a-configuration) |
 | Run view — running | A live scatter plot of the run's own current-generation frequencies (or, for a batch, every replicate's frequencies pooled onto one plot, filling in as replicates advance), with a generation progress indicator and a "Cancel" button — the window stays responsive throughout; the same axis selectors `completed` (below) has, live — picking a pair affects every subsequent push for the rest of the run, not just a one-time snapshot. For a scalar run, a statistic-vs-generation trajectory panel grows alongside the scatter as the run advances, plotting all six report statistics, each beside its own predicted-equilibrium reference line (D, G<sub>ST</sub>, E<sub>ST</sub> only — the three with a closed-form prediction). Cancelling, or the run ending in an error, leaves this same view showing exactly as it last rendered, with a banner on top | `run`'s own progress/error output, on one screen instead of terminal lines |
 | Run view — completed | A scalar run's summary (all six named statistics, convergence outcome, each shown as a meter against the same `[0, 1]` scale the confidence-interval bars below use) beside the canonical scatter plot and the same trajectory panel described above — replaced, once the run finishes, by the real persisted trajectory, and showing the within-run σ band (a shaded region plus its own `mean [lower, upper]` caption) whenever [sigma_band_multiplier](configuration.md#sigma_band_multiplier) was set — or — for a batch — a pooled scatter across every replicate's final state beside a replicate table (status, final generation, every named statistic) and each statistic's across-replicate confidence interval as a meter, explicitly labeled "uncertainty across N independent replicates" so it is never confused with the within-run σ band; either way, one panel (Deme 1 vs. Deme 2 by default) with a labeled, numbered `0.0`-`1.0` probability scale on both axes; axis selectors on the plot choose which two demes to compare directly, and selecting Deme 1 vs. Deme 2 again returns to the default panel; a scalar run with more than one persisted generation auto-populates a play/pause-and-scrub time slider over the persisted trajectory in the background, with no separate button to reach it; each batch replicate row's own "Open" button reaches this same view for that one replicate; "Open output folder" reveals the run's own artifacts (a batch's own `summary.json` and every replicate subdirectory, for a batch) | [Output schemas](#output-schemas), [Batch `summary.json` and `manifest.json`](#batch-summaryjson-and-manifestjson) |
-| Explore | Four fields (N, d, m, mu) and a theoretical-prediction table covering differentiation (D, G<sub>ST</sub>, E<sub>ST</sub>), equilibrium diversity (within-deme and pooled heterozygosity, Shannon entropy, and effective allele counts), and Whitlock identity-recovery metrics. The table also reports whether mutation is negligible at equilibrium and marks the typical-deme entropy as approximate, especially at d = 2. Values update when a field is committed — no simulation ever runs, so this remains immediate regardless of N or d. A sweep curve plots any of the predicted statistics across a fixed range of the selected field. Every statistic can be charted on every one of the four sweeps — click a table row to plot it. Because these are measured in different units (proportions, nats, effective alleles, generations), the chart shows one unit family at a time and switches families when you pick a statistic from another one. A statistic that does not depend on the swept field draws a flat line, which is itself informative: D does not vary with N at all, and the identity-recovery metrics do not vary with mutation rate. A slider beneath the chart moves the marker along the swept range and re-reads the whole table at that value, leaving your four fields untouched until you change them yourself. "▶ Run this for real" seeds Configure with these same four values and takes you there, with a new study pre-selected (change or clear it before running). Reachable from the rail's own Explore button, or "🔮 Explore" on Configure (which carries Configure's own current values over), from any screen; Back/Forward use the shared screen history | No CLI equivalent — a direct `fim.statistics` call from Python or a script is the closest terminal equivalent |
+| Explore | Four fields (N in gene copies, d, m, mu) and a theoretical-prediction table covering differentiation (D, G<sub>ST</sub>, E<sub>ST</sub>), equilibrium diversity (within-deme and pooled heterozygosity, Shannon entropy, and effective allele counts), and Whitlock identity-recovery metrics. The table also reports whether mutation is negligible at equilibrium and marks the typical-deme entropy as approximate, especially at d = 2. Values update when a field is committed — no simulation ever runs, so this remains immediate regardless of N or d. A sweep curve plots any of the predicted statistics across a fixed range of the selected field. Every statistic can be charted on every one of the four sweeps — click a table row to plot it. Because these are measured in different units (proportions, nats, effective alleles, generations), the chart shows one unit family at a time and switches families when you pick a statistic from another one. A statistic that does not depend on the swept field draws a flat line, which is itself informative: D does not vary with N at all, and the identity-recovery metrics do not vary with mutation rate. A slider beneath the chart moves the marker along the swept range and re-reads the whole table at that value, leaving your four fields untouched until you change them yourself. "▶ Run this for real" seeds Configure with these same four values and takes you there, with a new study pre-selected (change or clear it before running). Reachable from the rail's own Explore button, or "🔮 Explore" on Configure (which carries Configure's own current values over), from any screen; Back/Forward use the shared screen history | No CLI equivalent — a direct `fim.statistics` call from Python or a script is the closest terminal equivalent |
 | Compare | Pick two or more previously completed runs from a recent-runs list, then overlay their final-state scatter panels as small multiples with a legend naming whichever configuration field(s) actually differ across the selection, plus a trajectory-over-generations overlay (one statistic at a time, one color per run, selectable from the same six named statistics) — "how does the conclusion change as I vary this one knob," on real simulated runs, no re-run needed. Reachable from the rail's own Compare button from any screen; Back/Forward use the shared screen history | No CLI equivalent — comparing several `trajectory.jsonl`/`report.json` files by hand is the closest terminal equivalent |
 | Help | This guide and the [configuration reference](configuration.md), rendered in-app with working cross-links; every other doc opens on GitHub in the OS default browser instead. Reachable from the rail's own Help button, or the Help menu, from any screen; Back/Forward use the shared screen history | No CLI equivalent — the terminal reads these same two files directly |
 

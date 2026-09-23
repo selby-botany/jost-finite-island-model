@@ -241,6 +241,41 @@ def test_settings_save_button_persists_execution_and_convergence_defaults(
     assert result["n_replicates"] == "16"
 
 
+def test_default_ploidy_select_persists_immediately_and_reloads_on_open(
+    window: webview.Window,
+) -> None:
+    """Changing "Default ploidy" saves at once (no Save button) and reopens as set.
+
+    Like the startup-behavior and re-run seed selects beside it, and
+    unlike the execution defaults, it persists on change: it seeds only a
+    fresh configuration's ploidy, so there is no batch of fields to
+    validate together.
+    """
+
+    def steps(poll_until: Callable[[str, Callable[[Any], bool]], Any]) -> Any:
+        window.evaluate_js("document.getElementById('settings-button').click();")
+        poll_until(
+            "document.getElementById('modal-settings').open",
+            lambda value: value is True,
+        )
+        window.evaluate_js(
+            "const select = document.getElementById('settings-default-ploidy');"
+            "select.value = '3';"
+            "select.dispatchEvent(new Event('change', {bubbles: true}));"
+            "window.__fimSaved = null;"
+            "(async () => {"
+            "for (let i = 0; i < 50; i++) {"
+            "await new Promise((resolve) => setTimeout(resolve, 50));"
+            "const saved = await window.pywebview.api.get_default_ploidy();"
+            "if (saved === '3') { window.__fimSaved = saved; return; }"
+            "}"
+            "})();"
+        )
+        return poll_until("window.__fimSaved", lambda value: value is not None)
+
+    assert _drive(window, steps) == "3"
+
+
 def test_settings_save_button_shows_the_banner_on_an_invalid_value(
     window: webview.Window,
 ) -> None:

@@ -120,6 +120,8 @@ window.fim.updateRailHighlight = updateRailHighlight;
  * @param {Record<string, string>} values
  * @returns {{N: string, d: string, m: string, mu: string}}
  */
+const PLOIDY_NAMES = { 1: "haploid", 2: "diploid", 3: "triploid", 4: "tetraploid" };
+
 function formatParameterStripSummary(values) {
     const nItems = (values.N || "")
         .split(",")
@@ -133,6 +135,14 @@ function formatParameterStripSummary(values) {
             const max = Math.max(...numbers);
             n = `${nItems.length} demes, ${min}–${max}`;
         }
+    }
+
+    // Individuals per deme, followed by the ploidy that turns them into
+    // gene copies -- "225 diploid", not a bare number whose meaning
+    // depends on a field two screens away.
+    const ploidyName = PLOIDY_NAMES[values.ploidy];
+    if (ploidyName !== undefined && n !== "—") {
+        n = `${n} ${ploidyName}`;
     }
 
     const d = values.d || "—";

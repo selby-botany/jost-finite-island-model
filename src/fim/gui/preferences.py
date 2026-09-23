@@ -120,6 +120,17 @@ CURRENT_SCHEMA_VERSION: Final = 1
 Clock = Callable[[], datetime]
 
 
+def _choice(
+    gui: Mapping[str, Any], key: str, default: str, allowed: tuple[str, ...]
+) -> str:
+    """Return `gui[key]` (or `default`), requiring it to be one of `allowed`."""
+    value = gui.get(key, default)
+    if value not in allowed:
+        options = ", ".join(repr(option) for option in allowed)
+        raise ValueError(f"preferences 'gui.{key}' must be one of {options}")
+    return str(value)
+
+
 @dataclass(frozen=True, slots=True)
 class GuiPreferences:
     """One loaded (or default) snapshot of the GUI's own preferences.
@@ -178,6 +189,14 @@ class GuiPreferences:
             run") and does not need to be this action's own default
             behavior. Process-local like `significant_digits`, never
             part of any saved configuration.
+        default_ploidy: `""` (the default: no default, the botanist
+            chooses on every new configuration) or `"1"`-`"4"` -- the
+            ploidy a fresh configuration's form starts on (Settings'
+            "Default ploidy"). Deliberately separate from
+            `default_run_settings`: those are merged back into a
+            submission at run time, which would overwrite a ploidy the
+            botanist chose for this particular run; this only seeds a
+            fresh form and is never applied afterwards.
     """
 
     significant_digits: int | None = None
@@ -189,6 +208,7 @@ class GuiPreferences:
     default_run_settings: dict[str, str] | None = None
     results_location_override: str | None = None
     rerun_seed_mode: str = "new"
+    default_ploidy: str = ""
 
     def to_dict(self) -> dict[str, Any]:
         """Return the on-disk JSON shape this preference set writes as."""
@@ -205,6 +225,8 @@ class GuiPreferences:
             gui["results_location_override"] = self.results_location_override
         if self.rerun_seed_mode != "new":
             gui["rerun_seed_mode"] = self.rerun_seed_mode
+        if self.default_ploidy:
+            gui["default_ploidy"] = self.default_ploidy
         result: dict[str, Any] = {"schema_version": CURRENT_SCHEMA_VERSION, "gui": gui}
         if self.form_values is not None:
             result["form"] = dict(self.form_values)
@@ -256,11 +278,8 @@ class GuiPreferences:
             raise ValueError(
                 "preferences 'gui.results_location_override' must be a string"
             )
-        rerun_seed_mode = gui.get("rerun_seed_mode", "new")
-        if rerun_seed_mode not in ("new", "same"):
-            raise ValueError(
-                "preferences 'gui.rerun_seed_mode' must be 'new' or 'same'"
-            )
+        rerun_seed_mode = _choice(gui, "rerun_seed_mode", "new", ("new", "same"))
+        default_ploidy = _choice(gui, "default_ploidy", "", ("", "1", "2", "3", "4"))
         form_values = data.get("form")
         if form_values is not None:
             if not isinstance(form_values, Mapping) or not all(
@@ -307,6 +326,7 @@ class GuiPreferences:
             default_run_settings=default_run_settings,
             results_location_override=results_location_override,
             rerun_seed_mode=rerun_seed_mode,
+            default_ploidy=default_ploidy,
         )
 
     def with_form_values(self, form_values: Mapping[str, str]) -> GuiPreferences:
@@ -407,6 +427,17 @@ class GuiPreferences:
         rather than silently only ever growing.
         """
         return replace(self, results_location_override=path)
+
+    def with_default_ploidy(self, default_ploidy: str) -> GuiPreferences:
+        """Return a copy with `default_ploidy` replaced.
+
+        The `Api.set_default_ploidy` bridge method's own update.
+
+        Args:
+            default_ploidy: `""` or `"1"`-`"4"` -- see this dataclass's
+                own docstring.
+        """
+        return replace(self, default_ploidy=default_ploidy)
 
     def with_rerun_seed_mode(self, rerun_seed_mode: str) -> GuiPreferences:
         """Return a copy with `rerun_seed_mode` replaced.

@@ -194,6 +194,23 @@ function exploreSeriesValue(point, name) {
 
 
 /**
+ * Convert Configure's individuals-per-deme `N` into Explore's gene
+ * copies (`individuals * ploidy`). With no ploidy chosen yet the starter
+ * form's own diploid-equivalent pairing is assumed (its `N` is 225
+ * individuals, i.e. the 450 gene copies Explore has always opened on);
+ * a per-deme list is passed through unconverted, as before.
+ * @param {{N: string, ploidy?: string}} formValues
+ * @returns {string}
+ */
+function exploreGeneCopies(formValues) {
+    const individuals = Number(formValues.N);
+    if (!formValues.N || Number.isNaN(individuals)) {
+        return formValues.N;
+    }
+    return String(individuals * Number(formValues.ploidy || 2));
+}
+
+/**
  * Read the four field values as the plain strings the bridge expects.
  * `get_equilibrium_predictions`/`get_equilibrium_sweep` parse and
  * range-check them server-side; nothing here validates them first.
@@ -829,8 +846,10 @@ exploreBackButton.addEventListener("click", () => {
  */
 exploreRunForRealButton.addEventListener("click", async () => {
     const values = collectExploreValues();
+    // Explore works in gene copies (its own N label says so); the form
+    // asks for individuals and a ploidy, so the bridge converts.
     const result = await window.pywebview.api.get_starter_form_with_overrides({
-        N: values.n,
+        gene_copies: values.n,
         d: values.d,
         m_rate: values.m,
         mu_value: values.mu,
@@ -865,14 +884,14 @@ exploreRunForRealButton.addEventListener("click", async () => {
 window.fim.showExplore = async function showExplore(overrides) {
     if (overrides) {
         exploreSeeded = true;
-        exploreN.value = overrides.N;
+        exploreN.value = exploreGeneCopies(overrides);
         exploreD.value = overrides.d;
         exploreM.value = overrides.m_rate;
         exploreMu.value = overrides.mu_value;
     } else if (!exploreSeeded) {
         exploreSeeded = true;
         const starter = await window.pywebview.api.get_starter_form();
-        exploreN.value = starter.N;
+        exploreN.value = exploreGeneCopies(starter);
         exploreD.value = starter.d;
         exploreM.value = starter.m_rate;
         exploreMu.value = starter.mu_value;

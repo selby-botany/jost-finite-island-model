@@ -572,3 +572,45 @@ def test_quarantine_injected_clock_produces_exact_name(tmp_path: Path) -> None:
     fixed = datetime(2026, 9, 7, 12, 34, 56, 789012, tzinfo=UTC)
     quarantined = preferences_module._quarantine(path, clock=lambda: fixed)
     assert quarantined.name == "preferences.invalid-20260907T123456.789012.json"
+
+
+def test_default_ploidy_is_blank_and_omitted_from_disk() -> None:
+    """No default ploidy is the normal state and writes nothing."""
+    preferences = GuiPreferences()
+
+    assert preferences.default_ploidy == ""
+    assert "default_ploidy" not in preferences.to_dict()["gui"]
+
+
+def test_default_ploidy_round_trips_and_with_updates_only_itself(
+    tmp_path: Path,
+) -> None:
+    """A chosen default survives save and load; `with_default_ploidy` is narrow."""
+    path = tmp_path / "preferences.json"
+    original = GuiPreferences(rerun_seed_mode="same").with_default_ploidy("2")
+    save_preferences(path, original)
+
+    loaded, warning = load_preferences(path)
+
+    assert warning is None
+    assert loaded.default_ploidy == "2"
+    assert loaded.rerun_seed_mode == "same"
+
+
+def test_malformed_default_ploidy_is_quarantined(tmp_path: Path) -> None:
+    """A 'gui.default_ploidy' outside blank/1-4 is rejected, not coerced."""
+    path = tmp_path / "preferences.json"
+    path.write_text(
+        json.dumps(
+            {
+                "schema_version": CURRENT_SCHEMA_VERSION,
+                "gui": {"default_ploidy": "5"},
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    loaded, warning = load_preferences(path)
+
+    assert loaded == GuiPreferences()
+    assert warning is not None

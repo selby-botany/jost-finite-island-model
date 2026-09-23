@@ -20,7 +20,7 @@ for that first. For parameter types and defaults, use the
 <h2 id="create-a-configuration">Create a configuration</h2>
 <pre><code class="language-console">fim init [--output PATH] [--force]
 </code></pre>
-<p><code>fim init</code> writes the documented development scenario. Without <code>--output</code>, the
+<p><code>fim init</code> writes the documented development scenario (<code>N</code> is gene copies per deme; the file also records <code>ploidy</code>, so <code>N: 450</code> with <code>ploidy: 2</code> is 225 diploid individuals). Without <code>--output</code>, the
 path is <code>project-root/results/example-run.yaml</code>. Existing files are protected
 unless <code>--force</code> is present.</p>
 <h2 id="run-a-simulation">Run a simulation</h2>
@@ -96,6 +96,7 @@ freely.</p>
 migration matrix rather than one shared rate — a small &quot;hub&quot; topology
 where deme 4 is both the largest and the best-connected:</p>
 <pre><code class="language-yaml">N: [200, 200, 200, 800]
+ploidy: 2
 d: 4
 m:
   - [0.95, 0.02, 0.02, 0.01]
@@ -130,6 +131,7 @@ down, since it is both the largest deme and the best-connected one.</p>
 <code>fim.model.topology</code>'s compact sugar for a sparse migration matrix, instead
 of hand-writing all 36 matrix entries:</p>
 <pre><code class="language-yaml">N: 150
+ploidy: 2
 d: 6
 m:
   topology: ring
@@ -167,6 +169,7 @@ computes every statistic at the converged generation regardless of this
 setting; the flag only changes what is available generation by generation
 before that point.</p>
 <pre><code class="language-yaml">N: 200
+ploidy: 2
 d: 3
 m: 0.0
 mu: 0.0
@@ -204,6 +207,7 @@ splits into your demes by sampling without replacement, so the demes
 already differ a little at generation 0 purely from which copies each one
 happened to receive, a genuine founder effect rather than an assumption:</p>
 <pre><code class="language-yaml">N: 200
+ploidy: 2
 d: 3
 m: 0.005
 mu: 0.001
@@ -238,6 +242,7 @@ generation's frequencies. migrant_sampling: stochastic instead draws the
 migrant <em>count</em> from <code>Binomial(N, rate)</code>, adding a genuine, explicit source
 of randomness some studies want counted:</p>
 <pre><code class="language-yaml">N: 100
+ploidy: 2
 d: 4
 m: 0.05
 mu: 0.001
@@ -267,6 +272,7 @@ elsewhere in the run — deliberately exercised here with a very short
 3-base locus (only 4<sup>3</sup> = 64 states) and a high <code>mu</code> so recurrence is
 actually likely within the run, not just theoretically possible:</p>
 <pre><code class="language-yaml">N: 100
+ploidy: 2
 d: 3
 m: 0.02
 mu: 0.02
@@ -297,6 +303,7 @@ carry an explicit finite-<code>d</code> correction. This example keeps <code>d</
 that the correction matters; increasing <code>d</code> while holding <code>N</code>, <code>m</code>, and <code>mu</code>
 fixed moves G<sub>ST</sub> toward the infinite-island approximation.</p>
 <pre><code class="language-yaml">N: 500
+ploidy: 2
 d: 8
 m: 0.003
 mu: 0.0002
@@ -323,6 +330,7 @@ isolation-by-distance panel to show the short-distance decay pattern from
 Kimura and Weiss. The run is still small enough for an interactive example,
 but large enough that distances 1 through 10 exist on the ring.</p>
 <pre><code class="language-yaml">N: 200
+ploidy: 2
 d: 20
 m:
   topology: ring
@@ -351,6 +359,7 @@ probability; each locus derives its own <code>mu</code> from μ<sub>b</sub> and 
 <code>length</code> via mu = 1 - (1 - μ<sub>b</sub>)<sup>length</sup> — so two loci of very
 different lengths do not silently mutate at the same rate:</p>
 <pre><code class="language-yaml">N: 150
+ploidy: 2
 d: 3
 m: 0.02
 mu_b: 0.00002
@@ -377,6 +386,7 @@ canonical form μ<sub>b</sub> is sugar for; μ<sub>b</sub> itself is never store
 of them stable (convergence_combinator: all, the default) or just one
 (<code>any</code>):</p>
 <pre><code class="language-yaml">N: 150
+ploidy: 2
 d: 3
 m: 0.02
 mu: 0.001
@@ -404,6 +414,7 @@ across-replicate confidence interval in the next example, which asks how
 much independent replicates disagree with each other, not how noisy any one
 of them still is:</p>
 <pre><code class="language-yaml">N: 150
+ploidy: 2
 d: 4
 m: 0.02
 mu: 0.001
@@ -436,6 +447,7 @@ set n<sub>replicates</sub> well above the plausible requirement and let
 <a href="#" data-fim-help="configuration" data-fim-anchor="replicate_tolerance">replicate_tolerance</a> decide when
 enough have run:</p>
 <pre><code class="language-yaml">N: 100
+ploidy: 2
 d: 5
 m: 0.001
 mu: 0.00003
@@ -475,6 +487,7 @@ grows large enough — see <a href="#" data-fim-external="https://github.com/sel
 backend</a> for the
 full measured comparison this example's own shape is drawn from:</p>
 <pre><code class="language-yaml">N: 500
+ploidy: 2
 d: 70
 m: 0.05
 mu: 0.001
@@ -509,6 +522,7 @@ and the plain <code>generational</code> engine, which this project's own measure
 benchmarks find winning over <code>generational-vector</code> in exactly this kind of
 region (moderate <code>d</code>, a longer locus):</p>
 <pre><code class="language-yaml">N: 500
+ploidy: 2
 d: 35
 m: 0.05
 mu: 0.001
@@ -620,7 +634,7 @@ action the matching on-screen control already performs.</p>
 </tr>
 <tr>
 <td>Configure</td>
-<td>Two always-visible, independently scrollable panels: FIM parameters (N — scalar or a per-deme table, d, m, mu, seed — the five values that together are &quot;the finite island model&quot;) and Structure (initial conditions, migrant sampling, mutation model, deme weighting, loci, which convergence statistic(s) to watch, replicate tolerance/minimum, and the within-run σ band) — one per <a href="#" data-fim-help="configuration" data-fim-anchor="">configuration reference</a> section, no dialog to open for any of them; every field and mode-selector group has a hover/focus tooltip. Execution engine, n<sub>replicates</sub>, max_generations, convergence window/tolerance, replicate confidence, and the batch-execution tuning fields (JIT, the <code>auto</code> engine's own two thresholds, parallel workers, max concurrent replicates) live in Settings instead, as defaults every fresh configuration starts from — loading a saved configuration or a worked example updates them to match what was loaded. &quot;Load configuration…&quot;/&quot;Save configuration…&quot; read and write the exact YAML file format above, &quot;Load example…&quot; opens the Presets picker (each preset also viewable as plain YAML, with a copy-to-clipboard action, and a loaded preset can be duplicated under a new name), and &quot;▶ Run&quot;/&quot;🔮 Explore&quot; jump to those destinations with the configuration exactly as shown. An invalid field on &quot;Run simulation&quot; (from anywhere) navigates here and marks the specific field, not only the section it lives in</td>
+<td>Two always-visible, independently scrollable panels: FIM parameters (ploidy — chosen first, never guessed, unless Settings supplies a default — then N, the number of <em>individuals</em> per deme, scalar or a per-deme table, then d, m, mu, seed: the values that together are &quot;the finite island model&quot;; the app multiplies individuals by ploidy into the gene-copy <code>N</code> the simulator and the YAML format use) and Structure (initial conditions, migrant sampling, mutation model, deme weighting, loci, which convergence statistic(s) to watch, replicate tolerance/minimum, and the within-run σ band) — one per <a href="#" data-fim-help="configuration" data-fim-anchor="">configuration reference</a> section, no dialog to open for any of them; every field and mode-selector group has a hover/focus tooltip. Default ploidy, execution engine, n<sub>replicates</sub>, max_generations, convergence window/tolerance, replicate confidence, and the batch-execution tuning fields (JIT, the <code>auto</code> engine's own two thresholds, parallel workers, max concurrent replicates) live in Settings instead, as defaults every fresh configuration starts from — loading a saved configuration or a worked example updates them to match what was loaded. &quot;Load configuration…&quot;/&quot;Save configuration…&quot; read and write the exact YAML file format above, &quot;Load example…&quot; opens the Presets picker (each preset also viewable as plain YAML, with a copy-to-clipboard action, and a loaded preset can be duplicated under a new name), and &quot;▶ Run&quot;/&quot;🔮 Explore&quot; jump to those destinations with the configuration exactly as shown. An invalid field on &quot;Run simulation&quot; (from anywhere) navigates here and marks the specific field, not only the section it lives in</td>
 <td><a href="#create-a-configuration">Create a configuration</a></td>
 </tr>
 <tr>
@@ -635,7 +649,7 @@ action the matching on-screen control already performs.</p>
 </tr>
 <tr>
 <td>Explore</td>
-<td>Four fields (N, d, m, mu) and a theoretical-prediction table covering differentiation (D, G<sub>ST</sub>, E<sub>ST</sub>), equilibrium diversity (within-deme and pooled heterozygosity, Shannon entropy, and effective allele counts), and Whitlock identity-recovery metrics. The table also reports whether mutation is negligible at equilibrium and marks the typical-deme entropy as approximate, especially at d = 2. Values update when a field is committed — no simulation ever runs, so this remains immediate regardless of N or d. A sweep curve plots any of the predicted statistics across a fixed range of the selected field. Every statistic can be charted on every one of the four sweeps — click a table row to plot it. Because these are measured in different units (proportions, nats, effective alleles, generations), the chart shows one unit family at a time and switches families when you pick a statistic from another one. A statistic that does not depend on the swept field draws a flat line, which is itself informative: D does not vary with N at all, and the identity-recovery metrics do not vary with mutation rate. A slider beneath the chart moves the marker along the swept range and re-reads the whole table at that value, leaving your four fields untouched until you change them yourself. &quot;▶ Run this for real&quot; seeds Configure with these same four values and takes you there, with a new study pre-selected (change or clear it before running). Reachable from the rail's own Explore button, or &quot;🔮 Explore&quot; on Configure (which carries Configure's own current values over), from any screen; Back/Forward use the shared screen history</td>
+<td>Four fields (N in gene copies, d, m, mu) and a theoretical-prediction table covering differentiation (D, G<sub>ST</sub>, E<sub>ST</sub>), equilibrium diversity (within-deme and pooled heterozygosity, Shannon entropy, and effective allele counts), and Whitlock identity-recovery metrics. The table also reports whether mutation is negligible at equilibrium and marks the typical-deme entropy as approximate, especially at d = 2. Values update when a field is committed — no simulation ever runs, so this remains immediate regardless of N or d. A sweep curve plots any of the predicted statistics across a fixed range of the selected field. Every statistic can be charted on every one of the four sweeps — click a table row to plot it. Because these are measured in different units (proportions, nats, effective alleles, generations), the chart shows one unit family at a time and switches families when you pick a statistic from another one. A statistic that does not depend on the swept field draws a flat line, which is itself informative: D does not vary with N at all, and the identity-recovery metrics do not vary with mutation rate. A slider beneath the chart moves the marker along the swept range and re-reads the whole table at that value, leaving your four fields untouched until you change them yourself. &quot;▶ Run this for real&quot; seeds Configure with these same four values and takes you there, with a new study pre-selected (change or clear it before running). Reachable from the rail's own Explore button, or &quot;🔮 Explore&quot; on Configure (which carries Configure's own current values over), from any screen; Back/Forward use the shared screen history</td>
 <td>No CLI equivalent — a direct <code>fim.statistics</code> call from Python or a script is the closest terminal equivalent</td>
 </tr>
 <tr>
