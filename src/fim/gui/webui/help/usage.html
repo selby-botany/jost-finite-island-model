@@ -121,8 +121,8 @@ compare them against a run with one shared <code>N/m</code> to see the effect of
 unequal size and asymmetric connectivity on differentiation.</p>
 <p>deme_weighting only affects E<sub>ST</sub> — D and K<sub>ST</sub> weight demes equally by
 definition, regardless of this setting. With the unequal per-deme <code>N</code> above,
-the default <code>size</code> weighting gives E<sub>ST</sub> \sim 0.0208; adding
-<code>deme_weighting: equal</code> to the same configuration gives E<sub>ST</sub> \sim 0.0249
+the default <code>equal</code> weighting gives E<sub>ST</sub> \sim 0.0249; adding
+<code>deme_weighting: size</code> to the same configuration gives E<sub>ST</sub> \sim 0.0208
 instead — deme 4's own 800-gene-copy weight pulls the size-weighted value
 down, since it is both the largest deme and the best-connected one.</p>
 <h3 id="stepping-stone-spatial-migration">Stepping-stone (spatial) migration</h3>

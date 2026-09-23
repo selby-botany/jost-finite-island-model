@@ -124,7 +124,7 @@ POPULATION_FIELDS: Final[tuple[FormField, ...]] = (
     FormField("N", "N (gene copies/deme)", "int_list"),
     FormField("d", "d (demes)", "int"),
     FormField("seed", "seed", "int"),
-    FormField("deme_weighting", "deme weighting", "choice", choices=("size", "equal")),
+    FormField("deme_weighting", "deme weighting", "choice", choices=("equal", "size")),
     FormField("max_generations", "max generations", "int"),
 )
 

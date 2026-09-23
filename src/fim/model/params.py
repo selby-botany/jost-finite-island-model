@@ -238,7 +238,7 @@ PARAMETER_DEFAULTS: Final[dict[str, object]] = {
     "locus_lengths": DEFAULT_LOCUS_LENGTH,
     "initial_allele_count": 2,
     "initial_concentration": 1.0,
-    "deme_weighting": "size",
+    "deme_weighting": "equal",
     "locus_aggregation": "ratio_of_means",
     "convergence_statistic": "D",
     "convergence_combinator": "all",
@@ -610,7 +610,7 @@ class SimulationParams:
     )
     initial_allele_count: int = 2
     initial_concentration: float = 1.0
-    deme_weighting: DemeWeighting = "size"
+    deme_weighting: DemeWeighting = "equal"
     locus_aggregation: LocusAggregation = "ratio_of_means"
     convergence_statistic: ConvergenceStatistic = "D"
     convergence_combinator: ConvergenceCombinator = "all"

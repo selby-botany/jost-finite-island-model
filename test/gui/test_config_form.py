@@ -27,7 +27,7 @@ def test_starter_form_values_reflects_the_cli_starter_config() -> None:
     assert values["N"] == "450"
     assert values["d"] == "20"
     assert values["seed"] == "20260814"
-    assert values["deme_weighting"] == "size"
+    assert values["deme_weighting"] == "equal"
     assert values["max_generations"] == "10000"
     assert values["migrant_sampling"] == "continuous"
     assert values["m_mode"] == "scalar"

@@ -25,7 +25,7 @@ loci:
     length: 200
 initial_allele_count: 2
 initial_concentration: 1.0
-deme_weighting: size
+deme_weighting: equal
 convergence_statistic: D
 convergence_combinator: all
 convergence_window: 50
@@ -45,7 +45,7 @@ engine_backend: auto   # recommended choice; the library default is lineal
 autosomal locus and pass census individuals unchanged for a haploid locus.
 Per-deme lists model unequal island sizes: every stage of the update
 pipeline (<code>migrate</code>, <code>mutate</code>, <code>drift</code>), the founding-allele-count bound
-(checked against the smallest N<sub>i</sub>), and deme_weighting: size all use
+(checked against the smallest N<sub>i</sub>), and deme_weighting: size (when chosen) all use
 each deme's own configured gene-copy count.</p>
 <pre><code class="language-yaml">N: [120, 450, 60]   # three demes, unequal gene-copy counts
 d: 3
@@ -482,11 +482,13 @@ sigma_band_multiplier, above, for the full mechanism.</p>
 <h3 id="deme_weighting">deme_weighting</h3>
 <ul>
 <li><strong>Type:</strong> <code>size</code> or <code>equal</code></li>
-<li><strong>Default:</strong> <code>size</code></li>
+<li><strong>Default:</strong> <code>equal</code></li>
 </ul>
 <p>This setting controls E<sub>ST</sub>. Jost's <code>D</code> and K<sub>ST</sub> use equal deme weighting by
-definition. When every deme is the same size, both settings produce the same
-E<sub>ST</sub>.</p>
+definition, and <code>equal</code> is the default so E<sub>ST</sub> follows the same
+convention unless you ask otherwise. Choose <code>size</code> to weight each deme by its
+own gene-copy count. When every deme is the same size, both settings produce
+the same E<sub>ST</sub>.</p>
 <h3 id="locus_aggregation">locus_aggregation</h3>
 <ul>
 <li><strong>Type:</strong> <code>ratio_of_means</code> or <code>mean_of_ratios</code></li>

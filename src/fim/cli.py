@@ -114,7 +114,7 @@ loci:
     length: 200
 initial_allele_count: 2
 initial_concentration: 1.0
-deme_weighting: size
+deme_weighting: equal
 convergence_statistic: D
 convergence_window: 50
 convergence_tolerance: 0.01

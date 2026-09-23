@@ -147,8 +147,8 @@ unequal size and asymmetric connectivity on differentiation.
 
 deme_weighting only affects E<sub>ST</sub> — D and K<sub>ST</sub> weight demes equally by
 definition, regardless of this setting. With the unequal per-deme `N` above,
-the default `size` weighting gives E<sub>ST</sub> \sim 0.0208; adding
-`deme_weighting: equal` to the same configuration gives E<sub>ST</sub> \sim 0.0249
+the default `equal` weighting gives E<sub>ST</sub> \sim 0.0249; adding
+`deme_weighting: size` to the same configuration gives E<sub>ST</sub> \sim 0.0208
 instead — deme 4's own 800-gene-copy weight pulls the size-weighted value
 down, since it is both the largest deme and the best-connected one.
 

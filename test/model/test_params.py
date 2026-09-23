@@ -34,6 +34,9 @@ def test_scalar_parameters_construct_with_documented_defaults() -> None:
     assert params.initial_allele_count == PARAMETER_DEFAULTS["initial_allele_count"]
     assert params.initial_concentration == PARAMETER_DEFAULTS["initial_concentration"]
     assert params.deme_weighting == PARAMETER_DEFAULTS["deme_weighting"]
+    # Equal weighting, matching how `D` and `K_ST` already weight demes,
+    # so `E_ST` follows one convention unless `size` is asked for.
+    assert params.deme_weighting == "equal"
     assert params.convergence_statistic == PARAMETER_DEFAULTS["convergence_statistic"]
     assert params.convergence_statistics == ("D",)
     assert params.convergence_combinator == PARAMETER_DEFAULTS["convergence_combinator"]
