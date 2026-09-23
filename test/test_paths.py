@@ -374,7 +374,7 @@ def test_replace_with_retry_rides_out_transient_permission_errors(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
     """A rename refused a few times, then allowed, succeeds."""
-    monkeypatch.setattr(paths.time, "sleep", lambda _seconds: None)
+    monkeypatch.setattr("fim.paths.time.sleep", lambda _seconds: None)
     source = _RefusingSource(refusals=3)
 
     paths.replace_with_retry(source, tmp_path / "target")  # type: ignore[arg-type]
@@ -386,7 +386,7 @@ def test_replace_with_retry_gives_up_after_a_bounded_number_of_attempts(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
     """A target that stays locked raises the original error, not a hang."""
-    monkeypatch.setattr(paths.time, "sleep", lambda _seconds: None)
+    monkeypatch.setattr("fim.paths.time.sleep", lambda _seconds: None)
     source = _RefusingSource(refusals=10**6)
 
     with pytest.raises(PermissionError):

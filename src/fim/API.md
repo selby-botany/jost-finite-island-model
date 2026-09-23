@@ -84,6 +84,8 @@ Return to the [source-tree orientation](../README.md) or the [developer guide](.
     * [get\_initial\_form](#fim.gui.app.Api.get_initial_form)
     * [get\_startup\_behavior](#fim.gui.app.Api.get_startup_behavior)
     * [set\_startup\_behavior](#fim.gui.app.Api.set_startup_behavior)
+    * [get\_default\_ploidy](#fim.gui.app.Api.get_default_ploidy)
+    * [set\_default\_ploidy](#fim.gui.app.Api.set_default_ploidy)
     * [get\_rerun\_seed\_mode](#fim.gui.app.Api.get_rerun_seed_mode)
     * [set\_rerun\_seed\_mode](#fim.gui.app.Api.set_rerun_seed_mode)
     * [validate\_form](#fim.gui.app.Api.validate_form)
@@ -158,6 +160,8 @@ Return to the [source-tree orientation](../README.md) or the [developer guide](.
   * [replicate\_output\_directory](#fim.gui.batch_runner.replicate_output_directory)
   * [start\_batch\_run](#fim.gui.batch_runner.start_batch_run)
 * [fim.gui.config\_form](#fim.gui.config_form)
+  * [PLOIDY\_REQUIRED\_MESSAGE](#fim.gui.config_form.PLOIDY_REQUIRED_MESSAGE)
+  * [PLOIDY\_NAMES](#fim.gui.config_form.PLOIDY_NAMES)
   * [FormField](#fim.gui.config_form.FormField)
   * [TabSpec](#fim.gui.config_form.TabSpec)
   * [CONVERGENCE\_STATISTIC\_NAMES](#fim.gui.config_form.CONVERGENCE_STATISTIC_NAMES)
@@ -205,6 +209,7 @@ Return to the [source-tree orientation](../README.md) or the [developer guide](.
     * [with\_startup\_behavior](#fim.gui.preferences.GuiPreferences.with_startup_behavior)
     * [with\_default\_run\_settings](#fim.gui.preferences.GuiPreferences.with_default_run_settings)
     * [with\_results\_location\_override](#fim.gui.preferences.GuiPreferences.with_results_location_override)
+    * [with\_default\_ploidy](#fim.gui.preferences.GuiPreferences.with_default_ploidy)
     * [with\_rerun\_seed\_mode](#fim.gui.preferences.GuiPreferences.with_rerun_seed_mode)
   * [load\_preferences](#fim.gui.preferences.load_preferences)
   * [set\_preferences\_file\_override](#fim.gui.preferences.set_preferences_file_override)
@@ -3464,6 +3469,39 @@ Set how a fresh launch chooses its initial form values.
 - ``{"ok"` - True, "value": value}` on success; otherwise
 - ``{"ok"` - False, "message": ...}`.
 
+<a id="fim.gui.app.Api.get_default_ploidy"></a>
+
+#### get\_default\_ploidy
+
+```python
+@_log_bridge_call
+def get_default_ploidy() -> str
+```
+
+Return Settings' default ploidy: `""` (choose every time) or `"1"`-`"4"`.
+
+<a id="fim.gui.app.Api.set_default_ploidy"></a>
+
+#### set\_default\_ploidy
+
+```python
+@_log_bridge_call
+def set_default_ploidy(value: str) -> dict[str, Any]
+```
+
+Set the ploidy a fresh configuration's form starts on.
+
+**Arguments**:
+
+- `value` - `""` for no default (the botanist chooses each time),
+  or `"1"` through `"4"` (haploid through tetraploid).
+
+
+**Returns**:
+
+- ``{"ok"` - True, "value": value}` on success; otherwise
+- ``{"ok"` - False, "message": ...}`.
+
 <a id="fim.gui.app.Api.get_rerun_seed_mode"></a>
 
 #### get\_rerun\_seed\_mode
@@ -5772,6 +5810,18 @@ does not, and instead raises a clear `ValueError` from
 this form has always used for a construct it cannot represent at all)
 — see `doc/fim-gui-design.md` §6.2.
 
+<a id="fim.gui.config_form.PLOIDY_REQUIRED_MESSAGE"></a>
+
+#### PLOIDY\_REQUIRED\_MESSAGE
+
+The refusal when the form's ploidy is blank (see `POPULATION_FIELDS`).
+
+<a id="fim.gui.config_form.PLOIDY_NAMES"></a>
+
+#### PLOIDY\_NAMES
+
+Display names for `SimulationParams.ploidy`'s allowed values.
+
 <a id="fim.gui.config_form.FormField"></a>
 
 ## FormField Objects
@@ -6938,6 +6988,14 @@ One loaded (or default) snapshot of the GUI's own preferences.
   run") and does not need to be this action's own default
   behavior. Process-local like `significant_digits`, never
   part of any saved configuration.
+- `default_ploidy` - `""` (the default: no default, the botanist
+  chooses on every new configuration) or `"1"`-`"4"` -- the
+  ploidy a fresh configuration's form starts on (Settings'
+  "Default ploidy"). Deliberately separate from
+- ``default_run_settings`` - those are merged back into a
+  submission at run time, which would overwrite a ploidy the
+  botanist chose for this particular run; this only seeds a
+  fresh form and is never applied afterwards.
 
 <a id="fim.gui.preferences.GuiPreferences.to_dict"></a>
 
@@ -7108,6 +7166,23 @@ results_location` never passes `None` itself today (there is no
 "clear this field" affordance in Settings yet), but this
 matches `with_form_values`'s own "replace wholesale" shape
 rather than silently only ever growing.
+
+<a id="fim.gui.preferences.GuiPreferences.with_default_ploidy"></a>
+
+#### with\_default\_ploidy
+
+```python
+def with_default_ploidy(default_ploidy: str) -> GuiPreferences
+```
+
+Return a copy with `default_ploidy` replaced.
+
+The `Api.set_default_ploidy` bridge method's own update.
+
+**Arguments**:
+
+- `default_ploidy` - `""` or `"1"`-`"4"` -- see this dataclass's
+  own docstring.
 
 <a id="fim.gui.preferences.GuiPreferences.with_rerun_seed_mode"></a>
 

@@ -6753,6 +6753,60 @@ def test_get_starter_form_applies_saved_default_run_settings(
 
 A saved Settings default overlays the true starter values.
 
+<a id="gui.test_app_api.test_default_ploidy_seeds_a_fresh_form_and_makes_it_submittable"></a>
+
+#### test\_default\_ploidy\_seeds\_a\_fresh\_form\_and\_makes\_it\_submittable
+
+```python
+def test_default_ploidy_seeds_a_fresh_form_and_makes_it_submittable(
+        tmp_path: Path) -> None
+```
+
+A saved default ploidy starts new forms on it; unset leaves it to choose.
+
+<a id="gui.test_app_api.test_default_ploidy_does_not_overwrite_a_ploidy_chosen_for_one_run"></a>
+
+#### test\_default\_ploidy\_does\_not\_overwrite\_a\_ploidy\_chosen\_for\_one\_run
+
+```python
+def test_default_ploidy_does_not_overwrite_a_ploidy_chosen_for_one_run(
+        tmp_path: Path) -> None
+```
+
+Unlike the run-settings defaults, it is never merged into a submission.
+
+<a id="gui.test_app_api.test_set_default_ploidy_rejects_an_unknown_value"></a>
+
+#### test\_set\_default\_ploidy\_rejects\_an\_unknown\_value
+
+```python
+def test_set_default_ploidy_rejects_an_unknown_value(tmp_path: Path) -> None
+```
+
+Only blank and 1-4 are accepted, and a rejection saves nothing.
+
+<a id="gui.test_app_api.test_explore_handoff_converts_gene_copies_using_the_default_ploidy"></a>
+
+#### test\_explore\_handoff\_converts\_gene\_copies\_using\_the\_default\_ploidy
+
+```python
+def test_explore_handoff_converts_gene_copies_using_the_default_ploidy(
+        tmp_path: Path) -> None
+```
+
+Explore counts gene copies; the form gets individuals plus a ploidy.
+
+<a id="gui.test_app_api.test_explore_handoff_without_a_ploidy_leaves_it_to_be_chosen"></a>
+
+#### test\_explore\_handoff\_without\_a\_ploidy\_leaves\_it\_to\_be\_chosen
+
+```python
+def test_explore_handoff_without_a_ploidy_leaves_it_to_be_chosen(
+        tmp_path: Path) -> None
+```
+
+With no default ploidy the count cannot be converted honestly.
+
 <a id="gui.test_app_api.test_get_starter_form_falls_back_when_saved_default_run_settings_is_invalid"></a>
 
 #### test\_get\_starter\_form\_falls\_back\_when\_saved\_default\_run\_settings\_is\_invalid
@@ -11503,6 +11557,58 @@ and execution", whose last key is `migrant_sampling` — so
 `payload_to_yaml_text`'s own defensive "unknown key" fallback to
 append it in whatever order the payload dict happened to build.
 
+<a id="gui.test_config_form.test_form_values_to_payload_turns_individuals_into_gene_copies"></a>
+
+#### test\_form\_values\_to\_payload\_turns\_individuals\_into\_gene\_copies
+
+```python
+def test_form_values_to_payload_turns_individuals_into_gene_copies() -> None
+```
+
+The form's N is individuals; the payload's N is `individuals * ploidy`.
+
+<a id="gui.test_config_form.test_form_values_to_payload_refuses_a_blank_ploidy"></a>
+
+#### test\_form\_values\_to\_payload\_refuses\_a\_blank\_ploidy
+
+```python
+def test_form_values_to_payload_refuses_a_blank_ploidy() -> None
+```
+
+A blank ploidy is refused, never guessed, and names the field.
+
+<a id="gui.test_config_form.test_params_to_form_values_divides_gene_copies_back_into_individuals"></a>
+
+#### test\_params\_to\_form\_values\_divides\_gene\_copies\_back\_into\_individuals
+
+```python
+def test_params_to_form_values_divides_gene_copies_back_into_individuals(
+) -> None
+```
+
+Round trip: a diploid run's 450 gene copies reopen as 225 individuals.
+
+<a id="gui.test_config_form.test_params_to_form_values_blanks_a_config_with_no_recorded_ploidy"></a>
+
+#### test\_params\_to\_form\_values\_blanks\_a\_config\_with\_no\_recorded\_ploidy
+
+```python
+def test_params_to_form_values_blanks_a_config_with_no_recorded_ploidy(
+) -> None
+```
+
+Gene copies must not appear under an individuals label.
+
+<a id="gui.test_config_form.test_starter_form_values_overlay_may_choose_the_ploidy"></a>
+
+#### test\_starter\_form\_values\_overlay\_may\_choose\_the\_ploidy
+
+```python
+def test_starter_form_values_overlay_may_choose_the_ploidy() -> None
+```
+
+A saved default ploidy arrives as an override and makes the starter valid.
+
 <a id="gui.test_config_modal_dialogs"></a>
 
 # gui.test\_config\_modal\_dialogs
@@ -12586,6 +12692,33 @@ Polls `window.__fimRunViewReady`, not the field's own value:
 `revalidate` (which resolves the button's `disabled` state) inside
 `initializeInputScreen`, so polling the field alone risks reading
 `disabled` before `revalidate` has ever run once.
+
+<a id="gui.test_input_screen.test_a_fresh_form_makes_the_botanist_choose_a_ploidy"></a>
+
+#### test\_a\_fresh\_form\_makes\_the\_botanist\_choose\_a\_ploidy
+
+```python
+def test_a_fresh_form_makes_the_botanist_choose_a_ploidy(
+        tmp_path: Path, drive: Callable[..., Any]) -> None
+```
+
+With no default ploidy, Run is blocked until one is chosen.
+
+Botanist feedback on the first real beta run: ask for ploidy and then
+individuals, rather than gene copies. The choice is never guessed, so
+a fresh form (no saved default in Settings) opens on "choose..." with
+"Run simulation" disabled; picking a ploidy is what enables it.
+
+<a id="gui.test_input_screen.test_a_saved_default_ploidy_starts_the_form_on_it"></a>
+
+#### test\_a\_saved\_default\_ploidy\_starts\_the\_form\_on\_it
+
+```python
+def test_a_saved_default_ploidy_starts_the_form_on_it(
+        tmp_path: Path, drive: Callable[..., Any]) -> None
+```
+
+Settings' default ploidy pre-selects a new configuration's ploidy.
 
 <a id="gui.test_input_screen.test_initial_view_shows_axis_selectors_for_deme_pair_choice"></a>
 
@@ -14572,6 +14705,37 @@ An injected clock gives `_quarantine` a deterministic filename.
 the exact timestamp format via a fixed instant, matching `fim.
 paths.default_output_directory`'s own injected-clock test pattern.
 
+<a id="gui.test_preferences.test_default_ploidy_is_blank_and_omitted_from_disk"></a>
+
+#### test\_default\_ploidy\_is\_blank\_and\_omitted\_from\_disk
+
+```python
+def test_default_ploidy_is_blank_and_omitted_from_disk() -> None
+```
+
+No default ploidy is the normal state and writes nothing.
+
+<a id="gui.test_preferences.test_default_ploidy_round_trips_and_with_updates_only_itself"></a>
+
+#### test\_default\_ploidy\_round\_trips\_and\_with\_updates\_only\_itself
+
+```python
+def test_default_ploidy_round_trips_and_with_updates_only_itself(
+        tmp_path: Path) -> None
+```
+
+A chosen default survives save and load; `with_default_ploidy` is narrow.
+
+<a id="gui.test_preferences.test_malformed_default_ploidy_is_quarantined"></a>
+
+#### test\_malformed\_default\_ploidy\_is\_quarantined
+
+```python
+def test_malformed_default_ploidy_is_quarantined(tmp_path: Path) -> None
+```
+
+A 'gui.default_ploidy' outside blank/1-4 is rejected, not coerced.
+
 <a id="gui.test_presets"></a>
 
 # gui.test\_presets
@@ -16061,6 +16225,22 @@ Polling until the readback actually reflects the just-saved value
 converges to the same correct result regardless of how long the
 real bridge call takes, rather than gambling that a guessed delay
 was enough.
+
+<a id="gui.test_settings_modal.test_default_ploidy_select_persists_immediately_and_reloads_on_open"></a>
+
+#### test\_default\_ploidy\_select\_persists\_immediately\_and\_reloads\_on\_open
+
+```python
+def test_default_ploidy_select_persists_immediately_and_reloads_on_open(
+        window: webview.Window) -> None
+```
+
+Changing "Default ploidy" saves at once (no Save button) and reopens as set.
+
+Like the startup-behavior and re-run seed selects beside it, and
+unlike the execution defaults, it persists on change: it seeds only a
+fresh configuration's ploidy, so there is no batch of fields to
+validate together.
 
 <a id="gui.test_settings_modal.test_settings_save_button_shows_the_banner_on_an_invalid_value"></a>
 
