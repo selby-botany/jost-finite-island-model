@@ -95,7 +95,9 @@ def _submittable_starter() -> dict[str, str]:
 
 def test_get_starter_form_matches_config_form_directly() -> None:
     """With nothing saved, the bridge method matches `starter_form_values` exactly."""
-    assert Api().get_starter_form() == starter_form_values()
+    # The autouse preferences fixture seeds haploid as the default ploidy
+    # (`conftest.py`), the only thing the bridge overlays here.
+    assert Api().get_starter_form() == starter_form_values(overrides={"ploidy": "1"})
 
 
 def test_get_starter_form_applies_saved_default_run_settings(tmp_path: Path) -> None:
