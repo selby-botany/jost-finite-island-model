@@ -604,9 +604,13 @@ function renderScatterKey(bounded) {
     if (!bounded) {
         return;
     }
-    const add = (className, text, color) => {
+    const add = (className, text, color, fullText = text) => {
         const item = document.createElement("span");
         item.className = "scatter-key-item";
+        // The full sentence, worded as in the saved `scatter.png`'s legend
+        // (a test keeps the two in step), is the hover text; the visible
+        // label is short enough to fit a narrow pane.
+        item.title = fullText;
         const swatch = document.createElement("span");
         swatch.className = className;
         if (color !== undefined) {
@@ -615,7 +619,12 @@ function renderScatterKey(bounded) {
         item.append(swatch, text);
         key.appendChild(item);
     };
-    add("scatter-key-ring", "Most frequent", COLOR_COMMON);
+    add(
+        "scatter-key-ring",
+        "Most frequent",
+        COLOR_COMMON,
+        "Most frequent allele in either deme (ring; ties: first)"
+    );
     if (markPointsFor(_scatterStyle, true).ramp) {
         const label = document.createElement("span");
         label.className = "scatter-key-label";
