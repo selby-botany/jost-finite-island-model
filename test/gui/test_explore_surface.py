@@ -13,7 +13,7 @@ from .test_sweep_screen import Poll, _drive
 pytestmark = pytest.mark.gui
 
 _STATE = """({
-    curveReady: window.__fimExploreReady,
+    curveReady: window.__fimExploreReady === true,
     surfaceReady: window.__fimExploreSurfaceReady,
     mode: document.getElementById('explore-mode').value,
     surfaceHidden: document.getElementById('explore-surface').hidden,

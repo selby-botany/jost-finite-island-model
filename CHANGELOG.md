@@ -21,6 +21,18 @@ project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   it is new, already computed or invalid, and why), then run it. A progress
   table follows each point, and a sweep of 100 points or more asks for a second
   click. A sweep and a single run cannot overlap.
+- **Explore can look at two parameters, and start a sweep.** A new **View**
+  choice on Explore switches from the curve (one parameter, still the
+  default) to a **Surface**: a heat map of one closed-form statistic over two
+  parameters, with a probe you move by clicking, dragging or the arrow keys
+  (the statistics table follows it) and two small charts along the probe's row
+  and column. **Choose a sweep…** picks an interval, a count and a spacing
+  for each parameter shown, lists and draws the exact points (on the map too)
+  and counts them with the same plan a sweep uses; removing a point turns the
+  axis into a list of your own values. Spacing can be even on the axis's scale
+  or **even in the predicted response**, which crowds points where the
+  prediction changes. **Sweep this for real** carries the choice, and the four
+  fields, to the sweep screen (N is converted from gene copies to individuals).
 - **Sweep results.** After a sweep, **View results** (and **Sweep results…**
   on the study's row in Home, next to **Continue sweep** for an unfinished
   one) shows the statistic across the points: with one axis, each value with

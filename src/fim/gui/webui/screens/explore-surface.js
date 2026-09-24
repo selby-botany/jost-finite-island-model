@@ -39,6 +39,8 @@ let exploreSurfaceGrid = null;
 let exploreSurfaceProbe = null;
 let exploreSurfaceLayout = null;
 let exploreSurfaceSequence = 0;
+// Where a sweep chosen in `explore-sweep.js` would run, drawn on the map.
+let exploreSurfaceMarkers = [];
 let exploreSurfaceDragging = false;
 
 window.__fimExploreSurfaceReady = false;
@@ -161,6 +163,7 @@ function drawExploreSurface() {
         yTitle: exploreAxisLabel(grid.yAxis),
         valueTitle: statistic.replace("_", " "),
         selected: exploreSurfaceProbe,
+        markers: exploreSurfaceMarkers,
     });
     exploreSurfaceX.value = String(exploreSurfaceProbe.column);
     exploreSurfaceY.value = String(exploreSurfaceProbe.row);
@@ -359,4 +362,38 @@ window.fim.showExplore = async function showExploreWithSurface(overrides) {
     if (isExploreSurface()) {
         await refreshExploreSurface();
     }
+};
+
+/**
+ * Draw dots where a sweep would run, given as axis values.
+ * @param {Array<{x: number, y: number}>} points Values on the map's axes.
+ */
+window.fim.setExploreSurfaceMarkers = function setExploreSurfaceMarkers(points) {
+    if (exploreSurfaceGrid === null) {
+        exploreSurfaceMarkers = [];
+        return;
+    }
+    const position = (values, value) => {
+        const last = values.length - 1;
+        if (value <= values[0]) {
+            return 0.5;
+        }
+        if (value >= values[last]) {
+            return last + 0.5;
+        }
+        let index = 0;
+        while (values[index + 1] < value) {
+            index += 1;
+        }
+        const scale = sweepAxisIsLog(values) ? Math.log : (v) => v;
+        const fraction =
+            (scale(value) - scale(values[index])) /
+            (scale(values[index + 1]) - scale(values[index]));
+        return index + fraction + 0.5;
+    };
+    exploreSurfaceMarkers = points.map((point) => ({
+        column: position(exploreSurfaceGrid.xValues, point.x),
+        row: position(exploreSurfaceGrid.yValues, point.y),
+    }));
+    drawExploreSurface();
 };

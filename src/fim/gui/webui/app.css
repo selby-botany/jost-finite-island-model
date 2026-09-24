@@ -2787,3 +2787,93 @@ fieldset.composite > label {
     max-width: 21rem;
     min-width: 0;
 }
+
+/* Axis-range control (`axis-range.js`) and Explore's sweep panel. */
+.axis-range {
+    display: flex;
+    flex-direction: column;
+    gap: 0.35rem;
+    max-width: 44rem;
+    margin-bottom: 1rem;
+    padding: 0.5rem 0.75rem;
+    border: 1px solid var(--fim-border);
+    border-radius: 6px;
+}
+
+.axis-range-title {
+    font-weight: 600;
+}
+
+.axis-range-end {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.axis-range-end > span {
+    width: 2.5rem;
+}
+
+.axis-range-end input[type="range"] {
+    flex: 1 1 auto;
+    min-width: 0;
+}
+
+.axis-range-from,
+.axis-range-to {
+    accent-color: var(--fim-accent);
+}
+
+.axis-range-spacing {
+    max-width: 16rem;
+}
+
+.axis-range-restore {
+    margin-left: auto;
+}
+
+.axis-range-from-value,
+.axis-range-to-value {
+    width: 6.5rem;
+}
+
+.axis-range-settings {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.5rem 1rem;
+}
+
+.axis-range-count {
+    width: 3.5rem;
+}
+
+.axis-range-ticks {
+    position: relative;
+    height: 10px;
+    border-bottom: 1px solid var(--fim-border);
+}
+
+.axis-range-tick {
+    position: absolute;
+    bottom: 0;
+    width: 2px;
+    height: 10px;
+    margin-left: -1px;
+    background: var(--fim-accent);
+}
+
+.axis-range-chips {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.25rem;
+}
+
+.axis-range-chip {
+    padding: 0.05rem 0.5rem;
+    font-variant-numeric: tabular-nums;
+}
+
+#explore-sweep {
+    margin-top: 0.75rem;
+}

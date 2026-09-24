@@ -47,6 +47,7 @@ Every test module, fixture, and test function documented here in full; `doc/fim-
   - [`test_dark_mode_screen`](#gui.test_dark_mode_screen)
   - [`test_explore_screen`](#gui.test_explore_screen)
   - [`test_explore_surface`](#gui.test_explore_surface)
+  - [`test_explore_sweep`](#gui.test_explore_sweep)
   - [`test_field_help`](#gui.test_field_help)
   - [`test_field_help_screen`](#gui.test_field_help_screen)
   - [`test_fixed_per_deme_screen`](#gui.test_fixed_per_deme_screen)
@@ -11975,6 +11976,12 @@ editable at "No study" otherwise).
 # gui.test\_explore\_surface
 
 Headless functional tests for Explore's surface mode (`explore-surface.js`).
+
+<a id="gui.test_explore_sweep"></a>
+
+# gui.test\_explore\_sweep
+
+Headless functional tests for Explore's "Choose a sweep" panel.
 
 <a id="gui.test_field_help"></a>
 

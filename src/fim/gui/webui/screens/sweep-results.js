@@ -74,7 +74,9 @@ function sweepAxisValues(key) {
 }
 
 /**
- * Whether an axis is numeric and spans enough to read on a log scale.
+ * Whether an axis's values are geometrically spaced across a wide range,
+ * so it reads best on a log scale: consecutive ratios agree to within 5%
+ * and the whole span is a factor of 5 or more (two values: 20 or more).
  * @param {Array<number|string>} values
  * @returns {boolean}
  */
@@ -82,7 +84,13 @@ function sweepAxisIsLog(values) {
     if (!values.every((value) => typeof value === "number" && value > 0)) {
         return false;
     }
-    return Math.max(...values) / Math.min(...values) >= 20;
+    const span = Math.max(...values) / Math.min(...values);
+    if (values.length < 3) {
+        return span >= 20;
+    }
+    const ratios = values.slice(1).map((value, index) => value / values[index]);
+    const consistent = ratios.every((ratio) => Math.abs(ratio / ratios[0] - 1) < 0.05);
+    return consistent && span >= 5;
 }
 
 /**

@@ -1117,6 +1117,35 @@
             <canvas id="explore-slice-y" aria-label="The statistic along the probe's column"></canvas>
           </div>
         </div>
+        <div id="explore-sweep">
+          <!-- Choose what to run for real (`screens/explore-sweep.js`,
+               `20260923-claude-sonnet-5-sweep-as-study-implementation-
+               plan.md`, §7.2): the range and count of each displayed
+               parameter, the exact points drawn and listed, and a live
+               count from the same plan a sweep uses. -->
+          <button type="button" id="explore-sweep-toggle" aria-expanded="false">
+            Choose a sweep…
+          </button>
+          <div id="explore-sweep-panel" hidden>
+            <p class="hint">
+              Pick the values to run for real, on the parameters this view
+              shows. The points are listed and drawn as you edit, and the count
+              comes from the plan a sweep would make.
+            </p>
+            <div id="explore-sweep-axes"></div>
+            <div class="field">
+              <label for="explore-sweep-statistic">Place points by the response of</label>
+              <select id="explore-sweep-statistic"></select>
+            </div>
+            <p id="explore-sweep-plan" aria-live="polite"></p>
+            <button type="button" id="explore-sweep-button" class="primary-action" disabled>
+              <svg class="button-icon" aria-hidden="true">
+                <use href="icons/fim-icons.svg#icon-run"></use>
+              </svg>
+              Sweep this for real
+            </button>
+          </div>
+        </div>
       </div>
       <table class="stats-table" id="explore-predictions">
         <!-- Names the panel, and carries as a tooltip the reminder that
@@ -2250,6 +2279,8 @@
 <script src="heatmap.js"></script>
 <script src="screens/sweep-results.js"></script>
 <script src="screens/explore-surface.js"></script>
+<script src="axis-range.js"></script>
+<script src="screens/explore-sweep.js"></script>
 <script src="screens/compare.js"></script>
 <script src="screens/presets.js"></script>
 <script src="screens/settings.js"></script>

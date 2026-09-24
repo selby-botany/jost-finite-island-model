@@ -97,8 +97,12 @@ function heatmapFormat(value) {
  *   values: Array<Array<number|null>>,
  *   min: number, max: number, diverging?: boolean,
  *   xTitle?: string, yTitle?: string, valueTitle?: string,
- *   selected?: {row: number, column: number}|null
+ *   selected?: {row: number, column: number}|null,
+ *   markers?: Array<{row: number, column: number}>
  * }} spec `values[row][column]`; `null` is a cell with no value.
+ * `markers` are drawn as dots at fractional cell positions (a whole
+ * number is a cell's left/top edge; add 0.5 for its centre), for example
+ * the points a sweep would run.
  * @returns {{left: number, top: number, cellWidth: number, cellHeight: number,
  *   rows: number, columns: number}}
  */
@@ -173,6 +177,22 @@ function drawHeatmap(canvas, spec) {
     }
 
     drawHeatmapColorBar(context, canvas, spec, ramp, { top, plotHeight, muted, border });
+
+    for (const marker of spec.markers || []) {
+        context.beginPath();
+        context.arc(
+            left + marker.column * cellWidth,
+            top + marker.row * cellHeight,
+            3.5,
+            0,
+            Math.PI * 2
+        );
+        context.fillStyle = "#ffffff";
+        context.fill();
+        context.strokeStyle = "#000000";
+        context.lineWidth = 1.5;
+        context.stroke();
+    }
 
     if (spec.selected) {
         context.strokeStyle = foreground;
