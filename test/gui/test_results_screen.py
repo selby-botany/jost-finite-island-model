@@ -386,8 +386,9 @@ def test_a_single_replicate_run_gets_a_per_generation_results_table(
 
     Checks the two rows whose contents are fully determined regardless
     of how many generations this particular run takes: the first
-    (generation 0, outcome "initial") and the last (the run's own stop
-    reason, the same text `#results-outcome` reports above the plot).
+    (generation 0, styled italic as an input) and the last (flagged
+    with the warning row only when the run hit the generation cap, the
+    same reason `#results-outcome` reports above the plot).
     """
     settled = drive(
         window,
@@ -417,6 +418,12 @@ def test_a_single_replicate_run_gets_a_per_generation_results_table(
             "const row = rows[rows.length - 1];"
             "return row ? Array.from(row.children).map((c) => c.textContent) : null;"
             "})(), "
+            "firstRowClass: document.getElementById("
+            "'run-results-table-body').children[0]?.className, "
+            "lastRowClass: (() => {"
+            "const rows = document.getElementById('run-results-table-body').children;"
+            "return rows.length ? rows[rows.length - 1].className : null;"
+            "})(), "
             "outcome: document.getElementById('results-outcome').textContent"
             "})"
         ),
@@ -433,20 +440,54 @@ def test_a_single_replicate_run_gets_a_per_generation_results_table(
     # The batch table stays hidden -- this is a second table, not the
     # batch one repurposed.
     assert settled["batchTableHidden"] is True
-    assert settled["headers"][:2] == ["Generation", "Outcome"]
+    assert settled["headers"][:2] == ["Generation", "D"]
+    assert "Outcome" not in settled["headers"]
     # Ten statistics, no "Replicate" column and no "Open" column: a
     # single run has neither a sibling replicate to name nor a separate
     # trajectory to open, since this card is already showing it.
-    assert len(settled["headers"]) == 12
+    assert len(settled["headers"]) == 11
     # One row per scrubber frame, exactly -- the alignment that lets a
     # row and a scrub position mean the same generation.
     assert settled["rowCount"] == settled["frameCount"]
     first = settled["firstRowCells"]
     assert first[0] == "0"
-    assert first[1] == "initial"
-    last = settled["lastRowCells"]
-    assert last[1] != ""
-    assert settled["outcome"].startswith(last[1])
+    assert settled["firstRowClass"] == "row-initial"
+    hit_cap = settled["outcome"].startswith("hit the cap")
+    assert ("row-warning" in settled["lastRowClass"]) is hit_cap
+
+
+def test_not_converged_row_gets_a_warning_background_and_a_text_mark(
+    window: webview.Window, drive: Callable[..., Any]
+) -> None:
+    """A capped run's row is flagged by class, tooltip and a "⚠" glyph.
+
+    The glyph is the non-color cue; the class carries the yellow
+    background. Driven directly through `markNotConverged` (shared
+    global scope) so the result never depends on how a real run ends.
+    """
+    settled = drive(
+        window,
+        ready=_INPUT_SCREEN_READY,
+        trigger=(
+            "const row = document.createElement('tr'); "
+            "row.appendChild(document.createElement('td')); "
+            "row.firstElementChild.textContent = '40'; "
+            "markNotConverged(row, 'hit the cap'); "
+            "window.__fimWarningRow = { "
+            "className: row.className, title: row.title, "
+            "text: row.firstElementChild.textContent, "
+            "label: row.querySelector('[role=img]').getAttribute('aria-label') };"
+        ),
+        read="window.__fimWarningRow",
+        is_ready=lambda value: value is not None,
+    )
+
+    assert settled == {
+        "className": "row-warning",
+        "title": "Not converged (hit the cap)",
+        "text": "⚠40",
+        "label": "Not converged (hit the cap)",
+    }
 
 
 def test_completed_run_shows_title_above_canvas_and_back_returns_to_initial(

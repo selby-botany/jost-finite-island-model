@@ -15283,8 +15283,24 @@ and a scrub position always denote the same instant
 
 Checks the two rows whose contents are fully determined regardless
 of how many generations this particular run takes: the first
-(generation 0, outcome "initial") and the last (the run's own stop
-reason, the same text ``results`-outcome` reports above the plot).
+(generation 0, styled italic as an input) and the last (flagged
+with the warning row only when the run hit the generation cap, the
+same reason ``results`-outcome` reports above the plot).
+
+<a id="gui.test_results_screen.test_not_converged_row_gets_a_warning_background_and_a_text_mark"></a>
+
+#### test\_not\_converged\_row\_gets\_a\_warning\_background\_and\_a\_text\_mark
+
+```python
+def test_not_converged_row_gets_a_warning_background_and_a_text_mark(
+        window: webview.Window, drive: Callable[..., Any]) -> None
+```
+
+A capped run's row is flagged by class, tooltip and a "⚠" glyph.
+
+The glyph is the non-color cue; the class carries the yellow
+background. Driven directly through `markNotConverged` (shared
+global scope) so the result never depends on how a real run ends.
 
 <a id="gui.test_results_screen.test_completed_run_shows_title_above_canvas_and_back_returns_to_initial"></a>
 

@@ -256,6 +256,10 @@ def test_a_completed_batch_renders_the_run_view(fast_batch_run_settings: Path) -
                     "document.getElementById('batch-results-table-body')"
                     ".children[0].children"
                     ").map((cell) => cell.textContent), "
+                    "firstRowClass: document.getElementById("
+                    "'batch-results-table-body').children[0].className, "
+                    "secondRowClass: document.getElementById("
+                    "'batch-results-table-body').children[1].className, "
                     "secondRowCells: Array.from("
                     "document.getElementById('batch-results-table-body')"
                     ".children[1].children"
@@ -280,18 +284,13 @@ def test_a_completed_batch_renders_the_run_view(fast_batch_run_settings: Path) -
     # Row 0 is the p_0 baseline; rows 1 and 2 are the two replicates.
     assert settled["rowCount"] == 3
     assert settled["ciBarCount"] == 12
-    # p_0 row: generation=0, outcome="initial".
+    # p_0 row: generation=0, styled italic as an input, not an output.
     first_row = settled["firstRowCells"]
     assert first_row[0] == "0"
-    # Column order: Generation | Replicate | Outcome | ...
-    assert first_row[2] == "initial"
-    # Second row is the first replicate. Columns: Generation | Replicate | Outcome | ...
-    # "Converged", not "Converged (statistic converged)" -- `replicate.
-    # reason` is redundant with `converged` in the true case (`StopReason`
-    # only ever pairs them one way), so the parenthetical said nothing a
-    # reader did not already know.
-    second_row = settled["secondRowCells"]
-    assert second_row[2] == "Converged"
+    assert settled["firstRowClass"] == "row-initial"
+    # No Outcome column: a replicate that converged carries no warning,
+    # and one that hit the cap would carry `row-warning` instead.
+    assert "row-warning" not in settled["secondRowClass"]
     # A batch's own `completed` view now draws a pooled trajectory too
     # (batch trajectory panel design `20260912-claude-sonnet-5-batch-
     # trajectory-panel-design.md`, `selby/restricted`, commit 2) --

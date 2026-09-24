@@ -1435,17 +1435,40 @@ function replicateLabel(replicateId) {
     return match ? `#${Number(match[1])}` : replicateId || "";
 }
 
+/**
+ * Flag a results row whose run stopped at the generation cap instead of
+ * converging: a warning background plus a "⚠" in the first cell, so the
+ * cue survives color-blindness. Not an error, only a caution that the
+ * statistics are not settled values.
+ *
+ * @param {HTMLTableRowElement} row
+ * @param {string} reason - The engine's stop reason, e.g. "hit the cap".
+ */
+function markNotConverged(row, reason) {
+    row.classList.add("row-warning");
+    const label = `Not converged (${reason})`;
+    row.title = label;
+    const mark = document.createElement("span");
+    mark.className = "row-warning-mark";
+    mark.setAttribute("role", "img");
+    mark.setAttribute("aria-label", label);
+    mark.textContent = "⚠";
+    const first = row.firstElementChild;
+    first.insertBefore(mark, first.firstChild);
+}
+
 function renderBatchTable(replicates, p0Statistics) {
     batchResultsTableBody.replaceChildren();
     // p_0 baseline row — the initial conditions the entire batch shared.
-    // Column order: Generation | Replicate | Outcome | ...stats | Open
+    // Column order: Generation | Replicate | ...stats | Open
     if (p0Statistics) {
         const baseRow = document.createElement("tr");
+        // Italic: the inputs the batch started from, not an output.
+        baseRow.classList.add("row-initial");
         const baseCells = [
             0,
             // Placeholder for Replicate column — shared by the whole batch.
             "",
-            "initial",
             ...STATISTIC_NAMES.map((name) => p0Statistics[name]),
         ];
         for (const value of baseCells) {
@@ -1473,25 +1496,19 @@ function renderBatchTable(replicates, p0Statistics) {
     });
     for (const replicate of sorted) {
         const row = document.createElement("tr");
-        // `replicate.reason` is always exactly `"statistic converged"`
-        // when `converged` is true (`StopReason`'s own two-value enum) --
-        // showing it alongside "Converged" said the same thing twice.
-        // The `false` case keeps its own reason (`"hit the cap"`), which
-        // adds real information "Not converged" alone does not carry.
-        const outcome = replicate.converged
-            ? "Converged"
-            : `Not converged (${replicate.reason})`;
-        // Column order: Generation | Replicate | Outcome | ...stats
+        // Column order: Generation | Replicate | ...stats
         const cells = [
             replicate.generation,
             replicateLabel(replicate.replicateId),
-            outcome,
             ...STATISTIC_NAMES.map((name) => replicate.statistics[name]),
         ];
         for (const value of cells) {
             const cell = document.createElement("td");
             cell.textContent = String(value);
             row.appendChild(cell);
+        }
+        if (!replicate.converged) {
+            markNotConverged(row, replicate.reason);
         }
         // "Open replicate" (design §4.4): the exact same operation as
         // "Open a run…" over one replicate's own trajectory --
@@ -1574,12 +1591,6 @@ function renderScalarTable(frameGenerations) {
             generation
         );
         const scrubIndex = completedTrajectoryGenerations.indexOf(scrubGeneration);
-        let outcome = "";
-        if (generation === 0) {
-            outcome = "initial";
-        } else if (isFinal && completedReportReason) {
-            outcome = completedReportReason;
-        }
         const values = STATISTIC_NAMES.map((name) => {
             if (isFinal && completedFinalStatistics) {
                 return completedFinalStatistics[name];
@@ -1594,10 +1605,16 @@ function renderScalarTable(frameGenerations) {
             return Number.isFinite(value) ? Number(value).toPrecision(6) : "—";
         });
         const row = document.createElement("tr");
-        for (const value of [generation, outcome, ...values]) {
+        for (const value of [generation, ...values]) {
             const cell = document.createElement("td");
             cell.textContent = value === undefined || value === null ? "—" : String(value);
             row.appendChild(cell);
+        }
+        if (generation === 0) {
+            // Italic: the inputs the run started from, not an output.
+            row.classList.add("row-initial");
+        } else if (isFinal && completedReportReason === "hit the cap") {
+            markNotConverged(row, completedReportReason);
         }
         runResultsTableBody.appendChild(row);
     }

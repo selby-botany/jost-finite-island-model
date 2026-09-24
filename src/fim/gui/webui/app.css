@@ -63,6 +63,8 @@
     --fim-surface-soft: #e3ece3;
     --fim-border: #cdd5d0;
     --fim-shadow: rgba(36, 40, 36, 0.16);
+    --fim-warning-background: #fff1c2;
+    --fim-warning-mark: #8a5a00;
 }
 
 @media (prefers-color-scheme: dark) {
@@ -81,6 +83,8 @@
         --fim-surface-soft: #2f3a33;
         --fim-border: #465049;
         --fim-shadow: rgba(0, 0, 0, 0.35);
+        --fim-warning-background: #4a3c12;
+        --fim-warning-mark: #ffd166;
     }
 }
 
@@ -99,6 +103,8 @@
     --fim-surface-soft: #2f3a33;
     --fim-border: #465049;
     --fim-shadow: rgba(0, 0, 0, 0.35);
+    --fim-warning-background: #4a3c12;
+    --fim-warning-mark: #ffd166;
 }
 
 * {
@@ -1521,6 +1527,25 @@ fieldset.composite > label {
     text-align: left;
     padding: 0.3rem 0.6rem;
     border-bottom: 1px solid var(--fim-border);
+}
+
+/* Row cues: the starting inputs read italic (not an output); a run that
+ * hit the generation cap gets a warning background plus a "⚠" mark, so
+ * the cue does not rely on color alone. */
+.results-table tr.row-initial td,
+.batch-results-table tr.row-initial td {
+    font-style: italic;
+}
+
+.results-table tr.row-warning td,
+.batch-results-table tr.row-warning td {
+    background: var(--fim-warning-background);
+}
+
+.row-warning-mark {
+    margin-right: 0.35rem;
+    color: var(--fim-warning-mark);
+    font-style: normal;
 }
 
 /* Home identity and shortcut cards use Selby's orchid/plum/green language
