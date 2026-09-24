@@ -721,6 +721,10 @@ fim sweep report STUDY_ID --statistic D --csv
   instead of computing them again. Reuse requires identical configurations,
   including the seed, so an overlapping sweep must use the same base seed and
   the same axis order.
+- In the desktop app, **Run as a sweep…** on the Configure screen does the
+  same for the current form: pick the parameters to vary, watch the plan
+  update, and run. The Configure form supplies everything the axes do not
+  replace.
 - A failed point is recorded and the sweep continues. Press Ctrl+C to stop;
   finished points stay in the study.
 - Every point keeps its full trajectories. A sweep multiplies disk use by its

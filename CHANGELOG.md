@@ -15,6 +15,12 @@ project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   before anything runs; an interrupted sweep resumes, and points already
   computed are reused. An `N` axis counts individuals per deme. See "Sweep a
   parameter" in the usage guide.
+- **Run as a sweep in the app.** Configure has **Run as a sweep…**: choose one
+  or more parameters to vary (a range with a count and linear or log spacing,
+  or a list of values), see the plan update as you type (every point, whether
+  it is new, already computed or invalid, and why), then run it. A progress
+  table follows each point, and a sweep of 100 points or more asks for a second
+  click. A sweep and a single run cannot overlap.
 - **Several graphs on the Run card at once.** The scatter plot and the
   statistic trajectories now show side by side by default, so people can see
   how the two connect (the scatter is one moment; the trajectory's dashed

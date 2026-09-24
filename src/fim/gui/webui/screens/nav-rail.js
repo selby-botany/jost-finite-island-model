@@ -82,6 +82,10 @@ window.__fimConfigureExampleOptionsReady = false;
  * @returns {string|null}
  */
 function resolveDestination(screenId) {
+    if (screenId === "screen-sweep") {
+        // A sweep is set up from Configure and is a kind of run.
+        return "configure";
+    }
     for (const [destination, mappedScreenId] of Object.entries(
         STATIC_DESTINATION_TO_SCREEN
     )) {
@@ -289,6 +293,9 @@ function wireNavRail() {
     document
         .getElementById("configure-run-button")
         .addEventListener("click", () => window.fim.menu.runSimulation());
+    document
+        .getElementById("configure-sweep-button")
+        .addEventListener("click", () => window.fim.showSweepScreen());
     document
         .getElementById("configure-explore-button")
         .addEventListener("click", () => {

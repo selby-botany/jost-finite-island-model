@@ -71,6 +71,7 @@ Every test module, fixture, and test function documented here in full; `doc/fim-
   - [`test_shutdown_deadman`](#gui.test_shutdown_deadman)
   - [`test_store`](#gui.test_store)
   - [`test_sweep_api`](#gui.test_sweep_api)
+  - [`test_sweep_screen`](#gui.test_sweep_screen)
   - [`test_trajectory_history`](#gui.test_trajectory_history)
   - [`test_webui_global_scope`](#gui.test_webui_global_scope)
   - [`test_welcome_screen`](#gui.test_welcome_screen)
@@ -17328,6 +17329,16 @@ def api(tmp_path: Path, results: Path) -> Api
 ```
 
 An `Api` whose defaults make every point a tiny single run.
+
+<a id="gui.test_sweep_screen"></a>
+
+# gui.test\_sweep\_screen
+
+Headless functional tests for the sweep screen (`webui/screens/sweep.js`).
+
+Each test is one driven session (`webview.start` runs once per window),
+so a test's `steps` function performs every action and returns what it
+saw.
 
 <a id="gui.test_trajectory_history"></a>
 

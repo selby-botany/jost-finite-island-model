@@ -871,6 +871,80 @@
     <div id="help-content" class="help-content"></div>
   </section>
 
+  <!-- Sweep (`20260923-claude-sonnet-5-sweep-as-study-implementation-
+       plan.md`, `selby/restricted`, §6): run the Configure form over a
+       range of one or more parameters as a single Study. Reached from
+       Configure's "Run as a sweep…". One screen, three views: the
+       setup (axes, the live plan), the progress of the running sweep,
+       and (`screens/sweep-results.js`) the results across its points. -->
+  <section id="screen-sweep" class="screen" hidden>
+    <div id="sweep-banner" class="banner" hidden></div>
+    <div class="actions">
+      <button type="button" id="sweep-back-button" data-history-back disabled>
+        <svg class="button-icon" aria-hidden="true">
+          <use href="icons/fim-icons.svg#icon-back"></use>
+        </svg>
+        Back
+      </button>
+    </div>
+    <h2 id="sweep-title">Run as a sweep</h2>
+
+    <div id="sweep-setup">
+      <p id="sweep-base-summary" class="hint"></p>
+      <fieldset class="sweep-axes-fieldset">
+        <legend>What varies</legend>
+        <div id="sweep-axes"></div>
+        <button type="button" id="sweep-add-axis-button">Add axis</button>
+      </fieldset>
+      <div class="sweep-options">
+        <div class="field">
+          <label for="sweep-name">Study name</label>
+          <input type="text" id="sweep-name">
+        </div>
+        <div class="field">
+          <label for="sweep-experiment">Experiment</label>
+          <select id="sweep-experiment"></select>
+        </div>
+        <div class="field">
+          <label for="sweep-seed-policy">Seeds</label>
+          <select id="sweep-seed-policy">
+            <option value="spaced">Independent points (recommended)</option>
+            <option value="same">The same seed at every point</option>
+          </select>
+        </div>
+      </div>
+      <p id="sweep-plan-summary" class="sweep-plan-summary" aria-live="polite"></p>
+      <div class="sweep-plan-scroll">
+        <table id="sweep-plan-table" class="results-table" hidden>
+          <thead id="sweep-plan-head"></thead>
+          <tbody id="sweep-plan-body"></tbody>
+        </table>
+      </div>
+      <div class="actions">
+        <button type="button" id="sweep-run-button" class="primary-action" disabled>
+          <svg class="button-icon" aria-hidden="true">
+            <use href="icons/fim-icons.svg#icon-run"></use>
+          </svg>
+          Run sweep
+        </button>
+      </div>
+    </div>
+
+    <div id="sweep-progress" hidden>
+      <p id="sweep-progress-text" aria-live="polite"></p>
+      <progress id="sweep-progress-bar" value="0" max="1"></progress>
+      <table id="sweep-progress-table" class="results-table">
+        <thead id="sweep-progress-head"></thead>
+        <tbody id="sweep-progress-body"></tbody>
+      </table>
+      <div class="actions">
+        <button type="button" id="sweep-cancel-button">Cancel sweep</button>
+        <button type="button" id="sweep-setup-button" hidden>Set up another sweep</button>
+        <button type="button" id="sweep-home-button" hidden>Show in Home</button>
+      </div>
+    </div>
+  </section>
+
   <!-- Explore (design doc `20260907-claude-sonnet-5-botanist-gui-
        redesign.md` §5): no-simulation-needed theoretical predictions
        from `(N, m, mu, d)` alone, straight from `fim.statistics`'s own
@@ -1565,6 +1639,12 @@
         </svg>
         Run
       </button>
+      <button type="button" id="configure-sweep-button">
+        <svg class="button-icon" aria-hidden="true">
+          <use href="icons/fim-icons.svg#icon-run"></use>
+        </svg>
+        Run as a sweep…
+      </button>
       <button type="button" id="configure-explore-button">
         <svg class="button-icon" aria-hidden="true">
           <use href="icons/fim-icons.svg#icon-explore"></use>
@@ -2081,6 +2161,7 @@
 <script src="screens/open-run.js"></script>
 <script src="screens/help.js"></script>
 <script src="screens/explore.js"></script>
+<script src="screens/sweep.js"></script>
 <script src="screens/compare.js"></script>
 <script src="screens/presets.js"></script>
 <script src="screens/settings.js"></script>

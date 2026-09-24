@@ -2631,3 +2631,90 @@ fieldset.composite > label {
         border-top-color: #d6e2ee;
     }
 }
+
+/* Sweep screen (`screens/sweep.js`): axis rows, the live plan and the
+ * progress table. Neutral surface, like the other data views. */
+.sweep-axes-fieldset {
+    margin-bottom: 1rem;
+}
+
+.sweep-axis {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.5rem 0.75rem;
+    padding: 0.4rem 0;
+    border-bottom: 1px solid var(--fim-border);
+}
+
+.sweep-axis-numeric,
+.sweep-axis-range,
+.sweep-axis-choices {
+    display: inline-flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.4rem 0.6rem;
+}
+
+.sweep-axis-field {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.25rem;
+}
+
+.sweep-axis-start,
+.sweep-axis-stop {
+    width: 6.5rem;
+}
+
+.sweep-axis-count {
+    width: 3.5rem;
+}
+
+.sweep-axis-choice {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.25rem;
+}
+
+.sweep-axis-remove {
+    margin-left: auto;
+}
+
+.sweep-axis-list {
+    width: 14rem;
+}
+
+.sweep-axis-values {
+    flex-basis: 100%;
+    color: var(--fim-muted);
+    font-size: 0.85rem;
+    font-variant-numeric: tabular-nums;
+}
+
+.sweep-options {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0 1.25rem;
+}
+
+.sweep-plan-summary {
+    margin: 0.5rem 0;
+}
+
+.sweep-plan-problem {
+    color: var(--fim-warning-mark);
+    font-weight: 600;
+}
+
+.sweep-plan-scroll {
+    max-height: 16rem;
+    overflow-y: auto;
+    margin-bottom: 0.75rem;
+}
+
+#sweep-progress-bar {
+    width: 100%;
+    max-width: 32rem;
+    margin-bottom: 0.75rem;
+}
