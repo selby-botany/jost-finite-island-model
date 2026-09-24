@@ -99,6 +99,8 @@ Return to the [source-tree orientation](../README.md) or the [developer guide](.
     * [get\_initial\_state\_panels](#fim.gui.app.Api.get_initial_state_panels)
     * [get\_initial\_state\_deme\_pair\_panel](#fim.gui.app.Api.get_initial_state_deme_pair_panel)
     * [get\_equilibrium\_predictions](#fim.gui.app.Api.get_equilibrium_predictions)
+    * [get\_equilibrium\_grid](#fim.gui.app.Api.get_equilibrium_grid)
+    * [get\_equilibrium\_curve](#fim.gui.app.Api.get_equilibrium_curve)
     * [get\_equilibrium\_sweep](#fim.gui.app.Api.get_equilibrium_sweep)
     * [load\_yaml](#fim.gui.app.Api.load_yaml)
     * [list\_presets](#fim.gui.app.Api.list_presets)
@@ -3857,6 +3859,72 @@ of how large `N`/`d` are.
   numbers, or if a value parses but is out of range (that
   `ValueError`'s own message, verbatim, from whichever
   `fim.statistics` function first rejected it).
+
+<a id="fim.gui.app.Api.get_equilibrium_grid"></a>
+
+#### get\_equilibrium\_grid
+
+```python
+@_log_bridge_call
+def get_equilibrium_grid(x_axis: str, y_axis: str, n: str, m: str, mu: str,
+                         d: str) -> dict[str, Any]
+```
+
+Evaluate every prediction over a grid of two swept parameters.
+
+Explore's surface mode (`20260923-claude-sonnet-5-sweep-as-study-
+implementation-plan.md`, `selby/restricted`, §7.1): the same
+closed-form predictions `get_equilibrium_sweep` draws along one
+axis, over two at once. Every numeric statistic is returned for
+every cell, so the client re-reads the prediction table straight
+out of the payload as its probe moves, with no round trip per
+drag. The other two parameters are held at the given values.
+
+An integer axis (`d`; `N` in gene copies) gets one column per
+integer value, not an interpolated blur (`_grid_axis_values`).
+
+**Arguments**:
+
+- `x_axis` - The columns' parameter: `"N"`, `"d"`, `"m"` or `"mu"`.
+- `y_axis` - The rows' parameter, a different one of the four.
+- `n` - Population size in gene copies per deme, held unless swept.
+- `m` - Migration rate, held unless swept.
+- `mu` - Mutation rate, held unless swept.
+- `d` - Deme count, held unless swept.
+
+
+**Returns**:
+
+- ``{"ok"` - True, "xAxis", "yAxis", "xValues", "yValues",
+  "currentColumn", "currentRow", "series": [...], "values":
+- `{statistic` - [[value | None, ...] per column] per row}}`, where
+  `currentColumn`/`currentRow` index the cell nearest the
+  entered configuration; `{"ok": False, "message": ...}` for an
+  unknown or repeated axis or an unparseable field.
+
+<a id="fim.gui.app.Api.get_equilibrium_curve"></a>
+
+#### get\_equilibrium\_curve
+
+```python
+@_log_bridge_call
+def get_equilibrium_curve(axis: str, values: list[float], n: str, m: str,
+                          mu: str, d: str) -> dict[str, Any]
+```
+
+Evaluate every prediction at explicit values of one parameter.
+
+Unlike `get_equilibrium_sweep` (a fixed display range), the caller
+names the values. Used to place sweep points where a predicted
+statistic changes (`20260923-claude-sonnet-5-sweep-as-study-
+implementation-plan.md`, `selby/restricted`, §7.3): the client
+samples an interval densely and spaces its points by the response.
+
+**Returns**:
+
+- ``{"ok"` - True, "axis", "points": [{"x": value, statistic:
+  value | None, ...}, ...]}` in the order given, or `{"ok":
+  False, "message": ...}`.
 
 <a id="fim.gui.app.Api.get_equilibrium_sweep"></a>
 

@@ -1110,6 +1110,28 @@ def _geometric_sweep(low: float, high: float, count: int) -> list[float]:
     return [low * ratio**index for index in range(count)]
 
 
+def _grid_axis_values(axis: str) -> list[float | int]:
+    """Return the values one Explore grid axis takes.
+
+    An integer axis (`d`, and `N` in gene copies) is sampled at integers
+    only, with no repeats: every integer of `d`'s range, and `N`
+    geometrically spaced then rounded and de-duplicated. A rate axis is
+    geometrically spaced, like the curve chart's own axis.
+    """
+    low, high = _EQUILIBRIUM_SWEEP_DOMAINS[axis]
+    if axis == "d":
+        return list(range(int(low), int(high) + 1))
+    spaced = _geometric_sweep(low, high, _EQUILIBRIUM_SWEEP_POINTS)
+    if axis == "N":
+        return list(dict.fromkeys(round(value) for value in spaced))
+    return spaced
+
+
+def _nearest_index(values: Sequence[float | int], target: float | int) -> int:
+    """Return the index of the entry of `values` closest to `target`."""
+    return min(range(len(values)), key=lambda index: abs(values[index] - target))
+
+
 _MINIMUM_EQUILIBRIUM_N: Final = 1
 _MINIMUM_EQUILIBRIUM_DEMES: Final = 2
 
@@ -2149,6 +2171,118 @@ class Api:
             "predictions": predictions,
             "qualifications": qualifications,
         }
+
+    @_log_bridge_call
+    def get_equilibrium_grid(
+        self, x_axis: str, y_axis: str, n: str, m: str, mu: str, d: str
+    ) -> dict[str, Any]:
+        """Evaluate every prediction over a grid of two swept parameters.
+
+        Explore's surface mode (`20260923-claude-sonnet-5-sweep-as-study-
+        implementation-plan.md`, `selby/restricted`, §7.1): the same
+        closed-form predictions `get_equilibrium_sweep` draws along one
+        axis, over two at once. Every numeric statistic is returned for
+        every cell, so the client re-reads the prediction table straight
+        out of the payload as its probe moves, with no round trip per
+        drag. The other two parameters are held at the given values.
+
+        An integer axis (`d`; `N` in gene copies) gets one column per
+        integer value, not an interpolated blur (`_grid_axis_values`).
+
+        Args:
+            x_axis: The columns' parameter: `"N"`, `"d"`, `"m"` or `"mu"`.
+            y_axis: The rows' parameter, a different one of the four.
+            n: Population size in gene copies per deme, held unless swept.
+            m: Migration rate, held unless swept.
+            mu: Mutation rate, held unless swept.
+            d: Deme count, held unless swept.
+
+        Returns:
+            `{"ok": True, "xAxis", "yAxis", "xValues", "yValues",
+            "currentColumn", "currentRow", "series": [...], "values":
+            {statistic: [[value | None, ...] per column] per row}}`, where
+            `currentColumn`/`currentRow` index the cell nearest the
+            entered configuration; `{"ok": False, "message": ...}` for an
+            unknown or repeated axis or an unparseable field.
+        """
+        for axis in (x_axis, y_axis):
+            if axis not in _EQUILIBRIUM_SWEEP_DOMAINS:
+                names = sorted(_EQUILIBRIUM_SWEEP_DOMAINS)
+                return {"ok": False, "message": f"axis must be one of {names}"}
+        if x_axis == y_axis:
+            return {"ok": False, "message": "choose two different axes"}
+        try:
+            n_value, m_value, mu_value, d_value = _parse_equilibrium_inputs(n, m, mu, d)
+        except ValueError as error:
+            return {"ok": False, "message": str(error)}
+        held = {"N": n_value, "d": d_value, "m": m_value, "mu": mu_value}
+        x_values = _grid_axis_values(x_axis)
+        y_values = _grid_axis_values(y_axis)
+        rows: list[list[dict[str, float | bool | None]]] = []
+        for y_value in y_values:
+            row = []
+            for x_value in x_values:
+                point = {**held, x_axis: x_value, y_axis: y_value}
+                row.append(
+                    _equilibrium_numeric_predictions(
+                        int(point["N"]),
+                        float(point["m"]),
+                        float(point["mu"]),
+                        int(point["d"]),
+                    )
+                )
+            rows.append(row)
+        series = [
+            name for name, value in rows[0][0].items() if not isinstance(value, bool)
+        ]
+        return {
+            "ok": True,
+            "xAxis": x_axis,
+            "yAxis": y_axis,
+            "xValues": x_values,
+            "yValues": y_values,
+            "currentColumn": _nearest_index(x_values, held[x_axis]),
+            "currentRow": _nearest_index(y_values, held[y_axis]),
+            "digits": self._significant_digits,
+            "series": series,
+            "values": {
+                name: [[cell[name] for cell in row] for row in rows] for name in series
+            },
+        }
+
+    @_log_bridge_call
+    def get_equilibrium_curve(
+        self, axis: str, values: list[float], n: str, m: str, mu: str, d: str
+    ) -> dict[str, Any]:
+        """Evaluate every prediction at explicit values of one parameter.
+
+        Unlike `get_equilibrium_sweep` (a fixed display range), the caller
+        names the values. Used to place sweep points where a predicted
+        statistic changes (`20260923-claude-sonnet-5-sweep-as-study-
+        implementation-plan.md`, `selby/restricted`, §7.3): the client
+        samples an interval densely and spaces its points by the response.
+
+        Returns:
+            `{"ok": True, "axis", "points": [{"x": value, statistic:
+            value | None, ...}, ...]}` in the order given, or `{"ok":
+            False, "message": ...}`.
+        """
+        if axis not in _EQUILIBRIUM_SWEEP_DOMAINS:
+            names = sorted(_EQUILIBRIUM_SWEEP_DOMAINS)
+            return {"ok": False, "message": f"axis must be one of {names}"}
+        try:
+            n_value, m_value, mu_value, d_value = _parse_equilibrium_inputs(n, m, mu, d)
+        except ValueError as error:
+            return {"ok": False, "message": str(error)}
+        held = {"N": n_value, "d": d_value, "m": m_value, "mu": mu_value}
+        points = []
+        for value in values:
+            point = {**held, axis: round(value) if axis in ("N", "d") else value}
+            predictions = _equilibrium_numeric_predictions(
+                int(point["N"]), float(point["m"]), float(point["mu"]), int(point["d"])
+            )
+            points.append({"x": point[axis], **predictions})
+        return {"ok": True, "axis": axis, "points": points}
 
     @_log_bridge_call
     def get_equilibrium_sweep(

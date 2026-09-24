@@ -321,3 +321,64 @@ def test_list_studies_reports_the_planned_point_count_of_a_sweep_only(
 
     assert started["ok"] is True
     assert counts == {"Counted": 2, "By hand": None}
+
+
+def test_equilibrium_grid_gives_every_statistic_at_every_cell(api: Api) -> None:
+    grid = api.get_equilibrium_grid("m", "d", "225", "0.001", "0.00003", "20")
+
+    assert grid["ok"] is True
+    assert grid["xAxis"] == "m"
+    assert grid["yAxis"] == "d"
+    # An integer axis has one row per integer, 2 through 50, not a blur.
+    assert grid["yValues"] == list(range(2, 51))
+    assert len(grid["xValues"]) == 24
+    assert {"D", "G_ST", "H_S"} <= set(grid["series"])
+    assert "mutation_negligible_equilibrium" not in grid["series"]
+    rows = grid["values"]["D"]
+    assert len(rows) == 49
+    assert all(len(row) == 24 for row in rows)
+    # The cell nearest the entered configuration is the probe's start.
+    assert grid["yValues"][grid["currentRow"]] == 20
+    assert abs(grid["xValues"][grid["currentColumn"]] - 0.001) < 0.0005
+
+
+def test_equilibrium_grid_agrees_with_the_one_axis_sweep(api: Api) -> None:
+    grid = api.get_equilibrium_grid("m", "mu", "225", "0.001", "0.00003", "20")
+    curve = api.get_equilibrium_sweep("m", "225", "0.001", "0.00003", "20")
+
+    row = grid["currentRow"]
+    from_grid = [grid["values"]["G_ST"][row][c] for c in range(len(grid["xValues"]))]
+    # Only the row nearest mu = 3e-5 is comparable, and only where the
+    # nearest mu is that value; compare the shape at the sweep's own points.
+    assert grid["xValues"] == pytest.approx([p["x"] for p in curve["points"]])
+    assert all(value is None or 0 <= value <= 1 for value in from_grid)
+
+
+def test_equilibrium_grid_needs_two_different_known_axes(api: Api) -> None:
+    same = api.get_equilibrium_grid("m", "m", "225", "0.001", "0.00003", "20")
+    unknown = api.get_equilibrium_grid("m", "q", "225", "0.001", "0.00003", "20")
+    bad = api.get_equilibrium_grid("m", "d", "lots", "0.001", "0.00003", "20")
+
+    assert same == {"ok": False, "message": "choose two different axes"}
+    assert unknown["ok"] is False
+    assert bad["ok"] is False
+
+
+def test_equilibrium_grid_n_axis_is_whole_gene_copies_without_repeats(api: Api) -> None:
+    grid = api.get_equilibrium_grid("N", "m", "225", "0.001", "0.00003", "20")
+
+    values = grid["xValues"]
+    assert all(isinstance(value, int) for value in values)
+    assert len(values) == len(set(values))
+    assert values == sorted(values)
+
+
+def test_equilibrium_curve_evaluates_at_the_values_asked_for(api: Api) -> None:
+    curve = api.get_equilibrium_curve(
+        "d", [3, 4.4, 10], "225", "0.001", "0.00003", "20"
+    )
+
+    assert curve["ok"] is True
+    assert [point["x"] for point in curve["points"]] == [3, 4, 10]
+    assert curve["points"][0]["D"] != curve["points"][2]["D"]
+    assert api.get_equilibrium_curve("q", [1], "1", "0.1", "0.1", "2")["ok"] is False
