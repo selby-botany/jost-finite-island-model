@@ -11,6 +11,7 @@ for that first. For parameter types and defaults, use the
 - [Create a configuration](#create-a-configuration)
 - [Run a simulation](#run-a-simulation)
 - [Worked examples](#worked-examples)
+- [Sweep a parameter](#sweep-a-parameter)
 - [Re-analyze a trajectory](#re-analyze-a-trajectory)
 - [Check for updates](#check-for-updates)
 - [Desktop GUI (`fim-gui`)](#desktop-gui-fim-gui)
@@ -669,6 +670,61 @@ stopped at the 10-replicate minimum, with `D`'s 95% confidence interval at
 `0.0524 +/- 0.0063`. Loading this example syncs Settings' own execution
 engine to `generational` the same way the previous example syncs it to
 `generational-vector`.
+
+## Sweep a parameter
+
+A sweep runs one configuration over a range of one or more parameters and
+keeps every point as an ordinary run inside one study. A sweep file is a normal
+configuration plus a `sweep:` block:
+
+```yaml
+N: 450
+ploidy: 2
+d: 20
+m: 0.001
+mu: 0.00003
+seed: 20260814
+n_replicates: 200
+sweep:
+  name: Migration and number of demes
+  axes:
+    m: { start: 0.0001, stop: 0.1, count: 7, scale: log }
+    d: [4, 8, 16]
+```
+
+Each axis is a list of values or a `start`, `stop` and `count` range
+(`scale` is `linear` or `log`). The keys you can sweep are `N`, `d`, `m`, `mu`,
+`topology` (`island`, `ring`, `linear`, `torus`) and `deme_weighting`.
+
+In a sweep, an `N` axis counts **individuals per deme**, the number the
+desktop app shows, and each point's own `N` is that times `ploidy` (so the file
+needs a `ploidy`). The top-level `N` of a file stays gene copies, as in every
+other configuration file.
+
+By default every point gets its own seed (`base seed + point index times
+n_replicates`), so no two points share a replicate seed. Set
+`seed_policy: same` in the `sweep:` block to give every point the base seed.
+
+```bash
+fim sweep plan sweep.yaml            # list the points and their validity; runs nothing
+fim sweep run sweep.yaml             # create the study and run every point
+fim sweep resume STUDY_ID            # run only the points still missing
+fim sweep resume STUDY_ID --retry-failed
+fim sweep report STUDY_ID --statistic D --csv
+```
+
+- `plan` checks every point first. A combination that cannot run (a torus
+  whose `rows * columns` differs from `d`) is listed with its reason.
+- A sweep of 100 points or more asks for `--yes`.
+- A point's run id is a hash of its configuration, so resuming, or running a
+  second sweep that overlaps the first, reuses the runs that already exist
+  instead of computing them again. Reuse requires identical configurations,
+  including the seed, so an overlapping sweep must use the same base seed and
+  the same axis order.
+- A failed point is recorded and the sweep continues. Press Ctrl+C to stop;
+  finished points stay in the study.
+- Every point keeps its full trajectories. A sweep multiplies disk use by its
+  number of points.
 
 ## Re-analyze a trajectory
 

@@ -124,6 +124,7 @@ from fim.statistics import (
     identity_recovery_rate,
     mutation_negligible_equilibrium,
 )
+from fim.sweep_run import LocalPointRunner, PointFailure
 from fim.viz.scatter import (
     deme_pair_panel,
     frequency_points,
@@ -4300,18 +4301,13 @@ def _run_one_configuration_to_completion(params: SimulationParams) -> Path | Non
     """Run one already-validated configuration synchronously; return its own
     output directory.
 
-    `Api.rerun_study`'s own per-configuration step — reuses `fim.gui.
-    runner.start_run`/`fim.gui.batch_runner.start_batch_run` exactly as
-    `Api._start_scalar_run`/`_start_batch_run` do (the identical engine
-    invocation and atomic artifact-publish, `n_replicates` choosing
-    between them the same way `Api.start_run` already does), but drains
-    the resulting message queue itself, synchronously, discarding every
-    `"progress"` message rather than pushing it to a live window — there
-    is no live view for a Study-level re-run to draw into (`rerun_
-    study`'s own docstring). Both `start_run`/`start_batch_run` already
-    spawn their own worker thread internally; this function's own
-    caller is free to be a background thread itself (a JS-bridge call's
-    own delivery thread) without spawning yet another one here.
+    `Api.rerun_study`'s own per-configuration step. Delegates to `fim.
+    sweep_run.LocalPointRunner`, the same step a sweep point uses (the
+    identical engine invocation and atomic artifact-publish `Api.
+    _start_scalar_run`/`_start_batch_run` use, `n_replicates` choosing
+    between them), discarding every `"progress"` message — there is no
+    live view for a Study-level re-run to draw into (`rerun_study`'s own
+    docstring).
 
     Returns:
         The published output directory once the worker reports
@@ -4319,24 +4315,8 @@ def _run_one_configuration_to_completion(params: SimulationParams) -> Path | Non
         cancelled (never actually triggered by this caller, but the
         message shape allows it), or it failed with an engine error.
     """
-    output_directory = paths.default_output_directory()
-    message_queue: queue.Queue[Any] = queue.Queue()
-    cancel_event = threading.Event()
-    try:
-        if params.n_replicates > 1:
-            batch_runner.start_batch_run(
-                params, output_directory, message_queue, cancel_event
-            )
-        else:
-            runner.start_run(params, output_directory, message_queue, cancel_event)
-    except FileExistsError:
-        return None
-    while True:
-        message = message_queue.get()
-        if message[0] == "done":
-            return output_directory
-        if message[0] in ("cancelled", "error"):
-            return None
+    result = LocalPointRunner().run_point(params, threading.Event())
+    return None if isinstance(result, PointFailure) else result
 
 
 def _attach_finished_run_to_study(study_id: str | None, output_directory: Path) -> None:

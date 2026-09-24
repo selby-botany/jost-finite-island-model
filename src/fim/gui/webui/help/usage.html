@@ -9,6 +9,7 @@ for that first. For parameter types and defaults, use the
 <li><a href="#create-a-configuration">Create a configuration</a></li>
 <li><a href="#run-a-simulation">Run a simulation</a></li>
 <li><a href="#worked-examples">Worked examples</a></li>
+<li><a href="#sweep-a-parameter">Sweep a parameter</a></li>
 <li><a href="#re-analyze-a-trajectory">Re-analyze a trajectory</a></li>
 <li><a href="#check-for-updates">Check for updates</a></li>
 <li><a href="#desktop-gui-fim-gui">Desktop GUI (<code>fim-gui</code>)</a></li>
@@ -551,6 +552,52 @@ stopped at the 10-replicate minimum, with <code>D</code>'s 95% confidence interv
 <code>0.0524 +/- 0.0063</code>. Loading this example syncs Settings' own execution
 engine to <code>generational</code> the same way the previous example syncs it to
 <code>generational-vector</code>.</p>
+<h2 id="sweep-a-parameter">Sweep a parameter</h2>
+<p>A sweep runs one configuration over a range of one or more parameters and
+keeps every point as an ordinary run inside one study. A sweep file is a normal
+configuration plus a <code>sweep:</code> block:</p>
+<pre><code class="language-yaml">N: 450
+ploidy: 2
+d: 20
+m: 0.001
+mu: 0.00003
+seed: 20260814
+n_replicates: 200
+sweep:
+  name: Migration and number of demes
+  axes:
+    m: { start: 0.0001, stop: 0.1, count: 7, scale: log }
+    d: [4, 8, 16]
+</code></pre>
+<p>Each axis is a list of values or a <code>start</code>, <code>stop</code> and <code>count</code> range
+(<code>scale</code> is <code>linear</code> or <code>log</code>). The keys you can sweep are <code>N</code>, <code>d</code>, <code>m</code>, <code>mu</code>,
+<code>topology</code> (<code>island</code>, <code>ring</code>, <code>linear</code>, <code>torus</code>) and <code>deme_weighting</code>.</p>
+<p>In a sweep, an <code>N</code> axis counts <strong>individuals per deme</strong>, the number the
+desktop app shows, and each point's own <code>N</code> is that times <code>ploidy</code> (so the file
+needs a <code>ploidy</code>). The top-level <code>N</code> of a file stays gene copies, as in every
+other configuration file.</p>
+<p>By default every point gets its own seed (<code>base seed + point index times n_replicates</code>), so no two points share a replicate seed. Set
+<code>seed_policy: same</code> in the <code>sweep:</code> block to give every point the base seed.</p>
+<pre><code class="language-bash">fim sweep plan sweep.yaml            # list the points and their validity; runs nothing
+fim sweep run sweep.yaml             # create the study and run every point
+fim sweep resume STUDY_ID            # run only the points still missing
+fim sweep resume STUDY_ID --retry-failed
+fim sweep report STUDY_ID --statistic D --csv
+</code></pre>
+<ul>
+<li><code>plan</code> checks every point first. A combination that cannot run (a torus
+whose <code>rows * columns</code> differs from <code>d</code>) is listed with its reason.</li>
+<li>A sweep of 100 points or more asks for <code>--yes</code>.</li>
+<li>A point's run id is a hash of its configuration, so resuming, or running a
+second sweep that overlaps the first, reuses the runs that already exist
+instead of computing them again. Reuse requires identical configurations,
+including the seed, so an overlapping sweep must use the same base seed and
+the same axis order.</li>
+<li>A failed point is recorded and the sweep continues. Press Ctrl+C to stop;
+finished points stay in the study.</li>
+<li>Every point keeps its full trajectories. A sweep multiplies disk use by its
+number of points.</li>
+</ul>
 <h2 id="re-analyze-a-trajectory">Re-analyze a trajectory</h2>
 <pre><code class="language-console">fim stats TRAJECTORY [--manifest PATH] [--generation N]
     [--q ORDER ...] [-o PATH | --output PATH]

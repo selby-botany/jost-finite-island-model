@@ -10,6 +10,9 @@ Return to the [source-tree orientation](../README.md) or the [developer guide](.
 * [fim.cli](#fim.cli)
   * [load\_config](#fim.cli.load_config)
   * [main](#fim.cli.main)
+* [fim.cli\_sweep](#fim.cli_sweep)
+  * [add\_sweep\_subcommands](#fim.cli_sweep.add_sweep_subcommands)
+  * [command\_sweep](#fim.cli_sweep.command_sweep)
 * [fim.convergence](#fim.convergence)
 * [fim.convergence.criteria](#fim.convergence.criteria)
   * [ConvergenceCriterion](#fim.convergence.criteria.ConvergenceCriterion)
@@ -558,6 +561,8 @@ Return to the [source-tree orientation](../README.md) or the [developer guide](.
   * [run\_sweep](#fim.sweep_run.run_sweep)
   * [failures\_path](#fim.sweep_run.failures_path)
   * [read\_failures](#fim.sweep_run.read_failures)
+  * [PointResult](#fim.sweep_run.PointResult)
+  * [sweep\_point\_results](#fim.sweep_run.sweep_point_results)
 * [fim.update](#fim.update)
   * [compare\_versions](#fim.update.compare_versions)
   * [fetch\_latest\_release](#fim.update.fetch_latest_release)
@@ -620,6 +625,8 @@ each its own subsection below:
 - `fim experiment create/add-study/list/delete/copy` — the identical
   bookkeeping one level up, grouping Studies into a named Experiment
   (`_command_experiment`; `fim.persistence.groups`).
+- `fim sweep plan/run/resume/report` — run one configuration over a
+  parameter space as a single Study (`fim.cli_sweep`; `fim.sweep`).
 - `fim stats TRAJECTORY` — recompute statistics from a run's own saved
   data, for any generation, without re-running the simulation
   (`_command_stats`; see `fim.reanalyze`'s own docstring for what
@@ -707,6 +714,42 @@ a full traceback instead of being hidden behind a generic message.
 **Returns**:
 
   Process-style exit status.
+
+<a id="fim.cli_sweep"></a>
+
+# fim.cli\_sweep
+
+`fim sweep`: plan, run, resume and report a parameter sweep.
+
+The command-line half of the sweep-as-Study feature
+(`20260923-claude-sonnet-5-sweep-as-study-implementation-plan.md`,
+`selby/restricted`, section 5). A sweep file is an ordinary configuration
+plus a `sweep:` block; `fim.sweep.spec_from_config` splits it, so the
+ordinary configuration validator never sees `sweep`. The work itself is in
+`fim.sweep` (what the points are) and `fim.sweep_run` (running them); this
+module parses arguments and prints.
+
+<a id="fim.cli_sweep.add_sweep_subcommands"></a>
+
+#### add\_sweep\_subcommands
+
+```python
+def add_sweep_subcommands(
+        subcommands: argparse._SubParsersAction[Any]) -> None
+```
+
+Wire `fim sweep plan/run/resume/report` onto `subcommands`.
+
+<a id="fim.cli_sweep.command_sweep"></a>
+
+#### command\_sweep
+
+```python
+def command_sweep(arguments: argparse.Namespace,
+                  parser: argparse.ArgumentParser) -> int
+```
+
+Dispatch one `fim sweep` subcommand and return its exit status.
 
 <a id="fim.convergence"></a>
 
@@ -16569,6 +16612,46 @@ def read_failures(study_id: str,
 ```
 
 Return recorded failures by point `run_id`; empty if none or unreadable.
+
+<a id="fim.sweep_run.PointResult"></a>
+
+## PointResult Objects
+
+```python
+@dataclass(frozen=True, slots=True)
+class PointResult()
+```
+
+One finished point's statistics, for the across-points views.
+
+**Attributes**:
+
+- `index` - The point's grid index.
+- `coordinates` - The varied values, by axis key.
+- `run_id` - The point's id.
+- `directory` - The point's run directory.
+- `n_replicates` - Replicates the run has (1 for a scalar run).
+- `statistics` - Each statistic as `{"mean": ..., "low": ..., "high": ...}`;
+  `low` and `high` are `None` for a single run, which has no
+  across-replicate interval.
+
+<a id="fim.sweep_run.sweep_point_results"></a>
+
+#### sweep\_point\_results
+
+```python
+def sweep_point_results(study: StudyManifest,
+                        *,
+                        results: Path | None = None) -> list[PointResult]
+```
+
+Read the final statistics of every finished point, in grid order.
+
+A batch point reads its `summary.json` (mean and confidence interval
+across replicates); a scalar point reads its `report.json`. A point
+whose files cannot be read is left out, like a missing run directory
+elsewhere in the Study code. Nothing is stored: the aggregate is
+computed each time from small JSON files.
 
 <a id="fim.update"></a>
 

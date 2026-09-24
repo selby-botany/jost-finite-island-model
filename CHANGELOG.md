@@ -8,6 +8,13 @@ project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- **Parameter sweeps from the command line.** `fim sweep plan`, `run`,
+  `resume` and `report` run one configuration over a range of `N`, `d`, `m`,
+  `mu`, the migration topology or the deme weighting as a single study. Every
+  point is an ordinary run with its own trajectories; the plan is checked
+  before anything runs; an interrupted sweep resumes, and points already
+  computed are reused. An `N` axis counts individuals per deme. See "Sweep a
+  parameter" in the usage guide.
 - **Several graphs on the Run card at once.** The scatter plot and the
   statistic trajectories now show side by side by default, so people can see
   how the two connect (the scatter is one moment; the trajectory's dashed

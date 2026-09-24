@@ -27,6 +27,7 @@ from fim.sweep_run import (
     read_failures,
     run_sweep,
     stored_points,
+    sweep_point_results,
     sweep_point_statuses,
 )
 
@@ -314,3 +315,27 @@ def test_running_a_study_that_is_not_a_sweep_is_refused(results: Path) -> None:
 
     with pytest.raises(ValueError, match="not a sweep"):
         _run(study.study_id)
+
+
+def test_point_results_read_a_batch_summary_and_a_scalar_report(results: Path) -> None:
+    batch = _study(results, 2, replicates=2)
+    scalar = _study(results, 3)
+    _run(batch)
+    _run(scalar)
+
+    (batch_point,) = sweep_point_results(groups.get_study(batch))
+    (scalar_point,) = sweep_point_results(groups.get_study(scalar))
+
+    assert batch_point.coordinates == {"d": 2}
+    assert batch_point.n_replicates == 2
+    assert set(batch_point.statistics["D"]) == {"mean", "low", "high"}
+    assert batch_point.statistics["D"]["low"] is not None
+    assert scalar_point.n_replicates == 1
+    assert scalar_point.statistics["D"]["low"] is None
+    assert scalar_point.statistics["D"]["mean"] is not None
+
+
+def test_point_results_skip_points_that_have_not_run(results: Path) -> None:
+    study_id = _study(results, 2, 3)
+
+    assert sweep_point_results(groups.get_study(study_id)) == []

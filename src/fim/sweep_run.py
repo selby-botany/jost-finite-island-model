@@ -474,3 +474,106 @@ def _run_one_point(
     _clear_failure(study_id, point.run_id, results)
     on_event(SweepEvent("point_done", point.index, point.run_id, position, total))
     return "done"
+
+
+@dataclass(frozen=True, slots=True)
+class PointResult:
+    """One finished point's statistics, for the across-points views.
+
+    Attributes:
+        index: The point's grid index.
+        coordinates: The varied values, by axis key.
+        run_id: The point's id.
+        directory: The point's run directory.
+        n_replicates: Replicates the run has (1 for a scalar run).
+        statistics: Each statistic as `{"mean": ..., "low": ..., "high": ...}`;
+            `low` and `high` are `None` for a single run, which has no
+            across-replicate interval.
+    """
+
+    index: int
+    coordinates: Mapping[str, Any]
+    run_id: str
+    directory: Path
+    n_replicates: int
+    statistics: Mapping[str, Mapping[str, float | None]]
+
+
+def sweep_point_results(
+    study: StudyManifest, *, results: Path | None = None
+) -> list[PointResult]:
+    """Read the final statistics of every finished point, in grid order.
+
+    A batch point reads its `summary.json` (mean and confidence interval
+    across replicates); a scalar point reads its `report.json`. A point
+    whose files cannot be read is left out, like a missing run directory
+    elsewhere in the Study code. Nothing is stored: the aggregate is
+    computed each time from small JSON files.
+    """
+    by_id = {
+        run_id: directory
+        for directory in groups.study_run_directories(study, results=results)
+        if (run_id := groups.run_id_of(directory)) is not None
+    }
+    found: list[PointResult] = []
+    for entry in stored_points(study):
+        directory = by_id.get(str(entry["run_id"]))
+        if directory is None:
+            continue
+        statistics = _read_point_statistics(directory)
+        if statistics is None:
+            continue
+        found.append(
+            PointResult(
+                index=int(entry["index"]),
+                coordinates=dict(entry.get("coordinates", {})),
+                run_id=str(entry["run_id"]),
+                directory=directory,
+                n_replicates=statistics[0],
+                statistics=statistics[1],
+            )
+        )
+    return found
+
+
+def _read_point_statistics(
+    directory: Path,
+) -> tuple[int, dict[str, dict[str, float | None]]] | None:
+    """Return `(replicates, statistics)` from a run directory, or `None`."""
+    summary = directory / "summary.json"
+    report = directory / "report.json"
+    try:
+        if summary.is_file():
+            payload = json.loads(summary.read_text(encoding="utf-8"))
+            return _batch_statistics(payload)
+        if report.is_file():
+            payload = json.loads(report.read_text(encoding="utf-8"))
+            return 1, {
+                name: {"mean": float(value), "low": None, "high": None}
+                for name, value in payload.items()
+                if isinstance(value, int | float)
+                and not isinstance(value, bool)
+                and name != "generation"
+            }
+    except (OSError, ValueError, TypeError):
+        return None
+    return None
+
+
+def _batch_statistics(
+    payload: object,
+) -> tuple[int, dict[str, dict[str, float | None]]] | None:
+    """Reduce a batch `summary.json` to mean and interval per statistic."""
+    if not isinstance(payload, dict):
+        return None
+    statistics: dict[str, dict[str, float | None]] = {}
+    replicates = 0
+    for name, entry in payload.items():
+        if isinstance(entry, dict) and "mean" in entry:
+            statistics[name] = {
+                "mean": float(entry["mean"]),
+                "low": float(entry["low"]) if "low" in entry else None,
+                "high": float(entry["high"]) if "high" in entry else None,
+            }
+            replicates = max(replicates, int(entry.get("sample_count", 0)))
+    return (replicates, statistics) if statistics else None

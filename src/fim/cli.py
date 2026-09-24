@@ -26,6 +26,8 @@ each its own subsection below:
 - `fim experiment create/add-study/list/delete/copy` — the identical
   bookkeeping one level up, grouping Studies into a named Experiment
   (`_command_experiment`; `fim.persistence.groups`).
+- `fim sweep plan/run/resume/report` — run one configuration over a
+  parameter space as a single Study (`fim.cli_sweep`; `fim.sweep`).
 - `fim stats TRAJECTORY` — recompute statistics from a run's own saved
   data, for any generation, without re-running the simulation
   (`_command_stats`; see `fim.reanalyze`'s own docstring for what
@@ -63,6 +65,7 @@ import yaml
 from matplotlib import pyplot as plt
 
 from fim import __version__, logging_setup, paths, reanalyze, update
+from fim.cli_sweep import add_sweep_subcommands, command_sweep
 from fim.engine import RunResult, deterministic_run_id, fim, replicate_summary
 from fim.model.params import SimulationParams
 from fim.persistence.groups import (
@@ -297,6 +300,7 @@ def _dispatch_command(
         "run": lambda: _command_run(arguments, parser),
         "study": lambda: _command_study(arguments, parser),
         "experiment": lambda: _command_experiment(arguments, parser),
+        "sweep": lambda: command_sweep(arguments, parser),
         "stats": lambda: _command_stats(arguments),
         "update": lambda: _command_update(arguments, parser),
     }
@@ -1239,6 +1243,7 @@ def _parser() -> argparse.ArgumentParser:
 
     _add_study_subcommands(subcommands)
     _add_experiment_subcommands(subcommands)
+    add_sweep_subcommands(subcommands)
 
     stats_parser = subcommands.add_parser(
         "stats",

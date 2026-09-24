@@ -23,6 +23,7 @@ Every test module, fixture, and test function documented here in full; `doc/fim-
 - [`test/cli/`](#group-cli)
   - [`conftest`](#cli.conftest)
   - [`test_cli`](#cli.test_cli)
+  - [`test_cli_sweep`](#cli.test_cli_sweep)
 - [`test/convergence/`](#group-convergence)
   - [`test_criteria_validation`](#convergence.test_criteria_validation)
   - [`test_monitor`](#convergence.test_monitor)
@@ -3037,6 +3038,23 @@ def test_update_requires_explicit_opt_in() -> None
 ```
 
 The update command never accesses the network without --check.
+
+<a id="cli.test_cli_sweep"></a>
+
+# cli.test\_cli\_sweep
+
+Tests for `fim sweep` (plan, run, resume, report).
+
+<a id="cli.test_cli_sweep.sweep_file"></a>
+
+#### sweep\_file
+
+```python
+@pytest.fixture
+def sweep_file(tmp_path: Path) -> Path
+```
+
+Write a two-point sweep file and return its path.
 
 
 
