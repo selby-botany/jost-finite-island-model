@@ -456,6 +456,71 @@ def test_a_single_replicate_run_gets_a_per_generation_results_table(
     assert ("row-warning" in settled["lastRowClass"]) is hit_cap
 
 
+def test_table_headers_toggle_and_highlight_their_statistic(
+    fast_scalar_run_settings: Path, window: webview.Window, drive: Callable[..., Any]
+) -> None:
+    """A results-table header is the same toggle as its stats-panel row.
+
+    Clicking `D`'s header hides it everywhere (header, whole column,
+    stats-panel row) with `aria-pressed` following; hovering highlights
+    the header, the column and the stats-panel row; leaving clears it.
+    """
+    settled = drive(
+        window,
+        ready=_INPUT_SCREEN_READY,
+        trigger=(
+            _SET_TINY_FIELDS
+            + "document.getElementById('run-button').click(); "
+            + "const wait = () => { "
+            + "if (window.fim.getRunViewState() !== 'completed' || "
+            + "window.__fimScrubberPending !== 0 || "
+            + "document.querySelectorAll("
+            + "'#run-results-table-body tr').length === 0) { "
+            + "setTimeout(wait, 50); return; } "
+            + "const th = document.querySelector("
+            + "'#run-results-table th[data-statistic=\"D\"]'); "
+            + "const cell = () => document.querySelector("
+            + "'#run-results-table-body td[data-statistic=\"D\"]'); "
+            + "const panelRow = () => document.querySelector("
+            + "'[data-trajectory-statistic=\"D\"]'); "
+            + "const out = { headerCount: document.querySelectorAll("
+            + "'#run-results-table th[data-statistic]').length, "
+            + "batchHeaderCount: document.querySelectorAll("
+            + "'#batch-results-table th[data-statistic]').length, "
+            + "role: th.getAttribute('role'), "
+            + "color: th.style.getPropertyValue('--stat-color'), "
+            + "pressedBefore: th.getAttribute('aria-pressed') }; "
+            + "th.dispatchEvent(new Event('mouseenter')); "
+            + "out.highlighted = [th, cell(), panelRow()].map("
+            + "(e) => e.classList.contains('stat-highlight')); "
+            + "th.dispatchEvent(new Event('mouseleave')); "
+            + "out.cleared = [th, cell(), panelRow()].map("
+            + "(e) => e.classList.contains('stat-highlight')); "
+            + "th.click(); "
+            + "out.hidden = [th, cell(), panelRow()].map("
+            + "(e) => e.classList.contains('stat-plot-hidden')); "
+            + "out.pressedAfter = th.getAttribute('aria-pressed'); "
+            + "th.click(); "
+            + "out.restored = th.classList.contains('stat-plot-hidden'); "
+            + "window.__fimHeaderToggle = out; }; wait();"
+        ),
+        read="window.__fimHeaderToggle",
+        is_ready=lambda value: value is not None,
+        poll_attempts=_POLL_ATTEMPTS,
+    )
+
+    assert settled["headerCount"] == 10
+    assert settled["batchHeaderCount"] == 10
+    assert settled["role"] == "button"
+    assert settled["color"] == "#0072b2"
+    assert settled["pressedBefore"] == "true"
+    assert settled["highlighted"] == [True, True, True]
+    assert settled["cleared"] == [False, False, False]
+    assert settled["hidden"] == [True, True, True]
+    assert settled["pressedAfter"] == "false"
+    assert settled["restored"] is False
+
+
 def test_not_converged_row_gets_a_warning_background_and_a_text_mark(
     window: webview.Window, drive: Callable[..., Any]
 ) -> None:

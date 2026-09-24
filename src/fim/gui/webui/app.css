@@ -1542,6 +1542,55 @@ fieldset.composite > label {
     background: var(--fim-warning-background);
 }
 
+/* Column headers double as the statistic toggles. The colored bar is the
+ * statistic's own line color (outlined so black and yellow stay visible
+ * on both themes); a hidden statistic gets a hollow, dashed bar and a
+ * dimmed column, so the state does not rely on color alone. */
+.results-table th.stat-column-header,
+.batch-results-table th.stat-column-header {
+    cursor: pointer;
+    user-select: none;
+}
+
+.stat-column-header::before {
+    content: "";
+    display: block;
+    box-sizing: border-box;
+    height: 6px;
+    margin-bottom: 0.25rem;
+    border-radius: 2px;
+    background: var(--stat-color);
+    box-shadow: 0 0 0 1px var(--fim-muted);
+}
+
+.stat-column-header.stat-highlight::before {
+    height: 9px;
+}
+
+.stat-column-header.stat-plot-hidden::before {
+    border: 2px dashed var(--stat-color);
+    background: transparent;
+}
+
+.stat-column-header.stat-plot-hidden,
+.results-table td.stat-plot-hidden,
+.batch-results-table td.stat-plot-hidden {
+    opacity: 0.55;
+}
+
+.stat-column-header.stat-plot-hidden {
+    color: var(--fim-muted);
+}
+
+.results-table td.stat-highlight,
+.batch-results-table td.stat-highlight {
+    font-weight: 600;
+}
+
+.stats-table tr.stat-highlight td {
+    background: var(--fim-border);
+}
+
 .row-warning-mark {
     margin-right: 0.35rem;
     color: var(--fim-warning-mark);

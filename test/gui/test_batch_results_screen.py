@@ -258,6 +258,9 @@ def test_a_completed_batch_renders_the_run_view(fast_batch_run_settings: Path) -
                     ").map((cell) => cell.textContent), "
                     "firstRowClass: document.getElementById("
                     "'batch-results-table-body').children[0].className, "
+                    "taggedCells: document.querySelectorAll("
+                    "'#batch-results-table-body tr:nth-child(2) "
+                    "td[data-statistic]').length, "
                     "secondRowClass: document.getElementById("
                     "'batch-results-table-body').children[1].className, "
                     "secondRowCells: Array.from("
@@ -291,6 +294,8 @@ def test_a_completed_batch_renders_the_run_view(fast_batch_run_settings: Path) -
     # No Outcome column: a replicate that converged carries no warning,
     # and one that hit the cap would carry `row-warning` instead.
     assert "row-warning" not in settled["secondRowClass"]
+    # Every statistic cell is tagged so a hidden statistic dims its column.
+    assert settled["taggedCells"] == 10
     # A batch's own `completed` view now draws a pooled trajectory too
     # (batch trajectory panel design `20260912-claude-sonnet-5-batch-
     # trajectory-panel-design.md`, `selby/restricted`, commit 2) --

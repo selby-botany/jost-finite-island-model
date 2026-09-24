@@ -15287,6 +15287,22 @@ of how many generations this particular run takes: the first
 with the warning row only when the run hit the generation cap, the
 same reason ``results`-outcome` reports above the plot).
 
+<a id="gui.test_results_screen.test_table_headers_toggle_and_highlight_their_statistic"></a>
+
+#### test\_table\_headers\_toggle\_and\_highlight\_their\_statistic
+
+```python
+def test_table_headers_toggle_and_highlight_their_statistic(
+        fast_scalar_run_settings: Path, window: webview.Window,
+        drive: Callable[..., Any]) -> None
+```
+
+A results-table header is the same toggle as its stats-panel row.
+
+Clicking `D`'s header hides it everywhere (header, whole column,
+stats-panel row) with `aria-pressed` following; hovering highlights
+the header, the column and the stats-panel row; leaving clears it.
+
 <a id="gui.test_results_screen.test_not_converged_row_gets_a_warning_background_and_a_text_mark"></a>
 
 #### test\_not\_converged\_row\_gets\_a\_warning\_background\_and\_a\_text\_mark

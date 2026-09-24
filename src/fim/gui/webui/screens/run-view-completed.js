@@ -214,6 +214,11 @@ const batchResultsTableBody = document.getElementById("batch-results-table-body"
 // sampled generation rather than one row per replicate.
 const runResultsTableEl = document.getElementById("run-results-table");
 const runResultsTableBody = document.getElementById("run-results-table-body");
+
+// The two results tables' column headers double as the statistic
+// toggles (`wireResultsTableHeaders`), after the definitions it needs.
+wireResultsTableHeaders(document.getElementById("batch-results-table"), 2);
+wireResultsTableHeaders(runResultsTableEl, 1);
 const resultsBackButton = document.getElementById("results-back-button");
 const resultsHistoryBackButton = document.getElementById("results-history-back-button");
 const resultsHistoryForwardButton = document.getElementById(
@@ -294,6 +299,114 @@ let completedEffectiveAlleles = null;
 // `enterCompletedState`'s own scalar branch, nulled by its batch one.
 let completedReportReason = null;
 
+// The statistic under the pointer or keyboard focus in the stats panel
+// or a results-table header. Its curve is drawn heavier and the others
+// fade, so a row, a column and a line are visibly the same statistic.
+let highlightedTrajectoryStatistic = null;
+
+/**
+ * Line width and opacity for one statistic's curve given the current
+ * highlight.
+ *
+ * @param {string} name
+ * @returns {{width: number, alpha: number}}
+ */
+function trajectoryEmphasis(name) {
+    if (highlightedTrajectoryStatistic === null) {
+        return { width: 2, alpha: 1 };
+    }
+    return name === highlightedTrajectoryStatistic
+        ? { width: 4, alpha: 1 }
+        : { width: 2, alpha: 0.35 };
+}
+
+/**
+ * Highlight (or, with `null`, stop highlighting) one statistic across
+ * the graph, its stats-panel row and its results-table column.
+ *
+ * @param {string|null} name
+ */
+function setHighlightedTrajectoryStatistic(name) {
+    if (highlightedTrajectoryStatistic === name) {
+        return;
+    }
+    highlightedTrajectoryStatistic = name;
+    for (const element of document.querySelectorAll(
+        "[data-statistic], [data-trajectory-statistic]"
+    )) {
+        const own = element.dataset.statistic ?? element.dataset.trajectoryStatistic;
+        element.classList.toggle("stat-highlight", name !== null && own === name);
+    }
+    repaintTrajectory();
+}
+
+/**
+ * Wire hover and keyboard focus on `element` to the shared highlight.
+ *
+ * @param {HTMLElement} element
+ * @param {string} name
+ */
+function wireStatisticHighlight(element, name) {
+    element.addEventListener("mouseenter", () => setHighlightedTrajectoryStatistic(name));
+    element.addEventListener("mouseleave", () => setHighlightedTrajectoryStatistic(null));
+    element.addEventListener("focus", () => setHighlightedTrajectoryStatistic(name));
+    element.addEventListener("blur", () => setHighlightedTrajectoryStatistic(null));
+}
+
+/**
+ * Make a results table's statistic column headers the same toggle the
+ * stats panel rows are: a colored bar (hollow when hidden), click or
+ * Enter/Space to show or hide the curve, hover to highlight it.
+ *
+ * @param {HTMLTableElement} table
+ * @param {number} offset - Index of the first statistic column.
+ */
+function wireResultsTableHeaders(table, offset) {
+    const headers = table.querySelectorAll("thead th");
+    STATISTIC_NAMES.forEach((name, index) => {
+        const header = headers[offset + index];
+        if (!header) {
+            return;
+        }
+        header.dataset.statistic = name;
+        header.classList.add("stat-column-header");
+        header.style.setProperty(
+            "--stat-color",
+            STATISTIC_TRAJECTORY_COLORS[name] || "var(--fim-muted)"
+        );
+        header.tabIndex = 0;
+        header.setAttribute("role", "button");
+        header.title = `Show or hide ${name} on the graph`;
+        header.addEventListener("click", () => toggleTrajectoryStatistic(name));
+        header.addEventListener("keydown", (event) => {
+            if (event.key === "Enter" || event.key === " ") {
+                event.preventDefault();
+                toggleTrajectoryStatistic(name);
+            }
+        });
+        wireStatisticHighlight(header, name);
+    });
+}
+
+/**
+ * Tag a results table body's statistic cells so a hidden statistic
+ * dims its whole column, then repaint the toggle state.
+ *
+ * @param {HTMLElement} tbody
+ * @param {number} offset - Index of the first statistic column.
+ */
+function tagStatisticCells(tbody, offset) {
+    for (const row of tbody.children) {
+        STATISTIC_NAMES.forEach((name, index) => {
+            const cell = row.children[offset + index];
+            if (cell) {
+                cell.dataset.statistic = name;
+            }
+        });
+    }
+    refreshTrajectoryStatisticRowStates();
+}
+
 /**
  * Add or refresh one statistic row's plot color tile and display-toggle
  * behavior. The statistic value cells are still rebuilt by `applyStatRow`
@@ -307,6 +420,7 @@ let completedReportReason = null;
 function decorateTrajectoryStatisticRow(row, name) {
     if (row.dataset.trajectoryStatistic !== name) {
         row.dataset.trajectoryStatistic = name;
+        wireStatisticHighlight(row, name);
         row.addEventListener("click", () => toggleTrajectoryStatistic(name));
         row.addEventListener("keydown", (event) => {
             if (event.key === "Enter" || event.key === " ") {
@@ -338,6 +452,13 @@ function decorateTrajectoryStatisticRow(row, name) {
 function refreshTrajectoryStatisticRowStates() {
     for (const row of document.querySelectorAll("[data-trajectory-statistic]")) {
         updateTrajectoryStatisticRowState(row, row.dataset.trajectoryStatistic);
+    }
+    for (const element of document.querySelectorAll("[data-statistic]")) {
+        const visible = !hiddenTrajectoryStatistics.has(element.dataset.statistic);
+        element.classList.toggle("stat-plot-hidden", !visible);
+        if (element.classList.contains("stat-column-header")) {
+            element.setAttribute("aria-pressed", String(visible));
+        }
     }
 }
 
@@ -758,8 +879,10 @@ function drawTrajectoryCurve(
     }
 
     for (const [name, values] of Object.entries(histories)) {
+        const emphasis = trajectoryEmphasis(name);
         context.strokeStyle = STATISTIC_TRAJECTORY_COLORS[name] || mutedColor;
-        context.lineWidth = 2;
+        context.lineWidth = emphasis.width;
+        context.globalAlpha = emphasis.alpha;
         context.beginPath();
         values.forEach((value, index) => {
             const x = xToPixel(generations[index]);
@@ -771,6 +894,7 @@ function drawTrajectoryCurve(
             }
         });
         context.stroke();
+        context.globalAlpha = 1;
     }
 
     // The predicted-equilibrium reference line (design §6.2's own closing
@@ -1265,8 +1389,10 @@ function drawBatchTrajectoryCurve(canvas, visiblePooled, scrubGeneration) {
         context.fill();
         context.globalAlpha = 1;
 
+        const emphasis = trajectoryEmphasis(name);
         context.strokeStyle = color;
-        context.lineWidth = 2;
+        context.lineWidth = emphasis.width;
+        context.globalAlpha = emphasis.alpha;
         context.beginPath();
         points.forEach((point, index) => {
             const x = xToPixel(point.generation);
@@ -1278,6 +1404,7 @@ function drawBatchTrajectoryCurve(canvas, visiblePooled, scrubGeneration) {
             }
         });
         context.stroke();
+        context.globalAlpha = 1;
     }
 
     // The same dashed "you are looking at this generation" marker the
@@ -1536,6 +1663,7 @@ function renderBatchTable(replicates, p0Statistics) {
         row.appendChild(openCell);
         batchResultsTableBody.appendChild(row);
     }
+    tagStatisticCells(batchResultsTableBody, 2);
 }
 
 /**
@@ -1618,6 +1746,7 @@ function renderScalarTable(frameGenerations) {
         }
         runResultsTableBody.appendChild(row);
     }
+    tagStatisticCells(runResultsTableBody, 1);
     runResultsTableEl.hidden = false;
 }
 
