@@ -17,6 +17,7 @@ from fim.persistence.groups import (
     StudyManifest,
     add_run_to_study,
     add_study_to_experiment,
+    clear_study_runs,
     copy_experiment,
     copy_study,
     create_experiment,
@@ -30,6 +31,7 @@ from fim.persistence.groups import (
     get_study,
     list_experiments,
     list_studies,
+    prune_missing_studies,
     read_experiment_manifest,
     read_study_manifest,
     resolve_run_directory,
@@ -506,3 +508,67 @@ def test_resolve_run_directory_raises_when_nothing_matches(tmp_path: Path) -> No
     """A reference matching no directory, manifest path, or run_id is a clear error."""
     with pytest.raises(ValueError, match="could not identify a run"):
         resolve_run_directory("nope", results=tmp_path)
+
+
+def test_delete_study_detaches_it_from_every_experiment(tmp_path: Path) -> None:
+    """An Experiment never keeps naming a Study that was deleted."""
+    study = create_study("Ring", results=tmp_path)
+    kept = create_study("Kept", results=tmp_path)
+    experiment = create_experiment("Migration", results=tmp_path)
+    add_study_to_experiment(experiment.experiment_id, study.study_id, results=tmp_path)
+    add_study_to_experiment(experiment.experiment_id, kept.study_id, results=tmp_path)
+
+    delete_study(study.study_id, results=tmp_path)
+
+    after = get_experiment(experiment.experiment_id, results=tmp_path)
+    assert after.study_ids == (kept.study_id,)
+    assert after.study_count == 1
+
+
+def test_prune_missing_studies_repairs_an_experiment_with_dangling_ids(
+    tmp_path: Path,
+) -> None:
+    """Studies deleted before detaching existed are dropped from the Experiment."""
+    study = create_study("Ring", results=tmp_path)
+    kept = create_study("Kept", results=tmp_path)
+    experiment = create_experiment("Migration", results=tmp_path)
+    add_study_to_experiment(experiment.experiment_id, study.study_id, results=tmp_path)
+    add_study_to_experiment(experiment.experiment_id, kept.study_id, results=tmp_path)
+    # The old behavior: the manifest removed, the Experiment untouched.
+    study_manifest_path(study.study_id, results=tmp_path).unlink()
+
+    removed = prune_missing_studies(results=tmp_path)
+
+    assert removed == 1
+    assert get_experiment(experiment.experiment_id, results=tmp_path).study_ids == (
+        kept.study_id,
+    )
+    assert prune_missing_studies(results=tmp_path) == 0
+
+
+def test_clear_study_runs_removes_the_runs_and_keeps_the_study(tmp_path: Path) -> None:
+    study = create_study("Ring", results=tmp_path)
+    runs = [_run_directory(tmp_path, name) for name in ("run-a", "run-b")]
+    for run in runs:
+        add_run_to_study(study.study_id, run, results=tmp_path)
+
+    before = clear_study_runs(study.study_id, results=tmp_path)
+
+    assert before.run_count == 2
+    assert not any(run.exists() for run in runs)
+    after = get_study(study.study_id, results=tmp_path)
+    assert after.run_directories == ()
+    assert after.name == "Ring"
+
+
+def test_clear_study_runs_tolerates_a_missing_directory_and_study(
+    tmp_path: Path,
+) -> None:
+    study = create_study("Ring", results=tmp_path)
+    run = _run_directory(tmp_path, "run-a")
+    add_run_to_study(study.study_id, run, results=tmp_path)
+    shutil.rmtree(run)
+
+    assert clear_study_runs(study.study_id, results=tmp_path).run_count == 1
+    with pytest.raises(ValueError, match="no such study"):
+        clear_study_runs("study-ffffffff", results=tmp_path)

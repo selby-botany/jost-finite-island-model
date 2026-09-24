@@ -3230,6 +3230,9 @@ class Api:
             its own (design doc §6).
         """
         results = paths.results_directory()
+        # Heals an Experiment left listing Studies that were deleted before
+        # `delete_study` learned to detach them.
+        groups.prune_missing_studies(results=results)
         return [
             {
                 "experimentId": experiment.experiment_id,
@@ -3360,10 +3363,34 @@ class Api:
             False, "message": ...}` if `study_id` does not exist.
         """
         try:
-            deleted = groups.delete_study(study_id)
+            if study_id == groups.DEFAULT_STUDY_ID:
+                # Built in and always present: "deleting" it empties it, so
+                # the next run has somewhere to land and Home never shows
+                # the default Experiment claiming a Study it cannot open.
+                deleted = groups.clear_study_runs(study_id)
+            else:
+                deleted = groups.delete_study(study_id)
         except ValueError as error:
             return {"ok": False, "message": str(error)}
         return {"ok": True, "deletedRunCount": deleted.run_count}
+
+    @_log_bridge_call
+    def delete_study_runs(self, study_id: str) -> dict[str, Any]:
+        """Delete every Run in a Study and keep the Study.
+
+        Selecting a Study row for deletion removes the Study as well, and
+        selecting each Run one at a time does not scale to a Study with
+        thousands; this empties a Study in one step.
+
+        Returns:
+            `{"ok": True, "deletedRunCount": N}`, or `{"ok": False,
+            "message": ...}` if the Study does not exist.
+        """
+        try:
+            cleared = groups.clear_study_runs(study_id)
+        except ValueError as error:
+            return {"ok": False, "message": str(error)}
+        return {"ok": True, "deletedRunCount": cleared.run_count}
 
     @_log_bridge_call
     def delete_experiment(self, experiment_id: str) -> dict[str, Any]:
@@ -3374,7 +3401,15 @@ class Api:
             False, "message": ...}` if `experiment_id` does not exist.
         """
         try:
-            deleted = groups.delete_experiment(experiment_id)
+            if experiment_id == groups.DEFAULT_EXPERIMENT_ID:
+                # Built in and always present, like the default Study: its
+                # other Studies are deleted and the default Study emptied,
+                # but the two containers stay.
+                deleted = groups.get_experiment(experiment_id)
+                for study_id in deleted.study_ids:
+                    self.delete_study(study_id)
+            else:
+                deleted = groups.delete_experiment(experiment_id)
         except ValueError as error:
             return {"ok": False, "message": str(error)}
         return {"ok": True, "deletedStudyCount": deleted.study_count}

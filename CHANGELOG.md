@@ -1087,6 +1087,16 @@ project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+- **An experiment no longer lists studies that were deleted.** Deleting a
+  study left its name in the experiment, so Home said "4 studies" and the
+  experiment opened to nothing. Deleting now removes the study from its
+  experiments, Home counts only the studies that exist (and repairs a
+  listing left behind by the old behavior), and an empty group says so.
+- **Emptying a study.** Selecting a study row removes the study as well as its
+  runs, and there was no way to remove every run in a study at once. Each study
+  row now has **Delete runs…**, which removes the runs and keeps the study. The
+  built-in default study and default experiment are emptied, not removed, when
+  deleted; the confirmation says so.
 - **Windows: a large batch no longer dies with `[WinError 5] Access is
   denied` on a replicate's `.progress` file.** Every replicate rewrites its
   `.progress` sidecar each generation (write a temporary file, rename it

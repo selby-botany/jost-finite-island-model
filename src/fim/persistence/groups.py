@@ -554,7 +554,89 @@ def delete_study(
             directory = _resolve_stored_run_reference(entry, results=root)
             shutil.rmtree(directory, ignore_errors=True)
     study_manifest_path(study_id, results=root).unlink(missing_ok=True)
+    # An Experiment must never keep naming a Study that no longer exists:
+    # its own count and its expanded list would both claim a Study that
+    # is not there.
+    _detach_study_from_experiments(study_id, results=root)
     return manifest
+
+
+def clear_study_runs(
+    study_id: str,
+    *,
+    results: Path | None = None,
+    clock: Clock = _utc_now,
+) -> StudyManifest:
+    """Delete every Run a Study references and keep the (now empty) Study.
+
+    The counterpart to `delete_study` for emptying a Study without
+    removing the Study itself: selecting a Study row for deletion removes
+    the Study too, and there was no other way to remove all of its Runs
+    at once. A directory already gone is tolerated, as in `delete_study`.
+
+    Returns:
+        The Study as it was before its Runs were removed (so a caller can
+        report how many there were).
+
+    Raises:
+        ValueError: No Study with this id exists.
+    """
+    root = results if results is not None else paths.results_directory()
+    manifest = get_study(study_id, results=root)
+    for entry in manifest.run_directories:
+        shutil.rmtree(
+            _resolve_stored_run_reference(entry, results=root), ignore_errors=True
+        )
+    write_study_manifest(
+        study_manifest_path(study_id, results=root),
+        replace(manifest, run_directories=(), updated_at=_format_timestamp(clock())),
+    )
+    return manifest
+
+
+def prune_missing_studies(*, results: Path | None = None) -> int:
+    """Remove from every Experiment any Study id that has no manifest.
+
+    Repairs the state an older `delete_study` left behind (it removed the
+    Study but not its listing in an Experiment), so an Experiment claimed
+    Studies it could not show.
+
+    Returns:
+        How many dangling Study ids were removed across all Experiments.
+    """
+    root = results if results is not None else paths.results_directory()
+    removed = 0
+    for experiment in list_experiments(results=root):
+        kept = tuple(
+            study_id
+            for study_id in experiment.study_ids
+            if study_manifest_path(study_id, results=root).is_file()
+        )
+        if kept != experiment.study_ids:
+            removed += len(experiment.study_ids) - len(kept)
+            write_experiment_manifest(
+                experiment_manifest_path(experiment.experiment_id, results=root),
+                replace(experiment, study_ids=kept),
+            )
+    return removed
+
+
+def _detach_study_from_experiments(
+    study_id: str, *, results: Path, clock: Clock = _utc_now
+) -> None:
+    """Drop `study_id` from every Experiment that lists it."""
+    for experiment in list_experiments(results=results):
+        if study_id in experiment.study_ids:
+            write_experiment_manifest(
+                experiment_manifest_path(experiment.experiment_id, results=results),
+                replace(
+                    experiment,
+                    study_ids=tuple(
+                        entry for entry in experiment.study_ids if entry != study_id
+                    ),
+                    updated_at=_format_timestamp(clock()),
+                ),
+            )
 
 
 def copy_study(

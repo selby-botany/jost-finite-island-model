@@ -237,3 +237,33 @@ def test_home_offers_sweep_results_and_continue_only_for_a_sweep_study(
     assert "Re-run all…" not in sweep
     assert "Sweep results…" not in by_hand
     assert "Continue sweep" not in by_hand
+
+
+def test_home_shows_only_studies_that_exist_and_offers_delete_runs(
+    fast_scalar_run_settings: Path, window: webview.Window
+) -> None:
+    study = groups.create_study("Ring")
+    experiment = groups.create_experiment("Migration")
+    groups.add_study_to_experiment(experiment.experiment_id, study.study_id)
+    gone = groups.create_study("Gone")
+    groups.add_study_to_experiment(experiment.experiment_id, gone.study_id)
+    # The state an older delete left behind: the Study is gone, the
+    # Experiment still lists it.
+    groups.study_manifest_path(gone.study_id).unlink()
+    groups.create_study("Loose")
+
+    def steps(poll_until: Poll) -> Any:
+        return poll_until(
+            "({headers: Array.from(document.querySelectorAll("
+            "'.open-run-group-header')).map((row) => row.textContent), "
+            "buttons: Array.from(document.querySelectorAll("
+            "'.open-run-group-actions button')).map((b) => b.textContent.trim())})",
+            lambda seen: any("Migration" in header for header in seen["headers"]),
+        )
+
+    seen = _drive(window, steps)
+
+    migration = next(h for h in seen["headers"] if "Migration" in h)
+    assert "1 study" in migration
+    assert "2 studies" not in migration
+    assert "Delete runs…" in seen["buttons"]

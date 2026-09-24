@@ -9476,6 +9476,28 @@ def test_initial_window_size_is_the_largest_polite_16_by_9(
 
 The window is 16:9, inside the display with a margin, and capped.
 
+<a id="gui.test_app_api.test_deleting_a_study_leaves_its_experiment_without_a_dangling_listing"></a>
+
+#### test\_deleting\_a\_study\_leaves\_its\_experiment\_without\_a\_dangling\_listing
+
+```python
+def test_deleting_a_study_leaves_its_experiment_without_a_dangling_listing(
+        tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None
+```
+
+After a Study is deleted, its Experiment counts and lists only what exists.
+
+<a id="gui.test_app_api.test_list_experiments_heals_studies_deleted_by_the_old_behavior"></a>
+
+#### test\_list\_experiments\_heals\_studies\_deleted\_by\_the\_old\_behavior
+
+```python
+def test_list_experiments_heals_studies_deleted_by_the_old_behavior(
+        tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None
+```
+
+A manifest left naming a missing Study is repaired when Home lists it.
+
 <a id="gui.test_batch_results_screen"></a>
 
 # gui.test\_batch\_results\_screen
@@ -22024,6 +22046,28 @@ def test_resolve_run_directory_raises_when_nothing_matches(
 ```
 
 A reference matching no directory, manifest path, or run_id is a clear error.
+
+<a id="persistence.test_groups.test_delete_study_detaches_it_from_every_experiment"></a>
+
+#### test\_delete\_study\_detaches\_it\_from\_every\_experiment
+
+```python
+def test_delete_study_detaches_it_from_every_experiment(
+        tmp_path: Path) -> None
+```
+
+An Experiment never keeps naming a Study that was deleted.
+
+<a id="persistence.test_groups.test_prune_missing_studies_repairs_an_experiment_with_dangling_ids"></a>
+
+#### test\_prune\_missing\_studies\_repairs\_an\_experiment\_with\_dangling\_ids
+
+```python
+def test_prune_missing_studies_repairs_an_experiment_with_dangling_ids(
+        tmp_path: Path) -> None
+```
+
+Studies deleted before detaching existed are dropped from the Experiment.
 
 <a id="persistence.test_manifest"></a>
 

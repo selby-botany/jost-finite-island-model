@@ -278,9 +278,9 @@ function experimentGroup(experiment, studiesById) {
         kind: "experiment",
         experimentId: experiment.experimentId,
         runCount: subgroups.reduce((total, subgroup) => total + subgroup.runCount, 0),
-        countLabel: `${experiment.studyCount} stud${
-            experiment.studyCount === 1 ? "y" : "ies"
-        }`,
+        // The Studies that exist, not the manifest's own count: a stale
+        // count claimed Studies the expanded list could not show.
+        countLabel: `${subgroups.length} stud${subgroups.length === 1 ? "y" : "ies"}`,
         subgroups,
     };
 }
@@ -1125,6 +1125,9 @@ function buildGroupActionControls(group) {
     if (group.kind === "study") {
         container.appendChild(buildOpenStudyButton(group));
     }
+    if (group.kind === "study") {
+        container.appendChild(buildDeleteStudyRunsButton(group));
+    }
     if (group.kind === "study" && group.sweepPointCount !== null) {
         container.appendChild(buildSweepResultsButton(group));
         if (group.runCount < group.sweepPointCount) {
@@ -1312,6 +1315,26 @@ function buildGroupSelectCheckbox(group) {
     return checkbox;
 }
 
+/**
+ * A one-line note under an expanded group with nothing in it, so an open
+ * group is never silently blank.
+ * @param {string} text
+ * @param {boolean} nested
+ * @returns {HTMLTableRowElement}
+ */
+function buildEmptyGroupRow(text, nested) {
+    const row = document.createElement("tr");
+    row.className = "open-run-empty-group-row";
+    if (nested) {
+        row.classList.add("open-run-nested");
+    }
+    const cell = document.createElement("td");
+    cell.colSpan = _RUN_TABLE_COLUMNS.length;
+    cell.textContent = text;
+    row.appendChild(cell);
+    return row;
+}
+
 function buildGroupHeaderRow(group, nested = false) {
     const row = document.createElement("tr");
     row.className = "open-run-group-header";
@@ -1399,9 +1422,14 @@ function renderGroup(group, nested = false) {
         return;
     }
     if (group.subgroups) {
+        if (group.subgroups.length === 0) {
+            recentRunsBody.appendChild(buildEmptyGroupRow("No studies yet.", nested));
+        }
         for (const subgroup of group.subgroups) {
             renderGroup(subgroup, true);
         }
+    } else if (group.runs !== null && group.runs.length === 0) {
+        recentRunsBody.appendChild(buildEmptyGroupRow("No runs yet.", nested));
     } else if (group.runs.length > 0) {
         recentRunsBody.appendChild(buildColumnHeaderRow(group.studyId, nested));
         let previousRunId = null;
@@ -1608,10 +1636,15 @@ function buildDeleteSelectedMessage() {
     if (selectedStudyIds.size > 0) {
         parts.push(`${selectedStudyIds.size} stud(y/ies) (and its/their own runs)`);
     }
+
     if (selectedRunDirectories.size > 0) {
         parts.push(`${selectedRunDirectories.size} individual run(s)`);
     }
-    return `Delete ${parts.join(", ")}?`;
+    const builtIn =
+        selectedStudyIds.has("study-default") || selectedExperimentIds.has("experiment-default")
+            ? " The built-in default study and experiment are emptied, not removed."
+            : "";
+    return `Delete ${parts.join(", ")}?${builtIn}`;
 }
 
 // Bulk "Select/Delete/Delete all" idiom (design doc §10, resolved
@@ -1797,6 +1830,37 @@ async function openStudy(studyId) {
         window.fim.resetTrajectoryLegendVisibility();
         window.fim.enterCompletedState(result, true);
     });
+}
+
+/**
+ * "Delete runs…" on a Study row: removes every run in the Study and
+ * keeps the Study. Selecting the Study row for deletion removes the
+ * Study too, and selecting each run does not scale to a Study with
+ * thousands.
+ * @param {{studyId: string, label: string, runCount: number}} group
+ * @returns {HTMLButtonElement}
+ */
+function buildDeleteStudyRunsButton(group) {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "open-run-group-action-button";
+    button.textContent = "Delete runs…";
+    button.disabled = group.runCount === 0;
+    button.addEventListener("click", (event) => {
+        event.stopPropagation();
+        confirmThenRun(
+            button,
+            `Delete all ${group.runCount} run(s) in "${group.label}" and keep the study?`,
+            async () => {
+                const result = await window.pywebview.api.delete_study_runs(group.studyId);
+                if (!result.ok) {
+                    showOpenRunBanner(result.message);
+                }
+                await refreshRecentRuns();
+            }
+        );
+    });
+    return button;
 }
 
 /**

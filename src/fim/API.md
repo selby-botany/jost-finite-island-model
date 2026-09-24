@@ -137,6 +137,7 @@ Return to the [source-tree orientation](../README.md) or the [developer guide](.
     * [add\_run\_to\_study](#fim.gui.app.Api.add_run_to_study)
     * [add\_study\_to\_experiment](#fim.gui.app.Api.add_study_to_experiment)
     * [delete\_study](#fim.gui.app.Api.delete_study)
+    * [delete\_study\_runs](#fim.gui.app.Api.delete_study_runs)
     * [delete\_experiment](#fim.gui.app.Api.delete_experiment)
     * [copy\_study](#fim.gui.app.Api.copy_study)
     * [rerun\_study](#fim.gui.app.Api.rerun_study)
@@ -412,6 +413,8 @@ Return to the [source-tree orientation](../README.md) or the [developer guide](.
   * [list\_studies](#fim.persistence.groups.list_studies)
   * [add\_run\_to\_study](#fim.persistence.groups.add_run_to_study)
   * [delete\_study](#fim.persistence.groups.delete_study)
+  * [clear\_study\_runs](#fim.persistence.groups.clear_study_runs)
+  * [prune\_missing\_studies](#fim.persistence.groups.prune_missing_studies)
   * [copy\_study](#fim.persistence.groups.copy_study)
   * [create\_experiment](#fim.persistence.groups.create_experiment)
   * [get\_experiment](#fim.persistence.groups.get_experiment)
@@ -4899,6 +4902,26 @@ supports, matching the confirmed design.
 
 - ``{"ok"` - True, "deletedRunCount": N}` on success; `{"ok":
   False, "message": ...}` if `study_id` does not exist.
+
+<a id="fim.gui.app.Api.delete_study_runs"></a>
+
+#### delete\_study\_runs
+
+```python
+@_log_bridge_call
+def delete_study_runs(study_id: str) -> dict[str, Any]
+```
+
+Delete every Run in a Study and keep the Study.
+
+Selecting a Study row for deletion removes the Study as well, and
+selecting each Run one at a time does not scale to a Study with
+thousands; this empties a Study in one step.
+
+**Returns**:
+
+- ``{"ok"` - True, "deletedRunCount": N}`, or `{"ok": False,
+- `"message"` - ...}` if the Study does not exist.
 
 <a id="fim.gui.app.Api.delete_experiment"></a>
 
@@ -12913,6 +12936,52 @@ Delete a Study's own manifest and, by default, every Run it references.
 **Raises**:
 
 - `ValueError` - No Study with this id exists.
+
+<a id="fim.persistence.groups.clear_study_runs"></a>
+
+#### clear\_study\_runs
+
+```python
+def clear_study_runs(study_id: str,
+                     *,
+                     results: Path | None = None,
+                     clock: Clock = _utc_now) -> StudyManifest
+```
+
+Delete every Run a Study references and keep the (now empty) Study.
+
+The counterpart to `delete_study` for emptying a Study without
+removing the Study itself: selecting a Study row for deletion removes
+the Study too, and there was no other way to remove all of its Runs
+at once. A directory already gone is tolerated, as in `delete_study`.
+
+**Returns**:
+
+  The Study as it was before its Runs were removed (so a caller can
+  report how many there were).
+
+
+**Raises**:
+
+- `ValueError` - No Study with this id exists.
+
+<a id="fim.persistence.groups.prune_missing_studies"></a>
+
+#### prune\_missing\_studies
+
+```python
+def prune_missing_studies(*, results: Path | None = None) -> int
+```
+
+Remove from every Experiment any Study id that has no manifest.
+
+Repairs the state an older `delete_study` left behind (it removed the
+Study but not its listing in an Experiment), so an Experiment claimed
+Studies it could not show.
+
+**Returns**:
+
+  How many dangling Study ids were removed across all Experiments.
 
 <a id="fim.persistence.groups.copy_study"></a>
 

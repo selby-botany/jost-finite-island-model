@@ -4409,3 +4409,89 @@ def test_initial_window_size_is_the_largest_polite_16_by_9(
     assert abs(width / height - 16 / 9) < 0.01
     assert width <= screen[0] * 0.9 + 1
     assert height <= screen[1] * 0.9 + 1
+
+
+def test_deleting_a_study_leaves_its_experiment_without_a_dangling_listing(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """After a Study is deleted, its Experiment counts and lists only what exists."""
+    _use_isolated_results_directory(tmp_path, monkeypatch)
+    api = Api()
+    study_id = api.create_study("Ring")["studyId"]
+    experiment_id = api.create_experiment("Migration")["experimentId"]
+    api.add_study_to_experiment(experiment_id, study_id)
+
+    api.delete_study(study_id)
+
+    (experiment,) = api.list_experiments()
+    assert experiment["studyIds"] == []
+    assert experiment["studyCount"] == 0
+
+
+def test_list_experiments_heals_studies_deleted_by_the_old_behavior(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A manifest left naming a missing Study is repaired when Home lists it."""
+    _use_isolated_results_directory(tmp_path, monkeypatch)
+    api = Api()
+    study_id = api.create_study("Ring")["studyId"]
+    experiment_id = api.create_experiment("Migration")["experimentId"]
+    api.add_study_to_experiment(experiment_id, study_id)
+    groups.study_manifest_path(study_id).unlink()
+
+    (experiment,) = api.list_experiments()
+
+    assert experiment["studyCount"] == 0
+
+
+def test_delete_study_runs_empties_a_study_and_keeps_it(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    results = _use_isolated_results_directory(tmp_path, monkeypatch)
+    api = Api()
+    study_id = api.create_study("Ring")["studyId"]
+    output = _write_run_under(results, "run-a", seed=1, study_id=study_id)
+
+    result = api.delete_study_runs(study_id)
+
+    assert result == {"ok": True, "deletedRunCount": 1}
+    assert not output.exists()
+    (study,) = api.list_studies()
+    assert study["runCount"] == 0
+    assert api.delete_study_runs("study-ffffffff")["ok"] is False
+
+
+def test_deleting_the_built_in_default_study_empties_it_instead(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    results = _use_isolated_results_directory(tmp_path, monkeypatch)
+    api = Api()
+    default = groups.ensure_default_study()
+    output = _write_run_under(results, "run-a", seed=1, study_id=default.study_id)
+
+    api.delete_study(default.study_id)
+
+    assert not output.exists()
+    assert groups.get_study(default.study_id).run_count == 0
+    (experiment,) = api.list_experiments()
+    assert experiment["studyIds"] == [default.study_id]
+
+
+def test_deleting_the_built_in_default_experiment_keeps_both_containers(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    results = _use_isolated_results_directory(tmp_path, monkeypatch)
+    api = Api()
+    default = groups.ensure_default_study()
+    other = api.create_study("Other")["studyId"]
+    api.add_study_to_experiment(groups.DEFAULT_EXPERIMENT_ID, other)
+    output = _write_run_under(results, "run-a", seed=1, study_id=default.study_id)
+
+    result = api.delete_experiment(groups.DEFAULT_EXPERIMENT_ID)
+
+    assert result["ok"] is True
+    assert not output.exists()
+    assert groups.get_study(default.study_id).run_count == 0
+    assert [s["studyId"] for s in api.list_studies()] == [default.study_id]
+    (experiment,) = api.list_experiments()
+    assert experiment["studyIds"] == [default.study_id]
