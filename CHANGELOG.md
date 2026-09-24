@@ -8,6 +8,15 @@ project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- **Runs are matched by software version, and a difference is reported.** A
+  run is only reused (by **Run** or by a sweep) when the software version that
+  made it matches the current one. A configuration whose only run came from
+  another version is recomputed and compared, bit for bit, with the old run:
+  a match replaces the old run and says so; a difference shows a warning that
+  names the changed values, keeps both runs, and writes
+  `reproducibility.json` beside the new one. `fim sweep` prints the same and
+  exits with status 1. A sweep point whose only run is from another version
+  shows as "older version".
 - **Running a configuration you already ran shows the existing result.** A
   run is fully determined by its configuration and seed, so **Run** on a
   configuration that has already been computed adds the existing run to the

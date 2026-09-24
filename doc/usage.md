@@ -720,7 +720,9 @@ fim sweep report STUDY_ID --statistic D --csv
   second sweep that overlaps the first, reuses the runs that already exist
   instead of computing them again. Reuse requires identical configurations,
   including the seed, so an overlapping sweep must use the same base seed and
-  the same axis order.
+  the same axis order, and a run made by the same software version. A point
+  whose only run came from another version is recomputed and compared with it
+  (see [Reproduce a run](#reproduce-a-run)).
 - In the desktop app a sweep is part of Configure. Tick **Sweep**, choose
   what varies in the **Set up sweep…** dialog (a live count and, on request,
   every point), and press **Run** as always: with **Sweep** on, Run runs the
@@ -1180,6 +1182,20 @@ subdirectories actually present always equal replicate_run_ids exactly.
 2. Use its `parameters` object as a new YAML config.
 3. Run the same `fim` version shown in software_version.
 4. Compare `trajectory.jsonl` and `report.json` byte for byte.
+
+**Across software versions.** One configuration and seed give the same result,
+bit for bit, every time within a software version (checked for single runs and
+for batches, run sequentially and in parallel). A run records the version that
+made it, and a run is only reused, by **Run** or by a sweep, when that version
+matches the current one. A configuration whose only run came from another
+version is recomputed, and the new run is compared with the old one using the
+digests each run records for its trajectory, report and summary (the scatter
+image is left out, since its bytes can change without any result changing). If
+they match, the old run is replaced by the new one and you are told. If they
+do not match, a warning names the values that changed, both runs are kept, and
+the difference is written to `reproducibility.json` beside the new run: the
+simulator guarantees bit-for-bit reproducibility, so a difference is a
+finding, not a detail. `fim sweep` prints the same and exits with status 1.
 
 Given the same version, parameters, and seed, those files are identical.
 Manifest timestamps may differ.

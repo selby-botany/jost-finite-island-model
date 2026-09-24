@@ -592,7 +592,9 @@ whose <code>rows * columns</code> differs from <code>d</code>) is listed with it
 second sweep that overlaps the first, reuses the runs that already exist
 instead of computing them again. Reuse requires identical configurations,
 including the seed, so an overlapping sweep must use the same base seed and
-the same axis order.</li>
+the same axis order, and a run made by the same software version. A point
+whose only run came from another version is recomputed and compared with it
+(see <a href="#reproduce-a-run">Reproduce a run</a>).</li>
 <li>In the desktop app a sweep is part of Configure. Tick <strong>Sweep</strong>, choose
 what varies in the <strong>Set up sweep…</strong> dialog (a live count and, on request,
 every point), and press <strong>Run</strong> as always: with <strong>Sweep</strong> on, Run runs the
@@ -1105,6 +1107,19 @@ subdirectories actually present always equal replicate_run_ids exactly.</p>
 <li>Run the same <code>fim</code> version shown in software_version.</li>
 <li>Compare <code>trajectory.jsonl</code> and <code>report.json</code> byte for byte.</li>
 </ol>
+<p><strong>Across software versions.</strong> One configuration and seed give the same result,
+bit for bit, every time within a software version (checked for single runs and
+for batches, run sequentially and in parallel). A run records the version that
+made it, and a run is only reused, by <strong>Run</strong> or by a sweep, when that version
+matches the current one. A configuration whose only run came from another
+version is recomputed, and the new run is compared with the old one using the
+digests each run records for its trajectory, report and summary (the scatter
+image is left out, since its bytes can change without any result changing). If
+they match, the old run is replaced by the new one and you are told. If they
+do not match, a warning names the values that changed, both runs are kept, and
+the difference is written to <code>reproducibility.json</code> beside the new run: the
+simulator guarantees bit-for-bit reproducibility, so a difference is a
+finding, not a detail. <code>fim sweep</code> prints the same and exits with status 1.</p>
 <p>Given the same version, parameters, and seed, those files are identical.
 Manifest timestamps may differ.</p>
 <h2 id="troubleshooting">Troubleshooting</h2>

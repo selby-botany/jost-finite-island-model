@@ -16,6 +16,7 @@ Every test module, fixture, and test function documented here in full; `doc/fim-
   - [`test_mypy_scope`](#test.test_mypy_scope)
   - [`test_paths`](#test.test_paths)
   - [`test_reanalyze`](#test.test_reanalyze)
+  - [`test_reproducibility`](#test.test_reproducibility)
   - [`test_shutdown_diagnostics`](#test.test_shutdown_diagnostics)
   - [`test_sweep`](#test.test_sweep)
   - [`test_sweep_run`](#test.test_sweep_run)
@@ -1768,6 +1769,12 @@ monomorphic), which the reconstruction must reproduce as the same
 short list rather than papering over with a placeholder -- that
 shape is what `pooled_convergence_histories` keys its own
 drop-rather-than-guess rule off.
+
+<a id="test.test_reproducibility"></a>
+
+# test.test\_reproducibility
+
+Tests for `fim.reproducibility`: comparing two runs of one configuration.
 
 <a id="test.test_shutdown_diagnostics"></a>
 

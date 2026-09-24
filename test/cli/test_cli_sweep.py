@@ -145,3 +145,29 @@ def test_report_on_a_study_that_is_not_a_sweep_is_a_plain_error(
 
     assert status == 2
     assert "not a sweep" in capsys.readouterr().err
+
+
+def test_resuming_under_a_new_software_version_recomputes_and_reports_a_match(
+    tmp_path: Path,
+    sweep_file: Path,
+    capsys: pytest.CaptureFixture[str],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from fim import sweep_run  # noqa: PLC0415
+
+    _main(tmp_path, "sweep", "run", str(sweep_file))
+    (study,) = groups.list_studies(results=tmp_path / "results")
+    capsys.readouterr()
+    real = sweep_run.run_sweep
+    monkeypatch.setattr(
+        "fim.cli_sweep.run_sweep",
+        lambda *args, **kwargs: real(*args, software_version="9.9.9", **kwargs),
+    )
+
+    status = _main(tmp_path, "sweep", "resume", study.study_id)
+
+    output = capsys.readouterr().out
+    assert status == 0
+    assert "2 point(s) recomputed under this version and matched" in output
+    assert "0 differed" in output
+    assert len(list((tmp_path / "results").glob("*/manifest.json"))) == 2

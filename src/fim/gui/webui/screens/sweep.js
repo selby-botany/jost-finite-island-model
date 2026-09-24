@@ -557,7 +557,7 @@ function setSweepPointState(index, text) {
         return;
     }
     row.querySelector(".sweep-point-state").textContent = text;
-    const failed = text.startsWith("failed");
+    const failed = text.startsWith("failed") || text.includes("DIFFERS");
     row.classList.toggle("row-warning", failed);
 }
 
@@ -565,7 +565,21 @@ const SWEEP_EVENT_STATE_TEXT = {
     point_started: "running",
     point_reused: "reused an existing run",
     point_done: "done",
+    point_recomputed: "recomputed; matches the earlier version's result",
+    point_differs: "recomputed; DIFFERS from the earlier version's result",
 };
+
+/**
+ * A short list of what changed in a reproducibility comparison.
+ * @param {{differences: Array<{label: string, old: *, new: *}>}} comparison
+ * @returns {string}
+ */
+function sweepDifferenceText(comparison) {
+    return comparison.differences
+        .map((item) => `${item.label}: ${item.old} → ${item.new}`)
+        .slice(0, 6)
+        .join("; ");
+}
 
 /**
  * Handle one pushed sweep event (`Api._push_sweep_event`).
@@ -577,10 +591,25 @@ window.fim.onSweepEvent = function onSweepEvent(event) {
     } else if (event.kind === "point_failed") {
         setSweepPointState(event.index, `failed (${event.detail})`);
     }
+    if (event.kind === "point_differs") {
+        showSweepBanner(
+            "Reproducibility warning: a point recomputed under this software " +
+                "version gives different values from the earlier version's " +
+                `(${sweepDifferenceText(event.detail)}). Both runs are kept.`
+        );
+    }
     if (event.kind === "point_started") {
         sweepProgressText.textContent = `Running point ${event.position} of ${event.total}…`;
     }
-    if (["point_done", "point_reused", "point_failed"].includes(event.kind)) {
+    if (
+        [
+            "point_done",
+            "point_reused",
+            "point_failed",
+            "point_recomputed",
+            "point_differs",
+        ].includes(event.kind)
+    ) {
         sweepProgressBar.value = event.position;
     }
     if (event.kind === "sweep_done" || event.kind === "sweep_cancelled") {

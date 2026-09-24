@@ -1050,47 +1050,119 @@ def resolve_run_directory(reference: str, *, results: Path | None = None) -> Pat
     )
 
 
-def find_run_directories(run_id: str, *, results: Path | None = None) -> list[Path]:
+def find_run_directories(
+    run_id: str,
+    *,
+    software_version: str | None = None,
+    results: Path | None = None,
+) -> list[Path]:
     """Return every run directory directly under `results` with this `run_id`.
 
-    The lookup a sweep uses to recognize a point it already computed: a
-    run's id is a hash of its whole configuration, so a match is the same
-    configuration. Reads manifests, so it is linear in the number of runs.
+    The lookup that recognizes a configuration already computed: a run's id
+    is a hash of its whole configuration, seed included. `software_version`,
+    when given, also has to match the version recorded in the run's
+    manifest, because the guarantee that the same configuration gives the
+    same result holds within one software version: a run made by another
+    version is not reused (`find_stale_run_directories` finds it). Reads
+    manifests, so it is linear in the number of runs.
     """
     root = results if results is not None else paths.results_directory()
-    return _run_directories_with_id(run_id, root)
+    return [
+        directory
+        for directory, identity in _run_identities(root)
+        if identity[0] == run_id
+        and (software_version is None or identity[1] == software_version)
+    ]
+
+
+def find_stale_run_directories(
+    run_id: str, software_version: str, *, results: Path | None = None
+) -> list[Path]:
+    """Return runs with this `run_id` that another software version made."""
+    root = results if results is not None else paths.results_directory()
+    return [
+        directory
+        for directory, identity in _run_identities(root)
+        if identity[0] == run_id and identity[1] != software_version
+    ]
 
 
 def run_id_of(run_directory: Path) -> str | None:
     """Return the `run_id` recorded in `run_directory`'s manifest, if readable."""
-    return _manifest_run_id(run_directory / "manifest.json")
+    identity = run_identity_of(run_directory)
+    return identity[0] if identity is not None else None
+
+
+def run_identity_of(run_directory: Path) -> tuple[str, str] | None:
+    """Return `(run_id, software_version)` from a run's manifest, if readable."""
+    return _manifest_identity(run_directory / "manifest.json")
+
+
+def supersede_run(
+    old: Path | str, new: Path | str, *, results: Path | None = None
+) -> None:
+    """Replace every link to `old` with a link to `new`, then delete `old`.
+
+    For a run recomputed under a newer software version whose result matched
+    the old one bit for bit: the old directory is an exact duplicate, so
+    every Study that held it now holds the new one.
+    """
+    root = results if results is not None else paths.results_directory()
+    old_path = Path(old).resolve()
+    new_reference = _run_reference_string(Path(new), results=root)
+    for study in list_studies(results=root):
+        entries = [
+            new_reference
+            if _resolve_stored_run_reference(entry, results=root).resolve() == old_path
+            else entry
+            for entry in study.run_directories
+        ]
+        deduped = tuple(dict.fromkeys(entries))
+        if deduped != study.run_directories:
+            write_study_manifest(
+                study_manifest_path(study.study_id, results=root),
+                replace(study, run_directories=deduped),
+            )
+    shutil.rmtree(old_path, ignore_errors=True)
 
 
 def _run_directories_with_id(run_id: str, results: Path) -> list[Path]:
-    """Return every run directory under `results` whose manifest has `run_id`.
-
-    Tries the scalar shape then the batch shape for each candidate,
-    exactly like `fim.gui.recent_runs._recent_run_from_file` — a local
-    copy rather than an import from `fim.gui`, since this module lives
-    in `fim.persistence` and must not depend on the GUI package.
-    """
-    if not results.is_dir():
-        return []
+    """Return every run directory under `results` whose manifest has `run_id`."""
     return [
-        manifest_path.parent.resolve()
-        for manifest_path in sorted(results.glob("*/manifest.json"))
-        if _manifest_run_id(manifest_path) == run_id
+        directory
+        for directory, identity in _run_identities(results)
+        if identity[0] == run_id
     ]
 
 
-def _manifest_run_id(manifest_path: Path) -> str | None:
-    """Return one manifest's own `run_id`, trying scalar then batch shape."""
+def _run_identities(results: Path) -> list[tuple[Path, tuple[str, str]]]:
+    """Return `(directory, (run_id, software_version))` for every run under `results`.
+
+    Tries the scalar shape then the batch shape for each candidate, like
+    `fim.gui.recent_runs._recent_run_from_file` — a local copy rather than
+    an import from `fim.gui`, since this module lives in `fim.persistence`
+    and must not depend on the GUI package.
+    """
+    if not results.is_dir():
+        return []
+    found = []
+    for manifest_path in sorted(results.glob("*/manifest.json")):
+        identity = _manifest_identity(manifest_path)
+        if identity is not None:
+            found.append((manifest_path.parent.resolve(), identity))
+    return found
+
+
+def _manifest_identity(manifest_path: Path) -> tuple[str, str] | None:
+    """Return one manifest's `(run_id, software_version)`, scalar or batch."""
     try:
-        return read_manifest(manifest_path).run_id
+        scalar = read_manifest(manifest_path)
+        return scalar.run_id, scalar.software_version
     except (OSError, ValueError, KeyError):
         pass
     try:
-        return read_batch_manifest(manifest_path).run_id
+        batch = read_batch_manifest(manifest_path)
+        return batch.run_id, batch.software_version
     except (OSError, ValueError, KeyError):
         return None
 

@@ -424,7 +424,10 @@ Return to the [source-tree orientation](../README.md) or the [developer guide](.
   * [copy\_experiment](#fim.persistence.groups.copy_experiment)
   * [resolve\_run\_directory](#fim.persistence.groups.resolve_run_directory)
   * [find\_run\_directories](#fim.persistence.groups.find_run_directories)
+  * [find\_stale\_run\_directories](#fim.persistence.groups.find_stale_run_directories)
   * [run\_id\_of](#fim.persistence.groups.run_id_of)
+  * [run\_identity\_of](#fim.persistence.groups.run_identity_of)
+  * [supersede\_run](#fim.persistence.groups.supersede_run)
 * [fim.persistence.jsonl\_store](#fim.persistence.jsonl_store)
   * [JSONLTrajectoryStore](#fim.persistence.jsonl_store.JSONLTrajectoryStore)
     * [\_\_init\_\_](#fim.persistence.jsonl_store.JSONLTrajectoryStore.__init__)
@@ -491,6 +494,11 @@ Return to the [source-tree orientation](../README.md) or the [developer guide](.
   * [group\_rows\_by\_generation](#fim.reanalyze.group_rows_by_generation)
   * [reanalyze\_trajectory](#fim.reanalyze.reanalyze_trajectory)
   * [replicate\_convergence\_history](#fim.reanalyze.replicate_convergence_history)
+* [fim.reproducibility](#fim.reproducibility)
+  * [Difference](#fim.reproducibility.Difference)
+  * [Comparison](#fim.reproducibility.Comparison)
+    * [to\_dict](#fim.reproducibility.Comparison.to_dict)
+  * [compare\_runs](#fim.reproducibility.compare_runs)
 * [fim.statistics](#fim.statistics)
 * [fim.statistics.differentiation](#fim.statistics.differentiation)
   * [DifferentiationReport](#fim.statistics.differentiation.DifferentiationReport)
@@ -580,6 +588,7 @@ Return to the [source-tree orientation](../README.md) or the [developer guide](.
   * [run\_sweep](#fim.sweep_run.run_sweep)
   * [failures\_path](#fim.sweep_run.failures_path)
   * [read\_failures](#fim.sweep_run.read_failures)
+  * [write\_reproducibility\_note](#fim.sweep_run.write_reproducibility_note)
   * [PointResult](#fim.sweep_run.PointResult)
   * [sweep\_point\_results](#fim.sweep_run.sweep_point_results)
 * [fim.update](#fim.update)
@@ -13157,14 +13166,32 @@ always unambiguous when it resolves at all.
 ```python
 def find_run_directories(run_id: str,
                          *,
+                         software_version: str | None = None,
                          results: Path | None = None) -> list[Path]
 ```
 
 Return every run directory directly under `results` with this `run_id`.
 
-The lookup a sweep uses to recognize a point it already computed: a
-run's id is a hash of its whole configuration, so a match is the same
-configuration. Reads manifests, so it is linear in the number of runs.
+The lookup that recognizes a configuration already computed: a run's id
+is a hash of its whole configuration, seed included. `software_version`,
+when given, also has to match the version recorded in the run's
+manifest, because the guarantee that the same configuration gives the
+same result holds within one software version: a run made by another
+version is not reused (`find_stale_run_directories` finds it). Reads
+manifests, so it is linear in the number of runs.
+
+<a id="fim.persistence.groups.find_stale_run_directories"></a>
+
+#### find\_stale\_run\_directories
+
+```python
+def find_stale_run_directories(run_id: str,
+                               software_version: str,
+                               *,
+                               results: Path | None = None) -> list[Path]
+```
+
+Return runs with this `run_id` that another software version made.
 
 <a id="fim.persistence.groups.run_id_of"></a>
 
@@ -13175,6 +13202,33 @@ def run_id_of(run_directory: Path) -> str | None
 ```
 
 Return the `run_id` recorded in `run_directory`'s manifest, if readable.
+
+<a id="fim.persistence.groups.run_identity_of"></a>
+
+#### run\_identity\_of
+
+```python
+def run_identity_of(run_directory: Path) -> tuple[str, str] | None
+```
+
+Return `(run_id, software_version)` from a run's manifest, if readable.
+
+<a id="fim.persistence.groups.supersede_run"></a>
+
+#### supersede\_run
+
+```python
+def supersede_run(old: Path | str,
+                  new: Path | str,
+                  *,
+                  results: Path | None = None) -> None
+```
+
+Replace every link to `old` with a link to `new`, then delete `old`.
+
+For a run recomputed under a newer software version whose result matched
+the old one bit for bit: the old directory is an exact duplicate, so
+every Study that held it now holds the new one.
 
 <a id="fim.persistence.jsonl_store"></a>
 
@@ -14598,6 +14652,96 @@ independently plausible ones.
   same shape a live run produces for an interior gap and is
   handled identically by the pooling (dropped rather than
   guessed at). Empty if the trajectory holds nothing.
+
+<a id="fim.reproducibility"></a>
+
+# fim.reproducibility
+
+Compare two runs of one configuration, bit for bit.
+
+The simulator guarantees that one configuration and seed give the same
+result every time, within one software version. A run made under another
+version is recomputed rather than reused, and this module says whether the
+recomputed run matches the earlier one, and if not, which reported values
+changed, so a break in that guarantee is never silent.
+
+The comparison uses the SHA-256 digests every run's manifest already records
+for its data artifacts (a single run's trajectory and report, a batch's
+summary and replicates). The scatter image is left out: it is a rendering
+whose bytes can change with the plotting library without any result changing.
+
+<a id="fim.reproducibility.Difference"></a>
+
+## Difference Objects
+
+```python
+@dataclass(frozen=True, slots=True)
+class Difference()
+```
+
+One thing that differs between two runs of the same configuration.
+
+**Attributes**:
+
+- `label` - What differs: an artifact name (`trajectory`), or a reported
+  statistic (`D`).
+- `old` - The earlier run's value, or its digest for an artifact.
+- `new` - The recomputed run's value, or its digest for an artifact.
+
+<a id="fim.reproducibility.Comparison"></a>
+
+## Comparison Objects
+
+```python
+@dataclass(frozen=True, slots=True)
+class Comparison()
+```
+
+The outcome of comparing an earlier run with its recomputation.
+
+**Attributes**:
+
+- `identical` - Whether every data artifact matches bit for bit.
+- `differences` - Artifacts that differ, then the reported statistics
+  that changed (at most `_MAXIMUM_DIFFERENCES`).
+- `old_version` - The earlier run's software version.
+- `new_version` - The recomputed run's software version.
+
+<a id="fim.reproducibility.Comparison.to_dict"></a>
+
+#### to\_dict
+
+```python
+def to_dict() -> dict[str, object]
+```
+
+Return a JSON-serializable form (for the page and a sidecar file).
+
+<a id="fim.reproducibility.compare_runs"></a>
+
+#### compare\_runs
+
+```python
+def compare_runs(old: Path, new: Path) -> Comparison
+```
+
+Compare two run directories of the same configuration.
+
+**Arguments**:
+
+- `old` - The earlier run (another software version).
+- `new` - The recomputed run.
+
+
+**Returns**:
+
+  Whether they match, and what differs if not.
+
+
+**Raises**:
+
+- `OSError` - A manifest cannot be read.
+- `ValueError` - A manifest is not valid JSON.
 
 <a id="fim.statistics"></a>
 
@@ -16669,7 +16813,8 @@ The execution half of `fim.sweep`
 
 #### PointState
 
-A point is `done` (a member run has its id), `failed`, or `waiting`.
+A point is `done` (a member run has its id, from this software version), `stale`
+(only a run from another software version), `failed`, or `waiting`.
 
 <a id="fim.sweep_run.PointFailure"></a>
 
@@ -16874,14 +17019,17 @@ Return the planned points stored in a sweep Study.
 ```python
 def sweep_point_statuses(study: StudyManifest,
                          *,
+                         software_version: str = __version__,
                          results: Path | None = None) -> list[PointStatus]
 ```
 
 Return every planned point with its derived state.
 
-`done` if a member run of the Study has the point's `run_id`,
-`failed` if a failure was recorded and no such run exists, otherwise
-`waiting`.
+`done` if a member run of the Study has the point's `run_id` and was
+made by this `software_version`; `stale` if the only such member was
+made by another version (it is recomputed, and compared, on the next
+run); `failed` if a failure was recorded and there is no such run;
+otherwise `waiting`.
 
 <a id="fim.sweep_run.run_sweep"></a>
 
@@ -16894,6 +17042,7 @@ def run_sweep(study_id: str,
               cancel_event: threading.Event,
               *,
               retry_failed: bool = False,
+              software_version: str = __version__,
               results: Path | None = None) -> SweepOutcome
 ```
 
@@ -16911,6 +17060,9 @@ and skips the rest; completed points stay attached.
 - `cancel_event` - Set to stop the sweep.
 - `retry_failed` - Also retry points recorded as failed; by default
   they are skipped.
+- `software_version` - The version whose runs count as done. A point whose
+  only run was made by another version is recomputed and compared
+  with it; a difference is reported, never silent.
 - `results` - Optional results-directory override.
 
 
@@ -16948,6 +17100,20 @@ def read_failures(study_id: str,
 ```
 
 Return recorded failures by point `run_id`; empty if none or unreadable.
+
+<a id="fim.sweep_run.write_reproducibility_note"></a>
+
+#### write\_reproducibility\_note
+
+```python
+def write_reproducibility_note(directory: Path,
+                               comparison: Mapping[str, Any]) -> None
+```
+
+Record, beside a recomputed run, that it differs from an older version's.
+
+A sidecar file, deliberately outside the manifest's artifact digests, so
+the run's own record of itself is untouched.
 
 <a id="fim.sweep_run.PointResult"></a>
 

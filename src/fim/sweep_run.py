@@ -31,22 +31,26 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any, Literal, Protocol
 
-from fim import paths
+from fim import __version__, paths
 from fim.model.params import SimulationParams
 from fim.persistence import groups
 from fim.persistence.groups import StudyManifest
+from fim.reproducibility import compare_runs
 from fim.sweep import SweepPlan, SweepPoint, SweepSpec, enumerate_points
 
 logger = logging.getLogger(__name__)
 
-PointState = Literal["done", "failed", "waiting"]
-"""A point is `done` (a member run has its id), `failed`, or `waiting`."""
+PointState = Literal["done", "stale", "failed", "waiting"]
+"""A point is `done` (a member run has its id, from this software version), `stale`
+(only a run from another software version), `failed`, or `waiting`."""
 
 EventKind = Literal[
     "point_started",
     "point_progress",
     "point_reused",
     "point_done",
+    "point_recomputed",
+    "point_differs",
     "point_failed",
     "sweep_done",
     "sweep_cancelled",
@@ -91,6 +95,8 @@ class SweepOutcome:
     failed: int
     skipped_failed: int
     cancelled: bool
+    recomputed: int = 0
+    differing: int = 0
 
 
 @dataclass(frozen=True, slots=True)
@@ -267,26 +273,29 @@ def stored_points(study: StudyManifest) -> list[Mapping[str, Any]]:
 
 
 def sweep_point_statuses(
-    study: StudyManifest, *, results: Path | None = None
+    study: StudyManifest,
+    *,
+    software_version: str = __version__,
+    results: Path | None = None,
 ) -> list[PointStatus]:
     """Return every planned point with its derived state.
 
-    `done` if a member run of the Study has the point's `run_id`,
-    `failed` if a failure was recorded and no such run exists, otherwise
-    `waiting`.
+    `done` if a member run of the Study has the point's `run_id` and was
+    made by this `software_version`; `stale` if the only such member was
+    made by another version (it is recomputed, and compared, on the next
+    run); `failed` if a failure was recorded and there is no such run;
+    otherwise `waiting`.
     """
-    present = {
-        run_id
-        for directory in groups.study_run_directories(study, results=results)
-        if (run_id := groups.run_id_of(directory)) is not None
-    }
+    current, stale = _member_runs(study, software_version, results)
     failures = read_failures(study.study_id, results=results)
     statuses = []
     for entry in stored_points(study):
         run_id = str(entry["run_id"])
         failure = failures.get(run_id)
-        if run_id in present:
+        if run_id in current:
             state: PointState = "done"
+        elif run_id in stale:
+            state = "stale"
         elif failure is not None:
             state = "failed"
         else:
@@ -307,6 +316,24 @@ def sweep_point_statuses(
     return statuses
 
 
+def _member_runs(
+    study: StudyManifest, software_version: str, results: Path | None
+) -> tuple[dict[str, Path], dict[str, Path]]:
+    """Split a Study's member runs by id: made by this version, or by another."""
+    current: dict[str, Path] = {}
+    stale: dict[str, Path] = {}
+    for directory in groups.study_run_directories(study, results=results):
+        identity = groups.run_identity_of(directory)
+        if identity is None:
+            continue
+        run_id, version = identity
+        if version == software_version:
+            current[run_id] = directory
+        else:
+            stale.setdefault(run_id, directory)
+    return current, stale
+
+
 def run_sweep(
     study_id: str,
     runner: PointRunner,
@@ -314,6 +341,7 @@ def run_sweep(
     cancel_event: threading.Event,
     *,
     retry_failed: bool = False,
+    software_version: str = __version__,
     results: Path | None = None,
 ) -> SweepOutcome:
     """Run every point of a sweep Study that is not already present.
@@ -329,6 +357,9 @@ def run_sweep(
         cancel_event: Set to stop the sweep.
         retry_failed: Also retry points recorded as failed; by default
             they are skipped.
+        software_version: The version whose runs count as done. A point whose
+            only run was made by another version is recomputed and compared
+            with it; a difference is reported, never silent.
         results: Optional results-directory override.
 
     Returns:
@@ -342,13 +373,17 @@ def run_sweep(
     spec = sweep_spec_of(study)
     planned = _matching_plan(study, enumerate_points(spec))
     failures = read_failures(study_id, results=results)
-    present = {
-        run_id
-        for directory in groups.study_run_directories(study, results=results)
-        if (run_id := groups.run_id_of(directory)) is not None
-    }
+    present, stale = _member_runs(study, software_version, results)
     total = len(planned)
-    tally = {"done": 0, "reused": 0, "already_present": 0, "failed": 0, "skipped": 0}
+    tally = {
+        "done": 0,
+        "reused": 0,
+        "already_present": 0,
+        "failed": 0,
+        "skipped": 0,
+        "recomputed": 0,
+        "differs": 0,
+    }
     cancelled = False
     position = 0
     for position, point in enumerate(planned, start=1):
@@ -362,7 +397,14 @@ def run_sweep(
             tally["skipped"] += 1
             continue
         outcome = _run_one_point(
-            study_id, point, runner, on_event, cancel_event, position, total, results
+            study_id,
+            point,
+            runner,
+            on_event,
+            cancel_event,
+            (position, total),
+            (software_version, stale.get(point.run_id)),
+            results,
         )
         if outcome == "cancelled":
             cancelled = True
@@ -384,6 +426,8 @@ def run_sweep(
         failed=tally["failed"],
         skipped_failed=tally["skipped"],
         cancelled=cancelled,
+        recomputed=tally["recomputed"],
+        differing=tally["differs"],
     )
 
 
@@ -463,29 +507,39 @@ def _run_one_point(
     runner: PointRunner,
     on_event: Callable[[SweepEvent], None],
     cancel_event: threading.Event,
-    position: int,
-    total: int,
+    progress_position: tuple[int, int],
+    version_and_stale: tuple[str, Path | None],
     results: Path | None,
-) -> Literal["done", "reused", "failed", "cancelled"]:
-    """Attach, reuse or compute one point; return which."""
-    reusable = groups.find_run_directories(point.run_id, results=results)
-    if reusable:
-        groups.add_run_to_study(study_id, reusable[0], results=results)
-        _clear_failure(study_id, point.run_id, results)
-        on_event(SweepEvent("point_reused", point.index, point.run_id, position, total))
-        return "reused"
-    on_event(SweepEvent("point_started", point.index, point.run_id, position, total))
-
-    def progress(message: object) -> None:
+) -> Literal["done", "reused", "recomputed", "differs", "failed", "cancelled"]:
+    """Attach, reuse or compute one point; compare it with an older version's run."""
+    position, total = progress_position
+    software_version, stale_member = version_and_stale
+    reusable = groups.find_run_directories(
+        point.run_id, software_version=software_version, results=results
+    )
+    reused = bool(reusable)
+    if reused:
+        result: Path | PointFailure = reusable[0]
+    else:
         on_event(
-            SweepEvent(
-                "point_progress", point.index, point.run_id, position, total, message
-            )
+            SweepEvent("point_started", point.index, point.run_id, position, total)
         )
 
-    result = runner.run_point(
-        SimulationParams.from_mapping(point.params), cancel_event, progress
-    )
+        def progress(message: object) -> None:
+            on_event(
+                SweepEvent(
+                    "point_progress",
+                    point.index,
+                    point.run_id,
+                    position,
+                    total,
+                    message,
+                )
+            )
+
+        result = runner.run_point(
+            SimulationParams.from_mapping(point.params), cancel_event, progress
+        )
     if isinstance(result, PointFailure):
         if cancel_event.is_set():
             return "cancelled"
@@ -503,8 +557,75 @@ def _run_one_point(
         return "failed"
     groups.add_run_to_study(study_id, result, results=results)
     _clear_failure(study_id, point.run_id, results)
-    on_event(SweepEvent("point_done", point.index, point.run_id, position, total))
-    return "done"
+    older = stale_member or next(
+        iter(
+            groups.find_stale_run_directories(
+                point.run_id, software_version, results=results
+            )
+        ),
+        None,
+    )
+    if older is not None and older.resolve() != result.resolve():
+        return _compare_with_older(
+            point, older, result, on_event, (position, total), results
+        )
+    kind: EventKind = "point_reused" if reused else "point_done"
+    on_event(SweepEvent(kind, point.index, point.run_id, position, total))
+    return "reused" if reused else "done"
+
+
+def _compare_with_older(
+    point: SweepPoint,
+    older: Path,
+    recomputed: Path,
+    on_event: Callable[[SweepEvent], None],
+    progress_position: tuple[int, int],
+    results: Path | None,
+) -> Literal["recomputed", "differs"]:
+    """Compare a recomputed point with the run another version made.
+
+    A match means the old run is an exact duplicate: every Study that held it
+    now holds the recomputed one and the old directory goes. A mismatch keeps
+    both linked, records the difference beside the new run, and reports it.
+    """
+    position, total = progress_position
+    comparison = compare_runs(older, recomputed)
+    if comparison.identical:
+        groups.supersede_run(older, recomputed, results=results)
+        on_event(
+            SweepEvent(
+                "point_recomputed",
+                point.index,
+                point.run_id,
+                position,
+                total,
+                comparison.to_dict(),
+            )
+        )
+        return "recomputed"
+    write_reproducibility_note(recomputed, comparison.to_dict())
+    on_event(
+        SweepEvent(
+            "point_differs",
+            point.index,
+            point.run_id,
+            position,
+            total,
+            comparison.to_dict(),
+        )
+    )
+    return "differs"
+
+
+def write_reproducibility_note(directory: Path, comparison: Mapping[str, Any]) -> None:
+    """Record, beside a recomputed run, that it differs from an older version's.
+
+    A sidecar file, deliberately outside the manifest's artifact digests, so
+    the run's own record of itself is untouched.
+    """
+    (directory / "reproducibility.json").write_text(
+        json.dumps(comparison, indent=2), encoding="utf-8"
+    )
 
 
 @dataclass(frozen=True, slots=True)
@@ -541,11 +662,8 @@ def sweep_point_results(
     elsewhere in the Study code. Nothing is stored: the aggregate is
     computed each time from small JSON files.
     """
-    by_id = {
-        run_id: directory
-        for directory in groups.study_run_directories(study, results=results)
-        if (run_id := groups.run_id_of(directory)) is not None
-    }
+    current, stale = _member_runs(study, __version__, results)
+    by_id = {**stale, **current}
     found: list[PointResult] = []
     for entry in stored_points(study):
         directory = by_id.get(str(entry["run_id"]))

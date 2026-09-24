@@ -44,6 +44,9 @@ const SWEEP_PROPORTION_STATISTICS = new Set([
 // Statistics the closed form can predict (`Api.get_sweep_theory`).
 const SWEEP_THEORY_STATISTICS = new Set(["D", "G_ST", "E_ST", "H_S", "H_T"]);
 const SWEEP_THEORY_SAMPLES = 60;
+// A point whose only run came from another software version is recomputed
+// (and compared) the next time the sweep runs.
+const SWEEP_STATE_LABELS = { stale: "older version (rerun to update)" };
 const SWEEP_LINE_MARGIN = { left: 64, right: 24, top: 16, bottom: 52 };
 
 let sweepResultsData = null;
@@ -766,7 +769,10 @@ function drawSweepResultsTable(statistic) {
             stat && stat.low !== null ? sweepFormatValue(stat.low) : "",
             stat && stat.high !== null ? sweepFormatValue(stat.high) : "",
             result ? String(result.nReplicates) : "",
-            point.state === "failed" ? `failed (${point.reason})` : states.get(point.index).state,
+            point.state === "failed"
+                ? `failed (${point.reason})`
+                : SWEEP_STATE_LABELS[states.get(point.index).state] ??
+                  states.get(point.index).state,
         ];
         for (const text of cells) {
             const cell = document.createElement("td");

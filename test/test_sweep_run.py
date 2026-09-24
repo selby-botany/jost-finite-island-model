@@ -6,6 +6,7 @@ generations), so the run ids, manifests and attachments are the real ones.
 
 from __future__ import annotations
 
+import json
 import shutil
 import threading
 from collections.abc import Callable, Iterator
@@ -339,3 +340,83 @@ def test_point_results_skip_points_that_have_not_run(results: Path) -> None:
     study_id = _study(results, 2, 3)
 
     assert sweep_point_results(groups.get_study(study_id)) == []
+
+
+_OTHER_VERSION = "9.9.9"
+
+
+def test_a_run_from_another_software_version_is_stale_not_done(results: Path) -> None:
+    study_id = _study(results, 2)
+    _run(study_id)
+    study = groups.get_study(study_id)
+
+    assert [s.state for s in sweep_point_statuses(study)] == ["done"]
+    assert [
+        s.state for s in sweep_point_statuses(study, software_version=_OTHER_VERSION)
+    ] == ["stale"]
+
+
+def test_a_new_version_recomputes_and_a_matching_result_replaces_the_old_run(
+    results: Path,
+) -> None:
+    study_id = _study(results, 2, 3)
+    _run(study_id)
+    old = set(groups.study_run_directories(groups.get_study(study_id)))
+
+    outcome, events = _run(study_id, software_version=_OTHER_VERSION)
+
+    assert (outcome.recomputed, outcome.differing, outcome.done) == (2, 0, 0)
+    assert [e.kind for e in events if e.kind.startswith("point_")].count(
+        "point_recomputed"
+    ) == 2
+    now = set(groups.study_run_directories(groups.get_study(study_id)))
+    assert len(now) == 2
+    assert not (old & now)
+    assert not any(directory.exists() for directory in old)
+    assert len(list(results.glob("*/manifest.json"))) == 2
+    recomputed = next(e for e in events if e.kind == "point_recomputed")
+    assert recomputed.detail["identical"] is True  # type: ignore[index]
+
+
+class _Tampering:
+    """Recomputes a point, then breaks the new run's recorded trajectory digest."""
+
+    def __init__(self) -> None:
+        self.local = LocalPointRunner()
+
+    def run_point(
+        self,
+        params: SimulationParams,
+        cancel_event: threading.Event,
+        on_message: Callable[[object], None] | None = None,
+    ) -> Path | PointFailure:
+        result = self.local.run_point(params, cancel_event, on_message)
+        if isinstance(result, Path):
+            manifest_path = result / "manifest.json"
+            manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+            manifest["artifacts"]["trajectory"]["sha256"] = "0" * 64
+            manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
+        return result
+
+
+def test_a_recomputed_result_that_differs_is_reported_and_both_runs_are_kept(
+    results: Path,
+) -> None:
+    study_id = _study(results, 2)
+    _run(study_id)
+    (old,) = groups.study_run_directories(groups.get_study(study_id))
+
+    outcome, events = _run(study_id, _Tampering(), software_version=_OTHER_VERSION)
+
+    assert (outcome.differing, outcome.recomputed) == (1, 0)
+    differs = next(e for e in events if e.kind == "point_differs")
+    assert differs.detail["identical"] is False  # type: ignore[index]
+    assert differs.detail["differences"][0]["label"] == "trajectory"  # type: ignore[index]
+    members = groups.study_run_directories(groups.get_study(study_id))
+    assert old in members
+    assert len(members) == 2
+    (new,) = [m for m in members if m != old]
+    assert (
+        json.loads((new / "reproducibility.json").read_text("utf-8"))["identical"]
+        is False
+    )

@@ -184,6 +184,17 @@ def _execute(study_id: str, *, retry_failed: bool) -> int:
         f"{outcome.already_present} already present, {outcome.failed} failed, "
         f"{outcome.skipped_failed} skipped after an earlier failure"
     )
+    if outcome.recomputed or outcome.differing:
+        print(
+            f"{outcome.recomputed} point(s) recomputed under this version and "
+            f"matched the earlier result bit for bit; {outcome.differing} differed"
+        )
+    if outcome.differing:
+        print(
+            "fim: warning: the simulator guarantees bit-for-bit reproducibility; "
+            "both runs were kept for inspection",
+            file=sys.stderr,
+        )
     if outcome.cancelled:
         print(f"Cancelled. Continue with: fim sweep resume {study_id}")
         return 130
@@ -192,7 +203,17 @@ def _execute(study_id: str, *, retry_failed: bool) -> int:
             f"Retry the failed points with: fim sweep resume {study_id} --retry-failed"
         )
         return 1
-    return 0
+    return 1 if outcome.differing else 0
+
+
+def _describe_differences(comparison: object) -> str:
+    """List what changed in a reproducibility comparison, briefly."""
+    if not isinstance(comparison, dict):
+        return "see reproducibility.json"
+    items = comparison.get("differences", [])
+    return "; ".join(
+        f"{item['label']}: {item['old']} -> {item['new']}" for item in items[:6]
+    )
 
 
 def _print_event(event: SweepEvent) -> None:
@@ -204,6 +225,14 @@ def _print_event(event: SweepEvent) -> None:
         print(f"{prefix}: done", flush=True)
     elif event.kind == "point_reused":
         print(f"{prefix}: reused an existing run", flush=True)
+    elif event.kind == "point_recomputed":
+        print(f"{prefix}: recomputed; matches the earlier version's result", flush=True)
+    elif event.kind == "point_differs":
+        print(
+            f"{prefix}: recomputed; DIFFERS from the earlier version's result "
+            f"({_describe_differences(event.detail)})",
+            flush=True,
+        )
     elif event.kind == "point_failed":
         print(f"{prefix}: FAILED ({event.detail})", flush=True)
 

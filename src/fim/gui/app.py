@@ -109,6 +109,7 @@ from fim.persistence import groups
 from fim.persistence.manifest import RunManifest, read_batch_manifest, read_manifest
 from fim.persistence.run_metadata import run_metadata_path
 from fim.reanalyze import reanalyze_trajectory, replicate_convergence_history
+from fim.reproducibility import compare_runs
 from fim.statistics import (
     effective_allele_count,
     equilibrium_d,
@@ -131,6 +132,7 @@ from fim.sweep_run import (
     create_sweep_study,
     run_sweep,
     sweep_spec_of,
+    write_reproducibility_note,
 )
 from fim.viz.scatter import (
     deme_pair_panel,
@@ -1339,6 +1341,10 @@ class Api:
         # `_sweep_cancel_event` is non-`None` for exactly as long as a
         # sweep's own thread is running.
         self._run_in_flight = False
+        # The run of this configuration from another software version, if
+        # any, that the run now starting is compared with when it finishes.
+        self._previous_version_run: Path | None = None
+        self._comparison_target: tuple[Path, _EvaluatesJs] | None = None
         self._sweep_cancel_event: threading.Event | None = None
         self._sweep_study_id: str | None = None
         self._open_folder = open_folder
@@ -1477,12 +1483,16 @@ class Api:
         self._preferences = self._preferences.with_form_values(values)
         save_preferences(self._preferences_path, self._preferences)
         # A run is a pure function of its configuration (`deterministic_
-        # run_id` hashes all of it, the seed included), so a configuration
-        # already computed is not computed again: the existing run is
-        # attached to the chosen Study, exactly as a sweep point is, and
-        # shown as it is.
+        # run_id` hashes all of it, the seed included) within one software
+        # version, so a configuration already computed by this version is
+        # not computed again: the existing run is attached to the chosen
+        # Study, exactly as a sweep point is, and shown as it is. A run of
+        # the same configuration from another version is not reused: the
+        # configuration is recomputed and compared with it when it
+        # finishes, so a break in bit-for-bit reproducibility is reported.
         is_batch = params.n_replicates > 1
-        existing = groups.find_run_directories(deterministic_run_id(params))
+        run_id = deterministic_run_id(params)
+        existing = groups.find_run_directories(run_id, software_version=fim_version)
         if existing:
             _attach_finished_run_to_study(study_id, existing[0])
             return {
@@ -1491,6 +1501,9 @@ class Api:
                 "isBatch": is_batch,
                 "directory": str(existing[0]),
             }
+        self._previous_version_run = next(
+            iter(groups.find_stale_run_directories(run_id, fim_version)), None
+        )
         try:
             output_directory = paths.default_output_directory()
         except FileExistsError as error:
@@ -1555,6 +1568,7 @@ class Api:
         equilibrium = _equilibrium_reference_payload(params, self._significant_digits)
         identity_recovery = _identity_recovery_reference_payload(params)
         self._run_in_flight = True
+        self._comparison_target = (output_directory, window)
         threading.Thread(
             target=self._drain_then_release,
             args=(
@@ -1585,8 +1599,17 @@ class Api:
         The drain functions return once the run reports a terminal
         message, so this is what lets `start_sweep` know a run has ended.
         """
+        previous = self._previous_version_run
+        target = self._comparison_target
+        self._previous_version_run = None
         try:
             drain(*arguments)
+            if (
+                previous is not None
+                and target is not None
+                and (target[0] / "manifest.json").is_file()
+            ):
+                _check_reproducibility(target[1], target[0], previous)
         finally:
             self._run_in_flight = False
 
@@ -1633,6 +1656,7 @@ class Api:
         if self._on_run_started is not None:
             self._on_run_started()
         self._run_in_flight = True
+        self._comparison_target = (output_directory, window)
         threading.Thread(
             target=self._drain_then_release,
             args=(
@@ -4619,6 +4643,42 @@ class Api:
         }
 
 
+def _check_reproducibility(
+    window: _EvaluatesJs, recomputed: Path, previous: Path
+) -> None:
+    """Compare a recomputed run with the same configuration from another version.
+
+    Identical: the old run is an exact duplicate, so every Study that held
+    it holds the recomputed one and the old directory is removed. Different:
+    both are kept, the difference is recorded beside the new run, and the
+    page is told, since the simulator guarantees bit-for-bit reproducibility
+    and a difference is a break of that guarantee. Either way the page hears
+    of it through `fim.onReproducibilityChecked`.
+    """
+    try:
+        comparison = compare_runs(previous, recomputed)
+    except (OSError, ValueError) as error:
+        logger.warning("could not compare %s with %s: %s", recomputed, previous, error)
+        return
+    payload = comparison.to_dict()
+    if comparison.identical:
+        groups.supersede_run(previous, recomputed)
+    else:
+        logger.warning(
+            "recomputed run %s differs from %s (version %s vs %s): %s",
+            recomputed,
+            previous,
+            comparison.old_version,
+            comparison.new_version,
+            [item.label for item in comparison.differences],
+        )
+        write_reproducibility_note(recomputed, payload)
+    try:
+        window.evaluate_js(f"fim.onReproducibilityChecked({json.dumps(payload)})")
+    except Exception:
+        logger.debug("could not push a reproducibility result", exc_info=True)
+
+
 def _default_sweep_name(spec: SweepSpec) -> str:
     """Name a Study for a sweep from the parameters it varies."""
     return f"Sweep of {' and '.join(axis.key for axis in spec.axes)}"
@@ -4666,7 +4726,7 @@ def _theory_at(
 
 def _push_sweep_event(window: _EvaluatesJs, event: SweepEvent) -> None:
     """Push one sweep event to the page; a page that is gone is not an error."""
-    detail = event.detail if isinstance(event.detail, str) else None
+    detail = event.detail if isinstance(event.detail, str | dict) else None
     payload = {
         "kind": event.kind,
         "index": event.index,
