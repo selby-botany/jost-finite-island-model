@@ -2981,6 +2981,17 @@ def test_study_create_add_run_list_delete(
 
 A full `fim study create`/`add-run`/`list`/`delete` life cycle via `cli.main`.
 
+<a id="cli.test_cli.test_deleting_a_study_keeps_a_run_the_default_study_also_holds"></a>
+
+#### test\_deleting\_a\_study\_keeps\_a\_run\_the\_default\_study\_also\_holds
+
+```python
+def test_deleting_a_study_keeps_a_run_the_default_study_also_holds(
+        tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None
+```
+
+A plain `fim run` joins the default study, so a named study's delete keeps it.
+
 <a id="cli.test_cli.test_study_add_run_resolves_a_bare_run_id"></a>
 
 #### test\_study\_add\_run\_resolves\_a\_bare\_run\_id

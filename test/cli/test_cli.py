@@ -1639,10 +1639,23 @@ def test_study_create_add_run_list_delete(
     config = tmp_path / "run.yaml"
     output = tmp_path / "output"
     _write_config(config)
-    assert cli.main(["run", str(config), "--output", str(output), "--quiet"]) == 0
-
     assert cli.main(["study", "create", "--name", "Ring sweep"]) == 0
     study_id = next((tmp_path / "results" / ".fim" / "studies").glob("*.json")).stem
+    # Attached to this study only (an unnamed run also joins the default study).
+    assert (
+        cli.main(
+            [
+                "run",
+                str(config),
+                "--output",
+                str(output),
+                "--quiet",
+                "--study",
+                study_id,
+            ]
+        )
+        == 0
+    )
 
     assert cli.main(["study", "add-run", study_id, str(output)]) == 0
     capsys.readouterr()
@@ -1651,6 +1664,28 @@ def test_study_create_add_run_list_delete(
 
     assert cli.main(["study", "delete", study_id]) == 0
     assert not output.exists()
+
+
+def test_deleting_a_study_keeps_a_run_the_default_study_also_holds(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A plain `fim run` joins the default study, so a named study's delete keeps it."""
+    monkeypatch.setattr(paths, "results_directory", lambda: tmp_path / "results")
+    config = tmp_path / "run.yaml"
+    output = tmp_path / "output"
+    _write_config(config)
+    assert cli.main(["run", str(config), "--output", str(output), "--quiet"]) == 0
+    assert cli.main(["study", "create", "--name", "Ring sweep"]) == 0
+    study_id = next(
+        path.stem
+        for path in (tmp_path / "results" / ".fim" / "studies").glob("*.json")
+        if path.stem != "study-default"
+    )
+    assert cli.main(["study", "add-run", study_id, str(output)]) == 0
+
+    assert cli.main(["study", "delete", study_id]) == 0
+
+    assert output.exists()
 
 
 def test_study_add_run_resolves_a_bare_run_id(
@@ -1703,10 +1738,22 @@ def test_experiment_create_add_study_list_delete_cascades_to_runs(
     config = tmp_path / "run.yaml"
     output = tmp_path / "output"
     _write_config(config)
-    assert cli.main(["run", str(config), "--output", str(output), "--quiet"]) == 0
     assert cli.main(["study", "create", "--name", "Ring sweep"]) == 0
     study_id = next((tmp_path / "results" / ".fim" / "studies").glob("*.json")).stem
-    assert cli.main(["study", "add-run", study_id, str(output)]) == 0
+    assert (
+        cli.main(
+            [
+                "run",
+                str(config),
+                "--output",
+                str(output),
+                "--quiet",
+                "--study",
+                study_id,
+            ]
+        )
+        == 0
+    )
     assert cli.main(["experiment", "create", "--name", "Topology"]) == 0
     experiment_id = next(
         (tmp_path / "results" / ".fim" / "experiments").glob("*.json")
