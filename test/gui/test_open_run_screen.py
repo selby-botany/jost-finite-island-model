@@ -1302,8 +1302,11 @@ def test_a_reopened_batch_still_offers_its_trajectory_graph(
                 window,
                 "({"
                 "runViewState: window.fim.getRunViewState(), "
-                "graphKeys: Array.from(document.getElementById("
-                "'run-graph-select').options).map((option) => option.value)"
+                # A graph with data is either enabled in the Graphs menu or,
+                # when it is the only one chosen, checked-and-locked.
+                "graphKeys: Array.from(document.querySelectorAll("
+                "'#run-graph-menu-list input')).filter((box) => "
+                "!box.disabled || box.checked).map((box) => box.value)"
                 "})",
                 lambda value: (
                     value is not None and value.get("runViewState") == "completed"
@@ -1709,9 +1712,10 @@ def test_a_reopened_runs_graphs_repaint_at_the_real_pane_size(
                 "const c = document.getElementById('run-trajectory-canvas');"
                 "const ctx = c.getContext('2d');"
                 "let far = 0;"
-                "if (c.width > 312) {"
-                "const data = ctx.getImageData(310, c.height - 23, "
-                "c.width - 12 - 310, 3).data;"
+                "const from = Math.floor(c.width * 0.6);"
+                "if (c.width > 150) {"
+                "const data = ctx.getImageData(from, c.height - 23, "
+                "c.width - 12 - from, 3).data;"
                 "for (let i = 3; i < data.length; i += 4) {"
                 "if (data[i] !== 0) { far += 1; } } }"
                 "return {bufferW: c.width, cssW: c.clientWidth, farContent: far};"
@@ -1729,5 +1733,5 @@ def test_a_reopened_runs_graphs_repaint_at_the_real_pane_size(
 
     assert settled is not None, "`completed` was never reached after reopening"
     assert settled["bufferW"] == settled["cssW"]
-    assert settled["bufferW"] > 300
+    assert settled["bufferW"] > 150
     assert settled["farContent"] > 0

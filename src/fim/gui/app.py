@@ -5612,6 +5612,66 @@ def _set_macos_application_name(name: str) -> None:
             info["CFBundleName"] = name
 
 
+_HIDDEN_WINDOW_SIZE = (900, 700)
+"""Size of the windows tests drive (`hidden=True`): fixed, so a layout
+test is a function of its commit and not of the machine's display."""
+
+_FALLBACK_WINDOW_SIZE = (1280, 720)
+"""16:9, used when the display cannot be measured."""
+
+_WINDOW_SCREEN_FRACTION = 0.9
+"""How much of the display the initial window may take: a polite but tight
+margin, leaving room for the menu bar, dock or taskbar and window chrome."""
+
+_MAX_WINDOW_SIZE = (1920, 1080)
+"""Beyond this the content only gets sparser, not larger."""
+
+_MIN_WINDOW_SIZE = (960, 540)
+"""Below this the two default graphs, the scrubber and the statistics table
+no longer fit together; smaller displays are simply used in full."""
+
+
+def initial_window_size(screen_width: int, screen_height: int) -> tuple[int, int]:
+    """Choose the initial window size for a display: the largest 16:9 that fits.
+
+    The Run card's default view is two graphs side by side plus the
+    scrubber and the statistics table, which is wide rather than tall, so
+    the window is 16:9 and as large as the display politely allows
+    (`_WINDOW_SCREEN_FRACTION` of it, so the window never touches the
+    edges), between `_MIN_WINDOW_SIZE` and `_MAX_WINDOW_SIZE`.
+
+    Args:
+        screen_width: Display width in pixels.
+        screen_height: Display height in pixels.
+
+    Returns:
+        `(width, height)` in pixels, with `width / height` 16:9.
+    """
+    max_width = min(screen_width * _WINDOW_SCREEN_FRACTION, _MAX_WINDOW_SIZE[0])
+    max_height = min(screen_height * _WINDOW_SCREEN_FRACTION, _MAX_WINDOW_SIZE[1])
+    height = min(max_height, max_width * 9 / 16)
+    width = height * 16 / 9
+    if (
+        width < _MIN_WINDOW_SIZE[0]
+        and screen_width * _WINDOW_SCREEN_FRACTION >= (_MIN_WINDOW_SIZE[0])
+    ):
+        width, height = _MIN_WINDOW_SIZE
+    return int(width), int(height)
+
+
+def _window_size(hidden: bool) -> tuple[int, int]:
+    """The size to create the window at: fixed when hidden, else fit to the display."""
+    if hidden:
+        return _HIDDEN_WINDOW_SIZE
+    try:
+        screens = webview.screens
+        primary = screens[0]
+        return initial_window_size(int(primary.width), int(primary.height))
+    except Exception:
+        logger.warning("could not measure the display; using the fallback window size")
+        return _FALLBACK_WINDOW_SIZE
+
+
 def create_window(*, api: Api | None = None, hidden: bool = False) -> webview.Window:
     """Build, but do not show, fim's one pywebview window over `webui/index.html`.
 
@@ -5658,12 +5718,13 @@ def create_window(*, api: Api | None = None, hidden: bool = False) -> webview.Wi
     ThreadingMixIn.daemon_threads = True
     _set_macos_application_name(_MACOS_APPLICATION_NAME)
     _configure_macos_native_about_panel()
+    window_width, window_height = _window_size(hidden)
     created = webview.create_window(
         _WINDOW_TITLE,
         url=str(_webui_directory() / "index.html"),
         js_api=api if api is not None else Api(),
-        width=900,
-        height=700,
+        width=window_width,
+        height=window_height,
         hidden=hidden,
     )
     if created is None:

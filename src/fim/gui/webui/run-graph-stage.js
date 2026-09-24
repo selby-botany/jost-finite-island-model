@@ -1,7 +1,15 @@
 /*
- * The Run card's graph stage: one graph at a time, chosen from a
- * selector, driven by a scrubber down its left edge, and openable in a
- * zoom frame.
+ * The Run card's graph stage: the graphs the user chose to show together
+ * (the scatter plot and the trajectories by default), in a grid whose
+ * column count comes from Settings, driven by one shared scrubber down
+ * its left edge, and openable in a zoom frame.
+ *
+ * Several graphs at once is deliberate and user-controlled (design
+ * `20260923-claude-sonnet-5-multi-graph-run-card-and-scatter-encoding-
+ * design.md`): the scatter and the trajectories are two views of the same
+ * generation, and seeing them side by side is how people learn to connect
+ * them. The single-graph stage this replaced is still one setting away
+ * (choose one graph); `showGraph` keeps meaning "only this one".
  *
  * Replaces the card's earlier quadrant of four simultaneous panels,
  * which was reported as unworkable: each panel was too small to read,
@@ -27,38 +35,60 @@
 // which stays in the DOM (visually hidden) as both the source of the
 // option label and the pane's accessible name.
 const RUN_GRAPHS = [
-    { key: "scatter", paneId: "run-scatter-card", titleId: "run-scatter-title" },
-    { key: "trajectory", paneId: "run-trajectory-frame", titleId: "run-trajectory-title" },
+    { key: "scatter", paneId: "run-scatter-card", titleId: "run-scatter-title", weight: 1 },
+    {
+        key: "trajectory",
+        paneId: "run-trajectory-frame",
+        titleId: "run-trajectory-title",
+        weight: 1.5,
+    },
     {
         key: "alleleComposition",
         paneId: "allele-composition-card",
         titleId: "allele-composition-title",
+        weight: 1.3,
     },
     {
         key: "frequencySpectrum",
         paneId: "frequency-spectrum-card",
         titleId: "frequency-spectrum-title",
+        weight: 1.3,
     },
-    { key: "ibd", paneId: "ibd-card", titleId: "ibd-title" },
+    // Never offered: this card intentionally shows four graphs, not five
+    // (app.css). Kept so the payload stays wired for Python callers.
+    { key: "ibd", paneId: "ibd-card", titleId: "ibd-title", weight: 1.3, offered: false },
 ];
 
 const ZOOM_STEP = 0.25;
 const ZOOM_MIN = 0.5;
 const ZOOM_MAX = 4;
 
-const DEFAULT_GRAPH_KEY = "trajectory";
+// What a fresh install shows together, matching `fim.gui.preferences.
+// DEFAULT_RUN_GRAPHS`; replaced by the saved choice once the bridge is up.
+const DEFAULT_GRAPH_KEYS = ["scatter", "trajectory"];
+const DEFAULT_GRAPH_COLUMNS = 2;
+// A pane narrower than this is unreadable, so the effective column count
+// drops until every column can have at least this much (rows then follow).
+const MIN_PANE_WIDTH_PX = 220;
+const GRAPH_GAP_PX = 16;
 
 const graphAvailability = new Map();
 const graphRedrawers = new Map();
-// The graph the user asked for, which is not always the one on screen.
-// Kept apart from `selectedGraphKey` because availability arrives in an
+// The graphs the user asked for, which are not always the ones on screen.
+// Kept apart from `visibleGraphKeys` because availability arrives in an
 // order nobody controls: the scatter declares itself at `load`, long
 // before a run has produced a trajectory. Collapsing the two would let
 // that first fallback overwrite the preference permanently, so the
 // trajectory would never appear even once it had data -- which is
-// exactly the defect this pair replaced.
-let preferredGraphKey = DEFAULT_GRAPH_KEY;
-let selectedGraphKey = DEFAULT_GRAPH_KEY;
+// exactly the defect this pair replaced. The preference is only ever
+// changed by the user (or `showGraph`); what is *shown* is recomputed
+// against what has data on every sync.
+let preferredGraphKeys = [...DEFAULT_GRAPH_KEYS];
+let visibleGraphKeys = [];
+// The graph "the" active one for callers that ask for a single graph
+// (`getActiveGraph`): the pane last double-clicked, else the first shown.
+let focusedGraphKey = null;
+let graphColumns = DEFAULT_GRAPH_COLUMNS;
 let zoomedGraphKey = null;
 let zoomScale = 1;
 // Which statistics table `openGraphZoom` moved, if any -- remembered
@@ -155,7 +185,105 @@ for (const entry of RUN_GRAPHS) {
 }
 
 /**
- * Rebuild the selector, show exactly one pane, and repaint it.
+ * Return whether a graph is offered in the menu at all.
+ *
+ * @param {{offered?: boolean}} entry
+ * @returns {boolean}
+ */
+function isOffered(entry) {
+    return entry.offered !== false;
+}
+
+/**
+ * Rebuild the Graphs menu from what is available and chosen.
+ *
+ * Every offered graph is listed; one with no data yet is disabled rather
+ * than hidden, so the menu does not reshuffle as a run produces data.
+ * The last chosen graph that has data cannot be unchecked -- the stage
+ * is never left blank by a click.
+ *
+ * @param {Array<string>} available
+ * @returns {void}
+ */
+function syncGraphMenu(available) {
+    const list = document.getElementById("run-graph-menu-list");
+    const summary = document.getElementById("run-graph-menu-summary");
+    if (!list) {
+        return;
+    }
+    const chosen = new Set(visibleGraphKeys);
+    const signature = RUN_GRAPHS.filter(isOffered)
+        .map((entry) => {
+            const title = document.getElementById(entry.titleId);
+            const label = title ? title.textContent : entry.key;
+            const usable = available.includes(entry.key);
+            const only = chosen.size === 1 && chosen.has(entry.key);
+            return `${entry.key}\u0000${label}\u0000${usable}\u0000${chosen.has(entry.key)}\u0000${only}`;
+        })
+        .join("\u0001");
+    if (summary) {
+        summary.textContent = `Graphs (${visibleGraphKeys.length})`;
+    }
+    if (list.dataset.signature === signature) {
+        return;
+    }
+    list.dataset.signature = signature;
+    list.replaceChildren();
+    for (const entry of RUN_GRAPHS.filter(isOffered)) {
+        const title = document.getElementById(entry.titleId);
+        const usable = available.includes(entry.key);
+        const label = document.createElement("label");
+        label.className = "graph-menu-item";
+        const box = document.createElement("input");
+        box.type = "checkbox";
+        box.value = entry.key;
+        box.checked = chosen.has(entry.key);
+        box.disabled = !usable || (chosen.size === 1 && chosen.has(entry.key));
+        const text = document.createElement("span");
+        text.textContent = title ? title.textContent : entry.key;
+        if (!usable) {
+            label.title = "No data for this graph yet";
+        }
+        label.append(box, text);
+        list.appendChild(label);
+    }
+}
+
+/**
+ * Size the grid: how many columns, and how wide each is.
+ *
+ * The user's column setting is an upper bound. It is also capped by how
+ * many graphs are shown (three columns for two graphs would leave an
+ * empty cell) and by the width available, so that no pane is narrower
+ * than `MIN_PANE_WIDTH_PX` -- rows then follow. Column widths are
+ * weighted per graph (`weight` in `RUN_GRAPHS`) using the first row's
+ * graphs, so the scatter, which reads fine small, gets less than the
+ * trajectories, which do not.
+ *
+ * @returns {void}
+ */
+function applyGraphLayout() {
+    const panels = document.getElementById("run-visual-panels");
+    if (!panels) {
+        return;
+    }
+    const width = panels.clientWidth;
+    const fits =
+        width > 0
+            ? Math.max(1, Math.floor((width + GRAPH_GAP_PX) / (MIN_PANE_WIDTH_PX + GRAPH_GAP_PX)))
+            : graphColumns;
+    const columns = Math.max(1, Math.min(graphColumns, visibleGraphKeys.length, fits));
+    const weights = visibleGraphKeys
+        .slice(0, columns)
+        .map((key) => runGraphEntry(key).weight ?? 1);
+    panels.style.gridTemplateColumns = weights
+        .map((weight) => `minmax(0, ${weight}fr)`)
+        .join(" ");
+    panels.dataset.graphColumns = String(columns);
+}
+
+/**
+ * Work out which graphs to show, show exactly those, and repaint them.
  *
  * Idempotent: safe to call after any availability change, selection
  * change, or zoom transition.
@@ -163,83 +291,47 @@ for (const entry of RUN_GRAPHS) {
  * @returns {void}
  */
 function syncRunGraphStage() {
-    const select = document.getElementById("run-graph-select");
     const stage = document.getElementById("run-graph-stage");
-    if (!select || !stage) {
+    if (!stage) {
         return;
     }
     const available = availableGraphKeys();
 
-    // Keep the selection on a graph that still has data; fall back to
-    // the first one that does, so a state change that retires the
-    // showing graph does not leave the stage blank.
-    //
-    // Resolve the preference against what actually has data. The
-    // preference itself is never written here, so a graph that is
-    // merely not ready yet is shown as soon as it becomes ready.
-    if (available.includes(preferredGraphKey)) {
-        selectedGraphKey = preferredGraphKey;
-    } else {
-        selectedGraphKey = available.length > 0 ? available[0] : null;
+    // Show what the user chose *and* what has data, in card order. If
+    // that leaves nothing (a run's first moments, before the chosen
+    // graphs have data), fall back to the first graph that does, so a
+    // state change never leaves the stage blank; the preference itself
+    // is never written here, so a graph that is merely not ready yet
+    // appears as soon as it becomes ready.
+    visibleGraphKeys = RUN_GRAPHS.filter(
+        (entry) => preferredGraphKeys.includes(entry.key) && available.includes(entry.key)
+    ).map((entry) => entry.key);
+    if (visibleGraphKeys.length === 0 && available.length > 0) {
+        visibleGraphKeys = [available[0]];
     }
-
-    // Rebuild the options only when the set or the labels changed --
-    // replacing them unconditionally would drop an open dropdown.
-    const labels = available.map((key) => {
-        const entry = runGraphEntry(key);
-        const title = document.getElementById(entry.titleId);
-        return title ? title.textContent : key;
-    });
-    const signature = available.map((key, index) => `${key}\u0000${labels[index]}`).join("\u0001");
-    if (select.dataset.optionSignature !== signature) {
-        select.dataset.optionSignature = signature;
-
-        // Reuse each existing `<option>` rather than replacing the lot.
-        // The set really does change mid-run -- the scatter is the only
-        // graph with data until the first progress message arrives, and
-        // then three more appear at once -- so this rebuild runs while
-        // the user may already have chosen something. Discarding and
-        // recreating the selected option leaves the native popup button
-        // able to paint a stale label beside a correct `value`, which is
-        // what a reported "the pull-down disagrees with the graph"
-        // screenshot looks like. Appending an existing child moves it,
-        // so order still follows `available`.
-        const existing = new Map(
-            Array.from(select.options).map((option) => [option.value, option])
-        );
-        for (let index = 0; index < available.length; index += 1) {
-            const key = available[index];
-            const option = existing.get(key) ?? document.createElement("option");
-            option.value = key;
-            option.textContent = labels[index];
-            select.appendChild(option);
-            existing.delete(key);
-        }
-        for (const option of existing.values()) {
-            option.remove();
-        }
+    if (!visibleGraphKeys.includes(focusedGraphKey)) {
+        focusedGraphKey = visibleGraphKeys.length > 0 ? visibleGraphKeys[0] : null;
     }
-    if (selectedGraphKey !== null) {
-        select.value = selectedGraphKey;
-    }
-    select.disabled = available.length < 2;
     stage.hidden = available.length === 0;
+    syncGraphMenu(available);
 
-    // One pane visible, and only while it is not away in the zoom
-    // frame -- a pane that has been moved out of the stage must not be
-    // un-hidden back into a stage it no longer occupies.
+    // Only the chosen panes are visible -- and a pane that has been moved
+    // out of the stage into the zoom frame must not be un-hidden back
+    // into a stage it no longer occupies.
     for (const entry of RUN_GRAPHS) {
         const pane = document.getElementById(entry.paneId);
         if (!pane) {
             continue;
         }
-        const shown = entry.key === selectedGraphKey && graphAvailability.get(entry.key) === true;
-        pane.hidden = !shown;
+        pane.hidden = !visibleGraphKeys.includes(entry.key);
     }
-    if (selectedGraphKey !== null && !redrawingActiveGraph) {
+    applyGraphLayout();
+    if (!redrawingActiveGraph) {
         redrawingActiveGraph = true;
         try {
-            redrawGraph(selectedGraphKey);
+            for (const key of visibleGraphKeys) {
+                redrawGraph(key);
+            }
         } finally {
             redrawingActiveGraph = false;
         }
@@ -274,43 +366,107 @@ window.fim.registerGraphDraw = function registerGraphDraw(key, redraw) {
 };
 
 /**
- * Repaint whichever graph is showing, wherever it is showing.
+ * Repaint whichever graphs are showing, wherever they are showing.
+ *
+ * While the zoom frame is open only the zoomed graph is repainted: the
+ * others are hidden behind the modal and repaint when it closes.
  *
  * @returns {void}
  */
 window.fim.redrawActiveGraph = function redrawActiveGraph() {
-    const key = zoomedGraphKey === null ? selectedGraphKey : zoomedGraphKey;
-    if (key !== null) {
+    if (zoomedGraphKey !== null) {
+        redrawGraph(zoomedGraphKey);
+        return;
+    }
+    for (const key of visibleGraphKeys) {
         redrawGraph(key);
     }
 };
 
 /**
- * Show one graph on the stage.
+ * Persist a display choice through the bridge, if it is up. Best
+ * effort: a failure to save never changes what is on screen.
+ *
+ * @param {string} method
+ * @param {...unknown} args
+ * @returns {void}
+ */
+function saveRunCardChoice(method, ...args) {
+    const api = window.pywebview && window.pywebview.api;
+    if (api && typeof api[method] === "function") {
+        api[method](...args).catch(() => {});
+    }
+}
+
+/**
+ * Show exactly these graphs (those with data), remembering the choice.
+ *
+ * @param {Array<string>} keys
+ * @returns {void}
+ */
+window.fim.setVisibleGraphs = function setVisibleGraphs(keys) {
+    const known = RUN_GRAPHS.map((entry) => entry.key);
+    const chosen = known.filter((key) => keys.includes(key));
+    if (chosen.length === 0) {
+        return;
+    }
+    preferredGraphKeys = chosen;
+    syncRunGraphStage();
+    saveRunCardChoice("set_run_graphs", chosen);
+};
+
+/**
+ * Show one graph on the stage, and only that one. Not remembered: this is
+ * the programmatic "focus this graph" (tests, external callers), not the
+ * user's own menu choice.
  *
  * @param {string} key
  * @returns {void}
  */
 window.fim.showGraph = function showGraph(key) {
-    preferredGraphKey = key;
+    preferredGraphKeys = [key];
     syncRunGraphStage();
 };
 
 /**
- * Return the key of the graph currently showing, for tests and callers
- * that need to ask rather than assume.
+ * Set the column count the graphs are laid out in (Settings), applying
+ * it now. Rows follow.
+ *
+ * @param {number} columns
+ * @returns {void}
+ */
+window.fim.setGraphColumns = function setGraphColumns(columns) {
+    graphColumns = Math.max(1, Math.floor(columns) || DEFAULT_GRAPH_COLUMNS);
+    applyGraphLayout();
+    window.fim.redrawActiveGraph();
+};
+
+/**
+ * Return the keys of every graph currently on the stage, in card order.
+ *
+ * @returns {Array<string>}
+ */
+window.fim.getVisibleGraphs = function getVisibleGraphs() {
+    return [...visibleGraphKeys];
+};
+
+/**
+ * Return the key of the graph "the" caller should treat as active, for
+ * tests and callers that need to ask rather than assume: the zoomed graph
+ * while the zoom frame is open, else the pane last double-clicked, else
+ * the first one shown.
  *
  * @returns {string|null}
  */
 window.fim.getActiveGraph = function getActiveGraph() {
-    return zoomedGraphKey === null ? selectedGraphKey : zoomedGraphKey;
+    return zoomedGraphKey === null ? focusedGraphKey : zoomedGraphKey;
 };
 
 /**
  * Forget which graphs have data, so a stale pane from the previous
  * state cannot appear on the next one's stage.
  *
- * Deliberately leaves `preferredGraphKey` alone. Resetting it here made
+ * Deliberately leaves `preferredGraphKeys` alone. Resetting it here made
  * a run's end yank the stage back to the trajectory out from under
  * whoever was reading a different graph at the time -- reported as
  * unexpected. The preference is the user's, so it is sticky for the
@@ -321,7 +477,7 @@ window.fim.getActiveGraph = function getActiveGraph() {
  */
 window.fim.resetGraphStage = function resetGraphStage() {
     graphAvailability.clear();
-    selectedGraphKey = null;
+    visibleGraphKeys = [];
     syncRunGraphStage();
 };
 
@@ -449,7 +605,7 @@ function restoreFromZoomFrame(element, placeholderId) {
 }
 
 /**
- * Open the showing graph in the zoom frame.
+ * Open one showing graph in the zoom frame.
  *
  * Moves the real pane, the real scrubber, and whichever real statistics
  * table is currently showing rather than cloning any of them, so full
@@ -465,16 +621,22 @@ function restoreFromZoomFrame(element, placeholderId) {
  * run) collapses to nothing exactly as it does on the stage, with no
  * separate zoom-frame layout rule needed for that case.
  *
+ * @param {string} [requestedKey] the graph to zoom; defaults to the one
+ *     last double-clicked, else the first shown.
  * @returns {void}
  */
-window.fim.openGraphZoom = function openGraphZoom() {
+window.fim.openGraphZoom = function openGraphZoom(requestedKey) {
     const modal = document.getElementById("graph-zoom-modal");
     const body = document.getElementById("graph-zoom-body");
-    if (!modal || !body || selectedGraphKey === null || zoomedGraphKey !== null) {
+    const key =
+        requestedKey !== undefined && visibleGraphKeys.includes(requestedKey)
+            ? requestedKey
+            : focusedGraphKey;
+    if (!modal || !body || key === null || zoomedGraphKey !== null) {
         return;
     }
-    const entry = runGraphEntry(selectedGraphKey);
-    const pane = runGraphPane(selectedGraphKey);
+    const entry = runGraphEntry(key);
+    const pane = runGraphPane(key);
     if (!entry || !pane) {
         return;
     }
@@ -496,7 +658,8 @@ window.fim.openGraphZoom = function openGraphZoom() {
     }
     zoomedStatsTable = statsTable;
 
-    zoomedGraphKey = selectedGraphKey;
+    zoomedGraphKey = key;
+    focusedGraphKey = key;
     zoomScale = 1;
     pane.classList.add("graph-zoom-pane");
 
@@ -567,23 +730,80 @@ function restoreZoomedPane() {
     syncRunGraphStage();
 }
 
+/**
+ * Which graph a double-click landed on, if any: the pane containing the
+ * event target, mapped back to its key.
+ *
+ * @param {EventTarget|null} target
+ * @returns {string|undefined}
+ */
+function graphKeyForTarget(target) {
+    if (!(target instanceof Element)) {
+        return undefined;
+    }
+    const entry = RUN_GRAPHS.find((candidate) => {
+        const pane = document.getElementById(candidate.paneId);
+        return pane !== null && pane.contains(target);
+    });
+    return entry ? entry.key : undefined;
+}
+
+/**
+ * Read the saved display choices from the bridge and apply them.
+ *
+ * @returns {Promise<void>}
+ */
+async function loadRunCardLayout() {
+    const layout = await window.pywebview.api.get_run_card_layout();
+    preferredGraphKeys = layout.graphs;
+    graphColumns = layout.columns;
+    if (typeof window.fim.setScatterStyle === "function") {
+        window.fim.setScatterStyle(layout.scatterStyle);
+    }
+    syncRunGraphStage();
+}
+
 window.addEventListener("load", () => {
-    const select = document.getElementById("run-graph-select");
+    const menu = document.getElementById("run-graph-menu");
+    const menuList = document.getElementById("run-graph-menu-list");
     const stage = document.getElementById("run-graph-stage");
+    const panels = document.getElementById("run-visual-panels");
     const modal = document.getElementById("graph-zoom-modal");
-    if (select) {
-        select.addEventListener("change", () => {
-            window.fim.showGraph(select.value);
+    if (menuList) {
+        menuList.addEventListener("change", () => {
+            const keys = Array.from(menuList.querySelectorAll("input:checked")).map(
+                (box) => box.value
+            );
+            window.fim.setVisibleGraphs(keys);
         });
     }
+    if (menu) {
+        // A native <details> stays open until told otherwise; close it
+        // on any click outside so it behaves like a menu.
+        document.addEventListener("click", (event) => {
+            if (menu.open && !menu.contains(event.target)) {
+                menu.open = false;
+            }
+        });
+    }
+    if (panels) {
+        new ResizeObserver(() => {
+            const before = panels.dataset.graphColumns;
+            applyGraphLayout();
+            if (panels.dataset.graphColumns !== before) {
+                window.fim.redrawActiveGraph();
+            }
+        }).observe(panels);
+    }
     if (stage) {
-        // Only the graph itself opens the frame -- double-clicking the
-        // selector or dragging the scrubber must not.
+        // Only a graph itself opens the frame -- double-clicking the
+        // menu or dragging the scrubber must not, and the graph zoomed is
+        // the one under the pointer.
         stage.addEventListener("dblclick", (event) => {
             if (event.target.closest(".run-graph-toolbar, .scrubber-controls")) {
                 return;
             }
-            window.fim.openGraphZoom();
+            window.fim.openGraphZoom(graphKeyForTarget(event.target));
         });
     }
     if (modal) {
@@ -609,4 +829,5 @@ window.addEventListener("load", () => {
         }
     }
     syncRunGraphStage();
+    whenApiReady(loadRunCardLayout);
 });

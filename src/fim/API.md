@@ -155,6 +155,7 @@ Return to the [source-tree orientation](../README.md) or the [developer guide](.
     * [get\_about\_info](#fim.gui.app.Api.get_about_info)
   * [in\_flight\_bridge\_threads](#fim.gui.app.in_flight_bridge_threads)
   * [await\_bridge\_threads](#fim.gui.app.await_bridge_threads)
+  * [initial\_window\_size](#fim.gui.app.initial_window_size)
   * [create\_window](#fim.gui.app.create_window)
   * [shutdown\_timeout](#fim.gui.app.shutdown_timeout)
   * [main](#fim.gui.app.main)
@@ -5592,6 +5593,33 @@ test's own teardown) proceeds regardless.
 
   None. Returns as soon as no bridge thread is alive, or when
   `timeout` elapses, whichever comes first.
+
+<a id="fim.gui.app.initial_window_size"></a>
+
+#### initial\_window\_size
+
+```python
+def initial_window_size(screen_width: int,
+                        screen_height: int) -> tuple[int, int]
+```
+
+Choose the initial window size for a display: the largest 16:9 that fits.
+
+The Run card's default view is two graphs side by side plus the
+scrubber and the statistics table, which is wide rather than tall, so
+the window is 16:9 and as large as the display politely allows
+(`_WINDOW_SCREEN_FRACTION` of it, so the window never touches the
+edges), between `_MIN_WINDOW_SIZE` and `_MAX_WINDOW_SIZE`.
+
+**Arguments**:
+
+- `screen_width` - Display width in pixels.
+- `screen_height` - Display height in pixels.
+
+
+**Returns**:
+
+  `(width, height)` in pixels, with `width / height` 16:9.
 
 <a id="fim.gui.app.create_window"></a>
 

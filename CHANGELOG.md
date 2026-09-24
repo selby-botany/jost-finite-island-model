@@ -8,6 +8,27 @@ project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- **Several graphs on the Run card at once.** The scatter plot and the
+  statistic trajectories now show side by side by default, so people can see
+  how the two connect (the scatter is one moment; the trajectory's dashed
+  line marks that moment). A **Graphs** menu on the card chooses which
+  graphs to show together and remembers the choice; Settings has **Run card
+  graph columns** (1-4; rows follow, and narrow windows use fewer). The
+  scrubber drives every visible graph, double-click zooms the graph under
+  the pointer, the scatter carries a caption naming the generation, and the
+  statistics table stays beside the graphs at every width because it is the
+  colour legend and the on/off control for each trajectory line.
+- **Scatter plot point styles.** The original encoding grew a marker with the
+  number of alleles at the same coordinates, so in a pooled batch the pile of
+  alleles absent from both demes at (0, 0) became the biggest mark on the
+  plot. Settings, **Scatter plot points**, offers seven styles to choose by
+  looking: colour for count with the origin pile as a labelled badge (the
+  default), colour for count, circles with the origin badge, a density map,
+  translucent dots, circles with a trail of earlier generations, and the
+  original circles.
+- **The initial window is 16:9 and sized to the display** (about 90% of it,
+  between 960x540 and 1920x1080) so the two default graphs render well;
+  tests keep a fixed 900x700 window.
 - **Migration topology `torus`**: `m: {topology: torus, rate, rows,
   columns}`, a rows-by-columns grid that wraps in both directions so no
   deme is on an edge (the usual stepping-stone topology); every deme has

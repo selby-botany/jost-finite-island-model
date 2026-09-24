@@ -276,6 +276,48 @@ def test_default_ploidy_select_persists_immediately_and_reloads_on_open(
     assert _drive(window, steps) == "3"
 
 
+def test_run_card_columns_and_scatter_style_persist_on_change_and_apply_live(
+    window: webview.Window,
+) -> None:
+    """The Run card's columns and scatter style save at once and take effect now.
+
+    Like the other one-value selects in Settings (no Save button): each
+    saves on change through its own bridge call and applies to the card
+    immediately, so the botanist sees the effect without reopening
+    anything.
+    """
+
+    def steps(poll_until: Callable[[str, Callable[[Any], bool]], Any]) -> Any:
+        window.evaluate_js("document.getElementById('settings-button').click();")
+        poll_until(
+            "document.getElementById('modal-settings').open",
+            lambda value: value is True,
+        )
+        window.evaluate_js(
+            "for (const [id, value] of [['settings-run-graph-columns', '3'], "
+            "['settings-scatter-style', 'density']]) {"
+            "const select = document.getElementById(id);"
+            "select.value = value;"
+            "select.dispatchEvent(new Event('change', {bubbles: true}));"
+            "}"
+            "window.__fimSaved = null;"
+            "(async () => {"
+            "for (let i = 0; i < 50; i++) {"
+            "await new Promise((resolve) => setTimeout(resolve, 50));"
+            "const saved = await window.pywebview.api.get_run_card_layout();"
+            "if (saved.columns === 3 && saved.scatterStyle === 'density') {"
+            "window.__fimSaved = saved; return; }"
+            "}"
+            "})();"
+        )
+        return poll_until("window.__fimSaved", lambda value: value is not None)
+
+    saved = _drive(window, steps)
+
+    assert saved["columns"] == 3
+    assert saved["scatterStyle"] == "density"
+
+
 def test_settings_save_button_shows_the_banner_on_an_invalid_value(
     window: webview.Window,
 ) -> None:

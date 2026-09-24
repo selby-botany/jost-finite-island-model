@@ -4387,3 +4387,25 @@ def test_main_applies_root_results_directory_log_directory_and_preferences_file(
     assert paths.results_directory_override() == results
     assert paths.log_directory_override() == logs
     assert preferences_file_override() == preferences_path
+
+
+@pytest.mark.parametrize(
+    ("screen", "expected"),
+    [
+        ((1440, 900), (1296, 729)),
+        ((1920, 1080), (1728, 972)),
+        ((2560, 1440), (1920, 1080)),
+        ((1366, 768), (1228, 691)),
+        ((1024, 768), (921, 518)),
+    ],
+)
+def test_initial_window_size_is_the_largest_polite_16_by_9(
+    screen: tuple[int, int], expected: tuple[int, int]
+) -> None:
+    """The window is 16:9, inside the display with a margin, and capped."""
+    width, height = app_module.initial_window_size(*screen)
+
+    assert (width, height) == expected
+    assert abs(width / height - 16 / 9) < 0.01
+    assert width <= screen[0] * 0.9 + 1
+    assert height <= screen[1] * 0.9 + 1

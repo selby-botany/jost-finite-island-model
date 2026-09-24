@@ -63,6 +63,7 @@ Every test module, fixture, and test function documented here in full; `doc/fim-
   - [`test_results_screen`](#gui.test_results_screen)
   - [`test_runner`](#gui.test_runner)
   - [`test_running_screen`](#gui.test_running_screen)
+  - [`test_scatter_styles`](#gui.test_scatter_styles)
   - [`test_settings_modal`](#gui.test_settings_modal)
   - [`test_shutdown_deadman`](#gui.test_shutdown_deadman)
   - [`test_store`](#gui.test_store)
@@ -9403,6 +9404,27 @@ ordering `test_main_returns_2_on_a_malformed_fim_log_level` relies
 on) -- this exercises only the override-application lines that run
 just before that.
 
+<a id="gui.test_app_api.test_initial_window_size_is_the_largest_polite_16_by_9"></a>
+
+#### test\_initial\_window\_size\_is\_the\_largest\_polite\_16\_by\_9
+
+```python
+@pytest.mark.parametrize(
+    ("screen", "expected"),
+    [
+        ((1440, 900), (1296, 729)),
+        ((1920, 1080), (1728, 972)),
+        ((2560, 1440), (1920, 1080)),
+        ((1366, 768), (1228, 691)),
+        ((1024, 768), (921, 518)),
+    ],
+)
+def test_initial_window_size_is_the_largest_polite_16_by_9(
+        screen: tuple[int, int], expected: tuple[int, int]) -> None
+```
+
+The window is 16:9, inside the display with a margin, and capped.
+
 <a id="gui.test_batch_results_screen"></a>
 
 # gui.test\_batch\_results\_screen
@@ -15300,6 +15322,23 @@ the live 2D context, rather than asserting on pixels: it proves the
 real render path emitted the real strings, and reports a readable
 mismatch when it does not.
 
+<a id="gui.test_results_screen.test_the_default_scatter_style_explains_its_count_colors"></a>
+
+#### test\_the\_default\_scatter\_style\_explains\_its\_count\_colors
+
+```python
+def test_the_default_scatter_style_explains_its_count_colors(
+        fast_scalar_run_settings: Path, window: webview.Window,
+        drive: Callable[..., Any]) -> None
+```
+
+The default style (colour for count, origin badge) carries its own key.
+
+Fixed-size marks coloured by how many alleles share the spot are only
+readable with a key, so the plot draws one: a swatch per step, from a
+single allele up to sixteen or more, replacing the "Other alleles"
+line of the original circles.
+
 <a id="gui.test_results_screen.test_deme_pair_selector_switches_to_a_chosen_pair_and_back"></a>
 
 #### test\_deme\_pair\_selector\_switches\_to\_a\_chosen\_pair\_and\_back
@@ -15479,28 +15518,29 @@ def test_completed_scrubber_updates_supplemental_panels_on_scrub_ticks(
 
 Stepping the completed scrubber updates allele composition & spectrum.
 
-<a id="gui.test_results_screen.test_graph_stage_shows_one_graph_and_the_selector_switches_it"></a>
+<a id="gui.test_results_screen.test_graph_stage_shows_the_chosen_graphs_together_and_the_menu_changes_them"></a>
 
-#### test\_graph\_stage\_shows\_one\_graph\_and\_the\_selector\_switches\_it
+#### test\_graph\_stage\_shows\_the\_chosen\_graphs\_together\_and\_the\_menu\_changes\_them
 
 ```python
-def test_graph_stage_shows_one_graph_and_the_selector_switches_it(
+def test_graph_stage_shows_the_chosen_graphs_together_and_the_menu_changes_them(
         fast_scalar_run_settings: Path, window: webview.Window,
         drive: Callable[..., Any]) -> None
 ```
 
-The stage shows exactly one graph, and the selector changes which.
+The stage shows the scatter and trajectories together; the menu changes that.
 
-The Run card used to show four graphs at once in a 3x3 quadrant.
-That was reported as unworkable -- each panel too small to read at
-the app's own 900x700 default -- and was replaced by a "graph
-stage": one graph, chosen from a selector where the per-panel title
-used to be.
+The Run card once showed four graphs at once in a 3x3 quadrant
+(reported as unworkable), then one graph at a time. Botanist
+feedback: the scatter and the trajectories are two views of the same
+generation and seeing them together is how people learn to connect
+them, so those two are the default pair, and the user chooses which
+graphs to show from a "Graphs" menu.
 
-"Exactly one" is the part worth guarding. The stage decides pane
-visibility centrally, but the render functions still report *whether*
-each graph has data, and an earlier version of that split let a
-graph un-hide itself behind the stage's back.
+"Exactly the chosen ones" is the part worth guarding. The stage
+decides pane visibility centrally, but the render functions still
+report *whether* each graph has data, and an earlier version of that
+split let a graph un-hide itself behind the stage's back.
 
 <a id="gui.test_results_screen.test_graph_zoom_frame_takes_the_pane_and_gives_it_back"></a>
 
@@ -15582,24 +15622,62 @@ def test_the_graph_you_are_watching_survives_the_run_finishing(
         drive: Callable[..., Any]) -> None
 ```
 
-Completion leaves the stage on whatever graph the user chose.
+Completion leaves the stage on whatever graphs the user chose.
 
-Reported directly: mid-run, the pull-down was set to the scatter;
-when the run finished the stage jumped to the trajectory, which was
-both unasked-for and inconsistent with the pull-down still showing
-the old choice.
+Reported directly (when the stage showed one graph at a time): mid-run,
+the scatter was chosen; when the run finished the stage jumped to the
+trajectory, which was both unasked-for and inconsistent with the
+control still showing the old choice.
 
 The cause was `resetGraphStage`, called on the way into `completed`
 to drop the previous state's stale availability, also resetting the
 *preference* back to the default. Clearing what has data is right --
 the panes re-declare themselves immediately after; discarding the
-user's choice is not.
+user's choice is not. The same holds for a set of graphs: choosing
+"scatter only" mid-run must still be "scatter only" afterwards, even
+though the default pair (which includes the trajectory) would show
+more once the trajectory has data.
 
-The selection is driven here through a real `change` event on the
-`<select>`, not `showGraph`, because the option list is rebuilt in
-between (the scatter is the only graph with data until the first
-progress message lands) and the point is that the control and the
-stage still agree afterwards.
+The choice is made through `setVisibleGraphs`, the very function the
+menu's own `change` handler calls, while only the scatter has data
+(the trajectory's own checkbox is disabled until it does), and the
+point is that the menu and the stage still agree afterwards.
+
+<a id="gui.test_results_screen.test_the_default_pair_sits_side_by_side_above_the_fold_with_statistics"></a>
+
+#### test\_the\_default\_pair\_sits\_side\_by\_side\_above\_the\_fold\_with\_statistics
+
+```python
+def test_the_default_pair_sits_side_by_side_above_the_fold_with_statistics(
+        fast_scalar_run_settings: Path, window: webview.Window,
+        drive: Callable[..., Any]) -> None
+```
+
+Scatter and trajectories share a row at 900x700, statistics beside them.
+
+The whole point of the default pair (botanist feedback: "important to
+teach people how to connect them"): both graphs visible together
+without scrolling, and the statistics table -- the legend for the
+trajectory's coloured lines and the control that turns each on and
+off -- always on screen beside them rather than wrapped out of sight.
+One column stacks them instead, and the table still stays put.
+
+<a id="gui.test_results_screen.test_double_click_zooms_the_graph_under_the_pointer_and_the_caption_follows"></a>
+
+#### test\_double\_click\_zooms\_the\_graph\_under\_the\_pointer\_and\_the\_caption\_follows
+
+```python
+def test_double_click_zooms_the_graph_under_the_pointer_and_the_caption_follows(
+        fast_scalar_run_settings: Path, window: webview.Window,
+        drive: Callable[..., Any]) -> None
+```
+
+Zoom opens the clicked pane only, and the scatter names the generation.
+
+With several graphs on the stage, double-clicking must zoom the one
+that was clicked -- not "the" active one -- and leave the others where
+they are. The scatter's caption follows the scrubber, so it names the
+generation the trajectory's dashed line marks.
 
 <a id="gui.test_results_screen.test_nice_axis_ticks_round_to_human_steps_at_every_scale"></a>
 
@@ -16198,6 +16276,57 @@ run`, above, caught that intermittently on CI (`selectorHidden`
 invariant with no timing window at all, driving the three steps in
 their real order synchronously.
 
+<a id="gui.test_scatter_styles"></a>
+
+# gui.test\_scatter\_styles
+
+Every scatter point style draws, and each looks different.
+
+The original encoding made a marker's radius grow with how many alleles
+share its coordinates, so in a pooled batch the pile of alleles absent
+from both demes at (0, 0) became the largest mark on the plot. Seven
+styles are offered (Settings, "Scatter plot points") so a botanist can
+choose by looking; this pins that each one draws something and that they
+are genuinely different encodings, not seven names for one drawing.
+
+<a id="gui.test_scatter_styles.test_every_scatter_style_draws_and_they_are_all_distinct"></a>
+
+#### test\_every\_scatter\_style\_draws\_and\_they\_are\_all\_distinct
+
+```python
+def test_every_scatter_style_draws_and_they_are_all_distinct(
+        window: webview.Window, drive: Callable[..., Any]) -> None
+```
+
+Seven styles, seven different non-blank drawings, no errors.
+
+<a id="gui.test_scatter_styles.test_an_unknown_scatter_style_is_ignored"></a>
+
+#### test\_an\_unknown\_scatter\_style\_is\_ignored
+
+```python
+def test_an_unknown_scatter_style_is_ignored(
+        window: webview.Window, drive: Callable[..., Any]) -> None
+```
+
+A style the page does not know leaves the current one alone.
+
+<a id="gui.test_scatter_styles.test_the_badge_styles_replace_the_origin_circle_with_a_smaller_mark"></a>
+
+#### test\_the\_badge\_styles\_replace\_the\_origin\_circle\_with\_a\_smaller\_mark
+
+```python
+def test_the_badge_styles_replace_the_origin_circle_with_a_smaller_mark(
+        window: webview.Window, drive: Callable[..., Any]) -> None
+```
+
+The pile at (0, 0) stops being the biggest mark on the plot.
+
+Measured as ink: with the original circles the 48-allele pile covers
+a large disc at the corner; the badge styles draw a small dot and a
+label there instead, so a patch of the canvas just above and right of
+the origin holds far less ink.
+
 <a id="gui.test_settings_modal"></a>
 
 # gui.test\_settings\_modal
@@ -16314,6 +16443,22 @@ Like the startup-behavior and re-run seed selects beside it, and
 unlike the execution defaults, it persists on change: it seeds only a
 fresh configuration's ploidy, so there is no batch of fields to
 validate together.
+
+<a id="gui.test_settings_modal.test_run_card_columns_and_scatter_style_persist_on_change_and_apply_live"></a>
+
+#### test\_run\_card\_columns\_and\_scatter\_style\_persist\_on\_change\_and\_apply\_live
+
+```python
+def test_run_card_columns_and_scatter_style_persist_on_change_and_apply_live(
+        window: webview.Window) -> None
+```
+
+The Run card's columns and scatter style save at once and take effect now.
+
+Like the other one-value selects in Settings (no Save button): each
+saves on change through its own bridge call and applies to the card
+immediately, so the botanist sees the effect without reopening
+anything.
 
 <a id="gui.test_settings_modal.test_settings_save_button_shows_the_banner_on_an_invalid_value"></a>
 

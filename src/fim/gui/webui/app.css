@@ -815,17 +815,10 @@ fieldset.composite > label {
     min-width: 0;
 }
 
-.run-graph-stage h4 {
-    position: absolute;
-    width: 1px;
-    height: 1px;
-    padding: 0;
-    margin: -1px;
-    overflow: hidden;
-    clip-path: inset(50%);
-    white-space: nowrap;
-    border: 0;
-}
+/* The graphs' own `<h4>` titles are visible: with several graphs on the
+ * stage side by side, the title is what says which is which (the
+ * single-graph stage used to hide them because its selector named the
+ * one showing). */
 
 .run-graph-toolbar {
     display: flex;
@@ -835,14 +828,59 @@ fieldset.composite > label {
     min-width: 0;
 }
 
-.run-graph-toolbar select {
+/* The "Graphs" menu: a native <details> whose list floats over the
+ * stage rather than pushing it down. */
+.graph-menu {
+    position: relative;
+}
+
+.graph-menu > summary {
+    cursor: pointer;
     font: inherit;
     color: var(--fim-foreground);
     background: var(--fim-background);
     border: 1px solid var(--fim-border);
     border-radius: 4px;
-    padding: 0.15rem 0.4rem;
-    min-width: 15rem;
+    padding: 0.15rem 0.6rem;
+    list-style: none;
+    user-select: none;
+}
+
+.graph-menu > summary::-webkit-details-marker {
+    display: none;
+}
+
+.graph-menu > summary::after {
+    content: " \25BE";
+}
+
+.graph-menu-list {
+    position: absolute;
+    z-index: 20;
+    top: calc(100% + 0.25rem);
+    left: 0;
+    min-width: 14rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.15rem;
+    padding: 0.4rem 0.5rem;
+    background: var(--fim-background);
+    border: 1px solid var(--fim-border);
+    border-radius: 6px;
+    box-shadow: 0 4px 14px rgb(0 0 0 / 18%);
+}
+
+.graph-menu-item {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.15rem 0.2rem;
+    cursor: pointer;
+}
+
+.graph-menu-item:has(input:disabled) {
+    color: var(--fim-muted);
+    cursor: default;
 }
 
 .run-graph-body {
@@ -1009,80 +1047,12 @@ fieldset.composite > label {
     }
 }
 
-/* At the app's own default window size (900x700, `create_window` in
- * `app.py`), a completed scalar (or batch) run's own trajectory panel
- * (`#run-trajectory-frame`) sits beside the scatter frame in the same
- * `.run-plot-row`. The scatter frame's own preferred width (`calc(100vh
- * - 190px)` above, ~480px) plus the trajectory frame's fixed 480px --
- * neither shrinks in response to available *width*, only height --
- * sum to well over the row's own available width, so the row's own
- * `flex-wrap` (necessarily) drops the trajectory frame and stats table
- * to a second line. That reflow itself is correct (the wide comparison
- * screenshot's own side-by-side arrangement was never going to fit
- * unmodified at 900px), but *both* frames still claimed their full
- * tall-window heights on their own line, so the two stacked lines
- * together were taller than the whole 700px-tall window, pushing the
- * trajectory panel and stats table almost entirely below the fold with
- * no hint that scrolling would reveal them.
- *
- * Gated on `#run-plot-row`'s own `run-plot-row-has-trajectory` class
- * (`run-view-completed.js`'s `setTrajectoryFrameHidden`), not applied
- * whenever the window is merely narrow: the `initial` p_0 view and a
- * completed run with no trajectory of its own to show already fit --
- * the scatter plot is alone (or paired with just one stats table) --
- * and shrinking it there too would only make an already-working layout
- * needlessly smaller. This breakpoint (900px is comfortably inside it;
- * the wide comparison screenshot's width is not) gives the scatter
- * frame a shallower vh-based height budget when a trajectory panel is
- * also competing for the row -- close to half its usual share rather
- * than nearly all of it -- so that, paired with `.run-trajectory-
- * frame`'s own matching rule below, both frames fit on one row instead
- * of stacking at all. Confirmed live at 900x700 (see `test/gui/
- * test_results_screen.py`'s own `test_run_view_fits_the_default_
- * window_without_excess_scrolling`): before, the document needed
- * roughly 640px of scroll past the window to reach the trajectory
- * panel and stats table; after, both render on the scatter plot's own
- * row, fully visible, with well under 150px of scroll remaining (the
- * completed-run summary text/scrubber/reason line below the plot row,
- * unrelated to this fix -- already present, in smaller degree, even in
- * the wide-window case).
- *
- * The `380px`/`250px` (sibling rule, below) subtrahends carry real
- * slack, not the tightest values that happened to fit once: an
- * earlier version of this rule (`332px`/`300px`) fit with roughly 2px
- * to spare on macOS/Cocoa's own font metrics, measured against
- * `#results-stats`'s own real rendered width -- and wrapped anyway in
- * CI (`ubuntu-latest`, WebKitGTK), reproduced exactly (identical
- * failing pixel values) in a local `ubuntu:24.04` container built to
- * match CI's own dependency list. `.stats-table` has no explicit width
- * of its own (intentionally -- it is sized by its own content), so a
- * platform's own font/box-model rounding is free to shift its rendered
- * width by a few pixels either way; a fit with no margin for that is a
- * fit for exactly one platform, not a real one. These two values leave
- * roughly 95px of slack at 900x700 against the widths measured in that
- * same container, confirmed live there after the change.
- */
-@media (max-width: 1300px) {
-    #run-plot-row.run-plot-row-has-trajectory {
-        flex-wrap: nowrap;
-    }
-
-    #run-plot-row.run-plot-row-has-trajectory .run-visual-column {
-        flex: 0 1 auto;
-    }
-
-    #run-plot-row.run-plot-row-has-trajectory .run-canvas-frame {
-        width: min(100%, 620px, calc(100vh - 380px));
-    }
-
-    #run-plot-row.run-plot-row-has-trajectory #run-canvas {
-        max-height: calc(100vh - 380px);
-    }
-
-    #run-plot-row.run-plot-row-has-trajectory .stats-table {
-        flex: 0 0 auto;
-    }
-}
+/* (The width budgets that used to sit here -- a `@media (max-width:
+ * 1300px)` block and its long account of fitting the scatter, trajectory
+ * and statistics table into 900x700 by capping each frame's own width --
+ * are gone. The stage now sizes its graphs as grid columns
+ * (`run-graph-stage.js`'s `applyGraphLayout`), and the statistics table
+ * simply never wraps, so the graphs take whatever width is left.) */
 
 .run-axis-selectors {
     display: contents;
@@ -1183,38 +1153,6 @@ fieldset.composite > label {
     flex: 0 0 auto;
 }
 
-/* Paired with `#run-plot-row.run-plot-row-has-trajectory .run-canvas-
- * frame`'s own `@media (max-width: 1300px)` rule above (see its comment
- * for the full before/after): at the app's own 900x700 default, the
- * scatter frame's shrunk width (above) plus this frame's un-shrunk
- * 480px would still exceed `.run-plot-row`'s own available width, so it
- * (and the stats table beside it) would drop to a second, stacked line
- * -- correct as a fallback, but at its full un-shrunk 480px/434px
- * footprint that second line alone was taller than the scatter frame's
- * own row, doubling the run view's total height and pushing the
- * trajectory panel and stats table almost entirely below the default
- * window. Shrinking this frame too, not only the scatter one, lets
- * both fit on the scatter row's own line instead of wrapping at all.
- * Scoped the same way as the sibling rule (`run-plot-row-has-
- * trajectory`, kept in sync with this element's own `hidden` by
- * `setTrajectoryFrameHidden`) even though `[hidden]{display:none}`
- * already makes an un-scoped width moot whenever this frame itself is
- * hidden -- explicit here rather than relying on that.
- *
- * `250px`, not the `300px` this shipped with initially: see the
- * sibling rule's own comment for the full account -- `300px` fit with
- * only ~2px to spare against `#results-stats`'s own real, content-sized
- * width as rendered on macOS/Cocoa, and that margin evaporated on
- * `ubuntu-latest`'s own WebKitGTK rendering in CI, wrapping the stats
- * table to a second line anyway. `250px` was chosen for real slack
- * (confirmed live in a local `ubuntu:24.04` container matching CI's own
- * dependencies), not merely to pass once more. */
-@media (max-width: 1300px) {
-    #run-plot-row.run-plot-row-has-trajectory .run-trajectory-frame,
-    #run-plot-row.run-plot-row-has-trajectory .run-supplemental-panel {
-        width: min(100%, 250px);
-    }
-}
 
 /* `#compare-trajectory-canvas` shares this rule -- `screens/compare.js`
  * draws into it exactly the same way, only colored by run rather than
@@ -1489,6 +1427,11 @@ fieldset.composite > label {
  */
 #run-plot-row.run-plot-row-has-trajectory {
     display: flex;
+    /* Never wrap: the statistics table is also the legend (which colour is
+     * which statistic) and the control that turns each line on and off, so
+     * it stays beside the graphs at every width rather than dropping out of
+     * sight below them. The graphs give up width instead. */
+    flex-wrap: nowrap;
     gap: 1rem;
     align-items: flex-start;
 }
@@ -1503,13 +1446,41 @@ fieldset.composite > label {
     width: 100%;
 }
 
-/* The panes stack in one place and the stage shows exactly one of
- * them, so this is a plain block: the old flex row (with its
- * `flex-wrap`, which is what used to drop panels to a second line) has
- * nothing left to lay out side by side. */
-#run-plot-row.run-plot-row-has-trajectory .run-visual-panels {
-    display: block;
+/* Several graphs at once: a grid whose columns `run-graph-stage.js`'s
+ * `applyGraphLayout` sizes (the user's column count, capped by the graphs
+ * shown and the width available; weighted so a scatter that reads fine
+ * small gets less than the trajectories). Rows follow. This wins over the
+ * block rule above -- and over the older flex row this element used
+ * before the stage -- by being keyed on the element's own id. */
+#run-visual-panels {
+    display: grid;
+    gap: 1rem;
+    align-items: start;
+    justify-content: stretch;
     min-width: 0;
+}
+
+/* Each pane fills its own cell. The per-panel width caps the wrapping
+ * flex row needed are exactly what would fight the grid here. */
+#run-visual-panels > .run-canvas-frame,
+#run-visual-panels > .run-trajectory-frame,
+#run-visual-panels > .run-supplemental-panel {
+    width: 100%;
+    max-width: 100%;
+    min-width: 0;
+}
+
+.scatter-caption {
+    grid-column: 2;
+    grid-row: 5;
+    margin: 0;
+    font-size: 0.8rem;
+    color: var(--fim-muted);
+    text-align: center;
+}
+
+.scatter-caption:empty {
+    display: none;
 }
 
 /* Each pane fills the stage rather than keeping the per-panel width

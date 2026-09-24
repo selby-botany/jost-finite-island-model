@@ -50,6 +50,75 @@ const MARKER_COUNT_SCALE = 1.6;
 const COLOR_COMMON = "#1f6fb2";
 const COLOR_RARE = "#d97a26";
 
+/* How the points are drawn (design `20260923-claude-sonnet-5-multi-graph-
+ * run-card-and-scatter-encoding-design.md` Part B). Alleles at exactly the
+ * same coordinates arrive merged into one point with a `count`; the
+ * original encoding made the marker's radius grow with that count, which
+ * in a pooled batch lets the pile of alleles absent from both demes at
+ * (0, 0) -- the least informative point -- become the largest mark on the
+ * plot. Every alternative is offered (Settings, "Scatter plot points")
+ * so the botanist can choose by looking:
+ *
+ *   circles      the original: radius grows with count.
+ *   color        fixed-size marks; count is a sequential colour ramp in
+ *                five log-spaced steps, with a key.
+ *   badge        original circles, but the (0, 0) pile is drawn as a
+ *                small labelled badge instead of a circle.
+ *   color-badge  both of the above (the default).
+ *   density      a square-binned density map; positions are binned.
+ *   dots         one small translucent dot per point whose opacity
+ *                accumulates with count (overlap darkens, and saturates).
+ *   trail        the original circles, with the last few scrubber frames
+ *                faded in behind them so movement is visible.
+ */
+const SCATTER_STYLES = ["circles", "color", "badge", "color-badge", "density", "dots", "trail"];
+const DEFAULT_SCATTER_STYLE = "color-badge";
+let _scatterStyle = DEFAULT_SCATTER_STYLE;
+
+// Sequential, colour-blind-safe (ColorBrewer YlGnBu) ramp for counts of
+// 1, 2-3, 4-7, 8-15 and 16 or more.
+const COUNT_RAMP = ["#c7e9b4", "#7fcdbb", "#41b6c4", "#2c7fb8", "#253494"];
+const COUNT_RAMP_LABELS = ["1", "2-3", "4-7", "8-15", "16+"];
+const COLOR_MARKER_RADIUS = 4;
+const DOTS_BASE_ALPHA = 0.18;
+const DENSITY_BINS = 20;
+const COMPACT_DENSITY_BINS = 10;
+const TRAIL_FRAMES = 4;
+
+/**
+ * Return the ramp step (0-4) for a merged point's count.
+ *
+ * @param {number} count
+ * @returns {number}
+ */
+function countStep(count) {
+    return Math.min(COUNT_RAMP.length - 1, Math.floor(Math.log2(Math.max(1, count))));
+}
+
+/**
+ * Choose how the scatter plot draws its points, and redraw now.
+ *
+ * @param {string} style one of `SCATTER_STYLES`; anything else is ignored.
+ */
+window.fim.setScatterStyle = function setScatterStyle(style) {
+    if (!SCATTER_STYLES.includes(style)) {
+        return;
+    }
+    _scatterStyle = style;
+    if (_currentPanel && typeof runCanvas !== "undefined" && runCanvas) {
+        drawScatter(runCanvas, _currentPanel);
+    }
+};
+
+/**
+ * Report the current style, for tests and callers that need to ask.
+ *
+ * @returns {string}
+ */
+window.fim.getScatterStyle = function getScatterStyle() {
+    return _scatterStyle;
+};
+
 // The panel most recently drawn to `runCanvas`. `syncCanvasSize`
 // reads this to redraw after a resize without a second bridge call.
 let _currentPanel = null;
@@ -294,41 +363,28 @@ function drawScatterCell(context, rect, panel, opts) {
         compact
     );
 
-    const markerScale = opts.markerScale;
+    const style = _scatterStyle;
+    const geometry = { context, toCanvasX, toCanvasY, originX, originY, plotSize, compact, opts };
+    if (style === "trail" && bounded) {
+        drawTrail(geometry, panel);
+    }
+    if (style === "density" && bounded) {
+        drawDensity(geometry, panel.points);
+    }
+    const marks = markPointsFor(style, bounded);
+    let originPile = null;
     for (const point of panel.points) {
-        const cx = toCanvasX(point.x);
-        const cy = toCanvasY(point.y);
-        const radius =
-            markerScale *
-            (MARKER_BASE_RADIUS + MARKER_COUNT_SCALE * Math.sqrt(point.count));
-        context.beginPath();
-        context.arc(cx, cy, radius, 0, 2 * Math.PI);
-        if (point.common) {
-            // A hollow ring, not merely a differently colored disc
-            // (`fim.viz.scatter`'s own `_scatter_on_axis` docstring):
-            // color is never the only channel distinguishing "most
-            // frequent" from "other" here.
-            context.lineWidth = Math.max(2, radius * 0.35);
-            context.strokeStyle = COLOR_COMMON;
-            context.globalAlpha = 0.9;
-            context.stroke();
-            context.globalAlpha = 1;
-        } else {
-            context.fillStyle = COLOR_RARE;
-            context.globalAlpha = 0.75;
-            context.fill();
-            context.globalAlpha = 1;
-            context.strokeStyle = "#000000";
-            context.lineWidth = 0.4;
-            context.stroke();
+        if (marks.originBadge && point.x === 0 && point.y === 0) {
+            originPile = point;
+            continue;
         }
-        if (point.count > 1 && !compact) {
-            context.fillStyle = "#1a1a1a";
-            context.font = `${opts.tickFontSize}px -apple-system, sans-serif`;
-            context.textAlign = "left";
-            context.textBaseline = "alphabetic";
-            context.fillText(String(point.count), cx + radius + 2, cy - radius);
+        if (style === "density" && bounded && !point.common) {
+            continue;
         }
+        drawPoint(geometry, point, style, marks);
+    }
+    if (originPile !== null) {
+        drawOriginBadge(geometry, originPile);
     }
 
     // Only for a `"frequency"` panel: a `"pca"` panel disables frequency
@@ -341,8 +397,202 @@ function drawScatterCell(context, rect, panel, opts) {
     // color does not, and a small panel is if anything where a viewer is
     // least able to infer the rule from the data.
     if (bounded) {
-        drawMarkerLegend(context, originX, originY, plotSize, opts.tickFontSize);
+        drawMarkerLegend(context, originX, originY, plotSize, opts.tickFontSize, style, compact);
     }
+}
+
+/**
+ * Decide how one style marks its points.
+ *
+ * @param {string} style
+ * @param {boolean} bounded a `"frequency"` panel (the only kind with a
+ *     meaningful origin pile); a `"pca"` panel always draws original circles.
+ * @returns {{ramp: boolean, originBadge: boolean, fixed: boolean, dots: boolean}}
+ */
+function markPointsFor(style, bounded) {
+    if (!bounded) {
+        return { ramp: false, originBadge: false, fixed: false, dots: false };
+    }
+    return {
+        ramp: style === "color" || style === "color-badge" || style === "density",
+        originBadge: style === "badge" || style === "color-badge",
+        fixed: style === "color" || style === "color-badge" || style === "density",
+        dots: style === "dots",
+    };
+}
+
+/**
+ * Draw one merged point in the chosen style.
+ *
+ * @param {object} geometry the plot's mapping and context (see caller)
+ * @param {{x: number, y: number, count: number, common: boolean}} point
+ * @param {string} style
+ * @param {{ramp: boolean, fixed: boolean, dots: boolean}} marks
+ */
+function drawPoint(geometry, point, style, marks) {
+    const { context, toCanvasX, toCanvasY, compact, opts } = geometry;
+    const cx = toCanvasX(point.x);
+    const cy = toCanvasY(point.y);
+    let radius =
+        opts.markerScale * (MARKER_BASE_RADIUS + MARKER_COUNT_SCALE * Math.sqrt(point.count));
+    if (marks.fixed) {
+        radius = opts.markerScale * COLOR_MARKER_RADIUS;
+    }
+    if (marks.dots) {
+        radius = opts.markerScale * (COLOR_MARKER_RADIUS - 0.5);
+    }
+    context.beginPath();
+    context.arc(cx, cy, radius, 0, 2 * Math.PI);
+    if (point.common && !marks.fixed) {
+        // A hollow ring, not merely a differently colored disc
+        // (`fim.viz.scatter`'s own `_scatter_on_axis` docstring):
+        // color is never the only channel distinguishing "most
+        // frequent" from "other" here.
+        context.lineWidth = Math.max(2, radius * 0.35);
+        context.strokeStyle = COLOR_COMMON;
+        context.globalAlpha = 0.9;
+        context.stroke();
+        context.globalAlpha = 1;
+    } else if (marks.fixed || marks.dots) {
+        if (marks.dots) {
+            context.fillStyle = COLOR_RARE;
+            context.globalAlpha = 1 - Math.pow(1 - DOTS_BASE_ALPHA, point.count);
+        } else {
+            context.fillStyle = COUNT_RAMP[countStep(point.count)];
+            context.globalAlpha = 1;
+        }
+        context.fill();
+        context.globalAlpha = 1;
+        context.strokeStyle = "#1a1a1a";
+        context.lineWidth = 0.6;
+        context.stroke();
+        if (point.common) {
+            // The most frequent allele keeps its ring (a second, outer
+            // outline) so "most frequent" is still not colour alone.
+            context.beginPath();
+            context.arc(cx, cy, radius + 2, 0, 2 * Math.PI);
+            context.lineWidth = 2;
+            context.strokeStyle = COLOR_COMMON;
+            context.stroke();
+        }
+    } else {
+        context.fillStyle = COLOR_RARE;
+        context.globalAlpha = 0.75;
+        context.fill();
+        context.globalAlpha = 1;
+        context.strokeStyle = "#000000";
+        context.lineWidth = 0.4;
+        context.stroke();
+    }
+    if (point.count > 1 && !compact && !marks.fixed && !marks.dots) {
+        context.fillStyle = "#1a1a1a";
+        context.font = `${opts.tickFontSize}px -apple-system, sans-serif`;
+        context.textAlign = "left";
+        context.textBaseline = "alphabetic";
+        context.fillText(String(point.count), cx + radius + 2, cy - radius);
+    }
+}
+
+/**
+ * Draw the pile of alleles at exactly (0, 0) as a labelled badge.
+ *
+ * (0, 0) means "this allele exists somewhere in the population but in
+ * neither of the two demes shown". It is a real fact but a background
+ * one, and in a pooled batch it grows with the replicate count, so it is
+ * named in words instead of being drawn as the biggest mark on the plot.
+ *
+ * @param {object} geometry
+ * @param {{count: number}} point
+ */
+function drawOriginBadge(geometry, point) {
+    const { context, toCanvasX, toCanvasY, originX, originY, opts } = geometry;
+    const cx = toCanvasX(0);
+    const cy = toCanvasY(0);
+    context.save();
+    context.beginPath();
+    context.arc(cx, cy, 3, 0, 2 * Math.PI);
+    context.fillStyle = "#6b6b6b";
+    context.fill();
+    const text = `${point.count} at origin`;
+    context.font = `${opts.tickFontSize}px -apple-system, sans-serif`;
+    const textWidth = context.measureText(text).width;
+    const padX = 4;
+    const height = opts.tickFontSize + 6;
+    const left = originX + 8;
+    const top = originY - 8 - height;
+    context.fillStyle = "#f1f1f1";
+    context.strokeStyle = "#9a9a9a";
+    context.lineWidth = 1;
+    context.beginPath();
+    if (typeof context.roundRect === "function") {
+        context.roundRect(left, top, textWidth + 2 * padX, height, 4);
+    } else {
+        context.rect(left, top, textWidth + 2 * padX, height);
+    }
+    context.fill();
+    context.stroke();
+    context.fillStyle = "#1a1a1a";
+    context.textAlign = "left";
+    context.textBaseline = "middle";
+    context.fillText(text, left + padX, top + height / 2);
+    context.restore();
+}
+
+/**
+ * Draw a square-binned density map of the merged points, under any
+ * highlighted ring.
+ *
+ * @param {object} geometry
+ * @param {Array<{x: number, y: number, count: number}>} points
+ */
+function drawDensity(geometry, points) {
+    const { context, originX, originY, plotSize, compact } = geometry;
+    const bins = compact ? COMPACT_DENSITY_BINS : DENSITY_BINS;
+    const totals = new Map();
+    for (const point of points) {
+        const bx = Math.min(bins - 1, Math.floor(point.x * bins));
+        const by = Math.min(bins - 1, Math.floor(point.y * bins));
+        const key = by * bins + bx;
+        totals.set(key, (totals.get(key) ?? 0) + point.count);
+    }
+    const cell = plotSize / bins;
+    context.save();
+    for (const [key, total] of totals) {
+        const bx = key % bins;
+        const by = Math.floor(key / bins);
+        context.fillStyle = COUNT_RAMP[countStep(total)];
+        context.fillRect(originX + bx * cell, originY - (by + 1) * cell, cell, cell);
+    }
+    context.restore();
+}
+
+/**
+ * Draw the last few scrubber frames faded behind the current one, so the
+ * plot shows movement rather than a snapshot. Only frames of the same
+ * deme pair are used (the scrubber decides; `getScrubberTrailPanels`
+ * returns nothing for a pair chosen by hand).
+ *
+ * @param {object} geometry
+ * @param {object} panel the panel being drawn now
+ */
+function drawTrail(geometry, panel) {
+    const { context, toCanvasX, toCanvasY } = geometry;
+    if (!window.fim.getScrubberTrailPanels) {
+        return;
+    }
+    const earlier = window.fim.getScrubberTrailPanels(panel, TRAIL_FRAMES);
+    context.save();
+    earlier.forEach((trailPanel, index) => {
+        // Oldest faintest, newest closest to the current frame.
+        context.globalAlpha = 0.12 + (0.28 * (index + 1)) / (earlier.length + 1);
+        context.fillStyle = COLOR_RARE;
+        for (const point of trailPanel.points) {
+            context.beginPath();
+            context.arc(toCanvasX(point.x), toCanvasY(point.y), 2.5, 0, 2 * Math.PI);
+            context.fill();
+        }
+    });
+    context.restore();
 }
 
 /**
@@ -363,7 +613,7 @@ function drawScatterCell(context, rect, panel, opts) {
  * @param {number} plotSize Side length of the plot area, in canvas pixels.
  * @param {number} fontSize Tick font size, reused for legend text.
  */
-function drawMarkerLegend(context, originX, originY, plotSize, fontSize) {
+function drawMarkerLegend(context, originX, originY, plotSize, fontSize, style, compact) {
     const lineHeight = fontSize + 4;
     // Top-left of the plot area: the `x=y` diagonal runs corner to
     // corner, so the upper-left is the region least likely to sit on top
@@ -390,11 +640,18 @@ function drawMarkerLegend(context, originX, originY, plotSize, fontSize) {
     context.globalAlpha = 1;
     context.fillStyle = "#1a1a1a";
     context.fillText(
-        "Most frequent allele in either deme (ring; ties: first)",
+        compact ? "Most frequent (ring)" : "Most frequent allele in either deme (ring; ties: first)",
         commonSwatchX + 2 * commonRadius + 5,
         y
     );
     y += lineHeight;
+
+    const marks = markPointsFor(style, true);
+    if (marks.ramp) {
+        drawCountKey(context, originX, y + lineHeight - 2, fontSize, compact);
+        context.restore();
+        return;
+    }
 
     // Rare: an ordinary filled dot.
     const rareRadius = fontSize * 0.35;
@@ -412,6 +669,39 @@ function drawMarkerLegend(context, originX, originY, plotSize, fontSize) {
     context.fillText("Other alleles", rareSwatchX + 2 * rareRadius + 5, y);
 
     context.restore();
+}
+
+/**
+ * Draw the count key: five swatches, one per ramp step, with what each
+ * step means (alleles at that exact spot).
+ *
+ * @param {CanvasRenderingContext2D} context
+ * @param {number} x left edge
+ * @param {number} y vertical centre of the row
+ * @param {number} fontSize
+ * @param {boolean} compact a small plot: shorter wording
+ */
+function drawCountKey(context, x, y, fontSize, compact) {
+    const swatch = fontSize;
+    let cursor = x + 6;
+    context.fillStyle = "#1a1a1a";
+    context.textAlign = "left";
+    context.textBaseline = "middle";
+    const prefix = compact ? "n:" : "Alleles here:";
+    context.fillText(prefix, cursor, y);
+    cursor += context.measureText(prefix).width + 5;
+    COUNT_RAMP.forEach((color, index) => {
+        context.fillStyle = color;
+        context.fillRect(cursor, y - swatch / 2, swatch, swatch);
+        context.strokeStyle = "#1a1a1a";
+        context.lineWidth = 0.6;
+        context.strokeRect(cursor, y - swatch / 2, swatch, swatch);
+        cursor += swatch + 2;
+        context.fillStyle = "#1a1a1a";
+        const label = COUNT_RAMP_LABELS[index];
+        context.fillText(label, cursor, y);
+        cursor += context.measureText(label).width + 6;
+    });
 }
 
 /**

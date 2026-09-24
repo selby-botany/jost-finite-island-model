@@ -6,6 +6,8 @@ const settingsBanner = document.getElementById("settings-banner");
 const startupBehaviorSelect = document.getElementById("settings-startup-behavior");
 const rerunSeedModeSelect = document.getElementById("settings-rerun-seed-mode");
 const defaultPloidySelect = document.getElementById("settings-default-ploidy");
+const runGraphColumnsSelect = document.getElementById("settings-run-graph-columns");
+const scatterStyleSelect = document.getElementById("settings-scatter-style");
 
 const settingsEngineBackendSelect = document.getElementById("settings-engine_backend");
 const settingsNReplicatesInput = document.getElementById("settings-n_replicates");
@@ -153,6 +155,9 @@ async function loadSettingsDialog() {
     startupBehaviorSelect.value = await window.pywebview.api.get_startup_behavior();
     rerunSeedModeSelect.value = await window.pywebview.api.get_rerun_seed_mode();
     defaultPloidySelect.value = await window.pywebview.api.get_default_ploidy();
+    const runCardLayout = await window.pywebview.api.get_run_card_layout();
+    runGraphColumnsSelect.value = String(runCardLayout.columns);
+    scatterStyleSelect.value = runCardLayout.scatterStyle;
     applyDefaultRunSettingsValues(await window.pywebview.api.get_default_run_settings());
     await loadSettingsResultsLocation();
 }
@@ -168,6 +173,26 @@ startupBehaviorSelect.addEventListener("change", async () => {
         startupBehaviorSelect.value
     );
     if (!result.ok) {
+        showSettingsBanner(result.message);
+    }
+});
+
+runGraphColumnsSelect.addEventListener("change", async () => {
+    const result = await window.pywebview.api.set_run_graph_columns(
+        Number(runGraphColumnsSelect.value)
+    );
+    if (result.ok) {
+        window.fim.setGraphColumns(result.columns);
+    } else {
+        showSettingsBanner(result.message);
+    }
+});
+
+scatterStyleSelect.addEventListener("change", async () => {
+    const result = await window.pywebview.api.set_scatter_style(scatterStyleSelect.value);
+    if (result.ok) {
+        window.fim.setScatterStyle(result.style);
+    } else {
         showSettingsBanner(result.message);
     }
 });

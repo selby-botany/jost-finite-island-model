@@ -312,8 +312,19 @@
                cannot be drawn into correctly, so whichever pane becomes
                visible is always repainted at that moment. -->
           <div class="run-graph-stage" id="run-graph-stage">
+          <!-- Which graphs to show together (design `20260923-claude-
+               sonnet-5-multi-graph-run-card-and-scatter-encoding-
+               design.md` A2): a checkbox menu, rebuilt by
+               `run-graph-stage.js`'s `syncGraphMenu`. A native
+               <details> keeps it keyboard-reachable with no popover
+               code; the choice is remembered (`set_run_graphs`) and
+               how many columns they lay out in is a Settings choice. -->
           <div class="run-graph-toolbar">
-            <select id="run-graph-select" aria-label="Choose which graph to show"></select>
+            <details class="graph-menu" id="run-graph-menu">
+              <summary id="run-graph-menu-summary">Graphs</summary>
+              <div class="graph-menu-list" id="run-graph-menu-list" role="group"
+                   aria-label="Graphs to show"></div>
+            </details>
           </div>
             <div class="run-graph-body">
               <!-- `completed`-only this phase (design §3.2.4: no
@@ -371,6 +382,10 @@
               <div class="run-visual-panels" id="run-visual-panels">
             <div class="run-canvas-frame" id="run-scatter-card">
               <h4 id="run-scatter-title">Allele frequencies by deme pair</h4>
+              <!-- Follows the scrubber (`scrubber.js` fills every
+                   `[data-generation-caption]`), so the scatter names the
+                   generation the trajectory's dashed line marks. -->
+              <p class="scatter-caption" id="run-scatter-caption" data-generation-caption></p>
               <!-- Inside this frame, not up in the stage toolbar: both
                    selectors are placed by `grid-column`/`grid-row` in
                    `.run-canvas-frame`'s own grid, which is what glues
@@ -1788,6 +1803,43 @@
       <p class="hint">
         The ploidy a new configuration starts on. Leave it on "Ask me each
         time" to choose for every configuration.
+      </p>
+    </div>
+
+    <!-- How the Run card lays out the graphs chosen in its "Graphs"
+         menu (design `20260923-claude-sonnet-5-multi-graph-run-card-and-
+         scatter-encoding-design.md` A3): one number, rows follow. -->
+    <div class="field">
+      <label for="settings-run-graph-columns">Run card graph columns</label>
+      <select id="settings-run-graph-columns">
+        <option value="1">1 (one above another)</option>
+        <option value="2">2 (side by side)</option>
+        <option value="3">3</option>
+        <option value="4">4</option>
+      </select>
+      <p class="hint">
+        How many graphs sit side by side when several are shown; further
+        graphs start a new row. Narrow windows use fewer.
+      </p>
+    </div>
+
+    <!-- How the scatter plot draws its points. All the alternatives to the
+         original growing circle are offered so a botanist can choose by
+         looking (design B5); see `scatter.js`'s `SCATTER_STYLES`. -->
+    <div class="field">
+      <label for="settings-scatter-style">Scatter plot points</label>
+      <select id="settings-scatter-style">
+        <option value="color-badge">Colour for count, origin as a badge (recommended)</option>
+        <option value="color">Colour for count</option>
+        <option value="badge">Circles, origin as a badge</option>
+        <option value="density">Density map</option>
+        <option value="dots">Translucent dots</option>
+        <option value="trail">Circles with a trail of earlier generations</option>
+        <option value="circles">Circles that grow with count (original)</option>
+      </select>
+      <p class="hint">
+        Alleles at the same spot are counted together. Different styles show
+        that count differently; try each on a real run.
       </p>
     </div>
 

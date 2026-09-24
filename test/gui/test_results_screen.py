@@ -524,6 +524,8 @@ def test_completed_scatter_draws_the_marker_color_legend(
             # Wrap `fillText` before the run starts, so the completed
             # state's own first paint is captured rather than a later
             # incidental redraw.
+            "window.pywebview.api.set_scatter_style('circles').then(() => "
+            "window.fim.setScatterStyle('circles')); "
             "window.__fimCanvasText = []; "
             "const ctx = document.getElementById('run-canvas').getContext('2d'); "
             "const originalFillText = ctx.fillText.bind(ctx); "
@@ -547,8 +549,56 @@ def test_completed_scatter_draws_the_marker_color_legend(
     )
 
     drawn = settled["drawn"]
-    assert "Most frequent allele in either deme (ring; ties: first)" in drawn
+    # The full sentence on a large plot, a shorter one on the small plot
+    # the side-by-side default gives the scatter.
+    assert (
+        "Most frequent allele in either deme (ring; ties: first)" in drawn
+        or "Most frequent (ring)" in drawn
+    )
     assert "Other alleles" in drawn
+
+
+def test_the_default_scatter_style_explains_its_count_colors(
+    fast_scalar_run_settings: Path, window: webview.Window, drive: Callable[..., Any]
+) -> None:
+    """The default style (colour for count, origin badge) carries its own key.
+
+    Fixed-size marks coloured by how many alleles share the spot are only
+    readable with a key, so the plot draws one: a swatch per step, from a
+    single allele up to sixteen or more, replacing the "Other alleles"
+    line of the original circles.
+    """
+    settled = drive(
+        window,
+        ready=_INPUT_SCREEN_READY,
+        trigger=(
+            "window.__fimCanvasText = []; "
+            "const ctx = document.getElementById('run-canvas').getContext('2d'); "
+            "const originalFillText = ctx.fillText.bind(ctx); "
+            "ctx.fillText = (text, ...rest) => { "
+            "window.__fimCanvasText.push(String(text)); "
+            "return originalFillText(text, ...rest); "
+            "}; " + _SET_TINY_FIELDS + "document.getElementById('run-button').click();"
+        ),
+        read=(
+            "({"
+            "runViewState: window.fim.getRunViewState(), "
+            "style: window.fim.getScatterStyle(), "
+            "drawn: window.__fimCanvasText || []"
+            "})"
+        ),
+        is_ready=lambda value: (
+            value is not None
+            and value.get("runViewState") == "completed"
+            and "16+" in value.get("drawn", [])
+        ),
+        poll_attempts=_POLL_ATTEMPTS,
+    )
+
+    assert settled["style"] == "color-badge"
+    drawn = settled["drawn"]
+    assert {"1", "2-3", "4-7", "8-15", "16+"} <= set(drawn)
+    assert "Other alleles" not in drawn
 
 
 def test_deme_pair_selector_switches_to_a_chosen_pair_and_back(
@@ -1079,21 +1129,22 @@ def test_completed_scrubber_updates_supplemental_panels_on_scrub_ticks(
     assert "Generation 0" in settled["scrubberLabel"]
 
 
-def test_graph_stage_shows_one_graph_and_the_selector_switches_it(
+def test_graph_stage_shows_the_chosen_graphs_together_and_the_menu_changes_them(
     fast_scalar_run_settings: Path, window: webview.Window, drive: Callable[..., Any]
 ) -> None:
-    """The stage shows exactly one graph, and the selector changes which.
+    """The stage shows the scatter and trajectories together; the menu changes that.
 
-    The Run card used to show four graphs at once in a 3x3 quadrant.
-    That was reported as unworkable -- each panel too small to read at
-    the app's own 900x700 default -- and was replaced by a "graph
-    stage": one graph, chosen from a selector where the per-panel title
-    used to be.
+    The Run card once showed four graphs at once in a 3x3 quadrant
+    (reported as unworkable), then one graph at a time. Botanist
+    feedback: the scatter and the trajectories are two views of the same
+    generation and seeing them together is how people learn to connect
+    them, so those two are the default pair, and the user chooses which
+    graphs to show from a "Graphs" menu.
 
-    "Exactly one" is the part worth guarding. The stage decides pane
-    visibility centrally, but the render functions still report *whether*
-    each graph has data, and an earlier version of that split let a
-    graph un-hide itself behind the stage's back.
+    "Exactly the chosen ones" is the part worth guarding. The stage
+    decides pane visibility centrally, but the render functions still
+    report *whether* each graph has data, and an earlier version of that
+    split let a graph un-hide itself behind the stage's back.
     """
     settled = drive(
         window,
@@ -1101,14 +1152,26 @@ def test_graph_stage_shows_one_graph_and_the_selector_switches_it(
         trigger=(
             _SET_TINY_FIELDS
             + "document.getElementById('run-button').click(); "
+            + "const visible = () => ['run-scatter-card', "
+            + "'run-trajectory-frame', 'allele-composition-card', "
+            + "'frequency-spectrum-card']"
+            + ".filter((id) => !document.getElementById(id).hidden); "
             + "const pollCompleted = () => { "
             + "if (window.fim.getRunViewState() === 'completed') { "
-            + "const select = document.getElementById('run-graph-select'); "
-            + "window.__fimOptions = Array.from(select.options)"
-            + ".map((option) => option.value); "
-            + "window.__fimDefault = window.fim.getActiveGraph(); "
+            + "const boxes = Array.from(document.querySelectorAll("
+            + "'#run-graph-menu-list input')); "
+            + "window.__fimMenu = boxes.map((box) => ({value: box.value, "
+            + "checked: box.checked, disabled: box.disabled})); "
+            + "window.__fimDefault = visible(); "
+            + "window.__fimDefaultGraphs = window.fim.getVisibleGraphs(); "
+            + "const composition = boxes.find((box) => "
+            + "box.value === 'alleleComposition'); "
+            + "composition.checked = true; "
+            + "composition.dispatchEvent(new Event('change', {bubbles: true})); "
+            + "window.__fimThree = visible(); "
             + "window.fim.showGraph('alleleComposition'); "
-            + "window.__fimSwitched = window.fim.getActiveGraph(); "
+            + "window.__fimOnly = visible(); "
+            + "window.__fimActive = window.fim.getActiveGraph(); "
             + "return; "
             + "} "
             + "setTimeout(pollCompleted, 50); "
@@ -1118,36 +1181,45 @@ def test_graph_stage_shows_one_graph_and_the_selector_switches_it(
         read=(
             "({"
             "runViewState: window.fim.getRunViewState(), "
-            "options: window.__fimOptions, "
-            "defaultGraph: window.__fimDefault, "
-            "switchedGraph: window.__fimSwitched, "
-            "visible: ['run-scatter-card', 'run-trajectory-frame', "
-            "'allele-composition-card', 'frequency-spectrum-card']"
-            ".filter((id) => !document.getElementById(id).hidden)"
+            "menu: window.__fimMenu, "
+            "defaultVisible: window.__fimDefault, "
+            "defaultGraphs: window.__fimDefaultGraphs, "
+            "three: window.__fimThree, "
+            "only: window.__fimOnly, "
+            "active: window.__fimActive"
             "})"
         ),
         is_ready=lambda value: (
             value is not None
             and value.get("runViewState") == "completed"
-            and value.get("switchedGraph") is not None
+            and value.get("only") is not None
         ),
         poll_attempts=_POLL_ATTEMPTS,
     )
 
     # Four graphs on offer, never the fifth: the IBD payload is still
     # produced for Python callers, but this card does not show it.
-    assert settled["options"] == [
+    assert [entry["value"] for entry in settled["menu"]] == [
         "scatter",
         "trajectory",
         "alleleComposition",
         "frequencySpectrum",
     ]
-    # The trajectory is the requested default even though the scatter
-    # declares itself available first, during page load, long before any
-    # run exists.
-    assert settled["defaultGraph"] == "trajectory"
-    assert settled["switchedGraph"] == "alleleComposition"
-    assert settled["visible"] == ["allele-composition-card"]
+    # The default pair, in card order, even though the scatter declares
+    # itself available first, during page load, long before any run.
+    assert settled["defaultGraphs"] == ["scatter", "trajectory"]
+    assert settled["defaultVisible"] == ["run-scatter-card", "run-trajectory-frame"]
+    checked = {entry["value"] for entry in settled["menu"] if entry["checked"]}
+    assert checked == {"scatter", "trajectory"}
+    # Checking a third graph in the menu shows it as well, in card order.
+    assert settled["three"] == [
+        "run-scatter-card",
+        "run-trajectory-frame",
+        "allele-composition-card",
+    ]
+    # `showGraph` still means "only this one".
+    assert settled["only"] == ["allele-composition-card"]
+    assert settled["active"] == "alleleComposition"
 
 
 def test_graph_zoom_frame_takes_the_pane_and_gives_it_back(
@@ -1425,24 +1497,26 @@ def test_deme_pair_selectors_stay_glued_to_the_scatter_axes(
 def test_the_graph_you_are_watching_survives_the_run_finishing(
     fast_scalar_run_settings: Path, window: webview.Window, drive: Callable[..., Any]
 ) -> None:
-    """Completion leaves the stage on whatever graph the user chose.
+    """Completion leaves the stage on whatever graphs the user chose.
 
-    Reported directly: mid-run, the pull-down was set to the scatter;
-    when the run finished the stage jumped to the trajectory, which was
-    both unasked-for and inconsistent with the pull-down still showing
-    the old choice.
+    Reported directly (when the stage showed one graph at a time): mid-run,
+    the scatter was chosen; when the run finished the stage jumped to the
+    trajectory, which was both unasked-for and inconsistent with the
+    control still showing the old choice.
 
     The cause was `resetGraphStage`, called on the way into `completed`
     to drop the previous state's stale availability, also resetting the
     *preference* back to the default. Clearing what has data is right --
     the panes re-declare themselves immediately after; discarding the
-    user's choice is not.
+    user's choice is not. The same holds for a set of graphs: choosing
+    "scatter only" mid-run must still be "scatter only" afterwards, even
+    though the default pair (which includes the trajectory) would show
+    more once the trajectory has data.
 
-    The selection is driven here through a real `change` event on the
-    `<select>`, not `showGraph`, because the option list is rebuilt in
-    between (the scatter is the only graph with data until the first
-    progress message lands) and the point is that the control and the
-    stage still agree afterwards.
+    The choice is made through `setVisibleGraphs`, the very function the
+    menu's own `change` handler calls, while only the scatter has data
+    (the trajectory's own checkbox is disabled until it does), and the
+    point is that the menu and the stage still agree afterwards.
     """
     settled = drive(
         window,
@@ -1453,16 +1527,18 @@ def test_the_graph_you_are_watching_survives_the_run_finishing(
             + "document.getElementById('run-button').click(); "
             + "const poll = () => { "
             + "const state = window.fim.getRunViewState(); "
-            + "const select = document.getElementById('run-graph-select'); "
             + "if (state === 'running' && !window.__fimSwitched) { "
-            + "select.value = 'scatter'; "
-            + "select.dispatchEvent(new Event('change', {bubbles: true})); "
+            + "window.fim.setVisibleGraphs(['scatter']); "
             + "window.__fimSwitched = window.fim.getActiveGraph() === 'scatter'; } "
             + "if (state === 'completed' && window.__fimSwitched) { "
             + "window.__fimAfter = {active: window.fim.getActiveGraph(), "
-            + "value: select.value, "
-            + "text: select.selectedOptions[0].textContent, "
-            + "options: Array.from(select.options).map((o) => o.value), "
+            + "graphs: window.fim.getVisibleGraphs(), "
+            + "menu: Array.from(document.querySelectorAll("
+            + "'#run-graph-menu-list input')).map((box) => "
+            + "({value: box.value, checked: box.checked, "
+            + "disabled: box.disabled})), "
+            + "summary: document.getElementById('run-graph-menu-summary')"
+            + ".textContent, "
             + "visible: ['run-scatter-card', 'run-trajectory-frame', "
             + "'allele-composition-card', 'frequency-spectrum-card']"
             + ".filter((id) => !document.getElementById(id).hidden)}; "
@@ -1488,20 +1564,124 @@ def test_the_graph_you_are_watching_survives_the_run_finishing(
 
     after = settled["after"]
     assert after["active"] == "scatter"
+    assert after["graphs"] == ["scatter"]
     assert after["visible"] == ["run-scatter-card"]
 
-    # The control agrees with the stage -- in both its value and the
-    # label a reader actually sees, which is the half that was reported
-    # as wrong. By this point the option list has grown from one entry
-    # to four underneath the selection.
-    assert after["options"] == [
-        "scatter",
-        "trajectory",
-        "alleleComposition",
-        "frequencySpectrum",
-    ]
-    assert after["value"] == "scatter"
-    assert after["text"] == "Allele frequencies by deme pair"
+    # The menu agrees with the stage. By this point every graph has data
+    # underneath the choice: only the scatter is checked, and it cannot
+    # be unchecked (the stage is never left blank).
+    assert after["summary"] == "Graphs (1)"
+    checked = {entry["value"]: entry for entry in after["menu"] if entry["checked"]}
+    assert set(checked) == {"scatter"}
+    assert checked["scatter"]["disabled"] is True
+    assert all(
+        not entry["disabled"] for entry in after["menu"] if entry["value"] != "scatter"
+    )
+
+
+def test_the_default_pair_sits_side_by_side_above_the_fold_with_statistics(
+    fast_scalar_run_settings: Path, window: webview.Window, drive: Callable[..., Any]
+) -> None:
+    """Scatter and trajectories share a row at 900x700, statistics beside them.
+
+    The whole point of the default pair (botanist feedback: "important to
+    teach people how to connect them"): both graphs visible together
+    without scrolling, and the statistics table -- the legend for the
+    trajectory's coloured lines and the control that turns each on and
+    off -- always on screen beside them rather than wrapped out of sight.
+    One column stacks them instead, and the table still stays put.
+    """
+    settled = drive(
+        window,
+        ready=_INPUT_SCREEN_READY,
+        trigger=(
+            _SET_TINY_FIELDS
+            + "document.getElementById('run-button').click(); "
+            + "const box = (id) => { const b = document.getElementById(id)"
+            + ".getBoundingClientRect(); return {left: b.left, top: b.top, "
+            + "right: b.right, bottom: b.bottom, width: b.width}; }; "
+            + "const snap = () => ({scatter: box('run-scatter-card'), "
+            + "trajectory: box('run-trajectory-frame'), "
+            + "stats: box('results-stats'), "
+            + "canvas: box('run-canvas'), "
+            + "inner: [window.innerWidth, window.innerHeight]}); "
+            + "const poll = () => { "
+            + "if (window.fim.getRunViewState() === 'completed' && "
+            + "window.__fimScrubberPending === 0) { "
+            + "const two = snap(); "
+            + "window.fim.setGraphColumns(1); "
+            + "window.__fimLayouts = {two, one: snap()}; "
+            + "return; } setTimeout(poll, 50); }; setTimeout(poll, 50);"
+        ),
+        read="window.__fimLayouts || null",
+        is_ready=lambda value: value is not None,
+        poll_attempts=_POLL_ATTEMPTS,
+    )
+
+    two = settled["two"]
+    # Same row: tops within a few pixels, trajectory to the right.
+    assert abs(two["scatter"]["top"] - two["trajectory"]["top"]) < 4
+    assert two["trajectory"]["left"] >= two["scatter"]["right"]
+    # The scatter is the smaller of the two, but still a usable plot.
+    assert two["scatter"]["width"] < two["trajectory"]["width"]
+    assert two["canvas"]["width"] >= 120
+    # The statistics stay on screen beside them.
+    assert two["stats"]["left"] >= two["trajectory"]["right"]
+    assert two["stats"]["right"] <= two["inner"][0]
+    # Above the fold: the graphs end inside the window.
+    assert two["scatter"]["bottom"] <= two["inner"][1]
+    assert two["trajectory"]["bottom"] <= two["inner"][1]
+
+    one = settled["one"]
+    assert one["trajectory"]["top"] >= one["scatter"]["bottom"] - 1
+    assert one["stats"]["right"] <= one["inner"][0]
+    assert one["stats"]["width"] > 0
+
+
+def test_double_click_zooms_the_graph_under_the_pointer_and_the_caption_follows(
+    fast_scalar_run_settings: Path, window: webview.Window, drive: Callable[..., Any]
+) -> None:
+    """Zoom opens the clicked pane only, and the scatter names the generation.
+
+    With several graphs on the stage, double-clicking must zoom the one
+    that was clicked -- not "the" active one -- and leave the others where
+    they are. The scatter's caption follows the scrubber, so it names the
+    generation the trajectory's dashed line marks.
+    """
+    settled = drive(
+        window,
+        ready=_INPUT_SCREEN_READY,
+        trigger=(
+            _SET_TINY_FIELDS
+            + "document.getElementById('run-button').click(); "
+            + "const poll = () => { "
+            + "if (window.fim.getRunViewState() === 'completed' && "
+            + "window.__fimScrubberPending === 0) { "
+            + "const caption = document.getElementById('run-scatter-caption')"
+            + ".textContent; "
+            + "const label = document.getElementById('scrubber-label')"
+            + ".textContent; "
+            + "document.getElementById('run-trajectory-canvas').dispatchEvent("
+            + "new MouseEvent('dblclick', {bubbles: true})); "
+            + "const scatter = document.getElementById('run-scatter-card'); "
+            + "window.__fimZoomed = {active: window.fim.getActiveGraph(), "
+            + "open: document.getElementById('graph-zoom-modal').open, "
+            + "scatterParent: scatter.parentElement.id, "
+            + "scatterHidden: scatter.hidden, caption, label}; "
+            + "document.getElementById('graph-zoom-close').click(); "
+            + "return; } setTimeout(poll, 50); }; setTimeout(poll, 50);"
+        ),
+        read="window.__fimZoomed || null",
+        is_ready=lambda value: value is not None,
+        poll_attempts=_POLL_ATTEMPTS,
+    )
+
+    assert settled["open"] is True
+    assert settled["active"] == "trajectory"
+    assert settled["scatterParent"] == "run-visual-panels"
+    assert settled["scatterHidden"] is False
+    assert settled["label"].startswith("Generation ")
+    assert settled["caption"] == settled["label"]
 
 
 def test_nice_axis_ticks_round_to_human_steps_at_every_scale(

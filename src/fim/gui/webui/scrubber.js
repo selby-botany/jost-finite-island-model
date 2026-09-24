@@ -49,6 +49,21 @@ let onFrame = null;
 let scrubberMode = "replay";
 let isLiveTracking = true;
 
+/**
+ * Show the current generation: the readout above the slider, and every
+ * `[data-generation-caption]` on the page (the scatter plot's own
+ * caption), so the graphs shown together each name the generation the
+ * trajectory's dashed line marks. Empty text clears them.
+ *
+ * @param {string} text
+ */
+function setGenerationText(text) {
+    scrubberLabel.textContent = text;
+    for (const caption of document.querySelectorAll("[data-generation-caption]")) {
+        caption.textContent = text;
+    }
+}
+
 function setButtonActive(button, active) {
     button.classList.toggle("scrubber-step-active", active);
     button.setAttribute("aria-pressed", active ? "true" : "false");
@@ -70,7 +85,7 @@ function showCurrentFrame(isLiveHead = false) {
         return;
     }
     scrubberRange.value = String(currentIndex);
-    scrubberLabel.textContent = `Generation ${frame.generation}`;
+    setGenerationText(`Generation ${frame.generation}`);
     if (onFrame !== null) {
         onFrame(frame, currentIndex, isLiveHead);
     }
@@ -162,6 +177,34 @@ window.fim.getScrubberGenerations = function getScrubberGenerations() {
 };
 
 /**
+ * Return the default-pair scatter panels of the few frames just before
+ * the current one, oldest first -- what the scatter's "trail" style draws
+ * faded behind the current frame.
+ *
+ * Only when `panel` is the current frame's own default-pair panel: a pair
+ * the botanist chose by hand has no matching history, so it gets none
+ * rather than a trail of a different pair.
+ *
+ * @param {object} panel the panel being drawn
+ * @param {number} count how many earlier frames at most
+ * @returns {Array<object>}
+ */
+window.fim.getScrubberTrailPanels = function getScrubberTrailPanels(panel, count) {
+    const current = frames[currentIndex];
+    if (!current) {
+        return [];
+    }
+    const own = (current.panels && current.panels[0]) || current.pairPanel;
+    if (own !== panel && current.pairPanel !== panel) {
+        return [];
+    }
+    return frames
+        .slice(Math.max(0, currentIndex - count), currentIndex)
+        .map((frame) => (frame.panels && frame.panels[0]) || frame.pairPanel)
+        .filter(Boolean);
+};
+
+/**
  * Set the operational mode of the scrubber ("live" | "replay").
  *
  * @param {"live"|"replay"} mode
@@ -197,7 +240,7 @@ window.fim.appendLiveFrame = function appendLiveFrame(frame, drawFrame) {
         scrubberRange.value = String(currentIndex);
         const curFrame = frames[currentIndex];
         if (curFrame) {
-            scrubberLabel.textContent = `Generation ${curFrame.generation}`;
+            setGenerationText(`Generation ${curFrame.generation}`);
         }
     }
 };
@@ -232,7 +275,9 @@ window.fim.setScrubberFrames = function setScrubberFrames(newFrames, drawFrame, 
     scrubberRange.disabled = !canAnimate;
     scrubberRange.max = String(Math.max(frames.length - 1, 0));
     scrubberRange.value = String(currentIndex);
-    scrubberLabel.textContent = frames.length > 0 ? `Generation ${frames[currentIndex].generation}` : "";
+    setGenerationText(
+        frames.length > 0 ? `Generation ${frames[currentIndex].generation}` : ""
+    );
     // Only now does dragging/playback start actually drawing.
     onFrame = drawFrame;
 };
@@ -255,5 +300,5 @@ window.fim.resetScrubber = function resetScrubber() {
     scrubberRange.disabled = true;
     scrubberRange.max = "0";
     scrubberRange.value = "0";
-    scrubberLabel.textContent = "";
+    setGenerationText("");
 };
