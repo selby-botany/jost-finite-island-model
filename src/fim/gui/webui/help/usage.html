@@ -593,10 +593,11 @@ second sweep that overlaps the first, reuses the runs that already exist
 instead of computing them again. Reuse requires identical configurations,
 including the seed, so an overlapping sweep must use the same base seed and
 the same axis order.</li>
-<li>In the desktop app, <strong>Run as a sweep…</strong> on the Configure screen does the
-same for the current form: pick the parameters to vary, watch the plan
-update, and run. The Configure form supplies everything the axes do not
-replace.</li>
+<li>In the desktop app a sweep is part of Configure. Tick <strong>Sweep</strong>, choose
+what varies in the <strong>Set up sweep…</strong> dialog (a live count and, on request,
+every point), and press <strong>Run</strong> as always: with <strong>Sweep</strong> on, Run runs the
+configuration over those ranges into the study chosen at the bottom of
+Configure. That study then holds the sweep; a study holds at most one.</li>
 <li>A failed point is recorded and the sweep continues. Press Ctrl+C to stop;
 finished points stay in the study.</li>
 <li>Every point keeps its full trajectories. A sweep multiplies disk use by its

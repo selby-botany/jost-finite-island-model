@@ -21,6 +21,7 @@ const runStudyNewRow = document.getElementById("run-study-new-row");
 const runStudyNewNameInput = document.getElementById("run-study-new-name");
 const runStudyNewCreateButton = document.getElementById("run-study-new-create-button");
 const runStudyNewCancelButton = document.getElementById("run-study-new-cancel-button");
+const runStudyNewExperimentSelect = document.getElementById("run-study-new-experiment");
 
 function showRunBanner(message) {
     if (!message) {
@@ -53,6 +54,12 @@ async function onRunClicked() {
     const result = await revalidate();
     if (!result.ok) {
         window.fim.focusInvalidField(result.field);
+        return;
+    }
+    // Configure's Sweep box: Run means Run, so with it on this same button
+    // starts the sweep (`sweep.js`) into the same study choice.
+    if (window.fim.isSweepEnabled()) {
+        await window.fim.runConfiguredSweep(runStudySelect.value || null);
         return;
     }
     // Design §3.1: "clicking 'Run simulation' anywhere in Configure
@@ -290,6 +297,32 @@ window.fim.refreshRunStudySelectOptions = refreshRunStudySelectOptions;
 /** Show/hide `run-study-new-row` to match `run-study-select`'s own current value. */
 function syncRunStudyNewRowVisibility() {
     runStudyNewRow.hidden = runStudySelect.value !== "__new__";
+    if (!runStudyNewRow.hidden) {
+        populateRunStudyNewExperiments();
+    }
+}
+
+/**
+ * Fill the new-study row's experiment choice: no experiment, or one that
+ * exists. A study is placed in an experiment when it is created.
+ */
+async function populateRunStudyNewExperiments() {
+    const experiments = await window.pywebview.api.list_experiments();
+    const previous = runStudyNewExperimentSelect.value;
+    runStudyNewExperimentSelect.replaceChildren();
+    const none = document.createElement("option");
+    none.value = "";
+    none.textContent = "No experiment";
+    runStudyNewExperimentSelect.appendChild(none);
+    for (const experiment of experiments) {
+        const option = document.createElement("option");
+        option.value = experiment.experimentId;
+        option.textContent = experiment.name;
+        runStudyNewExperimentSelect.appendChild(option);
+    }
+    if (experiments.some((experiment) => experiment.experimentId === previous)) {
+        runStudyNewExperimentSelect.value = previous;
+    }
 }
 
 runStudySelect.addEventListener("change", () => {
@@ -310,7 +343,11 @@ async function onRunStudyNewCreateClicked() {
         showRunBanner("a study needs a name");
         return;
     }
-    const result = await window.pywebview.api.create_study(name);
+    const result = await window.pywebview.api.create_study(
+        name,
+        "",
+        runStudyNewExperimentSelect.value || null
+    );
     if (!result.ok) {
         showRunBanner(result.message);
         return;

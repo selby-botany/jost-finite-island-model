@@ -1,33 +1,41 @@
 "use strict";
 
-/* Sweep screen (`20260923-claude-sonnet-5-sweep-as-study-implementation-
+/* Sweep (`20260923-claude-sonnet-5-sweep-as-study-implementation-
  * plan.md`, `selby/restricted`, §6): run the Configure form over a range
  * of one or more parameters as a single Study.
  *
- * Two views on one screen. The setup view is a set of axis rows and a
- * live plan (`Api.plan_sweep`, debounced, so no run happens): every
- * point, whether it is new, already computed, or invalid and why. The
- * progress view follows a running sweep through `fim.onSweepEvent`
- * pushes from `Api.start_sweep`'s own background thread.
+ * A sweep is part of Configure, not a separate place to run things. The
+ * Sweep box beside Run turns it on; "Set up sweep…" opens `#modal-sweep`,
+ * where the axes (what varies, over which values) and the seed policy are
+ * chosen, with a live plan (`Api.plan_sweep`, so nothing runs) that counts
+ * the points, flags invalid ones and lists them on request. The study is
+ * Configure's own study choice. Run always means Run: with the box on it
+ * starts the sweep (`runConfiguredSweep`), otherwise a single run.
  *
- * A sweep of `confirmationThreshold` points or more needs a second click:
- * `window.confirm` hangs pywebview, so the Run button re-labels itself
- * ("Confirm: run 250 points") and only the second click starts it.
+ * Progress follows a running sweep through `fim.onSweepEvent` pushes from
+ * `Api.start_sweep`'s background thread, on the sweep screen.
+ *
+ * A sweep of `confirmationThreshold` points or more needs a second press
+ * of Run: `window.confirm` hangs pywebview, so the first press says so and
+ * only the second starts it.
  */
 
 const sweepBanner = document.getElementById("sweep-banner");
+const sweepDialog = document.getElementById("modal-sweep");
+const sweepDialogBanner = document.getElementById("sweep-banner-dialog");
+const sweepDoneButton = document.getElementById("sweep-done-button");
+const sweepDialogCancelButton = document.getElementById("sweep-dialog-cancel-button");
+const sweepCheckbox = document.getElementById("configure-sweep-checkbox");
+const sweepConfigureButton = document.getElementById("configure-sweep-button");
+const sweepConfigureSummary = document.getElementById("configure-sweep-summary");
 const sweepBaseSummary = document.getElementById("sweep-base-summary");
 const sweepAxesContainer = document.getElementById("sweep-axes");
 const sweepAddAxisButton = document.getElementById("sweep-add-axis-button");
-const sweepNameInput = document.getElementById("sweep-name");
-const sweepExperimentSelect = document.getElementById("sweep-experiment");
 const sweepSeedPolicySelect = document.getElementById("sweep-seed-policy");
 const sweepPlanSummary = document.getElementById("sweep-plan-summary");
 const sweepPlanTable = document.getElementById("sweep-plan-table");
 const sweepPlanHead = document.getElementById("sweep-plan-head");
 const sweepPlanBody = document.getElementById("sweep-plan-body");
-const sweepRunButton = document.getElementById("sweep-run-button");
-const sweepSetupView = document.getElementById("sweep-setup");
 const sweepProgressView = document.getElementById("sweep-progress");
 const sweepProgressText = document.getElementById("sweep-progress-text");
 const sweepProgressBar = document.getElementById("sweep-progress-bar");
@@ -58,8 +66,10 @@ let sweepBaseValues = {};
 let sweepPlanTimer = null;
 let sweepPlanSequence = 0;
 let sweepConfirmArmed = false;
+// The saved configuration: `{request, summary, pointCount}` once Done was
+// pressed in the dialog, else `null`.
+let sweepConfig = null;
 let sweepLastPlan = null;
-let sweepRunningStudyId = null;
 let sweepLastStudyId = null;
 
 window.__fimSweepPlanReady = false;
@@ -72,6 +82,15 @@ window.__fimSweepFinished = false;
 function showSweepBanner(message) {
     sweepBanner.hidden = !message;
     sweepBanner.textContent = message || "";
+}
+
+/**
+ * Show (or hide) the setup dialog's own banner.
+ * @param {string} [message]
+ */
+function showSweepDialogBanner(message) {
+    sweepDialogBanner.hidden = !message;
+    sweepDialogBanner.textContent = message || "";
 }
 
 /**
@@ -345,8 +364,7 @@ function buildSweepRequest() {
 
 /** Schedule a fresh plan after the user stops editing. */
 function onSweepAxesChanged() {
-    sweepConfirmArmed = false;
-    sweepRunButton.textContent = "Run sweep";
+    sweepDoneButton.disabled = true;
     window.__fimSweepPlanReady = false;
     sweepAddAxisButton.disabled =
         sweepAxisKeys().length >= (sweepKeys ? sweepKeys.length : 0);
@@ -355,21 +373,9 @@ function onSweepAxesChanged() {
 }
 
 /**
- * Suggest a Study name from the chosen axes, unless the user typed one.
- */
-function suggestSweepName() {
-    if (sweepNameInput.dataset.edited === "true") {
-        return;
-    }
-    const keys = sweepAxisKeys();
-    sweepNameInput.value = keys.length > 0 ? `Sweep of ${keys.join(" and ")}` : "Sweep";
-}
-
-/**
  * Ask the bridge for the plan and draw it.
  */
 async function refreshSweepPlan() {
-    suggestSweepName();
     const sequence = (sweepPlanSequence += 1);
     let request;
     try {
@@ -400,7 +406,7 @@ function drawSweepPlanProblem(message) {
     sweepPlanSummary.textContent = message;
     sweepPlanSummary.classList.add("sweep-plan-problem");
     sweepPlanTable.hidden = true;
-    sweepRunButton.disabled = true;
+    sweepDoneButton.disabled = true;
     for (const span of sweepAxesContainer.querySelectorAll(".sweep-axis-values")) {
         span.textContent = "";
     }
@@ -474,7 +480,7 @@ function drawSweepPlan(plan) {
         sweepPlanSummary.textContent += ` Showing the first ${SWEEP_PLAN_ROW_LIMIT} of ${entries.length} grid positions.`;
     }
     sweepPlanTable.hidden = false;
-    sweepRunButton.disabled = plan.points.length === 0;
+    sweepDoneButton.disabled = plan.points.length === 0;
 }
 
 /**
@@ -493,45 +499,13 @@ function sweepHeaderRow(labels) {
 }
 
 /**
- * Click on "Run sweep": confirm a large plan on a second click, then start.
- */
-async function onSweepRunClicked() {
-    showSweepBanner("");
-    if (sweepLastPlan === null || sweepLastPlan.points.length === 0) {
-        return;
-    }
-    if (sweepLastPlan.needsConfirmation && !sweepConfirmArmed) {
-        sweepConfirmArmed = true;
-        sweepRunButton.textContent = `Confirm: run ${sweepLastPlan.points.length} points`;
-        return;
-    }
-    sweepRunButton.disabled = true;
-    const experiment = sweepExperimentSelect.value || null;
-    const result = await window.pywebview.api.start_sweep(
-        sweepBaseValues,
-        buildSweepRequest(),
-        sweepNameInput.value.trim() || "Sweep",
-        experiment,
-        sweepConfirmArmed
-    );
-    if (!result.ok) {
-        showSweepBanner(result.message);
-        sweepRunButton.disabled = false;
-        return;
-    }
-    await enterSweepProgress(result.studyId);
-}
-
-/**
  * Switch to the progress view for a running (or resumed) sweep.
  * @param {string} studyId
  */
 async function enterSweepProgress(studyId) {
-    sweepRunningStudyId = studyId;
     sweepLastStudyId = studyId;
     window.__fimSweepFinished = false;
     sweepTitle.textContent = "Sweep running";
-    sweepSetupView.hidden = true;
     sweepProgressView.hidden = false;
     sweepCancelButton.hidden = false;
     sweepCancelButton.disabled = false;
@@ -636,60 +610,182 @@ function finishSweep(cancelled) {
     sweepSetupButton.hidden = false;
     sweepHomeButton.hidden = false;
     sweepViewResultsButton.hidden = sweepLastStudyId === null;
-    sweepRunningStudyId = null;
     window.__fimSweepFinished = true;
 }
 
 /**
- * Show the setup view, seeded from Configure's current form.
+ * The initial state of an axis row for a saved request entry.
+ * @param {{key: string, values?: Array, range?: object}} entry
+ * @returns {{key: string, initial: object}}
+ */
+function sweepAxisInitial(entry) {
+    if (entry.range) {
+        return {
+            key: entry.key,
+            initial: {
+                mode: "range",
+                start: entry.range.start,
+                stop: entry.range.stop,
+                count: entry.range.count,
+                scale: entry.range.scale,
+            },
+        };
+    }
+    const info = sweepKeyInfo(entry.key);
+    if (info && info.kind === "choice") {
+        return { key: entry.key, initial: { choices: entry.values } };
+    }
+    return { key: entry.key, initial: { mode: "list", list: entry.values.join(", ") } };
+}
+
+/**
+ * Open the setup dialog, on the saved configuration or, failing that, on
+ * `options.axes` or a first axis.
  * @param {{axes?: Array<{key: string, initial?: object}>}} [options]
  */
-window.fim.showSweepScreen = async function showSweepScreen(options = {}) {
-    showSweepBanner("");
+window.fim.openSweepDialog = async function openSweepDialog(options = {}) {
+    showSweepDialogBanner("");
     window.__fimSweepPlanReady = false;
     if (sweepKeys === null) {
         sweepKeys = await window.pywebview.api.get_sweepable_keys();
     }
     sweepBaseValues = collectFormValues();
     sweepBaseSummary.textContent = sweepBaseSummaryText(sweepBaseValues);
-    const experiments = await window.pywebview.api.list_experiments();
-    sweepExperimentSelect.replaceChildren();
-    const none = document.createElement("option");
-    none.value = "";
-    none.textContent = "No experiment";
-    sweepExperimentSelect.appendChild(none);
-    for (const experiment of experiments) {
-        const option = document.createElement("option");
-        option.value = experiment.experimentId;
-        option.textContent = experiment.name;
-        sweepExperimentSelect.appendChild(option);
+    sweepAxesContainer.replaceChildren();
+    let axes = options.axes;
+    if (!axes || axes.length === 0) {
+        axes =
+            sweepConfig === null
+                ? [{ key: "m" }]
+                : sweepConfig.request.axes.map(sweepAxisInitial);
     }
-    if (sweepRunningStudyId === null) {
-        sweepTitle.textContent = "Run as a sweep";
-        sweepSetupView.hidden = false;
-        sweepProgressView.hidden = true;
-        document.getElementById("sweep-results").hidden = true;
-        sweepAxesContainer.replaceChildren();
-        sweepNameInput.dataset.edited = "false";
-        const axes = options.axes && options.axes.length > 0 ? options.axes : [{ key: "m" }];
-        for (const axis of axes) {
-            addSweepAxisRow(axis.key, axis.initial || {});
-        }
+    if (sweepConfig !== null) {
+        sweepSeedPolicySelect.value = sweepConfig.request.seedPolicy;
     }
-    window.fim.showScreen("screen-sweep");
+    for (const axis of axes) {
+        addSweepAxisRow(axis.key, axis.initial || {});
+    }
+    if (!sweepDialog.open) {
+        sweepDialog.showModal();
+    }
 };
 
-sweepAddAxisButton.addEventListener("click", () => addSweepAxisRow());
-sweepNameInput.addEventListener("input", () => {
-    sweepNameInput.dataset.edited = "true";
+/** Reflect the saved configuration on Configure's Sweep box and summary. */
+function syncSweepControls() {
+    const enabled = sweepCheckbox.checked;
+    sweepConfigureButton.hidden = !enabled;
+    sweepConfigureSummary.hidden = !enabled || sweepConfig === null;
+    sweepConfigureSummary.textContent = sweepConfig === null ? "" : sweepConfig.summary;
+}
+
+/**
+ * Summarize a plan for Configure: what varies and how many points.
+ * @param {{axes: Array<{key: string, values: Array}>, points: Array}} plan
+ * @returns {string}
+ */
+function sweepSummaryText(plan) {
+    const axes = plan.axes.map((axis) => `${axis.key} (${axis.values.length})`).join(", ");
+    const count = plan.points.length;
+    return `Sweep: ${axes}, ${count} point${count === 1 ? "" : "s"}.`;
+}
+
+/**
+ * Save a request as the sweep configuration and turn the box on.
+ * @param {{axes: object[], seedPolicy: string}} request
+ * @param {object} plan Its plan, for the summary.
+ */
+function saveSweepConfiguration(request, plan) {
+    sweepConfig = { request, summary: sweepSummaryText(plan), pointCount: plan.points.length };
+    sweepConfirmArmed = false;
+    sweepCheckbox.checked = true;
+    syncSweepControls();
+}
+
+/**
+ * Set the sweep from outside (Explore's "Sweep this for real"): plan the
+ * request against Configure's current values, save it, and turn it on.
+ * @param {{axes: object[], seedPolicy?: string}} request
+ * @returns {Promise<{ok: boolean, message?: string}>}
+ */
+window.fim.setSweepConfiguration = async function setSweepConfiguration(request) {
+    const full = { seedPolicy: "spaced", ...request };
+    const plan = await window.pywebview.api.plan_sweep(collectFormValues(), full);
+    if (!plan.ok) {
+        return plan;
+    }
+    saveSweepConfiguration(full, plan);
+    return { ok: true };
+};
+
+/**
+ * Whether Configure's Sweep box is on and holds a configuration.
+ * @returns {boolean}
+ */
+window.fim.isSweepEnabled = function isSweepEnabled() {
+    return sweepCheckbox.checked && sweepConfig !== null;
+};
+
+/**
+ * What Run does with the Sweep box on: run Configure's values over the saved
+ * axes, into Configure's chosen study. A large plan needs a second press.
+ * @param {string|null} studyId Configure's own study choice.
+ * @returns {Promise<void>}
+ */
+window.fim.runConfiguredSweep = async function runConfiguredSweep(studyId) {
+    showRunBanner("");
+    const result = await window.pywebview.api.start_sweep(
+        collectFormValues(),
+        sweepConfig.request,
+        studyId,
+        sweepConfirmArmed
+    );
+    if (result.needsConfirmation && !sweepConfirmArmed) {
+        sweepConfirmArmed = true;
+        showRunBanner(
+            `This sweep has ${result.total} points. Press Run again to confirm.`
+        );
+        return;
+    }
+    if (!result.ok) {
+        showRunBanner(result.message);
+        return;
+    }
+    sweepConfirmArmed = false;
+    window.fim.showScreen("screen-sweep");
+    document.getElementById("sweep-results").hidden = true;
+    sweepProgressView.hidden = false;
+    await enterSweepProgress(result.studyId);
+};
+
+sweepCheckbox.addEventListener("change", async () => {
+    syncSweepControls();
+    if (sweepCheckbox.checked && sweepConfig === null) {
+        await window.fim.openSweepDialog();
+    }
 });
+sweepConfigureButton.addEventListener("click", () => window.fim.openSweepDialog());
+sweepAddAxisButton.addEventListener("click", () => addSweepAxisRow());
 sweepSeedPolicySelect.addEventListener("change", onSweepAxesChanged);
-sweepRunButton.addEventListener("click", onSweepRunClicked);
+sweepDoneButton.addEventListener("click", () => {
+    if (sweepLastPlan === null) {
+        return;
+    }
+    saveSweepConfiguration(buildSweepRequest(), sweepLastPlan);
+    sweepDialog.close();
+});
+sweepDialogCancelButton.addEventListener("click", () => sweepDialog.close());
+sweepDialog.addEventListener("close", () => {
+    // Cancelled with nothing saved: the box is not on with nothing to run.
+    if (sweepConfig === null) {
+        sweepCheckbox.checked = false;
+        syncSweepControls();
+    }
+});
 sweepCancelButton.addEventListener("click", async () => {
     sweepCancelButton.disabled = true;
     await window.pywebview.api.cancel_sweep();
 });
-sweepSetupButton.addEventListener("click", () => window.fim.showSweepScreen());
+sweepSetupButton.addEventListener("click", () => window.fim.showConfigureScreen());
 sweepHomeButton.addEventListener("click", () => window.fim.menu.openRun());
 sweepViewResultsButton.addEventListener("click", () => {
     if (sweepLastStudyId !== null) {

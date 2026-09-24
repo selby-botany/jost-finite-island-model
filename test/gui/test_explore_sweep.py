@@ -153,7 +153,7 @@ def test_even_in_the_predicted_response_places_points_differently(
     assert 2 <= len(response) <= 5
 
 
-def test_sweep_this_for_real_opens_the_sweep_screen_on_those_axes(
+def test_sweep_this_for_real_sets_the_sweep_on_configure(
     fast_scalar_run_settings: Path, window: webview.Window
 ) -> None:
     def steps(poll_until: Poll) -> Any:
@@ -161,20 +161,16 @@ def test_sweep_this_for_real_opens_the_sweep_screen_on_those_axes(
         window.evaluate_js("document.getElementById('explore-sweep-button').click();")
         return poll_until(
             "({screen: document.querySelector('.screen:not([hidden])').id, "
-            "planReady: window.__fimSweepPlanReady, "
-            "rows: document.querySelectorAll('.sweep-axis').length, "
-            "key: document.querySelector('.sweep-axis-key')?.value, "
-            "count: document.querySelector('.sweep-axis-count')?.value, "
-            "summary: document.getElementById('sweep-plan-summary').textContent})",
-            lambda s: s["screen"] == "screen-sweep" and s["planReady"] is True,
+            "boxOn: document.getElementById('configure-sweep-checkbox').checked, "
+            "summary: document.getElementById('configure-sweep-summary').textContent, "
+            "dialogOpen: document.getElementById('modal-sweep').open})",
+            lambda s: s["screen"] == "screen-configure" and s["boxOn"] is True,
         )
 
-    sweep = _drive(window, steps)
+    configure = _drive(window, steps)
 
-    assert sweep["rows"] == 1
-    assert sweep["key"] == "m"
-    assert sweep["count"] == "5"
-    assert sweep["summary"].startswith("5 points")
+    assert configure["summary"] == "Sweep: m (5), 5 points."
+    assert configure["dialogOpen"] is False
 
 
 def test_an_n_axis_is_converted_from_gene_copies_to_individuals(

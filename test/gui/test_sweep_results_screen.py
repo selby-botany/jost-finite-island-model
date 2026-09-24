@@ -16,6 +16,7 @@ from .test_sweep_screen import (
     _OPEN_SWEEP,
     _SCREEN_STATE,
     _SET_TINY_FIELDS,
+    _START,
     Poll,
     _drive,
     _plan_ready,
@@ -68,7 +69,7 @@ def _run_and_view_results(window: webview.Window, poll_until: Poll, axes: str) -
     poll_until(_SCREEN_STATE, _plan_ready)
     window.evaluate_js(axes)
     poll_until(_SCREEN_STATE, lambda s: s["planReady"] is True and s["tableRows"] >= 2)
-    window.evaluate_js("document.getElementById('sweep-run-button').click();")
+    window.evaluate_js(_START)
     poll_until("window.__fimSweepFinished", lambda finished: finished is True)
     window.evaluate_js("document.getElementById('sweep-view-results-button').click();")
     return poll_until(
@@ -126,7 +127,7 @@ def test_a_two_axis_sweep_draws_a_heat_map_in_all_three_modes(
         poll_until(
             _SCREEN_STATE, lambda s: s["planReady"] is True and s["tableRows"] == 4
         )
-        window.evaluate_js("document.getElementById('sweep-run-button').click();")
+        window.evaluate_js(_START)
         poll_until("window.__fimSweepFinished", lambda finished: finished is True)
         window.evaluate_js(
             "document.getElementById('sweep-view-results-button').click();"
@@ -169,7 +170,7 @@ def test_clicking_a_cell_opens_that_runs_results_card(
         poll_until(
             _SCREEN_STATE, lambda s: s["planReady"] is True and s["tableRows"] == 2
         )
-        window.evaluate_js("document.getElementById('sweep-run-button').click();")
+        window.evaluate_js(_START)
         poll_until("window.__fimSweepFinished", lambda finished: finished is True)
         window.evaluate_js(
             "document.getElementById('sweep-view-results-button').click();"

@@ -26,7 +26,7 @@ import logging
 import queue
 import threading
 from collections.abc import Callable, Mapping
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any, Literal, Protocol
@@ -205,6 +205,37 @@ def create_sweep_study(
             groups.delete_study(study.study_id, results=results)
             raise
     return study
+
+
+def attach_sweep_to_study(
+    study_id: str,
+    spec: SweepSpec,
+    plan: SweepPlan,
+    *,
+    results: Path | None = None,
+) -> StudyManifest:
+    """Make an existing Study the home of a sweep by storing its spec and plan.
+
+    The Study keeps any Runs it already has; a planned point whose run is
+    already a member counts as done. A Study holds at most one sweep.
+
+    Raises:
+        ValueError: The plan has no valid points, the Study does not exist,
+            or it already holds a sweep.
+    """
+    if not plan.points:
+        raise ValueError("the sweep has no valid points to run")
+    study = groups.get_study(study_id, results=results)
+    if study.sweep_spec is not None:
+        raise ValueError(
+            f"study {study.name!r} already holds a sweep; choose another study"
+        )
+    stored = {**spec.to_dict(), "points": [point.to_dict() for point in plan.points]}
+    updated = replace(study, sweep_spec=stored)
+    groups.write_study_manifest(
+        groups.study_manifest_path(study_id, results=results), updated
+    )
+    return updated
 
 
 def sweep_spec_of(study: StudyManifest) -> SweepSpec:

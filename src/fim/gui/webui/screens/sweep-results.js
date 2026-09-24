@@ -144,7 +144,6 @@ window.fim.showSweepResults = async function showSweepResults(studyId) {
     sweepResultsSummary.textContent = sweepResultsSummaryText(data);
     populateSweepResultsControls(data);
     sweepTitle.textContent = data.name;
-    sweepSetupView.hidden = true;
     sweepProgressView.hidden = true;
     sweepResultsView.hidden = false;
     window.fim.showScreen("screen-sweep");
@@ -796,7 +795,7 @@ for (const control of [sweepResultsX, sweepResultsY]) {
         renderSweepResults();
     });
 }
-sweepResultsSetupButton.addEventListener("click", () => window.fim.showSweepScreen());
+sweepResultsSetupButton.addEventListener("click", () => window.fim.showConfigureScreen());
 window.addEventListener("resize", () => {
     if (!sweepResultsView.hidden && sweepResultsData !== null) {
         renderSweepResults();

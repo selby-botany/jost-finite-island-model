@@ -294,9 +294,6 @@ function wireNavRail() {
         .getElementById("configure-run-button")
         .addEventListener("click", () => window.fim.menu.runSimulation());
     document
-        .getElementById("configure-sweep-button")
-        .addEventListener("click", () => window.fim.showSweepScreen());
-    document
         .getElementById("configure-explore-button")
         .addEventListener("click", () => {
             // Carries Configure's own *current* N/d/m/mu into Explore,

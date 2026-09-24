@@ -20,12 +20,15 @@ project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   before anything runs; an interrupted sweep resumes, and points already
   computed are reused. An `N` axis counts individuals per deme. See "Sweep a
   parameter" in the usage guide.
-- **Run as a sweep in the app.** Configure has **Run as a sweep…**: choose one
-  or more parameters to vary (a range with a count and linear or log spacing,
-  or a list of values), see the plan update as you type (every point, whether
-  it is new, already computed or invalid, and why), then run it. A progress
-  table follows each point, and a sweep of 100 points or more asks for a second
-  click. A sweep and a single run cannot overlap.
+- **Sweeps are part of Configure.** Tick **Sweep** beside **Run**, choose
+  what varies in **Set up sweep…** (a range with a count and linear or log
+  spacing, or a list of values; a live count of the points, with every point
+  on request), and press **Run** as always: with **Sweep** on, Run runs the
+  configuration over those ranges into the study chosen on Configure, which
+  then holds the sweep. A summary line under the buttons says a sweep is set.
+  A sweep of 100 points or more asks for a second press of Run. A progress
+  table follows each point. A sweep and a single run cannot overlap. A new
+  study made from Configure can be placed in an experiment.
 - **Explore can look at two parameters, and start a sweep.** A new **View**
   choice on Explore switches from the curve (one parameter, still the
   default) to a **Surface**: a heat map of one closed-form statistic over two
@@ -37,7 +40,8 @@ project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   axis into a list of your own values. Spacing can be even on the axis's scale
   or **even in the predicted response**, which crowds points where the
   prediction changes. **Sweep this for real** carries the choice, and the four
-  fields, to the sweep screen (N is converted from gene copies to individuals).
+  fields, to Configure with **Sweep** on (N is converted from gene copies to
+  individuals).
 - **Sweep results.** After a sweep, **View results** (and **Sweep results…**
   on the study's row in Home, next to **Continue sweep** for an unfinished
   one) shows the statistic across the points: with one axis, each value with

@@ -143,7 +143,7 @@ def test_plan_sweep_needs_at_least_one_axis(api: Api) -> None:
 def test_start_sweep_runs_every_point_and_pushes_events(
     api: Api, window: _FakeWindow
 ) -> None:
-    started = api.start_sweep(_form(), _request(_D_AXIS), "Demes")
+    started = api.start_sweep(_form(), _request(_D_AXIS))
 
     assert started["ok"] is True
     assert started["total"] == 2
@@ -157,14 +157,14 @@ def test_start_sweep_runs_every_point_and_pushes_events(
         "sweep_done",
     ]
     study = groups.get_study(started["studyId"])
-    assert study.name == "Demes"
+    assert study.name == "Sweep of d"
     assert study.run_count == 2
     status = api.get_sweep_status(started["studyId"])
     assert [point["state"] for point in status["points"]] == ["done", "done"]
 
 
 def test_a_finished_sweep_reports_its_results(api: Api, window: _FakeWindow) -> None:
-    started = api.start_sweep(_form(), _request(_D_AXIS), "Demes")
+    started = api.start_sweep(_form(), _request(_D_AXIS))
     assert window.finished.wait(_WAIT_SECONDS)
 
     payload = api.get_sweep_results(started["studyId"])
@@ -185,7 +185,7 @@ def test_a_large_sweep_needs_confirmation_before_anything_is_created(
         {"key": "m", "range": {"start": 0.001, "stop": 0.1, "count": 100}}
     )
 
-    result = api.start_sweep(_form(), request, "Big")
+    result = api.start_sweep(_form(), request)
 
     assert result["ok"] is False
     assert result["needsConfirmation"] is True
@@ -197,7 +197,7 @@ def test_a_sweep_and_a_run_cannot_overlap(api: Api, window: _FakeWindow) -> None
     del window
     api._run_in_flight = True
 
-    refused = api.start_sweep(_form(), _request(_D_AXIS), "Blocked")
+    refused = api.start_sweep(_form(), _request(_D_AXIS))
 
     assert refused["ok"] is False
     assert "run is in progress" in refused["message"]
@@ -206,7 +206,7 @@ def test_a_sweep_and_a_run_cannot_overlap(api: Api, window: _FakeWindow) -> None
     api._run_in_flight = False
     api._sweep_cancel_event = threading.Event()
 
-    also_refused = api.start_sweep(_form(), _request(_D_AXIS), "Blocked")
+    also_refused = api.start_sweep(_form(), _request(_D_AXIS))
     run_refused = api.start_run(_form())
 
     assert "already running" in also_refused["message"]
@@ -229,7 +229,7 @@ def test_cancelling_stops_the_sweep_and_resume_finishes_it(
     monkeypatch = pytest.MonkeyPatch()
     monkeypatch.setattr(LocalPointRunner, "run_point", cancel_after_first)
     try:
-        started = api.start_sweep(_form(), _request(_D_AXIS), "Interrupted")
+        started = api.start_sweep(_form(), _request(_D_AXIS))
         assert window.finished.wait(_WAIT_SECONDS)
     finally:
         monkeypatch.undo()
@@ -274,7 +274,7 @@ def test_a_sweep_needs_an_active_window(
 ) -> None:
     monkeypatch.setattr(app_module, "_active_window", lambda: None)
 
-    result = api.start_sweep(_form(), _request(_D_AXIS), "No window")
+    result = api.start_sweep(_form(), _request(_D_AXIS))
 
     assert result == {"ok": False, "message": "no active window"}
     assert groups.list_studies() == []
@@ -283,9 +283,7 @@ def test_a_sweep_needs_an_active_window(
 def test_sweep_theory_evaluates_the_closed_form_at_sweep_coordinates(
     api: Api, window: _FakeWindow
 ) -> None:
-    started = api.start_sweep(
-        _form(), _request({"key": "m", "values": [0.01, 0.1]}), "Theory"
-    )
+    started = api.start_sweep(_form(), _request({"key": "m", "values": [0.01, 0.1]}))
     assert window.finished.wait(_WAIT_SECONDS)
 
     theory = api.get_sweep_theory(
@@ -313,14 +311,14 @@ def test_sweep_theory_for_an_unknown_study_is_a_clean_failure(api: Api) -> None:
 def test_list_studies_reports_the_planned_point_count_of_a_sweep_only(
     api: Api, window: _FakeWindow
 ) -> None:
-    started = api.start_sweep(_form(), _request(_D_AXIS), "Counted")
+    started = api.start_sweep(_form(), _request(_D_AXIS))
     assert window.finished.wait(_WAIT_SECONDS)
     api.create_study("By hand")
 
     counts = {study["name"]: study["sweepPointCount"] for study in api.list_studies()}
 
     assert started["ok"] is True
-    assert counts == {"Counted": 2, "By hand": None}
+    assert counts == {"Sweep of d": 2, "By hand": None}
 
 
 def test_equilibrium_grid_gives_every_statistic_at_every_cell(api: Api) -> None:
@@ -382,3 +380,47 @@ def test_equilibrium_curve_evaluates_at_the_values_asked_for(api: Api) -> None:
     assert [point["x"] for point in curve["points"]] == [3, 4, 10]
     assert curve["points"][0]["D"] != curve["points"][2]["D"]
     assert api.get_equilibrium_curve("q", [1], "1", "0.1", "0.1", "2")["ok"] is False
+
+
+def test_a_sweep_runs_into_the_study_chosen_and_keeps_its_runs(
+    api: Api, window: _FakeWindow
+) -> None:
+    study_id = api.create_study("Mine")["studyId"]
+
+    started = api.start_sweep(_form(), _request(_D_AXIS), study_id)
+
+    assert started == {"ok": True, "studyId": study_id, "total": 2}
+    assert window.finished.wait(_WAIT_SECONDS)
+    (study,) = api.list_studies()
+    assert (study["name"], study["runCount"], study["sweepPointCount"]) == (
+        "Mine",
+        2,
+        2,
+    )
+
+
+def test_a_study_that_already_holds_a_sweep_is_refused(
+    api: Api, window: _FakeWindow
+) -> None:
+    study_id = api.create_study("Mine")["studyId"]
+    api.start_sweep(_form(), _request(_D_AXIS), study_id)
+    assert window.finished.wait(_WAIT_SECONDS)
+    assert _wait_until_idle(api)
+
+    again = api.start_sweep(_form(), _request({"key": "d", "values": [4]}), study_id)
+
+    assert again["ok"] is False
+    assert "already holds a sweep" in again["message"]
+
+
+def test_create_study_can_place_the_study_in_an_experiment(api: Api) -> None:
+    experiment_id = api.create_experiment("Migration")["experimentId"]
+
+    made = api.create_study("Ring", "", experiment_id)
+
+    assert made["ok"] is True
+    (experiment,) = api.list_experiments()
+    assert experiment["studyIds"] == [made["studyId"]]
+    missing = api.create_study("Orphan", "", "experiment-ffffffff")
+    assert missing["ok"] is False
+    assert [study["name"] for study in api.list_studies()] == ["Ring"]

@@ -2692,10 +2692,16 @@ fieldset.composite > label {
     font-variant-numeric: tabular-nums;
 }
 
-.sweep-options {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 0 1.25rem;
+.configure-sweep-toggle {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+}
+
+.sweep-modal {
+    width: min(56rem, 92vw);
+    max-height: 90vh;
+    overflow-y: auto;
 }
 
 .sweep-plan-summary {

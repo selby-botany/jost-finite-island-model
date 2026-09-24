@@ -6,7 +6,7 @@
  * an interval, a count and a spacing (`axis-range.js`), see the exact
  * points drawn and listed and how many the plan makes (`Api.plan_sweep`,
  * no run), then "Sweep this for real" seeds Configure from the four
- * fields and opens the sweep screen on those axes.
+ * fields and sets the sweep there (Sweep box on, axes saved).
  *
  * Explore works in gene copies per deme; a sweep's `N` counts
  * individuals, the number shown everywhere else. The conversion (divide
@@ -304,30 +304,6 @@ function drawExploreSweepMarkers(plan, ploidy) {
     );
 }
 
-/**
- * A control's definition as the sweep screen's axis-row initial state.
- * @param {object} definition In the sweep's own units.
- * @returns {{key: string, initial: object}}
- */
-function exploreSweepScreenAxis(definition) {
-    if (definition.range) {
-        return {
-            key: definition.key,
-            initial: {
-                mode: "range",
-                start: definition.range.start,
-                stop: definition.range.stop,
-                count: definition.range.count,
-                scale: definition.range.scale,
-            },
-        };
-    }
-    return {
-        key: definition.key,
-        initial: { mode: "list", list: definition.values.join(", ") },
-    };
-}
-
 exploreSweepToggle.addEventListener("click", async () => {
     const opening = exploreSweepPanel.hidden;
     exploreSweepPanel.hidden = !opening;
@@ -360,12 +336,16 @@ exploreSweepButton.addEventListener("click", async () => {
     }
     const ploidy = explorePloidy(seeded.values);
     const axes = exploreSweepControls.map((entry) =>
-        exploreSweepScreenAxis(exploreSweepDefinition(entry.control.getDefinition(), ploidy))
+        exploreSweepDefinition(entry.control.getDefinition(), ploidy)
     );
-    // The same seeding "Run this for real" does: Configure takes the
-    // four Explore fields, and the sweep screen reads its base from it.
+    // The same seeding "Run this for real" does: Configure takes the four
+    // Explore fields. The sweep is then set on Configure (its Sweep box on,
+    // the axes saved), and the botanist presses Run there.
     await window.fim.showConfigureScreen();
     applyFormValues(seeded.values);
     await revalidate();
-    await window.fim.showSweepScreen({ axes });
+    const set = await window.fim.setSweepConfiguration({ axes });
+    if (!set.ok) {
+        showConfigureBanner(set.message);
+    }
 });

@@ -10299,9 +10299,8 @@ account) -- so this count is six, not seven, even though
 `icon-results` is still in use: the merged "Run" button itself
 references it (a chart, not `icon-run`'s own bare play-triangle).
 
-25, not 21: the sweep feature added four -- Configure's "Run as a
-sweep…" (`icon-run`), the sweep screen's Back (`icon-back`) and Run
-sweep (`icon-run`), and Explore's "Sweep this for real" (`icon-run`).
+23, not 21: the sweep feature added two -- the sweep screen's Back
+(`icon-back`) and Explore's "Sweep this for real" (`icon-run`).
 
 21, not 24, before that: Home's own `.home-cards` were removed outright
 (`20260918-claude-sonnet-5-home-tree-reorg-design.md`, `selby/

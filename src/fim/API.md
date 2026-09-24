@@ -573,6 +573,7 @@ Return to the [source-tree orientation](../README.md) or the [developer guide](.
   * [LocalPointRunner](#fim.sweep_run.LocalPointRunner)
     * [run\_point](#fim.sweep_run.LocalPointRunner.run_point)
   * [create\_sweep\_study](#fim.sweep_run.create_sweep_study)
+  * [attach\_sweep\_to\_study](#fim.sweep_run.attach_sweep_to_study)
   * [sweep\_spec\_of](#fim.sweep_run.sweep_spec_of)
   * [stored\_points](#fim.sweep_run.stored_points)
   * [sweep\_point\_statuses](#fim.sweep_run.sweep_point_statuses)
@@ -4768,15 +4769,18 @@ its own runs' config summaries and statistics.
 
 ```python
 @_log_bridge_call
-def create_study(name: str, description: str = "") -> dict[str, Any]
+def create_study(name: str,
+                 description: str = "",
+                 experiment_id: str | None = None) -> dict[str, Any]
 ```
 
-Create a new, empty Study.
+Create a new, empty Study, inside an Experiment when one is given.
 
 **Returns**:
 
 - ``{"ok"` - True, "studyId": ...}` on success; `{"ok": False,
-- `"message"` - ...}` if `name` is blank after stripping.
+- `"message"` - ...}` if `name` is blank after stripping or the
+  Experiment does not exist (nothing is created then).
 
 <a id="fim.gui.app.Api.create_experiment"></a>
 
@@ -4965,12 +4969,17 @@ Enumerate and validate a sweep without running anything.
 @_log_bridge_call
 def start_sweep(values: dict[str, str],
                 request: dict[str, Any],
-                name: str,
-                experiment_id: str | None = None,
+                study_id: str | None = None,
                 confirmed: bool = False) -> dict[str, Any]
 ```
 
-Create a sweep Study and run its points on a background thread.
+Run the Configure form as a sweep, into a Study, on a background thread.
+
+What Run does when Configure's Sweep box is on. The Study is the
+one chosen on Configure: it becomes the sweep's home (its stored
+spec and plan), keeping any Runs it already has. With no Study
+chosen, a new one named for the axes is created. A Study that
+already holds a sweep is refused.
 
 Progress reaches the page as `fim.onSweepEvent(...)` pushes.
 Refused while a run or another sweep is in flight, and, for a plan
@@ -4979,8 +4988,8 @@ at or over the size threshold, until `confirmed` is true.
 **Returns**:
 
 - ``{"ok"` - True, "studyId": ..., "total": N}`; or `{"ok": False,
-- `"message"` - ...}`, with `"needsConfirmation": True` for an
-  unconfirmed large plan.
+- `"message"` - ...}`, with `"needsConfirmation": True` (and
+  `"total"`) for an unconfirmed large plan.
 
 <a id="fim.gui.app.Api.resume_sweep"></a>
 
@@ -16807,6 +16816,28 @@ Create the Study for a sweep, its spec and plan stored before any run.
 
 - `ValueError` - The plan has no valid points, or the Experiment does
   not exist.
+
+<a id="fim.sweep_run.attach_sweep_to_study"></a>
+
+#### attach\_sweep\_to\_study
+
+```python
+def attach_sweep_to_study(study_id: str,
+                          spec: SweepSpec,
+                          plan: SweepPlan,
+                          *,
+                          results: Path | None = None) -> StudyManifest
+```
+
+Make an existing Study the home of a sweep by storing its spec and plan.
+
+The Study keeps any Runs it already has; a planned point whose run is
+already a member counts as done. A Study holds at most one sweep.
+
+**Raises**:
+
+- `ValueError` - The plan has no valid points, the Study does not exist,
+  or it already holds a sweep.
 
 <a id="fim.sweep_run.sweep_spec_of"></a>
 

@@ -873,10 +873,11 @@
 
   <!-- Sweep (`20260923-claude-sonnet-5-sweep-as-study-implementation-
        plan.md`, `selby/restricted`, §6): run the Configure form over a
-       range of one or more parameters as a single Study. Reached from
-       Configure's "Run as a sweep…". One screen, three views: the
-       setup (axes, the live plan), the progress of the running sweep,
-       and (`screens/sweep-results.js`) the results across its points. -->
+       range of one or more parameters as a single Study. A sweep is
+       configured on Configure (its Sweep box and the `#modal-sweep`
+       dialog) and started by Configure's ordinary Run. This screen has
+       two views: the progress of the running sweep, and
+       (`screens/sweep-results.js`) the results across its points. -->
   <section id="screen-sweep" class="screen" hidden>
     <div id="sweep-banner" class="banner" hidden></div>
     <div class="actions">
@@ -887,48 +888,7 @@
         Back
       </button>
     </div>
-    <h2 id="sweep-title">Run as a sweep</h2>
-
-    <div id="sweep-setup">
-      <p id="sweep-base-summary" class="hint"></p>
-      <fieldset class="sweep-axes-fieldset">
-        <legend>What varies</legend>
-        <div id="sweep-axes"></div>
-        <button type="button" id="sweep-add-axis-button">Add axis</button>
-      </fieldset>
-      <div class="sweep-options">
-        <div class="field">
-          <label for="sweep-name">Study name</label>
-          <input type="text" id="sweep-name">
-        </div>
-        <div class="field">
-          <label for="sweep-experiment">Experiment</label>
-          <select id="sweep-experiment"></select>
-        </div>
-        <div class="field">
-          <label for="sweep-seed-policy">Seeds</label>
-          <select id="sweep-seed-policy">
-            <option value="spaced">Independent points (recommended)</option>
-            <option value="same">The same seed at every point</option>
-          </select>
-        </div>
-      </div>
-      <p id="sweep-plan-summary" class="sweep-plan-summary" aria-live="polite"></p>
-      <div class="sweep-plan-scroll">
-        <table id="sweep-plan-table" class="results-table" hidden>
-          <thead id="sweep-plan-head"></thead>
-          <tbody id="sweep-plan-body"></tbody>
-        </table>
-      </div>
-      <div class="actions">
-        <button type="button" id="sweep-run-button" class="primary-action" disabled>
-          <svg class="button-icon" aria-hidden="true">
-            <use href="icons/fim-icons.svg#icon-run"></use>
-          </svg>
-          Run sweep
-        </button>
-      </div>
-    </div>
+    <h2 id="sweep-title">Sweep</h2>
 
     <div id="sweep-progress" hidden>
       <p id="sweep-progress-text" aria-live="polite"></p>
@@ -939,7 +899,7 @@
       </table>
       <div class="actions">
         <button type="button" id="sweep-cancel-button">Cancel sweep</button>
-        <button type="button" id="sweep-setup-button" hidden>Set up another sweep</button>
+        <button type="button" id="sweep-setup-button" hidden>Back to Configure</button>
         <button type="button" id="sweep-view-results-button" hidden>View results</button>
         <button type="button" id="sweep-home-button" hidden>Show in Home</button>
       </div>
@@ -981,7 +941,7 @@
         <tbody id="sweep-results-body"></tbody>
       </table>
       <div class="actions">
-        <button type="button" id="sweep-results-setup-button">Set up another sweep</button>
+        <button type="button" id="sweep-results-setup-button">Back to Configure</button>
       </div>
     </div>
   </section>
@@ -1744,6 +1704,7 @@
           placeholder="Study name"
           aria-label="New study name"
         >
+        <select id="run-study-new-experiment" aria-label="Experiment for the new study"></select>
         <button type="button" id="run-study-new-create-button">Create</button>
         <button type="button" id="run-study-new-cancel-button">Cancel</button>
       </span>
@@ -1753,12 +1714,15 @@
         </svg>
         Run
       </button>
-      <button type="button" id="configure-sweep-button">
-        <svg class="button-icon" aria-hidden="true">
-          <use href="icons/fim-icons.svg#icon-run"></use>
-        </svg>
-        Run as a sweep…
-      </button>
+      <!-- Sweep (`screens/sweep.js`): Run always means Run. With this box
+           on, Run runs the configuration over the ranges set in the
+           dialog, into the study chosen here, instead of once. -->
+      <label class="configure-sweep-toggle">
+        <input type="checkbox" id="configure-sweep-checkbox">
+        Sweep
+      </label>
+      <button type="button" id="configure-sweep-button" hidden>Set up sweep…</button>
+      <span id="configure-sweep-summary" class="hint" hidden></span>
       <button type="button" id="configure-explore-button">
         <svg class="button-icon" aria-hidden="true">
           <use href="icons/fim-icons.svg#icon-explore"></use>
@@ -2200,6 +2164,42 @@
        focus the first focusable element in DOM order -- lands on the
        organization link below, showing a focus ring around a link the
        keyboard user never actually chose, confirmed live. -->
+
+  <!-- Sweep setup (`screens/sweep.js`): what varies, over which values,
+       and how the points are seeded. The study and experiment are
+       Configure's own study choice, not repeated here. -->
+  <dialog class="config-modal sweep-modal" id="modal-sweep">
+    <h2>Sweep</h2>
+    <div id="sweep-banner-dialog" class="banner" hidden></div>
+    <p id="sweep-base-summary" class="hint"></p>
+    <fieldset class="sweep-axes-fieldset">
+      <legend>What varies</legend>
+      <div id="sweep-axes"></div>
+      <button type="button" id="sweep-add-axis-button">Add axis</button>
+    </fieldset>
+    <div class="field">
+      <label for="sweep-seed-policy">Seeds</label>
+      <select id="sweep-seed-policy">
+        <option value="spaced">Independent points (recommended)</option>
+        <option value="same">The same seed at every point</option>
+      </select>
+    </div>
+    <p id="sweep-plan-summary" class="sweep-plan-summary" aria-live="polite"></p>
+    <details id="sweep-plan-details">
+      <summary>Show every point</summary>
+      <div class="sweep-plan-scroll">
+        <table id="sweep-plan-table" class="results-table" hidden>
+          <thead id="sweep-plan-head"></thead>
+          <tbody id="sweep-plan-body"></tbody>
+        </table>
+      </div>
+    </details>
+    <div class="actions">
+      <button type="button" id="sweep-done-button" class="primary-action" disabled>Done</button>
+      <button type="button" id="sweep-dialog-cancel-button">Cancel</button>
+    </div>
+  </dialog>
+
   <dialog class="config-modal" id="modal-about">
     <p class="brand-eyebrow">Marie Selby Botanical Gardens</p>
     <div class="about-header">

@@ -127,6 +127,7 @@ from fim.sweep import SweepSpec, apply_coordinates, enumerate_points
 from fim.sweep_run import (
     LocalPointRunner,
     SweepEvent,
+    attach_sweep_to_study,
     create_sweep_study,
     run_sweep,
     sweep_spec_of,
@@ -3263,15 +3264,27 @@ class Api:
         return {"ok": True, "runs": [_home_run_row(run, digits=digits) for run in runs]}
 
     @_log_bridge_call
-    def create_study(self, name: str, description: str = "") -> dict[str, Any]:
-        """Create a new, empty Study.
+    def create_study(
+        self,
+        name: str,
+        description: str = "",
+        experiment_id: str | None = None,
+    ) -> dict[str, Any]:
+        """Create a new, empty Study, inside an Experiment when one is given.
 
         Returns:
             `{"ok": True, "studyId": ...}` on success; `{"ok": False,
-            "message": ...}` if `name` is blank after stripping.
+            "message": ...}` if `name` is blank after stripping or the
+            Experiment does not exist (nothing is created then).
         """
         try:
             study = groups.create_study(name, description or None)
+            if experiment_id:
+                try:
+                    groups.add_study_to_experiment(experiment_id, study.study_id)
+                except ValueError:
+                    groups.delete_study(study.study_id)
+                    raise
         except ValueError as error:
             return {"ok": False, "message": str(error)}
         return {"ok": True, "studyId": study.study_id}
@@ -3458,11 +3471,16 @@ class Api:
         self,
         values: dict[str, str],
         request: dict[str, Any],
-        name: str,
-        experiment_id: str | None = None,
+        study_id: str | None = None,
         confirmed: bool = False,
     ) -> dict[str, Any]:
-        """Create a sweep Study and run its points on a background thread.
+        """Run the Configure form as a sweep, into a Study, on a background thread.
+
+        What Run does when Configure's Sweep box is on. The Study is the
+        one chosen on Configure: it becomes the sweep's home (its stored
+        spec and plan), keeping any Runs it already has. With no Study
+        chosen, a new one named for the axes is created. A Study that
+        already holds a sweep is refused.
 
         Progress reaches the page as `fim.onSweepEvent(...)` pushes.
         Refused while a run or another sweep is in flight, and, for a plan
@@ -3470,8 +3488,8 @@ class Api:
 
         Returns:
             `{"ok": True, "studyId": ..., "total": N}`; or `{"ok": False,
-            "message": ...}`, with `"needsConfirmation": True` for an
-            unconfirmed large plan.
+            "message": ...}`, with `"needsConfirmation": True` (and
+            `"total"`) for an unconfirmed large plan.
         """
         busy = self._busy_message()
         if busy is not None:
@@ -3486,11 +3504,16 @@ class Api:
                 return {
                     "ok": False,
                     "needsConfirmation": True,
+                    "total": len(plan.points),
                     "message": (
-                        f"this sweep has {len(plan.points)} points; confirm to run it"
+                        f"this sweep has {len(plan.points)} points; "
+                        "run again to confirm"
                     ),
                 }
-            study = create_sweep_study(spec, plan, name, experiment_id=experiment_id)
+            if study_id:
+                study = attach_sweep_to_study(study_id, spec, plan)
+            else:
+                study = create_sweep_study(spec, plan, _default_sweep_name(spec))
         except ValueError as error:
             return {"ok": False, "message": str(error)}
         self._start_sweep_thread(window, study.study_id, retry_failed=False)
@@ -4594,6 +4617,11 @@ class Api:
             "organization_url": "https://selby.org/botany/",
             "copyright_year": "2026",
         }
+
+
+def _default_sweep_name(spec: SweepSpec) -> str:
+    """Name a Study for a sweep from the parameters it varies."""
+    return f"Sweep of {' and '.join(axis.key for axis in spec.axes)}"
 
 
 def _sweep_point_count(study: groups.StudyManifest) -> int | None:
