@@ -1033,6 +1033,16 @@
     </div>
     <div class="run-plot-row">
       <div class="explore-plot-column">
+        <!-- Curve (one swept parameter, the original view) or Surface
+             (two, a heat map of one statistic, `screens/explore-
+             surface.js`). Curve stays the default. -->
+        <div class="field explore-mode-field">
+          <label for="explore-mode">View</label>
+          <select id="explore-mode">
+            <option value="curve">Curve: one parameter</option>
+            <option value="surface">Surface: two parameters</option>
+          </select>
+        </div>
         <div class="field">
           <!-- No visible <label>: the chosen axis is already named twice
                over without one (this <select>'s own selected option text,
@@ -1072,6 +1082,40 @@
                     aria-label="Back to the configuration you entered"></button>
           </div>
           <span id="explore-scrub-label" class="explore-scrub-label"></span>
+        </div>
+        <div id="explore-surface" hidden>
+          <div class="explore-surface-controls">
+            <div class="field">
+              <label for="explore-axis-y">Rows</label>
+              <select id="explore-axis-y">
+                <option value="d">d (demes)</option>
+                <option value="m">m (migration rate)</option>
+                <option value="mu">μ (mutation rate)</option>
+                <option value="N">N (gene copies/deme)</option>
+              </select>
+            </div>
+            <div class="field">
+              <label for="explore-surface-statistic">Statistic</label>
+              <select id="explore-surface-statistic"></select>
+            </div>
+          </div>
+          <canvas id="explore-surface-canvas" tabindex="0"
+                  aria-label="Heat map of the statistic over the two chosen parameters. Arrow keys move the probe."></canvas>
+          <div class="explore-surface-probes">
+            <label>
+              <span id="explore-surface-x-name">Columns</span>
+              <input type="range" id="explore-surface-x" min="0" max="0" value="0">
+            </label>
+            <label>
+              <span id="explore-surface-y-name">Rows</span>
+              <input type="range" id="explore-surface-y" min="0" max="0" value="0">
+            </label>
+          </div>
+          <p id="explore-surface-readout" class="hint" aria-live="polite"></p>
+          <div class="explore-slices">
+            <canvas id="explore-slice-x" aria-label="The statistic along the probe's row"></canvas>
+            <canvas id="explore-slice-y" aria-label="The statistic along the probe's column"></canvas>
+          </div>
         </div>
       </div>
       <table class="stats-table" id="explore-predictions">
@@ -2205,6 +2249,7 @@
 <script src="screens/sweep.js"></script>
 <script src="heatmap.js"></script>
 <script src="screens/sweep-results.js"></script>
+<script src="screens/explore-surface.js"></script>
 <script src="screens/compare.js"></script>
 <script src="screens/presets.js"></script>
 <script src="screens/settings.js"></script>
