@@ -940,7 +940,48 @@
       <div class="actions">
         <button type="button" id="sweep-cancel-button">Cancel sweep</button>
         <button type="button" id="sweep-setup-button" hidden>Set up another sweep</button>
+        <button type="button" id="sweep-view-results-button" hidden>View results</button>
         <button type="button" id="sweep-home-button" hidden>Show in Home</button>
+      </div>
+    </div>
+
+    <div id="sweep-results" hidden>
+      <p id="sweep-results-summary"></p>
+      <div class="sweep-results-controls">
+        <div class="field">
+          <label for="sweep-results-statistic">Statistic</label>
+          <select id="sweep-results-statistic"></select>
+        </div>
+        <div class="field">
+          <label for="sweep-results-x">Across</label>
+          <select id="sweep-results-x"></select>
+        </div>
+        <div class="field">
+          <label for="sweep-results-y">and</label>
+          <select id="sweep-results-y"></select>
+        </div>
+        <div class="field" id="sweep-results-mode-field" hidden>
+          <label for="sweep-results-mode">Show</label>
+          <select id="sweep-results-mode">
+            <option value="simulation">Simulation</option>
+            <option value="theory">Theory</option>
+            <option value="difference">Simulation minus theory</option>
+          </select>
+        </div>
+        <label id="sweep-results-theory-field" class="sweep-results-theory-field">
+          <input type="checkbox" id="sweep-results-theory">
+          Show theory
+        </label>
+      </div>
+      <div id="sweep-results-held" class="sweep-results-controls"></div>
+      <canvas id="sweep-results-canvas"></canvas>
+      <p id="sweep-results-readout" class="hint" aria-live="polite"></p>
+      <table id="sweep-results-table" class="results-table">
+        <thead id="sweep-results-head"></thead>
+        <tbody id="sweep-results-body"></tbody>
+      </table>
+      <div class="actions">
+        <button type="button" id="sweep-results-setup-button">Set up another sweep</button>
       </div>
     </div>
   </section>
@@ -2162,6 +2203,8 @@
 <script src="screens/help.js"></script>
 <script src="screens/explore.js"></script>
 <script src="screens/sweep.js"></script>
+<script src="heatmap.js"></script>
+<script src="screens/sweep-results.js"></script>
 <script src="screens/compare.js"></script>
 <script src="screens/presets.js"></script>
 <script src="screens/settings.js"></script>

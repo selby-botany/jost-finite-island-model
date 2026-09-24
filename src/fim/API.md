@@ -145,6 +145,7 @@ Return to the [source-tree orientation](../README.md) or the [developer guide](.
     * [cancel\_sweep](#fim.gui.app.Api.cancel_sweep)
     * [get\_sweep\_status](#fim.gui.app.Api.get_sweep_status)
     * [get\_sweep\_results](#fim.gui.app.Api.get_sweep_results)
+    * [get\_sweep\_theory](#fim.gui.app.Api.get_sweep_theory)
     * [copy\_experiment](#fim.gui.app.Api.copy_experiment)
     * [delete\_runs](#fim.gui.app.Api.delete_runs)
     * [delete\_selected](#fim.gui.app.Api.delete_selected)
@@ -557,6 +558,7 @@ Return to the [source-tree orientation](../README.md) or the [developer guide](.
   * [work\_estimate](#fim.sweep.work_estimate)
   * [expand\_axis](#fim.sweep.expand_axis)
   * [spec\_from\_config](#fim.sweep.spec_from_config)
+  * [apply\_coordinates](#fim.sweep.apply_coordinates)
 * [fim.sweep\_run](#fim.sweep_run)
   * [PointState](#fim.sweep_run.PointState)
   * [PointFailure](#fim.sweep_run.PointFailure)
@@ -4667,7 +4669,10 @@ List every Study, oldest first (matching `groups.list_studies`'s own order).
 **Returns**:
 
   One dict per Study: `{"studyId", "name", "description",
-  "runCount", "createdAt", "runDirectories"}`. `runDirectories`
+  "runCount", "createdAt", "runDirectories",
+  "sweepPointCount"}`. `sweepPointCount` is the number of
+  planned points for a sweep Study and `None` for one
+  assembled by hand. `runDirectories`
   is each member run's directory resolved to the same string
   form `list_home_runs`'s own `"directory"` field uses, so the
   client can match a Home row to its Study by plain string
@@ -5013,6 +5018,33 @@ def get_sweep_results(study_id: str) -> dict[str, Any]
 ```
 
 Return a sweep Study's finished points and their statistics.
+
+<a id="fim.gui.app.Api.get_sweep_theory"></a>
+
+#### get\_sweep\_theory
+
+```python
+@_log_bridge_call
+def get_sweep_theory(study_id: str,
+                     coordinates: list[dict[str, Any]]) -> dict[str, Any]
+```
+
+Return the closed-form predictions at arbitrary sweep coordinates.
+
+For the sweep results card's theory overlay and its theory and
+difference heat maps. Each entry of `coordinates` is a mapping of
+axis key to value; it is applied to the Study's stored base the
+way a sweep point is (`fim.sweep.apply_coordinates`), and the
+predictions are those of `_equilibrium_numeric_predictions`
+(restricted to plain numbers). A point the closed form does not
+cover (a non-island topology, per-deme `N`) yields `None` for
+every statistic, never an error.
+
+**Returns**:
+
+- ``{"ok"` - True, "values": [{statistic: number | None}, ...]}`,
+  one entry per requested coordinate, in order; or `{"ok":
+  False, "message": ...}`.
 
 <a id="fim.gui.app.Api.copy_experiment"></a>
 
@@ -16520,6 +16552,28 @@ and optionally `name`, `seed_policy` and `strategy`.
 **Raises**:
 
 - `ValueError` - The `sweep:` block is missing or malformed.
+
+<a id="fim.sweep.apply_coordinates"></a>
+
+#### apply\_coordinates
+
+```python
+def apply_coordinates(
+        base: Mapping[str, Any],
+        coordinates: Mapping[str, CoordinateValue]) -> dict[str, Any]
+```
+
+Return `base` with each axis value applied, and no seed set.
+
+The same substitution `enumerate_points` performs for one point (an `N`
+value counts individuals, a `topology` value re-expresses `m`, and so
+on), exposed so a caller can evaluate something at arbitrary
+coordinates, such as the closed-form theory along an axis.
+
+**Raises**:
+
+- `ValueError` - `base` cannot take one of the axes (for example an `N`
+  axis without a `ploidy`).
 
 <a id="fim.sweep_run"></a>
 

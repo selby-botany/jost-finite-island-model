@@ -422,6 +422,27 @@ def spec_from_config(config: Mapping[str, Any]) -> tuple[SweepSpec, str | None]:
     return spec, name
 
 
+def apply_coordinates(
+    base: Mapping[str, Any], coordinates: Mapping[str, CoordinateValue]
+) -> dict[str, Any]:
+    """Return `base` with each axis value applied, and no seed set.
+
+    The same substitution `enumerate_points` performs for one point (an `N`
+    value counts individuals, a `topology` value re-expresses `m`, and so
+    on), exposed so a caller can evaluate something at arbitrary
+    coordinates, such as the closed-form theory along an axis.
+
+    Raises:
+        ValueError: `base` cannot take one of the axes (for example an `N`
+            axis without a `ploidy`).
+    """
+    _check_base_supports_axes(base, set(coordinates))
+    mapping: dict[str, Any] = dict(base)
+    for key, value in coordinates.items():
+        _apply_axis(mapping, key, value)
+    return mapping
+
+
 def _apply_axis(mapping: dict[str, Any], key: str, value: CoordinateValue) -> None:
     """Apply one axis value to a point's configuration mapping in place."""
     if key == "N":

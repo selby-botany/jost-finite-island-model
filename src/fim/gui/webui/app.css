@@ -2718,3 +2718,25 @@ fieldset.composite > label {
     max-width: 32rem;
     margin-bottom: 0.75rem;
 }
+
+/* Sweep results (`screens/sweep-results.js`). */
+.sweep-results-controls {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: flex-end;
+    gap: 0 1rem;
+}
+
+.sweep-results-theory-field {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    margin-bottom: 0.75rem;
+}
+
+#sweep-results-canvas {
+    display: block;
+    width: 100%;
+    max-width: 56rem;
+    margin: 0.5rem 0;
+}

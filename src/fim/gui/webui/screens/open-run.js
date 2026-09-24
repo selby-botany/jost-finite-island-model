@@ -228,7 +228,7 @@ function nameMatchesFilter(name, filterText) {
  * null`, never reached by `renderGroup` for a still-collapsed group
  * either way.
  * @param {{studyId: string, name: string, runCount: number,
- *     runDirectories: Array<string>}} study
+ *     runDirectories: Array<string>, sweepPointCount: number|null}} study
  * @returns {object}
  */
 function studyGroup(study) {
@@ -244,6 +244,8 @@ function studyGroup(study) {
         runCount: study.runCount,
         countLabel: `${study.runCount} run${study.runCount === 1 ? "" : "s"}`,
         runDirectories: study.runDirectories,
+        // The planned number of points for a sweep Study, else `null`.
+        sweepPointCount: study.sweepPointCount ?? null,
     };
     if (cachedRuns === undefined) {
         return { ...base, runs: null };
@@ -1123,6 +1125,12 @@ function buildGroupActionControls(group) {
     if (group.kind === "study") {
         container.appendChild(buildOpenStudyButton(group));
     }
+    if (group.kind === "study" && group.sweepPointCount !== null) {
+        container.appendChild(buildSweepResultsButton(group));
+        if (group.runCount < group.sweepPointCount) {
+            container.appendChild(buildContinueSweepButton(group));
+        }
+    }
 
     const copyButton = document.createElement("button");
     copyButton.type = "button";
@@ -1146,7 +1154,7 @@ function buildGroupActionControls(group) {
     });
     container.appendChild(copyButton);
 
-    if (group.kind === "study") {
+    if (group.kind === "study" && group.sweepPointCount === null) {
         container.appendChild(buildRerunStudyButton(group));
     }
 
@@ -1789,6 +1797,50 @@ async function openStudy(studyId) {
         window.fim.resetTrajectoryLegendVisibility();
         window.fim.enterCompletedState(result, true);
     });
+}
+
+/**
+ * "Sweep results…" on a sweep Study's row: the statistic across its
+ * points (`screens/sweep-results.js`), beside "Open…", which pools every
+ * member run into one Results card.
+ * @param {{studyId: string}} group
+ * @returns {HTMLButtonElement}
+ */
+function buildSweepResultsButton(group) {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "open-run-group-action-button";
+    button.textContent = "Sweep results…";
+    button.addEventListener("click", async (event) => {
+        event.stopPropagation();
+        await window.fim.showSweepResults(group.studyId);
+    });
+    return button;
+}
+
+/**
+ * "Continue sweep" on an unfinished sweep Study's row: runs only the
+ * points still missing (`Api.resume_sweep`), showing the sweep screen's
+ * own progress view.
+ * @param {{studyId: string}} group
+ * @returns {HTMLButtonElement}
+ */
+function buildContinueSweepButton(group) {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "open-run-group-action-button primary-action";
+    button.textContent = "Continue sweep";
+    button.addEventListener("click", async (event) => {
+        event.stopPropagation();
+        const result = await window.pywebview.api.resume_sweep(group.studyId);
+        if (!result.ok) {
+            showOpenRunBanner(result.message);
+            return;
+        }
+        window.fim.showScreen("screen-sweep");
+        await window.fim.showSweepProgress(group.studyId);
+    });
+    return button;
 }
 
 /**

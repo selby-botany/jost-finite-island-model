@@ -278,3 +278,46 @@ def test_a_sweep_needs_an_active_window(
 
     assert result == {"ok": False, "message": "no active window"}
     assert groups.list_studies() == []
+
+
+def test_sweep_theory_evaluates_the_closed_form_at_sweep_coordinates(
+    api: Api, window: _FakeWindow
+) -> None:
+    started = api.start_sweep(
+        _form(), _request({"key": "m", "values": [0.01, 0.1]}), "Theory"
+    )
+    assert window.finished.wait(_WAIT_SECONDS)
+
+    theory = api.get_sweep_theory(
+        started["studyId"], [{"m": 0.01}, {"m": 0.1}, {"m": 0.1, "topology": "ring"}]
+    )
+
+    assert theory["ok"] is True
+    low, high, ring = theory["values"]
+    assert set(low) == {"D", "G_ST", "E_ST", "H_S", "H_T"}
+    assert low["D"] is not None and high["D"] is not None
+    assert low["D"] < high["D"] or low["D"] > high["D"]
+    # An N axis counts individuals; the closed form sees gene copies.
+    by_n = api.get_sweep_theory(started["studyId"], [{"N": 8}, {"N": 16}])["values"]
+    assert by_n[0]["H_S"] != by_n[1]["H_S"]
+    # A topology the island-model theory does not cover is undefined, not an error.
+    assert all(value is None for value in ring.values())
+
+
+def test_sweep_theory_for_an_unknown_study_is_a_clean_failure(api: Api) -> None:
+    result = api.get_sweep_theory("study-ffffffff", [{"m": 0.1}])
+
+    assert result["ok"] is False
+
+
+def test_list_studies_reports_the_planned_point_count_of_a_sweep_only(
+    api: Api, window: _FakeWindow
+) -> None:
+    started = api.start_sweep(_form(), _request(_D_AXIS), "Counted")
+    assert window.finished.wait(_WAIT_SECONDS)
+    api.create_study("By hand")
+
+    counts = {study["name"]: study["sweepPointCount"] for study in api.list_studies()}
+
+    assert started["ok"] is True
+    assert counts == {"Counted": 2, "By hand": None}

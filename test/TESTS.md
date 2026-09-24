@@ -71,6 +71,7 @@ Every test module, fixture, and test function documented here in full; `doc/fim-
   - [`test_shutdown_deadman`](#gui.test_shutdown_deadman)
   - [`test_store`](#gui.test_store)
   - [`test_sweep_api`](#gui.test_sweep_api)
+  - [`test_sweep_results_screen`](#gui.test_sweep_results_screen)
   - [`test_sweep_screen`](#gui.test_sweep_screen)
   - [`test_trajectory_history`](#gui.test_trajectory_history)
   - [`test_webui_global_scope`](#gui.test_webui_global_scope)
@@ -17329,6 +17330,12 @@ def api(tmp_path: Path, results: Path) -> Api
 ```
 
 An `Api` whose defaults make every point a tiny single run.
+
+<a id="gui.test_sweep_results_screen"></a>
+
+# gui.test\_sweep\_results\_screen
+
+Headless functional tests for the sweep results view (`sweep-results.js`).
 
 <a id="gui.test_sweep_screen"></a>
 

@@ -21,6 +21,14 @@ project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   it is new, already computed or invalid, and why), then run it. A progress
   table follows each point, and a sweep of 100 points or more asks for a second
   click. A sweep and a single run cannot overlap.
+- **Sweep results.** After a sweep, **View results** (and **Sweep results…**
+  on the study's row in Home, next to **Continue sweep** for an unfinished
+  one) shows the statistic across the points: with one axis, each value with
+  its confidence interval and an optional dashed closed-form theory curve;
+  with two, a heat map that can show the simulation, the theory, or their
+  difference. A sweep with more axes holds the others at a chosen value. A
+  table lists every planned point, and clicking a point or a cell opens that
+  run's own Results card.
 - **Several graphs on the Run card at once.** The scatter plot and the
   statistic trajectories now show side by side by default, so people can see
   how the two connect (the scatter is one moment; the trajectory's dashed

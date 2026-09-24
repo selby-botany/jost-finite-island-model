@@ -124,13 +124,14 @@ from fim.statistics import (
     identity_recovery_rate,
     mutation_negligible_equilibrium,
 )
-from fim.sweep import SweepSpec, enumerate_points
+from fim.sweep import SweepSpec, apply_coordinates, enumerate_points
 from fim.sweep_run import (
     LocalPointRunner,
     PointFailure,
     SweepEvent,
     create_sweep_study,
     run_sweep,
+    sweep_spec_of,
 )
 from fim.viz.scatter import (
     deme_pair_panel,
@@ -3052,7 +3053,10 @@ class Api:
 
         Returns:
             One dict per Study: `{"studyId", "name", "description",
-            "runCount", "createdAt", "runDirectories"}`. `runDirectories`
+            "runCount", "createdAt", "runDirectories",
+            "sweepPointCount"}`. `sweepPointCount` is the number of
+            planned points for a sweep Study and `None` for one
+            assembled by hand. `runDirectories`
             is each member run's directory resolved to the same string
             form `list_home_runs`'s own `"directory"` field uses, so the
             client can match a Home row to its Study by plain string
@@ -3074,6 +3078,7 @@ class Api:
                         study, results=results
                     )
                 ],
+                "sweepPointCount": _sweep_point_count(study),
             }
             for study in groups.list_studies(results=results)
         ]
@@ -3438,6 +3443,32 @@ class Api:
             return sweep_bridge.results_payload(groups.get_study(study_id))
         except ValueError as error:
             return {"ok": False, "message": str(error)}
+
+    @_log_bridge_call
+    def get_sweep_theory(
+        self, study_id: str, coordinates: list[dict[str, Any]]
+    ) -> dict[str, Any]:
+        """Return the closed-form predictions at arbitrary sweep coordinates.
+
+        For the sweep results card's theory overlay and its theory and
+        difference heat maps. Each entry of `coordinates` is a mapping of
+        axis key to value; it is applied to the Study's stored base the
+        way a sweep point is (`fim.sweep.apply_coordinates`), and the
+        predictions are those of `_equilibrium_numeric_predictions`
+        (restricted to plain numbers). A point the closed form does not
+        cover (a non-island topology, per-deme `N`) yields `None` for
+        every statistic, never an error.
+
+        Returns:
+            `{"ok": True, "values": [{statistic: number | None}, ...]}`,
+            one entry per requested coordinate, in order; or `{"ok":
+            False, "message": ...}`.
+        """
+        try:
+            spec = sweep_spec_of(groups.get_study(study_id))
+        except ValueError as error:
+            return {"ok": False, "message": str(error)}
+        return {"ok": True, "values": [_theory_at(spec.base, e) for e in coordinates]}
 
     def _busy_message(self) -> str | None:
         """Return why a sweep cannot start now, or `None` if it can."""
@@ -4507,6 +4538,46 @@ def _run_one_configuration_to_completion(params: SimulationParams) -> Path | Non
     """
     result = LocalPointRunner().run_point(params, threading.Event())
     return None if isinstance(result, PointFailure) else result
+
+
+def _sweep_point_count(study: groups.StudyManifest) -> int | None:
+    """Return a sweep Study's planned point count, or `None` for any other Study."""
+    if study.sweep_spec is None:
+        return None
+    points = study.sweep_spec.get("points")
+    return len(points) if isinstance(points, list) else None
+
+
+_THEORY_STATISTICS: Final = ("D", "G_ST", "E_ST", "H_S", "H_T")
+"""The predicted quantities that are also reported statistics of a run."""
+
+
+def _theory_at(
+    base: Mapping[str, Any], coordinates: Mapping[str, Any]
+) -> dict[str, float | None]:
+    """Closed-form predictions for one sweep coordinate, `None` where undefined."""
+    undefined: dict[str, float | None] = dict.fromkeys(_THEORY_STATISTICS)
+    try:
+        mapping = apply_coordinates(base, coordinates)
+        n, m, mu, d = mapping["N"], mapping["m"], mapping["mu"], mapping["d"]
+    except (ValueError, KeyError):
+        return undefined
+    scalars = all(
+        isinstance(value, int | float) and not isinstance(value, bool)
+        for value in (n, m, mu, d)
+    )
+    if not scalars or n < _MINIMUM_EQUILIBRIUM_N or d < _MINIMUM_EQUILIBRIUM_DEMES:
+        return undefined
+    predictions = _equilibrium_numeric_predictions(int(n), float(m), float(mu), int(d))
+    result: dict[str, float | None] = {}
+    for name in _THEORY_STATISTICS:
+        value = predictions.get(name)
+        result[name] = (
+            float(value)
+            if isinstance(value, float | int) and not isinstance(value, bool)
+            else None
+        )
+    return result
 
 
 def _push_sweep_event(window: _EvaluatesJs, event: SweepEvent) -> None:

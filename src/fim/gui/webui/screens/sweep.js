@@ -37,6 +37,7 @@ const sweepCancelButton = document.getElementById("sweep-cancel-button");
 const sweepSetupButton = document.getElementById("sweep-setup-button");
 const sweepHomeButton = document.getElementById("sweep-home-button");
 const sweepTitle = document.getElementById("sweep-title");
+const sweepViewResultsButton = document.getElementById("sweep-view-results-button");
 
 // How many plan rows to draw; a larger plan says how many it omitted.
 const SWEEP_PLAN_ROW_LIMIT = 200;
@@ -59,6 +60,7 @@ let sweepPlanSequence = 0;
 let sweepConfirmArmed = false;
 let sweepLastPlan = null;
 let sweepRunningStudyId = null;
+let sweepLastStudyId = null;
 
 window.__fimSweepPlanReady = false;
 window.__fimSweepFinished = false;
@@ -526,6 +528,7 @@ async function onSweepRunClicked() {
  */
 async function enterSweepProgress(studyId) {
     sweepRunningStudyId = studyId;
+    sweepLastStudyId = studyId;
     window.__fimSweepFinished = false;
     sweepTitle.textContent = "Sweep running";
     sweepSetupView.hidden = true;
@@ -534,6 +537,8 @@ async function enterSweepProgress(studyId) {
     sweepCancelButton.disabled = false;
     sweepSetupButton.hidden = true;
     sweepHomeButton.hidden = true;
+    sweepViewResultsButton.hidden = true;
+    document.getElementById("sweep-results").hidden = true;
     const status = await window.pywebview.api.get_sweep_status(studyId);
     if (!status.ok) {
         showSweepBanner(status.message);
@@ -564,6 +569,8 @@ async function enterSweepProgress(studyId) {
     sweepProgressBar.value = done;
     sweepProgressText.textContent = `${done} of ${status.points.length} points done`;
 }
+
+window.fim.showSweepProgress = enterSweepProgress;
 
 /**
  * Write one point's state into the progress table.
@@ -628,6 +635,7 @@ function finishSweep(cancelled) {
     sweepCancelButton.hidden = true;
     sweepSetupButton.hidden = false;
     sweepHomeButton.hidden = false;
+    sweepViewResultsButton.hidden = sweepLastStudyId === null;
     sweepRunningStudyId = null;
     window.__fimSweepFinished = true;
 }
@@ -660,6 +668,7 @@ window.fim.showSweepScreen = async function showSweepScreen(options = {}) {
         sweepTitle.textContent = "Run as a sweep";
         sweepSetupView.hidden = false;
         sweepProgressView.hidden = true;
+        document.getElementById("sweep-results").hidden = true;
         sweepAxesContainer.replaceChildren();
         sweepNameInput.dataset.edited = "false";
         const axes = options.axes && options.axes.length > 0 ? options.axes : [{ key: "m" }];
@@ -682,3 +691,8 @@ sweepCancelButton.addEventListener("click", async () => {
 });
 sweepSetupButton.addEventListener("click", () => window.fim.showSweepScreen());
 sweepHomeButton.addEventListener("click", () => window.fim.menu.openRun());
+sweepViewResultsButton.addEventListener("click", () => {
+    if (sweepLastStudyId !== null) {
+        window.fim.showSweepResults(sweepLastStudyId);
+    }
+});
