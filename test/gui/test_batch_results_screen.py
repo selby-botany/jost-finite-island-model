@@ -1008,7 +1008,12 @@ def test_running_a_batch_again_from_completed_starts_a_new_batch(
                 # A fresh click reuses whatever the form already has --
                 # no field needs re-setting, and no "New run"/reset step
                 # comes first.
-                window.evaluate_js("document.getElementById('run-button').click();")
+                window.evaluate_js(
+                    "const seed = document.getElementById('field-seed'); "
+                    "seed.value = '20260815'; "
+                    "seed.dispatchEvent(new Event('input', {bubbles: true})); "
+                    "document.getElementById('run-button').click();"
+                )
                 if second_done.wait(timeout=_EVENT_WAIT_TIMEOUT_SECONDS):
                     second_output_directory = window.evaluate_js(
                         "window.fim.getCompletedOutputDirectory()"

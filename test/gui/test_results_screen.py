@@ -853,10 +853,16 @@ def test_running_simulation_again_from_completed_starts_a_new_run(
             first_output_directory = window.evaluate_js(
                 "window.fim.getCompletedOutputDirectory()"
             )
-            # A fresh click reuses whatever the form already has -- no
-            # field needs re-setting, and no "New run"/reset step comes
-            # first.
-            window.evaluate_js("document.getElementById('run-button').click();")
+            # A fresh click reuses whatever the form already has, with no
+            # "New run"/reset step first -- but only a changed configuration
+            # is computed: the same seed would show the existing run (see
+            # `test_run_reuse.py`), so the seed changes here.
+            window.evaluate_js(
+                "const seed = document.getElementById('field-seed'); "
+                "seed.value = '20260815'; "
+                "seed.dispatchEvent(new Event('input', {bubbles: true})); "
+                "document.getElementById('run-button').click();"
+            )
             second_run_id = _poll_until(
                 window,
                 "window.fim.getRunViewState() === 'completed' && "
