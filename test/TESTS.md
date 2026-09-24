@@ -17,6 +17,7 @@ Every test module, fixture, and test function documented here in full; `doc/fim-
   - [`test_paths`](#test.test_paths)
   - [`test_reanalyze`](#test.test_reanalyze)
   - [`test_shutdown_diagnostics`](#test.test_shutdown_diagnostics)
+  - [`test_sweep`](#test.test_sweep)
   - [`test_update`](#test.test_update)
 - [`test/cli/`](#group-cli)
   - [`conftest`](#cli.conftest)
@@ -1881,6 +1882,12 @@ keeps the test fast; `subprocess`'s own `timeout` is set well above it
 so a genuine regression fails as a timeout rather than hanging this
 suite in turn -- the one failure mode this whole file exists to make
 impossible.
+
+<a id="test.test_sweep"></a>
+
+# test.test\_sweep
+
+Tests for `fim.sweep`: axes, enumeration, validation and seed policy.
 
 <a id="test.test_update"></a>
 

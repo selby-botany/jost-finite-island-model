@@ -516,6 +516,29 @@ Return to the [source-tree orientation](../README.md) or the [developer guide](.
   * [ConfidenceInterval](#fim.statistics.interval.ConfidenceInterval)
   * [confidence\_interval](#fim.statistics.interval.confidence_interval)
   * [student\_t\_critical\_value](#fim.statistics.interval.student_t_critical_value)
+* [fim.sweep](#fim.sweep)
+  * [SWEEP\_SPEC\_VERSION](#fim.sweep.SWEEP_SPEC_VERSION)
+  * [SIZE\_CONFIRMATION\_THRESHOLD](#fim.sweep.SIZE_CONFIRMATION_THRESHOLD)
+  * [SEED\_POLICIES](#fim.sweep.SEED_POLICIES)
+  * [STRATEGIES](#fim.sweep.STRATEGIES)
+  * [SweepKey](#fim.sweep.SweepKey)
+  * [SWEEPABLE\_KEYS](#fim.sweep.SWEEPABLE_KEYS)
+  * [SweepAxis](#fim.sweep.SweepAxis)
+    * [to\_dict](#fim.sweep.SweepAxis.to_dict)
+  * [SweepSpec](#fim.sweep.SweepSpec)
+    * [\_\_post\_init\_\_](#fim.sweep.SweepSpec.__post_init__)
+    * [grid\_size](#fim.sweep.SweepSpec.grid_size)
+    * [to\_dict](#fim.sweep.SweepSpec.to_dict)
+    * [from\_dict](#fim.sweep.SweepSpec.from_dict)
+  * [SweepPoint](#fim.sweep.SweepPoint)
+    * [to\_dict](#fim.sweep.SweepPoint.to_dict)
+  * [InvalidPoint](#fim.sweep.InvalidPoint)
+  * [SweepPlan](#fim.sweep.SweepPlan)
+    * [needs\_confirmation](#fim.sweep.SweepPlan.needs_confirmation)
+  * [enumerate\_points](#fim.sweep.enumerate_points)
+  * [work\_estimate](#fim.sweep.work_estimate)
+  * [expand\_axis](#fim.sweep.expand_axis)
+  * [spec\_from\_config](#fim.sweep.spec_from_config)
 * [fim.update](#fim.update)
   * [compare\_versions](#fim.update.compare_versions)
   * [fetch\_latest\_release](#fim.update.fetch_latest_release)
@@ -15883,6 +15906,333 @@ the exact large-sample (normal-distribution) answer once
 
 - `ValueError` - If `degrees_of_freedom` is not a positive integer or
   `confidence` is not a supported level.
+
+<a id="fim.sweep"></a>
+
+# fim.sweep
+
+Parameter sweeps: what varies, which points result, and which are valid.
+
+A sweep is a Study generated from a specification instead of assembled by
+hand (`20260923-claude-sonnet-5-sweep-as-study-implementation-plan.md`,
+`selby/restricted`). This module is the pure half: it turns a
+`SweepSpec` (a complete base configuration plus the axes that vary) into
+an ordered list of validated points, each a whole configuration with a
+deterministic `run_id`. Nothing here runs a simulation, touches disk, or
+imports the GUI, so the command line, the desktop app and any future
+service share it.
+
+Three ideas carry the design:
+
+- **Plan before running.** `enumerate_points` builds and validates every
+  point up front. A combination that cannot be run (a torus whose
+  `rows * columns` differs from `d`) is reported with its reason, never
+  discovered at point 47.
+- **Points are content-addressed.** A point's `run_id` is the hash of its
+  whole configuration (`fim.engine.deterministic_run_id`), so a resumed or
+  overlapping sweep can recognize a point it already computed.
+- **`N` counts individuals.** An `N` axis means individuals per deme, the
+  number the botanist sees everywhere else in the app; the point's own
+  `N` (gene copies, as every configuration mapping stores it) is that
+  value times the base `ploidy`. Ploidy always divides the result, so an
+  `N` axis never yields an indivisible point.
+
+<a id="fim.sweep.SWEEP_SPEC_VERSION"></a>
+
+#### SWEEP\_SPEC\_VERSION
+
+Schema version of the stored `sweep_spec` mapping.
+
+<a id="fim.sweep.SIZE_CONFIRMATION_THRESHOLD"></a>
+
+#### SIZE\_CONFIRMATION\_THRESHOLD
+
+Points at or above which a plan should ask before running.
+
+<a id="fim.sweep.SEED_POLICIES"></a>
+
+#### SEED\_POLICIES
+
+`spaced`: independent points; `same`: every point uses the base seed.
+
+<a id="fim.sweep.STRATEGIES"></a>
+
+#### STRATEGIES
+
+Only the full grid exists; the field leaves room for later strategies.
+
+<a id="fim.sweep.SweepKey"></a>
+
+## SweepKey Objects
+
+```python
+@dataclass(frozen=True, slots=True)
+class SweepKey()
+```
+
+One parameter a sweep may vary, with the metadata its controls need.
+
+**Attributes**:
+
+- `key` - Name used in a spec and in a sweep file.
+- `label` - Short human label.
+- `kind` - `int`, `float`, or `choice`.
+- `unit` - What one value counts, for display.
+- `scale` - Default spacing for a range over this key.
+- `minimum` - Smallest legal value, or `None` for a choice.
+- `maximum` - Largest legal value, or `None`.
+- `choices` - The legal values of a `choice` key.
+- `display_domain` - Default range a chart or a range control shows.
+- `closed_form` - Whether Explore has a closed-form prediction for it.
+
+<a id="fim.sweep.SWEEPABLE_KEYS"></a>
+
+#### SWEEPABLE\_KEYS
+
+Every parameter a sweep may vary. A table, not a free-for-all.
+
+<a id="fim.sweep.SweepAxis"></a>
+
+## SweepAxis Objects
+
+```python
+@dataclass(frozen=True, slots=True)
+class SweepAxis()
+```
+
+One varied parameter and the exact values it takes, in order.
+
+<a id="fim.sweep.SweepAxis.to_dict"></a>
+
+#### to\_dict
+
+```python
+def to_dict() -> dict[str, object]
+```
+
+Return the JSON-serializable stored form.
+
+<a id="fim.sweep.SweepSpec"></a>
+
+## SweepSpec Objects
+
+```python
+@dataclass(frozen=True, slots=True)
+class SweepSpec()
+```
+
+What is held fixed (`base`) and what varies (`axes`).
+
+**Attributes**:
+
+- `base` - A complete configuration mapping, exactly what
+  `SimulationParams.from_mapping` accepts. Its `N` is gene
+  copies, like every configuration mapping; it is overwritten
+  when `N` is an axis, and `ploidy` is then required.
+- `axes` - The varied keys, first axis slowest in the enumeration.
+- `strategy` - `grid` (every combination).
+- `seed_policy` - `spaced` gives point `i` the seed `base seed + i *
+  n_replicates`, so no two points share a replicate seed;
+  `same` gives every point the base seed.
+
+<a id="fim.sweep.SweepSpec.__post_init__"></a>
+
+#### \_\_post\_init\_\_
+
+```python
+def __post_init__() -> None
+```
+
+Validate the axes against the base and the sweepable-key table.
+
+<a id="fim.sweep.SweepSpec.grid_size"></a>
+
+#### grid\_size
+
+```python
+@property
+def grid_size() -> int
+```
+
+Return the number of points in the full grid.
+
+<a id="fim.sweep.SweepSpec.to_dict"></a>
+
+#### to\_dict
+
+```python
+def to_dict() -> dict[str, object]
+```
+
+Return the JSON-serializable stored form (without the points).
+
+<a id="fim.sweep.SweepSpec.from_dict"></a>
+
+#### from\_dict
+
+```python
+@classmethod
+def from_dict(cls, value: Mapping[str, Any]) -> SweepSpec
+```
+
+Rebuild a spec from its stored form (`to_dict`).
+
+**Raises**:
+
+- `ValueError` - The mapping is malformed or its version is unknown.
+
+<a id="fim.sweep.SweepPoint"></a>
+
+## SweepPoint Objects
+
+```python
+@dataclass(frozen=True, slots=True)
+class SweepPoint()
+```
+
+One valid point: a whole configuration and its deterministic id.
+
+**Attributes**:
+
+- `index` - Position in the full grid (first axis slowest), counting
+  invalid points, so a point's place never depends on which
+  others turned out valid.
+- `coordinates` - The varied values, by axis key.
+- `params` - The configuration mapping for `SimulationParams.from_mapping`.
+- `run_id` - `deterministic_run_id` of the validated configuration.
+
+<a id="fim.sweep.SweepPoint.to_dict"></a>
+
+#### to\_dict
+
+```python
+def to_dict() -> dict[str, object]
+```
+
+Return the stored plan entry (the plan, not the parameters).
+
+<a id="fim.sweep.InvalidPoint"></a>
+
+## InvalidPoint Objects
+
+```python
+@dataclass(frozen=True, slots=True)
+class InvalidPoint()
+```
+
+A grid position whose configuration cannot be built, with the reason.
+
+<a id="fim.sweep.SweepPlan"></a>
+
+## SweepPlan Objects
+
+```python
+@dataclass(frozen=True, slots=True)
+class SweepPlan()
+```
+
+Every point of a sweep, valid and not, before anything runs.
+
+**Attributes**:
+
+- `points` - Valid points in grid order, de-duplicated by `run_id`.
+- `invalid` - Grid positions that cannot run, each with its reason.
+- `collapsed` - How many valid points shared a `run_id` with an
+  earlier one and were dropped.
+- `grid_size` - The full grid's size.
+
+<a id="fim.sweep.SweepPlan.needs_confirmation"></a>
+
+#### needs\_confirmation
+
+```python
+@property
+def needs_confirmation() -> bool
+```
+
+Return whether the plan is large enough to ask before running.
+
+<a id="fim.sweep.enumerate_points"></a>
+
+#### enumerate\_points
+
+```python
+def enumerate_points(spec: SweepSpec) -> SweepPlan
+```
+
+Enumerate and validate every point of `spec`, without running any.
+
+**Arguments**:
+
+- `spec` - The sweep specification.
+
+
+**Returns**:
+
+  The plan: valid points in fixed order (first axis slowest), the
+  invalid ones with their reasons, and the count collapsed because
+  two points resolved to the same configuration.
+
+<a id="fim.sweep.work_estimate"></a>
+
+#### work\_estimate
+
+```python
+def work_estimate(spec: SweepSpec, plan: SweepPlan) -> dict[str, int]
+```
+
+Return an upper bound on the work a plan represents.
+
+The cost of a point is not known until a pilot runs, so this is the
+number of points times replicates times the generation cap: a ceiling
+that convergence usually undercuts.
+
+**Returns**:
+
+  `points`, `replicates` per point, `max_generations`, and
+  `replicate_generations` (their product).
+
+<a id="fim.sweep.expand_axis"></a>
+
+#### expand\_axis
+
+```python
+def expand_axis(key: str, definition: object) -> SweepAxis
+```
+
+Build an axis from a list of values or a `{start, stop, count}` range.
+
+A range is `{"start", "stop", "count", "scale": "linear" | "log"}`;
+`scale` defaults to the key's own default. The result stores the
+expanded values, so what ran is unambiguous. An integer key rounds
+and de-duplicates a range (a log range over `d` repeats small
+integers); an explicit list keeps its values and rejects a repeat.
+
+**Raises**:
+
+- `ValueError` - The key is not sweepable, or the definition is
+  malformed or has a value outside the key's legal range.
+
+<a id="fim.sweep.spec_from_config"></a>
+
+#### spec\_from\_config
+
+```python
+def spec_from_config(
+        config: Mapping[str, Any]) -> tuple[SweepSpec, str | None]
+```
+
+Split a sweep file into its `SweepSpec` and the optional name.
+
+A sweep file is an ordinary configuration plus a `sweep:` block; the
+block is removed before the rest becomes the base, so the ordinary
+configuration validator never sees it. The `sweep:` block holds
+`axes` (a mapping of key to a list or a range, in order),
+and optionally `name`, `seed_policy` and `strategy`.
+
+**Raises**:
+
+- `ValueError` - The `sweep:` block is missing or malformed.
 
 <a id="fim.update"></a>
 
