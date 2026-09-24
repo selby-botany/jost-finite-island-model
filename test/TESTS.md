@@ -18,6 +18,7 @@ Every test module, fixture, and test function documented here in full; `doc/fim-
   - [`test_reanalyze`](#test.test_reanalyze)
   - [`test_shutdown_diagnostics`](#test.test_shutdown_diagnostics)
   - [`test_sweep`](#test.test_sweep)
+  - [`test_sweep_run`](#test.test_sweep_run)
   - [`test_update`](#test.test_update)
 - [`test/cli/`](#group-cli)
   - [`conftest`](#cli.conftest)
@@ -1888,6 +1889,26 @@ impossible.
 # test.test\_sweep
 
 Tests for `fim.sweep`: axes, enumeration, validation and seed policy.
+
+<a id="test.test_sweep_run"></a>
+
+# test.test\_sweep\_run
+
+Tests for `fim.sweep_run`: creating, running, resuming and reusing sweeps.
+
+Points are real but tiny runs (small populations, a handful of
+generations), so the run ids, manifests and attachments are the real ones.
+
+<a id="test.test_sweep_run.results"></a>
+
+#### results
+
+```python
+@pytest.fixture
+def results(tmp_path: Path) -> Iterator[Path]
+```
+
+Point the results directory at a temporary one for the test.
 
 <a id="test.test_update"></a>
 

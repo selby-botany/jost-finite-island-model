@@ -403,6 +403,8 @@ Return to the [source-tree orientation](../README.md) or the [developer guide](.
   * [delete\_experiment](#fim.persistence.groups.delete_experiment)
   * [copy\_experiment](#fim.persistence.groups.copy_experiment)
   * [resolve\_run\_directory](#fim.persistence.groups.resolve_run_directory)
+  * [find\_run\_directories](#fim.persistence.groups.find_run_directories)
+  * [run\_id\_of](#fim.persistence.groups.run_id_of)
 * [fim.persistence.jsonl\_store](#fim.persistence.jsonl_store)
   * [JSONLTrajectoryStore](#fim.persistence.jsonl_store.JSONLTrajectoryStore)
     * [\_\_init\_\_](#fim.persistence.jsonl_store.JSONLTrajectoryStore.__init__)
@@ -539,6 +541,23 @@ Return to the [source-tree orientation](../README.md) or the [developer guide](.
   * [work\_estimate](#fim.sweep.work_estimate)
   * [expand\_axis](#fim.sweep.expand_axis)
   * [spec\_from\_config](#fim.sweep.spec_from_config)
+* [fim.sweep\_run](#fim.sweep_run)
+  * [PointState](#fim.sweep_run.PointState)
+  * [PointFailure](#fim.sweep_run.PointFailure)
+  * [SweepEvent](#fim.sweep_run.SweepEvent)
+  * [SweepOutcome](#fim.sweep_run.SweepOutcome)
+  * [PointStatus](#fim.sweep_run.PointStatus)
+  * [PointRunner](#fim.sweep_run.PointRunner)
+    * [run\_point](#fim.sweep_run.PointRunner.run_point)
+  * [LocalPointRunner](#fim.sweep_run.LocalPointRunner)
+    * [run\_point](#fim.sweep_run.LocalPointRunner.run_point)
+  * [create\_sweep\_study](#fim.sweep_run.create_sweep_study)
+  * [sweep\_spec\_of](#fim.sweep_run.sweep_spec_of)
+  * [stored\_points](#fim.sweep_run.stored_points)
+  * [sweep\_point\_statuses](#fim.sweep_run.sweep_point_statuses)
+  * [run\_sweep](#fim.sweep_run.run_sweep)
+  * [failures\_path](#fim.sweep_run.failures_path)
+  * [read\_failures](#fim.sweep_run.read_failures)
 * [fim.update](#fim.update)
   * [compare\_versions](#fim.update.compare_versions)
   * [fetch\_latest\_release](#fim.update.fetch_latest_release)
@@ -12426,11 +12445,13 @@ Atomically write `manifest` to `path`, creating parent directories as needed.
 #### create\_study
 
 ```python
-def create_study(name: str,
-                 description: str | None = None,
-                 *,
-                 results: Path | None = None,
-                 clock: Clock = _utc_now) -> StudyManifest
+def create_study(
+        name: str,
+        description: str | None = None,
+        *,
+        results: Path | None = None,
+        clock: Clock = _utc_now,
+        sweep_spec: Mapping[str, object] | None = None) -> StudyManifest
 ```
 
 Create a new, empty Study and write its manifest.
@@ -12441,6 +12462,9 @@ Create a new, empty Study and write its manifest.
 - `description` - Optional longer description.
 - `results` - Optional results-directory override.
 - `clock` - Injectable current-time source, for deterministic tests.
+- `sweep_spec` - The stored sweep specification and plan (`fim.
+  sweep_run.create_sweep_study`), or `None` for a Study
+  assembled by hand.
 
 
 **Returns**:
@@ -12790,6 +12814,32 @@ always unambiguous when it resolves at all.
 - `ValueError` - `reference` does not uniquely identify a Run —
   either nothing matches, or (for a bare `run_id`) more than
   one directory shares it.
+
+<a id="fim.persistence.groups.find_run_directories"></a>
+
+#### find\_run\_directories
+
+```python
+def find_run_directories(run_id: str,
+                         *,
+                         results: Path | None = None) -> list[Path]
+```
+
+Return every run directory directly under `results` with this `run_id`.
+
+The lookup a sweep uses to recognize a point it already computed: a
+run's id is a hash of its whole configuration, so a match is the same
+configuration. Reads manifests, so it is linear in the number of runs.
+
+<a id="fim.persistence.groups.run_id_of"></a>
+
+#### run\_id\_of
+
+```python
+def run_id_of(run_directory: Path) -> str | None
+```
+
+Return the `run_id` recorded in `run_directory`'s manifest, if readable.
 
 <a id="fim.persistence.jsonl_store"></a>
 
@@ -16233,6 +16283,292 @@ and optionally `name`, `seed_policy` and `strategy`.
 **Raises**:
 
 - `ValueError` - The `sweep:` block is missing or malformed.
+
+<a id="fim.sweep_run"></a>
+
+# fim.sweep\_run
+
+Running a sweep: create its Study, run the points, resume, and report status.
+
+The execution half of `fim.sweep`
+(`20260923-claude-sonnet-5-sweep-as-study-implementation-plan.md`,
+`selby/restricted`, sections 3 and 4).
+
+- `create_sweep_study` stores the specification and the plan in a new
+  Study's `sweep_spec` *before* any point runs, so an interrupted sweep
+  resumes from what is stored.
+- `run_sweep` walks the stored points. Each point is skipped if the Study
+  already holds a run with its `run_id`, attached if such a run exists
+  anywhere under `results/`, and computed otherwise. Resuming is the same
+  operation as running.
+- Point status is *derived* (a point is done if a member run has its id),
+  never stored, so a manifest cannot disagree with the run directories.
+  Only failures are recorded, in a small file beside the Study index.
+- Points run one after another. A batch already spreads its replicates
+  over the cores; running several batches at once would oversubscribe
+  them. `PointRunner` is the seam a cluster would implement instead.
+
+<a id="fim.sweep_run.PointState"></a>
+
+#### PointState
+
+A point is `done` (a member run has its id), `failed`, or `waiting`.
+
+<a id="fim.sweep_run.PointFailure"></a>
+
+## PointFailure Objects
+
+```python
+@dataclass(frozen=True, slots=True)
+class PointFailure()
+```
+
+Why one point produced no run.
+
+<a id="fim.sweep_run.SweepEvent"></a>
+
+## SweepEvent Objects
+
+```python
+@dataclass(frozen=True, slots=True)
+class SweepEvent()
+```
+
+One progress event from `run_sweep`.
+
+**Attributes**:
+
+- `kind` - What happened.
+- `index` - The point's grid index, or `-1` for a whole-sweep event.
+- `run_id` - The point's id, or an empty string for a whole-sweep event.
+- `position` - How many points have been dealt with so far.
+- `total` - How many points the sweep has.
+- `detail` - A reason for a failure, or the raw run message for progress.
+
+<a id="fim.sweep_run.SweepOutcome"></a>
+
+## SweepOutcome Objects
+
+```python
+@dataclass(frozen=True, slots=True)
+class SweepOutcome()
+```
+
+The tally `run_sweep` returns.
+
+<a id="fim.sweep_run.PointStatus"></a>
+
+## PointStatus Objects
+
+```python
+@dataclass(frozen=True, slots=True)
+class PointStatus()
+```
+
+One planned point and where it stands.
+
+<a id="fim.sweep_run.PointRunner"></a>
+
+## PointRunner Objects
+
+```python
+class PointRunner(Protocol)
+```
+
+Runs one point's configuration to completion.
+
+The local implementation is `LocalPointRunner`. A cluster would supply
+another that computes a point elsewhere and returns the result
+directory; points are independent and self-describing, and a point's
+identity is its content hash, so no shared state is needed.
+
+<a id="fim.sweep_run.PointRunner.run_point"></a>
+
+#### run\_point
+
+```python
+def run_point(
+        params: SimulationParams,
+        cancel_event: threading.Event,
+        on_message: Callable[[object], None] | None = None
+) -> Path | PointFailure
+```
+
+Run `params` and return the published run directory or a failure.
+
+<a id="fim.sweep_run.LocalPointRunner"></a>
+
+## LocalPointRunner Objects
+
+```python
+class LocalPointRunner()
+```
+
+Runs a point in this process's own scalar or batch machinery.
+
+The same engine invocation and atomic artifact publication the desktop
+app uses, so a sweep point is an ordinary Run the app can open.
+
+<a id="fim.sweep_run.LocalPointRunner.run_point"></a>
+
+#### run\_point
+
+```python
+def run_point(
+        params: SimulationParams,
+        cancel_event: threading.Event,
+        on_message: Callable[[object], None] | None = None
+) -> Path | PointFailure
+```
+
+Run `params` synchronously; see `PointRunner.run_point`.
+
+<a id="fim.sweep_run.create_sweep_study"></a>
+
+#### create\_sweep\_study
+
+```python
+def create_sweep_study(spec: SweepSpec,
+                       plan: SweepPlan,
+                       name: str,
+                       *,
+                       description: str | None = None,
+                       experiment_id: str | None = None,
+                       results: Path | None = None) -> StudyManifest
+```
+
+Create the Study for a sweep, its spec and plan stored before any run.
+
+**Arguments**:
+
+- `spec` - The sweep specification.
+- `plan` - Its enumerated plan; only the valid points are stored.
+- `name` - The Study name.
+- `description` - Optional longer description.
+- `experiment_id` - Add the Study to this Experiment, if given.
+- `results` - Optional results-directory override.
+
+
+**Returns**:
+
+  The new Study, with `sweep_spec` holding the specification and the
+  planned points.
+
+
+**Raises**:
+
+- `ValueError` - The plan has no valid points, or the Experiment does
+  not exist.
+
+<a id="fim.sweep_run.sweep_spec_of"></a>
+
+#### sweep\_spec\_of
+
+```python
+def sweep_spec_of(study: StudyManifest) -> SweepSpec
+```
+
+Rebuild the `SweepSpec` a sweep Study stored.
+
+**Raises**:
+
+- `ValueError` - The Study is not a sweep, or its spec is malformed.
+
+<a id="fim.sweep_run.stored_points"></a>
+
+#### stored\_points
+
+```python
+def stored_points(study: StudyManifest) -> list[Mapping[str, Any]]
+```
+
+Return the planned points stored in a sweep Study.
+
+**Raises**:
+
+- `ValueError` - The Study is not a sweep, or its points are malformed.
+
+<a id="fim.sweep_run.sweep_point_statuses"></a>
+
+#### sweep\_point\_statuses
+
+```python
+def sweep_point_statuses(study: StudyManifest,
+                         *,
+                         results: Path | None = None) -> list[PointStatus]
+```
+
+Return every planned point with its derived state.
+
+`done` if a member run of the Study has the point's `run_id`,
+`failed` if a failure was recorded and no such run exists, otherwise
+`waiting`.
+
+<a id="fim.sweep_run.run_sweep"></a>
+
+#### run\_sweep
+
+```python
+def run_sweep(study_id: str,
+              runner: PointRunner,
+              on_event: Callable[[SweepEvent], None],
+              cancel_event: threading.Event,
+              *,
+              retry_failed: bool = False,
+              results: Path | None = None) -> SweepOutcome
+```
+
+Run every point of a sweep Study that is not already present.
+
+Points are handled in grid order, one at a time. A failed point is
+recorded and the sweep continues. Cancelling stops the current point
+and skips the rest; completed points stay attached.
+
+**Arguments**:
+
+- `study_id` - A sweep Study created by `create_sweep_study`.
+- `runner` - Runs one point.
+- `on_event` - Called with every `SweepEvent`.
+- `cancel_event` - Set to stop the sweep.
+- `retry_failed` - Also retry points recorded as failed; by default
+  they are skipped.
+- `results` - Optional results-directory override.
+
+
+**Returns**:
+
+  The tally.
+
+
+**Raises**:
+
+- `ValueError` - The Study is not a sweep, or the stored plan no longer
+  matches what this version of the program enumerates.
+
+<a id="fim.sweep_run.failures_path"></a>
+
+#### failures\_path
+
+```python
+def failures_path(study_id: str, *, results: Path | None = None) -> Path
+```
+
+Return the file recording a sweep Study's failed points.
+
+Kept in a subdirectory of the Study index so the index's own
+`*.json` scan never mistakes it for a Study manifest.
+
+<a id="fim.sweep_run.read_failures"></a>
+
+#### read\_failures
+
+```python
+def read_failures(study_id: str,
+                  *,
+                  results: Path | None = None) -> dict[str, dict[str, Any]]
+```
+
+Return recorded failures by point `run_id`; empty if none or unreadable.
 
 <a id="fim.update"></a>
 

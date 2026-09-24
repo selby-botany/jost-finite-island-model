@@ -395,6 +395,7 @@ def create_study(
     *,
     results: Path | None = None,
     clock: Clock = _utc_now,
+    sweep_spec: Mapping[str, object] | None = None,
 ) -> StudyManifest:
     """Create a new, empty Study and write its manifest.
 
@@ -403,6 +404,9 @@ def create_study(
         description: Optional longer description.
         results: Optional results-directory override.
         clock: Injectable current-time source, for deterministic tests.
+        sweep_spec: The stored sweep specification and plan (`fim.
+            sweep_run.create_sweep_study`), or `None` for a Study
+            assembled by hand.
 
     Returns:
         The newly created, empty Study.
@@ -424,7 +428,7 @@ def create_study(
         created_at=now,
         updated_at=now,
         run_directories=(),
-        sweep_spec=None,
+        sweep_spec=dict(sweep_spec) if sweep_spec is not None else None,
     )
     write_study_manifest(study_manifest_path(study_id, results=root), manifest)
     return manifest
@@ -906,6 +910,22 @@ def resolve_run_directory(reference: str, *, results: Path | None = None) -> Pat
         "existing run directory, not a path to a manifest.json, and no "
         f"run under {root} has this run_id"
     )
+
+
+def find_run_directories(run_id: str, *, results: Path | None = None) -> list[Path]:
+    """Return every run directory directly under `results` with this `run_id`.
+
+    The lookup a sweep uses to recognize a point it already computed: a
+    run's id is a hash of its whole configuration, so a match is the same
+    configuration. Reads manifests, so it is linear in the number of runs.
+    """
+    root = results if results is not None else paths.results_directory()
+    return _run_directories_with_id(run_id, root)
+
+
+def run_id_of(run_directory: Path) -> str | None:
+    """Return the `run_id` recorded in `run_directory`'s manifest, if readable."""
+    return _manifest_run_id(run_directory / "manifest.json")
 
 
 def _run_directories_with_id(run_id: str, results: Path) -> list[Path]:
