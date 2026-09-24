@@ -33,7 +33,11 @@ def test_navigation_uses_one_svg_icon_language_instead_of_emoji() -> None:
     `icon-results` is still in use: the merged "Run" button itself
     references it (a chart, not `icon-run`'s own bare play-triangle).
 
-    21, not 24: Home's own `.home-cards` were removed outright
+    25, not 21: the sweep feature added four -- Configure's "Run as a
+    sweep…" (`icon-run`), the sweep screen's Back (`icon-back`) and Run
+    sweep (`icon-run`), and Explore's "Sweep this for real" (`icon-run`).
+
+    21, not 24, before that: Home's own `.home-cards` were removed outright
     (`20260918-claude-sonnet-5-home-tree-reorg-design.md`, `selby/
     restricted`, §7) -- their "New run" button's own trailing
     `icon-forward` and the "Explore" card's own `icon-explore` went
@@ -46,7 +50,7 @@ def test_navigation_uses_one_svg_icon_language_instead_of_emoji() -> None:
     icons = (_WEBUI / "icons" / "fim-icons.svg").read_text(encoding="utf-8")
 
     assert html.count('class="rail-icon"') == 6
-    assert html.count('href="icons/fim-icons.svg#icon-') == 21
+    assert html.count('href="icons/fim-icons.svg#icon-') == 25
     for icon_id in (
         "home",
         "configure",
