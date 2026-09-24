@@ -1085,6 +1085,16 @@ project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   project's own established practice for a pre-existing but unused
   public name.
 
+- **"Re-run all…" and its setting.** A run is fully determined by its
+  configuration and seed: running the same configuration again gives
+  byte-identical trajectories and reports (checked for a single run and for a
+  batch, run sequentially and in parallel), so re-running with each run's own
+  seed changed nothing, and re-running with new seeds is simply new runs.
+  **Re-run all…** on a study and **When re-running a study** in Settings are
+  gone.
+- **"Add to experiment…" on a study row.** A study is placed in an experiment
+  when it is created.
+
 ### Fixed
 
 - **An experiment no longer lists studies that were deleted.** Deleting a

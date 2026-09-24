@@ -232,9 +232,13 @@ def test_home_offers_sweep_results_and_continue_only_for_a_sweep_study(
     seen = _drive(window, steps)
 
     sweep = next(names for names in seen if "Sweep results…" in names)
-    by_hand = next(names for names in seen if "Re-run all…" in names)
+    by_hand = next(
+        names
+        for names in seen
+        if "Sweep results…" not in names and "Delete runs…" in names
+    )
     assert "Continue sweep" in sweep
-    assert "Re-run all…" not in sweep
+    assert "Re-run all…" not in sweep and "Re-run all…" not in by_hand
     assert "Sweep results…" not in by_hand
     assert "Continue sweep" not in by_hand
 

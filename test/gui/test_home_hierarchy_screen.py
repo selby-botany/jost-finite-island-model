@@ -200,35 +200,6 @@ def _create_study_on_experiment(
     _poll_until(window, _TREE_TEXT, lambda value: value is not None and name in value)
 
 
-def _add_study_to_experiment(
-    window: webview.Window, study_label: str, experiment_name: str
-) -> None:
-    """Pick `experiment_name` from the "Add to experiment…" select on a Study's
-    own row."""
-    picked = window.evaluate_js(
-        "(function(label, experimentName) {"
-        "var headers = document.querySelectorAll('.open-run-group-header');"
-        "for (var header of headers) {"
-        "  var toggle = header.querySelector('.open-run-group-toggle');"
-        "  if (toggle && toggle.textContent.includes(label)) {"
-        "    var select = header.querySelector('.open-run-add-to-select');"
-        "    for (var option of select.options) {"
-        "      if (option.textContent === experimentName) {"
-        "        select.value = option.value;"
-        "        select.dispatchEvent(new Event('change'));"
-        "        return true;"
-        "      }"
-        "    }"
-        "  }"
-        "}"
-        "return false; })"
-        f"({study_label!r}, {experiment_name!r})"
-    )
-    assert picked is True, (
-        f"no group header named {study_label!r} had a {experiment_name!r} option"
-    )
-
-
 def _check_group_checkbox(window: webview.Window, group_label: str) -> None:
     """Check the Select checkbox on the group header whose toggle names
     `group_label`."""
@@ -441,77 +412,6 @@ def test_creating_an_experiment_and_a_study_on_its_row_nests_it(
     assert tree_text is not None
     assert "Topology (1 study)" in tree_text
     assert "Ring sweep (0 runs)" in tree_text
-
-
-def test_moving_an_existing_study_into_an_experiment_via_the_picker(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    """The "Add to experiment…" picker still nests an already-existing,
-    standalone Study.
-
-    Kept as real, separate functionality from row-level "Create study…"
-    (`buildAddToExperimentSelect` is untouched by this reorg) -- a
-    Study created standalone, or moved out of one Experiment, still
-    needs a way into a different one after the fact.
-    """
-    results = tmp_path / "results"
-    results.mkdir()
-    groups.create_study("Ring sweep", results=results)
-    monkeypatch.setattr(paths_module, "results_directory", lambda: results)
-
-    window = create_window(hidden=True)
-    outcome: queue.Queue[dict[str, Any] | None] = queue.Queue(maxsize=1)
-
-    def _drive() -> None:
-        try:
-            _poll_until(window, _INPUT_SCREEN_READY, lambda value: value is True)
-            window.evaluate_js("window.fim.menu.openRun();")
-            _poll_until(
-                window,
-                "window.__fimOpenRunRecentRunsLoaded === true",
-                lambda value: value is True,
-            )
-            _create_experiment(window, "Topology")
-            picked = False
-            for _ in range(30):
-                picked = bool(
-                    window.evaluate_js(
-                        "(function(){"
-                        "var selects = document.querySelectorAll("
-                        "'.open-run-add-to-select');"
-                        "for (var select of selects) {"
-                        "  for (var option of select.options) {"
-                        "    if (option.textContent === 'Topology') {"
-                        "      select.value = option.value;"
-                        "      select.dispatchEvent(new Event('change'));"
-                        "      return true;"
-                        "    }"
-                        "  }"
-                        "}"
-                        "return false; })()"
-                    )
-                )
-                if picked:
-                    break
-                time.sleep(_POLL_INTERVAL_SECONDS)
-            _poll_until(
-                window,
-                _TREE_TEXT,
-                lambda value: value is not None and "Topology (1 study)" in value,
-            )
-            _expand_every_group(window)
-            tree_text = window.evaluate_js(_TREE_TEXT)
-            outcome.put({"picked": picked, "treeText": tree_text})
-        finally:
-            window.destroy()
-
-    webview.start(_drive)
-    result = outcome.get(timeout=_DRIVE_TIMEOUT_SECONDS)
-
-    assert result is not None
-    assert result["picked"] is True
-    assert "Topology (1 study)" in result["treeText"]
-    assert "Ring sweep (0 runs)" in result["treeText"]
 
 
 def test_deleting_a_study_cascades_to_its_own_runs(
@@ -944,59 +844,6 @@ def test_run_study_select_new_study_cancel_returns_to_no_study(
     # test itself did in Configure.
     names = [study.name for study in groups.list_studies(results=results)]
     assert names == ["Default study"]
-
-
-def test_rerun_all_re_runs_every_configuration_in_a_study(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    """A Study group's own "Re-run all…" button re-runs its member configuration.
-
-    `20260918-claude-sonnet-5-explore-to-study-run-handoff-design.md`
-    (`selby/restricted`), §4/§8: real, DOM-driven proof that the button
-    actually reaches `Api.rerun_study` and the tree reflects the new
-    run count once it resolves -- `test/gui/test_app_api.py`'s own
-    tests already prove `rerun_study` itself correct as a plain Python
-    call.
-    """
-    results = tmp_path / "results"
-    results.mkdir()
-    monkeypatch.setattr(paths_module, "results_directory", lambda: results)
-    study = groups.create_study("Ring sweep", results=results)
-    _write_run(results, "run-a", seed=1, study_id=study.study_id)
-
-    window = create_window(hidden=True)
-    outcome: queue.Queue[str | None] = queue.Queue(maxsize=1)
-
-    def _drive() -> None:
-        try:
-            _poll_until(window, _INPUT_SCREEN_READY, lambda value: value is True)
-            window.evaluate_js("window.fim.menu.openRun();")
-            _poll_until(
-                window,
-                "window.__fimOpenRunRecentRunsLoaded === true",
-                lambda value: value is True,
-            )
-            _expand_every_group(window)
-            _poll_until(
-                window,
-                _TREE_TEXT,
-                lambda value: value is not None and "Ring sweep (1 run)" in value,
-            )
-            _click_group_button(window, "Ring sweep", "Re-run all…")
-            _poll_until(
-                window,
-                _TREE_TEXT,
-                lambda value: value is not None and "Ring sweep (2 runs)" in value,
-            )
-            outcome.put(window.evaluate_js(_TREE_TEXT))
-        finally:
-            window.destroy()
-
-    webview.start(_drive)
-    tree_text = outcome.get(timeout=_DRIVE_TIMEOUT_SECONDS)
-
-    assert tree_text is not None
-    assert "Ring sweep (2 runs)" in tree_text
 
 
 def test_home_shows_both_runs_of_a_repeated_configuration_but_blanks_the_repeat(

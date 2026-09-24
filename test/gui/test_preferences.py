@@ -232,50 +232,6 @@ def test_malformed_results_location_override_is_quarantined(tmp_path: Path) -> N
     assert warning is not None
 
 
-def test_rerun_seed_mode_default_is_new_and_omitted_from_disk() -> None:
-    """The default preserves existing behavior without extra JSON."""
-    preferences = GuiPreferences()
-
-    assert preferences.rerun_seed_mode == "new"
-    assert "rerun_seed_mode" not in preferences.to_dict()["gui"]
-
-
-def test_with_rerun_seed_mode_leaves_other_fields_untouched() -> None:
-    """`with_rerun_seed_mode` updates only `rerun_seed_mode`."""
-    original = GuiPreferences(significant_digits=7)
-    updated = original.with_rerun_seed_mode("same")
-    assert updated.significant_digits == 7
-    assert updated.rerun_seed_mode == "same"
-
-
-def test_rerun_seed_mode_round_trips_through_save_and_load(tmp_path: Path) -> None:
-    """A saved-and-reloaded `GuiPreferences` preserves a non-default
-    `rerun_seed_mode`."""
-    path = tmp_path / "preferences.json"
-    original = GuiPreferences(rerun_seed_mode="same")
-    save_preferences(path, original)
-    loaded, warning = load_preferences(path)
-    assert warning is None
-    assert loaded.rerun_seed_mode == "same"
-
-
-def test_malformed_rerun_seed_mode_is_quarantined(tmp_path: Path) -> None:
-    """A 'gui.rerun_seed_mode' outside 'new'/'same' is rejected, not coerced."""
-    path = tmp_path / "preferences.json"
-    path.write_text(
-        json.dumps(
-            {
-                "schema_version": CURRENT_SCHEMA_VERSION,
-                "gui": {"rerun_seed_mode": "sometimes"},
-            }
-        ),
-        encoding="utf-8",
-    )
-    loaded, warning = load_preferences(path)
-    assert loaded == GuiPreferences()
-    assert warning is not None
-
-
 def test_with_dark_mode_override_leaves_other_fields_untouched() -> None:
     """`with_dark_mode_override` updates only `dark_mode_override`."""
     original = GuiPreferences(significant_digits=7)
@@ -587,14 +543,14 @@ def test_default_ploidy_round_trips_and_with_updates_only_itself(
 ) -> None:
     """A chosen default survives save and load; `with_default_ploidy` is narrow."""
     path = tmp_path / "preferences.json"
-    original = GuiPreferences(rerun_seed_mode="same").with_default_ploidy("2")
+    original = GuiPreferences(startup_behavior="restart").with_default_ploidy("2")
     save_preferences(path, original)
 
     loaded, warning = load_preferences(path)
 
     assert warning is None
     assert loaded.default_ploidy == "2"
-    assert loaded.rerun_seed_mode == "same"
+    assert loaded.startup_behavior == "restart"
 
 
 def test_malformed_default_ploidy_is_quarantined(tmp_path: Path) -> None:

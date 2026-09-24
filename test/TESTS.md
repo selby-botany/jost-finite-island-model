@@ -8817,72 +8817,6 @@ def test_copy_experiment_creates_an_independent_experiment(
 
 `copy_experiment` mirrors `copy_study` one level up.
 
-<a id="gui.test_app_api.test_rerun_study_new_seed_mode_produces_a_different_seed"></a>
-
-#### test\_rerun\_study\_new\_seed\_mode\_produces\_a\_different\_seed
-
-```python
-def test_rerun_study_new_seed_mode_produces_a_different_seed(
-        tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None
-```
-
-The default "new" seed mode re-runs with a fresh seed, attached to the Study.
-
-<a id="gui.test_app_api.test_rerun_study_same_seed_mode_reuses_the_original_seed"></a>
-
-#### test\_rerun\_study\_same\_seed\_mode\_reuses\_the\_original\_seed
-
-```python
-def test_rerun_study_same_seed_mode_reuses_the_original_seed(
-        tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None
-```
-
-`"same"` reuses each configuration's own original seed exactly.
-
-<a id="gui.test_app_api.test_rerun_study_reports_an_unknown_study"></a>
-
-#### test\_rerun\_study\_reports\_an\_unknown\_study
-
-```python
-def test_rerun_study_reports_an_unknown_study(
-        tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None
-```
-
-Re-running a Study that no longer exists is a clean failure, not a crash.
-
-<a id="gui.test_app_api.test_rerun_study_reports_an_empty_study"></a>
-
-#### test\_rerun\_study\_reports\_an\_empty\_study
-
-```python
-def test_rerun_study_reports_an_empty_study(
-        tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None
-```
-
-A Study with no still-existing run has nothing to re-run.
-
-<a id="gui.test_app_api.test_get_set_rerun_seed_mode_round_trips"></a>
-
-#### test\_get\_set\_rerun\_seed\_mode\_round\_trips
-
-```python
-def test_get_set_rerun_seed_mode_round_trips(tmp_path: Path) -> None
-```
-
-The Settings bridge pair for `rerun_seed_mode` persists across an `Api`
-reload.
-
-<a id="gui.test_app_api.test_set_rerun_seed_mode_rejects_an_unknown_value"></a>
-
-#### test\_set\_rerun\_seed\_mode\_rejects\_an\_unknown\_value
-
-```python
-def test_set_rerun_seed_mode_rejects_an_unknown_value(tmp_path: Path) -> None
-```
-
-A value other than "new"/"same" is a validation failure, not silently
-accepted.
-
 <a id="gui.test_app_api.test_delete_runs_removes_every_directory_and_tolerates_a_missing_one"></a>
 
 #### test\_delete\_runs\_removes\_every\_directory\_and\_tolerates\_a\_missing\_one
@@ -12489,23 +12423,6 @@ a Study created this way (that picker still exists, `test_moving_
 an_existing_study_into_an_experiment_via_the_picker`, just below,
 for a Study that already exists elsewhere).
 
-<a id="gui.test_home_hierarchy_screen.test_moving_an_existing_study_into_an_experiment_via_the_picker"></a>
-
-#### test\_moving\_an\_existing\_study\_into\_an\_experiment\_via\_the\_picker
-
-```python
-def test_moving_an_existing_study_into_an_experiment_via_the_picker(
-        tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None
-```
-
-The "Add to experiment…" picker still nests an already-existing,
-standalone Study.
-
-Kept as real, separate functionality from row-level "Create study…"
-(`buildAddToExperimentSelect` is untouched by this reorg) -- a
-Study created standalone, or moved out of one Experiment, still
-needs a way into a different one after the fact.
-
 <a id="gui.test_home_hierarchy_screen.test_deleting_a_study_cascades_to_its_own_runs"></a>
 
 #### test\_deleting\_a\_study\_cascades\_to\_its\_own\_runs
@@ -12613,24 +12530,6 @@ def test_run_study_select_new_study_cancel_returns_to_no_study(
 ```
 
 Cancelling the inline "New study…" row abandons it, no Study created.
-
-<a id="gui.test_home_hierarchy_screen.test_rerun_all_re_runs_every_configuration_in_a_study"></a>
-
-#### test\_rerun\_all\_re\_runs\_every\_configuration\_in\_a\_study
-
-```python
-def test_rerun_all_re_runs_every_configuration_in_a_study(
-        tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None
-```
-
-A Study group's own "Re-run all…" button re-runs its member configuration.
-
-`20260918-claude-sonnet-5-explore-to-study-run-handoff-design.md`
-(`selby/restricted`), §4/§8: real, DOM-driven proof that the button
-actually reaches `Api.rerun_study` and the tree reflects the new
-run count once it resolves -- `test/gui/test_app_api.py`'s own
-tests already prove `rerun_study` itself correct as a plain Python
-call.
 
 <a id="gui.test_home_hierarchy_screen.test_home_shows_both_runs_of_a_repeated_configuration_but_blanks_the_repeat"></a>
 
@@ -14514,48 +14413,6 @@ def test_malformed_results_location_override_is_quarantined(
 ```
 
 A non-string 'gui.results_location_override' is rejected, not coerced.
-
-<a id="gui.test_preferences.test_rerun_seed_mode_default_is_new_and_omitted_from_disk"></a>
-
-#### test\_rerun\_seed\_mode\_default\_is\_new\_and\_omitted\_from\_disk
-
-```python
-def test_rerun_seed_mode_default_is_new_and_omitted_from_disk() -> None
-```
-
-The default preserves existing behavior without extra JSON.
-
-<a id="gui.test_preferences.test_with_rerun_seed_mode_leaves_other_fields_untouched"></a>
-
-#### test\_with\_rerun\_seed\_mode\_leaves\_other\_fields\_untouched
-
-```python
-def test_with_rerun_seed_mode_leaves_other_fields_untouched() -> None
-```
-
-`with_rerun_seed_mode` updates only `rerun_seed_mode`.
-
-<a id="gui.test_preferences.test_rerun_seed_mode_round_trips_through_save_and_load"></a>
-
-#### test\_rerun\_seed\_mode\_round\_trips\_through\_save\_and\_load
-
-```python
-def test_rerun_seed_mode_round_trips_through_save_and_load(
-        tmp_path: Path) -> None
-```
-
-A saved-and-reloaded `GuiPreferences` preserves a non-default
-`rerun_seed_mode`.
-
-<a id="gui.test_preferences.test_malformed_rerun_seed_mode_is_quarantined"></a>
-
-#### test\_malformed\_rerun\_seed\_mode\_is\_quarantined
-
-```python
-def test_malformed_rerun_seed_mode_is_quarantined(tmp_path: Path) -> None
-```
-
-A 'gui.rerun_seed_mode' outside 'new'/'same' is rejected, not coerced.
 
 <a id="gui.test_preferences.test_with_dark_mode_override_leaves_other_fields_untouched"></a>
 

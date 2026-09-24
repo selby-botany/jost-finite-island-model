@@ -4,7 +4,6 @@ const settingsButton = document.getElementById("settings-button");
 const settingsDialog = document.getElementById("modal-settings");
 const settingsBanner = document.getElementById("settings-banner");
 const startupBehaviorSelect = document.getElementById("settings-startup-behavior");
-const rerunSeedModeSelect = document.getElementById("settings-rerun-seed-mode");
 const defaultPloidySelect = document.getElementById("settings-default-ploidy");
 const runGraphColumnsSelect = document.getElementById("settings-run-graph-columns");
 const scatterStyleSelect = document.getElementById("settings-scatter-style");
@@ -153,7 +152,6 @@ settingsResultsLocationChangeButton.addEventListener("click", async () => {
 async function loadSettingsDialog() {
     showSettingsBanner("");
     startupBehaviorSelect.value = await window.pywebview.api.get_startup_behavior();
-    rerunSeedModeSelect.value = await window.pywebview.api.get_rerun_seed_mode();
     defaultPloidySelect.value = await window.pywebview.api.get_default_ploidy();
     const runCardLayout = await window.pywebview.api.get_run_card_layout();
     runGraphColumnsSelect.value = String(runCardLayout.columns);
@@ -199,15 +197,6 @@ scatterStyleSelect.addEventListener("change", async () => {
 
 defaultPloidySelect.addEventListener("change", async () => {
     const result = await window.pywebview.api.set_default_ploidy(defaultPloidySelect.value);
-    if (!result.ok) {
-        showSettingsBanner(result.message);
-    }
-});
-
-rerunSeedModeSelect.addEventListener("change", async () => {
-    const result = await window.pywebview.api.set_rerun_seed_mode(
-        rerunSeedModeSelect.value
-    );
     if (!result.ok) {
         showSettingsBanner(result.message);
     }

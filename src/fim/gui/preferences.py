@@ -239,17 +239,6 @@ class GuiPreferences:
             Settings override," not "results/ has no location at all" —
             `fim.paths.results_directory()` still has its own further
             fallback chain regardless.
-        rerun_seed_mode: `"new"` (the default) draws a fresh seed for
-            each run `Api.rerun_study` re-submits; `"same"` reuses each
-            run's own original seed instead — the botanist's own call
-            (`20260918-claude-sonnet-5-explore-to-study-run-handoff-
-            design.md`, `selby/restricted`, §4/§5): "new" is the more
-            broadly useful default for widening a Study's own
-            confidence, while an exact-reproduction need already has
-            its own documented path (`doc/usage.md`'s "Reproduce a
-            run") and does not need to be this action's own default
-            behavior. Process-local like `significant_digits`, never
-            part of any saved configuration.
         run_graphs: The graphs the Run card shows together, in
             `RUN_GRAPH_KEYS` order, or `None` for `DEFAULT_RUN_GRAPHS`.
         run_graph_columns: How many columns the shown graphs are laid out
@@ -273,7 +262,6 @@ class GuiPreferences:
     startup_behavior: str = "restore"
     default_run_settings: dict[str, str] | None = None
     results_location_override: str | None = None
-    rerun_seed_mode: str = "new"
     default_ploidy: str = ""
     run_graphs: tuple[str, ...] | None = None
     run_graph_columns: int = DEFAULT_RUN_GRAPH_COLUMNS
@@ -303,8 +291,6 @@ class GuiPreferences:
             gui["startup_behavior"] = self.startup_behavior
         if self.results_location_override is not None:
             gui["results_location_override"] = self.results_location_override
-        if self.rerun_seed_mode != "new":
-            gui["rerun_seed_mode"] = self.rerun_seed_mode
         if self.default_ploidy:
             gui["default_ploidy"] = self.default_ploidy
         gui.update(self._run_card_dict())
@@ -359,7 +345,6 @@ class GuiPreferences:
             raise ValueError(
                 "preferences 'gui.results_location_override' must be a string"
             )
-        rerun_seed_mode = _choice(gui, "rerun_seed_mode", "new", ("new", "same"))
         default_ploidy = _choice(gui, "default_ploidy", "", ("", "1", "2", "3", "4"))
         form_values = data.get("form")
         if form_values is not None:
@@ -406,7 +391,6 @@ class GuiPreferences:
             startup_behavior=startup_behavior,
             default_run_settings=default_run_settings,
             results_location_override=results_location_override,
-            rerun_seed_mode=rerun_seed_mode,
             default_ploidy=default_ploidy,
             run_graphs=_parse_run_graphs(gui),
             run_graph_columns=_parse_run_graph_columns(gui),
@@ -549,17 +533,6 @@ class GuiPreferences:
                 own docstring.
         """
         return replace(self, default_ploidy=default_ploidy)
-
-    def with_rerun_seed_mode(self, rerun_seed_mode: str) -> GuiPreferences:
-        """Return a copy with `rerun_seed_mode` replaced.
-
-        The `Api.set_rerun_seed_mode` bridge method's own update.
-
-        Args:
-            rerun_seed_mode: `"new"` or `"same"` — see this dataclass's
-                own field docstring for what each means.
-        """
-        return replace(self, rerun_seed_mode=rerun_seed_mode)
 
 
 def load_preferences(path: Path) -> tuple[GuiPreferences, str | None]:
