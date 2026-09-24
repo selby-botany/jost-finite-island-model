@@ -84,6 +84,10 @@ Return to the [source-tree orientation](../README.md) or the [developer guide](.
     * [get\_initial\_form](#fim.gui.app.Api.get_initial_form)
     * [get\_startup\_behavior](#fim.gui.app.Api.get_startup_behavior)
     * [set\_startup\_behavior](#fim.gui.app.Api.set_startup_behavior)
+    * [get\_run\_card\_layout](#fim.gui.app.Api.get_run_card_layout)
+    * [set\_run\_graphs](#fim.gui.app.Api.set_run_graphs)
+    * [set\_run\_graph\_columns](#fim.gui.app.Api.set_run_graph_columns)
+    * [set\_scatter\_style](#fim.gui.app.Api.set_scatter_style)
     * [get\_default\_ploidy](#fim.gui.app.Api.get_default_ploidy)
     * [set\_default\_ploidy](#fim.gui.app.Api.set_default_ploidy)
     * [get\_rerun\_seed\_mode](#fim.gui.app.Api.get_rerun_seed_mode)
@@ -197,6 +201,9 @@ Return to the [source-tree orientation](../README.md) or the [developer guide](.
   * [isolation\_by\_distance\_payload](#fim.gui.literature_visuals.isolation_by_distance_payload)
   * [pooled\_isolation\_by\_distance\_payload](#fim.gui.literature_visuals.pooled_isolation_by_distance_payload)
 * [fim.gui.preferences](#fim.gui.preferences)
+  * [RUN\_GRAPH\_KEYS](#fim.gui.preferences.RUN_GRAPH_KEYS)
+  * [DEFAULT\_RUN\_GRAPHS](#fim.gui.preferences.DEFAULT_RUN_GRAPHS)
+  * [SCATTER\_STYLES](#fim.gui.preferences.SCATTER_STYLES)
   * [GuiPreferences](#fim.gui.preferences.GuiPreferences)
     * [to\_dict](#fim.gui.preferences.GuiPreferences.to_dict)
     * [from\_dict](#fim.gui.preferences.GuiPreferences.from_dict)
@@ -209,6 +216,7 @@ Return to the [source-tree orientation](../README.md) or the [developer guide](.
     * [with\_startup\_behavior](#fim.gui.preferences.GuiPreferences.with_startup_behavior)
     * [with\_default\_run\_settings](#fim.gui.preferences.GuiPreferences.with_default_run_settings)
     * [with\_results\_location\_override](#fim.gui.preferences.GuiPreferences.with_results_location_override)
+    * [with\_run\_card\_layout](#fim.gui.preferences.GuiPreferences.with_run_card_layout)
     * [with\_default\_ploidy](#fim.gui.preferences.GuiPreferences.with_default_ploidy)
     * [with\_rerun\_seed\_mode](#fim.gui.preferences.GuiPreferences.with_rerun_seed_mode)
   * [load\_preferences](#fim.gui.preferences.load_preferences)
@@ -3468,6 +3476,88 @@ Set how a fresh launch chooses its initial form values.
 
 - ``{"ok"` - True, "value": value}` on success; otherwise
 - ``{"ok"` - False, "message": ...}`.
+
+<a id="fim.gui.app.Api.get_run_card_layout"></a>
+
+#### get\_run\_card\_layout
+
+```python
+@_log_bridge_call
+def get_run_card_layout() -> dict[str, Any]
+```
+
+Return how the Run card shows its graphs.
+
+**Returns**:
+
+- ``{"graphs"` - [...], "columns": int, "scatterStyle": str}`: the
+  graph keys the user wants shown together (`DEFAULT_RUN_GRAPHS`
+  until they choose), how many columns they are laid out in, and
+  how the scatter plot draws its points.
+
+<a id="fim.gui.app.Api.set_run_graphs"></a>
+
+#### set\_run\_graphs
+
+```python
+@_log_bridge_call
+def set_run_graphs(graphs: list[str]) -> dict[str, Any]
+```
+
+Remember which graphs the Run card shows together.
+
+**Arguments**:
+
+- `graphs` - Graph keys (`RUN_GRAPH_KEYS`). Unknown keys are
+  ignored; at least one known key is required.
+
+
+**Returns**:
+
+- ``{"ok"` - True, "graphs": [...]}` with the keys kept, in card
+  order; otherwise `{"ok": False, "message": ...}`.
+
+<a id="fim.gui.app.Api.set_run_graph_columns"></a>
+
+#### set\_run\_graph\_columns
+
+```python
+@_log_bridge_call
+def set_run_graph_columns(columns: int) -> dict[str, Any]
+```
+
+Set how many columns the Run card lays its graphs out in.
+
+**Arguments**:
+
+- `columns` - 1 to `MAX_RUN_GRAPH_COLUMNS`; rows follow.
+
+
+**Returns**:
+
+- ``{"ok"` - True, "columns": columns}`, or `{"ok": False,
+- `"message"` - ...}`.
+
+<a id="fim.gui.app.Api.set_scatter_style"></a>
+
+#### set\_scatter\_style
+
+```python
+@_log_bridge_call
+def set_scatter_style(style: str) -> dict[str, Any]
+```
+
+Choose how the scatter plot draws its points.
+
+**Arguments**:
+
+- `style` - One of `SCATTER_STYLES`.
+
+
+**Returns**:
+
+- ``{"ok"` - True, "style": style}`, or `{"ok": False, "message":
+  ...}`.
 
 <a id="fim.gui.app.Api.get_default_ploidy"></a>
 
@@ -6922,6 +7012,26 @@ preferences` returns fresh defaults plus a human-readable warning the
 caller is expected to actually show, not just log
 (`fim.gui.app.Api.get_startup_warnings`).
 
+<a id="fim.gui.preferences.RUN_GRAPH_KEYS"></a>
+
+#### RUN\_GRAPH\_KEYS
+
+Every graph the Run card can show, in on-screen order (`run-graph-stage.js`'s
+own `RUN_GRAPHS`, which this must stay in step with).
+
+<a id="fim.gui.preferences.DEFAULT_RUN_GRAPHS"></a>
+
+#### DEFAULT\_RUN\_GRAPHS
+
+What a fresh install shows together: the scatter and the trajectories.
+
+<a id="fim.gui.preferences.SCATTER_STYLES"></a>
+
+#### SCATTER\_STYLES
+
+How the scatter plot draws its points (`scatter.js`'s own `SCATTER_STYLES`).
+`circles` is the original encoding (radius grows with count).
+
 <a id="fim.gui.preferences.GuiPreferences"></a>
 
 ## GuiPreferences Objects
@@ -6988,6 +7098,11 @@ One loaded (or default) snapshot of the GUI's own preferences.
   run") and does not need to be this action's own default
   behavior. Process-local like `significant_digits`, never
   part of any saved configuration.
+- `run_graphs` - The graphs the Run card shows together, in
+  `RUN_GRAPH_KEYS` order, or `None` for `DEFAULT_RUN_GRAPHS`.
+- `run_graph_columns` - How many columns the shown graphs are laid out
+  in (rows follow); 1 to `MAX_RUN_GRAPH_COLUMNS`.
+- `scatter_style` - One of `SCATTER_STYLES`.
 - `default_ploidy` - `""` (the default: no default, the botanist
   chooses on every new configuration) or `"1"`-`"4"` -- the
   ploidy a fresh configuration's form starts on (Settings'
@@ -7166,6 +7281,22 @@ results_location` never passes `None` itself today (there is no
 "clear this field" affordance in Settings yet), but this
 matches `with_form_values`'s own "replace wholesale" shape
 rather than silently only ever growing.
+
+<a id="fim.gui.preferences.GuiPreferences.with_run_card_layout"></a>
+
+#### with\_run\_card\_layout
+
+```python
+def with_run_card_layout(*,
+                         run_graphs: tuple[str, ...] | None = None,
+                         run_graph_columns: int | None = None,
+                         scatter_style: str | None = None) -> GuiPreferences
+```
+
+Return a copy with any of the Run card's display choices replaced.
+
+The `Api.set_run_*`/`set_scatter_style` bridge methods' own update:
+each argument left `None` keeps the current value.
 
 <a id="fim.gui.preferences.GuiPreferences.with_default_ploidy"></a>
 

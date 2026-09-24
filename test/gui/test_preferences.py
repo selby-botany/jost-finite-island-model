@@ -614,3 +614,91 @@ def test_malformed_default_ploidy_is_quarantined(tmp_path: Path) -> None:
 
     assert loaded == GuiPreferences()
     assert warning is not None
+
+
+def test_run_card_layout_defaults_write_nothing() -> None:
+    """Untouched display choices are the defaults and stay off disk."""
+    preferences = GuiPreferences()
+
+    assert preferences.run_graphs is None
+    assert preferences.run_graph_columns == 2
+    assert preferences.scatter_style == "color-badge"
+    gui = preferences.to_dict()["gui"]
+    assert "run_graphs" not in gui
+    assert "run_graph_columns" not in gui
+    assert "scatter_style" not in gui
+
+
+def test_run_card_layout_round_trips_through_save_and_load(tmp_path: Path) -> None:
+    """Chosen graphs, columns and scatter style survive a reload."""
+    path = tmp_path / "preferences.json"
+    original = GuiPreferences().with_run_card_layout(
+        run_graphs=("scatter", "trajectory", "alleleComposition"),
+        run_graph_columns=3,
+        scatter_style="density",
+    )
+    save_preferences(path, original)
+
+    loaded, warning = load_preferences(path)
+
+    assert warning is None
+    assert loaded.run_graphs == ("scatter", "trajectory", "alleleComposition")
+    assert loaded.run_graph_columns == 3
+    assert loaded.scatter_style == "density"
+
+
+def test_with_run_card_layout_changes_only_what_it_is_given() -> None:
+    """Arguments left out keep their current value."""
+    original = GuiPreferences(run_graph_columns=3, scatter_style="dots")
+
+    updated = original.with_run_card_layout(run_graphs=("scatter",))
+
+    assert updated.run_graphs == ("scatter",)
+    assert updated.run_graph_columns == 3
+    assert updated.scatter_style == "dots"
+
+
+def test_unknown_graph_keys_are_dropped_and_an_empty_list_means_default(
+    tmp_path: Path,
+) -> None:
+    """A graph a later version removed does not invalidate the file."""
+    path = tmp_path / "preferences.json"
+    path.write_text(
+        json.dumps(
+            {
+                "schema_version": CURRENT_SCHEMA_VERSION,
+                "gui": {"run_graphs": ["trajectory", "gone", "scatter"]},
+            }
+        ),
+        encoding="utf-8",
+    )
+    loaded, _ = load_preferences(path)
+    assert loaded.run_graphs == ("scatter", "trajectory")
+
+    path.write_text(
+        json.dumps(
+            {
+                "schema_version": CURRENT_SCHEMA_VERSION,
+                "gui": {"run_graphs": ["gone"]},
+            }
+        ),
+        encoding="utf-8",
+    )
+    loaded, warning = load_preferences(path)
+    assert warning is None
+    assert loaded.run_graphs is None
+
+
+def test_malformed_run_card_values_are_quarantined(tmp_path: Path) -> None:
+    """A bad column count or scatter style is rejected, not coerced."""
+    path = tmp_path / "preferences.json"
+    for gui in ({"run_graph_columns": 9}, {"scatter_style": "pie"}, {"run_graphs": 3}):
+        path.write_text(
+            json.dumps({"schema_version": CURRENT_SCHEMA_VERSION, "gui": gui}),
+            encoding="utf-8",
+        )
+
+        loaded, warning = load_preferences(path)
+
+        assert loaded == GuiPreferences(), gui
+        assert warning is not None, gui

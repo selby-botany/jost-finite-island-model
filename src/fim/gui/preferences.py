@@ -120,6 +120,67 @@ CURRENT_SCHEMA_VERSION: Final = 1
 Clock = Callable[[], datetime]
 
 
+RUN_GRAPH_KEYS: tuple[str, ...] = (
+    "scatter",
+    "trajectory",
+    "alleleComposition",
+    "frequencySpectrum",
+    "ibd",
+)
+"""Every graph the Run card can show, in on-screen order (`run-graph-stage.js`'s
+own `RUN_GRAPHS`, which this must stay in step with)."""
+
+DEFAULT_RUN_GRAPHS: tuple[str, ...] = ("scatter", "trajectory")
+"""What a fresh install shows together: the scatter and the trajectories."""
+
+MAX_RUN_GRAPH_COLUMNS = 4
+DEFAULT_RUN_GRAPH_COLUMNS = 2
+
+SCATTER_STYLES: tuple[str, ...] = (
+    "circles",
+    "color",
+    "badge",
+    "color-badge",
+    "density",
+    "dots",
+    "trail",
+)
+"""How the scatter plot draws its points (`scatter.js`'s own `SCATTER_STYLES`).
+`circles` is the original encoding (radius grows with count)."""
+
+DEFAULT_SCATTER_STYLE = "color-badge"
+
+
+def _parse_run_graphs(gui: Mapping[str, Any]) -> tuple[str, ...] | None:
+    """Read `gui.run_graphs`: a list of known graph keys, or `None` for the default.
+
+    Unknown keys (a graph a later version removed) are dropped rather than
+    rejected, and a list left empty by that means "use the default".
+    """
+    raw = gui.get("run_graphs")
+    if raw is None:
+        return None
+    if not isinstance(raw, list) or not all(isinstance(key, str) for key in raw):
+        raise ValueError("preferences 'gui.run_graphs' must be a list of strings")
+    kept = tuple(key for key in RUN_GRAPH_KEYS if key in raw)
+    return kept or None
+
+
+def _parse_run_graph_columns(gui: Mapping[str, Any]) -> int:
+    """Read `gui.run_graph_columns`: an integer 1 to `MAX_RUN_GRAPH_COLUMNS`."""
+    value = gui.get("run_graph_columns", DEFAULT_RUN_GRAPH_COLUMNS)
+    if (
+        isinstance(value, bool)
+        or not isinstance(value, int)
+        or not 1 <= value <= MAX_RUN_GRAPH_COLUMNS
+    ):
+        raise ValueError(
+            "preferences 'gui.run_graph_columns' must be an integer "
+            f"from 1 to {MAX_RUN_GRAPH_COLUMNS}"
+        )
+    return value
+
+
 def _choice(
     gui: Mapping[str, Any], key: str, default: str, allowed: tuple[str, ...]
 ) -> str:
@@ -189,6 +250,11 @@ class GuiPreferences:
             run") and does not need to be this action's own default
             behavior. Process-local like `significant_digits`, never
             part of any saved configuration.
+        run_graphs: The graphs the Run card shows together, in
+            `RUN_GRAPH_KEYS` order, or `None` for `DEFAULT_RUN_GRAPHS`.
+        run_graph_columns: How many columns the shown graphs are laid out
+            in (rows follow); 1 to `MAX_RUN_GRAPH_COLUMNS`.
+        scatter_style: One of `SCATTER_STYLES`.
         default_ploidy: `""` (the default: no default, the botanist
             chooses on every new configuration) or `"1"`-`"4"` -- the
             ploidy a fresh configuration's form starts on (Settings'
@@ -209,6 +275,20 @@ class GuiPreferences:
     results_location_override: str | None = None
     rerun_seed_mode: str = "new"
     default_ploidy: str = ""
+    run_graphs: tuple[str, ...] | None = None
+    run_graph_columns: int = DEFAULT_RUN_GRAPH_COLUMNS
+    scatter_style: str = DEFAULT_SCATTER_STYLE
+
+    def _run_card_dict(self) -> dict[str, Any]:
+        """The Run card display choices that differ from their defaults."""
+        result: dict[str, Any] = {}
+        if self.run_graphs is not None:
+            result["run_graphs"] = list(self.run_graphs)
+        if self.run_graph_columns != DEFAULT_RUN_GRAPH_COLUMNS:
+            result["run_graph_columns"] = self.run_graph_columns
+        if self.scatter_style != DEFAULT_SCATTER_STYLE:
+            result["scatter_style"] = self.scatter_style
+        return result
 
     def to_dict(self) -> dict[str, Any]:
         """Return the on-disk JSON shape this preference set writes as."""
@@ -227,6 +307,7 @@ class GuiPreferences:
             gui["rerun_seed_mode"] = self.rerun_seed_mode
         if self.default_ploidy:
             gui["default_ploidy"] = self.default_ploidy
+        gui.update(self._run_card_dict())
         result: dict[str, Any] = {"schema_version": CURRENT_SCHEMA_VERSION, "gui": gui}
         if self.form_values is not None:
             result["form"] = dict(self.form_values)
@@ -327,6 +408,11 @@ class GuiPreferences:
             results_location_override=results_location_override,
             rerun_seed_mode=rerun_seed_mode,
             default_ploidy=default_ploidy,
+            run_graphs=_parse_run_graphs(gui),
+            run_graph_columns=_parse_run_graph_columns(gui),
+            scatter_style=_choice(
+                gui, "scatter_style", DEFAULT_SCATTER_STYLE, SCATTER_STYLES
+            ),
         )
 
     def with_form_values(self, form_values: Mapping[str, str]) -> GuiPreferences:
@@ -427,6 +513,31 @@ class GuiPreferences:
         rather than silently only ever growing.
         """
         return replace(self, results_location_override=path)
+
+    def with_run_card_layout(
+        self,
+        *,
+        run_graphs: tuple[str, ...] | None = None,
+        run_graph_columns: int | None = None,
+        scatter_style: str | None = None,
+    ) -> GuiPreferences:
+        """Return a copy with any of the Run card's display choices replaced.
+
+        The `Api.set_run_*`/`set_scatter_style` bridge methods' own update:
+        each argument left `None` keeps the current value.
+        """
+        return replace(
+            self,
+            run_graphs=self.run_graphs if run_graphs is None else run_graphs,
+            run_graph_columns=(
+                self.run_graph_columns
+                if run_graph_columns is None
+                else run_graph_columns
+            ),
+            scatter_style=(
+                self.scatter_style if scatter_style is None else scatter_style
+            ),
+        )
 
     def with_default_ploidy(self, default_ploidy: str) -> GuiPreferences:
         """Return a copy with `default_ploidy` replaced.

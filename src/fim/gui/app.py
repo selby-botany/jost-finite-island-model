@@ -91,6 +91,10 @@ from fim.gui.literature_visuals import (
     pooled_literature_visual_payload,
 )
 from fim.gui.preferences import (
+    DEFAULT_RUN_GRAPHS,
+    MAX_RUN_GRAPH_COLUMNS,
+    RUN_GRAPH_KEYS,
+    SCATTER_STYLES,
     GuiPreferences,
     load_preferences,
     preferences_file_path,
@@ -1814,6 +1818,85 @@ class Api:
         self._preferences = self._preferences.with_startup_behavior(value)
         save_preferences(self._preferences_path, self._preferences)
         return {"ok": True, "value": value}
+
+    @_log_bridge_call
+    def get_run_card_layout(self) -> dict[str, Any]:
+        """Return how the Run card shows its graphs.
+
+        Returns:
+            `{"graphs": [...], "columns": int, "scatterStyle": str}`: the
+            graph keys the user wants shown together (`DEFAULT_RUN_GRAPHS`
+            until they choose), how many columns they are laid out in, and
+            how the scatter plot draws its points.
+        """
+        preferences = self._preferences
+        return {
+            "graphs": list(preferences.run_graphs or DEFAULT_RUN_GRAPHS),
+            "columns": preferences.run_graph_columns,
+            "scatterStyle": preferences.scatter_style,
+        }
+
+    @_log_bridge_call
+    def set_run_graphs(self, graphs: list[str]) -> dict[str, Any]:
+        """Remember which graphs the Run card shows together.
+
+        Args:
+            graphs: Graph keys (`RUN_GRAPH_KEYS`). Unknown keys are
+                ignored; at least one known key is required.
+
+        Returns:
+            `{"ok": True, "graphs": [...]}` with the keys kept, in card
+            order; otherwise `{"ok": False, "message": ...}`.
+        """
+        kept = tuple(key for key in RUN_GRAPH_KEYS if key in graphs)
+        if not kept:
+            return {"ok": False, "message": "choose at least one graph to show"}
+        self._preferences = self._preferences.with_run_card_layout(run_graphs=kept)
+        save_preferences(self._preferences_path, self._preferences)
+        return {"ok": True, "graphs": list(kept)}
+
+    @_log_bridge_call
+    def set_run_graph_columns(self, columns: int) -> dict[str, Any]:
+        """Set how many columns the Run card lays its graphs out in.
+
+        Args:
+            columns: 1 to `MAX_RUN_GRAPH_COLUMNS`; rows follow.
+
+        Returns:
+            `{"ok": True, "columns": columns}`, or `{"ok": False,
+            "message": ...}`.
+        """
+        if (
+            isinstance(columns, bool)
+            or not isinstance(columns, int)
+            or not 1 <= columns <= MAX_RUN_GRAPH_COLUMNS
+        ):
+            return {
+                "ok": False,
+                "message": f"columns must be 1 to {MAX_RUN_GRAPH_COLUMNS}",
+            }
+        self._preferences = self._preferences.with_run_card_layout(
+            run_graph_columns=columns
+        )
+        save_preferences(self._preferences_path, self._preferences)
+        return {"ok": True, "columns": columns}
+
+    @_log_bridge_call
+    def set_scatter_style(self, style: str) -> dict[str, Any]:
+        """Choose how the scatter plot draws its points.
+
+        Args:
+            style: One of `SCATTER_STYLES`.
+
+        Returns:
+            `{"ok": True, "style": style}`, or `{"ok": False, "message":
+            ...}`.
+        """
+        if style not in SCATTER_STYLES:
+            return {"ok": False, "message": f"unknown scatter style: {style!r}"}
+        self._preferences = self._preferences.with_run_card_layout(scatter_style=style)
+        save_preferences(self._preferences_path, self._preferences)
+        return {"ok": True, "style": style}
 
     @_log_bridge_call
     def get_default_ploidy(self) -> str:

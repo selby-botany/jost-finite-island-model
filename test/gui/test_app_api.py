@@ -121,6 +121,42 @@ def test_get_starter_form_applies_saved_default_run_settings(tmp_path: Path) -> 
     assert result["N"] == starter_form_values()["N"]
 
 
+def test_run_card_layout_defaults_and_persists(tmp_path: Path) -> None:
+    """The Run card starts on scatter + trajectories, two columns; changes persist."""
+    path = tmp_path / "preferences.json"
+    api = Api(preferences_path=path)
+
+    assert api.get_run_card_layout() == {
+        "graphs": ["scatter", "trajectory"],
+        "columns": 2,
+        "scatterStyle": "color-badge",
+    }
+    assert api.set_run_graphs(["trajectory", "alleleComposition", "nope"]) == {
+        "ok": True,
+        "graphs": ["trajectory", "alleleComposition"],
+    }
+    assert api.set_run_graph_columns(3) == {"ok": True, "columns": 3}
+    assert api.set_scatter_style("dots") == {"ok": True, "style": "dots"}
+
+    assert Api(preferences_path=path).get_run_card_layout() == {
+        "graphs": ["trajectory", "alleleComposition"],
+        "columns": 3,
+        "scatterStyle": "dots",
+    }
+
+
+def test_run_card_layout_rejects_bad_input_and_saves_nothing(tmp_path: Path) -> None:
+    """No graphs, a column count out of range, or an unknown style is refused."""
+    api = Api(preferences_path=tmp_path / "preferences.json")
+
+    assert api.set_run_graphs(["nope"])["ok"] is False
+    assert api.set_run_graphs([])["ok"] is False
+    assert api.set_run_graph_columns(0)["ok"] is False
+    assert api.set_run_graph_columns(5)["ok"] is False
+    assert api.set_scatter_style("pie")["ok"] is False
+    assert api.get_run_card_layout()["graphs"] == ["scatter", "trajectory"]
+
+
 def test_default_ploidy_seeds_a_fresh_form_and_makes_it_submittable(
     tmp_path: Path,
 ) -> None:

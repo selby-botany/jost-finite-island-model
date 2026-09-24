@@ -6753,6 +6753,27 @@ def test_get_starter_form_applies_saved_default_run_settings(
 
 A saved Settings default overlays the true starter values.
 
+<a id="gui.test_app_api.test_run_card_layout_defaults_and_persists"></a>
+
+#### test\_run\_card\_layout\_defaults\_and\_persists
+
+```python
+def test_run_card_layout_defaults_and_persists(tmp_path: Path) -> None
+```
+
+The Run card starts on scatter + trajectories, two columns; changes persist.
+
+<a id="gui.test_app_api.test_run_card_layout_rejects_bad_input_and_saves_nothing"></a>
+
+#### test\_run\_card\_layout\_rejects\_bad\_input\_and\_saves\_nothing
+
+```python
+def test_run_card_layout_rejects_bad_input_and_saves_nothing(
+        tmp_path: Path) -> None
+```
+
+No graphs, a column count out of range, or an unknown style is refused.
+
 <a id="gui.test_app_api.test_default_ploidy_seeds_a_fresh_form_and_makes_it_submittable"></a>
 
 #### test\_default\_ploidy\_seeds\_a\_fresh\_form\_and\_makes\_it\_submittable
@@ -14735,6 +14756,58 @@ def test_malformed_default_ploidy_is_quarantined(tmp_path: Path) -> None
 ```
 
 A 'gui.default_ploidy' outside blank/1-4 is rejected, not coerced.
+
+<a id="gui.test_preferences.test_run_card_layout_defaults_write_nothing"></a>
+
+#### test\_run\_card\_layout\_defaults\_write\_nothing
+
+```python
+def test_run_card_layout_defaults_write_nothing() -> None
+```
+
+Untouched display choices are the defaults and stay off disk.
+
+<a id="gui.test_preferences.test_run_card_layout_round_trips_through_save_and_load"></a>
+
+#### test\_run\_card\_layout\_round\_trips\_through\_save\_and\_load
+
+```python
+def test_run_card_layout_round_trips_through_save_and_load(
+        tmp_path: Path) -> None
+```
+
+Chosen graphs, columns and scatter style survive a reload.
+
+<a id="gui.test_preferences.test_with_run_card_layout_changes_only_what_it_is_given"></a>
+
+#### test\_with\_run\_card\_layout\_changes\_only\_what\_it\_is\_given
+
+```python
+def test_with_run_card_layout_changes_only_what_it_is_given() -> None
+```
+
+Arguments left out keep their current value.
+
+<a id="gui.test_preferences.test_unknown_graph_keys_are_dropped_and_an_empty_list_means_default"></a>
+
+#### test\_unknown\_graph\_keys\_are\_dropped\_and\_an\_empty\_list\_means\_default
+
+```python
+def test_unknown_graph_keys_are_dropped_and_an_empty_list_means_default(
+        tmp_path: Path) -> None
+```
+
+A graph a later version removed does not invalidate the file.
+
+<a id="gui.test_preferences.test_malformed_run_card_values_are_quarantined"></a>
+
+#### test\_malformed\_run\_card\_values\_are\_quarantined
+
+```python
+def test_malformed_run_card_values_are_quarantined(tmp_path: Path) -> None
+```
+
+A bad column count or scatter style is rejected, not coerced.
 
 <a id="gui.test_presets"></a>
 
