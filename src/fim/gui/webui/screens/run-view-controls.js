@@ -128,6 +128,17 @@ async function onRunClicked() {
         showRunBanner(started.message);
         return;
     }
+    if (started.reused) {
+        // Already computed: nothing was started. Show the existing run the
+        // way Home opens it, and say so.
+        window.fim.enterInitialState();
+        await window.fim.openComputedRun(started.directory, Boolean(started.isBatch));
+        showRunBanner(
+            "This configuration was already computed, so nothing was run. " +
+                "Showing the existing result."
+        );
+        return;
+    }
     // Only the run-kind-dependent panels, not the whole running state:
     // the run has been going since `start_run` executed server-side, so
     // its first progress pushes can already have landed while this same

@@ -39,7 +39,7 @@ import os
 import secrets
 import shutil
 import tempfile
-from collections.abc import Callable, Mapping
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, replace
 from datetime import UTC, datetime
 from pathlib import Path
@@ -550,9 +550,7 @@ def delete_study(
     root = results if results is not None else paths.results_directory()
     manifest = get_study(study_id, results=root)
     if delete_runs:
-        for entry in manifest.run_directories:
-            directory = _resolve_stored_run_reference(entry, results=root)
-            shutil.rmtree(directory, ignore_errors=True)
+        _delete_unshared_runs(manifest, results=root)
     study_manifest_path(study_id, results=root).unlink(missing_ok=True)
     # An Experiment must never keep naming a Study that no longer exists:
     # its own count and its expanded list would both claim a Study that
@@ -583,15 +581,73 @@ def clear_study_runs(
     """
     root = results if results is not None else paths.results_directory()
     manifest = get_study(study_id, results=root)
-    for entry in manifest.run_directories:
-        shutil.rmtree(
-            _resolve_stored_run_reference(entry, results=root), ignore_errors=True
-        )
+    _delete_unshared_runs(manifest, results=root)
     write_study_manifest(
         study_manifest_path(study_id, results=root),
         replace(manifest, run_directories=(), updated_at=_format_timestamp(clock())),
     )
     return manifest
+
+
+def shared_run_directories(study_id: str, *, results: Path | None = None) -> list[Path]:
+    """Return the Study's Runs that another Study also references.
+
+    A Run is a link from a Study to a directory (a computed configuration),
+    and one Run may be linked from several Studies. Deleting a Study, or
+    emptying it, removes its links and deletes only the Runs nothing else
+    links to, so it can never delete a Run out from under another Study.
+    """
+    root = results if results is not None else paths.results_directory()
+    manifest = get_study(study_id, results=root)
+    others = _directories_referenced_by_others(study_id, results=root)
+    return [
+        directory
+        for entry in manifest.run_directories
+        if (directory := _resolve_stored_run_reference(entry, results=root)).resolve()
+        in others
+    ]
+
+
+def remove_run_references(
+    directories: Sequence[Path | str], *, results: Path | None = None
+) -> None:
+    """Drop every link, in every Study, to the given (deleted) Run directories.
+
+    Called after a Run is deleted itself, so no Study keeps counting a Run
+    that is gone.
+    """
+    root = results if results is not None else paths.results_directory()
+    gone = {Path(directory).resolve() for directory in directories}
+    for study in list_studies(results=root):
+        kept = tuple(
+            entry
+            for entry in study.run_directories
+            if _resolve_stored_run_reference(entry, results=root).resolve() not in gone
+        )
+        if kept != study.run_directories:
+            write_study_manifest(
+                study_manifest_path(study.study_id, results=root),
+                replace(study, run_directories=kept),
+            )
+
+
+def _directories_referenced_by_others(study_id: str, *, results: Path) -> set[Path]:
+    """Return the resolved Run directories any Study other than `study_id` links."""
+    return {
+        _resolve_stored_run_reference(entry, results=results).resolve()
+        for other in list_studies(results=results)
+        if other.study_id != study_id
+        for entry in other.run_directories
+    }
+
+
+def _delete_unshared_runs(manifest: StudyManifest, *, results: Path) -> None:
+    """Delete the Study's Run directories that no other Study links."""
+    others = _directories_referenced_by_others(manifest.study_id, results=results)
+    for entry in manifest.run_directories:
+        directory = _resolve_stored_run_reference(entry, results=results)
+        if directory.resolve() not in others:
+            shutil.rmtree(directory, ignore_errors=True)
 
 
 def prune_missing_studies(*, results: Path | None = None) -> int:

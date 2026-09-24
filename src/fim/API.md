@@ -410,6 +410,8 @@ Return to the [source-tree orientation](../README.md) or the [developer guide](.
   * [add\_run\_to\_study](#fim.persistence.groups.add_run_to_study)
   * [delete\_study](#fim.persistence.groups.delete_study)
   * [clear\_study\_runs](#fim.persistence.groups.clear_study_runs)
+  * [shared\_run\_directories](#fim.persistence.groups.shared_run_directories)
+  * [remove\_run\_references](#fim.persistence.groups.remove_run_references)
   * [prune\_missing\_studies](#fim.persistence.groups.prune_missing_studies)
   * [copy\_study](#fim.persistence.groups.copy_study)
   * [create\_experiment](#fim.persistence.groups.create_experiment)
@@ -4852,17 +4854,18 @@ Add one existing Study to an Experiment; idempotent.
 def delete_study(study_id: str) -> dict[str, Any]
 ```
 
-Delete a Study and every Run it references.
+Delete a Study and the Runs only it references.
 
-A deliberate, explicit product decision (`fim.persistence.
-groups.delete_study`'s own docstring) — the GUI never offers the
-`delete_runs=False` escape hatch that function itself still
-supports, matching the confirmed design.
+A Run is a link to a computed configuration, and may be linked from
+several Studies; a Run another Study also links is kept (only this
+Study's link goes), so deleting one Study never deletes a Run out
+from under another.
 
 **Returns**:
 
-- ``{"ok"` - True, "deletedRunCount": N}` on success; `{"ok":
-  False, "message": ...}` if `study_id` does not exist.
+- ``{"ok"` - True, "deletedRunCount": N, "keptRunCount": K}` on
+  success; `{"ok": False, "message": ...}` if `study_id` does
+  not exist.
 
 <a id="fim.gui.app.Api.delete_study_runs"></a>
 
@@ -4873,16 +4876,17 @@ supports, matching the confirmed design.
 def delete_study_runs(study_id: str) -> dict[str, Any]
 ```
 
-Delete every Run in a Study and keep the Study.
+Delete the Runs only this Study references, and keep the Study.
 
 Selecting a Study row for deletion removes the Study as well, and
 selecting each Run one at a time does not scale to a Study with
-thousands; this empties a Study in one step.
+thousands; this empties a Study in one step. A Run another Study
+also links is unlinked, not deleted.
 
 **Returns**:
 
-- ``{"ok"` - True, "deletedRunCount": N}`, or `{"ok": False,
-- `"message"` - ...}` if the Study does not exist.
+- ``{"ok"` - True, "deletedRunCount": N, "keptRunCount": K}`, or
+- ``{"ok"` - False, "message": ...}` if the Study does not exist.
 
 <a id="fim.gui.app.Api.delete_experiment"></a>
 
@@ -12848,6 +12852,38 @@ at once. A directory already gone is tolerated, as in `delete_study`.
 **Raises**:
 
 - `ValueError` - No Study with this id exists.
+
+<a id="fim.persistence.groups.shared_run_directories"></a>
+
+#### shared\_run\_directories
+
+```python
+def shared_run_directories(study_id: str,
+                           *,
+                           results: Path | None = None) -> list[Path]
+```
+
+Return the Study's Runs that another Study also references.
+
+A Run is a link from a Study to a directory (a computed configuration),
+and one Run may be linked from several Studies. Deleting a Study, or
+emptying it, removes its links and deletes only the Runs nothing else
+links to, so it can never delete a Run out from under another Study.
+
+<a id="fim.persistence.groups.remove_run_references"></a>
+
+#### remove\_run\_references
+
+```python
+def remove_run_references(directories: Sequence[Path | str],
+                          *,
+                          results: Path | None = None) -> None
+```
+
+Drop every link, in every Study, to the given (deleted) Run directories.
+
+Called after a Run is deleted itself, so no Study keeps counting a Run
+that is gone.
 
 <a id="fim.persistence.groups.prune_missing_studies"></a>
 

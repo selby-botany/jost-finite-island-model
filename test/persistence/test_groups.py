@@ -34,7 +34,9 @@ from fim.persistence.groups import (
     prune_missing_studies,
     read_experiment_manifest,
     read_study_manifest,
+    remove_run_references,
     resolve_run_directory,
+    shared_run_directories,
     study_manifest_path,
     write_experiment_manifest,
     write_study_manifest,
@@ -572,3 +574,54 @@ def test_clear_study_runs_tolerates_a_missing_directory_and_study(
     assert clear_study_runs(study.study_id, results=tmp_path).run_count == 1
     with pytest.raises(ValueError, match="no such study"):
         clear_study_runs("study-ffffffff", results=tmp_path)
+
+
+def test_deleting_a_study_keeps_a_run_another_study_also_links(tmp_path: Path) -> None:
+    """A Run is a link; deleting one Study never deletes a Run another links."""
+    first = create_study("First", results=tmp_path)
+    second = create_study("Second", results=tmp_path)
+    shared = _run_directory(tmp_path, "run-shared")
+    only_first = _run_directory(tmp_path, "run-only-first")
+    for run in (shared, only_first):
+        add_run_to_study(first.study_id, run, results=tmp_path)
+    add_run_to_study(second.study_id, shared, results=tmp_path)
+
+    assert shared_run_directories(first.study_id, results=tmp_path) == [shared]
+
+    delete_study(first.study_id, results=tmp_path)
+
+    assert shared.exists()
+    assert not only_first.exists()
+    assert get_study(second.study_id, results=tmp_path).run_directories == (
+        "run-shared",
+    )
+
+
+def test_clearing_a_study_keeps_a_run_another_study_also_links(tmp_path: Path) -> None:
+    first = create_study("First", results=tmp_path)
+    second = create_study("Second", results=tmp_path)
+    shared = _run_directory(tmp_path, "run-shared")
+    add_run_to_study(first.study_id, shared, results=tmp_path)
+    add_run_to_study(second.study_id, shared, results=tmp_path)
+
+    clear_study_runs(first.study_id, results=tmp_path)
+
+    assert shared.exists()
+    assert get_study(first.study_id, results=tmp_path).run_directories == ()
+
+
+def test_removing_run_references_unlinks_a_deleted_run_everywhere(
+    tmp_path: Path,
+) -> None:
+    first = create_study("First", results=tmp_path)
+    second = create_study("Second", results=tmp_path)
+    run = _run_directory(tmp_path, "run-a")
+    kept = _run_directory(tmp_path, "run-b")
+    for study in (first, second):
+        add_run_to_study(study.study_id, run, results=tmp_path)
+    add_run_to_study(first.study_id, kept, results=tmp_path)
+
+    remove_run_references([run], results=tmp_path)
+
+    assert get_study(first.study_id, results=tmp_path).run_directories == ("run-b",)
+    assert get_study(second.study_id, results=tmp_path).run_directories == ()

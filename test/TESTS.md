@@ -66,6 +66,7 @@ Every test module, fixture, and test function documented here in full; `doc/fim-
   - [`test_presets_screen`](#gui.test_presets_screen)
   - [`test_recent_runs`](#gui.test_recent_runs)
   - [`test_results_screen`](#gui.test_results_screen)
+  - [`test_run_reuse`](#gui.test_run_reuse)
   - [`test_runner`](#gui.test_runner)
   - [`test_running_screen`](#gui.test_running_screen)
   - [`test_scatter_styles`](#gui.test_scatter_styles)
@@ -15722,6 +15723,12 @@ batch panel's own version of this fix was reported for. This pins
 both halves plus the exact restore at the final frame, so the
 connection cannot quietly drop again on either one.
 
+<a id="gui.test_run_reuse"></a>
+
+# gui.test\_run\_reuse
+
+A configuration already computed is reused, not computed again.
+
 <a id="gui.test_runner"></a>
 
 # gui.test\_runner
@@ -21925,6 +21932,17 @@ def test_prune_missing_studies_repairs_an_experiment_with_dangling_ids(
 ```
 
 Studies deleted before detaching existed are dropped from the Experiment.
+
+<a id="persistence.test_groups.test_deleting_a_study_keeps_a_run_another_study_also_links"></a>
+
+#### test\_deleting\_a\_study\_keeps\_a\_run\_another\_study\_also\_links
+
+```python
+def test_deleting_a_study_keeps_a_run_another_study_also_links(
+        tmp_path: Path) -> None
+```
+
+A Run is a link; deleting one Study never deletes a Run another links.
 
 <a id="persistence.test_manifest"></a>
 

@@ -1475,6 +1475,21 @@ class Api:
         # store's own (`fim.gui.preferences`'s own top docstring).
         self._preferences = self._preferences.with_form_values(values)
         save_preferences(self._preferences_path, self._preferences)
+        # A run is a pure function of its configuration (`deterministic_
+        # run_id` hashes all of it, the seed included), so a configuration
+        # already computed is not computed again: the existing run is
+        # attached to the chosen Study, exactly as a sweep point is, and
+        # shown as it is.
+        is_batch = params.n_replicates > 1
+        existing = groups.find_run_directories(deterministic_run_id(params))
+        if existing:
+            _attach_finished_run_to_study(study_id, existing[0])
+            return {
+                "ok": True,
+                "reused": True,
+                "isBatch": is_batch,
+                "directory": str(existing[0]),
+            }
         try:
             output_directory = paths.default_output_directory()
         except FileExistsError as error:
@@ -3321,18 +3336,20 @@ class Api:
 
     @_log_bridge_call
     def delete_study(self, study_id: str) -> dict[str, Any]:
-        """Delete a Study and every Run it references.
+        """Delete a Study and the Runs only it references.
 
-        A deliberate, explicit product decision (`fim.persistence.
-        groups.delete_study`'s own docstring) — the GUI never offers the
-        `delete_runs=False` escape hatch that function itself still
-        supports, matching the confirmed design.
+        A Run is a link to a computed configuration, and may be linked from
+        several Studies; a Run another Study also links is kept (only this
+        Study's link goes), so deleting one Study never deletes a Run out
+        from under another.
 
         Returns:
-            `{"ok": True, "deletedRunCount": N}` on success; `{"ok":
-            False, "message": ...}` if `study_id` does not exist.
+            `{"ok": True, "deletedRunCount": N, "keptRunCount": K}` on
+            success; `{"ok": False, "message": ...}` if `study_id` does
+            not exist.
         """
         try:
+            kept = len(groups.shared_run_directories(study_id))
             if study_id == groups.DEFAULT_STUDY_ID:
                 # Built in and always present: "deleting" it empties it, so
                 # the next run has somewhere to land and Home never shows
@@ -3342,25 +3359,35 @@ class Api:
                 deleted = groups.delete_study(study_id)
         except ValueError as error:
             return {"ok": False, "message": str(error)}
-        return {"ok": True, "deletedRunCount": deleted.run_count}
+        return {
+            "ok": True,
+            "deletedRunCount": deleted.run_count - kept,
+            "keptRunCount": kept,
+        }
 
     @_log_bridge_call
     def delete_study_runs(self, study_id: str) -> dict[str, Any]:
-        """Delete every Run in a Study and keep the Study.
+        """Delete the Runs only this Study references, and keep the Study.
 
         Selecting a Study row for deletion removes the Study as well, and
         selecting each Run one at a time does not scale to a Study with
-        thousands; this empties a Study in one step.
+        thousands; this empties a Study in one step. A Run another Study
+        also links is unlinked, not deleted.
 
         Returns:
-            `{"ok": True, "deletedRunCount": N}`, or `{"ok": False,
-            "message": ...}` if the Study does not exist.
+            `{"ok": True, "deletedRunCount": N, "keptRunCount": K}`, or
+            `{"ok": False, "message": ...}` if the Study does not exist.
         """
         try:
+            kept = len(groups.shared_run_directories(study_id))
             cleared = groups.clear_study_runs(study_id)
         except ValueError as error:
             return {"ok": False, "message": str(error)}
-        return {"ok": True, "deletedRunCount": cleared.run_count}
+        return {
+            "ok": True,
+            "deletedRunCount": cleared.run_count - kept,
+            "keptRunCount": kept,
+        }
 
     @_log_bridge_call
     def delete_experiment(self, experiment_id: str) -> dict[str, Any]:
@@ -3618,6 +3645,7 @@ class Api:
             if path.is_dir():
                 shutil.rmtree(path)
                 deleted_count += 1
+        groups.remove_run_references(directories)
         return {"ok": True, "deletedCount": deleted_count}
 
     @_log_bridge_call

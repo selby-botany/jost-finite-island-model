@@ -8,6 +8,11 @@ project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- **Running a configuration you already ran shows the existing result.** A
+  run is fully determined by its configuration and seed, so **Run** on a
+  configuration that has already been computed adds the existing run to the
+  chosen study and shows it, with a note that nothing was run, instead of
+  computing an identical copy. A sweep already worked this way.
 - **Parameter sweeps from the command line.** `fim sweep plan`, `run`,
   `resume` and `report` run one configuration over a range of `N`, `d`, `m`,
   `mu`, the migration topology or the deme weighting as a single study. Every
@@ -1097,6 +1102,12 @@ project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+- **Deleting a study never deletes a run another study also contains.** A run
+  is a link to a computed configuration and can be in several studies.
+  Deleting a study, or **Delete runs…**, removes its own links and deletes only
+  the runs no other study contains (and says how many it kept). Deleting a run
+  itself removes it from every study, so no study keeps counting a run that is
+  gone.
 - **An experiment no longer lists studies that were deleted.** Deleting a
   study left its name in the experiment, so Home said "4 studies" and the
   experiment opened to nothing. Deleting now removes the study from its

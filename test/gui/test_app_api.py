@@ -3004,7 +3004,7 @@ def test_delete_study_removes_it_and_its_runs(
 
     deleted = api.delete_study(study_id)
 
-    assert deleted == {"ok": True, "deletedRunCount": 1}
+    assert deleted == {"ok": True, "deletedRunCount": 1, "keptRunCount": 0}
     assert not output.exists()
     assert api.list_studies() == []
 
@@ -4367,7 +4367,7 @@ def test_delete_study_runs_empties_a_study_and_keeps_it(
 
     result = api.delete_study_runs(study_id)
 
-    assert result == {"ok": True, "deletedRunCount": 1}
+    assert result == {"ok": True, "deletedRunCount": 1, "keptRunCount": 0}
     assert not output.exists()
     (study,) = api.list_studies()
     assert study["runCount"] == 0
@@ -4408,3 +4408,35 @@ def test_deleting_the_built_in_default_experiment_keeps_both_containers(
     assert [s["studyId"] for s in api.list_studies()] == [default.study_id]
     (experiment,) = api.list_experiments()
     assert experiment["studyIds"] == [default.study_id]
+
+
+def test_deleting_a_run_unlinks_it_from_every_study(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    results = _use_isolated_results_directory(tmp_path, monkeypatch)
+    api = Api()
+    study_id = api.create_study("Ring")["studyId"]
+    output = _write_run_under(results, "run-a", seed=1, study_id=study_id)
+
+    api.delete_runs([str(output)])
+
+    (study,) = api.list_studies()
+    assert study["runCount"] == 0
+
+
+def test_delete_study_reports_the_runs_it_kept_because_another_study_links_them(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    results = _use_isolated_results_directory(tmp_path, monkeypatch)
+    api = Api()
+    first = api.create_study("First")["studyId"]
+    second = api.create_study("Second")["studyId"]
+    shared = _write_run_under(results, "run-shared", seed=1, study_id=first)
+    groups.add_run_to_study(second, shared)
+    own = _write_run_under(results, "run-own", seed=2, study_id=first)
+
+    result = api.delete_study(first)
+
+    assert result == {"ok": True, "deletedRunCount": 1, "keptRunCount": 1}
+    assert shared.exists()
+    assert not own.exists()

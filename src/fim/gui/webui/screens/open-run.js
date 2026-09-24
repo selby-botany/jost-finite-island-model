@@ -1539,7 +1539,7 @@ function buildDeleteSelectedMessage() {
         );
     }
     if (selectedStudyIds.size > 0) {
-        parts.push(`${selectedStudyIds.size} stud(y/ies) (and its/their own runs)`);
+        parts.push(`${selectedStudyIds.size} stud(y/ies) (and the runs only they contain)`);
     }
 
     if (selectedRunDirectories.size > 0) {
@@ -1690,6 +1690,21 @@ async function openTrajectory(trajectoryPath) {
 }
 
 /**
+ * Open a run that already exists on disk on the Results card: a batch
+ * through `Api.open_batch`, a single run through its trajectory. What
+ * "Run" does when the configuration was already computed.
+ * @param {string} directory
+ * @param {boolean} isBatch
+ */
+window.fim.openComputedRun = async function openComputedRun(directory, isBatch) {
+    if (isBatch) {
+        await openBatch(directory);
+    } else {
+        await openTrajectory(`${directory}/trajectory.jsonl`);
+    }
+};
+
+/**
  * `openTrajectory`'s own batch counterpart -- `Api.open_batch`
  * (`20260919-claude-sonnet-5-unified-batch-and-study-results-reopen-
  * design.md`, `selby/restricted`, §1) reconstructs the identical
@@ -1760,6 +1775,11 @@ function buildDeleteStudyRunsButton(group) {
                 const result = await window.pywebview.api.delete_study_runs(group.studyId);
                 if (!result.ok) {
                     showOpenRunBanner(result.message);
+                } else if (result.keptRunCount > 0) {
+                    showOpenRunBanner(
+                        `${result.keptRunCount} run(s) are also in another study, so ` +
+                            "they were removed from this study but not deleted."
+                    );
                 }
                 await refreshRecentRuns();
             }
