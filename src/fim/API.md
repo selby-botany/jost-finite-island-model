@@ -580,11 +580,15 @@ Return to the [source-tree orientation](../README.md) or the [developer guide](.
     * [run\_point](#fim.sweep_run.PointRunner.run_point)
   * [LocalPointRunner](#fim.sweep_run.LocalPointRunner)
     * [run\_point](#fim.sweep_run.LocalPointRunner.run_point)
+  * [Concurrency](#fim.sweep_run.Concurrency)
+  * [resolve\_concurrency](#fim.sweep_run.resolve_concurrency)
   * [create\_sweep\_study](#fim.sweep_run.create_sweep_study)
   * [attach\_sweep\_to\_study](#fim.sweep_run.attach_sweep_to_study)
   * [sweep\_spec\_of](#fim.sweep_run.sweep_spec_of)
   * [stored\_points](#fim.sweep_run.stored_points)
   * [sweep\_point\_statuses](#fim.sweep_run.sweep_point_statuses)
+  * [\_Context](#fim.sweep_run._Context)
+    * [emit](#fim.sweep_run._Context.emit)
   * [run\_sweep](#fim.sweep_run.run_sweep)
   * [failures\_path](#fim.sweep_run.failures_path)
   * [read\_failures](#fim.sweep_run.read_failures)
@@ -5006,7 +5010,9 @@ at or over the size threshold, until `confirmed` is true.
 
 ```python
 @_log_bridge_call
-def resume_sweep(study_id: str, retry_failed: bool = False) -> dict[str, Any]
+def resume_sweep(study_id: str,
+                 retry_failed: bool = False,
+                 points_at_once: int | None = None) -> dict[str, Any]
 ```
 
 Run the points of an existing sweep Study that are still missing.
@@ -16889,14 +16895,16 @@ identity is its content hash, so no shared state is needed.
 #### run\_point
 
 ```python
-def run_point(
-        params: SimulationParams,
-        cancel_event: threading.Event,
-        on_message: Callable[[object], None] | None = None
-) -> Path | PointFailure
+def run_point(params: SimulationParams,
+              cancel_event: threading.Event,
+              on_message: Callable[[object], None] | None = None,
+              max_workers: int | None = None) -> Path | PointFailure
 ```
 
 Run `params` and return the published run directory or a failure.
+
+`max_workers` sizes the worker processes of a batch point (a lineal
+batch's replicates); `None` leaves the runner's own default.
 
 <a id="fim.sweep_run.LocalPointRunner"></a>
 
@@ -16909,21 +16917,78 @@ class LocalPointRunner()
 Runs a point in this process's own scalar or batch machinery.
 
 The same engine invocation and atomic artifact publication the desktop
-app uses, so a sweep point is an ordinary Run the app can open.
+app uses, so a sweep point is an ordinary Run the app can open. Safe to
+call from several threads at once, one call per point in flight.
+
+**Arguments**:
+
+- `max_workers` - Worker processes for a lineal batch point, or `None`
+  for the runner's default (one per core). `run_point`'s own
+  `max_workers` argument overrides it for one call.
 
 <a id="fim.sweep_run.LocalPointRunner.run_point"></a>
 
 #### run\_point
 
 ```python
-def run_point(
-        params: SimulationParams,
-        cancel_event: threading.Event,
-        on_message: Callable[[object], None] | None = None
-) -> Path | PointFailure
+def run_point(params: SimulationParams,
+              cancel_event: threading.Event,
+              on_message: Callable[[object], None] | None = None,
+              max_workers: int | None = None) -> Path | PointFailure
 ```
 
 Run `params` synchronously; see `PointRunner.run_point`.
+
+<a id="fim.sweep_run.Concurrency"></a>
+
+## Concurrency Objects
+
+```python
+@dataclass(frozen=True, slots=True)
+class Concurrency()
+```
+
+How a sweep spreads its points over the machine.
+
+**Attributes**:
+
+- `points_at_once` - Points running at the same time.
+- `workers_per_point` - Worker processes each lineal batch point uses, or
+  `None` where a point's own default applies (a single run, or a
+  non-lineal engine).
+- `cores` - The core count the split was made from.
+
+<a id="fim.sweep_run.resolve_concurrency"></a>
+
+#### resolve\_concurrency
+
+```python
+def resolve_concurrency(*,
+                        points: int,
+                        params: SimulationParams,
+                        requested: int | None = None,
+                        max_workers: int | None = None,
+                        cores: int | None = None) -> Concurrency
+```
+
+Choose how many points run at once, and each point's workers.
+
+A batch already spreads its replicates over cores, so points at once
+times workers per point should not exceed the core count. "Auto"
+(`requested=None`) fills the machine: a single run needs one core, so
+up to one point per core; a batch of `r` replicates on a lineal engine
+needs about `min(r, cores)`, so `cores // that` points. A non-lineal
+engine's demand is its concurrent replicates. `max_workers`, when the
+user set it, is each point's worker count and shrinks how many fit.
+
+**Arguments**:
+
+- `points` - How many points there are to run (caps the answer).
+- `params` - One point's configuration (replicates and engine are the
+  same across a sweep's points).
+- `requested` - Points at once the user asked for, or `None` for auto.
+- `max_workers` - The user's per-batch worker limit, if any.
+- `cores` - Core count; the machine's own when `None`.
 
 <a id="fim.sweep_run.create_sweep_study"></a>
 
@@ -17031,6 +17096,31 @@ made by another version (it is recomputed, and compared, on the next
 run); `failed` if a failure was recorded and there is no such run;
 otherwise `waiting`.
 
+<a id="fim.sweep_run._Context"></a>
+
+## \_Context Objects
+
+```python
+@dataclass(slots=True)
+class _Context()
+```
+
+What every point of one `run_sweep` call shares.
+
+<a id="fim.sweep_run._Context.emit"></a>
+
+#### emit
+
+```python
+def emit(kind: EventKind,
+         point: SweepPoint,
+         detail: object = None,
+         *,
+         finish: bool) -> None
+```
+
+Send one event; a finishing event advances the finished count.
+
 <a id="fim.sweep_run.run_sweep"></a>
 
 #### run\_sweep
@@ -17043,26 +17133,36 @@ def run_sweep(study_id: str,
               *,
               retry_failed: bool = False,
               software_version: str = __version__,
+              points_at_once: int | None = None,
+              max_workers: int | None = None,
               results: Path | None = None) -> SweepOutcome
 ```
 
 Run every point of a sweep Study that is not already present.
 
-Points are handled in grid order, one at a time. A failed point is
-recorded and the sweep continues. Cancelling stops the current point
-and skips the rest; completed points stay attached.
+Points that need running are started in grid order, several at once
+(`resolve_concurrency`: by default as many as fill the machine, since a
+single run uses one core and a batch only as many as its replicates).
+A failed point is recorded and the sweep continues. Cancelling stops
+every point in flight and starts no more; completed points stay
+attached. Results do not depend on how many run at once: each point is
+a pure function of its configuration.
 
 **Arguments**:
 
 - `study_id` - A sweep Study created by `create_sweep_study`.
-- `runner` - Runs one point.
-- `on_event` - Called with every `SweepEvent`.
+- `runner` - Runs one point. Must be safe to call from several threads.
+- `on_event` - Called with every `SweepEvent`, one at a time. A point's
+  `position` is how many points have finished, not its index.
 - `cancel_event` - Set to stop the sweep.
 - `retry_failed` - Also retry points recorded as failed; by default
   they are skipped.
 - `software_version` - The version whose runs count as done. A point whose
   only run was made by another version is recomputed and compared
   with it; a difference is reported, never silent.
+- `points_at_once` - How many points to run at the same time, or `None`
+  for automatic.
+- `max_workers` - Worker processes for each batch point, or `None`.
 - `results` - Optional results-directory override.
 
 

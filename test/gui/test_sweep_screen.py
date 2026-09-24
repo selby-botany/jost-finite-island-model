@@ -315,3 +315,41 @@ def test_the_sweep_runs_into_the_study_chosen_on_configure(
     assert chosen.sweep_spec is not None
     assert chosen.run_count == 4
     assert [s.name for s in groups.list_studies()] == ["Chosen"]
+
+
+def test_the_dialog_says_how_many_points_run_at_once_and_a_choice_sticks(
+    fast_scalar_run_settings: Path, window: webview.Window
+) -> None:
+    note = """({
+        planReady: window.__fimSweepPlanReady,
+        dialogOpen: document.getElementById('modal-sweep').open,
+        note: document.getElementById('sweep-concurrency-note').textContent,
+        choice: document.getElementById('sweep-points-at-once').value
+    })"""
+
+    def steps(poll_until: Poll) -> Any:
+        window.evaluate_js(_SET_TINY_FIELDS + _OPEN_SWEEP)
+        automatic = poll_until(
+            note, lambda s: s["planReady"] is True and "at once" in s["note"]
+        )
+        window.evaluate_js(
+            "const select = document.getElementById('sweep-points-at-once');"
+            "select.value = '1';"
+            "select.dispatchEvent(new Event('change', {bubbles: true}));"
+        )
+        one = poll_until(
+            note, lambda s: s["planReady"] is True and s["note"].startswith("1 point")
+        )
+        window.evaluate_js("document.getElementById('sweep-done-button').click();")
+        window.evaluate_js("document.getElementById('configure-sweep-button').click();")
+        reopened = poll_until(
+            note, lambda s: s["dialogOpen"] is True and s["planReady"] is True
+        )
+        return automatic, one, reopened
+
+    automatic, one, reopened = _drive(window, steps)
+
+    assert automatic["note"].startswith("Automatic: ")
+    assert "cores" in automatic["note"]
+    assert one["note"].startswith("1 point at once")
+    assert reopened["choice"] == "1"

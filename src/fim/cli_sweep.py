@@ -61,6 +61,7 @@ def add_sweep_subcommands(subcommands: argparse._SubParsersAction[Any]) -> None:
         action="store_true",
         help=f"confirm a sweep of {SIZE_CONFIRMATION_THRESHOLD} or more points",
     )
+    _add_concurrency_arguments(run_parser)
     resume_parser = sweep_subcommands.add_parser(
         "resume", help="run the points of a sweep study that are still missing"
     )
@@ -70,6 +71,7 @@ def add_sweep_subcommands(subcommands: argparse._SubParsersAction[Any]) -> None:
         action="store_true",
         help="also retry points that failed before",
     )
+    _add_concurrency_arguments(resume_parser)
     report_parser = sweep_subcommands.add_parser(
         "report", help="print each point's statistic, with its interval"
     )
@@ -82,6 +84,56 @@ def add_sweep_subcommands(subcommands: argparse._SubParsersAction[Any]) -> None:
     )
 
 
+def _add_concurrency_arguments(parser: argparse.ArgumentParser) -> None:
+    """Add `--points-at-once`, `--workers` and `--sequential` to a subcommand."""
+    parser.add_argument(
+        "--points-at-once",
+        default="auto",
+        metavar="N|auto",
+        help="points to run at the same time (default: auto, which fills the "
+        "cores: a single run needs one, a batch as many as its replicates)",
+    )
+    parser.add_argument(
+        "--workers",
+        type=int,
+        metavar="N",
+        help="worker processes for each batch point (default: as many as fit)",
+    )
+    parser.add_argument(
+        "--sequential",
+        action="store_true",
+        help="one point at a time, each with one worker",
+    )
+
+
+def _concurrency_options(
+    arguments: argparse.Namespace,
+) -> tuple[int | None, int | None]:
+    """Turn the concurrency flags into `(points_at_once, max_workers)`.
+
+    Raises:
+        ValueError: A flag is not a positive whole number, or `--sequential`
+            is combined with `--points-at-once` or `--workers`.
+    """
+    text = str(arguments.points_at_once)
+    if arguments.sequential:
+        if text != "auto" or arguments.workers is not None:
+            raise ValueError(
+                "--sequential cannot be combined with other concurrency flags"
+            )
+        return 1, 1
+    points: int | None = None
+    if text != "auto":
+        if not text.isdigit() or int(text) < 1:
+            raise ValueError(
+                "--points-at-once must be a whole number of at least 1, or auto"
+            )
+        points = int(text)
+    if arguments.workers is not None and arguments.workers < 1:
+        raise ValueError("--workers must be at least 1")
+    return points, arguments.workers
+
+
 def command_sweep(
     arguments: argparse.Namespace, parser: argparse.ArgumentParser
 ) -> int:
@@ -92,7 +144,7 @@ def command_sweep(
     if command == "run":
         return _run(arguments)
     if command == "resume":
-        return _resume(arguments.study_id, retry_failed=arguments.retry_failed)
+        return _resume(arguments)
     if command == "report":
         return _report(arguments.study_id, arguments.statistic, as_csv=arguments.csv)
     parser.error("a sweep subcommand is required")
@@ -155,17 +207,18 @@ def _run(arguments: argparse.Namespace) -> int:
     name = arguments.study or file_name or path.stem
     study = create_sweep_study(spec, plan, name, experiment_id=arguments.experiment)
     print(f"Created sweep study {study.study_id}: {study.name}")
-    return _execute(study.study_id, retry_failed=False)
+    return _execute(study.study_id, arguments)
 
 
-def _resume(study_id: str, *, retry_failed: bool) -> int:
+def _resume(arguments: argparse.Namespace) -> int:
     """Run the points of an existing sweep study that are missing."""
-    groups.get_study(study_id)
-    return _execute(study_id, retry_failed=retry_failed)
+    groups.get_study(arguments.study_id)
+    return _execute(arguments.study_id, arguments)
 
 
-def _execute(study_id: str, *, retry_failed: bool) -> int:
+def _execute(study_id: str, arguments: argparse.Namespace) -> int:
     """Run a sweep study, print a line per point, and return an exit status."""
+    points_at_once, max_workers = _concurrency_options(arguments)
     cancel_event = threading.Event()
     try:
         outcome = run_sweep(
@@ -173,7 +226,9 @@ def _execute(study_id: str, *, retry_failed: bool) -> int:
             LocalPointRunner(),
             _print_event,
             cancel_event,
-            retry_failed=retry_failed,
+            retry_failed=getattr(arguments, "retry_failed", False),
+            points_at_once=points_at_once,
+            max_workers=max_workers,
         )
     except KeyboardInterrupt:
         cancel_event.set()
@@ -218,7 +273,7 @@ def _describe_differences(comparison: object) -> str:
 
 def _print_event(event: SweepEvent) -> None:
     """Print one line per point as it finishes."""
-    prefix = f"[{event.position}/{event.total}] point {event.index}"
+    prefix = f"[{event.position}/{event.total} finished] point {event.index}"
     if event.kind == "point_started":
         print(f"{prefix}: running", flush=True)
     elif event.kind == "point_done":

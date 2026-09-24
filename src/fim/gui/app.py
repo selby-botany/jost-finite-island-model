@@ -130,6 +130,7 @@ from fim.sweep_run import (
     SweepEvent,
     attach_sweep_to_study,
     create_sweep_study,
+    resolve_concurrency,
     run_sweep,
     sweep_spec_of,
     write_reproducibility_note,
@@ -3488,7 +3489,45 @@ class Api:
             spec = self._sweep_spec(values, request)
         except ValueError as error:
             return {"ok": False, "message": str(error)}
-        return sweep_bridge.plan_payload(spec, enumerate_points(spec))
+        plan = enumerate_points(spec)
+        payload = sweep_bridge.plan_payload(spec, plan)
+        if plan.points:
+            payload["concurrency"] = self._concurrency_payload(
+                values, request, plan.points[0].params, int(payload["newCount"])
+            )
+        return payload
+
+    def _sweep_run_options(
+        self, values: dict[str, str], request: dict[str, Any]
+    ) -> tuple[int | None, int | None]:
+        """Return `(points_at_once, max_workers)` for a sweep: the request's
+        choice (`None`, "auto") and Settings' "max workers"."""
+        merged = self._merge_default_run_settings(values)
+        requested = str(request.get("pointsAtOnce", "auto"))
+        at_once = int(requested) if requested.isdigit() and int(requested) > 0 else None
+        return at_once, _parse_max_workers(merged.get("max_workers", ""))
+
+    def _concurrency_payload(
+        self,
+        values: dict[str, str],
+        request: dict[str, Any],
+        point_params: Mapping[str, Any],
+        points: int,
+    ) -> dict[str, Any]:
+        """Describe how the sweep would spread its points over the machine."""
+        at_once, max_workers = self._sweep_run_options(values, request)
+        chosen = resolve_concurrency(
+            points=points,
+            params=SimulationParams.from_mapping(point_params),
+            requested=at_once,
+            max_workers=max_workers,
+        )
+        return {
+            "pointsAtOnce": chosen.points_at_once,
+            "workersPerPoint": chosen.workers_per_point,
+            "cores": chosen.cores,
+            "automatic": at_once is None,
+        }
 
     @_log_bridge_call
     def start_sweep(
@@ -3540,11 +3579,23 @@ class Api:
                 study = create_sweep_study(spec, plan, _default_sweep_name(spec))
         except ValueError as error:
             return {"ok": False, "message": str(error)}
-        self._start_sweep_thread(window, study.study_id, retry_failed=False)
+        at_once, max_workers = self._sweep_run_options(values, request)
+        self._start_sweep_thread(
+            window,
+            study.study_id,
+            retry_failed=False,
+            points_at_once=at_once,
+            max_workers=max_workers,
+        )
         return {"ok": True, "studyId": study.study_id, "total": len(plan.points)}
 
     @_log_bridge_call
-    def resume_sweep(self, study_id: str, retry_failed: bool = False) -> dict[str, Any]:
+    def resume_sweep(
+        self,
+        study_id: str,
+        retry_failed: bool = False,
+        points_at_once: int | None = None,
+    ) -> dict[str, Any]:
         """Run the points of an existing sweep Study that are still missing."""
         busy = self._busy_message()
         if busy is not None:
@@ -3557,7 +3608,14 @@ class Api:
             sweep_bridge.status_payload(study)
         except ValueError as error:
             return {"ok": False, "message": str(error)}
-        self._start_sweep_thread(window, study_id, retry_failed=retry_failed)
+        saved = self._merge_default_run_settings({})
+        self._start_sweep_thread(
+            window,
+            study_id,
+            retry_failed=retry_failed,
+            points_at_once=points_at_once,
+            max_workers=_parse_max_workers(saved.get("max_workers", "")),
+        )
         return {"ok": True, "studyId": study_id}
 
     @_log_bridge_call
@@ -3627,7 +3685,13 @@ class Api:
         return sweep_bridge.spec_from_request(base, request)
 
     def _start_sweep_thread(
-        self, window: _EvaluatesJs, study_id: str, *, retry_failed: bool
+        self,
+        window: _EvaluatesJs,
+        study_id: str,
+        *,
+        retry_failed: bool,
+        points_at_once: int | None = None,
+        max_workers: int | None = None,
     ) -> None:
         """Run `study_id`'s sweep on a daemon thread, pushing each event."""
         cancel_event = threading.Event()
@@ -3645,6 +3709,8 @@ class Api:
                     push,
                     cancel_event,
                     retry_failed=retry_failed,
+                    points_at_once=points_at_once,
+                    max_workers=max_workers,
                 )
             except ValueError as error:
                 logger.warning("sweep %s failed: %s", study_id, error)

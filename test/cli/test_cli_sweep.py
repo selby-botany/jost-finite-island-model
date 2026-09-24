@@ -171,3 +171,53 @@ def test_resuming_under_a_new_software_version_recomputes_and_reports_a_match(
     assert "2 point(s) recomputed under this version and matched" in output
     assert "0 differed" in output
     assert len(list((tmp_path / "results").glob("*/manifest.json"))) == 2
+
+
+def test_concurrency_flags_are_accepted_and_the_sweep_still_runs(
+    tmp_path: Path, sweep_file: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    status = _main(
+        tmp_path,
+        "sweep",
+        "run",
+        str(sweep_file),
+        "--points-at-once",
+        "2",
+        "--workers",
+        "1",
+    )
+
+    assert status == 0
+    assert "2 run, 0 reused" in capsys.readouterr().out
+
+
+def test_sequential_runs_one_point_at_a_time(
+    tmp_path: Path, sweep_file: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    status = _main(tmp_path, "sweep", "run", str(sweep_file), "--sequential")
+
+    assert status == 0
+    assert "2 run, 0 reused" in capsys.readouterr().out
+
+
+@pytest.mark.parametrize(
+    ("flags", "message"),
+    [
+        (["--sequential", "--workers", "2"], "cannot be combined"),
+        (["--sequential", "--points-at-once", "2"], "cannot be combined"),
+        (["--points-at-once", "0"], "at least 1"),
+        (["--points-at-once", "many"], "at least 1"),
+        (["--workers", "0"], "at least 1"),
+    ],
+)
+def test_bad_concurrency_flags_are_plain_errors(
+    tmp_path: Path,
+    sweep_file: Path,
+    capsys: pytest.CaptureFixture[str],
+    flags: list[str],
+    message: str,
+) -> None:
+    status = _main(tmp_path, "sweep", "run", str(sweep_file), *flags)
+
+    assert status == 2
+    assert message in capsys.readouterr().err

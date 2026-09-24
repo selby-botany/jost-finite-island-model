@@ -711,11 +711,21 @@ fim sweep run sweep.yaml             # create the study and run every point
 fim sweep resume STUDY_ID            # run only the points still missing
 fim sweep resume STUDY_ID --retry-failed
 fim sweep report STUDY_ID --statistic D --csv
+fim sweep run sweep.yaml --points-at-once 4 --workers 2   # or --sequential
 ```
 
 - `plan` checks every point first. A combination that cannot run (a torus
   whose `rows * columns` differs from `d`) is listed with its reason.
 - A sweep of 100 points or more asks for `--yes`.
+- **Points run at the same time, by default as many as fill the machine.** A
+  single run uses one core, and a batch of `r` replicates uses about `r`, so a
+  sweep of single runs runs up to one point per core, a sweep of small batches a
+  few points at once, and a sweep of large batches one point at a time.
+  `--points-at-once N` sets the number, `--workers N` the worker processes each
+  batch point uses, and `--sequential` runs one point at a time with one
+  worker. In the app, the Sweep dialog's **Points at once** does the same, and
+  the Settings value "max workers" applies. Results do not depend on the
+  setting: each point is fixed by its own configuration and seed.
 - A point's run id is a hash of its configuration, so resuming, or running a
   second sweep that overlaps the first, reuses the runs that already exist
   instead of computing them again. Reuse requires identical configurations,

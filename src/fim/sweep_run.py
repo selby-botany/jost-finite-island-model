@@ -23,9 +23,11 @@ from __future__ import annotations
 
 import json
 import logging
+import os
 import queue
 import threading
 from collections.abc import Callable, Mapping
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, replace
 from datetime import UTC, datetime
 from pathlib import Path
@@ -124,35 +126,79 @@ class PointRunner(Protocol):
         params: SimulationParams,
         cancel_event: threading.Event,
         on_message: Callable[[object], None] | None = None,
+        max_workers: int | None = None,
     ) -> Path | PointFailure:
-        """Run `params` and return the published run directory or a failure."""
+        """Run `params` and return the published run directory or a failure.
+
+        `max_workers` sizes the worker processes of a batch point (a lineal
+        batch's replicates); `None` leaves the runner's own default.
+        """
         ...
+
+
+_ALLOCATION_LOCK = threading.Lock()
+_ALLOCATED_DIRECTORIES: set[Path] = set()
+
+
+def _allocate_output_directory() -> Path:
+    """Return a new run directory name no other point in this process holds.
+
+    `paths.default_output_directory` names a directory by the microsecond
+    and checks it does not exist yet, but the directory is only created when
+    a run publishes, so two points allocating at once could be handed one
+    name. The lock and the set close that window.
+    """
+    with _ALLOCATION_LOCK:
+        for _ in range(1000):
+            candidate = paths.default_output_directory()
+            if candidate not in _ALLOCATED_DIRECTORIES:
+                _ALLOCATED_DIRECTORIES.add(candidate)
+                return candidate
+    raise FileExistsError("could not allocate a unique run directory")
 
 
 class LocalPointRunner:
     """Runs a point in this process's own scalar or batch machinery.
 
     The same engine invocation and atomic artifact publication the desktop
-    app uses, so a sweep point is an ordinary Run the app can open.
+    app uses, so a sweep point is an ordinary Run the app can open. Safe to
+    call from several threads at once, one call per point in flight.
+
+    Args:
+        max_workers: Worker processes for a lineal batch point, or `None`
+            for the runner's default (one per core). `run_point`'s own
+            `max_workers` argument overrides it for one call.
     """
+
+    def __init__(self, max_workers: int | None = None) -> None:
+        self.max_workers = max_workers
 
     def run_point(
         self,
         params: SimulationParams,
         cancel_event: threading.Event,
         on_message: Callable[[object], None] | None = None,
+        max_workers: int | None = None,
     ) -> Path | PointFailure:
         """Run `params` synchronously; see `PointRunner.run_point`."""
         # Imported here: the runners pull in matplotlib and the GUI
         # package, which a plain `import fim.sweep_run` should not.
         from fim.gui import batch_runner, runner  # noqa: PLC0415
 
-        output_directory = paths.default_output_directory()
+        try:
+            output_directory = _allocate_output_directory()
+        except FileExistsError as error:
+            return PointFailure(str(error))
+        workers = max_workers if max_workers is not None else self.max_workers
         message_queue: queue.Queue[Any] = queue.Queue()
         try:
             if params.n_replicates > 1:
                 batch_runner.start_batch_run(
-                    params, output_directory, message_queue, cancel_event
+                    params,
+                    output_directory,
+                    message_queue,
+                    cancel_event,
+                    max_workers=workers,
                 )
             else:
                 runner.start_run(params, output_directory, message_queue, cancel_event)
@@ -169,6 +215,67 @@ class LocalPointRunner:
                 return PointFailure(str(message[1]))
             if on_message is not None:
                 on_message(message)
+
+
+@dataclass(frozen=True, slots=True)
+class Concurrency:
+    """How a sweep spreads its points over the machine.
+
+    Attributes:
+        points_at_once: Points running at the same time.
+        workers_per_point: Worker processes each lineal batch point uses, or
+            `None` where a point's own default applies (a single run, or a
+            non-lineal engine).
+        cores: The core count the split was made from.
+    """
+
+    points_at_once: int
+    workers_per_point: int | None
+    cores: int
+
+
+def resolve_concurrency(
+    *,
+    points: int,
+    params: SimulationParams,
+    requested: int | None = None,
+    max_workers: int | None = None,
+    cores: int | None = None,
+) -> Concurrency:
+    """Choose how many points run at once, and each point's workers.
+
+    A batch already spreads its replicates over cores, so points at once
+    times workers per point should not exceed the core count. "Auto"
+    (`requested=None`) fills the machine: a single run needs one core, so
+    up to one point per core; a batch of `r` replicates on a lineal engine
+    needs about `min(r, cores)`, so `cores // that` points. A non-lineal
+    engine's demand is its concurrent replicates. `max_workers`, when the
+    user set it, is each point's worker count and shrinks how many fit.
+
+    Args:
+        points: How many points there are to run (caps the answer).
+        params: One point's configuration (replicates and engine are the
+            same across a sweep's points).
+        requested: Points at once the user asked for, or `None` for auto.
+        max_workers: The user's per-batch worker limit, if any.
+        cores: Core count; the machine's own when `None`.
+    """
+    available = cores if cores is not None else (os.cpu_count() or 1)
+    lineal = params.engine_backend in {"lineal", "auto"}
+    if params.n_replicates <= 1:
+        demand = 1
+    elif lineal:
+        demand = min(params.n_replicates, max_workers or available)
+    else:
+        concurrent = params.max_concurrent_replicates or params.n_replicates
+        demand = min(concurrent, available)
+    demand = max(1, demand)
+    at_once = requested if requested is not None else max(1, available // demand)
+    at_once = max(1, min(at_once, max(points, 1)))
+    workers: int | None = None
+    if params.n_replicates > 1 and lineal:
+        workers = max_workers or max(1, min(params.n_replicates, available // at_once))
+    return Concurrency(at_once, workers, available)
 
 
 def create_sweep_study(
@@ -334,6 +441,36 @@ def _member_runs(
     return current, stale
 
 
+@dataclass(slots=True)
+class _Context:
+    """What every point of one `run_sweep` call shares."""
+
+    study_id: str
+    runner: PointRunner
+    on_event: Callable[[SweepEvent], None]
+    cancel_event: threading.Event
+    software_version: str
+    results: Path | None
+    total: int
+    workers_per_point: int | None
+    # Guards the Study manifest, the failure file, and the finished count,
+    # each a read-modify-write that several points in flight would race on.
+    lock: threading.Lock
+    finished: int = 0
+
+    def emit(
+        self, kind: EventKind, point: SweepPoint, detail: object = None, *, finish: bool
+    ) -> None:
+        """Send one event; a finishing event advances the finished count."""
+        with self.lock:
+            if finish:
+                self.finished += 1
+            event = SweepEvent(
+                kind, point.index, point.run_id, self.finished, self.total, detail
+            )
+            self.on_event(event)
+
+
 def run_sweep(
     study_id: str,
     runner: PointRunner,
@@ -342,24 +479,34 @@ def run_sweep(
     *,
     retry_failed: bool = False,
     software_version: str = __version__,
+    points_at_once: int | None = None,
+    max_workers: int | None = None,
     results: Path | None = None,
 ) -> SweepOutcome:
     """Run every point of a sweep Study that is not already present.
 
-    Points are handled in grid order, one at a time. A failed point is
-    recorded and the sweep continues. Cancelling stops the current point
-    and skips the rest; completed points stay attached.
+    Points that need running are started in grid order, several at once
+    (`resolve_concurrency`: by default as many as fill the machine, since a
+    single run uses one core and a batch only as many as its replicates).
+    A failed point is recorded and the sweep continues. Cancelling stops
+    every point in flight and starts no more; completed points stay
+    attached. Results do not depend on how many run at once: each point is
+    a pure function of its configuration.
 
     Args:
         study_id: A sweep Study created by `create_sweep_study`.
-        runner: Runs one point.
-        on_event: Called with every `SweepEvent`.
+        runner: Runs one point. Must be safe to call from several threads.
+        on_event: Called with every `SweepEvent`, one at a time. A point's
+            `position` is how many points have finished, not its index.
         cancel_event: Set to stop the sweep.
         retry_failed: Also retry points recorded as failed; by default
             they are skipped.
         software_version: The version whose runs count as done. A point whose
             only run was made by another version is recomputed and compared
             with it; a difference is reported, never silent.
+        points_at_once: How many points to run at the same time, or `None`
+            for automatic.
+        max_workers: Worker processes for each batch point, or `None`.
         results: Optional results-directory override.
 
     Returns:
@@ -374,49 +521,66 @@ def run_sweep(
     planned = _matching_plan(study, enumerate_points(spec))
     failures = read_failures(study_id, results=results)
     present, stale = _member_runs(study, software_version, results)
-    total = len(planned)
-    tally = {
-        "done": 0,
-        "reused": 0,
-        "already_present": 0,
-        "failed": 0,
-        "skipped": 0,
-        "recomputed": 0,
-        "differs": 0,
-    }
-    cancelled = False
-    position = 0
-    for position, point in enumerate(planned, start=1):
-        if cancel_event.is_set():
-            cancelled = True
-            break
+    tally = dict.fromkeys(
+        (
+            "done",
+            "reused",
+            "already_present",
+            "failed",
+            "skipped",
+            "recomputed",
+            "differs",
+        ),
+        0,
+    )
+    todo: list[SweepPoint] = []
+    for point in planned:
         if point.run_id in present:
             tally["already_present"] += 1
-            continue
-        if point.run_id in failures and not retry_failed:
+        elif point.run_id in failures and not retry_failed:
             tally["skipped"] += 1
-            continue
-        outcome = _run_one_point(
-            study_id,
-            point,
-            runner,
-            on_event,
-            cancel_event,
-            (position, total),
-            (software_version, stale.get(point.run_id)),
-            results,
-        )
-        if outcome == "cancelled":
-            cancelled = True
-            break
-        tally[outcome] += 1
+        else:
+            todo.append(point)
+    concurrency = resolve_concurrency(
+        points=len(todo),
+        params=SimulationParams.from_mapping(planned[0].params),
+        requested=points_at_once,
+        max_workers=max_workers,
+    )
+    context = _Context(
+        study_id,
+        runner,
+        on_event,
+        cancel_event,
+        software_version,
+        results,
+        len(planned),
+        concurrency.workers_per_point,
+        threading.Lock(),
+        finished=tally["already_present"] + tally["skipped"],
+    )
+    cancelled = False
+
+    def work(point: SweepPoint) -> str:
+        if cancel_event.is_set():
+            return "cancelled"
+        return _run_one_point(context, point, stale.get(point.run_id))
+
+    if todo:
+        with ThreadPoolExecutor(max_workers=concurrency.points_at_once) as pool:
+            for outcome in pool.map(work, todo):
+                if outcome == "cancelled":
+                    cancelled = True
+                else:
+                    tally[outcome] += 1
+    cancelled = cancelled or (cancel_event.is_set() and bool(todo))
     on_event(
         SweepEvent(
             "sweep_cancelled" if cancelled else "sweep_done",
             -1,
             "",
-            position,
-            total,
+            context.finished,
+            len(planned),
         )
     )
     return SweepOutcome(
@@ -502,85 +666,55 @@ def _matching_plan(study: StudyManifest, plan: SweepPlan) -> tuple[SweepPoint, .
 
 
 def _run_one_point(
-    study_id: str,
-    point: SweepPoint,
-    runner: PointRunner,
-    on_event: Callable[[SweepEvent], None],
-    cancel_event: threading.Event,
-    progress_position: tuple[int, int],
-    version_and_stale: tuple[str, Path | None],
-    results: Path | None,
+    context: _Context, point: SweepPoint, stale_member: Path | None
 ) -> Literal["done", "reused", "recomputed", "differs", "failed", "cancelled"]:
     """Attach, reuse or compute one point; compare it with an older version's run."""
-    position, total = progress_position
-    software_version, stale_member = version_and_stale
     reusable = groups.find_run_directories(
-        point.run_id, software_version=software_version, results=results
+        point.run_id,
+        software_version=context.software_version,
+        results=context.results,
     )
     reused = bool(reusable)
     if reused:
         result: Path | PointFailure = reusable[0]
     else:
-        on_event(
-            SweepEvent("point_started", point.index, point.run_id, position, total)
-        )
+        context.emit("point_started", point, finish=False)
 
         def progress(message: object) -> None:
-            on_event(
-                SweepEvent(
-                    "point_progress",
-                    point.index,
-                    point.run_id,
-                    position,
-                    total,
-                    message,
-                )
-            )
+            context.emit("point_progress", point, message, finish=False)
 
-        result = runner.run_point(
-            SimulationParams.from_mapping(point.params), cancel_event, progress
+        result = context.runner.run_point(
+            SimulationParams.from_mapping(point.params),
+            context.cancel_event,
+            progress,
+            context.workers_per_point,
         )
     if isinstance(result, PointFailure):
-        if cancel_event.is_set():
+        if context.cancel_event.is_set():
             return "cancelled"
-        _record_failure(study_id, point, result.reason, results)
-        on_event(
-            SweepEvent(
-                "point_failed",
-                point.index,
-                point.run_id,
-                position,
-                total,
-                result.reason,
-            )
-        )
+        with context.lock:
+            _record_failure(context.study_id, point, result.reason, context.results)
+        context.emit("point_failed", point, result.reason, finish=True)
         return "failed"
-    groups.add_run_to_study(study_id, result, results=results)
-    _clear_failure(study_id, point.run_id, results)
+    with context.lock:
+        groups.add_run_to_study(context.study_id, result, results=context.results)
+        _clear_failure(context.study_id, point.run_id, context.results)
     older = stale_member or next(
         iter(
             groups.find_stale_run_directories(
-                point.run_id, software_version, results=results
+                point.run_id, context.software_version, results=context.results
             )
         ),
         None,
     )
     if older is not None and older.resolve() != result.resolve():
-        return _compare_with_older(
-            point, older, result, on_event, (position, total), results
-        )
-    kind: EventKind = "point_reused" if reused else "point_done"
-    on_event(SweepEvent(kind, point.index, point.run_id, position, total))
+        return _compare_with_older(context, point, older, result)
+    context.emit("point_reused" if reused else "point_done", point, finish=True)
     return "reused" if reused else "done"
 
 
 def _compare_with_older(
-    point: SweepPoint,
-    older: Path,
-    recomputed: Path,
-    on_event: Callable[[SweepEvent], None],
-    progress_position: tuple[int, int],
-    results: Path | None,
+    context: _Context, point: SweepPoint, older: Path, recomputed: Path
 ) -> Literal["recomputed", "differs"]:
     """Compare a recomputed point with the run another version made.
 
@@ -588,32 +722,14 @@ def _compare_with_older(
     now holds the recomputed one and the old directory goes. A mismatch keeps
     both linked, records the difference beside the new run, and reports it.
     """
-    position, total = progress_position
     comparison = compare_runs(older, recomputed)
     if comparison.identical:
-        groups.supersede_run(older, recomputed, results=results)
-        on_event(
-            SweepEvent(
-                "point_recomputed",
-                point.index,
-                point.run_id,
-                position,
-                total,
-                comparison.to_dict(),
-            )
-        )
+        with context.lock:
+            groups.supersede_run(older, recomputed, results=context.results)
+        context.emit("point_recomputed", point, comparison.to_dict(), finish=True)
         return "recomputed"
     write_reproducibility_note(recomputed, comparison.to_dict())
-    on_event(
-        SweepEvent(
-            "point_differs",
-            point.index,
-            point.run_id,
-            position,
-            total,
-            comparison.to_dict(),
-        )
-    )
+    context.emit("point_differs", point, comparison.to_dict(), finish=True)
     return "differs"
 
 

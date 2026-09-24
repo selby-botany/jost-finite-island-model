@@ -8,6 +8,17 @@ project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- **Sweeps run several points at once.** Points used to run one after another,
+  leaving cores idle whenever a point was a single run or a small batch. A
+  sweep now runs as many points at the same time as fill the machine (a single
+  run needs one core, a batch about as many as its replicates), and the
+  Settings value "max workers", which a sweep ignored before, applies to each
+  batch point. The Sweep dialog has **Points at once** (Automatic, 1, 2, 4, 8),
+  with a note of what Automatic chose, and `fim sweep run` and `resume` take
+  `--points-at-once`, `--workers` and `--sequential`. Measured on a 10-core
+  machine, eight single-run points took 22 s one at a time and 4.5 s four at a
+  time; eight four-replicate batches 31 s and 14 s. Results are identical
+  either way (tested byte for byte).
 - **Runs are matched by software version, and a difference is reported.** A
   run is only reused (by **Run** or by a sweep) when the software version that
   made it matches the current one. A configuration whose only run came from

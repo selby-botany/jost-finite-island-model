@@ -143,7 +143,8 @@ def test_plan_sweep_needs_at_least_one_axis(api: Api) -> None:
 def test_start_sweep_runs_every_point_and_pushes_events(
     api: Api, window: _FakeWindow
 ) -> None:
-    started = api.start_sweep(_form(), _request(_D_AXIS))
+    # One at a time, so the events arrive in a fixed order.
+    started = api.start_sweep(_form(), _request(_D_AXIS, pointsAtOnce="1"))
 
     assert started["ok"] is True
     assert started["total"] == 2
@@ -220,16 +221,20 @@ def test_cancelling_stops_the_sweep_and_resume_finishes_it(
     original = LocalPointRunner.run_point
 
     def cancel_after_first(
-        self: Any, params: Any, cancel_event: threading.Event, on_message: Any = None
+        self: Any,
+        params: Any,
+        cancel_event: threading.Event,
+        on_message: Any = None,
+        max_workers: int | None = None,
     ) -> Any:
-        result = original(self, params, cancel_event, on_message)
+        result = original(self, params, cancel_event, on_message, max_workers)
         api.cancel_sweep()
         return result
 
     monkeypatch = pytest.MonkeyPatch()
     monkeypatch.setattr(LocalPointRunner, "run_point", cancel_after_first)
     try:
-        started = api.start_sweep(_form(), _request(_D_AXIS))
+        started = api.start_sweep(_form(), _request(_D_AXIS, pointsAtOnce="1"))
         assert window.finished.wait(_WAIT_SECONDS)
     finally:
         monkeypatch.undo()
@@ -424,3 +429,46 @@ def test_create_study_can_place_the_study_in_an_experiment(api: Api) -> None:
     missing = api.create_study("Orphan", "", "experiment-ffffffff")
     assert missing["ok"] is False
     assert [study["name"] for study in api.list_studies()] == ["Ring"]
+
+
+def test_plan_sweep_says_how_many_points_run_at_once(api: Api) -> None:
+    plan = api.plan_sweep(_form(), _request(_D_AXIS))
+
+    concurrency = plan["concurrency"]
+    assert concurrency["automatic"] is True
+    assert 1 <= concurrency["pointsAtOnce"] <= 2
+    assert concurrency["cores"] >= 1
+    asked = api.plan_sweep(_form(), _request(_D_AXIS, pointsAtOnce="1"))
+    assert asked["concurrency"]["pointsAtOnce"] == 1
+    assert asked["concurrency"]["automatic"] is False
+
+
+def test_a_sweep_passes_its_points_at_once_and_the_worker_count_to_each_point(
+    api: Api, window: _FakeWindow, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    seen: list[int | None] = []
+    original = LocalPointRunner.run_point
+
+    def recording(
+        self: Any,
+        params: Any,
+        cancel_event: threading.Event,
+        on_message: Any = None,
+        max_workers: int | None = None,
+    ) -> Any:
+        seen.append(max_workers)
+        return original(self, params, cancel_event, on_message, max_workers)
+
+    monkeypatch.setattr(LocalPointRunner, "run_point", recording)
+    api.set_default_run_settings(
+        {**api.get_default_run_settings(), "n_replicates": "2"}
+    )
+
+    started = api.start_sweep(_form(), _request(_D_AXIS, pointsAtOnce="1"))
+
+    assert started["ok"] is True
+    assert window.finished.wait(_WAIT_SECONDS)
+    # A two-replicate lineal batch gets at most two workers, never the whole
+    # machine by default.
+    assert len(seen) == 2
+    assert all(workers is not None and 1 <= workers <= 2 for workers in seen)

@@ -32,6 +32,8 @@ const sweepBaseSummary = document.getElementById("sweep-base-summary");
 const sweepAxesContainer = document.getElementById("sweep-axes");
 const sweepAddAxisButton = document.getElementById("sweep-add-axis-button");
 const sweepSeedPolicySelect = document.getElementById("sweep-seed-policy");
+const sweepPointsAtOnceSelect = document.getElementById("sweep-points-at-once");
+const sweepConcurrencyNote = document.getElementById("sweep-concurrency-note");
 const sweepPlanSummary = document.getElementById("sweep-plan-summary");
 const sweepPlanTable = document.getElementById("sweep-plan-table");
 const sweepPlanHead = document.getElementById("sweep-plan-head");
@@ -359,7 +361,11 @@ function buildSweepRequest() {
     const axes = Array.from(sweepAxesContainer.querySelectorAll(".sweep-axis")).map(
         readSweepAxisRow
     );
-    return { axes, seedPolicy: sweepSeedPolicySelect.value };
+    return {
+        axes,
+        seedPolicy: sweepSeedPolicySelect.value,
+        pointsAtOnce: sweepPointsAtOnceSelect.value,
+    };
 }
 
 /** Schedule a fresh plan after the user stops editing. */
@@ -481,6 +487,31 @@ function drawSweepPlan(plan) {
     }
     sweepPlanTable.hidden = false;
     sweepDoneButton.disabled = plan.points.length === 0;
+    drawSweepConcurrencyNote(plan.concurrency);
+}
+
+/**
+ * Say how the sweep will use the machine: how many points at once and how
+ * many worker processes each batch point gets.
+ * @param {{pointsAtOnce: number, workersPerPoint: number|null, cores: number,
+ *     automatic: boolean}|undefined} concurrency
+ */
+function drawSweepConcurrencyNote(concurrency) {
+    if (!concurrency) {
+        sweepConcurrencyNote.textContent = "";
+        return;
+    }
+    const points = concurrency.pointsAtOnce;
+    const each =
+        concurrency.workersPerPoint === null
+            ? ""
+            : `, each with ${concurrency.workersPerPoint} worker${
+                  concurrency.workersPerPoint === 1 ? "" : "s"
+              }`;
+    const lead = concurrency.automatic ? "Automatic: " : "";
+    sweepConcurrencyNote.textContent =
+        `${lead}${points} point${points === 1 ? "" : "s"} at once${each} ` +
+        `on ${concurrency.cores} cores.`;
 }
 
 /**
@@ -599,7 +630,7 @@ window.fim.onSweepEvent = function onSweepEvent(event) {
         );
     }
     if (event.kind === "point_started") {
-        sweepProgressText.textContent = `Running point ${event.position} of ${event.total}…`;
+        sweepProgressText.textContent = `Running… ${event.position} of ${event.total} points finished`;
     }
     if (
         [
@@ -611,6 +642,7 @@ window.fim.onSweepEvent = function onSweepEvent(event) {
         ].includes(event.kind)
     ) {
         sweepProgressBar.value = event.position;
+        sweepProgressText.textContent = `${event.position} of ${event.total} points finished`;
     }
     if (event.kind === "sweep_done" || event.kind === "sweep_cancelled") {
         finishSweep(event.kind === "sweep_cancelled");
@@ -690,6 +722,7 @@ window.fim.openSweepDialog = async function openSweepDialog(options = {}) {
     }
     if (sweepConfig !== null) {
         sweepSeedPolicySelect.value = sweepConfig.request.seedPolicy;
+        sweepPointsAtOnceSelect.value = sweepConfig.request.pointsAtOnce ?? "auto";
     }
     for (const axis of axes) {
         addSweepAxisRow(axis.key, axis.initial || {});
@@ -795,6 +828,7 @@ sweepCheckbox.addEventListener("change", async () => {
 sweepConfigureButton.addEventListener("click", () => window.fim.openSweepDialog());
 sweepAddAxisButton.addEventListener("click", () => addSweepAxisRow());
 sweepSeedPolicySelect.addEventListener("change", onSweepAxesChanged);
+sweepPointsAtOnceSelect.addEventListener("change", onSweepAxesChanged);
 sweepDoneButton.addEventListener("click", () => {
     if (sweepLastPlan === null) {
         return;

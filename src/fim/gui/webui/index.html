@@ -2184,6 +2184,17 @@
         <option value="same">The same seed at every point</option>
       </select>
     </div>
+    <div class="field">
+      <label for="sweep-points-at-once">Points at once</label>
+      <select id="sweep-points-at-once">
+        <option value="auto">Automatic (fills the cores)</option>
+        <option value="1">1 (one point at a time)</option>
+        <option value="2">2</option>
+        <option value="4">4</option>
+        <option value="8">8</option>
+      </select>
+      <p id="sweep-concurrency-note" class="hint"></p>
+    </div>
     <p id="sweep-plan-summary" class="sweep-plan-summary" aria-live="polite"></p>
     <details id="sweep-plan-details">
       <summary>Show every point</summary>
