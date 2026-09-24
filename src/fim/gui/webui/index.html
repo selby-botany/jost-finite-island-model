@@ -382,10 +382,10 @@
               <div class="run-visual-panels" id="run-visual-panels">
             <div class="run-canvas-frame" id="run-scatter-card">
               <h4 id="run-scatter-title">Allele frequencies by deme pair</h4>
-              <!-- Follows the scrubber (`scrubber.js` fills every
-                   `[data-generation-caption]`), so the scatter names the
-                   generation the trajectory's dashed line marks. -->
-              <p class="scatter-caption" id="run-scatter-caption" data-generation-caption></p>
+              <!-- The marker key (`scatter.js`'s `renderScatterKey`), under
+                   the plot rather than drawn inside it. The generation is
+                   the scrubber's to show. -->
+              <div class="scatter-key" id="run-scatter-key"></div>
               <!-- Inside this frame, not up in the stage toolbar: both
                    selectors are placed by `grid-column`/`grid-row` in
                    `.run-canvas-frame`'s own grid, which is what glues

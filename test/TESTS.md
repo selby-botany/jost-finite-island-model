@@ -15294,29 +15294,22 @@ def test_completed_run_shows_title_above_canvas_and_back_returns_to_initial(
 
 The run title sits above the plot and the Back action returns to p_0.
 
-<a id="gui.test_results_screen.test_completed_scatter_draws_the_marker_color_legend"></a>
+<a id="gui.test_results_screen.test_completed_scatter_shows_the_marker_color_key_beneath_the_plot"></a>
 
-#### test\_completed\_scatter\_draws\_the\_marker\_color\_legend
+#### test\_completed\_scatter\_shows\_the\_marker\_color\_key\_beneath\_the\_plot
 
 ```python
-def test_completed_scatter_draws_the_marker_color_legend(
+def test_completed_scatter_shows_the_marker_color_key_beneath_the_plot(
         fast_scalar_run_settings: Path, window: webview.Window,
         drive: Callable[..., Any]) -> None
 ```
 
-The on-screen plot explains its own marker colors.
+The plot explains its own marker colors, in a key under it, not on it.
 
 Before this, the canvas drew blue and orange markers and defined
-neither, leaving "why are some dots blue?" answerable only by reading
-the source -- the same ambiguity that made the original "common
-allele" marker a reported defect rather than merely an unclear one.
-The saved `scatter.png` carries a matplotlib legend; this proves the
-GUI carries the equivalent.
-
-Records the text the canvas actually draws by wrapping `fillText` on
-the live 2D context, rather than asserting on pixels: it proves the
-real render path emitted the real strings, and reports a readable
-mismatch when it does not.
+neither, and a key drawn inside the canvas then sat on top of the data.
+The saved `scatter.png` carries a matplotlib legend; the GUI carries
+the equivalent as a row of HTML beneath the plot.
 
 <a id="gui.test_results_screen.test_the_default_scatter_style_explains_its_count_colors"></a>
 
@@ -15739,6 +15732,21 @@ two different generations at once, the same staleness class the
 batch panel's own version of this fix was reported for. This pins
 both halves plus the exact restore at the final frame, so the
 connection cannot quietly drop again on either one.
+
+<a id="gui.test_results_screen.test_the_scatter_and_trajectory_panes_share_a_height_and_the_scatter_stays_square"></a>
+
+#### test\_the\_scatter\_and\_trajectory\_panes\_share\_a\_height\_and\_the\_scatter\_stays\_square
+
+```python
+def test_the_scatter_and_trajectory_panes_share_a_height_and_the_scatter_stays_square(
+        fast_scalar_run_settings: Path, window: webview.Window,
+        drive: Callable[..., Any]) -> None
+```
+
+The two default graphs are boxes of one height; the width they share moves.
+
+The scatter canvas is square, so equalizing heights takes width from
+(or gives it to) the trajectory rather than stretching the scatter.
 
 <a id="gui.test_run_reuse"></a>
 

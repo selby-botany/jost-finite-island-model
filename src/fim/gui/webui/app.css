@@ -1461,7 +1461,7 @@ fieldset.composite > label {
 #run-visual-panels {
     display: grid;
     gap: 1rem;
-    align-items: start;
+    align-items: stretch;
     justify-content: stretch;
     min-width: 0;
 }
@@ -1476,17 +1476,50 @@ fieldset.composite > label {
     min-width: 0;
 }
 
-.scatter-caption {
+/* The key under the scatter: what the ring and each marker color mean. */
+.scatter-key {
     grid-column: 2;
     grid-row: 5;
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    align-items: center;
+    gap: 0.25rem 0.75rem;
     margin: 0;
-    font-size: 0.8rem;
+    font-size: 0.75rem;
     color: var(--fim-muted);
-    text-align: center;
 }
 
-.scatter-caption:empty {
+.scatter-key:empty {
     display: none;
+}
+
+.scatter-key-item,
+.scatter-key-label {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.3rem;
+}
+
+.scatter-key-item .scatter-key-swatch {
+    width: 0.8rem;
+    height: 0.8rem;
+    background: var(--swatch-color);
+    border: 1px solid var(--fim-foreground);
+}
+
+.scatter-key-item .scatter-key-ring {
+    width: 0.7rem;
+    height: 0.7rem;
+    border: 2px solid var(--swatch-color);
+    border-radius: 50%;
+}
+
+.scatter-key-item .scatter-key-dot {
+    width: 0.7rem;
+    height: 0.7rem;
+    background: var(--swatch-color);
+    border-radius: 50%;
 }
 
 /* Each pane fills the stage rather than keeping the per-panel width

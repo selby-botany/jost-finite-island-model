@@ -50,18 +50,14 @@ let scrubberMode = "replay";
 let isLiveTracking = true;
 
 /**
- * Show the current generation: the readout above the slider, and every
- * `[data-generation-caption]` on the page (the scatter plot's own
- * caption), so the graphs shown together each name the generation the
- * trajectory's dashed line marks. Empty text clears them.
+ * Show the current generation in the readout above the slider. That readout
+ * is the one place the generation is named; the graphs no longer repeat it.
+ * Empty text clears it.
  *
  * @param {string} text
  */
 function setGenerationText(text) {
     scrubberLabel.textContent = text;
-    for (const caption of document.querySelectorAll("[data-generation-caption]")) {
-        caption.textContent = text;
-    }
 }
 
 function setButtonActive(button, active) {

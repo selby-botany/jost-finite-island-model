@@ -280,6 +280,70 @@ function applyGraphLayout() {
         .map((weight) => `minmax(0, ${weight}fr)`)
         .join(" ");
     panels.dataset.graphColumns = String(columns);
+    matchScatterAndTrajectoryHeights(panels, columns);
+}
+
+// The trajectory canvas is 4:3, so a pane's height moves by this much per
+// pixel of its width; the scatter canvas is square, so it moves by one.
+const TRAJECTORY_HEIGHT_PER_WIDTH = 0.75;
+
+/**
+ * Give the scatter and the trajectory panes the same height, without ever
+ * distorting the scatter: the plot stays square, so the width the two
+ * share is what moves. When the trajectory pane is taller, the scatter
+ * takes width from it (growing, still square) until the heights meet; when
+ * it is shorter, the reverse. Only the first row is considered, and only
+ * when both panes sit in it.
+ *
+ * Measures the layout the default weights just produced (reading a size
+ * forces layout, so this needs no animation frame, which a hidden window
+ * never fires), then sets the two columns to widths that meet in the
+ * middle.
+ *
+ * @param {HTMLElement} panels The `#run-visual-panels` grid.
+ * @param {number} columns How many columns the first row has.
+ */
+function matchScatterAndTrajectoryHeights(panels, columns) {
+    const firstRow = visibleGraphKeys.slice(0, columns);
+    const scatterIndex = firstRow.indexOf("scatter");
+    const trajectoryIndex = firstRow.indexOf("trajectory");
+    if (scatterIndex === -1 || trajectoryIndex === -1) {
+        return;
+    }
+    const scatter = document.getElementById(runGraphEntry("scatter").paneId);
+    const trajectory = document.getElementById(runGraphEntry("trajectory").paneId);
+    if (
+        scatter.parentElement !== panels ||
+        trajectory.parentElement !== panels ||
+        scatter.hidden ||
+        trajectory.hidden
+    ) {
+        return;
+    }
+    const scatterBox = scatter.getBoundingClientRect();
+    const trajectoryBox = trajectory.getBoundingClientRect();
+    if (scatterBox.width === 0 || trajectoryBox.width === 0) {
+        return;
+    }
+    const shift =
+        (trajectoryBox.height - scatterBox.height) / (1 + TRAJECTORY_HEIGHT_PER_WIDTH);
+    const pair = scatterBox.width + trajectoryBox.width;
+    const scatterWidth = Math.min(
+        pair - MIN_PANE_WIDTH_PX,
+        Math.max(MIN_PANE_WIDTH_PX, scatterBox.width + shift)
+    );
+    const widths = firstRow.map((key) => {
+        if (key === "scatter") {
+            return scatterWidth;
+        }
+        if (key === "trajectory") {
+            return pair - scatterWidth;
+        }
+        return document.getElementById(runGraphEntry(key).paneId).getBoundingClientRect().width;
+    });
+    panels.style.gridTemplateColumns = widths
+        .map((width) => `minmax(0, ${width}fr)`)
+        .join(" ");
 }
 
 /**

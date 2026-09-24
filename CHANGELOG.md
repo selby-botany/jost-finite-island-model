@@ -819,6 +819,13 @@ project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Changed
 
+- **The scatter's color key sits under the plot, and the two default graphs
+  are the same height.** The key (the ring for the most frequent allele, and
+  what each count color means) used to be drawn inside the plot, on top of the
+  data; it is now a row beneath it, replacing the "Generation" caption, since
+  the scrubber already names the generation. The scatter and trajectory panes
+  now share one height: the scatter stays square and the width the two share
+  moves between them.
 - **`deme_weighting` now defaults to `equal`** (was `size`). It only
   affects E_ST, and only when demes differ in size; `D` and K_ST already
   weight demes equally, so E_ST now follows the same convention unless

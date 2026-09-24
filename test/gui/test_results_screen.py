@@ -42,6 +42,12 @@ from fim.gui.app import Api, create_window
 
 pytestmark = pytest.mark.gui
 
+_SCATTER_KEY_TEXTS = (
+    "Array.from(document.querySelectorAll("
+    "'#run-scatter-key span.scatter-key-item, "
+    "#run-scatter-key span.scatter-key-label')"
+    ").map((e) => e.textContent)"
+)
 _POLL_INTERVAL_SECONDS = 0.1
 _POLL_ATTEMPTS = 600
 # Generous margin over the largest test's own sequential poll stages,
@@ -606,62 +612,40 @@ def test_completed_run_shows_title_above_canvas_and_back_returns_to_initial(
     assert settled["backHidden"] is True
 
 
-def test_completed_scatter_draws_the_marker_color_legend(
+def test_completed_scatter_shows_the_marker_color_key_beneath_the_plot(
     fast_scalar_run_settings: Path, window: webview.Window, drive: Callable[..., Any]
 ) -> None:
-    """The on-screen plot explains its own marker colors.
+    """The plot explains its own marker colors, in a key under it, not on it.
 
     Before this, the canvas drew blue and orange markers and defined
-    neither, leaving "why are some dots blue?" answerable only by reading
-    the source -- the same ambiguity that made the original "common
-    allele" marker a reported defect rather than merely an unclear one.
-    The saved `scatter.png` carries a matplotlib legend; this proves the
-    GUI carries the equivalent.
-
-    Records the text the canvas actually draws by wrapping `fillText` on
-    the live 2D context, rather than asserting on pixels: it proves the
-    real render path emitted the real strings, and reports a readable
-    mismatch when it does not.
+    neither, and a key drawn inside the canvas then sat on top of the data.
+    The saved `scatter.png` carries a matplotlib legend; the GUI carries
+    the equivalent as a row of HTML beneath the plot.
     """
     settled = drive(
         window,
         ready=_INPUT_SCREEN_READY,
         trigger=(
-            # Wrap `fillText` before the run starts, so the completed
-            # state's own first paint is captured rather than a later
-            # incidental redraw.
             "window.pywebview.api.set_scatter_style('circles').then(() => "
             "window.fim.setScatterStyle('circles')); "
-            "window.__fimCanvasText = []; "
-            "const ctx = document.getElementById('run-canvas').getContext('2d'); "
-            "const originalFillText = ctx.fillText.bind(ctx); "
-            "ctx.fillText = (text, ...rest) => { "
-            "window.__fimCanvasText.push(String(text)); "
-            "return originalFillText(text, ...rest); "
-            "}; " + _SET_TINY_FIELDS + "document.getElementById('run-button').click();"
+            + _SET_TINY_FIELDS
+            + "document.getElementById('run-button').click();"
         ),
         read=(
             "({"
             "runViewState: window.fim.getRunViewState(), "
-            "drawn: window.__fimCanvasText || []"
-            "})"
+            "key: " + _SCATTER_KEY_TEXTS + "})"
         ),
         is_ready=lambda value: (
             value is not None
             and value.get("runViewState") == "completed"
-            and any("Other alleles" in text for text in value.get("drawn", []))
+            and "Other alleles" in value.get("key", [])
         ),
         poll_attempts=_POLL_ATTEMPTS,
     )
 
-    drawn = settled["drawn"]
-    # The full sentence on a large plot, a shorter one on the small plot
-    # the side-by-side default gives the scatter.
-    assert (
-        "Most frequent allele in either deme (ring; ties: first)" in drawn
-        or "Most frequent (ring)" in drawn
-    )
-    assert "Other alleles" in drawn
+    assert "Most frequent" in settled["key"]
+    assert "Other alleles" in settled["key"]
 
 
 def test_the_default_scatter_style_explains_its_count_colors(
@@ -677,21 +661,12 @@ def test_the_default_scatter_style_explains_its_count_colors(
     settled = drive(
         window,
         ready=_INPUT_SCREEN_READY,
-        trigger=(
-            "window.__fimCanvasText = []; "
-            "const ctx = document.getElementById('run-canvas').getContext('2d'); "
-            "const originalFillText = ctx.fillText.bind(ctx); "
-            "ctx.fillText = (text, ...rest) => { "
-            "window.__fimCanvasText.push(String(text)); "
-            "return originalFillText(text, ...rest); "
-            "}; " + _SET_TINY_FIELDS + "document.getElementById('run-button').click();"
-        ),
+        trigger=(_SET_TINY_FIELDS + "document.getElementById('run-button').click();"),
         read=(
             "({"
             "runViewState: window.fim.getRunViewState(), "
             "style: window.fim.getScatterStyle(), "
-            "drawn: window.__fimCanvasText || []"
-            "})"
+            "drawn: " + _SCATTER_KEY_TEXTS + "})"
         ),
         is_ready=lambda value: (
             value is not None
@@ -1769,7 +1744,7 @@ def test_double_click_zooms_the_graph_under_the_pointer_and_the_caption_follows(
             + "const poll = () => { "
             + "if (window.fim.getRunViewState() === 'completed' && "
             + "window.__fimScrubberPending === 0) { "
-            + "const caption = document.getElementById('run-scatter-caption')"
+            + "const caption = document.getElementById('run-scatter-key')"
             + ".textContent; "
             + "const label = document.getElementById('scrubber-label')"
             + ".textContent; "
@@ -1793,7 +1768,9 @@ def test_double_click_zooms_the_graph_under_the_pointer_and_the_caption_follows(
     assert settled["scatterParent"] == "run-visual-panels"
     assert settled["scatterHidden"] is False
     assert settled["label"].startswith("Generation ")
-    assert settled["caption"] == settled["label"]
+    # The generation is the scrubber's to show; the scatter carries its key.
+    assert "Most frequent" in settled["caption"]
+    assert not settled["caption"].startswith("Generation")
 
 
 def test_nice_axis_ticks_round_to_human_steps_at_every_scale(
@@ -1990,3 +1967,41 @@ def test_scrubbing_a_completed_scalar_run_moves_every_stats_row(
     # verbatim, both rows.
     assert settled["restored"]["d"] == settled["final"]["d"]
     assert settled["restored"]["ne"] == settled["final"]["ne"]
+
+
+def test_the_scatter_and_trajectory_panes_share_a_height_and_the_scatter_stays_square(
+    fast_scalar_run_settings: Path, window: webview.Window, drive: Callable[..., Any]
+) -> None:
+    """The two default graphs are boxes of one height; the width they share moves.
+
+    The scatter canvas is square, so equalizing heights takes width from
+    (or gives it to) the trajectory rather than stretching the scatter.
+    """
+    settled = drive(
+        window,
+        ready=_INPUT_SCREEN_READY,
+        trigger=(_SET_TINY_FIELDS + "document.getElementById('run-button').click();"),
+        read=(
+            "({"
+            "state: window.fim.getRunViewState(), "
+            "pending: window.__fimScrubberPending, "
+            "scatter: document.getElementById('run-scatter-card')"
+            ".getBoundingClientRect().height, "
+            "trajectory: document.getElementById('run-trajectory-frame')"
+            ".getBoundingClientRect().height, "
+            "canvasWidth: document.getElementById('run-canvas').clientWidth, "
+            "canvasHeight: document.getElementById('run-canvas').clientHeight"
+            "})"
+        ),
+        is_ready=lambda value: (
+            value is not None
+            and value.get("state") == "completed"
+            and value.get("pending") == 0
+            and value.get("scatter", 0) > 0
+            and value.get("trajectory", 0) > 0
+        ),
+        poll_attempts=_POLL_ATTEMPTS,
+    )
+
+    assert abs(settled["scatter"] - settled["trajectory"]) <= 2
+    assert abs(settled["canvasWidth"] - settled["canvasHeight"]) <= 1

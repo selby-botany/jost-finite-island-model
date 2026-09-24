@@ -248,6 +248,7 @@ function drawScatter(canvas, panel) {
             markerScale: 1,
         }
     );
+    renderScatterKey(panel.kind !== "pca");
 }
 
 /**
@@ -385,19 +386,6 @@ function drawScatterCell(context, rect, panel, opts) {
     }
     if (originPile !== null) {
         drawOriginBadge(geometry, originPile);
-    }
-
-    // Only for a `"frequency"` panel: a `"pca"` panel disables frequency
-    // highlighting entirely (a principal component is not a deme, so
-    // "most frequent in either deme" names nothing there), so a color key
-    // would explain a distinction that panel does not draw.
-    //
-    // Deliberately *not* suppressed on a compact panel, unlike tick
-    // density. Fewer ticks still leave a readable plot; an unexplained
-    // color does not, and a small panel is if anything where a viewer is
-    // least able to infer the rule from the data.
-    if (bounded) {
-        drawMarkerLegend(context, originX, originY, plotSize, opts.tickFontSize, style, compact);
     }
 }
 
@@ -596,112 +584,49 @@ function drawTrail(geometry, panel) {
 }
 
 /**
- * Draw the color key explaining what a blue marker means.
+ * Fill the key beneath the Run card's scatter: what a ringed marker is,
+ * and either what the other markers are or what each count color means.
  *
- * The canvas counterpart of `_add_marker_legend` in `fim/viz/scatter.py`,
- * and deliberately worded identically: the same plot rendered to
- * `scatter.png` and rendered on screen must not explain itself
- * differently.
+ * A row of HTML under the plot, not text drawn inside the canvas, where
+ * it sat on top of the data. The wording matches `_add_marker_legend` in
+ * `fim/viz/scatter.py`, so the plot rendered to `scatter.png` and the one
+ * on screen do not explain themselves differently. A `"pca"` panel has no
+ * key: it disables frequency highlighting, so there is nothing to explain.
  *
- * Without this, the on-screen plot drew two colors and defined neither --
- * the exact ambiguity that made the original "common allele" marker a
- * reported defect rather than merely an unclear one.
- *
- * @param {CanvasRenderingContext2D} context
- * @param {number} originX Left edge of the plot area, in canvas pixels.
- * @param {number} originY Bottom edge of the plot area, in canvas pixels.
- * @param {number} plotSize Side length of the plot area, in canvas pixels.
- * @param {number} fontSize Tick font size, reused for legend text.
+ * @param {boolean} bounded a `"frequency"` panel (the only kind with a key)
  */
-function drawMarkerLegend(context, originX, originY, plotSize, fontSize, style, compact) {
-    const lineHeight = fontSize + 4;
-    // Top-left of the plot area: the `x=y` diagonal runs corner to
-    // corner, so the upper-left is the region least likely to sit on top
-    // of data in a bounded frequency panel.
-    let y = originY - plotSize + lineHeight;
-
-    context.save();
-    context.font = `${fontSize}px -apple-system, sans-serif`;
-    context.textAlign = "left";
-    context.textBaseline = "middle";
-
-    // Common: a hollow-ring swatch, matching the shape actually drawn
-    // above -- not a filled disc like the "Other alleles" swatch below,
-    // the same reasoning `fim.viz.scatter._add_marker_legend` uses its
-    // own `Line2D` (rather than `Patch`) handle for.
-    const commonRadius = fontSize * 0.35;
-    const commonSwatchX = originX + 6;
-    context.beginPath();
-    context.arc(commonSwatchX + commonRadius, y, commonRadius, 0, 2 * Math.PI);
-    context.lineWidth = Math.max(1.5, commonRadius * 0.5);
-    context.strokeStyle = COLOR_COMMON;
-    context.globalAlpha = 0.9;
-    context.stroke();
-    context.globalAlpha = 1;
-    context.fillStyle = "#1a1a1a";
-    context.fillText(
-        compact ? "Most frequent (ring)" : "Most frequent allele in either deme (ring; ties: first)",
-        commonSwatchX + 2 * commonRadius + 5,
-        y
-    );
-    y += lineHeight;
-
-    const marks = markPointsFor(style, true);
-    if (marks.ramp) {
-        drawCountKey(context, originX, y + lineHeight - 2, fontSize, compact);
-        context.restore();
+function renderScatterKey(bounded) {
+    const key = document.getElementById("run-scatter-key");
+    if (key === null) {
         return;
     }
-
-    // Rare: an ordinary filled dot.
-    const rareRadius = fontSize * 0.35;
-    const rareSwatchX = originX + 6;
-    context.beginPath();
-    context.arc(rareSwatchX + rareRadius, y, rareRadius, 0, 2 * Math.PI);
-    context.fillStyle = COLOR_RARE;
-    context.globalAlpha = 0.75;
-    context.fill();
-    context.globalAlpha = 1;
-    context.strokeStyle = "#000000";
-    context.lineWidth = 0.4;
-    context.stroke();
-    context.fillStyle = "#1a1a1a";
-    context.fillText("Other alleles", rareSwatchX + 2 * rareRadius + 5, y);
-
-    context.restore();
-}
-
-/**
- * Draw the count key: five swatches, one per ramp step, with what each
- * step means (alleles at that exact spot).
- *
- * @param {CanvasRenderingContext2D} context
- * @param {number} x left edge
- * @param {number} y vertical centre of the row
- * @param {number} fontSize
- * @param {boolean} compact a small plot: shorter wording
- */
-function drawCountKey(context, x, y, fontSize, compact) {
-    const swatch = fontSize;
-    let cursor = x + 6;
-    context.fillStyle = "#1a1a1a";
-    context.textAlign = "left";
-    context.textBaseline = "middle";
-    const prefix = compact ? "n:" : "Alleles here:";
-    context.fillText(prefix, cursor, y);
-    cursor += context.measureText(prefix).width + 5;
-    COUNT_RAMP.forEach((color, index) => {
-        context.fillStyle = color;
-        context.fillRect(cursor, y - swatch / 2, swatch, swatch);
-        context.strokeStyle = "#1a1a1a";
-        context.lineWidth = 0.6;
-        context.strokeRect(cursor, y - swatch / 2, swatch, swatch);
-        cursor += swatch + 2;
-        context.fillStyle = "#1a1a1a";
-        const label = COUNT_RAMP_LABELS[index];
-        context.fillText(label, cursor, y);
-        cursor += context.measureText(label).width + 6;
-    });
+    key.replaceChildren();
+    if (!bounded) {
+        return;
+    }
+    const add = (className, text, color) => {
+        const item = document.createElement("span");
+        item.className = "scatter-key-item";
+        const swatch = document.createElement("span");
+        swatch.className = className;
+        if (color !== undefined) {
+            swatch.style.setProperty("--swatch-color", color);
+        }
+        item.append(swatch, text);
+        key.appendChild(item);
+    };
+    add("scatter-key-ring", "Most frequent", COLOR_COMMON);
+    if (markPointsFor(_scatterStyle, true).ramp) {
+        const label = document.createElement("span");
+        label.className = "scatter-key-label";
+        label.textContent = "Alleles here:";
+        key.appendChild(label);
+        COUNT_RAMP.forEach((color, index) => {
+            add("scatter-key-swatch", COUNT_RAMP_LABELS[index], color);
+        });
+        return;
+    }
+    add("scatter-key-dot", "Other alleles", COLOR_RARE);
 }
 
 /**
