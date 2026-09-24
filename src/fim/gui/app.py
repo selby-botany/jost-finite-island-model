@@ -72,7 +72,7 @@ from fim.engine import (
     report_for_state,
     reports_summary,
 )
-from fim.gui import batch_runner, presets, recent_runs, runner
+from fim.gui import batch_runner, presets, recent_runs, runner, sweep_bridge
 from fim.gui.animation import pre_render_batch_frames, pre_render_frames
 from fim.gui.config_form import (
     DEFAULT_RUN_SETTING_FIELD_NAMES,
@@ -124,7 +124,14 @@ from fim.statistics import (
     identity_recovery_rate,
     mutation_negligible_equilibrium,
 )
-from fim.sweep_run import LocalPointRunner, PointFailure
+from fim.sweep import SweepSpec, enumerate_points
+from fim.sweep_run import (
+    LocalPointRunner,
+    PointFailure,
+    SweepEvent,
+    create_sweep_study,
+    run_sweep,
+)
 from fim.viz.scatter import (
     deme_pair_panel,
     frequency_points,
@@ -1304,6 +1311,14 @@ class Api:
                 collides with — a real user's saved preferences.
         """
         self._cancel_event: threading.Event | None = None
+        # One active thing at a time: a run and a sweep cannot overlap
+        # (`start_run`, `start_sweep`). `_run_in_flight` is cleared by
+        # the run's own drain thread once it reports a terminal message;
+        # `_sweep_cancel_event` is non-`None` for exactly as long as a
+        # sweep's own thread is running.
+        self._run_in_flight = False
+        self._sweep_cancel_event: threading.Event | None = None
+        self._sweep_study_id: str | None = None
         self._open_folder = open_folder
         self._on_run_started = on_run_started
         self._on_message = on_message
@@ -1421,6 +1436,11 @@ class Api:
                 groups.get_study(study_id)
             except ValueError as error:
                 return {"ok": False, "message": str(error)}
+        if self._sweep_cancel_event is not None:
+            return {
+                "ok": False,
+                "message": "a sweep is running; wait for it or cancel it first",
+            }
         values = self._merge_default_run_settings(values)
         try:
             payload = form_values_to_payload(values)
@@ -1497,9 +1517,11 @@ class Api:
         # two places either is needed.
         equilibrium = _equilibrium_reference_payload(params, self._significant_digits)
         identity_recovery = _identity_recovery_reference_payload(params)
+        self._run_in_flight = True
         threading.Thread(
-            target=_drain_run_messages,
+            target=self._drain_then_release,
             args=(
+                _drain_run_messages,
                 window,
                 message_queue,
                 params.max_generations,
@@ -1519,6 +1541,17 @@ class Api:
             "equilibrium": equilibrium,
             "identityRecovery": identity_recovery,
         }
+
+    def _drain_then_release(self, drain: Callable[..., None], *arguments: Any) -> None:
+        """Run a run's drain function, then mark no run as in flight.
+
+        The drain functions return once the run reports a terminal
+        message, so this is what lets `start_sweep` know a run has ended.
+        """
+        try:
+            drain(*arguments)
+        finally:
+            self._run_in_flight = False
 
     def _start_batch_run(
         self,
@@ -1562,9 +1595,11 @@ class Api:
         self._live_deme_pair = None
         if self._on_run_started is not None:
             self._on_run_started()
+        self._run_in_flight = True
         threading.Thread(
-            target=_drain_batch_messages,
+            target=self._drain_then_release,
             args=(
+                _drain_batch_messages,
                 window,
                 message_queue,
                 params,
@@ -3292,6 +3327,161 @@ class Api:
         return {"ok": True, "completed": completed, "failed": failed}
 
     @_log_bridge_call
+    def get_sweepable_keys(self) -> list[dict[str, Any]]:
+        """Return every parameter a sweep may vary, with its axis metadata."""
+        return sweep_bridge.sweepable_keys_payload()
+
+    @_log_bridge_call
+    def plan_sweep(
+        self, values: dict[str, str], request: dict[str, Any]
+    ) -> dict[str, Any]:
+        """Enumerate and validate a sweep without running anything.
+
+        Args:
+            values: The Configure form's values, the base configuration.
+            request: `{"axes": [...], "seedPolicy": ...}`; see
+                `fim.gui.sweep_bridge.spec_from_request`.
+
+        Returns:
+            `fim.gui.sweep_bridge.plan_payload`'s dictionary, marking
+            each point whose run already exists, or `{"ok": False,
+            "message": ...}`.
+        """
+        try:
+            spec = self._sweep_spec(values, request)
+        except ValueError as error:
+            return {"ok": False, "message": str(error)}
+        return sweep_bridge.plan_payload(spec, enumerate_points(spec))
+
+    @_log_bridge_call
+    def start_sweep(
+        self,
+        values: dict[str, str],
+        request: dict[str, Any],
+        name: str,
+        experiment_id: str | None = None,
+        confirmed: bool = False,
+    ) -> dict[str, Any]:
+        """Create a sweep Study and run its points on a background thread.
+
+        Progress reaches the page as `fim.onSweepEvent(...)` pushes.
+        Refused while a run or another sweep is in flight, and, for a plan
+        at or over the size threshold, until `confirmed` is true.
+
+        Returns:
+            `{"ok": True, "studyId": ..., "total": N}`; or `{"ok": False,
+            "message": ...}`, with `"needsConfirmation": True` for an
+            unconfirmed large plan.
+        """
+        busy = self._busy_message()
+        if busy is not None:
+            return {"ok": False, "message": busy}
+        window = _active_window()
+        if window is None:
+            return {"ok": False, "message": "no active window"}
+        try:
+            spec = self._sweep_spec(values, request)
+            plan = enumerate_points(spec)
+            if plan.needs_confirmation and not confirmed:
+                return {
+                    "ok": False,
+                    "needsConfirmation": True,
+                    "message": (
+                        f"this sweep has {len(plan.points)} points; confirm to run it"
+                    ),
+                }
+            study = create_sweep_study(spec, plan, name, experiment_id=experiment_id)
+        except ValueError as error:
+            return {"ok": False, "message": str(error)}
+        self._start_sweep_thread(window, study.study_id, retry_failed=False)
+        return {"ok": True, "studyId": study.study_id, "total": len(plan.points)}
+
+    @_log_bridge_call
+    def resume_sweep(self, study_id: str, retry_failed: bool = False) -> dict[str, Any]:
+        """Run the points of an existing sweep Study that are still missing."""
+        busy = self._busy_message()
+        if busy is not None:
+            return {"ok": False, "message": busy}
+        window = _active_window()
+        if window is None:
+            return {"ok": False, "message": "no active window"}
+        try:
+            study = groups.get_study(study_id)
+            sweep_bridge.status_payload(study)
+        except ValueError as error:
+            return {"ok": False, "message": str(error)}
+        self._start_sweep_thread(window, study_id, retry_failed=retry_failed)
+        return {"ok": True, "studyId": study_id}
+
+    @_log_bridge_call
+    def cancel_sweep(self) -> None:
+        """Stop the running sweep: the current point is cancelled, the rest skipped."""
+        if self._sweep_cancel_event is not None:
+            self._sweep_cancel_event.set()
+
+    @_log_bridge_call
+    def get_sweep_status(self, study_id: str) -> dict[str, Any]:
+        """Return a sweep Study's planned points with their derived states."""
+        try:
+            payload = sweep_bridge.status_payload(groups.get_study(study_id))
+        except ValueError as error:
+            return {"ok": False, "message": str(error)}
+        payload["active"] = self._sweep_study_id == study_id and (
+            self._sweep_cancel_event is not None
+        )
+        return payload
+
+    @_log_bridge_call
+    def get_sweep_results(self, study_id: str) -> dict[str, Any]:
+        """Return a sweep Study's finished points and their statistics."""
+        try:
+            return sweep_bridge.results_payload(groups.get_study(study_id))
+        except ValueError as error:
+            return {"ok": False, "message": str(error)}
+
+    def _busy_message(self) -> str | None:
+        """Return why a sweep cannot start now, or `None` if it can."""
+        if self._sweep_cancel_event is not None:
+            return "a sweep is already running"
+        if self._run_in_flight:
+            return "a run is in progress; wait for it to finish first"
+        return None
+
+    def _sweep_spec(self, values: dict[str, str], request: dict[str, Any]) -> SweepSpec:
+        """Build a `SweepSpec` from the Configure form and the page's axes."""
+        merged = self._merge_default_run_settings(values)
+        base = form_values_to_payload(merged)
+        return sweep_bridge.spec_from_request(base, request)
+
+    def _start_sweep_thread(
+        self, window: _EvaluatesJs, study_id: str, *, retry_failed: bool
+    ) -> None:
+        """Run `study_id`'s sweep on a daemon thread, pushing each event."""
+        cancel_event = threading.Event()
+        self._sweep_cancel_event = cancel_event
+        self._sweep_study_id = study_id
+
+        def push(event: SweepEvent) -> None:
+            _push_sweep_event(window, event)
+
+        def work() -> None:
+            try:
+                run_sweep(
+                    study_id,
+                    LocalPointRunner(),
+                    push,
+                    cancel_event,
+                    retry_failed=retry_failed,
+                )
+            except ValueError as error:
+                logger.warning("sweep %s failed: %s", study_id, error)
+                _push_sweep_error(window, str(error))
+            finally:
+                self._sweep_cancel_event = None
+
+        threading.Thread(target=work, daemon=True).start()
+
+    @_log_bridge_call
     def copy_experiment(self, experiment_id: str, name: str) -> dict[str, Any]:
         """Copy an Experiment's own study list into a new, independent Experiment.
 
@@ -4317,6 +4507,31 @@ def _run_one_configuration_to_completion(params: SimulationParams) -> Path | Non
     """
     result = LocalPointRunner().run_point(params, threading.Event())
     return None if isinstance(result, PointFailure) else result
+
+
+def _push_sweep_event(window: _EvaluatesJs, event: SweepEvent) -> None:
+    """Push one sweep event to the page; a page that is gone is not an error."""
+    detail = event.detail if isinstance(event.detail, str) else None
+    payload = {
+        "kind": event.kind,
+        "index": event.index,
+        "runId": event.run_id,
+        "position": event.position,
+        "total": event.total,
+        "detail": detail,
+    }
+    try:
+        window.evaluate_js(f"fim.onSweepEvent({json.dumps(payload)})")
+    except Exception:
+        logger.debug("could not push a sweep event", exc_info=True)
+
+
+def _push_sweep_error(window: _EvaluatesJs, message: str) -> None:
+    """Tell the page a sweep could not start or continue."""
+    try:
+        window.evaluate_js(f"fim.onSweepError({json.dumps(message)})")
+    except Exception:
+        logger.debug("could not push a sweep error", exc_info=True)
 
 
 def _attach_finished_run_to_study(study_id: str | None, output_directory: Path) -> None:

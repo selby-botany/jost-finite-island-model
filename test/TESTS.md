@@ -70,6 +70,7 @@ Every test module, fixture, and test function documented here in full; `doc/fim-
   - [`test_settings_modal`](#gui.test_settings_modal)
   - [`test_shutdown_deadman`](#gui.test_shutdown_deadman)
   - [`test_store`](#gui.test_store)
+  - [`test_sweep_api`](#gui.test_sweep_api)
   - [`test_trajectory_history`](#gui.test_trajectory_history)
   - [`test_webui_global_scope`](#gui.test_webui_global_scope)
   - [`test_welcome_screen`](#gui.test_welcome_screen)
@@ -17288,6 +17289,45 @@ A read refused while a writer swaps the file in is "no update yet".
 Windows refuses to open a file in the instant it is being replaced
 (`PermissionError`). The batch poller reads again on its next tick,
 so this must not fail the batch.
+
+<a id="gui.test_sweep_api"></a>
+
+# gui.test\_sweep\_api
+
+Tests for the sweep bridge calls on `fim.gui.app.Api` (no real window).
+
+<a id="gui.test_sweep_api.results"></a>
+
+#### results
+
+```python
+@pytest.fixture
+def results(tmp_path: Path) -> Iterator[Path]
+```
+
+Isolate the results directory for the test.
+
+<a id="gui.test_sweep_api.window"></a>
+
+#### window
+
+```python
+@pytest.fixture
+def window(monkeypatch: pytest.MonkeyPatch) -> _FakeWindow
+```
+
+Provide a fake active window.
+
+<a id="gui.test_sweep_api.api"></a>
+
+#### api
+
+```python
+@pytest.fixture
+def api(tmp_path: Path, results: Path) -> Api
+```
+
+An `Api` whose defaults make every point a tiny single run.
 
 <a id="gui.test_trajectory_history"></a>
 

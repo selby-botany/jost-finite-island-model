@@ -138,6 +138,13 @@ Return to the [source-tree orientation](../README.md) or the [developer guide](.
     * [delete\_experiment](#fim.gui.app.Api.delete_experiment)
     * [copy\_study](#fim.gui.app.Api.copy_study)
     * [rerun\_study](#fim.gui.app.Api.rerun_study)
+    * [get\_sweepable\_keys](#fim.gui.app.Api.get_sweepable_keys)
+    * [plan\_sweep](#fim.gui.app.Api.plan_sweep)
+    * [start\_sweep](#fim.gui.app.Api.start_sweep)
+    * [resume\_sweep](#fim.gui.app.Api.resume_sweep)
+    * [cancel\_sweep](#fim.gui.app.Api.cancel_sweep)
+    * [get\_sweep\_status](#fim.gui.app.Api.get_sweep_status)
+    * [get\_sweep\_results](#fim.gui.app.Api.get_sweep_results)
     * [copy\_experiment](#fim.gui.app.Api.copy_experiment)
     * [delete\_runs](#fim.gui.app.Api.delete_runs)
     * [delete\_selected](#fim.gui.app.Api.delete_selected)
@@ -257,6 +264,12 @@ Return to the [source-tree orientation](../README.md) or the [developer guide](.
   * [write\_progress\_sidecar](#fim.gui.store.write_progress_sidecar)
   * [read\_progress\_sidecar](#fim.gui.store.read_progress_sidecar)
   * [read\_live\_state](#fim.gui.store.read_live_state)
+* [fim.gui.sweep\_bridge](#fim.gui.sweep_bridge)
+  * [sweepable\_keys\_payload](#fim.gui.sweep_bridge.sweepable_keys_payload)
+  * [spec\_from\_request](#fim.gui.sweep_bridge.spec_from_request)
+  * [plan\_payload](#fim.gui.sweep_bridge.plan_payload)
+  * [status\_payload](#fim.gui.sweep_bridge.status_payload)
+  * [results\_payload](#fim.gui.sweep_bridge.results_payload)
 * [fim.gui.trajectory\_history](#fim.gui.trajectory_history)
   * [TrajectoryHistory](#fim.gui.trajectory_history.TrajectoryHistory)
   * [sampled\_statistic\_history](#fim.gui.trajectory_history.sampled_statistic_history)
@@ -4896,6 +4909,111 @@ deleted run directory.
   ...}` if `study_id` does not exist, or the Study has no
   still-existing run to re-run at all.
 
+<a id="fim.gui.app.Api.get_sweepable_keys"></a>
+
+#### get\_sweepable\_keys
+
+```python
+@_log_bridge_call
+def get_sweepable_keys() -> list[dict[str, Any]]
+```
+
+Return every parameter a sweep may vary, with its axis metadata.
+
+<a id="fim.gui.app.Api.plan_sweep"></a>
+
+#### plan\_sweep
+
+```python
+@_log_bridge_call
+def plan_sweep(values: dict[str, str], request: dict[str,
+                                                     Any]) -> dict[str, Any]
+```
+
+Enumerate and validate a sweep without running anything.
+
+**Arguments**:
+
+- `values` - The Configure form's values, the base configuration.
+- `request` - `{"axes": [...], "seedPolicy": ...}`; see
+  `fim.gui.sweep_bridge.spec_from_request`.
+
+
+**Returns**:
+
+  `fim.gui.sweep_bridge.plan_payload`'s dictionary, marking
+  each point whose run already exists, or `{"ok": False,
+- `"message"` - ...}`.
+
+<a id="fim.gui.app.Api.start_sweep"></a>
+
+#### start\_sweep
+
+```python
+@_log_bridge_call
+def start_sweep(values: dict[str, str],
+                request: dict[str, Any],
+                name: str,
+                experiment_id: str | None = None,
+                confirmed: bool = False) -> dict[str, Any]
+```
+
+Create a sweep Study and run its points on a background thread.
+
+Progress reaches the page as `fim.onSweepEvent(...)` pushes.
+Refused while a run or another sweep is in flight, and, for a plan
+at or over the size threshold, until `confirmed` is true.
+
+**Returns**:
+
+- ``{"ok"` - True, "studyId": ..., "total": N}`; or `{"ok": False,
+- `"message"` - ...}`, with `"needsConfirmation": True` for an
+  unconfirmed large plan.
+
+<a id="fim.gui.app.Api.resume_sweep"></a>
+
+#### resume\_sweep
+
+```python
+@_log_bridge_call
+def resume_sweep(study_id: str, retry_failed: bool = False) -> dict[str, Any]
+```
+
+Run the points of an existing sweep Study that are still missing.
+
+<a id="fim.gui.app.Api.cancel_sweep"></a>
+
+#### cancel\_sweep
+
+```python
+@_log_bridge_call
+def cancel_sweep() -> None
+```
+
+Stop the running sweep: the current point is cancelled, the rest skipped.
+
+<a id="fim.gui.app.Api.get_sweep_status"></a>
+
+#### get\_sweep\_status
+
+```python
+@_log_bridge_call
+def get_sweep_status(study_id: str) -> dict[str, Any]
+```
+
+Return a sweep Study's planned points with their derived states.
+
+<a id="fim.gui.app.Api.get_sweep_results"></a>
+
+#### get\_sweep\_results
+
+```python
+@_log_bridge_call
+def get_sweep_results(study_id: str) -> dict[str, Any]
+```
+
+Return a sweep Study's finished points and their statistics.
+
 <a id="fim.gui.app.Api.copy_experiment"></a>
 
 #### copy\_experiment
@@ -8217,6 +8335,82 @@ generation still being written.
   longer, or not yet fully) present — a transient filesystem-
   visibility race a live poller's own next call simply retries,
   never an error to raise partway through a still-running batch.
+
+<a id="fim.gui.sweep_bridge"></a>
+
+# fim.gui.sweep\_bridge
+
+JSON-shaped payloads for the sweep bridge calls (`fim.gui.app.Api`).
+
+Pure functions turning a page request into a `SweepSpec` and turning a
+plan, a Study or its results back into plain dictionaries the page can
+draw. Nothing here touches a window or starts a run; `Api` owns that.
+
+<a id="fim.gui.sweep_bridge.sweepable_keys_payload"></a>
+
+#### sweepable\_keys\_payload
+
+```python
+def sweepable_keys_payload() -> list[dict[str, Any]]
+```
+
+Describe every sweepable key for the page's axis controls.
+
+<a id="fim.gui.sweep_bridge.spec_from_request"></a>
+
+#### spec\_from\_request
+
+```python
+def spec_from_request(base: Mapping[str, Any],
+                      request: Mapping[str, Any]) -> SweepSpec
+```
+
+Build a `SweepSpec` from the page's request and a validated base mapping.
+
+`request["axes"]` is a list of `{"key", "values"}` or `{"key",
+"range": {"start", "stop", "count", "scale"}}` entries, in axis order;
+`request["seedPolicy"]` is optional.
+
+**Raises**:
+
+- `ValueError` - An axis is malformed, or the spec is not valid.
+
+<a id="fim.gui.sweep_bridge.plan_payload"></a>
+
+#### plan\_payload
+
+```python
+def plan_payload(spec: SweepSpec,
+                 plan: SweepPlan,
+                 *,
+                 results: Path | None = None) -> dict[str, Any]
+```
+
+Describe a plan for the page, marking points whose run already exists.
+
+<a id="fim.gui.sweep_bridge.status_payload"></a>
+
+#### status\_payload
+
+```python
+def status_payload(study: StudyManifest,
+                   *,
+                   results: Path | None = None) -> dict[str, Any]
+```
+
+Describe a sweep Study and each planned point's derived state.
+
+<a id="fim.gui.sweep_bridge.results_payload"></a>
+
+#### results\_payload
+
+```python
+def results_payload(study: StudyManifest,
+                    *,
+                    results: Path | None = None) -> dict[str, Any]
+```
+
+Describe a sweep Study's finished points and their statistics.
 
 <a id="fim.gui.trajectory_history"></a>
 
