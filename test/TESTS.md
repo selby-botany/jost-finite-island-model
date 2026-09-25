@@ -3464,6 +3464,16 @@ def test_large_scalar_island_uses_the_closed_form() -> None
 
 A scalar `m` at any `d` never needs the eigenvalue route.
 
+<a id="convergence.test_defaults.test_derived_convergence_sentence_names_window_cap_and_time"></a>
+
+#### test\_derived\_convergence\_sentence\_names\_window\_cap\_and\_time
+
+```python
+def test_derived_convergence_sentence_names_window_cap_and_time() -> None
+```
+
+The shared sentence carries all three numbers, with thousands separators.
+
 <a id="convergence.test_monitor"></a>
 
 # convergence.test\_monitor
@@ -7750,6 +7760,16 @@ def test_validate_form_accepts_the_starter_values() -> None
 ```
 
 The starter form is valid on its own — no field left in a rejecting state.
+
+<a id="gui.test_app_api.test_validate_form_has_no_note_when_window_and_cap_are_explicit"></a>
+
+#### test\_validate\_form\_has\_no\_note\_when\_window\_and\_cap\_are\_explicit
+
+```python
+def test_validate_form_has_no_note_when_window_and_cap_are_explicit() -> None
+```
+
+Explicit values are the user's own; nothing is announced.
 
 <a id="gui.test_app_api.test_validate_form_rejects_and_locates_an_invalid_population_field"></a>
 
@@ -15196,6 +15216,50 @@ def test_malformed_run_card_values_are_quarantined(tmp_path: Path) -> None
 ```
 
 A bad column count or scatter style is rejected, not coerced.
+
+<a id="gui.test_preferences.test_a_version_one_file_has_its_saved_window_and_cap_reset_to_auto"></a>
+
+#### test\_a\_version\_one\_file\_has\_its\_saved\_window\_and\_cap\_reset\_to\_auto
+
+```python
+def test_a_version_one_file_has_its_saved_window_and_cap_reset_to_auto(
+        tmp_path: Path) -> None
+```
+
+The old fixed numbers become auto in every place they were saved.
+
+<a id="gui.test_preferences.test_a_version_one_file_keeps_every_other_preference"></a>
+
+#### test\_a\_version\_one\_file\_keeps\_every\_other\_preference
+
+```python
+def test_a_version_one_file_keeps_every_other_preference(
+        tmp_path: Path) -> None
+```
+
+Only the two derived fields change; nothing else is touched.
+
+<a id="gui.test_preferences.test_a_saved_file_is_written_at_the_current_version"></a>
+
+#### test\_a\_saved\_file\_is\_written\_at\_the\_current\_version
+
+```python
+def test_a_saved_file_is_written_at_the_current_version(
+        tmp_path: Path) -> None
+```
+
+Saving after an upgrade writes version 2, so the reset happens once.
+
+<a id="gui.test_preferences.test_a_current_version_file_keeps_an_explicit_window"></a>
+
+#### test\_a\_current\_version\_file\_keeps\_an\_explicit\_window
+
+```python
+def test_a_current_version_file_keeps_an_explicit_window(
+        tmp_path: Path) -> None
+```
+
+Version 2 files hold what the user chose; nothing is reset.
 
 <a id="gui.test_presets"></a>
 

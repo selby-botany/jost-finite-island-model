@@ -78,7 +78,7 @@ deliberate design choice already in `app.py`, not an oversight this
 store should paper over.
 
 The on-disk shape is one small JSON document,
-`{"schema_version": 1, "gui": {...}, "form": {...}}`, written with the
+`{"schema_version": 2, "gui": {...}, "form": {...}}`, written with the
 same mkstemp-then-`os.replace` atomic idiom `fim.gui.store.
 write_progress_sidecar` already uses — this module is that idiom's
 second caller, not a second implementation of it. A file this module
@@ -112,7 +112,18 @@ logger = logging.getLogger(__name__)
 # exactly like a corrupt file (quarantined, defaults returned) rather
 # than guessed at — the same policy `fim.persistence.manifest.
 # CURRENT_SCHEMA_VERSION` already uses for run manifests.
-CURRENT_SCHEMA_VERSION: Final = 1
+CURRENT_SCHEMA_VERSION: Final = 2
+
+# Version 1 files saved `convergence_window` and `max_generations` as the
+# explicit numbers the fixed defaults were (50 and 10000), in the last form,
+# the Settings defaults and every named preset. Those defaults are now
+# derived from the model ("auto"), and a saved 50 would silently override the
+# derivation for every later run. A version 1 file is therefore read with
+# exactly those two fields set to `auto` wherever they were saved (a saved
+# form must stay complete, or the whole form would be discarded); nothing
+# else in the file is touched and nothing is quarantined.
+LEGACY_SCHEMA_VERSION: Final = 1
+_DERIVED_FIELDS: Final = ("convergence_window", "max_generations")
 
 # Injectable so a test can supply a fixed instant for the quarantine
 # filename, matching `fim.paths.default_output_directory`'s own `Clock`
@@ -318,10 +329,12 @@ class GuiPreferences:
                 merge of an unrecognized shape.
         """
         found_version = data.get("schema_version")
-        if found_version != CURRENT_SCHEMA_VERSION:
+        if found_version not in (LEGACY_SCHEMA_VERSION, CURRENT_SCHEMA_VERSION):
             raise ValueError(
                 f"unsupported preferences schema_version: {found_version!r}"
             )
+        if found_version == LEGACY_SCHEMA_VERSION:
+            data = _with_derived_fields_reset(data)
         gui = data.get("gui", {})
         if not isinstance(gui, Mapping):
             raise ValueError("preferences 'gui' section must be an object")
@@ -533,6 +546,41 @@ class GuiPreferences:
                 own docstring.
         """
         return replace(self, default_ploidy=default_ploidy)
+
+
+def _reset(values: Mapping[str, Any]) -> dict[str, Any]:
+    """Return `values` with each saved derived field replaced by `auto`."""
+    return {
+        key: "auto" if key in _DERIVED_FIELDS else value
+        for key, value in values.items()
+    }
+
+
+def _with_derived_fields_reset(data: Mapping[str, Any]) -> dict[str, Any]:
+    """Return a version 1 document with the now-derived fields set to auto.
+
+    Args:
+        data: The parsed version 1 preferences document.
+
+    Returns:
+        A copy with `convergence_window` and `max_generations` set to
+        `auto` wherever they were saved: the `form`, `default_run_settings`
+        and every named `presets` entry.
+        Sections of the wrong shape are left for `from_dict`'s own
+        validation to reject.
+    """
+    cleaned = dict(data)
+    for section in ("form", "default_run_settings"):
+        values = cleaned.get(section)
+        if isinstance(values, Mapping):
+            cleaned[section] = _reset(values)
+    presets = cleaned.get("presets")
+    if isinstance(presets, Mapping):
+        cleaned["presets"] = {
+            name: _reset(values) if isinstance(values, Mapping) else values
+            for name, values in presets.items()
+        }
+    return cleaned
 
 
 def load_preferences(path: Path) -> tuple[GuiPreferences, str | None]:

@@ -658,3 +658,85 @@ def test_malformed_run_card_values_are_quarantined(tmp_path: Path) -> None:
 
         assert loaded == GuiPreferences(), gui
         assert warning is not None, gui
+
+
+def _version_one_file(path: Path) -> None:
+    """Write a version 1 file that saved the old fixed convergence numbers."""
+    saved = {"N": "225", "convergence_window": "50", "max_generations": "10000"}
+    path.write_text(
+        json.dumps(
+            {
+                "schema_version": 1,
+                "gui": {"dark_mode_override": "dark"},
+                "form": dict(saved),
+                "default_run_settings": {**saved, "n_replicates": "3"},
+                "presets": {"mine": dict(saved)},
+            }
+        ),
+        encoding="utf-8",
+    )
+
+
+def test_a_version_one_file_has_its_saved_window_and_cap_reset_to_auto(
+    tmp_path: Path,
+) -> None:
+    """The old fixed numbers become auto in every place they were saved."""
+    path = tmp_path / "preferences.json"
+    _version_one_file(path)
+
+    loaded, warning = load_preferences(path)
+
+    assert warning is None
+    assert path.exists()
+    assert loaded.form_values == {
+        "N": "225",
+        "convergence_window": "auto",
+        "max_generations": "auto",
+    }
+    assert loaded.default_run_settings == {
+        "N": "225",
+        "convergence_window": "auto",
+        "max_generations": "auto",
+        "n_replicates": "3",
+    }
+    assert loaded.named_presets == {
+        "mine": {"N": "225", "convergence_window": "auto", "max_generations": "auto"}
+    }
+
+
+def test_a_version_one_file_keeps_every_other_preference(tmp_path: Path) -> None:
+    """Only the two derived fields change; nothing else is touched."""
+    path = tmp_path / "preferences.json"
+    _version_one_file(path)
+
+    loaded, _ = load_preferences(path)
+
+    assert loaded.dark_mode_override == "dark"
+
+
+def test_a_saved_file_is_written_at_the_current_version(tmp_path: Path) -> None:
+    """Saving after an upgrade writes version 2, so the reset happens once."""
+    path = tmp_path / "preferences.json"
+    _version_one_file(path)
+    loaded, _ = load_preferences(path)
+
+    assert loaded.to_dict()["schema_version"] == CURRENT_SCHEMA_VERSION == 2
+
+
+def test_a_current_version_file_keeps_an_explicit_window(tmp_path: Path) -> None:
+    """Version 2 files hold what the user chose; nothing is reset."""
+    path = tmp_path / "preferences.json"
+    path.write_text(
+        json.dumps(
+            {
+                "schema_version": CURRENT_SCHEMA_VERSION,
+                "gui": {},
+                "form": {"convergence_window": "50"},
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    loaded, _ = load_preferences(path)
+
+    assert loaded.form_values == {"convergence_window": "50"}

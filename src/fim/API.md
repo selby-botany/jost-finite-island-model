@@ -38,6 +38,7 @@ Return to the [source-tree orientation](../README.md) or the [developer guide](.
   * [MAXIMUM\_RECURSION\_DEMES](#fim.convergence.defaults.MAXIMUM_RECURSION_DEMES)
   * [DerivedConvergence](#fim.convergence.defaults.DerivedConvergence)
   * [derive\_convergence\_defaults](#fim.convergence.defaults.derive_convergence_defaults)
+  * [describe\_derived\_convergence](#fim.convergence.defaults.describe_derived_convergence)
   * [island\_relaxation\_time](#fim.convergence.defaults.island_relaxation_time)
   * [recursion\_relaxation\_time](#fim.convergence.defaults.recursion_relaxation_time)
   * [relaxation\_time](#fim.convergence.defaults.relaxation_time)
@@ -1276,6 +1277,33 @@ Return the default window and cap for one model.
 - `ValueError` - If the model has no relaxation time (no migration and
   no mutation), or is an explicit matrix with more than
   `MAXIMUM_RECURSION_DEMES` demes.
+
+<a id="fim.convergence.defaults.describe_derived_convergence"></a>
+
+#### describe\_derived\_convergence
+
+```python
+def describe_derived_convergence(*, window: int, max_generations: int,
+                                 relaxation_time: float) -> str
+```
+
+Return the one-line, plain-language statement of derived settings.
+
+Shared by the command line and the desktop app so the two say the same
+thing.
+
+**Arguments**:
+
+- `window` - The derived trailing window, in generations.
+- `max_generations` - The derived generation cap.
+- `relaxation_time` - The estimated relaxation time, in generations.
+
+
+**Returns**:
+
+  A sentence such as "Convergence: window 59,078 generations, cap
+  295,390 (derived; this model needs about 19,693 generations to
+  forget its starting state)".
 
 <a id="fim.convergence.defaults.island_relaxation_time"></a>
 
@@ -4071,8 +4099,11 @@ Validate the form exactly as "Run simulation" would.
 
 **Returns**:
 
-- ``{"ok"` - True}` if `values` parses into a valid
-  `SimulationParams`; otherwise `{"ok": False, "message": ...,
+- ``{"ok"` - True, "note": ...}` if `values` parses into a valid
+  `SimulationParams`, where `note` says how long the run is
+  expected to take when the convergence window or cap was
+  derived (`""` when both were given explicitly); otherwise
+- ``{"ok"` - False, "message": ...,
 - `"field"` - ..., "tab": ...}` — `message` is the caught
   `ValueError`'s own text verbatim (matching the CLI's own
   wording), `field`/`tab` are `None` when the
@@ -7638,7 +7669,7 @@ deliberate design choice already in `app.py`, not an oversight this
 store should paper over.
 
 The on-disk shape is one small JSON document,
-`{"schema_version": 1, "gui": {...}, "form": {...}}`, written with the
+`{"schema_version": 2, "gui": {...}, "form": {...}}`, written with the
 same mkstemp-then-`os.replace` atomic idiom `fim.gui.store.
 write_progress_sidecar` already uses — this module is that idiom's
 second caller, not a second implementation of it. A file this module
