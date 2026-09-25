@@ -6,11 +6,69 @@ seed: 20260825
 loci:
   - locus_id: 1
     length: 200
+  - locus_id: 2
+    length: 200
+  - locus_id: 3
+    length: 200
+  - locus_id: 4
+    length: 200
+  - locus_id: 5
+    length: 200
+  - locus_id: 6
+    length: 200
+  - locus_id: 7
+    length: 200
+  - locus_id: 8
+    length: 200
+  - locus_id: 9
+    length: 200
+  - locus_id: 10
+    length: 200
+  - locus_id: 11
+    length: 200
+  - locus_id: 12
+    length: 200
+  - locus_id: 13
+    length: 200
+  - locus_id: 14
+    length: 200
+  - locus_id: 15
+    length: 200
+  - locus_id: 16
+    length: 200
+  - locus_id: 17
+    length: 200
+  - locus_id: 18
+    length: 200
+  - locus_id: 19
+    length: 200
+  - locus_id: 20
+    length: 200
+  - locus_id: 21
+    length: 200
+  - locus_id: 22
+    length: 200
+  - locus_id: 23
+    length: 200
+  - locus_id: 24
+    length: 200
+  - locus_id: 25
+    length: 200
+  - locus_id: 26
+    length: 200
+  - locus_id: 27
+    length: 200
+  - locus_id: 28
+    length: 200
+  - locus_id: 29
+    length: 200
+  - locus_id: 30
+    length: 200
 initial_allele_count: 2
 initial_concentration: 1.0
 deme_weighting: size
-convergence_statistic: G_ST
-convergence_window: 500
-convergence_tolerance: 0.005
-max_generations: 100000
+convergence_statistic: D
+convergence_window: auto
+convergence_tolerance: 0.01
+max_generations: auto
 n_replicates: 1

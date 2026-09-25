@@ -1,26 +1,26 @@
 {
   "artifacts": {
     "report": {
-      "bytes": 470,
-      "sha256": "79ec2cb1b1f93c6f5af563371e463dd5e410027fecbbc533ab9712c03a965c75"
+      "bytes": 449,
+      "sha256": "6672041e92647c939b1e14ef713f868c6618d72efc17aa30d0d4321d46088ad4"
     },
     "scatter": {
-      "bytes": 148135,
-      "sha256": "b87ff22fc35cb8e808e1e4ac9473ae5e9ae30786bb97986cb86cb8dcdb55ae51"
+      "bytes": 131532,
+      "sha256": "2ad2dea6e8a40e55c40bc309ee2fa7eb9a48a0e8a5ae0ef931697e8f68d07f23"
     },
     "trajectory": {
-      "bytes": 434135,
-      "sha256": "8f8ac577728558c0d444f07f4774209354f5917db4fd6c1da363e9c31579e9eb"
+      "bytes": 1054439,
+      "sha256": "6c916e5d634b097f19168ae2fde12b527a0633675243036343f3116cd5994f76"
     }
   },
   "convergence": {
     "converged": true,
-    "generation": 177,
-    "generation_count": 178,
+    "generation": 400,
+    "generation_count": 401,
     "reason": "statistic converged",
     "statistic": "D"
   },
-  "ended_at": "2026-09-25T18:21:00.636988Z",
+  "ended_at": "2026-09-25T22:01:59.782443Z",
   "engine_backend": "lineal",
   "equilibrium_final_heterozygosity": null,
   "equilibrium_generation_count": null,
@@ -32,8 +32,8 @@
     "auto_vector_min_d": 2,
     "convergence_combinator": "all",
     "convergence_statistic": "D",
-    "convergence_tolerance": 0.005,
-    "convergence_window": 100,
+    "convergence_tolerance": 0.01,
+    "convergence_window": 254,
     "d": 4,
     "deme_weighting": "size",
     "engine_backend": "lineal",
@@ -59,11 +59,11 @@
     "seed": 20260825,
     "track_expensive_statistics": false
   },
-  "run_id": "run-f99a5656e48a5cec",
+  "run_id": "run-d194569a8c0e2a46",
   "schema_version": 3,
   "sigma_band": null,
   "sigma_band_multiplier": null,
   "sigma_band_window": null,
   "software_version": "1.2.0",
-  "started_at": "2026-09-25T18:20:59.612528Z"
+  "started_at": "2026-09-25T22:01:57.812794Z"
 }

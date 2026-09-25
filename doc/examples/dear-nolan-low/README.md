@@ -2,41 +2,45 @@
 
 This example implements the low-migration scenario from the Dear-Nolan
 botanical simulations: five demes of 100 individuals each with very low
-migration and negligible mutation. At these parameters genetic drift
-dominates and demes fix on distinct alleles, producing near-complete
-differentiation.
+migration and negligible mutation. It runs to the population's equilibrium,
+which takes tens of thousands of generations.
 
 ## Biological context
 
 The Dear-Nolan scenarios (referenced in the `fim` calibration suite) model
 isolated plant populations where seed dispersal between sites is rare.
-The low-migration configuration (m = 0.0001, &mu; = 0.000001) represents
-patches so isolated that migration rarely occurs across the lifetime of a
-study, and mutation is slow enough that new alleles arise only over
-geological time.
+The low-migration configuration (m = 0.0001, &mu; = 0.000001) gives
+Nm = 0.01, which the traditional view reads as "very high differentiation".
 
-In this regime the finite-island model behaves as a set of nearly isolated
-populations. Drift brings each deme to fixation independently, so the
-population-level allele pool retains diversity only because different demes
-fix on different alleles. G<sub>ST</sub> approaches 1.0 as between-deme diversity
-(H<sub>ST</sub>) approaches the total diversity H<sub>T</sub>.
+At equilibrium the opposite happens for the heterozygosity-based
+differentiation that G<sub>ST</sub> and D measure. Each deme is nearly always
+fixed for a single allele (H<sub>S</sub> ≈ 0.001), and because the total
+diversity is also near zero (H<sub>T</sub> ≈ 0.03), almost all demes are fixed
+for the *same* allele. In the source correspondence, 189 of 200 simulated loci
+had two demes fixed for the same allele (about 95%). G<sub>ST</sub> is high
+(the little diversity that exists is between demes) but D, which measures
+differentiation of allele frequencies, is near zero: it is controlled by
+m / [(d − 1) &mu;] = 25, not by Nm.
 
 Published ensemble values (engineered equilibrium start, multi-locus,
 100 replicates): **G<sub>ST</sub> ≈ 0.970, D ≈ 0.038**.
 
-A single-locus run from a random two-allele start demonstrates the same
-fixation dynamic: by generation 732 with this seed all five demes have
-fixed on a single shared allele (H<sub>S</sub> = 0) while between-deme diversity
-(H<sub>ST</sub> ≈ 0.48) reflects the period before the last locus fixed.
-G<sub>ST</sub> = 1.0 at that point because there is no within-deme diversity
-left to compare against total diversity.
+## Why the run is long
 
-The small discrepancy from the published G<sub>ST</sub> ≈ 0.970 (not 1.0) arises
-because the published value is a multi-locus ensemble average: most loci
-have already fixed but a few remain polymorphic, pulling the mean below
-1.0. A multi-locus configuration with an engineered near-equilibrium start
-(as used in `test/validation/test_simulator_equilibrium.py`) reproduces
-the published values.
+A run from a random start passes through two stages. In the first few hundred
+generations drift fixes each deme on one of its two founding alleles, usually
+on *different* alleles in different demes. That state is a plateau: G<sub>ST</sub>
+is exactly 1.0 and flat, and D is high (about 0.6). It is not the equilibrium.
+Only when migration and mutation have had time to spread one allele across the
+demes does D fall toward 0.04. The population needs about 19,700 generations
+to forget its starting state (the relaxation time; see
+[Convergence defaults](../../convergence.md)).
+
+`config.yaml` therefore leaves `convergence_window` and `max_generations` on
+`auto`. `fim run` derives a window of 59,078 generations and a cap of 295,390,
+prints them, and stops once D has stayed steady for that long. Earlier
+versions stopped this scenario after a few hundred generations, on the
+plateau, with a large D.
 
 ## Parameters
 
@@ -46,8 +50,13 @@ the published values.
 | d | 5 | Number of demes |
 | m | 0.0001 | Very low symmetric migration rate |
 | &mu; | 0.000001 | Negligible per-locus mutation rate |
-| locus length | 200 | Allele-space size (infinite-alleles model) |
+| loci | 30 | Independent loci of length 200 (infinite-alleles model) |
+| convergence | `auto` | Window and cap derived from the model |
 | seed | 20260825 | Exact RNG seed |
+
+Thirty independent loci stand in for many separate simulation runs, as in the
+source correspondence (each locus is an independent replicate of the same
+demographic process).
 
 ## Running the example
 
@@ -56,36 +65,42 @@ fim run doc/examples/dear-nolan-low/config.yaml \
     --output results/dear-nolan-low --quiet
 ```
 
-Finishes in about one second. `results/dear-nolan-low/report.json` will
-match `report.json` in this directory exactly.
+Takes several minutes (about 97,000 generations of 30 loci) and writes a large
+`trajectory.jsonl`. `results/dear-nolan-low/report.json` will match
+`report.json` in this directory exactly.
 
 ## Expected output
 
 ```json
 {
   "converged": true,
-  "converged_on": "G_ST",
-  "generation": 732,
-  "G_ST": 1.0,
-  "D": 0.5999999999999999,
-  "E_ST": 0.4181656600790515,
-  "K_ST": 0.25,
-  "Gs": 1.0,
-  "Gd": 0.40000000000000013,
-  "Delta": 0.6000000000000001,
-  "A_CGD": 0.6,
-  "MI": 0.6730116670092563,
-  "H_S": 0.0,
-  "H_T": 0.47999999999999987,
-  "H_ST": 0.47999999999999987,
+  "converged_on": "D",
+  "generation": 97462,
+  "G_ST": 0.9922101418926843,
+  "D": 0.1383187273219821,
+  "E_ST": 0.10253455467966041,
+  "K_ST": 0.07222222222222223,
+  "Gs": 0.999132,
+  "Gd": 0.8609333333333334,
+  "Delta": 0.13906666666666664,
+  "A_CGD": 0.13333333333333333,
+  "MI": 0.1650229996359928,
+  "H_S": 0.0008679999999999992,
+  "H_T": 0.1114269333333333,
+  "H_ST": 0.11080559092091388,
   "reason": "statistic converged"
 }
 ```
 
-G<sub>ST</sub> converges to **1.0** at generation 732: the within-deme heterozygosity
-(H<sub>S</sub>) has reached zero — every deme is monomorphic. H<sub>T</sub> ≈ 0.48 reflects the
-diversity still present across the total population because the allele that
-fixed differs among some demes at convergence time.
+The run stopped at generation 97,462. G<sub>ST</sub> is 0.992 and D is 0.138,
+against the published ensemble values 0.970 and 0.038. This is one run of 30
+loci, and D is a noisy statistic at that size: a single locus that still
+differs between demes moves D by several hundredths. Across independent runs
+the mean is close to the published value (six replicates of ten loci gave a
+mean D of 0.040 with a standard error of 0.020; the measurements are in
+`test/validation/convergence-defaults-evidence.json`). H<sub>S</sub> ≈ 0.0009
+and H<sub>T</sub> ≈ 0.11 show the same picture as the source: nearly every
+deme is fixed, and nearly all of them on the same allele.
 
 ## Relationship to the published calibration
 
@@ -96,12 +111,12 @@ uses:
 - 12 replicates averaged together
 - A different seed (884000)
 
-That configuration holds the population near the mathematical fixed point
-where both within-deme and between-deme allele-identity recursions are
-balanced — the stationary distribution that a real isolated plant metapopulation
-would occupy if observed long after colonization. The single-locus
-random-start run here shows the *approach* to that regime: the inevitable
-fixation that occurs when drift is unchecked.
+That configuration starts the population at the mathematical fixed point where
+the within-deme and between-deme identity recursions balance, so it needs no
+long approach. This example starts from a random draw and shows the approach
+itself, which is why it runs for so long. `test/validation/
+test_convergence_defaults.py` checks that a run with the default settings
+stops near the same equilibrium.
 
 ## Files in this directory
 

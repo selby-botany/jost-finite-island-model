@@ -1,26 +1,26 @@
 {
   "artifacts": {
     "report": {
-      "bytes": 422,
-      "sha256": "a2413ee0722412a550bcb8acf08ec9a948ef7bf5270a5e8df0210ac2de70f9cb"
+      "bytes": 490,
+      "sha256": "e72510415c872001033a796f8b818ca12dd05366c98524bbffb3534783384382"
     },
     "scatter": {
-      "bytes": 240309,
-      "sha256": "5589073fbad52b73c9b1c07b347733f3218cce5615ba9542c2177e04980a967e"
+      "bytes": 225388,
+      "sha256": "90d71733237ba2bf8cb908a139d49da709b56f9a693aab6c77f1383bf401762c"
     },
     "trajectory": {
-      "bytes": 471045,
-      "sha256": "337dfeb38314712e7545feeb978b35b1047ed2d45e4f4242748d272f6f50f544"
+      "bytes": 1575570030,
+      "sha256": "0d513c2f74abf7d58d83967c64506d9a0568f4df966dee83e1fa89f2c4d51920"
     }
   },
   "convergence": {
     "converged": true,
-    "generation": 732,
-    "generation_count": 733,
+    "generation": 97462,
+    "generation_count": 97463,
     "reason": "statistic converged",
-    "statistic": "G_ST"
+    "statistic": "D"
   },
-  "ended_at": "2026-09-25T18:20:54.304667Z",
+  "ended_at": "2026-09-25T22:25:16.589626Z",
   "engine_backend": "lineal",
   "equilibrium_final_heterozygosity": null,
   "equilibrium_generation_count": null,
@@ -31,9 +31,9 @@
     "auto_vector_max_capacity": 4096,
     "auto_vector_min_d": 2,
     "convergence_combinator": "all",
-    "convergence_statistic": "G_ST",
-    "convergence_tolerance": 0.005,
-    "convergence_window": 500,
+    "convergence_statistic": "D",
+    "convergence_tolerance": 0.01,
+    "convergence_window": 59078,
     "d": 5,
     "deme_weighting": "size",
     "engine_backend": "lineal",
@@ -44,11 +44,127 @@
       {
         "length": 200,
         "locus_id": 1
+      },
+      {
+        "length": 200,
+        "locus_id": 2
+      },
+      {
+        "length": 200,
+        "locus_id": 3
+      },
+      {
+        "length": 200,
+        "locus_id": 4
+      },
+      {
+        "length": 200,
+        "locus_id": 5
+      },
+      {
+        "length": 200,
+        "locus_id": 6
+      },
+      {
+        "length": 200,
+        "locus_id": 7
+      },
+      {
+        "length": 200,
+        "locus_id": 8
+      },
+      {
+        "length": 200,
+        "locus_id": 9
+      },
+      {
+        "length": 200,
+        "locus_id": 10
+      },
+      {
+        "length": 200,
+        "locus_id": 11
+      },
+      {
+        "length": 200,
+        "locus_id": 12
+      },
+      {
+        "length": 200,
+        "locus_id": 13
+      },
+      {
+        "length": 200,
+        "locus_id": 14
+      },
+      {
+        "length": 200,
+        "locus_id": 15
+      },
+      {
+        "length": 200,
+        "locus_id": 16
+      },
+      {
+        "length": 200,
+        "locus_id": 17
+      },
+      {
+        "length": 200,
+        "locus_id": 18
+      },
+      {
+        "length": 200,
+        "locus_id": 19
+      },
+      {
+        "length": 200,
+        "locus_id": 20
+      },
+      {
+        "length": 200,
+        "locus_id": 21
+      },
+      {
+        "length": 200,
+        "locus_id": 22
+      },
+      {
+        "length": 200,
+        "locus_id": 23
+      },
+      {
+        "length": 200,
+        "locus_id": 24
+      },
+      {
+        "length": 200,
+        "locus_id": 25
+      },
+      {
+        "length": 200,
+        "locus_id": 26
+      },
+      {
+        "length": 200,
+        "locus_id": 27
+      },
+      {
+        "length": 200,
+        "locus_id": 28
+      },
+      {
+        "length": 200,
+        "locus_id": 29
+      },
+      {
+        "length": 200,
+        "locus_id": 30
       }
     ],
     "locus_aggregation": "ratio_of_means",
     "m": 0.0001,
-    "max_generations": 100000,
+    "max_generations": 295390,
     "migrant_sampling": "continuous",
     "mu": 1e-06,
     "mutation_model": "infinite_alleles",
@@ -59,11 +175,11 @@
     "seed": 20260825,
     "track_expensive_statistics": false
   },
-  "run_id": "run-f2fe50811952ff4b",
+  "run_id": "run-048402f3d2daf053",
   "schema_version": 3,
   "sigma_band": null,
   "sigma_band_multiplier": null,
   "sigma_band_window": null,
   "software_version": "1.2.0",
-  "started_at": "2026-09-25T18:20:51.198188Z"
+  "started_at": "2026-09-25T22:15:04.113131Z"
 }

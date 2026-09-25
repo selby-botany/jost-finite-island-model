@@ -17,16 +17,18 @@ fim run doc/examples/<example>/config.yaml \
     --output results/<example> --quiet
 ```
 
+The Dear-Nolan low example takes several minutes; the others take seconds.
+
 For the Dear-Nolan high example, run the reproduction script directly:
 
 ```console
 python3 doc/examples/dear-nolan-high/reproduce.py
 ```
 
-Every example finishes in seconds on a laptop, except the high-migration
-scenario's direct write-up is deliberately a lightweight 5-replicate
-reproduction of the test case rather than the full Monte Carlo sweep used in
-calibration.
+Every example except Dear-Nolan low (several minutes) finishes in seconds on
+a laptop. The high-migration scenario's direct write-up is deliberately a
+lightweight 5-replicate reproduction of the test case rather than the full
+Monte Carlo sweep used in calibration.
 
 ## Examples
 
@@ -35,15 +37,17 @@ calibration.
 **Jost (2008) Part VI** — the primary calibration anchor for `fim`.
 Four demes, N = 100, moderate migration (m = 0.01) and mutation
 (mu = 0.005). Produces an intermediate differentiation regime:
-G_ST ≈ 0.246, D ≈ 0.410 at this seed. Published ensemble values
+G_ST ≈ 0.240, D ≈ 0.611 at this seed. Published ensemble values
 (100 replicates, multi-locus engineered start): G_ST ≈ 0.176, D ≈ 0.604.
 
 ### [dear-nolan-low](dear-nolan-low/README.md)
 
 **Dear-Nolan low-migration botanical scenario** — five isolated plant
 patches, N = 100, very low migration (m = 0.0001) and negligible mutation
-(mu = 0.000001). Drift dominates: demes fix independently, G_ST → 1.0
-at generation 732. Published ensemble values: G_ST ≈ 0.970, D ≈ 0.038.
+(mu = 0.000001). Runs to equilibrium, about 97,000 generations with the
+derived defaults (several minutes): almost all demes fixed for the same
+allele, G_ST ≈ 0.99 and D ≈ 0.14 for this one 30-locus run. Published
+ensemble values: G_ST ≈ 0.970, D ≈ 0.038.
 
 ### [dear-nolan-high](dear-nolan-high/README.md)
 

@@ -10,7 +10,12 @@ from pathlib import Path
 import pytest
 
 ROOT = Path(__file__).resolve().parents[1]
-EXAMPLES = ("dear-nolan-low", "golden-part-vi")
+EXAMPLES = (
+    "golden-part-vi",
+    # Thirty loci run to equilibrium (about 90,000 generations), minutes not
+    # seconds, so it stays out of the default suite.
+    pytest.param("dear-nolan-low", marks=pytest.mark.slow),
+)
 
 
 @pytest.mark.parametrize("example", EXAMPLES)

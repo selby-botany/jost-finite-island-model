@@ -50,29 +50,31 @@ match `report.json` in this directory exactly.
 {
   "converged": true,
   "converged_on": "D",
-  "generation": 177,
-  "G_ST": 0.2463892074723479,
-  "D": 0.40987582460225047,
-  "E_ST": 0.32490450861722747,
-  "K_ST": 0.42028985507246375,
-  "Gs": 0.5154,
-  "Gd": 0.3041500000000001,
-  "Delta": 0.5208333333333333,
-  "A_CGD": 2.75,
-  "MI": 0.45041328819849136,
-  "H_S": 0.48460000000000003,
-  "H_T": 0.6430374999999999,
-  "H_ST": 0.30740686845168785,
+  "generation": 400,
+  "G_ST": 0.24024462671952998,
+  "D": 0.610873025590792,
+  "E_ST": 0.38259945507022347,
+  "K_ST": 0.22807017543859642,
+  "Gs": 0.40835,
+  "Gd": 0.15890000000000004,
+  "Delta": 0.5483333333333333,
+  "A_CGD": 1.25,
+  "MI": 0.5303954671313937,
+  "H_S": 0.59165,
+  "H_T": 0.7787375,
+  "H_ST": 0.45815476919309406,
   "reason": "statistic converged"
 }
 ```
 
-D converges at generation 177 to **0.410** and G<sub>ST</sub> to **0.246**. The
-single-locus values sit below the published ensemble means (D ≈ 0.604,
-G<sub>ST</sub> ≈ 0.176) because a single locus samples one trajectory through
-allele-frequency space; the ensemble mean requires many replicates and
-a multi-locus configuration. See
-`test/validation/test_simulator_equilibrium.py` for the full multi-locus
+D converges at generation 400 to **0.611**, close to the published ensemble
+mean (D ≈ 0.604). G<sub>ST</sub> is **0.240** against the published
+G<sub>ST</sub> ≈ 0.176: a single locus samples one trajectory through
+allele-frequency space, so it scatters around the ensemble mean. The
+convergence window and generation cap are left on `auto`; they are derived from
+this model's relaxation time (about 85 generations), so the run watches D for
+a window of 254 generations. See [Convergence defaults](../../convergence.md)
+and `test/validation/test_simulator_equilibrium.py` for the full multi-locus
 calibration test.
 
 ## Files in this directory
