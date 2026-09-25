@@ -24,6 +24,18 @@ Return to the [source-tree orientation](../README.md) or the [developer guide](.
   * [ConfidenceIntervalCriterion](#fim.convergence.criteria.ConfidenceIntervalCriterion)
     * [\_\_post\_init\_\_](#fim.convergence.criteria.ConfidenceIntervalCriterion.__post_init__)
     * [is\_stable](#fim.convergence.criteria.ConfidenceIntervalCriterion.is_stable)
+* [fim.convergence.defaults](#fim.convergence.defaults)
+  * [WINDOW\_RELAXATION\_MULTIPLE](#fim.convergence.defaults.WINDOW_RELAXATION_MULTIPLE)
+  * [CAP\_RELAXATION\_MULTIPLE](#fim.convergence.defaults.CAP_RELAXATION_MULTIPLE)
+  * [MINIMUM\_WINDOW](#fim.convergence.defaults.MINIMUM_WINDOW)
+  * [MINIMUM\_MAX\_GENERATIONS](#fim.convergence.defaults.MINIMUM_MAX_GENERATIONS)
+  * [ABSOLUTE\_MAX\_GENERATIONS](#fim.convergence.defaults.ABSOLUTE_MAX_GENERATIONS)
+  * [MAXIMUM\_RECURSION\_DEMES](#fim.convergence.defaults.MAXIMUM_RECURSION_DEMES)
+  * [DerivedConvergence](#fim.convergence.defaults.DerivedConvergence)
+  * [derive\_convergence\_defaults](#fim.convergence.defaults.derive_convergence_defaults)
+  * [island\_relaxation\_time](#fim.convergence.defaults.island_relaxation_time)
+  * [recursion\_relaxation\_time](#fim.convergence.defaults.recursion_relaxation_time)
+  * [relaxation\_time](#fim.convergence.defaults.relaxation_time)
 * [fim.convergence.monitor](#fim.convergence.monitor)
   * [StopReason](#fim.convergence.monitor.StopReason)
   * [ConvergenceOutcome](#fim.convergence.monitor.ConvergenceOutcome)
@@ -793,8 +805,11 @@ Dispatch one `fim sweep` subcommand and return its exit status.
 Convergence criteria and run-loop monitoring.
 
 This package answers "when has this simulation run been going on long
-enough?" It is organized into two modules:
+enough?" It is organized into three modules:
 
+- `fim.convergence.defaults` — derives a default window and generation
+  cap from the model's own relaxation time, since no fixed number is right
+  for every migration and mutation regime.
 - `fim.convergence.criteria` — the individual, swappable *rules* for
   judging whether a statistic's history has settled down (a trailing-
   window comparison for a single run, and a confidence-interval check
@@ -808,7 +823,7 @@ enough?" It is organized into two modules:
   cannot run forever. `ConvergenceOutcome` and `StopReason` describe
   its result.
 
-Every public name from both modules is re-exported here.
+The public names from all three modules are re-exported here.
 
 <a id="fim.convergence.criteria"></a>
 
@@ -1039,6 +1054,229 @@ and why the Student's-t method is used to compute one; this
 method's whole job is deciding whether that computed interval
 (specifically its `half_width`, the "± 3%" half of a "52% ±
 3%"-style report) has narrowed to at most `tolerance` yet.
+
+<a id="fim.convergence.defaults"></a>
+
+# fim.convergence.defaults
+
+Derive convergence defaults from the modeled population's own timescale.
+
+A fixed trailing window (say 50 generations) cannot tell "the statistic has
+stopped changing" from "the statistic is changing too slowly to see in 50
+generations". How long a run must be watched depends on how fast the
+population forgets its starting state: its *relaxation time*, `tau`. This
+module estimates `tau` from the migration, mutation and deme-size
+parameters and turns it into a default `convergence_window` and
+`max_generations`.
+
+Why `tau` has this form, and the numerical check behind it, is written up in
+the design document `20260925-claude-sonnet-5-convergence-defaults-derived-
+from-model-design.md` (Appendix A) and, for users, in `doc/convergence.md`.
+In short: every watched statistic is a smooth function of the pairwise
+identity probabilities `J`, `J` obeys a linear recurrence, and the run is
+settled only once that recurrence's slowest mode has decayed.
+
+Two routes give `tau`:
+
+- `island_relaxation_time` is a closed form, exact to about 1% for the
+  symmetric island model with equal deme sizes (the default `m` scalar).
+- `recursion_relaxation_time` builds the recurrence's linear part as a
+  `d² by d²` matrix and takes its spectral radius. It handles any migration
+  matrix and unequal deme sizes, at a cost that limits it to small `d`.
+
+<a id="fim.convergence.defaults.WINDOW_RELAXATION_MULTIPLE"></a>
+
+#### WINDOW\_RELAXATION\_MULTIPLE
+
+Default `convergence_window`, in units of the relaxation time `tau`.
+
+At a window of `2 tau` the stopping rule accepts a remaining distance from
+equilibrium of about a third of `convergence_tolerance` (Appendix A.6).
+
+<a id="fim.convergence.defaults.CAP_RELAXATION_MULTIPLE"></a>
+
+#### CAP\_RELAXATION\_MULTIPLE
+
+Default `max_generations`, in units of `tau`.
+
+A run from a far start needs about `5.7 tau` to satisfy the stopping rule
+(Appendix A.7), so `10 tau` leaves a margin of about 1.75.
+
+<a id="fim.convergence.defaults.MINIMUM_WINDOW"></a>
+
+#### MINIMUM\_WINDOW
+
+Smallest derived window: the historical default, kept as a floor.
+
+<a id="fim.convergence.defaults.MINIMUM_MAX_GENERATIONS"></a>
+
+#### MINIMUM\_MAX\_GENERATIONS
+
+Smallest derived cap: the historical default, kept as a floor.
+
+<a id="fim.convergence.defaults.ABSOLUTE_MAX_GENERATIONS"></a>
+
+#### ABSOLUTE\_MAX\_GENERATIONS
+
+Ceiling on a derived cap, so a nearly isolated system stays finite.
+
+<a id="fim.convergence.defaults.MAXIMUM_RECURSION_DEMES"></a>
+
+#### MAXIMUM\_RECURSION\_DEMES
+
+Largest `d` for which the `d² by d²` eigenvalue route is used.
+
+A 24-deme system is a 576 by 576 eigenproblem, well under a second. The
+cost grows as `d⁶`, so larger explicit migration matrices must be given
+explicit convergence values.
+
+<a id="fim.convergence.defaults.DerivedConvergence"></a>
+
+## DerivedConvergence Objects
+
+```python
+@dataclass(frozen=True, slots=True)
+class DerivedConvergence()
+```
+
+Convergence settings derived from a model's relaxation time.
+
+**Arguments**:
+
+- `window` - Trailing stability-window length, in generations.
+- `max_generations` - Hard generation cap.
+- `relaxation_time` - The estimated `tau`, in generations, for display.
+
+<a id="fim.convergence.defaults.derive_convergence_defaults"></a>
+
+#### derive\_convergence\_defaults
+
+```python
+def derive_convergence_defaults(
+        *, deme_sizes: Sequence[int], migration: MigrationInput,
+        mutation_rates: Sequence[float]) -> DerivedConvergence
+```
+
+Return the default window and cap for one model.
+
+**Arguments**:
+
+- `deme_sizes` - Gene-copy count of every deme, so `d` values.
+- `migration` - A scalar symmetric rate `m`, or a `d` by `d`
+  row-stochastic matrix.
+- `mutation_rates` - Per-locus mutation probabilities.
+
+
+**Returns**:
+
+  The derived window, cap and relaxation time.
+
+
+**Raises**:
+
+- `ValueError` - If the model has no relaxation time (no migration and
+  no mutation), or is an explicit matrix with more than
+  `MAXIMUM_RECURSION_DEMES` demes.
+
+<a id="fim.convergence.defaults.island_relaxation_time"></a>
+
+#### island\_relaxation\_time
+
+```python
+def island_relaxation_time(*, total_size: float, deme_count: int,
+                           migration: float, mutation: float) -> float
+```
+
+Return `tau` for the symmetric island model, in closed form.
+
+`T = N_total + (d - 1) / (2 m)` is the mean pairwise coalescence time
+(the time for two gene copies to reach one deme, plus the time for the
+whole population to coalesce). Mutation destroys identity at an
+independent rate `2 mu`, and independent rates add, so
+`tau = 1 / (2 mu + 1 / T)`.
+
+**Arguments**:
+
+- `total_size` - Sum of every deme's gene-copy count.
+- `deme_count` - Number of demes `d`.
+- `migration` - Scalar migration rate `m`.
+- `mutation` - Mean per-locus mutation probability.
+
+
+**Returns**:
+
+  The relaxation time in generations.
+
+
+**Raises**:
+
+- `ValueError` - If `migration` and `mutation` are both zero.
+
+<a id="fim.convergence.defaults.recursion_relaxation_time"></a>
+
+#### recursion\_relaxation\_time
+
+```python
+def recursion_relaxation_time(*, deme_sizes: Sequence[int],
+                              migration: Sequence[Sequence[float]],
+                              mutation: float) -> float
+```
+
+Return `tau` from the identity recursion's slowest mode.
+
+The pairwise identity matrix `J` updates as migrate (`M J Mᵀ`), mutate
+(scale by `(1 - mu)²`), then drift (each diagonal entry `J[i][i]` keeps
+a fraction `1 - 1/N_i`). Flattening `J` makes this a `d² by d²` matrix;
+its spectral radius `rho` gives `tau = 1 / (1 - rho)`.
+
+**Arguments**:
+
+- `deme_sizes` - Gene-copy count of every deme.
+- `migration` - A `d` by `d` row-stochastic migration matrix.
+- `mutation` - Mean per-locus mutation probability.
+
+
+**Returns**:
+
+  The relaxation time in generations.
+
+
+**Raises**:
+
+- `ValueError` - If `d` exceeds `MAXIMUM_RECURSION_DEMES`, or the model
+  has no relaxation time.
+
+<a id="fim.convergence.defaults.relaxation_time"></a>
+
+#### relaxation\_time
+
+```python
+def relaxation_time(*, deme_sizes: Sequence[int], migration: MigrationInput,
+                    mutation_rates: Sequence[float]) -> float
+```
+
+Return the relaxation time `tau` for one model, choosing the route.
+
+Equal deme sizes with a scalar `m` use the closed form. Everything else
+(an explicit matrix, or unequal sizes, where the scalar `m` is a
+size-weighted migrant pool) uses the recursion's eigenvalue.
+
+**Arguments**:
+
+- `deme_sizes` - Gene-copy count of every deme.
+- `migration` - A scalar `m`, or a `d` by `d` row-stochastic matrix.
+- `mutation_rates` - Per-locus mutation probabilities.
+
+
+**Returns**:
+
+  The relaxation time in generations.
+
+
+**Raises**:
+
+- `ValueError` - If the model has no relaxation time, or the eigenvalue
+  route is needed but `d` is too large.
 
 <a id="fim.convergence.monitor"></a>
 

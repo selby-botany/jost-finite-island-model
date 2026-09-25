@@ -1,8 +1,11 @@
 """Convergence criteria and run-loop monitoring.
 
 This package answers "when has this simulation run been going on long
-enough?" It is organized into two modules:
+enough?" It is organized into three modules:
 
+- `fim.convergence.defaults` — derives a default window and generation
+  cap from the model's own relaxation time, since no fixed number is right
+  for every migration and mutation regime.
 - `fim.convergence.criteria` — the individual, swappable *rules* for
   judging whether a statistic's history has settled down (a trailing-
   window comparison for a single run, and a confidence-interval check
@@ -16,7 +19,7 @@ enough?" It is organized into two modules:
   cannot run forever. `ConvergenceOutcome` and `StopReason` describe
   its result.
 
-Every public name from both modules is re-exported here.
+The public names from all three modules are re-exported here.
 """
 
 from fim.convergence.criteria import (
@@ -24,6 +27,10 @@ from fim.convergence.criteria import (
     ConvergenceCriterion,
     TrailingWindowCriterion,
     trailing_window_stable,
+)
+from fim.convergence.defaults import (
+    DerivedConvergence,
+    derive_convergence_defaults,
 )
 from fim.convergence.monitor import (
     ConvergenceMonitor,
@@ -36,7 +43,9 @@ __all__ = [
     "ConvergenceCriterion",
     "ConvergenceMonitor",
     "ConvergenceOutcome",
+    "DerivedConvergence",
     "StopReason",
     "TrailingWindowCriterion",
+    "derive_convergence_defaults",
     "trailing_window_stable",
 ]

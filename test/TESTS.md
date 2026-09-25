@@ -28,6 +28,7 @@ Every test module, fixture, and test function documented here in full; `doc/fim-
   - [`test_cli_sweep`](#cli.test_cli_sweep)
 - [`test/convergence/`](#group-convergence)
   - [`test_criteria_validation`](#convergence.test_criteria_validation)
+  - [`test_defaults`](#convergence.test_defaults)
   - [`test_monitor`](#convergence.test_monitor)
 - [`test/engine/`](#group-engine)
   - [`test_engine`](#engine.test_engine)
@@ -3227,6 +3228,176 @@ def test_monitor_rejects_records_after_convergence() -> None
 ```
 
 A terminal monitor cannot accept observations after its decision.
+
+<a id="convergence.test_defaults"></a>
+
+# convergence.test\_defaults
+
+Tests for `fim.convergence.defaults`: derived window and cap.
+
+<a id="convergence.test_defaults.test_closed_form_matches_the_recursion_eigenvalue"></a>
+
+#### test\_closed\_form\_matches\_the\_recursion\_eigenvalue
+
+```python
+@pytest.mark.parametrize(("d", "n", "m", "mu"), ISLAND_CASES)
+def test_closed_form_matches_the_recursion_eigenvalue(d: int, n: int, m: float,
+                                                      mu: float) -> None
+```
+
+The island closed form is within 5% of the recursion's slowest mode.
+
+<a id="convergence.test_defaults.test_dear_nolan_low_relaxation_time_is_about_twenty_thousand"></a>
+
+#### test\_dear\_nolan\_low\_relaxation\_time\_is\_about\_twenty\_thousand
+
+```python
+def test_dear_nolan_low_relaxation_time_is_about_twenty_thousand() -> None
+```
+
+The source scenario relaxes over about 20,000 generations.
+
+<a id="convergence.test_defaults.test_derived_defaults_are_multiples_of_the_relaxation_time"></a>
+
+#### test\_derived\_defaults\_are\_multiples\_of\_the\_relaxation\_time
+
+```python
+def test_derived_defaults_are_multiples_of_the_relaxation_time() -> None
+```
+
+Window and cap are the documented multiples of `tau`.
+
+<a id="convergence.test_defaults.test_fast_models_keep_the_historical_floors"></a>
+
+#### test\_fast\_models\_keep\_the\_historical\_floors
+
+```python
+def test_fast_models_keep_the_historical_floors() -> None
+```
+
+A quickly relaxing model never gets a window below 50 or a cap below 10,000.
+
+<a id="convergence.test_defaults.test_window_never_exceeds_the_cap_when_the_cap_is_clamped"></a>
+
+#### test\_window\_never\_exceeds\_the\_cap\_when\_the\_cap\_is\_clamped
+
+```python
+def test_window_never_exceeds_the_cap_when_the_cap_is_clamped() -> None
+```
+
+A nearly isolated system stays finite and keeps window <= cap.
+
+<a id="convergence.test_defaults.test_lower_migration_never_shortens_the_window"></a>
+
+#### test\_lower\_migration\_never\_shortens\_the\_window
+
+```python
+@pytest.mark.parametrize(("smaller", "larger"), [(1e-3, 1e-4), (1e-4, 1e-5)])
+def test_lower_migration_never_shortens_the_window(smaller: float,
+                                                   larger: float) -> None
+```
+
+Monotonicity: less migration means a longer (or equal) window.
+
+<a id="convergence.test_defaults.test_mutation_dominates_at_high_migration"></a>
+
+#### test\_mutation\_dominates\_at\_high\_migration
+
+```python
+def test_mutation_dominates_at_high_migration() -> None
+```
+
+With strong migration and mutation, tau is about 1 / (2 mu).
+
+<a id="convergence.test_defaults.test_ring_is_slower_than_the_island_model_at_equal_rate"></a>
+
+#### test\_ring\_is\_slower\_than\_the\_island\_model\_at\_equal\_rate
+
+```python
+def test_ring_is_slower_than_the_island_model_at_equal_rate() -> None
+```
+
+A ring's local migration lengthens the relaxation time.
+
+<a id="convergence.test_defaults.test_explicit_island_matrix_agrees_with_the_scalar_form"></a>
+
+#### test\_explicit\_island\_matrix\_agrees\_with\_the\_scalar\_form
+
+```python
+def test_explicit_island_matrix_agrees_with_the_scalar_form() -> None
+```
+
+A scalar `m` and its equivalent matrix give the same `tau`.
+
+<a id="convergence.test_defaults.test_asymmetric_matrix_has_a_finite_relaxation_time"></a>
+
+#### test\_asymmetric\_matrix\_has\_a\_finite\_relaxation\_time
+
+```python
+def test_asymmetric_matrix_has_a_finite_relaxation_time() -> None
+```
+
+A one-way chain of demes still relaxes.
+
+<a id="convergence.test_defaults.test_unequal_sizes_use_the_recursion_route"></a>
+
+#### test\_unequal\_sizes\_use\_the\_recursion\_route
+
+```python
+def test_unequal_sizes_use_the_recursion_route() -> None
+```
+
+Unequal deme sizes with a scalar `m` still produce a finite `tau`.
+
+<a id="convergence.test_defaults.test_mean_mutation_rate_across_loci_is_used"></a>
+
+#### test\_mean\_mutation\_rate\_across\_loci\_is\_used
+
+```python
+def test_mean_mutation_rate_across_loci_is_used() -> None
+```
+
+Per-locus rates are averaged.
+
+<a id="convergence.test_defaults.test_no_migration_and_no_mutation_has_no_relaxation_time"></a>
+
+#### test\_no\_migration\_and\_no\_mutation\_has\_no\_relaxation\_time
+
+```python
+def test_no_migration_and_no_mutation_has_no_relaxation_time() -> None
+```
+
+Nothing to wait for: reject rather than guess.
+
+<a id="convergence.test_defaults.test_no_migration_with_mutation_uses_the_mutation_rate"></a>
+
+#### test\_no\_migration\_with\_mutation\_uses\_the\_mutation\_rate
+
+```python
+def test_no_migration_with_mutation_uses_the_mutation_rate() -> None
+```
+
+Isolated demes still lose identity through mutation.
+
+<a id="convergence.test_defaults.test_large_explicit_matrix_is_rejected_with_guidance"></a>
+
+#### test\_large\_explicit\_matrix\_is\_rejected\_with\_guidance
+
+```python
+def test_large_explicit_matrix_is_rejected_with_guidance() -> None
+```
+
+Above the eigenvalue route's size limit, `auto` is not available.
+
+<a id="convergence.test_defaults.test_large_scalar_island_uses_the_closed_form"></a>
+
+#### test\_large\_scalar\_island\_uses\_the\_closed\_form
+
+```python
+def test_large_scalar_island_uses_the_closed_form() -> None
+```
+
+A scalar `m` at any `d` never needs the eigenvalue route.
 
 <a id="convergence.test_monitor"></a>
 
