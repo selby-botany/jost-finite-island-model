@@ -75,6 +75,7 @@ def test_a_reused_run_is_attached_to_the_study_chosen_the_second_time(
     assert groups.get_study(first_study.study_id).run_count == 1
 
 
+@pytest.mark.gui
 def test_clicking_run_on_a_computed_configuration_shows_it_and_says_so(
     fast_scalar_run_settings: Path, window: webview.Window
 ) -> None:
