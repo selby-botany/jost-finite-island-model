@@ -41,9 +41,13 @@ def test_scalar_parameters_construct_with_documented_defaults() -> None:
     assert params.convergence_statistic == PARAMETER_DEFAULTS["convergence_statistic"]
     assert params.convergence_statistics == ("D",)
     assert params.convergence_combinator == PARAMETER_DEFAULTS["convergence_combinator"]
-    assert params.convergence_window == PARAMETER_DEFAULTS["convergence_window"]
+    # Unset means "derive it": the defaults table holds None, and the
+    # constructed params hold the derived integers (see the derivation tests
+    # at the end of this file).
+    assert PARAMETER_DEFAULTS["convergence_window"] is None
+    assert PARAMETER_DEFAULTS["max_generations"] is None
+    assert params.auto_derived == {"convergence_window", "max_generations"}
     assert params.convergence_tolerance == PARAMETER_DEFAULTS["convergence_tolerance"]
-    assert params.max_generations == PARAMETER_DEFAULTS["max_generations"]
     assert params.n_replicates == PARAMETER_DEFAULTS["n_replicates"]
     assert params.n_replicates == 200
     assert params.replicate_tolerance == PARAMETER_DEFAULTS["replicate_tolerance"]
@@ -494,11 +498,12 @@ def test_mu_and_mu_b_are_mutually_exclusive_and_one_is_required() -> None:
         ({"convergence_tolerance": float("nan")}, "finite"),
         ({"max_generations": 0}, "max_generations"),
         (
-            # Default convergence_window is 50; capping max_generations to 5
+            # An explicit window of 50 with max_generations capped to 5
             # leaves room for only 6 possible records (generation 0 plus 5
             # steps), so the window could never fill before the cap stops
-            # the run.
-            {"max_generations": 5},
+            # the run. (A derived window is clamped to an explicit cap
+            # instead; see `test_a_derived_window_is_clamped_to_an_explicit_cap`.)
+            {"convergence_window": 50, "max_generations": 5},
             "convergence_window cannot exceed max_generations",
         ),
         ({"n_replicates": 0}, "n_replicates"),
@@ -1241,3 +1246,106 @@ def test_ploidy_rejects_non_integers() -> None:
     """A float or a bool is not a ploidy."""
     with pytest.raises(ValueError, match="ploidy must be an integer"):
         SimulationParams.from_mapping({**_valid_config(), "N": 40, "ploidy": 2.0})
+
+
+def test_unset_window_and_cap_are_derived_from_the_model() -> None:
+    """Unset window and cap take the derived values, recorded as derived."""
+    params = SimulationParams.from_mapping(
+        {"N": 100, "d": 5, "m": 0.0001, "mu": 0.000001, "seed": 1}
+    )
+    assert params.auto_derived == {"convergence_window", "max_generations"}
+    assert params.relaxation_time == pytest.approx(19_700, rel=0.01)
+    assert params.convergence_window == 59_078
+    assert params.max_generations == 295_390
+
+
+@pytest.mark.parametrize("auto", [None, "auto", "AUTO", " auto "])
+def test_auto_spellings_all_mean_derive(auto: object) -> None:
+    """`null` and `auto` (any case) request derivation."""
+    config = {**_valid_config(), "convergence_window": auto, "max_generations": auto}
+    params = SimulationParams.from_mapping(config)
+    assert params.auto_derived == {"convergence_window", "max_generations"}
+
+
+@pytest.mark.parametrize("bad", [0, -5, "many", 1.5, True])
+def test_a_bad_window_or_cap_is_rejected_not_read_as_auto(bad: object) -> None:
+    """A bare zero (the internal sentinel) and other junk are errors."""
+    with pytest.raises(ValueError, match="convergence_window"):
+        SimulationParams.from_mapping({**_valid_config(), "convergence_window": bad})
+    with pytest.raises(ValueError, match="max_generations"):
+        SimulationParams.from_mapping({**_valid_config(), "max_generations": bad})
+
+
+def test_explicit_values_win_and_are_not_recorded_as_derived() -> None:
+    """Both explicit: nothing derived, nothing recorded."""
+    params = SimulationParams.from_mapping(
+        {**_valid_config(), "convergence_window": 60, "max_generations": 900}
+    )
+    assert (params.convergence_window, params.max_generations) == (60, 900)
+    assert params.auto_derived == frozenset()
+    assert params.relaxation_time is None
+
+
+def test_a_derived_window_is_clamped_to_an_explicit_cap() -> None:
+    """A derived window never exceeds an explicit cap."""
+    params = SimulationParams.from_mapping(
+        {
+            "N": 100,
+            "d": 5,
+            "m": 0.0001,
+            "mu": 0.000001,
+            "seed": 1,
+            "max_generations": 1000,
+        }
+    )
+    assert params.max_generations == 1000
+    assert params.convergence_window == 1000
+    assert params.auto_derived == {"convergence_window"}
+
+
+def test_a_derived_cap_is_raised_to_fit_an_explicit_window() -> None:
+    """A derived cap leaves an explicit window the usual headroom."""
+    params = SimulationParams.from_mapping(
+        {**_valid_config(), "convergence_window": 40_000}
+    )
+    # 15 / 3 = 5 windows of headroom, the ratio the derived defaults use.
+    assert params.max_generations == 200_000
+    assert params.auto_derived == {"max_generations"}
+
+
+def test_derived_values_round_trip_as_concrete_integers() -> None:
+    """The round trip yields an equal, fully explicit configuration."""
+    original = SimulationParams.from_mapping(_valid_config())
+    again = SimulationParams.from_mapping(original.to_dict())
+    assert again == original
+    assert again.auto_derived == frozenset()
+    assert original.to_dict()["convergence_window"] == original.convergence_window
+
+
+def test_no_migration_and_no_mutation_needs_explicit_values() -> None:
+    """Nothing to wait for: derivation is refused, explicit values work."""
+    config = {"N": 20, "d": 2, "m": 0.0, "mu": 0.0, "seed": 1}
+    with pytest.raises(ValueError, match="cannot derive convergence_window"):
+        SimulationParams.from_mapping(config)
+    params = SimulationParams.from_mapping(
+        {**config, "convergence_window": 50, "max_generations": 500}
+    )
+    assert params.convergence_window == 50
+
+
+def test_a_large_explicit_matrix_needs_explicit_values() -> None:
+    """An explicit matrix beyond the eigenvalue route's size is refused."""
+    d = 30
+    matrix = [
+        [0.99 if row == column else 0.01 / (d - 1) for column in range(d)]
+        for row in range(d)
+    ]
+    config = {"N": 20, "d": d, "m": matrix, "mu": 0.001, "seed": 1}
+    with pytest.raises(ValueError, match="explicit"):
+        SimulationParams.from_mapping(config)
+    assert (
+        SimulationParams.from_mapping(
+            {**config, "convergence_window": 60, "max_generations": 600}
+        ).convergence_window
+        == 60
+    )

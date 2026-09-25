@@ -343,6 +343,7 @@ Return to the [source-tree orientation](../README.md) or the [developer guide](.
   * [step](#fim.model.operators.step)
 * [fim.model.params](#fim.model.params)
   * [ALLOWED\_PLOIDIES](#fim.model.params.ALLOWED_PLOIDIES)
+  * [AUTO\_CONVERGENCE](#fim.model.params.AUTO_CONVERGENCE)
   * [DEFAULT\_AUTO\_VECTOR\_MIN\_D](#fim.model.params.DEFAULT_AUTO_VECTOR_MIN_D)
   * [DEFAULT\_AUTO\_VECTOR\_MAX\_CAPACITY](#fim.model.params.DEFAULT_AUTO_VECTOR_MAX_CAPACITY)
   * [DEFAULT\_N\_REPLICATES](#fim.model.params.DEFAULT_N_REPLICATES)
@@ -10644,6 +10645,17 @@ independent of this file's own more code-oriented documentation.
 
 Ploidy levels the configuration accepts: haploid through tetraploid.
 
+<a id="fim.model.params.AUTO_CONVERGENCE"></a>
+
+#### AUTO\_CONVERGENCE
+
+`convergence_window`/`max_generations` value meaning "derive it".
+
+`SimulationParams.__post_init__` replaces it with the derived integer, so
+every consumer of a constructed `SimulationParams` still reads a plain
+positive integer. Zero is safe as the sentinel because an explicit value must
+be positive (config parsing rejects an explicit `0`).
+
 <a id="fim.model.params.DEFAULT_AUTO_VECTOR_MIN_D"></a>
 
 #### DEFAULT\_AUTO\_VECTOR\_MIN\_D
@@ -10652,10 +10664,10 @@ Ploidy levels the configuration accepts: haploid through tetraploid.
 `"generational-vector"` even when the config is otherwise eligible for it.
 
 Lives here, not in `fim.engine`, because it is a `SimulationParams` field
-default like any other (`convergence_window`'s own `50`, `max_generations`'s
-own `10_000`) — `fim.engine` imports it from here rather than the other way
-around, matching this project's own one-directional dependency rule (the
-engine depends on the model; the model depends on nothing in the engine).
+default like any other (`replicate_minimum`'s own `10`, for one) —
+`fim.engine` imports it from here rather than the other way around,
+matching this project's own one-directional dependency rule (the engine
+depends on the model; the model depends on nothing in the engine).
 
 Measured, not guessed — the generation-first design's own Stage 4/vector
 design's own Stage V3 deme-axis sweep found Backend V crosses over from
@@ -10929,7 +10941,10 @@ functions that actually use each one.
 - `convergence_combinator` - How several watched statistics combine —
   "all" (every one stable) or "any" (at least one stable).
   A single statistic makes this a no-op special case.
-- `convergence_window` - Trailing stability-window length.
+- `convergence_window` - Trailing stability-window length, in
+  generations. `AUTO_CONVERGENCE` (`0`, the default) derives it
+  from the model's relaxation time
+  (`fim.convergence.defaults`); an explicit value always wins.
 - `convergence_tolerance` - Maximum half-window mean difference.
 - `track_expensive_statistics` - Whether the per-generation
   convergence check also computes `E_ST`/`K_ST`/`A_CGD`/
@@ -10970,7 +10985,9 @@ functions that actually use each one.
   named in `convergence_statistic` is computed regardless of
   this flag, watched or not, exactly as before this field
   existed.
-- `max_generations` - Hard generation safety cap.
+- `max_generations` - Hard generation safety cap. `AUTO_CONVERGENCE`
+  (`0`, the default) derives it from the model's relaxation
+  time, as for `convergence_window`.
 - `n_replicates` - Number of independently seeded runs — the hard cap
   a replicate batch runs up to. Defaults to
   `DEFAULT_N_REPLICATES` (`200`), not `1`: the ordinary useful

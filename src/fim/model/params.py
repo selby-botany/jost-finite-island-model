@@ -22,12 +22,18 @@ independent of this file's own more code-oriented documentation.
 
 from __future__ import annotations
 
+import logging
 import math
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
 from types import MappingProxyType
 from typing import Any, Final, Literal, cast
 
+from fim.convergence.defaults import (
+    CAP_RELAXATION_MULTIPLE,
+    WINDOW_RELAXATION_MULTIPLE,
+    derive_convergence_defaults,
+)
 from fim.model.allele import AlleleId
 from fim.model.identifiers import parse_integer_identifier
 from fim.model.locus import LocusSpec, finite_allele_capacity
@@ -52,16 +58,27 @@ EngineBackend = Literal["lineal", "generational", "generational-vector", "auto"]
 Jit = Literal["off", "numba"]
 InitialFrequencies = tuple[tuple[Mapping[AlleleId, float], ...], ...]
 
+logger = logging.getLogger(__name__)
+
+AUTO_CONVERGENCE: Final = 0
+"""`convergence_window`/`max_generations` value meaning "derive it".
+
+`SimulationParams.__post_init__` replaces it with the derived integer, so
+every consumer of a constructed `SimulationParams` still reads a plain
+positive integer. Zero is safe as the sentinel because an explicit value must
+be positive (config parsing rejects an explicit `0`).
+"""
+
 DEFAULT_LOCUS_LENGTH: Final = 200
 DEFAULT_AUTO_VECTOR_MIN_D: Final = 2
 """`"auto"`'s own default deme-count cutover, below which it never picks
 `"generational-vector"` even when the config is otherwise eligible for it.
 
 Lives here, not in `fim.engine`, because it is a `SimulationParams` field
-default like any other (`convergence_window`'s own `50`, `max_generations`'s
-own `10_000`) — `fim.engine` imports it from here rather than the other way
-around, matching this project's own one-directional dependency rule (the
-engine depends on the model; the model depends on nothing in the engine).
+default like any other (`replicate_minimum`'s own `10`, for one) —
+`fim.engine` imports it from here rather than the other way around,
+matching this project's own one-directional dependency rule (the engine
+depends on the model; the model depends on nothing in the engine).
 
 Measured, not guessed — the generation-first design's own Stage 4/vector
 design's own Stage V3 deme-axis sweep found Backend V crosses over from
@@ -244,10 +261,10 @@ PARAMETER_DEFAULTS: Final[dict[str, object]] = {
     "locus_aggregation": "ratio_of_means",
     "convergence_statistic": "D",
     "convergence_combinator": "all",
-    "convergence_window": 50,
+    "convergence_window": None,  # None means "auto": derive it
     "convergence_tolerance": 0.01,
     "track_expensive_statistics": False,
-    "max_generations": 10_000,
+    "max_generations": None,  # None means "auto": derive it
     "n_replicates": DEFAULT_N_REPLICATES,
     "replicate_tolerance": DEFAULT_REPLICATE_TOLERANCE,
     "replicate_minimum": 10,
@@ -420,7 +437,10 @@ class SimulationParams:
         convergence_combinator: How several watched statistics combine —
             "all" (every one stable) or "any" (at least one stable).
             A single statistic makes this a no-op special case.
-        convergence_window: Trailing stability-window length.
+        convergence_window: Trailing stability-window length, in
+            generations. `AUTO_CONVERGENCE` (`0`, the default) derives it
+            from the model's relaxation time
+            (`fim.convergence.defaults`); an explicit value always wins.
         convergence_tolerance: Maximum half-window mean difference.
         track_expensive_statistics: Whether the per-generation
             convergence check also computes `E_ST`/`K_ST`/`A_CGD`/
@@ -461,7 +481,9 @@ class SimulationParams:
             named in `convergence_statistic` is computed regardless of
             this flag, watched or not, exactly as before this field
             existed.
-        max_generations: Hard generation safety cap.
+        max_generations: Hard generation safety cap. `AUTO_CONVERGENCE`
+            (`0`, the default) derives it from the model's relaxation
+            time, as for `convergence_window`.
         n_replicates: Number of independently seeded runs — the hard cap
             a replicate batch runs up to. Defaults to
             `DEFAULT_N_REPLICATES` (`200`), not `1`: the ordinary useful
@@ -630,10 +652,10 @@ class SimulationParams:
     locus_aggregation: LocusAggregation = "ratio_of_means"
     convergence_statistic: ConvergenceStatistic = "D"
     convergence_combinator: ConvergenceCombinator = "all"
-    convergence_window: int = 50
+    convergence_window: int = AUTO_CONVERGENCE
     convergence_tolerance: float = 0.01
     track_expensive_statistics: bool = False
-    max_generations: int = 10_000
+    max_generations: int = AUTO_CONVERGENCE
     n_replicates: int = DEFAULT_N_REPLICATES
     replicate_tolerance: float | None = DEFAULT_REPLICATE_TOLERANCE
     replicate_minimum: int = 10
@@ -652,6 +674,12 @@ class SimulationParams:
     sigma_band_multiplier: float | None = None
     sigma_band_window: int | None = None
     ploidy: int | None = None
+    auto_derived: frozenset[str] = field(
+        default=frozenset(), init=False, compare=False, repr=False
+    )
+    relaxation_time: float | None = field(
+        default=None, init=False, compare=False, repr=False
+    )
 
     def __post_init__(self) -> None:
         """Normalize sequence inputs and validate every parameter.
@@ -710,6 +738,7 @@ class SimulationParams:
         )
         if self.convergence_combinator not in {"any", "all"}:
             raise ValueError("convergence_combinator must be 'any' or 'all'")
+        self._resolve_convergence_defaults(population_sizes, migration, mutation_rates)
         _require_integer(
             "convergence_window",
             self.convergence_window,
@@ -856,6 +885,89 @@ class SimulationParams:
         if isinstance(self.mu, float):
             return (self.mu,) * len(self.loci)
         return self.mu
+
+    def _resolve_convergence_defaults(
+        self,
+        population_sizes: tuple[int, ...],
+        migration: Migration,
+        mutation_rates: tuple[float, ...],
+    ) -> None:
+        """Replace an `AUTO_CONVERGENCE` window and cap with derived values.
+
+        Nothing is derived when both are explicit, so a model with no
+        relaxation time (no migration and no mutation) or an explicit
+        migration matrix too large for the eigenvalue route still runs when
+        the caller states both numbers. `auto_derived` records which fields
+        were derived; `relaxation_time` records the estimate. Neither takes
+        part in equality, so a run and its reproduction from concrete
+        integers compare equal.
+
+        A derived window is clamped to an explicit cap, and a derived cap is
+        raised to fit an explicit window (the same multiples of the window
+        that the defaults use), so mixing one explicit value with one
+        derived value never produces an unreachable stopping rule.
+
+        Args:
+            population_sizes: Normalized gene-copy count per deme.
+            migration: Normalized scalar or matrix migration.
+            mutation_rates: Normalized per-locus mutation rates.
+
+        Raises:
+            ValueError: If a value must be derived but the model has no
+                relaxation time or is too large for the eigenvalue route.
+        """
+        window_auto = self.convergence_window == AUTO_CONVERGENCE
+        cap_auto = self.max_generations == AUTO_CONVERGENCE
+        if not (window_auto or cap_auto):
+            return
+        try:
+            derived = derive_convergence_defaults(
+                deme_sizes=population_sizes,
+                migration=migration,
+                mutation_rates=mutation_rates,
+            )
+        except ValueError as error:
+            raise ValueError(
+                f"cannot derive convergence_window/max_generations: {error}"
+            ) from error
+        window, cap = self.convergence_window, self.max_generations
+        if cap_auto:
+            cap = derived.max_generations
+            if not window_auto:
+                # An explicit window needs the same headroom a derived one
+                # gets; scale the derived cap by the window ratio.
+                cap = max(
+                    cap,
+                    math.ceil(
+                        CAP_RELAXATION_MULTIPLE / WINDOW_RELAXATION_MULTIPLE * window
+                    ),
+                )
+        if window_auto:
+            window = derived.window
+            if window > cap:
+                logger.info(
+                    "derived convergence_window %d exceeds max_generations %d; "
+                    "using %d",
+                    window,
+                    cap,
+                    cap,
+                )
+                window = cap
+        object.__setattr__(self, "convergence_window", window)
+        object.__setattr__(self, "max_generations", cap)
+        object.__setattr__(
+            self,
+            "auto_derived",
+            frozenset(
+                name
+                for name, is_auto in (
+                    ("convergence_window", window_auto),
+                    ("max_generations", cap_auto),
+                )
+                if is_auto
+            ),
+        )
+        object.__setattr__(self, "relaxation_time", derived.relaxation_time)
 
     def to_dict(self) -> dict[str, object]:
         """Return a JSON/YAML-serializable, lossless configuration mapping.
@@ -1068,7 +1180,7 @@ class SimulationParams:
                     PARAMETER_DEFAULTS["convergence_combinator"],
                 ),
             ),
-            convergence_window=_parse_int(
+            convergence_window=_parse_auto_int(
                 "convergence_window",
                 config.get(
                     "convergence_window",
@@ -1089,7 +1201,7 @@ class SimulationParams:
                     PARAMETER_DEFAULTS["track_expensive_statistics"],
                 ),
             ),
-            max_generations=_parse_int(
+            max_generations=_parse_auto_int(
                 "max_generations",
                 config.get(
                     "max_generations",
@@ -1606,6 +1718,29 @@ def _parse_initial_frequencies(value: Any) -> InitialFrequencies | None:
             loci.append(frequencies)
         demes.append(tuple(loci))
     return tuple(demes)
+
+
+def _parse_auto_int(name: str, value: Any) -> int:
+    """Parse a positive integer, or `None`/`"auto"` meaning "derive it".
+
+    Args:
+        name: Field name for error messages.
+        value: The configured value.
+
+    Returns:
+        The integer, or `AUTO_CONVERGENCE` for `None` and `"auto"`.
+
+    Raises:
+        ValueError: If `value` is neither `None`, `"auto"`, nor a positive
+            integer. A bare `0` is rejected rather than silently read as
+            "auto", since `0` is the internal sentinel.
+    """
+    if value is None or (isinstance(value, str) and value.strip().lower() == "auto"):
+        return AUTO_CONVERGENCE
+    parsed = _parse_int(name, value)
+    if parsed < 1:
+        raise ValueError(f"{name} must be a positive integer or 'auto'")
+    return parsed
 
 
 def _parse_int(name: str, value: Any) -> int:

@@ -19949,11 +19949,13 @@ Exactly one of `mu`/`mu_b` must be given — never both, never neither.
             "max_generations": 0
         }, "max_generations"),
         (
-            # Default convergence_window is 50; capping max_generations to 5
+            # An explicit window of 50 with max_generations capped to 5
             # leaves room for only 6 possible records (generation 0 plus 5
             # steps), so the window could never fill before the cap stops
-            # the run.
+            # the run. (A derived window is clamped to an explicit cap
+            # instead; see `test_a_derived_window_is_clamped_to_an_explicit_cap`.)
             {
+                "convergence_window": 50,
                 "max_generations": 5
             },
             "convergence_window cannot exceed max_generations",
@@ -20695,6 +20697,98 @@ def test_ploidy_rejects_non_integers() -> None
 ```
 
 A float or a bool is not a ploidy.
+
+<a id="model.test_params.test_unset_window_and_cap_are_derived_from_the_model"></a>
+
+#### test\_unset\_window\_and\_cap\_are\_derived\_from\_the\_model
+
+```python
+def test_unset_window_and_cap_are_derived_from_the_model() -> None
+```
+
+Unset window and cap take the derived values, recorded as derived.
+
+<a id="model.test_params.test_auto_spellings_all_mean_derive"></a>
+
+#### test\_auto\_spellings\_all\_mean\_derive
+
+```python
+@pytest.mark.parametrize("auto", [None, "auto", "AUTO", " auto "])
+def test_auto_spellings_all_mean_derive(auto: object) -> None
+```
+
+`null` and `auto` (any case) request derivation.
+
+<a id="model.test_params.test_a_bad_window_or_cap_is_rejected_not_read_as_auto"></a>
+
+#### test\_a\_bad\_window\_or\_cap\_is\_rejected\_not\_read\_as\_auto
+
+```python
+@pytest.mark.parametrize("bad", [0, -5, "many", 1.5, True])
+def test_a_bad_window_or_cap_is_rejected_not_read_as_auto(bad: object) -> None
+```
+
+A bare zero (the internal sentinel) and other junk are errors.
+
+<a id="model.test_params.test_explicit_values_win_and_are_not_recorded_as_derived"></a>
+
+#### test\_explicit\_values\_win\_and\_are\_not\_recorded\_as\_derived
+
+```python
+def test_explicit_values_win_and_are_not_recorded_as_derived() -> None
+```
+
+Both explicit: nothing derived, nothing recorded.
+
+<a id="model.test_params.test_a_derived_window_is_clamped_to_an_explicit_cap"></a>
+
+#### test\_a\_derived\_window\_is\_clamped\_to\_an\_explicit\_cap
+
+```python
+def test_a_derived_window_is_clamped_to_an_explicit_cap() -> None
+```
+
+A derived window never exceeds an explicit cap.
+
+<a id="model.test_params.test_a_derived_cap_is_raised_to_fit_an_explicit_window"></a>
+
+#### test\_a\_derived\_cap\_is\_raised\_to\_fit\_an\_explicit\_window
+
+```python
+def test_a_derived_cap_is_raised_to_fit_an_explicit_window() -> None
+```
+
+A derived cap leaves an explicit window the usual headroom.
+
+<a id="model.test_params.test_derived_values_round_trip_as_concrete_integers"></a>
+
+#### test\_derived\_values\_round\_trip\_as\_concrete\_integers
+
+```python
+def test_derived_values_round_trip_as_concrete_integers() -> None
+```
+
+The round trip yields an equal, fully explicit configuration.
+
+<a id="model.test_params.test_no_migration_and_no_mutation_needs_explicit_values"></a>
+
+#### test\_no\_migration\_and\_no\_mutation\_needs\_explicit\_values
+
+```python
+def test_no_migration_and_no_mutation_needs_explicit_values() -> None
+```
+
+Nothing to wait for: derivation is refused, explicit values work.
+
+<a id="model.test_params.test_a_large_explicit_matrix_needs_explicit_values"></a>
+
+#### test\_a\_large\_explicit\_matrix\_needs\_explicit\_values
+
+```python
+def test_a_large_explicit_matrix_needs_explicit_values() -> None
+```
+
+An explicit matrix beyond the eigenvalue route's size is refused.
 
 <a id="model.test_state"></a>
 
