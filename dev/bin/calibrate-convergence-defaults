@@ -1,0 +1,207 @@
+#!/usr/bin/env python3
+"""Measure how close derived convergence defaults stop to true equilibrium.
+
+`fim.convergence.defaults` sets `convergence_window` to `K * tau` and
+`max_generations` to `C * tau`, where `tau` is the model's relaxation time.
+`K` and `C` are provisional (design doc
+`20260925-claude-sonnet-5-convergence-defaults-derived-from-model-design.md`,
+sections 5.1 and 7). This script is the versioned measurement that sets
+them: for each reference regime it runs replicated simulations with the
+window and cap derived at a chosen `K` and `C`, stops each by the ordinary
+convergence rule, and compares the pooled D at the stop with the analytic
+identity-recursion fixed point.
+
+Acceptance (design section 7): the mean pooled D over replicates at the stop
+is within 0.05 of the analytic value, and no replicate ends at the cap. The
+criterion is on the mean, not on each replicate: a single stochastic run
+scatters around equilibrium by its own sampling noise (roughly 0.06 to 0.11
+at Golden Part VI with eight loci), which no stopping rule can remove. What
+the window controls is the bias, the systematic distance of the stops from
+equilibrium.
+
+Usage:
+    dev/bin/calibrate-convergence-defaults REGIME [--k K] [--c C]
+        [--replicates N] [--loci L] [--seed S]
+    dev/bin/calibrate-convergence-defaults --list
+
+Prints one JSON object with the per-replicate stops and the verdict.
+"""
+
+from __future__ import annotations
+
+import argparse
+import importlib.util
+import json
+import math
+import statistics
+import sys
+from pathlib import Path
+
+import numpy as np
+
+ROOT = Path(__file__).resolve().parents[2]
+sys.path.insert(0, str(ROOT / "src"))
+
+from fim.convergence.defaults import relaxation_time  # noqa: E402
+from fim.engine import fim  # noqa: E402
+from fim.model.locus import LocusSpec  # noqa: E402
+from fim.model.params import SimulationParams  # noqa: E402
+
+TOLERANCE = 0.01
+D_ACCEPT = 0.05
+
+
+def _ring(d: int, m: float) -> list[list[float]]:
+    """Return a nearest-neighbor ring migration matrix."""
+    matrix = [[0.0] * d for _ in range(d)]
+    for i in range(d):
+        matrix[i][i] += 1.0 - m
+        matrix[i][(i + 1) % d] += m / 2.0
+        matrix[i][(i - 1) % d] += m / 2.0
+    return matrix
+
+
+# name -> (d, N, migration, per-locus mutation rates as a function of L)
+REGIMES = {
+    "dear-nolan-low": (5, 100, 1e-4, lambda n: [1e-6] * n),
+    "dear-nolan-high": (100, 2000, 0.01, lambda n: [1e-3] * n),
+    "golden-part-vi": (4, 100, 0.01, lambda n: [0.005] * n),
+    "ring": (10, 100, _ring(10, 0.01), lambda n: [1e-6] * n),
+    "unequal-mu": (5, 100, 1e-3, lambda n: [1e-6, 4e-6] * (n // 2)),
+}
+
+
+def _load_oracle():
+    """Import the analytic identity-recursion helpers from the test suite."""
+    path = ROOT / "test" / "validation" / "test_simulator_equilibrium.py"
+    spec = importlib.util.spec_from_file_location("equilibrium_validation", path)
+    module = importlib.util.module_from_spec(spec)
+    assert spec is not None and spec.loader is not None
+    spec.loader.exec_module(module)
+    return module
+
+
+def analytic_d(oracle, d: int, n: int, migration, mus: list[float]) -> float:
+    """Return the pooled equilibrium D from the identity recursion.
+
+    Identities are linear in the identity matrix, so averaging the fixed-
+    point matrix over loci gives the ratio-of-means pooling the engine uses.
+    """
+    matrix = migration
+    if isinstance(migration, float):
+        matrix = [
+            [1.0 - migration if r == c else migration / (d - 1) for c in range(d)]
+            for r in range(d)
+        ]
+    fixed = np.mean(
+        [
+            oracle._pairwise_identity_fixed_point(
+                population_size=n, migration_matrix=matrix, mu=mu
+            )
+            for mu in sorted(set(mus))
+        ],
+        axis=0,
+    )
+    return float(oracle._pooled_statistics_from_identity_matrix(fixed, d)[1])
+
+
+def main() -> None:
+    """Run one regime and print the verdict as JSON."""
+    parser = argparse.ArgumentParser(description=__doc__.split("\n")[0])
+    parser.add_argument("regime", nargs="?", choices=sorted(REGIMES))
+    parser.add_argument("--list", action="store_true")
+    parser.add_argument("--k", type=float, default=2.0)
+    parser.add_argument("--c", type=float, default=10.0)
+    parser.add_argument("--replicates", type=int, default=10)
+    parser.add_argument("--loci", type=int, default=10)
+    parser.add_argument("--seed", type=int, default=910000)
+    args = parser.parse_args()
+    if args.list or args.regime is None:
+        print("\n".join(sorted(REGIMES)))
+        return
+
+    d, n, migration, mu_for = REGIMES[args.regime]
+    mus = mu_for(args.loci)
+    tau = relaxation_time(deme_sizes=[n] * d, migration=migration, mutation_rates=mus)
+    window = max(50, math.ceil(args.k * tau))
+    cap = max(10_000, math.ceil(args.c * tau))
+    oracle = _load_oracle()
+    expected = analytic_d(oracle, d, n, migration, mus)
+
+    loci = tuple(LocusSpec(index + 1, 200) for index in range(args.loci))
+    params = SimulationParams(
+        N=n,
+        m=migration if isinstance(migration, float) else tuple(map(tuple, migration)),
+        mu=tuple(mus) if len(set(mus)) > 1 else mus[0],
+        d=d,
+        seed=args.seed,
+        loci=loci,
+        initial_allele_count=2,
+        convergence_statistic="D",
+        convergence_window=window,
+        convergence_tolerance=TOLERANCE,
+        max_generations=cap,
+        n_replicates=args.replicates,
+        replicate_tolerance=None,
+    )
+
+    class Discard:
+        """Trajectory store that keeps nothing."""
+
+        def write_generation(self, *a, **k) -> None:
+            """Drop a generation."""
+
+        def read(self, run_id):
+            """Yield nothing."""
+            del run_id
+            return iter(())
+
+        def discard(self, run_id) -> None:
+            """Drop a run."""
+
+    results = fim(
+        n,
+        migration if isinstance(migration, float) else params.m,
+        params.mu,
+        d,
+        params=params,
+        store=Discard(),
+    )
+    results = results if isinstance(results, tuple) else (results,)
+    rows = [
+        {
+            "generation": r.report["generation"],
+            "converged": bool(r.report["converged"]),
+            "D": r.report["D"],
+            "error": abs(r.report["D"] - expected)
+            if r.report["D"] is not None
+            else None,
+        }
+        for r in results
+    ]
+    observed = [r["D"] for r in rows if r["D"] is not None]
+    mean_d = statistics.fmean(observed)
+    spread = statistics.stdev(observed) if len(observed) > 1 else 0.0
+    verdict = {
+        "regime": args.regime,
+        "k": args.k,
+        "c": args.c,
+        "tau": tau,
+        "window": window,
+        "max_generations": cap,
+        "analytic_D": expected,
+        "replicates": rows,
+        "any_hit_cap": any(not row["converged"] for row in rows),
+        "mean_D": mean_d,
+        "bias": mean_d - expected,
+        "standard_error": spread / math.sqrt(len(observed)),
+        "mean_stop_generation": statistics.fmean(r["generation"] for r in rows),
+    }
+    verdict["accepted"] = (
+        abs(verdict["bias"]) <= D_ACCEPT and not verdict["any_hit_cap"]
+    )
+    print(json.dumps(verdict, indent=2))
+
+
+if __name__ == "__main__":
+    main()

@@ -110,6 +110,7 @@ Every test module, fixture, and test function documented here in full; `doc/fim-
   - [`test_beta_workflow`](#validation.test_beta_workflow)
   - [`test_calibration_provenance`](#validation.test_calibration_provenance)
   - [`test_ci_runtime_budget`](#validation.test_ci_runtime_budget)
+  - [`test_convergence_defaults`](#validation.test_convergence_defaults)
   - [`test_doc_links`](#validation.test_doc_links)
   - [`test_equilibrium`](#validation.test_equilibrium)
   - [`test_git_hooks`](#validation.test_git_hooks)
@@ -24728,6 +24729,99 @@ the boolean `True`, not the string `"on"` -- confirmed directly
 before writing this assertion, not assumed -- so this reads the
 trigger block back the same way every other test in this file
 already reads the rest of the workflow, through `workflow[True]`.
+
+<a id="validation.test_convergence_defaults"></a>
+
+# validation.test\_convergence\_defaults
+
+Validate the derived convergence defaults against the analytic equilibrium.
+
+`fim.convergence.defaults` derives `convergence_window` and `max_generations`
+from the model's relaxation time. These tests run the engine with exactly
+the shipped derivation (no overridden multiples) and check that runs stop
+near the analytic equilibrium D from the identity recursion, and that none
+end at the cap. The measurement that chose the multiples is versioned in
+`test/validation/convergence-defaults-evidence.json`
+(`dev/bin/calibrate-convergence-defaults`).
+
+Acceptance is on the mean over replicates, not on each replicate: a single
+stochastic run scatters around equilibrium by its own sampling noise, which
+no stopping rule can remove. Seeds are fixed, so a given commit always gives
+the same result.
+
+<a id="validation.test_convergence_defaults.MAX_MEAN_STOP_D"></a>
+
+#### MAX\_MEAN\_STOP\_D
+
+Design section 7 item 6: the source scenario never stops above this D.
+
+<a id="validation.test_convergence_defaults._Discard"></a>
+
+## \_Discard Objects
+
+```python
+class _Discard()
+```
+
+Trajectory store that keeps nothing.
+
+<a id="validation.test_convergence_defaults._Discard.write_generation"></a>
+
+#### write\_generation
+
+```python
+def write_generation(*args: object, **kwargs: object) -> None
+```
+
+Drop a generation.
+
+<a id="validation.test_convergence_defaults._Discard.read"></a>
+
+#### read
+
+```python
+def read(run_id: str) -> Iterator[Any]
+```
+
+Yield nothing.
+
+<a id="validation.test_convergence_defaults._Discard.discard"></a>
+
+#### discard
+
+```python
+def discard(run_id: str) -> None
+```
+
+Drop a run.
+
+<a id="validation.test_convergence_defaults.test_golden_part_vi_stops_at_its_analytic_equilibrium"></a>
+
+#### test\_golden\_part\_vi\_stops\_at\_its\_analytic\_equilibrium
+
+```python
+@pytest.mark.slow
+@pytest.mark.statistical
+def test_golden_part_vi_stops_at_its_analytic_equilibrium() -> None
+```
+
+Fast regime: the mean stop is within 0.05 of the analytic D.
+
+<a id="validation.test_convergence_defaults.test_dear_nolan_low_never_stops_at_the_transient"></a>
+
+#### test\_dear\_nolan\_low\_never\_stops\_at\_the\_transient
+
+```python
+@pytest.mark.slow
+@pytest.mark.statistical
+def test_dear_nolan_low_never_stops_at_the_transient() -> None
+```
+
+The source scenario runs to equilibrium, not to drift fixation.
+
+Regression for the reported failure: the old fixed defaults stopped
+this scenario after about 100 generations with D near 0.4. The
+equilibrium is D near 0.04; the transient state is above 0.3.
 
 <a id="validation.test_doc_links"></a>
 

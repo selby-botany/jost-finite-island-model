@@ -1177,8 +1177,17 @@ Two routes give `tau`:
 
 Default `convergence_window`, in units of the relaxation time `tau`.
 
-At a window of `2 tau` the stopping rule accepts a remaining distance from
-equilibrium of about a third of `convergence_tolerance` (Appendix A.6).
+Set by `dev/bin/calibrate-convergence-defaults` and recorded in
+`test/validation/convergence-defaults-evidence.json`. The noise-free
+analysis (design Appendix A.6) already accepts a residual of a third of
+`convergence_tolerance` at `2 tau`, but a single stochastic run also
+carries sampling noise. Golden Part VI (60 replicates, 8 loci) stops
+0.14 below its analytic D at `1 tau`, 0.060 at `2 tau` (outside the 0.05
+acceptance) and 0.040 at `3 tau`; a longer window does not improve on that
+(0.039 at `4 tau`), because the remaining offset comes from estimating D
+over a finite number of loci, not from stopping early. The slower regimes
+measured (Dear-Nolan low, ring, unequal mutation rates) are within 0.025
+at `2 tau` and within 0.01 at `4 tau`.
 
 <a id="fim.convergence.defaults.CAP_RELAXATION_MULTIPLE"></a>
 
@@ -1186,8 +1195,10 @@ equilibrium of about a third of `convergence_tolerance` (Appendix A.6).
 
 Default `max_generations`, in units of `tau`.
 
-A run from a far start needs about `5.7 tau` to satisfy the stopping rule
-(Appendix A.7), so `10 tau` leaves a margin of about 1.75.
+A run needs its window plus the time to settle. The slowest stop measured
+was `10.2 tau` (Golden Part VI at a window of `4 tau`; `9.0 tau` at the
+shipped `3 tau`), so `15 tau` leaves a margin of about 1.5 and no measured
+run ended at the cap.
 
 <a id="fim.convergence.defaults.MINIMUM_WINDOW"></a>
 
