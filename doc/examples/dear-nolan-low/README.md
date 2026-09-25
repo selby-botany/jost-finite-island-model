@@ -25,7 +25,7 @@ Published ensemble values (engineered equilibrium start, multi-locus,
 100 replicates): **G<sub>ST</sub> ≈ 0.970, D ≈ 0.038**.
 
 A single-locus run from a random two-allele start demonstrates the same
-fixation dynamic: by generation 981 with this seed all five demes have
+fixation dynamic: by generation 732 with this seed all five demes have
 fixed on a single shared allele (H<sub>S</sub> = 0) while between-deme diversity
 (H<sub>ST</sub> ≈ 0.48) reflects the period before the last locus fixed.
 G<sub>ST</sub> = 1.0 at that point because there is no within-deme diversity
@@ -65,11 +65,16 @@ match `report.json` in this directory exactly.
 {
   "converged": true,
   "converged_on": "G_ST",
-  "generation": 981,
+  "generation": 732,
   "G_ST": 1.0,
   "D": 0.5999999999999999,
   "E_ST": 0.4181656600790515,
   "K_ST": 0.25,
+  "Gs": 1.0,
+  "Gd": 0.40000000000000013,
+  "Delta": 0.6000000000000001,
+  "A_CGD": 0.6,
+  "MI": 0.6730116670092563,
   "H_S": 0.0,
   "H_T": 0.47999999999999987,
   "H_ST": 0.47999999999999987,
@@ -77,7 +82,7 @@ match `report.json` in this directory exactly.
 }
 ```
 
-G<sub>ST</sub> converges to **1.0** at generation 981: the within-deme heterozygosity
+G<sub>ST</sub> converges to **1.0** at generation 732: the within-deme heterozygosity
 (H<sub>S</sub>) has reached zero — every deme is monomorphic. H<sub>T</sub> ≈ 0.48 reflects the
 diversity still present across the total population because the allele that
 fixed differs among some demes at convergence time.

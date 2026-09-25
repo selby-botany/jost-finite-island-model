@@ -50,19 +50,24 @@ match `report.json` in this directory exactly.
 {
   "converged": true,
   "converged_on": "D",
-  "generation": 148,
-  "G_ST": 0.12498550148299113,
-  "D": 0.36986368539766584,
-  "E_ST": 0.38611672455255747,
-  "K_ST": 0.4871794871794872,
-  "H_S": 0.6601,
-  "H_T": 0.7543875,
-  "H_ST": 0.2773977640482494,
+  "generation": 177,
+  "G_ST": 0.2463892074723479,
+  "D": 0.40987582460225047,
+  "E_ST": 0.32490450861722747,
+  "K_ST": 0.42028985507246375,
+  "Gs": 0.5154,
+  "Gd": 0.3041500000000001,
+  "Delta": 0.5208333333333333,
+  "A_CGD": 2.75,
+  "MI": 0.45041328819849136,
+  "H_S": 0.48460000000000003,
+  "H_T": 0.6430374999999999,
+  "H_ST": 0.30740686845168785,
   "reason": "statistic converged"
 }
 ```
 
-D converges at generation 148 to **0.370** and G<sub>ST</sub> to **0.125**. The
+D converges at generation 177 to **0.410** and G<sub>ST</sub> to **0.246**. The
 single-locus values sit below the published ensemble means (D ≈ 0.604,
 G<sub>ST</sub> ≈ 0.176) because a single locus samples one trajectory through
 allele-frequency space; the ensemble mean requires many replicates and

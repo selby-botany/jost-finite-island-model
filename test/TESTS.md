@@ -9,6 +9,7 @@ Every test module, fixture, and test function documented here in full; `doc/fim-
 - [`test/`](#group-test)
   - [`conftest`](#test.conftest)
   - [`test_build_ci_parallel`](#test.test_build_ci_parallel)
+  - [`test_doc_examples`](#test.test_doc_examples)
   - [`test_hypothesis_profile`](#test.test_hypothesis_profile)
   - [`test_launcher`](#test.test_launcher)
   - [`test_logging_setup`](#test.test_logging_setup)
@@ -378,6 +379,28 @@ def test_ci_build_runs_non_gui_parallel_and_gui_serially() -> None
 ```
 
 `--ci` keeps stateful tests out of xdist while parallelizing the rest.
+
+<a id="test.test_doc_examples"></a>
+
+# test.test\_doc\_examples
+
+Guard: committed worked-example reports match a fresh `fim run`.
+
+<a id="test.test_doc_examples.test_example_report_matches_a_fresh_run"></a>
+
+#### test\_example\_report\_matches\_a\_fresh\_run
+
+```python
+@pytest.mark.parametrize("example", EXAMPLES)
+def test_example_report_matches_a_fresh_run(example: str,
+                                            tmp_path: Path) -> None
+```
+
+The documented `report.json` is the run's exact output.
+
+Adding a statistic or changing the engine changes the report; this
+fails until the example directory is regenerated, so the docs cannot
+silently drift from the code.
 
 <a id="test.test_hypothesis_profile"></a>
 
