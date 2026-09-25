@@ -253,7 +253,8 @@ def test_the_sweep_is_part_of_configure_and_run_stays_run(
             "summary: document.getElementById('configure-sweep-summary').textContent, "
             "runLabel: document.getElementById('configure-run-button')"
             ".textContent.trim()})",
-            lambda s: s["dialogOpen"] is False,
+            # The close handler that saves runs after the dialog reports closed.
+            lambda s: s["dialogOpen"] is False and s["summary"] != "",
         )
         return before, after
 
@@ -279,7 +280,8 @@ def test_cancelling_the_dialog_with_nothing_saved_turns_the_box_off(
         return poll_until(
             "({boxOn: document.getElementById('configure-sweep-checkbox').checked, "
             "dialogOpen: document.getElementById('modal-sweep').open})",
-            lambda s: s["dialogOpen"] is False,
+            # The close event handler runs after the dialog reports closed.
+            lambda s: s["dialogOpen"] is False and s["boxOn"] is False,
         )
 
     state = _drive(window, steps)
