@@ -461,7 +461,11 @@ def test_a_sweep_passes_its_points_at_once_and_the_worker_count_to_each_point(
 
     monkeypatch.setattr(LocalPointRunner, "run_point", recording)
     api.set_default_run_settings(
-        {**api.get_default_run_settings(), "n_replicates": "2"}
+        {
+            **api.get_default_run_settings(),
+            "n_replicates": "2",
+            "engine_backend": "lineal",
+        }
     )
 
     started = api.start_sweep(_form(), _request(_D_AXIS, pointsAtOnce="1"))

@@ -353,3 +353,49 @@ def test_the_dialog_says_how_many_points_run_at_once_and_a_choice_sticks(
     assert "cores" in automatic["note"]
     assert one["note"].startswith("1 point at once")
     assert reopened["choice"] == "1"
+
+
+def test_closing_the_dialog_any_way_but_cancel_keeps_what_it_showed(
+    fast_scalar_run_settings: Path, window: webview.Window
+) -> None:
+    saved = """({
+        axes: sweepConfig === null ? null : sweepConfig.request.axes.map((a) => a.key),
+        summary: document.getElementById('configure-sweep-summary').textContent,
+        open: document.getElementById('modal-sweep').open
+    })"""
+
+    def steps(poll_until: Poll) -> Any:
+        window.evaluate_js(_SET_TINY_FIELDS + _OPEN_SWEEP)
+        poll_until(_SCREEN_STATE, _plan_ready)
+        window.evaluate_js("document.getElementById('sweep-done-button').click();")
+        first = poll_until(
+            saved, lambda s: s["open"] is False and s["axes"] is not None
+        )
+        # Reopen, add an axis, then close as Escape does (no Done, no Cancel).
+        window.evaluate_js("document.getElementById('configure-sweep-button').click();")
+        poll_until(_SCREEN_STATE, lambda s: s["dialogOpen"] is True and s["planReady"])
+        window.evaluate_js("document.getElementById('sweep-add-axis-button').click();")
+        poll_until(_SCREEN_STATE, lambda s: s["rows"] == 2 and s["planReady"] is True)
+        window.evaluate_js("document.getElementById('modal-sweep').close();")
+        escaped = poll_until(
+            saved, lambda s: s["open"] is False and len(s["axes"]) == 2
+        )
+        # Reopen, remove the axis, and press Cancel: the two axes stay.
+        window.evaluate_js("document.getElementById('configure-sweep-button').click();")
+        poll_until(_SCREEN_STATE, lambda s: s["dialogOpen"] is True and s["planReady"])
+        window.evaluate_js("document.querySelector('.sweep-axis-remove').click();")
+        poll_until(_SCREEN_STATE, lambda s: s["rows"] == 1 and s["planReady"] is True)
+        window.evaluate_js(
+            "document.getElementById('sweep-dialog-cancel-button').click();"
+        )
+        cancelled = poll_until(
+            saved, lambda s: s["open"] is False and s["axes"] is not None
+        )
+        return first, escaped, cancelled
+
+    first, escaped, cancelled = _drive(window, steps)
+
+    assert first["axes"] == ["m"]
+    assert escaped["axes"] == ["m", "N"]
+    assert escaped["summary"] == "Sweep: m (4), N (4), 16 points."
+    assert cancelled["axes"] == ["m", "N"]

@@ -555,3 +555,52 @@ def test_the_worker_limit_reaches_each_batch_point(results: Path) -> None:
     _run(study_id, runner, points_at_once=1, max_workers=2)
 
     assert runner.workers == [2, 2]
+
+
+def test_a_batch_on_a_non_lineal_engine_needs_one_core_so_points_fill_the_machine() -> (
+    None
+):
+    for backend in ("auto", "generational"):
+        chosen = resolve_concurrency(
+            points=30,
+            params=_params(n_replicates=200, engine_backend=backend),
+            cores=10,
+        )
+        assert (chosen.points_at_once, chosen.workers_per_point) == (10, None)
+
+
+def test_processes_run_the_points_of_a_sweep_and_the_runs_match_the_serial_ones(
+    results: Path, tmp_path: Path
+) -> None:
+    serial_id = _study(results, 2, 3)
+    _run(serial_id, points_at_once=1)
+    serial = {
+        groups.run_id_of(d): d
+        for d in groups.study_run_directories(groups.get_study(serial_id))
+    }
+    second_root = tmp_path / "second"
+    second_root.mkdir()
+    paths.set_results_directory_override(second_root)
+    process_id = _study(second_root, 2, 3)
+
+    outcome, events = _run(process_id, points_at_once=2)
+
+    assert (outcome.done, outcome.failed) == (2, 0)
+    assert sorted(e.position for e in events if e.kind == "point_done") == [1, 2]
+    assert not list(second_root.glob(".reserve-*"))
+    for directory in groups.study_run_directories(groups.get_study(process_id)):
+        assert directory.parent == second_root.resolve()
+        assert compare_runs(serial[groups.run_id_of(directory)], directory).identical
+
+
+def test_run_directories_are_reserved_so_two_points_never_share_a_name(
+    results: Path,
+) -> None:
+    from fim.sweep_run import _allocate_output_directory  # noqa: PLC0415
+
+    first, first_marker = _allocate_output_directory()
+    second, second_marker = _allocate_output_directory()
+
+    assert first != second
+    assert first_marker.is_dir() and second_marker.is_dir()
+    assert first.parent == results

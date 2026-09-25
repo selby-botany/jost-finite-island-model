@@ -891,6 +891,7 @@
     <h2 id="sweep-title">Sweep</h2>
 
     <div id="sweep-progress" hidden>
+      <p id="sweep-progress-spec" class="sweep-progress-spec"></p>
       <p id="sweep-progress-text" aria-live="polite"></p>
       <progress id="sweep-progress-bar" value="0" max="1"></progress>
       <table id="sweep-progress-table" class="results-table">
@@ -1722,7 +1723,7 @@
         Sweep
       </label>
       <button type="button" id="configure-sweep-button" hidden>Set up sweep…</button>
-      <span id="configure-sweep-summary" class="hint" hidden></span>
+      <span id="configure-sweep-summary" class="configure-sweep-summary" hidden></span>
       <button type="button" id="configure-explore-button">
         <svg class="button-icon" aria-hidden="true">
           <use href="icons/fim-icons.svg#icon-explore"></use>

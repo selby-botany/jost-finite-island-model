@@ -23,11 +23,15 @@ from __future__ import annotations
 
 import json
 import logging
+import multiprocessing
 import os
 import queue
+import shutil
 import threading
 from collections.abc import Callable, Mapping
-from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import ProcessPoolExecutor, ThreadPoolExecutor
+from concurrent.futures import TimeoutError as FutureTimeoutError
+from concurrent.futures.process import BrokenProcessPool
 from dataclasses import dataclass, replace
 from datetime import UTC, datetime
 from pathlib import Path
@@ -136,24 +140,24 @@ class PointRunner(Protocol):
         ...
 
 
-_ALLOCATION_LOCK = threading.Lock()
-_ALLOCATED_DIRECTORIES: set[Path] = set()
-
-
-def _allocate_output_directory() -> Path:
-    """Return a new run directory name no other point in this process holds.
+def _allocate_output_directory() -> tuple[Path, Path]:
+    """Return `(directory, reservation)` for a new run no other point holds.
 
     `paths.default_output_directory` names a directory by the microsecond
     and checks it does not exist yet, but the directory is only created when
     a run publishes, so two points allocating at once could be handed one
-    name. The lock and the set close that window.
+    name. A reservation (a hidden marker directory, made atomically) closes
+    that window between threads and between processes. The caller removes
+    the reservation when the run has published or failed.
     """
-    with _ALLOCATION_LOCK:
-        for _ in range(1000):
-            candidate = paths.default_output_directory()
-            if candidate not in _ALLOCATED_DIRECTORIES:
-                _ALLOCATED_DIRECTORIES.add(candidate)
-                return candidate
+    for _ in range(1000):
+        candidate = paths.default_output_directory()
+        reservation = candidate.parent / f".reserve-{candidate.name}"
+        try:
+            reservation.mkdir(parents=True)
+        except FileExistsError:
+            continue
+        return candidate, reservation
     raise FileExistsError("could not allocate a unique run directory")
 
 
@@ -183,12 +187,29 @@ class LocalPointRunner:
         """Run `params` synchronously; see `PointRunner.run_point`."""
         # Imported here: the runners pull in matplotlib and the GUI
         # package, which a plain `import fim.sweep_run` should not.
-        from fim.gui import batch_runner, runner  # noqa: PLC0415
 
         try:
-            output_directory = _allocate_output_directory()
+            output_directory, reservation = _allocate_output_directory()
         except FileExistsError as error:
             return PointFailure(str(error))
+        try:
+            return self._run(
+                params, output_directory, cancel_event, on_message, max_workers
+            )
+        finally:
+            shutil.rmtree(reservation, ignore_errors=True)
+
+    def _run(
+        self,
+        params: SimulationParams,
+        output_directory: Path,
+        cancel_event: threading.Event,
+        on_message: Callable[[object], None] | None,
+        max_workers: int | None,
+    ) -> Path | PointFailure:
+        """Start the run into `output_directory` and drain its messages."""
+        from fim.gui import batch_runner, runner  # noqa: PLC0415
+
         workers = max_workers if max_workers is not None else self.max_workers
         message_queue: queue.Queue[Any] = queue.Queue()
         try:
@@ -215,6 +236,84 @@ class LocalPointRunner:
                 return PointFailure(str(message[1]))
             if on_message is not None:
                 on_message(message)
+
+
+def _run_point_in_process(
+    params: SimulationParams,
+    results_directory: str,
+    max_workers: int | None,
+    cancel_event: Any,
+) -> tuple[str, str]:
+    """Run one point in a worker process; the entry point `ProcessPointRunner` submits.
+
+    Returns `("ok", directory)` or `("failure", reason)`. The results
+    directory is set explicitly because a spawned process starts without
+    the parent's location overrides.
+    """
+    paths.set_results_directory_override(Path(results_directory))
+    result = LocalPointRunner().run_point(params, cancel_event, None, max_workers)
+    if isinstance(result, PointFailure):
+        return "failure", result.reason
+    return "ok", str(result)
+
+
+class ProcessPointRunner:
+    """Runs each point in a worker process, so points really run in parallel.
+
+    A run inside one process is limited by the interpreter lock for the
+    engines that step demes and replicates in Python (the generational
+    engines), which a batch of threads cannot get past: measured, four such
+    points took 45 s one at a time, 18 s on four threads and 10 s in four
+    processes. A lineal batch already uses processes for its replicates and
+    runs the same in either. Each worker process runs `LocalPointRunner` on
+    one point at a time, so a lineal batch inside it starts its own workers.
+
+    A cancel reaches the worker through a shared event, and a worker that
+    dies is reported as a failed point, not a hung sweep.
+
+    Args:
+        processes: How many points can run at once.
+        max_workers: Default worker processes for a lineal batch point.
+    """
+
+    def __init__(self, processes: int, max_workers: int | None = None) -> None:
+        context = multiprocessing.get_context("spawn")
+        self._manager = context.Manager()
+        self._executor = ProcessPoolExecutor(processes, mp_context=context)
+        self.max_workers = max_workers
+
+    def run_point(
+        self,
+        params: SimulationParams,
+        cancel_event: threading.Event,
+        on_message: Callable[[object], None] | None = None,
+        max_workers: int | None = None,
+    ) -> Path | PointFailure:
+        """Run `params` in a worker process; see `PointRunner.run_point`."""
+        del on_message  # progress inside a point does not cross processes
+        shared_cancel = self._manager.Event()
+        future = self._executor.submit(
+            _run_point_in_process,
+            params,
+            str(paths.results_directory()),
+            max_workers if max_workers is not None else self.max_workers,
+            shared_cancel,
+        )
+        while True:
+            try:
+                kind, value = future.result(timeout=0.25)
+            except FutureTimeoutError:
+                if cancel_event.is_set():
+                    shared_cancel.set()
+                continue
+            except BrokenProcessPool:
+                return PointFailure("a worker process ended unexpectedly")
+            return Path(value) if kind == "ok" else PointFailure(value)
+
+    def close(self) -> None:
+        """Stop the worker processes and the shared-event server."""
+        self._executor.shutdown(wait=True, cancel_futures=True)
+        self._manager.shutdown()
 
 
 @dataclass(frozen=True, slots=True)
@@ -246,11 +345,11 @@ def resolve_concurrency(
 
     A batch already spreads its replicates over cores, so points at once
     times workers per point should not exceed the core count. "Auto"
-    (`requested=None`) fills the machine: a single run needs one core, so
-    up to one point per core; a batch of `r` replicates on a lineal engine
-    needs about `min(r, cores)`, so `cores // that` points. A non-lineal
-    engine's demand is its concurrent replicates. `max_workers`, when the
-    user set it, is each point's worker count and shrinks how many fit.
+    (`requested=None`) fills the machine: a single run, or a batch on any
+    engine but lineal, needs one core, so up to one point per core; a batch
+    of `r` replicates on the lineal engine needs about `min(r, cores)`, so
+    `cores // that` points. `max_workers`, when the user set it, is each
+    point's worker count and shrinks how many fit.
 
     Args:
         points: How many points there are to run (caps the answer).
@@ -261,14 +360,15 @@ def resolve_concurrency(
         cores: Core count; the machine's own when `None`.
     """
     available = cores if cores is not None else (os.cpu_count() or 1)
-    lineal = params.engine_backend in {"lineal", "auto"}
-    if params.n_replicates <= 1:
-        demand = 1
-    elif lineal:
+    lineal = params.engine_backend == "lineal"
+    # Only a lineal batch uses more than one core per point: it spreads its
+    # replicates over worker processes. Every other engine (the generational
+    # ones, and "auto", which never picks lineal) steps a whole batch inside
+    # one process, and measured at 0.7 to 0.9 cores each.
+    if params.n_replicates > 1 and lineal:
         demand = min(params.n_replicates, max_workers or available)
     else:
-        concurrent = params.max_concurrent_replicates or params.n_replicates
-        demand = min(concurrent, available)
+        demand = 1
     demand = max(1, demand)
     at_once = requested if requested is not None else max(1, available // demand)
     at_once = max(1, min(at_once, max(points, 1)))
@@ -547,9 +647,16 @@ def run_sweep(
         requested=points_at_once,
         max_workers=max_workers,
     )
+    process_runner: ProcessPointRunner | None = None
+    effective_runner: PointRunner = runner
+    if concurrency.points_at_once > 1 and isinstance(runner, LocalPointRunner):
+        process_runner = ProcessPointRunner(
+            concurrency.points_at_once, runner.max_workers
+        )
+        effective_runner = process_runner
     context = _Context(
         study_id,
-        runner,
+        effective_runner,
         on_event,
         cancel_event,
         software_version,
@@ -566,13 +673,17 @@ def run_sweep(
             return "cancelled"
         return _run_one_point(context, point, stale.get(point.run_id))
 
-    if todo:
-        with ThreadPoolExecutor(max_workers=concurrency.points_at_once) as pool:
-            for outcome in pool.map(work, todo):
-                if outcome == "cancelled":
-                    cancelled = True
-                else:
-                    tally[outcome] += 1
+    try:
+        if todo:
+            with ThreadPoolExecutor(max_workers=concurrency.points_at_once) as pool:
+                for outcome in pool.map(work, todo):
+                    if outcome == "cancelled":
+                        cancelled = True
+                    else:
+                        tally[outcome] += 1
+    finally:
+        if process_runner is not None:
+            process_runner.close()
     cancelled = cancelled or (cancel_event.is_set() and bool(todo))
     on_event(
         SweepEvent(

@@ -2922,3 +2922,10 @@ fieldset.composite > label {
     color: var(--fim-muted);
     font-style: italic;
 }
+
+/* What Run will run, shown where Run is pressed and on the sweep's own screen. */
+.configure-sweep-summary,
+.sweep-progress-spec {
+    font-weight: 600;
+    color: var(--fim-foreground);
+}

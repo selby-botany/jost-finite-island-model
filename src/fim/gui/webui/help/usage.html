@@ -589,10 +589,12 @@ fim sweep run sweep.yaml --points-at-once 4 --workers 2   # or --sequential
 <li><code>plan</code> checks every point first. A combination that cannot run (a torus
 whose <code>rows * columns</code> differs from <code>d</code>) is listed with its reason.</li>
 <li>A sweep of 100 points or more asks for <code>--yes</code>.</li>
-<li><strong>Points run at the same time, by default as many as fill the machine.</strong> A
-single run uses one core, and a batch of <code>r</code> replicates uses about <code>r</code>, so a
-sweep of single runs runs up to one point per core, a sweep of small batches a
-few points at once, and a sweep of large batches one point at a time.
+<li><strong>Points run at the same time, by default as many as fill the machine, each
+in its own process.</strong> A single run, or a batch on any engine but <code>lineal</code>
+(including <code>auto</code>), uses about one core; a <code>lineal</code> batch of <code>r</code> replicates
+uses about <code>r</code>. So a sweep of single runs or generational batches runs up to
+one point per core, a sweep of small lineal batches a few at once, and a sweep
+of large lineal batches one point at a time.
 <code>--points-at-once N</code> sets the number, <code>--workers N</code> the worker processes each
 batch point uses, and <code>--sequential</code> runs one point at a time with one
 worker. In the app, the Sweep dialog's <strong>Points at once</strong> does the same, and

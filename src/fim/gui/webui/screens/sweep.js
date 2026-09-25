@@ -40,6 +40,7 @@ const sweepPlanHead = document.getElementById("sweep-plan-head");
 const sweepPlanBody = document.getElementById("sweep-plan-body");
 const sweepProgressView = document.getElementById("sweep-progress");
 const sweepProgressText = document.getElementById("sweep-progress-text");
+const sweepProgressSpec = document.getElementById("sweep-progress-spec");
 const sweepProgressBar = document.getElementById("sweep-progress-bar");
 const sweepProgressHead = document.getElementById("sweep-progress-head");
 const sweepProgressBody = document.getElementById("sweep-progress-body");
@@ -550,6 +551,9 @@ async function enterSweepProgress(studyId) {
         return;
     }
     const keys = status.axes.map((axis) => axis.key);
+    sweepProgressSpec.textContent =
+        `${status.name}: ${keys.join(" × ")}, ${status.points.length} points ` +
+        `(${status.axes.map((axis) => `${axis.key} ${axis.values.length}`).join(" × ")}).`;
     sweepProgressHead.replaceChildren(sweepHeaderRow(["#", ...keys, "State"]));
     sweepProgressBody.replaceChildren();
     for (const point of status.points) {
@@ -728,6 +732,7 @@ window.fim.openSweepDialog = async function openSweepDialog(options = {}) {
         addSweepAxisRow(axis.key, axis.initial || {});
     }
     if (!sweepDialog.open) {
+        sweepDialog.returnValue = "";
         sweepDialog.showModal();
     }
 };
@@ -829,17 +834,21 @@ sweepConfigureButton.addEventListener("click", () => window.fim.openSweepDialog(
 sweepAddAxisButton.addEventListener("click", () => addSweepAxisRow());
 sweepSeedPolicySelect.addEventListener("change", onSweepAxesChanged);
 sweepPointsAtOnceSelect.addEventListener("change", onSweepAxesChanged);
-sweepDoneButton.addEventListener("click", () => {
-    if (sweepLastPlan === null) {
-        return;
-    }
-    saveSweepConfiguration(buildSweepRequest(), sweepLastPlan);
-    sweepDialog.close();
-});
-sweepDialogCancelButton.addEventListener("click", () => sweepDialog.close());
+sweepDoneButton.addEventListener("click", () => sweepDialog.close("done"));
+sweepDialogCancelButton.addEventListener("click", () => sweepDialog.close("cancel"));
+// Any way of closing the dialog except its Cancel button (Done, Escape) keeps
+// what is on screen when it is valid: edits made in the dialog are never
+// silently thrown away, which is how a sweep once ran with fewer axes than
+// the dialog had shown.
 sweepDialog.addEventListener("close", () => {
-    // Cancelled with nothing saved: the box is not on with nothing to run.
-    if (sweepConfig === null) {
+    const keep =
+        sweepDialog.returnValue !== "cancel" &&
+        sweepLastPlan !== null &&
+        !sweepDoneButton.disabled;
+    if (keep) {
+        saveSweepConfiguration(buildSweepRequest(), sweepLastPlan);
+    } else if (sweepConfig === null) {
+        // Nothing saved: the box is not on with nothing to run.
         sweepCheckbox.checked = false;
         syncSweepControls();
     }

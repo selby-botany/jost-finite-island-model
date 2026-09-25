@@ -8,6 +8,15 @@ project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- **Sweep points run in their own processes, so sweeps fill the machine.**
+  Points that run at the same time (several at once, automatic by default) each
+  get a worker process. The generational engines, which "auto" always picks,
+  step a whole batch inside one process and cannot use more than about one
+  core there (measured 0.7 to 0.9), so an automatic sweep of them was using
+  one core of ten. Measured on four such points: 45 s one at a time, 18 s on
+  four threads, 10 s in four processes; a ten-point sweep took 76 s against
+  197 s. Automatic now counts one core for every batch except a lineal one and
+  runs a point per core.
 - **Sweeps run several points at once.** Points used to run one after another,
   leaving cores idle whenever a point was a single run or a small batch. A
   sweep now runs as many points at the same time as fill the machine (a single
@@ -1133,6 +1142,12 @@ project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+- **The sweep dialog no longer throws away edits.** Only Done saved the
+  dialog; closing it any other way (Escape) kept the earlier settings, so a
+  sweep could run with fewer axes than the dialog had shown. Now every way of
+  closing except the Cancel button keeps what the dialog shows when it is
+  valid. The sweep's summary on Configure and the sweep screen both now say
+  which parameters vary and how many points there are.
 - **Deleting a study never deletes a run another study also contains.** A run
   is a link to a computed configuration and can be in several studies.
   Deleting a study, or **Delete runs…**, removes its own links and deletes only

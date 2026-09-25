@@ -580,6 +580,9 @@ Return to the [source-tree orientation](../README.md) or the [developer guide](.
     * [run\_point](#fim.sweep_run.PointRunner.run_point)
   * [LocalPointRunner](#fim.sweep_run.LocalPointRunner)
     * [run\_point](#fim.sweep_run.LocalPointRunner.run_point)
+  * [ProcessPointRunner](#fim.sweep_run.ProcessPointRunner)
+    * [run\_point](#fim.sweep_run.ProcessPointRunner.run_point)
+    * [close](#fim.sweep_run.ProcessPointRunner.close)
   * [Concurrency](#fim.sweep_run.Concurrency)
   * [resolve\_concurrency](#fim.sweep_run.resolve_concurrency)
   * [create\_sweep\_study](#fim.sweep_run.create_sweep_study)
@@ -16939,6 +16942,55 @@ def run_point(params: SimulationParams,
 
 Run `params` synchronously; see `PointRunner.run_point`.
 
+<a id="fim.sweep_run.ProcessPointRunner"></a>
+
+## ProcessPointRunner Objects
+
+```python
+class ProcessPointRunner()
+```
+
+Runs each point in a worker process, so points really run in parallel.
+
+A run inside one process is limited by the interpreter lock for the
+engines that step demes and replicates in Python (the generational
+engines), which a batch of threads cannot get past: measured, four such
+points took 45 s one at a time, 18 s on four threads and 10 s in four
+processes. A lineal batch already uses processes for its replicates and
+runs the same in either. Each worker process runs `LocalPointRunner` on
+one point at a time, so a lineal batch inside it starts its own workers.
+
+A cancel reaches the worker through a shared event, and a worker that
+dies is reported as a failed point, not a hung sweep.
+
+**Arguments**:
+
+- `processes` - How many points can run at once.
+- `max_workers` - Default worker processes for a lineal batch point.
+
+<a id="fim.sweep_run.ProcessPointRunner.run_point"></a>
+
+#### run\_point
+
+```python
+def run_point(params: SimulationParams,
+              cancel_event: threading.Event,
+              on_message: Callable[[object], None] | None = None,
+              max_workers: int | None = None) -> Path | PointFailure
+```
+
+Run `params` in a worker process; see `PointRunner.run_point`.
+
+<a id="fim.sweep_run.ProcessPointRunner.close"></a>
+
+#### close
+
+```python
+def close() -> None
+```
+
+Stop the worker processes and the shared-event server.
+
 <a id="fim.sweep_run.Concurrency"></a>
 
 ## Concurrency Objects
@@ -16975,11 +17027,11 @@ Choose how many points run at once, and each point's workers.
 
 A batch already spreads its replicates over cores, so points at once
 times workers per point should not exceed the core count. "Auto"
-(`requested=None`) fills the machine: a single run needs one core, so
-up to one point per core; a batch of `r` replicates on a lineal engine
-needs about `min(r, cores)`, so `cores // that` points. A non-lineal
-engine's demand is its concurrent replicates. `max_workers`, when the
-user set it, is each point's worker count and shrinks how many fit.
+(`requested=None`) fills the machine: a single run, or a batch on any
+engine but lineal, needs one core, so up to one point per core; a batch
+of `r` replicates on the lineal engine needs about `min(r, cores)`, so
+`cores // that` points. `max_workers`, when the user set it, is each
+point's worker count and shrinks how many fit.
 
 **Arguments**:
 
