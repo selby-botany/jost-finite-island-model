@@ -21,6 +21,11 @@ Return to the [source-tree orientation](../README.md) or the [developer guide](.
   * [TrailingWindowCriterion](#fim.convergence.criteria.TrailingWindowCriterion)
     * [\_\_post\_init\_\_](#fim.convergence.criteria.TrailingWindowCriterion.__post_init__)
     * [is\_stable](#fim.convergence.criteria.TrailingWindowCriterion.is_stable)
+    * [tracker](#fim.convergence.criteria.TrailingWindowCriterion.tracker)
+  * [TrailingWindowTracker](#fim.convergence.criteria.TrailingWindowTracker)
+    * [\_\_init\_\_](#fim.convergence.criteria.TrailingWindowTracker.__init__)
+    * [push](#fim.convergence.criteria.TrailingWindowTracker.push)
+    * [is\_stable](#fim.convergence.criteria.TrailingWindowTracker.is_stable)
   * [ConfidenceIntervalCriterion](#fim.convergence.criteria.ConfidenceIntervalCriterion)
     * [\_\_post\_init\_\_](#fim.convergence.criteria.ConfidenceIntervalCriterion.__post_init__)
     * [is\_stable](#fim.convergence.criteria.ConfidenceIntervalCriterion.is_stable)
@@ -1001,6 +1006,88 @@ def is_stable(history: Sequence[float]) -> bool
 ```
 
 Return whether the configured trailing window is stable.
+
+<a id="fim.convergence.criteria.TrailingWindowCriterion.tracker"></a>
+
+#### tracker
+
+```python
+def tracker() -> TrailingWindowTracker
+```
+
+Return an O(1)-per-observation tracker with this configuration.
+
+<a id="fim.convergence.criteria.TrailingWindowTracker"></a>
+
+## TrailingWindowTracker Objects
+
+```python
+class TrailingWindowTracker()
+```
+
+Judge `trailing_window_stable` in O(1) per observation.
+
+`trailing_window_stable` copies and sums the whole trailing window on
+every call, which costs `O(window)` per generation: negligible at a
+window of 50, but a real fraction of a generation's cost at the tens of
+thousands a slowly relaxing model needs. This tracker keeps the running
+prefix sums of the window instead.
+
+The sums are exact integers (each double scaled by `2 ** 1074`), and the
+two half means are formed by correctly rounded true division of that
+exact sum. `math.fsum` also returns the correctly rounded exact sum, so
+this tracker returns the identical decision to `trailing_window_stable`
+on every input, not merely a close one. A test pins that equivalence.
+
+<a id="fim.convergence.criteria.TrailingWindowTracker.__init__"></a>
+
+#### \_\_init\_\_
+
+```python
+def __init__(window: int, tolerance: float) -> None
+```
+
+Start an empty tracker.
+
+**Arguments**:
+
+- `window` - Trailing window length; at least 2.
+- `tolerance` - Maximum half-window mean difference counted stable.
+
+
+**Raises**:
+
+- `ValueError` - If `window` is smaller than 2, or `tolerance` is
+  negative or not finite.
+
+<a id="fim.convergence.criteria.TrailingWindowTracker.push"></a>
+
+#### push
+
+```python
+def push(value: float) -> None
+```
+
+Record one more observation.
+
+**Arguments**:
+
+- `value` - The next finite statistic value.
+
+<a id="fim.convergence.criteria.TrailingWindowTracker.is_stable"></a>
+
+#### is\_stable
+
+```python
+def is_stable() -> bool
+```
+
+Return whether the trailing window is currently stable.
+
+**Returns**:
+
+  `False` until `window` observations exist; afterward whether the
+  two half-window means are within the tolerance.
 
 <a id="fim.convergence.criteria.ConfidenceIntervalCriterion"></a>
 

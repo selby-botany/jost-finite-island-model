@@ -167,6 +167,97 @@ class TrailingWindowCriterion:
         """Return whether the configured trailing window is stable."""
         return trailing_window_stable(history, self.window, self.tolerance)
 
+    def tracker(self) -> TrailingWindowTracker:
+        """Return an O(1)-per-observation tracker with this configuration."""
+        return TrailingWindowTracker(self.window, self.tolerance)
+
+
+_EXACT_SCALE_BITS = 1074
+"""Every finite double is an integer multiple of `2 ** -1074`."""
+
+_EXACT_SCALE = 1 << _EXACT_SCALE_BITS
+
+
+def _to_exact(value: float) -> int:
+    """Return `value` as an exact integer multiple of `2 ** -1074`.
+
+    Args:
+        value: A finite double.
+
+    Returns:
+        The integer `value * 2 ** 1074`, exactly.
+    """
+    numerator, denominator = value.as_integer_ratio()
+    return numerator << (_EXACT_SCALE_BITS - (denominator.bit_length() - 1))
+
+
+class TrailingWindowTracker:
+    """Judge `trailing_window_stable` in O(1) per observation.
+
+    `trailing_window_stable` copies and sums the whole trailing window on
+    every call, which costs `O(window)` per generation: negligible at a
+    window of 50, but a real fraction of a generation's cost at the tens of
+    thousands a slowly relaxing model needs. This tracker keeps the running
+    prefix sums of the window instead.
+
+    The sums are exact integers (each double scaled by `2 ** 1074`), and the
+    two half means are formed by correctly rounded true division of that
+    exact sum. `math.fsum` also returns the correctly rounded exact sum, so
+    this tracker returns the identical decision to `trailing_window_stable`
+    on every input, not merely a close one. A test pins that equivalence.
+    """
+
+    def __init__(self, window: int, tolerance: float) -> None:
+        """Start an empty tracker.
+
+        Args:
+            window: Trailing window length; at least 2.
+            tolerance: Maximum half-window mean difference counted stable.
+
+        Raises:
+            ValueError: If `window` is smaller than 2, or `tolerance` is
+                negative or not finite.
+        """
+        if window < MINIMUM_WINDOW:
+            raise ValueError("window must be at least 2")
+        if not math.isfinite(tolerance) or tolerance < 0.0:
+            raise ValueError("tolerance must be finite and non-negative")
+        self._window = window
+        self._tolerance = tolerance
+        # Ring buffer of the last `window + 1` prefix sums; prefix sum `k`
+        # (the exact sum of the first `k` observations) lives at `k % size`.
+        self._size = window + 1
+        self._prefix = [0] * self._size
+        self._count = 0
+
+    def push(self, value: float) -> None:
+        """Record one more observation.
+
+        Args:
+            value: The next finite statistic value.
+        """
+        total = self._prefix[self._count % self._size] + _to_exact(value)
+        self._count += 1
+        self._prefix[self._count % self._size] = total
+
+    def is_stable(self) -> bool:
+        """Return whether the trailing window is currently stable.
+
+        Returns:
+            `False` until `window` observations exist; afterward whether the
+            two half-window means are within the tolerance.
+        """
+        if self._count < self._window:
+            return False
+        midpoint = self._window // 2
+        start = self._count - self._window
+        low = self._prefix[start % self._size]
+        middle = self._prefix[(start + midpoint) % self._size]
+        high = self._prefix[self._count % self._size]
+        first_mean = ((middle - low) / _EXACT_SCALE) / midpoint
+        second_mean = ((high - middle) / _EXACT_SCALE) / (self._window - midpoint)
+        return abs(first_mean - second_mean) <= self._tolerance
+
 
 @dataclass(frozen=True, slots=True)
 class ConfidenceIntervalCriterion:

@@ -30,6 +30,7 @@ Every test module, fixture, and test function documented here in full; `doc/fim-
   - [`test_criteria_validation`](#convergence.test_criteria_validation)
   - [`test_defaults`](#convergence.test_defaults)
   - [`test_monitor`](#convergence.test_monitor)
+  - [`test_tracker`](#convergence.test_tracker)
 - [`test/engine/`](#group-engine)
   - [`test_engine`](#engine.test_engine)
 - [`test/gui/`](#group-gui)
@@ -3592,6 +3593,91 @@ def test_extra_statistics_constructor_rejects_a_name_repeated_across_the_two_set
 ```
 
 A name cannot appear in both `statistics` and `extra_statistics`.
+
+<a id="convergence.test_tracker"></a>
+
+# convergence.test\_tracker
+
+Tests for `TrailingWindowTracker`: the O(1) form of the trailing check.
+
+<a id="convergence.test_tracker.test_tracker_decides_identically_to_the_reference_at_every_step"></a>
+
+#### test\_tracker\_decides\_identically\_to\_the\_reference\_at\_every\_step
+
+```python
+@pytest.mark.parametrize("kind", ["uniform", "decay", "cancellation", "tiny"])
+@pytest.mark.parametrize("window", [2, 3, 7, 50, 51])
+def test_tracker_decides_identically_to_the_reference_at_every_step(
+        kind: str, window: int) -> None
+```
+
+Every step's decision equals `trailing_window_stable`'s, exactly.
+
+<a id="convergence.test_tracker.test_tracker_is_false_until_the_window_fills"></a>
+
+#### test\_tracker\_is\_false\_until\_the\_window\_fills
+
+```python
+def test_tracker_is_false_until_the_window_fills() -> None
+```
+
+A window that has not filled is never stable.
+
+<a id="convergence.test_tracker.test_tracker_accepts_integers"></a>
+
+#### test\_tracker\_accepts\_integers
+
+```python
+def test_tracker_accepts_integers() -> None
+```
+
+The monitor may be given ints; they are exact too.
+
+<a id="convergence.test_tracker.test_tracker_validates_its_arguments"></a>
+
+#### test\_tracker\_validates\_its\_arguments
+
+```python
+@pytest.mark.parametrize(("window", "tolerance"), [(1, 0.1), (5, -0.1)])
+def test_tracker_validates_its_arguments(window: int,
+                                         tolerance: float) -> None
+```
+
+Bad arguments are rejected at construction, like the criterion.
+
+<a id="convergence.test_tracker._PlainCriterion"></a>
+
+## \_PlainCriterion Objects
+
+```python
+class _PlainCriterion()
+```
+
+A trailing-window rule that is not a `TrailingWindowCriterion`.
+
+Forces the monitor's full-history path, the reference behavior.
+
+<a id="convergence.test_tracker._PlainCriterion.is_stable"></a>
+
+#### is\_stable
+
+```python
+def is_stable(history: Sequence[float]) -> bool
+```
+
+Delegate to the reference function.
+
+<a id="convergence.test_tracker.test_monitor_stops_at_the_same_generation_on_either_path"></a>
+
+#### test\_monitor\_stops\_at\_the\_same\_generation\_on\_either\_path
+
+```python
+@pytest.mark.parametrize("window", [2, 5, 40, 41])
+def test_monitor_stops_at_the_same_generation_on_either_path(
+        window: int) -> None
+```
+
+The tracker path and the full-history path stop together.
 
 
 

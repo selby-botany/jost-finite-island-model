@@ -23,7 +23,11 @@ from dataclasses import dataclass
 from enum import StrEnum
 from typing import Literal
 
-from fim.convergence.criteria import ConvergenceCriterion
+from fim.convergence.criteria import (
+    ConvergenceCriterion,
+    TrailingWindowCriterion,
+    TrailingWindowTracker,
+)
 
 Combinator = Literal["any", "all"]
 
@@ -192,6 +196,15 @@ class ConvergenceMonitor:
         self._combinator = combinator
         self._generations: list[int] = []
         self._histories: dict[str, list[float]] = {name: [] for name in all_names}
+        # A trailing-window criterion is judged incrementally, in O(1) per
+        # generation, rather than by re-summing the whole window each time
+        # (`TrailingWindowTracker` returns the identical decision). Any other
+        # criterion is asked against the full history as before.
+        self._trackers: dict[str, TrailingWindowTracker] = (
+            {name: criterion.tracker() for name in statistic_names}
+            if isinstance(criterion, TrailingWindowCriterion)
+            else {}
+        )
         self._outcome = ConvergenceOutcome(False, False, None, None)
 
     @property
@@ -318,6 +331,8 @@ class ConvergenceMonitor:
         self._generations.append(generation)
         for statistic, number in values.items():
             self._histories[statistic].append(number)
+            if statistic in self._trackers:
+                self._trackers[statistic].push(number)
 
         # Each watched statistic's own history is judged by the same
         # criterion, independently — one statistic's history says
@@ -327,7 +342,9 @@ class ConvergenceMonitor:
         # `ConvergenceMonitor`'s own class docstring for why this is a
         # genuine no-op with only one watched statistic.
         per_statistic_stable = (
-            self._criterion.is_stable(self._histories[name])
+            self._trackers[name].is_stable()
+            if name in self._trackers
+            else self._criterion.is_stable(self._histories[name])
             for name in self._statistics
         )
         is_stable = (
