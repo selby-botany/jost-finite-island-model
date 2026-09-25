@@ -14,6 +14,7 @@ matplotlib.use("Agg", force=True)
 
 import numpy as np
 from matplotlib import pyplot as plt
+from matplotlib.artist import Artist
 from matplotlib.axes import Axes
 from matplotlib.figure import Figure
 from matplotlib.lines import Line2D
@@ -37,6 +38,7 @@ class PcaSummary(TypedDict):
 
 
 PAIRWISE_MAX_DEMES = 6
+AXIS_PAD = 0.05
 DIRECT_2D_DEMES = 2
 DIRECT_3D_DEMES = 3
 MINIMUM_PAIRWISE_MAX_DEMES = 4
@@ -91,7 +93,11 @@ def plot_frequency_scatter(
         )
         figure = _plot_deme_pair(points, 0, 1)
     figure.suptitle(_title(params))
-    figure.tight_layout()
+    if figure.legends:
+        # Room for the shared figure-level legend below the panels.
+        figure.tight_layout(rect=(0.0, 0.05, 1.0, 0.97))
+    else:
+        figure.tight_layout()
     if path is not None:
         output_path = Path(path)
         output_path.parent.mkdir(parents=True, exist_ok=True)
@@ -552,11 +558,14 @@ def _plot_pairwise(points: FloatArray, deme_count: int) -> Figure:
         squeeze=False,
     )
     for axis, pair in zip(axes.flat, pairs, strict=False):
-        _scatter_on_axis(axis, points[:, pair[0]], points[:, pair[1]])
+        _scatter_on_axis(axis, points[:, pair[0]], points[:, pair[1]], legend=False)
         axis.set_xlabel(f"Deme {pair[0] + 1}")
         axis.set_ylabel(f"Deme {pair[1] + 1}")
     for axis in tuple(axes.flat)[len(pairs) :]:
         axis.set_visible(False)
+    # One shared legend: a per-panel legend covers the very corner points
+    # (0 and 1 on each axis) that fixed alleles occupy.
+    figure.legend(handles=_marker_legend_handles(), loc="lower center", ncol=2)
     return figure
 
 
@@ -631,6 +640,7 @@ def _scatter_on_axis(
     *,
     reference: bool = True,
     highlight: bool = True,
+    legend: bool = True,
 ) -> None:
     """Render grouped points, coincidence labels, and optional diagonal.
 
@@ -667,6 +677,7 @@ def _scatter_on_axis(
             alpha=0.75,
             edgecolors="black",
             linewidths=0.4,
+            clip_on=False,
         )
     if common:
         axis.scatter(
@@ -676,6 +687,7 @@ def _scatter_on_axis(
             facecolors="none",
             edgecolors="tab:blue",
             linewidths=2.0,
+            clip_on=False,
         )
     for point, label in zip(unique, labels, strict=True):
         if label:
@@ -684,9 +696,11 @@ def _scatter_on_axis(
             )
     if reference:
         axis.plot((0.0, 1.0), (0.0, 1.0), color="0.65", linestyle="--")
-        axis.set_xlim(0.0, 1.0)
-        axis.set_ylim(0.0, 1.0)
-    if highlight:
+        # Padded so points at exactly 0 or 1 (fixed alleles) are not cut
+        # in half by the axes frame.
+        axis.set_xlim(-AXIS_PAD, 1.0 + AXIS_PAD)
+        axis.set_ylim(-AXIS_PAD, 1.0 + AXIS_PAD)
+    if highlight and legend:
         _add_marker_legend(axis)
 
 
@@ -710,23 +724,38 @@ def _add_marker_legend(axis: Axes) -> None:
     saved `scatter.png` and the on-screen plot explain themselves the same
     way.
     """
+    # Below the axes, not "best": any inside position can cover the corner
+    # points (0 and 1 on each axis) that fixed alleles occupy.
     axis.legend(
-        handles=[
-            Line2D(
-                [],
-                [],
-                marker="o",
-                linestyle="None",
-                markerfacecolor="none",
-                markeredgecolor="tab:blue",
-                markeredgewidth=2,
-                markersize=9,
-                label="Most frequent allele in either deme (ring; ties: first)",
-            ),
-            Patch(color="tab:orange", label="Other alleles"),
-        ],
-        loc="best",
+        handles=_marker_legend_handles(),
+        loc="upper center",
+        bbox_to_anchor=(0.5, -0.12),
     )
+
+
+def _marker_legend_handles() -> list[Artist]:
+    """Return the ring and swatch handles shared by every marker legend.
+
+    Args:
+        None
+
+    Returns:
+        The legend handles, ring entry first.
+    """
+    return [
+        Line2D(
+            [],
+            [],
+            marker="o",
+            linestyle="None",
+            markerfacecolor="none",
+            markeredgecolor="tab:blue",
+            markeredgewidth=2,
+            markersize=9,
+            label="Most frequent allele in either deme (ring; ties: first)",
+        ),
+        Patch(color="tab:orange", label="Other alleles"),
+    ]
 
 
 def _highlighted_indices(*frequencies: FloatArray) -> frozenset[int]:
