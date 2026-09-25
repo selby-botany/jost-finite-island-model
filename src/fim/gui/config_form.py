@@ -49,6 +49,7 @@ FieldKind = Literal[
     "choice",
     "optional_float",
     "optional_int",
+    "auto_int",
     "float_choice",
     "bool",
 ]
@@ -94,7 +95,10 @@ class FormField:
             `int(text)` and `float(text)` disagree on what they accept
             (`"3.5"` parses as a `float` but must be rejected for a
             field `SimulationParams` itself requires to be a whole
-            number). "float_choice" is "choice" restricted to a fixed
+            number). "auto_int" is a whole number or the word `auto`
+            (blank also means `auto`), for `convergence_window`/
+            `max_generations`, which `SimulationParams` derives when
+            unset. "float_choice" is "choice" restricted to a fixed
             set of numbers rather than tokens (`replicate_confidence`)
             — `from_mapping` requires an actual `float`, not its string
             spelling. "bool" is a plain, always-present checkbox
@@ -145,7 +149,7 @@ POPULATION_FIELDS: Final[tuple[FormField, ...]] = (
     FormField("d", "d (demes)", "int"),
     FormField("seed", "seed", "int"),
     FormField("deme_weighting", "deme weighting", "choice", choices=("equal", "size")),
-    FormField("max_generations", "max generations", "int"),
+    FormField("max_generations", "max generations", "auto_int"),
 )
 
 # `migrant_sampling` (G11) sits on this tab rather than a dedicated one
@@ -201,7 +205,7 @@ INITIAL_CONDITIONS_FIELDS: Final[tuple[FormField, ...]] = (
 # "bool" `FormField` rather than a composite one.
 CONVERGENCE_FIELDS: Final[tuple[FormField, ...]] = (
     FormField("convergence_combinator", "combinator", "choice", choices=("any", "all")),
-    FormField("convergence_window", "convergence window", "int"),
+    FormField("convergence_window", "convergence window", "auto_int"),
     FormField("convergence_tolerance", "tolerance", "float"),
     FormField("track_expensive_statistics", "track E_ST/K_ST for display", "bool"),
 )
@@ -509,6 +513,8 @@ def form_values_to_payload(values: Mapping[str, str]) -> dict[str, object]:
                 payload[field.name] = (
                     None if not text else _parse_float_named(field.name, text)
                 )
+            elif field.kind == "auto_int":
+                payload[field.name] = _parse_auto_int_named(field.name, text)
             elif field.kind == "optional_int":
                 payload[field.name] = (
                     None if not text else _parse_int_named(field.name, text)
@@ -1238,6 +1244,20 @@ def sigma_band_from_params(params: SimulationParams) -> dict[str, str]:
     }
 
 
+def _auto_or_number(params: SimulationParams, name: str) -> str:
+    """Return `auto` for a derived field, else its number as text.
+
+    Args:
+        params: The configuration being shown in the form.
+        name: `convergence_window` or `max_generations`.
+
+    Returns:
+        The text a form field shows, so a derived value is never frozen into
+        a saved form as if the user had typed it.
+    """
+    return "auto" if name in params.auto_derived else str(getattr(params, name))
+
+
 def params_to_form_values(params: SimulationParams) -> dict[str, str]:
     """Render a validated `SimulationParams` back into the form's fields.
 
@@ -1277,13 +1297,13 @@ def params_to_form_values(params: SimulationParams) -> dict[str, str]:
         "d": str(params.d),
         "seed": str(params.seed),
         "deme_weighting": params.deme_weighting,
-        "max_generations": str(params.max_generations),
+        "max_generations": _auto_or_number(params, "max_generations"),
         "migrant_sampling": params.migrant_sampling,
         "mutation_model": params.mutation_model,
         "initial_allele_count": str(params.initial_allele_count),
         "initial_concentration": str(params.initial_concentration),
         "convergence_combinator": params.convergence_combinator,
-        "convergence_window": str(params.convergence_window),
+        "convergence_window": _auto_or_number(params, "convergence_window"),
         "convergence_tolerance": str(params.convergence_tolerance),
         "track_expensive_statistics": (
             "true" if params.track_expensive_statistics else "false"
@@ -1515,6 +1535,27 @@ def _parse_int_list_named(name: str, text: str) -> int | list[int]:
     return [
         _parse_int_named(f"{name}[{index}]", item) for index, item in enumerate(items)
     ]
+
+
+def _parse_auto_int_named(name: str, text: str) -> int | str:
+    """Parse a whole number, or `auto` (also blank), for a derivable field.
+
+    Args:
+        name: Field name for error messages.
+        text: The trimmed field text.
+
+    Returns:
+        The integer, or the string `"auto"`.
+
+    Raises:
+        ValueError: If the text is neither blank, `auto`, nor a whole number.
+    """
+    if not text or text.lower() == "auto":
+        return "auto"
+    try:
+        return int(text)
+    except ValueError as error:
+        raise ValueError(f"{name} must be a whole number or auto") from error
 
 
 def _parse_int_named(name: str, text: str) -> int:

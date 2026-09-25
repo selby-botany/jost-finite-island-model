@@ -11962,6 +11962,64 @@ def test_starter_form_values_overlay_may_choose_the_ploidy() -> None
 
 A saved default ploidy arrives as an override and makes the starter valid.
 
+<a id="gui.test_config_form.test_a_derived_window_and_cap_are_shown_as_auto_not_as_numbers"></a>
+
+#### test\_a\_derived\_window\_and\_cap\_are\_shown\_as\_auto\_not\_as\_numbers
+
+```python
+def test_a_derived_window_and_cap_are_shown_as_auto_not_as_numbers() -> None
+```
+
+A derived value is never frozen into the form as if it were typed.
+
+<a id="gui.test_config_form.test_an_explicit_window_and_cap_are_shown_as_numbers"></a>
+
+#### test\_an\_explicit\_window\_and\_cap\_are\_shown\_as\_numbers
+
+```python
+def test_an_explicit_window_and_cap_are_shown_as_numbers() -> None
+```
+
+Explicit values stay explicit in the form.
+
+<a id="gui.test_config_form.test_the_form_accepts_auto_blank_or_a_whole_number"></a>
+
+#### test\_the\_form\_accepts\_auto\_blank\_or\_a\_whole\_number
+
+```python
+@pytest.mark.parametrize(
+    ("text", "expected"),
+    [("auto", "auto"), ("AUTO", "auto"), ("", "auto"), ("  ", "auto"),
+     ("250", 250)],
+)
+def test_the_form_accepts_auto_blank_or_a_whole_number(
+        text: str, expected: object) -> None
+```
+
+Both derivable fields parse the same way.
+
+<a id="gui.test_config_form.test_the_form_rejects_a_window_that_is_neither_auto_nor_whole"></a>
+
+#### test\_the\_form\_rejects\_a\_window\_that\_is\_neither\_auto\_nor\_whole
+
+```python
+@pytest.mark.parametrize("text", ["many", "1.5", "12abc"])
+def test_the_form_rejects_a_window_that_is_neither_auto_nor_whole(
+        text: str) -> None
+```
+
+Junk names the field and the accepted forms.
+
+<a id="gui.test_config_form.test_a_form_showing_auto_round_trips_through_the_params"></a>
+
+#### test\_a\_form\_showing\_auto\_round\_trips\_through\_the\_params
+
+```python
+def test_a_form_showing_auto_round_trips_through_the_params() -> None
+```
+
+auto in the form derives on validation and shows as auto again.
+
 <a id="gui.test_config_modal_dialogs"></a>
 
 # gui.test\_config\_modal\_dialogs

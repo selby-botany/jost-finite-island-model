@@ -6576,7 +6576,10 @@ One model-input screen field's config key, label, and value kind.
   `int(text)` and `float(text)` disagree on what they accept
   (`"3.5"` parses as a `float` but must be rejected for a
   field `SimulationParams` itself requires to be a whole
-  number). "float_choice" is "choice" restricted to a fixed
+  number). "auto_int" is a whole number or the word `auto`
+  (blank also means `auto`), for `convergence_window`/
+  `max_generations`, which `SimulationParams` derives when
+  unset. "float_choice" is "choice" restricted to a fixed
   set of numbers rather than tokens (`replicate_confidence`)
   — `from_mapping` requires an actual `float`, not its string
   spelling. "bool" is a plain, always-present checkbox

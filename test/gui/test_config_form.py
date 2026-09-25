@@ -1361,3 +1361,77 @@ def test_starter_form_values_overlay_may_choose_the_ploidy() -> None:
     assert values["N"] == "225"
     payload = config_form.form_values_to_payload(values)
     assert payload["N"] == 675
+
+
+def test_a_derived_window_and_cap_are_shown_as_auto_not_as_numbers() -> None:
+    """A derived value is never frozen into the form as if it were typed."""
+    params = SimulationParams.from_mapping(
+        {"N": 100, "d": 5, "m": 0.0001, "mu": 0.000001, "seed": 1}
+    )
+
+    values = config_form.params_to_form_values(params)
+
+    assert values["convergence_window"] == "auto"
+    assert values["max_generations"] == "auto"
+
+
+def test_an_explicit_window_and_cap_are_shown_as_numbers() -> None:
+    """Explicit values stay explicit in the form."""
+    params = SimulationParams.from_mapping(
+        {
+            "N": 100,
+            "d": 5,
+            "m": 0.0001,
+            "mu": 0.000001,
+            "seed": 1,
+            "convergence_window": 60,
+            "max_generations": 900,
+        }
+    )
+
+    values = config_form.params_to_form_values(params)
+
+    assert values["convergence_window"] == "60"
+    assert values["max_generations"] == "900"
+
+
+@pytest.mark.parametrize(
+    ("text", "expected"),
+    [("auto", "auto"), ("AUTO", "auto"), ("", "auto"), ("  ", "auto"), ("250", 250)],
+)
+def test_the_form_accepts_auto_blank_or_a_whole_number(
+    text: str, expected: object
+) -> None:
+    """Both derivable fields parse the same way."""
+    values = {**config_form.starter_form_values(), "convergence_window": text}
+
+    payload = config_form.form_values_to_payload({**values, "ploidy": "1"})
+
+    assert payload["convergence_window"] == expected
+
+
+@pytest.mark.parametrize("text", ["many", "1.5", "12abc"])
+def test_the_form_rejects_a_window_that_is_neither_auto_nor_whole(text: str) -> None:
+    """Junk names the field and the accepted forms."""
+    values = {
+        **config_form.starter_form_values(),
+        "max_generations": text,
+        "ploidy": "1",
+    }
+
+    with pytest.raises(
+        ValueError, match="max_generations must be a whole number or auto"
+    ):
+        config_form.form_values_to_payload(values)
+
+
+def test_a_form_showing_auto_round_trips_through_the_params() -> None:
+    """auto in the form derives on validation and shows as auto again."""
+    values = {
+        **config_form.starter_form_values(),
+        "convergence_window": "auto",
+        "ploidy": "1",
+    }
+    params = SimulationParams.from_mapping(config_form.form_values_to_payload(values))
+
+    assert config_form.params_to_form_values(params)["convergence_window"] == "auto"
