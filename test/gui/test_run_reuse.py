@@ -82,6 +82,7 @@ def test_clicking_run_on_a_computed_configuration_shows_it_and_says_so(
 
     state = """({
         view: window.fim.getRunViewState(),
+        pending: window.__fimScrubberPending,
         banner: document.getElementById('run-banner').textContent,
         bannerHidden: document.getElementById('run-banner').hidden
     })"""
@@ -90,13 +91,19 @@ def test_clicking_run_on_a_computed_configuration_shows_it_and_says_so(
         window.evaluate_js(
             _SET_TINY_FIELDS + "document.getElementById('run-button').click();"
         )
-        poll_until(state, lambda s: s["view"] == "completed")
+        # The completed view fetches its scrubber frames in the background;
+        # destroying the window under a bridge call still in flight crashes
+        # the process, so every stage waits for that counter to reach zero.
+        poll_until(state, lambda s: s["view"] == "completed" and s["pending"] == 0)
         before = len(groups.list_studies())
         window.evaluate_js(
             "window.fim.showScreen('screen-configure');"
             "document.getElementById('configure-run-button').click();"
         )
-        second = poll_until(state, lambda s: "already computed" in s["banner"])
+        second = poll_until(
+            state,
+            lambda s: "already computed" in s["banner"] and s["pending"] == 0,
+        )
         return before, second
 
     before, second = _drive(window, steps)

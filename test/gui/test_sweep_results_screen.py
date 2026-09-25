@@ -191,15 +191,22 @@ def test_clicking_a_cell_opens_that_runs_results_card(
                 }));
             })();"""
         )
+        # Wait out the scrubber-frame fetch the opened run starts: destroying
+        # the window under a bridge call still in flight crashes the process.
         return poll_until(
             "({screen: document.querySelector('.screen:not([hidden])').id, "
-            "state: window.fim.getRunViewState()})",
-            lambda s: s["screen"] == "screen-run" and s["state"] == "completed",
+            "state: window.fim.getRunViewState(), "
+            "pending: window.__fimScrubberPending})",
+            lambda s: (
+                s["screen"] == "screen-run"
+                and s["state"] == "completed"
+                and s["pending"] == 0
+            ),
         )
 
     opened = _drive(window, steps)
 
-    assert opened == {"screen": "screen-run", "state": "completed"}
+    assert (opened["screen"], opened["state"]) == ("screen-run", "completed")
 
 
 def test_home_offers_sweep_results_and_continue_only_for_a_sweep_study(
