@@ -121,9 +121,12 @@ initial_allele_count: 2
 initial_concentration: 1.0
 deme_weighting: equal
 convergence_statistic: D
-convergence_window: 50
+# `auto` derives the window and the generation cap from how fast this
+# population forgets its starting state (its migration, mutation and size).
+# Write a whole number instead to choose your own.
+convergence_window: auto
 convergence_tolerance: 0.01
-max_generations: 10000
+max_generations: auto
 # Explicit, not merely `DEFAULT_N_REPLICATES`'s own value (200) --
 # a real, reported request: the target default behavior for a new
 # configuration is to converge on confidence intervals, so a fresh
@@ -494,6 +497,7 @@ def _command_run_scalar(
             f"(N={params.N}, d={params.d}, m={params.m}, "
             f"mu={params.mu}, seed={params.seed})"
         )
+        _print_derived_convergence(params)
     with paths.atomic_directory(output_directory) as working_directory:
         targets = _run_artifact_targets(working_directory)
         store = JSONLTrajectoryStore(targets["trajectory"])
@@ -524,6 +528,8 @@ def _command_run_scalar(
             f"{output.report['generation']}, D={output.report['D']:.6g}, "
             f"G_ST={_format_optional(output.report['G_ST'])}"
         )
+        if not output.report["converged"]:
+            _print_cap_note(params)
         for label, path in _run_artifact_targets(output_directory).items():
             print(f"{label.capitalize():10} -> {path}")
     return 0
@@ -612,6 +618,7 @@ def _command_run_batch(
     )
     if not arguments.quiet:
         print(f"Running batch {run_id} {_batch_description(params, max_workers)}")
+        _print_derived_convergence(params)
 
     started_at = _format_timestamp(_utc_now())
     with paths.atomic_directory(output_directory) as working_directory:
@@ -853,6 +860,44 @@ def _command_update(
         )
         print(f"fim {__version__} is newer than the latest release {latest_tag}")
     return 0
+
+
+def _print_cap_note(params: SimulationParams) -> None:
+    """Explain a run that reached its generation cap, when a time is known.
+
+    Args:
+        params: The run's configuration.
+
+    Returns:
+        None. Prints nothing when the relaxation time is unknown (both
+        convergence values were given explicitly).
+    """
+    if params.relaxation_time is None:
+        return
+    print(
+        f"The statistic did not settle within {params.max_generations:,} "
+        f"generations; this model needs about {params.relaxation_time:,.0f} "
+        "generations to forget its starting state"
+    )
+
+
+def _print_derived_convergence(params: SimulationParams) -> None:
+    """Print the derived window and cap, so a long run is not a surprise.
+
+    Args:
+        params: The run's configuration.
+
+    Returns:
+        None. Prints nothing when both values were given explicitly.
+    """
+    if not params.auto_derived or params.relaxation_time is None:
+        return
+    print(
+        f"Convergence: window {params.convergence_window:,} generations, "
+        f"cap {params.max_generations:,} (derived; this model needs about "
+        f"{params.relaxation_time:,.0f} generations to forget its starting "
+        "state)"
+    )
 
 
 def _batch_description(params: SimulationParams, max_workers: int | None) -> str:

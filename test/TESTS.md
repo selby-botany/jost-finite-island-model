@@ -1930,6 +1930,26 @@ impossible.
 
 Tests for `fim.sweep`: axes, enumeration, validation and seed policy.
 
+<a id="test.test_sweep.test_an_unset_cap_is_derived_per_point_in_the_work_estimate"></a>
+
+#### test\_an\_unset\_cap\_is\_derived\_per\_point\_in\_the\_work\_estimate
+
+```python
+def test_an_unset_cap_is_derived_per_point_in_the_work_estimate() -> None
+```
+
+Points with different migration get different derived caps.
+
+<a id="test.test_sweep.test_a_point_with_no_relaxation_time_is_invalid_not_fatal"></a>
+
+#### test\_a\_point\_with\_no\_relaxation\_time\_is\_invalid\_not\_fatal
+
+```python
+def test_a_point_with_no_relaxation_time_is_invalid_not_fatal() -> None
+```
+
+No migration and no mutation cannot derive a cap; only that point fails.
+
 <a id="test.test_sweep_run"></a>
 
 # test.test\_sweep\_run
@@ -3088,6 +3108,49 @@ def test_update_requires_explicit_opt_in() -> None
 ```
 
 The update command never accesses the network without --check.
+
+<a id="cli.test_cli.test_init_writes_derived_convergence_settings"></a>
+
+#### test\_init\_writes\_derived\_convergence\_settings
+
+```python
+def test_init_writes_derived_convergence_settings(tmp_path: Path) -> None
+```
+
+The starter config asks for derived values rather than fixed ones.
+
+<a id="cli.test_cli.test_a_run_with_derived_settings_announces_them"></a>
+
+#### test\_a\_run\_with\_derived\_settings\_announces\_them
+
+```python
+def test_a_run_with_derived_settings_announces_them(
+        tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None
+```
+
+A derived window and cap are printed before the run starts.
+
+<a id="cli.test_cli.test_a_run_with_explicit_settings_prints_no_derivation_line"></a>
+
+#### test\_a\_run\_with\_explicit\_settings\_prints\_no\_derivation\_line
+
+```python
+def test_a_run_with_explicit_settings_prints_no_derivation_line(
+        tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None
+```
+
+Explicit values are the user's own, so nothing is announced.
+
+<a id="cli.test_cli.test_a_derived_run_that_hits_its_cap_names_the_relaxation_time"></a>
+
+#### test\_a\_derived\_run\_that\_hits\_its\_cap\_names\_the\_relaxation\_time
+
+```python
+def test_a_derived_run_that_hits_its_cap_names_the_relaxation_time(
+        tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None
+```
+
+Reaching the cap explains how long the model needs.
 
 <a id="cli.test_cli_sweep"></a>
 

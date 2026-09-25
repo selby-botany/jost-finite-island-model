@@ -319,3 +319,33 @@ def test_a_large_plan_asks_for_confirmation() -> None:
 
     assert small.needs_confirmation is False
     assert large.needs_confirmation is True
+
+
+def test_an_unset_cap_is_derived_per_point_in_the_work_estimate() -> None:
+    """Points with different migration get different derived caps."""
+    base = {key: value for key, value in _BASE.items() if key != "max_generations"}
+    base["mu"] = 1e-6
+    spec = SweepSpec(base=base, axes=(expand_axis("m", [0.01, 0.00001]),))
+
+    estimate = work_estimate(spec, enumerate_points(spec))
+
+    plan = enumerate_points(spec)
+    caps = [
+        SimulationParams.from_mapping(point.params).max_generations
+        for point in plan.points
+    ]
+    assert caps[0] < caps[1]
+    assert estimate["max_generations"] == max(caps)
+    assert estimate["replicate_generations"] == 3 * sum(caps)
+
+
+def test_a_point_with_no_relaxation_time_is_invalid_not_fatal() -> None:
+    """No migration and no mutation cannot derive a cap; only that point fails."""
+    base = {key: value for key, value in _BASE.items() if key != "max_generations"}
+    base["mu"] = 0.0
+    spec = SweepSpec(base=base, axes=(expand_axis("m", [0.0, 0.01]),))
+
+    plan = enumerate_points(spec)
+
+    assert len(plan.points) == 1
+    assert "cannot derive convergence_window" in plan.invalid[0].reason

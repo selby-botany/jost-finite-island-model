@@ -1790,3 +1790,61 @@ def test_update_requires_explicit_opt_in() -> None:
     with pytest.raises(SystemExit) as exit_info:
         cli.main(["update"])
     assert exit_info.value.code == 2
+
+
+def test_init_writes_derived_convergence_settings(tmp_path: Path) -> None:
+    """The starter config asks for derived values rather than fixed ones."""
+    output = tmp_path / "example-run.yaml"
+
+    assert cli.main(["init", "--output", str(output)]) == 0
+
+    text = output.read_text(encoding="utf-8")
+    assert "convergence_window: auto" in text
+    assert "max_generations: auto" in text
+    params = cli.load_config(output)
+    assert params.auto_derived == {"convergence_window", "max_generations"}
+    assert params.convergence_window > 50
+
+
+def test_a_run_with_derived_settings_announces_them(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """A derived window and cap are printed before the run starts."""
+    config = tmp_path / "config.yaml"
+    _write_config(config, convergence_window="auto", max_generations="auto")
+
+    assert cli.main(["run", str(config), "--output", str(tmp_path / "out")]) == 0
+
+    output = capsys.readouterr().out
+    assert "Convergence: window" in output
+    assert "(derived; this model needs about" in output
+
+
+def test_a_run_with_explicit_settings_prints_no_derivation_line(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """Explicit values are the user's own, so nothing is announced."""
+    config = tmp_path / "config.yaml"
+    _write_config(config)
+
+    assert cli.main(["run", str(config), "--output", str(tmp_path / "out")]) == 0
+
+    assert "Convergence: window" not in capsys.readouterr().out
+
+
+def test_a_derived_run_that_hits_its_cap_names_the_relaxation_time(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """Reaching the cap explains how long the model needs."""
+    config = tmp_path / "config.yaml"
+    # Tolerance 0 can never be met, so the run always ends at the cap.
+    _write_config(
+        config,
+        convergence_window="auto",
+        max_generations=200,
+        convergence_tolerance=0.0,
+    )
+
+    assert cli.main(["run", str(config), "--output", str(tmp_path / "out")]) == 0
+
+    assert "did not settle within 200 generations" in capsys.readouterr().out

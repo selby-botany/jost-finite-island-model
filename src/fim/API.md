@@ -17077,14 +17077,16 @@ def work_estimate(spec: SweepSpec, plan: SweepPlan) -> dict[str, int]
 
 Return an upper bound on the work a plan represents.
 
-The cost of a point is not known until a pilot runs, so this is the
-number of points times replicates times the generation cap: a ceiling
-that convergence usually undercuts.
+The cost of a point is not known until a pilot runs, so this is the sum
+over points of replicates times that point's generation cap: a ceiling
+that convergence usually undercuts. Each point resolves its own cap,
+since an unset `max_generations` is derived from that point's own
+migration, mutation and sizes.
 
 **Returns**:
 
-  `points`, `replicates` per point, `max_generations`, and
-  `replicate_generations` (their product).
+  `points`, `replicates` per point, `max_generations` (the largest cap
+  of any point), and `replicate_generations` (the sum described above).
 
 <a id="fim.sweep.expand_axis"></a>
 
