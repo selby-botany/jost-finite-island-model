@@ -8,6 +8,7 @@ for that first. For parameter types and defaults, use the
 <ul>
 <li><a href="#create-a-configuration">Create a configuration</a></li>
 <li><a href="#run-a-simulation">Run a simulation</a></li>
+<li><a href="#why-does-my-run-take-so-long">Why does my run take so long?</a></li>
 <li><a href="#worked-examples">Worked examples</a></li>
 <li><a href="#sweep-a-parameter">Sweep a parameter</a></li>
 <li><a href="#re-analyze-a-trajectory">Re-analyze a trajectory</a></li>
@@ -39,6 +40,20 @@ statistics, convergence decision, or deterministic run_id.</p>
 name the offending key or value and return status 2. A run that reaches
 max_generations also returns status 0 because it is a valid, inspectable
 non-converged result.</p>
+<h3 id="why-does-my-run-take-so-long">Why does my run take so long?</h3>
+<p>A simulated population does not settle at once. With little migration between
+islands, gene flow and mutation take tens of thousands of generations to shape
+what you finally see, so a run is only finished once its statistics have stayed
+steady for about that long. You do not choose that stretch: <code>convergence_window</code>
+and <code>max_generations</code> default to <code>auto</code>, derived from your migration, mutation
+and population sizes.</p>
+<p><code>fim run</code> prints the derived values unless <code>--quiet</code>, and the desktop app shows
+them next to <strong>Run simulation</strong> before you start. For five islands of 100 gene
+copies with <code>m: 0.0001</code> and <code>mu: 0.000001</code> that is a window of about 59,000
+generations. A run that finishes in a hundred generations is a warning sign,
+not good news. The derivation and its evidence are in
+<a href="#" data-fim-external="https://github.com/selby-botany/jost-finite-island-model/blob/main/doc/convergence.md">Convergence defaults</a>; the settings are in
+<a href="#" data-fim-help="configuration" data-fim-anchor="convergence_window">configuration.md</a>.</p>
 <h3 id="batches-nreplicates-greater-than-one">Batches (n<sub>replicates</sub> greater than one)</h3>
 <p>A config's n<sub>replicates</sub> (see <a href="#" data-fim-help="configuration" data-fim-anchor="nreplicates">configuration.md</a>)
 controls whether one run or a whole batch executes:</p>
@@ -1141,9 +1156,14 @@ Manifest timestamps may differ.</p>
 <li><strong>Output already exists:</strong> select a new output directory. <code>fim</code> refuses
 to publish into one that already exists at all, even if empty — never
 appended, overwritten, or reused.</li>
-<li><strong>Reached the cap:</strong> inspect the trajectory and report, then increase
-max_generations, relax the tolerance, increase the window, or select
-another convergence statistic based on the study's needs.</li>
+<li><strong>Reached the cap:</strong> the message names how many generations the model
+needs to forget its starting state. Inspect the trajectory and report, then
+increase max_generations, relax the tolerance, or select another
+convergence statistic based on the study's needs.</li>
+<li><strong>A run finished in a few hundred generations:</strong> check whether
+convergence_window and max_generations were set to small fixed numbers.
+Leave them on <code>auto</code>; see
+<a href="#why-does-my-run-take-so-long">Why does my run take so long?</a>.</li>
 <li><strong>Windows warning:</strong> verify the release checksum before running the unsigned
 executable. See <a href="#" data-fim-external="https://github.com/selby-botany/jost-finite-island-model/blob/main/SECURITY.md">SECURITY.md</a>.</li>
 </ul>

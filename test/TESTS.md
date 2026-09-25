@@ -9,6 +9,7 @@ Every test module, fixture, and test function documented here in full; `doc/fim-
 - [`test/`](#group-test)
   - [`conftest`](#test.conftest)
   - [`test_build_ci_parallel`](#test.test_build_ci_parallel)
+  - [`test_convergence_docs`](#test.test_convergence_docs)
   - [`test_doc_examples`](#test.test_doc_examples)
   - [`test_hypothesis_profile`](#test.test_hypothesis_profile)
   - [`test_launcher`](#test.test_launcher)
@@ -382,6 +383,23 @@ def test_ci_build_runs_non_gui_parallel_and_gui_serially() -> None
 ```
 
 `--ci` keeps stateful tests out of xdist while parallelizing the rest.
+
+<a id="test.test_convergence_docs"></a>
+
+# test.test\_convergence\_docs
+
+Static checks that the documentation states the shipped convergence multiples.
+
+<a id="test.test_convergence_docs.test_docs_state_the_shipped_window_and_cap_formulas"></a>
+
+#### test\_docs\_state\_the\_shipped\_window\_and\_cap\_formulas
+
+```python
+@pytest.mark.parametrize("relative", DOCS)
+def test_docs_state_the_shipped_window_and_cap_formulas(relative: str) -> None
+```
+
+The formulas in the docs match `fim.convergence.defaults`.
 
 <a id="test.test_doc_examples"></a>
 

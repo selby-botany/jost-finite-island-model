@@ -839,6 +839,28 @@ project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Changed
 
+- **Runs now wait for the population to settle: the convergence window and
+  generation cap are derived from the model.** `convergence_window` and
+  `max_generations` used to default to the fixed numbers 50 and 10,000. A
+  window of 50 cannot tell "steady" from "changing too slowly to see", so the
+  five-island Dear-Nolan low-migration scenario stopped after about 100
+  generations at D near 0.4, when its equilibrium (D near 0.04, as in the
+  source correspondence) needs tens of thousands. The defaults are now
+  `auto`: the window is three relaxation times and the cap fifteen, where the
+  relaxation time comes from migration, mutation and deme sizes (a closed
+  form for the island model; the identity recursion's slowest mode for an
+  explicit migration matrix or unequal sizes, up to 24 demes). An explicit
+  whole number always wins. `fim run` and the desktop app say how long the
+  run is expected to take before it starts, and a run that reaches the cap
+  says how long the model needs. Measured stops are within 0.05 of the
+  analytic equilibrium in every regime tested. The GUI form and Settings
+  accept `auto`; saved preferences from the previous version have their saved
+  window and cap reset to `auto` once. The trailing-window check now costs
+  O(1) per generation instead of O(window), with identical decisions. Runs
+  that omit either key produce different results and run ids than before;
+  runs that state both are unchanged. See
+  [Convergence defaults](doc/convergence.md).
+
 - **The scatter's color key sits under the plot, and the two default graphs
   are the same height.** The key (the ring for the most frequent allele, and
   what each count color means) used to be drawn inside the plot, on top of the

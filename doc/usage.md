@@ -10,6 +10,7 @@ for that first. For parameter types and defaults, use the
 
 - [Create a configuration](#create-a-configuration)
 - [Run a simulation](#run-a-simulation)
+- [Why does my run take so long?](#why-does-my-run-take-so-long)
 - [Worked examples](#worked-examples)
 - [Sweep a parameter](#sweep-a-parameter)
 - [Re-analyze a trajectory](#re-analyze-a-trajectory)
@@ -49,6 +50,23 @@ statistics, convergence decision, or deterministic run_id.
 name the offending key or value and return status 2. A run that reaches
 max_generations also returns status 0 because it is a valid, inspectable
 non-converged result.
+
+### Why does my run take so long?
+
+A simulated population does not settle at once. With little migration between
+islands, gene flow and mutation take tens of thousands of generations to shape
+what you finally see, so a run is only finished once its statistics have stayed
+steady for about that long. You do not choose that stretch: `convergence_window`
+and `max_generations` default to `auto`, derived from your migration, mutation
+and population sizes.
+
+`fim run` prints the derived values unless `--quiet`, and the desktop app shows
+them next to **Run simulation** before you start. For five islands of 100 gene
+copies with `m: 0.0001` and `mu: 0.000001` that is a window of about 59,000
+generations. A run that finishes in a hundred generations is a warning sign,
+not good news. The derivation and its evidence are in
+[Convergence defaults](convergence.md); the settings are in
+[configuration.md](configuration.md#convergence_window).
 
 ### Batches (n<sub>replicates</sub> greater than one)
 
@@ -1219,8 +1237,13 @@ Manifest timestamps may differ.
 - **Output already exists:** select a new output directory. `fim` refuses
   to publish into one that already exists at all, even if empty — never
   appended, overwritten, or reused.
-- **Reached the cap:** inspect the trajectory and report, then increase
-  max_generations, relax the tolerance, increase the window, or select
-  another convergence statistic based on the study's needs.
+- **Reached the cap:** the message names how many generations the model
+  needs to forget its starting state. Inspect the trajectory and report, then
+  increase max_generations, relax the tolerance, or select another
+  convergence statistic based on the study's needs.
+- **A run finished in a few hundred generations:** check whether
+  convergence_window and max_generations were set to small fixed numbers.
+  Leave them on `auto`; see
+  [Why does my run take so long?](#why-does-my-run-take-so-long).
 - **Windows warning:** verify the release checksum before running the unsigned
   executable. See [SECURITY.md](../SECURITY.md).

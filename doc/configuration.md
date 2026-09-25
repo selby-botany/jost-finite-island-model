@@ -32,9 +32,9 @@ initial_concentration: 1.0
 deme_weighting: equal
 convergence_statistic: D
 convergence_combinator: all
-convergence_window: 50
+convergence_window: auto   # derived from the model; see below
 convergence_tolerance: 0.01
-max_generations: 10000
+max_generations: auto      # derived from the model; see below
 n_replicates: 1   # opt-in single scalar run; the library default is 200
 engine_backend: auto   # recommended choice; the library default is lineal
 ```
@@ -485,8 +485,8 @@ value by construction, so this key has no effect and needs no attention.
 
 ### convergence_window
 
-- **Type:** integer at least 2
-- **Default:** `50`
+- **Type:** integer at least 2, or `auto`
+- **Default:** `auto`
 
 The monitor compares the means of the first and second halves of the trailing
 window. An odd window splits as \lfloor{window / 2\rfloor observations in the first half
@@ -497,6 +497,38 @@ always recorded before the run loop's first step, so a run watching
 max_generations records at most that many generations; a window
 larger than that could never fill before the hard cap stops the run,
 so convergence could never be detected.
+
+**`auto` (the default) derives the window from the model.** A short fixed
+window cannot tell "the statistic has stopped changing" from "the statistic is
+changing too slowly to see in that window". How long a run must be watched
+depends on how fast the population forgets its starting state, its
+*relaxation time* `tau`:
+
+```text
+T   = N_total + (d - 1) / (2 m)      # mean time for two gene copies to coalesce
+tau = 1 / (2 mu + 1 / T)             # mutation is a second way to lose identity
+window          = max(50, ceil(3 tau))
+max_generations = max(10000, ceil(15 tau))
+```
+
+`N_total` is the sum of every deme's gene copies and `mu` is the mean over
+loci. That closed form is for the symmetric island model (scalar `m`, equal
+deme sizes). An explicit migration matrix or unequal sizes use the slowest
+mode of the identity recursion instead, computed for up to 24 demes; above
+that, `auto` is refused and you must give both values. With no migration and
+no mutation there is nothing to wait for, so `auto` is refused there too.
+
+For example, five demes of 100 gene copies with `m: 0.0001` and `mu: 0.000001`
+have `tau` of about 19,700 generations, so the derived window is about 59,000
+and the cap about 295,000. A run that finishes in a hundred generations there
+would be a warning sign, not good news: the population is still far from its
+equilibrium.
+
+Choose your own whole number to override. Too short a window stops a run while
+the statistic is still moving (look for D still falling at the end of the
+trajectory); too long a cap only delays a run that never settles. Why the
+formula has this form, and how its multiples were chosen, is in
+[Convergence defaults](convergence.md).
 
 ### convergence_tolerance
 
@@ -541,11 +573,14 @@ track_expensive_statistics: true
 
 ### max_generations
 
-- **Type:** positive integer
-- **Default:** `10000`
+- **Type:** positive integer, or `auto`
+- **Default:** `auto`
 
 This safety cap always ends a run. Reaching it is reported as a valid
-non-converged outcome.
+non-converged outcome. `auto` derives it as 15 relaxation times (at least
+10,000); see [convergence_window](#convergence_window). Setting only this
+value below the derived window clamps the window to fit; setting only the
+window raises the derived cap to five windows.
 
 ### sigma_band_multiplier
 
