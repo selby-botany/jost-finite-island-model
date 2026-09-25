@@ -101,7 +101,12 @@ const FIELD_HELP = {
         "statistic: all requires every one to be stable; any stops once " +
         "one is.",
     convergence_window: "Trailing window, in generations, whose first and " +
-        "second halves are compared for stability.",
+        "second halves are compared for stability. Leave it as auto and " +
+        "the app sets it from how slowly this population forgets its " +
+        "starting state (its migration, mutation and size), so a run is " +
+        "only called finished once it has stayed steady for that long. A " +
+        "run that finishes in a hundred generations is a warning sign, " +
+        "not good news.",
     convergence_tolerance: "The run is considered converged once the " +
         "trailing window's two half-means differ by at most this much.",
     track_expensive_statistics: "D/G_ST/H_S/H_T always display live for " +
@@ -111,8 +116,10 @@ const FIELD_HELP = {
         "cost -- checking one of the five above as a convergence " +
         "statistic also tracks it for display, at the same cost, " +
         "regardless of this checkbox.",
-    max_generations: "Hard cap on generations. Reaching it without " +
-        "converging is still reported as a valid, non-converged outcome.",
+    max_generations: "Hard cap on generations. Leave it as auto and the " +
+        "app sets it to a comfortable multiple of the time this " +
+        "population needs to settle. Reaching it without converging is " +
+        "still reported as a valid, non-converged outcome.",
     sigma_band_group: "Once converged, continue for a further window and " +
         "report each watched statistic's own mean ± (multiplier × sigma) " +
         "over that trailing window — a within-run stability check, " +

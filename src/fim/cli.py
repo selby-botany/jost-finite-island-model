@@ -66,6 +66,7 @@ from matplotlib import pyplot as plt
 
 from fim import __version__, logging_setup, paths, reanalyze, update
 from fim.cli_sweep import add_sweep_subcommands, command_sweep
+from fim.convergence.defaults import describe_derived_convergence
 from fim.engine import RunResult, deterministic_run_id, fim, replicate_summary
 from fim.model.params import SimulationParams
 from fim.persistence.groups import (
@@ -893,10 +894,11 @@ def _print_derived_convergence(params: SimulationParams) -> None:
     if not params.auto_derived or params.relaxation_time is None:
         return
     print(
-        f"Convergence: window {params.convergence_window:,} generations, "
-        f"cap {params.max_generations:,} (derived; this model needs about "
-        f"{params.relaxation_time:,.0f} generations to forget its starting "
-        "state)"
+        describe_derived_convergence(
+            window=params.convergence_window,
+            max_generations=params.max_generations,
+            relaxation_time=params.relaxation_time,
+        )
     )
 
 

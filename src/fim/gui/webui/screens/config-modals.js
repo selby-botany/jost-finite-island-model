@@ -209,7 +209,10 @@ async function revalidate() {
     const result = await window.pywebview.api.validate_form(values);
     if (result.ok) {
         runButton.disabled = false;
-        runReason.textContent = "";
+        // A valid form with a derived convergence window says how long the
+        // run is expected to take, so a run of tens of thousands of
+        // generations is never a surprise; empty when both were explicit.
+        runReason.textContent = result.note || "";
         return result;
     }
     runButton.disabled = true;

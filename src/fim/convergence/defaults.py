@@ -130,6 +130,31 @@ def derive_convergence_defaults(
     return DerivedConvergence(window=window, max_generations=cap, relaxation_time=tau)
 
 
+def describe_derived_convergence(
+    *, window: int, max_generations: int, relaxation_time: float
+) -> str:
+    """Return the one-line, plain-language statement of derived settings.
+
+    Shared by the command line and the desktop app so the two say the same
+    thing.
+
+    Args:
+        window: The derived trailing window, in generations.
+        max_generations: The derived generation cap.
+        relaxation_time: The estimated relaxation time, in generations.
+
+    Returns:
+        A sentence such as "Convergence: window 59,078 generations, cap
+        295,390 (derived; this model needs about 19,693 generations to
+        forget its starting state)".
+    """
+    return (
+        f"Convergence: window {window:,} generations, cap {max_generations:,} "
+        f"(derived; this model needs about {relaxation_time:,.0f} generations "
+        "to forget its starting state)"
+    )
+
+
 def island_relaxation_time(
     *, total_size: float, deme_count: int, migration: float, mutation: float
 ) -> float:

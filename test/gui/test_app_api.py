@@ -847,7 +847,22 @@ def test_validate_form_accepts_the_starter_values() -> None:
     """The starter form is valid on its own — no field left in a rejecting state."""
     result = Api().validate_form(_submittable_starter())
 
-    assert result == {"ok": True}
+    assert result["ok"] is True
+    # The starter asks for a derived window and cap, so the form says how
+    # long the run is expected to take.
+    assert result["note"].startswith("Convergence: window ")
+    assert "(derived; this model needs about" in result["note"]
+
+
+def test_validate_form_has_no_note_when_window_and_cap_are_explicit() -> None:
+    """Explicit values are the user's own; nothing is announced."""
+    values = {
+        **_submittable_starter(),
+        "convergence_window": "60",
+        "max_generations": "900",
+    }
+
+    assert Api().validate_form(values) == {"ok": True, "note": ""}
 
 
 def test_validate_form_rejects_and_locates_an_invalid_population_field() -> None:

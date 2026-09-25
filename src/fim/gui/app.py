@@ -62,6 +62,7 @@ from fim import __version__ as fim_version
 from fim import engine as engine_module
 from fim import logging_setup, paths, update
 from fim.cli import load_config
+from fim.convergence.defaults import describe_derived_convergence
 from fim.engine import (
     FinalReport,
     RunResult,
@@ -209,6 +210,25 @@ _SHUTDOWN_DEADMAN_SECONDS: Final[float] = 20.0
 # recognizable as such in a log, a shell's `$?`, or a bug report,
 # rather than being confused with a clean close.
 _SHUTDOWN_DEADMAN_EXIT_CODE: Final[int] = 3
+
+
+def _derived_convergence_note(params: SimulationParams) -> str:
+    """Return the run-length note for a valid form, or `""` when none applies.
+
+    Args:
+        params: The validated configuration.
+
+    Returns:
+        The shared derived-settings sentence when the window or cap was
+        derived; the empty string when both were explicit.
+    """
+    if not params.auto_derived or params.relaxation_time is None:
+        return ""
+    return describe_derived_convergence(
+        window=params.convergence_window,
+        max_generations=params.max_generations,
+        relaxation_time=params.relaxation_time,
+    )
 
 
 def _log_bridge_call[ApiMethod: Callable[..., Any]](method: ApiMethod) -> ApiMethod:
@@ -2033,8 +2053,11 @@ class Api:
                 to collect from the live form.
 
         Returns:
-            `{"ok": True}` if `values` parses into a valid
-            `SimulationParams`; otherwise `{"ok": False, "message": ...,
+            `{"ok": True, "note": ...}` if `values` parses into a valid
+            `SimulationParams`, where `note` says how long the run is
+            expected to take when the convergence window or cap was
+            derived (`""` when both were given explicitly); otherwise
+            `{"ok": False, "message": ...,
             "field": ..., "tab": ...}` — `message` is the caught
             `ValueError`'s own text verbatim (matching the CLI's own
             wording), `field`/`tab` are `None` when the
@@ -2045,7 +2068,7 @@ class Api:
         values = self._merge_default_run_settings(values)
         try:
             payload = form_values_to_payload(values)
-            SimulationParams.from_mapping(payload)
+            params = SimulationParams.from_mapping(payload)
         except ValueError as error:
             message = str(error)
             return {
@@ -2054,7 +2077,7 @@ class Api:
                 "field": field_for_error(message),
                 "tab": tab_for_error(message),
             }
-        return {"ok": True}
+        return {"ok": True, "note": _derived_convergence_note(params)}
 
     @_log_bridge_call
     def get_initial_state_panels(self, values: dict[str, str]) -> dict[str, Any]:

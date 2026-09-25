@@ -14,6 +14,7 @@ from fim.convergence.defaults import (
     MINIMUM_WINDOW,
     WINDOW_RELAXATION_MULTIPLE,
     derive_convergence_defaults,
+    describe_derived_convergence,
     island_relaxation_time,
     recursion_relaxation_time,
     relaxation_time,
@@ -191,3 +192,15 @@ def test_large_scalar_island_uses_the_closed_form() -> None:
     """A scalar `m` at any `d` never needs the eigenvalue route."""
     tau = relaxation_time(deme_sizes=[100] * 200, migration=0.01, mutation_rates=[1e-6])
     assert tau > 0.0
+
+
+def test_derived_convergence_sentence_names_window_cap_and_time() -> None:
+    """The shared sentence carries all three numbers, with thousands separators."""
+    text = describe_derived_convergence(
+        window=59_078, max_generations=295_390, relaxation_time=19_693.4
+    )
+
+    assert text == (
+        "Convergence: window 59,078 generations, cap 295,390 (derived; this "
+        "model needs about 19,693 generations to forget its starting state)"
+    )
