@@ -11101,9 +11101,9 @@ Mean simulated `D` and `G_ST` sit on the offered curve, per example.
 Each example runs `REPLICATES` seeds as one scalar run, held for three
 relaxation times with no early stop (the curve does not depend on where
 a run stops). At five checkpoints the mean paired difference (simulated
-minus curve) must lie within five standard errors of zero. Single-locus
-examples are noisy, so their band is wide: this catches a wrong model
-(a curve that goes to the wrong place), not a small bias.
+minus curve) must lie within five standard errors of zero. Every other
+option of the example is kept; only the locus count is raised to `LOCI`
+(see there), so this catches a wrong model, not the single-locus bias.
 
 <a id="gui.test_compare_screen"></a>
 

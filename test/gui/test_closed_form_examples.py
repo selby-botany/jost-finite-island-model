@@ -178,6 +178,12 @@ def _evaluate_like_the_page(
 
 
 REPLICATES = 8
+# The curve is the model's expectation. `D` and `G_ST` are ratios, and with a
+# single locus the mean of the ratio sits measurably below the ratio of the
+# expected identities (up to ~0.06 here), which is the estimator, not a
+# modelling error. Enough loci make the ratio track its expectation, so
+# every example is compared on the same footing, with its own other options.
+LOCI = 12
 STANDARD_ERRORS = 5.0
 MINIMUM_HORIZON = 60
 
@@ -195,9 +201,9 @@ def test_engine_agrees_with_the_payload_for_every_example(
     Each example runs `REPLICATES` seeds as one scalar run, held for three
     relaxation times with no early stop (the curve does not depend on where
     a run stops). At five checkpoints the mean paired difference (simulated
-    minus curve) must lie within five standard errors of zero. Single-locus
-    examples are noisy, so their band is wide: this catches a wrong model
-    (a curve that goes to the wrong place), not a small bias.
+    minus curve) must lie within five standard errors of zero. Every other
+    option of the example is kept; only the locus count is raised to `LOCI`
+    (see there), so this catches a wrong model, not the single-locus bias.
     """
     monkeypatch.setenv("FIM_RESULTS_DIRECTORY", str(tmp_path / "results"))
     base = CONFIGURATIONS[name]
@@ -214,6 +220,10 @@ def test_engine_agrees_with_the_payload_for_every_example(
             "convergence_window": horizon,
             "convergence_tolerance": 1e-12,
             "max_generations": horizon,
+            "loci": [
+                {"locus_id": index, "length": base["loci"][0]["length"]}
+                for index in range(1, LOCI + 1)
+            ],
         }
         path = tmp_path / f"{name.replace('/', '-')}-{offset}.yaml"
         path.write_text(yaml.safe_dump(config, sort_keys=False), encoding="utf-8")
