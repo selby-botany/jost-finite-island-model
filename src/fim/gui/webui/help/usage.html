@@ -104,7 +104,13 @@ statistic's across-replicate confidence interval has tightened enough (see
 the YAML, run the command, and the reported values match those shown here,
 because the same seed, parameters, and version always give the same
 <code>report.json</code> (see <a href="#reproduce-a-run">Reproduce a run</a>). Each example uses
-a small <code>N</code>, <code>d</code>, and max_generations so it finishes in seconds, and a
+a small <code>N</code> and <code>d</code>, and lets <a href="#" data-fim-external="https://github.com/selby-botany/jost-finite-island-model/blob/main/doc/convergence.md">convergence_window and
+max_generations</a> be derived from the model (the default), so
+each run goes on for as many generations as that model needs to forget its
+starting state — from a few hundred to a few thousand here, and a fraction of a
+minute to about a minute of wall-clock time. Every example uses one locus, so
+a single run's numbers scatter widely around the model's expectation; use a
+batch (<code>n_replicates</code>) when you want a stable value. Each uses a
 seed distinct from <a href="#create-a-configuration"><code>fim init</code></a>'s starter config.
 Each demonstrates one option, or one natural pair of options, from the
 <a href="#" data-fim-help="configuration" data-fim-anchor="">configuration reference</a>; a real study combines them
@@ -131,14 +137,14 @@ n_replicates: 1   # a single scalar run; the default (200) would batch
 </code></pre>
 <pre><code class="language-console">fim run hub-island.yaml --output results/hub-island --quiet
 </code></pre>
-<p>Converges at generation 19 with D \sim 0.0453. <code>manifest.json</code>'s <code>parameters.N</code>
+<p>Converges at generation 1,006 with D \sim 0.0551. <code>manifest.json</code>'s <code>parameters.N</code>
 and <code>parameters.m</code> record the exact per-deme sizes and matrix rows used —
 compare them against a run with one shared <code>N/m</code> to see the effect of
 unequal size and asymmetric connectivity on differentiation.</p>
 <p>deme_weighting only affects E<sub>ST</sub> — D and K<sub>ST</sub> weight demes equally by
 definition, regardless of this setting. With the unequal per-deme <code>N</code> above,
-the default <code>equal</code> weighting gives E<sub>ST</sub> \sim 0.0249; adding
-<code>deme_weighting: size</code> to the same configuration gives E<sub>ST</sub> \sim 0.0208
+the default <code>equal</code> weighting gives E<sub>ST</sub> \sim 0.0671; adding
+<code>deme_weighting: size</code> to the same configuration gives E<sub>ST</sub> \sim 0.0644
 instead — deme 4's own 800-gene-copy weight pulls the size-weighted value
 down, since it is both the largest deme and the best-connected one.</p>
 <h3 id="stepping-stone-spatial-migration">Stepping-stone (spatial) migration</h3>
@@ -161,7 +167,7 @@ n_replicates: 1   # a single scalar run; the default (200) would batch
 </code></pre>
 <pre><code class="language-console">fim run stepping-stone.yaml --output results/stepping-stone --quiet
 </code></pre>
-<p>Converges at generation 17 with D \sim 0.0892. Swap <code>topology: ring</code> for
+<p>Converges at generation 1,748 with D \sim 0.0287. Swap <code>topology: ring</code> for
 <code>linear</code> to remove the wrap-around edge between deme 1 and deme 6. In
 the GUI, the completed-run Literature visualizations panel includes an
 isolation-by-distance plot whenever the migration graph has at least two
@@ -235,7 +241,7 @@ n_replicates: 1   # a single scalar run; the default (200) would batch
 </code></pre>
 <pre><code class="language-console">fim run equilibrium-split.yaml --output results/equilibrium-split --quiet
 </code></pre>
-<p>Converges at generation 9 with D \sim 0.0357 — real differentiation the
+<p>Converges at generation 1,091 with D \sim 0.191 — real differentiation the
 ancestral-population founder effect produced, with no explicit <code>p_0</code>
 anywhere in the file. Loosen equilibrium_convergence_tolerance to let the
 ancestral phase settle sooner (a less stable shared history to found from),
@@ -265,7 +271,7 @@ n_replicates: 1   # a single scalar run; the default (200) would batch
 </code></pre>
 <pre><code class="language-console">fim run stochastic-migrants.yaml --output results/stochastic-migrants --quiet
 </code></pre>
-<p>Converges at generation 9 with D \sim 0.183. Re-run with migrant_sampling
+<p>Converges at generation 701 with D \sim 0.0089. Re-run with migrant_sampling
 removed (or set to <code>continuous</code>, the default) at the same seed to compare
 against the deterministic-migration baseline directly.</p>
 <h3 id="finite-length-alleles-the-k-allele-model">Finite-length alleles (the K-allele model)</h3>
@@ -293,7 +299,7 @@ n_replicates: 1   # a single scalar run; the default (200) would batch
 </code></pre>
 <pre><code class="language-console">fim run finite-alleles.yaml --output results/finite-alleles --quiet
 </code></pre>
-<p>Converges at generation 10 with D \sim 0.190. This is the Kimura-Crow
+<p>Converges at generation 113 with D \sim 0.706. This is the Kimura-Crow
 finite-allele setting in miniature: <code>length: 3</code> gives 64 possible allele
 states, so recurrent mutation is visible enough for the completed-run
 frequency spectrum to be useful. See
@@ -320,10 +326,12 @@ n_replicates: 1   # a single scalar run; the default (200) would batch
 <pre><code class="language-console">fim run finite-deme-correction.yaml \
   --output results/finite-deme-correction --quiet
 </code></pre>
-<p>Converges at generation 9 with G<sub>ST</sub> \sim 0.161 and
-D \sim 0.161. The closed-form finite-deme prediction for these parameters
+<p>Converges (on G<sub>ST</sub>) at generation 5,152 with G<sub>ST</sub> \sim 0.222 and
+D \sim 0.646. The closed-form finite-deme prediction for these parameters
 is about 0.141, below the corresponding infinite-island approximation of
-about 0.238 because the <code>d / (d - 1)</code> correction is retained.</p>
+about 0.238 because the <code>d / (d - 1)</code> correction is retained. A single locus
+scatters widely around that expectation (the exact expectation for this
+model is G<sub>ST</sub> 0.195 and D 0.318); a batch averages it out.</p>
 <h3 id="kimura-weiss-isolation-by-distance">Kimura-Weiss isolation by distance</h3>
 <p>A 20-deme ring gives enough graph-distance classes for the GUI's
 isolation-by-distance panel to show the short-distance decay pattern from
@@ -346,7 +354,7 @@ n_replicates: 1   # a single scalar run; the default (200) would batch
 <pre><code class="language-console">fim run kimura-weiss-isolation-by-distance.yaml \
   --output results/kimura-weiss-isolation-by-distance --quiet
 </code></pre>
-<p>Converges at generation 11 with D \sim 0.090 and G<sub>ST</sub> \sim 0.095.
+<p>Converges at generation 2,754 with D \sim 0.615 and G<sub>ST</sub> \sim 0.132.
 Open the result in <code>fim-gui</code> and inspect the Literature visualizations panel:
 the identity-decay plot groups deme pairs by shortest-path distance over the
 non-zero migration edges and overlays a log-linear fit.</p>
@@ -371,7 +379,7 @@ n_replicates: 1   # a single scalar run; the default (200) would batch
 </code></pre>
 <pre><code class="language-console">fim run mu-b.yaml --output results/mu-b --quiet
 </code></pre>
-<p>Converges at generation 17 with D \sim 0.191. <code>results/mu-b/manifest.json</code>'s
+<p>Converges at generation 301 with D \sim 0.180. <code>results/mu-b/manifest.json</code>'s
 <code>parameters.mu</code> records the two derived rates — <code>0.0009995</code> for the
 50-base locus and <code>0.0099503</code> for the 500-base one — the expanded,
 canonical form μ<sub>b</sub> is sugar for; μ<sub>b</sub> itself is never stored.</p>
@@ -394,7 +402,7 @@ n_replicates: 1   # a single scalar run; the default (200) would batch
 </code></pre>
 <pre><code class="language-console">fim run multi-statistic.yaml --output results/multi-statistic --quiet
 </code></pre>
-<p>Converges at generation 13, with <code>report.json</code>'s converged_on recording
+<p>Converges at generation 770, with <code>report.json</code>'s converged_on recording
 [&quot;D&quot;, &quot;G<sub>ST</sub>&quot;] — both were watched, and <code>any</code> means only one needed to
 stabilize first.</p>
 <h3 id="within-run-sigma-band">Within-run sigma band</h3>
@@ -420,13 +428,12 @@ n_replicates: 1   # a single scalar run; the default (200) would batch
 </code></pre>
 <pre><code class="language-console">fim run sigma-band.yaml --output results/sigma-band --quiet
 </code></pre>
-<p>Converges at generation 10 with D = 0.265; the following 30-generation
-extension reports D = 0.124 ± 0.161 (mean ± 2σ). The band's own mean
+<p>Converges at generation 1,429 with D = 0.126; the following 30-generation
+extension reports D = 0.106 ± 0.090 (mean ± 2σ). The band's own mean
 differs from the converged value itself — it is computed over the
 <em>extension</em> window, not the generations that triggered convergence — and
-is wide enough here to dip below zero, an honest report of how much a
-single statistic can still wobble over just 30 generations, not a sign of
-anything wrong. <code>results/sigma-band/sigma_band_trajectory.jsonl</code> records
+is an honest report of how much a single statistic can still wobble over
+just 30 generations, not a sign of anything wrong. <code>results/sigma-band/sigma_band_trajectory.jsonl</code> records
 one <code>D</code> value per extension generation; <code>manifest.json</code>'s own <code>sigma_band</code>
 field holds the summarized band shown here.</p>
 <h3 id="an-adaptive-replicate-batch-with-a-confidence-interval">An adaptive replicate batch with a confidence interval</h3>
@@ -446,26 +453,30 @@ loci:
 convergence_statistic: D
 n_replicates: 50
 replicate_minimum: 10
-replicate_tolerance: 0.05
+replicate_tolerance: 0.08
 </code></pre>
 <pre><code class="language-console">fim run adaptive-batch.yaml --output results/adaptive-batch --sequential --quiet
 </code></pre>
-<p>Stops at 25 replicates — <code>D</code>'s 95% confidence interval has just tightened to
-<code>0.256 +/- 0.0498</code>, inside the requested <code>0.05</code> half-width, so the
-remaining 25 possible replicates were never needed.
+<p>Stops at 16 replicates — <code>D</code>'s 95% confidence interval has just tightened to
+<code>0.287 +/- 0.0782</code>, inside the requested <code>0.08</code> half-width, so the
+remaining 34 possible replicates were never needed.
 <code>results/adaptive-batch/summary.json</code> reports every statistic's own
 interval; <code>results/adaptive-batch/replicate-001/</code> through
-<code>replicate-025/</code> each hold the ordinary four-file scalar-run contract for
+<code>replicate-016/</code> each hold the ordinary four-file scalar-run contract for
 that one replicate. Drop <code>--sequential</code> to run the same batch across a
 worker process per CPU instead — the computed numbers are identical
 either way (see <a href="#batches-nreplicates-greater-than-one">Batches</a>); only
 the wall-clock time differs.</p>
 <h3 id="a-large-d-batch-under-generational-vector">A large-<code>d</code> batch under generational-vector</h3>
-<p>Every example above finishes in well under a second and uses <code>engine_ backend</code>'s own default, <code>auto</code> — which, at this small a scale, always
+<p>Every example above uses derived convergence defaults and <code>engine_ backend</code>'s own default, <code>auto</code> — which, at this small a scale, always
 resolves to <code>lineal</code>, the single-threaded reference implementation. This
 example and the next are the deliberate exception: each names a specific
 engine backend and runs a real, moderately long batch (a few seconds, not
 instant) large enough for that backend's own advantage to actually show.
+They are also the exception to the derived convergence defaults: each pins a
+short run (<code>convergence_window: 10</code>, <code>max_generations: 100</code>) so a timing
+comparison finishes in seconds. The population is nowhere near equilibrium
+when it stops, so read these two as timing workloads, not as results.
 <code>generational-vector</code> keeps a dense, array-native representation of every
 active replicate at once, and is the fastest measured choice once <code>d</code>
 grows large enough — see <a href="#" data-fim-external="https://github.com/selby-botany/jost-finite-island-model/blob/main/doc/fim-simulator-design.md#46-choosing-an-engine-backend">choosing an engine
@@ -475,7 +486,7 @@ full measured comparison this example's own shape is drawn from:</p>
 ploidy: haploid
 d: 70
 m: 0.05
-mu: 0.01
+mu: 0.001
 seed: 20260916
 mutation_model: finite_alleles
 migrant_sampling: continuous
@@ -484,6 +495,9 @@ loci:
     length: 5
 engine_backend: generational-vector
 convergence_statistic: D
+convergence_window: 10
+convergence_tolerance: 0.02
+max_generations: 100
 n_replicates: 16
 </code></pre>
 <pre><code class="language-console">fim run vector-showcase.yaml --output results/vector-showcase --quiet
@@ -507,7 +521,7 @@ region (moderate <code>d</code>, a longer locus):</p>
 ploidy: haploid
 d: 35
 m: 0.05
-mu: 0.01
+mu: 0.001
 seed: 20260916
 mutation_model: finite_alleles
 migrant_sampling: continuous
@@ -516,6 +530,9 @@ loci:
     length: 7
 engine_backend: generational
 convergence_statistic: D
+convergence_window: 10
+convergence_tolerance: 0.02
+max_generations: 100
 n_replicates: 16
 </code></pre>
 <pre><code class="language-console">fim run generational-showcase.yaml --output results/generational-showcase --quiet

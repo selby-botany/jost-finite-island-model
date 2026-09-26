@@ -7,6 +7,8 @@ from pathlib import Path
 
 import pytest
 
+from fim.gui.presets import list_presets
+
 ROOT = Path(__file__).resolve().parents[1]
 DOCS = sorted(
     path
@@ -36,3 +38,34 @@ def test_every_configuration_snippet_that_sets_n_also_sets_a_ploidy_word(
             f"{path.name}: snippet sets N but not ploidy:\n{block}"
         )
         assert match.group(1) in PLOIDY_WORDS, block
+
+
+# Worked examples that deliberately pin a run length: a one-generation
+# statistics check, and two engine-timing workloads.
+PINNED_CONVERGENCE_EXAMPLES = {
+    "literature-distance-statistics-from-an-explicit-founder-split",
+    "a-large-d-batch-under-generational-vector",
+    "a-long-locus-batch-under-the-generational-engine",
+}
+
+
+def test_worked_examples_use_derived_convergence_unless_deliberately_pinned() -> None:
+    """A pinned window or generation cap makes a run stop long before it settles.
+
+    Every worked example lets `convergence_window` and `max_generations` be
+    derived from the model, except the few that name a reason to pin them.
+    Pinning `convergence_window: 10` was what made the hub example stop at
+    generation 19 with a meaningless result.
+    """
+    webui = ROOT / "src" / "fim" / "gui" / "webui"
+    pinned = set()
+    for preset in list_presets(webui):
+        keys = re.findall(
+            r"^(convergence_window|max_generations):\s*(\S+)",
+            preset.yaml_text,
+            re.M,
+        )
+        if any(value != "auto" for _, value in keys):
+            pinned.add(preset.preset_id)
+
+    assert pinned == PINNED_CONVERGENCE_EXAMPLES

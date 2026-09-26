@@ -125,7 +125,13 @@ Each example below is a complete config and the command that runs it: save
 the YAML, run the command, and the reported values match those shown here,
 because the same seed, parameters, and version always give the same
 `report.json` (see [Reproduce a run](#reproduce-a-run)). Each example uses
-a small `N`, `d`, and max_generations so it finishes in seconds, and a
+a small `N` and `d`, and lets [convergence_window and
+max_generations](convergence.md) be derived from the model (the default), so
+each run goes on for as many generations as that model needs to forget its
+starting state — from a few hundred to a few thousand here, and a fraction of a
+minute to about a minute of wall-clock time. Every example uses one locus, so
+a single run's numbers scatter widely around the model's expectation; use a
+batch (`n_replicates`) when you want a stable value. Each uses a
 seed distinct from [`fim init`](#create-a-configuration)'s starter config.
 Each demonstrates one option, or one natural pair of options, from the
 [configuration reference](configuration.md); a real study combines them
@@ -152,9 +158,6 @@ loci:
   - locus_id: 1
     length: 100
 convergence_statistic: D
-convergence_window: 10
-convergence_tolerance: 0.02
-max_generations: 300
 n_replicates: 1   # a single scalar run; the default (200) would batch
 ```
 
@@ -162,15 +165,15 @@ n_replicates: 1   # a single scalar run; the default (200) would batch
 fim run hub-island.yaml --output results/hub-island --quiet
 ```
 
-Converges at generation 19 with D \sim 0.0453. `manifest.json`'s `parameters.N`
+Converges at generation 1,006 with D \sim 0.0551. `manifest.json`'s `parameters.N`
 and `parameters.m` record the exact per-deme sizes and matrix rows used —
 compare them against a run with one shared `N/m` to see the effect of
 unequal size and asymmetric connectivity on differentiation.
 
 deme_weighting only affects E<sub>ST</sub> — D and K<sub>ST</sub> weight demes equally by
 definition, regardless of this setting. With the unequal per-deme `N` above,
-the default `equal` weighting gives E<sub>ST</sub> \sim 0.0249; adding
-`deme_weighting: size` to the same configuration gives E<sub>ST</sub> \sim 0.0208
+the default `equal` weighting gives E<sub>ST</sub> \sim 0.0671; adding
+`deme_weighting: size` to the same configuration gives E<sub>ST</sub> \sim 0.0644
 instead — deme 4's own 800-gene-copy weight pulls the size-weighted value
 down, since it is both the largest deme and the best-connected one.
 
@@ -193,9 +196,6 @@ loci:
   - locus_id: 1
     length: 100
 convergence_statistic: D
-convergence_window: 10
-convergence_tolerance: 0.02
-max_generations: 500
 n_replicates: 1   # a single scalar run; the default (200) would batch
 ```
 
@@ -203,7 +203,7 @@ n_replicates: 1   # a single scalar run; the default (200) would batch
 fim run stepping-stone.yaml --output results/stepping-stone --quiet
 ```
 
-Converges at generation 17 with D \sim 0.0892. Swap `topology: ring` for
+Converges at generation 1,748 with D \sim 0.0287. Swap `topology: ring` for
 `linear` to remove the wrap-around edge between deme 1 and deme 6. In
 the GUI, the completed-run Literature visualizations panel includes an
 isolation-by-distance plot whenever the migration graph has at least two
@@ -284,9 +284,6 @@ equilibrium_convergence_window: 20
 equilibrium_convergence_tolerance: 0.01
 equilibrium_max_generations: 500
 convergence_statistic: D
-convergence_window: 10
-convergence_tolerance: 0.02
-max_generations: 300
 n_replicates: 1   # a single scalar run; the default (200) would batch
 ```
 
@@ -294,7 +291,7 @@ n_replicates: 1   # a single scalar run; the default (200) would batch
 fim run equilibrium-split.yaml --output results/equilibrium-split --quiet
 ```
 
-Converges at generation 9 with D \sim 0.0357 — real differentiation the
+Converges at generation 1,091 with D \sim 0.191 — real differentiation the
 ancestral-population founder effect produced, with no explicit `p_0`
 anywhere in the file. Loosen equilibrium_convergence_tolerance to let the
 ancestral phase settle sooner (a less stable shared history to found from),
@@ -324,9 +321,6 @@ loci:
   - locus_id: 1
     length: 100
 convergence_statistic: D
-convergence_window: 10
-convergence_tolerance: 0.02
-max_generations: 500
 n_replicates: 1   # a single scalar run; the default (200) would batch
 ```
 
@@ -334,7 +328,7 @@ n_replicates: 1   # a single scalar run; the default (200) would batch
 fim run stochastic-migrants.yaml --output results/stochastic-migrants --quiet
 ```
 
-Converges at generation 9 with D \sim 0.183. Re-run with migrant_sampling
+Converges at generation 701 with D \sim 0.0089. Re-run with migrant_sampling
 removed (or set to `continuous`, the default) at the same seed to compare
 against the deterministic-migration baseline directly.
 
@@ -362,9 +356,6 @@ loci:
   - locus_id: 1
     length: 3
 convergence_statistic: D
-convergence_window: 10
-convergence_tolerance: 0.02
-max_generations: 500
 n_replicates: 1   # a single scalar run; the default (200) would batch
 ```
 
@@ -372,7 +363,7 @@ n_replicates: 1   # a single scalar run; the default (200) would batch
 fim run finite-alleles.yaml --output results/finite-alleles --quiet
 ```
 
-Converges at generation 10 with D \sim 0.190. This is the Kimura-Crow
+Converges at generation 113 with D \sim 0.706. This is the Kimura-Crow
 finite-allele setting in miniature: `length: 3` gives 64 possible allele
 states, so recurrent mutation is visible enough for the completed-run
 frequency spectrum to be useful. See
@@ -398,9 +389,6 @@ loci:
   - locus_id: 1
     length: 100
 convergence_statistic: G_ST
-convergence_window: 10
-convergence_tolerance: 0.02
-max_generations: 500
 n_replicates: 1   # a single scalar run; the default (200) would batch
 ```
 
@@ -409,10 +397,12 @@ fim run finite-deme-correction.yaml \
   --output results/finite-deme-correction --quiet
 ```
 
-Converges at generation 9 with G<sub>ST</sub> \sim 0.161 and
-D \sim 0.161. The closed-form finite-deme prediction for these parameters
+Converges (on G<sub>ST</sub>) at generation 5,152 with G<sub>ST</sub> \sim 0.222 and
+D \sim 0.646. The closed-form finite-deme prediction for these parameters
 is about 0.141, below the corresponding infinite-island approximation of
-about 0.238 because the `d / (d - 1)` correction is retained.
+about 0.238 because the `d / (d - 1)` correction is retained. A single locus
+scatters widely around that expectation (the exact expectation for this
+model is G<sub>ST</sub> 0.195 and D 0.318); a batch averages it out.
 
 ### Kimura-Weiss isolation by distance
 
@@ -434,9 +424,6 @@ loci:
   - locus_id: 1
     length: 100
 convergence_statistic: D
-convergence_window: 10
-convergence_tolerance: 0.02
-max_generations: 120
 n_replicates: 1   # a single scalar run; the default (200) would batch
 ```
 
@@ -445,7 +432,7 @@ fim run kimura-weiss-isolation-by-distance.yaml \
   --output results/kimura-weiss-isolation-by-distance --quiet
 ```
 
-Converges at generation 11 with D \sim 0.090 and G<sub>ST</sub> \sim 0.095.
+Converges at generation 2,754 with D \sim 0.615 and G<sub>ST</sub> \sim 0.132.
 Open the result in `fim-gui` and inspect the Literature visualizations panel:
 the identity-decay plot groups deme pairs by shortest-path distance over the
 non-zero migration edges and overlays a log-linear fit.
@@ -470,9 +457,6 @@ loci:
   - locus_id: 2
     length: 500
 convergence_statistic: D
-convergence_window: 10
-convergence_tolerance: 0.02
-max_generations: 500
 n_replicates: 1   # a single scalar run; the default (200) would batch
 ```
 
@@ -480,7 +464,7 @@ n_replicates: 1   # a single scalar run; the default (200) would batch
 fim run mu-b.yaml --output results/mu-b --quiet
 ```
 
-Converges at generation 17 with D \sim 0.191. `results/mu-b/manifest.json`'s
+Converges at generation 301 with D \sim 0.180. `results/mu-b/manifest.json`'s
 `parameters.mu` records the two derived rates — `0.0009995` for the
 50-base locus and `0.0099503` for the 500-base one — the expanded,
 canonical form μ<sub>b</sub> is sugar for; μ<sub>b</sub> itself is never stored.
@@ -503,9 +487,6 @@ loci:
     length: 100
 convergence_statistic: [D, G_ST]
 convergence_combinator: any
-convergence_window: 10
-convergence_tolerance: 0.02
-max_generations: 500
 n_replicates: 1   # a single scalar run; the default (200) would batch
 ```
 
@@ -513,7 +494,7 @@ n_replicates: 1   # a single scalar run; the default (200) would batch
 fim run multi-statistic.yaml --output results/multi-statistic --quiet
 ```
 
-Converges at generation 13, with `report.json`'s converged_on recording
+Converges at generation 770, with `report.json`'s converged_on recording
 ["D", "G<sub>ST</sub>"] — both were watched, and `any` means only one needed to
 stabilize first.
 
@@ -537,9 +518,6 @@ loci:
   - locus_id: 1
     length: 100
 convergence_statistic: D
-convergence_window: 10
-convergence_tolerance: 0.02
-max_generations: 300
 sigma_band_multiplier: 2.0
 sigma_band_window: 30
 n_replicates: 1   # a single scalar run; the default (200) would batch
@@ -549,13 +527,12 @@ n_replicates: 1   # a single scalar run; the default (200) would batch
 fim run sigma-band.yaml --output results/sigma-band --quiet
 ```
 
-Converges at generation 10 with D = 0.265; the following 30-generation
-extension reports D = 0.124 ± 0.161 (mean ± 2σ). The band's own mean
+Converges at generation 1,429 with D = 0.126; the following 30-generation
+extension reports D = 0.106 ± 0.090 (mean ± 2σ). The band's own mean
 differs from the converged value itself — it is computed over the
 *extension* window, not the generations that triggered convergence — and
-is wide enough here to dip below zero, an honest report of how much a
-single statistic can still wobble over just 30 generations, not a sign of
-anything wrong. `results/sigma-band/sigma_band_trajectory.jsonl` records
+is an honest report of how much a single statistic can still wobble over
+just 30 generations, not a sign of anything wrong. `results/sigma-band/sigma_band_trajectory.jsonl` records
 one `D` value per extension generation; `manifest.json`'s own `sigma_band`
 field holds the summarized band shown here.
 
@@ -570,31 +547,28 @@ enough have run:
 N: 100
 ploidy: haploid
 d: 5
-m: 0.001
-mu: 0.0000003
+m: 0.01
+mu: 0.001
 seed: 20260819
 loci:
   - locus_id: 1
     length: 100
 convergence_statistic: D
-convergence_window: 10
-convergence_tolerance: 0.02
-max_generations: 500
 n_replicates: 50
 replicate_minimum: 10
-replicate_tolerance: 0.05
+replicate_tolerance: 0.08
 ```
 
 ```console
 fim run adaptive-batch.yaml --output results/adaptive-batch --sequential --quiet
 ```
 
-Stops at 25 replicates — `D`'s 95% confidence interval has just tightened to
-`0.256 +/- 0.0498`, inside the requested `0.05` half-width, so the
-remaining 25 possible replicates were never needed.
+Stops at 16 replicates — `D`'s 95% confidence interval has just tightened to
+`0.287 +/- 0.0782`, inside the requested `0.08` half-width, so the
+remaining 34 possible replicates were never needed.
 `results/adaptive-batch/summary.json` reports every statistic's own
 interval; `results/adaptive-batch/replicate-001/` through
-`replicate-025/` each hold the ordinary four-file scalar-run contract for
+`replicate-016/` each hold the ordinary four-file scalar-run contract for
 that one replicate. Drop `--sequential` to run the same batch across a
 worker process per CPU instead — the computed numbers are identical
 either way (see [Batches](#batches-nreplicates-greater-than-one)); only
@@ -602,12 +576,16 @@ the wall-clock time differs.
 
 ### A large-`d` batch under generational-vector
 
-Every example above finishes in well under a second and uses `engine_
+Every example above uses derived convergence defaults and `engine_
 backend`'s own default, `auto` — which, at this small a scale, always
 resolves to `lineal`, the single-threaded reference implementation. This
 example and the next are the deliberate exception: each names a specific
 engine backend and runs a real, moderately long batch (a few seconds, not
 instant) large enough for that backend's own advantage to actually show.
+They are also the exception to the derived convergence defaults: each pins a
+short run (`convergence_window: 10`, `max_generations: 100`) so a timing
+comparison finishes in seconds. The population is nowhere near equilibrium
+when it stops, so read these two as timing workloads, not as results.
 `generational-vector` keeps a dense, array-native representation of every
 active replicate at once, and is the fastest measured choice once `d`
 grows large enough — see [choosing an engine
@@ -852,7 +830,7 @@ action the matching on-screen control already performs.
 |---|---|---|
 | Home | An Experiment/Study/Run tree: every Experiment expands to its own Studies, each expanding to its own Runs, each row carrying a config-summary and a final-statistics/outcome column read from that run's own `report.json`/`summary.json` — a batch row's outcome is its own confidence interval, and is expandable to its individual replicates, each independently reachable for re-analysis. Selecting a scalar or batch row and clicking "Open" (or double-clicking it directly) opens the identical Results card either way — a batch's own pooled statistics, table, and scatter, rebuilt fresh from its own persisted replicates, not only what a live batch's own completion shows. A Study row's own "Open…" goes one level up: every member run, and every replicate of every member batch, pooled together the same way — a mismatched parameter across members (say, two different `d` values) is never refused, only named in a "varies across members" note, since intentionally pooling runs in the same parameter neighborhood is a legitimate choice a botanist is free to make. A run always belongs to a Study; a botanist who never organizes anything still has one to start from — a default Study, inside a default Experiment, created automatically the first time it's needed. An Experiment row's own "Create study…" and a Study row's own "Create run…" (which opens Configure with that Study already selected) put creation on the row that receives it, rather than a separate step elsewhere; "Create experiment…" beside the filter bar is the one page-level exception, since a new Experiment has no row of its own yet to hang the action off of. Deletion is Select/Select all/Delete: every row (Run, Study, Experiment) gets a checkbox, hidden until "Select" is toggled on, and "Delete selected" removes exactly what was checked — deleting a Study or Experiment cascades to its own Runs, named explicitly in the confirmation so a botanist never underestimates what is about to disappear. A recent-runs row, or browsing for a `trajectory.jsonl` directly, re-renders its summary and scatter (and, for a multi-generation run, its own scrubber) at any persisted generation, with the same optional differentiation-`q` sweep. Reachable from the rail's own Home button, or the File menu's "Open run…", from any screen | [Re-analyze a trajectory](#re-analyze-a-trajectory) |
 | Configure | Two always-visible, independently scrollable panels: FIM parameters (ploidy — chosen first and never guessed, starting on diploid unless Settings' default ploidy says otherwise ("Ask me each time" leaves it blank, and a blank ploidy blocks the run) — then N, the number of *individuals* per deme, scalar or a per-deme table, then d, m, mu, seed: the values that together are "the finite island model"; the app multiplies individuals by ploidy into the gene-copy `N` the simulator and the YAML format use) and Structure (initial conditions, migrant sampling, mutation model, deme weighting, loci, which convergence statistic(s) to watch, replicate tolerance/minimum, and the within-run σ band) — one per [configuration reference](configuration.md) section, no dialog to open for any of them; every field and mode-selector group has a hover/focus tooltip. Default ploidy, the Run card's graph columns and scatter-plot style, execution engine, n<sub>replicates</sub>, max_generations, convergence window/tolerance, replicate confidence, and the batch-execution tuning fields (JIT, the `auto` engine's own two thresholds, parallel workers, max concurrent replicates) live in Settings instead, as defaults every fresh configuration starts from — loading a saved configuration or a worked example updates them to match what was loaded. "Load configuration…"/"Save configuration…" read and write the exact YAML file format above, "Load example…" opens the Presets picker (each preset also viewable as plain YAML, with a copy-to-clipboard action, and a loaded preset can be duplicated under a new name), and "▶ Run"/"🔮 Explore" jump to those destinations with the configuration exactly as shown. An invalid field on "Run simulation" (from anywhere) navigates here and marks the specific field, not only the section it lives in | [Create a configuration](#create-a-configuration) |
-| Run view — running | The scatter plot and the trajectories side by side by default — a "Graphs" menu on the card chooses which graphs to show together (the choice is remembered), the columns they use are a Settings choice, and the statistics table beside them stays visible as both the colour legend and the on/off control for each trajectory line. A live scatter plot of the run's own current-generation frequencies (or, for a batch, every replicate's frequencies pooled onto one plot, filling in as replicates advance), with a generation progress indicator and a "Cancel" button — the window stays responsive throughout; the same axis selectors `completed` (below) has, live — picking a pair affects every subsequent push for the rest of the run, not just a one-time snapshot. For a scalar run, a statistic-vs-generation trajectory panel grows alongside the scatter as the run advances, plotting all six report statistics, each beside its own predicted-equilibrium reference line (D, G<sub>ST</sub>, E<sub>ST</sub> only — the three with a closed-form prediction). D, G<sub>ST</sub>, H<sub>S</sub>, H<sub>T</sub> and H<sub>ST</sub> also get a dash-dot closed-form curve: the value theory expects at every generation, starting from the state the run itself started in and settling at that statistic's equilibrium, so you can see whether the run is on track and how far drift has carried it. It covers unequal deme sizes and explicit migration matrices too (up to 12 demes), starting from the run's own seeded founding population. It is not drawn for per-locus mutation rates, for a founding population built by equilibration, or for a matrix with more than 12 demes, and it is shown and hidden together with its own statistic's on/off control. Cancelling, or the run ending in an error, leaves this same view showing exactly as it last rendered, with a banner on top | `run`'s own progress/error output, on one screen instead of terminal lines |
+| Run view — running | The scatter plot and the trajectories side by side by default — a "Graphs" menu on the card chooses which graphs to show together (the choice is remembered), the columns they use are a Settings choice, and the statistics table beside them stays visible as both the colour legend and the on/off control for each trajectory line. A live scatter plot of the run's own current-generation frequencies (or, for a batch, every replicate's frequencies pooled onto one plot, filling in as replicates advance), with a generation progress indicator and a "Cancel" button — the window stays responsive throughout; the same axis selectors `completed` (below) has, live — picking a pair affects every subsequent push for the rest of the run, not just a one-time snapshot. For a scalar run, a statistic-vs-generation trajectory panel grows alongside the scatter as the run advances, plotting all six report statistics, each beside its own predicted-equilibrium reference line (D, G<sub>ST</sub>, E<sub>ST</sub> only — the three with a closed-form prediction). D, G<sub>ST</sub>, H<sub>S</sub>, H<sub>T</sub> and H<sub>ST</sub> also get a dash-dot closed-form curve: the value theory expects at every generation, starting from the state the run itself started in and settling at that statistic's equilibrium, so you can see whether the run is on track and how far drift has carried it. It covers unequal deme sizes and explicit migration matrices too (up to 24 demes), starting from the run's own seeded founding population. It is not drawn for per-locus mutation rates, for a founding population built by equilibration, or for a matrix with more than 24 demes, and it is shown and hidden together with its own statistic's on/off control. Cancelling, or the run ending in an error, leaves this same view showing exactly as it last rendered, with a banner on top | `run`'s own progress/error output, on one screen instead of terminal lines |
 | Run view — completed | A scalar run's summary (all six named statistics, convergence outcome, each shown as a meter against the same `[0, 1]` scale the confidence-interval bars below use) beside the canonical scatter plot and the same trajectory panel described above — replaced, once the run finishes, by the real persisted trajectory, and showing the within-run σ band (a shaded region plus its own `mean [lower, upper]` caption) whenever [sigma_band_multiplier](configuration.md#sigma_band_multiplier) was set — or — for a batch — a pooled scatter across every replicate's final state beside a replicate table (status, final generation, every named statistic) and each statistic's across-replicate confidence interval as a meter, explicitly labeled "uncertainty across N independent replicates" so it is never confused with the within-run σ band; either way, one panel (Deme 1 vs. Deme 2 by default) with a labeled, numbered `0.0`-`1.0` probability scale on both axes; axis selectors on the plot choose which two demes to compare directly, and selecting Deme 1 vs. Deme 2 again returns to the default panel; a scalar run with more than one persisted generation auto-populates a play/pause-and-scrub time slider over the persisted trajectory in the background, with no separate button to reach it; each batch replicate row's own "Open" button reaches this same view for that one replicate; "Open output folder" reveals the run's own artifacts (a batch's own `summary.json` and every replicate subdirectory, for a batch) | [Output schemas](#output-schemas), [Batch `summary.json` and `manifest.json`](#batch-summaryjson-and-manifestjson) |
 | Explore | Four fields (N in individuals, d, m, mu; predictions use the form's ploidy to turn individuals into gene copies) and a theoretical-prediction table covering differentiation (D, G<sub>ST</sub>, E<sub>ST</sub>), equilibrium diversity (within-deme and pooled heterozygosity, Shannon entropy, and effective allele counts), and Whitlock identity-recovery metrics. The table also reports whether mutation is negligible at equilibrium and marks the typical-deme entropy as approximate, especially at d = 2. Values update when a field is committed — no simulation ever runs, so this remains immediate regardless of N or d. A sweep curve plots any of the predicted statistics across a fixed range of the selected field. Every statistic can be charted on every one of the four sweeps — click a table row to plot it. Because these are measured in different units (proportions, nats, effective alleles, generations), the chart shows one unit family at a time and switches families when you pick a statistic from another one. A statistic that does not depend on the swept field draws a flat line, which is itself informative: D does not vary with N at all, and the identity-recovery metrics do not vary with mutation rate. A slider beneath the chart moves the marker along the swept range and re-reads the whole table at that value, leaving your four fields untouched until you change them yourself. "▶ Run this for real" seeds Configure with these same four values and takes you there, with a new study pre-selected (change or clear it before running). Reachable from the rail's own Explore button, or "🔮 Explore" on Configure (which carries Configure's own current values over), from any screen; Back/Forward use the shared screen history | No CLI equivalent — a direct `fim.statistics` call from Python or a script is the closest terminal equivalent |
 | Compare | Pick two or more previously completed runs from a recent-runs list, then overlay their final-state scatter panels as small multiples with a legend naming whichever configuration field(s) actually differ across the selection, plus a trajectory-over-generations overlay (one statistic at a time, one color per run, selectable from the same six named statistics) — "how does the conclusion change as I vary this one knob," on real simulated runs, no re-run needed. Reachable from the rail's own Compare button from any screen; Back/Forward use the shared screen history | No CLI equivalent — comparing several `trajectory.jsonl`/`report.json` files by hand is the closest terminal equivalent |

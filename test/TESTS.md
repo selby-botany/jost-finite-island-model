@@ -485,6 +485,22 @@ def test_every_configuration_snippet_that_sets_n_also_sets_a_ploidy_word(
 A snippet copied into a file must run, and a number is refused
 (`SimulationParams.from_mapping`), so the ploidy is checked as a word.
 
+<a id="test.test_doc_snippets.test_worked_examples_use_derived_convergence_unless_deliberately_pinned"></a>
+
+#### test\_worked\_examples\_use\_derived\_convergence\_unless\_deliberately\_pinned
+
+```python
+def test_worked_examples_use_derived_convergence_unless_deliberately_pinned(
+) -> None
+```
+
+A pinned window or generation cap makes a run stop long before it settles.
+
+Every worked example lets `convergence_window` and `max_generations` be
+derived from the model, except the few that name a reason to pin them.
+Pinning `convergence_window: 10` was what made the hub example stop at
+generation 19 with a meaningless result.
+
 <a id="test.test_hypothesis_profile"></a>
 
 # test.test\_hypothesis\_profile
