@@ -181,6 +181,19 @@ with one parameter and no ploidy flag — and it is what makes Jost's own
 example parameters (`N = 100`, `N = 2000`) usable as §4.3's default
 scenarios without a conversion.
 
+**Update (2026-09-26): the configuration says individuals, the engine says
+gene copies.** The paragraph above describes the engine, and it still holds:
+drift draws gene copies, and the statistics and analytic formulas are written
+in them. It no longer describes the configuration file, the form or the
+manifest. There `N` counts *individuals per deme* and a required `ploidy`
+word (`haploid`, `diploid`, ...) says how many gene copies each carries, so
+the botanist's `N: 225`, `ploidy: diploid` is 450 gene copies. The
+conversion happens once, in `SimulationParams.from_mapping`, and the engine's
+own field is named `gene_copies` so the two quantities cannot be confused.
+Jost's haploid examples say `ploidy: haploid`, which leaves `N = 100` and
+`N = 2000` exactly as above. See `doc/configuration.md` for the user-facing
+rule.
+
 ### 3.2 Alleles, loci, and identity
 
 An allele is an opaque label with exactly one operation: `same(a<sub>j</sub>, a<sub>k</sub>) =
