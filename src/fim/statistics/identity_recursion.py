@@ -285,8 +285,8 @@ def identity_recursion(
 
 
 # The matrix solver diagonalizes a d^2 by d^2 operator; this keeps that
-# eigenproblem small and quick (144 by 144 at the limit).
-MAXIMUM_MATRIX_DEMES = 12
+# eigenproblem small and quick (576 by 576 at the limit, well under a second).
+MAXIMUM_MATRIX_DEMES = 24
 
 # The eigenvector matrix is trusted only while it is this well conditioned
 # and reproduces the operator to this relative accuracy.

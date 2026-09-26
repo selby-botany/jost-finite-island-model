@@ -27,6 +27,7 @@ is the last moment ordinary Python code is guaranteed to run.
 from __future__ import annotations
 
 import faulthandler
+import json
 import logging
 import os
 import sys
@@ -176,16 +177,20 @@ def _real_results_index() -> Path:
     return paths.project_root() / "results" / ".fim" / "studies" / "study-default.json"
 
 
-def _fingerprint(path: Path) -> tuple[int, int] | None:
-    """Return `(size, modification time in ns)`, or `None` if `path` is absent."""
+def _index_entries(path: Path) -> frozenset[str]:
+    """Return the run directories the Study index at `path` lists.
+
+    Empty when the file is absent or unreadable: the guard below then
+    has nothing to compare, which is the safe direction.
+    """
     try:
-        info = path.stat()
-    except FileNotFoundError:
-        return None
-    return (info.st_size, info.st_mtime_ns)
+        listed = json.loads(path.read_text(encoding="utf-8"))["run_directories"]
+    except (OSError, ValueError, KeyError, TypeError):
+        return frozenset()
+    return frozenset(str(entry) for entry in listed)
 
 
-_REAL_INDEX_AT_START: tuple[int, int] | None = None
+_REAL_ENTRIES_AT_START: frozenset[str] = frozenset()
 
 
 def pytest_sessionstart(session: pytest.Session) -> None:
@@ -193,28 +198,38 @@ def pytest_sessionstart(session: pytest.Session) -> None:
 
     Only the controlling process records it; xdist workers start after it.
     """
-    global _REAL_INDEX_AT_START  # noqa: PLW0603
+    global _REAL_ENTRIES_AT_START  # noqa: PLW0603
     if not hasattr(session.config, "workerinput"):
-        _REAL_INDEX_AT_START = _fingerprint(_real_results_index())
+        _REAL_ENTRIES_AT_START = _index_entries(_real_results_index())
 
 
 def pytest_sessionfinish(session: pytest.Session, exitstatus: int) -> None:
-    """Fail the session if a test wrote into the developer's real results index.
+    """Fail the session if a test registered a run in the real results index.
 
     `fim run` records every run in the default Study under the results
     directory, wherever its own `--output` is, so a test that runs it without
     isolating the results directory pollutes the index the app's Home screen
     reads (one suite run once added 35 throwaway runs to it). Making that a
     failure, not a silent side effect, keeps it from coming back.
+
+    Only *outside* entries count: a run written elsewhere is listed by its
+    absolute path, while the developer's own runs in `results/` are bare
+    directory names. Comparing modification times instead (this guard's first
+    form) failed a session whenever the developer's desktop app finished a
+    run of its own while the tests were going, which made a test's outcome
+    depend on something other than the commit.
     """
     del exitstatus
     if hasattr(session.config, "workerinput"):
         return
-    if _fingerprint(_real_results_index()) != _REAL_INDEX_AT_START:
+    added = _index_entries(_real_results_index()) - _REAL_ENTRIES_AT_START
+    outside = sorted(entry for entry in added if Path(entry).is_absolute())
+    if outside:
         print(
-            "\nERROR: this test session modified the real results index "
-            f"({_real_results_index()}). A test must isolate the results "
-            "directory (see test/cli/conftest.py)."
+            "\nERROR: this test session registered runs outside `results/` in "
+            f"the real results index ({_real_results_index()}): {outside[:3]}. "
+            "A test must isolate the results directory (see "
+            "test/cli/conftest.py)."
         )
         session.exitstatus = pytest.ExitCode.TESTS_FAILED
 

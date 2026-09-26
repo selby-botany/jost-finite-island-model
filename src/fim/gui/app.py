@@ -946,13 +946,19 @@ def _closed_form_trajectory_payload(
         params: A validated configuration, at run-start or a reopened run's.
 
     Returns:
-        `None` when `N`, `m` or `mu` has a shape neither solver covers
-        (per-locus `mu`), there are fewer than two demes, the starting
+        `None` when the configuration is outside the recursion's model
+        (`_closed_form_model_applies`: finite alleles, stochastic migrants,
+        mean-of-ratios loci), `mu` is per-locus, there
+        are fewer than two demes, the starting
         population is built by equilibration (its identities are not known
         without running it), or the model has no closed form (no migration
         and no mutation). Otherwise the payload described above, raw floats.
     """
-    if not isinstance(params.mu, float) or params.d < _MINIMUM_CLOSED_FORM_DEMES:
+    if (
+        not isinstance(params.mu, float)
+        or params.d < _MINIMUM_CLOSED_FORM_DEMES
+        or not _closed_form_model_applies(params)
+    ):
         return None
     if isinstance(params.gene_copies, int) and isinstance(params.m, float):
         try:
@@ -969,6 +975,39 @@ def _closed_form_trajectory_payload(
             "inverse": [list(row) for row in recursion.inverse],
         }
     return _sampled_closed_form_payload(params)
+
+
+def _closed_form_model_applies(params: SimulationParams) -> bool:
+    """Say whether the identity recursion is the engine's model for `params`.
+
+    The recursion assumes every mutation makes a brand-new allele, migrants
+    move as expected fractions, and `D`/`G_ST` pool loci as a ratio of
+    means. Each option
+    that changes one of those changes the expected trajectory, so a curve
+    drawn for it would be wrong, not just approximate:
+
+    - `mutation_model: finite_alleles` lets a mutation recreate an existing
+      allele, so identity in state is no longer identity by descent.
+    - `migrant_sampling: stochastic` draws whole migrant counts, adding
+      sampling variance the deterministic recursion leaves out.
+    - `locus_aggregation: mean_of_ratios` averages per-locus ratios.
+
+    `deme_weighting` is deliberately not on the list: the engine weights
+    only `E_ST` and the literature statistics by deme size; `H_S`, `H_T`,
+    `H_ST`, `G_ST` and `D` always count demes equally
+    (`statistics_report`).
+
+    Args:
+        params: A validated configuration.
+
+    Returns:
+        `True` when none of those options departs from the recursion.
+    """
+    return (
+        params.mutation_model == "infinite_alleles"
+        and params.migrant_sampling == "continuous"
+        and params.locus_aggregation == "ratio_of_means"
+    )
 
 
 def _sampled_closed_form_payload(params: SimulationParams) -> dict[str, Any] | None:

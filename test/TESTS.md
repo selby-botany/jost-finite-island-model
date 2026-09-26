@@ -46,6 +46,7 @@ Every test module, fixture, and test function documented here in full; `doc/fim-
   - [`test_batch_runner`](#gui.test_batch_runner)
   - [`test_batch_running`](#gui.test_batch_running)
   - [`test_branding`](#gui.test_branding)
+  - [`test_closed_form_examples`](#gui.test_closed_form_examples)
   - [`test_compare_screen`](#gui.test_compare_screen)
   - [`test_completed_scrubber`](#gui.test_completed_scrubber)
   - [`test_config_form`](#gui.test_config_form)
@@ -295,13 +296,20 @@ Only the controlling process records it; xdist workers start after it.
 def pytest_sessionfinish(session: pytest.Session, exitstatus: int) -> None
 ```
 
-Fail the session if a test wrote into the developer's real results index.
+Fail the session if a test registered a run in the real results index.
 
 `fim run` records every run in the default Study under the results
 directory, wherever its own `--output` is, so a test that runs it without
 isolating the results directory pollutes the index the app's Home screen
 reads (one suite run once added 35 throwaway runs to it). Making that a
 failure, not a silent side effect, keeps it from coming back.
+
+Only *outside* entries count: a run written elsewhere is listed by its
+absolute path, while the developer's own runs in `results/` are bare
+directory names. Comparing modification times instead (this guard's first
+form) failed a session whenever the developer's desktop app finished a
+run of its own while the tests were going, which made a test's outcome
+depend on something other than the commit.
 
 <a id="test.conftest.pytest_unconfigure"></a>
 
@@ -11001,6 +11009,85 @@ def test_license_excludes_the_identified_branding_assets_from_agpl() -> None
 ```
 
 The repository license and branding policy state the asset boundary.
+
+<a id="gui.test_closed_form_examples"></a>
+
+# gui.test\_closed\_form\_examples
+
+The expected-trajectory payload, checked against every shipped configuration.
+
+The closed-form trajectory is exact for one model (infinite alleles,
+expected migrant fractions, ratio-of-means loci) and
+wrong for others, so it must be offered for exactly the configurations it
+is right for. This walks every configuration the project ships or
+documents (the fourteen worked examples, `doc/examples/`, and the
+`fim init` starter) and pins, per configuration, whether the payload is
+the two-variable form, the sampled matrix form, or absent. A new example,
+or a change to the model options that decide this, fails here until the
+table is updated on purpose.
+
+The slow statistical half (`test_engine_agrees_with_the_payload_for_every_
+example`) then runs each configuration that gets a curve against the real
+engine, evaluating the payload the way the page does.
+
+<a id="gui.test_closed_form_examples.test_the_table_names_every_shipped_configuration"></a>
+
+#### test\_the\_table\_names\_every\_shipped\_configuration
+
+```python
+def test_the_table_names_every_shipped_configuration() -> None
+```
+
+A configuration missing from `EXPECTED` (or stale in it) fails here.
+
+<a id="gui.test_closed_form_examples.test_payload_shape_matches_the_model_for_every_configuration"></a>
+
+#### test\_payload\_shape\_matches\_the\_model\_for\_every\_configuration
+
+```python
+@pytest.mark.parametrize("name", sorted(EXPECTED))
+def test_payload_shape_matches_the_model_for_every_configuration(
+        name: str) -> None
+```
+
+Each shipped configuration gets exactly the payload the table says.
+
+<a id="gui.test_closed_form_examples.test_payload_is_finite_bounded_and_settles_for_every_curve"></a>
+
+#### test\_payload\_is\_finite\_bounded\_and\_settles\_for\_every\_curve
+
+```python
+@pytest.mark.parametrize(
+    "name",
+    [name for name, kind in sorted(EXPECTED.items()) if kind is not NONE])
+def test_payload_is_finite_bounded_and_settles_for_every_curve(
+        name: str) -> None
+```
+
+Every offered curve is finite, in range, and ends at the recursion's limit.
+
+<a id="gui.test_closed_form_examples.test_engine_agrees_with_the_payload_for_every_example"></a>
+
+#### test\_engine\_agrees\_with\_the\_payload\_for\_every\_example
+
+```python
+@pytest.mark.slow
+@pytest.mark.statistical
+@pytest.mark.parametrize(
+    "name",
+    [name for name, kind in sorted(EXPECTED.items()) if kind is not NONE])
+def test_engine_agrees_with_the_payload_for_every_example(
+        name: str, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None
+```
+
+Mean simulated `D` and `G_ST` sit on the offered curve, per example.
+
+Each example runs `REPLICATES` seeds as one scalar run, held for three
+relaxation times with no early stop (the curve does not depend on where
+a run stops). At five checkpoints the mean paired difference (simulated
+minus curve) must lie within five standard errors of zero. Single-locus
+examples are noisy, so their band is wide: this catches a wrong model
+(a curve that goes to the wrong place), not a small bias.
 
 <a id="gui.test_compare_screen"></a>
 

@@ -127,9 +127,6 @@ loci:
   - locus_id: 1
     length: 100
 convergence_statistic: D
-convergence_window: 10
-convergence_tolerance: 0.02
-max_generations: 300
 n_replicates: 1   # a single scalar run; the default (200) would batch
 </code></pre>
 <pre><code class="language-console">fim run hub-island.yaml --output results/hub-island --quiet
@@ -160,9 +157,6 @@ loci:
   - locus_id: 1
     length: 100
 convergence_statistic: D
-convergence_window: 10
-convergence_tolerance: 0.02
-max_generations: 500
 n_replicates: 1   # a single scalar run; the default (200) would batch
 </code></pre>
 <pre><code class="language-console">fim run stepping-stone.yaml --output results/stepping-stone --quiet
@@ -237,9 +231,6 @@ equilibrium_convergence_window: 20
 equilibrium_convergence_tolerance: 0.01
 equilibrium_max_generations: 500
 convergence_statistic: D
-convergence_window: 10
-convergence_tolerance: 0.02
-max_generations: 300
 n_replicates: 1   # a single scalar run; the default (200) would batch
 </code></pre>
 <pre><code class="language-console">fim run equilibrium-split.yaml --output results/equilibrium-split --quiet
@@ -270,9 +261,6 @@ loci:
   - locus_id: 1
     length: 100
 convergence_statistic: D
-convergence_window: 10
-convergence_tolerance: 0.02
-max_generations: 500
 n_replicates: 1   # a single scalar run; the default (200) would batch
 </code></pre>
 <pre><code class="language-console">fim run stochastic-migrants.yaml --output results/stochastic-migrants --quiet
@@ -301,9 +289,6 @@ loci:
   - locus_id: 1
     length: 3
 convergence_statistic: D
-convergence_window: 10
-convergence_tolerance: 0.02
-max_generations: 500
 n_replicates: 1   # a single scalar run; the default (200) would batch
 </code></pre>
 <pre><code class="language-console">fim run finite-alleles.yaml --output results/finite-alleles --quiet
@@ -330,9 +315,6 @@ loci:
   - locus_id: 1
     length: 100
 convergence_statistic: G_ST
-convergence_window: 10
-convergence_tolerance: 0.02
-max_generations: 500
 n_replicates: 1   # a single scalar run; the default (200) would batch
 </code></pre>
 <pre><code class="language-console">fim run finite-deme-correction.yaml \
@@ -359,9 +341,6 @@ loci:
   - locus_id: 1
     length: 100
 convergence_statistic: D
-convergence_window: 10
-convergence_tolerance: 0.02
-max_generations: 120
 n_replicates: 1   # a single scalar run; the default (200) would batch
 </code></pre>
 <pre><code class="language-console">fim run kimura-weiss-isolation-by-distance.yaml \
@@ -388,9 +367,6 @@ loci:
   - locus_id: 2
     length: 500
 convergence_statistic: D
-convergence_window: 10
-convergence_tolerance: 0.02
-max_generations: 500
 n_replicates: 1   # a single scalar run; the default (200) would batch
 </code></pre>
 <pre><code class="language-console">fim run mu-b.yaml --output results/mu-b --quiet
@@ -414,9 +390,6 @@ loci:
     length: 100
 convergence_statistic: [D, G_ST]
 convergence_combinator: any
-convergence_window: 10
-convergence_tolerance: 0.02
-max_generations: 500
 n_replicates: 1   # a single scalar run; the default (200) would batch
 </code></pre>
 <pre><code class="language-console">fim run multi-statistic.yaml --output results/multi-statistic --quiet
@@ -441,9 +414,6 @@ loci:
   - locus_id: 1
     length: 100
 convergence_statistic: D
-convergence_window: 10
-convergence_tolerance: 0.02
-max_generations: 300
 sigma_band_multiplier: 2.0
 sigma_band_window: 30
 n_replicates: 1   # a single scalar run; the default (200) would batch
@@ -467,16 +437,13 @@ enough have run:</p>
 <pre><code class="language-yaml">N: 100
 ploidy: haploid
 d: 5
-m: 0.001
-mu: 0.0000003
+m: 0.01
+mu: 0.001
 seed: 20260819
 loci:
   - locus_id: 1
     length: 100
 convergence_statistic: D
-convergence_window: 10
-convergence_tolerance: 0.02
-max_generations: 500
 n_replicates: 50
 replicate_minimum: 10
 replicate_tolerance: 0.05
@@ -508,7 +475,7 @@ full measured comparison this example's own shape is drawn from:</p>
 ploidy: haploid
 d: 70
 m: 0.05
-mu: 0.001
+mu: 0.01
 seed: 20260916
 mutation_model: finite_alleles
 migrant_sampling: continuous
@@ -517,9 +484,6 @@ loci:
     length: 5
 engine_backend: generational-vector
 convergence_statistic: D
-convergence_window: 10
-convergence_tolerance: 0.02
-max_generations: 100
 n_replicates: 16
 </code></pre>
 <pre><code class="language-console">fim run vector-showcase.yaml --output results/vector-showcase --quiet
@@ -543,7 +507,7 @@ region (moderate <code>d</code>, a longer locus):</p>
 ploidy: haploid
 d: 35
 m: 0.05
-mu: 0.001
+mu: 0.01
 seed: 20260916
 mutation_model: finite_alleles
 migrant_sampling: continuous
@@ -552,9 +516,6 @@ loci:
     length: 7
 engine_backend: generational
 convergence_statistic: D
-convergence_window: 10
-convergence_tolerance: 0.02
-max_generations: 100
 n_replicates: 16
 </code></pre>
 <pre><code class="language-console">fim run generational-showcase.yaml --output results/generational-showcase --quiet
@@ -721,7 +682,7 @@ action the matching on-screen control already performs.</p>
 </tr>
 <tr>
 <td>Run view — running</td>
-<td>The scatter plot and the trajectories side by side by default — a &quot;Graphs&quot; menu on the card chooses which graphs to show together (the choice is remembered), the columns they use are a Settings choice, and the statistics table beside them stays visible as both the colour legend and the on/off control for each trajectory line. A live scatter plot of the run's own current-generation frequencies (or, for a batch, every replicate's frequencies pooled onto one plot, filling in as replicates advance), with a generation progress indicator and a &quot;Cancel&quot; button — the window stays responsive throughout; the same axis selectors <code>completed</code> (below) has, live — picking a pair affects every subsequent push for the rest of the run, not just a one-time snapshot. For a scalar run, a statistic-vs-generation trajectory panel grows alongside the scatter as the run advances, plotting all six report statistics, each beside its own predicted-equilibrium reference line (D, G<sub>ST</sub>, E<sub>ST</sub> only — the three with a closed-form prediction). D, G<sub>ST</sub>, H<sub>S</sub>, H<sub>T</sub> and H<sub>ST</sub> also get a dash-dot closed-form curve: the value theory expects at every generation, starting from the state the run itself started in and settling at that statistic's equilibrium, so you can see whether the run is on track and how far drift has carried it. It covers unequal deme sizes and explicit migration matrices too (up to 12 demes), starting from the run's own seeded founding population. It is not drawn for per-locus mutation rates, for a founding population built by equilibration, or for a matrix with more than 12 demes, and it is shown and hidden together with its own statistic's on/off control. Cancelling, or the run ending in an error, leaves this same view showing exactly as it last rendered, with a banner on top</td>
+<td>The scatter plot and the trajectories side by side by default — a &quot;Graphs&quot; menu on the card chooses which graphs to show together (the choice is remembered), the columns they use are a Settings choice, and the statistics table beside them stays visible as both the colour legend and the on/off control for each trajectory line. A live scatter plot of the run's own current-generation frequencies (or, for a batch, every replicate's frequencies pooled onto one plot, filling in as replicates advance), with a generation progress indicator and a &quot;Cancel&quot; button — the window stays responsive throughout; the same axis selectors <code>completed</code> (below) has, live — picking a pair affects every subsequent push for the rest of the run, not just a one-time snapshot. For a scalar run, a statistic-vs-generation trajectory panel grows alongside the scatter as the run advances, plotting all six report statistics, each beside its own predicted-equilibrium reference line (D, G<sub>ST</sub>, E<sub>ST</sub> only — the three with a closed-form prediction). D, G<sub>ST</sub>, H<sub>S</sub>, H<sub>T</sub> and H<sub>ST</sub> also get a dash-dot closed-form curve: the value theory expects at every generation, starting from the state the run itself started in and settling at that statistic's equilibrium, so you can see whether the run is on track and how far drift has carried it. It covers unequal deme sizes and explicit migration matrices too (up to 24 demes), starting from the run's own seeded founding population. It is not drawn for per-locus mutation rates, for a founding population built by equilibration, or for a matrix with more than 24 demes, and it is shown and hidden together with its own statistic's on/off control. Cancelling, or the run ending in an error, leaves this same view showing exactly as it last rendered, with a banner on top</td>
 <td><code>run</code>'s own progress/error output, on one screen instead of terminal lines</td>
 </tr>
 <tr>
