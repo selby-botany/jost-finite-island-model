@@ -561,8 +561,8 @@ def test_choosing_a_configure_example_applies_it_without_leaving_configure(
     result = _drive(window, steps)
     assert result["configureVisible"] is True
     assert result["mMode"] == "matrix"
-    # 150 gene copies at the example's declared diploid ploidy.
-    assert result["nValue"] == "75"
+    # The example's `N: 150` with `ploidy: haploid`: 150 individuals.
+    assert result["nValue"] == "150"
     # Reset to its own placeholder afterward — the control always reads
     # as an action, never as "currently showing example X."
     assert result["selectValue"] == ""

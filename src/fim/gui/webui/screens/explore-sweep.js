@@ -8,10 +8,10 @@
  * no run), then "Sweep this for real" seeds Configure from the four
  * fields and sets the sweep there (Sweep box on, axes saved).
  *
- * Explore works in gene copies per deme; a sweep's `N` counts
- * individuals, the number shown everywhere else. The conversion (divide
- * by the ploidy, which the bridge fills in from Settings) happens here at
- * the seam, so the sweep screen receives individuals.
+ * Explore's `N` counts individuals per deme, the same number the sweep
+ * and every other screen use, so nothing is converted at this seam; the
+ * bridge multiplies by the ploidy only where a closed-form prediction
+ * needs gene copies.
  *
  * "Even in the predicted response" places points where a closed-form
  * statistic changes: the interval is sampled densely, and the points sit
@@ -119,7 +119,8 @@ async function exploreResponseValues(key, low, high, count) {
         entered.n,
         entered.m,
         entered.mu,
-        entered.d
+        entered.d,
+        exploreCurrentPloidy
     );
     const statistic = exploreSweepStatistic.value;
     if (!curve.ok || count < 2 || unique.length < 2) {
@@ -192,51 +193,14 @@ function scheduleExploreSweepPlan() {
 }
 
 /**
- * The ploidy the Explore fields are converted with (1 when none is set,
- * the same reading the bridge gives an unset ploidy).
- * @param {Record<string, string>} formValues
- * @returns {number}
- */
-function explorePloidy(formValues) {
-    const ploidy = Number(formValues.ploidy);
-    return Number.isInteger(ploidy) && ploidy >= 1 ? ploidy : 1;
-}
-
-/**
- * A control's definition in the sweep's own units (individuals for `N`).
- * @param {{key: string, range?: object, values?: number[]}} definition
- * @param {number} ploidy
- * @returns {object}
- */
-function exploreSweepDefinition(definition, ploidy) {
-    if (definition.key !== "N") {
-        return definition;
-    }
-    if (definition.range) {
-        return {
-            key: "N",
-            range: {
-                ...definition.range,
-                start: Math.max(1, Math.round(definition.range.start / ploidy)),
-                stop: Math.max(1, Math.round(definition.range.stop / ploidy)),
-            },
-        };
-    }
-    const individuals = definition.values.map((value) => Math.max(1, Math.round(value / ploidy)));
-    return {
-        key: "N",
-        values: individuals.filter((value, index) => individuals.indexOf(value) === index),
-    };
-}
-
-/**
  * Seed the form values Explore's fields imply, or say why not.
  * @returns {Promise<{ok: boolean, values?: object, message?: string}>}
  */
 function exploreFormValues() {
     const entered = collectExploreValues();
     return window.pywebview.api.get_starter_form_with_overrides({
-        gene_copies: entered.n,
+        N: entered.n,
+        ploidy: exploreCurrentPloidy,
         d: entered.d,
         m_rate: entered.m,
         mu_value: entered.mu,
@@ -258,10 +222,7 @@ async function refreshExploreSweepPlan() {
         window.__fimExploreSweepReady = true;
         return;
     }
-    const ploidy = explorePloidy(seeded.values);
-    const axes = exploreSweepControls.map((entry) =>
-        exploreSweepDefinition(entry.control.getDefinition(), ploidy)
-    );
+    const axes = exploreSweepControls.map((entry) => entry.control.getDefinition());
     const plan = await window.pywebview.api.plan_sweep(seeded.values, { axes });
     if (sequence !== exploreSweepSequence) {
         return;
@@ -280,26 +241,24 @@ async function refreshExploreSweepPlan() {
         exploreSweepPlan.textContent = `${pieces.join(", ")}.`;
         exploreSweepButton.disabled = plan.points.length === 0;
     }
-    drawExploreSweepMarkers(plan, ploidy);
+    drawExploreSweepMarkers(plan);
     window.__fimExploreSweepReady = true;
 }
 
 /**
  * Draw the planned points on the surface map (surface mode only).
  * @param {object} plan
- * @param {number} ploidy
  */
-function drawExploreSweepMarkers(plan, ploidy) {
+function drawExploreSweepMarkers(plan) {
     if (!isExploreSurface() || !plan.ok || exploreSweepControls.length < 2) {
         window.fim.setExploreSurfaceMarkers([]);
         return;
     }
     const [xKey, yKey] = exploreSweepControls.map((entry) => entry.key);
-    const inExploreUnits = (key, value) => (key === "N" ? value * ploidy : value);
     window.fim.setExploreSurfaceMarkers(
         plan.points.map((point) => ({
-            x: inExploreUnits(xKey, point.coordinates[xKey]),
-            y: inExploreUnits(yKey, point.coordinates[yKey]),
+            x: point.coordinates[xKey],
+            y: point.coordinates[yKey],
         }))
     );
 }
@@ -334,10 +293,7 @@ exploreSweepButton.addEventListener("click", async () => {
         exploreBanner.hidden = false;
         return;
     }
-    const ploidy = explorePloidy(seeded.values);
-    const axes = exploreSweepControls.map((entry) =>
-        exploreSweepDefinition(entry.control.getDefinition(), ploidy)
-    );
+    const axes = exploreSweepControls.map((entry) => entry.control.getDefinition());
     // The same seeding "Run this for real" does: Configure takes the four
     // Explore fields. The sweep is then set on Configure (its Sweep box on,
     // the axes saved), and the botanist presses Run there.

@@ -3881,7 +3881,8 @@ Return a fresh form's values, with specific fields overridden.
 Explore's own "▶ Run this for real" handoff (`20260918-claude-
 sonnet-5-explore-to-study-run-handoff-design.md`, `selby/
 restricted`, §1/§8) is the one caller: `overrides` is Explore's
-own current `N`/`d`/`m_rate`/`mu_value`, layered on top of
+own current `N` (individuals), `ploidy`, `d`, `m_rate` and
+`mu_value`, layered on top of
 `get_starter_form`'s own values (including any saved Settings
 defaults) exactly like `config_form.starter_form_values`'s own
 `overrides` parameter already does for a single call.
@@ -4180,8 +4181,11 @@ pair as separate panels (`d > 6`).
 
 ```python
 @_log_bridge_call
-def get_equilibrium_predictions(n: str, m: str, mu: str,
-                                d: str) -> dict[str, Any]
+def get_equilibrium_predictions(n: str,
+                                m: str,
+                                mu: str,
+                                d: str,
+                                ploidy: str = "1") -> dict[str, Any]
 ```
 
 Return no-simulation-needed theoretical equilibrium predictions.
@@ -4196,10 +4200,12 @@ of how large `N`/`d` are.
 
 **Arguments**:
 
-- `n` - Population size (gene copies per deme), as typed.
+- `n` - Individuals per deme, as typed.
 - `m` - Migration rate, as typed.
 - `mu` - Mutation rate, as typed.
 - `d` - Deme count, as typed.
+- `ploidy` - Gene copies per individual (`"1"` to `"4"`); the
+  predictions are evaluated at `n * ploidy` gene copies.
 
 
 **Returns**:
@@ -4220,8 +4226,13 @@ of how large `N`/`d` are.
 
 ```python
 @_log_bridge_call
-def get_equilibrium_grid(x_axis: str, y_axis: str, n: str, m: str, mu: str,
-                         d: str) -> dict[str, Any]
+def get_equilibrium_grid(x_axis: str,
+                         y_axis: str,
+                         n: str,
+                         m: str,
+                         mu: str,
+                         d: str,
+                         ploidy: str = "1") -> dict[str, Any]
 ```
 
 Evaluate every prediction over a grid of two swept parameters.
@@ -4234,17 +4245,18 @@ every cell, so the client re-reads the prediction table straight
 out of the payload as its probe moves, with no round trip per
 drag. The other two parameters are held at the given values.
 
-An integer axis (`d`; `N` in gene copies) gets one column per
+An integer axis (`d`; `N` in individuals) gets one column per
 integer value, not an interpolated blur (`_grid_axis_values`).
 
 **Arguments**:
 
 - `x_axis` - The columns' parameter: `"N"`, `"d"`, `"m"` or `"mu"`.
 - `y_axis` - The rows' parameter, a different one of the four.
-- `n` - Population size in gene copies per deme, held unless swept.
+- `n` - Individuals per deme, held unless swept.
 - `m` - Migration rate, held unless swept.
 - `mu` - Mutation rate, held unless swept.
 - `d` - Deme count, held unless swept.
+- `ploidy` - Gene copies per individual (`"1"` to `"4"`).
 
 
 **Returns**:
@@ -4262,8 +4274,13 @@ integer value, not an interpolated blur (`_grid_axis_values`).
 
 ```python
 @_log_bridge_call
-def get_equilibrium_curve(axis: str, values: list[float], n: str, m: str,
-                          mu: str, d: str) -> dict[str, Any]
+def get_equilibrium_curve(axis: str,
+                          values: list[float],
+                          n: str,
+                          m: str,
+                          mu: str,
+                          d: str,
+                          ploidy: str = "1") -> dict[str, Any]
 ```
 
 Evaluate every prediction at explicit values of one parameter.
@@ -4286,8 +4303,12 @@ samples an interval densely and spaces its points by the response.
 
 ```python
 @_log_bridge_call
-def get_equilibrium_sweep(axis: str, n: str, m: str, mu: str,
-                          d: str) -> dict[str, Any]
+def get_equilibrium_sweep(axis: str,
+                          n: str,
+                          m: str,
+                          mu: str,
+                          d: str,
+                          ploidy: str = "1") -> dict[str, Any]
 ```
 
 Sweep one of N/d/m/mu and return every prediction across it.

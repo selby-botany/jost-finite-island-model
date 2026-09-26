@@ -115,18 +115,45 @@ def test_input_screen_run_button_enabled_for_the_valid_starter_form(
     assert settled["disabled"] is False
 
 
-def test_a_fresh_form_makes_the_botanist_choose_a_ploidy(
+def test_a_fresh_form_starts_diploid_and_is_ready_to_run(
     tmp_path: Path, drive: Callable[..., Any]
 ) -> None:
-    """With no default ploidy, Run is blocked until one is chosen.
+    """With nothing saved, a new configuration starts diploid and can run.
 
-    Botanist feedback on the first real beta run: ask for ploidy and then
-    individuals, rather than gene copies. The choice is never guessed, so
-    a fresh form (no saved default in Settings) opens on "choose..." with
-    "Run simulation" disabled; picking a ploidy is what enables it.
+    Botanist feedback on the first real beta run: a blank ploidy blocked Run
+    and, with it, every graph, until the ploidy field was found. New
+    configurations start on diploid; the form still asks for individuals
+    (225 diploid individuals, 450 gene copies).
     """
     preferences_path = tmp_path / "preferences.json"
     save_preferences(preferences_path, GuiPreferences(welcome_dismissed=True))
+    window = create_window(api=Api(preferences_path=preferences_path), hidden=True)
+
+    settled = drive(
+        window,
+        trigger="null",
+        read=(
+            "({ploidy: document.getElementById('field-ploidy').value, "
+            "disabled: document.getElementById('run-button').disabled, "
+            "strip: document.getElementById('parameter-strip-N').textContent})"
+        ),
+        ready=_INPUT_SCREEN_READY,
+        is_ready=lambda value: value is not None and value["strip"] == "225 diploid",
+    )
+
+    assert settled["ploidy"] == "2"
+    assert settled["disabled"] is False
+
+
+def test_ask_me_each_time_blocks_run_until_a_ploidy_is_chosen(
+    tmp_path: Path, drive: Callable[..., Any]
+) -> None:
+    """Settings' "Ask me each time" keeps the forced choice; picking one enables Run."""
+    preferences_path = tmp_path / "preferences.json"
+    save_preferences(
+        preferences_path,
+        GuiPreferences(welcome_dismissed=True, default_ploidy=""),
+    )
     window = create_window(api=Api(preferences_path=preferences_path), hidden=True)
 
     settled = drive(

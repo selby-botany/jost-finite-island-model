@@ -116,7 +116,8 @@ async function refreshExploreSurface() {
         values.n,
         values.m,
         values.mu,
-        values.d
+        values.d,
+        exploreCurrentPloidy
     );
     if (sequence !== exploreSurfaceSequence) {
         return;

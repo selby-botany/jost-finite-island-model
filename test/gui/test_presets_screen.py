@@ -102,8 +102,8 @@ def test_load_example_populates_the_list_and_applies_the_chosen_preset(
     assert result["itemCount"] > 0
     assert result["settled"]["dialogOpen"] is False
     assert result["settled"]["mMode"] == "matrix"
-    # 150 gene copies at the example's declared diploid ploidy.
-    assert result["settled"]["nValue"] == "75"
+    # The example's `N: 150` with `ploidy: haploid`: 150 individuals.
+    assert result["settled"]["nValue"] == "150"
     # The stepping-stone preset's own d=6 ring matrix, real values in a
     # real, rendered, editable grid — not a read-only "loaded" badge.
     assert result["settled"]["matrixFieldsHidden"] is False

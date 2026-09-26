@@ -642,10 +642,9 @@ def _isolate_gui_preferences(
     # already uses for `dark_mode_override`/`significant_digits` --
     # every other test in this package never has to know this dialog
     # exists.
-    # `default_ploidy="1"`: the app makes the botanist choose a ploidy, so
-    # without a default no test could submit a run. Haploid (individuals
-    # equal gene copies) keeps every explicit `N` a test types meaning
-    # exactly what it always did.
+    # `default_ploidy="1"`: the app starts on diploid, which would double
+    # every explicit `N` a test types. Haploid (individuals equal gene
+    # copies) keeps each of them meaning exactly what it always did.
     save_preferences(
         preferences_path,
         GuiPreferences(welcome_dismissed=True, default_ploidy="1"),

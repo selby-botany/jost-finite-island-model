@@ -173,21 +173,30 @@ def test_sweep_this_for_real_sets_the_sweep_on_configure(
     assert configure["dialogOpen"] is False
 
 
-def test_an_n_axis_is_converted_from_gene_copies_to_individuals(
+def test_an_n_axis_is_individuals_end_to_end_with_no_conversion_seam(
     fast_scalar_run_settings: Path, window: webview.Window
 ) -> None:
+    """Explore, the sweep panel and Configure all count individuals.
+
+    The panel used to divide Explore's gene copies by the ploidy; Explore's N
+    is individuals now, so the axis a botanist sets is the axis that is
+    swept, and the ploidy Explore evaluates with is the form's.
+    """
+
     def steps(poll_until: Poll) -> Any:
         _open_panel(window, poll_until, surface=False)
         return window.evaluate_js(
-            "[exploreSweepDefinition({key: 'N', range: {start: 200, stop: 2000, "
-            "count: 3, scale: 'log'}}, 2), "
-            "exploreSweepDefinition({key: 'N', values: [10, 11, 200]}, 2)]"
+            "({"
+            "converts: typeof exploreSweepDefinition !== 'undefined', "
+            "n: document.getElementById('explore-n').value, "
+            "ploidy: exploreCurrentPloidy"
+            "})"
         )
 
-    ranged, listed = _drive(window, steps)
+    settled = _drive(window, steps)
 
-    assert ranged["range"]["start"] == 100
-    assert ranged["range"]["stop"] == 1000
-    # 10 and 11 gene copies are 5 and 6 individuals; nothing collapses here,
-    # but a repeat after rounding would.
-    assert listed["values"] == [5, 6, 100]
+    assert settled["converts"] is False
+    assert settled["n"] == "225"
+    # The GUI test fixtures seed haploid as the default ploidy (test/gui/
+    # conftest.py), so the form, and therefore Explore, is haploid here.
+    assert settled["ploidy"] == "1"

@@ -104,7 +104,7 @@ from fim.gui.preferences import (
 from fim.gui.store import read_live_state, read_progress_sidecar
 from fim.gui.trajectory_history import sampled_statistic_history
 from fim.model.initial import generate_initial_state
-from fim.model.params import SimulationParams
+from fim.model.params import ALLOWED_PLOIDIES, SimulationParams
 from fim.model.state import ModelState
 from fim.persistence import groups
 from fim.persistence.manifest import RunManifest, read_batch_manifest, read_manifest
@@ -1197,13 +1197,38 @@ def _parse_equilibrium_inputs(
     except (TypeError, ValueError) as error:
         raise ValueError("N, d, m, and mu must all be numbers") from error
     if n_value < _MINIMUM_EQUILIBRIUM_N:
-        raise ValueError("N must be a positive gene-copy count")
+        raise ValueError("N must be a positive number of individuals")
     if d_value < _MINIMUM_EQUILIBRIUM_DEMES:
         raise ValueError("d must be at least 2")
     for name, value in (("m", m_value), ("mu", mu_value)):
         if not isfinite(value) or not 0.0 <= value <= 1.0:
             raise ValueError(f"{name} must be between 0 and 1")
     return (n_value, m_value, mu_value, d_value)
+
+
+def _parse_explore_ploidy(ploidy: str) -> int:
+    """Parse Explore's ploidy field: 1 through 4 gene copies per individual.
+
+    Explore's N counts individuals, like the Configure form and the
+    configuration's `N`; the closed-form predictions are functions of gene
+    copies, so every bridge method multiplies by this before evaluating them.
+
+    Args:
+        ploidy: The ploidy number as text (`"1"` haploid through `"4"`).
+
+    Returns:
+        The integer ploidy.
+
+    Raises:
+        ValueError: If it is not a whole number from 1 to 4.
+    """
+    try:
+        value = int(ploidy)
+    except (TypeError, ValueError) as error:
+        raise ValueError("ploidy must be 1, 2, 3 or 4") from error
+    if value not in ALLOWED_PLOIDIES:
+        raise ValueError("ploidy must be 1, 2, 3 or 4")
+    return value
 
 
 def _active_window() -> webview.Window | None:
@@ -1836,7 +1861,8 @@ class Api:
         Explore's own "▶ Run this for real" handoff (`20260918-claude-
         sonnet-5-explore-to-study-run-handoff-design.md`, `selby/
         restricted`, §1/§8) is the one caller: `overrides` is Explore's
-        own current `N`/`d`/`m_rate`/`mu_value`, layered on top of
+        own current `N` (individuals), `ploidy`, `d`, `m_rate` and
+        `mu_value`, layered on top of
         `get_starter_form`'s own values (including any saved Settings
         defaults) exactly like `config_form.starter_form_values`'s own
         `overrides` parameter already does for a single call.
@@ -1860,19 +1886,7 @@ class Api:
             "message": ...}` if the merged whole does not validate.
         """
         merged_overrides = self._starter_overrides()
-        overrides = dict(overrides)
-        gene_copies = overrides.pop("gene_copies", None)
         merged_overrides.update(overrides)
-        if gene_copies is not None:
-            # Explore counts gene copies; the form asks for individuals.
-            # With no ploidy known (none chosen, no Settings default) the
-            # count cannot be converted honestly, so the form keeps its
-            # own individuals and the botanist chooses a ploidy.
-            ploidy = merged_overrides.get("ploidy", "")
-            if ploidy and gene_copies.strip().isdigit():
-                merged_overrides["N"] = str(
-                    max(1, round(int(gene_copies) / int(ploidy)))
-                )
         try:
             values = starter_form_values(overrides=merged_overrides)
         except ValueError as error:
@@ -2161,7 +2175,7 @@ class Api:
 
     @_log_bridge_call
     def get_equilibrium_predictions(
-        self, n: str, m: str, mu: str, d: str
+        self, n: str, m: str, mu: str, d: str, ploidy: str = "1"
     ) -> dict[str, Any]:
         """Return no-simulation-needed theoretical equilibrium predictions.
 
@@ -2174,10 +2188,12 @@ class Api:
         of how large `N`/`d` are.
 
         Args:
-            n: Population size (gene copies per deme), as typed.
+            n: Individuals per deme, as typed.
             m: Migration rate, as typed.
             mu: Mutation rate, as typed.
             d: Deme count, as typed.
+            ploidy: Gene copies per individual (`"1"` to `"4"`); the
+                predictions are evaluated at `n * ploidy` gene copies.
 
         Returns:
             `{"ok": True, "predictions": {...}, "qualifications": {...}}`;
@@ -2192,13 +2208,14 @@ class Api:
         """
         try:
             n_value, m_value, mu_value, d_value = _parse_equilibrium_inputs(n, m, mu, d)
+            ploidy_value = _parse_explore_ploidy(ploidy)
         except ValueError as error:
             return {"ok": False, "message": str(error)}
 
         digits = self._significant_digits
 
         predictions, qualifications = _equilibrium_prediction_payload(
-            n_value, m_value, mu_value, d_value, digits
+            n_value * ploidy_value, m_value, mu_value, d_value, digits
         )
         return {
             "ok": True,
@@ -2208,7 +2225,14 @@ class Api:
 
     @_log_bridge_call
     def get_equilibrium_grid(
-        self, x_axis: str, y_axis: str, n: str, m: str, mu: str, d: str
+        self,
+        x_axis: str,
+        y_axis: str,
+        n: str,
+        m: str,
+        mu: str,
+        d: str,
+        ploidy: str = "1",
     ) -> dict[str, Any]:
         """Evaluate every prediction over a grid of two swept parameters.
 
@@ -2220,16 +2244,17 @@ class Api:
         out of the payload as its probe moves, with no round trip per
         drag. The other two parameters are held at the given values.
 
-        An integer axis (`d`; `N` in gene copies) gets one column per
+        An integer axis (`d`; `N` in individuals) gets one column per
         integer value, not an interpolated blur (`_grid_axis_values`).
 
         Args:
             x_axis: The columns' parameter: `"N"`, `"d"`, `"m"` or `"mu"`.
             y_axis: The rows' parameter, a different one of the four.
-            n: Population size in gene copies per deme, held unless swept.
+            n: Individuals per deme, held unless swept.
             m: Migration rate, held unless swept.
             mu: Mutation rate, held unless swept.
             d: Deme count, held unless swept.
+            ploidy: Gene copies per individual (`"1"` to `"4"`).
 
         Returns:
             `{"ok": True, "xAxis", "yAxis", "xValues", "yValues",
@@ -2247,6 +2272,7 @@ class Api:
             return {"ok": False, "message": "choose two different axes"}
         try:
             n_value, m_value, mu_value, d_value = _parse_equilibrium_inputs(n, m, mu, d)
+            ploidy_value = _parse_explore_ploidy(ploidy)
         except ValueError as error:
             return {"ok": False, "message": str(error)}
         held = {"N": n_value, "d": d_value, "m": m_value, "mu": mu_value}
@@ -2259,7 +2285,7 @@ class Api:
                 point = {**held, x_axis: x_value, y_axis: y_value}
                 row.append(
                     _equilibrium_numeric_predictions(
-                        int(point["N"]),
+                        int(point["N"]) * ploidy_value,
                         float(point["m"]),
                         float(point["mu"]),
                         int(point["d"]),
@@ -2286,7 +2312,14 @@ class Api:
 
     @_log_bridge_call
     def get_equilibrium_curve(
-        self, axis: str, values: list[float], n: str, m: str, mu: str, d: str
+        self,
+        axis: str,
+        values: list[float],
+        n: str,
+        m: str,
+        mu: str,
+        d: str,
+        ploidy: str = "1",
     ) -> dict[str, Any]:
         """Evaluate every prediction at explicit values of one parameter.
 
@@ -2306,6 +2339,7 @@ class Api:
             return {"ok": False, "message": f"axis must be one of {names}"}
         try:
             n_value, m_value, mu_value, d_value = _parse_equilibrium_inputs(n, m, mu, d)
+            ploidy_value = _parse_explore_ploidy(ploidy)
         except ValueError as error:
             return {"ok": False, "message": str(error)}
         held = {"N": n_value, "d": d_value, "m": m_value, "mu": mu_value}
@@ -2313,14 +2347,17 @@ class Api:
         for value in values:
             point = {**held, axis: round(value) if axis in ("N", "d") else value}
             predictions = _equilibrium_numeric_predictions(
-                int(point["N"]), float(point["m"]), float(point["mu"]), int(point["d"])
+                int(point["N"]) * ploidy_value,
+                float(point["m"]),
+                float(point["mu"]),
+                int(point["d"]),
             )
             points.append({"x": point[axis], **predictions})
         return {"ok": True, "axis": axis, "points": points}
 
     @_log_bridge_call
     def get_equilibrium_sweep(
-        self, axis: str, n: str, m: str, mu: str, d: str
+        self, axis: str, n: str, m: str, mu: str, d: str, ploidy: str = "1"
     ) -> dict[str, Any]:
         """Sweep one of N/d/m/mu and return every prediction across it.
 
@@ -2372,6 +2409,7 @@ class Api:
             }
         try:
             n_value, m_value, mu_value, d_value = _parse_equilibrium_inputs(n, m, mu, d)
+            ploidy_value = _parse_explore_ploidy(ploidy)
         except ValueError as error:
             return {"ok": False, "message": str(error)}
 
@@ -2393,7 +2431,7 @@ class Api:
         swept_values: list[float | int] = []
         for raw_value in swept:
             value = value_at(raw_value)
-            sweep_n = int(value) if axis == "N" else n_value
+            sweep_n = (int(value) if axis == "N" else n_value) * ploidy_value
             sweep_d = int(value) if axis == "d" else d_value
             sweep_m = float(value) if axis == "m" else m_value
             sweep_mu = float(value) if axis == "mu" else mu_value

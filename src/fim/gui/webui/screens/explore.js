@@ -194,20 +194,25 @@ function exploreSeriesValue(point, name) {
 
 
 /**
- * Convert Configure's individuals-per-deme `N` into Explore's gene
- * copies (`individuals * ploidy`). With no ploidy chosen yet the starter
- * form's own diploid-equivalent pairing is assumed (its `N` is 225
- * individuals, i.e. the 450 gene copies Explore has always opened on);
- * a per-deme list is passed through unconverted, as before.
- * @param {{N: string, ploidy?: string}} formValues
- * @returns {string}
+ * The ploidy Explore evaluates its predictions with: gene copies per
+ * individual, read from Configure's own form (or the starter form) when
+ * Explore opens, so the two never disagree. Explore's `N` counts
+ * individuals, like Configure's; the bridge multiplies by this before it
+ * evaluates the closed-form predictions, which are functions of gene
+ * copies. A blank ploidy ("Ask me each time" in Settings) reads as
+ * diploid, the app's default.
  */
-function exploreGeneCopies(formValues) {
-    const individuals = Number(formValues.N);
-    if (!formValues.N || Number.isNaN(individuals)) {
-        return formValues.N;
-    }
-    return String(individuals * Number(formValues.ploidy || 2));
+let exploreCurrentPloidy = "2";
+
+/**
+ * Take the ploidy from a set of Configure form values.
+ * @param {{ploidy?: string}} formValues
+ */
+function exploreReadPloidy(formValues) {
+    const ploidy = Number(formValues.ploidy);
+    exploreCurrentPloidy = Number.isInteger(ploidy) && ploidy >= 1 && ploidy <= 4
+        ? String(ploidy)
+        : "2";
 }
 
 /**
@@ -759,7 +764,8 @@ async function refreshExplore() {
         values.n,
         values.m,
         values.mu,
-        values.d
+        values.d,
+        exploreCurrentPloidy
     );
     if (!predictionsResult.ok) {
         exploreBanner.textContent = predictionsResult.message;
@@ -785,7 +791,8 @@ async function refreshExplore() {
         values.n,
         values.m,
         values.mu,
-        values.d
+        values.d,
+        exploreCurrentPloidy
     );
     _currentSweep = sweepResult.ok ? sweepResult : null;
     syncExploreCanvasSize();
@@ -846,10 +853,11 @@ exploreBackButton.addEventListener("click", () => {
  */
 exploreRunForRealButton.addEventListener("click", async () => {
     const values = collectExploreValues();
-    // Explore works in gene copies (its own N label says so); the form
-    // asks for individuals and a ploidy, so the bridge converts.
+    // Explore's N counts individuals, exactly like the form's, so it is
+    // handed over as is together with the ploidy it was evaluated with.
     const result = await window.pywebview.api.get_starter_form_with_overrides({
-        gene_copies: values.n,
+        N: values.n,
+        ploidy: exploreCurrentPloidy,
         d: values.d,
         m_rate: values.m,
         mu_value: values.mu,
@@ -884,14 +892,16 @@ exploreRunForRealButton.addEventListener("click", async () => {
 window.fim.showExplore = async function showExplore(overrides) {
     if (overrides) {
         exploreSeeded = true;
-        exploreN.value = exploreGeneCopies(overrides);
+        exploreReadPloidy(overrides);
+        exploreN.value = overrides.N;
         exploreD.value = overrides.d;
         exploreM.value = overrides.m_rate;
         exploreMu.value = overrides.mu_value;
     } else if (!exploreSeeded) {
         exploreSeeded = true;
         const starter = await window.pywebview.api.get_starter_form();
-        exploreN.value = exploreGeneCopies(starter);
+        exploreReadPloidy(starter);
+        exploreN.value = starter.N;
         exploreD.value = starter.d;
         exploreM.value = starter.m_rate;
         exploreMu.value = starter.mu_value;

@@ -7284,16 +7284,16 @@ def test_set_default_ploidy_rejects_an_unknown_value(tmp_path: Path) -> None
 
 Only blank and 1-4 are accepted, and a rejection saves nothing.
 
-<a id="gui.test_app_api.test_explore_handoff_converts_gene_copies_using_the_default_ploidy"></a>
+<a id="gui.test_app_api.test_explore_handoff_passes_individuals_and_ploidy_through_unconverted"></a>
 
-#### test\_explore\_handoff\_converts\_gene\_copies\_using\_the\_default\_ploidy
+#### test\_explore\_handoff\_passes\_individuals\_and\_ploidy\_through\_unconverted
 
 ```python
-def test_explore_handoff_converts_gene_copies_using_the_default_ploidy(
+def test_explore_handoff_passes_individuals_and_ploidy_through_unconverted(
         tmp_path: Path) -> None
 ```
 
-Explore counts gene copies; the form gets individuals plus a ploidy.
+Explore's N counts individuals like the form's, so nothing is converted.
 
 <a id="gui.test_app_api.test_explore_handoff_without_a_ploidy_leaves_it_to_be_chosen"></a>
 
@@ -7304,7 +7304,7 @@ def test_explore_handoff_without_a_ploidy_leaves_it_to_be_chosen(
         tmp_path: Path) -> None
 ```
 
-With "Ask me each time" the count cannot be converted honestly.
+With "Ask me each time" and no ploidy from Explore, the ploidy stays blank.
 
 <a id="gui.test_app_api.test_get_starter_form_falls_back_when_saved_default_run_settings_is_invalid"></a>
 
@@ -9868,6 +9868,59 @@ def test_list_experiments_heals_studies_deleted_by_the_old_behavior(
 
 A manifest left naming a missing Study is repaired when Home lists it.
 
+<a id="gui.test_app_api.test_explore_predictions_count_individuals_and_multiply_by_ploidy"></a>
+
+#### test\_explore\_predictions\_count\_individuals\_and\_multiply\_by\_ploidy
+
+```python
+def test_explore_predictions_count_individuals_and_multiply_by_ploidy(
+) -> None
+```
+
+225 diploid individuals predict exactly what 450 haploid ones do.
+
+<a id="gui.test_app_api.test_explore_ploidy_defaults_to_haploid_so_older_callers_keep_their_meaning"></a>
+
+#### test\_explore\_ploidy\_defaults\_to\_haploid\_so\_older\_callers\_keep\_their\_meaning
+
+```python
+def test_explore_ploidy_defaults_to_haploid_so_older_callers_keep_their_meaning(
+) -> (None)
+```
+
+No ploidy argument means N is the gene-copy count, as before.
+
+<a id="gui.test_app_api.test_explore_rejects_a_ploidy_outside_one_to_four"></a>
+
+#### test\_explore\_rejects\_a\_ploidy\_outside\_one\_to\_four
+
+```python
+@pytest.mark.parametrize("bad", ["0", "5", "diploid", ""])
+def test_explore_rejects_a_ploidy_outside_one_to_four(bad: str) -> None
+```
+
+Every Explore method refuses an unusable ploidy with one message.
+
+<a id="gui.test_app_api.test_explore_sweeps_the_n_axis_in_individuals"></a>
+
+#### test\_explore\_sweeps\_the\_n\_axis\_in\_individuals
+
+```python
+def test_explore_sweeps_the_n_axis_in_individuals() -> None
+```
+
+The axis values are individuals; each is evaluated at value * ploidy.
+
+<a id="gui.test_app_api.test_explore_grid_and_sweep_evaluate_at_gene_copies"></a>
+
+#### test\_explore\_grid\_and\_sweep\_evaluate\_at\_gene\_copies
+
+```python
+def test_explore_grid_and_sweep_evaluate_at_gene_copies() -> None
+```
+
+The held N of a sweep or a grid is individuals times ploidy too.
+
 <a id="gui.test_batch_results_screen"></a>
 
 # gui.test\_batch\_results\_screen
@@ -12423,6 +12476,21 @@ study…" entry with its inline creation row revealed -- a soft
 nudge, not a forced requirement (`run-study-select` still starts
 editable at "No study" otherwise).
 
+<a id="gui.test_explore_screen.test_explore_opens_on_individuals_and_evaluates_at_the_forms_ploidy"></a>
+
+#### test\_explore\_opens\_on\_individuals\_and\_evaluates\_at\_the\_forms\_ploidy
+
+```python
+def test_explore_opens_on_individuals_and_evaluates_at_the_forms_ploidy(
+        window: webview.Window) -> None
+```
+
+Explore shows the starter's 225 individuals, not 450 gene copies.
+
+Its predictions are those of 450 gene copies (225 diploid individuals),
+the value the bridge computes for the same population, so the number the
+botanist reads and the science agree.
+
 <a id="gui.test_explore_surface"></a>
 
 # gui.test\_explore\_surface
@@ -12434,6 +12502,21 @@ Headless functional tests for Explore's surface mode (`explore-surface.js`).
 # gui.test\_explore\_sweep
 
 Headless functional tests for Explore's "Choose a sweep" panel.
+
+<a id="gui.test_explore_sweep.test_an_n_axis_is_individuals_end_to_end_with_no_conversion_seam"></a>
+
+#### test\_an\_n\_axis\_is\_individuals\_end\_to\_end\_with\_no\_conversion\_seam
+
+```python
+def test_an_n_axis_is_individuals_end_to_end_with_no_conversion_seam(
+        fast_scalar_run_settings: Path, window: webview.Window) -> None
+```
+
+Explore, the sweep panel and Configure all count individuals.
+
+The panel used to divide Explore's gene copies by the ploidy; Explore's N
+is individuals now, so the axis a botanist sets is the axis that is
+swept, and the ploidy Explore evaluates with is the form's.
 
 <a id="gui.test_field_help"></a>
 
@@ -13216,21 +13299,32 @@ Polls `window.__fimRunViewReady`, not the field's own value:
 `initializeInputScreen`, so polling the field alone risks reading
 `disabled` before `revalidate` has ever run once.
 
-<a id="gui.test_input_screen.test_a_fresh_form_makes_the_botanist_choose_a_ploidy"></a>
+<a id="gui.test_input_screen.test_a_fresh_form_starts_diploid_and_is_ready_to_run"></a>
 
-#### test\_a\_fresh\_form\_makes\_the\_botanist\_choose\_a\_ploidy
+#### test\_a\_fresh\_form\_starts\_diploid\_and\_is\_ready\_to\_run
 
 ```python
-def test_a_fresh_form_makes_the_botanist_choose_a_ploidy(
+def test_a_fresh_form_starts_diploid_and_is_ready_to_run(
         tmp_path: Path, drive: Callable[..., Any]) -> None
 ```
 
-With no default ploidy, Run is blocked until one is chosen.
+With nothing saved, a new configuration starts diploid and can run.
 
-Botanist feedback on the first real beta run: ask for ploidy and then
-individuals, rather than gene copies. The choice is never guessed, so
-a fresh form (no saved default in Settings) opens on "choose..." with
-"Run simulation" disabled; picking a ploidy is what enables it.
+Botanist feedback on the first real beta run: a blank ploidy blocked Run
+and, with it, every graph, until the ploidy field was found. New
+configurations start on diploid; the form still asks for individuals
+(225 diploid individuals, 450 gene copies).
+
+<a id="gui.test_input_screen.test_ask_me_each_time_blocks_run_until_a_ploidy_is_chosen"></a>
+
+#### test\_ask\_me\_each\_time\_blocks\_run\_until\_a\_ploidy\_is\_chosen
+
+```python
+def test_ask_me_each_time_blocks_run_until_a_ploidy_is_chosen(
+        tmp_path: Path, drive: Callable[..., Any]) -> None
+```
+
+Settings' "Ask me each time" keeps the forced choice; picking one enables Run.
 
 <a id="gui.test_input_screen.test_a_saved_default_ploidy_starts_the_form_on_it"></a>
 

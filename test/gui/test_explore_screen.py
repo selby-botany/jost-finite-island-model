@@ -538,3 +538,49 @@ def test_run_this_for_real_seeds_configure_and_preselects_new_study(
     assert result["nValue"] == "777"
     assert result["studySelectValue"] == "__new__"
     assert result["newRowHidden"] is False
+
+
+def test_explore_opens_on_individuals_and_evaluates_at_the_forms_ploidy(
+    window: webview.Window,
+) -> None:
+    """Explore shows the starter's 225 individuals, not 450 gene copies.
+
+    Its predictions are those of 450 gene copies (225 diploid individuals),
+    the value the bridge computes for the same population, so the number the
+    botanist reads and the science agree.
+    """
+    outcome: queue.Queue[dict[str, Any]] = queue.Queue(maxsize=1)
+
+    def _poll_until(script: str, predicate: Callable[[Any], bool]) -> Any:
+        value = None
+        for _ in range(_POLL_ATTEMPTS):
+            value = window.evaluate_js(script)
+            if predicate(value):
+                return value
+            time.sleep(_POLL_INTERVAL_SECONDS)
+        return value
+
+    def _drive() -> None:
+        try:
+            _poll_until(_INPUT_SCREEN_READY, lambda value: value is True)
+            window.evaluate_js("setTimeout(() => { window.fim.menu.explore(); }, 0);")
+            settled = _poll_until(
+                "({"
+                "ready: window.__fimExploreReady === true, "
+                "n: document.getElementById('explore-n').value, "
+                "label: document.querySelector('label[for=explore-n]').textContent, "
+                "d: document.getElementById('explore-stat-D').textContent"
+                "})",
+                lambda value: value["ready"] is True,
+            )
+            outcome.put(settled)
+        finally:
+            window.destroy()
+
+    webview.start(_drive)
+    result = outcome.get(timeout=10)
+
+    assert result["n"] == "225"
+    assert "individuals" in result["label"]
+    assert "gene copies" not in result["label"]
+    assert result["d"] != ""

@@ -206,32 +206,32 @@ def test_set_default_ploidy_rejects_an_unknown_value(tmp_path: Path) -> None:
     assert api.get_default_ploidy() == "2"
 
 
-def test_explore_handoff_converts_gene_copies_using_the_default_ploidy(
+def test_explore_handoff_passes_individuals_and_ploidy_through_unconverted(
     tmp_path: Path,
 ) -> None:
-    """Explore counts gene copies; the form gets individuals plus a ploidy."""
+    """Explore's N counts individuals like the form's, so nothing is converted."""
     api = Api(preferences_path=tmp_path / "preferences.json")
-    api.set_default_ploidy("2")
 
-    result = api.get_starter_form_with_overrides({"gene_copies": "600", "d": "4"})
+    result = api.get_starter_form_with_overrides({"N": "300", "ploidy": "2", "d": "4"})
 
     assert result["ok"] is True
     assert result["values"]["ploidy"] == "2"
     assert result["values"]["N"] == "300"
+    assert result["values"]["d"] == "4"
 
 
 def test_explore_handoff_without_a_ploidy_leaves_it_to_be_chosen(
     tmp_path: Path,
 ) -> None:
-    """With "Ask me each time" the count cannot be converted honestly."""
+    """With "Ask me each time" and no ploidy from Explore, the ploidy stays blank."""
     api = Api(preferences_path=tmp_path / "preferences.json")
     api.set_default_ploidy("")
 
-    result = api.get_starter_form_with_overrides({"gene_copies": "600", "d": "4"})
+    result = api.get_starter_form_with_overrides({"N": "600", "d": "4"})
 
     assert result["ok"] is True
     assert result["values"]["ploidy"] == ""
-    assert result["values"]["N"] == starter_form_values()["N"]
+    assert result["values"]["N"] == "600"
 
 
 def test_get_starter_form_falls_back_when_saved_default_run_settings_is_invalid(
@@ -4468,3 +4468,75 @@ def test_delete_study_reports_the_runs_it_kept_because_another_study_links_them(
     assert result == {"ok": True, "deletedRunCount": 1, "keptRunCount": 1}
     assert shared.exists()
     assert not own.exists()
+
+
+def test_explore_predictions_count_individuals_and_multiply_by_ploidy() -> None:
+    """225 diploid individuals predict exactly what 450 haploid ones do."""
+    api = Api()
+
+    diploid = api.get_equilibrium_predictions("225", "0.001", "0.00003", "20", "2")
+    haploid = api.get_equilibrium_predictions("450", "0.001", "0.00003", "20", "1")
+
+    assert diploid["ok"] is True
+    assert diploid["predictions"] == haploid["predictions"]
+    assert diploid["qualifications"] == haploid["qualifications"]
+
+
+def test_explore_ploidy_defaults_to_haploid_so_older_callers_keep_their_meaning() -> (
+    None
+):
+    """No ploidy argument means N is the gene-copy count, as before."""
+    api = Api()
+
+    assert api.get_equilibrium_predictions(
+        "450", "0.001", "0.00003", "20"
+    ) == api.get_equilibrium_predictions("450", "0.001", "0.00003", "20", "1")
+
+
+@pytest.mark.parametrize("bad", ["0", "5", "diploid", ""])
+def test_explore_rejects_a_ploidy_outside_one_to_four(bad: str) -> None:
+    """Every Explore method refuses an unusable ploidy with one message."""
+    api = Api()
+
+    calls = (
+        api.get_equilibrium_predictions("450", "0.001", "0.00003", "20", bad),
+        api.get_equilibrium_sweep("m", "450", "0.001", "0.00003", "20", bad),
+        api.get_equilibrium_grid("m", "d", "450", "0.001", "0.00003", "20", bad),
+        api.get_equilibrium_curve("m", [0.01], "450", "0.001", "0.00003", "20", bad),
+    )
+
+    for result in calls:
+        assert result == {"ok": False, "message": "ploidy must be 1, 2, 3 or 4"}
+
+
+def test_explore_sweeps_the_n_axis_in_individuals() -> None:
+    """The axis values are individuals; each is evaluated at value * ploidy."""
+    api = Api()
+
+    curve = api.get_equilibrium_curve(
+        "N", [100, 200], "225", "0.001", "0.00003", "20", "2"
+    )
+    reference = api.get_equilibrium_curve(
+        "N", [200, 400], "450", "0.001", "0.00003", "20", "1"
+    )
+
+    assert [point["x"] for point in curve["points"]] == [100, 200]
+    for mine, theirs in zip(curve["points"], reference["points"], strict=True):
+        assert {k: v for k, v in mine.items() if k != "x"} == {
+            k: v for k, v in theirs.items() if k != "x"
+        }
+
+
+def test_explore_grid_and_sweep_evaluate_at_gene_copies() -> None:
+    """The held N of a sweep or a grid is individuals times ploidy too."""
+    api = Api()
+
+    sweep = api.get_equilibrium_sweep("m", "225", "0.001", "0.00003", "20", "2")
+    reference = api.get_equilibrium_sweep("m", "450", "0.001", "0.00003", "20", "1")
+    grid = api.get_equilibrium_grid("m", "d", "225", "0.001", "0.00003", "20", "2")
+    grid_reference = api.get_equilibrium_grid(
+        "m", "d", "450", "0.001", "0.00003", "20", "1"
+    )
+
+    assert sweep["points"] == reference["points"]
+    assert grid["values"] == grid_reference["values"]
