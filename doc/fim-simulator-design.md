@@ -1260,7 +1260,8 @@ starter config:
 
 ```yaml
 # myrun.yaml
-N: 450                    # gene copies per deme (§3.1: ploidy-neutral)
+N: 225                    # individuals per deme (450 gene copies)
+ploidy: diploid           # gene copies per individual
 d: 20                     # demes
 m: 0.001                  # migration rate
 mu: 0.0000003             # mutation rate

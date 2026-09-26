@@ -343,7 +343,7 @@ Return to the [source-tree orientation](../README.md) or the [developer guide](.
   * [mutate](#fim.model.operators.mutate)
   * [step](#fim.model.operators.step)
 * [fim.model.params](#fim.model.params)
-  * [ALLOWED\_PLOIDIES](#fim.model.params.ALLOWED_PLOIDIES)
+  * [PLOIDY\_WORDS](#fim.model.params.PLOIDY_WORDS)
   * [AUTO\_CONVERGENCE](#fim.model.params.AUTO_CONVERGENCE)
   * [DEFAULT\_AUTO\_VECTOR\_MIN\_D](#fim.model.params.DEFAULT_AUTO_VECTOR_MIN_D)
   * [DEFAULT\_AUTO\_VECTOR\_MAX\_CAPACITY](#fim.model.params.DEFAULT_AUTO_VECTOR_MAX_CAPACITY)
@@ -353,9 +353,11 @@ Return to the [source-tree orientation](../README.md) or the [developer guide](.
     * [\_\_post\_init\_\_](#fim.model.params.SimulationParams.__post_init__)
     * [convergence\_statistics](#fim.model.params.SimulationParams.convergence_statistics)
     * [population\_sizes](#fim.model.params.SimulationParams.population_sizes)
+    * [individuals](#fim.model.params.SimulationParams.individuals)
     * [mutation\_rates](#fim.model.params.SimulationParams.mutation_rates)
     * [to\_dict](#fim.model.params.SimulationParams.to_dict)
     * [from\_mapping](#fim.model.params.SimulationParams.from_mapping)
+  * [describe\_population](#fim.model.params.describe_population)
 * [fim.model.state](#fim.model.state)
   * [ModelState](#fim.model.state.ModelState)
     * [\_\_post\_init\_\_](#fim.model.state.ModelState.__post_init__)
@@ -6576,7 +6578,8 @@ The refusal when the form's ploidy is blank (see `POPULATION_FIELDS`).
 
 #### PLOIDY\_NAMES
 
-Display names for `SimulationParams.ploidy`'s allowed values.
+Display names for `SimulationParams.ploidy`'s allowed values (the same words
+a configuration spells them with).
 
 <a id="fim.gui.config_form.FormField"></a>
 
@@ -10676,11 +10679,16 @@ validated `SimulationParams`. See `doc/configuration.md` for what each
 configuration field means and its accepted range, in plain language,
 independent of this file's own more code-oriented documentation.
 
-<a id="fim.model.params.ALLOWED_PLOIDIES"></a>
+<a id="fim.model.params.PLOIDY_WORDS"></a>
 
-#### ALLOWED\_PLOIDIES
+#### PLOIDY\_WORDS
 
-Ploidy levels the configuration accepts: haploid through tetraploid.
+How a configuration and a manifest spell each ploidy.
+
+Configurations accept only these words, never the integers. Files written
+before `N` meant individuals say `N: 450` with `ploidy: 2`; an integer ploidy
+is refused so such a file fails with an instruction instead of being read as
+900 gene copies.
 
 <a id="fim.model.params.AUTO_CONVERGENCE"></a>
 
@@ -11170,15 +11178,12 @@ functions that actually use each one.
   independent of `convergence_window`, since the two describe
   different things (whether the run has settled, versus how
   much it still wobbles once settled).
-- `ploidy` - Gene copies per individual -- 1 (haploid) through 4
-- `(tetraploid)` - or `None` (the default) when unspecified.
-  Pure provenance: the simulator's dynamics run on gene
-  copies (`N`) and never read it, so it changes no result.
-  It exists so a run can say "225 diploid individuals" rather
-  than an unexplained `N = 450`, and so the desktop app,
-  which asks for individuals, can show them again when a run
-  is reopened. When set, every deme's `N` must be a multiple
-  of it.
+- `ploidy` - Gene copies per individual: 1 (haploid, the default when a
+  `SimulationParams` is built directly) through 4 (tetraploid).
+  The dynamics run on `gene_copies` and never read it. It is
+  how `from_mapping` and `to_dict` convert between the
+  configuration's `N` (individuals per deme) and `gene_copies`,
+  so `gene_copies` must be a multiple of it.
 
 <a id="fim.model.params.SimulationParams.__post_init__"></a>
 
@@ -11233,6 +11238,20 @@ per-deme values — this property is the always-fully-expanded
 form (always exactly `d` values, one per deme) code elsewhere
 actually iterates over, so it never needs to special-case the
 "every deme is the same size" shorthand itself.
+
+<a id="fim.model.params.SimulationParams.individuals"></a>
+
+#### individuals
+
+```python
+@property
+def individuals() -> int | tuple[int, ...]
+```
+
+Return individuals per deme: `gene_copies` divided by `ploidy`.
+
+The same shape as `gene_copies`. This is the quantity the
+configuration key `N` names.
 
 <a id="fim.model.params.SimulationParams.mutation_rates"></a>
 
@@ -11304,6 +11323,26 @@ before construction, rather than inside `__post_init__`.
 **Raises**:
 
 - `ValueError` - If a key is unknown, required, malformed, or conflicting.
+
+<a id="fim.model.params.describe_population"></a>
+
+#### describe\_population
+
+```python
+def describe_population(params: SimulationParams) -> str
+```
+
+Return the population size the way a botanist reads it.
+
+**Arguments**:
+
+- `params` - The configuration.
+
+
+**Returns**:
+
+  For example "225 diploid individuals per deme", or "200, 300, 150
+  diploid individuals per deme" for unequal demes.
 
 <a id="fim.model.state"></a>
 
@@ -16861,11 +16900,10 @@ Three ideas carry the design:
 - **Points are content-addressed.** A point's `run_id` is the hash of its
   whole configuration (`fim.engine.deterministic_run_id`), so a resumed or
   overlapping sweep can recognize a point it already computed.
-- **`N` counts individuals.** An `N` axis means individuals per deme, the
-  number the botanist sees everywhere else in the app; the point's own
-  `N` (gene copies, as every configuration mapping stores it) is that
-  value times the base `ploidy`. Ploidy always divides the result, so an
-  `N` axis never yields an indivisible point.
+- **`N` counts individuals.** `N` means individuals per deme in the base
+  configuration and on an axis alike, the number the botanist sees
+  everywhere else in the app; the base's required `ploidy` turns it into
+  gene copies when a point is built (`SimulationParams.from_mapping`).
 
 <a id="fim.sweep.SWEEP_SPEC_VERSION"></a>
 
@@ -16956,9 +16994,9 @@ What is held fixed (`base`) and what varies (`axes`).
 **Attributes**:
 
 - `base` - A complete configuration mapping, exactly what
-  `SimulationParams.from_mapping` accepts. Its `N` is gene
-  copies, like every configuration mapping; it is overwritten
-  when `N` is an axis, and `ploidy` is then required.
+  `SimulationParams.from_mapping` accepts. Its `N` is
+  individuals per deme, and it must say `ploidy`; `N` is
+  overwritten when it is an axis.
 - `axes` - The varied keys, first axis slowest in the enumeration.
 - `strategy` - `grid` (every combination).
 - `seed_policy` - `spaced` gives point `i` the seed `base seed + i *
@@ -17185,8 +17223,8 @@ coordinates, such as the closed-form theory along an axis.
 
 **Raises**:
 
-- `ValueError` - `base` cannot take one of the axes (for example an `N`
-  axis without a `ploidy`).
+- `ValueError` - `base` cannot take one of the axes (for example an `m`
+  axis with no `m` in the base).
 
 <a id="fim.sweep_run"></a>
 

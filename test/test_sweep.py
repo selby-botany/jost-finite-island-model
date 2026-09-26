@@ -19,7 +19,7 @@ from fim.sweep import (
 
 _BASE: dict[str, Any] = {
     "N": 40,
-    "ploidy": 2,
+    "ploidy": "diploid",
     "d": 4,
     "m": 0.01,
     "mu": 0.001,
@@ -133,21 +133,23 @@ def test_enumeration_is_deterministic() -> None:
     assert first == second
 
 
-def test_an_n_axis_counts_individuals_and_multiplies_by_ploidy() -> None:
-    plan = enumerate_points(_spec(expand_axis("N", [10, 25]), ploidy=3, N=30))
+def test_an_n_axis_counts_individuals_and_the_base_ploidy_makes_gene_copies() -> None:
+    plan = enumerate_points(_spec(expand_axis("N", [10, 25]), ploidy="triploid", N=30))
 
-    assert [p.params["N"] for p in plan.points] == [30, 75]
-    assert [SimulationParams.from_mapping(p.params).ploidy for p in plan.points] == [
-        3,
-        3,
-    ]
+    assert [p.params["N"] for p in plan.points] == [10, 25]
+    points = [SimulationParams.from_mapping(p.params) for p in plan.points]
+    assert [point.gene_copies for point in points] == [30, 75]
+    assert [point.ploidy for point in points] == [3, 3]
 
 
-def test_an_n_axis_needs_a_ploidy() -> None:
+def test_a_base_without_a_ploidy_makes_every_point_invalid() -> None:
     base = {key: value for key, value in _BASE.items() if key != "ploidy"}
+    spec = SweepSpec(base=base, axes=(expand_axis("N", [10, 20]),))
 
-    with pytest.raises(ValueError, match="ploidy"):
-        SweepSpec(base=base, axes=(expand_axis("N", [10]),))
+    plan = enumerate_points(spec)
+
+    assert plan.points == ()
+    assert all("ploidy is required" in bad.reason for bad in plan.invalid)
 
 
 def test_spaced_seeds_never_share_a_replicate_seed() -> None:

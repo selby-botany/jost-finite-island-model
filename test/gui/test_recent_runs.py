@@ -24,6 +24,7 @@ def _write_run(tmp_path: Path, name: str, **overrides: object) -> Path:
     """Write a tiny deterministic config, run it under `name`, return its directory."""
     config: dict[str, object] = {
         "N": 20,
+        "ploidy": "haploid",
         "d": 2,
         "m": 0.1,
         "mu": 0.01,

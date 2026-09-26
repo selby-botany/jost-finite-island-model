@@ -45,6 +45,19 @@ from fim.model.topology import (
 
 PopulationSize = int | tuple[int, ...]
 ALLOWED_PLOIDIES: Final = (1, 2, 3, 4)
+PLOIDY_WORDS: Final[Mapping[int, str]] = {
+    1: "haploid",
+    2: "diploid",
+    3: "triploid",
+    4: "tetraploid",
+}
+"""How a configuration and a manifest spell each ploidy.
+
+Configurations accept only these words, never the integers. Files written
+before `N` meant individuals say `N: 450` with `ploidy: 2`; an integer ploidy
+is refused so such a file fails with an instruction instead of being read as
+900 gene copies.
+"""
 """Ploidy levels the configuration accepts: haploid through tetraploid."""
 Migration = float | tuple[tuple[float, ...], ...]
 MutationRate = float | tuple[float, ...]
@@ -281,7 +294,7 @@ PARAMETER_DEFAULTS: Final[dict[str, object]] = {
     "equilibrium_max_generations": None,
     "sigma_band_multiplier": None,
     "sigma_band_window": None,
-    "ploidy": None,
+    "ploidy": None,  # required: no default (see `_parse_ploidy`)
 }
 
 _CONFIG_KEYS: Final = frozenset(
@@ -629,15 +642,12 @@ class SimulationParams:
             independent of `convergence_window`, since the two describe
             different things (whether the run has settled, versus how
             much it still wobbles once settled).
-        ploidy: Gene copies per individual -- 1 (haploid) through 4
-            (tetraploid) -- or `None` (the default) when unspecified.
-            Pure provenance: the simulator's dynamics run on gene
-            copies (`N`) and never read it, so it changes no result.
-            It exists so a run can say "225 diploid individuals" rather
-            than an unexplained `N = 450`, and so the desktop app,
-            which asks for individuals, can show them again when a run
-            is reopened. When set, every deme's `N` must be a multiple
-            of it.
+        ploidy: Gene copies per individual: 1 (haploid, the default when a
+            `SimulationParams` is built directly) through 4 (tetraploid).
+            The dynamics run on `gene_copies` and never read it. It is
+            how `from_mapping` and `to_dict` convert between the
+            configuration's `N` (individuals per deme) and `gene_copies`,
+            so `gene_copies` must be a multiple of it.
     """
 
     gene_copies: PopulationSize
@@ -675,7 +685,7 @@ class SimulationParams:
     equilibrium_max_generations: int | None = None
     sigma_band_multiplier: float | None = None
     sigma_band_window: int | None = None
-    ploidy: int | None = None
+    ploidy: int = 1
     auto_derived: frozenset[str] = field(
         default=frozenset(), init=False, compare=False, repr=False
     )
@@ -878,6 +888,17 @@ class SimulationParams:
         return self.gene_copies
 
     @property
+    def individuals(self) -> int | tuple[int, ...]:
+        """Return individuals per deme: `gene_copies` divided by `ploidy`.
+
+        The same shape as `gene_copies`. This is the quantity the
+        configuration key `N` names.
+        """
+        if isinstance(self.gene_copies, int):
+            return self.gene_copies // self.ploidy
+        return tuple(copies // self.ploidy for copies in self.gene_copies)
+
+    @property
     def mutation_rates(self) -> tuple[float, ...]:
         """Return one mutation-probability rate per locus.
 
@@ -984,10 +1005,12 @@ class SimulationParams:
         completed run's configuration can be recovered exactly, later,
         without needing the original config file at all.
         """
+        # The configuration's `N` counts individuals, so divide the gene
+        # copies back by the ploidy: from_mapping(to_dict()) is the identity.
         serialized_n: int | list[int] = (
-            self.gene_copies
+            self.gene_copies // self.ploidy
             if isinstance(self.gene_copies, int)
-            else list(self.gene_copies)
+            else [copies // self.ploidy for copies in self.gene_copies]
         )
 
         serialized_m: float | list[list[float]]
@@ -1083,12 +1106,9 @@ class SimulationParams:
             # this one is.
             result["sigma_band_multiplier"] = self.sigma_band_multiplier
             result["sigma_band_window"] = self.sigma_band_window
-        if self.ploidy is not None:
-            # Omitted when unset, like `initial_frequencies`: the field's
-            # default is already `None`, so an absent key and an explicit
-            # `None` mean the same thing, and configurations that never
-            # mention ploidy keep their existing run ids.
-            result["ploidy"] = self.ploidy
+        # Always written, as a word: `N` above counts individuals, so the
+        # ploidy is part of what it means.
+        result["ploidy"] = PLOIDY_WORDS[self.ploidy]
         if self.initial_frequencies is not None:
             result["p_0"] = [
                 [
@@ -1134,13 +1154,17 @@ class SimulationParams:
         if missing:
             names = ", ".join(sorted(missing))
             raise ValueError(f"missing required configuration key(s): {names}")
+        ploidy = _parse_ploidy(config)
+        gene_copies = _individuals_to_gene_copies(
+            _parse_population_size(config["N"]), ploidy
+        )
         if "mu" not in config and "mu_b" not in config:
             raise ValueError("missing required configuration key(s): mu or mu_b")
 
         loci = _loci_from_config(config)
         d = _parse_int("d", config["d"])
         return cls(
-            gene_copies=_parse_population_size(config["N"]),
+            gene_copies=gene_copies,
             d=d,
             m=_parse_migration(config["m"], d),
             mu=_mutation_rate_from_config(config, loci),
@@ -1327,10 +1351,7 @@ class SimulationParams:
                     PARAMETER_DEFAULTS["sigma_band_window"],
                 ),
             ),
-            ploidy=_parse_optional_int(
-                "ploidy",
-                config.get("ploidy", PARAMETER_DEFAULTS["ploidy"]),
-            ),
+            ploidy=ploidy,
         )
 
 
@@ -1878,25 +1899,86 @@ def _parse_population_size(value: Any) -> PopulationSize:
     return tuple(_parse_int(f"N[{index}]", item) for index, item in enumerate(value))
 
 
-def _validate_ploidy(ploidy: int | None, population_sizes: tuple[int, ...]) -> None:
+def _individuals_to_gene_copies(
+    individuals: PopulationSize, ploidy: int
+) -> PopulationSize:
+    """Convert a configuration's `N` (individuals) to gene copies.
+
+    Args:
+        individuals: Individuals per deme, one shared count or one per deme.
+        ploidy: Gene copies per individual.
+
+    Returns:
+        The same shape, in gene copies.
+    """
+    if isinstance(individuals, int):
+        return individuals * ploidy
+    return tuple(count * ploidy for count in individuals)
+
+
+def _parse_ploidy(config: Mapping[str, Any]) -> int:
+    """Read the required `ploidy` word from a configuration mapping.
+
+    Args:
+        config: The configuration mapping.
+
+    Returns:
+        1 through 4.
+
+    Raises:
+        ValueError: If `ploidy` is missing, is an integer (files written
+            before `N` meant individuals), or is not one of the four words.
+    """
+    guidance = (
+        "N counts individuals per deme, and ploidy says how many gene copies "
+        "each carries: haploid, diploid, triploid or tetraploid "
+        "(for example N: 225 with ploidy: diploid; a file that has N: 450 "
+        "with ploidy: 2 now reads N: 225 with ploidy: diploid)"
+    )
+    if "ploidy" not in config or config["ploidy"] is None:
+        raise ValueError(f"ploidy is required: {guidance}")
+    value = config["ploidy"]
+    if not isinstance(value, str):
+        raise ValueError(f"ploidy must be a word, not {value!r}: {guidance}")
+    word = value.strip().lower()
+    for number, name in PLOIDY_WORDS.items():
+        if word == name:
+            return number
+    raise ValueError(f"ploidy must be a word, not {value!r}: {guidance}")
+
+
+def describe_population(params: SimulationParams) -> str:
+    """Return the population size the way a botanist reads it.
+
+    Args:
+        params: The configuration.
+
+    Returns:
+        For example "225 diploid individuals per deme", or "200, 300, 150
+        diploid individuals per deme" for unequal demes.
+    """
+    counts = params.individuals
+    text = str(counts) if isinstance(counts, int) else ", ".join(map(str, counts))
+    return f"{text} {PLOIDY_WORDS[params.ploidy]} individuals per deme"
+
+
+def _validate_ploidy(ploidy: int, population_sizes: tuple[int, ...]) -> None:
     """Check `ploidy` is 1 through 4 and divides every deme's gene-copy count.
 
     Args:
-        ploidy: Gene copies per individual, or `None` when unspecified.
-        population_sizes: Every deme's gene-copy count (`N`, expanded).
+        ploidy: Gene copies per individual.
+        population_sizes: Every deme's gene-copy count (`gene_copies`, expanded).
 
     Raises:
-        ValueError: If `ploidy` is not 1, 2, 3, or 4, or a deme's `N` is
-            not a whole number of individuals of that ploidy.
+        ValueError: If `ploidy` is not 1, 2, 3, or 4, or a deme's gene-copy
+            count is not a whole number of individuals of that ploidy.
     """
-    if ploidy is None:
-        return
     if isinstance(ploidy, bool) or ploidy not in ALLOWED_PLOIDIES:
         raise ValueError("ploidy must be 1, 2, 3, or 4")
     for index, gene_copies in enumerate(population_sizes):
         if gene_copies % ploidy != 0:
             raise ValueError(
-                f"N[{index}] is {gene_copies} gene copies, which is not a whole "
+                f"gene_copies[{index}] is {gene_copies}, which is not a whole "
                 f"number of ploidy-{ploidy} individuals"
             )
 

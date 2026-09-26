@@ -21,6 +21,7 @@ def _write_config(path: Path, **updates: object) -> None:
     """Write a tiny deterministic YAML config."""
     config: dict[str, object] = {
         "N": 20,
+        "ploidy": "haploid",
         "d": 2,
         "m": 0.1,
         "mu": 0.01,
@@ -287,6 +288,7 @@ def test_run_accepts_a_per_base_mutation_rate(tmp_path: Path) -> None:
     output = tmp_path / "output"
     config_body: dict[str, object] = {
         "N": 20,
+        "ploidy": "haploid",
         "d": 2,
         "m": 0.1,
         "mu_b": 0.0001,

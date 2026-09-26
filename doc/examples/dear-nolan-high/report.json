@@ -2,6 +2,7 @@
   "scenario": "dear_nolan_high",
   "naive_config": {
     "N": 2000,
+    "ploidy": "haploid",
     "d": 100,
     "m": 0.01,
     "mu": 0.001,

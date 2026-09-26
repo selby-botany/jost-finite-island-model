@@ -120,6 +120,7 @@ def test_literature_visual_payload_groups_identity_by_stepping_stone_distance() 
     params = SimulationParams.from_mapping(
         {
             "N": 50,
+            "ploidy": "haploid",
             "d": 4,
             "m": {"topology": "ring", "rate": 0.05},
             "mu": 0.01,
@@ -243,6 +244,7 @@ def test_pooled_isolation_by_distance_payload_counts_pairs_across_states() -> No
     params = SimulationParams.from_mapping(
         {
             "N": 50,
+            "ploidy": "haploid",
             "d": 4,
             "m": {"topology": "ring", "rate": 0.05},
             "mu": 0.01,

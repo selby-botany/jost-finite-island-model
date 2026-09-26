@@ -37,7 +37,7 @@ from fim.sweep_run import (
 
 _BASE: dict[str, Any] = {
     "N": 16,
-    "ploidy": 2,
+    "ploidy": "diploid",
     "d": 2,
     "m": 0.1,
     "mu": 0.01,

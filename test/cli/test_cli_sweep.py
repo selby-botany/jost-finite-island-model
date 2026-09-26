@@ -11,7 +11,7 @@ from fim.persistence import groups
 
 _SWEEP_FILE = """\
 N: 16
-ploidy: 2
+ploidy: diploid
 d: 2
 m: 0.1
 mu: 0.01

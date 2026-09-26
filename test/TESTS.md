@@ -11,6 +11,7 @@ Every test module, fixture, and test function documented here in full; `doc/fim-
   - [`test_build_ci_parallel`](#test.test_build_ci_parallel)
   - [`test_convergence_docs`](#test.test_convergence_docs)
   - [`test_doc_examples`](#test.test_doc_examples)
+  - [`test_doc_snippets`](#test.test_doc_snippets)
   - [`test_hypothesis_profile`](#test.test_hypothesis_profile)
   - [`test_launcher`](#test.test_launcher)
   - [`test_logging_setup`](#test.test_logging_setup)
@@ -422,6 +423,29 @@ The documented `report.json` is the run's exact output.
 Adding a statistic or changing the engine changes the report; this
 fails until the example directory is regenerated, so the docs cannot
 silently drift from the code.
+
+<a id="test.test_doc_snippets"></a>
+
+# test.test\_doc\_snippets
+
+Static checks on the configuration snippets in the documentation.
+
+<a id="test.test_doc_snippets.test_every_configuration_snippet_that_sets_n_also_sets_a_ploidy_word"></a>
+
+#### test\_every\_configuration\_snippet\_that\_sets\_n\_also\_sets\_a\_ploidy\_word
+
+```python
+@pytest.mark.parametrize("path",
+                         DOCS,
+                         ids=lambda path: str(path.relative_to(ROOT)))
+def test_every_configuration_snippet_that_sets_n_also_sets_a_ploidy_word(
+        path: Path) -> None
+```
+
+`N` counts individuals, so a snippet that sets it must say the ploidy.
+
+A snippet copied into a file must run, and a number is refused
+(`SimulationParams.from_mapping`), so the ploidy is checked as a word.
 
 <a id="test.test_hypothesis_profile"></a>
 
@@ -12019,7 +12043,7 @@ append it in whatever order the payload dict happened to build.
 def test_form_values_to_payload_turns_individuals_into_gene_copies() -> None
 ```
 
-The form's N is individuals; the payload's N is `individuals * ploidy`.
+The payload carries individuals and the ploidy word; from_mapping multiplies.
 
 <a id="gui.test_config_form.test_form_values_to_payload_refuses_a_blank_ploidy"></a>
 
@@ -12042,16 +12066,15 @@ def test_params_to_form_values_divides_gene_copies_back_into_individuals(
 
 Round trip: a diploid run's 450 gene copies reopen as 225 individuals.
 
-<a id="gui.test_config_form.test_params_to_form_values_blanks_a_config_with_no_recorded_ploidy"></a>
+<a id="gui.test_config_form.test_a_config_with_no_ploidy_cannot_be_loaded_into_the_form"></a>
 
-#### test\_params\_to\_form\_values\_blanks\_a\_config\_with\_no\_recorded\_ploidy
+#### test\_a\_config\_with\_no\_ploidy\_cannot\_be\_loaded\_into\_the\_form
 
 ```python
-def test_params_to_form_values_blanks_a_config_with_no_recorded_ploidy(
-) -> None
+def test_a_config_with_no_ploidy_cannot_be_loaded_into_the_form() -> None
 ```
 
-Gene copies must not appear under an individuals label.
+Ploidy is required, so a ploidy-less file fails before it reaches the form.
 
 <a id="gui.test_config_form.test_starter_form_values_overlay_may_choose_the_ploidy"></a>
 
@@ -20861,56 +20884,157 @@ def test_migration_accepts_a_torus_topology_and_rejects_a_mismatched_shape(
 
 `m: {topology: torus, rate, rows, columns}` expands to the dense matrix.
 
-<a id="model.test_params.test_ploidy_defaults_to_unset_and_leaves_run_ids_alone"></a>
+<a id="model.test_params.test_ploidy_is_required_and_the_message_says_how_to_fix_the_file"></a>
 
-#### test\_ploidy\_defaults\_to\_unset\_and\_leaves\_run\_ids\_alone
-
-```python
-def test_ploidy_defaults_to_unset_and_leaves_run_ids_alone() -> None
-```
-
-An unset ploidy is omitted from `to_dict`, so existing run ids hold.
-
-<a id="model.test_params.test_ploidy_round_trips_through_to_dict_and_changes_the_run_id"></a>
-
-#### test\_ploidy\_round\_trips\_through\_to\_dict\_and\_changes\_the\_run\_id
+#### test\_ploidy\_is\_required\_and\_the\_message\_says\_how\_to\_fix\_the\_file
 
 ```python
-def test_ploidy_round_trips_through_to_dict_and_changes_the_run_id() -> None
+def test_ploidy_is_required_and_the_message_says_how_to_fix_the_file() -> None
 ```
 
-A set ploidy is recorded in the manifest mapping and round-trips.
+A configuration with no ploidy is refused, naming the fix.
 
-<a id="model.test_params.test_ploidy_outside_one_to_four_is_rejected"></a>
+<a id="model.test_params.test_an_integer_ploidy_is_refused_so_an_old_file_cannot_be_misread"></a>
 
-#### test\_ploidy\_outside\_one\_to\_four\_is\_rejected
+#### test\_an\_integer\_ploidy\_is\_refused\_so\_an\_old\_file\_cannot\_be\_misread
+
+```python
+@pytest.mark.parametrize("old_spelling", [1, 2, 3, 4, "2", 2.0, True])
+def test_an_integer_ploidy_is_refused_so_an_old_file_cannot_be_misread(
+        old_spelling: object) -> None
+```
+
+Files written when N meant gene copies say `ploidy: 2`; they fail loudly.
+
+Read under the new rule, `N: 450` with `ploidy: 2` would silently be 900
+gene copies, so only the words are accepted.
+
+<a id="model.test_params.test_only_the_four_ploidy_words_are_accepted"></a>
+
+#### test\_only\_the\_four\_ploidy\_words\_are\_accepted
+
+```python
+@pytest.mark.parametrize("word", ["pentaploid", "", "dip", "diploids"])
+def test_only_the_four_ploidy_words_are_accepted(word: str) -> None
+```
+
+Anything else is refused with the same guidance.
+
+<a id="model.test_params.test_ploidy_words_parse_case_insensitively"></a>
+
+#### test\_ploidy\_words\_parse\_case\_insensitively
+
+```python
+@pytest.mark.parametrize(
+    ("word", "ploidy"),
+    [
+        ("haploid", 1),
+        ("diploid", 2),
+        ("triploid", 3),
+        ("tetraploid", 4),
+        ("Diploid", 2),
+        (" TETRAPLOID ", 4),
+    ],
+)
+def test_ploidy_words_parse_case_insensitively(word: str, ploidy: int) -> None
+```
+
+Spelling is forgiving about case and surrounding space.
+
+<a id="model.test_params.test_n_counts_individuals_and_the_params_hold_gene_copies"></a>
+
+#### test\_n\_counts\_individuals\_and\_the\_params\_hold\_gene\_copies
+
+```python
+def test_n_counts_individuals_and_the_params_hold_gene_copies() -> None
+```
+
+225 diploid individuals per deme is 450 gene copies inside.
+
+<a id="model.test_params.test_a_per_deme_list_of_individuals_is_multiplied_by_the_ploidy"></a>
+
+#### test\_a\_per\_deme\_list\_of\_individuals\_is\_multiplied\_by\_the\_ploidy
+
+```python
+def test_a_per_deme_list_of_individuals_is_multiplied_by_the_ploidy() -> None
+```
+
+Each deme's count is converted, in order.
+
+<a id="model.test_params.test_to_dict_writes_individuals_and_the_ploidy_word"></a>
+
+#### test\_to\_dict\_writes\_individuals\_and\_the\_ploidy\_word
+
+```python
+def test_to_dict_writes_individuals_and_the_ploidy_word() -> None
+```
+
+The record and the configuration say the same thing.
+
+<a id="model.test_params.test_from_mapping_of_to_dict_is_the_identity"></a>
+
+#### test\_from\_mapping\_of\_to\_dict\_is\_the\_identity
+
+```python
+@pytest.mark.parametrize("ploidy",
+                         ["haploid", "diploid", "triploid", "tetraploid"])
+def test_from_mapping_of_to_dict_is_the_identity(ploidy: str) -> None
+```
+
+The round trip holds for every ploidy, scalar and per-deme N.
+
+<a id="model.test_params.test_the_same_population_in_either_unit_differs_only_in_the_run_id"></a>
+
+#### test\_the\_same\_population\_in\_either\_unit\_differs\_only\_in\_the\_run\_id
+
+```python
+def test_the_same_population_in_either_unit_differs_only_in_the_run_id(
+) -> None
+```
+
+450 haploid and 225 diploid are one process with two records.
+
+<a id="model.test_params.test_a_directly_built_params_defaults_to_haploid"></a>
+
+#### test\_a\_directly\_built\_params\_defaults\_to\_haploid
+
+```python
+def test_a_directly_built_params_defaults_to_haploid() -> None
+```
+
+Direct construction names gene copies; ploidy defaults to haploid.
+
+<a id="model.test_params.test_a_directly_built_ploidy_outside_one_to_four_is_rejected"></a>
+
+#### test\_a\_directly\_built\_ploidy\_outside\_one\_to\_four\_is\_rejected
 
 ```python
 @pytest.mark.parametrize("ploidy", [0, 5, -1])
-def test_ploidy_outside_one_to_four_is_rejected(ploidy: int) -> None
+def test_a_directly_built_ploidy_outside_one_to_four_is_rejected(
+        ploidy: int) -> None
 ```
 
-Only haploid through tetraploid are accepted.
+Only haploid through tetraploid exist.
 
-<a id="model.test_params.test_ploidy_must_divide_every_demes_gene_copies"></a>
+<a id="model.test_params.test_a_directly_built_gene_copy_count_must_divide_by_the_ploidy"></a>
 
-#### test\_ploidy\_must\_divide\_every\_demes\_gene\_copies
+#### test\_a\_directly\_built\_gene\_copy\_count\_must\_divide\_by\_the\_ploidy
 
 ```python
-def test_ploidy_must_divide_every_demes_gene_copies() -> None
+def test_a_directly_built_gene_copy_count_must_divide_by_the_ploidy() -> None
 ```
 
-A deme's N must be a whole number of individuals.
+A deme's gene copies must be a whole number of individuals.
 
-<a id="model.test_params.test_ploidy_rejects_non_integers"></a>
+<a id="model.test_params.test_describe_population_reads_the_way_a_botanist_does"></a>
 
-#### test\_ploidy\_rejects\_non\_integers
+#### test\_describe\_population\_reads\_the\_way\_a\_botanist\_does
 
 ```python
-def test_ploidy_rejects_non_integers() -> None
+def test_describe_population_reads_the_way_a_botanist_does() -> None
 ```
 
-A float or a bool is not a ploidy.
+One formatter for every surface that shows the population size.
 
 <a id="model.test_params.test_unset_window_and_cap_are_derived_from_the_model"></a>
 

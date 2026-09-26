@@ -106,6 +106,7 @@ def _manifest() -> RunManifest:
     """Return a valid minimal manifest."""
     params = {
         "N": 20,
+        "ploidy": "haploid",
         "d": 2,
         "m": 0.1,
         "mu": 0.001,
@@ -488,6 +489,7 @@ def _batch_manifest() -> BatchManifest:
     """Return a valid minimal batch manifest."""
     params = {
         "N": 20,
+        "ploidy": "haploid",
         "d": 2,
         "m": 0.1,
         "mu": 0.001,

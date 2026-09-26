@@ -25,6 +25,7 @@ def _write_run(tmp_path: Path, **overrides: object) -> Path:
     """
     config: dict[str, object] = {
         "N": 20,
+        "ploidy": "haploid",
         "d": 2,
         "m": 0.1,
         "mu": 0.01,

@@ -18,11 +18,10 @@ Three ideas carry the design:
 - **Points are content-addressed.** A point's `run_id` is the hash of its
   whole configuration (`fim.engine.deterministic_run_id`), so a resumed or
   overlapping sweep can recognize a point it already computed.
-- **`N` counts individuals.** An `N` axis means individuals per deme, the
-  number the botanist sees everywhere else in the app; the point's own
-  `N` (gene copies, as every configuration mapping stores it) is that
-  value times the base `ploidy`. Ploidy always divides the result, so an
-  `N` axis never yields an indivisible point.
+- **`N` counts individuals.** `N` means individuals per deme in the base
+  configuration and on an axis alike, the number the botanist sees
+  everywhere else in the app; the base's required `ploidy` turns it into
+  gene copies when a point is built (`SimulationParams.from_mapping`).
 """
 
 from __future__ import annotations
@@ -165,9 +164,9 @@ class SweepSpec:
 
     Attributes:
         base: A complete configuration mapping, exactly what
-            `SimulationParams.from_mapping` accepts. Its `N` is gene
-            copies, like every configuration mapping; it is overwritten
-            when `N` is an axis, and `ploidy` is then required.
+            `SimulationParams.from_mapping` accepts. Its `N` is
+            individuals per deme, and it must say `ploidy`; `N` is
+            overwritten when it is an axis.
         axes: The varied keys, first axis slowest in the enumeration.
         strategy: `grid` (every combination).
         seed_policy: `spaced` gives point `i` the seed `base seed + i *
@@ -438,8 +437,8 @@ def apply_coordinates(
     coordinates, such as the closed-form theory along an axis.
 
     Raises:
-        ValueError: `base` cannot take one of the axes (for example an `N`
-            axis without a `ploidy`).
+        ValueError: `base` cannot take one of the axes (for example an `m`
+            axis with no `m` in the base).
     """
     _check_base_supports_axes(base, set(coordinates))
     mapping: dict[str, Any] = dict(base)
@@ -451,7 +450,7 @@ def apply_coordinates(
 def _apply_axis(mapping: dict[str, Any], key: str, value: CoordinateValue) -> None:
     """Apply one axis value to a point's configuration mapping in place."""
     if key == "N":
-        mapping["N"] = int(value) * int(mapping["ploidy"])
+        mapping["N"] = int(value)
     elif key in {"d", "mu", "deme_weighting"}:
         mapping[key] = value
     elif key == "m":
@@ -478,11 +477,6 @@ def _with_topology(current: object, topology: str) -> object:
 
 def _check_base_supports_axes(base: Mapping[str, Any], keys: set[str]) -> None:
     """Reject a base that the chosen axes cannot be applied to."""
-    if "N" in keys and "ploidy" not in base:
-        raise ValueError(
-            "an N axis counts individuals, so the base configuration needs a "
-            "ploidy (1 to 4)"
-        )
     if keys & {"m", "topology"}:
         migration = base.get("m")
         if migration is None:

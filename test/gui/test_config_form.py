@@ -17,7 +17,7 @@ import yaml
 from fim.cli import STARTER_CONFIG
 from fim.gui import config_form
 from fim.model.locus import LocusSpec
-from fim.model.params import SimulationParams
+from fim.model.params import PLOIDY_WORDS, SimulationParams
 
 
 def _starter() -> dict[str, str]:
@@ -178,8 +178,10 @@ def test_form_values_to_payload_parses_every_plain_field_kind() -> None:
     payload = config_form.form_values_to_payload(values)
 
     # 450 individuals, diploid: 900 gene copies.
-    assert payload["N"] == 900
-    assert payload["ploidy"] == 2
+    # The form's N is individuals, like the configuration's; the word is the
+    # configuration's spelling of ploidy.
+    assert payload["N"] == 450
+    assert payload["ploidy"] == "diploid"
     assert payload["d"] == 20
     assert payload["seed"] == 7
     assert payload["deme_weighting"] == "equal"
@@ -232,7 +234,7 @@ def test_form_values_to_payload_accepts_a_per_deme_n_list() -> None:
     payload = config_form.form_values_to_payload(values)
 
     # Individuals per deme, times the starter's diploid ploidy.
-    assert payload["N"] == [400, 600, 300]
+    assert payload["N"] == [200, 300, 150]
 
 
 def test_form_values_to_payload_rejects_a_non_integer_n_item() -> None:
@@ -1308,15 +1310,17 @@ def test_payload_to_yaml_text_orders_engine_backend_last() -> None:
 
 
 def test_form_values_to_payload_turns_individuals_into_gene_copies() -> None:
-    """The form's N is individuals; the payload's N is `individuals * ploidy`."""
+    """The payload carries individuals and the ploidy word; from_mapping multiplies."""
     for ploidy in (1, 2, 3, 4):
         values = {**_starter(), "ploidy": str(ploidy), "N": "100"}
 
         payload = config_form.form_values_to_payload(values)
 
-        assert payload["N"] == 100 * ploidy
-        assert payload["ploidy"] == ploidy
-        assert SimulationParams.from_mapping(payload).ploidy == ploidy
+        assert payload["N"] == 100
+        assert payload["ploidy"] == PLOIDY_WORDS[ploidy]
+        params = SimulationParams.from_mapping(payload)
+        assert params.ploidy == ploidy
+        assert params.gene_copies == 100 * ploidy
 
 
 def test_form_values_to_payload_refuses_a_blank_ploidy() -> None:
@@ -1338,20 +1342,23 @@ def test_params_to_form_values_divides_gene_copies_back_into_individuals() -> No
     assert values["ploidy"] == "2"
     assert values["N"] == "225"
     per_deme = SimulationParams.from_mapping(
-        {**yaml.safe_load(STARTER_CONFIG), "d": 3, "N": [100, 200, 60], "ploidy": 2}
+        {
+            **yaml.safe_load(STARTER_CONFIG),
+            "d": 3,
+            "N": [100, 200, 60],
+            "ploidy": "diploid",
+        }
     )
-    assert config_form.params_to_form_values(per_deme)["N"] == "50,100,30"
+    assert config_form.params_to_form_values(per_deme)["N"] == "100,200,60"
 
 
-def test_params_to_form_values_blanks_a_config_with_no_recorded_ploidy() -> None:
-    """Gene copies must not appear under an individuals label."""
+def test_a_config_with_no_ploidy_cannot_be_loaded_into_the_form() -> None:
+    """Ploidy is required, so a ploidy-less file fails before it reaches the form."""
     config = {**yaml.safe_load(STARTER_CONFIG)}
     del config["ploidy"]
 
-    values = config_form.params_to_form_values(SimulationParams.from_mapping(config))
-
-    assert values["ploidy"] == ""
-    assert values["N"] == ""
+    with pytest.raises(ValueError, match="ploidy is required"):
+        SimulationParams.from_mapping(config)
 
 
 def test_starter_form_values_overlay_may_choose_the_ploidy() -> None:
@@ -1361,13 +1368,14 @@ def test_starter_form_values_overlay_may_choose_the_ploidy() -> None:
     assert values["ploidy"] == "3"
     assert values["N"] == "225"
     payload = config_form.form_values_to_payload(values)
-    assert payload["N"] == 675
+    assert payload["N"] == 225
+    assert payload["ploidy"] == "triploid"
 
 
 def test_a_derived_window_and_cap_are_shown_as_auto_not_as_numbers() -> None:
     """A derived value is never frozen into the form as if it were typed."""
     params = SimulationParams.from_mapping(
-        {"N": 100, "d": 5, "m": 0.0001, "mu": 0.000001, "seed": 1}
+        {"N": 100, "ploidy": "haploid", "d": 5, "m": 0.0001, "mu": 0.000001, "seed": 1}
     )
 
     values = config_form.params_to_form_values(params)
@@ -1381,6 +1389,7 @@ def test_an_explicit_window_and_cap_are_shown_as_numbers() -> None:
     params = SimulationParams.from_mapping(
         {
             "N": 100,
+            "ploidy": "haploid",
             "d": 5,
             "m": 0.0001,
             "mu": 0.000001,

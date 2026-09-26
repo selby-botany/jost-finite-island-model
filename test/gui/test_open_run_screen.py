@@ -69,6 +69,7 @@ def _write_batch_run(tmp_path: Path, *, study_id: str | None = None) -> Path:
     """
     config = {
         "N": 20,
+        "ploidy": "haploid",
         "d": 2,
         "m": 0.1,
         "mu": 0.01,
@@ -102,6 +103,7 @@ def _write_run(tmp_path: Path, *, study_id: str | None = None) -> Path:
     """
     config = {
         "N": 20,
+        "ploidy": "haploid",
         "d": 2,
         "m": 0.1,
         "mu": 0.01,
@@ -134,6 +136,7 @@ def _write_run_with_sigma_band(tmp_path: Path) -> Path:
     """
     config = {
         "N": 20,
+        "ploidy": "haploid",
         "d": 2,
         "m": 0.1,
         "mu": 0.01,
@@ -1420,6 +1423,7 @@ def test_clicking_a_column_header_sorts_that_studys_own_runs(
         yaml.safe_dump(
             {
                 "N": 20,
+                "ploidy": "haploid",
                 "d": 2,
                 "m": 0.1,
                 "mu": 0.01,

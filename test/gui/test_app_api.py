@@ -387,6 +387,7 @@ def test_interval_payload_omits_the_summary_for_a_bootstrap_interval() -> None:
     params = SimulationParams.from_mapping(
         {
             "N": 20,
+            "ploidy": "haploid",
             "d": 2,
             "m": 0.1,
             "mu": 0.01,
@@ -658,10 +659,9 @@ def test_get_preset_form_values_loads_a_representable_preset() -> None:
     result = Api().get_preset_form_values("stepping-stone-spatial-migration")
 
     assert result["ok"] is True
-    # The example's 150 gene copies at its declared diploid ploidy: 75
-    # individuals in the form.
-    assert result["values"]["ploidy"] == "2"
-    assert result["values"]["N"] == "75"
+    # The example's `N: 150` with `ploidy: haploid`: 150 individuals in the form.
+    assert result["values"]["ploidy"] == "1"
+    assert result["values"]["N"] == "150"
     assert result["values"]["m_mode"] == "matrix"
     matrix = json.loads(result["values"]["m_matrix_json"])
     assert len(matrix) == 6
@@ -2590,6 +2590,7 @@ def _write_run(
     """
     config: dict[str, object] = {
         "N": 20,
+        "ploidy": "haploid",
         "d": 2,
         "m": 0.1,
         "mu": 0.01,
@@ -2733,7 +2734,7 @@ def test_list_home_runs_attaches_config_summary_and_statistics_for_a_scalar_run(
     assert len(result) == 1
     row = result[0]
     assert row["configSummary"] == {
-        "N": "20",
+        "N": "20 haploid",
         "d": "2",
         "seed": "1",
         "m": "0.1",
@@ -3520,7 +3521,7 @@ def test_compare_runs_overlays_two_runs_and_names_the_differing_field(
             "Delta",
             "MI",
         }
-        assert run["configSummary"]["N"] == "20"
+        assert run["configSummary"]["N"] == "20 haploid"
         assert run["configSummary"]["m"] == "0.1"
         assert set(run["histories"]) == {
             "D",

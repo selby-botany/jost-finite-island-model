@@ -22,9 +22,9 @@ for that first. For parameter types and defaults, use the
 <h2 id="create-a-configuration">Create a configuration</h2>
 <pre><code class="language-console">fim init [--output PATH] [--force]
 </code></pre>
-<p><code>fim init</code> writes the documented development scenario. <code>N</code> is gene copies
-per deme, and the file also records <code>ploidy</code>, so <code>N: 450</code> with <code>ploidy: 2</code> is
-225 diploid individuals. Without <code>--output</code>, the path is
+<p><code>fim init</code> writes the documented development scenario. <code>N</code> is individuals
+per deme and <code>ploidy</code> says how many gene copies each carries, so <code>N: 225</code> with
+<code>ploidy: diploid</code> is 450 gene copies. Without <code>--output</code>, the path is
 <code>project-root/results/example-run.yaml</code>. Existing files are protected unless
 <code>--force</code> is present.</p>
 <h2 id="run-a-simulation">Run a simulation</h2>
@@ -114,7 +114,7 @@ freely.</p>
 migration matrix rather than one shared rate — a small &quot;hub&quot; topology
 where deme 4 is both the largest and the best-connected:</p>
 <pre><code class="language-yaml">N: [200, 200, 200, 800]
-ploidy: 2
+ploidy: haploid
 d: 4
 m:
   - [0.95, 0.02, 0.02, 0.01]
@@ -149,7 +149,7 @@ down, since it is both the largest deme and the best-connected one.</p>
 <code>fim.model.topology</code>'s compact sugar for a sparse migration matrix, instead
 of hand-writing all 36 matrix entries:</p>
 <pre><code class="language-yaml">N: 150
-ploidy: 2
+ploidy: haploid
 d: 6
 m:
   topology: ring
@@ -187,7 +187,7 @@ computes every statistic at the converged generation regardless of this
 setting; the flag only changes what is available generation by generation
 before that point.</p>
 <pre><code class="language-yaml">N: 200
-ploidy: 2
+ploidy: haploid
 d: 3
 m: 0.0
 mu: 0.0
@@ -225,7 +225,7 @@ splits into your demes by sampling without replacement, so the demes
 already differ a little at generation 0 purely from which copies each one
 happened to receive, a genuine founder effect rather than an assumption:</p>
 <pre><code class="language-yaml">N: 200
-ploidy: 2
+ploidy: haploid
 d: 3
 m: 0.005
 mu: 0.001
@@ -260,7 +260,7 @@ generation's frequencies. migrant_sampling: stochastic instead draws the
 migrant <em>count</em> from <code>Binomial(N, rate)</code>, adding a genuine, explicit source
 of randomness some studies want counted:</p>
 <pre><code class="language-yaml">N: 100
-ploidy: 2
+ploidy: haploid
 d: 4
 m: 0.05
 mu: 0.001
@@ -290,7 +290,7 @@ elsewhere in the run — deliberately exercised here with a very short
 3-base locus (only 4<sup>3</sup> = 64 states) and a high <code>mu</code> so recurrence is
 actually likely within the run, not just theoretically possible:</p>
 <pre><code class="language-yaml">N: 100
-ploidy: 2
+ploidy: haploid
 d: 3
 m: 0.02
 mu: 0.02
@@ -321,7 +321,7 @@ carry an explicit finite-<code>d</code> correction. This example keeps <code>d</
 that the correction matters; increasing <code>d</code> while holding <code>N</code>, <code>m</code>, and <code>mu</code>
 fixed moves G<sub>ST</sub> toward the infinite-island approximation.</p>
 <pre><code class="language-yaml">N: 500
-ploidy: 2
+ploidy: haploid
 d: 8
 m: 0.003
 mu: 0.0002
@@ -348,7 +348,7 @@ isolation-by-distance panel to show the short-distance decay pattern from
 Kimura and Weiss. The run is still small enough for an interactive example,
 but large enough that distances 1 through 10 exist on the ring.</p>
 <pre><code class="language-yaml">N: 200
-ploidy: 2
+ploidy: haploid
 d: 20
 m:
   topology: ring
@@ -377,7 +377,7 @@ probability; each locus derives its own <code>mu</code> from μ<sub>b</sub> and 
 <code>length</code> via mu = 1 - (1 - μ<sub>b</sub>)<sup>length</sup> — so two loci of very
 different lengths do not silently mutate at the same rate:</p>
 <pre><code class="language-yaml">N: 150
-ploidy: 2
+ploidy: haploid
 d: 3
 m: 0.02
 mu_b: 0.00002
@@ -404,7 +404,7 @@ canonical form μ<sub>b</sub> is sugar for; μ<sub>b</sub> itself is never store
 of them stable (convergence_combinator: all, the default) or just one
 (<code>any</code>):</p>
 <pre><code class="language-yaml">N: 150
-ploidy: 2
+ploidy: haploid
 d: 3
 m: 0.02
 mu: 0.001
@@ -432,7 +432,7 @@ across-replicate confidence interval in the next example, which asks how
 much independent replicates disagree with each other, not how noisy any one
 of them still is:</p>
 <pre><code class="language-yaml">N: 150
-ploidy: 2
+ploidy: haploid
 d: 4
 m: 0.02
 mu: 0.001
@@ -465,7 +465,7 @@ set n<sub>replicates</sub> well above the plausible requirement and let
 <a href="#" data-fim-help="configuration" data-fim-anchor="replicate_tolerance">replicate_tolerance</a> decide when
 enough have run:</p>
 <pre><code class="language-yaml">N: 100
-ploidy: 2
+ploidy: haploid
 d: 5
 m: 0.001
 mu: 0.0000003
@@ -505,7 +505,7 @@ grows large enough — see <a href="#" data-fim-external="https://github.com/sel
 backend</a> for the
 full measured comparison this example's own shape is drawn from:</p>
 <pre><code class="language-yaml">N: 500
-ploidy: 2
+ploidy: haploid
 d: 70
 m: 0.05
 mu: 0.001
@@ -540,7 +540,7 @@ and the plain <code>generational</code> engine, which this project's own measure
 benchmarks find winning over <code>generational-vector</code> in exactly this kind of
 region (moderate <code>d</code>, a longer locus):</p>
 <pre><code class="language-yaml">N: 500
-ploidy: 2
+ploidy: haploid
 d: 35
 m: 0.05
 mu: 0.001
@@ -572,7 +572,7 @@ engine to <code>generational</code> the same way the previous example syncs it t
 keeps every point as an ordinary run inside one study. A sweep file is a normal
 configuration plus a <code>sweep:</code> block:</p>
 <pre><code class="language-yaml">N: 450
-ploidy: 2
+ploidy: haploid
 d: 20
 m: 0.001
 mu: 0.0000003
@@ -587,10 +587,9 @@ sweep:
 <p>Each axis is a list of values or a <code>start</code>, <code>stop</code> and <code>count</code> range
 (<code>scale</code> is <code>linear</code> or <code>log</code>). The keys you can sweep are <code>N</code>, <code>d</code>, <code>m</code>, <code>mu</code>,
 <code>topology</code> (<code>island</code>, <code>ring</code>, <code>linear</code>, <code>torus</code>) and <code>deme_weighting</code>.</p>
-<p>In a sweep, an <code>N</code> axis counts <strong>individuals per deme</strong>, the number the
-desktop app shows, and each point's own <code>N</code> is that times <code>ploidy</code> (so the file
-needs a <code>ploidy</code>). The top-level <code>N</code> of a file stays gene copies, as in every
-other configuration file.</p>
+<p>In a sweep, <code>N</code> counts <strong>individuals per deme</strong> on an axis and in the base
+alike, the number the desktop app shows; the file's <code>ploidy</code> turns it into gene
+copies for each point.</p>
 <p>By default every point gets its own seed (<code>base seed + point index times n_replicates</code>), so no two points share a replicate seed. Set
 <code>seed_policy: same</code> in the <code>sweep:</code> block to give every point the base seed.</p>
 <pre><code class="language-bash">fim sweep plan sweep.yaml            # list the points and their validity; runs nothing

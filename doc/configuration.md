@@ -19,7 +19,8 @@ the [project overview](../README.md) for installation.
 ## Complete example
 
 ```yaml
-N: 450
+N: 225
+ploidy: diploid
 d: 20
 m: 0.001
 mu: 0.0000003
@@ -45,20 +46,22 @@ engine_backend: auto   # recommended choice; the library default is lineal
 
 - **Type:** positive integer, or a list of `d` positive integers
 - **Required:** yes
-- **Meaning:** gene copies per deme
+- **Meaning:** individuals per deme
 
-`N` is deliberately ploidy-neutral: the simulator counts gene copies. Pass
-`2 * individuals` for a diploid autosomal locus and pass census individuals
-unchanged for a haploid locus. Set [`ploidy`](#ploidy) as well to record how
-many copies each individual carries; the desktop app always does, and asks
-you for individuals rather than gene copies.
+`N` counts the individuals on each island, the number a field botanist counts.
+The simulator counts gene copies, so it multiplies `N` by [`ploidy`](#ploidy):
+`N: 225` with `ploidy: diploid` is 450 gene copies per deme. That conversion
+happens once, when the configuration is read; everything after it, including
+every statistic and the analytic formulas, works in gene copies.
+
 Per-deme lists model unequal island sizes: every stage of the update
 pipeline (`migrate`, `mutate`, `drift`), the founding-allele-count bound
 (checked against the smallest N<sub>i</sub>), and deme_weighting: size (when chosen) all use
-each deme's own configured gene-copy count.
+each deme's own gene-copy count.
 
 ```yaml
-N: [120, 450, 60]   # three demes, unequal gene-copy counts
+N: [120, 450, 60]   # three demes, unequal individual counts
+ploidy: haploid
 d: 3
 ```
 
@@ -67,24 +70,30 @@ prefer the scalar form when every deme is the same size.
 
 ### `ploidy`
 
-- **Type:** `1`, `2`, `3`, or `4` (haploid, diploid, triploid, tetraploid)
-- **Default:** unset
-- **Meaning:** gene copies per individual
+- **Type:** `haploid`, `diploid`, `triploid`, or `tetraploid`
+- **Required:** yes
+- **Meaning:** gene copies per individual (1, 2, 3 or 4)
 
-Pure provenance. The simulator runs on gene copies (`N`) and never reads
-`ploidy`, so it changes no result. It is recorded so a run can say "225
-diploid individuals" instead of an unexplained `N: 450`, and so the desktop
-app can show individuals again when you reopen a run. When set, every deme's
-`N` must be a multiple of it.
+Says how many gene copies each individual carries, so the simulator can turn
+`N` (individuals) into gene copies. Say it in words; a number is refused. The
+words exist for a reason: files written when `N` counted gene copies say
+`N: 450` with `ploidy: 2`, and reading that under today's rule would silently
+give 900 gene copies. Refusing the number makes such a file fail with an
+instruction instead: write `N: 225` with `ploidy: diploid`.
 
 ```yaml
-N: 450        # gene copies
-ploidy: 2     # so 225 diploid individuals per deme
+N: 225            # individuals per deme
+ploidy: diploid   # 2 gene copies each, so 450 gene copies per deme
 ```
 
+Literature configurations that state haploid reproductive individuals, such as
+Jost (2008) Part VI and the Dear-Nolan scenarios, say `ploidy: haploid`, so
+their `N` is exactly the gene-copy count the source gives.
+
 Because it is part of the recorded configuration, two runs that differ only
-in `ploidy` get different auto-generated run ids. A configuration that does
-not set it is unchanged, and keeps its existing run id.
+in `ploidy` get different auto-generated run ids, even when their gene-copy
+counts are equal: 450 haploid and 225 diploid individuals are the same
+process with two records.
 
 ### `d`
 
@@ -1000,7 +1009,7 @@ execution-flavored defaults.
 | Condition | Result |
 |---|---|
 | `N < 1`, `d < 2` | rejected |
-| `ploidy` not `1`-`4`, or a deme's `N` not a multiple of it | rejected |
+| `ploidy` missing, a number, or not one of the four words | rejected, with the fix |
 | `m` or `mu` outside `[0, 1]` | rejected |
 | missing `seed`, or `seed < 0` | rejected |
 | empty or duplicate loci | rejected |

@@ -70,6 +70,7 @@ def _write_run(tmp_path: Path, *, d: int = 2) -> Path:
     """Write a real completed run with several generations, real frames to sample."""
     config = {
         "N": 20,
+        "ploidy": "haploid",
         "d": d,
         "m": 0.1,
         "mu": 0.01,

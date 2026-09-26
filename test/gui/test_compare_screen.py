@@ -44,6 +44,7 @@ def _write_run(results_root: Path, name: str, **overrides: object) -> Path:
     """
     config: dict[str, object] = {
         "N": 20,
+        "ploidy": "haploid",
         "d": 2,
         "m": 0.1,
         "mu": 0.01,

@@ -80,7 +80,11 @@ def test_malformed_form_section_is_quarantined(tmp_path: Path) -> None:
     path = tmp_path / "preferences.json"
     path.write_text(
         json.dumps(
-            {"schema_version": CURRENT_SCHEMA_VERSION, "gui": {}, "form": {"N": 500}}
+            {
+                "schema_version": CURRENT_SCHEMA_VERSION,
+                "gui": {},
+                "form": {"N": 500, "ploidy": "haploid"},
+            }
         ),
         encoding="utf-8",
     )
@@ -419,7 +423,7 @@ def test_malformed_presets_section_is_quarantined(tmp_path: Path) -> None:
             {
                 "schema_version": CURRENT_SCHEMA_VERSION,
                 "gui": {},
-                "presets": {"A": {"N": 500}},
+                "presets": {"A": {"N": 500, "ploidy": "haploid"}},
             }
         ),
         encoding="utf-8",

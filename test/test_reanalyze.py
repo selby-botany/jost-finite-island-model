@@ -71,6 +71,7 @@ def _write_run(tmp_path: Path, **overrides: object) -> Path:
     """Write a tiny deterministic config, run it, and return its output directory."""
     config: dict[str, object] = {
         "N": 20,
+        "ploidy": "haploid",
         "d": 2,
         "m": 0.1,
         "mu": 0.01,
@@ -388,6 +389,7 @@ def test_a_rebuilt_convergence_history_matches_the_live_one(tmp_path: Path) -> N
     """
     config = {
         "N": 20,
+        "ploidy": "haploid",
         "d": 2,
         "m": 0.1,
         "mu": 0.01,

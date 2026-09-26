@@ -18,6 +18,7 @@ this:
 
 ```yaml
 N: 2000
+ploidy: haploid
 d: 100
 m: 0.01
 mu: 0.001

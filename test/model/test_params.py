@@ -6,13 +6,19 @@ import pytest
 
 from fim.engine import deterministic_run_id
 from fim.model.locus import LocusSpec
-from fim.model.params import _CONFIG_KEYS, PARAMETER_DEFAULTS, SimulationParams
+from fim.model.params import (
+    _CONFIG_KEYS,
+    PARAMETER_DEFAULTS,
+    SimulationParams,
+    describe_population,
+)
 
 
 def _valid_config() -> dict[str, object]:
     """Return the smallest complete config mapping."""
     return {
         "N": 20,
+        "ploidy": "haploid",
         "d": 2,
         "m": 0.1,
         "mu": 0.001,
@@ -152,7 +158,12 @@ def test_direct_construction_rejects_bool_and_string_matrix_entries() -> None:
 
 def test_initial_allele_count_is_bounded_by_the_smallest_deme_n() -> None:
     """Unequal per-deme N constrains founding alleles by the smallest deme."""
-    config = {**_valid_config(), "N": [5, 50], "initial_allele_count": 6}
+    config = {
+        **_valid_config(),
+        "N": [5, 50],
+        "ploidy": "haploid",
+        "initial_allele_count": 6,
+    }
 
     with pytest.raises(ValueError, match="cannot exceed the smallest deme N"):
         SimulationParams.from_mapping(config)
@@ -953,6 +964,7 @@ def test_explicit_frequency_support_cannot_exceed_deme_size() -> None:
     config = {
         **_valid_config(),
         "N": 2,
+        "ploidy": "haploid",
         "initial_allele_count": 1,
         "p_0": [
             [{"0": 1 / 3, "1": 1 / 3, "2": 1 / 3}],
@@ -1190,6 +1202,7 @@ def test_migration_accepts_a_torus_topology_and_rejects_a_mismatched_shape() -> 
         **_valid_config(),
         "d": 12,
         "N": 100,
+        "ploidy": "haploid",
         "m": {"topology": "torus", "rate": 0.4, "rows": 3, "columns": 4},
     }
     params = SimulationParams.from_mapping(config)
@@ -1207,51 +1220,154 @@ def test_migration_accepts_a_torus_topology_and_rejects_a_mismatched_shape() -> 
         )
 
 
-def test_ploidy_defaults_to_unset_and_leaves_run_ids_alone() -> None:
-    """An unset ploidy is omitted from `to_dict`, so existing run ids hold."""
-    params = SimulationParams.from_mapping(_valid_config())
+def test_ploidy_is_required_and_the_message_says_how_to_fix_the_file() -> None:
+    """A configuration with no ploidy is refused, naming the fix."""
+    config = {key: value for key, value in _valid_config().items() if key != "ploidy"}
 
-    assert params.ploidy is None
-    assert "ploidy" not in params.to_dict()
+    with pytest.raises(ValueError, match="ploidy is required") as error:
+        SimulationParams.from_mapping(config)
+
+    assert "N: 225 with ploidy: diploid" in str(error.value)
 
 
-def test_ploidy_round_trips_through_to_dict_and_changes_the_run_id() -> None:
-    """A set ploidy is recorded in the manifest mapping and round-trips."""
-    plain = SimulationParams.from_mapping({**_valid_config(), "N": 40})
-    diploid = SimulationParams.from_mapping({**_valid_config(), "N": 40, "ploidy": 2})
+@pytest.mark.parametrize("old_spelling", [1, 2, 3, 4, "2", 2.0, True])
+def test_an_integer_ploidy_is_refused_so_an_old_file_cannot_be_misread(
+    old_spelling: object,
+) -> None:
+    """Files written when N meant gene copies say `ploidy: 2`; they fail loudly.
 
-    assert diploid.ploidy == 2
-    assert diploid.to_dict()["ploidy"] == 2
-    assert SimulationParams.from_mapping(diploid.to_dict()) == diploid
-    # Same dynamics, different provenance: a deliberately different id.
-    assert deterministic_run_id(diploid) != deterministic_run_id(plain)
+    Read under the new rule, `N: 450` with `ploidy: 2` would silently be 900
+    gene copies, so only the words are accepted.
+    """
+    with pytest.raises(ValueError, match="ploidy must be a word") as error:
+        SimulationParams.from_mapping(
+            {**_valid_config(), "N": 450, "ploidy": old_spelling}
+        )
+
+    assert "N: 225 with ploidy: diploid" in str(error.value)
+
+
+@pytest.mark.parametrize("word", ["pentaploid", "", "dip", "diploids"])
+def test_only_the_four_ploidy_words_are_accepted(word: str) -> None:
+    """Anything else is refused with the same guidance."""
+    with pytest.raises(ValueError, match="ploidy must be a word"):
+        SimulationParams.from_mapping({**_valid_config(), "ploidy": word})
+
+
+@pytest.mark.parametrize(
+    ("word", "ploidy"),
+    [
+        ("haploid", 1),
+        ("diploid", 2),
+        ("triploid", 3),
+        ("tetraploid", 4),
+        ("Diploid", 2),
+        (" TETRAPLOID ", 4),
+    ],
+)
+def test_ploidy_words_parse_case_insensitively(word: str, ploidy: int) -> None:
+    """Spelling is forgiving about case and surrounding space."""
+    params = SimulationParams.from_mapping({**_valid_config(), "ploidy": word})
+
+    assert params.ploidy == ploidy
+
+
+def test_n_counts_individuals_and_the_params_hold_gene_copies() -> None:
+    """225 diploid individuals per deme is 450 gene copies inside."""
+    params = SimulationParams.from_mapping(
+        {**_valid_config(), "N": 225, "ploidy": "diploid"}
+    )
+
+    assert params.gene_copies == 450
+    assert params.individuals == 225
+    assert params.ploidy == 2
+
+
+def test_a_per_deme_list_of_individuals_is_multiplied_by_the_ploidy() -> None:
+    """Each deme's count is converted, in order."""
+    params = SimulationParams.from_mapping(
+        {**_valid_config(), "d": 3, "N": [200, 300, 150], "ploidy": "triploid"}
+    )
+
+    assert params.gene_copies == (600, 900, 450)
+    assert params.individuals == (200, 300, 150)
+
+
+def test_to_dict_writes_individuals_and_the_ploidy_word() -> None:
+    """The record and the configuration say the same thing."""
+    params = SimulationParams.from_mapping(
+        {**_valid_config(), "N": 225, "ploidy": "diploid"}
+    )
+
+    assert params.to_dict()["N"] == 225
+    assert params.to_dict()["ploidy"] == "diploid"
+
+
+@pytest.mark.parametrize("ploidy", ["haploid", "diploid", "triploid", "tetraploid"])
+def test_from_mapping_of_to_dict_is_the_identity(ploidy: str) -> None:
+    """The round trip holds for every ploidy, scalar and per-deme N."""
+    for n in (40, [40, 60]):
+        params = SimulationParams.from_mapping(
+            {**_valid_config(), "N": n, "ploidy": ploidy}
+        )
+
+        assert SimulationParams.from_mapping(params.to_dict()) == params
+
+
+def test_the_same_population_in_either_unit_differs_only_in_the_run_id() -> None:
+    """450 haploid and 225 diploid are one process with two records."""
+    haploid = SimulationParams.from_mapping(
+        {**_valid_config(), "N": 450, "ploidy": "haploid"}
+    )
+    diploid = SimulationParams.from_mapping(
+        {**_valid_config(), "N": 225, "ploidy": "diploid"}
+    )
+
+    assert haploid.gene_copies == diploid.gene_copies == 450
+    assert deterministic_run_id(diploid) != deterministic_run_id(haploid)
+
+
+def test_a_directly_built_params_defaults_to_haploid() -> None:
+    """Direct construction names gene copies; ploidy defaults to haploid."""
+    params = SimulationParams(gene_copies=20, m=0.1, mu=0.001, d=2, seed=7)
+
+    assert params.ploidy == 1
+    assert params.individuals == 20
+    assert params.to_dict()["ploidy"] == "haploid"
 
 
 @pytest.mark.parametrize("ploidy", [0, 5, -1])
-def test_ploidy_outside_one_to_four_is_rejected(ploidy: int) -> None:
-    """Only haploid through tetraploid are accepted."""
+def test_a_directly_built_ploidy_outside_one_to_four_is_rejected(ploidy: int) -> None:
+    """Only haploid through tetraploid exist."""
     with pytest.raises(ValueError, match="ploidy must be 1, 2, 3, or 4"):
-        SimulationParams.from_mapping({**_valid_config(), "N": 60, "ploidy": ploidy})
+        SimulationParams(gene_copies=60, m=0.1, mu=0.001, d=2, seed=7, ploidy=ploidy)
 
 
-def test_ploidy_must_divide_every_demes_gene_copies() -> None:
-    """A deme's N must be a whole number of individuals."""
-    with pytest.raises(ValueError, match=r"N\[1\] is 41 gene copies"):
-        SimulationParams.from_mapping(
-            {**_valid_config(), "d": 2, "N": [40, 41], "ploidy": 2, "m": 0.1}
-        )
+def test_a_directly_built_gene_copy_count_must_divide_by_the_ploidy() -> None:
+    """A deme's gene copies must be a whole number of individuals."""
+    with pytest.raises(ValueError, match=r"gene_copies\[1\] is 41"):
+        SimulationParams(gene_copies=(40, 41), m=0.1, mu=0.001, d=2, seed=7, ploidy=2)
 
 
-def test_ploidy_rejects_non_integers() -> None:
-    """A float or a bool is not a ploidy."""
-    with pytest.raises(ValueError, match="ploidy must be an integer"):
-        SimulationParams.from_mapping({**_valid_config(), "N": 40, "ploidy": 2.0})
+def test_describe_population_reads_the_way_a_botanist_does() -> None:
+    """One formatter for every surface that shows the population size."""
+    diploid = SimulationParams.from_mapping(
+        {**_valid_config(), "N": 225, "ploidy": "diploid"}
+    )
+    unequal = SimulationParams.from_mapping(
+        {**_valid_config(), "d": 3, "N": [200, 300, 150], "ploidy": "diploid"}
+    )
+    direct = SimulationParams(gene_copies=20, m=0.1, mu=0.001, d=2, seed=7)
+
+    assert describe_population(diploid) == "225 diploid individuals per deme"
+    assert describe_population(unequal) == "200, 300, 150 diploid individuals per deme"
+    assert describe_population(direct) == "20 haploid individuals per deme"
 
 
 def test_unset_window_and_cap_are_derived_from_the_model() -> None:
     """Unset window and cap take the derived values, recorded as derived."""
     params = SimulationParams.from_mapping(
-        {"N": 100, "d": 5, "m": 0.0001, "mu": 0.000001, "seed": 1}
+        {"N": 100, "ploidy": "haploid", "d": 5, "m": 0.0001, "mu": 0.000001, "seed": 1}
     )
     assert params.auto_derived == {"convergence_window", "max_generations"}
     assert params.relaxation_time == pytest.approx(19_700, rel=0.01)
@@ -1291,6 +1407,7 @@ def test_a_derived_window_is_clamped_to_an_explicit_cap() -> None:
     params = SimulationParams.from_mapping(
         {
             "N": 100,
+            "ploidy": "haploid",
             "d": 5,
             "m": 0.0001,
             "mu": 0.000001,
@@ -1324,7 +1441,7 @@ def test_derived_values_round_trip_as_concrete_integers() -> None:
 
 def test_no_migration_and_no_mutation_needs_explicit_values() -> None:
     """Nothing to wait for: derivation is refused, explicit values work."""
-    config = {"N": 20, "d": 2, "m": 0.0, "mu": 0.0, "seed": 1}
+    config = {"N": 20, "ploidy": "haploid", "d": 2, "m": 0.0, "mu": 0.0, "seed": 1}
     with pytest.raises(ValueError, match="cannot derive convergence_window"):
         SimulationParams.from_mapping(config)
     params = SimulationParams.from_mapping(
@@ -1340,7 +1457,7 @@ def test_a_large_explicit_matrix_needs_explicit_values() -> None:
         [0.99 if row == column else 0.01 / (d - 1) for column in range(d)]
         for row in range(d)
     ]
-    config = {"N": 20, "d": d, "m": matrix, "mu": 0.001, "seed": 1}
+    config = {"N": 20, "ploidy": "haploid", "d": d, "m": matrix, "mu": 0.001, "seed": 1}
     with pytest.raises(ValueError, match="explicit"):
         SimulationParams.from_mapping(config)
     assert (

@@ -215,7 +215,7 @@ def test_home_offers_sweep_results_and_continue_only_for_a_sweep_study(
     spec = SweepSpec(
         base={
             "N": 16,
-            "ploidy": 1,
+            "ploidy": "haploid",
             "d": 2,
             "m": 0.1,
             "mu": 0.01,

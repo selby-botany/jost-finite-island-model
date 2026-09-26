@@ -15,7 +15,8 @@ the <a href="#" data-fim-external="https://github.com/selby-botany/jost-finite-i
 <li><a href="#validation-summary">Validation summary</a></li>
 </ul>
 <h2 id="complete-example">Complete example</h2>
-<pre><code class="language-yaml">N: 450
+<pre><code class="language-yaml">N: 225
+ploidy: diploid
 d: 20
 m: 0.001
 mu: 0.0000003
@@ -39,39 +40,45 @@ engine_backend: auto   # recommended choice; the library default is lineal
 <ul>
 <li><strong>Type:</strong> positive integer, or a list of <code>d</code> positive integers</li>
 <li><strong>Required:</strong> yes</li>
-<li><strong>Meaning:</strong> gene copies per deme</li>
+<li><strong>Meaning:</strong> individuals per deme</li>
 </ul>
-<p><code>N</code> is deliberately ploidy-neutral: the simulator counts gene copies. Pass
-<code>2 * individuals</code> for a diploid autosomal locus and pass census individuals
-unchanged for a haploid locus. Set <a href="#ploidy"><code>ploidy</code></a> as well to record how
-many copies each individual carries; the desktop app always does, and asks
-you for individuals rather than gene copies.
-Per-deme lists model unequal island sizes: every stage of the update
+<p><code>N</code> counts the individuals on each island, the number a field botanist counts.
+The simulator counts gene copies, so it multiplies <code>N</code> by <a href="#ploidy"><code>ploidy</code></a>:
+<code>N: 225</code> with <code>ploidy: diploid</code> is 450 gene copies per deme. That conversion
+happens once, when the configuration is read; everything after it, including
+every statistic and the analytic formulas, works in gene copies.</p>
+<p>Per-deme lists model unequal island sizes: every stage of the update
 pipeline (<code>migrate</code>, <code>mutate</code>, <code>drift</code>), the founding-allele-count bound
 (checked against the smallest N<sub>i</sub>), and deme_weighting: size (when chosen) all use
-each deme's own configured gene-copy count.</p>
-<pre><code class="language-yaml">N: [120, 450, 60]   # three demes, unequal gene-copy counts
+each deme's own gene-copy count.</p>
+<pre><code class="language-yaml">N: [120, 450, 60]   # three demes, unequal individual counts
+ploidy: haploid
 d: 3
 </code></pre>
 <p>A scalar <code>N</code> and a list of <code>d</code> equal values are numerically identical;
 prefer the scalar form when every deme is the same size.</p>
 <h3 id="ploidy"><code>ploidy</code></h3>
 <ul>
-<li><strong>Type:</strong> <code>1</code>, <code>2</code>, <code>3</code>, or <code>4</code> (haploid, diploid, triploid, tetraploid)</li>
-<li><strong>Default:</strong> unset</li>
-<li><strong>Meaning:</strong> gene copies per individual</li>
+<li><strong>Type:</strong> <code>haploid</code>, <code>diploid</code>, <code>triploid</code>, or <code>tetraploid</code></li>
+<li><strong>Required:</strong> yes</li>
+<li><strong>Meaning:</strong> gene copies per individual (1, 2, 3 or 4)</li>
 </ul>
-<p>Pure provenance. The simulator runs on gene copies (<code>N</code>) and never reads
-<code>ploidy</code>, so it changes no result. It is recorded so a run can say &quot;225
-diploid individuals&quot; instead of an unexplained <code>N: 450</code>, and so the desktop
-app can show individuals again when you reopen a run. When set, every deme's
-<code>N</code> must be a multiple of it.</p>
-<pre><code class="language-yaml">N: 450        # gene copies
-ploidy: 2     # so 225 diploid individuals per deme
+<p>Says how many gene copies each individual carries, so the simulator can turn
+<code>N</code> (individuals) into gene copies. Say it in words; a number is refused. The
+words exist for a reason: files written when <code>N</code> counted gene copies say
+<code>N: 450</code> with <code>ploidy: 2</code>, and reading that under today's rule would silently
+give 900 gene copies. Refusing the number makes such a file fail with an
+instruction instead: write <code>N: 225</code> with <code>ploidy: diploid</code>.</p>
+<pre><code class="language-yaml">N: 225            # individuals per deme
+ploidy: diploid   # 2 gene copies each, so 450 gene copies per deme
 </code></pre>
+<p>Literature configurations that state haploid reproductive individuals, such as
+Jost (2008) Part VI and the Dear-Nolan scenarios, say <code>ploidy: haploid</code>, so
+their <code>N</code> is exactly the gene-copy count the source gives.</p>
 <p>Because it is part of the recorded configuration, two runs that differ only
-in <code>ploidy</code> get different auto-generated run ids. A configuration that does
-not set it is unchanged, and keeps its existing run id.</p>
+in <code>ploidy</code> get different auto-generated run ids, even when their gene-copy
+counts are equal: 450 haploid and 225 diploid individuals are the same
+process with two records.</p>
 <h3 id="d"><code>d</code></h3>
 <ul>
 <li><strong>Type:</strong> integer at least 2</li>
@@ -886,8 +893,8 @@ execution-flavored defaults.</p>
 <td>rejected</td>
 </tr>
 <tr>
-<td><code>ploidy</code> not <code>1</code>-<code>4</code>, or a deme's <code>N</code> not a multiple of it</td>
-<td>rejected</td>
+<td><code>ploidy</code> missing, a number, or not one of the four words</td>
+<td>rejected, with the fix</td>
 </tr>
 <tr>
 <td><code>m</code> or <code>mu</code> outside <code>[0, 1]</code></td>

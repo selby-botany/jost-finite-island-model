@@ -40,7 +40,7 @@ from typing import Final, Literal
 import yaml
 
 from fim.cli import STARTER_CONFIG
-from fim.model.params import SimulationParams
+from fim.model.params import PLOIDY_WORDS, SimulationParams
 
 FieldKind = Literal[
     "int",
@@ -62,13 +62,9 @@ MigrationMode = Literal["scalar", "topology", "matrix"]
 PLOIDY_REQUIRED_MESSAGE: Final = "ploidy must be chosen"
 """The refusal when the form's ploidy is blank (see `POPULATION_FIELDS`)."""
 
-PLOIDY_NAMES: Final[Mapping[int, str]] = {
-    1: "haploid",
-    2: "diploid",
-    3: "triploid",
-    4: "tetraploid",
-}
-"""Display names for `SimulationParams.ploidy`'s allowed values."""
+PLOIDY_NAMES: Final[Mapping[int, str]] = PLOIDY_WORDS
+"""Display names for `SimulationParams.ploidy`'s allowed values (the same words
+a configuration spells them with)."""
 
 MIGRATION_TOPOLOGIES: Final[tuple[str, ...]] = ("ring", "linear", "torus")
 
@@ -138,11 +134,11 @@ class TabSpec:
 # `ploidy` and `N` are asked in that order and in the botanist's own
 # terms: first how many gene copies each individual carries, then how
 # many *individuals* each deme holds. The form's `N` is therefore
-# individuals; `form_values_to_payload` multiplies by `ploidy` to give
-# `SimulationParams.gene_copies` (always gene copies), and `params_to_form_values`
-# divides back. `ploidy` is deliberately not a default: a blank choice is
-# refused (`PLOIDY_REQUIRED_MESSAGE`) rather than silently guessed, since
-# a wrong guess halves or doubles the gene-copy count of every deme.
+# individuals, exactly like the configuration key `N`: the payload carries
+# individuals plus the ploidy word, and `SimulationParams.from_mapping` does
+# the one conversion to `gene_copies`. A blank ploidy is refused
+# (`PLOIDY_REQUIRED_MESSAGE`) rather than silently guessed, since a wrong
+# guess halves or doubles the gene-copy count of every deme.
 POPULATION_FIELDS: Final[tuple[FormField, ...]] = (
     FormField("ploidy", "ploidy", "optional_int"),
     FormField("N", "N (individuals/deme)", "int_list"),
@@ -525,7 +521,7 @@ def form_values_to_payload(values: Mapping[str, str]) -> dict[str, object]:
                 payload[field.name] = text == "true"
             else:
                 payload[field.name] = text
-        _individuals_to_gene_copies(payload)
+        _ploidy_to_word(payload)
         payload["m"] = m_to_payload(values)
         payload.update(mu_to_payload(values))
         payload.update(initial_conditions_to_payload(values))
@@ -537,12 +533,11 @@ def form_values_to_payload(values: Mapping[str, str]) -> dict[str, object]:
     return payload
 
 
-def _individuals_to_gene_copies(payload: dict[str, object]) -> None:
-    """Turn the form's individuals-per-deme `N` into gene copies, in place.
+def _ploidy_to_word(payload: dict[str, object]) -> None:
+    """Turn the form's ploidy number into the configuration's ploidy word.
 
-    The form asks for individuals; `SimulationParams.gene_copies` is gene copies
-    (`individuals * ploidy`). A blank ploidy is refused rather than
-    guessed.
+    The form's `N` already counts individuals, which is what the
+    configuration's `N` means, so only the ploidy is respelled.
 
     Raises:
         ValueError: If ploidy is blank (`PLOIDY_REQUIRED_MESSAGE`).
@@ -551,12 +546,7 @@ def _individuals_to_gene_copies(payload: dict[str, object]) -> None:
     if ploidy is None:
         raise ValueError(PLOIDY_REQUIRED_MESSAGE)
     assert isinstance(ploidy, int)
-    individuals = payload["N"]
-    if isinstance(individuals, list):
-        payload["N"] = [count * ploidy for count in individuals]
-    else:
-        assert isinstance(individuals, int)
-        payload["N"] = individuals * ploidy
+    payload["ploidy"] = PLOIDY_WORDS.get(ploidy, ploidy)
 
 
 def m_to_payload(
@@ -1277,22 +1267,16 @@ def params_to_form_values(params: SimulationParams) -> dict[str, str]:
             longer trigger this, `loci_from_params` below now renders
             those as a real, editable grid instead).
     """
-    # The form shows individuals (`N / ploidy`). A configuration with no
-    # recorded ploidy (written by hand or by the command line) cannot be
-    # divided honestly, so both fields come back blank for the botanist
-    # to fill in, rather than showing gene copies under an individuals
-    # label.
-    if params.ploidy is None:
-        n_text = ""
-    else:
-        ploidy = params.ploidy
-        n_text = (
-            str(params.gene_copies // ploidy)
-            if isinstance(params.gene_copies, int)
-            else ",".join(str(value // ploidy) for value in params.gene_copies)
-        )
+    # The form shows individuals, the same quantity as the configuration's
+    # `N`, and the ploidy beside it.
+    individuals = params.individuals
+    n_text = (
+        str(individuals)
+        if isinstance(individuals, int)
+        else ",".join(str(value) for value in individuals)
+    )
     values: dict[str, str] = {
-        "ploidy": "" if params.ploidy is None else str(params.ploidy),
+        "ploidy": str(params.ploidy),
         "N": n_text,
         "d": str(params.d),
         "seed": str(params.seed),

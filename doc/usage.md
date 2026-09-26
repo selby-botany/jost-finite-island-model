@@ -27,9 +27,9 @@ for that first. For parameter types and defaults, use the
 fim init [--output PATH] [--force]
 ```
 
-`fim init` writes the documented development scenario. `N` is gene copies
-per deme, and the file also records `ploidy`, so `N: 450` with `ploidy: 2` is
-225 diploid individuals. Without `--output`, the path is
+`fim init` writes the documented development scenario. `N` is individuals
+per deme and `ploidy` says how many gene copies each carries, so `N: 225` with
+`ploidy: diploid` is 450 gene copies. Without `--output`, the path is
 `project-root/results/example-run.yaml`. Existing files are protected unless
 `--force` is present.
 
@@ -139,7 +139,7 @@ where deme 4 is both the largest and the best-connected:
 
 ```yaml
 N: [200, 200, 200, 800]
-ploidy: 2
+ploidy: haploid
 d: 4
 m:
   - [0.95, 0.02, 0.02, 0.01]
@@ -182,7 +182,7 @@ of hand-writing all 36 matrix entries:
 
 ```yaml
 N: 150
-ploidy: 2
+ploidy: haploid
 d: 6
 m:
   topology: ring
@@ -227,7 +227,7 @@ before that point.
 
 ```yaml
 N: 200
-ploidy: 2
+ploidy: haploid
 d: 3
 m: 0.0
 mu: 0.0
@@ -272,7 +272,7 @@ happened to receive, a genuine founder effect rather than an assumption:
 
 ```yaml
 N: 200
-ploidy: 2
+ploidy: haploid
 d: 3
 m: 0.005
 mu: 0.001
@@ -314,7 +314,7 @@ of randomness some studies want counted:
 
 ```yaml
 N: 100
-ploidy: 2
+ploidy: haploid
 d: 4
 m: 0.05
 mu: 0.001
@@ -351,7 +351,7 @@ actually likely within the run, not just theoretically possible:
 
 ```yaml
 N: 100
-ploidy: 2
+ploidy: haploid
 d: 3
 m: 0.02
 mu: 0.02
@@ -389,7 +389,7 @@ fixed moves G<sub>ST</sub> toward the infinite-island approximation.
 
 ```yaml
 N: 500
-ploidy: 2
+ploidy: haploid
 d: 8
 m: 0.003
 mu: 0.0002
@@ -423,7 +423,7 @@ but large enough that distances 1 through 10 exist on the ring.
 
 ```yaml
 N: 200
-ploidy: 2
+ploidy: haploid
 d: 20
 m:
   topology: ring
@@ -459,7 +459,7 @@ different lengths do not silently mutate at the same rate:
 
 ```yaml
 N: 150
-ploidy: 2
+ploidy: haploid
 d: 3
 m: 0.02
 mu_b: 0.00002
@@ -493,7 +493,7 @@ of them stable (convergence_combinator: all, the default) or just one
 
 ```yaml
 N: 150
-ploidy: 2
+ploidy: haploid
 d: 3
 m: 0.02
 mu: 0.001
@@ -528,7 +528,7 @@ of them still is:
 
 ```yaml
 N: 150
-ploidy: 2
+ploidy: haploid
 d: 4
 m: 0.02
 mu: 0.001
@@ -568,7 +568,7 @@ enough have run:
 
 ```yaml
 N: 100
-ploidy: 2
+ploidy: haploid
 d: 5
 m: 0.001
 mu: 0.0000003
@@ -616,7 +616,7 @@ full measured comparison this example's own shape is drawn from:
 
 ```yaml
 N: 500
-ploidy: 2
+ploidy: haploid
 d: 70
 m: 0.05
 mu: 0.001
@@ -658,7 +658,7 @@ region (moderate `d`, a longer locus):
 
 ```yaml
 N: 500
-ploidy: 2
+ploidy: haploid
 d: 35
 m: 0.05
 mu: 0.001
@@ -697,7 +697,7 @@ configuration plus a `sweep:` block:
 
 ```yaml
 N: 450
-ploidy: 2
+ploidy: haploid
 d: 20
 m: 0.001
 mu: 0.0000003
@@ -714,10 +714,9 @@ Each axis is a list of values or a `start`, `stop` and `count` range
 (`scale` is `linear` or `log`). The keys you can sweep are `N`, `d`, `m`, `mu`,
 `topology` (`island`, `ring`, `linear`, `torus`) and `deme_weighting`.
 
-In a sweep, an `N` axis counts **individuals per deme**, the number the
-desktop app shows, and each point's own `N` is that times `ploidy` (so the file
-needs a `ploidy`). The top-level `N` of a file stays gene copies, as in every
-other configuration file.
+In a sweep, `N` counts **individuals per deme** on an axis and in the base
+alike, the number the desktop app shows; the file's `ploidy` turns it into gene
+copies for each point.
 
 By default every point gets its own seed (`base seed + point index times
 n_replicates`), so no two points share a replicate seed. Set

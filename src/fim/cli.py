@@ -108,9 +108,10 @@ logger = logging.getLogger(__name__)
 
 STARTER_CONFIG = """\
 # Finite island model starter configuration
-# N is gene copies per deme: 450 gene copies = 225 diploid individuals.
-N: 450
-ploidy: 2
+# N is individuals per deme; ploidy says how many gene copies each carries.
+# 225 diploid individuals = 450 gene copies.
+N: 225
+ploidy: diploid
 d: 20
 m: 0.001
 mu: 0.0000003

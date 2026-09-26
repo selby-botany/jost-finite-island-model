@@ -301,7 +301,10 @@ def test_sweep_theory_evaluates_the_closed_form_at_sweep_coordinates(
     assert low["D"] is not None and high["D"] is not None
     assert low["D"] < high["D"] or low["D"] > high["D"]
     # An N axis counts individuals; the closed form sees gene copies.
-    by_n = api.get_sweep_theory(started["studyId"], [{"N": 8}, {"N": 16}])["values"]
+    by_n = api.get_sweep_theory(
+        started["studyId"],
+        [{"N": 8, "ploidy": "haploid"}, {"N": 16, "ploidy": "haploid"}],
+    )["values"]
     assert by_n[0]["H_S"] != by_n[1]["H_S"]
     # A topology the island-model theory does not cover is undefined, not an error.
     assert all(value is None for value in ring.values())

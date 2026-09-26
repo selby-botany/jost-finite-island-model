@@ -34,6 +34,7 @@ def build_naive_config() -> dict[str, object]:
     """Return the configuration a user would naturally write from the docs."""
     return {
         "N": 2000,
+        "ploidy": "haploid",
         "d": 100,
         "m": 0.01,
         "mu": 0.001,

@@ -65,6 +65,7 @@ def _tiny_config() -> dict[str, object]:
     """
     return {
         "N": 20,
+        "ploidy": "haploid",
         "m": 0.1,
         "mu": 0.01,
         "d": 2,
@@ -3085,6 +3086,7 @@ def test_stepping_stone_topology_run_is_reproducible() -> None:
     params = SimulationParams.from_mapping(
         {
             "N": 20,
+            "ploidy": "haploid",
             "d": 8,
             "m": {"topology": "ring", "rate": 0.2},
             "mu": 0.02,
@@ -3118,6 +3120,7 @@ def test_stochastic_migrant_sampling_run_is_reproducible() -> None:
     params = SimulationParams.from_mapping(
         {
             "N": 40,
+            "ploidy": "haploid",
             "d": 3,
             "m": 0.2,
             "mu": 0.02,
@@ -3150,6 +3153,7 @@ def test_default_migrant_sampling_is_unaffected_by_the_stochastic_option() -> No
     """
     base_config = {
         "N": 40,
+        "ploidy": "haploid",
         "d": 3,
         "m": 0.2,
         "mu": 0.02,
@@ -3185,6 +3189,7 @@ def test_finite_alleles_run_is_reproducible_and_bounds_capacity() -> None:
     params = SimulationParams.from_mapping(
         {
             "N": 40,
+            "ploidy": "haploid",
             "d": 3,
             "m": 0.2,
             "mu": 0.1,
@@ -3219,6 +3224,7 @@ def test_default_mutation_model_is_unaffected_by_the_finite_alleles_option() -> 
     """
     base_config = {
         "N": 40,
+        "ploidy": "haploid",
         "d": 3,
         "m": 0.2,
         "mu": 0.02,
@@ -3256,6 +3262,7 @@ def test_mu_b_run_matches_the_equivalent_explicit_per_locus_mu() -> None:
     loci = [{"locus_id": 1, "length": 5}, {"locus_id": 2, "length": 50}]
     base_config = {
         "N": 40,
+        "ploidy": "haploid",
         "d": 3,
         "m": 0.2,
         "seed": 20260822,
@@ -3291,6 +3298,7 @@ def test_mu_b_combines_with_finite_alleles() -> None:
     params = SimulationParams.from_mapping(
         {
             "N": 40,
+            "ploidy": "haploid",
             "d": 3,
             "m": 0.2,
             "mu_b": 0.05,
