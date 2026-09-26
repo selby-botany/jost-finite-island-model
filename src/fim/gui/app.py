@@ -3260,7 +3260,9 @@ class Api:
         Returns:
             One dict per Study: `{"studyId", "name", "description",
             "runCount", "createdAt", "runDirectories",
-            "sweepPointCount"}`. `sweepPointCount` is the number of
+            "sweepPointCount"}`. `runCount` is the number of member
+            runs that still exist (the length of `runDirectories`),
+            not the manifest's own count. `sweepPointCount` is the number of
             planned points for a sweep Study and `None` for one
             assembled by hand. `runDirectories`
             is each member run's directory resolved to the same string
@@ -3271,23 +3273,28 @@ class Api:
             second bridge round trip per row).
         """
         results = paths.results_directory()
-        return [
-            {
-                "studyId": study.study_id,
-                "name": study.name,
-                "description": study.description,
-                "runCount": study.run_count,
-                "createdAt": study.created_at,
-                "runDirectories": [
-                    str(directory)
-                    for directory in groups.study_run_directories(
-                        study, results=results
-                    )
-                ],
-                "sweepPointCount": _sweep_point_count(study),
-            }
-            for study in groups.list_studies(results=results)
-        ]
+        rows = []
+        for study in groups.list_studies(results=results):
+            directories = [
+                str(directory)
+                for directory in groups.study_run_directories(study, results=results)
+            ]
+            rows.append(
+                {
+                    "studyId": study.study_id,
+                    "name": study.name,
+                    "description": study.description,
+                    # The runs that exist, not the manifest's own count: a run
+                    # deleted out of band (or a throwaway one recorded from
+                    # outside `results/`) stays in the manifest, and a header
+                    # claiming 339 runs above a list of five is not a count.
+                    "runCount": len(directories),
+                    "createdAt": study.created_at,
+                    "runDirectories": directories,
+                    "sweepPointCount": _sweep_point_count(study),
+                }
+            )
+        return rows
 
     @_log_bridge_call
     def list_experiments(self) -> list[dict[str, Any]]:

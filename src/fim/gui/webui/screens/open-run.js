@@ -1585,6 +1585,15 @@ selectAllButton.addEventListener("click", () => {
     for (const run of allRecentRuns) {
         selectedRunDirectories.add(run.directory);
     }
+    // Every run a Study holds is a row in the tree, including one recorded
+    // from a folder outside `results/`, which the scan behind
+    // `allRecentRuns` never sees. Selecting only the scanned runs left the
+    // others' checkboxes empty under a "select all".
+    for (const study of allStudies) {
+        for (const directory of study.runDirectories) {
+            selectedRunDirectories.add(directory);
+        }
+    }
     for (const study of allStudies) {
         selectedStudyIds.add(study.studyId);
     }

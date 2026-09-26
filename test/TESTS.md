@@ -10003,6 +10003,17 @@ def test_explore_grid_and_sweep_evaluate_at_gene_copies() -> None
 
 The held N of a sweep or a grid is individuals times ploidy too.
 
+<a id="gui.test_app_api.test_list_studies_counts_only_the_member_runs_that_exist"></a>
+
+#### test\_list\_studies\_counts\_only\_the\_member\_runs\_that\_exist
+
+```python
+def test_list_studies_counts_only_the_member_runs_that_exist(
+        tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None
+```
+
+`runCount` is the length of `runDirectories`, not the manifest's own count.
+
 <a id="gui.test_batch_results_screen"></a>
 
 # gui.test\_batch\_results\_screen
@@ -13319,6 +13330,39 @@ files live under `tmp_path`, entirely outside this test's own
 `results/`), added to a Study by absolute path -- the same shape
 `_run_reference_string` documents as a supported, legitimate case,
 not a corrupted one.
+
+<a id="gui.test_home_hierarchy_screen.test_a_study_header_counts_only_the_runs_that_exist"></a>
+
+#### test\_a\_study\_header\_counts\_only\_the\_runs\_that\_exist
+
+```python
+def test_a_study_header_counts_only_the_runs_that_exist(
+        tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None
+```
+
+The header and the list agree when a Study still references gone runs.
+
+A real report: "Default study (339 runs)" above a list of five. The
+manifest keeps every directory a run was ever recorded from, including
+ones later deleted, and the header used the manifest's own count while
+the list and the "N runs" line counted what exists.
+
+<a id="gui.test_home_hierarchy_screen.test_select_all_also_selects_runs_a_study_holds_from_outside_results"></a>
+
+#### test\_select\_all\_also\_selects\_runs\_a\_study\_holds\_from\_outside\_results
+
+```python
+def test_select_all_also_selects_runs_a_study_holds_from_outside_results(
+        tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None
+```
+
+A run recorded from a folder outside `results/` is selected too.
+
+A real report: after "Select all", some rows under the Default study
+stayed unchecked. The tree shows every run a Study holds, but "Select
+all" used only the runs found by scanning `results/`, so runs recorded
+from other folders (a `--output` elsewhere) were left out of the
+selection and out of "Delete selected".
 
 <a id="gui.test_input_screen"></a>
 

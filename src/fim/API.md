@@ -5116,7 +5116,9 @@ List every Study, oldest first (matching `groups.list_studies`'s own order).
 
   One dict per Study: `{"studyId", "name", "description",
   "runCount", "createdAt", "runDirectories",
-  "sweepPointCount"}`. `sweepPointCount` is the number of
+  "sweepPointCount"}`. `runCount` is the number of member
+  runs that still exist (the length of `runDirectories`),
+  not the manifest's own count. `sweepPointCount` is the number of
   planned points for a sweep Study and `None` for one
   assembled by hand. `runDirectories`
   is each member run's directory resolved to the same string

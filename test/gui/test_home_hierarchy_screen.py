@@ -24,6 +24,7 @@ import re
 import threading
 import time
 from collections.abc import Callable
+from dataclasses import replace
 from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any
@@ -1258,3 +1259,123 @@ def test_home_run_count_label_never_shows_more_visible_than_total(
     # have rendered "1 of 0 runs"; this must never claim more runs are
     # visible than the tree itself actually has.
     assert count_text == "1 run"
+
+
+def test_a_study_header_counts_only_the_runs_that_exist(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The header and the list agree when a Study still references gone runs.
+
+    A real report: "Default study (339 runs)" above a list of five. The
+    manifest keeps every directory a run was ever recorded from, including
+    ones later deleted, and the header used the manifest's own count while
+    the list and the "N runs" line counted what exists.
+    """
+    results = tmp_path / "results"
+    results.mkdir()
+    monkeypatch.setattr(paths_module, "results_directory", lambda: results)
+    output = _write_run(results, "run-a", seed=1)
+    study = groups.get_study(groups.DEFAULT_STUDY_ID, results=results)
+    stale = tuple(str(tmp_path / "gone" / f"run-{index}") for index in range(20))
+    groups.write_study_manifest(
+        groups.study_manifest_path(study.study_id, results=results),
+        replace(study, run_directories=(*study.run_directories, *stale)),
+    )
+    assert output.is_dir()
+
+    window = create_window(hidden=True)
+    outcome: queue.Queue[dict[str, Any] | None] = queue.Queue(maxsize=1)
+
+    def _drive() -> None:
+        try:
+            _poll_until(window, _INPUT_SCREEN_READY, lambda value: value is True)
+            window.evaluate_js("window.fim.menu.openRun();")
+            _poll_until(
+                window,
+                "window.__fimOpenRunRecentRunsLoaded === true",
+                lambda value: value is True,
+            )
+            # The default Study sits inside the default Experiment.
+            _expand_every_group(window)
+            headers = _poll_until(
+                window,
+                "Array.from(document.querySelectorAll("
+                "'.open-run-group-toggle')).map((b) => b.textContent)",
+                lambda value: (
+                    value is not None and any("Default study" in text for text in value)
+                ),
+            )
+            count = window.evaluate_js(
+                "document.getElementById('open-run-count').textContent"
+            )
+            outcome.put({"headers": headers, "count": count})
+        finally:
+            window.destroy()
+
+    webview.start(_drive)
+    result = outcome.get(timeout=_DRIVE_TIMEOUT_SECONDS)
+
+    assert result is not None
+    study_header = next(text for text in result["headers"] if "Default study" in text)
+    assert "(1 run)" in study_header
+    assert "21" not in study_header
+    assert result["count"] == "1 run"
+
+
+def test_select_all_also_selects_runs_a_study_holds_from_outside_results(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A run recorded from a folder outside `results/` is selected too.
+
+    A real report: after "Select all", some rows under the Default study
+    stayed unchecked. The tree shows every run a Study holds, but "Select
+    all" used only the runs found by scanning `results/`, so runs recorded
+    from other folders (a `--output` elsewhere) were left out of the
+    selection and out of "Delete selected".
+    """
+    results = tmp_path / "results"
+    results.mkdir()
+    monkeypatch.setattr(paths_module, "results_directory", lambda: results)
+    inside = _write_run(results, "run-a", seed=1)
+    outside_folder = tmp_path / "elsewhere"
+    outside_folder.mkdir()
+    outside = _write_run(outside_folder, "run-b", seed=2)
+    assert inside.is_dir() and outside.is_dir()
+
+    window = create_window(hidden=True)
+    outcome: queue.Queue[dict[str, Any] | None] = queue.Queue(maxsize=1)
+
+    def _drive() -> None:
+        try:
+            _poll_until(window, _INPUT_SCREEN_READY, lambda value: value is True)
+            window.evaluate_js("window.fim.menu.openRun();")
+            _poll_until(
+                window,
+                "window.__fimOpenRunRecentRunsLoaded === true",
+                lambda value: value is True,
+            )
+            window.evaluate_js(
+                "document.getElementById('open-run-select-all-button').click();"
+            )
+            _expand_every_group(window)
+            state = _poll_until(
+                window,
+                "({checked: document.querySelectorAll("
+                "'.open-run-select-checkbox:checked').length, "
+                "boxes: document.querySelectorAll("
+                "'.open-run-select-checkbox').length, "
+                "label: document.getElementById("
+                "'open-run-selection-count').textContent})",
+                lambda value: value is not None and value["boxes"] >= 4,
+            )
+            outcome.put(state)
+        finally:
+            window.destroy()
+
+    webview.start(_drive)
+    result = outcome.get(timeout=_DRIVE_TIMEOUT_SECONDS)
+
+    assert result is not None
+    # The default Experiment, the default Study and both runs.
+    assert result["label"] == "4 selected"
+    assert result["checked"] == result["boxes"] == 4

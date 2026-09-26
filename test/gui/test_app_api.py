@@ -4540,3 +4540,31 @@ def test_explore_grid_and_sweep_evaluate_at_gene_copies() -> None:
 
     assert sweep["points"] == reference["points"]
     assert grid["values"] == grid_reference["values"]
+
+
+def test_list_studies_counts_only_the_member_runs_that_exist(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """`runCount` is the length of `runDirectories`, not the manifest's own count."""
+    results = tmp_path / "results"
+    results.mkdir()
+    monkeypatch.setattr(paths, "results_directory", lambda: results)
+    real = results / "run-real"
+    real.mkdir()
+    study = groups.create_study("Stale", results=results)
+    groups.write_study_manifest(
+        groups.study_manifest_path(study.study_id, results=results),
+        replace(
+            study,
+            run_directories=(
+                str(real),
+                str(tmp_path / "gone-1"),
+                str(tmp_path / "gone-2"),
+            ),
+        ),
+    )
+
+    (row,) = Api().list_studies()
+
+    assert row["runDirectories"] == [str(real)]
+    assert row["runCount"] == 1
