@@ -171,6 +171,54 @@ def arm_shutdown_watchdog() -> None:
         faulthandler.dump_traceback_later(_SHUTDOWN_TIMEOUT_SECONDS, exit=True)
 
 
+def _real_results_index() -> Path:
+    """Return the developer's own default Study index file."""
+    return paths.project_root() / "results" / ".fim" / "studies" / "study-default.json"
+
+
+def _fingerprint(path: Path) -> tuple[int, int] | None:
+    """Return `(size, modification time in ns)`, or `None` if `path` is absent."""
+    try:
+        info = path.stat()
+    except FileNotFoundError:
+        return None
+    return (info.st_size, info.st_mtime_ns)
+
+
+_REAL_INDEX_AT_START: tuple[int, int] | None = None
+
+
+def pytest_sessionstart(session: pytest.Session) -> None:
+    """Remember the developer's real results index before any test runs.
+
+    Only the controlling process records it; xdist workers start after it.
+    """
+    global _REAL_INDEX_AT_START  # noqa: PLW0603
+    if not hasattr(session.config, "workerinput"):
+        _REAL_INDEX_AT_START = _fingerprint(_real_results_index())
+
+
+def pytest_sessionfinish(session: pytest.Session, exitstatus: int) -> None:
+    """Fail the session if a test wrote into the developer's real results index.
+
+    `fim run` records every run in the default Study under the results
+    directory, wherever its own `--output` is, so a test that runs it without
+    isolating the results directory pollutes the index the app's Home screen
+    reads (one suite run once added 35 throwaway runs to it). Making that a
+    failure, not a silent side effect, keeps it from coming back.
+    """
+    del exitstatus
+    if hasattr(session.config, "workerinput"):
+        return
+    if _fingerprint(_real_results_index()) != _REAL_INDEX_AT_START:
+        print(
+            "\nERROR: this test session modified the real results index "
+            f"({_real_results_index()}). A test must isolate the results "
+            "directory (see test/cli/conftest.py)."
+        )
+        session.exitstatus = pytest.ExitCode.TESTS_FAILED
+
+
 def pytest_unconfigure(config: pytest.Config) -> None:
     """Run both shutdown diagnostics as the session ends.
 

@@ -273,6 +273,34 @@ fix it.
 
   None
 
+<a id="test.conftest.pytest_sessionstart"></a>
+
+#### pytest\_sessionstart
+
+```python
+def pytest_sessionstart(session: pytest.Session) -> None
+```
+
+Remember the developer's real results index before any test runs.
+
+Only the controlling process records it; xdist workers start after it.
+
+<a id="test.conftest.pytest_sessionfinish"></a>
+
+#### pytest\_sessionfinish
+
+```python
+def pytest_sessionfinish(session: pytest.Session, exitstatus: int) -> None
+```
+
+Fail the session if a test wrote into the developer's real results index.
+
+`fim run` records every run in the default Study under the results
+directory, wherever its own `--output` is, so a test that runs it without
+isolating the results directory pollutes the index the app's Home screen
+reads (one suite run once added 35 throwaway runs to it). Making that a
+failure, not a silent side effect, keeps it from coming back.
+
 <a id="test.conftest.pytest_unconfigure"></a>
 
 #### pytest\_unconfigure

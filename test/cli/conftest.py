@@ -14,6 +14,7 @@ autouse fixture.
 from __future__ import annotations
 
 from collections.abc import Iterator
+from pathlib import Path
 
 import pytest
 
@@ -27,7 +28,7 @@ def _isolate_logging(log_isolation: None) -> None:
 
 
 @pytest.fixture(autouse=True)
-def _isolate_path_overrides() -> Iterator[None]:
+def _isolate_path_overrides(tmp_path: Path) -> Iterator[None]:
     """Restore every `fim.paths`/`fim.gui.preferences` override after each test.
 
     `cli.main`'s own `--root`/`--results-directory`/`--log-directory`/
@@ -42,6 +43,13 @@ def _isolate_path_overrides() -> Iterator[None]:
     directory -- the exact kind of state leak `log_isolation`'s own
     docstring, one file up, already warns about for logging specifically.
     """
+    # A project root of the test's own, so the default Study index each
+    # `fim run` updates (in `<root>/results/.fim`) is the test's, never the
+    # developer's real one: one suite run used to add 35 throwaway runs to
+    # it, and the app's Home screen then counted hundreds of vanished runs.
+    # This is the least specific override, so a test that passes `--root`,
+    # `--results-directory` or sets `FIM_RESULTS_DIRECTORY` still wins.
+    paths.set_root_override(tmp_path / "root")
     try:
         yield
     finally:

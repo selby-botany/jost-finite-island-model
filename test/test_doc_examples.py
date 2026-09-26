@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import os
 import subprocess
 import sys
 from pathlib import Path
@@ -41,6 +42,9 @@ def test_example_report_matches_a_fresh_run(example: str, tmp_path: Path) -> Non
         ],
         check=True,
         cwd=ROOT,
+        # The command records each run in a Study index under the results
+        # directory; keep that out of the developer's real `results/`.
+        env={**os.environ, "FIM_RESULTS_DIRECTORY": str(tmp_path / "results")},
     )
     fresh = json.loads((output / "report.json").read_text(encoding="utf-8"))
     committed = json.loads((directory / "report.json").read_text(encoding="utf-8"))
