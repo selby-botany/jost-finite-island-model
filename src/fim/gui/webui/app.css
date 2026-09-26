@@ -1219,6 +1219,14 @@ fieldset.composite > label {
  * predicted-equilibrium reference line (`renderTrajectory`'s own dashed
  * canvas annotation) has no legend entry of its own to be confused
  * with. */
+.run-trajectory-legend .swatch-dashdot {
+    width: 0.9rem;
+    height: 0;
+    border-top: 2px dashed var(--fim-muted);
+    border-radius: 0;
+    background: none;
+}
+
 .run-trajectory-legend .swatch-dotted {
     width: 0.9rem;
     height: 0;

@@ -52,6 +52,7 @@ not, on its own, the fix for this specific failure.
 
 from __future__ import annotations
 
+import json
 import queue
 import threading
 import time
@@ -64,6 +65,11 @@ import webview
 from fim.gui.app import Api, create_window
 from fim.gui.batch_runner import BatchMessage
 from fim.gui.runner import RunMessage
+from fim.statistics import (
+    IDENTITY_STATISTIC_NAMES,
+    identities_from_heterozygosities,
+    identity_recursion,
+)
 
 pytestmark = pytest.mark.gui
 
@@ -426,7 +432,8 @@ def test_run_button_shows_the_trajectory_panel_for_the_watched_statistic(
             "stat-value",
         ]
     assert settled["overlayLegendNames"] == [
-        "f₀ (identity recovery, theoretical founder event)"
+        "expected trajectory (closed form)",
+        "f₀ (identity recovery, theoretical founder event)",
     ]
 
 
@@ -550,6 +557,121 @@ def test_trajectory_row_toggle_hides_and_restores_a_curves_own_pixels(
         assert entry["ariaPressed"] == "true"
 
 
+def test_closed_form_curves_follow_each_measures_own_toggle(
+    fast_scalar_run_settings: Path,
+) -> None:
+    """The expected-trajectory curves are shown and hidden with their measure.
+
+    A finished run draws each identity-based statistic's closed-form
+    trajectory beside its simulated curve. Hiding every measure the
+    closed form covers removes the legend entry; showing one again brings
+    it back.
+    """
+    done_event = threading.Event()
+
+    def on_message(message: RunMessage | BatchMessage) -> None:
+        if message[0] in ("done", "cancelled", "error"):
+            done_event.set()
+
+    window = create_window(api=Api(on_message=on_message), hidden=True)
+    outcome: queue.Queue[dict[str, Any] | None] = queue.Queue(maxsize=1)
+    click_row = (
+        "document.querySelector("
+        "'#results-stats tr[data-trajectory-statistic=\"%s\"]').click();"
+    )
+    legend_names = (
+        "Array.from(document.querySelectorAll("
+        "'#run-trajectory-legend .legend-item'))"
+        ".map((span) => span.textContent)"
+    )
+
+    def _drive() -> None:
+        try:
+            _wait_for_input_screen_ready(window)
+            window.evaluate_js(
+                _SET_TINY_FIELDS + "document.getElementById('run-button').click();"
+            )
+            if not done_event.wait(timeout=_EVENT_WAIT_TIMEOUT_SECONDS):
+                outcome.put(None)
+                return
+            shown = window.evaluate_js(legend_names)
+            for name in ("D", "G_ST", "H_S", "H_T", "H_ST"):
+                window.evaluate_js(click_row % name)
+            all_hidden = window.evaluate_js(legend_names)
+            window.evaluate_js(click_row % "D")
+            one_back = window.evaluate_js(legend_names)
+            outcome.put(
+                {"shown": shown, "all_hidden": all_hidden, "one_back": one_back}
+            )
+        finally:
+            window.destroy()
+
+    webview.start(_drive)
+    settled = outcome.get(timeout=_OUTCOME_TIMEOUT_SECONDS)
+
+    assert settled is not None
+    closed_form = "expected trajectory (closed form)"
+    assert closed_form in settled["shown"]
+    assert closed_form not in settled["all_hidden"]
+    assert closed_form in settled["one_back"]
+
+
+def test_page_evaluation_of_the_closed_form_matches_the_python_recursion() -> None:
+    """`closedFormTrajectories` in the page equals `IdentityRecursion` in Python.
+
+    The two halves of one formula must not drift apart: the server solves
+    the recursion, the page evaluates it at the run's own generations from
+    the run's own first `H_S`/`H_T`.
+    """
+    demes, size, migration, mutation = 4, 60, 0.05, 0.01
+    recursion = identity_recursion(size, migration, mutation, demes)
+    payload = {
+        "demes": recursion.deme_count,
+        "fixedPoint": list(recursion.fixed_point),
+        "eigenvalues": list(recursion.eigenvalues),
+        "eigenvectors": [list(row) for row in recursion.eigenvectors],
+        "inverse": [list(row) for row in recursion.inverse],
+    }
+    generations = [3, 4, 10, 57, 400, 12_000]
+    start_h_s, start_h_t = 0.31, 0.48
+    within, between = identities_from_heterozygosities(start_h_s, start_h_t, demes)
+    expected = {
+        name: [
+            recursion.statistics_after(generation - generations[0], within, between)[
+                name
+            ]
+            for generation in generations
+        ]
+        for name in IDENTITY_STATISTIC_NAMES
+    }
+    histories = {
+        "H_S": [start_h_s] + [0.0] * (len(generations) - 1),
+        "H_T": [start_h_t] + [0.0] * (len(generations) - 1),
+    }
+    script = (
+        f"JSON.stringify(closedFormTrajectories({json.dumps(payload)}, "
+        f"{json.dumps(generations)}, {json.dumps(histories)}))"
+    )
+    window = create_window(api=Api(), hidden=True)
+    outcome: queue.Queue[str | None] = queue.Queue(maxsize=1)
+
+    def _drive() -> None:
+        try:
+            _wait_for_input_screen_ready(window)
+            outcome.put(window.evaluate_js(script))
+        finally:
+            window.destroy()
+
+    webview.start(_drive)
+    settled = outcome.get(timeout=_OUTCOME_TIMEOUT_SECONDS)
+
+    assert settled is not None
+    actual = json.loads(settled)
+    assert set(actual) == set(expected)
+    for name, values in expected.items():
+        assert actual[name] == pytest.approx(values, rel=1e-9, abs=1e-12)
+
+
 def test_trajectory_panel_updates_live_while_a_run_is_still_going(
     unreachable_convergence_run_settings: Path,
 ) -> None:
@@ -660,7 +782,8 @@ def test_trajectory_panel_updates_live_while_a_run_is_still_going(
         "MI",
     ]
     assert settled["overlayLegendNames"] == [
-        "f₀ (identity recovery, theoretical founder event)"
+        "expected trajectory (closed form)",
+        "f₀ (identity recovery, theoretical founder event)",
     ]
 
 

@@ -123,6 +123,7 @@ from fim.statistics import (
     identity_recovery_equilibrium,
     identity_recovery_half_life,
     identity_recovery_rate,
+    identity_recursion,
     mutation_negligible_equilibrium,
 )
 from fim.sweep import SweepSpec, apply_coordinates, enumerate_points
@@ -899,6 +900,63 @@ def _identity_recovery_reference_payload(
     }
 
 
+def _closed_form_trajectory_payload(
+    params: SimulationParams,
+) -> dict[str, Any] | None:
+    """Build the trajectory panel's closed-form `D(t)`/`G_ST(t)` payload.
+
+    The third theoretical reference on the panel, and the only one that is
+    the same quantity as the simulated curve at every generation:
+    `fim.statistics.identity_recursion` solves the engine's own
+    migrate-mutate-drift recursion for the expected within- and
+    between-deme identities, and `D`, `G_ST`, `H_S`, `H_T` and `H_ST` are
+    functions of those two numbers alone. `E_ST`, `K_ST` and the
+    effective-allele family are not, so they get no curve.
+
+    Sent as the recursion's solved *ingredients* (fixed point, eigenvalues,
+    eigenvectors and their inverse), not as sampled points, for the same
+    reason `_identity_recovery_reference_payload` sends two floats: the page
+    evaluates `x* + V diag(lambda^t) V^-1 (x0 - x*)` at whatever generations
+    it is plotting, however many the run has and however the sampling is
+    thinned, with no second series to keep in step. The starting
+    state `x0` is deliberately *not* here: the page takes it from the run's
+    own first recorded `H_S`/`H_T`, so the curve starts where the simulated
+    one does whatever the initial-conditions mode was, which answers the
+    initial-condition question `20260911-claude-sonnet-5-derived-
+    differentiation-trajectory-design.md` deferred.
+
+    Args:
+        params: A validated configuration, at run-start or a reopened run's.
+
+    Returns:
+        `None` when `N`, `m` or `mu` is not a plain scalar (per-deme sizes,
+        a migration matrix and per-locus rates have no two-variable
+        reduction), when there are fewer than two demes, or when the
+        configuration has no closed form (no migration and no mutation).
+        Otherwise `{"demes", "fixedPoint", "eigenvalues", "eigenvectors",
+        "inverse"}`, raw floats.
+    """
+    if (
+        not isinstance(params.gene_copies, int)
+        or not isinstance(params.m, float)
+        or not isinstance(params.mu, float)
+    ):
+        return None
+    try:
+        recursion = identity_recursion(
+            params.gene_copies, params.m, params.mu, params.d
+        )
+    except ValueError:
+        return None
+    return {
+        "demes": recursion.deme_count,
+        "fixedPoint": list(recursion.fixed_point),
+        "eigenvalues": list(recursion.eigenvalues),
+        "eigenvectors": [list(row) for row in recursion.eigenvectors],
+        "inverse": [list(row) for row in recursion.inverse],
+    }
+
+
 def _run_config_summary(params: SimulationParams) -> dict[str, str]:
     """Summarize one run's configuration into a fixed set of commonly-swept fields.
 
@@ -1477,8 +1535,8 @@ class Api:
 
         Returns:
             `{"ok": True, "isBatch": ..., "equilibrium": ...,
-            "identityRecovery": ...}` once the run has *started* — not
-            once it finishes; the real outcome arrives via the pushed
+            "identityRecovery": ..., "closedForm": ...}` once the run has
+            *started* — not once it finishes; the real outcome arrives via the pushed
             calls above. `isBatch` is `params.n_replicates > 1`, the
             identical "batch or scalar" toggle `_start_batch_run`'s own
             dispatch above already used — `run-view-controls.js`'s own
@@ -1491,15 +1549,19 @@ class Api:
             `identityRecovery` is `_identity_recovery_reference_
             payload`'s own result (that same section's closed-form
             recovery *curve*, a second and different reference overlay —
-            see that function's own docstring). Both `None` for a batch
-            (never computed there — batch has no trajectory panel of its
-            own to overlay onto) or for a scalar run whose `N`/`m`(/`mu`,
-            for `equilibrium` only) are not all plain scalars; the page
-            caches both client-side for the live trajectory panel to
-            draw against on every subsequent progress tick (`webui/
-            screens/run-view-running.js`'s own `setLiveEquilibriumReference`/
-            `setLiveIdentityRecoveryReference`), and the same values are
-            reused, not recomputed, in the eventual `"done"` push
+            see that function's own docstring); `closedForm` is
+            `_closed_form_trajectory_payload`'s own result (the same
+            section's closed-form `D(t)`/`G_ST(t)` curves). All three are
+            `None` for a batch (never computed there — batch has no
+            trajectory panel of its own to overlay onto) or for a scalar
+            run whose `N`/`m`(/`mu`, for `equilibrium` and `closedForm`)
+            are not all plain scalars; the page caches them client-side
+            for the live trajectory panel to draw against on every
+            subsequent progress tick (`webui/screens/run-view-running.js`'s
+            own `setLiveEquilibriumReference`/
+            `setLiveIdentityRecoveryReference`/`setLiveClosedForm`), and
+            the same values are reused, not recomputed, in the eventual
+            `"done"` push
             (`_drain_run_messages`). `{"ok": False, "message": ...}` if
             the form does not validate, `study_id` does not name an
             existing Study, or the output directory cannot be allocated.
@@ -1612,6 +1674,9 @@ class Api:
         # two places either is needed.
         equilibrium = _equilibrium_reference_payload(params, self._significant_digits)
         identity_recovery = _identity_recovery_reference_payload(params)
+        # The closed-form D(t)/G_ST(t) curves (`_closed_form_trajectory_
+        # payload`'s own docstring), computed once for the same two uses.
+        closed_form = _closed_form_trajectory_payload(params)
         self._run_in_flight = True
         self._comparison_target = (output_directory, window)
         threading.Thread(
@@ -1628,6 +1693,7 @@ class Api:
                 self._on_message,
                 equilibrium,
                 identity_recovery,
+                closed_form,
                 study_id,
             ),
             daemon=True,
@@ -1636,6 +1702,7 @@ class Api:
             "ok": True,
             "equilibrium": equilibrium,
             "identityRecovery": identity_recovery,
+            "closedForm": closed_form,
         }
 
     def _drain_then_release(self, drain: Callable[..., None], *arguments: Any) -> None:
@@ -4078,6 +4145,9 @@ class Api:
             # above: computed fresh from this reopened run's own manifest
             # params, a pure function of `(N, m)`.
             "identityRecovery": _identity_recovery_reference_payload(reanalyzed.params),
+            # The closed-form D(t)/G_ST(t) curves (`_closed_form_trajectory_
+            # payload`'s own docstring), fresh from the manifest's params.
+            "closedForm": _closed_form_trajectory_payload(reanalyzed.params),
         }
 
     @_log_bridge_call
@@ -4932,6 +5002,7 @@ def _drain_run_messages(
     on_message: Callable[[runner.RunMessage], None] | None = None,
     equilibrium: dict[str, str] | None = None,
     identity_recovery: dict[str, float] | None = None,
+    closed_form: dict[str, Any] | None = None,
     study_id: str | None = None,
 ) -> None:
     """Push every `runner.RunMessage` to the page as it arrives, until the run ends.
@@ -5096,6 +5167,8 @@ def _drain_run_messages(
                 # overlay (design doc §6.2, `_identity_recovery_reference_
                 # payload`'s own docstring) — same reuse, not recomputed.
                 "identityRecovery": identity_recovery,
+                # The closed-form D(t)/G_ST(t) curves — same reuse.
+                "closedForm": closed_form,
             }
             _attach_finished_run_to_study(study_id, output_directory)
             logger.info("run done: %s", output_directory)

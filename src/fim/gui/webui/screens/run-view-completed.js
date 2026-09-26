@@ -273,6 +273,7 @@ let completedTrajectoryHistories = null;
 let completedSigmaBand = null;
 let completedEquilibrium = null;
 let completedIdentityRecovery = null;
+let completedClosedForm = null;
 let completedGenerationCount = null;
 let completedFinalStatistics = null;
 let completedFinalLiteratureVisuals = null;
@@ -704,6 +705,81 @@ function drawTrajectoryAxisTicks(
 }
 
 /**
+ * Evaluate the closed-form expected trajectory of every identity-based
+ * statistic at each of `generations`.
+ *
+ * The page-side half of `fim.statistics.identity_recursion` (the
+ * server sends the solved recursion, `_closed_form_trajectory_payload`;
+ * see `IdentityRecursion.identities_after` for the same arithmetic in
+ * Python, which a test holds this function to). The two expected
+ * identities start where the run itself did — read from its own first
+ * recorded `H_S` and `H_T` — and relax as `x* + V diag(lambda^t) V^-1
+ * (x0 - x*)`, `t` being generations since that first point. `D`,
+ * `G_ST`, `H_S`, `H_T` and `H_ST` are then functions of the two
+ * identities alone.
+ *
+ * @param {object|null|undefined} closedForm `_closed_form_trajectory_
+ *     payload`'s result.
+ * @param {number[]} generations
+ * @param {Object<string, number[]>} histories the run's own histories;
+ *     only `H_S` and `H_T` are read, and only when both cover every one
+ *     of `generations`.
+ * @returns {Object<string, number[]>} one array per statistic, each the
+ *     same length as `generations`; empty when there is nothing to
+ *     evaluate (no payload, no starting state, or a non-finite result).
+ */
+function closedFormTrajectories(closedForm, generations, histories) {
+    const hS = histories.H_S;
+    const hT = histories.H_T;
+    if (
+        !closedForm ||
+        generations.length === 0 ||
+        !hS ||
+        !hT ||
+        hS.length !== generations.length ||
+        hT.length !== generations.length
+    ) {
+        return {};
+    }
+    const demes = closedForm.demes;
+    const [fixedWithin, fixedBetween] = closedForm.fixedPoint;
+    const [highRate, lowRate] = closedForm.eigenvalues;
+    const vectors = closedForm.eigenvectors;
+    const inverse = closedForm.inverse;
+    const within0 = 1 - hS[0];
+    const between0 = (demes * (1 - hT[0]) - within0) / (demes - 1);
+    const offsetWithin = within0 - fixedWithin;
+    const offsetBetween = between0 - fixedBetween;
+    const highWeight = inverse[0][0] * offsetWithin + inverse[0][1] * offsetBetween;
+    const lowWeight = inverse[1][0] * offsetWithin + inverse[1][1] * offsetBetween;
+    const series = { D: [], G_ST: [], H_S: [], H_T: [], H_ST: [] };
+    for (const generation of generations) {
+        const steps = generation - generations[0];
+        const high = highWeight * Math.pow(highRate, steps);
+        const low = lowWeight * Math.pow(lowRate, steps);
+        const within = fixedWithin + vectors[0][0] * high + vectors[0][1] * low;
+        const between = fixedBetween + vectors[1][0] * high + vectors[1][1] * low;
+        const expectedHS = 1 - within;
+        const expectedHT = 1 - (within + (demes - 1) * between) / demes;
+        const expectedHST = expectedHT - expectedHS;
+        const values = {
+            D: within > 0 ? 1 - between / within : 0,
+            G_ST: expectedHT > 0 ? expectedHST / expectedHT : 0,
+            H_S: expectedHS,
+            H_T: expectedHT,
+            H_ST: expectedHST,
+        };
+        if (!Object.values(values).every(Number.isFinite)) {
+            return {};
+        }
+        for (const [name, value] of Object.entries(values)) {
+            series[name].push(value);
+        }
+    }
+    return series;
+}
+
+/**
  * Draw one or more named statistic-vs-generation curves on shared axes
  * (botanist GUI design doc §6.2's own "how it got here" trajectory
  * panel) — deliberately not a generalized version of `drawDifferentiation
@@ -741,6 +817,15 @@ function drawTrajectoryAxisTicks(
  *     grid to keep in sync. `null`/`undefined` (a batch, a non-scalar
  *     `N`/`m`, or a panel not otherwise showing anything to plot this
  *     against) draws nothing extra.
+ * @param {Object<string, number[]>|null|undefined} closedFormSeries the
+ *     expected trajectory of each drawn identity-based statistic
+ *     (`closedFormTrajectories`, below), one array per statistic, each
+ *     the same length as `generations` — drawn in that statistic's own
+ *     color as a dash-dot line, so it reads as "this statistic, as
+ *     theory expects it" beside its solid simulated curve. `renderTrajectory`
+ *     already dropped any statistic the legend toggle hides, so a hidden
+ *     measure takes its closed-form curve with it. `null`/`undefined`
+ *     or empty draws nothing extra.
  * @param {number|null} [scrubGeneration] the completed-state scrubber's
  *     own currently-scrubbed generation (`updateScrubbedTrajectory`,
  *     below, already resolves this to the nearest generation this
@@ -758,6 +843,7 @@ function drawTrajectoryCurve(
     sigmaBand,
     equilibrium,
     identityRecovery,
+    closedFormSeries,
     scrubGeneration
 ) {
     const context = canvas.getContext("2d");
@@ -783,6 +869,11 @@ function drawTrajectoryCurve(
     }
     if (equilibrium) {
         allValues.push(...Object.values(equilibrium));
+    }
+    if (closedFormSeries) {
+        for (const values of Object.values(closedFormSeries)) {
+            allValues.push(...values);
+        }
     }
     if (identityRecovery) {
         allValues.push(
@@ -919,6 +1010,31 @@ function drawTrajectoryCurve(
         context.setLineDash([]);
     }
 
+    // The closed-form expected trajectories: each drawn statistic's own
+    // color, dash-dot, so one measure's simulated curve, its flat
+    // equilibrium line and its expected trajectory read as the same
+    // statistic three ways. Drawn over the solid curves (thin, like the
+    // equilibrium line) so the run's scatter around theory stays visible.
+    if (closedFormSeries) {
+        context.lineWidth = 1.5;
+        context.setLineDash([8, 3, 2, 3]);
+        for (const [name, values] of Object.entries(closedFormSeries)) {
+            context.strokeStyle = STATISTIC_TRAJECTORY_COLORS[name] || mutedColor;
+            context.beginPath();
+            values.forEach((value, index) => {
+                const x = xToPixel(generations[index]);
+                const y = yToPixel(value);
+                if (index === 0) {
+                    context.moveTo(x, y);
+                } else {
+                    context.lineTo(x, y);
+                }
+            });
+            context.stroke();
+        }
+        context.setLineDash([]);
+    }
+
     // The identity-recovery closed-form curve (a second, different
     // theoretical reference from the equilibrium line just above — see
     // this function's own `identityRecovery` parameter doc): drawn in a
@@ -1040,6 +1156,12 @@ function setTrajectoryFrameHidden(hidden) {
  *     client-side — `run-view-running.js`'s own `setLiveIdentityRecoveryReference`)
  *     or `Api.open_run`'s identical field (a reopened run); `null`/
  *     `undefined` for a batch or a non-scalar `N`/`m`.
+ * @param {object|null|undefined} closedForm `Api.start_run`'s own
+ *     `closedForm` field (`_closed_form_trajectory_payload`: the solved
+ *     identity recursion's fixed point, eigenvalues, eigenvectors and
+ *     inverse) or `Api.open_run`'s identical field; `null`/`undefined`
+ *     for a batch or a configuration with no two-variable reduction
+ *     (per-deme `N`, a migration matrix, per-locus `mu`).
  * @param {number|null} [scrubGeneration] see `drawTrajectoryCurve`'s own
  *     parameter of the same name — threaded straight through unchanged;
  *     `undefined` for every existing caller (a live tick, a fresh
@@ -1053,6 +1175,7 @@ function renderTrajectory(
     generationCount,
     equilibrium,
     identityRecovery,
+    closedForm,
     scrubGeneration
 ) {
     // Cached so a legend click (`buildTrajectoryLegendItem`, below) can
@@ -1066,6 +1189,7 @@ function renderTrajectory(
         generationCount,
         equilibrium,
         identityRecovery,
+        closedForm,
         scrubGeneration,
     ];
     const hasCurve = generations && histories && generations.length > 0;
@@ -1142,6 +1266,21 @@ function renderTrajectory(
             ([name]) => !hiddenTrajectoryStatistics.has(name)
         )
     );
+    // The closed-form expected trajectories follow the same per-statistic
+    // visibility as the simulated curve they accompany: a statistic that
+    // is not plotted, or that the toggle hides, gets none. They need the
+    // run's own first `H_S`/`H_T` as the starting state, so a panel with
+    // no curve (a reopened run showing only its sigma band) has none.
+    const closedFormSeries = hasCurve
+        ? Object.fromEntries(
+              Object.entries(
+                  closedFormTrajectories(closedForm, effectiveGenerations, plottable)
+              ).filter(
+                  ([name]) =>
+                      name in visiblePlottable && !hiddenTrajectoryStatistics.has(name)
+              )
+          )
+        : {};
     drawTrajectoryCurve(
         canvas,
         effectiveGenerations,
@@ -1149,6 +1288,7 @@ function renderTrajectory(
         sigmaBand,
         visiblePlottableEquilibrium,
         identityRecovery,
+        closedFormSeries,
         scrubGeneration
     );
     runTrajectorySigmaBandCaption.replaceChildren();
@@ -1165,6 +1305,17 @@ function renderTrajectory(
         runTrajectorySigmaBandCaption.children.length === 0;
     refreshTrajectoryStatisticRowStates();
     runTrajectoryLegend.replaceChildren();
+    if (Object.keys(closedFormSeries).length > 0) {
+        const item = document.createElement("span");
+        item.className = "legend-item";
+        const swatch = document.createElement("span");
+        swatch.className = "swatch swatch-dashdot";
+        item.appendChild(swatch);
+        item.appendChild(
+            document.createTextNode("expected trajectory (closed form)")
+        );
+        runTrajectoryLegend.appendChild(item);
+    }
     // The identity-recovery closed-form curve's own legend entry (see
     // `drawTrajectoryCurve`'s own `identityRecovery` parameter doc for
     // the full "what this is and why it is not called D" explanation) —
@@ -1850,6 +2001,7 @@ function updateScrubbedTrajectory(frameGeneration, isFinalFrame) {
             completedGenerationCount,
             completedEquilibrium,
             completedIdentityRecovery,
+            completedClosedForm,
             null
         );
         return;
@@ -1919,6 +2071,7 @@ function updateScrubbedTrajectory(frameGeneration, isFinalFrame) {
         completedGenerationCount,
         completedEquilibrium,
         completedIdentityRecovery,
+        completedClosedForm,
         scrubGeneration
     );
 }
@@ -2296,6 +2449,7 @@ window.fim.enterCompletedState = function enterCompletedState(payload, isBatch) 
         completedSigmaBand = null;
         completedEquilibrium = null;
         completedIdentityRecovery = null;
+        completedClosedForm = null;
         completedGenerationCount = null;
         completedFinalStatistics = null;
         completedFinalLiteratureVisuals = null;
@@ -2344,6 +2498,7 @@ window.fim.enterCompletedState = function enterCompletedState(payload, isBatch) 
         completedSigmaBand = payload.sigmaBand || null;
         completedEquilibrium = payload.equilibrium || null;
         completedIdentityRecovery = payload.identityRecovery || null;
+        completedClosedForm = payload.closedForm || null;
         completedGenerationCount = payload.generationCount;
         completedFinalStatistics = payload.statistics;
         completedFinalLiteratureVisuals = payload.literatureVisuals || null;
@@ -2356,7 +2511,8 @@ window.fim.enterCompletedState = function enterCompletedState(payload, isBatch) 
             payload.sigmaBand,
             payload.generationCount,
             payload.equilibrium,
-            payload.identityRecovery
+            payload.identityRecovery,
+            payload.closedForm
         );
         wireCompletedScrubber(payload.outputDirectory, payload.generationCount);
     }

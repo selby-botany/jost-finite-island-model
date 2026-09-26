@@ -117,6 +117,7 @@ Every test module, fixture, and test function documented here in full; `doc/fim-
   - [`test_doc_links`](#validation.test_doc_links)
   - [`test_equilibrium`](#validation.test_equilibrium)
   - [`test_git_hooks`](#validation.test_git_hooks)
+  - [`test_identity_recursion_trajectory`](#validation.test_identity_recursion_trajectory)
   - [`test_install_sh`](#validation.test_install_sh)
   - [`test_packaging_spec`](#validation.test_packaging_spec)
   - [`test_python_wrappers`](#validation.test_python_wrappers)
@@ -8140,6 +8141,43 @@ def test_identity_recovery_reference_payload_is_none_for_a_migration_matrix(
 
 A migration matrix has no single scalar `m` this family of functions accepts.
 
+<a id="gui.test_app_api.test_closed_form_trajectory_payload_carries_the_solved_recursion"></a>
+
+#### test\_closed\_form\_trajectory\_payload\_carries\_the\_solved\_recursion
+
+```python
+def test_closed_form_trajectory_payload_carries_the_solved_recursion(
+        tiny_params: SimulationParams) -> None
+```
+
+`_closed_form_trajectory_payload` sends the recursion's own ingredients.
+
+The page evaluates `x* + V diag(lambda^t) V^-1 (x0 - x*)` from these;
+so the payload must be exactly `identity_recursion`'s fields, as plain
+lists, and JSON-serializable for the bridge.
+
+<a id="gui.test_app_api.test_closed_form_trajectory_payload_is_none_without_a_two_variable_reduction"></a>
+
+#### test\_closed\_form\_trajectory\_payload\_is\_none\_without\_a\_two\_variable\_reduction
+
+```python
+def test_closed_form_trajectory_payload_is_none_without_a_two_variable_reduction(
+        tiny_params: SimulationParams) -> None
+```
+
+Per-deme `N`, a migration matrix, per-locus `mu` and one deme get no curve.
+
+<a id="gui.test_app_api.test_closed_form_trajectory_payload_is_none_without_migration_or_mutation"></a>
+
+#### test\_closed\_form\_trajectory\_payload\_is\_none\_without\_migration\_or\_mutation
+
+```python
+def test_closed_form_trajectory_payload_is_none_without_migration_or_mutation(
+        tiny_params: SimulationParams) -> None
+```
+
+No migration and no mutation has no fixed point, so no curve (not an error).
+
 <a id="gui.test_app_api.test_get_equilibrium_sweep_holds_the_other_three_fields_fixed"></a>
 
 #### test\_get\_equilibrium\_sweep\_holds\_the\_other\_three\_fields\_fixed
@@ -9532,6 +9570,17 @@ A reopened run's own `identityRecovery` matches Whitlock's formulas directly.
 A second, different overlay from `equilibrium` immediately above
 (design doc §6.2) — computed fresh from the same reopened run's own
 manifest params.
+
+<a id="gui.test_app_api.test_open_run_carries_the_real_closed_form_trajectory"></a>
+
+#### test\_open\_run\_carries\_the\_real\_closed\_form\_trajectory
+
+```python
+def test_open_run_carries_the_real_closed_form_trajectory(
+        tmp_path: Path) -> None
+```
+
+A reopened run's own `closedForm` is the solved recursion for its params.
 
 <a id="gui.test_app_api.test_open_run_choose_reanalyzes_an_earlier_generation_as_re_analysis"></a>
 
@@ -16803,6 +16852,37 @@ report statistics the row toggle scopes to) stays untouched;
 clicking it again must restore the exact original pixel count,
 proving the toggle is purely a display filter, never a re-request or
 a loss of the underlying data.
+
+<a id="gui.test_running_screen.test_closed_form_curves_follow_each_measures_own_toggle"></a>
+
+#### test\_closed\_form\_curves\_follow\_each\_measures\_own\_toggle
+
+```python
+def test_closed_form_curves_follow_each_measures_own_toggle(
+        fast_scalar_run_settings: Path) -> None
+```
+
+The expected-trajectory curves are shown and hidden with their measure.
+
+A finished run draws each identity-based statistic's closed-form
+trajectory beside its simulated curve. Hiding every measure the
+closed form covers removes the legend entry; showing one again brings
+it back.
+
+<a id="gui.test_running_screen.test_page_evaluation_of_the_closed_form_matches_the_python_recursion"></a>
+
+#### test\_page\_evaluation\_of\_the\_closed\_form\_matches\_the\_python\_recursion
+
+```python
+def test_page_evaluation_of_the_closed_form_matches_the_python_recursion(
+) -> None
+```
+
+`closedFormTrajectories` in the page equals `IdentityRecursion` in Python.
+
+The two halves of one formula must not drift apart: the server solves
+the recursion, the page evaluates it at the run's own generations from
+the run's own first `H_S`/`H_T`.
 
 <a id="gui.test_running_screen.test_trajectory_panel_updates_live_while_a_run_is_still_going"></a>
 
@@ -26264,6 +26344,50 @@ def test_installer_links_all_repository_hooks(tmp_path: Path) -> None
 ```
 
 The installer links each documented hook into a fixture repository.
+
+<a id="validation.test_identity_recursion_trajectory"></a>
+
+# validation.test\_identity\_recursion\_trajectory
+
+The closed-form expected trajectory tracks the real engine, generation by generation.
+
+`test/statistics/test_identity_recursion.py` proves the closed form equals
+the identity recursion it solves. This proves the recursion is the engine's:
+the mean of seeded engine runs must sit on the closed-form curve at every
+checkpoint, starting each run's curve from that run's own first `H_S`/`H_T`
+exactly as the Run card does.
+
+The band is measured, not assumed: at each checkpoint the paired difference
+(simulated minus closed form) is averaged over the replicates and must lie
+within five standard errors of zero. Runs are seeded, so the outcome is a
+pure function of the commit.
+
+<a id="validation.test_identity_recursion_trajectory.engine_histories"></a>
+
+#### engine\_histories
+
+```python
+@pytest.fixture(scope="module")
+def engine_histories(
+    tmp_path_factory: pytest.TempPathFactory
+) -> list[tuple[list[int], dict[str, list[float]]]]
+```
+
+Run every seeded replicate once, shared by both statistics' tests.
+
+<a id="validation.test_identity_recursion_trajectory.test_engine_mean_sits_on_the_closed_form_curve"></a>
+
+#### test\_engine\_mean\_sits\_on\_the\_closed\_form\_curve
+
+```python
+@pytest.mark.parametrize("name", ["D", "G_ST"])
+def test_engine_mean_sits_on_the_closed_form_curve(
+        name: str, engine_histories: list[tuple[list[int],
+                                                dict[str,
+                                                     list[float]]]]) -> None
+```
+
+Mean simulated `D`/`G_ST` matches the closed form at five checkpoints.
 
 <a id="validation.test_install_sh"></a>
 

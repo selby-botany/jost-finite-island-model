@@ -78,6 +78,7 @@ from fim.statistics import (
     identity_recovery_equilibrium,
     identity_recovery_half_life,
     identity_recovery_rate,
+    identity_recursion,
     mutation_negligible_equilibrium,
 )
 from fim.viz.scatter import frequency_points, pooled_scatter_panels
@@ -1162,6 +1163,69 @@ def test_identity_recovery_reference_payload_is_none_for_a_migration_matrix(
     params = replace(tiny_params, m=((0.9, 0.1), (0.1, 0.9)))
 
     assert app_module._identity_recovery_reference_payload(params) is None
+
+
+def test_closed_form_trajectory_payload_carries_the_solved_recursion(
+    tiny_params: SimulationParams,
+) -> None:
+    """`_closed_form_trajectory_payload` sends the recursion's own ingredients.
+
+    The page evaluates `x* + V diag(lambda^t) V^-1 (x0 - x*)` from these;
+    so the payload must be exactly `identity_recursion`'s fields, as plain
+    lists, and JSON-serializable for the bridge.
+    """
+    assert isinstance(tiny_params.gene_copies, int)
+    assert isinstance(tiny_params.m, float)
+    assert isinstance(tiny_params.mu, float)
+
+    result = app_module._closed_form_trajectory_payload(tiny_params)
+
+    recursion = identity_recursion(
+        tiny_params.gene_copies, tiny_params.m, tiny_params.mu, tiny_params.d
+    )
+    assert result == {
+        "demes": tiny_params.d,
+        "fixedPoint": list(recursion.fixed_point),
+        "eigenvalues": list(recursion.eigenvalues),
+        "eigenvectors": [list(row) for row in recursion.eigenvectors],
+        "inverse": [list(row) for row in recursion.inverse],
+    }
+    assert json.loads(json.dumps(result)) == result
+
+
+def test_closed_form_trajectory_payload_is_none_without_a_two_variable_reduction(
+    tiny_params: SimulationParams,
+) -> None:
+    """Per-deme `N`, a migration matrix, per-locus `mu` and one deme get no curve."""
+    per_locus_mu = replace(
+        tiny_params,
+        loci=(LocusSpec(1, 200), LocusSpec(2, 200)),
+        mu=(0.01, 0.02),
+    )
+    assert isinstance(per_locus_mu.mu, tuple)
+
+    assert (
+        app_module._closed_form_trajectory_payload(
+            replace(tiny_params, gene_copies=(10, 20))
+        )
+        is None
+    )
+    assert (
+        app_module._closed_form_trajectory_payload(
+            replace(tiny_params, m=((0.9, 0.1), (0.1, 0.9)))
+        )
+        is None
+    )
+    assert app_module._closed_form_trajectory_payload(per_locus_mu) is None
+
+
+def test_closed_form_trajectory_payload_is_none_without_migration_or_mutation(
+    tiny_params: SimulationParams,
+) -> None:
+    """No migration and no mutation has no fixed point, so no curve (not an error)."""
+    params = replace(tiny_params, m=0.0, mu=0.0)
+
+    assert app_module._closed_form_trajectory_payload(params) is None
 
 
 def test_get_equilibrium_sweep_holds_the_other_three_fields_fixed() -> None:
@@ -3410,6 +3474,19 @@ def test_open_run_carries_the_real_identity_recovery_reference(tmp_path: Path) -
         "rate": identity_recovery_rate(20, 0.1),
         "equilibrium": identity_recovery_equilibrium(20, 0.1),
     }
+
+
+def test_open_run_carries_the_real_closed_form_trajectory(tmp_path: Path) -> None:
+    """A reopened run's own `closedForm` is the solved recursion for its params."""
+    output = _write_run(tmp_path)
+
+    result = Api().open_run({"trajectoryPath": str(output / "trajectory.jsonl")})
+
+    assert result["ok"] is True
+    recursion = identity_recursion(20, 0.1, 0.01, 2)
+    assert result["closedForm"]["fixedPoint"] == list(recursion.fixed_point)
+    assert result["closedForm"]["eigenvalues"] == list(recursion.eigenvalues)
+    assert result["closedForm"]["demes"] == 2
 
 
 def test_open_run_choose_reanalyzes_an_earlier_generation_as_re_analysis(

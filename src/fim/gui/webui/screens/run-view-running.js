@@ -148,6 +148,11 @@ let liveEquilibriumReference = null;
 // above.
 let liveIdentityRecoveryReference = null;
 
+// The live trajectory's own closed-form expected D(t)/G_ST(t) payload
+// (`_closed_form_trajectory_payload`, `fim/gui/app.py`) — cached and reset
+// exactly like the two references above.
+let liveClosedForm = null;
+
 /**
  * Apply just the run-kind-dependent parts of the running state.
  *
@@ -215,6 +220,7 @@ function enterRunningState(isBatch = false) {
     // resolves (`setLiveEquilibriumReference`, below).
     liveEquilibriumReference = null;
     liveIdentityRecoveryReference = null;
+    liveClosedForm = null;
     // A genuinely new run starting is one of the two points the
     // trajectory legend's own display-only visibility toggle resets
     // (design §6.2's legend-toggle; `run-view-completed.js`'s own
@@ -300,6 +306,18 @@ window.fim.setLiveIdentityRecoveryReference = function setLiveIdentityRecoveryRe
     identityRecovery
 ) {
     liveIdentityRecoveryReference = identityRecovery ?? null;
+};
+
+/**
+ * Cache the live trajectory's closed-form expected-trajectory payload for
+ * the run that just started — same calling convention as
+ * `setLiveIdentityRecoveryReference` immediately above (its `closedForm`
+ * field of `Api.start_run`'s result).
+ *
+ * @param {object|null|undefined} closedForm
+ */
+window.fim.setLiveClosedForm = function setLiveClosedForm(closedForm) {
+    liveClosedForm = closedForm ?? null;
 };
 
 function drawProgressPanels(payload) {
@@ -541,6 +559,7 @@ window.fim.onRunProgress = function onRunProgress(payload) {
                 undefined,
                 liveEquilibriumReference,
                 liveIdentityRecoveryReference,
+                liveClosedForm,
                 isLiveHead ? null : f.generation
             );
         }

@@ -3792,8 +3792,8 @@ driver thread, before this method was written; see
 **Returns**:
 
 - ``{"ok"` - True, "isBatch": ..., "equilibrium": ...,
-- `"identityRecovery"` - ...}` once the run has *started* — not
-  once it finishes; the real outcome arrives via the pushed
+- `"identityRecovery"` - ..., "closedForm": ...}` once the run has
+  *started* — not once it finishes; the real outcome arrives via the pushed
   calls above. `isBatch` is `params.n_replicates > 1`, the
   identical "batch or scalar" toggle `_start_batch_run`'s own
   dispatch above already used — `run-view-controls.js`'s own
@@ -3806,15 +3806,19 @@ driver thread, before this method was written; see
   `identityRecovery` is `_identity_recovery_reference_
   payload`'s own result (that same section's closed-form
   recovery *curve*, a second and different reference overlay —
-  see that function's own docstring). Both `None` for a batch
-  (never computed there — batch has no trajectory panel of its
-  own to overlay onto) or for a scalar run whose `N`/`m`(/`mu`,
-  for `equilibrium` only) are not all plain scalars; the page
-  caches both client-side for the live trajectory panel to
-  draw against on every subsequent progress tick (`webui/
-  screens/run-view-running.js`'s own `setLiveEquilibriumReference`/
-  `setLiveIdentityRecoveryReference`), and the same values are
-  reused, not recomputed, in the eventual `"done"` push
+  see that function's own docstring); `closedForm` is
+  `_closed_form_trajectory_payload`'s own result (the same
+  section's closed-form `D(t)`/`G_ST(t)` curves). All three are
+  `None` for a batch (never computed there — batch has no
+  trajectory panel of its own to overlay onto) or for a scalar
+  run whose `N`/`m`(/`mu`, for `equilibrium` and `closedForm`)
+  are not all plain scalars; the page caches them client-side
+  for the live trajectory panel to draw against on every
+  subsequent progress tick (`webui/screens/run-view-running.js`'s
+  own `setLiveEquilibriumReference`/
+  `setLiveIdentityRecoveryReference`/`setLiveClosedForm`), and
+  the same values are reused, not recomputed, in the eventual
+  `"done"` push
   (`_drain_run_messages`). `{"ok": False, "message": ...}` if
   the form does not validate, `study_id` does not name an
   existing Study, or the output directory cannot be allocated.

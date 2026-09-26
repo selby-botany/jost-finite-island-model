@@ -167,6 +167,7 @@ async function onRunClicked() {
     // batch/`null`-for-a-non-scalar-configuration shape as `started.
     // equilibrium` immediately above.
     window.fim.setLiveIdentityRecoveryReference(started.identityRecovery);
+    window.fim.setLiveClosedForm(started.closedForm);
 }
 
 async function onLoadYamlClicked() {
