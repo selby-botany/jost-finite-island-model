@@ -96,14 +96,13 @@ import json
 import logging
 import os
 import sys
-import tempfile
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass, replace
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any, Final
 
-from fim.paths import replace_with_retry
+from fim.paths import write_text_atomically
 
 logger = logging.getLogger(__name__)
 
@@ -718,17 +717,8 @@ def save_preferences(path: Path, preferences: GuiPreferences) -> None:
     write_progress_sidecar` — a concurrent reader always sees either the
     previous complete file or the new one, never a torn write.
     """
-    path.parent.mkdir(parents=True, exist_ok=True)
     payload = json.dumps(preferences.to_dict(), indent=2, sort_keys=True)
-    descriptor, temp_name = tempfile.mkstemp(dir=path.parent, prefix=".preferences-")
-    temp_path = Path(temp_name)
-    try:
-        with os.fdopen(descriptor, "w", encoding="utf-8") as temp_file:
-            temp_file.write(payload)
-        replace_with_retry(temp_path, path)
-    except BaseException:
-        temp_path.unlink(missing_ok=True)
-        raise
+    write_text_atomically(path, payload, prefix=".preferences-")
     logger.debug("wrote preferences: %s", path)
 
 

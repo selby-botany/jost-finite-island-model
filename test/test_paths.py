@@ -3,6 +3,7 @@ atomic-publish resolution."""
 
 from __future__ import annotations
 
+import stat
 import sys
 from datetime import UTC, datetime
 from pathlib import Path
@@ -406,3 +407,66 @@ def test_replace_with_retry_really_replaces_a_file(tmp_path: Path) -> None:
 
     assert target.read_text(encoding="utf-8") == "new"
     assert not source.exists()
+
+
+def _mode(path: Path) -> int:
+    """Return the permission bits of `path`."""
+    return stat.S_IMODE(path.stat().st_mode)
+
+
+def test_default_modes_follow_the_process_umask() -> None:
+    """Files get 666 and directories 777 minus the umask (usually 644 and 755)."""
+    assert paths.default_file_mode() == 0o666 & ~paths._UMASK
+    assert paths.default_directory_mode() == 0o777 & ~paths._UMASK
+
+
+def test_write_text_atomically_creates_an_ordinarily_readable_file(
+    tmp_path: Path,
+) -> None:
+    """The index files are not owner-only, which is what `mkstemp` would give."""
+    target = tmp_path / "nested" / "index.json"
+
+    paths.write_text_atomically(target, '{"a": 1}', prefix=".test-")
+
+    assert target.read_text(encoding="utf-8") == '{"a": 1}'
+    assert _mode(target) == paths.default_file_mode()
+    assert list(target.parent.iterdir()) == [target]
+
+
+def test_write_text_atomically_replaces_an_existing_file(tmp_path: Path) -> None:
+    """A second write replaces the first completely."""
+    target = tmp_path / "index.json"
+    paths.write_text_atomically(target, "first", prefix=".test-")
+
+    paths.write_text_atomically(target, "second", prefix=".test-")
+
+    assert target.read_text(encoding="utf-8") == "second"
+    assert _mode(target) == paths.default_file_mode()
+
+
+def test_write_text_atomically_leaves_no_temp_file_after_a_failure(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A failed replace removes its temporary file and keeps the old contents."""
+    target = tmp_path / "index.json"
+    paths.write_text_atomically(target, "keep me", prefix=".test-")
+
+    def refuse(source: Path, destination: Path) -> None:
+        raise OSError("refused")
+
+    monkeypatch.setattr(paths, "replace_with_retry", refuse)
+    with pytest.raises(OSError, match="refused"):
+        paths.write_text_atomically(target, "lose me", prefix=".test-")
+
+    assert target.read_text(encoding="utf-8") == "keep me"
+    assert list(tmp_path.iterdir()) == [target]
+
+
+def test_a_published_run_directory_has_ordinary_permissions(tmp_path: Path) -> None:
+    """`mkdtemp` makes a private folder; the published run folder is not."""
+    target = tmp_path / "run"
+
+    with paths.atomic_directory(target) as working:
+        (working / "report.json").write_text("{}", encoding="utf-8")
+
+    assert _mode(target) == paths.default_directory_mode()

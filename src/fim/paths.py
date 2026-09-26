@@ -149,6 +149,66 @@ def log_directory_override() -> Path | None:
     return _log_directory_override
 
 
+def _read_umask() -> int:
+    """Return the process umask without leaving it changed.
+
+    `os.umask` can only be read by setting it, so this sets it to zero and
+    puts the old value straight back. It runs once, at import, before the
+    program starts threads of its own.
+    """
+    current = os.umask(0)
+    os.umask(current)
+    return current
+
+
+_UMASK = _read_umask()
+"""The umask in force when `fim.paths` was imported."""
+
+
+def default_file_mode() -> int:
+    """Return the permission bits an ordinary new file gets (usually `0o644`).
+
+    `tempfile.mkstemp` deliberately creates files private to the owner
+    (`0o600`), which is right for a scratch file and wrong for the results
+    and index files a botanist's other tools, backups and colleagues read.
+    """
+    return 0o666 & ~_UMASK
+
+
+def default_directory_mode() -> int:
+    """Return the permission bits an ordinary new directory gets (usually `0o755`)."""
+    return 0o777 & ~_UMASK
+
+
+def write_text_atomically(path: Path, text: str, *, prefix: str) -> None:
+    """Write `text` to `path` so a reader sees the old file or the new one, never half.
+
+    The text goes to a temporary file in the same directory, which is given
+    the ordinary permissions a new file would have had (not the owner-only
+    ones `mkstemp` picks), then replaces `path` in one rename. Shared by the
+    Study and Experiment indexes, run metadata, the progress sidecar and the
+    preferences file, which each used to repeat this idiom and each ended up
+    unreadable to anyone but the owner.
+
+    Args:
+        path: The file to write. Its parent directory is created if needed.
+        text: The complete new contents.
+        prefix: Prefix for the temporary file's name, which shows what was
+            being written if a crash leaves one behind.
+    """
+    path.parent.mkdir(parents=True, exist_ok=True)
+    descriptor, temp_name = tempfile.mkstemp(dir=path.parent, prefix=prefix)
+    temp_path = Path(temp_name)
+    try:
+        with os.fdopen(descriptor, "w", encoding="utf-8") as temp_file:
+            temp_file.write(text)
+        temp_path.chmod(default_file_mode())
+        replace_with_retry(temp_path, path)
+    except BaseException:
+        temp_path.unlink(missing_ok=True)
+        raise
+
+
 # Bounded, fixed retry for `replace_with_retry`: 10 attempts 20 ms apart,
 # so a genuinely stuck target fails after about 0.2 s rather than hanging.
 _REPLACE_ATTEMPTS = 10
@@ -268,6 +328,9 @@ def atomic_directory(target: Path) -> Iterator[Path]:
     working_directory = Path(
         tempfile.mkdtemp(prefix=f".{target.name}.", dir=target.parent)
     )
+    # `mkdtemp` makes the folder private to its owner; a published run
+    # folder should be as readable as any other folder the user creates.
+    working_directory.chmod(default_directory_mode())
     logger.debug("building %s in temporary directory %s", target, working_directory)
     try:
         # Hand the temporary folder to the caller's own `with` block —

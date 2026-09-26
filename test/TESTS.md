@@ -1682,6 +1682,60 @@ def test_replace_with_retry_really_replaces_a_file(tmp_path: Path) -> None
 
 The happy path on a real filesystem: content is swapped in.
 
+<a id="test.test_paths.test_default_modes_follow_the_process_umask"></a>
+
+#### test\_default\_modes\_follow\_the\_process\_umask
+
+```python
+def test_default_modes_follow_the_process_umask() -> None
+```
+
+Files get 666 and directories 777 minus the umask (usually 644 and 755).
+
+<a id="test.test_paths.test_write_text_atomically_creates_an_ordinarily_readable_file"></a>
+
+#### test\_write\_text\_atomically\_creates\_an\_ordinarily\_readable\_file
+
+```python
+def test_write_text_atomically_creates_an_ordinarily_readable_file(
+        tmp_path: Path) -> None
+```
+
+The index files are not owner-only, which is what `mkstemp` would give.
+
+<a id="test.test_paths.test_write_text_atomically_replaces_an_existing_file"></a>
+
+#### test\_write\_text\_atomically\_replaces\_an\_existing\_file
+
+```python
+def test_write_text_atomically_replaces_an_existing_file(
+        tmp_path: Path) -> None
+```
+
+A second write replaces the first completely.
+
+<a id="test.test_paths.test_write_text_atomically_leaves_no_temp_file_after_a_failure"></a>
+
+#### test\_write\_text\_atomically\_leaves\_no\_temp\_file\_after\_a\_failure
+
+```python
+def test_write_text_atomically_leaves_no_temp_file_after_a_failure(
+        tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None
+```
+
+A failed replace removes its temporary file and keeps the old contents.
+
+<a id="test.test_paths.test_a_published_run_directory_has_ordinary_permissions"></a>
+
+#### test\_a\_published\_run\_directory\_has\_ordinary\_permissions
+
+```python
+def test_a_published_run_directory_has_ordinary_permissions(
+        tmp_path: Path) -> None
+```
+
+`mkdtemp` makes a private folder; the published run folder is not.
+
 <a id="test.test_reanalyze"></a>
 
 # test.test\_reanalyze
@@ -15418,6 +15472,16 @@ def test_a_current_version_file_keeps_an_explicit_window(
 
 Version 2 files hold what the user chose; nothing is reset.
 
+<a id="gui.test_preferences.test_the_preferences_file_is_not_owner_only"></a>
+
+#### test\_the\_preferences\_file\_is\_not\_owner\_only
+
+```python
+def test_the_preferences_file_is_not_owner_only(tmp_path: Path) -> None
+```
+
+Saved preferences are readable like any other file the user creates.
+
 <a id="gui.test_presets"></a>
 
 # gui.test\_presets
@@ -22786,6 +22850,17 @@ def test_deleting_a_study_keeps_a_run_another_study_also_links(
 ```
 
 A Run is a link; deleting one Study never deletes a Run another links.
+
+<a id="persistence.test_groups.test_the_study_and_experiment_indexes_are_not_owner_only"></a>
+
+#### test\_the\_study\_and\_experiment\_indexes\_are\_not\_owner\_only
+
+```python
+def test_the_study_and_experiment_indexes_are_not_owner_only(
+        tmp_path: Path) -> None
+```
+
+The index files are readable like any other file the user creates.
 
 <a id="persistence.test_manifest"></a>
 

@@ -9,9 +9,11 @@ never need one).
 from __future__ import annotations
 
 import json
+import stat
 from datetime import UTC, datetime
 from pathlib import Path
 
+from fim import paths
 from fim.gui import preferences as preferences_module
 from fim.gui.preferences import (
     CURRENT_SCHEMA_VERSION,
@@ -755,3 +757,11 @@ def test_a_current_version_file_keeps_an_explicit_window(tmp_path: Path) -> None
     loaded, _ = load_preferences(path)
 
     assert loaded.form_values == {"convergence_window": "50"}
+
+
+def test_the_preferences_file_is_not_owner_only(tmp_path: Path) -> None:
+    """Saved preferences are readable like any other file the user creates."""
+    path = tmp_path / "preferences.json"
+    save_preferences(path, GuiPreferences())
+
+    assert stat.S_IMODE(path.stat().st_mode) == paths.default_file_mode()

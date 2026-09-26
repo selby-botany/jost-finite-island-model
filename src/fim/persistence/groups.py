@@ -35,10 +35,8 @@ from __future__ import annotations
 
 import json
 import logging
-import os
 import secrets
 import shutil
-import tempfile
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, replace
 from datetime import UTC, datetime
@@ -375,18 +373,10 @@ def write_experiment_manifest(path: Path | str, manifest: ExperimentManifest) ->
 
 
 def _write_json_atomically(path: Path, payload: object, *, prefix: str) -> None:
-    """Shared mkstemp-then-replace body for the two write functions above."""
-    path.parent.mkdir(parents=True, exist_ok=True)
-    text = json.dumps(payload, indent=2, sort_keys=True)
-    descriptor, temp_name = tempfile.mkstemp(dir=path.parent, prefix=prefix)
-    temp_path = Path(temp_name)
-    try:
-        with os.fdopen(descriptor, "w", encoding="utf-8") as temp_file:
-            temp_file.write(text)
-        paths.replace_with_retry(temp_path, path)
-    except BaseException:
-        temp_path.unlink(missing_ok=True)
-        raise
+    """Shared atomic JSON write for the two write functions above."""
+    paths.write_text_atomically(
+        path, json.dumps(payload, indent=2, sort_keys=True), prefix=prefix
+    )
 
 
 def create_study(

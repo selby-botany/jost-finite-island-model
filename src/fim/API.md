@@ -394,6 +394,9 @@ Return to the [source-tree orientation](../README.md) or the [developer guide](.
   * [results\_directory\_override](#fim.paths.results_directory_override)
   * [set\_log\_directory\_override](#fim.paths.set_log_directory_override)
   * [log\_directory\_override](#fim.paths.log_directory_override)
+  * [default\_file\_mode](#fim.paths.default_file_mode)
+  * [default\_directory\_mode](#fim.paths.default_directory_mode)
+  * [write\_text\_atomically](#fim.paths.write_text_atomically)
   * [replace\_with\_retry](#fim.paths.replace_with_retry)
   * [atomic\_directory](#fim.paths.atomic_directory)
   * [default\_output\_directory](#fim.paths.default_output_directory)
@@ -12502,6 +12505,54 @@ def log_directory_override() -> Path | None
 ```
 
 The current `log_directory()` override, if any.
+
+<a id="fim.paths.default_file_mode"></a>
+
+#### default\_file\_mode
+
+```python
+def default_file_mode() -> int
+```
+
+Return the permission bits an ordinary new file gets (usually `0o644`).
+
+`tempfile.mkstemp` deliberately creates files private to the owner
+(`0o600`), which is right for a scratch file and wrong for the results
+and index files a botanist's other tools, backups and colleagues read.
+
+<a id="fim.paths.default_directory_mode"></a>
+
+#### default\_directory\_mode
+
+```python
+def default_directory_mode() -> int
+```
+
+Return the permission bits an ordinary new directory gets (usually `0o755`).
+
+<a id="fim.paths.write_text_atomically"></a>
+
+#### write\_text\_atomically
+
+```python
+def write_text_atomically(path: Path, text: str, *, prefix: str) -> None
+```
+
+Write `text` to `path` so a reader sees the old file or the new one, never half.
+
+The text goes to a temporary file in the same directory, which is given
+the ordinary permissions a new file would have had (not the owner-only
+ones `mkstemp` picks), then replaces `path` in one rename. Shared by the
+Study and Experiment indexes, run metadata, the progress sidecar and the
+preferences file, which each used to repeat this idiom and each ended up
+unreadable to anyone but the owner.
+
+**Arguments**:
+
+- `path` - The file to write. Its parent directory is created if needed.
+- `text` - The complete new contents.
+- `prefix` - Prefix for the temporary file's name, which shows what was
+  being written if a crash leaves one behind.
 
 <a id="fim.paths.replace_with_retry"></a>
 

@@ -35,8 +35,6 @@ from __future__ import annotations
 
 import json
 import logging
-import os
-import tempfile
 import threading
 from collections.abc import Callable, Iterable, Iterator, Mapping, Sequence
 from datetime import UTC, datetime
@@ -45,7 +43,7 @@ from typing import Any
 
 from fim.model.locus import LocusSpec
 from fim.model.state import ModelState
-from fim.paths import replace_with_retry
+from fim.paths import write_text_atomically
 from fim.persistence.store import TrajectoryRow, TrajectoryStore
 from fim.reanalyze import group_rows_by_generation
 
@@ -236,17 +234,7 @@ def write_progress_sidecar(progress_path: Path, generation: int) -> None:
     torn write — no lock needed on either side.
     """
     payload = json.dumps({"generation": generation, "written_at": _iso_now()})
-    descriptor, temp_name = tempfile.mkstemp(
-        dir=progress_path.parent, prefix=".progress-"
-    )
-    temp_path = Path(temp_name)
-    try:
-        with os.fdopen(descriptor, "w", encoding="utf-8") as temp_file:
-            temp_file.write(payload)
-        replace_with_retry(temp_path, progress_path)
-    except BaseException:
-        temp_path.unlink(missing_ok=True)
-        raise
+    write_text_atomically(progress_path, payload, prefix=".progress-")
     # Guarded like `fim.persistence.jsonl_store.JSONLTrajectoryStore.
     # write_generation` (`doc/fim-logging-design.md` §9): called once
     # per generation for the life of a replicate. This runs inside a

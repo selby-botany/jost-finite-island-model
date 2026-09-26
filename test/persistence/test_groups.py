@@ -3,11 +3,13 @@
 from __future__ import annotations
 
 import shutil
+import stat
 from datetime import UTC, datetime
 from pathlib import Path
 
 import pytest
 
+from fim import paths
 from fim.persistence.groups import (
     DEFAULT_EXPERIMENT_ID,
     DEFAULT_EXPERIMENT_NAME,
@@ -625,3 +627,15 @@ def test_removing_run_references_unlinks_a_deleted_run_everywhere(
 
     assert get_study(first.study_id, results=tmp_path).run_directories == ("run-b",)
     assert get_study(second.study_id, results=tmp_path).run_directories == ()
+
+
+def test_the_study_and_experiment_indexes_are_not_owner_only(tmp_path: Path) -> None:
+    """The index files are readable like any other file the user creates."""
+    study = create_study("Readable", results=tmp_path)
+    experiment = create_experiment("Readable too", results=tmp_path)
+
+    for path in (
+        study_manifest_path(study.study_id, results=tmp_path),
+        experiment_manifest_path(experiment.experiment_id, results=tmp_path),
+    ):
+        assert stat.S_IMODE(path.stat().st_mode) == paths.default_file_mode()

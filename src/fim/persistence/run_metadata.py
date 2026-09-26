@@ -21,15 +21,13 @@ from __future__ import annotations
 
 import json
 import logging
-import os
-import tempfile
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
-from fim.paths import replace_with_retry
+from fim.paths import write_text_atomically
 
 logger = logging.getLogger(__name__)
 
@@ -158,19 +156,11 @@ def write_run_metadata(path: Path | str, metadata: RunMetadata) -> None:
     its own atomicity here rather than inheriting a caller's.
     """
     metadata_path = Path(path)
-    metadata_path.parent.mkdir(parents=True, exist_ok=True)
-    payload = json.dumps(metadata.to_dict(), indent=2, sort_keys=True)
-    descriptor, temp_name = tempfile.mkstemp(
-        dir=metadata_path.parent, prefix=".metadata-"
+    write_text_atomically(
+        metadata_path,
+        json.dumps(metadata.to_dict(), indent=2, sort_keys=True),
+        prefix=".metadata-",
     )
-    temp_path = Path(temp_name)
-    try:
-        with os.fdopen(descriptor, "w", encoding="utf-8") as temp_file:
-            temp_file.write(payload)
-        replace_with_retry(temp_path, metadata_path)
-    except BaseException:
-        temp_path.unlink(missing_ok=True)
-        raise
     logger.debug("wrote run metadata: %s", metadata_path)
 
 
