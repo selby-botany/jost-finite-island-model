@@ -68,7 +68,7 @@ from fim import __version__, logging_setup, paths, reanalyze, update
 from fim.cli_sweep import add_sweep_subcommands, command_sweep
 from fim.convergence.defaults import describe_derived_convergence
 from fim.engine import RunResult, deterministic_run_id, fim, replicate_summary
-from fim.model.params import SimulationParams
+from fim.model.params import SimulationParams, describe_population
 from fim.persistence.groups import (
     ExperimentManifest,
     StudyManifest,
@@ -396,9 +396,9 @@ def _command_run(arguments: argparse.Namespace, parser: argparse.ArgumentParser)
         else paths.default_output_directory()
     )
     logger.debug(
-        "config loaded: N=%s, d=%s, m=%s, mu=%s, seed=%s, n_replicates=%s, "
+        "config loaded: %s, d=%s, m=%s, mu=%s, seed=%s, n_replicates=%s, "
         "output_directory=%s",
-        params.gene_copies,
+        describe_population(params),
         params.d,
         params.m,
         params.mu,
@@ -485,9 +485,9 @@ def _command_run_scalar(
     """
     run_id = deterministic_run_id(params)
     logger.info(
-        "starting scalar run %s (N=%s, d=%s, m=%s, mu=%s, seed=%s)",
+        "starting scalar run %s (%s, d=%s, m=%s, mu=%s, seed=%s)",
         run_id,
-        params.gene_copies,
+        describe_population(params),
         params.d,
         params.m,
         params.mu,
@@ -496,7 +496,7 @@ def _command_run_scalar(
     if not quiet:
         print(
             f"Running {run_id} "
-            f"(N={params.gene_copies}, d={params.d}, m={params.m}, "
+            f"({describe_population(params)}, d={params.d}, m={params.m}, "
             f"mu={params.mu}, seed={params.seed})"
         )
         _print_derived_convergence(params)
@@ -923,8 +923,9 @@ def _batch_description(params: SimulationParams, max_workers: int | None) -> str
     else:
         concurrency = f"engine_backend={params.engine_backend!r}"
     return (
-        f"(N={params.gene_copies}, d={params.d}, m={params.m}, mu={params.mu}, "
-        f"seed={params.seed}, n_replicates={params.n_replicates}{adaptive}) "
+        f"({describe_population(params)}, d={params.d}, m={params.m}, "
+        f"mu={params.mu}, seed={params.seed}, "
+        f"n_replicates={params.n_replicates}{adaptive}) "
         f"[{concurrency}]"
     )
 

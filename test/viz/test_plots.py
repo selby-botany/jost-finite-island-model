@@ -91,7 +91,7 @@ def test_direct_scatter_has_deme_axes_and_parameter_title(tmp_path: Path) -> Non
     assert len(figure.axes) == 1
     assert figure.axes[0].get_xlabel() == "Deme 1"
     assert figure.axes[0].get_ylabel() == "Deme 2"
-    assert "N=20" in figure.get_suptitle()
+    assert "20 haploid individuals per deme" in figure.get_suptitle()
     plt.close(figure)
 
 
@@ -767,3 +767,22 @@ def test_pca_project_handles_a_single_point_without_svd() -> None:
 
     assert projected.shape == (1, 2)
     assert tuple(projected[0]) == (0.0, 0.0)
+
+
+def test_scatter_title_states_individuals_and_ploidy_for_a_diploid_run() -> None:
+    """The title says 10 diploid individuals, not the 20 gene copies inside."""
+    params = SimulationParams(
+        gene_copies=20,
+        m=0.1,
+        mu=0.001,
+        d=2,
+        seed=3,
+        loci=(LocusSpec(1, 100),),
+        ploidy=2,
+    )
+
+    figure = plot_frequency_scatter(_state(2), params)
+
+    assert "10 diploid individuals per deme" in figure.get_suptitle()
+    assert "gene" not in figure.get_suptitle()
+    plt.close(figure)

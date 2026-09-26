@@ -3194,6 +3194,17 @@ def test_a_derived_run_that_hits_its_cap_names_the_relaxation_time(
 
 Reaching the cap explains how long the model needs.
 
+<a id="cli.test_cli.test_a_run_banner_states_individuals_and_ploidy_not_gene_copies"></a>
+
+#### test\_a\_run\_banner\_states\_individuals\_and\_ploidy\_not\_gene\_copies
+
+```python
+def test_a_run_banner_states_individuals_and_ploidy_not_gene_copies(
+        tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None
+```
+
+A botanist who wrote 225 diploid individuals sees exactly that.
+
 <a id="cli.test_cli_sweep"></a>
 
 # cli.test\_cli\_sweep
@@ -28530,5 +28541,16 @@ def test_pca_project_handles_a_single_point_without_svd() -> None
 ```
 
 A single-row input skips SVD entirely, matching `_plot_pca`'s special case.
+
+<a id="viz.test_plots.test_scatter_title_states_individuals_and_ploidy_for_a_diploid_run"></a>
+
+#### test\_scatter\_title\_states\_individuals\_and\_ploidy\_for\_a\_diploid\_run
+
+```python
+def test_scatter_title_states_individuals_and_ploidy_for_a_diploid_run(
+) -> None
+```
+
+The title says 10 diploid individuals, not the 20 gene copies inside.
 
 

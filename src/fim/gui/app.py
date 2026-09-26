@@ -930,18 +930,11 @@ def _run_config_summary(params: SimulationParams) -> dict[str, str]:
         matrix or a `mu_b`-derived rate compares as a single field like
         every other, not several.
     """
-    # Individuals with their ploidy when the run recorded one ("225
-    # diploid"), gene copies otherwise -- the same two things the
+    # Individuals with their ploidy ("225 diploid"): the same two things the
     # Configure form shows and asks for.
-    ploidy = params.ploidy or 1
-    counts = (
-        [params.gene_copies] * 1
-        if isinstance(params.gene_copies, int)
-        else list(params.gene_copies)
-    )
-    n_text = ",".join(str(value // ploidy) for value in counts)
-    if params.ploidy is not None:
-        n_text = f"{n_text} {PLOIDY_NAMES[params.ploidy]}"
+    individuals = params.individuals
+    counts = [individuals] if isinstance(individuals, int) else list(individuals)
+    n_text = f"{','.join(map(str, counts))} {PLOIDY_NAMES[params.ploidy]}"
     m_values = m_from_params(params)
     if m_values["m_mode"] == "scalar":
         m_text = m_values["m_rate"]

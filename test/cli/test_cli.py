@@ -1850,3 +1850,17 @@ def test_a_derived_run_that_hits_its_cap_names_the_relaxation_time(
     assert cli.main(["run", str(config), "--output", str(tmp_path / "out")]) == 0
 
     assert "did not settle within 200 generations" in capsys.readouterr().out
+
+
+def test_a_run_banner_states_individuals_and_ploidy_not_gene_copies(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """A botanist who wrote 225 diploid individuals sees exactly that."""
+    config = tmp_path / "config.yaml"
+    _write_config(config, N=225, ploidy="diploid")
+
+    assert cli.main(["run", str(config), "--output", str(tmp_path / "out")]) == 0
+
+    banner = capsys.readouterr().out.splitlines()[0]
+    assert "225 diploid individuals per deme" in banner
+    assert "N=450" not in banner

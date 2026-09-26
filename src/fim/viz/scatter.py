@@ -22,7 +22,7 @@ from matplotlib.patches import Patch
 from numpy.typing import NDArray
 
 from fim.model.allele import AlleleId
-from fim.model.params import SimulationParams
+from fim.model.params import SimulationParams, describe_population
 from fim.model.state import ModelState
 
 FloatArray: TypeAlias = NDArray[np.float64]
@@ -772,6 +772,6 @@ def _highlighted_indices(*frequencies: FloatArray) -> frozenset[int]:
 def _title(params: SimulationParams) -> str:
     """Return the required self-describing plot title."""
     return (
-        f"Finite island model: N={params.gene_copies}, m={params.m}, "
+        f"Finite island model: {describe_population(params)}, m={params.m}, "
         f"mu={params.mu}, d={params.d}"
     )
