@@ -23,7 +23,14 @@ import yaml
 
 from fim import cli
 from fim.gui.trajectory_history import sampled_statistic_history
-from fim.statistics import identities_from_heterozygosities, identity_recursion
+from fim.model.initial import generate_initial_state
+from fim.model.params import SimulationParams
+from fim.statistics import (
+    identities_from_heterozygosities,
+    identity_matrix_from_frequencies,
+    identity_recursion,
+    matrix_identity_trajectory,
+)
 
 pytestmark = [pytest.mark.slow, pytest.mark.statistical]
 
@@ -92,6 +99,99 @@ def test_engine_mean_sits_on_the_closed_form_curve(
         )
 
     generations = engine_histories[0][0]
+    checkpoints = np.linspace(0, len(generations) - 1, 5, dtype=int)
+    for checkpoint in checkpoints:
+        column = [row[checkpoint] for row in differences]
+        standard_error = statistics.stdev(column) / len(column) ** 0.5
+        assert (
+            abs(statistics.fmean(column)) <= STANDARD_ERRORS * standard_error + 1e-9
+        ), (
+            f"{name} at generation {generations[checkpoint]}: mean difference "
+            f"{statistics.fmean(column):.4f}, standard error {standard_error:.4f}"
+        )
+
+
+HUB_CONFIG = {
+    "N": [20, 20, 20, 80],
+    "ploidy": "haploid",
+    "d": 4,
+    "m": [
+        [0.95, 0.02, 0.02, 0.01],
+        [0.02, 0.95, 0.02, 0.01],
+        [0.02, 0.02, 0.95, 0.01],
+        [0.01, 0.01, 0.01, 0.97],
+    ],
+    "mu": 0.005,
+    "loci": [{"locus_id": index, "length": 100} for index in range(1, 9)],
+    "convergence_window": 300,
+    "convergence_tolerance": 1e-9,
+    "max_generations": 300,
+    "n_replicates": 1,
+    "replicate_tolerance": None,
+}
+
+
+@pytest.fixture(scope="module")
+def hub_histories(
+    tmp_path_factory: pytest.TempPathFactory,
+) -> list[tuple[SimulationParams, list[int], dict[str, list[float]]]]:
+    """Run the hub scenario once per seed, keeping each run's own parameters."""
+    root = tmp_path_factory.mktemp("identity-matrix")
+    runs = []
+    with pytest.MonkeyPatch.context() as patch:
+        patch.setenv("FIM_RESULTS_DIRECTORY", str(root / "results"))
+        for seed in range(1, REPLICATES + 1):
+            config = {**HUB_CONFIG, "seed": seed}
+            config_path = root / f"hub-{seed}.yaml"
+            config_path.write_text(
+                yaml.safe_dump(config, sort_keys=False), encoding="utf-8"
+            )
+            output = root / f"hub-out-{seed}"
+            assert (
+                cli.main(["run", str(config_path), "-o", str(output), "--quiet"]) == 0
+            )
+            history = sampled_statistic_history(output / "trajectory.jsonl")
+            runs.append(
+                (
+                    SimulationParams.from_mapping(config),
+                    history.generations,
+                    history.histories,
+                )
+            )
+    return runs
+
+
+@pytest.mark.parametrize("name", ["D", "G_ST"])
+def test_engine_mean_sits_on_the_matrix_closed_form_for_a_hub(
+    name: str,
+    hub_histories: list[tuple[SimulationParams, list[int], dict[str, list[float]]]],
+) -> None:
+    """Unequal sizes and a migration matrix: the full-matrix curve tracks the engine."""
+    differences: list[list[float]] = []
+    for params, generations, histories in hub_histories:
+        state = generate_initial_state(params)
+        start = identity_matrix_from_frequencies(
+            [
+                [deme[locus] for locus in range(len(state.loci))]
+                for deme in state.frequencies
+            ]
+        )
+        assert isinstance(params.mu, float)
+        expected = matrix_identity_trajectory(
+            deme_sizes=params.population_sizes,
+            migration=params.m,
+            mutation=params.mu,
+            initial_identities=start,
+            generations=generations,
+        )[name]
+        differences.append(
+            [
+                simulated - theory
+                for simulated, theory in zip(histories[name], expected, strict=True)
+            ]
+        )
+
+    generations = hub_histories[0][1]
     checkpoints = np.linspace(0, len(generations) - 1, 5, dtype=int)
     for checkpoint in checkpoints:
         column = [row[checkpoint] for row in differences]

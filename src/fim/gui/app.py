@@ -53,6 +53,7 @@ from pathlib import Path
 from socketserver import ThreadingMixIn
 from typing import Any, Final, Protocol, TextIO, cast
 
+import numpy as np
 import webview
 import yaml
 from webview.menu import Menu, MenuAction, MenuSeparator
@@ -62,7 +63,10 @@ from fim import __version__ as fim_version
 from fim import engine as engine_module
 from fim import logging_setup, paths, update
 from fim.cli import load_config
-from fim.convergence.defaults import describe_derived_convergence
+from fim.convergence.defaults import (
+    describe_derived_convergence,
+    island_migration_matrix,
+)
 from fim.engine import (
     FinalReport,
     RunResult,
@@ -112,6 +116,7 @@ from fim.persistence.run_metadata import run_metadata_path
 from fim.reanalyze import reanalyze_trajectory, replicate_convergence_history
 from fim.reproducibility import compare_runs
 from fim.statistics import (
+    MAXIMUM_MATRIX_DEMES,
     effective_allele_count,
     equilibrium_d,
     equilibrium_g_st,
@@ -120,10 +125,12 @@ from fim.statistics import (
     equilibrium_shannon_differentiation,
     equilibrium_shannon_entropy_subpopulation,
     equilibrium_shannon_entropy_total,
+    identity_matrix_from_frequencies,
     identity_recovery_equilibrium,
     identity_recovery_half_life,
     identity_recovery_rate,
     identity_recursion,
+    matrix_identity_trajectory,
     mutation_negligible_equilibrium,
 )
 from fim.sweep import SweepSpec, apply_coordinates, enumerate_points
@@ -900,6 +907,14 @@ def _identity_recovery_reference_payload(
     }
 
 
+# Number of geometrically spaced points, beyond the whole generations of the
+# first `_SAMPLED_DENSE_GENERATIONS`, on the grid the matrix solver is sampled
+# at; the page interpolates linearly between them.
+_MINIMUM_CLOSED_FORM_DEMES: Final = 2
+_SAMPLED_GEOMETRIC_POINTS = 600
+_SAMPLED_DENSE_GENERATIONS = 100
+
+
 def _closed_form_trajectory_payload(
     params: SimulationParams,
 ) -> dict[str, Any] | None:
@@ -907,54 +922,122 @@ def _closed_form_trajectory_payload(
 
     The third theoretical reference on the panel, and the only one that is
     the same quantity as the simulated curve at every generation:
-    `fim.statistics.identity_recursion` solves the engine's own
-    migrate-mutate-drift recursion for the expected within- and
-    between-deme identities, and `D`, `G_ST`, `H_S`, `H_T` and `H_ST` are
-    functions of those two numbers alone. `E_ST`, `K_ST` and the
-    effective-allele family are not, so they get no curve.
+    `fim.statistics` solves the engine's own migrate-mutate-drift identity
+    recursion, and `D`, `G_ST`, `H_S`, `H_T` and `H_ST` are functions of the
+    identities alone. `E_ST`, `K_ST` and the effective-allele family are
+    not, so they get no curve.
 
-    Sent as the recursion's solved *ingredients* (fixed point, eigenvalues,
-    eigenvectors and their inverse), not as sampled points, for the same
-    reason `_identity_recovery_reference_payload` sends two floats: the page
-    evaluates `x* + V diag(lambda^t) V^-1 (x0 - x*)` at whatever generations
-    it is plotting, however many the run has and however the sampling is
-    thinned, with no second series to keep in step. The starting
-    state `x0` is deliberately *not* here: the page takes it from the run's
-    own first recorded `H_S`/`H_T`, so the curve starts where the simulated
-    one does whatever the initial-conditions mode was, which answers the
-    initial-condition question `20260911-claude-sonnet-5-derived-
-    differentiation-trajectory-design.md` deferred.
+    Two shapes, chosen by the model:
+
+    - Equal deme sizes, a scalar `m` and one `mu`: the recursion collapses
+      to two numbers (`identity_recursion`). Sent as the solved
+      *ingredients* (fixed point, eigenvalues, eigenvectors, inverse), and
+      the page evaluates them at whatever generations it plots, starting
+      from the run's own first `H_S`/`H_T`.
+    - Unequal sizes and/or a migration matrix (a hub, a ring): the whole
+      `d` by `d` identity matrix is needed, so the starting state comes
+      from the seeded initial population
+      (`generate_initial_state(params)`, the engine's own call) and the
+      solved trajectory is sampled on a grid, `{"generations": [...],
+      "statistics": {name: [...]}}`, that the page interpolates. At most
+      `MAXIMUM_MATRIX_DEMES` demes.
 
     Args:
         params: A validated configuration, at run-start or a reopened run's.
 
     Returns:
-        `None` when `N`, `m` or `mu` is not a plain scalar (per-deme sizes,
-        a migration matrix and per-locus rates have no two-variable
-        reduction), when there are fewer than two demes, or when the
-        configuration has no closed form (no migration and no mutation).
-        Otherwise `{"demes", "fixedPoint", "eigenvalues", "eigenvectors",
-        "inverse"}`, raw floats.
+        `None` when `N`, `m` or `mu` has a shape neither solver covers
+        (per-locus `mu`), there are fewer than two demes, the starting
+        population is built by equilibration (its identities are not known
+        without running it), or the model has no closed form (no migration
+        and no mutation). Otherwise the payload described above, raw floats.
+    """
+    if not isinstance(params.mu, float) or params.d < _MINIMUM_CLOSED_FORM_DEMES:
+        return None
+    if isinstance(params.gene_copies, int) and isinstance(params.m, float):
+        try:
+            recursion = identity_recursion(
+                params.gene_copies, params.m, params.mu, params.d
+            )
+        except ValueError:
+            return None
+        return {
+            "demes": recursion.deme_count,
+            "fixedPoint": list(recursion.fixed_point),
+            "eigenvalues": list(recursion.eigenvalues),
+            "eigenvectors": [list(row) for row in recursion.eigenvectors],
+            "inverse": [list(row) for row in recursion.inverse],
+        }
+    return _sampled_closed_form_payload(params)
+
+
+def _sampled_closed_form_payload(params: SimulationParams) -> dict[str, Any] | None:
+    """Solve the full identity matrix for `params` and sample it on a grid.
+
+    The general-model branch of `_closed_form_trajectory_payload`; see there.
+
+    Args:
+        params: A validated configuration with scalar `mu`.
+
+    Returns:
+        `{"generations": [...], "statistics": {name: [...]}}`, or `None`
+        when the model is outside what the matrix solver covers.
     """
     if (
-        not isinstance(params.gene_copies, int)
-        or not isinstance(params.m, float)
-        or not isinstance(params.mu, float)
+        not isinstance(params.mu, float)
+        or params.equilibrium_max_generations is not None
+        or params.d > MAXIMUM_MATRIX_DEMES
     ):
         return None
+    sizes = params.population_sizes
+    migration = (
+        island_migration_matrix(sizes, params.m)
+        if isinstance(params.m, float)
+        else params.m
+    )
+    grid = _trajectory_sample_grid(params.max_generations)
     try:
-        recursion = identity_recursion(
-            params.gene_copies, params.m, params.mu, params.d
+        state = generate_initial_state(params)
+        start = identity_matrix_from_frequencies(
+            [
+                [deme_maps[locus] for locus in range(len(state.loci))]
+                for deme_maps in state.frequencies
+            ]
+        )
+        statistics = matrix_identity_trajectory(
+            deme_sizes=sizes,
+            migration=migration,
+            mutation=params.mu,
+            initial_identities=start,
+            generations=grid,
         )
     except ValueError:
         return None
-    return {
-        "demes": recursion.deme_count,
-        "fixedPoint": list(recursion.fixed_point),
-        "eigenvalues": list(recursion.eigenvalues),
-        "eigenvectors": [list(row) for row in recursion.eigenvectors],
-        "inverse": [list(row) for row in recursion.inverse],
-    }
+    return {"generations": grid, "statistics": statistics}
+
+
+def _trajectory_sample_grid(max_generations: int) -> list[int]:
+    """Return the generations the matrix solver is sampled at.
+
+    Every whole generation up to `_SAMPLED_DENSE_GENERATIONS` (where the
+    fast modes live), then geometric spacing to `max_generations`, so a
+    linear interpolation error stays negligible whether the run relaxes in
+    ten generations or in ten thousand.
+
+    Args:
+        max_generations: The run's cap.
+
+    Returns:
+        Sorted, distinct generation numbers starting at 0 and ending at
+        `max_generations`.
+    """
+    dense = range(min(max_generations, _SAMPLED_DENSE_GENERATIONS) + 1)
+    if max_generations <= _SAMPLED_DENSE_GENERATIONS:
+        return list(dense)
+    geometric = np.geomspace(
+        _SAMPLED_DENSE_GENERATIONS, max_generations, _SAMPLED_GEOMETRIC_POINTS
+    )
+    return sorted({*dense, *(round(value) for value in geometric)})
 
 
 def _run_config_summary(params: SimulationParams) -> dict[str, str]:

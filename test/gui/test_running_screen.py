@@ -59,6 +59,7 @@ import time
 from pathlib import Path
 from typing import Any
 
+import numpy as np
 import pytest
 import webview
 
@@ -670,6 +671,45 @@ def test_page_evaluation_of_the_closed_form_matches_the_python_recursion() -> No
     assert set(actual) == set(expected)
     for name, values in expected.items():
         assert actual[name] == pytest.approx(values, rel=1e-9, abs=1e-12)
+
+
+def test_page_interpolation_of_a_sampled_closed_form_matches_numpy() -> None:
+    """`closedFormTrajectories` interpolates a sampled payload linearly.
+
+    Between grid points it is linear interpolation; before the first and
+    after the last it holds the end value.
+    """
+    grid = [0, 1, 2, 10, 100, 1000]
+    payload = {
+        "generations": grid,
+        "statistics": {
+            "D": [0.0, 0.1, 0.25, 0.4, 0.6, 0.62],
+            "G_ST": [0.5, 0.4, 0.3, 0.2, 0.1, 0.05],
+        },
+    }
+    plotted = [0, 1, 3, 7, 10, 55, 100, 999, 1000, 5000]
+    script = (
+        f"JSON.stringify(closedFormTrajectories({json.dumps(payload)}, "
+        f"{json.dumps(plotted)}, {{}}))"
+    )
+    window = create_window(api=Api(), hidden=True)
+    outcome: queue.Queue[str | None] = queue.Queue(maxsize=1)
+
+    def _drive() -> None:
+        try:
+            _wait_for_input_screen_ready(window)
+            outcome.put(window.evaluate_js(script))
+        finally:
+            window.destroy()
+
+    webview.start(_drive)
+    settled = outcome.get(timeout=_OUTCOME_TIMEOUT_SECONDS)
+
+    assert settled is not None
+    actual = json.loads(settled)
+    for name, values in payload["statistics"].items():
+        expected = np.interp(plotted, grid, values)
+        assert actual[name] == pytest.approx(list(expected), abs=1e-12)
 
 
 def test_trajectory_panel_updates_live_while_a_run_is_still_going(

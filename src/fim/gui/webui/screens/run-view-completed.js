@@ -705,6 +705,51 @@ function drawTrajectoryAxisTicks(
 }
 
 /**
+ * Read the closed-form expected trajectory off a sampled curve.
+ *
+ * The general-model half of `_closed_form_trajectory_payload`: the server
+ * solved the whole identity matrix from the run's seeded starting
+ * population and sampled the result at `closedForm.generations` (every
+ * generation up to 100, then geometric spacing to the run's cap), so this
+ * only interpolates linearly between the two samples around each plotted
+ * generation, and holds the last value beyond the grid.
+ *
+ * @param {{generations: number[], statistics: Object<string, number[]>}} closedForm
+ * @param {number[]} generations the generations being plotted, ascending.
+ * @returns {Object<string, number[]>} one array per statistic, each the
+ *     same length as `generations`; empty on malformed input.
+ */
+function sampledClosedFormTrajectories(closedForm, generations) {
+    const grid = closedForm.generations;
+    const names = Object.keys(closedForm.statistics);
+    if (
+        !Array.isArray(grid) ||
+        grid.length === 0 ||
+        names.some((name) => closedForm.statistics[name].length !== grid.length)
+    ) {
+        return {};
+    }
+    const series = Object.fromEntries(names.map((name) => [name, []]));
+    let upper = 0;
+    for (const generation of generations) {
+        while (upper < grid.length - 1 && grid[upper] < generation) {
+            upper += 1;
+        }
+        const lower = Math.max(0, upper - 1);
+        const span = grid[upper] - grid[lower];
+        const fraction =
+            span > 0 ? Math.min(1, Math.max(0, (generation - grid[lower]) / span)) : 1;
+        for (const name of names) {
+            const values = closedForm.statistics[name];
+            series[name].push(values[lower] + fraction * (values[upper] - values[lower]));
+        }
+    }
+    return Object.values(series).every((values) => values.every(Number.isFinite))
+        ? series
+        : {};
+}
+
+/**
  * Evaluate the closed-form expected trajectory of every identity-based
  * statistic at each of `generations`.
  *
@@ -719,7 +764,9 @@ function drawTrajectoryAxisTicks(
  * identities alone.
  *
  * @param {object|null|undefined} closedForm `_closed_form_trajectory_
- *     payload`'s result.
+ *     payload`'s result: either the solved two-variable ingredients
+ *     (evaluated here) or, for a model with unequal deme sizes or a
+ *     migration matrix, a sampled curve (`sampledClosedFormTrajectories`).
  * @param {number[]} generations
  * @param {Object<string, number[]>} histories the run's own histories;
  *     only `H_S` and `H_T` are read, and only when both cover every one
@@ -729,6 +776,9 @@ function drawTrajectoryAxisTicks(
  *     evaluate (no payload, no starting state, or a non-finite result).
  */
 function closedFormTrajectories(closedForm, generations, histories) {
+    if (closedForm && closedForm.statistics) {
+        return sampledClosedFormTrajectories(closedForm, generations);
+    }
     const hS = histories.H_S;
     const hT = histories.H_T;
     if (

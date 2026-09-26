@@ -58,6 +58,7 @@ from fim.gui.preferences import (
 )
 from fim.gui.recent_runs import RecentRun
 from fim.gui.store import LiveProgressStore
+from fim.gui.trajectory_history import sampled_statistic_history
 from fim.model.allele import AlleleId
 from fim.model.locus import LocusSpec
 from fim.model.params import SimulationParams
@@ -66,6 +67,7 @@ from fim.persistence import groups
 from fim.persistence.jsonl_store import JSONLTrajectoryStore
 from fim.persistence.manifest import read_manifest
 from fim.statistics import (
+    MAXIMUM_MATRIX_DEMES,
     confidence_interval,
     effective_allele_count,
     equilibrium_d,
@@ -1193,30 +1195,100 @@ def test_closed_form_trajectory_payload_carries_the_solved_recursion(
     assert json.loads(json.dumps(result)) == result
 
 
-def test_closed_form_trajectory_payload_is_none_without_a_two_variable_reduction(
+def test_closed_form_trajectory_payload_is_sampled_for_unequal_sizes_and_a_matrix(
     tiny_params: SimulationParams,
 ) -> None:
-    """Per-deme `N`, a migration matrix, per-locus `mu` and one deme get no curve."""
+    """Per-deme `N` or a migration matrix gets a sampled curve, not ingredients.
+
+    The two-variable form needs equal sizes and one scalar `m`; anything
+    else solves the whole identity matrix from the seeded starting
+    population and ships the result on a grid for the page to interpolate.
+    """
+    for params in (
+        replace(tiny_params, gene_copies=(10, 20)),
+        replace(tiny_params, m=((0.9, 0.1), (0.1, 0.9))),
+    ):
+        result = app_module._closed_form_trajectory_payload(params)
+
+        assert result is not None
+        grid = result["generations"]
+        assert grid[0] == 0
+        assert grid[-1] == params.max_generations
+        assert grid == sorted(set(grid))
+        assert set(result["statistics"]) == {"D", "G_ST", "H_S", "H_T", "H_ST"}
+        for values in result["statistics"].values():
+            assert len(values) == len(grid)
+            assert all(math.isfinite(value) for value in values)
+        assert json.loads(json.dumps(result)) == result
+
+
+def test_sampled_closed_form_starts_where_the_real_run_starts(tmp_path: Path) -> None:
+    """The seeded initial population reproduces generation zero's `H_S`/`H_T`.
+
+    The matrix solver cannot read its start off the trajectory (two averages
+    are not enough for unequal demes), so it rebuilds the initial state
+    with `generate_initial_state`. That must be the engine's own state.
+    """
+    config = {
+        "N": [20, 20, 20, 80],
+        "ploidy": "haploid",
+        "d": 4,
+        "m": [
+            [0.95, 0.02, 0.02, 0.01],
+            [0.02, 0.95, 0.02, 0.01],
+            [0.02, 0.02, 0.95, 0.01],
+            [0.01, 0.01, 0.01, 0.97],
+        ],
+        "mu": 0.001,
+        "seed": 20260819,
+        "loci": [{"locus_id": 1, "length": 50}, {"locus_id": 2, "length": 50}],
+        "convergence_window": 4,
+        "convergence_tolerance": 1.0,
+        "max_generations": 10,
+        "n_replicates": 1,
+        "replicate_tolerance": None,
+    }
+    config_path = tmp_path / "hub.yaml"
+    config_path.write_text(yaml.safe_dump(config, sort_keys=False), encoding="utf-8")
+    output = tmp_path / "out"
+    assert cli.main(["run", str(config_path), "-o", str(output), "--quiet"]) == 0
+    history = sampled_statistic_history(output / "trajectory.jsonl")
+
+    payload = app_module._closed_form_trajectory_payload(
+        SimulationParams.from_mapping(config)
+    )
+
+    assert payload is not None
+    assert payload["statistics"]["H_S"][0] == pytest.approx(history.histories["H_S"][0])
+    assert payload["statistics"]["H_T"][0] == pytest.approx(history.histories["H_T"][0])
+
+
+def test_closed_form_trajectory_payload_is_none_where_no_solver_applies(
+    tiny_params: SimulationParams,
+) -> None:
+    """Per-locus `mu`, an equilibrium-built start, and too many demes get no curve."""
     per_locus_mu = replace(
         tiny_params,
         loci=(LocusSpec(1, 200), LocusSpec(2, 200)),
         mu=(0.01, 0.02),
     )
     assert isinstance(per_locus_mu.mu, tuple)
+    equilibrium_start = replace(
+        tiny_params,
+        gene_copies=(10, 20),
+        equilibrium_convergence_window=4,
+        equilibrium_convergence_tolerance=1.0,
+        equilibrium_max_generations=10,
+    )
+    too_many = replace(
+        tiny_params,
+        d=MAXIMUM_MATRIX_DEMES + 1,
+        gene_copies=tuple(range(10, 10 + MAXIMUM_MATRIX_DEMES + 1)),
+    )
 
-    assert (
-        app_module._closed_form_trajectory_payload(
-            replace(tiny_params, gene_copies=(10, 20))
-        )
-        is None
-    )
-    assert (
-        app_module._closed_form_trajectory_payload(
-            replace(tiny_params, m=((0.9, 0.1), (0.1, 0.9)))
-        )
-        is None
-    )
     assert app_module._closed_form_trajectory_payload(per_locus_mu) is None
+    assert app_module._closed_form_trajectory_payload(equilibrium_start) is None
+    assert app_module._closed_form_trajectory_payload(too_many) is None
 
 
 def test_closed_form_trajectory_payload_is_none_without_migration_or_mutation(
