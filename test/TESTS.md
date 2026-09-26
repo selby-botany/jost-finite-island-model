@@ -8156,16 +8156,46 @@ The page evaluates `x* + V diag(lambda^t) V^-1 (x0 - x*)` from these;
 so the payload must be exactly `identity_recursion`'s fields, as plain
 lists, and JSON-serializable for the bridge.
 
-<a id="gui.test_app_api.test_closed_form_trajectory_payload_is_none_without_a_two_variable_reduction"></a>
+<a id="gui.test_app_api.test_closed_form_trajectory_payload_is_sampled_for_unequal_sizes_and_a_matrix"></a>
 
-#### test\_closed\_form\_trajectory\_payload\_is\_none\_without\_a\_two\_variable\_reduction
+#### test\_closed\_form\_trajectory\_payload\_is\_sampled\_for\_unequal\_sizes\_and\_a\_matrix
 
 ```python
-def test_closed_form_trajectory_payload_is_none_without_a_two_variable_reduction(
+def test_closed_form_trajectory_payload_is_sampled_for_unequal_sizes_and_a_matrix(
         tiny_params: SimulationParams) -> None
 ```
 
-Per-deme `N`, a migration matrix, per-locus `mu` and one deme get no curve.
+Per-deme `N` or a migration matrix gets a sampled curve, not ingredients.
+
+The two-variable form needs equal sizes and one scalar `m`; anything
+else solves the whole identity matrix from the seeded starting
+population and ships the result on a grid for the page to interpolate.
+
+<a id="gui.test_app_api.test_sampled_closed_form_starts_where_the_real_run_starts"></a>
+
+#### test\_sampled\_closed\_form\_starts\_where\_the\_real\_run\_starts
+
+```python
+def test_sampled_closed_form_starts_where_the_real_run_starts(
+        tmp_path: Path) -> None
+```
+
+The seeded initial population reproduces generation zero's `H_S`/`H_T`.
+
+The matrix solver cannot read its start off the trajectory (two averages
+are not enough for unequal demes), so it rebuilds the initial state
+with `generate_initial_state`. That must be the engine's own state.
+
+<a id="gui.test_app_api.test_closed_form_trajectory_payload_is_none_where_no_solver_applies"></a>
+
+#### test\_closed\_form\_trajectory\_payload\_is\_none\_where\_no\_solver\_applies
+
+```python
+def test_closed_form_trajectory_payload_is_none_where_no_solver_applies(
+        tiny_params: SimulationParams) -> None
+```
+
+Per-locus `mu`, an equilibrium-built start, and too many demes get no curve.
 
 <a id="gui.test_app_api.test_closed_form_trajectory_payload_is_none_without_migration_or_mutation"></a>
 
@@ -16884,6 +16914,19 @@ The two halves of one formula must not drift apart: the server solves
 the recursion, the page evaluates it at the run's own generations from
 the run's own first `H_S`/`H_T`.
 
+<a id="gui.test_running_screen.test_page_interpolation_of_a_sampled_closed_form_matches_numpy"></a>
+
+#### test\_page\_interpolation\_of\_a\_sampled\_closed\_form\_matches\_numpy
+
+```python
+def test_page_interpolation_of_a_sampled_closed_form_matches_numpy() -> None
+```
+
+`closedFormTrajectories` interpolates a sampled payload linearly.
+
+Between grid points it is linear interpolation; before the first and
+after the last it holds the end value.
+
 <a id="gui.test_running_screen.test_trajectory_panel_updates_live_while_a_run_is_still_going"></a>
 
 #### test\_trajectory\_panel\_updates\_live\_while\_a\_run\_is\_still\_going
@@ -24795,6 +24838,68 @@ def test_no_migration_and_no_mutation_has_no_fixed_point() -> None
 
 Fully isolated, mutation-free demes never settle, so there is no closed form.
 
+<a id="statistics.test_identity_recursion.test_matrix_trajectory_matches_step_by_step_iteration"></a>
+
+#### test\_matrix\_trajectory\_matches\_step\_by\_step\_iteration
+
+```python
+@pytest.mark.parametrize(
+    ("sizes", "matrix", "mu"),
+    [
+        (HUB_SIZES, HUB_MATRIX, 0.001),
+        (HUB_SIZES, HUB_MATRIX, 0.0),
+        ((150, ) * 5, DIRECTED_RING, 0.002),
+    ],
+)
+def test_matrix_trajectory_matches_step_by_step_iteration(
+        sizes: tuple[int, ...], matrix: tuple[tuple[float, ...], ...],
+        mu: float) -> None
+```
+
+Unequal sizes, a hub, and a non-reversible ring all match iteration.
+
+<a id="statistics.test_identity_recursion.test_matrix_trajectory_agrees_with_the_two_variable_form_for_an_island"></a>
+
+#### test\_matrix\_trajectory\_agrees\_with\_the\_two\_variable\_form\_for\_an\_island
+
+```python
+def test_matrix_trajectory_agrees_with_the_two_variable_form_for_an_island(
+) -> None
+```
+
+Equal sizes and symmetric migration give the same curve either way.
+
+<a id="statistics.test_identity_recursion.test_identity_matrix_from_frequencies_matches_the_definition"></a>
+
+#### test\_identity\_matrix\_from\_frequencies\_matches\_the\_definition
+
+```python
+def test_identity_matrix_from_frequencies_matches_the_definition() -> None
+```
+
+Diagonal is `sum x^2`, off-diagonal `sum x y`, averaged over loci.
+
+<a id="statistics.test_identity_recursion.test_matrix_trajectory_refuses_too_many_demes"></a>
+
+#### test\_matrix\_trajectory\_refuses\_too\_many\_demes
+
+```python
+def test_matrix_trajectory_refuses_too_many_demes() -> None
+```
+
+More demes than the eigenproblem limit is refused, not slow.
+
+<a id="statistics.test_identity_recursion.test_matrix_trajectory_without_migration_or_mutation_has_no_fixed_point"></a>
+
+#### test\_matrix\_trajectory\_without\_migration\_or\_mutation\_has\_no\_fixed\_point
+
+```python
+def test_matrix_trajectory_without_migration_or_mutation_has_no_fixed_point(
+) -> None
+```
+
+Isolated, mutation-free demes never settle.
+
 <a id="statistics.test_interval"></a>
 
 # statistics.test\_interval
@@ -26388,6 +26493,33 @@ def test_engine_mean_sits_on_the_closed_form_curve(
 ```
 
 Mean simulated `D`/`G_ST` matches the closed form at five checkpoints.
+
+<a id="validation.test_identity_recursion_trajectory.hub_histories"></a>
+
+#### hub\_histories
+
+```python
+@pytest.fixture(scope="module")
+def hub_histories(
+    tmp_path_factory: pytest.TempPathFactory
+) -> list[tuple[SimulationParams, list[int], dict[str, list[float]]]]
+```
+
+Run the hub scenario once per seed, keeping each run's own parameters.
+
+<a id="validation.test_identity_recursion_trajectory.test_engine_mean_sits_on_the_matrix_closed_form_for_a_hub"></a>
+
+#### test\_engine\_mean\_sits\_on\_the\_matrix\_closed\_form\_for\_a\_hub
+
+```python
+@pytest.mark.parametrize("name", ["D", "G_ST"])
+def test_engine_mean_sits_on_the_matrix_closed_form_for_a_hub(
+    name: str, hub_histories: list[tuple[SimulationParams, list[int],
+                                         dict[str, list[float]]]]
+) -> None
+```
+
+Unequal sizes and a migration matrix: the full-matrix curve tracks the engine.
 
 <a id="validation.test_install_sh"></a>
 

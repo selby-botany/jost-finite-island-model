@@ -9,14 +9,17 @@ import pytest
 
 from fim.statistics import (
     IDENTITY_STATISTIC_NAMES,
+    MAXIMUM_MATRIX_DEMES,
     equilibrium_d,
     g_st,
     h_s,
     h_t,
     identities_from_heterozygosities,
     identities_to_statistics,
+    identity_matrix_from_frequencies,
     identity_recursion,
     jost_d,
+    matrix_identity_trajectory,
 )
 
 # (gene copies per deme, migration, mutation, demes): fast mixing, slow
@@ -178,3 +181,145 @@ def test_no_migration_and_no_mutation_has_no_fixed_point() -> None:
     """Fully isolated, mutation-free demes never settle, so there is no closed form."""
     with pytest.raises(ValueError, match="no closed-form trajectory"):
         identity_recursion(100, 0.0, 0.0, 4)
+
+
+HUB_SIZES = (200, 200, 200, 800)
+HUB_MATRIX = (
+    (0.95, 0.02, 0.02, 0.01),
+    (0.02, 0.95, 0.02, 0.01),
+    (0.02, 0.02, 0.95, 0.01),
+    (0.01, 0.01, 0.01, 0.97),
+)
+# Directed ring: not reversible, so the operator has complex eigenvalues.
+DIRECTED_RING = tuple(
+    tuple(0.8 if i == j else 0.2 if j == (i + 1) % 5 else 0.0 for j in range(5))
+    for i in range(5)
+)
+
+
+def _brute_force_statistics(
+    sizes: tuple[int, ...],
+    matrix: tuple[tuple[float, ...], ...],
+    mu: float,
+    start: np.ndarray,
+    steps: int,
+) -> dict[str, float]:
+    """Iterate the full identity matrix one generation at a time."""
+    d = len(sizes)
+    migration = np.asarray(matrix)
+    inverse = 1.0 / np.asarray(sizes, dtype=float)
+    survival = (1.0 - mu) ** 2 + mu * (1.0 - mu) * (
+        inverse[:, None] + inverse[None, :]
+    ) / 2.0
+    identities = start.copy()
+    diagonal = np.diag_indices(d)
+    for _ in range(steps):
+        migrated = migration @ identities @ migration.T
+        identities = survival * migrated
+        identities[diagonal] = (
+            inverse + (1.0 - inverse) * survival[diagonal] * (migrated[diagonal])
+        )
+    return identities_to_statistics(
+        float(np.mean(np.diag(identities))),
+        float((identities.sum() - np.trace(identities)) / (d * (d - 1))),
+        d,
+    )
+
+
+@pytest.mark.parametrize(
+    ("sizes", "matrix", "mu"),
+    [
+        (HUB_SIZES, HUB_MATRIX, 0.001),
+        (HUB_SIZES, HUB_MATRIX, 0.0),
+        ((150,) * 5, DIRECTED_RING, 0.002),
+    ],
+)
+def test_matrix_trajectory_matches_step_by_step_iteration(
+    sizes: tuple[int, ...], matrix: tuple[tuple[float, ...], ...], mu: float
+) -> None:
+    """Unequal sizes, a hub, and a non-reversible ring all match iteration."""
+    d = len(sizes)
+    start = _asymmetric_start(d, seed=3)
+    steps = [0, 1, 5, 40, 300]
+
+    actual = matrix_identity_trajectory(
+        deme_sizes=sizes,
+        migration=matrix,
+        mutation=mu,
+        initial_identities=start,
+        generations=steps,
+    )
+
+    for index, step in enumerate(steps):
+        expected = _brute_force_statistics(sizes, matrix, mu, start, step)
+        for name in IDENTITY_STATISTIC_NAMES:
+            assert actual[name][index] == pytest.approx(
+                expected[name], rel=1e-8, abs=1e-10
+            ), (name, step)
+
+
+def test_matrix_trajectory_agrees_with_the_two_variable_form_for_an_island() -> None:
+    """Equal sizes and symmetric migration give the same curve either way."""
+    size, m, mu, d = 60, 0.05, 0.01, 5
+    migration = np.full((d, d), m / (d - 1))
+    np.fill_diagonal(migration, 1.0 - m)
+    start = _asymmetric_start(d, seed=11)
+    within = float(np.mean(np.diag(start)))
+    between = float((start.sum() - np.trace(start)) / (d * (d - 1)))
+    steps = [0, 3, 50, 900]
+
+    matrix_form = matrix_identity_trajectory(
+        deme_sizes=(size,) * d,
+        migration=migration,
+        mutation=mu,
+        initial_identities=start,
+        generations=steps,
+    )
+
+    recursion = identity_recursion(size, m, mu, d)
+    for index, step in enumerate(steps):
+        two_variable = recursion.statistics_after(step, within, between)
+        for name in IDENTITY_STATISTIC_NAMES:
+            assert matrix_form[name][index] == pytest.approx(
+                two_variable[name], rel=1e-3, abs=1e-6
+            )
+
+
+def test_identity_matrix_from_frequencies_matches_the_definition() -> None:
+    """Diagonal is `sum x^2`, off-diagonal `sum x y`, averaged over loci."""
+    frequencies = [
+        [{0: 0.5, 1: 0.5}, {0: 1.0}],
+        [{0: 1.0}, {0: 0.25, 2: 0.75}],
+    ]
+
+    matrix = identity_matrix_from_frequencies(frequencies)
+
+    assert matrix[0, 0] == pytest.approx((0.5 + 1.0) / 2)
+    assert matrix[1, 1] == pytest.approx((1.0 + 0.625) / 2)
+    assert matrix[0, 1] == pytest.approx((0.5 + 0.25) / 2)
+    assert matrix[0, 1] == matrix[1, 0]
+
+
+def test_matrix_trajectory_refuses_too_many_demes() -> None:
+    """More demes than the eigenproblem limit is refused, not slow."""
+    d = MAXIMUM_MATRIX_DEMES + 1
+    with pytest.raises(ValueError, match="between 2 and"):
+        matrix_identity_trajectory(
+            deme_sizes=(10,) * d,
+            migration=np.eye(d),
+            mutation=0.01,
+            initial_identities=np.eye(d),
+            generations=[0],
+        )
+
+
+def test_matrix_trajectory_without_migration_or_mutation_has_no_fixed_point() -> None:
+    """Isolated, mutation-free demes never settle."""
+    with pytest.raises(ValueError, match="no closed-form trajectory"):
+        matrix_identity_trajectory(
+            deme_sizes=(10, 10),
+            migration=np.eye(2),
+            mutation=0.0,
+            initial_identities=np.eye(2),
+            generations=[0],
+        )

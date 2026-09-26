@@ -42,6 +42,7 @@ Return to the [source-tree orientation](../README.md) or the [developer guide](.
   * [island\_relaxation\_time](#fim.convergence.defaults.island_relaxation_time)
   * [recursion\_relaxation\_time](#fim.convergence.defaults.recursion_relaxation_time)
   * [relaxation\_time](#fim.convergence.defaults.relaxation_time)
+  * [island\_migration\_matrix](#fim.convergence.defaults.island_migration_matrix)
 * [fim.convergence.monitor](#fim.convergence.monitor)
   * [StopReason](#fim.convergence.monitor.StopReason)
   * [ConvergenceOutcome](#fim.convergence.monitor.ConvergenceOutcome)
@@ -573,6 +574,8 @@ Return to the [source-tree orientation](../README.md) or the [developer guide](.
   * [identities\_from\_heterozygosities](#fim.statistics.identity_recursion.identities_from_heterozygosities)
   * [identities\_to\_statistics](#fim.statistics.identity_recursion.identities_to_statistics)
   * [identity\_recursion](#fim.statistics.identity_recursion.identity_recursion)
+  * [identity\_matrix\_from\_frequencies](#fim.statistics.identity_recursion.identity_matrix_from_frequencies)
+  * [matrix\_identity\_trajectory](#fim.statistics.identity_recursion.matrix_identity_trajectory)
 * [fim.statistics.interval](#fim.statistics.interval)
   * [ConfidenceInterval](#fim.statistics.interval.ConfidenceInterval)
   * [confidence\_interval](#fim.statistics.interval.confidence_interval)
@@ -1416,6 +1419,31 @@ size-weighted migrant pool) uses the recursion's eigenvalue.
 
 - `ValueError` - If the model has no relaxation time, or the eigenvalue
   route is needed but `d` is too large.
+
+<a id="fim.convergence.defaults.island_migration_matrix"></a>
+
+#### island\_migration\_matrix
+
+```python
+def island_migration_matrix(sizes: Sequence[int],
+                            migration: float) -> list[list[float]]
+```
+
+Return the scalar-`m` migration matrix for unequal deme sizes.
+
+Each deme keeps `1 - m` and receives `m` from the size-weighted average
+of every other deme, as the configuration reference defines the scalar
+form.
+
+**Arguments**:
+
+- `sizes` - Gene-copy count of every deme.
+- `migration` - Scalar migration rate.
+
+
+**Returns**:
+
+  A `d` by `d` row-stochastic matrix.
 
 <a id="fim.convergence.monitor"></a>
 
@@ -16815,8 +16843,17 @@ large the generation number is. `IdentityRecursion` holds `x*`, `lambda`, `V`
 and `V^-1` (the "ingredients"), which is exactly what the GUI receives and
 evaluates in the page.
 
-Scope: `d` equal demes of `N` gene copies, symmetric island migration `m`,
-one shared mutation probability. Expected values are exact for those
+Two solvers share the same recursion:
+
+- `identity_recursion` is the fast 2 by 2 form for `d` equal demes of `N`
+  gene copies with symmetric island migration `m` and one mutation
+  probability. It needs only the run's own `H_S` and `H_T` to start.
+- `matrix_identity_trajectory` keeps the whole `d` by `d` identity matrix,
+  so it handles unequal deme sizes and any migration matrix (a hub, a
+  ring). The price is the state: it starts from the full matrix of
+  identities, `identity_matrix_from_frequencies`, not two averages.
+
+Scope: one shared mutation probability. Expected values are exact for those
 assumptions; a single run scatters around them by drift, and a
 multi-locus run whose `locus_aggregation` is `mean_of_ratios` differs from
 the ratio-of-means form used here by a small amount.
@@ -16974,6 +17011,76 @@ by the exact second moment `(1 - mu)^2 + mu (1 - mu) / N`; drift adds
   configuration has no unique closed form (no migration and no
   mutation leaves no fixed point; two equal eigenvalues make
   the eigenvector matrix singular).
+
+<a id="fim.statistics.identity_recursion.identity_matrix_from_frequencies"></a>
+
+#### identity\_matrix\_from\_frequencies
+
+```python
+def identity_matrix_from_frequencies(
+        frequencies: FrequencyTable) -> NDArray[np.float64]
+```
+
+Return the `d` by `d` identity matrix of a starting population.
+
+Entry `[i][j]` is `sum_k x_ik x_jk` averaged over loci: the chance that
+one gene copy drawn from deme `i` and one from deme `j` are the same
+allele. The diagonal is the with-replacement within-deme identity,
+`1 - H_S`'s per-deme term.
+
+**Arguments**:
+
+- `frequencies` - `frequencies[deme][locus]` maps allele to frequency
+  (`ModelState.frequencies`).
+
+
+**Returns**:
+
+  The averaged symmetric `d` by `d` matrix.
+
+<a id="fim.statistics.identity_recursion.matrix_identity_trajectory"></a>
+
+#### matrix\_identity\_trajectory
+
+```python
+def matrix_identity_trajectory(
+        *, deme_sizes: Sequence[int], migration: Sequence[Sequence[float]],
+        mutation: float, initial_identities: NDArray[np.float64],
+        generations: Sequence[int]) -> dict[str, list[float]]
+```
+
+Return the expected statistics at each of `generations`.
+
+One generation is `J -> S (M J M^T)` with `M` the row-stochastic
+migration matrix, `S` the mutation survival (`(1 - mu)^2` plus the
+same-copy correction `mu (1 - mu) / N`, averaged over the two demes'
+sizes so it equals `identity_recursion`'s factor for equal sizes), and
+each deme's diagonal entry then gaining drift's `1/N_i`. That is
+affine in the flattened matrix, `x' = A x + c`, so
+`x_t = x* + V diag(lambda^t) V^-1 (x_0 - x*)` (eigenvalues may be
+complex; the result is real). `D`, `G_ST`, `H_S`, `H_T` and `H_ST` use
+equal deme weights, as the engine's reports do.
+
+**Arguments**:
+
+- `deme_sizes` - Gene copies in every deme.
+- `migration` - `d` by `d` row-stochastic migration matrix.
+- `mutation` - Per-copy mutation probability.
+- `initial_identities` - Starting `d` by `d` identity matrix.
+- `generations` - Generations since the starting state, each `>= 0`.
+
+
+**Returns**:
+
+  One list per `IDENTITY_STATISTIC_NAMES`, aligned with
+  `generations`.
+
+
+**Raises**:
+
+- `ValueError` - If the inputs are out of range, `d` is outside
+  `[2, MAXIMUM_MATRIX_DEMES]`, or the operator has no fixed
+  point or no reliable eigen-decomposition.
 
 <a id="fim.statistics.interval"></a>
 

@@ -73,15 +73,19 @@ from .differentiation import (
 )
 from .identity_recursion import (
     IDENTITY_STATISTIC_NAMES,
+    MAXIMUM_MATRIX_DEMES,
     IdentityRecursion,
     identities_from_heterozygosities,
     identities_to_statistics,
+    identity_matrix_from_frequencies,
     identity_recursion,
+    matrix_identity_trajectory,
 )
 from .interval import ConfidenceInterval, confidence_interval, student_t_critical_value
 
 __all__ = [
     "IDENTITY_STATISTIC_NAMES",
+    "MAXIMUM_MATRIX_DEMES",
     "ConfidenceInterval",
     "DifferentiationReport",
     "IdentityRecursion",
@@ -115,6 +119,7 @@ __all__ = [
     "identities_from_heterozygosities",
     "identities_to_statistics",
     "identity",
+    "identity_matrix_from_frequencies",
     "identity_recovery_equilibrium",
     "identity_recovery_half_life",
     "identity_recovery_rate",
@@ -122,6 +127,7 @@ __all__ = [
     "identity_recursion",
     "jost_d",
     "k_st",
+    "matrix_identity_trajectory",
     "mutation_negligible_equilibrium",
     "mutation_negligible_transition",
     "mutual_information",

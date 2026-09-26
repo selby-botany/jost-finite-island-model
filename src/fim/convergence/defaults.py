@@ -267,7 +267,7 @@ def relaxation_time(
             mutation=mutation,
         )
     matrix = (
-        _island_matrix(sizes, float(migration))
+        island_migration_matrix(sizes, float(migration))
         if isinstance(migration, int | float)
         else migration
     )
@@ -276,7 +276,9 @@ def relaxation_time(
     )
 
 
-def _island_matrix(sizes: Sequence[int], migration: float) -> list[list[float]]:
+def island_migration_matrix(
+    sizes: Sequence[int], migration: float
+) -> list[list[float]]:
     """Return the scalar-`m` migration matrix for unequal deme sizes.
 
     Each deme keeps `1 - m` and receives `m` from the size-weighted average

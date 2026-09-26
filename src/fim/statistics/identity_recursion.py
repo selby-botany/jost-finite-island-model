@@ -27,8 +27,17 @@ large the generation number is. `IdentityRecursion` holds `x*`, `lambda`, `V`
 and `V^-1` (the "ingredients"), which is exactly what the GUI receives and
 evaluates in the page.
 
-Scope: `d` equal demes of `N` gene copies, symmetric island migration `m`,
-one shared mutation probability. Expected values are exact for those
+Two solvers share the same recursion:
+
+- `identity_recursion` is the fast 2 by 2 form for `d` equal demes of `N`
+  gene copies with symmetric island migration `m` and one mutation
+  probability. It needs only the run's own `H_S` and `H_T` to start.
+- `matrix_identity_trajectory` keeps the whole `d` by `d` identity matrix,
+  so it handles unequal deme sizes and any migration matrix (a hub, a
+  ring). The price is the state: it starts from the full matrix of
+  identities, `identity_matrix_from_frequencies`, not two averages.
+
+Scope: one shared mutation probability. Expected values are exact for those
 assumptions; a single run scatters around them by drift, and a
 multi-locus run whose `locus_aggregation` is `mean_of_ratios` differs from
 the ratio-of-means form used here by a small amount.
@@ -37,7 +46,12 @@ the ratio-of-means form used here by a small amount.
 from __future__ import annotations
 
 import math
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
+from typing import Any
+
+import numpy as np
+from numpy.typing import NDArray
 
 # Statistics that are a function of the two identities alone. `E_ST`,
 # `K_ST` and the effective-allele family need the allele structure itself.
@@ -268,3 +282,143 @@ def identity_recursion(
             (-v_high[1] / matrix_determinant, v_high[0] / matrix_determinant),
         ),
     )
+
+
+# The matrix solver diagonalizes a d^2 by d^2 operator; this keeps that
+# eigenproblem small and quick (144 by 144 at the limit).
+MAXIMUM_MATRIX_DEMES = 12
+
+# The eigenvector matrix is trusted only while it is this well conditioned
+# and reproduces the operator to this relative accuracy.
+_MAXIMUM_CONDITION = 1e8
+_RECONSTRUCTION_TOLERANCE = 1e-8
+
+FrequencyTable = Sequence[Sequence[Mapping[Any, float]]]
+
+
+def identity_matrix_from_frequencies(
+    frequencies: FrequencyTable,
+) -> NDArray[np.float64]:
+    """Return the `d` by `d` identity matrix of a starting population.
+
+    Entry `[i][j]` is `sum_k x_ik x_jk` averaged over loci: the chance that
+    one gene copy drawn from deme `i` and one from deme `j` are the same
+    allele. The diagonal is the with-replacement within-deme identity,
+    `1 - H_S`'s per-deme term.
+
+    Args:
+        frequencies: `frequencies[deme][locus]` maps allele to frequency
+            (`ModelState.frequencies`).
+
+    Returns:
+        The averaged symmetric `d` by `d` matrix.
+    """
+    demes = len(frequencies)
+    loci = len(frequencies[0])
+    total = np.zeros((demes, demes))
+    for locus in range(loci):
+        alleles = sorted({a for deme in frequencies for a in deme[locus]})
+        table = np.array(
+            [[deme[locus].get(a, 0.0) for a in alleles] for deme in frequencies]
+        )
+        total += table @ table.T
+    return total / loci
+
+
+def matrix_identity_trajectory(
+    *,
+    deme_sizes: Sequence[int],
+    migration: Sequence[Sequence[float]],
+    mutation: float,
+    initial_identities: NDArray[np.float64],
+    generations: Sequence[int],
+) -> dict[str, list[float]]:
+    """Return the expected statistics at each of `generations`.
+
+    One generation is `J -> S (M J M^T)` with `M` the row-stochastic
+    migration matrix, `S` the mutation survival (`(1 - mu)^2` plus the
+    same-copy correction `mu (1 - mu) / N`, averaged over the two demes'
+    sizes so it equals `identity_recursion`'s factor for equal sizes), and
+    each deme's diagonal entry then gaining drift's `1/N_i`. That is
+    affine in the flattened matrix, `x' = A x + c`, so
+    `x_t = x* + V diag(lambda^t) V^-1 (x_0 - x*)` (eigenvalues may be
+    complex; the result is real). `D`, `G_ST`, `H_S`, `H_T` and `H_ST` use
+    equal deme weights, as the engine's reports do.
+
+    Args:
+        deme_sizes: Gene copies in every deme.
+        migration: `d` by `d` row-stochastic migration matrix.
+        mutation: Per-copy mutation probability.
+        initial_identities: Starting `d` by `d` identity matrix.
+        generations: Generations since the starting state, each `>= 0`.
+
+    Returns:
+        One list per `IDENTITY_STATISTIC_NAMES`, aligned with
+        `generations`.
+
+    Raises:
+        ValueError: If the inputs are out of range, `d` is outside
+            `[2, MAXIMUM_MATRIX_DEMES]`, or the operator has no fixed
+            point or no reliable eigen-decomposition.
+    """
+    d = len(deme_sizes)
+    if not _MINIMUM_DEMES <= d <= MAXIMUM_MATRIX_DEMES:
+        raise ValueError(
+            f"matrix identity trajectory needs between {_MINIMUM_DEMES} and "
+            f"{MAXIMUM_MATRIX_DEMES} demes"
+        )
+    if not 0.0 <= mutation <= 1.0 or min(deme_sizes) < 1:
+        raise ValueError("matrix identity trajectory inputs are out of range")
+    matrix = np.asarray(migration, dtype=np.float64)
+    if matrix.shape != (d, d):
+        raise ValueError("migration matrix does not match the number of demes")
+
+    # Operator on the row-major flattened identity matrix.
+    inverse_size = 1.0 / np.asarray(deme_sizes, dtype=np.float64)
+    excess = mutation * (1.0 - mutation)
+    survival = (1.0 - mutation) ** 2 + excess * (
+        inverse_size[:, None] + inverse_size[None, :]
+    ) / 2.0
+    coefficient = survival.copy()
+    diagonal = np.diag_indices(d)
+    coefficient[diagonal] = (1.0 - inverse_size) * survival[diagonal]
+    operator = coefficient.ravel()[:, None] * np.kron(matrix, matrix)
+    drift = np.zeros((d, d))
+    drift[diagonal] = inverse_size
+    constant = drift.ravel()
+
+    # Fixed point and eigen-decomposition, each checked before use.
+    size = d * d
+    try:
+        fixed = np.linalg.solve(np.eye(size) - operator, constant)
+        values, vectors = np.linalg.eig(operator)
+        weights = np.linalg.solve(vectors, (initial_identities.ravel() - fixed))
+    except np.linalg.LinAlgError as error:
+        raise ValueError("no closed-form trajectory: singular operator") from error
+    scale = max(float(np.max(np.abs(operator))), 1.0)
+    reconstruction = np.max(np.abs(operator @ vectors - vectors * values))
+    if (
+        not np.all(np.isfinite(fixed))
+        or np.linalg.cond(vectors) > _MAXIMUM_CONDITION
+        or reconstruction > _RECONSTRUCTION_TOLERANCE * scale
+    ):
+        raise ValueError("no closed-form trajectory: unreliable eigen-decomposition")
+
+    steps = np.asarray(generations, dtype=np.float64)
+    decayed = weights[:, None] * values[:, None] ** steps[None, :]
+    identities = (fixed[:, None] + (vectors @ decayed).real).reshape(d, d, -1)
+    within = np.trace(identities, axis1=0, axis2=1) / d
+    pooled = identities.sum(axis=(0, 1)) / (d * d)
+    h_s = 1.0 - within
+    h_t = 1.0 - pooled
+    h_st = h_t - h_s
+    with np.errstate(divide="ignore", invalid="ignore"):
+        g_st = np.where(h_t > 0.0, h_st / h_t, 0.0)
+        jost_d = np.where(within > 0.0, h_st / within * d / (d - 1), 0.0)
+    return {
+        "D": jost_d.tolist(),
+        "G_ST": g_st.tolist(),
+        "H_S": h_s.tolist(),
+        "H_T": h_t.tolist(),
+        "H_ST": h_st.tolist(),
+    }
