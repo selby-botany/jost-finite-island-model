@@ -221,7 +221,7 @@ def tiny_params() -> SimulationParams:
     other test that happens to share this fixture.
     """
     return SimulationParams(
-        N=20,
+        gene_copies=20,
         m=0.1,
         mu=0.01,
         d=2,

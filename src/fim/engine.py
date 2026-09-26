@@ -950,7 +950,8 @@ class VectorizedAdvancer:
                     f"{lane.params.migrant_sampling!r} for replicate {lane.run_id}"
                 )
             sizes = np.asarray(
-                _population_sizes(lane.params.N, lane.state.deme_count), dtype=np.int64
+                _population_sizes(lane.params.gene_copies, lane.state.deme_count),
+                dtype=np.int64,
             )
             # A plain scalar `params.m` never needs a `(d, d)` matrix
             # built at all — `migrate_vectorized_symmetric` computes the
@@ -1039,7 +1040,7 @@ def _build_replica_lane(
     logger.info(
         "replicate %s starting (N=%s, d=%s, m=%s, mu=%s, seed=%s, max_generations=%s)",
         lane_run_id,
-        lane_params.N,
+        lane_params.gene_copies,
         lane_params.d,
         lane_params.m,
         lane_params.mu,
@@ -1822,7 +1823,7 @@ def build_engine_backend(
 
 
 def fim(
-    N: PopulationSize,
+    gene_copies: PopulationSize,
     m: Migration,
     mu: MutationRate,
     d: int,
@@ -1870,13 +1871,14 @@ def fim(
     silently disagree.
 
     Args:
-        N: Gene-copy count, repeated from ``params`` for the public signature.
+        gene_copies: Gene-copy count, repeated from ``params`` for the public
+            signature.
         m: Migration rate or matrix, repeated from ``params``.
         mu: Mutation probability, repeated from ``params``.
         d: Deme count, repeated from ``params``.
         params: Full validated run configuration and open parameter bag —
             everything about how to run the simulation that is not
-            already covered by `N`/`m`/`mu`/`d` above (how many
+            already covered by `gene_copies`/`m`/`mu`/`d` above (how many
             generations to allow, when to consider it converged, how
             many replicates to run, and so on). See `fim.model.params.
             SimulationParams`.
@@ -1953,7 +1955,7 @@ def fim(
             caller who only builds `params` and never touches this
             argument still gets whatever `params` itself asked for.
             Passing this argument explicitly overrides `params` for this
-            one call, the same relationship `N`/`m`/`mu`/`d` have to
+            one call, the same relationship `gene_copies`/`m`/`mu`/`d` have to
             `params`, without the "must agree" requirement those four
             enforce — this one is a pure override, not a redundant
             cross-check. ``"lineal"`` (both `params`'s own default and
@@ -2074,7 +2076,7 @@ def fim(
             (or under `"generational-vector"`, including when `"auto"`
             resolves to it — see `build_engine_backend`'s own docstring).
     """
-    _validate_public_signature(N, m, mu, d, params)
+    _validate_public_signature(gene_copies, m, mu, d, params)
     # An explicit argument always wins; otherwise fall back to `params`'s
     # own field of the same name — real `SimulationParams` fields (see
     # `doc/configuration.md`), not orphaned duplicates of these
@@ -3159,7 +3161,7 @@ def _run_one(
     logger.info(
         "replicate %s starting (N=%s, d=%s, m=%s, mu=%s, seed=%s, max_generations=%s)",
         run_id,
-        params.N,
+        params.gene_copies,
         params.d,
         params.m,
         params.mu,
@@ -4059,14 +4061,15 @@ def _run_vectorized_sigma_band_extension(
             f"replicate {lane.run_id} has no cached vectorized state to extend"
         )
     # Rebuilt exactly the way `VectorizedAdvancer.advance` builds them
-    # per tick, from the same immutable inputs (`params.m`/`params.N`/
+    # per tick, from the same immutable inputs (`params.m`/`params.gene_copies`/
     # deme count never change mid-run), so the extension's own
     # generations are stepped with identical migration handling to the
     # main run's: a plain scalar rate stays matrix-free (`O(d*K)`), a
     # genuine caller-supplied weight matrix reuses this lane's own
     # already-cached `(d, d)` arrays rather than reconverting them.
     sizes = np.asarray(
-        _population_sizes(lane.params.N, lane.state.deme_count), dtype=np.int64
+        _population_sizes(lane.params.gene_copies, lane.state.deme_count),
+        dtype=np.int64,
     )
     symmetric_rate: float | None = None
     if isinstance(lane.params.m, int | float):
@@ -4298,7 +4301,7 @@ def _utc_now() -> datetime:
 
 
 def _validate_public_signature(
-    N: PopulationSize,
+    gene_copies: PopulationSize,
     m: Migration,
     mu: MutationRate,
     d: int,
@@ -4306,15 +4309,15 @@ def _validate_public_signature(
 ) -> None:
     """Reject disagreement between named arguments and the parameter bag.
 
-    `fim()` accepts `N`/`m`/`mu`/`d` both as their own named arguments
+    `fim()` accepts `gene_copies`/`m`/`mu`/`d` both as their own named arguments
     and, redundantly, already inside `params` (see `fim`'s own docstring
     for why) — this function is what actually enforces that the two
     copies agree, rather than silently trusting whichever one a caller
     happened to update if they ever changed one without the other.
     """
     mismatches: list[str] = []
-    if N != params.N:
-        mismatches.append("N")
+    if gene_copies != params.gene_copies:
+        mismatches.append("gene_copies")
     if m != params.m:
         mismatches.append("m")
     if mu != params.mu:

@@ -772,5 +772,6 @@ def _highlighted_indices(*frequencies: FloatArray) -> frozenset[int]:
 def _title(params: SimulationParams) -> str:
     """Return the required self-describing plot title."""
     return (
-        f"Finite island model: N={params.N}, m={params.m}, mu={params.mu}, d={params.d}"
+        f"Finite island model: N={params.gene_copies}, m={params.m}, "
+        f"mu={params.mu}, d={params.d}"
     )

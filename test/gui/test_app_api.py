@@ -398,7 +398,9 @@ def test_interval_payload_omits_the_summary_for_a_bootstrap_interval() -> None:
             "convergence_window": 5,
         }
     )
-    output = engine_fim(params.N, params.m, params.mu, params.d, params=params)
+    output = engine_fim(
+        params.gene_copies, params.m, params.mu, params.d, params=params
+    )
     assert isinstance(output, tuple)
     bootstrapped = bootstrap_replicate_summary(output, rng=np.random.default_rng(11))
 
@@ -1055,14 +1057,14 @@ def test_equilibrium_reference_payload_matches_equilibrium_reference_for_scalar_
     small/fast scalar fixture — `N`, `m`, and `mu` are all plain
     scalars there, the ordinary case this overlay exists for.
     """
-    assert isinstance(tiny_params.N, int)
+    assert isinstance(tiny_params.gene_copies, int)
     assert isinstance(tiny_params.m, float)
     assert isinstance(tiny_params.mu, float)
 
     result = app_module._equilibrium_reference_payload(tiny_params, digits=4)
 
     assert result == app_module._equilibrium_reference(
-        tiny_params.N, tiny_params.m, tiny_params.mu, tiny_params.d, digits=4
+        tiny_params.gene_copies, tiny_params.m, tiny_params.mu, tiny_params.d, digits=4
     )
 
 
@@ -1077,7 +1079,7 @@ def test_equilibrium_reference_payload_is_none_for_a_per_deme_population_size(
     "nothing to show, don't draw anything" case, not a computed value
     reduced from a non-scalar shape.
     """
-    params = replace(tiny_params, N=(10, 20))
+    params = replace(tiny_params, gene_copies=(10, 20))
 
     assert app_module._equilibrium_reference_payload(params, digits=4) is None
 
@@ -1124,14 +1126,16 @@ def test_identity_recovery_reference_payload_matches_the_statistics_functions_di
     so this test checks the two raw ingredients the page evaluates that
     formula from client-side, not a pre-sampled series.
     """
-    assert isinstance(tiny_params.N, int)
+    assert isinstance(tiny_params.gene_copies, int)
     assert isinstance(tiny_params.m, float)
 
     result = app_module._identity_recovery_reference_payload(tiny_params)
 
     assert result == {
-        "rate": identity_recovery_rate(tiny_params.N, tiny_params.m),
-        "equilibrium": identity_recovery_equilibrium(tiny_params.N, tiny_params.m),
+        "rate": identity_recovery_rate(tiny_params.gene_copies, tiny_params.m),
+        "equilibrium": identity_recovery_equilibrium(
+            tiny_params.gene_copies, tiny_params.m
+        ),
     }
 
 
@@ -1146,7 +1150,7 @@ def test_identity_recovery_reference_payload_is_none_for_a_per_deme_population_s
     equilibrium family, since Whitlock (1992)'s own model is deme-count-
     and mutation-independent by construction.
     """
-    params = replace(tiny_params, N=(10, 20))
+    params = replace(tiny_params, gene_copies=(10, 20))
 
     assert app_module._identity_recovery_reference_payload(params) is None
 
@@ -1882,7 +1886,7 @@ def batch_results(batch_params: SimulationParams) -> tuple[RunResult, ...]:
     """
     run_id = deterministic_run_id(batch_params)
     results = engine_fim(
-        batch_params.N,
+        batch_params.gene_copies,
         batch_params.m,
         batch_params.mu,
         batch_params.d,
@@ -2519,7 +2523,7 @@ def test_drain_run_messages_includes_a_live_deme_pair_panel_when_selected() -> N
     )
     points = frequency_points(state)
     params = SimulationParams(
-        N=20,
+        gene_copies=20,
         m=0.1,
         mu=0.01,
         d=3,

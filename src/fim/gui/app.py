@@ -816,12 +816,14 @@ def _equilibrium_reference_payload(
         `get_equilibrium_predictions`'s own identically-named fields.
     """
     if (
-        not isinstance(params.N, int)
+        not isinstance(params.gene_copies, int)
         or not isinstance(params.m, float)
         or not isinstance(params.mu, float)
     ):
         return None
-    return _equilibrium_reference(params.N, params.m, params.mu, params.d, digits)
+    return _equilibrium_reference(
+        params.gene_copies, params.m, params.mu, params.d, digits
+    )
 
 
 def _identity_recovery_reference_payload(
@@ -889,11 +891,11 @@ def _identity_recovery_reference_payload(
         shape the rest of this payload already uses for the curve data
         itself).
     """
-    if not isinstance(params.N, int) or not isinstance(params.m, float):
+    if not isinstance(params.gene_copies, int) or not isinstance(params.m, float):
         return None
     return {
-        "rate": identity_recovery_rate(params.N, params.m),
-        "equilibrium": identity_recovery_equilibrium(params.N, params.m),
+        "rate": identity_recovery_rate(params.gene_copies, params.m),
+        "equilibrium": identity_recovery_equilibrium(params.gene_copies, params.m),
     }
 
 
@@ -932,7 +934,11 @@ def _run_config_summary(params: SimulationParams) -> dict[str, str]:
     # diploid"), gene copies otherwise -- the same two things the
     # Configure form shows and asks for.
     ploidy = params.ploidy or 1
-    counts = [params.N] * 1 if isinstance(params.N, int) else list(params.N)
+    counts = (
+        [params.gene_copies] * 1
+        if isinstance(params.gene_copies, int)
+        else list(params.gene_copies)
+    )
     n_text = ",".join(str(value // ploidy) for value in counts)
     if params.ploidy is not None:
         n_text = f"{n_text} {PLOIDY_NAMES[params.ploidy]}"

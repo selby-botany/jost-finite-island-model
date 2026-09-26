@@ -38,7 +38,7 @@ from fim.viz.scatter import (
 def _params(d: int) -> SimulationParams:
     """Return parameters for one visualization shape."""
     return SimulationParams(
-        N=20,
+        gene_copies=20,
         m=0.1,
         mu=0.001,
         d=d,

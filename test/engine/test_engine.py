@@ -81,7 +81,7 @@ def _tiny_config() -> dict[str, object]:
 def _run(params: SimulationParams) -> RunResult:
     """Run one scalar configuration and narrow the output type."""
     result = fim(
-        params.N,
+        params.gene_copies,
         params.m,
         params.mu,
         params.d,
@@ -381,7 +381,9 @@ def test_sigma_band_extends_every_replicate_of_a_generational_batch() -> None:
         }
     )
 
-    output = fim(params.N, params.m, params.mu, params.d, params=params, clock=_clock)
+    output = fim(
+        params.gene_copies, params.m, params.mu, params.d, params=params, clock=_clock
+    )
     assert isinstance(output, tuple)
     assert len(output) == 3
 
@@ -418,7 +420,9 @@ def test_sigma_band_is_never_computed_for_an_adaptively_abandoned_lane() -> None
         }
     )
 
-    output = fim(params.N, params.m, params.mu, params.d, params=params, clock=_clock)
+    output = fim(
+        params.gene_copies, params.m, params.mu, params.d, params=params, clock=_clock
+    )
     assert isinstance(output, tuple)
     # The adaptive stop keeps strictly fewer than the requested ten.
     assert len(output) == 3
@@ -440,7 +444,7 @@ def _sigma_band_vector_params(**overrides: object) -> SimulationParams:
     exceed `auto_vector_max_capacity` outright.
     """
     base = SimulationParams(
-        N=40,
+        gene_copies=40,
         m=0.2,
         mu=0.1,
         d=3,
@@ -564,7 +568,8 @@ def test_vectorized_extension_keeps_minted_identities_through_extinction() -> No
     replay = _drive_vector_lane_to_stop(params)
     assert replay.vectorized_state is not None
     sizes = np.asarray(
-        _population_sizes(replay.params.N, replay.state.deme_count), dtype=np.int64
+        _population_sizes(replay.params.gene_copies, replay.state.deme_count),
+        dtype=np.int64,
     )
     presence = [_present_allele_ids(replay.vectorized_state.locus_states[0])]
     vectorized_state = replay.vectorized_state
@@ -773,7 +778,7 @@ def test_replicates_are_independently_reproducible(
     store = InMemoryTrajectoryStore()
 
     output = fim(
-        batched_params.N,
+        batched_params.gene_copies,
         batched_params.m,
         batched_params.mu,
         batched_params.d,
@@ -794,10 +799,10 @@ def test_public_signature_mismatches_are_reported(
 ) -> None:
     """The legacy positional arguments must agree with the parameter bag."""
     cases = (
-        (21, tiny_params.m, tiny_params.mu, tiny_params.d, "N"),
-        (tiny_params.N, 0.2, tiny_params.mu, tiny_params.d, "m"),
-        (tiny_params.N, tiny_params.m, 0.2, tiny_params.d, "mu"),
-        (tiny_params.N, tiny_params.m, tiny_params.mu, 3, "d"),
+        (21, tiny_params.m, tiny_params.mu, tiny_params.d, "gene_copies"),
+        (tiny_params.gene_copies, 0.2, tiny_params.mu, tiny_params.d, "m"),
+        (tiny_params.gene_copies, tiny_params.m, 0.2, tiny_params.d, "mu"),
+        (tiny_params.gene_copies, tiny_params.m, tiny_params.mu, 3, "d"),
     )
     for population_size, migration, mutation, demes, message in cases:
         with pytest.raises(ValueError, match=message):
@@ -817,7 +822,7 @@ def test_batch_run_uses_explicit_run_id_suffixes(
     """Caller-provided batch IDs receive deterministic one-based suffixes."""
     params = SimulationParams.from_mapping({**tiny_params.to_dict(), "n_replicates": 2})
     output = fim(
-        params.N,
+        params.gene_copies,
         params.m,
         params.mu,
         params.d,
@@ -835,7 +840,9 @@ def test_replicate_tolerance_unset_is_unaffected_by_the_adaptive_machinery(
     """Omitting `replicate_tolerance` keeps the fixed-count batch loop exact."""
     params = SimulationParams.from_mapping({**tiny_params.to_dict(), "n_replicates": 4})
     assert params.replicate_tolerance is None
-    output = fim(params.N, params.m, params.mu, params.d, params=params, clock=_clock)
+    output = fim(
+        params.gene_copies, params.m, params.mu, params.d, params=params, clock=_clock
+    )
     assert isinstance(output, tuple)
     assert len(output) == 4
 
@@ -853,7 +860,9 @@ def test_replicate_tolerance_can_stop_before_the_cap() -> None:
             "replicate_tolerance": 1000.0,
         }
     )
-    output = fim(params.N, params.m, params.mu, params.d, params=params, clock=_clock)
+    output = fim(
+        params.gene_copies, params.m, params.mu, params.d, params=params, clock=_clock
+    )
     assert isinstance(output, tuple)
     assert len(output) == 3
 
@@ -881,7 +890,7 @@ def test_generational_adaptive_stop_discards_abandoned_lanes_own_rows() -> None:
     store = InMemoryTrajectoryStore()
 
     output = fim(
-        params.N,
+        params.gene_copies,
         params.m,
         params.mu,
         params.d,
@@ -956,7 +965,9 @@ def test_run_batch_bounds_concurrently_active_lanes_to_the_configured_window(
     monkeypatch.setattr(engine, "_build_replica_lane", _counting_build)
     monkeypatch.setattr(engine, "_finalize_replica_lane", _counting_finalize)
 
-    output = fim(params.N, params.m, params.mu, params.d, params=params, clock=_clock)
+    output = fim(
+        params.gene_copies, params.m, params.mu, params.d, params=params, clock=_clock
+    )
 
     assert isinstance(output, tuple)
     assert len(output) == 6
@@ -1000,7 +1011,7 @@ def test_max_concurrent_replicates_does_not_change_what_a_batch_computes() -> No
         }
     )
     unbounded = fim(
-        base_params.N,
+        base_params.gene_copies,
         base_params.m,
         base_params.mu,
         base_params.d,
@@ -1009,7 +1020,7 @@ def test_max_concurrent_replicates_does_not_change_what_a_batch_computes() -> No
     )
     windowed_params = replace(base_params, max_concurrent_replicates=2)
     windowed = fim(
-        windowed_params.N,
+        windowed_params.gene_copies,
         windowed_params.m,
         windowed_params.mu,
         windowed_params.d,
@@ -1058,7 +1069,9 @@ def test_replicate_minimum_above_n_replicates_runs_to_completion() -> None:
     )
     assert params.replicate_minimum == 3
 
-    output = fim(params.N, params.m, params.mu, params.d, params=params, clock=_clock)
+    output = fim(
+        params.gene_copies, params.m, params.mu, params.d, params=params, clock=_clock
+    )
     assert isinstance(output, tuple)
     assert len(output) == 3
 
@@ -1076,7 +1089,7 @@ def test_replicate_tolerance_never_stops_on_a_permanently_undefined_statistic() 
     run's actual (complete lack of) data never supported.
     """
     params = SimulationParams(
-        N=10,
+        gene_copies=10,
         m=0.0,
         mu=0.0,
         d=2,
@@ -1094,7 +1107,9 @@ def test_replicate_tolerance_never_stops_on_a_permanently_undefined_statistic() 
             ({AlleleId(0): 1.0},),
         ),
     )
-    output = fim(params.N, params.m, params.mu, params.d, params=params, clock=_clock)
+    output = fim(
+        params.gene_copies, params.m, params.mu, params.d, params=params, clock=_clock
+    )
     assert isinstance(output, tuple)
     assert len(output) == 5
     assert all(result.report["G_ST"] is None for result in output)
@@ -1106,7 +1121,9 @@ def test_replicate_summary_reports_a_confidence_interval_per_statistic(
 ) -> None:
     """The batch summary covers every statistic with at least two samples."""
     params = SimulationParams.from_mapping({**tiny_params.to_dict(), "n_replicates": 5})
-    output = fim(params.N, params.m, params.mu, params.d, params=params, clock=_clock)
+    output = fim(
+        params.gene_copies, params.m, params.mu, params.d, params=params, clock=_clock
+    )
     assert isinstance(output, tuple)
 
     summary = replicate_summary(output)
@@ -1145,7 +1162,9 @@ def test_replicate_summary_reports_a_real_sample_standard_deviation(
     report (see the bootstrap counterpart test below).
     """
     params = SimulationParams.from_mapping({**tiny_params.to_dict(), "n_replicates": 5})
-    output = fim(params.N, params.m, params.mu, params.d, params=params, clock=_clock)
+    output = fim(
+        params.gene_copies, params.m, params.mu, params.d, params=params, clock=_clock
+    )
     assert isinstance(output, tuple)
 
     summary = replicate_summary(output)
@@ -1186,7 +1205,9 @@ def test_replicate_summary_covers_every_numeric_final_report_key(
     }
     numeric_fields = set(FinalReport.__annotations__) - non_statistic_fields
     params = SimulationParams.from_mapping({**tiny_params.to_dict(), "n_replicates": 5})
-    output = fim(params.N, params.m, params.mu, params.d, params=params, clock=_clock)
+    output = fim(
+        params.gene_copies, params.m, params.mu, params.d, params=params, clock=_clock
+    )
     assert isinstance(output, tuple)
 
     summary = replicate_summary(output)
@@ -1228,7 +1249,7 @@ def test_pooled_convergence_histories_carries_a_stopped_replicates_value_forward
     12, 15]`, confirmed live for this exact configuration) instead.
     """
     params = SimulationParams(
-        N=20,
+        gene_copies=20,
         m=0.1,
         mu=0.01,
         d=2,
@@ -1240,7 +1261,9 @@ def test_pooled_convergence_histories_carries_a_stopped_replicates_value_forward
         n_replicates=5,
         replicate_tolerance=None,
     )
-    output = fim(params.N, params.m, params.mu, params.d, params=params, clock=_clock)
+    output = fim(
+        params.gene_copies, params.m, params.mu, params.d, params=params, clock=_clock
+    )
     assert isinstance(output, tuple)
     final_generations = sorted(result.report["generation"] for result in output)
     # A real precondition for the rest of this test to mean anything:
@@ -1293,7 +1316,11 @@ def test_pooled_convergence_histories_requires_at_least_two_results(
 ) -> None:
     """The same "single replicate has no interval" guard `replicate_summary` applies."""
     output = fim(
-        tiny_params.N, tiny_params.m, tiny_params.mu, tiny_params.d, params=tiny_params
+        tiny_params.gene_copies,
+        tiny_params.m,
+        tiny_params.mu,
+        tiny_params.d,
+        params=tiny_params,
     )
     assert isinstance(output, RunResult)
 
@@ -1325,7 +1352,7 @@ def test_pooled_convergence_histories_drops_a_replicate_with_an_interior_gap(
     exactly what a real run actually produced.
     """
     params = replace(tiny_params, n_replicates=2)
-    output = fim(params.N, params.m, params.mu, params.d, params=params)
+    output = fim(params.gene_copies, params.m, params.mu, params.d, params=params)
     assert isinstance(output, tuple)
     assert len(output) == 2
     intact, corrupted = output
@@ -1358,7 +1385,9 @@ def test_sequential_batch_derives_valid_seeds_at_the_seed_zero_boundary() -> Non
     params = SimulationParams.from_mapping(
         {**_tiny_config(), "seed": 0, "n_replicates": 4}
     )
-    output = fim(params.N, params.m, params.mu, params.d, params=params, clock=_clock)
+    output = fim(
+        params.gene_copies, params.m, params.mu, params.d, params=params, clock=_clock
+    )
     assert isinstance(output, tuple)
     assert [result.params.seed for result in output] == [0, 1, 2, 3]
 
@@ -1374,7 +1403,9 @@ def test_parallel_batch_derives_valid_seeds_at_the_seed_zero_boundary() -> None:
     params = SimulationParams.from_mapping(
         {**_tiny_config(), "seed": 0, "n_replicates": 4}
     )
-    output = fim(params.N, params.m, params.mu, params.d, params=params, max_workers=2)
+    output = fim(
+        params.gene_copies, params.m, params.mu, params.d, params=params, max_workers=2
+    )
     assert isinstance(output, tuple)
     assert sorted(result.params.seed for result in output) == [0, 1, 2, 3]
 
@@ -1383,9 +1414,9 @@ def test_max_workers_produces_the_same_replicates_as_sequential_execution() -> N
     """Parallel batching changes nothing about the computed results."""
     params = SimulationParams.from_mapping({**_tiny_config(), "n_replicates": 4})
 
-    sequential = fim(params.N, params.m, params.mu, params.d, params=params)
+    sequential = fim(params.gene_copies, params.m, params.mu, params.d, params=params)
     parallel = fim(
-        params.N, params.m, params.mu, params.d, params=params, max_workers=2
+        params.gene_copies, params.m, params.mu, params.d, params=params, max_workers=2
     )
 
     assert isinstance(sequential, tuple)
@@ -1401,7 +1432,7 @@ def test_store_factory_gives_every_sequential_replicate_its_own_store() -> None:
     """`store_factory` also works for the ordinary sequential batch loop."""
     params = SimulationParams.from_mapping({**_tiny_config(), "n_replicates": 2})
     output = fim(
-        params.N,
+        params.gene_copies,
         params.m,
         params.mu,
         params.d,
@@ -1418,7 +1449,7 @@ def test_store_and_store_factory_are_mutually_exclusive(
     """Only one trajectory-store strategy may be given at a time."""
     with pytest.raises(ValueError, match="mutually exclusive"):
         fim(
-            tiny_params.N,
+            tiny_params.gene_copies,
             tiny_params.m,
             tiny_params.mu,
             tiny_params.d,
@@ -1433,7 +1464,7 @@ def test_max_workers_rejects_a_shared_store() -> None:
     params = SimulationParams.from_mapping({**_tiny_config(), "n_replicates": 2})
     with pytest.raises(ValueError, match="max_workers requires store=None"):
         fim(
-            params.N,
+            params.gene_copies,
             params.m,
             params.mu,
             params.d,
@@ -1447,7 +1478,14 @@ def test_max_workers_rejects_a_non_positive_count() -> None:
     """`max_workers` must name at least one worker."""
     params = SimulationParams.from_mapping({**_tiny_config(), "n_replicates": 2})
     with pytest.raises(ValueError, match="max_workers must be at least 1"):
-        fim(params.N, params.m, params.mu, params.d, params=params, max_workers=0)
+        fim(
+            params.gene_copies,
+            params.m,
+            params.mu,
+            params.d,
+            params=params,
+            max_workers=0,
+        )
 
 
 @pytest.mark.parametrize(
@@ -1475,7 +1513,7 @@ def test_single_replicate_run_still_validates_max_workers(
     params = SimulationParams.from_mapping(_tiny_config())
     with pytest.raises(ValueError, match=message):
         fim(
-            params.N,
+            params.gene_copies,
             params.m,
             params.mu,
             params.d,
@@ -1499,7 +1537,7 @@ def test_single_replicate_run_uses_store_factory(tmp_path: Path) -> None:
     params = SimulationParams.from_mapping(_tiny_config())
 
     output = fim(
-        params.N,
+        params.gene_copies,
         params.m,
         params.mu,
         params.d,
@@ -1521,7 +1559,7 @@ def test_max_workers_rejects_an_unpicklable_clock() -> None:
     params = SimulationParams.from_mapping({**_tiny_config(), "n_replicates": 2})
     with pytest.raises(ValueError, match="clock must be picklable"):
         fim(
-            params.N,
+            params.gene_copies,
             params.m,
             params.mu,
             params.d,
@@ -1542,7 +1580,7 @@ def test_max_workers_rejects_an_unpicklable_store_factory() -> None:
     params = SimulationParams.from_mapping({**_tiny_config(), "n_replicates": 2})
     with pytest.raises(ValueError, match="store_factory must be picklable"):
         fim(
-            params.N,
+            params.gene_copies,
             params.m,
             params.mu,
             params.d,
@@ -1567,7 +1605,9 @@ def test_max_workers_respects_adaptive_stopping_in_batches() -> None:
             "replicate_tolerance": 1000.0,
         }
     )
-    output = fim(params.N, params.m, params.mu, params.d, params=params, max_workers=2)
+    output = fim(
+        params.gene_copies, params.m, params.mu, params.d, params=params, max_workers=2
+    )
     assert isinstance(output, tuple)
     assert 3 <= len(output) <= 4
 
@@ -1608,7 +1648,7 @@ def test_parallel_batch_adaptive_stop_discards_overshoot_replicates_artifacts(
     )
 
     output = fim(
-        params.N,
+        params.gene_copies,
         params.m,
         params.mu,
         params.d,
@@ -1635,7 +1675,7 @@ def test_max_workers_uses_store_factory_per_replicate() -> None:
     """Each worker gets its own store, built by `store_factory` in-process."""
     params = SimulationParams.from_mapping({**_tiny_config(), "n_replicates": 2})
     output = fim(
-        params.N,
+        params.gene_copies,
         params.m,
         params.mu,
         params.d,
@@ -1674,7 +1714,7 @@ def test_non_lineal_batch_uses_store_factory_per_replicate(
     params = replace(base_params, engine_backend=engine_backend)  # type: ignore[arg-type]
 
     output = fim(
-        params.N,
+        params.gene_copies,
         params.m,
         params.mu,
         params.d,
@@ -1706,7 +1746,7 @@ def test_non_lineal_single_replicate_run_uses_store_factory(tmp_path: Path) -> N
     )
 
     output = fim(
-        params.N,
+        params.gene_copies,
         params.m,
         params.mu,
         params.d,
@@ -1745,7 +1785,9 @@ def test_bootstrap_replicate_summary_point_estimate_matches_the_pooled_ratio(
     params = SimulationParams.from_mapping(
         {**tiny_params.to_dict(), "n_replicates": 8, "replicate_tolerance": None}
     )
-    output = fim(params.N, params.m, params.mu, params.d, params=params, clock=_clock)
+    output = fim(
+        params.gene_copies, params.m, params.mu, params.d, params=params, clock=_clock
+    )
     assert isinstance(output, tuple)
 
     summary = bootstrap_replicate_summary(output, rng=np.random.default_rng(1))
@@ -1771,7 +1813,9 @@ def test_bootstrap_replicate_summary_interval_contains_its_own_point_estimate(
     params = SimulationParams.from_mapping(
         {**tiny_params.to_dict(), "n_replicates": 8, "replicate_tolerance": None}
     )
-    output = fim(params.N, params.m, params.mu, params.d, params=params, clock=_clock)
+    output = fim(
+        params.gene_copies, params.m, params.mu, params.d, params=params, clock=_clock
+    )
     assert isinstance(output, tuple)
 
     summary = bootstrap_replicate_summary(output, rng=np.random.default_rng(2))
@@ -1804,7 +1848,9 @@ def test_bootstrap_replicate_summary_reports_no_sample_standard_deviation(
     params = SimulationParams.from_mapping(
         {**tiny_params.to_dict(), "n_replicates": 8, "replicate_tolerance": None}
     )
-    output = fim(params.N, params.m, params.mu, params.d, params=params, clock=_clock)
+    output = fim(
+        params.gene_copies, params.m, params.mu, params.d, params=params, clock=_clock
+    )
     assert isinstance(output, tuple)
 
     summary = bootstrap_replicate_summary(output, rng=np.random.default_rng(3))
@@ -1830,7 +1876,9 @@ def test_bootstrap_replicate_summary_is_deterministic_for_a_given_rng_state(
     params = SimulationParams.from_mapping(
         {**tiny_params.to_dict(), "n_replicates": 6, "replicate_tolerance": None}
     )
-    output = fim(params.N, params.m, params.mu, params.d, params=params, clock=_clock)
+    output = fim(
+        params.gene_copies, params.m, params.mu, params.d, params=params, clock=_clock
+    )
     assert isinstance(output, tuple)
 
     first = bootstrap_replicate_summary(output, rng=np.random.default_rng(7))
@@ -1856,7 +1904,9 @@ def test_bootstrap_replicate_summary_rejects_invalid_inputs(
     params = SimulationParams.from_mapping(
         {**tiny_params.to_dict(), "n_replicates": 4, "replicate_tolerance": None}
     )
-    output = fim(params.N, params.m, params.mu, params.d, params=params, clock=_clock)
+    output = fim(
+        params.gene_copies, params.m, params.mu, params.d, params=params, clock=_clock
+    )
     assert isinstance(output, tuple)
 
     with pytest.raises(ValueError, match=message):
@@ -1889,7 +1939,9 @@ def test_convergence_can_watch_h_st(tiny_params: SimulationParams) -> None:
     """
     params = replace(tiny_params, convergence_statistic="H_ST")
 
-    output = fim(params.N, params.m, params.mu, params.d, params=params, clock=_clock)
+    output = fim(
+        params.gene_copies, params.m, params.mu, params.d, params=params, clock=_clock
+    )
 
     assert isinstance(output, RunResult)
     assert output.report["H_ST"] is not None
@@ -1929,7 +1981,7 @@ def test_naive_manifest_clock_is_rejected(tiny_params: SimulationParams) -> None
     """Manifest timestamps require an explicit timezone."""
     with pytest.raises(ValueError, match="timezone-aware"):
         fim(
-            tiny_params.N,
+            tiny_params.gene_copies,
             tiny_params.m,
             tiny_params.mu,
             tiny_params.d,
@@ -1951,7 +2003,7 @@ def test_g_st_convergence_falls_back_to_the_cap_at_total_fixation() -> None:
     produced regardless of what the run was actually doing.
     """
     params = SimulationParams(
-        N=10,
+        gene_copies=10,
         m=0.0,
         mu=0.0,
         d=2,
@@ -1969,7 +2021,7 @@ def test_g_st_convergence_falls_back_to_the_cap_at_total_fixation() -> None:
         ),
     )
     result = fim(
-        params.N,
+        params.gene_copies,
         params.m,
         params.mu,
         params.d,
@@ -2001,7 +2053,7 @@ def test_adaptive_g_st_batch_survives_partial_monomorphism() -> None:
     works, end to end through the adaptive stopping monitor.
     """
     params = SimulationParams(
-        N=10,
+        gene_copies=10,
         m=0.0,
         mu=0.0,
         d=2,
@@ -2022,7 +2074,7 @@ def test_adaptive_g_st_batch_survives_partial_monomorphism() -> None:
             ({AlleleId(0): 1.0}, {AlleleId(0): 0.5, AlleleId(1): 0.5}),
         ),
     )
-    output = fim(params.N, params.m, params.mu, params.d, params=params)
+    output = fim(params.gene_copies, params.m, params.mu, params.d, params=params)
     assert isinstance(output, tuple)
     assert len(output) == 2
     for result in output:
@@ -2044,7 +2096,7 @@ def test_adaptive_batch_drops_replicates_where_g_st_is_undefined() -> None:
     unaffected.
     """
     params = SimulationParams(
-        N=10,
+        gene_copies=10,
         m=0.0,
         mu=0.0,
         d=2,
@@ -2065,7 +2117,7 @@ def test_adaptive_batch_drops_replicates_where_g_st_is_undefined() -> None:
             ({AlleleId(0): 1.0},),
         ),
     )
-    output = fim(params.N, params.m, params.mu, params.d, params=params)
+    output = fim(params.gene_copies, params.m, params.mu, params.d, params=params)
     assert isinstance(output, tuple)
     assert len(output) == 3
     assert all(result.report["G_ST"] is None for result in output)
@@ -2098,7 +2150,7 @@ def test_single_statistic_report_shape_is_the_multi_statistic_special_case(
 def test_multi_statistic_run_watches_and_reports_every_statistic() -> None:
     """Watching several statistics is reproducible and reports every history."""
     params = SimulationParams(
-        N=25,
+        gene_copies=25,
         m=0.15,
         mu=0.03,
         d=3,
@@ -2143,7 +2195,7 @@ def test_any_combinator_can_stop_earlier_than_all() -> None:
 
     def _params(combinator: ConvergenceCombinator) -> SimulationParams:
         return SimulationParams(
-            N=25,
+            gene_copies=25,
             m=0.15,
             mu=0.03,
             d=3,
@@ -2181,7 +2233,7 @@ def test_any_combinator_can_stop_earlier_than_all() -> None:
 def test_mutation_ids_follow_high_explicit_initial_id() -> None:
     """Mutations cannot collide with labels supplied through explicit p_0."""
     params = SimulationParams(
-        N=1,
+        gene_copies=1,
         m=0.0,
         mu=1.0,
         d=2,
@@ -2213,7 +2265,7 @@ def test_unequal_deme_sizes_run_is_reproducible_and_bounds_support() -> None:
     """A full run with per-deme N stays reproducible and honors each N_i."""
     sizes = (6, 30)
     params = SimulationParams(
-        N=sizes,
+        gene_copies=sizes,
         m=0.2,
         mu=0.05,
         d=2,
@@ -2252,7 +2304,7 @@ def test_report_size_weighting_reflects_actual_per_deme_sizes() -> None:
         ),
     )
     sized_params = SimulationParams(
-        N=(10, 10_000),
+        gene_copies=(10, 10_000),
         m=0.1,
         mu=0.0,
         d=2,
@@ -2261,7 +2313,7 @@ def test_report_size_weighting_reflects_actual_per_deme_sizes() -> None:
         deme_weighting="size",
     )
     equal_params = SimulationParams(
-        N=(10, 10_000),
+        gene_copies=(10, 10_000),
         m=0.1,
         mu=0.0,
         d=2,
@@ -2299,7 +2351,7 @@ def test_asymmetric_migration_matrix_run_is_reproducible() -> None:
         (0.0, 0.2, 0.8),
     )
     params = SimulationParams(
-        N=20,
+        gene_copies=20,
         m=matrix,
         mu=0.05,
         d=3,
@@ -2339,7 +2391,7 @@ def test_report_for_state_supports_multiple_loci_and_equal_weighting() -> None:
         ),
     )
     params = SimulationParams(
-        N=10,
+        gene_copies=10,
         m=0.1,
         mu=0.0,
         d=2,
@@ -2384,7 +2436,7 @@ def test_report_for_state_drops_a_monomorphic_locus_from_the_g_st_average() -> N
         ),
     )
     params = SimulationParams(
-        N=10,
+        gene_copies=10,
         m=0.1,
         mu=0.0,
         d=2,
@@ -2403,7 +2455,7 @@ def test_report_for_state_drops_a_monomorphic_locus_from_the_g_st_average() -> N
             loci=(loci[1],),
             frequencies=tuple((deme[1],) for deme in state.frequencies),
         ),
-        SimulationParams(N=10, m=0.1, mu=0.0, d=2, seed=7, loci=(loci[1],)),
+        SimulationParams(gene_copies=10, m=0.1, mu=0.0, d=2, seed=7, loci=(loci[1],)),
         run_id="run-b",
         converged=False,
         reason="test",
@@ -2468,7 +2520,7 @@ def test_convergence_watches_the_same_d_and_g_st_report_for_state_uses() -> None
     state = _two_locus_state_with_divergent_per_locus_estimates()
     for locus_aggregation in ("ratio_of_means", "mean_of_ratios"):
         params = SimulationParams(
-            N=10,
+            gene_copies=10,
             m=0.1,
             mu=0.0,
             d=2,
@@ -2498,7 +2550,7 @@ def test_convergence_values_vectorized_watches_the_same_d_and_g_st() -> None:
     """
     state = _two_locus_state_with_divergent_per_locus_estimates()
     params = SimulationParams(
-        N=10,
+        gene_copies=10,
         m=0.1,
         mu=0.0,
         d=2,
@@ -2533,7 +2585,7 @@ def test_convergence_values_skips_e_st_and_k_st_when_only_d_is_watched(
     """
     state = _two_locus_state_with_divergent_per_locus_estimates()
     params = SimulationParams(
-        N=10,
+        gene_copies=10,
         m=0.1,
         mu=0.0,
         d=2,
@@ -2578,7 +2630,7 @@ def test_convergence_values_vectorized_skips_e_st_and_k_st_when_only_d_is_watche
     """
     state = _two_locus_state_with_divergent_per_locus_estimates()
     params = SimulationParams(
-        N=10,
+        gene_copies=10,
         m=0.1,
         mu=0.0,
         d=2,
@@ -2627,7 +2679,13 @@ def test_convergence_values_always_includes_the_always_tracked_four() -> None:
     """
     state = _two_locus_state_with_divergent_per_locus_estimates()
     params = SimulationParams(
-        N=10, m=0.1, mu=0.0, d=2, seed=7, loci=state.loci, convergence_statistic="D"
+        gene_copies=10,
+        m=0.1,
+        mu=0.0,
+        d=2,
+        seed=7,
+        loci=state.loci,
+        convergence_statistic="D",
     )
 
     values = _convergence_values(state, params)
@@ -2639,7 +2697,13 @@ def test_convergence_values_vectorized_always_includes_d_g_st_h_s_h_t() -> None:
     """The array-native path returns the identical always-tracked superset."""
     state = _two_locus_state_with_divergent_per_locus_estimates()
     params = SimulationParams(
-        N=10, m=0.1, mu=0.0, d=2, seed=7, loci=state.loci, convergence_statistic="D"
+        gene_copies=10,
+        m=0.1,
+        mu=0.0,
+        d=2,
+        seed=7,
+        loci=state.loci,
+        convergence_statistic="D",
     )
     vectorized_state = build_vectorized_state(state)
 
@@ -2662,7 +2726,7 @@ def test_track_expensive_statistics_computes_e_st_and_k_st_even_when_unwatched(
     """
     state = _two_locus_state_with_divergent_per_locus_estimates()
     params = SimulationParams(
-        N=10,
+        gene_copies=10,
         m=0.1,
         mu=0.0,
         d=2,
@@ -2713,7 +2777,7 @@ def test_track_expensive_statistics_vectorized_computes_e_st_and_k_st(
     """The array-native path gets the identical opt-in fix."""
     state = _two_locus_state_with_divergent_per_locus_estimates()
     params = SimulationParams(
-        N=10,
+        gene_copies=10,
         m=0.1,
         mu=0.0,
         d=2,
@@ -2777,7 +2841,7 @@ def test_track_expensive_statistics_computes_a_cgd_delta_mi_even_when_unwatched(
     """
     state = _two_locus_state_with_divergent_per_locus_estimates()
     params = SimulationParams(
-        N=10,
+        gene_copies=10,
         m=0.1,
         mu=0.0,
         d=2,
@@ -2845,7 +2909,7 @@ def test_run_result_convergence_histories_include_always_tracked_statistics() ->
     account of a real, reported second instance of this same symptom).
     """
     params = SimulationParams(
-        N=15,
+        gene_copies=15,
         m=0.1,
         mu=0.01,
         d=2,
@@ -2877,7 +2941,7 @@ def test_run_result_convergence_histories_include_e_st_k_st_when_opted_in() -> N
     same length as every other tracked statistic's own.
     """
     params = SimulationParams(
-        N=15,
+        gene_copies=15,
         m=0.1,
         mu=0.01,
         d=2,
@@ -2922,7 +2986,7 @@ def test_sigma_band_stays_scoped_to_watched_statistics_only() -> None:
     `_convergence_values` now happens to also return.
     """
     params = SimulationParams(
-        N=15,
+        gene_copies=15,
         m=0.1,
         mu=0.01,
         d=2,
@@ -2967,7 +3031,7 @@ def test_locus_length_does_not_affect_the_report() -> None:
     )
 
     def _report(loci: tuple[LocusSpec, ...]) -> FinalReport:
-        params = SimulationParams(N=20, m=0.1, mu=0.0, d=2, seed=7, loci=loci)
+        params = SimulationParams(gene_copies=20, m=0.1, mu=0.0, d=2, seed=7, loci=loci)
         state = ModelState(loci=loci, frequencies=frequencies)
         return report_for_state(
             state,
@@ -2987,7 +3051,7 @@ def test_locus_length_does_not_affect_the_report() -> None:
 def test_multi_locus_run_with_unequal_lengths_is_reproducible() -> None:
     """A full run over loci with genuinely different lengths stays reproducible."""
     params = SimulationParams(
-        N=20,
+        gene_copies=20,
         m=0.1,
         mu=0.02,
         d=2,
@@ -3339,7 +3403,7 @@ def test_run_batch_cross_replica_stop_fires_at_deterministic_ordinal() -> None:
     replicates 2-4 never even reached.
     """
     params = SimulationParams(
-        N=20,
+        gene_copies=20,
         m=0.1,
         mu=0.01,
         d=2,
@@ -3380,7 +3444,7 @@ def test_fim_engine_backend_generational_matches_default(
 ) -> None:
     """`fim(..., engine_backend="generational")` matches the untouched default."""
     lineal_result = fim(
-        tiny_params.N,
+        tiny_params.gene_copies,
         tiny_params.m,
         tiny_params.mu,
         tiny_params.d,
@@ -3390,7 +3454,7 @@ def test_fim_engine_backend_generational_matches_default(
     assert isinstance(lineal_result, RunResult)
 
     generational_result = fim(
-        tiny_params.N,
+        tiny_params.gene_copies,
         tiny_params.m,
         tiny_params.mu,
         tiny_params.d,
@@ -3429,7 +3493,7 @@ def test_fim_rejects_jit_on_lineal(tiny_params: SimulationParams) -> None:
     """`jit` is never offered on the lineal backend — a permanent restriction."""
     with pytest.raises(ValueError, match="lineal backend"):
         fim(
-            tiny_params.N,
+            tiny_params.gene_copies,
             tiny_params.m,
             tiny_params.mu,
             tiny_params.d,
@@ -3452,7 +3516,7 @@ def test_fim_rejects_max_workers_on_other_backends(
     """
     with pytest.raises(ValueError, match="lineal-backend-only"):
         fim(
-            tiny_params.N,
+            tiny_params.gene_copies,
             tiny_params.m,
             tiny_params.mu,
             tiny_params.d,
@@ -3474,7 +3538,7 @@ def test_fim_generational_vector_rejects_infinite_alleles(
     """
     with pytest.raises(ValueError, match="finite_alleles"):
         fim(
-            tiny_params.N,
+            tiny_params.gene_copies,
             tiny_params.m,
             tiny_params.mu,
             tiny_params.d,
@@ -3492,7 +3556,7 @@ def test_fim_generational_vector_rejects_stochastic_migrant_sampling(
     )
     with pytest.raises(ValueError, match="migrant_sampling"):
         fim(
-            params.N,
+            params.gene_copies,
             params.m,
             params.mu,
             params.d,
@@ -3511,7 +3575,7 @@ def test_fim_generational_vector_rejects_jit(tiny_params: SimulationParams) -> N
     params = replace(tiny_params, mutation_model="finite_alleles")
     with pytest.raises(ValueError, match="generational-vector"):
         fim(
-            params.N,
+            params.gene_copies,
             params.m,
             params.mu,
             params.d,
@@ -3755,7 +3819,7 @@ def test_fim_engine_backend_auto_runs_end_to_end(
     here, and still produce a normal, successful result.
     """
     result = fim(
-        tiny_params.N,
+        tiny_params.gene_copies,
         tiny_params.m,
         tiny_params.mu,
         tiny_params.d,
@@ -3773,7 +3837,7 @@ def test_fim_engine_backend_auto_reaches_vector_end_to_end() -> None:
     params = _finite_alleles_vector_params(d=40)
 
     result = fim(
-        params.N,
+        params.gene_copies,
         params.m,
         params.mu,
         params.d,
@@ -3801,7 +3865,7 @@ def test_fim_records_the_explicit_engine_backend_in_the_manifest(
 ) -> None:
     """`fim(..., engine_backend=...)` stamps that exact choice, not `None`."""
     result = fim(
-        tiny_params.N,
+        tiny_params.gene_copies,
         tiny_params.m,
         tiny_params.mu,
         tiny_params.d,
@@ -3819,7 +3883,7 @@ def test_fim_default_lineal_records_engine_backend_in_the_manifest(
 ) -> None:
     """Even the untouched default (`"lineal"`) gets recorded, not left `None`."""
     result = fim(
-        tiny_params.N,
+        tiny_params.gene_copies,
         tiny_params.m,
         tiny_params.mu,
         tiny_params.d,
@@ -3850,7 +3914,7 @@ def test_fim_records_equilibrium_split_provenance_in_the_manifest(
     )
 
     result = fim(
-        params.N,
+        params.gene_copies,
         params.m,
         params.mu,
         params.d,
@@ -3883,7 +3947,7 @@ def test_fim_records_equilibrium_split_provenance_under_the_generational_backend
     )
 
     result = fim(
-        params.N,
+        params.gene_copies,
         params.m,
         params.mu,
         params.d,
@@ -3904,7 +3968,7 @@ def test_fim_dirichlet_run_leaves_equilibrium_manifest_fields_none(
 ) -> None:
     """An ordinary Dirichlet-prior run never populates the equilibrium-only fields."""
     result = fim(
-        tiny_params.N,
+        tiny_params.gene_copies,
         tiny_params.m,
         tiny_params.mu,
         tiny_params.d,
@@ -3928,7 +3992,7 @@ def test_fim_auto_records_the_resolved_choice_not_the_literal_auto() -> None:
     pytest.importorskip("numba")
     below = _finite_alleles_vector_params(d=30)
     below_result = fim(
-        below.N,
+        below.gene_copies,
         below.m,
         below.mu,
         below.d,
@@ -3942,7 +4006,7 @@ def test_fim_auto_records_the_resolved_choice_not_the_literal_auto() -> None:
 
     above = _finite_alleles_vector_params(d=40)
     above_result = fim(
-        above.N,
+        above.gene_copies,
         above.m,
         above.mu,
         above.d,
@@ -3959,7 +4023,7 @@ def test_fim_records_jit_in_the_manifest(tiny_params: SimulationParams) -> None:
     """`jit="numba"` is recorded exactly, not silently dropped."""
     pytest.importorskip("numba")
     result = fim(
-        tiny_params.N,
+        tiny_params.gene_copies,
         tiny_params.m,
         tiny_params.mu,
         tiny_params.d,
@@ -3978,7 +4042,7 @@ def test_fim_records_engine_backend_for_every_replicate_in_a_batch(
     """A multi-replicate batch stamps every replicate's own manifest, not just one."""
     params = replace(tiny_params, n_replicates=3)
     results = fim(
-        params.N,
+        params.gene_copies,
         params.m,
         params.mu,
         params.d,
@@ -4061,7 +4125,7 @@ def test_fim_engine_backend_generational_uses_threaded_advancer(
     entry point, not just `GenerationalBackend` constructed directly.
     """
     result = fim(
-        tiny_params.N,
+        tiny_params.gene_copies,
         tiny_params.m,
         tiny_params.mu,
         tiny_params.d,
@@ -4304,7 +4368,7 @@ def test_fim_engine_backend_generational_with_jit_matches_default(
     """`fim(..., engine_backend="generational", jit="numba")` end to end."""
     pytest.importorskip("numba")
     lineal_result = fim(
-        tiny_params.N,
+        tiny_params.gene_copies,
         tiny_params.m,
         tiny_params.mu,
         tiny_params.d,
@@ -4314,7 +4378,7 @@ def test_fim_engine_backend_generational_with_jit_matches_default(
     assert isinstance(lineal_result, RunResult)
 
     jit_result = fim(
-        tiny_params.N,
+        tiny_params.gene_copies,
         tiny_params.m,
         tiny_params.mu,
         tiny_params.d,
@@ -4348,7 +4412,7 @@ def _finite_alleles_vector_params(**overrides: object) -> SimulationParams:
     reproducible`) wants a single scalar run.
     """
     base = SimulationParams(
-        N=40,
+        gene_copies=40,
         m=0.2,
         mu=0.1,
         d=3,
@@ -4414,7 +4478,9 @@ def test_generational_vector_backend_bounds_capacity_and_stays_valid() -> None:
 
     rows = list(result.store.read(result.run_id))
     assert {int(row["allele_id"]) for row in rows} <= set(range(capacity))
-    result.final_state.validate_support(tuple(_population_sizes(params.N, params.d)))
+    result.final_state.validate_support(
+        tuple(_population_sizes(params.gene_copies, params.d))
+    )
 
 
 def test_generational_vector_backend_batch_is_independently_reproducible() -> None:
@@ -4686,7 +4752,7 @@ def test_generational_vector_backend_matches_lineal_statistically() -> None:
     """
     pytest.importorskip("numba")
     params = SimulationParams(
-        N=40,
+        gene_copies=40,
         m=0.1,
         mu=0.05,
         d=4,
@@ -4708,10 +4774,15 @@ def test_generational_vector_backend_matches_lineal_statistically() -> None:
     )
 
     lineal_results = fim(
-        params.N, params.m, params.mu, params.d, params=params, engine_backend="lineal"
+        params.gene_copies,
+        params.m,
+        params.mu,
+        params.d,
+        params=params,
+        engine_backend="lineal",
     )
     vector_results = fim(
-        params.N,
+        params.gene_copies,
         params.m,
         params.mu,
         params.d,
@@ -4768,7 +4839,7 @@ def test_generational_vector_matches_lineal_statistically_multi_locus() -> None:
     """
     pytest.importorskip("numba")
     params = SimulationParams(
-        N=40,
+        gene_copies=40,
         m=0.0,
         mu=0.05,
         d=4,
@@ -4788,10 +4859,15 @@ def test_generational_vector_matches_lineal_statistically_multi_locus() -> None:
     )
 
     lineal_results = fim(
-        params.N, params.m, params.mu, params.d, params=params, engine_backend="lineal"
+        params.gene_copies,
+        params.m,
+        params.mu,
+        params.d,
+        params=params,
+        engine_backend="lineal",
     )
     vector_results = fim(
-        params.N,
+        params.gene_copies,
         params.m,
         params.mu,
         params.d,
@@ -4823,7 +4899,7 @@ def test_fim_engine_backend_generational_vector_runs_end_to_end() -> None:
     params = _finite_alleles_vector_params()
 
     result = fim(
-        params.N,
+        params.gene_copies,
         params.m,
         params.mu,
         params.d,
@@ -4985,7 +5061,7 @@ def test_every_engine_backend_visits_the_same_generations_and_output_shape() -> 
     """
     pytest.importorskip("numba")
     params = SimulationParams(
-        N=40,
+        gene_copies=40,
         m=0.2,
         mu=0.1,
         d=3,

@@ -86,7 +86,7 @@ def _run(
     expected = module.analytic_d(module._load_oracle(), d, n, migration, mus)
     m = migration if isinstance(migration, float) else tuple(map(tuple, migration))
     params = SimulationParams(
-        N=n,
+        gene_copies=n,
         m=m,
         mu=tuple(mus) if len(set(mus)) > 1 else mus[0],
         d=d,

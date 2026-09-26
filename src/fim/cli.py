@@ -397,7 +397,7 @@ def _command_run(arguments: argparse.Namespace, parser: argparse.ArgumentParser)
     logger.debug(
         "config loaded: N=%s, d=%s, m=%s, mu=%s, seed=%s, n_replicates=%s, "
         "output_directory=%s",
-        params.N,
+        params.gene_copies,
         params.d,
         params.m,
         params.mu,
@@ -486,7 +486,7 @@ def _command_run_scalar(
     logger.info(
         "starting scalar run %s (N=%s, d=%s, m=%s, mu=%s, seed=%s)",
         run_id,
-        params.N,
+        params.gene_copies,
         params.d,
         params.m,
         params.mu,
@@ -495,7 +495,7 @@ def _command_run_scalar(
     if not quiet:
         print(
             f"Running {run_id} "
-            f"(N={params.N}, d={params.d}, m={params.m}, "
+            f"(N={params.gene_copies}, d={params.d}, m={params.m}, "
             f"mu={params.mu}, seed={params.seed})"
         )
         _print_derived_convergence(params)
@@ -503,7 +503,7 @@ def _command_run_scalar(
         targets = _run_artifact_targets(working_directory)
         store = JSONLTrajectoryStore(targets["trajectory"])
         output = fim(
-            params.N,
+            params.gene_copies,
             params.m,
             params.mu,
             params.d,
@@ -624,7 +624,7 @@ def _command_run_batch(
     started_at = _format_timestamp(_utc_now())
     with paths.atomic_directory(output_directory) as working_directory:
         output = fim(
-            params.N,
+            params.gene_copies,
             params.m,
             params.mu,
             params.d,
@@ -922,7 +922,7 @@ def _batch_description(params: SimulationParams, max_workers: int | None) -> str
     else:
         concurrency = f"engine_backend={params.engine_backend!r}"
     return (
-        f"(N={params.N}, d={params.d}, m={params.m}, mu={params.mu}, "
+        f"(N={params.gene_copies}, d={params.d}, m={params.m}, mu={params.mu}, "
         f"seed={params.seed}, n_replicates={params.n_replicates}{adaptive}) "
         f"[{concurrency}]"
     )

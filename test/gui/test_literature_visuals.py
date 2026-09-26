@@ -33,7 +33,7 @@ def _gradient_state() -> ModelState:
 def test_literature_visual_payload_carries_a_wright_beta_overlay() -> None:
     """A scalar run's frequency spectrum carries a Wright beta overlay."""
     params = SimulationParams(
-        N=50,
+        gene_copies=50,
         m=0.05,
         mu=0.01,
         d=4,
@@ -80,7 +80,7 @@ def test_literature_visual_payload_remaps_allele_composition_legend_labels() -> 
     from "raw id" behavior.
     """
     params = SimulationParams(
-        N=50,
+        gene_copies=50,
         m=0.05,
         mu=0.01,
         d=2,
@@ -145,7 +145,7 @@ def test_literature_visual_payload_groups_identity_by_stepping_stone_distance() 
 def _base_params(*, d: int = 2) -> SimulationParams:
     """A minimal, valid `SimulationParams` for the pooling tests below."""
     return SimulationParams(
-        N=50,
+        gene_copies=50,
         m=0.05,
         mu=0.01,
         d=d,

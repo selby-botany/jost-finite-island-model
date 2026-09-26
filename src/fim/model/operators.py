@@ -1706,17 +1706,17 @@ def step(
     # rng draws and every existing reproducible run is bit-for-bit
     # unaffected by this feature's existence.
     migration_rng = rng if params.migrant_sampling == "stochastic" else None
-    migrated = migrate(state, params.m, params.N, rng=migration_rng, jit=jit)
+    migrated = migrate(state, params.m, params.gene_copies, rng=migration_rng, jit=jit)
     mutated = mutate(
         migrated,
         params.mu,
-        params.N,
+        params.gene_copies,
         registry,
         rng,
         finite_alleles=finite_alleles,
         jit=jit,
     )
-    return drift(mutated, params.N, rng, jit=jit)
+    return drift(mutated, params.gene_copies, rng, jit=jit)
 
 
 def _allele_union(frequency_maps: Sequence[FrequencyMap]) -> tuple[AlleleId, ...]:

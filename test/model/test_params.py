@@ -107,7 +107,7 @@ def test_unknown_key_is_rejected_by_name() -> None:
 def test_array_n_and_matrix_m_are_shape_validated() -> None:
     """Future unequal-size and migration-matrix data shapes are accepted."""
     params = SimulationParams(
-        N=(10, 20),
+        gene_copies=(10, 20),
         m=((0.9, 0.1), (0.2, 0.8)),
         mu=0.001,
         d=2,
@@ -132,7 +132,7 @@ def test_direct_construction_rejects_bool_and_string_matrix_entries() -> None:
     """
     with pytest.raises(ValueError, match="m\\[0\\] must be a number"):
         SimulationParams(
-            N=10,
+            gene_copies=10,
             m=((True, 0.0), (0.0, 1.0)),
             mu=0.001,
             d=2,
@@ -141,7 +141,7 @@ def test_direct_construction_rejects_bool_and_string_matrix_entries() -> None:
         )
     with pytest.raises(ValueError, match="mu\\[0\\] must be a number"):
         SimulationParams(
-            N=10,
+            gene_copies=10,
             m=0.1,
             mu=("0.5",),  # type: ignore[arg-type]
             d=2,

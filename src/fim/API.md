@@ -2683,7 +2683,7 @@ class tree to maintain.
 #### fim
 
 ```python
-def fim(N: PopulationSize,
+def fim(gene_copies: PopulationSize,
         m: Migration,
         mu: MutationRate,
         d: int,
@@ -2733,13 +2733,14 @@ silently disagree.
 
 **Arguments**:
 
-- `N` - Gene-copy count, repeated from ``params`` for the public signature.
+- `gene_copies` - Gene-copy count, repeated from ``params`` for the public
+  signature.
 - `m` - Migration rate or matrix, repeated from ``params``.
 - `mu` - Mutation probability, repeated from ``params``.
 - `d` - Deme count, repeated from ``params``.
 - `params` - Full validated run configuration and open parameter bag —
   everything about how to run the simulation that is not
-  already covered by `N`/`m`/`mu`/`d` above (how many
+  already covered by `gene_copies`/`m`/`mu`/`d` above (how many
   generations to allow, when to consider it converged, how
   many replicates to run, and so on). See `fim.model.params.
   SimulationParams`.
@@ -2816,7 +2817,7 @@ silently disagree.
   caller who only builds `params` and never touches this
   argument still gets whatever `params` itself asked for.
   Passing this argument explicitly overrides `params` for this
-  one call, the same relationship `N`/`m`/`mu`/`d` have to
+  one call, the same relationship `gene_copies`/`m`/`mu`/`d` have to
   `params`, without the "must agree" requirement those four
   enforce — this one is a pure override, not a redundant
   cross-check. ``"lineal"`` (both `params`'s own default and
@@ -10915,10 +10916,12 @@ functions that actually use each one.
 
 **Arguments**:
 
-- `N` - Gene-copy count shared by all demes, or one count per deme.
-  Always gene copies, whatever the ploidy: `ploidy` below
+- `gene_copies` - Gene-copy count shared by all demes, or one count per
+  deme. Always gene copies, whatever the ploidy: `ploidy` below
   records how many copies each individual carries, so the
-  number of individuals per deme is `N / ploidy`.
+  number of individuals per deme is `gene_copies / ploidy`. The
+  configuration key `N` (individuals per deme) is a different
+  quantity; `from_mapping` converts.
 - `m` - Symmetric migration rate, or a row-stochastic migration matrix.
 - `mu` - Per-copy mutation probability per generation — shared by every
   locus, or one rate per locus. `SimulationParams.from_mapping`

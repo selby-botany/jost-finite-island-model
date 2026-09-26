@@ -57,12 +57,12 @@ see `doc/fim-gui-test-plan.md`.
 
 The one entry point everything else in this project ultimately calls.
 
-- **`fim(N, m, mu, d, *, params, store=None, run_id=None, clock=None,
+- **`fim(gene_copies, m, mu, d, *, params, store=None, run_id=None, clock=None,
   max_workers=None, store_factory=None, engine_backend=None, jit=None,
   auto_vector_min_d=None, auto_vector_max_capacity=None) -> RunResult |
   tuple[RunResult, ...]`**
   Runs the finite island model to convergence (or the hard generation
-  cap), once per replicate. `N`, `m`, `mu`, `d` must equal the same
+  cap), once per replicate. `gene_copies`, `m`, `mu`, `d` must equal the same
   fields already inside `params`; the four are repeated in the
   signature because a real call site names them directly (matching how
   a genetics paper would state a scenario) rather than reading them out
@@ -77,7 +77,7 @@ The one entry point everything else in this project ultimately calls.
   CLI reachable, `doc/configuration.md`), not duplicate-of-nothing
   keyword arguments; passing one of these four explicitly overrides
   `params` for that one call only, a pure override with no "must agree"
-  requirement (unlike `N`/`m`/`mu`/`d` above). `engine_backend` selects
+  requirement (unlike `gene_copies`/`m`/`mu`/`d` above). `engine_backend` selects
   which of this project's own engine
   implementations actually runs the batch — `"lineal"` (`params`'s own
   default too, every earlier release's own behavior, unchanged),
@@ -215,7 +215,7 @@ The plain data describing one finite-island population at a moment in
 time, and the pure functions that build a starting one.
 
 - **`SimulationParams`** (a frozen dataclass) — the full, validated
-  configuration `fim()` takes: `N` (`PopulationSize`, an `int` gene-copy
+  configuration `fim()` takes: `gene_copies` (`PopulationSize`, an `int` gene-copy
   count or a per-deme tuple), `m` (`Migration`, a scalar rate or a dense
   `d`-by-`d` matrix), `mu` (`MutationRate`, a scalar or per-locus
   tuple), `d` (deme count), `seed`, `loci` (a tuple of `LocusSpec`),

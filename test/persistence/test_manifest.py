@@ -14,7 +14,7 @@ from fim.persistence.manifest import RunManifest, hash_file, verify_trajectory_i
 def _manifest(**overrides: object) -> RunManifest:
     """Build one minimal, otherwise-valid manifest for integrity tests."""
     params = SimulationParams(
-        N=20, m=0.1, mu=0.001, d=2, seed=7, loci=(LocusSpec(1, 200),)
+        gene_copies=20, m=0.1, mu=0.001, d=2, seed=7, loci=(LocusSpec(1, 200),)
     )
     fields: dict[str, object] = {
         "schema_version": 1,

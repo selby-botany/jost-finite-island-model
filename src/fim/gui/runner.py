@@ -264,7 +264,7 @@ def _run_worker(
                 cancel_event=cancel_event,
             )
             result = fim(
-                params.N,
+                params.gene_copies,
                 params.m,
                 params.mu,
                 params.d,

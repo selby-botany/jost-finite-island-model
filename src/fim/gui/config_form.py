@@ -139,7 +139,7 @@ class TabSpec:
 # terms: first how many gene copies each individual carries, then how
 # many *individuals* each deme holds. The form's `N` is therefore
 # individuals; `form_values_to_payload` multiplies by `ploidy` to give
-# `SimulationParams.N` (always gene copies), and `params_to_form_values`
+# `SimulationParams.gene_copies` (always gene copies), and `params_to_form_values`
 # divides back. `ploidy` is deliberately not a default: a blank choice is
 # refused (`PLOIDY_REQUIRED_MESSAGE`) rather than silently guessed, since
 # a wrong guess halves or doubles the gene-copy count of every deme.
@@ -540,7 +540,7 @@ def form_values_to_payload(values: Mapping[str, str]) -> dict[str, object]:
 def _individuals_to_gene_copies(payload: dict[str, object]) -> None:
     """Turn the form's individuals-per-deme `N` into gene copies, in place.
 
-    The form asks for individuals; `SimulationParams.N` is gene copies
+    The form asks for individuals; `SimulationParams.gene_copies` is gene copies
     (`individuals * ploidy`). A blank ploidy is refused rather than
     guessed.
 
@@ -1287,9 +1287,9 @@ def params_to_form_values(params: SimulationParams) -> dict[str, str]:
     else:
         ploidy = params.ploidy
         n_text = (
-            str(params.N // ploidy)
-            if isinstance(params.N, int)
-            else ",".join(str(value // ploidy) for value in params.N)
+            str(params.gene_copies // ploidy)
+            if isinstance(params.gene_copies, int)
+            else ",".join(str(value // ploidy) for value in params.gene_copies)
         )
     values: dict[str, str] = {
         "ploidy": "" if params.ploidy is None else str(params.ploidy),

@@ -222,7 +222,7 @@ def _load_fixed_baseline(config_path: Path | None) -> FixedBaseline:
     if not isinstance(payload, Mapping):
         raise ValueError(f"{config_path}: configuration root must be a mapping")
     params = SimulationParams.from_mapping(payload)
-    if not isinstance(params.N, int):
+    if not isinstance(params.gene_copies, int):
         raise ValueError(f"{config_path}: N must be a single scalar, not per-deme")
     if not isinstance(params.m, int | float):
         raise ValueError(f"{config_path}: m must be a scalar rate, not a matrix")
@@ -234,7 +234,7 @@ def _load_fixed_baseline(config_path: Path | None) -> FixedBaseline:
         )
     return FixedBaseline(
         d=params.d,
-        n=params.N,
+        n=params.gene_copies,
         mu=params.mu,
         m=params.m,
         locus_length=params.loci[0].length,
@@ -297,7 +297,7 @@ def _base_params(
     that would make the very thing being timed vary from run to run.
     """
     return SimulationParams(
-        N=N,
+        gene_copies=N,
         m=m,
         mu=mu,
         d=d,
@@ -440,7 +440,7 @@ def _measure_rss(
         "--d",
         str(params.d),
         "--n",
-        str(params.N),
+        str(params.gene_copies),
         "--mu",
         str(params.mu),
         "--m",

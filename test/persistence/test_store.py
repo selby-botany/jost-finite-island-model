@@ -328,7 +328,7 @@ def test_jsonl_store_appends_generations_and_ignores_partial_tail(
 def test_manifest_round_trip_reconstructs_parameters(tmp_path: Path) -> None:
     """A saved manifest contains a lossless replay configuration."""
     params = SimulationParams(
-        N=20,
+        gene_copies=20,
         m=0.1,
         mu=0.001,
         d=2,
@@ -362,7 +362,7 @@ def test_manifest_round_trip_reconstructs_several_convergence_statistics(
 ) -> None:
     """A manifest watching several statistics is a lossless replay too."""
     params = SimulationParams(
-        N=20,
+        gene_copies=20,
         m=0.1,
         mu=0.001,
         d=2,

@@ -267,7 +267,7 @@ def _batch_worker(
             # outside this worker could otherwise ever observe.
             message_queue.put(("started", working_directory))
             results = fim(
-                params.N,
+                params.gene_copies,
                 params.m,
                 params.mu,
                 params.d,

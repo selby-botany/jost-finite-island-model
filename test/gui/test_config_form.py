@@ -211,10 +211,10 @@ def test_form_values_to_payload_coerces_a_bool_field_from_true_false_text() -> N
 def test_params_to_form_values_renders_track_expensive_statistics_as_text() -> None:
     """`params_to_form_values` renders the field back as literal "true"/"false"."""
     enabled = SimulationParams(
-        N=10, m=0.1, mu=0.0, d=2, seed=1, track_expensive_statistics=True
+        gene_copies=10, m=0.1, mu=0.0, d=2, seed=1, track_expensive_statistics=True
     )
     disabled = SimulationParams(
-        N=10, m=0.1, mu=0.0, d=2, seed=1, track_expensive_statistics=False
+        gene_copies=10, m=0.1, mu=0.0, d=2, seed=1, track_expensive_statistics=False
     )
 
     enabled_values = config_form.params_to_form_values(enabled)
@@ -377,7 +377,7 @@ def test_field_for_error_returns_none_for_an_unmatched_message() -> None:
 def _params(**overrides: object) -> SimulationParams:
     """Build one minimal, otherwise-valid `SimulationParams` for these tests."""
     fields: dict[str, object] = {
-        "N": 20,
+        "gene_copies": 20,
         "m": 0.1,
         "mu": 0.001,
         "d": 2,

@@ -130,7 +130,7 @@ def main() -> None:
 
     loci = tuple(LocusSpec(index + 1, 200) for index in range(args.loci))
     params = SimulationParams(
-        N=n,
+        gene_copies=n,
         m=migration if isinstance(migration, float) else tuple(map(tuple, migration)),
         mu=tuple(mus) if len(set(mus)) > 1 else mus[0],
         d=d,

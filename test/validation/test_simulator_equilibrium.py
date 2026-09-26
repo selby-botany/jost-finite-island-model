@@ -795,7 +795,7 @@ def test_report_for_state_ratio_of_means_matches_the_pooled_oracle() -> None:
     d, n_loci = 4, 6
     loci = tuple(LocusSpec(index + 1, 400) for index in range(n_loci))
     params = SimulationParams(
-        N=200,
+        gene_copies=200,
         m=0.05,
         mu=1e-4,
         d=d,
@@ -805,7 +805,7 @@ def test_report_for_state_ratio_of_means_matches_the_pooled_oracle() -> None:
         max_generations=50,
     )
     result = fim(
-        params.N,
+        params.gene_copies,
         params.m,
         params.mu,
         params.d,
@@ -1004,7 +1004,7 @@ def _run_engine_replicates(
     """
     loci = tuple(LocusSpec(index + 1, 400) for index in range(n_loci))
     params = SimulationParams(
-        N=population_size,
+        gene_copies=population_size,
         m=m,
         mu=mu,
         d=d,
@@ -2294,7 +2294,7 @@ def test_engine_trajectory_matches_the_identity_recursion_gs_and_gd() -> None:
         heterozygosity_0, deme_count=d, locus_count=n_loci
     )
     params = SimulationParams(
-        N=population_size,
+        gene_copies=population_size,
         m=m,
         mu=mu,
         d=d,
@@ -2314,7 +2314,9 @@ def test_engine_trajectory_matches_the_identity_recursion_gs_and_gd() -> None:
     )
     store = InMemoryTrajectoryStore()
 
-    output = fim(params.N, params.m, params.mu, params.d, params=params, store=store)
+    output = fim(
+        params.gene_copies, params.m, params.mu, params.d, params=params, store=store
+    )
 
     assert isinstance(output, tuple)
     assert len(output) == replicates
@@ -2427,7 +2429,7 @@ def test_engine_reproduces_ryman_leimar_ancestral_heterozygosity_effect() -> Non
             heterozygosity_0, deme_count=d, locus_count=n_loci
         )
         params = SimulationParams(
-            N=population_size,
+            gene_copies=population_size,
             m=m,
             mu=mu,
             d=d,
@@ -2441,7 +2443,7 @@ def test_engine_reproduces_ryman_leimar_ancestral_heterozygosity_effect() -> Non
             replicate_tolerance=None,
             initial_frequencies=initial_frequencies,
         )
-        output = fim(params.N, params.m, params.mu, params.d, params=params)
+        output = fim(params.gene_copies, params.m, params.mu, params.d, params=params)
         assert isinstance(output, tuple)
         summary = bootstrap_replicate_summary(
             output, rng=np.random.default_rng(1), bootstrap_samples=500

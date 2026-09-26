@@ -411,7 +411,7 @@ def test_a_rebuilt_convergence_history_matches_the_live_one(tmp_path: Path) -> N
         return JSONLTrajectoryStore(path)
 
     results = engine.fim(
-        params.N,
+        params.gene_copies,
         params.m,
         params.mu,
         params.d,

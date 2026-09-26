@@ -443,7 +443,7 @@ def test_init_writes_parseable_starter_config(tmp_path: Path) -> None:
 
     params = cli.load_config(output)
     assert params.seed == 20260814
-    assert params.N == 450
+    assert params.gene_copies == 450
 
 
 def test_init_writes_a_config_that_runs_as_an_adaptive_replicate_batch(

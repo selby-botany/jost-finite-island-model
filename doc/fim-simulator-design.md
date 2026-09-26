@@ -906,7 +906,7 @@ see §6.
 
 **`viz/scatter.py`** and **`viz/diagnostics.py`** — see §8.
 
-**`engine.py`.** `fim(N, m, mu, d, *, params: SimulationParams) ->
+**`engine.py`.** `fim(gene_copies, m, mu, d, *, params: SimulationParams) ->
 RunResult` — the public entry point matching the requirement's own
 signature. Owns the run loop described in §4.2 and nothing else; every
 step it takes is a call into one of the modules above. With

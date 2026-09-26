@@ -586,13 +586,13 @@ def _wright_beta_overlay(
 ) -> list[dict[str, float]] | None:
     """Return a scalar Wright beta overlay, or ``None`` outside its scope."""
     if (
-        not isinstance(params.N, int)
+        not isinstance(params.gene_copies, int)
         or not isinstance(params.m, float)
         or not isinstance(params.mu, float)
         or sample_count == 0
     ):
         return None
-    theta = equilibrium_g_st(params.N, params.m, params.mu, params.d)
+    theta = equilibrium_g_st(params.gene_copies, params.m, params.mu, params.d)
     if theta <= 0.0 or theta >= 1.0 or not isfinite(theta):
         return None
     allele_means = sorted(
@@ -619,7 +619,7 @@ def _wright_beta_overlay(
     # like with like. Without this the leftmost bin's own overlay point
     # absorbs every rare allele's near-zero mass and towers over the
     # histogram it is meant to be read against.
-    smallest_observable = 1.0 / params.N
+    smallest_observable = 1.0 / params.gene_copies
     masses = []
     for index in range(bin_count):
         low = max(index * width, smallest_observable)

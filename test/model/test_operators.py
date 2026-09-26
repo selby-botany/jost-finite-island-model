@@ -934,7 +934,7 @@ def test_mutate_with_jit_matches_without_jit_under_multi_deme_finite_alleles(
     """
     pytest.importorskip("numba")
     params = SimulationParams(
-        N=30,
+        gene_copies=30,
         m=0.1,
         mu=0.2,
         d=6,
@@ -947,7 +947,7 @@ def test_mutate_with_jit_matches_without_jit_under_multi_deme_finite_alleles(
     without_jit = mutate(
         state,
         params.mu,
-        params.N,
+        params.gene_copies,
         AlleleRegistry(),
         rng(11),
         finite_alleles=_finite_alleles_for(state, params),
@@ -956,7 +956,7 @@ def test_mutate_with_jit_matches_without_jit_under_multi_deme_finite_alleles(
     with_jit = mutate(
         state,
         params.mu,
-        params.N,
+        params.gene_copies,
         AlleleRegistry(),
         rng(11),
         finite_alleles=_finite_alleles_for(state, params),
@@ -983,7 +983,7 @@ def test_mutate_with_jit_falls_back_above_the_capacity_bound(
     pytest.importorskip("numba")
     monkeypatch.setattr(operators, "_MAX_JIT_FINITE_ALLELE_CAPACITY", 50)
     params = SimulationParams(
-        N=30,
+        gene_copies=30,
         m=0.1,
         mu=0.2,
         d=3,
@@ -996,7 +996,7 @@ def test_mutate_with_jit_falls_back_above_the_capacity_bound(
     without_jit = mutate(
         state,
         params.mu,
-        params.N,
+        params.gene_copies,
         AlleleRegistry(),
         rng(12),
         finite_alleles=_finite_alleles_for(state, params),
@@ -1005,7 +1005,7 @@ def test_mutate_with_jit_falls_back_above_the_capacity_bound(
     with_jit_requested = mutate(
         state,
         params.mu,
-        params.N,
+        params.gene_copies,
         AlleleRegistry(),
         rng(12),
         finite_alleles=_finite_alleles_for(state, params),
@@ -1030,7 +1030,7 @@ def test_mutate_with_jit_handles_mixed_eligible_and_ineligible_loci(
     pytest.importorskip("numba")
     monkeypatch.setattr(operators, "_MAX_JIT_FINITE_ALLELE_CAPACITY", 50)
     params = SimulationParams(
-        N=30,
+        gene_copies=30,
         m=0.1,
         mu=0.2,
         d=4,
@@ -1046,7 +1046,7 @@ def test_mutate_with_jit_handles_mixed_eligible_and_ineligible_loci(
     without_jit = mutate(
         state,
         params.mu,
-        params.N,
+        params.gene_copies,
         AlleleRegistry(),
         rng(13),
         finite_alleles=_finite_alleles_for(state, params),
@@ -1055,7 +1055,7 @@ def test_mutate_with_jit_handles_mixed_eligible_and_ineligible_loci(
     with_jit = mutate(
         state,
         params.mu,
-        params.N,
+        params.gene_copies,
         AlleleRegistry(),
         rng(13),
         finite_alleles=_finite_alleles_for(state, params),
@@ -1082,7 +1082,7 @@ def test_step_with_finite_alleles_jit_matches_without_jit_across_many_generation
     """
     pytest.importorskip("numba")
     params = SimulationParams(
-        N=25,
+        gene_copies=25,
         m=0.15,
         mu=0.15,
         d=5,
@@ -1144,7 +1144,7 @@ def test_mutate_with_jit_matches_without_jit_across_many_demes_and_loci(
     """
     pytest.importorskip("numba")
     params = SimulationParams(
-        N=25,
+        gene_copies=25,
         m=0.15,
         mu=(0.03, 0.0, 0.01),
         d=10,
@@ -1153,8 +1153,12 @@ def test_mutate_with_jit_matches_without_jit_across_many_demes_and_loci(
     )
     state = generate_initial_state(params, rng(20260903))
 
-    unjitted = mutate(state, params.mu, params.N, AlleleRegistry(), rng(13), jit=False)
-    jitted = mutate(state, params.mu, params.N, AlleleRegistry(), rng(13), jit=True)
+    unjitted = mutate(
+        state, params.mu, params.gene_copies, AlleleRegistry(), rng(13), jit=False
+    )
+    jitted = mutate(
+        state, params.mu, params.gene_copies, AlleleRegistry(), rng(13), jit=True
+    )
 
     assert unjitted == jitted
 
@@ -1171,7 +1175,7 @@ def test_step_with_mutate_jit_matches_without_jit_across_many_generations(
     """
     pytest.importorskip("numba")
     params = SimulationParams(
-        N=25,
+        gene_copies=25,
         m=0.2,
         mu=0.02,
         d=10,
@@ -1208,7 +1212,7 @@ def test_step_matches_explicit_operator_order(
 ) -> None:
     """The public pipeline is drift(mutate(migrate(state)))."""
     params = SimulationParams(
-        N=20,
+        gene_copies=20,
         m=0.2,
         mu=0.05,
         d=2,
@@ -1218,13 +1222,13 @@ def test_step_matches_explicit_operator_order(
     expected_rng = rng(6)
     expected = drift(
         mutate(
-            migrate(_state(), params.m, params.N),
+            migrate(_state(), params.m, params.gene_copies),
             params.mu,
-            params.N,
+            params.gene_copies,
             AlleleRegistry(),
             expected_rng,
         ),
-        params.N,
+        params.gene_copies,
         expected_rng,
     )
 
@@ -1395,7 +1399,7 @@ def test_jit_migrate_symmetric_blend_matches_plain_batched_computation() -> None
     """
     pytest.importorskip("numba")
     params = SimulationParams(
-        N=30,
+        gene_copies=30,
         m=0.2,
         mu=0.02,
         d=10,
@@ -1450,7 +1454,7 @@ def test_migrate_with_jit_matches_without_jit_across_many_demes_and_loci() -> No
     """
     pytest.importorskip("numba")
     params = SimulationParams(
-        N=40,
+        gene_copies=40,
         m=0.25,
         mu=0.02,
         d=12,
@@ -1459,8 +1463,8 @@ def test_migrate_with_jit_matches_without_jit_across_many_demes_and_loci() -> No
     )
     state = generate_initial_state(params, np.random.default_rng(20260903))
 
-    unjitted = migrate(state, params.m, params.N, jit=False)
-    jitted = migrate(state, params.m, params.N, jit=True)
+    unjitted = migrate(state, params.m, params.gene_copies, jit=False)
+    jitted = migrate(state, params.m, params.gene_copies, jit=True)
 
     assert unjitted == jitted
 
@@ -1512,7 +1516,7 @@ def test_step_with_migrate_jit_matches_without_jit_across_many_generations(
     """
     pytest.importorskip("numba")
     params = SimulationParams(
-        N=25,
+        gene_copies=25,
         m=0.2,
         mu=0.02,
         d=10,
@@ -2173,7 +2177,9 @@ def test_step_with_jit_matches_step_without_jit_bit_for_bit(
 ) -> None:
     """`jit=True` changes nothing about `step`'s own output either, end to end."""
     pytest.importorskip("numba")
-    params = SimulationParams(N=20, m=0.2, mu=0.05, d=2, seed=6, loci=_state().loci)
+    params = SimulationParams(
+        gene_copies=20, m=0.2, mu=0.05, d=2, seed=6, loci=_state().loci
+    )
 
     unjitted = step(_state(), params, AlleleRegistry(), rng(6), jit=False)
     jitted = step(_state(), params, AlleleRegistry(), rng(6), jit=True)
@@ -2197,7 +2203,7 @@ def test_drift_with_jit_matches_without_jit_across_many_generations_and_demes(
     """
     pytest.importorskip("numba")
     params = SimulationParams(
-        N=25,
+        gene_copies=25,
         m=0.15,
         mu=0.02,
         d=12,
@@ -2209,7 +2215,7 @@ def test_drift_with_jit_matches_without_jit_across_many_generations_and_demes(
     unjitted_rng = rng(7)
     jitted_rng = rng(7)
     for _ in range(40):
-        unjitted_state = drift(state, params.N, unjitted_rng, jit=False)
-        jitted_state = drift(state, params.N, jitted_rng, jit=True)
+        unjitted_state = drift(state, params.gene_copies, unjitted_rng, jit=False)
+        jitted_state = drift(state, params.gene_copies, jitted_rng, jit=True)
         assert unjitted_state == jitted_state
         state = unjitted_state

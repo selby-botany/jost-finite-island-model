@@ -375,10 +375,12 @@ class SimulationParams:
     functions that actually use each one.
 
     Args:
-        N: Gene-copy count shared by all demes, or one count per deme.
-            Always gene copies, whatever the ploidy: `ploidy` below
+        gene_copies: Gene-copy count shared by all demes, or one count per
+            deme. Always gene copies, whatever the ploidy: `ploidy` below
             records how many copies each individual carries, so the
-            number of individuals per deme is `N / ploidy`.
+            number of individuals per deme is `gene_copies / ploidy`. The
+            configuration key `N` (individuals per deme) is a different
+            quantity; `from_mapping` converts.
         m: Symmetric migration rate, or a row-stochastic migration matrix.
         mu: Per-copy mutation probability per generation — shared by every
             locus, or one rate per locus. `SimulationParams.from_mapping`
@@ -638,7 +640,7 @@ class SimulationParams:
             of it.
     """
 
-    N: PopulationSize
+    gene_copies: PopulationSize
     m: Migration
     mu: MutationRate
     d: int
@@ -710,7 +712,7 @@ class SimulationParams:
         # large values, so non-negativity is the entire legal range.
         _require_integer("seed", self.seed, minimum=0)
 
-        population_sizes = _normalize_population_sizes(self.N, self.d)
+        population_sizes = _normalize_population_sizes(self.gene_copies, self.d)
         migration = _normalize_migration(self.m, self.d)
         loci = tuple(self.loci)
         if not loci:
@@ -825,7 +827,7 @@ class SimulationParams:
 
         object.__setattr__(
             self,
-            "N",
+            "gene_copies",
             population_sizes[0]
             if len(set(population_sizes)) == 1
             else population_sizes,
@@ -871,9 +873,9 @@ class SimulationParams:
         actually iterates over, so it never needs to special-case the
         "every deme is the same size" shorthand itself.
         """
-        if isinstance(self.N, int):
-            return (self.N,) * self.d
-        return self.N
+        if isinstance(self.gene_copies, int):
+            return (self.gene_copies,) * self.d
+        return self.gene_copies
 
     @property
     def mutation_rates(self) -> tuple[float, ...]:
@@ -983,7 +985,9 @@ class SimulationParams:
         without needing the original config file at all.
         """
         serialized_n: int | list[int] = (
-            self.N if isinstance(self.N, int) else list(self.N)
+            self.gene_copies
+            if isinstance(self.gene_copies, int)
+            else list(self.gene_copies)
         )
 
         serialized_m: float | list[list[float]]
@@ -1136,7 +1140,7 @@ class SimulationParams:
         loci = _loci_from_config(config)
         d = _parse_int("d", config["d"])
         return cls(
-            N=_parse_population_size(config["N"]),
+            gene_copies=_parse_population_size(config["N"]),
             d=d,
             m=_parse_migration(config["m"], d),
             mu=_mutation_rate_from_config(config, loci),
