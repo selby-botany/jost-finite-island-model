@@ -566,6 +566,13 @@ Return to the [source-tree orientation](../README.md) or the [developer guide](.
   * [equilibrium\_shannon\_entropy\_subpopulation](#fim.statistics.differentiation.equilibrium_shannon_entropy_subpopulation)
   * [equilibrium\_shannon\_differentiation](#fim.statistics.differentiation.equilibrium_shannon_differentiation)
   * [statistics\_report](#fim.statistics.differentiation.statistics_report)
+* [fim.statistics.identity\_recursion](#fim.statistics.identity_recursion)
+  * [IdentityRecursion](#fim.statistics.identity_recursion.IdentityRecursion)
+    * [identities\_after](#fim.statistics.identity_recursion.IdentityRecursion.identities_after)
+    * [statistics\_after](#fim.statistics.identity_recursion.IdentityRecursion.statistics_after)
+  * [identities\_from\_heterozygosities](#fim.statistics.identity_recursion.identities_from_heterozygosities)
+  * [identities\_to\_statistics](#fim.statistics.identity_recursion.identities_to_statistics)
+  * [identity\_recursion](#fim.statistics.identity_recursion.identity_recursion)
 * [fim.statistics.interval](#fim.statistics.interval)
   * [ConfidenceInterval](#fim.statistics.interval.ConfidenceInterval)
   * [confidence\_interval](#fim.statistics.interval.confidence_interval)
@@ -16770,6 +16777,199 @@ redundant re-validation *through this function* is gone.
   either — gated for the same reason as `E_ST`/`K_ST`, not
   because computing them costs anything worth avoiding on its
   own.
+
+<a id="fim.statistics.identity_recursion"></a>
+
+# fim.statistics.identity\_recursion
+
+Expected trajectory of the identity-based statistics, in closed form.
+
+`equilibrium_d` and `equilibrium_g_st` say where `D` and `G_ST` settle.
+This module says how they get there: the deterministic (expected) value of
+each statistic at every generation, from a chosen starting state.
+
+Why this is exact for the engine's own model: every quantity here is a
+function of two expected identities,
+
+- `within` = `E[sum_k x_k^2]`, two gene copies drawn from one deme, and
+- `between` = `E[sum_k x_k y_k]`, one copy drawn from each of two demes,
+
+and one generation of the engine (migrate, mutate, drift) maps that pair to
+a new pair by an *affine* rule, `x' = A x + c` with a 2 by 2 matrix `A`. The
+derivation is in the design document `20260911-claude-sonnet-5-derived-
+differentiation-trajectory-design.md` (approach B, iterate the verified
+recursion), and `test/validation/test_simulator_equilibrium.py` carries an
+independent implementation of the same recursion as the engine's oracle.
+
+An affine map has a closed-form solution. With fixed point `x*` and
+eigenpairs `(lambda_k, v_k)` of `A`,
+
+    x_t = x* + sum_k c_k lambda_k^t v_k,   c = V^-1 (x_0 - x*),
+
+so the value at any generation costs a few multiplications, however
+large the generation number is. `IdentityRecursion` holds `x*`, `lambda`, `V`
+and `V^-1` (the "ingredients"), which is exactly what the GUI receives and
+evaluates in the page.
+
+Scope: `d` equal demes of `N` gene copies, symmetric island migration `m`,
+one shared mutation probability. Expected values are exact for those
+assumptions; a single run scatters around them by drift, and a
+multi-locus run whose `locus_aggregation` is `mean_of_ratios` differs from
+the ratio-of-means form used here by a small amount.
+
+<a id="fim.statistics.identity_recursion.IdentityRecursion"></a>
+
+## IdentityRecursion Objects
+
+```python
+@dataclass(frozen=True)
+class IdentityRecursion()
+```
+
+The solved two-variable identity recursion for one configuration.
+
+**Attributes**:
+
+- `deme_count` - Number of demes `d`.
+- `fixed_point` - `(within, between)` the recursion settles to.
+- `eigenvalues` - The two real eigenvalues of the linear part `A`.
+- `eigenvectors` - `V` as rows: `eigenvectors[row][k]` is component
+  `row` of eigenvector `k`.
+- `inverse` - `V^-1`, same layout.
+
+<a id="fim.statistics.identity_recursion.IdentityRecursion.identities_after"></a>
+
+#### identities\_after
+
+```python
+def identities_after(steps: float, within: float,
+                     between: float) -> tuple[float, float]
+```
+
+Return `(within, between)` after `steps` generations.
+
+**Arguments**:
+
+- `steps` - Generations elapsed since the starting state (an
+  integer in practice; any non-negative number works).
+- `within` - Starting within-deme identity.
+- `between` - Starting between-deme identity.
+
+
+**Returns**:
+
+  The expected `(within, between)` identities.
+
+<a id="fim.statistics.identity_recursion.IdentityRecursion.statistics_after"></a>
+
+#### statistics\_after
+
+```python
+def statistics_after(steps: float, within: float,
+                     between: float) -> dict[str, float]
+```
+
+Return the identity-based statistics after `steps` generations.
+
+**Arguments**:
+
+- `steps` - Generations elapsed since the starting state.
+- `within` - Starting within-deme identity.
+- `between` - Starting between-deme identity.
+
+
+**Returns**:
+
+  One value per `IDENTITY_STATISTIC_NAMES`.
+
+<a id="fim.statistics.identity_recursion.identities_from_heterozygosities"></a>
+
+#### identities\_from\_heterozygosities
+
+```python
+def identities_from_heterozygosities(h_s: float, h_t: float,
+                                     deme_count: int) -> tuple[float, float]
+```
+
+Return `(within, between)` identities implied by `H_S` and `H_T`.
+
+Inverts `H_S = 1 - within` and `H_T = 1 - (within + (d - 1) between) / d`.
+For equal demes and symmetric migration, only these two averages
+matter: the recursion commutes with permuting demes, so an uneven
+starting state relaxes exactly as its symmetrized average does.
+
+**Arguments**:
+
+- `h_s` - Mean within-deme heterozygosity.
+- `h_t` - Pooled heterozygosity.
+- `deme_count` - Number of demes, at least 2.
+
+
+**Returns**:
+
+  The `(within, between)` pair.
+
+<a id="fim.statistics.identity_recursion.identities_to_statistics"></a>
+
+#### identities\_to\_statistics
+
+```python
+def identities_to_statistics(within: float, between: float,
+                             deme_count: int) -> dict[str, float]
+```
+
+Return the identity-based statistics for one `(within, between)`.
+
+The pooled forms of `h_s`, `h_t`, `g_st` and `jost_d` written in terms
+of the two identities. A zero denominator (no diversity left) gives
+`0.0` for `G_ST` and `D` rather than `nan`.
+
+**Arguments**:
+
+- `within` - Within-deme identity.
+- `between` - Between-deme identity.
+- `deme_count` - Number of demes `d`.
+
+
+**Returns**:
+
+  `{"D", "G_ST", "H_S", "H_T", "H_ST"}` as floats.
+
+<a id="fim.statistics.identity_recursion.identity_recursion"></a>
+
+#### identity\_recursion
+
+```python
+def identity_recursion(population_size: int, m: float, mu: float,
+                       d: int) -> IdentityRecursion
+```
+
+Solve the engine's identity recursion for one configuration.
+
+One generation is migrate, mutate, drift. Migration maps the two
+identities by fixed coefficients of `m` and `d`; mutation scales them
+by the exact second moment `(1 - mu)^2 + mu (1 - mu) / N`; drift adds
+`1/N` to within-deme identity and keeps `1 - 1/N` of the rest.
+
+**Arguments**:
+
+- `population_size` - Gene copies `N` per deme.
+- `m` - Symmetric migration rate.
+- `mu` - Per-copy mutation probability.
+- `d` - Number of demes, at least 2.
+
+
+**Returns**:
+
+  The solved recursion.
+
+
+**Raises**:
+
+- `ValueError` - If `d < 2`, an input is out of range, or the
+  configuration has no unique closed form (no migration and no
+  mutation leaves no fixed point; two equal eigenvalues make
+  the eigenvector matrix singular).
 
 <a id="fim.statistics.interval"></a>
 

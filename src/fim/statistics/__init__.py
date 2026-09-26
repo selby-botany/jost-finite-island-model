@@ -71,11 +71,20 @@ from .differentiation import (
     total_hill_number,
     within_hill_number,
 )
+from .identity_recursion import (
+    IDENTITY_STATISTIC_NAMES,
+    IdentityRecursion,
+    identities_from_heterozygosities,
+    identities_to_statistics,
+    identity_recursion,
+)
 from .interval import ConfidenceInterval, confidence_interval, student_t_critical_value
 
 __all__ = [
+    "IDENTITY_STATISTIC_NAMES",
     "ConfidenceInterval",
     "DifferentiationReport",
+    "IdentityRecursion",
     "allelic_distance",
     "confidence_interval",
     "d_m",
@@ -103,11 +112,14 @@ __all__ = [
     "h_t",
     "heterozygosity",
     "hill_number",
+    "identities_from_heterozygosities",
+    "identities_to_statistics",
     "identity",
     "identity_recovery_equilibrium",
     "identity_recovery_half_life",
     "identity_recovery_rate",
     "identity_recovery_trajectory",
+    "identity_recursion",
     "jost_d",
     "k_st",
     "mutation_negligible_equilibrium",

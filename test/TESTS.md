@@ -104,6 +104,7 @@ Every test module, fixture, and test function documented here in full; `doc/fim-
   - [`test_validation`](#persistence.test_validation)
 - [`test/statistics/`](#group-statistics)
   - [`test_differentiation`](#statistics.test_differentiation)
+  - [`test_identity_recursion`](#statistics.test_identity_recursion)
   - [`test_interval`](#statistics.test_interval)
   - [`test_properties`](#statistics.test_properties)
 - [`test/validation/`](#group-validation)
@@ -24603,6 +24604,116 @@ ordinary expression, evaluated at import even under `from
 __future__ import annotations` (only the `: TypeAlias` part
 becomes a string), so `typing.get_args` sees the real
 parameterization and a harmless reformat cannot break this test.
+
+<a id="statistics.test_identity_recursion"></a>
+
+# statistics.test\_identity\_recursion
+
+Tests for the closed-form identity recursion (`fim.statistics`).
+
+<a id="statistics.test_identity_recursion.test_closed_form_matches_full_matrix_iteration"></a>
+
+#### test\_closed\_form\_matches\_full\_matrix\_iteration
+
+```python
+@pytest.mark.parametrize(("size", "m", "mu", "d"), CONFIGURATIONS)
+@pytest.mark.parametrize("steps", [0, 1, 7, 200])
+def test_closed_form_matches_full_matrix_iteration(size: int, m: float,
+                                                   mu: float, d: int,
+                                                   steps: int) -> None
+```
+
+The closed form equals the full matrix, even from an uneven start.
+
+<a id="statistics.test_identity_recursion.test_fixed_point_is_where_the_trajectory_ends"></a>
+
+#### test\_fixed\_point\_is\_where\_the\_trajectory\_ends
+
+```python
+@pytest.mark.parametrize(("size", "m", "mu", "d"), CONFIGURATIONS)
+def test_fixed_point_is_where_the_trajectory_ends(size: int, m: float,
+                                                  mu: float, d: int) -> None
+```
+
+A very long run reaches the recursion's own fixed point.
+
+<a id="statistics.test_identity_recursion.test_equilibrium_d_agrees_with_the_published_approximation"></a>
+
+#### test\_equilibrium\_d\_agrees\_with\_the\_published\_approximation
+
+```python
+@pytest.mark.parametrize(("size", "m", "mu", "d"), CONFIGURATIONS)
+def test_equilibrium_d_agrees_with_the_published_approximation(
+        size: int, m: float, mu: float, d: int) -> None
+```
+
+The exact fixed-point `D` is within 15% of `equilibrium_d`.
+
+<a id="statistics.test_identity_recursion.test_identical_founding_demes_start_with_no_differentiation"></a>
+
+#### test\_identical\_founding\_demes\_start\_with\_no\_differentiation
+
+```python
+def test_identical_founding_demes_start_with_no_differentiation() -> None
+```
+
+`within == between == 1` is `D = G_ST = 0` at generation zero.
+
+<a id="statistics.test_identity_recursion.test_statistics_match_the_frequency_table_definitions"></a>
+
+#### test\_statistics\_match\_the\_frequency\_table\_definitions
+
+```python
+def test_statistics_match_the_frequency_table_definitions() -> None
+```
+
+`identities_to_statistics` matches the frequency-table definitions.
+
+<a id="statistics.test_identity_recursion.test_heterozygosities_round_trip_through_identities"></a>
+
+#### test\_heterozygosities\_round\_trip\_through\_identities
+
+```python
+def test_heterozygosities_round_trip_through_identities() -> None
+```
+
+`identities_from_heterozygosities` inverts `H_S`/`H_T`.
+
+<a id="statistics.test_identity_recursion.test_no_diversity_gives_zero_rather_than_nan"></a>
+
+#### test\_no\_diversity\_gives\_zero\_rather\_than\_nan
+
+```python
+def test_no_diversity_gives_zero_rather_than_nan() -> None
+```
+
+A fixed population (everyone identical) has finite, zero differentiation.
+
+<a id="statistics.test_identity_recursion.test_invalid_inputs_are_refused"></a>
+
+#### test\_invalid\_inputs\_are\_refused
+
+```python
+@pytest.mark.parametrize(
+    ("size", "m", "mu", "d"),
+    [(100, 0.1, 0.01, 1), (0, 0.1, 0.01, 4), (100, 1.5, 0.01, 4),
+     (100, 0.1, -1, 4)],
+)
+def test_invalid_inputs_are_refused(size: int, m: float, mu: float,
+                                    d: int) -> None
+```
+
+Out-of-range inputs raise `ValueError`.
+
+<a id="statistics.test_identity_recursion.test_no_migration_and_no_mutation_has_no_fixed_point"></a>
+
+#### test\_no\_migration\_and\_no\_mutation\_has\_no\_fixed\_point
+
+```python
+def test_no_migration_and_no_mutation_has_no_fixed_point() -> None
+```
+
+Fully isolated, mutation-free demes never settle, so there is no closed form.
 
 <a id="statistics.test_interval"></a>
 

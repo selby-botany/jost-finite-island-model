@@ -1,0 +1,270 @@
+"""Expected trajectory of the identity-based statistics, in closed form.
+
+`equilibrium_d` and `equilibrium_g_st` say where `D` and `G_ST` settle.
+This module says how they get there: the deterministic (expected) value of
+each statistic at every generation, from a chosen starting state.
+
+Why this is exact for the engine's own model: every quantity here is a
+function of two expected identities,
+
+- `within` = `E[sum_k x_k^2]`, two gene copies drawn from one deme, and
+- `between` = `E[sum_k x_k y_k]`, one copy drawn from each of two demes,
+
+and one generation of the engine (migrate, mutate, drift) maps that pair to
+a new pair by an *affine* rule, `x' = A x + c` with a 2 by 2 matrix `A`. The
+derivation is in the design document `20260911-claude-sonnet-5-derived-
+differentiation-trajectory-design.md` (approach B, iterate the verified
+recursion), and `test/validation/test_simulator_equilibrium.py` carries an
+independent implementation of the same recursion as the engine's oracle.
+
+An affine map has a closed-form solution. With fixed point `x*` and
+eigenpairs `(lambda_k, v_k)` of `A`,
+
+    x_t = x* + sum_k c_k lambda_k^t v_k,   c = V^-1 (x_0 - x*),
+
+so the value at any generation costs a few multiplications, however
+large the generation number is. `IdentityRecursion` holds `x*`, `lambda`, `V`
+and `V^-1` (the "ingredients"), which is exactly what the GUI receives and
+evaluates in the page.
+
+Scope: `d` equal demes of `N` gene copies, symmetric island migration `m`,
+one shared mutation probability. Expected values are exact for those
+assumptions; a single run scatters around them by drift, and a
+multi-locus run whose `locus_aggregation` is `mean_of_ratios` differs from
+the ratio-of-means form used here by a small amount.
+"""
+
+from __future__ import annotations
+
+import math
+from dataclasses import dataclass
+
+# Statistics that are a function of the two identities alone. `E_ST`,
+# `K_ST` and the effective-allele family need the allele structure itself.
+IDENTITY_STATISTIC_NAMES = ("D", "G_ST", "H_S", "H_T", "H_ST")
+
+# The recursion needs a between-deme identity, so at least two demes.
+_MINIMUM_DEMES = 2
+
+# Eigenvalues closer than this (relative to the larger) make the 2 by 2
+# eigenvector matrix numerically singular.
+_DEGENERACY_TOLERANCE = 1e-9
+
+# Below these, the fixed-point system or the eigenvector matrix is singular
+# to double precision.
+_SINGULAR_FIXED_POINT = 1e-15
+_SINGULAR_EIGENVECTORS = 1e-300
+
+
+@dataclass(frozen=True)
+class IdentityRecursion:
+    """The solved two-variable identity recursion for one configuration.
+
+    Attributes:
+        deme_count: Number of demes `d`.
+        fixed_point: `(within, between)` the recursion settles to.
+        eigenvalues: The two real eigenvalues of the linear part `A`.
+        eigenvectors: `V` as rows: `eigenvectors[row][k]` is component
+            `row` of eigenvector `k`.
+        inverse: `V^-1`, same layout.
+    """
+
+    deme_count: int
+    fixed_point: tuple[float, float]
+    eigenvalues: tuple[float, float]
+    eigenvectors: tuple[tuple[float, float], tuple[float, float]]
+    inverse: tuple[tuple[float, float], tuple[float, float]]
+
+    def identities_after(
+        self, steps: float, within: float, between: float
+    ) -> tuple[float, float]:
+        """Return `(within, between)` after `steps` generations.
+
+        Args:
+            steps: Generations elapsed since the starting state (an
+                integer in practice; any non-negative number works).
+            within: Starting within-deme identity.
+            between: Starting between-deme identity.
+
+        Returns:
+            The expected `(within, between)` identities.
+        """
+        offset = (within - self.fixed_point[0], between - self.fixed_point[1])
+        coefficients = [
+            self.inverse[k][0] * offset[0] + self.inverse[k][1] * offset[1]
+            for k in range(2)
+        ]
+        decayed = [coefficients[k] * self.eigenvalues[k] ** steps for k in range(2)]
+        return (
+            self.fixed_point[0]
+            + self.eigenvectors[0][0] * decayed[0]
+            + self.eigenvectors[0][1] * decayed[1],
+            self.fixed_point[1]
+            + self.eigenvectors[1][0] * decayed[0]
+            + self.eigenvectors[1][1] * decayed[1],
+        )
+
+    def statistics_after(
+        self, steps: float, within: float, between: float
+    ) -> dict[str, float]:
+        """Return the identity-based statistics after `steps` generations.
+
+        Args:
+            steps: Generations elapsed since the starting state.
+            within: Starting within-deme identity.
+            between: Starting between-deme identity.
+
+        Returns:
+            One value per `IDENTITY_STATISTIC_NAMES`.
+        """
+        current_within, current_between = self.identities_after(steps, within, between)
+        return identities_to_statistics(
+            current_within, current_between, self.deme_count
+        )
+
+
+def identities_from_heterozygosities(
+    h_s: float, h_t: float, deme_count: int
+) -> tuple[float, float]:
+    """Return `(within, between)` identities implied by `H_S` and `H_T`.
+
+    Inverts `H_S = 1 - within` and `H_T = 1 - (within + (d - 1) between) / d`.
+    For equal demes and symmetric migration, only these two averages
+    matter: the recursion commutes with permuting demes, so an uneven
+    starting state relaxes exactly as its symmetrized average does.
+
+    Args:
+        h_s: Mean within-deme heterozygosity.
+        h_t: Pooled heterozygosity.
+        deme_count: Number of demes, at least 2.
+
+    Returns:
+        The `(within, between)` pair.
+    """
+    within = 1.0 - h_s
+    between = (deme_count * (1.0 - h_t) - within) / (deme_count - 1)
+    return within, between
+
+
+def identities_to_statistics(
+    within: float, between: float, deme_count: int
+) -> dict[str, float]:
+    """Return the identity-based statistics for one `(within, between)`.
+
+    The pooled forms of `h_s`, `h_t`, `g_st` and `jost_d` written in terms
+    of the two identities. A zero denominator (no diversity left) gives
+    `0.0` for `G_ST` and `D` rather than `nan`.
+
+    Args:
+        within: Within-deme identity.
+        between: Between-deme identity.
+        deme_count: Number of demes `d`.
+
+    Returns:
+        `{"D", "G_ST", "H_S", "H_T", "H_ST"}` as floats.
+    """
+    d = deme_count
+    h_s = 1.0 - within
+    h_t = 1.0 - (within + (d - 1) * between) / d
+    h_st = h_t - h_s
+    g_st = h_st / h_t if h_t > 0.0 else 0.0
+    jost_d = 1.0 - between / within if within > 0.0 else 0.0
+    return {"D": jost_d, "G_ST": g_st, "H_S": h_s, "H_T": h_t, "H_ST": h_st}
+
+
+def identity_recursion(
+    population_size: int, m: float, mu: float, d: int
+) -> IdentityRecursion:
+    """Solve the engine's identity recursion for one configuration.
+
+    One generation is migrate, mutate, drift. Migration maps the two
+    identities by fixed coefficients of `m` and `d`; mutation scales them
+    by the exact second moment `(1 - mu)^2 + mu (1 - mu) / N`; drift adds
+    `1/N` to within-deme identity and keeps `1 - 1/N` of the rest.
+
+    Args:
+        population_size: Gene copies `N` per deme.
+        m: Symmetric migration rate.
+        mu: Per-copy mutation probability.
+        d: Number of demes, at least 2.
+
+    Returns:
+        The solved recursion.
+
+    Raises:
+        ValueError: If `d < 2`, an input is out of range, or the
+            configuration has no unique closed form (no migration and no
+            mutation leaves no fixed point; two equal eigenvalues make
+            the eigenvector matrix singular).
+    """
+    if d < _MINIMUM_DEMES:
+        raise ValueError("identity recursion needs at least two demes")
+    if population_size < 1 or not 0.0 <= m <= 1.0 or not 0.0 <= mu <= 1.0:
+        raise ValueError("identity recursion inputs are out of range")
+
+    # Migration coefficients (retained fraction `1 - m`, `m / (d - 1)` to
+    # each other deme), then the mutation and drift steps folded in.
+    retained = 1.0 - m
+    shared = m / (d - 1)
+    within_from_within = retained * retained + shared * shared * (d - 1)
+    within_from_between = 2.0 * retained * m + shared * shared * (d - 1) * (d - 2)
+    between_from_within = 2.0 * retained * shared + shared * shared * (d - 2)
+    between_from_between = (
+        retained * retained
+        + 2.0 * retained * shared * (d - 2)
+        + shared * shared * ((d - 1) ** 2 - (d - 2))
+    )
+    inverse_size = 1.0 / population_size
+    survival = (1.0 - mu) ** 2 + mu * (1.0 - mu) * inverse_size
+    keep = (1.0 - inverse_size) * survival
+    a11 = keep * within_from_within
+    a12 = keep * within_from_between
+    a21 = survival * between_from_within
+    a22 = survival * between_from_between
+
+    # Fixed point: solve (I - A) x = c with c = (1/N, 0).
+    determinant = (1.0 - a11) * (1.0 - a22) - a12 * a21
+    if not abs(determinant) > _SINGULAR_FIXED_POINT:
+        raise ValueError(
+            "no closed-form trajectory: the configuration has no unique "
+            "fixed point (no migration and no mutation)"
+        )
+    fixed_within = inverse_size * (1.0 - a22) / determinant
+    fixed_between = inverse_size * a21 / determinant
+
+    # Eigen-decomposition of the 2 by 2 matrix. The discriminant
+    # `(a11 - a22)^2 + 4 a12 a21` is never negative for a nonnegative
+    # matrix, so both eigenvalues are real.
+    trace = a11 + a22
+    discriminant = (a11 - a22) ** 2 + 4.0 * a12 * a21
+    root = math.sqrt(max(discriminant, 0.0))
+    high = (trace + root) / 2.0
+    low = (trace - root) / 2.0
+    if root <= _DEGENERACY_TOLERANCE * max(abs(high), abs(low), _SINGULAR_EIGENVECTORS):
+        raise ValueError(
+            "no closed-form trajectory: the recursion has a repeated "
+            "eigenvalue for this configuration"
+        )
+
+    def eigenvector(value: float) -> tuple[float, float]:
+        # Both `(a12, value - a11)` and `(value - a22, a21)` satisfy
+        # `A v = value v`; take whichever is farther from zero.
+        first = (a12, value - a11)
+        second = (value - a22, a21)
+        return first if math.hypot(*first) >= math.hypot(*second) else second
+
+    v_high = eigenvector(high)
+    v_low = eigenvector(low)
+    matrix_determinant = v_high[0] * v_low[1] - v_low[0] * v_high[1]
+    if not abs(matrix_determinant) > _SINGULAR_EIGENVECTORS:
+        raise ValueError("no closed-form trajectory: singular eigenvectors")
+    return IdentityRecursion(
+        deme_count=d,
+        fixed_point=(fixed_within, fixed_between),
+        eigenvalues=(high, low),
+        eigenvectors=((v_high[0], v_low[0]), (v_high[1], v_low[1])),
+        inverse=(
+            (v_low[1] / matrix_determinant, -v_low[0] / matrix_determinant),
+            (-v_high[1] / matrix_determinant, v_high[0] / matrix_determinant),
+        ),
+    )
