@@ -839,6 +839,14 @@ project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Changed
 
+- **New configurations start diploid.** The desktop app's ploidy used to start
+  blank, and a blank ploidy refuses to run ("ploidy must be chosen"), so a
+  first-time botanist could not start a run and saw no graphs until they found
+  the ploidy field. New configurations now start on diploid (Settings'
+  "Default ploidy", still changeable; "Ask me each time" keeps the blank
+  behavior and is remembered). The simulator is unchanged: it counts gene
+  copies, so 225 diploid individuals is 450 gene copies.
+
 - **Runs now wait for the population to settle: the convergence window and
   generation cap are derived from the model.** `convergence_window` and
   `max_generations` used to default to the fixed numbers 50 and 10,000. A

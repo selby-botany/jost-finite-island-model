@@ -530,12 +530,23 @@ def test_quarantine_injected_clock_produces_exact_name(tmp_path: Path) -> None:
     assert quarantined.name == "preferences.invalid-20260907T123456.789012.json"
 
 
-def test_default_ploidy_is_blank_and_omitted_from_disk() -> None:
-    """No default ploidy is the normal state and writes nothing."""
+def test_default_ploidy_is_diploid_and_omitted_from_disk() -> None:
+    """Diploid is the default: the normal state writes nothing."""
     preferences = GuiPreferences()
 
-    assert preferences.default_ploidy == ""
+    assert preferences.default_ploidy == "2"
     assert "default_ploidy" not in preferences.to_dict()["gui"]
+
+
+def test_a_blank_default_ploidy_is_written_and_read_back(tmp_path: Path) -> None:
+    """ "Ask me each time" is not the default, so it must survive a save and load."""
+    path = tmp_path / "preferences.json"
+    save_preferences(path, GuiPreferences().with_default_ploidy(""))
+
+    loaded, warning = load_preferences(path)
+
+    assert warning is None
+    assert loaded.default_ploidy == ""
 
 
 def test_default_ploidy_round_trips_and_with_updates_only_itself(

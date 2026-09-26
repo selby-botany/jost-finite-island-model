@@ -36,7 +36,8 @@ const FIELD_HELP = {
     seed: "Seed for this run's random number generator. The same seed and " +
         "configuration always produce byte-identical results.",
     ploidy: "How many gene copies each individual carries: haploid 1, " +
-        "diploid 2, triploid 3, tetraploid 4. Choose it first; the " +
+        "diploid 2, triploid 3, tetraploid 4. New configurations start " +
+        "diploid (change that in Settings). Choose it first; the " +
         "simulator counts gene copies, so it multiplies your individuals " +
         "by this number.",
     n_mode: "Same for every deme uses one count of individuals for all " +

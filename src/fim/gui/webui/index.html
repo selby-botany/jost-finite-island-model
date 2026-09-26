@@ -1300,9 +1300,10 @@
         <!-- Ploidy first, then individuals (botanist feedback, first
              real beta run): the form asks in the botanist's own terms and
              `config_form.form_values_to_payload` multiplies individuals
-             by ploidy into the simulator's gene-copy `N`. No default:
-             a blank choice is refused ("ploidy must be chosen") rather
-             than guessed, unless Settings supplies a default ploidy. -->
+             by ploidy into the simulator's gene-copy `N`. New
+             configurations start diploid (Settings' default ploidy); a
+             blank choice is refused ("ploidy must be chosen") rather than
+             guessed. -->
         <div class="field">
           <label for="field-ploidy" data-field-help="ploidy">ploidy</label>
           <select id="field-ploidy" name="ploidy" form="input-form">
@@ -1945,9 +1946,9 @@
          botanist's own call for what a Study group's own "Re-run all…"
          action (`open-run.js`) does with each configuration's seed. -->
     <!-- Default ploidy (botanist feedback, first real beta run): what a
-         fresh configuration's ploidy starts on. Blank keeps the "choose
-         every time" behavior. Applied to new configurations only --
-         never to a run already being edited or reopened. -->
+         fresh configuration's ploidy starts on. Diploid unless changed;
+         "Ask me each time" leaves it blank. Applied to new configurations
+         only -- never to a run already being edited or reopened. -->
     <div class="field">
       <label for="settings-default-ploidy">Default ploidy</label>
       <select id="settings-default-ploidy">
@@ -1958,8 +1959,8 @@
         <option value="4">Tetraploid (4)</option>
       </select>
       <p class="hint">
-        The ploidy a new configuration starts on. Leave it on "Ask me each
-        time" to choose for every configuration.
+        The ploidy a new configuration starts on, diploid unless you change
+        it. Choose "Ask me each time" to pick for every configuration.
       </p>
     </div>
 

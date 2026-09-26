@@ -123,6 +123,11 @@ CURRENT_SCHEMA_VERSION: Final = 2
 # form must stay complete, or the whole form would be discarded); nothing
 # else in the file is touched and nothing is quarantined.
 LEGACY_SCHEMA_VERSION: Final = 1
+
+# The ploidy a fresh configuration starts on when nothing is saved. Diploid,
+# because that is what the botanists studying these plants have: a blank
+# default blocked every first run until a ploidy was chosen.
+DEFAULT_PLOIDY: Final = "2"
 _DERIVED_FIELDS: Final = ("convergence_window", "max_generations")
 
 # Injectable so a test can supply a fixed instant for the quarantine
@@ -255,10 +260,12 @@ class GuiPreferences:
         run_graph_columns: How many columns the shown graphs are laid out
             in (rows follow); 1 to `MAX_RUN_GRAPH_COLUMNS`.
         scatter_style: One of `SCATTER_STYLES`.
-        default_ploidy: `""` (the default: no default, the botanist
-            chooses on every new configuration) or `"1"`-`"4"` -- the
+        default_ploidy: `"2"` (the default: diploid) or `"1"`-`"4"`, or
+            `""` when the botanist chose "Ask me each time" -- the
             ploidy a fresh configuration's form starts on (Settings'
-            "Default ploidy"). Deliberately separate from
+            "Default ploidy"). A blank ploidy stops a run from starting
+            ("ploidy must be chosen"), so a botanist who has not yet
+            chosen gets diploid rather than a blocked form. Deliberately separate from
             `default_run_settings`: those are merged back into a
             submission at run time, which would overwrite a ploidy the
             botanist chose for this particular run; this only seeds a
@@ -273,7 +280,7 @@ class GuiPreferences:
     startup_behavior: str = "restore"
     default_run_settings: dict[str, str] | None = None
     results_location_override: str | None = None
-    default_ploidy: str = ""
+    default_ploidy: str = DEFAULT_PLOIDY
     run_graphs: tuple[str, ...] | None = None
     run_graph_columns: int = DEFAULT_RUN_GRAPH_COLUMNS
     scatter_style: str = DEFAULT_SCATTER_STYLE
@@ -302,7 +309,10 @@ class GuiPreferences:
             gui["startup_behavior"] = self.startup_behavior
         if self.results_location_override is not None:
             gui["results_location_override"] = self.results_location_override
-        if self.default_ploidy:
+        # Written whenever it differs from the default, including the blank
+        # "Ask me each time" choice, which would otherwise be lost and read
+        # back as diploid.
+        if self.default_ploidy != DEFAULT_PLOIDY:
             gui["default_ploidy"] = self.default_ploidy
         gui.update(self._run_card_dict())
         result: dict[str, Any] = {"schema_version": CURRENT_SCHEMA_VERSION, "gui": gui}
@@ -358,7 +368,9 @@ class GuiPreferences:
             raise ValueError(
                 "preferences 'gui.results_location_override' must be a string"
             )
-        default_ploidy = _choice(gui, "default_ploidy", "", ("", "1", "2", "3", "4"))
+        default_ploidy = _choice(
+            gui, "default_ploidy", DEFAULT_PLOIDY, ("", "1", "2", "3", "4")
+        )
         form_values = data.get("form")
         if form_values is not None:
             if not isinstance(form_values, Mapping) or not all(

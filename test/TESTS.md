@@ -7226,7 +7226,7 @@ def test_default_ploidy_seeds_a_fresh_form_and_makes_it_submittable(
         tmp_path: Path) -> None
 ```
 
-A saved default ploidy starts new forms on it; unset leaves it to choose.
+New forms start diploid; "Ask me each time" blanks the form and persists.
 
 <a id="gui.test_app_api.test_default_ploidy_does_not_overwrite_a_ploidy_chosen_for_one_run"></a>
 
@@ -7269,7 +7269,7 @@ def test_explore_handoff_without_a_ploidy_leaves_it_to_be_chosen(
         tmp_path: Path) -> None
 ```
 
-With no default ploidy the count cannot be converted honestly.
+With "Ask me each time" the count cannot be converted honestly.
 
 <a id="gui.test_app_api.test_get_starter_form_falls_back_when_saved_default_run_settings_is_invalid"></a>
 
@@ -15152,15 +15152,26 @@ An injected clock gives `_quarantine` a deterministic filename.
 the exact timestamp format via a fixed instant, matching `fim.
 paths.default_output_directory`'s own injected-clock test pattern.
 
-<a id="gui.test_preferences.test_default_ploidy_is_blank_and_omitted_from_disk"></a>
+<a id="gui.test_preferences.test_default_ploidy_is_diploid_and_omitted_from_disk"></a>
 
-#### test\_default\_ploidy\_is\_blank\_and\_omitted\_from\_disk
+#### test\_default\_ploidy\_is\_diploid\_and\_omitted\_from\_disk
 
 ```python
-def test_default_ploidy_is_blank_and_omitted_from_disk() -> None
+def test_default_ploidy_is_diploid_and_omitted_from_disk() -> None
 ```
 
-No default ploidy is the normal state and writes nothing.
+Diploid is the default: the normal state writes nothing.
+
+<a id="gui.test_preferences.test_a_blank_default_ploidy_is_written_and_read_back"></a>
+
+#### test\_a\_blank\_default\_ploidy\_is\_written\_and\_read\_back
+
+```python
+def test_a_blank_default_ploidy_is_written_and_read_back(
+        tmp_path: Path) -> None
+```
+
+"Ask me each time" is not the default, so it must survive a save and load.
 
 <a id="gui.test_preferences.test_default_ploidy_round_trips_and_with_updates_only_itself"></a>
 

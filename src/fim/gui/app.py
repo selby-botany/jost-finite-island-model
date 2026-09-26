@@ -1748,8 +1748,9 @@ class Api:
         submission, which would overwrite a ploidy chosen for one run.
         """
         overrides = dict(self._preferences.default_run_settings or {})
-        if self._preferences.default_ploidy:
-            overrides["ploidy"] = self._preferences.default_ploidy
+        # Always applied, blank included: a blank default is the botanist's
+        # own "Ask me each time" choice and must blank the starter's ploidy.
+        overrides["ploidy"] = self._preferences.default_ploidy
         return overrides
 
     def _merge_default_run_settings(self, values: dict[str, str]) -> dict[str, str]:
@@ -2018,7 +2019,7 @@ class Api:
 
     @_log_bridge_call
     def get_default_ploidy(self) -> str:
-        """Return Settings' default ploidy: `""` (choose every time) or `"1"`-`"4"`."""
+        """Return the default ploidy: `"2"` unless changed; `""` asks each time."""
         return self._preferences.default_ploidy
 
     @_log_bridge_call

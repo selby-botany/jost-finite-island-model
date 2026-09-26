@@ -4054,7 +4054,7 @@ Choose how the scatter plot draws its points.
 def get_default_ploidy() -> str
 ```
 
-Return Settings' default ploidy: `""` (choose every time) or `"1"`-`"4"`.
+Return the default ploidy: `"2"` unless changed; `""` asks each time.
 
 <a id="fim.gui.app.Api.set_default_ploidy"></a>
 
@@ -7760,10 +7760,12 @@ One loaded (or default) snapshot of the GUI's own preferences.
 - `run_graph_columns` - How many columns the shown graphs are laid out
   in (rows follow); 1 to `MAX_RUN_GRAPH_COLUMNS`.
 - `scatter_style` - One of `SCATTER_STYLES`.
-- `default_ploidy` - `""` (the default: no default, the botanist
-  chooses on every new configuration) or `"1"`-`"4"` -- the
+- `default_ploidy` - `"2"` (the default: diploid) or `"1"`-`"4"`, or
+  `""` when the botanist chose "Ask me each time" -- the
   ploidy a fresh configuration's form starts on (Settings'
-  "Default ploidy"). Deliberately separate from
+  "Default ploidy"). A blank ploidy stops a run from starting
+  ("ploidy must be chosen"), so a botanist who has not yet
+  chosen gets diploid rather than a blocked form. Deliberately separate from
 - ``default_run_settings`` - those are merged back into a
   submission at run time, which would overwrite a ploidy the
   botanist chose for this particular run; this only seeds a

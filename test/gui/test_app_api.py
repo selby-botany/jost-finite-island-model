@@ -160,21 +160,27 @@ def test_run_card_layout_rejects_bad_input_and_saves_nothing(tmp_path: Path) -> 
 def test_default_ploidy_seeds_a_fresh_form_and_makes_it_submittable(
     tmp_path: Path,
 ) -> None:
-    """A saved default ploidy starts new forms on it; unset leaves it to choose."""
+    """New forms start diploid; "Ask me each time" blanks the form and persists."""
     preferences_path = tmp_path / "preferences.json"
     api = Api(preferences_path=preferences_path)
 
-    assert api.get_default_ploidy() == ""
-    assert api.get_starter_form()["ploidy"] == ""
-    assert api.validate_form(api.get_starter_form())["ok"] is False
+    # Nothing saved: diploid, so the first run is not blocked.
+    assert api.get_default_ploidy() == "2"
+    assert api.get_starter_form()["ploidy"] == "2"
+    assert api.validate_form(api.get_starter_form())["ok"] is True
 
-    assert api.set_default_ploidy("2") == {"ok": True, "value": "2"}
+    # The botanist's explicit "Ask me each time" blanks the form, survives a
+    # relaunch (a blank is not the default, so it must be written), and a
+    # blank ploidy blocks a run until one is chosen.
+    assert api.set_default_ploidy("") == {"ok": True, "value": ""}
     reloaded = Api(preferences_path=preferences_path)
-    form = reloaded.get_starter_form()
+    assert reloaded.get_default_ploidy() == ""
+    assert reloaded.get_starter_form()["ploidy"] == ""
+    assert reloaded.validate_form(reloaded.get_starter_form())["ok"] is False
 
-    assert reloaded.get_default_ploidy() == "2"
-    assert form["ploidy"] == "2"
-    assert reloaded.validate_form(form)["ok"] is True
+    # A chosen ploidy starts new forms on it.
+    assert reloaded.set_default_ploidy("4") == {"ok": True, "value": "4"}
+    assert Api(preferences_path=preferences_path).get_starter_form()["ploidy"] == "4"
 
 
 def test_default_ploidy_does_not_overwrite_a_ploidy_chosen_for_one_run(
@@ -197,7 +203,7 @@ def test_set_default_ploidy_rejects_an_unknown_value(tmp_path: Path) -> None:
     result = api.set_default_ploidy("7")
 
     assert result["ok"] is False
-    assert api.get_default_ploidy() == ""
+    assert api.get_default_ploidy() == "2"
 
 
 def test_explore_handoff_converts_gene_copies_using_the_default_ploidy(
@@ -217,8 +223,9 @@ def test_explore_handoff_converts_gene_copies_using_the_default_ploidy(
 def test_explore_handoff_without_a_ploidy_leaves_it_to_be_chosen(
     tmp_path: Path,
 ) -> None:
-    """With no default ploidy the count cannot be converted honestly."""
+    """With "Ask me each time" the count cannot be converted honestly."""
     api = Api(preferences_path=tmp_path / "preferences.json")
+    api.set_default_ploidy("")
 
     result = api.get_starter_form_with_overrides({"gene_copies": "600", "d": "4"})
 
@@ -451,7 +458,8 @@ def test_get_initial_form_falls_back_to_starter_values_for_a_stale_saved_form(
 
     result = Api(preferences_path=preferences_path).get_initial_form()
 
-    assert result == starter_form_values()
+    # The fallback is the starter form as a fresh launch sees it: diploid.
+    assert result == starter_form_values(overrides={"ploidy": "2"})
 
 
 def test_get_default_max_workers_matches_batch_runner_directly() -> None:
