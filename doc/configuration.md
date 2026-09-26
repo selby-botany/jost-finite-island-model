@@ -22,7 +22,7 @@ the [project overview](../README.md) for installation.
 N: 450
 d: 20
 m: 0.001
-mu: 0.00003
+mu: 0.0000003
 seed: 20260814
 loci:
   - locus_id: 1

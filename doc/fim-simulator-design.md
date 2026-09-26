@@ -464,7 +464,7 @@ from fixation-neutrality (G<sub>ST</sub> near zero) — which is exactly the poi
 the letter itself is making (Nm does not control allelic differentiation;
 m/[μ(d-1)] does), rendered as a parameter sweep rather than a static
 table. Approximately the geometric midpoint of the two — N ≈ 450, d ≈ 20,
-m ≈ 0.001, μ ≈ 0.00003 — is the default scenario for exercising the
+m ≈ 0.001, μ ≈ 0.0000003 — is the default scenario for exercising the
 simulator end to end, sitting between the two regimes rather than at
 either extreme.
 
@@ -1263,7 +1263,7 @@ starter config:
 N: 450                    # gene copies per deme (§3.1: ploidy-neutral)
 d: 20                     # demes
 m: 0.001                  # migration rate
-mu: 0.00003               # mutation rate
+mu: 0.0000003             # mutation rate
 seed: 20260814
 loci:
   - locus_id: 1
@@ -1282,7 +1282,7 @@ Running it — a real, reproducible transcript, not a sketch:
 
 ```console
 $ fim run myrun.yaml -o results/example
-Running run-cee6b47ea87691ee (N=450, d=20, m=0.001, mu=3e-05, seed=20260814)
+Running run-cee6b47ea87691ee (N=450, d=20, m=0.001, mu=3e-07, seed=20260814)
 Statistic converged: generation 49, D=0.238373, G_ST=0.365507
 Trajectory -> results/example/trajectory.jsonl
 Manifest   -> results/example/manifest.json

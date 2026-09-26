@@ -321,7 +321,7 @@ def test_parameter_strip_shows_the_starter_configuration_on_launch(
         ),
     )
     # Individuals with the ploidy the test fixtures seed as the default.
-    assert values == {"N": "225 haploid", "d": "20", "m": "0.001", "mu": "3e-05"}
+    assert values == {"N": "225 haploid", "d": "20", "m": "0.001", "mu": "3e-07"}
 
 
 def test_clicking_configure_shows_the_landing_screen_and_updates_the_rail(

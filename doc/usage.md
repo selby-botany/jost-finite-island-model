@@ -571,7 +571,7 @@ N: 100
 ploidy: 2
 d: 5
 m: 0.001
-mu: 0.00003
+mu: 0.0000003
 seed: 20260819
 loci:
   - locus_id: 1
@@ -700,7 +700,7 @@ N: 450
 ploidy: 2
 d: 20
 m: 0.001
-mu: 0.00003
+mu: 0.0000003
 seed: 20260814
 n_replicates: 200
 sweep:
