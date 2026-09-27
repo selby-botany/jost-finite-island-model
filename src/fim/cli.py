@@ -67,7 +67,13 @@ from matplotlib import pyplot as plt
 from fim import __version__, logging_setup, paths, reanalyze, update
 from fim.cli_sweep import add_sweep_subcommands, command_sweep
 from fim.convergence.defaults import describe_derived_convergence
-from fim.engine import RunResult, deterministic_run_id, fim, replicate_summary
+from fim.engine import (
+    FinalReport,
+    RunResult,
+    deterministic_run_id,
+    fim,
+    replicate_summary,
+)
 from fim.model.params import SimulationParams, describe_population
 from fim.persistence.groups import (
     ExperimentManifest,
@@ -530,8 +536,9 @@ def _command_run_scalar(
             f"{output.report['generation']}, D={output.report['D']:.6g}, "
             f"G_ST={_format_optional(output.report['G_ST'])}"
         )
+        _print_window_statistics(output.report)
         if not output.report["converged"]:
-            _print_cap_note(params)
+            _print_cap_note(params, output.report)
         for label, path in _run_artifact_targets(output_directory).items():
             print(f"{label.capitalize():10} -> {path}")
     return 0
@@ -864,23 +871,83 @@ def _command_update(
     return 0
 
 
-def _print_cap_note(params: SimulationParams) -> None:
-    """Explain a run that reached its generation cap, when a time is known.
+def _print_window_statistics(report: FinalReport) -> None:
+    """Print the watched statistic(s)' own trailing-window mean and precision.
+
+    `report["D"]` (or whichever statistic was watched) is a single
+    generation's own point value — real, but exactly as noisy as one
+    stochastic draw is; the trailing-window mean this prints alongside it
+    is the average of `window` generations, a materially better estimate
+    of the model's own long-run value (see `doc/convergence.md`), whether
+    or not it happened to also satisfy the noise-adequacy gate. Printed
+    for every watched statistic, converged or capped alike — a capped run
+    still has a real, if imprecise, window mean worth reading.
+
+    Args:
+        report: The run's own final report.
+
+    Returns:
+        None. Prints nothing for a statistic with no `window_statistics`
+        entry (a window shorter than `fim.convergence.window_statistics.
+        MINIMUM_NOISE_CHECK_WINDOW`, or `convergence_statistics` an empty
+        placeholder — neither reachable from an ordinary CLI run today,
+        guarded anyway since this reads a dict `report_for_state` itself
+        already documents as sometimes empty).
+    """
+    names = (
+        [report["converged_on"]]
+        if isinstance(report["converged_on"], str)
+        else report["converged_on"]
+    )
+    for name in names:
+        stats = report["window_statistics"].get(name)
+        if stats is None:
+            continue
+        precision = "" if stats["noise_adequate"] else ", not yet noise-adequate"
+        print(
+            f"{name} trailing-window mean: {stats['mean']:.6g} ± "
+            f"{stats['standard_error']:.4g} (1 sigma, last {stats['window']:,} "
+            f"generations{precision})"
+        )
+
+
+def _print_cap_note(params: SimulationParams, report: FinalReport) -> None:
+    """Explain a run that reached its generation cap.
 
     Args:
         params: The run's configuration.
+        report: The run's own final report — read for `window_statistics`,
+            so a capped run says not just *that* it never reached the
+            requested tolerance but how far off its own best estimate
+            still is (see `_print_window_statistics`'s own docstring for
+            why that is worth printing even for a capped run).
 
     Returns:
-        None. Prints nothing when the relaxation time is unknown (both
-        convergence values were given explicitly).
+        None.
     """
-    if params.relaxation_time is None:
-        return
-    print(
-        f"The statistic did not settle within {params.max_generations:,} "
-        f"generations; this model needs about {params.relaxation_time:,.0f} "
-        "generations to forget its starting state"
+    if params.relaxation_time is not None:
+        print(
+            f"The statistic did not settle within {params.max_generations:,} "
+            f"generations; this model needs about "
+            f"{params.relaxation_time:,.0f} generations to forget its "
+            "starting state"
+        )
+    names = (
+        [params.convergence_statistic]
+        if isinstance(params.convergence_statistic, str)
+        else list(params.convergence_statistic)
     )
+    for name in names:
+        stats = report["window_statistics"].get(name)
+        if stats is None or stats["noise_adequate"]:
+            continue
+        print(
+            f"{name}'s own trailing-window mean is not yet known to the "
+            f"requested tolerance: {stats['mean']:.4g} ± "
+            f"{stats['standard_error']:.4g} (1 sigma, last "
+            f"{stats['window']:,} generations) against a requested ±"
+            f"{params.convergence_tolerance / 2:.4g}"
+        )
 
 
 def _print_derived_convergence(params: SimulationParams) -> None:
