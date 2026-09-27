@@ -17,18 +17,18 @@ fim run doc/examples/<example>/config.yaml \
     --output results/<example> --quiet
 ```
 
-The Dear-Nolan low example takes several minutes; the others take seconds.
-
 For the Dear-Nolan high example, run the reproduction script directly:
 
 ```console
 python3 doc/examples/dear-nolan-high/reproduce.py
 ```
 
-Every example except Dear-Nolan low (several minutes) finishes in seconds on
-a laptop. The high-migration scenario's direct write-up is deliberately a
-lightweight 5-replicate reproduction of the test case rather than the full
-Monte Carlo sweep used in calibration.
+Dear-Nolan low takes several minutes; Golden Part VI takes under a minute
+(it now honestly runs to its 10,000-generation cap — see its own README);
+Dear-Nolan high finishes in seconds on a laptop. The high-migration
+scenario's direct write-up is deliberately a lightweight 5-replicate
+reproduction of the test case rather than the full Monte Carlo sweep used
+in calibration.
 
 ## Examples
 
@@ -36,9 +36,13 @@ Monte Carlo sweep used in calibration.
 
 **Jost (2008) Part VI** — the primary calibration anchor for `fim`.
 Four demes, N = 100, moderate migration (m = 0.01) and mutation
-(mu = 0.005). Produces an intermediate differentiation regime:
-G_ST ≈ 0.240, D ≈ 0.611 at this seed. Published ensemble values
-(100 replicates, multi-locus engineered start): G_ST ≈ 0.176, D ≈ 0.604.
+(mu = 0.005). A single locus and replicate cannot resolve D to this
+project's own default tolerance (0.01) — this run honestly reports
+hitting the 10,000-generation cap, not convergence, with a trailing-
+window D of 0.57 ± 0.03. Published ensemble values (100 replicates,
+multi-locus engineered start): G_ST ≈ 0.176, D ≈ 0.604 — see the
+example's own README for why one run cannot reach that precision, and
+where the real, calibrated multi-locus/multi-replicate agreement lives.
 
 ### [dear-nolan-low](dear-nolan-low/README.md)
 

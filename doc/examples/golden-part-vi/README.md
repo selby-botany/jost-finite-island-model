@@ -18,10 +18,56 @@ observation motivating D as a replacement statistic.
 Published equilibrium values (100-replicate ensemble, multi-locus engineered
 start): **G<sub>ST</sub> ≈ 0.176, D ≈ 0.604**.
 
-A single-locus run from a random start reaches a nearby but distinct
-equilibrium whose exact values depend on which allele-frequency trajectory
-the seed follows — see `report.json` in this directory for the reproducible
-single-run result.
+## Why this one run does not reach that precision — and why that is honest
+
+A single locus, watched by a single replicate, is exactly the case this
+project's own convergence rule cannot resolve to a tight tolerance no
+matter how long it runs. A short trailing window can *look* stable — two
+neighboring halves land close together — purely because drift's own
+generation-to-generation wobble happens to cancel out for a moment, not
+because the run has actually settled near its true long-run value. An
+earlier version of this example fell into exactly that trap: it reported
+"converged" at generation 400 with D = 0.611, a number that looked like a
+clean match to the published ensemble mean (0.604) but was, in fact, one
+lucky window among many unlucky ones nearby — the true picture, visible
+only by watching many more generations, is that a single-locus D keeps
+wandering with a standard deviation around 0.1 indefinitely; generation
+400 was never special.
+
+`fim` now checks for that directly: alongside the trend check, it asks
+whether the trailing window's own mean is actually known to the
+requested [convergence_tolerance](../../configuration.md#convergence_tolerance),
+correcting for how correlated consecutive generations are
+(`fim.convergence.window_statistics`,
+[Convergence defaults](../../convergence.md)). For this exact
+configuration, the derived window (254 generations, three times the
+model's own relaxation time) is nowhere near enough independent
+information to know D to ±0.005: even a 10,000-generation run — the
+derived cap — never satisfies that, and honestly reports **hitting the
+cap**, not convergence, in `report.json`.
+
+That report's own `window_statistics.D` still says something worth
+reading: the trailing window's *mean*, 0.5697, sits closer to the
+published 0.604 than the single reported point value, 0.5216 — averaging
+over the window's own noise helps, even short of the requested precision.
+Reaching the requested precision from a single locus and single replicate
+would need a window some 30–50 times longer than the one derived here (an
+open recalibration question, `20260927-claude-sonnet-5-noise-aware-
+convergence-design.md`, `selby/restricted`) — resolving this cleanly, the
+way the published ensemble does, instead uses many loci and many
+replicates (see the next paragraph), which is the actual, calibrated
+validation this project relies on, not this one convenience-sized run.
+
+## The real calibration: many loci, many replicates
+
+The genuine test that `fim`'s own mechanics reproduce Jost's theory is not
+this one convenience-sized run at all: it is
+`test/validation/test_simulator_equilibrium.py`'s Golden Part VI scenario,
+averaged over 60 independently seeded replicates of 8 loci each, which
+lands within 0.04 of the analytic equilibrium D
+(`test/validation/convergence-defaults-evidence.json`). This single-locus
+example exists to show a complete, minimal, reproducible configuration —
+not to stand in for that calibration.
 
 ## Parameters
 
@@ -41,41 +87,35 @@ fim run doc/examples/golden-part-vi/config.yaml \
     --output results/golden-part-vi --quiet
 ```
 
-Finishes in under one second. `results/golden-part-vi/report.json` will
+Finishes in under a minute (10,000 generations, each one written to the
+trajectory file). `results/golden-part-vi/report.json` will
 match `report.json` in this directory exactly.
 
 ## Expected output
 
 ```json
 {
-  "converged": true,
+  "converged": false,
   "converged_on": "D",
-  "generation": 400,
-  "G_ST": 0.24024462671952998,
-  "D": 0.610873025590792,
-  "E_ST": 0.38259945507022347,
-  "K_ST": 0.22807017543859642,
-  "Gs": 0.40835,
-  "Gd": 0.15890000000000004,
-  "Delta": 0.5483333333333333,
-  "A_CGD": 1.25,
-  "MI": 0.5303954671313937,
-  "H_S": 0.59165,
-  "H_T": 0.7787375,
-  "H_ST": 0.45815476919309406,
-  "reason": "statistic converged"
+  "generation": 10000,
+  "G_ST": 0.22949039831716092,
+  "D": 0.5216117216117216,
+  "reason": "hit the cap",
+  "window_statistics": {
+    "D": {
+      "mean": 0.5696931947724891,
+      "standard_error": 0.029458217468817414,
+      "noise_adequate": false,
+      "window": 254
+    }
+  }
 }
 ```
 
-D converges at generation 400 to **0.611**, close to the published ensemble
-mean (D ≈ 0.604). G<sub>ST</sub> is **0.240** against the published
-G<sub>ST</sub> ≈ 0.176: a single locus samples one trajectory through
-allele-frequency space, so it scatters around the ensemble mean. The
-convergence window and generation cap are left on `auto`; they are derived from
-this model's relaxation time (about 85 generations), so the run watches D for
-a window of 254 generations. See [Convergence defaults](../../convergence.md)
-and `test/validation/test_simulator_equilibrium.py` for the full multi-locus
-calibration test.
+(Abbreviated here to the fields this document discusses; the real
+`report.json` in this directory has every field, every watched
+statistic's own `window_statistics` entry, and full floating-point
+precision.)
 
 ## Files in this directory
 
