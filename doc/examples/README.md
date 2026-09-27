@@ -23,7 +23,7 @@ For the Dear-Nolan high example, run the reproduction script directly:
 python3 doc/examples/dear-nolan-high/reproduce.py
 ```
 
-Dear-Nolan low takes several minutes; Golden Part VI takes under a minute
+Dear-Nolan low takes about 25 minutes; Golden Part VI takes under a minute
 (it now honestly runs to its 10,000-generation cap — see its own README);
 Dear-Nolan high finishes in seconds on a laptop. The high-migration
 scenario's direct write-up is deliberately a lightweight 5-replicate
@@ -48,10 +48,13 @@ where the real, calibrated multi-locus/multi-replicate agreement lives.
 
 **Dear-Nolan low-migration botanical scenario** — five isolated plant
 patches, N = 100, very low migration (m = 0.0001) and negligible mutation
-(mu = 0.000001). Runs to equilibrium, about 97,000 generations with the
-derived defaults (several minutes): almost all demes fixed for the same
-allele, G_ST ≈ 0.99 and D ≈ 0.14 for this one 30-locus run. Published
-ensemble values: G_ST ≈ 0.970, D ≈ 0.038.
+(mu = 0.000001). Genuinely converges — trend flat and the window's own mean
+known to tolerance — at about 276,000 generations with the derived defaults
+(some 25 minutes): almost all demes fixed for the same allele. Its own
+trailing-window means, G_ST ≈ 0.973 and D ≈ 0.054, are close to the
+published ensemble values G_ST ≈ 0.970, D ≈ 0.038; at 30 loci this one run's
+own noise is already small enough to satisfy the tolerance directly — see
+its own README for why that is not true of every worked example here.
 
 ### [dear-nolan-high](dear-nolan-high/README.md)
 

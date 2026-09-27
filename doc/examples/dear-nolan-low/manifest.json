@@ -1,26 +1,26 @@
 {
   "artifacts": {
     "report": {
-      "bytes": 490,
-      "sha256": "5aaf055ab094c9342d4c2ae4f6561bc728afef412332d6da22938206e4687cc4"
+      "bytes": 1763,
+      "sha256": "ba4744d954e9d36427cd07d90cf44442a59148f731cffa812da76b36e0ca0523"
     },
     "scatter": {
-      "bytes": 225388,
-      "sha256": "90d71733237ba2bf8cb908a139d49da709b56f9a693aab6c77f1383bf401762c"
+      "bytes": 214127,
+      "sha256": "ee285321be4e8cc7f17019b44b4a823f5e11b934563c61481f72a19f1bf5b48a"
     },
     "trajectory": {
-      "bytes": 1575570030,
-      "sha256": "9222e6e8c8ba062380e9b81936938e0944f3ad74bf3f82a36215a7ea4de53527"
+      "bytes": 4482790856,
+      "sha256": "f57150c5c7b2ba1b2cd49024373645fb90b2071d6446dace94a3a107f865bedf"
     }
   },
   "convergence": {
     "converged": true,
-    "generation": 97462,
-    "generation_count": 97463,
+    "generation": 275884,
+    "generation_count": 275885,
     "reason": "statistic converged",
     "statistic": "D"
   },
-  "ended_at": "2026-09-26T18:13:15.403642Z",
+  "ended_at": "2026-09-27T16:50:37.484043Z",
   "engine_backend": "lineal",
   "equilibrium_final_heterozygosity": null,
   "equilibrium_generation_count": null,
@@ -182,5 +182,5 @@
   "sigma_band_multiplier": null,
   "sigma_band_window": null,
   "software_version": "1.2.0",
-  "started_at": "2026-09-26T17:15:51.098178Z"
+  "started_at": "2026-09-27T16:30:42.973815Z"
 }
