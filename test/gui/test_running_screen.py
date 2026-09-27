@@ -65,6 +65,7 @@ import webview
 
 from fim.gui.app import Api, create_window
 from fim.gui.batch_runner import BatchMessage
+from fim.gui.preferences import GuiPreferences, save_preferences
 from fim.gui.runner import RunMessage
 from fim.statistics import (
     IDENTITY_STATISTIC_NAMES,
@@ -710,6 +711,59 @@ def test_page_interpolation_of_a_sampled_closed_form_matches_numpy() -> None:
     for name, values in payload["statistics"].items():
         expected = np.interp(plotted, grid, values)
         assert actual[name] == pytest.approx(list(expected), abs=1e-12)
+
+
+def test_completed_row_tooltip_shows_the_trailing_window_mean(
+    _isolate_gui_preferences: Path,
+) -> None:
+    """A statistic row's own hover title carries its trailing-window mean.
+
+    Needs a window at least `MINIMUM_NOISE_CHECK_WINDOW` long -- shorter
+    than that, `report_for_state` has nothing to report
+    (`fim.convergence.window_statistics`'s own docstring) -- so this uses
+    its own Settings override rather than `fast_scalar_run_settings`
+    (window 4).
+    """
+    save_preferences(
+        _isolate_gui_preferences,
+        GuiPreferences(
+            welcome_dismissed=True,
+            default_ploidy="1",
+            default_run_settings={
+                "n_replicates": "1",
+                "max_generations": "40",
+                "convergence_window": "20",
+                "convergence_tolerance": "0.5",
+            },
+        ),
+    )
+    done_event = threading.Event()
+
+    def on_message(message: RunMessage | BatchMessage) -> None:
+        if message[0] in ("done", "cancelled", "error"):
+            done_event.set()
+
+    window = create_window(api=Api(on_message=on_message), hidden=True)
+    outcome: queue.Queue[str | None] = queue.Queue(maxsize=1)
+
+    def _drive() -> None:
+        try:
+            _wait_for_input_screen_ready(window)
+            window.evaluate_js(
+                _SET_TINY_FIELDS + "document.getElementById('run-button').click();"
+            )
+            if not done_event.wait(timeout=_EVENT_WAIT_TIMEOUT_SECONDS):
+                outcome.put(None)
+                return
+            outcome.put(window.evaluate_js("document.getElementById('stat-D').title"))
+        finally:
+            window.destroy()
+
+    webview.start(_drive)
+    settled = outcome.get(timeout=_OUTCOME_TIMEOUT_SECONDS)
+
+    assert settled is not None
+    assert "window mean" in settled
 
 
 def test_trajectory_panel_updates_live_while_a_run_is_still_going(

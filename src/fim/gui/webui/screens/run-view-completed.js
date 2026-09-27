@@ -274,6 +274,14 @@ let completedSigmaBand = null;
 let completedEquilibrium = null;
 let completedIdentityRecovery = null;
 let completedClosedForm = null;
+// The just-shown run's own `report.window_statistics` (design doc
+// `20260927-claude-sonnet-5-noise-aware-convergence-design.md`,
+// `selby/restricted`) -- how precisely each recorded statistic's
+// trailing-window mean was actually known when the run stopped, keyed by
+// statistic name. `null` for a batch (no single trailing window; the
+// pooled confidence interval already answers the analogous question) or
+// before any run has been shown at all.
+let completedWindowStatistics = null;
 let completedGenerationCount = null;
 let completedFinalStatistics = null;
 let completedFinalLiteratureVisuals = null;
@@ -406,6 +414,37 @@ function tagStatisticCells(tbody, offset) {
         });
     }
     refreshTrajectoryStatisticRowStates();
+}
+
+/**
+ * Build a statistic row's own hover description, with a trailing-window
+ * precision note appended when one is available.
+ *
+ * `completedWindowStatistics[name]` (design doc `20260927-claude-sonnet-5-
+ * noise-aware-convergence-design.md`, `selby/restricted`) is a materially
+ * better estimate than the single point value the table itself shows --
+ * the mean of `window` generations, not one of them -- whether or not it
+ * also happened to satisfy the noise-adequacy gate; this surfaces it in
+ * the same place the CLI's own `_print_window_statistics` prints it,
+ * without adding a second visible column to the table.
+ *
+ * @param {string} name
+ * @returns {string} The base statistic description, unchanged, when
+ *     `completedWindowStatistics` has no entry for `name`; otherwise that
+ *     description plus a trailing-window mean/standard-error clause.
+ */
+function windowStatisticsDescription(name) {
+    const base = statisticDescription(name);
+    const stats = completedWindowStatistics && completedWindowStatistics[name];
+    if (!stats) {
+        return base;
+    }
+    const precision = stats.noise_adequate ? "" : ", not yet noise-adequate";
+    const note =
+        ` — window mean ${stats.mean.toFixed(4)} ± ` +
+        `${stats.standard_error.toFixed(4)} (1σ, last ` +
+        `${stats.window.toLocaleString()} generations${precision})`;
+    return base + note;
 }
 
 /**
@@ -2037,7 +2076,14 @@ function updateScrubbedTrajectory(frameGeneration, isFinalFrame) {
         // there would only ever redraw on top of it).
         for (const name of STATISTIC_NAMES) {
             const element = document.getElementById(`stat-${name}`);
-            applyStatRow(element, buildPointMeter(name, completedFinalStatistics[name]));
+            applyStatRow(
+                element,
+                buildPointMeter(
+                    name,
+                    completedFinalStatistics[name],
+                    windowStatisticsDescription(name)
+                )
+            );
             decorateTrajectoryStatisticRow(element, name);
         }
         // The two derived rows restore from the retained final payload,
@@ -2500,6 +2546,7 @@ window.fim.enterCompletedState = function enterCompletedState(payload, isBatch) 
         completedEquilibrium = null;
         completedIdentityRecovery = null;
         completedClosedForm = null;
+        completedWindowStatistics = null;
         completedGenerationCount = null;
         completedFinalStatistics = null;
         completedFinalLiteratureVisuals = null;
@@ -2525,10 +2572,19 @@ window.fim.enterCompletedState = function enterCompletedState(payload, isBatch) 
         const reason = report.reason.charAt(0).toUpperCase() + report.reason.slice(1);
         resultsOutcome.textContent = `${reason}: generation ${report.generation}`;
         completedReportReason = reason;
+        // Set before the row loop just below reads it (`windowStatistics
+        // Description`), not after -- the two used to run in the other
+        // order, which meant every row's own tooltip always showed the
+        // *previous* run's window statistics (or none, on the first run
+        // of a session), never this one's.
+        completedWindowStatistics = report.window_statistics || null;
         for (const name of STATISTIC_NAMES) {
             const value = payload.statistics[name];
             const element = document.getElementById(`stat-${name}`);
-            applyStatRow(element, buildPointMeter(name, value));
+            applyStatRow(
+                element,
+                buildPointMeter(name, value, windowStatisticsDescription(name))
+            );
             decorateTrajectoryStatisticRow(element, name);
         }
         renderEffectiveAlleles(payload.effectiveAlleles);
