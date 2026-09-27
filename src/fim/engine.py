@@ -118,6 +118,12 @@ from fim.convergence.criteria import (
     TrailingWindowCriterion,
 )
 from fim.convergence.monitor import ConvergenceMonitor, ConvergenceOutcome
+from fim.convergence.window_statistics import (
+    MINIMUM_NOISE_CHECK_WINDOW,
+)
+from fim.convergence.window_statistics import (
+    window_statistics as _compute_window_statistics,
+)
 from fim.model.allele import (
     MINTED_ID_START,
     AlleleRegistry,
@@ -242,6 +248,29 @@ class FinalReport(TypedDict):
             added for Phase 4 GUI visual interpretation: Caballero-
             Garcia-Dorado allelic distance, Gregorius delta, and Sherwin
             mutual information.
+        window_statistics: How precisely each recorded statistic's own
+            trailing-window mean was actually known at the generation this
+            run stopped at — `{name: {"mean", "standard_error",
+            "standard_deviation", "effective_sample_size", "window",
+            "noise_adequate"}}`, one entry per statistic `report_for_state`
+            was given a monitor history for (`fim.convergence.window_
+            statistics.WindowStatistics`, `_window_statistics_payload`).
+            Empty for a state with no monitored run behind it at all (a GUI
+            preview, a re-analysis) — this is *not* the same thing as `D`/
+            `G_ST`/etc. above, which are always this state's own point
+            values, computed directly from its allele frequencies; this
+            field is instead the *history leading up to* that state, the
+            answer to "how much can this run's own last window of noise be
+            trusted," which the point value alone cannot say. `"statistic
+            converged"` (see `reason`, above) means the watched statistic's
+            own `noise_adequate` was `True` at the stopping generation
+            (`fim.convergence.monitor.ConvergenceMonitor`'s own noise-
+            adequacy gate, `20260927-claude-sonnet-5-noise-aware-
+            convergence-design.md`, `selby/restricted`); `converged=False`
+            (the generation cap was hit first) can still show a real,
+            informative `standard_error` here for whichever statistic was
+            watched — "capped, and here is how far off the estimate still
+            is" — even though `noise_adequate` for it is `False`.
     """
 
     run_id: str
@@ -261,6 +290,7 @@ class FinalReport(TypedDict):
     MI: float
     Gs: float
     Gd: float
+    window_statistics: dict[str, dict[str, float | int | bool]]
 
 
 @dataclass(frozen=True, slots=True)
@@ -1146,6 +1176,7 @@ def _finalize_replica_lane(
         run_id=lane.run_id,
         converged=outcome.converged,
         reason=outcome.reason.value,
+        window_statistics=_window_statistics_payload(lane.monitor, lane.params),
     )
     ended_at = _format_timestamp(clock())
     logger.info(
@@ -2192,6 +2223,59 @@ def deterministic_run_id(params: SimulationParams) -> str:
     return f"run-{hashlib.sha256(canonical).hexdigest()[:16]}"
 
 
+def _window_statistics_payload(
+    monitor: ConvergenceMonitor, params: SimulationParams
+) -> dict[str, dict[str, float | int | bool]]:
+    """Compute `report_for_state`'s own `window_statistics` from a stopped monitor.
+
+    Computed post-hoc, directly from `monitor.histories` (the full,
+    already-retained per-generation values, both watched and `extra_
+    statistics` alike) — not from `ConvergenceMonitor.window_statistics`,
+    which caches only a side effect of the *stop decision itself* and stays
+    `None` for a statistic that never gated stopping (`D`/`G_ST`/`H_S`/`H_T`/
+    `H_ST` are always recorded, `fim.engine._ALWAYS_TRACKED_STATISTICS`, but
+    only the actual `convergence_statistic`(s) among them ever run the gate).
+    A single configured `window`/`tolerance` applies to every recorded
+    statistic alike (`SimulationParams.convergence_window`/`_tolerance` are
+    scalars, not per-statistic), so this needs no per-name lookup the way
+    the gate itself does.
+
+    Args:
+        monitor: The just-stopped monitor driving this run.
+        params: The run's own configuration (`convergence_window`/
+            `convergence_tolerance`).
+
+    Returns:
+        One entry per statistic with at least `params.convergence_window`
+        recorded values, keyed by name — a statistic recorded for fewer
+        generations than that (only possible for `extra_statistics`, since
+        every watched statistic's own history is at least `window` long by
+        the time the monitor stops) is simply omitted, the same "nothing
+        to show, don't fabricate a value" precedent `G_ST` itself already
+        sets when undefined. Empty when `params.convergence_window` is
+        shorter than `MINIMUM_NOISE_CHECK_WINDOW` (a configuration too
+        short to estimate a lag-1 autocorrelation from at all).
+    """
+    window = params.convergence_window
+    if window < MINIMUM_NOISE_CHECK_WINDOW:
+        return {}
+    tolerance = params.convergence_tolerance
+    payload: dict[str, dict[str, float | int | bool]] = {}
+    for name, history in monitor.histories.items():
+        if len(history) < window:
+            continue
+        stats = _compute_window_statistics(history[-window:])
+        payload[name] = {
+            "mean": stats.mean,
+            "standard_error": stats.standard_error,
+            "standard_deviation": stats.standard_deviation,
+            "effective_sample_size": stats.effective_sample_size,
+            "window": stats.window,
+            "noise_adequate": stats.noise_adequate(tolerance),
+        }
+    return payload
+
+
 def report_for_state(
     state: ModelState,
     params: SimulationParams,
@@ -2199,6 +2283,7 @@ def report_for_state(
     run_id: str,
     converged: bool,
     reason: str,
+    window_statistics: Mapping[str, dict[str, float | int | bool]] | None = None,
 ) -> FinalReport:
     """Compute the final report independently of the run loop.
 
@@ -2231,6 +2316,15 @@ def report_for_state(
             simply hit its generation cap — see `FinalReport.converged`.
         reason: The short, human-readable phrase explaining why the run
             stopped where it did — see `FinalReport.reason`.
+        window_statistics: `_window_statistics_payload`'s own result — how
+            precisely each recorded statistic's trailing-window mean was
+            actually known when the run stopped (`fim.convergence.window_
+            statistics`), keyed by statistic name; `None` for a caller with
+            no monitored run behind this state at all (a GUI preview of
+            generation zero, a re-analysis of a persisted trajectory, most
+            of this function's own tests) — `FinalReport.window_statistics`
+            is then `{}`, not absent, so every caller can iterate it
+            unconditionally rather than checking for `None` twice.
 
     Returns:
         A `FinalReport`: the run's own bookkeeping (id, generation,
@@ -2274,6 +2368,7 @@ def report_for_state(
         "MI": _mean(tuple(report["MI"] for report in locus_reports)),
         "Gs": 1.0 - mean_h_s,
         "Gd": _gd_from_within_and_total(mean_h_s, mean_h_t, state.deme_count),
+        "window_statistics": dict(window_statistics) if window_statistics else {},
     }
 
 
@@ -3272,6 +3367,7 @@ def _run_one(
         run_id=run_id,
         converged=outcome.converged,
         reason=outcome.reason.value,
+        window_statistics=_window_statistics_payload(monitor, params),
     )
     # The within-run sigma band (`20260907-claude-sonnet-5-within-run-
     # sigma-band-backend-design.md`): once the main run has genuinely

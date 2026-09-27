@@ -1203,6 +1203,12 @@ def test_replicate_summary_covers_every_numeric_final_report_key(
         "converged",
         "converged_on",
         "reason",
+        # A per-run nested payload (`fim.convergence.window_statistics`), not
+        # a single number to average across replicates the way every other
+        # field here is -- `reports_summary`'s own across-replicate interval
+        # already exists for that; this field answers a different question
+        # (how precise was *this one run's* own trailing-window mean).
+        "window_statistics",
     }
     numeric_fields = set(FinalReport.__annotations__) - non_statistic_fields
     params = SimulationParams.from_mapping({**tiny_params.to_dict(), "n_replicates": 5})
