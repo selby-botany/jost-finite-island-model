@@ -156,6 +156,40 @@ unequal mutation rates), and the slowest run stopped after 9.0 `tau`, so the
 cap is 15 `tau`. The data are in
 `test/validation/convergence-defaults-evidence.json`.
 
+## Is the reported value actually precise enough?
+
+*For everyone.* The trend check above answers "has this stopped moving in
+one direction." It does not answer "is the number I am about to read
+actually known to the tolerance I asked for" — a statistic that has
+genuinely stopped trending can still wobble, generation to generation, by
+more than the tolerance, and two neighboring halves of a window can land
+close together by chance long before that wobble has been averaged away.
+A single locus watched by a single replicate is the case this bites
+hardest: `doc/examples/golden-part-vi`'s own README shows a real run that
+did exactly this — "converged" at generation 400 on a lucky half-window
+match, at a value that was not actually close to the model's long-run
+average.
+
+`fim` now checks for this directly. Alongside the trend check, it asks
+whether the trailing window's own mean is known to half the configured
+tolerance, correcting for how correlated consecutive generations are (an
+effective-sample-size estimate from the window's own lag-1
+autocorrelation — `fim.convergence.window_statistics`). A run only stops
+with `"statistic converged"` once **both** checks pass. A run that hits
+`max_generations` without ever reaching that precision reports `"hit the
+cap"` honestly, the same as a run that never stopped trending — this is
+common, not a bug, for a single locus and a tight tolerance, since
+extending the generation cap alone does not help: the window itself would
+need to be longer, which the auto-derived multiple (3 `tau`) does not yet
+account for (see [Limits](#limits)).
+
+Every scalar run's `report.json` carries the evidence either way, in
+`window_statistics`, one entry per statistic recorded — `mean` (the
+window average, a better estimate than the single reported point value
+even when not yet precise enough), `standard_error`, `effective_sample_size`,
+`window`, and `noise_adequate`. The CLI prints the watched statistic's own
+line after every run; the GUI's Run card tooltip shows the same numbers.
+
 ## Checking the numbers yourself
 
 - `dev/bin/relaxation-table` prints the true relaxation time from the identity
