@@ -55,6 +55,11 @@ Return to the [source-tree orientation](../README.md) or the [developer guide](.
     * [reason](#fim.convergence.monitor.ConvergenceMonitor.reason)
     * [record](#fim.convergence.monitor.ConvergenceMonitor.record)
     * [should\_stop](#fim.convergence.monitor.ConvergenceMonitor.should_stop)
+    * [window\_statistics](#fim.convergence.monitor.ConvergenceMonitor.window_statistics)
+* [fim.convergence.window\_statistics](#fim.convergence.window_statistics)
+  * [WindowStatistics](#fim.convergence.window_statistics.WindowStatistics)
+    * [noise\_adequate](#fim.convergence.window_statistics.WindowStatistics.noise_adequate)
+  * [window\_statistics](#fim.convergence.window_statistics.window_statistics)
 * [fim.engine](#fim.engine)
   * [FinalReport](#fim.engine.FinalReport)
   * [RunResult](#fim.engine.RunResult)
@@ -1752,6 +1757,159 @@ Return whether statistical convergence or the hard cap fired.
 A convenience for the run loop's own stop check — equivalent to
 `outcome().stopped`, without needing `converged`/`reason` too.
 
+<a id="fim.convergence.monitor.ConvergenceMonitor.window_statistics"></a>
+
+#### window\_statistics
+
+```python
+def window_statistics(name: str) -> WindowStatistics | None
+```
+
+Return the most recent noise-adequacy check computed for `name`.
+
+Set only as a side effect of `_gated_stable` actually running the
+expensive check (below) — most recently, and therefore most
+informatively, at the exact generation `name` was declared stable
+(`record`'s own `is_stable` branch fires in the same call that just
+set this). A caller building a final report reads this once, after
+the run has stopped, to say not just *that* a statistic converged
+but how precisely its own trailing-window mean was actually known.
+
+**Arguments**:
+
+- `name` - A configured statistic name (watched or extra).
+
+
+**Returns**:
+
+  `None` when no check has run yet for `name` — the monitor never
+  reached a trend-stable candidate at all (most commonly: the run
+  hit `max_generations` while `name`'s own trailing window was
+  still visibly trending), `name`'s own criterion is not a
+  `TrailingWindowCriterion`-shaped one, or its configured window
+  is shorter than `fim.convergence.window_statistics.
+  MINIMUM_NOISE_CHECK_WINDOW`.
+
+<a id="fim.convergence.window_statistics"></a>
+
+# fim.convergence.window\_statistics
+
+How precisely a trailing window's own mean is known, given correlated noise.
+
+`fim.convergence.criteria.trailing_window_stable` answers "has this stopped
+*trending*" by comparing the two halves of a window — a good, cheap proxy for
+"the transient has died out," but it says nothing about whether the window's
+own mean is actually known to the requested tolerance once that transient is
+gone. A single-locus, single-replicate run's per-generation statistic keeps
+wobbling by drift alone, generation after generation, at an amplitude that
+does not shrink just because the population has relaxed — two neighboring
+windows drawn from the *same* stationary process can land on opposite sides
+of a small tolerance purely by chance. This module answers the question the
+window criterion does not: given a window of correlated values, how precise
+is their mean, actually?
+
+The complication is that a window's own values are not independent draws —
+generation `t` and generation `t + 1` share almost the entire population
+that produced them, so they are strongly correlated at short lag and that
+correlation only fades over roughly `tau` (the model's own relaxation time,
+`fim.convergence.defaults`). Averaging `W` correlated values does not shrink
+the uncertainty by `1 / sqrt(W)` the way averaging `W` independent ones
+would; it shrinks by `1 / sqrt(W / tau_int)`, where `tau_int` (the
+*integrated autocorrelation time*) counts how many of those `W` values are
+worth, in information, one independent draw. This module estimates
+`tau_int` from the window itself, from its lag-1 autocorrelation alone: a
+window is well-approximated, over a short enough span, as a first-order
+autoregressive (AR(1)) process, for which `tau_int = (1 + rho) / (1 - rho)`
+is exact (`rho` the lag-1 correlation) — the standard "effective sample
+size" formula for a first-order process (see, for instance, the "batch
+means"/spectral-variance literature on Markov-chain output analysis; a
+single-lag estimate is the simplest member of that family, not the most
+precise one — Geyer's 1992 initial-sequence estimators sum many lags for a
+tighter bound, at a cost this module's own O(1)-per-generation budget
+(`fim.convergence.monitor.ConvergenceMonitor`) cannot afford every
+generation of a run that may need millions).
+
+<a id="fim.convergence.window_statistics.WindowStatistics"></a>
+
+## WindowStatistics Objects
+
+```python
+@dataclass(frozen=True, slots=True)
+class WindowStatistics()
+```
+
+How well a window's own mean is known, given its internal correlation.
+
+**Attributes**:
+
+- `mean` - The window's own sample mean.
+- `standard_error` - The estimated standard error of `mean` — not
+  `standard_deviation / sqrt(len(window))`, the independent-draws
+  formula, but the same divided by `sqrt(effective_sample_size /
+  len(window))` instead, correcting for `lag1_autocorrelation`.
+- `standard_deviation` - The window's own sample standard deviation
+  (Bessel-corrected), ignoring correlation — the quantity a sigma
+  band already reports (`fim.engine._sigma_band_summary`); kept
+  alongside `standard_error` so a caller never has to choose one
+  over the other.
+- `effective_sample_size` - How many independent draws this window's
+  `len(window)` correlated values are worth, in information.
+- `lag1_autocorrelation` - The estimated correlation between neighboring
+  values, clamped to `_MAXIMUM_LAG1_CORRELATION`.
+- `window` - `len(window)` this was computed from, carried along so a
+  caller does not have to keep the original sequence around too.
+
+<a id="fim.convergence.window_statistics.WindowStatistics.noise_adequate"></a>
+
+#### noise\_adequate
+
+```python
+def noise_adequate(tolerance: float) -> bool
+```
+
+Return whether `mean` is known to within `tolerance`.
+
+**Arguments**:
+
+- `tolerance` - The statistic's own configured convergence
+  tolerance (`SimulationParams.convergence_tolerance`).
+
+
+**Returns**:
+
+  `True` when `standard_error` is at most
+  `NOISE_TOLERANCE_FRACTION` of `tolerance`.
+
+<a id="fim.convergence.window_statistics.window_statistics"></a>
+
+#### window\_statistics
+
+```python
+def window_statistics(values: Sequence[float]) -> WindowStatistics
+```
+
+Estimate a window's own mean and its correlation-corrected precision.
+
+**Arguments**:
+
+- `values` - A trailing window of a statistic's own per-generation
+  values, in chronological order. At least
+  `MINIMUM_NOISE_CHECK_WINDOW` long — a caller with a shorter
+  window should not call this at all (see that constant's own
+  docstring), not pass a short one and expect a meaningful answer.
+
+
+**Returns**:
+
+  The window's own mean, standard deviation, correlation-corrected
+  standard error, effective sample size, and lag-1 autocorrelation.
+
+
+**Raises**:
+
+- `ValueError` - If `values` has fewer than 3 entries (an autocorrelation
+  of anything shorter is undefined, not merely unreliable).
+
 <a id="fim.engine"></a>
 
 # fim.engine
@@ -1927,6 +2085,29 @@ Fields:
         added for Phase 4 GUI visual interpretation: Caballero-
         Garcia-Dorado allelic distance, Gregorius delta, and Sherwin
         mutual information.
+    window_statistics: How precisely each recorded statistic's own
+        trailing-window mean was actually known at the generation this
+        run stopped at — `{name: {"mean", "standard_error",
+        "standard_deviation", "effective_sample_size", "window",
+        "noise_adequate"}}`, one entry per statistic `report_for_state`
+        was given a monitor history for (`fim.convergence.window_
+        statistics.WindowStatistics`, `_window_statistics_payload`).
+        Empty for a state with no monitored run behind it at all (a GUI
+        preview, a re-analysis) — this is *not* the same thing as `D`/
+        `G_ST`/etc. above, which are always this state's own point
+        values, computed directly from its allele frequencies; this
+        field is instead the *history leading up to* that state, the
+        answer to "how much can this run's own last window of noise be
+        trusted," which the point value alone cannot say. `"statistic
+        converged"` (see `reason`, above) means the watched statistic's
+        own `noise_adequate` was `True` at the stopping generation
+        (`fim.convergence.monitor.ConvergenceMonitor`'s own noise-
+        adequacy gate, `20260927-claude-sonnet-5-noise-aware-
+        convergence-design.md`, `selby/restricted`); `converged=False`
+        (the generation cap was hit first) can still show a real,
+        informative `standard_error` here for whichever statistic was
+        watched — "capped, and here is how far off the estimate still
+        is" — even though `noise_adequate` for it is `False`.
 
 <a id="fim.engine.RunResult"></a>
 
@@ -3008,8 +3189,16 @@ rather than something engineered for its own sake.
 #### report\_for\_state
 
 ```python
-def report_for_state(state: ModelState, params: SimulationParams, *,
-                     run_id: str, converged: bool, reason: str) -> FinalReport
+def report_for_state(
+    state: ModelState,
+    params: SimulationParams,
+    *,
+    run_id: str,
+    converged: bool,
+    reason: str,
+    window_statistics: Mapping[str, dict[str, float | int | bool]]
+    | None = None
+) -> FinalReport
 ```
 
 Compute the final report independently of the run loop.
@@ -3044,6 +3233,15 @@ that produced it, not a whole run in progress.
   simply hit its generation cap — see `FinalReport.converged`.
 - `reason` - The short, human-readable phrase explaining why the run
   stopped where it did — see `FinalReport.reason`.
+- `window_statistics` - `_window_statistics_payload`'s own result — how
+  precisely each recorded statistic's trailing-window mean was
+  actually known when the run stopped (`fim.convergence.window_
+  statistics`), keyed by statistic name; `None` for a caller with
+  no monitored run behind this state at all (a GUI preview of
+  generation zero, a re-analysis of a persisted trajectory, most
+  of this function's own tests) — `FinalReport.window_statistics`
+  is then `{}`, not absent, so every caller can iterate it
+  unconditionally rather than checking for `None` twice.
 
 
 **Returns**:

@@ -28,6 +28,11 @@ from fim.convergence.criteria import (
     TrailingWindowCriterion,
     TrailingWindowTracker,
 )
+from fim.convergence.window_statistics import (
+    MINIMUM_NOISE_CHECK_WINDOW,
+    WindowStatistics,
+    window_statistics,
+)
 
 Combinator = Literal["any", "all"]
 
@@ -205,6 +210,30 @@ class ConvergenceMonitor:
             if isinstance(criterion, TrailingWindowCriterion)
             else {}
         )
+        # The noise-adequacy gate (`_gated_stable`, below) needs a window
+        # length and a tolerance, which only a `TrailingWindowCriterion`
+        # carries — duck-typed via `getattr`, not `isinstance`, so a test
+        # double exposing the same two attributes participates identically
+        # (`test/convergence/test_tracker.py`'s own `_PlainCriterion`, which
+        # this module has no reason to import). `None` for any other
+        # criterion (`ConfidenceIntervalCriterion`, an across-replicate
+        # concept with no single run's own trailing window to be noisy
+        # about) — that criterion's own signal passes through ungated below.
+        window = getattr(criterion, "window", None)
+        tolerance = getattr(criterion, "tolerance", None)
+        self._noise_window: int | None = (
+            window
+            if isinstance(window, int) and window >= MINIMUM_NOISE_CHECK_WINDOW
+            else None
+        )
+        self._noise_tolerance: float | None = tolerance
+        # "Re-armed" means the fast trend check has not said stable since
+        # the last time the (more expensive) noise check ran — see
+        # `_gated_stable`'s own docstring for why this throttles the noise
+        # check to once per contiguous stretch of trend-stability, not
+        # once per generation within it.
+        self._noise_rearmed: dict[str, bool] = dict.fromkeys(statistic_names, True)
+        self._last_window_statistics: dict[str, WindowStatistics] = {}
         self._outcome = ConvergenceOutcome(False, False, None, None)
 
     @property
@@ -342,9 +371,12 @@ class ConvergenceMonitor:
         # `ConvergenceMonitor`'s own class docstring for why this is a
         # genuine no-op with only one watched statistic.
         per_statistic_stable = (
-            self._trackers[name].is_stable()
-            if name in self._trackers
-            else self._criterion.is_stable(self._histories[name])
+            self._gated_stable(
+                name,
+                self._trackers[name].is_stable()
+                if name in self._trackers
+                else self._criterion.is_stable(self._histories[name]),
+            )
             for name in self._statistics
         )
         is_stable = (
@@ -395,6 +427,94 @@ class ConvergenceMonitor:
         `outcome().stopped`, without needing `converged`/`reason` too.
         """
         return self._outcome.stopped
+
+    def window_statistics(self, name: str) -> WindowStatistics | None:
+        """Return the most recent noise-adequacy check computed for `name`.
+
+        Set only as a side effect of `_gated_stable` actually running the
+        expensive check (below) — most recently, and therefore most
+        informatively, at the exact generation `name` was declared stable
+        (`record`'s own `is_stable` branch fires in the same call that just
+        set this). A caller building a final report reads this once, after
+        the run has stopped, to say not just *that* a statistic converged
+        but how precisely its own trailing-window mean was actually known.
+
+        Args:
+            name: A configured statistic name (watched or extra).
+
+        Returns:
+            `None` when no check has run yet for `name` — the monitor never
+            reached a trend-stable candidate at all (most commonly: the run
+            hit `max_generations` while `name`'s own trailing window was
+            still visibly trending), `name`'s own criterion is not a
+            `TrailingWindowCriterion`-shaped one, or its configured window
+            is shorter than `fim.convergence.window_statistics.
+            MINIMUM_NOISE_CHECK_WINDOW`.
+        """
+        return self._last_window_statistics.get(name)
+
+    def _gated_stable(self, name: str, trend_stable: bool) -> bool:
+        """Confirm a trend-stable signal against `name`'s own noise floor.
+
+        `trend_stable` (the criterion's or tracker's own O(1) half-window
+        judgment) answers "has this stopped trending" — a real, useful, but
+        noise-blind question: a single-locus statistic that is still
+        wobbling by drift alone, with no trend left at all, will still
+        satisfy it the instant a wobble happens to land the two halves
+        close together, whether or not that means anything. This method
+        adds the second half of the answer, `fim.convergence.window_
+        statistics.window_statistics`'s own correlation-corrected standard
+        error of the trailing window's mean, compared against half of the
+        configured tolerance (`WindowStatistics.noise_adequate`) — a window
+        judged stable only when both the trend has flattened *and* its own
+        mean is actually known to the requested precision.
+
+        Throttled, not run every generation: `window_statistics` is
+        `O(window)`, and `TrailingWindowTracker`'s whole reason to exist is
+        keeping the per-generation cost `O(1)` for windows that can reach
+        millions of generations. `_noise_rearmed[name]` tracks whether the
+        noise check has already run once during the *current* contiguous
+        stretch of `trend_stable=True` — re-armed (eligible to run again)
+        only once `trend_stable` next goes `False`. A noisy statistic whose
+        fast trend check flickers true/false for a long time before really
+        settling therefore pays for one `O(window)` check per flicker, not
+        one per generation the flicker lasts; a statistic that settles and
+        stays settled pays for exactly one. The one accuracy cost: with
+        several statistics and `combinator="all"`, a statistic that reaches
+        noise-adequate before the others keeps returning that same cached
+        verdict, from its own trailing window at the moment it was computed,
+        without re-checking a newer window while waiting on the rest — a
+        real, accepted approximation (see this method's own design note,
+        `20260927-...-noise-aware-convergence-design.md`, `selby/restricted`).
+
+        Args:
+            name: The statistic whose trend signal this confirms.
+            trend_stable: `name`'s own fast half-window judgment this round.
+
+        Returns:
+            `trend_stable` unchanged when `name` has no window/tolerance to
+            check against (`self._noise_window` is `None`) or its history
+            has not yet reached that window length; otherwise `trend_stable
+            and` the (possibly cached) noise-adequacy verdict.
+        """
+        if not trend_stable:
+            self._noise_rearmed[name] = True
+            return False
+        if self._noise_window is None:
+            return True
+        history = self._histories[name]
+        if len(history) < self._noise_window:
+            return True
+        if not self._noise_rearmed[name]:
+            cached = self._last_window_statistics.get(name)
+            assert cached is not None  # set on every prior True branch, above
+            assert self._noise_tolerance is not None  # set alongside self._noise_window
+            return cached.noise_adequate(self._noise_tolerance)
+        stats = window_statistics(history[-self._noise_window :])
+        self._last_window_statistics[name] = stats
+        self._noise_rearmed[name] = False
+        assert self._noise_tolerance is not None  # set alongside self._noise_window
+        return stats.noise_adequate(self._noise_tolerance)
 
     def _resolve_values(
         self,

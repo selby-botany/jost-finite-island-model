@@ -32,7 +32,9 @@ Every test module, fixture, and test function documented here in full; `doc/fim-
   - [`test_criteria_validation`](#convergence.test_criteria_validation)
   - [`test_defaults`](#convergence.test_defaults)
   - [`test_monitor`](#convergence.test_monitor)
+  - [`test_noise_gate`](#convergence.test_noise_gate)
   - [`test_tracker`](#convergence.test_tracker)
+  - [`test_window_statistics`](#convergence.test_window_statistics)
 - [`test/engine/`](#group-engine)
   - [`test_engine`](#engine.test_engine)
 - [`test/gui/`](#group-gui)
@@ -3829,6 +3831,106 @@ def test_extra_statistics_constructor_rejects_a_name_repeated_across_the_two_set
 
 A name cannot appear in both `statistics` and `extra_statistics`.
 
+<a id="convergence.test_noise_gate"></a>
+
+# convergence.test\_noise\_gate
+
+`ConvergenceMonitor`'s noise-adequacy gate: `_gated_stable`.
+
+`trailing_window_stable` alone answers "has this stopped trending," which a
+noisy-but-flat series can satisfy by chance long before its own trailing-
+window mean is actually known to the configured tolerance — the real defect
+these tests were written against (a botanist-reported worked example whose
+"converged" `D` was a single noisy generation, nowhere near the model's own
+expectation). These tests prove the gate actually delays a stop until the
+window's own standard error is noise-adequate, that it still stops promptly
+once the process is genuinely precise, and that a run capped without ever
+reaching noise-adequacy reports that honestly.
+
+<a id="convergence.test_noise_gate.test_the_noise_gate_delays_a_stop_the_trend_check_alone_would_have_taken"></a>
+
+#### test\_the\_noise\_gate\_delays\_a\_stop\_the\_trend\_check\_alone\_would\_have\_taken
+
+```python
+def test_the_noise_gate_delays_a_stop_the_trend_check_alone_would_have_taken(
+) -> None
+```
+
+Correlated noise that fools the trend check does not fool the gate.
+
+`phi=0.85` positive correlation, `window=24`, `tolerance=0.03`: two
+neighboring 12-value halves of a correlated series land close together
+(`trailing_window_stable` alone -- the old, ungated behavior -- passes
+by generation 23, confirmed below, not assumed) long before the window's
+own correlation-corrected standard error has actually shrunk enough. The
+gated monitor must not stop that early, and must eventually stop once it
+genuinely has (`stats.noise_adequate`).
+
+<a id="convergence.test_noise_gate.test_a_genuinely_precise_series_still_stops_promptly"></a>
+
+#### test\_a\_genuinely\_precise\_series\_still\_stops\_promptly
+
+```python
+def test_a_genuinely_precise_series_still_stops_promptly() -> None
+```
+
+Tiny noise relative to tolerance costs (almost) no extra generations.
+
+Regression guard: the gate must not meaningfully delay the easy,
+already-well-served case (a multi-locus or multi-replicate mean whose
+own noise is already far below the requested tolerance).
+
+<a id="convergence.test_noise_gate.test_a_run_that_never_reaches_noise_adequacy_is_honestly_capped"></a>
+
+#### test\_a\_run\_that\_never\_reaches\_noise\_adequacy\_is\_honestly\_capped
+
+```python
+def test_a_run_that_never_reaches_noise_adequacy_is_honestly_capped() -> None
+```
+
+Hitting the cap without a noise-adequate window reports `converged=False`.
+
+Persistent noise (`sigma` large relative to `tolerance`, a window too
+short to average enough of it away) never satisfies the gate — the run
+must report the cap, not a false convergence, and `window_statistics`
+must still be available so a caller can say how far off the estimate is.
+
+<a id="convergence.test_noise_gate.test_window_statistics_is_none_before_any_check_has_run"></a>
+
+#### test\_window\_statistics\_is\_none\_before\_any\_check\_has\_run
+
+```python
+def test_window_statistics_is_none_before_any_check_has_run() -> None
+```
+
+A fresh monitor, or one whose trend never stabilized, has nothing yet.
+
+<a id="convergence.test_noise_gate.test_a_window_shorter_than_the_noise_check_minimum_is_never_gated"></a>
+
+#### test\_a\_window\_shorter\_than\_the\_noise\_check\_minimum\_is\_never\_gated
+
+```python
+@pytest.mark.parametrize("window", [2, MINIMUM_NOISE_CHECK_WINDOW - 1])
+def test_a_window_shorter_than_the_noise_check_minimum_is_never_gated(
+        window: int) -> None
+```
+
+Below `MINIMUM_NOISE_CHECK_WINDOW`, the trend check alone decides.
+
+Matches the trend-only check's own original behavior for a window too
+short to estimate a lag-1 autocorrelation from at all
+(`fim.convergence.window_statistics`'s own docstring).
+
+<a id="convergence.test_noise_gate.test_a_criterion_without_a_window_or_tolerance_is_never_gated"></a>
+
+#### test\_a\_criterion\_without\_a\_window\_or\_tolerance\_is\_never\_gated
+
+```python
+def test_a_criterion_without_a_window_or_tolerance_is_never_gated() -> None
+```
+
+A non-`TrailingWindowCriterion`-shaped criterion passes through unchanged.
+
 <a id="convergence.test_tracker"></a>
 
 # convergence.test\_tracker
@@ -3913,6 +4015,97 @@ def test_monitor_stops_at_the_same_generation_on_either_path(
 ```
 
 The tracker path and the full-history path stop together.
+
+<a id="convergence.test_window_statistics"></a>
+
+# convergence.test\_window\_statistics
+
+Tests for `fim.convergence.window_statistics`.
+
+<a id="convergence.test_window_statistics.test_independent_draws_give_the_ordinary_standard_error"></a>
+
+#### test\_independent\_draws\_give\_the\_ordinary\_standard\_error
+
+```python
+def test_independent_draws_give_the_ordinary_standard_error() -> None
+```
+
+`phi = 0` (no correlation) reduces to `sd / sqrt(n)`.
+
+<a id="convergence.test_window_statistics.test_correlated_draws_match_the_known_ar1_standard_error"></a>
+
+#### test\_correlated\_draws\_match\_the\_known\_ar1\_standard\_error
+
+```python
+@pytest.mark.parametrize("phi", [0.5, 0.8, 0.95, -0.4])
+def test_correlated_draws_match_the_known_ar1_standard_error(
+        phi: float) -> None
+```
+
+A known AR(1) process's asymptotic `Var(mean) = sigma_x^2/n * (1+phi)/(1-phi)`.
+
+The textbook result for the variance of the sample mean of `n`
+consecutive draws from a stationary AR(1) process, `n` large — this
+module's own `tau_int = (1 + rho) / (1 - rho)` (with `rho` the sample
+lag-1 correlation, estimating `phi`) reproduces exactly this factor, so
+the estimated standard error should track the true one for large `n`.
+
+<a id="convergence.test_window_statistics.test_constant_window_is_exactly_known"></a>
+
+#### test\_constant\_window\_is\_exactly\_known
+
+```python
+def test_constant_window_is_exactly_known() -> None
+```
+
+No variation at all means no uncertainty, not a division by zero.
+
+<a id="convergence.test_window_statistics.test_perfectly_alternating_window_is_known_better_than_its_own_length"></a>
+
+#### test\_perfectly\_alternating\_window\_is\_known\_better\_than\_its\_own\_length
+
+```python
+def test_perfectly_alternating_window_is_known_better_than_its_own_length(
+) -> None
+```
+
+An oscillating (anticorrelated) window's mean is better known than i.i.d.
+
+Two neighboring points nearly cancel each other's noise, so the standard
+error of the mean is *smaller* than `sd / sqrt(n)`, the independent-draws
+baseline -- a negative `lag1_autocorrelation` correctly reports more
+effective samples than raw observations, not fewer.
+
+<a id="convergence.test_window_statistics.test_noise_adequate_uses_half_the_tolerance"></a>
+
+#### test\_noise\_adequate\_uses\_half\_the\_tolerance
+
+```python
+def test_noise_adequate_uses_half_the_tolerance() -> None
+```
+
+`noise_adequate` is `standard_error <= tolerance * NOISE_TOLERANCE_FRACTION`.
+
+<a id="convergence.test_window_statistics.test_too_few_values_is_refused"></a>
+
+#### test\_too\_few\_values\_is\_refused
+
+```python
+@pytest.mark.parametrize("values", [[], [0.1], [0.1, 0.2]])
+def test_too_few_values_is_refused(values: list[float]) -> None
+```
+
+Fewer than three values leaves no lag-1 correlation to estimate.
+
+<a id="convergence.test_window_statistics.test_minimum_noise_check_window_is_at_least_three"></a>
+
+#### test\_minimum\_noise\_check\_window\_is\_at\_least\_three
+
+```python
+def test_minimum_noise_check_window_is_at_least_three() -> None
+```
+
+The monitor's own skip threshold must not be shorter than this module needs.
 
 
 
@@ -17029,6 +17222,23 @@ def test_page_interpolation_of_a_sampled_closed_form_matches_numpy() -> None
 
 Between grid points it is linear interpolation; before the first and
 after the last it holds the end value.
+
+<a id="gui.test_running_screen.test_completed_row_tooltip_shows_the_trailing_window_mean"></a>
+
+#### test\_completed\_row\_tooltip\_shows\_the\_trailing\_window\_mean
+
+```python
+def test_completed_row_tooltip_shows_the_trailing_window_mean(
+        _isolate_gui_preferences: Path) -> None
+```
+
+A statistic row's own hover title carries its trailing-window mean.
+
+Needs a window at least `MINIMUM_NOISE_CHECK_WINDOW` long -- shorter
+than that, `report_for_state` has nothing to report
+(`fim.convergence.window_statistics`'s own docstring) -- so this uses
+its own Settings override rather than `fast_scalar_run_settings`
+(window 4).
 
 <a id="gui.test_running_screen.test_trajectory_panel_updates_live_while_a_run_is_still_going"></a>
 

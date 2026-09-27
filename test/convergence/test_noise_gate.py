@@ -1,0 +1,203 @@
+"""`ConvergenceMonitor`'s noise-adequacy gate: `_gated_stable`.
+
+`trailing_window_stable` alone answers "has this stopped trending," which a
+noisy-but-flat series can satisfy by chance long before its own trailing-
+window mean is actually known to the configured tolerance — the real defect
+these tests were written against (a botanist-reported worked example whose
+"converged" `D` was a single noisy generation, nowhere near the model's own
+expectation). These tests prove the gate actually delays a stop until the
+window's own standard error is noise-adequate, that it still stops promptly
+once the process is genuinely precise, and that a run capped without ever
+reaching noise-adequacy reports that honestly.
+"""
+
+from __future__ import annotations
+
+import math
+import random
+
+import pytest
+
+from fim.convergence.criteria import TrailingWindowCriterion, trailing_window_stable
+from fim.convergence.monitor import ConvergenceMonitor
+from fim.convergence.window_statistics import MINIMUM_NOISE_CHECK_WINDOW
+
+
+def _noisy_flat_series(
+    *, mean: float, sigma: float, length: int, seed: int
+) -> list[float]:
+    """Independent Gaussian noise around a fixed mean -- no trend, real noise."""
+    rng = random.Random(seed)
+    return [mean + rng.gauss(0.0, sigma) for _ in range(length)]
+
+
+def _ar1_series(
+    *, phi: float, sigma: float, length: int, seed: int, mean: float = 0.4
+) -> list[float]:
+    """A stationary AR(1) series -- see `test_window_statistics.py`'s own twin.
+
+    Correlated noise, not independent: real per-generation drift/mutation
+    statistics behave this way (`fim.convergence.defaults`'s own relaxation
+    time `tau` is exactly this process's own correlation length), and
+    correlation is what genuinely fools the trend-only check -- two
+    neighboring halves of a correlated series look artificially similar to
+    each other even while the *window's own mean* is still poorly known.
+    Independent noise (`_noisy_flat_series`, above) does not reproduce that
+    asymmetry: for i.i.d. noise the two checks have comparable statistical
+    power (the half-window-difference's own standard deviation is exactly
+    twice the window-mean's own standard error), so it is used only for the
+    two tests that do not depend on the asymmetry itself.
+    """
+    rng = random.Random(seed)
+    stationary_sigma = sigma / math.sqrt(1.0 - phi * phi)
+    value = mean + rng.gauss(0.0, stationary_sigma)
+    series = []
+    for _ in range(length):
+        series.append(value)
+        value = mean + phi * (value - mean) + rng.gauss(0.0, sigma)
+    return series
+
+
+def test_the_noise_gate_delays_a_stop_the_trend_check_alone_would_have_taken() -> None:
+    """Correlated noise that fools the trend check does not fool the gate.
+
+    `phi=0.85` positive correlation, `window=24`, `tolerance=0.03`: two
+    neighboring 12-value halves of a correlated series land close together
+    (`trailing_window_stable` alone -- the old, ungated behavior -- passes
+    by generation 23, confirmed below, not assumed) long before the window's
+    own correlation-corrected standard error has actually shrunk enough. The
+    gated monitor must not stop that early, and must eventually stop once it
+    genuinely has (`stats.noise_adequate`).
+    """
+    window, tolerance = 24, 0.03
+    series = _ar1_series(phi=0.85, sigma=0.05, length=300, seed=8)
+
+    ungated_count = next(
+        count
+        for count in range(window, len(series) + 1)
+        if trailing_window_stable(series[:count], window, tolerance)
+    )
+    ungated_stop = ungated_count - 1  # `record()`'s own 0-indexed generation
+    assert ungated_stop < 30  # the premise: the old rule really is fooled early
+
+    monitor = ConvergenceMonitor(
+        TrailingWindowCriterion(window, tolerance), max_generations=len(series) - 1
+    )
+    gated_stop = None
+    for generation, value in enumerate(series):
+        if monitor.record(generation, value).stopped:
+            gated_stop = generation
+            break
+
+    assert gated_stop is not None
+    assert gated_stop > ungated_stop + 50
+    stats = monitor.window_statistics("value")
+    assert stats is not None
+    assert stats.noise_adequate(tolerance)
+
+
+def test_a_genuinely_precise_series_still_stops_promptly() -> None:
+    """Tiny noise relative to tolerance costs (almost) no extra generations.
+
+    Regression guard: the gate must not meaningfully delay the easy,
+    already-well-served case (a multi-locus or multi-replicate mean whose
+    own noise is already far below the requested tolerance).
+    """
+    window, tolerance = 30, 0.02
+    series = _noisy_flat_series(mean=0.6, sigma=0.0005, length=200, seed=3)
+
+    ungated_stop = (
+        next(
+            count
+            for count in range(window, len(series) + 1)
+            if trailing_window_stable(series[:count], window, tolerance)
+        )
+        - 1
+    )
+    monitor = ConvergenceMonitor(
+        TrailingWindowCriterion(window, tolerance), max_generations=len(series) - 1
+    )
+    gated_stop = next(
+        generation
+        for generation, value in enumerate(series)
+        if monitor.record(generation, value).stopped
+    )
+
+    assert gated_stop - ungated_stop <= 2
+
+
+def test_a_run_that_never_reaches_noise_adequacy_is_honestly_capped() -> None:
+    """Hitting the cap without a noise-adequate window reports `converged=False`.
+
+    Persistent noise (`sigma` large relative to `tolerance`, a window too
+    short to average enough of it away) never satisfies the gate — the run
+    must report the cap, not a false convergence, and `window_statistics`
+    must still be available so a caller can say how far off the estimate is.
+    """
+    window, tolerance = 20, 0.001
+    series = _noisy_flat_series(mean=0.3, sigma=0.05, length=150, seed=5)
+
+    monitor = ConvergenceMonitor(
+        TrailingWindowCriterion(window, tolerance), max_generations=len(series) - 1
+    )
+    outcome = None
+    for generation, value in enumerate(series):
+        outcome = monitor.record(generation, value)
+        if outcome.stopped:
+            break
+
+    assert outcome is not None
+    assert outcome.stopped
+    assert outcome.converged is False
+    stats = monitor.window_statistics("value")
+    assert stats is not None
+    assert not stats.noise_adequate(tolerance)
+    assert stats.standard_error > tolerance * 0.5
+
+
+def test_window_statistics_is_none_before_any_check_has_run() -> None:
+    """A fresh monitor, or one whose trend never stabilized, has nothing yet."""
+    monitor = ConvergenceMonitor(TrailingWindowCriterion(20, 0.001), max_generations=5)
+    for generation, value in enumerate([0.0, 1.0, 0.0, 1.0, 0.0, 1.0][:5]):
+        monitor.record(generation, value)
+
+    assert monitor.window_statistics("value") is None
+
+
+@pytest.mark.parametrize("window", [2, MINIMUM_NOISE_CHECK_WINDOW - 1])
+def test_a_window_shorter_than_the_noise_check_minimum_is_never_gated(
+    window: int,
+) -> None:
+    """Below `MINIMUM_NOISE_CHECK_WINDOW`, the trend check alone decides.
+
+    Matches the trend-only check's own original behavior for a window too
+    short to estimate a lag-1 autocorrelation from at all
+    (`fim.convergence.window_statistics`'s own docstring).
+    """
+    monitor = ConvergenceMonitor(
+        TrailingWindowCriterion(window, 0.0), max_generations=10
+    )
+    outcome = None
+    for generation in range(window):
+        outcome = monitor.record(generation, 0.5)
+
+    assert outcome is not None
+    assert outcome.stopped
+    assert outcome.converged
+    assert monitor.window_statistics("value") is None
+
+
+def test_a_criterion_without_a_window_or_tolerance_is_never_gated() -> None:
+    """A non-`TrailingWindowCriterion`-shaped criterion passes through unchanged."""
+
+    class _AlwaysStable:
+        def is_stable(self, history: list[float]) -> bool:
+            del history
+            return True
+
+    monitor = ConvergenceMonitor(_AlwaysStable(), max_generations=10)  # type: ignore[arg-type]
+    outcome = monitor.record(0, 0.5)
+
+    assert outcome.stopped
+    assert outcome.converged
+    assert monitor.window_statistics("value") is None
