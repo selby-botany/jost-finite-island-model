@@ -147,20 +147,33 @@ def test_payload_is_finite_bounded_and_settles_for_every_curve(name: str) -> Non
 
 def _recursion_from_payload(payload: dict[str, Any]) -> IdentityRecursion:
     """Rebuild `IdentityRecursion` from the ingredients the page receives."""
+    vectors = payload["eigenvectors"]
+    inverse = payload["inverse"]
     return IdentityRecursion(
         deme_count=payload["demes"],
         fixed_point=tuple(payload["fixedPoint"]),
         eigenvalues=tuple(payload["eigenvalues"]),
-        eigenvectors=tuple(tuple(row) for row in payload["eigenvectors"]),
-        inverse=tuple(tuple(row) for row in payload["inverse"]),
+        eigenvectors=((vectors[0][0], vectors[0][1]), (vectors[1][0], vectors[1][1])),
+        inverse=((inverse[0][0], inverse[0][1]), (inverse[1][0], inverse[1][1])),
     )
+
+
+def _defined(value: float | None) -> float:
+    """Narrow one of `TrajectoryHistory.histories`' own optional entries.
+
+    Every statistic read this way here is one of `D`/`G_ST`/`H_S`/`H_T` at a
+    healthy, multi-locus configuration -- always defined in practice (only
+    `G_ST`, at a monomorphic locus, can ever be `None`).
+    """
+    assert value is not None, "expected a defined statistic value"
+    return value
 
 
 def _evaluate_like_the_page(
     payload: dict[str, Any],
     name: str,
     generations: list[int],
-    histories: dict[str, list[float]],
+    histories: dict[str, list[float | None]],
 ) -> list[float]:
     """Evaluate `payload` for statistic `name` the way `closedFormTrajectories` does."""
     if _kind(payload) == SAMPLED:
@@ -169,7 +182,7 @@ def _evaluate_like_the_page(
         )
     recursion = _recursion_from_payload(payload)
     within, between = identities_from_heterozygosities(
-        histories["H_S"][0], histories["H_T"][0], payload["demes"]
+        _defined(histories["H_S"][0]), _defined(histories["H_T"][0]), payload["demes"]
     )
     return [
         recursion.statistics_after(generation - generations[0], within, between)[name]
@@ -211,7 +224,7 @@ def test_engine_agrees_with_the_payload_for_every_example(
     horizon = max(MINIMUM_HORIZON, math.ceil(3.0 * (reference.relaxation_time or 0.0)))
     horizon = min(horizon, 1500)
 
-    runs: list[tuple[dict[str, Any], list[int], dict[str, list[float]]]] = []
+    runs: list[tuple[dict[str, Any], list[int], dict[str, list[float | None]]]] = []
     for offset in range(REPLICATES):
         config = {
             **base,
@@ -239,7 +252,7 @@ def test_engine_agrees_with_the_payload_for_every_example(
     for statistic in ("D", "G_ST"):
         differences = [
             [
-                simulated - expected
+                _defined(simulated) - expected
                 for simulated, expected in zip(
                     histories[statistic],
                     _evaluate_like_the_page(payload, statistic, generations, histories),

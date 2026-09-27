@@ -681,7 +681,7 @@ def test_page_interpolation_of_a_sampled_closed_form_matches_numpy() -> None:
     after the last it holds the end value.
     """
     grid = [0, 1, 2, 10, 100, 1000]
-    payload = {
+    payload: dict[str, Any] = {
         "generations": grid,
         "statistics": {
             "D": [0.0, 0.1, 0.25, 0.4, 0.6, 0.62],

@@ -328,7 +328,7 @@ def identity_matrix_from_frequencies(
 def matrix_identity_trajectory(
     *,
     deme_sizes: Sequence[int],
-    migration: Sequence[Sequence[float]],
+    migration: Sequence[Sequence[float]] | NDArray[np.float64],
     mutation: float,
     initial_identities: NDArray[np.float64],
     generations: Sequence[int],

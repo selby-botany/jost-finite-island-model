@@ -26788,7 +26788,7 @@ pure function of the commit.
 @pytest.fixture(scope="module")
 def engine_histories(
     tmp_path_factory: pytest.TempPathFactory
-) -> list[tuple[list[int], dict[str, list[float]]]]
+) -> list[tuple[list[int], dict[str, list[float | None]]]]
 ```
 
 Run every seeded replicate once, shared by both statistics' tests.
@@ -26800,9 +26800,9 @@ Run every seeded replicate once, shared by both statistics' tests.
 ```python
 @pytest.mark.parametrize("name", ["D", "G_ST"])
 def test_engine_mean_sits_on_the_closed_form_curve(
-        name: str, engine_histories: list[tuple[list[int],
-                                                dict[str,
-                                                     list[float]]]]) -> None
+    name: str, engine_histories: list[tuple[list[int],
+                                            dict[str, list[float | None]]]]
+) -> None
 ```
 
 Mean simulated `D`/`G_ST` matches the closed form at five checkpoints.
@@ -26815,7 +26815,7 @@ Mean simulated `D`/`G_ST` matches the closed form at five checkpoints.
 @pytest.fixture(scope="module")
 def hub_histories(
     tmp_path_factory: pytest.TempPathFactory
-) -> list[tuple[SimulationParams, list[int], dict[str, list[float]]]]
+) -> list[tuple[SimulationParams, list[int], dict[str, list[float | None]]]]
 ```
 
 Run the hub scenario once per seed, keeping each run's own parameters.
@@ -26828,7 +26828,7 @@ Run the hub scenario once per seed, keeping each run's own parameters.
 @pytest.mark.parametrize("name", ["D", "G_ST"])
 def test_engine_mean_sits_on_the_matrix_closed_form_for_a_hub(
     name: str, hub_histories: list[tuple[SimulationParams, list[int],
-                                         dict[str, list[float]]]]
+                                         dict[str, list[float | None]]]]
 ) -> None
 ```
 

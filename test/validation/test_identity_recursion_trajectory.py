@@ -40,7 +40,23 @@ REPLICATES = 20
 STANDARD_ERRORS = 5.0
 
 
-def _run_history(tmp_path: Path, seed: int) -> tuple[list[int], dict[str, list[float]]]:
+def _defined(value: float | None) -> float:
+    """Narrow one of `TrajectoryHistory.histories`' own optional entries.
+
+    Every statistic read this way in this file is one of `D`/`G_ST`/`H_S`/
+    `H_T` at a healthy, multi-locus, non-degenerate configuration -- always
+    defined in practice, per `fim.gui.trajectory_history.TrajectoryHistory`'s
+    own docstring (only `G_ST`, and only at a monomorphic locus, can ever be
+    `None`). A real `None` here would be a genuine, surprising finding about
+    the scenario, not something to silently skip past.
+    """
+    assert value is not None, "expected a defined statistic value"
+    return value
+
+
+def _run_history(
+    tmp_path: Path, seed: int
+) -> tuple[list[int], dict[str, list[float | None]]]:
     """Run one seeded engine run and return its sampled statistic histories."""
     config = {
         "N": SIZE,
@@ -67,7 +83,7 @@ def _run_history(tmp_path: Path, seed: int) -> tuple[list[int], dict[str, list[f
 @pytest.fixture(scope="module")
 def engine_histories(
     tmp_path_factory: pytest.TempPathFactory,
-) -> list[tuple[list[int], dict[str, list[float]]]]:
+) -> list[tuple[list[int], dict[str, list[float | None]]]]:
     """Run every seeded replicate once, shared by both statistics' tests."""
     root = tmp_path_factory.mktemp("identity-recursion")
     # `fim run` registers every run in the default Study; keep that out of
@@ -79,18 +95,18 @@ def engine_histories(
 
 @pytest.mark.parametrize("name", ["D", "G_ST"])
 def test_engine_mean_sits_on_the_closed_form_curve(
-    name: str, engine_histories: list[tuple[list[int], dict[str, list[float]]]]
+    name: str, engine_histories: list[tuple[list[int], dict[str, list[float | None]]]]
 ) -> None:
     """Mean simulated `D`/`G_ST` matches the closed form at five checkpoints."""
     recursion = identity_recursion(SIZE, MIGRATION, MUTATION, DEMES)
     differences: list[list[float]] = []
     for generations, histories in engine_histories:
         within, between = identities_from_heterozygosities(
-            histories["H_S"][0], histories["H_T"][0], DEMES
+            _defined(histories["H_S"][0]), _defined(histories["H_T"][0]), DEMES
         )
         differences.append(
             [
-                histories[name][index]
+                _defined(histories[name][index])
                 - recursion.statistics_after(
                     generation - generations[0], within, between
                 )[name]
@@ -134,7 +150,7 @@ HUB_CONFIG = {
 @pytest.fixture(scope="module")
 def hub_histories(
     tmp_path_factory: pytest.TempPathFactory,
-) -> list[tuple[SimulationParams, list[int], dict[str, list[float]]]]:
+) -> list[tuple[SimulationParams, list[int], dict[str, list[float | None]]]]:
     """Run the hub scenario once per seed, keeping each run's own parameters."""
     root = tmp_path_factory.mktemp("identity-matrix")
     runs = []
@@ -164,7 +180,9 @@ def hub_histories(
 @pytest.mark.parametrize("name", ["D", "G_ST"])
 def test_engine_mean_sits_on_the_matrix_closed_form_for_a_hub(
     name: str,
-    hub_histories: list[tuple[SimulationParams, list[int], dict[str, list[float]]]],
+    hub_histories: list[
+        tuple[SimulationParams, list[int], dict[str, list[float | None]]]
+    ],
 ) -> None:
     """Unequal sizes and a migration matrix: the full-matrix curve tracks the engine."""
     differences: list[list[float]] = []
@@ -177,6 +195,7 @@ def test_engine_mean_sits_on_the_matrix_closed_form_for_a_hub(
             ]
         )
         assert isinstance(params.mu, float)
+        assert not isinstance(params.m, float)
         expected = matrix_identity_trajectory(
             deme_sizes=params.population_sizes,
             migration=params.m,
@@ -186,7 +205,7 @@ def test_engine_mean_sits_on_the_matrix_closed_form_for_a_hub(
         )[name]
         differences.append(
             [
-                simulated - theory
+                _defined(simulated) - theory
                 for simulated, theory in zip(histories[name], expected, strict=True)
             ]
         )

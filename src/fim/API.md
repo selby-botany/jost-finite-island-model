@@ -17242,7 +17242,8 @@ allele. The diagonal is the with-replacement within-deme identity,
 
 ```python
 def matrix_identity_trajectory(
-        *, deme_sizes: Sequence[int], migration: Sequence[Sequence[float]],
+        *, deme_sizes: Sequence[int],
+        migration: Sequence[Sequence[float]] | NDArray[np.float64],
         mutation: float, initial_identities: NDArray[np.float64],
         generations: Sequence[int]) -> dict[str, list[float]]
 ```

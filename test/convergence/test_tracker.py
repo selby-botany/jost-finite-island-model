@@ -58,8 +58,8 @@ def test_tracker_is_false_until_the_window_fills() -> None:
 def test_tracker_accepts_integers() -> None:
     """The monitor may be given ints; they are exact too."""
     tracker = TrailingWindowTracker(2, 0.0)
-    tracker.push(3)  # type: ignore[arg-type]
-    tracker.push(3)  # type: ignore[arg-type]
+    tracker.push(3)
+    tracker.push(3)
     assert tracker.is_stable()
 
 
