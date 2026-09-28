@@ -1224,6 +1224,186 @@ def mutual_information(
     return _mutual_information_from_demes(demes, weights)
 
 
+def f_st_coancestry_matrix(
+    table: FrequencyTable,
+) -> tuple[tuple[float, ...], ...]:
+    """Return Goudet & Weir (2023) F_ST matrix (Eq. 4 / Eq. 11).
+
+    Computes the matrix of population-specific (diagonal) and
+    population-pair (off-diagonal) F_ST values from the pairwise
+    coancestry / cross-identity matrix ``Theta``:
+
+    .. math::
+
+        F_{ST} = \\frac{\\Theta - J \\theta_B}{1 - \\theta_B}
+
+    where ``theta_B`` is the average of the off-diagonal elements of
+    ``Theta``, and ``J`` is an all-ones matrix.
+
+    By construction:
+    - The diagonal element ``F_ST[i][i]`` is population-specific F_ST
+      for deme ``i`` (Eq. 7).
+    - The off-diagonal element ``F_ST[i][j]`` is population-pair F_ST
+      for demes ``i`` and ``j`` (Eq. 9 / 11).
+    - The off-diagonal elements have mean exactly zero (their sum is 0.0).
+
+    Args:
+        table: Frequency table across demes and alleles.
+
+    Returns:
+        Square tuple of tuples of floats of shape ``(d, d)``.
+    """
+    demes = _validate_table(table)
+    _require_multiple_demes(demes)
+    d = len(demes)
+
+    # Compute pairwise identity matrix Theta: Theta[i][j] = sum_k p_ik * p_jk
+    # For i == j: Theta[i][i] = sum_k p_ik^2
+    theta = [[0.0] * d for _ in range(d)]
+    for i in range(d):
+        theta[i][i] = fsum(v * v for v in demes[i].values())
+        for j in range(i + 1, d):
+            shared = set(demes[i]).intersection(demes[j])
+            val = fsum(demes[i][a] * demes[j][a] for a in shared)
+            theta[i][j] = val
+            theta[j][i] = val
+
+    # theta_B is the average of off-diagonal elements
+    off_diag_sum = fsum(theta[i][j] for i in range(d) for j in range(d) if i != j)
+    theta_b = off_diag_sum / (d * (d - 1))
+
+    denominator = 1.0 - theta_b
+    if denominator == 0.0:
+        # Complete between-population identity
+        return tuple(tuple(0.0 for _ in range(d)) for _ in range(d))
+
+    matrix = tuple(
+        tuple((theta[i][j] - theta_b) / denominator for j in range(d)) for i in range(d)
+    )
+    return matrix
+
+
+def population_specific_f_st(table: FrequencyTable) -> tuple[float, ...]:
+    """Return Goudet & Weir (2023) population-specific F_ST (Eq. 4 / Eq. 7).
+
+    The diagonal elements of the coancestry-based F_ST matrix:
+
+    .. math::
+
+        F_{ST}^i = \\frac{\\theta_{ii} - \\theta_B}{1 - \\theta_B}
+
+    where ``theta_{ii} = sum_u p_{iu}^2`` is the homozygosity / within-deme
+    identity of deme ``i``, and ``theta_B`` is the mean between-deme identity.
+
+    Args:
+        table: Frequency table across demes and alleles.
+
+    Returns:
+        Tuple of population-specific F_ST values, one per deme.
+    """
+    matrix = f_st_coancestry_matrix(table)
+    return tuple(matrix[i][i] for i in range(len(matrix)))
+
+
+def population_pair_f_st(
+    table: FrequencyTable,
+    i: int,
+    j: int,
+) -> float:
+    """Return Goudet & Weir (2023) population-pair F_ST (Eq. 4 / Eq. 9 / Eq. 11).
+
+    Measures the coancestry between demes ``i`` and ``j`` relative to the
+    global average between-population coancestry ``theta_B``:
+
+    .. math::
+
+        F_{ST}^{ij} = \\frac{\\theta_{ij} - \\theta_B}{1 - \\theta_B}
+
+    Negative values indicate that populations ``i`` and ``j`` share fewer
+    alleles than an average pair of distinct populations in the dataset,
+    meaning together they harbor greater diversity than the global background.
+
+    Args:
+        table: Frequency table across demes and alleles.
+        i: 0-based index of the first deme.
+        j: 0-based index of the second deme.
+
+    Returns:
+        Population-pair F_ST as a float.
+    """
+    matrix = f_st_coancestry_matrix(table)
+    d = len(matrix)
+    if not (0 <= i < d and 0 <= j < d):
+        raise IndexError(f"indices i={i}, j={j} out of range for {d} demes")
+    return matrix[i][j]
+
+
+def pairwise_f_st(
+    frequencies_x: Mapping[Any, Any],
+    frequencies_y: Mapping[Any, Any],
+) -> float:
+    """Return classical pairwise F_ST using only the pair's data (Eq. 10).
+
+    Following Goudet & Weir (2023) Eq. 10 (also Rousset 2002):
+
+    .. math::
+
+        F_{STp}^{XY} = \\frac{(\\theta_{XX} + \\theta_{YY})/2 - \\theta_{XY}}
+                       {1 - \\theta_{XY}}
+
+    where ``theta_{XX}`` and ``theta_{YY}`` are the homozygosities within
+    populations X and Y, and ``theta_{XY} = sum_u x_u y_u`` is the cross
+    identity.
+
+    Unlike population-pair F_ST (which uses the whole dataset's ``theta_B``
+    as reference), classical pairwise F_ST uses only the pair's own data
+    and reference point ``theta_{XY}``.
+
+    Args:
+        frequencies_x: Normalized allele frequencies in population X at one locus.
+        frequencies_y: Normalized allele frequencies in population Y at one locus.
+
+    Returns:
+        Classical pairwise F_ST in [0, 1].
+    """
+    deme_x = _validate_deme(frequencies_x, 0)
+    deme_y = _validate_deme(frequencies_y, 1)
+    theta_xx = fsum(v * v for v in deme_x.values())
+    theta_yy = fsum(v * v for v in deme_y.values())
+    shared = set(deme_x).intersection(deme_y)
+    theta_xy = fsum(deme_x[a] * deme_y[a] for a in shared)
+    numerator = 0.5 * (theta_xx + theta_yy) - theta_xy
+    denominator = 1.0 - theta_xy
+    if denominator <= 0.0:
+        return 0.0
+    return _bounded(numerator / denominator, "pairwise_F_ST")
+
+
+def overall_coancestry_f_st(table: FrequencyTable) -> float:
+    """Return overall F_ST from coancestry matrix (Goudet & Weir 2023 Eq. 4/8).
+
+    Defined as the unweighted mean of the population-specific F_ST values:
+
+    .. math::
+
+        F_{ST} = \\frac{\\bar{\\theta}_W - \\theta_B}{1 - \\theta_B}
+
+    where ``bar{theta}_W`` is the mean within-population coancestry (diagonal),
+    and ``theta_B`` is the mean between-population coancestry (off-diagonal).
+
+    For equal deme weights, this is Rousset (2002) / Weir & Goudet (2017)
+    unweighted F_ST.
+
+    Args:
+        table: Frequency table across demes and alleles.
+
+    Returns:
+        Overall coancestry-based F_ST as a float.
+    """
+    pop_f_st = population_specific_f_st(table)
+    return fsum(pop_f_st) / len(pop_f_st)
+
+
 def differentiation_q(
     table: FrequencyTable,
     order: float | int,

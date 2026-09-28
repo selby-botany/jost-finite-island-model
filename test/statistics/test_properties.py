@@ -233,3 +233,32 @@ def test_equilibrium_d_and_g_st_move_opposite_ways_in_mutation(
     assert equilibrium_g_st(population_size, m, mu_lo, d) >= equilibrium_g_st(
         population_size, m, mu_hi, d
     )
+
+
+@given(
+    population_size=st.integers(min_value=1, max_value=5000),
+    d=st.integers(min_value=2, max_value=50),
+    mu=st.floats(min_value=0.0, max_value=1.0, allow_nan=False),
+    m_values=st.lists(
+        st.floats(min_value=0.0, max_value=1.0, allow_nan=False),
+        min_size=2,
+        max_size=2,
+    ),
+)
+def test_aoki_2023_claim_4_g_st_monotonicity_in_migration(
+    population_size: int,
+    d: int,
+    mu: float,
+    m_values: list[float],
+) -> None:
+    """G_ST monotonically decreases with increasing migration rate.
+
+    Aoki et al. (2023) §5.3 Claim 4: G_ST responds in a strictly downward
+    direction to higher gene flow (m). Tested as a pure property test across
+    arbitrary population sizes, deme counts, and mutation rates against
+    equilibrium_g_st.
+    """
+    m_lo, m_hi = sorted(m_values)
+    g_st_lo = equilibrium_g_st(population_size, m_lo, mu, d)
+    g_st_hi = equilibrium_g_st(population_size, m_hi, mu, d)
+    assert g_st_lo >= g_st_hi

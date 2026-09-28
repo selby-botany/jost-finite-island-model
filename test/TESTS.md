@@ -25249,6 +25249,66 @@ __future__ import annotations` (only the `: TypeAlias` part
 becomes a string), so `typing.get_args` sees the real
 parameterization and a harmless reformat cannot break this test.
 
+<a id="statistics.test_differentiation.DifferentiationStatisticsTests.test_goudet_weir_claim_1_overall_f_st_vs_g_st"></a>
+
+#### test\_goudet\_weir\_claim\_1\_overall\_f\_st\_vs\_g\_st
+
+```python
+def test_goudet_weir_claim_1_overall_f_st_vs_g_st() -> None
+```
+
+Claim 1: Biallelic random-mating equal-weight F_ST matches G_ST.
+
+In the random-mating, equal-deme-weight formulation, overall F_ST
+evaluated relative to total identity Q_T = 1 - H_T equals G_ST
+to floating-point tolerance (diff < 1e-15).
+
+<a id="statistics.test_differentiation.DifferentiationStatisticsTests.test_goudet_weir_claim_5_thought_experiment_limits"></a>
+
+#### test\_goudet\_weir\_claim\_5\_thought\_experiment\_limits
+
+```python
+def test_goudet_weir_claim_5_thought_experiment_limits() -> None
+```
+
+Claim 5: Thought experiment limits (F_ST^i->1, F_ST^{1,2}->-1, others->0).
+
+Thought experiment from Goudet & Weir (2023, p. 18):
+- Populations 1 and 2 are fixed for opposite homozygotes (0 and 1).
+- Populations 3..d maintain allele frequency 0.5 at each locus.
+As d -> inf:
+- Population-specific F_ST for pop 1 and pop 2 is 1.0.
+- Population-pair F_ST between pop 1 and pop 2 tends to -1.0.
+- Every other off-diagonal population-pair F_ST tends to 0.0.
+
+<a id="statistics.test_differentiation.DifferentiationStatisticsTests.test_goudet_weir_claim_6_pairwise_vs_population_pair_disagreement"></a>
+
+#### test\_goudet\_weir\_claim\_6\_pairwise\_vs\_population\_pair\_disagreement
+
+```python
+def test_goudet_weir_claim_6_pairwise_vs_population_pair_disagreement(
+) -> None
+```
+
+Claim 6: Population-pair F_ST and classical pairwise F_ST disagree in sign.
+
+On the two divergent populations (0 and 1) embedded in the thought experiment,
+classical pairwise F_ST (Eq. 10) is +1.0, whereas population-pair F_ST (Eq. 9)
+is negative (approaching -1.0 as d grows).
+
+<a id="statistics.test_differentiation.DifferentiationStatisticsTests.test_goudet_weir_claim_7_zero_sum_invariant"></a>
+
+#### test\_goudet\_weir\_claim\_7\_zero\_sum\_invariant
+
+```python
+def test_goudet_weir_claim_7_zero_sum_invariant() -> None
+```
+
+Claim 7: Off-diagonal elements of F_ST matrix sum to zero by construction.
+
+For any frequency table, sum_{i != j} F_ST[i][j] == 0.0 to floating-point
+precision.
+
 <a id="statistics.test_genetic_distance"></a>
 
 # statistics.test\_genetic\_distance
@@ -25952,6 +26012,33 @@ mutation drives more allelic differentiation between demes (`D`
 rises toward 1) even as it moves every deme further from fixation
 (`G_ST` falls). This test is the executable version of that
 section's own prose, not a restatement of it.
+
+<a id="statistics.test_properties.test_aoki_2023_claim_4_g_st_monotonicity_in_migration"></a>
+
+#### test\_aoki\_2023\_claim\_4\_g\_st\_monotonicity\_in\_migration
+
+```python
+@given(
+    population_size=st.integers(min_value=1, max_value=5000),
+    d=st.integers(min_value=2, max_value=50),
+    mu=st.floats(min_value=0.0, max_value=1.0, allow_nan=False),
+    m_values=st.lists(
+        st.floats(min_value=0.0, max_value=1.0, allow_nan=False),
+        min_size=2,
+        max_size=2,
+    ),
+)
+def test_aoki_2023_claim_4_g_st_monotonicity_in_migration(
+        population_size: int, d: int, mu: float,
+        m_values: list[float]) -> None
+```
+
+G_ST monotonically decreases with increasing migration rate.
+
+Aoki et al. (2023) §5.3 Claim 4: G_ST responds in a strictly downward
+direction to higher gene flow (m). Tested as a pure property test across
+arbitrary population sizes, deme counts, and mutation rates against
+equilibrium_g_st.
 
 
 

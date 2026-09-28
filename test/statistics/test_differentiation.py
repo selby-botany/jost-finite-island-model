@@ -20,6 +20,7 @@ from fim.statistics import (
     effective_allele_count,
     equilibrium_d,
     equilibrium_g_st,
+    f_st_coancestry_matrix,
     g_st,
     g_st_log,
     g_st_max,
@@ -42,6 +43,10 @@ from fim.statistics import (
     mutation_negligible_equilibrium,
     mutation_negligible_transition,
     mutual_information,
+    overall_coancestry_f_st,
+    pairwise_f_st,
+    population_pair_f_st,
+    population_specific_f_st,
     r_st,
     statistics_report,
     total_hill_number,
@@ -1042,3 +1047,149 @@ class DifferentiationStatisticsTests(unittest.TestCase):
             get_args(differentiation.DemeWeights),
             (Sequence[float], type(None)),
         )
+
+    def test_goudet_weir_claim_1_overall_f_st_vs_g_st(self) -> None:
+        """Claim 1: Biallelic random-mating equal-weight F_ST matches G_ST.
+
+        In the random-mating, equal-deme-weight formulation, overall F_ST
+        evaluated relative to total identity Q_T = 1 - H_T equals G_ST
+        to floating-point tolerance (diff < 1e-15).
+        """
+        tables: list[list[dict[int, float]]] = [
+            [{0: 0.8, 1: 0.2}, {0: 0.4, 1: 0.6}],
+            [{0: 0.9, 1: 0.1}, {0: 0.1, 1: 0.9}],
+            [{0: 0.5, 1: 0.5}, {0: 0.5, 1: 0.5}],
+            [{0: 0.7, 1: 0.3}, {0: 0.5, 1: 0.5}, {0: 0.2, 1: 0.8}],
+            [{0: 0.6, 1: 0.4}, {0: 0.6, 1: 0.4}, {0: 0.6, 1: 0.4}],
+        ]
+
+        for table in tables:
+            with self.subTest(table=table):
+                gst = g_st(table)
+                within = h_s(table)
+                total = h_t(table)
+                # Rousset (2002) / Wright F_ST relative to total population Q_T:
+                q_w = 1.0 - within
+                q_t = 1.0 - total
+                if total > 0.0:
+                    f_st_total = (q_w - q_t) / (1.0 - q_t)
+                    assert gst is not None
+                    self.assertAlmostEqual(f_st_total, gst, places=14)
+
+                # Overall coancestry F_ST is well-defined and non-negative
+                f_st_coanc = overall_coancestry_f_st(table)
+                self.assertGreaterEqual(f_st_coanc, -1e-12)
+                # When populations are identical, both F_ST and G_ST are 0.0
+                if total == within:
+                    self.assertAlmostEqual(f_st_coanc, 0.0, places=12)
+                    self.assertAlmostEqual(gst or 0.0, 0.0, places=12)
+
+    def test_goudet_weir_claim_5_thought_experiment_limits(self) -> None:
+        """Claim 5: Thought experiment limits (F_ST^i->1, F_ST^{1,2}->-1, others->0).
+
+        Thought experiment from Goudet & Weir (2023, p. 18):
+        - Populations 1 and 2 are fixed for opposite homozygotes (0 and 1).
+        - Populations 3..d maintain allele frequency 0.5 at each locus.
+        As d -> inf:
+        - Population-specific F_ST for pop 1 and pop 2 is 1.0.
+        - Population-pair F_ST between pop 1 and pop 2 tends to -1.0.
+        - Every other off-diagonal population-pair F_ST tends to 0.0.
+        """
+        # Test for increasing d
+        for d in (5, 10, 50, 100):
+            table: list[dict[int, float]] = [
+                {0: 1.0, 1: 0.0},  # Pop 1 (index 0): fixed for allele 0
+                {0: 0.0, 1: 1.0},  # Pop 2 (index 1): fixed for allele 1
+            ]
+            table.extend({0: 0.5, 1: 0.5} for _ in range(d - 2))
+
+            matrix = f_st_coancestry_matrix(table)
+            pop_f_st = population_specific_f_st(table)
+
+            # Populations 1 and 2 have population-specific F_ST = 1.0 exactly
+            self.assertAlmostEqual(pop_f_st[0], 1.0, places=12)
+            self.assertAlmostEqual(pop_f_st[1], 1.0, places=12)
+            self.assertAlmostEqual(matrix[0][0], 1.0, places=12)
+            self.assertAlmostEqual(matrix[1][1], 1.0, places=12)
+
+            # Population-pair F_ST between 1 and 2 is negative
+            fst_12 = population_pair_f_st(table, 0, 1)
+            self.assertLess(fst_12, 0.0)
+
+            # As d increases, F_ST^{1, 2} approaches -1.0
+            # Theoretical formula: theta_B = (d+1)(d-2) / (2 d (d-1))
+            # fst_12 = -theta_B / (1 - theta_B)
+            sum_off = (d - 2) * 0.5 * (d + 1)
+            expected_theta_b = sum_off / (d * (d - 1))
+            expected_fst_12 = -expected_theta_b / (1.0 - expected_theta_b)
+            self.assertAlmostEqual(fst_12, expected_fst_12, places=12)
+
+            if d >= 100:
+                self.assertAlmostEqual(fst_12, -1.0, places=3)
+                # Other off-diagonal elements approach 0
+                for i in range(2, d):
+                    for j in range(i + 1, d):
+                        self.assertAlmostEqual(matrix[i][j], 0.0, places=3)
+
+    def test_goudet_weir_claim_6_pairwise_vs_population_pair_disagreement(
+        self,
+    ) -> None:
+        """Claim 6: Population-pair F_ST and classical pairwise F_ST disagree in sign.
+
+        On the two divergent populations (0 and 1) embedded in the thought experiment,
+        classical pairwise F_ST (Eq. 10) is +1.0, whereas population-pair F_ST (Eq. 9)
+        is negative (approaching -1.0 as d grows).
+        """
+        table: list[dict[int, float]] = [
+            {0: 1.0, 1: 0.0},
+            {0: 0.0, 1: 1.0},
+            {0: 0.5, 1: 0.5},
+            {0: 0.5, 1: 0.5},
+            {0: 0.5, 1: 0.5},
+            {0: 0.5, 1: 0.5},
+        ]
+
+        # Classical pairwise F_ST between pop 0 and pop 1
+        classical_p = pairwise_f_st(table[0], table[1])
+        self.assertEqual(classical_p, 1.0)
+
+        # Population-pair F_ST between pop 0 and pop 1 relative to whole dataset
+        pair_f_st = population_pair_f_st(table, 0, 1)
+        self.assertLess(pair_f_st, 0.0)
+        # Sharp divergence: one is positive (+1.0), the other is negative (< -0.8)
+        self.assertLess(pair_f_st, -0.8)
+
+    def test_goudet_weir_claim_7_zero_sum_invariant(self) -> None:
+        """Claim 7: Off-diagonal elements of F_ST matrix sum to zero by construction.
+
+        For any frequency table, sum_{i != j} F_ST[i][j] == 0.0 to floating-point
+        precision.
+        """
+        test_tables: list[list[dict[int, float]]] = [
+            [
+                {0: 0.8, 1: 0.2},
+                {0: 0.4, 1: 0.6},
+                {0: 0.1, 1: 0.9},
+            ],
+            [
+                {0: 0.9, 1: 0.05, 2: 0.05},
+                {0: 0.2, 1: 0.7, 2: 0.1},
+                {0: 0.3, 1: 0.3, 2: 0.4},
+                {0: 0.0, 1: 0.1, 2: 0.9},
+            ],
+            [
+                {0: 1.0},
+                {1: 1.0},
+                {2: 1.0},
+                {3: 1.0},
+            ],
+        ]
+
+        for table in test_tables:
+            with self.subTest(table=table):
+                matrix = f_st_coancestry_matrix(table)
+                d = len(matrix)
+                off_diag_sum = sum(
+                    matrix[i][j] for i in range(d) for j in range(d) if i != j
+                )
+                self.assertAlmostEqual(off_diag_sum, 0.0, places=12)
