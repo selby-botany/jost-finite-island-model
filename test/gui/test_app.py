@@ -19,6 +19,37 @@ import webview
 pytestmark = pytest.mark.gui
 
 
+def test_create_window_enables_text_selection(
+    window: webview.Window, drive: Callable[..., Any]
+) -> None:
+    """`create_window` opts into `pywebview`'s own text-selection support.
+
+    `webview.create_window`'s own default (`text_select=False`) disables
+    selecting or copying text anywhere on the page -- reported live:
+    almost nothing in the app, a run id included, could be selected or
+    copied at all, the opposite of this project's own "only an editable
+    field supports cut/paste" intent (`app.py`'s own comment on this
+    call has the full rationale). Checked directly against the real
+    `webview.Window` object `create_window` returns, since a window's
+    own selection behavior is `pywebview`'s own native concern, not
+    something a DOM-level `getSelection()` call inside this headless
+    harness can exercise meaningfully. Driven through `drive` like every
+    other test here, not read straight off `window`: the attribute is
+    set at construction time regardless, but `window.destroy()` (this
+    fixture's own teardown) itself requires the native loop to have
+    actually started at least once first, or `pywebview`'s own "Main
+    window failed to start" guard raises instead.
+    """
+    drive(
+        window,
+        trigger="null",
+        read="document.getElementById('bridge-status').textContent",
+        is_ready=lambda value: value != "Connecting…",
+    )
+
+    assert window.text_select is True
+
+
 def test_create_window_loads_index_html(
     window: webview.Window, drive: Callable[..., Any]
 ) -> None:

@@ -6486,6 +6486,19 @@ def create_window(*, api: Api | None = None, hidden: bool = False) -> webview.Wi
         width=window_width,
         height=window_height,
         hidden=hidden,
+        # `pywebview`'s own default is `False` -- reported live: almost
+        # no text anywhere in the app could be selected or copied (a run
+        # id, say), the exact opposite of this project's own "only an
+        # editable field supports cut/paste" intent. Selection this
+        # broad has one narrow cost: dragging over a button or slider
+        # can now also start a text selection the way it would on any
+        # ordinary web page, which the handful of elements that already
+        # set `user-select: none` (`.graph-menu > summary`, sortable
+        # table headers) exist to prevent where it would actually be
+        # annoying -- the exception `app.css`'s own `.fim-copyable-text`
+        # comment already documents, just inverted: selectable is now
+        # the default, and specific elements opt out, not the reverse.
+        text_select=True,
     )
     if created is None:
         raise RuntimeError("pywebview did not create a window")
