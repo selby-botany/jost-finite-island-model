@@ -108,6 +108,7 @@ Every test module, fixture, and test function documented here in full; `doc/fim-
   - [`test_validation`](#persistence.test_validation)
 - [`test/statistics/`](#group-statistics)
   - [`test_differentiation`](#statistics.test_differentiation)
+  - [`test_genetic_distance`](#statistics.test_genetic_distance)
   - [`test_identity_recursion`](#statistics.test_identity_recursion)
   - [`test_interval`](#statistics.test_interval)
   - [`test_properties`](#statistics.test_properties)
@@ -25247,6 +25248,139 @@ ordinary expression, evaluated at import even under `from
 __future__ import annotations` (only the `: TypeAlias` part
 becomes a string), so `typing.get_args` sees the real
 parameterization and a harmless reformat cannot break this test.
+
+<a id="statistics.test_genetic_distance"></a>
+
+# statistics.test\_genetic\_distance
+
+Focused tests for pairwise genetic distance and identity (Nei 1972).
+
+<a id="statistics.test_genetic_distance.random_locus_profile"></a>
+
+#### random\_locus\_profile
+
+```python
+@st.composite
+def random_locus_profile(draw: st.DrawFn,
+                         locus_count: int,
+                         max_alleles: int = 5) -> list[dict[int, float]]
+```
+
+Generate a valid multi-locus profile for one population.
+
+<a id="statistics.test_genetic_distance.GeneticDistanceTests"></a>
+
+## GeneticDistanceTests Objects
+
+```python
+class GeneticDistanceTests(unittest.TestCase)
+```
+
+Verify formulas, bounds, literature regression, and input validation.
+
+<a id="statistics.test_genetic_distance.GeneticDistanceTests.test_claim_1_identity_endpoint"></a>
+
+#### test\_claim\_1\_identity\_endpoint
+
+```python
+def test_claim_1_identity_endpoint() -> None
+```
+
+Claim 1: Identical frequencies at every locus imply D = 0 and I = 1.
+
+<a id="statistics.test_genetic_distance.GeneticDistanceTests.test_claim_2_disjoint_support_endpoint"></a>
+
+#### test\_claim\_2\_disjoint\_support\_endpoint
+
+```python
+def test_claim_2_disjoint_support_endpoint() -> None
+```
+
+Claim 2: No shared alleles at any locus implies I = 0 and D = +inf.
+
+<a id="statistics.test_genetic_distance.GeneticDistanceTests.test_claim_3_non_negativity"></a>
+
+#### test\_claim\_3\_non\_negativity
+
+```python
+def test_claim_3_non_negativity() -> None
+```
+
+Claim 3: D >= 0 and I in [0, 1] unconditionally (Cauchy-Schwarz).
+
+<a id="statistics.test_genetic_distance.GeneticDistanceTests.test_claim_4_d_prime_internal_identity"></a>
+
+#### test\_claim\_4\_d\_prime\_internal\_identity
+
+```python
+def test_claim_4_d_prime_internal_identity() -> None
+```
+
+Claim 4: Geometric-mean D' equals arithmetic-mean D' (Eq. 4 vs Eq. 4').
+
+<a id="statistics.test_genetic_distance.GeneticDistanceTests.test_claim_5_founder_effect_closed_form"></a>
+
+#### test\_claim\_5\_founder\_effect\_closed\_form
+
+```python
+def test_claim_5_founder_effect_closed_form() -> None
+```
+
+Claim 5: Founder identity I_0 matches Nei (1972) Eq. 9 exact numbers.
+
+<a id="statistics.test_genetic_distance.GeneticDistanceTests.test_claim_6_table_1_regression"></a>
+
+#### test\_claim\_6\_table\_1\_regression
+
+```python
+def test_claim_6_table_1_regression() -> None
+```
+
+Claim 6: Table 1 regression check matches Nei (1972) printed values.
+
+<a id="statistics.test_genetic_distance.GeneticDistanceTests.test_non_metric_triangle_inequality_violation"></a>
+
+#### test\_non\_metric\_triangle\_inequality\_violation
+
+```python
+def test_non_metric_triangle_inequality_violation() -> None
+```
+
+Nei's D is non-metric: triangle inequality fails (Discussion, p. 290).
+
+<a id="statistics.test_genetic_distance.GeneticDistanceTests.test_symmetry"></a>
+
+#### test\_symmetry
+
+```python
+def test_symmetry() -> None
+```
+
+Pairwise genetic distance and identity are strictly symmetric.
+
+<a id="statistics.test_genetic_distance.GeneticDistanceTests.test_input_validation"></a>
+
+#### test\_input\_validation
+
+```python
+def test_input_validation() -> None
+```
+
+Inputs are strictly validated for type, domain, and locus alignment.
+
+<a id="statistics.test_genetic_distance.test_hypothesis_genetic_distance_properties"></a>
+
+#### test\_hypothesis\_genetic\_distance\_properties
+
+```python
+@given(random_locus_profile(locus_count=3),
+       random_locus_profile(locus_count=3))
+def test_hypothesis_genetic_distance_properties(
+        profile_x: list[dict[int, float]],
+        profile_y: list[dict[int, float]]) -> None
+```
+
+Property test: bounds, symmetry, and Cauchy-Schwarz for random profiles.
 
 <a id="statistics.test_identity_recursion"></a>
 

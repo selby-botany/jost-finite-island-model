@@ -572,6 +572,16 @@ Return to the [source-tree orientation](../README.md) or the [developer guide](.
   * [equilibrium\_shannon\_entropy\_subpopulation](#fim.statistics.differentiation.equilibrium_shannon_entropy_subpopulation)
   * [equilibrium\_shannon\_differentiation](#fim.statistics.differentiation.equilibrium_shannon_differentiation)
   * [statistics\_report](#fim.statistics.differentiation.statistics_report)
+* [fim.statistics.genetic\_distance](#fim.statistics.genetic_distance)
+  * [cross\_identity](#fim.statistics.genetic_distance.cross_identity)
+  * [nei\_d](#fim.statistics.genetic_distance.nei_d)
+  * [nei\_d\_prime](#fim.statistics.genetic_distance.nei_d_prime)
+  * [nei\_founder\_identity](#fim.statistics.genetic_distance.nei_founder_identity)
+  * [nei\_geometric\_distance](#fim.statistics.genetic_distance.nei_geometric_distance)
+  * [nei\_geometric\_identity](#fim.statistics.genetic_distance.nei_geometric_identity)
+  * [nei\_identity](#fim.statistics.genetic_distance.nei_identity)
+  * [nei\_mean\_distance](#fim.statistics.genetic_distance.nei_mean_distance)
+  * [nei\_standard\_distance](#fim.statistics.genetic_distance.nei_standard_distance)
 * [fim.statistics.identity\_recursion](#fim.statistics.identity_recursion)
   * [IdentityRecursion](#fim.statistics.identity_recursion.IdentityRecursion)
     * [identities\_after](#fim.statistics.identity_recursion.IdentityRecursion.identities_after)
@@ -15539,7 +15549,7 @@ used to describe a population's genetic diversity lives in exactly one
 place, reviewable and testable on its own, independently of the code
 that produces the data or the code that displays it.
 
-It is organized into two modules by subject:
+It is organized into three modules by subject:
 
 - `fim.statistics.differentiation` — the actual diversity and
   differentiation formulas (`H_S`, `H_T`, `H_ST`, `G_ST`, Jost's `D`,
@@ -15547,14 +15557,18 @@ It is organized into two modules by subject:
   them all together). See that module's own docstring, and the
   [differentiation-measures guide](../../doc/jost-differentiation-measures.md),
   for the underlying population-genetics ideas.
+- `fim.statistics.genetic_distance` — pairwise genetic distance and
+  identity statistics between populations (Nei 1972 standard distance
+  `D`, geometric/arithmetic distance `D'`, normalized identity `I`,
+  cross identity `J_XY`, and founder-effect identity `I_0`).
 - `fim.statistics.interval` — confidence intervals for a sample mean
   (the "± 3%" half of a "52% ± 3%"-style report) computed across a run's
   independent replicates. See that module's own docstring for what a
   confidence interval is and why the Student's-t method is used.
 
-Every public name from both modules is re-exported here, so a caller
+Every public name from all modules is re-exported here, so a caller
 elsewhere in the project writes ``from fim.statistics import h_s,
-jost_d, confidence_interval`` rather than reaching into either module
+jost_d, nei_d, confidence_interval`` rather than reaching into any module
 by its own name directly.
 
 <a id="fim.statistics.differentiation"></a>
@@ -17037,6 +17051,283 @@ redundant re-validation *through this function* is gone.
   either — gated for the same reason as `E_ST`/`K_ST`, not
   because computing them costs anything worth avoiding on its
   own.
+
+<a id="fim.statistics.genetic_distance"></a>
+
+# fim.statistics.genetic\_distance
+
+Pairwise genetic distance and identity statistics between populations.
+
+This module implements genetic distance measures between pairs of
+populations, following Nei (1972, *American Naturalist* 106(949):283-292,
+DOI 10.1086/282771). Unlike `fim.statistics.differentiation`, which
+measures diversity and differentiation across an entire collection of demes
+pooled together, this module measures the accumulated genetic divergence
+specifically between two named populations.
+
+Key measures implemented:
+
+- `cross_identity` — the cross-population gene identity
+  ``J_XY = sum(x_i * y_i)`` at a single locus (the numerator of Nei 1972
+  Eq. 1).
+- `nei_identity` — normalized genetic identity ``I`` across one or more
+  loci (Nei 1972 Eq. 1 and Eq. 2). Bounded in ``[0, 1]``.
+- `nei_standard_distance` (alias `nei_d`) — Nei's standard genetic
+  distance ``D = -ln(I)`` (Nei 1972 Eq. 3). Bounded in ``[0, +inf)``;
+  equals 0 iff allele frequencies are identical at every locus.
+- `nei_geometric_identity` — normalized genetic identity ``I'`` computed
+  via geometric means across loci (Nei 1972 Eq. 4).
+- `nei_geometric_distance` — genetic distance ``D' = -ln(I')`` under
+  locus-varying substitution rates, via geometric means (Nei 1972 Eq. 4).
+- `nei_mean_distance` (alias `nei_d_prime`) — genetic distance ``D'``
+  under locus-varying substitution rates, via the arithmetic mean of
+  per-locus distances (Nei 1972 Eq. 4'). Algebraically identical to
+  `nei_geometric_distance`.
+- `nei_founder_identity` — expected genetic identity ``I_0`` immediately
+  after a parental population splits into two isolated populations of
+  finite size (Nei 1972 Eq. 9).
+
+<a id="fim.statistics.genetic_distance.cross_identity"></a>
+
+#### cross\_identity
+
+```python
+def cross_identity(frequencies_x: Mapping[Any, Any],
+                   frequencies_y: Mapping[Any, Any]) -> float
+```
+
+Return Nei cross-population gene identity ``J_XY = sum(x_i * y_i)``.
+
+Computes the probability that two gene copies, one drawn at random
+from population X and one drawn at random from population Y, are the
+same allele. This is the numerator of Nei (1972) Eq. 1.
+
+**Arguments**:
+
+- `frequencies_x` - Normalized allele frequencies in population X at one locus.
+- `frequencies_y` - Normalized allele frequencies in population Y at one locus.
+
+
+**Returns**:
+
+  Cross gene identity J_XY in [0, 1]. Returns 0.0 if the populations share
+  no alleles; equals within-deme identity if frequencies are identical.
+
+<a id="fim.statistics.genetic_distance.nei_d"></a>
+
+#### nei\_d
+
+```python
+def nei_d(loci_x: Sequence[Mapping[Any, Any]] | Mapping[Any, Any],
+          loci_y: Sequence[Mapping[Any, Any]] | Mapping[Any, Any]) -> float
+```
+
+Return Nei's standard genetic distance ``D`` (alias for `nei_standard_distance`).
+
+**Arguments**:
+
+- `loci_x` - Allele frequencies for population X across loci.
+- `loci_y` - Allele frequencies for population Y across loci.
+
+
+**Returns**:
+
+  Genetic distance D in [0, +inf).
+
+<a id="fim.statistics.genetic_distance.nei_d_prime"></a>
+
+#### nei\_d\_prime
+
+```python
+def nei_d_prime(
+        loci_x: Sequence[Mapping[Any, Any]] | Mapping[Any, Any],
+        loci_y: Sequence[Mapping[Any, Any]] | Mapping[Any, Any]) -> float
+```
+
+Return Nei's distance ``D'`` under varying rates (alias for `nei_mean_distance`).
+
+**Arguments**:
+
+- `loci_x` - Allele frequencies for population X across loci.
+- `loci_y` - Allele frequencies for population Y across loci.
+
+
+**Returns**:
+
+  Genetic distance D' in [0, +inf).
+
+<a id="fim.statistics.genetic_distance.nei_founder_identity"></a>
+
+#### nei\_founder\_identity
+
+```python
+def nei_founder_identity(j_z: float, n_x: float, n_y: float) -> float
+```
+
+Return expected genetic identity ``I_0`` after splitting (Nei 1972 Eq. 9).
+
+Computes the expected normalized genetic identity between two isolated
+populations X and Y immediately after they are founded from a common
+parental population Z of homozygosity `j_z`:
+
+.. math::
+
+I_0 = \frac{J_Z}{\sqrt{\left[J_Z + \frac{1 - J_Z}{2 N_X}\right]
+\left[J_Z + \frac{1 - J_Z}{2 N_Y}\right]}}
+
+**Arguments**:
+
+- `j_z` - Homozygosity (gene identity sum(z_i ** 2)) in the parental
+  population Z, in (0, 1].
+- `n_x` - Effective population size of population X (strictly positive,
+  may be math.inf).
+- `n_y` - Effective population size of population Y (strictly positive,
+  may be math.inf).
+
+
+**Returns**:
+
+  Expected genetic identity I_0 in [0, 1].
+
+
+**Raises**:
+
+- `TypeError` - If an argument is not a real number.
+- `ValueError` - If `j_z` is outside (0, 1] or population sizes are
+  non-positive.
+
+<a id="fim.statistics.genetic_distance.nei_geometric_distance"></a>
+
+#### nei\_geometric\_distance
+
+```python
+def nei_geometric_distance(
+        loci_x: Sequence[Mapping[Any, Any]] | Mapping[Any, Any],
+        loci_y: Sequence[Mapping[Any, Any]] | Mapping[Any, Any]) -> float
+```
+
+Return genetic distance ``D' = -ln(I')`` via geometric means (Nei 1972 Eq. 4).
+
+Measures accumulated gene differences when substitution rates vary
+substantially among loci, taking geometric means of per-locus identities.
+Algebraically identical to `nei_mean_distance` (Eq. 4').
+
+**Arguments**:
+
+- `loci_x` - Allele frequencies for population X across loci.
+- `loci_y` - Allele frequencies for population Y across loci.
+
+
+**Returns**:
+
+  Genetic distance D' in [0, +inf). Returns 0.0 if identical; math.inf
+  if any locus has no shared alleles.
+
+<a id="fim.statistics.genetic_distance.nei_geometric_identity"></a>
+
+#### nei\_geometric\_identity
+
+```python
+def nei_geometric_identity(
+        loci_x: Sequence[Mapping[Any, Any]] | Mapping[Any, Any],
+        loci_y: Sequence[Mapping[Any, Any]] | Mapping[Any, Any]) -> float
+```
+
+Return normalized identity ``I'`` via geometric means (Nei 1972 Eq. 4).
+
+Computes ``I' = J'_XY / sqrt(J'_X * J'_Y)``, where ``J'_X``, ``J'_Y``,
+and ``J'_XY`` are the geometric means of per-locus identities across loci.
+
+**Arguments**:
+
+- `loci_x` - Allele frequencies for population X across loci.
+- `loci_y` - Allele frequencies for population Y across loci.
+
+
+**Returns**:
+
+  Normalized identity I' in [0, 1]. Returns 0.0 if any locus has no
+  shared alleles.
+
+<a id="fim.statistics.genetic_distance.nei_identity"></a>
+
+#### nei\_identity
+
+```python
+def nei_identity(
+        loci_x: Sequence[Mapping[Any, Any]] | Mapping[Any, Any],
+        loci_y: Sequence[Mapping[Any, Any]] | Mapping[Any, Any]) -> float
+```
+
+Return normalized genetic identity ``I`` (Nei 1972 Eq. 1 and Eq. 2).
+
+For a single locus, ``I = j_XY / sqrt(j_X * j_Y)`` (Eq. 1). For multiple
+loci, ``I = J_XY / sqrt(J_X * J_Y)`` (Eq. 2), where ``J_X``, ``J_Y``, and
+``J_XY`` are the arithmetic means across all loci examined.
+
+**Arguments**:
+
+- `loci_x` - Allele frequencies for population X across loci.
+- `loci_y` - Allele frequencies for population Y across loci.
+
+
+**Returns**:
+
+  Normalized identity I in [0, 1]. Returns 1.0 if allele frequencies
+  are identical at all loci; returns 0.0 if no alleles are shared at
+  any locus.
+
+<a id="fim.statistics.genetic_distance.nei_mean_distance"></a>
+
+#### nei\_mean\_distance
+
+```python
+def nei_mean_distance(
+        loci_x: Sequence[Mapping[Any, Any]] | Mapping[Any, Any],
+        loci_y: Sequence[Mapping[Any, Any]] | Mapping[Any, Any]) -> float
+```
+
+Return genetic distance ``D' = mean(d_j)`` (Nei 1972 Eq. 4').
+
+Computes the arithmetic mean of per-locus distances ``d_j = -ln(I_j)``.
+Algebraically identical to `nei_geometric_distance` (Eq. 4).
+
+**Arguments**:
+
+- `loci_x` - Allele frequencies for population X across loci.
+- `loci_y` - Allele frequencies for population Y across loci.
+
+
+**Returns**:
+
+  Genetic distance D' in [0, +inf). Returns 0.0 if identical; math.inf
+  if any locus has no shared alleles.
+
+<a id="fim.statistics.genetic_distance.nei_standard_distance"></a>
+
+#### nei\_standard\_distance
+
+```python
+def nei_standard_distance(
+        loci_x: Sequence[Mapping[Any, Any]] | Mapping[Any, Any],
+        loci_y: Sequence[Mapping[Any, Any]] | Mapping[Any, Any]) -> float
+```
+
+Return Nei's standard genetic distance ``D = -ln(I)`` (Nei 1972 Eq. 3).
+
+Measures accumulated codon differences per locus under a steady-state
+infinite-alleles neutral mutation model.
+
+**Arguments**:
+
+- `loci_x` - Allele frequencies for population X across loci.
+- `loci_y` - Allele frequencies for population Y across loci.
+
+
+**Returns**:
+
+  Genetic distance D in [0, +inf). Returns 0.0 if allele frequencies
+  are identical at all loci; returns math.inf if no alleles are shared.
 
 <a id="fim.statistics.identity_recursion"></a>
 

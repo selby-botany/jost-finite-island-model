@@ -9,7 +9,7 @@ used to describe a population's genetic diversity lives in exactly one
 place, reviewable and testable on its own, independently of the code
 that produces the data or the code that displays it.
 
-It is organized into two modules by subject:
+It is organized into three modules by subject:
 
 - `fim.statistics.differentiation` — the actual diversity and
   differentiation formulas (`H_S`, `H_T`, `H_ST`, `G_ST`, Jost's `D`,
@@ -17,14 +17,18 @@ It is organized into two modules by subject:
   them all together). See that module's own docstring, and the
   [differentiation-measures guide](../../doc/jost-differentiation-measures.md),
   for the underlying population-genetics ideas.
+- `fim.statistics.genetic_distance` — pairwise genetic distance and
+  identity statistics between populations (Nei 1972 standard distance
+  `D`, geometric/arithmetic distance `D'`, normalized identity `I`,
+  cross identity `J_XY`, and founder-effect identity `I_0`).
 - `fim.statistics.interval` — confidence intervals for a sample mean
   (the "± 3%" half of a "52% ± 3%"-style report) computed across a run's
   independent replicates. See that module's own docstring for what a
   confidence interval is and why the Student's-t method is used.
 
-Every public name from both modules is re-exported here, so a caller
+Every public name from all modules is re-exported here, so a caller
 elsewhere in the project writes ``from fim.statistics import h_s,
-jost_d, confidence_interval`` rather than reaching into either module
+jost_d, nei_d, confidence_interval`` rather than reaching into any module
 by its own name directly.
 """
 
@@ -71,6 +75,17 @@ from .differentiation import (
     total_hill_number,
     within_hill_number,
 )
+from .genetic_distance import (
+    cross_identity,
+    nei_d,
+    nei_d_prime,
+    nei_founder_identity,
+    nei_geometric_distance,
+    nei_geometric_identity,
+    nei_identity,
+    nei_mean_distance,
+    nei_standard_distance,
+)
 from .identity_recursion import (
     IDENTITY_STATISTIC_NAMES,
     MAXIMUM_MATRIX_DEMES,
@@ -91,6 +106,7 @@ __all__ = [
     "IdentityRecursion",
     "allelic_distance",
     "confidence_interval",
+    "cross_identity",
     "d_m",
     "differentiation_q",
     "e_st",
@@ -131,6 +147,14 @@ __all__ = [
     "mutation_negligible_equilibrium",
     "mutation_negligible_transition",
     "mutual_information",
+    "nei_d",
+    "nei_d_prime",
+    "nei_founder_identity",
+    "nei_geometric_distance",
+    "nei_geometric_identity",
+    "nei_identity",
+    "nei_mean_distance",
+    "nei_standard_distance",
     "r_st",
     "statistics_report",
     "student_t_critical_value",
