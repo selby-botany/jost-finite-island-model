@@ -81,6 +81,7 @@ Every test module, fixture, and test function documented here in full; `doc/fim-
   - [`test_scatter_styles`](#gui.test_scatter_styles)
   - [`test_settings_modal`](#gui.test_settings_modal)
   - [`test_shutdown_deadman`](#gui.test_shutdown_deadman)
+  - [`test_shutdown_signals`](#gui.test_shutdown_signals)
   - [`test_store`](#gui.test_store)
   - [`test_sweep_api`](#gui.test_sweep_api)
   - [`test_sweep_results_screen`](#gui.test_sweep_results_screen)
@@ -18151,6 +18152,126 @@ design.md`, "Current state": `window.destroy()` does not fire
 `events.closing` on macOS at all) — exercises the Quit menu's own
 closure directly, not `window.destroy()`, since that distinction is
 exactly what this test needs to prove matters.
+
+<a id="gui.test_shutdown_signals"></a>
+
+# gui.test\_shutdown\_signals
+
+Tests for `fim.gui.app`'s SIGTERM/SIGINT/SIGHUP shutdown handling.
+
+Window-free and unmarked `gui`, like `test_shutdown_deadman.py`: none of
+this needs a real pywebview window.
+
+Before `_install_shutdown_signal_handlers` existed, none of these three
+signals had any handler at all, so each one terminated the process
+immediately -- no Python code ran, not even a `finally` block, and any
+live `ProcessPoolExecutor` batch worker (`fim.engine._run_batch_parallel`)
+was simply abandoned as an orphan (investigation recorded in
+`20260928-claude-sonnet-5-shutdown-signal-handling-design.md`,
+`selby/restricted`). The end-to-end test below sends a real `SIGTERM` to
+a child interpreter and proves the process survives long enough to run
+the handler, rather than dying on the spot the way it did before this
+module existed -- the same "reproduce the real failure in a child
+interpreter" discipline `test_shutdown_deadman.py`'s own wedged-process
+test already uses, for the same reason: nothing here should risk the
+signal reaching this test run's own process.
+
+<a id="gui.test_shutdown_signals.test_shutdown_signals_excludes_sigkill"></a>
+
+#### test\_shutdown\_signals\_excludes\_sigkill
+
+```python
+def test_shutdown_signals_excludes_sigkill() -> None
+```
+
+`SIGKILL` cannot be caught, so it is never in the installed set.
+
+<a id="gui.test_shutdown_signals.test_shutdown_signals_includes_sigterm_and_sigint"></a>
+
+#### test\_shutdown\_signals\_includes\_sigterm\_and\_sigint
+
+```python
+def test_shutdown_signals_includes_sigterm_and_sigint() -> None
+```
+
+The two signals present on every platform this project ships to.
+
+<a id="gui.test_shutdown_signals.test_install_shutdown_signal_handlers_replaces_every_default_handler"></a>
+
+#### test\_install\_shutdown\_signal\_handlers\_replaces\_every\_default\_handler
+
+```python
+def test_install_shutdown_signal_handlers_replaces_every_default_handler(
+        tmp_path: Path) -> None
+```
+
+Every signal in `_SHUTDOWN_SIGNALS` gets a real, non-default handler.
+
+<a id="gui.test_shutdown_signals.test_signal_handler_cancels_the_active_run"></a>
+
+#### test\_signal\_handler\_cancels\_the\_active\_run
+
+```python
+def test_signal_handler_cancels_the_active_run(monkeypatch: pytest.MonkeyPatch,
+                                               tmp_path: Path) -> None
+```
+
+Receiving the signal does what clicking Cancel already does.
+
+`Api._cancel_event` is the same `threading.Event` `start_run`/`_start_
+batch_run` hand to `fim.gui.runner`/`fim.gui.batch_runner`, and every
+live worker's `LiveProgressStore` already checks it (translated into
+`cancel_path`'s existence for a batch) before each generation's write
+-- setting it here is the one, already-trusted way to ask real,
+in-flight work to stop cooperatively.
+
+<a id="gui.test_shutdown_signals.test_signal_handler_arms_the_shutdown_deadman"></a>
+
+#### test\_signal\_handler\_arms\_the\_shutdown\_deadman
+
+```python
+def test_signal_handler_arms_the_shutdown_deadman(
+        monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None
+```
+
+The deadman still guarantees a bounded exit even if cooperative
+cancellation never completes -- the signal path gets the identical
+backstop an ordinary window close already has.
+
+<a id="gui.test_shutdown_signals.test_signal_handler_destroys_the_active_window"></a>
+
+#### test\_signal\_handler\_destroys\_the\_active\_window
+
+```python
+def test_signal_handler_destroys_the_active_window(
+        monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None
+```
+
+The window is asked to close so `webview.start()` returns.
+
+Without this, `main`'s own blocking `webview.start()` call would
+never return on its own after a signal -- the deadman would still
+eventually force an exit, but only after its full timeout, rather
+than as soon as cancellation has had a real chance to finish.
+
+<a id="gui.test_shutdown_signals.test_a_real_sigterm_is_handled_instead_of_killing_the_process"></a>
+
+#### test\_a\_real\_sigterm\_is\_handled\_instead\_of\_killing\_the\_process
+
+```python
+def test_a_real_sigterm_is_handled_instead_of_killing_the_process(
+        tmp_path: Path) -> None
+```
+
+End to end, in a child interpreter: a real `SIGTERM` runs the handler.
+
+Before this handler existed, `os.kill(pid, SIGTERM)` against this
+exact program would have ended it on the spot -- the child would
+never reach its own later `print` calls at all. Reproduced in a
+child interpreter, not this test's own process, for the same reason
+`test_shutdown_deadman.py`'s wedged-process test uses one: nothing
+here should risk a real termination signal reaching the process
+running this suite.
 
 <a id="gui.test_store"></a>
 

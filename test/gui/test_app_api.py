@@ -4355,12 +4355,18 @@ def _stub_main_past_logging_config(monkeypatch: pytest.MonkeyPatch) -> None:
     SECONDS`, 20s) long after this test itself returns, an even worse
     hazard than the hang -- it would kill this entire worker process
     out from under whatever unrelated test happens to be running 20
-    seconds later.
+    seconds later. `_install_shutdown_signal_handlers` is stubbed for the
+    identical reason, one level earlier: left real, it would install real
+    `signal.signal()` handlers -- process-global, not per-test -- into
+    this worker for the rest of the suite.
     """
-    monkeypatch.setattr(app_module, "create_window", object)
+    monkeypatch.setattr(app_module, "create_window", lambda **_kwargs: object())
     monkeypatch.setattr(webview, "start", lambda **_kwargs: None)
     monkeypatch.setattr(app_module, "_build_menu", lambda _window: [])
     monkeypatch.setattr(app_module, "_start_shutdown_deadman", lambda _timeout: None)
+    monkeypatch.setattr(
+        app_module, "_install_shutdown_signal_handlers", lambda _api, _timeout: None
+    )
 
 
 def test_main_logging_config_flag_wins_over_fim_logging_config_env_var(

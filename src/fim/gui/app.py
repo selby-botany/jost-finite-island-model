@@ -41,6 +41,7 @@ import multiprocessing
 import os
 import queue
 import shutil
+import signal
 import subprocess
 import sys
 import threading
@@ -51,6 +52,7 @@ from concurrent.futures import ProcessPoolExecutor
 from math import exp, isfinite
 from pathlib import Path
 from socketserver import ThreadingMixIn
+from types import FrameType
 from typing import Any, Final, Protocol, TextIO, cast
 
 import numpy as np
@@ -6763,6 +6765,94 @@ def _start_shutdown_deadman(timeout_seconds: float) -> None:
     logger.debug("shutdown deadman armed (%gs)", timeout_seconds)
 
 
+# `SIGKILL` is deliberately absent: it cannot be caught, so there is
+# nothing to install a handler for. `SIGHUP` is absent on Windows
+# (`getattr` rather than a bare `signal.SIGHUP` reference keeps this
+# constant buildable there); `SIGTERM`/`SIGINT` exist everywhere this
+# project ships (`doc/packaging.md`'s own macOS/Linux/Windows targets).
+_SHUTDOWN_SIGNALS: Final[tuple[signal.Signals, ...]] = tuple(
+    sig
+    for sig in (
+        getattr(signal, "SIGTERM", None),
+        getattr(signal, "SIGINT", None),
+        getattr(signal, "SIGHUP", None),
+    )
+    if sig is not None
+)
+
+
+def _install_shutdown_signal_handlers(api: Api, timeout_seconds: float) -> None:
+    """Give SIGTERM/SIGINT/SIGHUP a real chance at a clean shutdown.
+
+    Unhandled — the state of this application before this function
+    existed — each of `_SHUTDOWN_SIGNALS` terminates the process
+    immediately, running no Python code at all, not even a `finally`
+    block. That is a materially worse outcome here than an ordinary
+    window close: any live batch run's `ProcessPoolExecutor` worker
+    processes (`fim.engine._run_batch_parallel`) are simply abandoned,
+    orphaned to `launchd`/`init`, with nothing left to ever collect or
+    stop them — and since `fim.convergence.defaults.
+    MINIMUM_MAX_GENERATIONS` now lets a single replicate legitimately
+    run for hours, "a batch is still in flight when the signal arrives"
+    is a realistic scenario, not an edge case
+    (`20260928-claude-sonnet-5-shutdown-signal-handling-design.md`,
+    `selby/restricted`).
+
+    The installed handler does exactly what clicking "Cancel" already
+    does — set `api`'s own `_cancel_event`, which every live worker's
+    `LiveProgressStore` already checks before each generation's write
+    (`fim.gui.batch_runner`) — then arms the existing shutdown deadman
+    (`_start_shutdown_deadman`) so the process still exits in bounded
+    time even if cooperative cancellation does not finish, and finally
+    asks the active window to close so `webview.start()` returns and
+    ordinary shutdown proceeds from there. Calling `_start_shutdown_
+    deadman` again from `main`'s own post-`webview.start()` line after
+    this handler already armed one is harmless: both are daemon timers
+    racing toward the same `os._exit`, and only the one that fires
+    first ever runs.
+
+    This is best effort, not a guarantee: CPython only runs a signal
+    handler once control returns to the interpreter's own bytecode
+    loop, so a signal arriving while the main thread is deep inside
+    pywebview's native event loop is not delivered instantly. Every
+    other shutdown path this application has (an ordinary window close,
+    the deadman itself) already shares that same native-loop
+    dependency, so this is no worse than the existing mechanism, and
+    considerably better than the total silence these three signals got
+    before it.
+
+    Args:
+        api: The single production `Api` instance (`create_window`'s
+            own "one window" invariant — see `_active_window`) whose
+            `_cancel_event` a live run or batch actually checks.
+        timeout_seconds: Forwarded to `_start_shutdown_deadman` exactly
+            as `main`'s own later call already does, so a
+            signal-triggered shutdown is bounded by the same,
+            already-documented and already-overridable
+            (`FIM_GUI_SHUTDOWN_TIMEOUT`) margin as an ordinary close.
+
+    Returns:
+        None
+    """
+
+    def handle(signum: int, _frame: FrameType | None) -> None:
+        signal_name = signal.Signals(signum).name
+        logger.warning("received %s; requesting shutdown", signal_name)
+        print(f"fim: received {signal_name}; shutting down", file=sys.stderr)
+        api.cancel_run()
+        _start_shutdown_deadman(timeout_seconds)
+        window = _active_window()
+        if window is not None:
+            window.destroy()
+
+    for sig in _SHUTDOWN_SIGNALS:
+        signal.signal(sig, handle)
+    logger.debug(
+        "shutdown signal handlers installed: %s",
+        ", ".join(sig.name for sig in _SHUTDOWN_SIGNALS),
+    )
+
+
 def _gui_argument_parser() -> argparse.ArgumentParser:
     """Build `fim-gui`'s own tiny flag set.
 
@@ -6882,7 +6972,14 @@ def main(argv: Sequence[str] | None = None) -> int:
         return 2
     _apply_saved_results_location_override()
     logger.info("starting fim %s", _version_display())
-    window = create_window()
+    api = Api()
+    window = create_window(api=api)
+    # Before `webview.start()`, not after: a signal delivered while the
+    # native event loop is still starting up must reach a real handler,
+    # not the OS's own default (immediate, code-free termination) —
+    # `_install_shutdown_signal_handlers`'s own docstring has the full
+    # rationale.
+    _install_shutdown_signal_handlers(api, shutdown_timeout())
     webview.start(menu=_build_menu(window))
     logger.info("window closed")
     # Armed only now, after the window has closed: the timer's budget
