@@ -132,6 +132,7 @@ Return to the [source-tree orientation](../README.md) or the [developer guide](.
     * [save\_current\_as\_preset](#fim.gui.app.Api.save_current_as_preset)
     * [delete\_user\_preset](#fim.gui.app.Api.delete_user_preset)
     * [save\_yaml](#fim.gui.app.Api.save_yaml)
+    * [export\_graph\_image](#fim.gui.app.Api.export_graph_image)
     * [get\_default\_max\_workers](#fim.gui.app.Api.get_default_max_workers)
     * [get\_engine\_backend\_availability](#fim.gui.app.Api.get_engine_backend_availability)
     * [get\_significant\_digits](#fim.gui.app.Api.get_significant_digits)
@@ -4896,6 +4897,43 @@ Validate the form, then save it as a `fim run`-compatible YAML file.
   cancelled; `{"ok": False, "message": "..."}` if the form does
   not currently validate (saving an invalid form is refused,
   the same as running one) or the write itself failed.
+
+<a id="fim.gui.app.Api.export_graph_image"></a>
+
+#### export\_graph\_image
+
+```python
+@_log_bridge_call
+def export_graph_image(values: dict[str, str]) -> dict[str, Any]
+```
+
+Save a graph's own rendered canvas as a PNG file, via a native Save dialog.
+
+The one export path every exportable graph (the Run card's own
+canvases, the animation scrubber's current frame) shares:
+`webui/run-graph-stage.js`'s own `exportActiveGraphImage` reads
+the pixels back with `canvas.toDataURL("image/png")` (already
+the exact bitmap on screen, scrub position included, so this
+needs no second render of its own) and hands the result here —
+the same "the botanist cannot export the graphs and animations"
+gap `save_yaml`'s own config export, just above, does not cover.
+
+**Arguments**:
+
+- `values` - `{"dataUrl": "data:image/png;base64,...",
+- `"suggestedFilename"` - "..."}` — `dataUrl` is a canvas's
+  own `toDataURL("image/png")` result verbatim;
+  `suggestedFilename` seeds the Save dialog's own
+  filename field, never trusted as a path on its own.
+
+
+**Returns**:
+
+- ``{"ok"` - True, "path": "..."}` on success; `{"ok": False,
+- `"message"` - ""}` if the save dialog was cancelled;
+- ``{"ok"` - False, "message": "..."}` if `dataUrl` is not a PNG
+  data URL, its base64 payload does not decode, or the write
+  itself failed.
 
 <a id="fim.gui.app.Api.get_default_max_workers"></a>
 

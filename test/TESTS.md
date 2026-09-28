@@ -7544,6 +7544,51 @@ logic (`fim.gui.store.LiveProgressStore`, `fim.gui.batch_runner`,
 both already built and tested independently) is ever reached through
 it.
 
+<a id="gui.test_app.test_export_active_graph_image_writes_a_real_png"></a>
+
+#### test\_export\_active\_graph\_image\_writes\_a\_real\_png
+
+```python
+def test_export_active_graph_image_writes_a_real_png(
+        window: webview.Window, drive: Callable[..., Any], tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch) -> None
+```
+
+"Export image…" in the zoom frame writes the active canvas as a
+real PNG file, through a real (mocked-dialog) round trip.
+
+Reported live: a botanist had no way to get a graph -- or an
+animation paused at a chosen generation -- out of the app to share
+with another researcher. `window.fim.exportActiveGraphImage`
+(`run-graph-stage.js`) reads the active pane's own canvas back with
+`toDataURL`, and `Api.export_graph_image` decodes and writes it;
+`window.create_file_dialog` is mocked here (a real Save dialog needs
+a human) to return a path in `tmp_path` directly, the same "a real
+window, a mocked dialog" shape `save_yaml`'s own bridge method
+would need if it had a test of its own yet.
+
+The scatter pane is available (`window.fim.setGraphAvailable
+("scatter", true)`, `scatter.js`'s own page-load registration) and
+resized (`syncCanvasSize`) before any run ever starts, so this needs
+no simulation run first -- a blank canvas is still a real PNG.
+
+<a id="gui.test_app.test_export_active_graph_image_reports_a_cancelled_dialog"></a>
+
+#### test\_export\_active\_graph\_image\_reports\_a\_cancelled\_dialog
+
+```python
+def test_export_active_graph_image_reports_a_cancelled_dialog(
+        window: webview.Window, drive: Callable[..., Any],
+        monkeypatch: pytest.MonkeyPatch) -> None
+```
+
+A cancelled Save dialog reports `ok: False` with no message, not an error.
+
+`_save_dialog_path`'s own `None` (`Api.export_graph_image`'s
+documented cancel shape) is the botanist's own deliberate choice --
+`save_yaml`'s existing "{"ok": False, "message": ""}` on cancel"
+convention, matched here rather than inventing a second one.
+
 <a id="gui.test_app_api"></a>
 
 # gui.test\_app\_api

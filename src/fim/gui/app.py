@@ -32,6 +32,8 @@ after the `await` resolves.
 from __future__ import annotations
 
 import argparse
+import base64
+import binascii
 import contextlib
 import faulthandler
 import functools
@@ -2980,6 +2982,59 @@ class Api:
             return {"ok": False, "message": ""}
         try:
             target.write_text(payload_to_yaml_text(payload), encoding="utf-8")
+        except OSError as error:
+            return {"ok": False, "message": str(error)}
+        return {"ok": True, "path": str(target)}
+
+    @_log_bridge_call
+    def export_graph_image(self, values: dict[str, str]) -> dict[str, Any]:
+        """Save a graph's own rendered canvas as a PNG file, via a native Save dialog.
+
+        The one export path every exportable graph (the Run card's own
+        canvases, the animation scrubber's current frame) shares:
+        `webui/run-graph-stage.js`'s own `exportActiveGraphImage` reads
+        the pixels back with `canvas.toDataURL("image/png")` (already
+        the exact bitmap on screen, scrub position included, so this
+        needs no second render of its own) and hands the result here —
+        the same "the botanist cannot export the graphs and animations"
+        gap `save_yaml`'s own config export, just above, does not cover.
+
+        Args:
+            values: `{"dataUrl": "data:image/png;base64,...",
+                "suggestedFilename": "..."}` — `dataUrl` is a canvas's
+                own `toDataURL("image/png")` result verbatim;
+                `suggestedFilename` seeds the Save dialog's own
+                filename field, never trusted as a path on its own.
+
+        Returns:
+            `{"ok": True, "path": "..."}` on success; `{"ok": False,
+            "message": ""}` if the save dialog was cancelled;
+            `{"ok": False, "message": "..."}` if `dataUrl` is not a PNG
+            data URL, its base64 payload does not decode, or the write
+            itself failed.
+        """
+        data_url = values.get("dataUrl", "")
+        prefix = "data:image/png;base64,"
+        if not data_url.startswith(prefix):
+            return {"ok": False, "message": "not a PNG image"}
+        try:
+            image_bytes = base64.b64decode(data_url[len(prefix) :], validate=True)
+        except (ValueError, binascii.Error) as error:
+            return {"ok": False, "message": str(error)}
+        window = _active_window()
+        if window is None:
+            return {"ok": False, "message": "no active window"}
+        suggested = values.get("suggestedFilename") or "graph.png"
+        selection = window.create_file_dialog(
+            webview.FileDialog.SAVE,
+            directory=str(Path.home()),
+            save_filename=suggested,
+        )
+        target = _save_dialog_path(selection)
+        if target is None:
+            return {"ok": False, "message": ""}
+        try:
+            target.write_bytes(image_bytes)
         except OSError as error:
             return {"ok": False, "message": str(error)}
         return {"ok": True, "path": str(target)}

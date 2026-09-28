@@ -536,6 +536,46 @@ window.fim.getActiveGraph = function getActiveGraph() {
 };
 
 /**
+ * Save the active graph's own current pixels as a PNG file, via a
+ * native Save dialog (`Api.export_graph_image`).
+ *
+ * Reported live: a botanist had no way to get a graph, or an animation
+ * paused at a chosen generation, out of the app to share with another
+ * researcher. `canvas.toDataURL` reads back exactly what is already on
+ * screen -- the active pane's own current scrub position included, so
+ * exporting an animation's own frame needs no separate rendering path
+ * of its own, only exporting *while playing* is out of scope here (a
+ * static PNG of one frame, not a moving GIF/video).
+ *
+ * @returns {Promise<{ok: boolean, path?: string, message?: string}>}
+ */
+window.fim.exportActiveGraphImage = async function exportActiveGraphImage() {
+    const key = window.fim.getActiveGraph();
+    if (key === null) {
+        return { ok: false, message: "no graph to export" };
+    }
+    const entry = runGraphEntry(key);
+    const pane = runGraphPane(key);
+    const canvas = pane ? pane.querySelector("canvas") : null;
+    if (!canvas) {
+        return { ok: false, message: "no graph to export" };
+    }
+    const titleEl = entry ? document.getElementById(entry.titleId) : null;
+    const title = titleEl && titleEl.textContent ? titleEl.textContent : key;
+    // Lowercased, non-alphanumerics collapsed to a single hyphen: a
+    // filename every platform's own Save dialog accepts unmodified,
+    // without asking the page to know that beforehand.
+    const slug = title
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, "-")
+        .replace(/^-+|-+$/g, "");
+    return await window.pywebview.api.export_graph_image({
+        dataUrl: canvas.toDataURL("image/png"),
+        suggestedFilename: `fim-${slug || key}.png`,
+    });
+};
+
+/**
  * Forget which graphs have data, so a stale pane from the previous
  * state cannot appear on the next one's stage.
  *
@@ -921,6 +961,30 @@ window.addEventListener("load", () => {
             resetView.addEventListener("click", () => {
                 if (typeof window.fim.resetScatterZoomView === "function") {
                     window.fim.resetScatterZoomView();
+                }
+            });
+        }
+        const exportButton = document.getElementById("graph-zoom-export");
+        const exportStatus = document.getElementById("graph-zoom-export-status");
+        if (exportButton) {
+            exportButton.addEventListener("click", async () => {
+                exportButton.disabled = true;
+                if (exportStatus) {
+                    exportStatus.textContent = "";
+                }
+                try {
+                    const result = await window.fim.exportActiveGraphImage();
+                    if (exportStatus) {
+                        // A cancelled Save dialog is `{ok: false,
+                        // message: ""}` (`Api.export_graph_image`'s own
+                        // docstring) -- the botanist's own deliberate
+                        // choice, not a failure worth a message.
+                        exportStatus.textContent = result.ok
+                            ? "Saved."
+                            : result.message || "";
+                    }
+                } finally {
+                    exportButton.disabled = false;
                 }
             });
         }
