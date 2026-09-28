@@ -78,6 +78,7 @@ from .differentiation import (
     r_st,
     statistics_report,
     total_hill_number,
+    unbiased_heterozygosity,
     within_hill_number,
 )
 from .genetic_distance import (
@@ -169,5 +170,6 @@ __all__ = [
     "statistics_report",
     "student_t_critical_value",
     "total_hill_number",
+    "unbiased_heterozygosity",
     "within_hill_number",
 ]

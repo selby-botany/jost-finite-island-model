@@ -80,6 +80,7 @@ FrequencyTable: TypeAlias = Sequence[Mapping[Any, float]]
 DemeWeights: TypeAlias = Sequence[float] | None
 
 _MINIMUM_DEMES = 2
+_MINIMUM_SAMPLE_GENE_COPIES = 2
 _TOLERANCE = 1e-12
 
 # Euler-Mascheroni constant gamma = -psi(1), to full double precision
@@ -411,6 +412,62 @@ def heterozygosity(frequencies: Mapping[Any, Any]) -> float:
     """
     deme = _validate_deme(frequencies, 0)
     return _bounded(1.0 - fsum(value * value for value in deme.values()), "H")
+
+
+def unbiased_heterozygosity(
+    frequencies: Mapping[Any, Any],
+    sample_size: int,
+    *,
+    is_gene_copies: bool = False,
+) -> float:
+    """Return Nei (1977) unbiased expected heterozygosity for a finite sample.
+
+    Nei (1977, *Genetics* 89(3):583-590), Equation 2:
+
+    .. math::
+
+        \\hat{H}_e = \\frac{2n}{2n - 1} \\left(1 - \\sum_i p_i^2\\right)
+                   = \\frac{2n}{2n - 1} H_e
+
+    where ``n`` is the number of diploid individuals sampled (or ``2n``
+    gene copies). Sample frequencies ``p_i`` computed from a finite sample
+    of size ``2n`` gene copies underestimate population heterozygosity
+    because of sampling without replacement; multiplying by
+    ``2n / (2n - 1)`` corrects this small-sample bias exactly.
+
+    Args:
+        frequencies: Normalized sample allele frequencies in one deme.
+        sample_size: Number of sampled diploid individuals (or gene copies if
+            ``is_gene_copies=True``). Must be at least 1 individual (or at
+            least 2 gene copies).
+        is_gene_copies: If True, ``sample_size`` is the total gene-copy
+            count ``2n``; if False (default), ``sample_size`` is the diploid
+            individual count ``n``.
+
+    Returns:
+        Unbiased expected heterozygosity, bounded in [0, 1].
+
+    Raises:
+        TypeError: If ``sample_size`` is not an integer.
+        ValueError: If ``sample_size`` is less than 1 (or less than 2 when
+            ``is_gene_copies=True``).
+    """
+    if isinstance(sample_size, bool) or not isinstance(sample_size, int):
+        raise TypeError("sample_size must be an integer")
+    if is_gene_copies:
+        gene_copies = sample_size
+        if gene_copies < _MINIMUM_SAMPLE_GENE_COPIES:
+            raise ValueError(
+                "sample_size in gene copies must be at least 2 for bias correction"
+            )
+    else:
+        if sample_size < 1:
+            raise ValueError("sample_size in diploid individuals must be at least 1")
+        gene_copies = 2 * sample_size
+
+    h_e = heterozygosity(frequencies)
+    factor = gene_copies / (gene_copies - 1)
+    return _bounded(factor * h_e, "unbiased_H_e")
 
 
 def identity(frequencies: Mapping[Any, Any]) -> float:

@@ -533,6 +533,7 @@ Return to the [source-tree orientation](../README.md) or the [developer guide](.
 * [fim.statistics.differentiation](#fim.statistics.differentiation)
   * [DifferentiationReport](#fim.statistics.differentiation.DifferentiationReport)
   * [heterozygosity](#fim.statistics.differentiation.heterozygosity)
+  * [unbiased\_heterozygosity](#fim.statistics.differentiation.unbiased_heterozygosity)
   * [identity](#fim.statistics.differentiation.identity)
   * [hill\_number](#fim.statistics.differentiation.hill_number)
   * [effective\_allele\_count](#fim.statistics.differentiation.effective_allele_count)
@@ -15690,6 +15691,54 @@ same allele, so two random draws can never differ) and just under 1
 (approaching 1 only as the number of equally common alleles grows
 without bound — `H` never actually reaches it for any finite number
 of alleles).
+
+<a id="fim.statistics.differentiation.unbiased_heterozygosity"></a>
+
+#### unbiased\_heterozygosity
+
+```python
+def unbiased_heterozygosity(frequencies: Mapping[Any, Any],
+                            sample_size: int,
+                            *,
+                            is_gene_copies: bool = False) -> float
+```
+
+Return Nei (1977) unbiased expected heterozygosity for a finite sample.
+
+Nei (1977, *Genetics* 89(3):583-590), Equation 2:
+
+.. math::
+
+\hat{H}_e = \frac{2n}{2n - 1} \left(1 - \sum_i p_i^2\right)
+= \frac{2n}{2n - 1} H_e
+
+where ``n`` is the number of diploid individuals sampled (or ``2n``
+gene copies). Sample frequencies ``p_i`` computed from a finite sample
+of size ``2n`` gene copies underestimate population heterozygosity
+because of sampling without replacement; multiplying by
+``2n / (2n - 1)`` corrects this small-sample bias exactly.
+
+**Arguments**:
+
+- `frequencies` - Normalized sample allele frequencies in one deme.
+- `sample_size` - Number of sampled diploid individuals (or gene copies if
+  ``is_gene_copies=True``). Must be at least 1 individual (or at
+  least 2 gene copies).
+- `is_gene_copies` - If True, ``sample_size`` is the total gene-copy
+  count ``2n``; if False (default), ``sample_size`` is the diploid
+  individual count ``n``.
+
+
+**Returns**:
+
+  Unbiased expected heterozygosity, bounded in [0, 1].
+
+
+**Raises**:
+
+- `TypeError` - If ``sample_size`` is not an integer.
+- `ValueError` - If ``sample_size`` is less than 1 (or less than 2 when
+  ``is_gene_copies=True``).
 
 <a id="fim.statistics.differentiation.identity"></a>
 

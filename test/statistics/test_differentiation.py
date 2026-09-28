@@ -50,6 +50,7 @@ from fim.statistics import (
     r_st,
     statistics_report,
     total_hill_number,
+    unbiased_heterozygosity,
     within_hill_number,
 )
 from fim.statistics.differentiation import FrequencyTable
@@ -1193,3 +1194,41 @@ class DifferentiationStatisticsTests(unittest.TestCase):
                     matrix[i][j] for i in range(d) for j in range(d) if i != j
                 )
                 self.assertAlmostEqual(off_diag_sum, 0.0, places=12)
+
+    def test_aoki_2023_claim_1_unbiased_heterozygosity(self) -> None:
+        """Claim 1: Nei (1977) finite-sample bias correction Eq. 2.
+
+        \\hat{H}_e = (2n / (2n - 1)) * (1 - sum(p_i^2)).
+        """
+        freqs = {0: 0.6, 1: 0.4}
+        h_e = heterozygosity(freqs)  # 1 - (0.36 + 0.16) = 0.48
+
+        # For n = 10 diploid individuals (2n = 20 gene copies):
+        # factor = 20 / 19
+        hat_h = unbiased_heterozygosity(freqs, sample_size=10)
+        expected = (20.0 / 19.0) * h_e
+        self.assertAlmostEqual(hat_h, expected, places=12)
+
+        # Using is_gene_copies=True directly with gene copies = 20:
+        hat_h_copies = unbiased_heterozygosity(
+            freqs, sample_size=20, is_gene_copies=True
+        )
+        self.assertEqual(hat_h, hat_h_copies)
+
+        # As sample size n -> inf, hat_H_e approaches H_e
+        large_sample_h = unbiased_heterozygosity(freqs, sample_size=1_000_000)
+        self.assertAlmostEqual(large_sample_h, h_e, places=5)
+
+        # Monomorphism (h_e = 0) stays 0 regardless of sample size
+        mono = {0: 1.0}
+        self.assertEqual(unbiased_heterozygosity(mono, sample_size=5), 0.0)
+
+        # Input validation
+        with self.assertRaises(TypeError):
+            unbiased_heterozygosity(freqs, sample_size=10.5)  # type: ignore[arg-type]
+        with self.assertRaises(ValueError):
+            unbiased_heterozygosity(freqs, sample_size=0)
+        with self.assertRaises(ValueError):
+            unbiased_heterozygosity(freqs, sample_size=-5)
+        with self.assertRaises(ValueError):
+            unbiased_heterozygosity(freqs, sample_size=1, is_gene_copies=True)

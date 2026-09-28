@@ -25309,6 +25309,18 @@ Claim 7: Off-diagonal elements of F_ST matrix sum to zero by construction.
 For any frequency table, sum_{i != j} F_ST[i][j] == 0.0 to floating-point
 precision.
 
+<a id="statistics.test_differentiation.DifferentiationStatisticsTests.test_aoki_2023_claim_1_unbiased_heterozygosity"></a>
+
+#### test\_aoki\_2023\_claim\_1\_unbiased\_heterozygosity
+
+```python
+def test_aoki_2023_claim_1_unbiased_heterozygosity() -> None
+```
+
+Claim 1: Nei (1977) finite-sample bias correction Eq. 2.
+
+\hat{H}_e = (2n / (2n - 1)) * (1 - sum(p_i^2)).
+
 <a id="statistics.test_genetic_distance"></a>
 
 # statistics.test\_genetic\_distance
