@@ -378,6 +378,15 @@ function syncRunGraphStage() {
     }
     stage.hidden = available.length === 0;
     syncGraphMenu(available);
+    // Before `applyGraphLayout()`, not after: that function measures
+    // `#run-visual-panels`' own `clientWidth` to decide how many graph
+    // columns fit, and `#run-plot-row`'s own wrap behavior (`run-view-
+    // completed.js`'s own `updateRunPlotRowLayoutClass`) has to already
+    // be correct by then, or the measurement is taken against a row
+    // that has not yet reserved room for the statistics table.
+    if (typeof window.fim.updateRunPlotRowLayoutClass === "function") {
+        window.fim.updateRunPlotRowLayoutClass();
+    }
 
     // Only the chosen panes are visible -- and a pane that has been moved
     // out of the stage into the zoom frame must not be un-hidden back

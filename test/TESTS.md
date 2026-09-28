@@ -15308,6 +15308,37 @@ pane's own CSS size, and content really was drawn across that width
 (a resized-but-never-redrawn canvas would be blank past its own old
 300px).
 
+<a id="gui.test_open_run_screen.test_multiple_graph_panes_do_not_push_the_stats_table_off_the_row"></a>
+
+#### test\_multiple\_graph\_panes\_do\_not\_push\_the\_stats\_table\_off\_the\_row
+
+```python
+def test_multiple_graph_panes_do_not_push_the_stats_table_off_the_row(
+        tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None
+```
+
+Several *non-trajectory* panes shown together still leave the
+statistics table beside them, not wrapped onto a line below.
+
+Reported live, more than once ("has once again become unglued"):
+``run`-plot-row`'s own never-wrap protection (`app.css`'s
+`run-plot-row-has-trajectory` rules) used to apply only while this
+run's own trajectory had data to draw (`renderTrajectory`'s own
+`hasCurve` check, `run-view-completed.js`) -- true for most *live*
+runs, which is exactly why this went unnoticed for as long as it
+did: a *reopened* run has no such history at all (`Api.open_run`'s
+own docstring: re-analysis recomputes one chosen generation, never a
+full history), so its trajectory is always unavailable regardless of
+how long the run itself actually ran -- a deterministic, reliable
+way to reach the one condition the old code's own narrower check
+never protected, without depending on live-convergence timing.
+Picking several non-trajectory panes together here (the scatter plot
+plus both supplemental panels, matching the reported case) hits the
+identical underlying overflow. `updateRunPlotRowLayoutClass`
+(`run-view-completed.js`) now also applies the class whenever more
+than one pane is visible, regardless of the trajectory's own
+availability.
+
 <a id="gui.test_p0_grid_screen"></a>
 
 # gui.test\_p0\_grid\_screen

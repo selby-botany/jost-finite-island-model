@@ -1872,3 +1872,83 @@ def test_a_reopened_runs_graphs_repaint_at_the_real_pane_size(
     assert settled["bufferW"] == settled["cssW"]
     assert settled["bufferW"] > 150
     assert settled["farContent"] > 0
+
+
+def test_multiple_graph_panes_do_not_push_the_stats_table_off_the_row(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Several *non-trajectory* panes shown together still leave the
+    statistics table beside them, not wrapped onto a line below.
+
+    Reported live, more than once ("has once again become unglued"):
+    `#run-plot-row`'s own never-wrap protection (`app.css`'s
+    `run-plot-row-has-trajectory` rules) used to apply only while this
+    run's own trajectory had data to draw (`renderTrajectory`'s own
+    `hasCurve` check, `run-view-completed.js`) -- true for most *live*
+    runs, which is exactly why this went unnoticed for as long as it
+    did: a *reopened* run has no such history at all (`Api.open_run`'s
+    own docstring: re-analysis recomputes one chosen generation, never a
+    full history), so its trajectory is always unavailable regardless of
+    how long the run itself actually ran -- a deterministic, reliable
+    way to reach the one condition the old code's own narrower check
+    never protected, without depending on live-convergence timing.
+    Picking several non-trajectory panes together here (the scatter plot
+    plus both supplemental panels, matching the reported case) hits the
+    identical underlying overflow. `updateRunPlotRowLayoutClass`
+    (`run-view-completed.js`) now also applies the class whenever more
+    than one pane is visible, regardless of the trajectory's own
+    availability.
+    """
+    monkeypatch.setattr(paths_module, "results_directory", lambda: tmp_path / "results")
+    output = _write_run(tmp_path)
+
+    window = create_window(hidden=True)
+    outcome: queue.Queue[dict[str, Any] | None] = queue.Queue(maxsize=1)
+
+    def _drive() -> None:
+        try:
+            window.resize(900, 700)
+            _poll_until(window, _INPUT_SCREEN_READY, lambda value: value is True)
+            window.evaluate_js(f"window.fim.openComputedRun({str(output)!r}, false);")
+            _poll_until(
+                window,
+                "window.fim.getRunViewState()",
+                lambda value: value == "completed",
+            )
+            window.evaluate_js(
+                "window.fim.setVisibleGraphs("
+                "['scatter', 'alleleComposition', 'frequencySpectrum']);"
+            )
+            settled = _poll_until(
+                window,
+                "(function() {"
+                "var row = document.getElementById('run-plot-row');"
+                "var visualColumn = document.querySelector('.run-visual-column');"
+                "var stats = document.getElementById('results-stats');"
+                "if (stats.hidden) { return null; }"
+                "var columnRect = visualColumn.getBoundingClientRect();"
+                "var statsRect = stats.getBoundingClientRect();"
+                "return {"
+                "rowHasTrajectoryClass: "
+                "row.classList.contains('run-plot-row-has-trajectory'), "
+                "visibleGraphCount: window.fim.getVisibleGraphs().length, "
+                "columnTop: columnRect.top, columnRight: columnRect.right, "
+                "statsTop: statsRect.top, statsLeft: statsRect.left"
+                "};"
+                "})()",
+                lambda value: value is not None and value.get("visibleGraphCount") == 3,
+            )
+            outcome.put(settled)
+        finally:
+            window.destroy()
+
+    webview.start(_drive)
+    settled = outcome.get(timeout=_DRIVE_TIMEOUT_SECONDS)
+
+    assert settled is not None
+    assert settled["visibleGraphCount"] == 3
+    assert settled["rowHasTrajectoryClass"] is True
+    # Beside the graph column, not wrapped below it.
+    assert settled["statsLeft"] >= settled["columnRight"]
+    assert settled["statsTop"] == settled["columnTop"]

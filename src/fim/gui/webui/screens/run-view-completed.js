@@ -1181,20 +1181,77 @@ function drawTrajectoryCurve(
     }
 }
 
+// Whether this run produced a trajectory at all -- one of the two
+// conditions `updateRunPlotRowLayoutClass` (below) ORs together. Set by
+// `setTrajectoryFrameHidden`, read nowhere else: kept as its own flag
+// (rather than re-deriving it from `#run-trajectory-frame`'s own
+// `hidden`) so the class can be recomputed from either trigger without
+// each one needing to know how the other one's condition is stored.
+let trajectoryAvailableForLayout = false;
+
+/**
+ * Recompute `#run-plot-row`'s own `run-plot-row-has-trajectory` class --
+ * kept under its original name for the smaller diff, even though what it
+ * actually means is "the graphs must never be allowed to push the
+ * statistics table onto its own line below them" -- from every condition
+ * that can make that true: a trajectory panel competing for the row
+ * (`setTrajectoryFrameHidden`, below), or more than one graph pane shown
+ * at once (`run-graph-stage.js`'s own `syncRunGraphStage`, the multi-
+ * graph "Graphs (N)" picker). Either alone can make `.run-visual-
+ * column`'s own natural width exceed what is left once the statistics
+ * table -- which doubles as the trajectory legend and the per-statistic
+ * show/hide control -- takes its own share.
+ *
+ * Reported live, more than once: this class's own protective CSS rules
+ * (`app.css`) used to apply only while a trajectory panel was actually
+ * competing for the row, so a botanist who picked several non-trajectory
+ * graphs together (the reported case: three supplemental panels, no
+ * trajectory in sight) hit the exact same underlying overflow with
+ * nothing there to prevent it -- the statistics panel dropped out from
+ * beside the graphs to its own line below them ("unglued... unmoored").
+ * Deliberately still not unconditional: `test_run_view_initial_state_
+ * canvas_is_unaffected_by_the_trajectory_fix` (`test/gui/test_results_
+ * screen.py`) already confirmed live that applying these rules with
+ * nothing actually competing for the row measurably shrinks the
+ * `initial` p_0 preview's own canvas for no reason -- only exactly the
+ * two conditions that can cause the real overflow apply the class.
+ *
+ * Exposed on `window.fim` so `run-graph-stage.js`'s own `syncRunGraphStage`
+ * -- which changes the *other* condition, the visible pane count -- can
+ * call it too, before its own `applyGraphLayout()` measures the row's
+ * width; guarded there with a `typeof` check for load order, the same
+ * precedent `showScreen`'s own `updateRailHighlight` call already sets
+ * (`app.js`).
+ */
+function updateRunPlotRowLayoutClass() {
+    const paneCount =
+        typeof window.fim.getVisibleGraphs === "function"
+            ? window.fim.getVisibleGraphs().length
+            : 1;
+    runPlotRow.classList.toggle(
+        "run-plot-row-has-trajectory",
+        trajectoryAvailableForLayout || paneCount > 1
+    );
+}
+
+window.fim.updateRunPlotRowLayoutClass = updateRunPlotRowLayoutClass;
+
 /**
  * Declare whether the trajectory graph has anything to show.
  *
  * The graph stage owns `#run-trajectory-frame`'s own `hidden` (one
  * graph is on screen at a time), so this only reports availability and
- * keeps `#run-plot-row`'s own `run-plot-row-has-trajectory` class in
- * sync as the "this run produced a trajectory at all" signal. Every
- * caller (`renderTrajectory`, `renderBatchTrajectory`) goes through
- * this rather than touching either directly.
+ * keeps `#run-plot-row`'s own layout class in sync
+ * (`updateRunPlotRowLayoutClass`, above) as one of the two "this run
+ * needs the fixed, never-wrap layout" signals. Every caller
+ * (`renderTrajectory`, `renderBatchTrajectory`) goes through this rather
+ * than touching either directly.
  *
  * @param {boolean} hidden
  */
 function setTrajectoryFrameHidden(hidden) {
-    runPlotRow.classList.toggle("run-plot-row-has-trajectory", !hidden);
+    trajectoryAvailableForLayout = !hidden;
+    updateRunPlotRowLayoutClass();
     window.fim.registerGraphDraw("trajectory", repaintTrajectory);
     window.fim.setGraphAvailable("trajectory", !hidden);
 }
