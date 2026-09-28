@@ -443,7 +443,7 @@ depends on how fast the population forgets its starting state, its
 <pre><code class="language-text">T   = N_total + (d - 1) / (2 m)      # mean time for two gene copies to coalesce
 tau = 1 / (2 mu + 1 / T)             # mutation is a second way to lose identity
 window          = max(50, ceil(3 tau))
-max_generations = max(10000, ceil(15 tau))
+max_generations = max(200000, ceil(15 tau))
 </code></pre>
 <p><code>N_total</code> is the sum of every deme's gene copies and <code>mu</code> is the mean over
 loci. That closed form is for the symmetric island model (scalar <code>m</code>, equal
@@ -504,8 +504,11 @@ the recurring per-generation cost for your own configuration.</p>
 </ul>
 <p>This safety cap always ends a run. Reaching it is reported as a valid
 non-converged outcome. <code>auto</code> derives it as 15 relaxation times (at least
-10,000); see <a href="#convergence_window">convergence_window</a>. Setting only this
-value below the derived window clamps the window to fit; setting only the
+200,000, so a single locus has room to average its own noise down to the
+configured tolerance — see <a href="#" data-fim-external="https://github.com/selby-botany/jost-finite-island-model/blob/main/doc/convergence.md#is-the-reported-value-actually-precise-enough">Is the reported value actually precise
+enough?</a>);
+see <a href="#convergence_window">convergence_window</a>. Setting only this value
+below the derived window clamps the window to fit; setting only the
 window raises the derived cap to five windows.</p>
 <h3 id="sigma_band_multiplier">sigma_band_multiplier</h3>
 <ul>

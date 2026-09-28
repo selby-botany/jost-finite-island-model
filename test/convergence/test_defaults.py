@@ -82,7 +82,7 @@ def test_derived_defaults_are_multiples_of_the_relaxation_time() -> None:
 
 
 def test_fast_models_keep_the_historical_floors() -> None:
-    """A quickly relaxing model never gets a window below 50 or a cap below 10,000."""
+    """A quickly relaxing model never gets a window or cap below their own floors."""
     derived = derive_convergence_defaults(
         deme_sizes=[10] * 3, migration=0.5, mutation_rates=[0.1]
     )

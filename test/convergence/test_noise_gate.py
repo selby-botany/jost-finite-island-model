@@ -70,7 +70,7 @@ def test_the_noise_gate_delays_a_stop_the_trend_check_alone_would_have_taken() -
     genuinely has (`stats.noise_adequate`).
     """
     window, tolerance = 24, 0.03
-    series = _ar1_series(phi=0.85, sigma=0.05, length=300, seed=8)
+    series = _ar1_series(phi=0.85, sigma=0.05, length=3000, seed=8)
 
     ungated_count = next(
         count
@@ -201,3 +201,30 @@ def test_a_criterion_without_a_window_or_tolerance_is_never_gated() -> None:
     assert outcome.stopped
     assert outcome.converged
     assert monitor.window_statistics("value") is None
+
+
+def test_the_evidence_window_grows_past_a_flickering_trend_check() -> None:
+    """A flickering (but genuinely stationary) trend check must not reset growth.
+
+    The first version of this gate reset its accumulated evidence every
+    time the fast trend check next read `False` for even one generation --
+    confirmed directly to never grow past the base `window` at all on a
+    real 200,000-generation engine run, because real noisy data flickers
+    the trend check more often than the doubling interval allows. This
+    seeds one such flickering series and checks the window really did grow
+    beyond its own base length by the time the run stopped.
+    """
+    window, tolerance = 24, 0.03
+    series = _ar1_series(phi=0.7, sigma=0.05, length=3000, seed=1)
+
+    monitor = ConvergenceMonitor(
+        TrailingWindowCriterion(window, tolerance), max_generations=len(series) - 1
+    )
+    for generation, value in enumerate(series):
+        if monitor.record(generation, value).stopped:
+            break
+
+    stats = monitor.window_statistics("value")
+    assert stats is not None
+    assert stats.window > window
+    assert stats.noise_adequate(tolerance)

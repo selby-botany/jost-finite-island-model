@@ -12,8 +12,13 @@ import pytest
 
 ROOT = Path(__file__).resolve().parents[1]
 EXAMPLES = (
-    "golden-part-vi",
-    # Thirty loci run to equilibrium (about 90,000 generations), minutes not
+    # A single locus needs the noise-adequacy gate's own evidence window to
+    # grow to around 130,000 generations before its own mean is precise
+    # enough (`20260927-claude-sonnet-5-noise-aware-convergence-design.md`,
+    # `selby/restricted`) -- over two minutes, so both examples are now out
+    # of the default suite, not only the thirty-loci one below.
+    pytest.param("golden-part-vi", marks=pytest.mark.slow),
+    # Thirty loci run to equilibrium (about 275,000 generations), minutes not
     # seconds, so it stays out of the default suite.
     pytest.param("dear-nolan-low", marks=pytest.mark.slow),
 )

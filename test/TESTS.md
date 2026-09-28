@@ -3503,7 +3503,7 @@ Window and cap are the documented multiples of `tau`.
 def test_fast_models_keep_the_historical_floors() -> None
 ```
 
-A quickly relaxing model never gets a window below 50 or a cap below 10,000.
+A quickly relaxing model never gets a window or cap below their own floors.
 
 <a id="convergence.test_defaults.test_window_never_exceeds_the_cap_when_the_cap_is_clamped"></a>
 
@@ -3930,6 +3930,24 @@ def test_a_criterion_without_a_window_or_tolerance_is_never_gated() -> None
 ```
 
 A non-`TrailingWindowCriterion`-shaped criterion passes through unchanged.
+
+<a id="convergence.test_noise_gate.test_the_evidence_window_grows_past_a_flickering_trend_check"></a>
+
+#### test\_the\_evidence\_window\_grows\_past\_a\_flickering\_trend\_check
+
+```python
+def test_the_evidence_window_grows_past_a_flickering_trend_check() -> None
+```
+
+A flickering (but genuinely stationary) trend check must not reset growth.
+
+The first version of this gate reset its accumulated evidence every
+time the fast trend check next read `False` for even one generation --
+confirmed directly to never grow past the base `window` at all on a
+real 200,000-generation engine run, because real noisy data flickers
+the trend check more often than the doubling interval allows. This
+seeds one such flickering series and checks the window really did grow
+beyond its own base length by the time the run stopped.
 
 <a id="convergence.test_tracker"></a>
 

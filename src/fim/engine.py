@@ -2228,17 +2228,18 @@ def _window_statistics_payload(
 ) -> dict[str, dict[str, float | int | bool]]:
     """Compute `report_for_state`'s own `window_statistics` from a stopped monitor.
 
-    Computed post-hoc, directly from `monitor.histories` (the full,
-    already-retained per-generation values, both watched and `extra_
-    statistics` alike) — not from `ConvergenceMonitor.window_statistics`,
-    which caches only a side effect of the *stop decision itself* and stays
-    `None` for a statistic that never gated stopping (`D`/`G_ST`/`H_S`/`H_T`/
-    `H_ST` are always recorded, `fim.engine._ALWAYS_TRACKED_STATISTICS`, but
-    only the actual `convergence_statistic`(s) among them ever run the gate).
-    A single configured `window`/`tolerance` applies to every recorded
-    statistic alike (`SimulationParams.convergence_window`/`_tolerance` are
-    scalars, not per-statistic), so this needs no per-name lookup the way
-    the gate itself does.
+    For a statistic that gated stopping, `ConvergenceMonitor.window_
+    statistics` already holds the *exact* evidence the gate itself last
+    checked — including any growth past `params.convergence_window` the
+    noise-adequacy check needed (`ConvergenceMonitor._gated_stable`'s own
+    docstring) — so that is used verbatim, not recomputed. A statistic that
+    never gated stopping (`D`/`G_ST`/`H_S`/`H_T`/`H_ST` are always recorded,
+    `fim.engine._ALWAYS_TRACKED_STATISTICS`, whether or not any one of them
+    is the actual `convergence_statistic`) has no such value; for those,
+    this computes one post-hoc, directly from `monitor.histories`, over the
+    plain configured `window` — the best available answer for a statistic
+    the gate was never asked about, even though it is not the grown window
+    a gated statistic might have earned.
 
     Args:
         monitor: The just-stopped monitor driving this run.
@@ -2262,9 +2263,13 @@ def _window_statistics_payload(
     tolerance = params.convergence_tolerance
     payload: dict[str, dict[str, float | int | bool]] = {}
     for name, history in monitor.histories.items():
-        if len(history) < window:
+        gated = monitor.window_statistics(name)
+        if gated is not None:
+            stats = gated
+        elif len(history) >= window:
+            stats = _compute_window_statistics(history[-window:])
+        else:
             continue
-        stats = _compute_window_statistics(history[-window:])
         payload[name] = {
             "mean": stats.mean,
             "standard_error": stats.standard_error,

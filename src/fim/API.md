@@ -1220,7 +1220,12 @@ Default `max_generations`, in units of `tau`.
 A run needs its window plus the time to settle. The slowest stop measured
 was `10.2 tau` (Golden Part VI at a window of `4 tau`; `9.0 tau` at the
 shipped `3 tau`), so `15 tau` leaves a margin of about 1.5 and no measured
-run ended at the cap.
+run ended at the cap. Only binding once `15 tau` exceeds `MINIMUM_MAX_
+GENERATIONS`'s own floor (its own docstring has why that floor is now
+large) -- a fast-relaxing model's cap is set by the floor instead, since
+`15 tau` alone was never a measurement of how long a single-locus run's
+own noise takes to average out, only of how long the *trend* takes to
+settle.
 
 <a id="fim.convergence.defaults.MINIMUM_WINDOW"></a>
 
@@ -1232,7 +1237,28 @@ Smallest derived window: the historical default, kept as a floor.
 
 #### MINIMUM\_MAX\_GENERATIONS
 
-Smallest derived cap: the historical default, kept as a floor.
+Smallest derived cap.
+
+Set by the same evidence as `WINDOW_RELAXATION_MULTIPLE`'s own docstring,
+extended: `fim.convergence.monitor.ConvergenceMonitor`'s noise-adequacy
+gate lets the evidence window actually used to judge stability grow past
+`convergence_window` on its own, generation by generation, whenever a
+single, fast-relaxing (small `tau`) model's own per-generation noise
+still leaves the trailing-window mean short of the requested tolerance --
+the single-locus case the original `10_000` floor (this project's own
+pre-derived-defaults historical default) was never measured against. Two
+independent single-locus, single-replicate regimes (Golden Part VI,
+`tau = 85`; Dear-Nolan low, `tau = 19,693` -- two orders of magnitude
+apart in `tau`) both needed close to 130,000 generations for their own
+`D` to become genuinely noise-adequate, despite that wide spread in
+`tau`: this floor is a small multiple of that measured need, not derived
+from `tau` at all (a third, well-resolved regime, a 10-deme ring, settled
+at 12,000, comfortably under this floor on its own). A model that settles
+long before this floor is unaffected -- the adaptive window still stops
+the instant it is genuinely adequate, this floor only raises how long a
+run is *allowed* to keep growing that window before giving up
+honestly. See `20260927-claude-sonnet-5-noise-aware-convergence-design.md`
+(`selby/restricted`) for the full measurement.
 
 <a id="fim.convergence.defaults.ABSOLUTE_MAX_GENERATIONS"></a>
 
@@ -1773,7 +1799,10 @@ informatively, at the exact generation `name` was declared stable
 (`record`'s own `is_stable` branch fires in the same call that just
 set this). A caller building a final report reads this once, after
 the run has stopped, to say not just *that* a statistic converged
-but how precisely its own trailing-window mean was actually known.
+but how precisely its own (possibly grown well past the criterion's
+own configured `window`) trailing evidence window was actually
+known — `WindowStatistics.window` carries however long that
+evidence window actually ended up being, not the configured one.
 
 **Arguments**:
 

@@ -517,7 +517,7 @@ depends on how fast the population forgets its starting state, its
 T   = N_total + (d - 1) / (2 m)      # mean time for two gene copies to coalesce
 tau = 1 / (2 mu + 1 / T)             # mutation is a second way to lose identity
 window          = max(50, ceil(3 tau))
-max_generations = max(10000, ceil(15 tau))
+max_generations = max(200000, ceil(15 tau))
 ```
 
 `N_total` is the sum of every deme's gene copies and `mu` is the mean over
@@ -587,8 +587,11 @@ track_expensive_statistics: true
 
 This safety cap always ends a run. Reaching it is reported as a valid
 non-converged outcome. `auto` derives it as 15 relaxation times (at least
-10,000); see [convergence_window](#convergence_window). Setting only this
-value below the derived window clamps the window to fit; setting only the
+200,000, so a single locus has room to average its own noise down to the
+configured tolerance — see [Is the reported value actually precise
+enough?](convergence.md#is-the-reported-value-actually-precise-enough));
+see [convergence_window](#convergence_window). Setting only this value
+below the derived window clamps the window to fit; setting only the
 window raises the derived cap to five windows.
 
 ### sigma_band_multiplier

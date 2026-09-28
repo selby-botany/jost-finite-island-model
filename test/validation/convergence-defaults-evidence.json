@@ -246,5 +246,55 @@
       "slowest_stop_in_tau": 9.82,
       "any_hit_cap": false
     }
-  ]
+  ],
+  "minimum_max_generations_evidence": {
+    "description": "Single-locus, single-replicate regimes need the noise-adequacy gate's own adaptive evidence window to grow well past the derived window before the trailing-window mean is precise enough -- this measures how far, informing MINIMUM_MAX_GENERATIONS (fim.convergence.defaults). Produced by direct fim() calls, not dev/bin/calibrate-convergence-defaults (which does not yet expose the adaptive window's own final size); see 20260927-claude-sonnet-5-noise-aware-convergence-design.md (selby/restricted) for the full account.",
+    "date": "2026-09-27",
+    "tolerance": 0.01,
+    "chosen": {
+      "minimum_max_generations": 200000,
+      "rationale": "Both hard cases (tau 84.6 and 19,693 -- 233x apart) needed close to 130,000 generations despite that spread, so the floor is a small margin above the measured need, not derived from tau; the ring (tau 1,902) settled at 12,000, comfortably under this floor without needing it."
+    },
+    "runs": [
+      {
+        "regime": "golden-part-vi",
+        "loci": 1,
+        "replicates": 1,
+        "seed": 20260825,
+        "relaxation_time": 84.6,
+        "derived_window": 254,
+        "stop_generation": 130194,
+        "grown_window": 130048,
+        "D_window_mean": 0.623650057980255,
+        "D_standard_error": 0.004193292255722906,
+        "noise_adequate": true
+      },
+      {
+        "regime": "dear-nolan-low",
+        "loci": 1,
+        "replicates": 1,
+        "seed": 910000,
+        "relaxation_time": 19692.6,
+        "derived_window": 59078,
+        "stop_generation": 131443,
+        "grown_window": 118154,
+        "D_window_mean": 0.002502595952780451,
+        "D_standard_error": 0.004599489358141314,
+        "noise_adequate": true
+      },
+      {
+        "regime": "ring (d=10)",
+        "loci": 1,
+        "replicates": 1,
+        "seed": 910000,
+        "relaxation_time": 1902.4,
+        "derived_window": 5707,
+        "stop_generation": 11828,
+        "grown_window": 11414,
+        "D_window_mean": 0.0024945903052200655,
+        "D_standard_error": 0.0027147227480000553,
+        "noise_adequate": true
+      }
+    ]
+  }
 }

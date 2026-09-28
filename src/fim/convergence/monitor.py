@@ -227,12 +227,14 @@ class ConvergenceMonitor:
             else None
         )
         self._noise_tolerance: float | None = tolerance
-        # "Re-armed" means the fast trend check has not said stable since
-        # the last time the (more expensive) noise check ran — see
-        # `_gated_stable`'s own docstring for why this throttles the noise
-        # check to once per contiguous stretch of trend-stability, not
-        # once per generation within it.
-        self._noise_rearmed: dict[str, bool] = dict.fromkeys(statistic_names, True)
+        # Where the current evidence window began (a position in `name`'s
+        # own history list), for whichever statistics `_gated_stable` is
+        # actively growing one for; absent while the trend is not
+        # currently stable. The window at which the *next* noise check is
+        # due, doubling after each inadequate one — see `_gated_stable`'s
+        # own docstring for why both exist.
+        self._noise_window_start: dict[str, int] = {}
+        self._noise_next_check_length: dict[str, int] = {}
         self._last_window_statistics: dict[str, WindowStatistics] = {}
         self._outcome = ConvergenceOutcome(False, False, None, None)
 
@@ -437,7 +439,10 @@ class ConvergenceMonitor:
         (`record`'s own `is_stable` branch fires in the same call that just
         set this). A caller building a final report reads this once, after
         the run has stopped, to say not just *that* a statistic converged
-        but how precisely its own trailing-window mean was actually known.
+        but how precisely its own (possibly grown well past the criterion's
+        own configured `window`) trailing evidence window was actually
+        known — `WindowStatistics.window` carries however long that
+        evidence window actually ended up being, not the configured one.
 
         Args:
             name: A configured statistic name (watched or extra).
@@ -462,30 +467,69 @@ class ConvergenceMonitor:
         wobbling by drift alone, with no trend left at all, will still
         satisfy it the instant a wobble happens to land the two halves
         close together, whether or not that means anything. This method
-        adds the second half of the answer, `fim.convergence.window_
-        statistics.window_statistics`'s own correlation-corrected standard
-        error of the trailing window's mean, compared against half of the
-        configured tolerance (`WindowStatistics.noise_adequate`) — a window
-        judged stable only when both the trend has flattened *and* its own
-        mean is actually known to the requested precision.
+        adds the second half of the answer: once the trend has flattened,
+        it keeps accumulating that same evidence window forward — not the
+        fixed `window` length the trend check itself uses — until `fim.
+        convergence.window_statistics.window_statistics`'s own
+        correlation-corrected standard error of the (growing) window's
+        mean is at most half the configured tolerance
+        (`WindowStatistics.noise_adequate`), or the run's own generation
+        cap arrives first.
+
+        A fixed window multiple cannot serve every model: measured
+        directly (`20260927-...-noise-aware-convergence-design.md`,
+        `selby/restricted`, this design's own follow-up note), one
+        single-locus scenario needed a window some 500 times longer than
+        the model's own derived one to reach noise adequacy, while a
+        30-locus scenario already needed on the derived window exactly —
+        no single constant serves both without wasting enormous time on
+        the second to (barely) help the first. Growing the window instead
+        needs no such guess: it keeps exactly as much evidence as the
+        statistic's own noise demands, whatever that turns out to be, and
+        cannot be slower than the old fixed-window rule when a single
+        window's worth is already enough (the very first check still
+        happens at the same generation as before).
 
         Throttled, not run every generation: `window_statistics` is
-        `O(window)`, and `TrailingWindowTracker`'s whole reason to exist is
-        keeping the per-generation cost `O(1)` for windows that can reach
-        millions of generations. `_noise_rearmed[name]` tracks whether the
-        noise check has already run once during the *current* contiguous
-        stretch of `trend_stable=True` — re-armed (eligible to run again)
-        only once `trend_stable` next goes `False`. A noisy statistic whose
-        fast trend check flickers true/false for a long time before really
-        settling therefore pays for one `O(window)` check per flicker, not
-        one per generation the flicker lasts; a statistic that settles and
-        stays settled pays for exactly one. The one accuracy cost: with
-        several statistics and `combinator="all"`, a statistic that reaches
-        noise-adequate before the others keeps returning that same cached
-        verdict, from its own trailing window at the moment it was computed,
-        without re-checking a newer window while waiting on the rest — a
-        real, accepted approximation (see this method's own design note,
-        `20260927-...-noise-aware-convergence-design.md`, `selby/restricted`).
+        `O(window)`, and `TrailingWindowTracker`'s whole reason to exist
+        is keeping the per-generation cost `O(1)` for windows that can
+        reach millions of generations. `_noise_next_check_length[name]`
+        starts at `window` and doubles after each inadequate check — the
+        standard amortized-growth doubling discipline, the same one a
+        growing array uses to keep total copying `O(final size)` rather
+        than `O(size^2)`: `k` doublings of an eventual length `L` cost
+        `O(L)` in total, not `O(L log L)`, let alone one `O(window)` check
+        every single generation on the way there. The one accuracy cost:
+        with several statistics and `combinator="all"`, a statistic that
+        reaches noise-adequate before the others simply stops growing and
+        keeps returning that one cached verdict while waiting on the
+        rest, rather than continuing to accumulate evidence it no longer
+        needs.
+
+        The evidence window's own start, once first anchored, is **not**
+        reset just because `trend_stable` next reads `False` for one
+        generation — a real, load-bearing decision, not an oversight: a
+        genuinely stationary but noisy statistic's own half-window
+        trend check itself wobbles in and out of `True` by chance (the
+        same noise this whole gate exists to average past), and a design
+        that discarded all accumulated evidence on every such flicker was
+        tried first and confirmed, directly, to never grow past the base
+        `window` at all on a real 200,000-generation run — the flicker
+        happens more often than the doubling interval, so growth never
+        survives to the next check. Anchoring once and never resetting
+        does still give up something: if the anchor point turns out to
+        have landed slightly before the transient genuinely finished, the
+        growing window's mean carries a shrinking bias from those first
+        few, still-transient values, diluted by an ever-larger share of
+        later, settled ones as the window grows — exactly the same
+        "average away the bad estimate" arithmetic this whole gate
+        already relies on for noise, self-correcting rather than
+        permanent. A genuinely still-drifting statistic (not just noisy)
+        continues to resist `noise_adequate` regardless, since a real
+        drift keeps inflating the window's own measured autocorrelation
+        as fast as new points are added, matching this method's own
+        already-established "never falsely stop, worst case run longer"
+        guarantee.
 
         Args:
             name: The statistic whose trend signal this confirms.
@@ -494,27 +538,40 @@ class ConvergenceMonitor:
         Returns:
             `trend_stable` unchanged when `name` has no window/tolerance to
             check against (`self._noise_window` is `None`) or its history
-            has not yet reached that window length; otherwise `trend_stable
-            and` the (possibly cached) noise-adequacy verdict.
+            has not yet reached that window length; otherwise, once an
+            evidence window has been anchored, the (possibly cached)
+            noise-adequacy verdict alone — `trend_stable` no longer gates
+            the answer from that point on (see above).
         """
-        if not trend_stable:
-            self._noise_rearmed[name] = True
-            return False
         if self._noise_window is None:
-            return True
+            return trend_stable
         history = self._histories[name]
-        if len(history) < self._noise_window:
-            return True
-        if not self._noise_rearmed[name]:
-            cached = self._last_window_statistics.get(name)
-            assert cached is not None  # set on every prior True branch, above
-            assert self._noise_tolerance is not None  # set alongside self._noise_window
-            return cached.noise_adequate(self._noise_tolerance)
-        stats = window_statistics(history[-self._noise_window :])
+        start = self._noise_window_start.get(name)
+        if start is None:
+            if not trend_stable or len(history) < self._noise_window:
+                return trend_stable
+            # The trend has just become stable (or this is the first
+            # `record()` call reached with it already stable) -- the
+            # evidence window starts at exactly the `window`-length slice
+            # that made the trend check pass, and will grow from here,
+            # anchored for the rest of this run (see above).
+            start = len(history) - self._noise_window
+            self._noise_window_start[name] = start
+            self._noise_next_check_length[name] = self._noise_window
+        current_length = len(history) - start
+        if current_length < self._noise_next_check_length[name]:
+            # Not due for a check yet -- the window has not doubled since
+            # the last (inadequate) one, so it is assumed still
+            # inadequate rather than paying for another `O(window)` check
+            # that would almost certainly repeat the same verdict.
+            return False
+        stats = window_statistics(history[start:])
         self._last_window_statistics[name] = stats
-        self._noise_rearmed[name] = False
         assert self._noise_tolerance is not None  # set alongside self._noise_window
-        return stats.noise_adequate(self._noise_tolerance)
+        if stats.noise_adequate(self._noise_tolerance):
+            return True
+        self._noise_next_check_length[name] = current_length * 2
+        return False
 
     def _resolve_values(
         self,
