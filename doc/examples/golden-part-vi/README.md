@@ -18,55 +18,52 @@ observation motivating D as a replacement statistic.
 Published equilibrium values (100-replicate ensemble, multi-locus engineered
 start): **G<sub>ST</sub> ≈ 0.176, D ≈ 0.604**.
 
-## Why this one run does not reach that precision — and why that is honest
+## A single locus's own D genuinely converges; G<sub>ST</sub> does not, honestly
 
-A single locus, watched by a single replicate, is exactly the case this
-project's own convergence rule cannot resolve to a tight tolerance no
-matter how long it runs. A short trailing window can *look* stable — two
-neighboring halves land close together — purely because drift's own
-generation-to-generation wobble happens to cancel out for a moment, not
-because the run has actually settled near its true long-run value. An
-earlier version of this example fell into exactly that trap: it reported
-"converged" at generation 400 with D = 0.611, a number that looked like a
-clean match to the published ensemble mean (0.604) but was, in fact, one
-lucky window among many unlucky ones nearby — the true picture, visible
-only by watching many more generations, is that a single-locus D keeps
-wandering with a standard deviation around 0.1 indefinitely; generation
-400 was never special.
+A single locus, watched by a single replicate, is exactly the case that
+first exposed a real defect in `fim`'s own convergence rule: a short
+trailing window can *look* stable — two neighboring halves land close
+together — purely because drift's own generation-to-generation wobble
+happens to cancel out for a moment, not because the run has actually
+settled near its true long-run value. An earlier version of this example
+fell into exactly that trap: it reported "converged" at generation 400
+with D = 0.611, a number that looked like a clean match to the published
+ensemble mean (0.604) but was, in fact, one lucky window among many
+unlucky ones nearby.
 
 `fim` now checks for that directly: alongside the trend check, it asks
-whether the trailing window's own mean is actually known to the
-requested [convergence_tolerance](../../configuration.md#convergence_tolerance),
+whether the trailing window's own mean is actually known to the requested
+[convergence_tolerance](../../configuration.md#convergence_tolerance),
 correcting for how correlated consecutive generations are
 (`fim.convergence.window_statistics`,
-[Convergence defaults](../../convergence.md)). For this exact
-configuration, the derived window (254 generations, three times the
-model's own relaxation time) is nowhere near enough independent
-information to know D to ±0.005: even a 10,000-generation run — the
-derived cap — never satisfies that, and honestly reports **hitting the
-cap**, not convergence, in `report.json`.
+[Convergence defaults](../../convergence.md)). Once the trend genuinely
+flattens, that evidence window keeps growing — not staying fixed at the
+derived 254 generations — until the noise itself has been averaged down
+enough, or the run's own cap arrives. For **D**, the statistic this
+example actually watches (`convergence_statistic: D`), that window grew
+to 130,048 generations before its own mean, **0.6237 ± 0.0042**, was
+finally precise enough — very close to the published 0.604, and a real,
+earned result, not a lucky one: the run stops at generation 130,194.
 
-That report's own `window_statistics.D` still says something worth
-reading: the trailing window's *mean*, 0.5697, sits closer to the
-published 0.604 than the single reported point value, 0.5216 — averaging
-over the window's own noise helps, even short of the requested precision.
-Reaching the requested precision from a single locus and single replicate
-would need a window some 30–50 times longer than the one derived here (an
-open recalibration question, `20260927-claude-sonnet-5-noise-aware-
-convergence-design.md`, `selby/restricted`) — resolving this cleanly, the
-way the published ensemble does, instead uses many loci and many
-replicates (see the next paragraph), which is the actual, calibrated
-validation this project relies on, not this one convenience-sized run.
+**G<sub>ST</sub> is a different story, deliberately left honest rather than
+implied.** Only the statistic a run actually watches gets that same
+growing treatment; `report.json`'s own `window_statistics.G_ST` still
+reflects the plain, un-grown 254-generation window (mean 0.193, standard
+error 0.018) — nowhere near the requested precision, and correctly marked
+`"noise_adequate": false`. Watching **G_ST** as well (`convergence_
+statistic: [D, G_ST]`) would earn it the same growing treatment D gets
+here, at the cost of a longer run; that is a choice for a future revision
+of this example, not implied by the one shown.
 
 ## The real calibration: many loci, many replicates
 
 The genuine test that `fim`'s own mechanics reproduce Jost's theory is not
-this one convenience-sized run at all: it is
-`test/validation/test_simulator_equilibrium.py`'s Golden Part VI scenario,
-averaged over 60 independently seeded replicates of 8 loci each, which
-lands within 0.04 of the analytic equilibrium D
-(`test/validation/convergence-defaults-evidence.json`). This single-locus
-example exists to show a complete, minimal, reproducible configuration —
+this one single-locus run at all: it is `test/validation/
+test_simulator_equilibrium.py`'s Golden Part VI scenario, averaged over 60
+independently seeded replicates of 8 loci each, which lands within 0.04 of
+the analytic equilibrium D (`test/validation/convergence-defaults-
+evidence.json`). This single-locus example exists to show a complete,
+minimal, reproducible configuration whose own D now genuinely converges —
 not to stand in for that calibration.
 
 ## Parameters
@@ -87,24 +84,30 @@ fim run doc/examples/golden-part-vi/config.yaml \
     --output results/golden-part-vi --quiet
 ```
 
-Finishes in under a minute (10,000 generations, each one written to the
-trajectory file). `results/golden-part-vi/report.json` will
-match `report.json` in this directory exactly.
+Takes a little over two minutes (130,194 generations, each one written to
+the trajectory file). `results/golden-part-vi/report.json` will match
+`report.json` in this directory exactly.
 
 ## Expected output
 
 ```json
 {
-  "converged": false,
+  "converged": true,
   "converged_on": "D",
-  "generation": 10000,
-  "G_ST": 0.22949039831716092,
-  "D": 0.5216117216117216,
-  "reason": "hit the cap",
+  "generation": 130194,
+  "G_ST": 0.13905013986224318,
+  "D": 0.5418424753867791,
+  "reason": "statistic converged",
   "window_statistics": {
     "D": {
-      "mean": 0.5696931947724891,
-      "standard_error": 0.029458217468817414,
+      "mean": 0.623650057980255,
+      "standard_error": 0.004193292255722906,
+      "noise_adequate": true,
+      "window": 130048
+    },
+    "G_ST": {
+      "mean": 0.19330519212198638,
+      "standard_error": 0.018257804320953017,
       "noise_adequate": false,
       "window": 254
     }
@@ -113,9 +116,19 @@ match `report.json` in this directory exactly.
 ```
 
 (Abbreviated here to the fields this document discusses; the real
-`report.json` in this directory has every field, every watched
+`report.json` in this directory has every field, every recorded
 statistic's own `window_statistics` entry, and full floating-point
 precision.)
+
+D converges to **0.624** (window mean), close to the published ensemble
+mean (D ≈ 0.604). The final generation's own single point value, 0.542,
+is real too but noisier — one stochastic draw, not the averaged estimate.
+G<sub>ST</sub>'s own window mean, **0.193**, is close to the published
+G<sub>ST</sub> ≈ 0.176 as well, even though its own window was never grown to
+confirm that precision — a single locus samples one trajectory through
+allele-frequency space, so both statistics scatter around their own
+ensemble means; watching G<sub>ST</sub> directly, not just D, would confirm
+whether that particular closeness holds up or is itself a lucky draw.
 
 ## Files in this directory
 

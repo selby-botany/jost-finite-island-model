@@ -43,13 +43,11 @@ window's own mean is actually known to the configured tolerance — not just
 flat, but precise (see [Convergence defaults](../../convergence.md)'s own
 "Is the reported value actually precise enough?"). Earlier versions stopped
 this scenario after a few hundred generations, on the plateau, with a large
-D; a version in between stopped correctly on the equilibrium plateau but,
-before the precision check existed, could in principle have stopped on an
-unlucky early window there too — this example's own 30 loci turn out to make
-that a non-issue in practice (see "Expected output," below): the window's
-own noise is already small enough to satisfy the gate on the first
-attempt, at the same generation this project's own earlier, honest-by-luck
-run already reported.
+D. This run watches **D** specifically, and D turns out to be the harder of
+the two statistics to pin down here: its own evidence window grows to
+236,312 generations without quite reaching the requested precision, and the
+run ends honestly reporting the cap, not convergence — see "Expected
+output," below, for what that still says.
 
 ## Parameters
 
@@ -74,30 +72,30 @@ fim run doc/examples/dear-nolan-low/config.yaml \
     --output results/dear-nolan-low --quiet
 ```
 
-Takes about 25 minutes (close to 276,000 generations of 30 loci) and writes
-a large `trajectory.jsonl`. `results/dear-nolan-low/report.json` will match
-`report.json` in this directory exactly.
+Takes about 25 minutes (295,390 generations — the derived cap — of 30
+loci) and writes a large `trajectory.jsonl`. `results/dear-nolan-low/
+report.json` will match `report.json` in this directory exactly.
 
 ## Expected output
 
 ```json
 {
-  "converged": true,
+  "converged": false,
   "converged_on": "D",
-  "generation": 275884,
-  "G_ST": 0.8989589712186161,
-  "D": 0.036821510986254635,
-  "reason": "statistic converged",
+  "generation": 295390,
+  "G_ST": 0.9487036088409319,
+  "D": 0.06748576189094388,
+  "reason": "hit the cap",
   "window_statistics": {
     "D": {
-      "mean": 0.05396398933716157,
-      "standard_error": 0.003463426731764122,
-      "noise_adequate": true,
-      "window": 59078
+      "mean": 0.0527925006091829,
+      "standard_error": 0.010682169871340578,
+      "noise_adequate": false,
+      "window": 236312
     },
     "G_ST": {
-      "mean": 0.9728402533510954,
-      "standard_error": 0.0021692864792483544,
+      "mean": 0.9688172150934331,
+      "standard_error": 0.002533421965157816,
       "noise_adequate": true,
       "window": 59078
     }
@@ -106,23 +104,28 @@ a large `trajectory.jsonl`. `results/dear-nolan-low/report.json` will match
 ```
 
 (Abbreviated to the fields this document discusses; the real `report.json`
-in this directory has every field, every watched statistic's own
+in this directory has every field, every recorded statistic's own
 `window_statistics` entry, and full floating-point precision.)
 
-The run stopped at generation 275,884 — this project's own noise-adequacy
-gate needed almost three times as many generations as the earlier,
-convergence-by-luck-alone version to actually confirm the window's own mean,
-not only its trend, had settled. D's own trailing-window mean, 0.0540, and
-G<sub>ST</sub>'s, 0.9728, both land close to the published ensemble values,
-0.038 and 0.970 — closer than either statistic's single final-generation
-point value (0.0368, 0.8990) does, the same pattern
-`doc/examples/golden-part-vi`'s own README shows for a much noisier,
-single-locus case. `window_statistics.D.noise_adequate` and
-`window_statistics.G_ST.noise_adequate` are both `true`: at 30 loci, this
-example's own noise is already small enough that the window mean satisfies
-the requested 0.01 tolerance directly, no recalibration needed. H<sub>S</sub>
-≈ 0.001 and H<sub>T</sub> ≈ 0.03 show the same picture as the source:
-nearly every deme is fixed, and nearly all of them on the same allele.
+The run ends at the cap, generation 295,390, because **D** — the statistic
+this example actually watches — is the more stubborn of the two to pin
+down: its own evidence window grew to 236,312 generations, and its
+standard error, 0.0107, is still a little over twice the 0.005 the
+requested tolerance demands. Its window mean, **0.0528**, is nonetheless
+close to the published ensemble D ≈ 0.038, and closer than the final
+generation's own single point value, 0.0675.
+
+`window_statistics.G_ST` tells a different story, computed the same way
+(the fixed, un-grown 59,078-generation window, since only D gated this
+run's own stop decision) but already `noise_adequate: true`: G<sub>ST</sub>'s
+own mean, **0.969**, matches the published G<sub>ST</sub> ≈ 0.970 closely, and
+its own noise (`effective_sample_size` near 292, against D's 8.5 at a
+window 4x longer) is far smaller here — D and G<sub>ST</sub> are not equally
+noisy for this scenario, even though both are computed from the same
+identity matrix. H<sub>S</sub> ≈ 0.001 and H<sub>T</sub> ≈ 0.03 (also
+`noise_adequate: true` at the base window) show the same picture as the
+source: nearly every deme is fixed, and nearly all of them on the same
+allele.
 
 ## Relationship to the published calibration
 

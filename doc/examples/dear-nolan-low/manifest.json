@@ -1,26 +1,26 @@
 {
   "artifacts": {
     "report": {
-      "bytes": 1763,
-      "sha256": "ba4744d954e9d36427cd07d90cf44442a59148f731cffa812da76b36e0ca0523"
+      "bytes": 1770,
+      "sha256": "a418ba26396d4d5781dc2984b3ecba819fb1db7b07a21882b5fe5ac4b8e5006f"
     },
     "scatter": {
-      "bytes": 214127,
-      "sha256": "ee285321be4e8cc7f17019b44b4a823f5e11b934563c61481f72a19f1bf5b48a"
+      "bytes": 221657,
+      "sha256": "9c529e1a84a4982471f9760c795e170151c23f40a577c36a1e2cd47527f09bb8"
     },
     "trajectory": {
-      "bytes": 4482790856,
-      "sha256": "f57150c5c7b2ba1b2cd49024373645fb90b2071d6446dace94a3a107f865bedf"
+      "bytes": 4804262406,
+      "sha256": "de8f95eed3925e37098c5639131c4b1c3dc08f3cc2ec6e2a185936f5890937ee"
     }
   },
   "convergence": {
-    "converged": true,
-    "generation": 275884,
-    "generation_count": 275885,
-    "reason": "statistic converged",
+    "converged": false,
+    "generation": 295390,
+    "generation_count": 295391,
+    "reason": "hit the cap",
     "statistic": "D"
   },
-  "ended_at": "2026-09-27T16:50:37.484043Z",
+  "ended_at": "2026-09-28T00:34:29.829745Z",
   "engine_backend": "lineal",
   "equilibrium_final_heterozygosity": null,
   "equilibrium_generation_count": null,
@@ -182,5 +182,5 @@
   "sigma_band_multiplier": null,
   "sigma_band_window": null,
   "software_version": "1.2.0",
-  "started_at": "2026-09-27T16:30:42.973815Z"
+  "started_at": "2026-09-28T00:11:08.497590Z"
 }

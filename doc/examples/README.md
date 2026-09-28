@@ -23,12 +23,11 @@ For the Dear-Nolan high example, run the reproduction script directly:
 python3 doc/examples/dear-nolan-high/reproduce.py
 ```
 
-Dear-Nolan low takes about 25 minutes; Golden Part VI takes under a minute
-(it now honestly runs to its 10,000-generation cap — see its own README);
-Dear-Nolan high finishes in seconds on a laptop. The high-migration
-scenario's direct write-up is deliberately a lightweight 5-replicate
-reproduction of the test case rather than the full Monte Carlo sweep used
-in calibration.
+Dear-Nolan low takes about 25 minutes; Golden Part VI takes a little over
+two minutes; Dear-Nolan high finishes in seconds on a laptop. The
+high-migration scenario's direct write-up is deliberately a lightweight
+5-replicate reproduction of the test case rather than the full Monte
+Carlo sweep used in calibration.
 
 ## Examples
 
@@ -36,25 +35,26 @@ in calibration.
 
 **Jost (2008) Part VI** — the primary calibration anchor for `fim`.
 Four demes, N = 100, moderate migration (m = 0.01) and mutation
-(mu = 0.005). A single locus and replicate cannot resolve D to this
-project's own default tolerance (0.01) — this run honestly reports
-hitting the 10,000-generation cap, not convergence, with a trailing-
-window D of 0.57 ± 0.03. Published ensemble values (100 replicates,
-multi-locus engineered start): G_ST ≈ 0.176, D ≈ 0.604 — see the
-example's own README for why one run cannot reach that precision, and
-where the real, calibrated multi-locus/multi-replicate agreement lives.
+(mu = 0.005). D genuinely converges at generation 130,194, its own
+evidence window grown to 130,048 generations to confirm precision — a
+trailing-window D of 0.624 ± 0.004. G_ST is left honestly unconfirmed
+(this example watches D alone), at 0.193 from the un-grown base window.
+Published ensemble values (100 replicates, multi-locus engineered
+start): G_ST ≈ 0.176, D ≈ 0.604 — see the example's own README for why
+D reaches that precision here while G_ST does not, and where the real,
+calibrated multi-locus/multi-replicate agreement lives.
 
 ### [dear-nolan-low](dear-nolan-low/README.md)
 
 **Dear-Nolan low-migration botanical scenario** — five isolated plant
 patches, N = 100, very low migration (m = 0.0001) and negligible mutation
-(mu = 0.000001). Genuinely converges — trend flat and the window's own mean
-known to tolerance — at about 276,000 generations with the derived defaults
-(some 25 minutes): almost all demes fixed for the same allele. Its own
-trailing-window means, G_ST ≈ 0.973 and D ≈ 0.054, are close to the
-published ensemble values G_ST ≈ 0.970, D ≈ 0.038; at 30 loci this one run's
-own noise is already small enough to satisfy the tolerance directly — see
-its own README for why that is not true of every worked example here.
+(mu = 0.000001). Runs the full derived cap, 295,390 generations (about 25
+minutes): almost all demes fixed for the same allele. D — the statistic
+this example watches — is the harder of the two to pin down here, ending
+honestly at the cap with a trailing-window mean of 0.053 (published
+D ≈ 0.038); G_ST, computed the same way but not gated on, is already
+precise at 0.969 (published G_ST ≈ 0.970) — D and G_ST are not equally
+noisy for this scenario, see its own README for why.
 
 ### [dear-nolan-high](dear-nolan-high/README.md)
 
