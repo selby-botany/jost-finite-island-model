@@ -47,7 +47,7 @@
 
 const MARKER_BASE_RADIUS = 3;
 const MARKER_COUNT_SCALE = 1.6;
-const COLOR_COMMON = "#1f6fb2";
+const COLOR_COMMON = "#ff0000";
 const COLOR_RARE = "#d97a26";
 
 /* How the points are drawn (design `20260923-claude-sonnet-5-multi-graph-
