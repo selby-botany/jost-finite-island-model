@@ -1497,6 +1497,98 @@ def test_graph_zoom_sizes_are_a_function_of_the_frame_not_of_the_last_zoom(
     assert settled["final"]["paneWidth"] == fit["paneWidth"]
 
 
+def test_dragging_the_zoomed_scatter_pane_narrows_the_view(
+    fast_scalar_run_settings: Path, window: webview.Window, drive: Callable[..., Any]
+) -> None:
+    """Dragging a rectangle on the zoomed scatter pane zooms to that
+    data-space region; "Reset view" returns to the full extent.
+
+    Reported live: the zoom frame's own canvas-pixel `+`/`-`/`Fit`
+    controls make the whole plot bigger, but two points already close
+    together in *data* space stay exactly as close together at any
+    pixel size -- a botanist wanting to see what several near-origin
+    points are actually doing had no way to do it. `scatter.js`'s own
+    `wireScatterZoomInteraction` adds drag-to-zoom, scoped to the zoom
+    frame alone (`#graph-zoom-reset-view` stays hidden on every other
+    pane, `run-graph-stage.js`'s own `openGraphZoom`).
+    """
+    settled = drive(
+        window,
+        ready=_INPUT_SCREEN_READY,
+        trigger=(
+            _SET_TINY_FIELDS
+            + "document.getElementById('run-button').click(); "
+            + "const poll = () => { "
+            + "if (window.fim.getRunViewState() === 'completed' && "
+            + "window.__fimScrubberPending === 0) { "
+            + "window.fim.openGraphZoom('scatter'); "
+            + "const resetButton = "
+            + "document.getElementById('graph-zoom-reset-view'); "
+            + "const before = {"
+            + "resetHidden: resetButton.hidden, "
+            + "hasZoom: window.fim.hasScatterZoomView()"
+            + "}; "
+            + "const canvas = document.getElementById('run-canvas'); "
+            + "const box = canvas.getBoundingClientRect(); "
+            + "const at = (fx, fy) => ({"
+            + "clientX: box.left + box.width * fx, "
+            + "clientY: box.top + box.height * fy, "
+            + "bubbles: true"
+            + "}); "
+            + "canvas.dispatchEvent(new MouseEvent('mousedown', at(0.1, 0.9))); "
+            + "canvas.dispatchEvent(new MouseEvent('mousemove', at(0.4, 0.6))); "
+            + "window.dispatchEvent(new MouseEvent('mouseup', at(0.4, 0.6))); "
+            + "const dragged = {hasZoom: window.fim.hasScatterZoomView()}; "
+            + "resetButton.click(); "
+            + "const reset = {hasZoom: window.fim.hasScatterZoomView()}; "
+            + "window.__fimZoomDrag = {before, dragged, reset}; "
+            + "return; "
+            + "} "
+            + "setTimeout(poll, 50); "
+            + "}; "
+            + "setTimeout(poll, 50);"
+        ),
+        read="window.__fimZoomDrag || null",
+        is_ready=lambda value: value is not None,
+        poll_attempts=_POLL_ATTEMPTS,
+    )
+
+    assert settled["before"]["resetHidden"] is False
+    assert settled["before"]["hasZoom"] is False
+    assert settled["dragged"]["hasZoom"] is True
+    assert settled["reset"]["hasZoom"] is False
+
+
+def test_reset_view_is_hidden_for_a_non_scatter_zoomed_pane(
+    fast_scalar_run_settings: Path, window: webview.Window, drive: Callable[..., Any]
+) -> None:
+    """Drag-to-zoom is scatter-only; the trajectory pane offers no reset button."""
+    settled = drive(
+        window,
+        ready=_INPUT_SCREEN_READY,
+        trigger=(
+            _SET_TINY_FIELDS
+            + "document.getElementById('run-button').click(); "
+            + "const poll = () => { "
+            + "if (window.fim.getRunViewState() === 'completed' && "
+            + "window.__fimScrubberPending === 0) { "
+            + "window.fim.openGraphZoom('trajectory'); "
+            + "window.__fimResetHidden = "
+            + "document.getElementById('graph-zoom-reset-view').hidden; "
+            + "return; "
+            + "} "
+            + "setTimeout(poll, 50); "
+            + "}; "
+            + "setTimeout(poll, 50);"
+        ),
+        read="window.__fimResetHidden",
+        is_ready=lambda value: value is not None,
+        poll_attempts=_POLL_ATTEMPTS,
+    )
+
+    assert settled is True
+
+
 def test_deme_pair_selectors_stay_glued_to_the_scatter_axes(
     fast_scalar_run_settings: Path, window: webview.Window, drive: Callable[..., Any]
 ) -> None:

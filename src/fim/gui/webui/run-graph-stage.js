@@ -551,6 +551,9 @@ window.fim.getActiveGraph = function getActiveGraph() {
 window.fim.resetGraphStage = function resetGraphStage() {
     graphAvailability.clear();
     visibleGraphKeys = [];
+    if (typeof window.fim.resetScatterZoomView === "function") {
+        window.fim.resetScatterZoomView();
+    }
     syncRunGraphStage();
 };
 
@@ -735,6 +738,16 @@ window.fim.openGraphZoom = function openGraphZoom(requestedKey) {
     focusedGraphKey = key;
     zoomScale = 1;
     pane.classList.add("graph-zoom-pane");
+    // Drag-to-zoom (`scatter.js`'s own `wireScatterZoomInteraction`) is
+    // only wired to the scatter pane -- the one pane a botanist actually
+    // asked to zoom into a specific region, not merely a bigger canvas
+    // of ("The 'enlarge/zoom' graph feature enlarges the canvas, but not
+    // the graph itself"). Offered only there; every other pane keeps the
+    // canvas-pixel `+`/`-`/`Fit` controls alone.
+    const resetView = document.getElementById("graph-zoom-reset-view");
+    if (resetView) {
+        resetView.hidden = key !== "scatter";
+    }
 
     const graphColumn = document.createElement("div");
     graphColumn.id = "graph-zoom-graph-column";
@@ -776,6 +789,9 @@ window.fim.openGraphZoom = function openGraphZoom(requestedKey) {
 function restoreZoomedPane() {
     if (zoomedGraphKey === null) {
         return;
+    }
+    if (zoomedGraphKey === "scatter" && typeof window.fim.resetScatterZoomView === "function") {
+        window.fim.resetScatterZoomView();
     }
     const pane = runGraphPane(zoomedGraphKey);
     restoreFromZoomFrame(
@@ -898,6 +914,14 @@ window.addEventListener("load", () => {
             fit.addEventListener("click", () => {
                 zoomScale = 1;
                 applyGraphZoom();
+            });
+        }
+        const resetView = document.getElementById("graph-zoom-reset-view");
+        if (resetView) {
+            resetView.addEventListener("click", () => {
+                if (typeof window.fim.resetScatterZoomView === "function") {
+                    window.fim.resetScatterZoomView();
+                }
             });
         }
     }

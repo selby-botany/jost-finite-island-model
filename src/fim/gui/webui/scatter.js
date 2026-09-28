@@ -123,6 +123,22 @@ window.fim.getScatterStyle = function getScatterStyle() {
 // reads this to redraw after a resize without a second bridge call.
 let _currentPanel = null;
 
+// A chosen data-space sub-rectangle to show instead of the panel's own
+// full `[0, 1]` extent, or `null` for the full extent -- set by dragging
+// a selection box on the zoomed pane (`wireScatterZoomInteraction`,
+// below), cleared by `resetScatterZoomView`. Deliberately survives a
+// scrub tick or a deme-pair change: every `"frequency"` panel shares the
+// identical `[0, 1]` domain regardless of which pair or generation is
+// showing, so a chosen sub-rectangle stays geometrically meaningful
+// across either -- only an explicit reset, a zoom-frame close, or a
+// freshly opened run should lose it.
+let _zoomDomain = null;
+
+// The geometry `drawScatterCell` last computed for `runCanvas` --
+// `wireScatterZoomInteraction` inverts a drag's own pixel coordinates
+// through it to compute the data-space rectangle to zoom to.
+let _lastGeometry = null;
+
 /**
  * Point `canvas`'s drawing buffer at its current CSS layout size.
  *
@@ -196,7 +212,147 @@ window.addEventListener("load", () => {
         });
         window.fim.setGraphAvailable("scatter", true);
     }
+    if (typeof runCanvas !== "undefined" && runCanvas) {
+        wireScatterZoomInteraction(runCanvas);
+    }
 });
+
+/**
+ * Clear any chosen zoom sub-rectangle, back to the panel's own full
+ * extent. Called by the zoom frame's own "Reset view" button and, from
+ * `run-graph-stage.js`, whenever the zoom frame closes or a freshly
+ * opened run resets the whole stage -- a stale zoom rectangle chosen
+ * against one run's own points should never silently carry into
+ * another's.
+ *
+ * @returns {void}
+ */
+window.fim.resetScatterZoomView = function resetScatterZoomView() {
+    if (_zoomDomain === null) {
+        return;
+    }
+    _zoomDomain = null;
+    if (_currentPanel && typeof runCanvas !== "undefined" && runCanvas) {
+        drawScatter(runCanvas, _currentPanel);
+    }
+};
+
+/**
+ * Whether a zoom sub-rectangle is currently active -- the zoom frame's
+ * own "Reset view" button is shown only then, so it is never offered
+ * with nothing for it to do.
+ *
+ * @returns {boolean}
+ */
+window.fim.hasScatterZoomView = function hasScatterZoomView() {
+    return _zoomDomain !== null;
+};
+
+// A drag shorter than this, in either dimension, is treated as an
+// accidental or aborted click rather than a real "zoom to this
+// rectangle" gesture -- chosen well above the few pixels of jitter a
+// real click can carry, comfortably below the smallest rectangle a
+// deliberate drag would draw.
+const ZOOM_DRAG_MINIMUM_PX = 12;
+
+/**
+ * Let dragging a rectangle on the zoomed pane choose a data-space
+ * sub-rectangle to view instead of the panel's own full extent --
+ * reported live: the zoom frame's own canvas-pixel `+`/`-`/`Fit`
+ * controls (`run-graph-stage.js`) make the whole plot bigger, but a
+ * point already close to another in *data* space is exactly as close
+ * together at any pixel size, so a botanist trying to see what several
+ * near-origin points are actually doing had no way to do it.
+ *
+ * Scoped to the zoom frame alone (`.graph-zoom-pane`, added by `open
+ * GraphZoom`), checked fresh on every `mousedown`: the *inline* pane
+ * shares this exact canvas element (`moveIntoZoomFrame` relocates the
+ * real node, `run-graph-stage.js`'s own comment), and a `wheel`/drag
+ * gesture over a small inline plot is indistinguishable from an attempt
+ * to scroll the page past it -- only the enlarged, single-purpose zoom
+ * view is worth claiming the gesture on. Only meaningful for a
+ * `"frequency"` panel (`drawScatter`'s own `domainOverride` guard
+ * already excludes `"pca"`); dragging over an auto-scaled panel simply
+ * does nothing.
+ *
+ * @param {HTMLCanvasElement} canvas
+ * @returns {void}
+ */
+function wireScatterZoomInteraction(canvas) {
+    let dragStart = null;
+    canvas.addEventListener("mousedown", (event) => {
+        // `.graph-zoom-pane` (`openGraphZoom`, `run-graph-stage.js`) is
+        // set on the pane frame -- `#run-scatter-card`, an ancestor of
+        // this canvas -- not the canvas element itself.
+        if (!canvas.closest(".graph-zoom-pane") || _lastGeometry === null) {
+            return;
+        }
+        if (!_currentPanel || _currentPanel.kind === "pca") {
+            return;
+        }
+        const box = canvas.getBoundingClientRect();
+        dragStart = {
+            x: ((event.clientX - box.left) / box.width) * canvas.width,
+            y: ((event.clientY - box.top) / box.height) * canvas.height,
+        };
+    });
+    canvas.addEventListener("mousemove", (event) => {
+        if (dragStart === null) {
+            return;
+        }
+        const box = canvas.getBoundingClientRect();
+        const current = {
+            x: ((event.clientX - box.left) / box.width) * canvas.width,
+            y: ((event.clientY - box.top) / box.height) * canvas.height,
+        };
+        drawScatter(canvas, _currentPanel);
+        const context = canvas.getContext("2d");
+        context.save();
+        context.strokeStyle = "#ff0000";
+        context.fillStyle = "rgba(255, 0, 0, 0.12)";
+        context.lineWidth = 1;
+        const x = Math.min(dragStart.x, current.x);
+        const y = Math.min(dragStart.y, current.y);
+        const width = Math.abs(current.x - dragStart.x);
+        const height = Math.abs(current.y - dragStart.y);
+        context.fillRect(x, y, width, height);
+        context.strokeRect(x, y, width, height);
+        context.restore();
+    });
+    window.addEventListener("mouseup", (event) => {
+        if (dragStart === null) {
+            return;
+        }
+        const start = dragStart;
+        dragStart = null;
+        const box = canvas.getBoundingClientRect();
+        const end = {
+            x: ((event.clientX - box.left) / box.width) * canvas.width,
+            y: ((event.clientY - box.top) / box.height) * canvas.height,
+        };
+        if (
+            Math.abs(end.x - start.x) < ZOOM_DRAG_MINIMUM_PX ||
+            Math.abs(end.y - start.y) < ZOOM_DRAG_MINIMUM_PX ||
+            _lastGeometry === null
+        ) {
+            // Too small to be a deliberate drag -- redraw plainly, erasing
+            // the selection-box preview `mousemove` left on the canvas.
+            if (_currentPanel) {
+                drawScatter(canvas, _currentPanel);
+            }
+            return;
+        }
+        const { domain, originX, originY, plotSize } = _lastGeometry;
+        const toDataX = (px) => domain.xMin + ((px - originX) / plotSize) * (domain.xMax - domain.xMin);
+        const toDataY = (py) => domain.yMin + ((originY - py) / plotSize) * (domain.yMax - domain.yMin);
+        const xValues = [toDataX(start.x), toDataX(end.x)].sort((a, b) => a - b);
+        const yValues = [toDataY(start.y), toDataY(end.y)].sort((a, b) => a - b);
+        _zoomDomain = { xMin: xValues[0], xMax: xValues[1], yMin: yValues[0], yMax: yValues[1] };
+        if (_currentPanel) {
+            drawScatter(canvas, _currentPanel);
+        }
+    });
+}
 
 // The one panel always fills the whole canvas (simplify-main-plot
 // design: no small-multiples grid any more), so it gets generous room
@@ -238,7 +394,7 @@ function drawScatter(canvas, panel) {
     resizeCanvasToCssSize(canvas);
     const context = canvas.getContext("2d");
     context.clearRect(0, 0, canvas.width, canvas.height);
-    drawScatterCell(
+    _lastGeometry = drawScatterCell(
         context,
         { x: 0, y: 0, width: canvas.width, height: canvas.height },
         panel,
@@ -246,6 +402,7 @@ function drawScatter(canvas, panel) {
             padding: SINGLE_PANEL_PADDING,
             tickFontSize: SINGLE_PANEL_TICK_FONT,
             markerScale: 1,
+            domainOverride: panel.kind !== "pca" ? _zoomDomain : null,
         }
     );
     renderScatterKey(panel.kind !== "pca");
@@ -307,12 +464,18 @@ function computeDomain(points, bounded) {
  * @param {{x: number, y: number, width: number, height: number}} rect
  * @param {{x_label?: string, y_label?: string, kind?: string,
  *     points: Array<{x: number, y: number, count: number, common: boolean}>}} panel
- * @param {{padding: number, tickFontSize: number,
- *     markerScale: number}} opts
+ * @param {{padding: number, tickFontSize: number, markerScale: number,
+ *     domainOverride?: {xMin: number, xMax: number, yMin: number, yMax: number}}} opts
+ *     `domainOverride`, when given, replaces `computeDomain`'s own
+ *     result -- the zoom-drag interaction below (`applyScatterZoomView`)
+ *     is the one caller that sets it, to show a chosen sub-rectangle of
+ *     the data instead of the panel's own full, auto-fit extent.
+ * @returns {{domain: {xMin: number, xMax: number, yMin: number, yMax: number},
+ *     originX: number, originY: number, plotSize: number}}
  */
 function drawScatterCell(context, rect, panel, opts) {
     const bounded = panel.kind !== "pca";
-    const domain = computeDomain(panel.points, bounded);
+    const domain = opts.domainOverride ?? computeDomain(panel.points, bounded);
     const side = Math.min(rect.width, rect.height);
     const adaptivePadding =
         side < 520 ? Math.max(28, Math.floor(side * 0.09)) : opts.padding;
@@ -387,6 +550,12 @@ function drawScatterCell(context, rect, panel, opts) {
     if (originPile !== null) {
         drawOriginBadge(geometry, originPile);
     }
+    // Handed back so a caller driving interactive zoom/pan (below) can
+    // invert a canvas pixel back to a data coordinate without
+    // duplicating this function's own padding/domain math a second
+    // time -- the one thing about this draw a caller outside it
+    // legitimately needs to know.
+    return { domain, originX, originY, plotSize };
 }
 
 /**

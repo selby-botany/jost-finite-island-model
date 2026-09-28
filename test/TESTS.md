@@ -16830,6 +16830,40 @@ was measured off the pane itself (so every step compounded on the
 previous one). Also pinned: the table keeps its natural height
 instead of spreading its rows across a stretched box.
 
+<a id="gui.test_results_screen.test_dragging_the_zoomed_scatter_pane_narrows_the_view"></a>
+
+#### test\_dragging\_the\_zoomed\_scatter\_pane\_narrows\_the\_view
+
+```python
+def test_dragging_the_zoomed_scatter_pane_narrows_the_view(
+        fast_scalar_run_settings: Path, window: webview.Window,
+        drive: Callable[..., Any]) -> None
+```
+
+Dragging a rectangle on the zoomed scatter pane zooms to that
+data-space region; "Reset view" returns to the full extent.
+
+Reported live: the zoom frame's own canvas-pixel `+`/`-`/`Fit`
+controls make the whole plot bigger, but two points already close
+together in *data* space stay exactly as close together at any
+pixel size -- a botanist wanting to see what several near-origin
+points are actually doing had no way to do it. `scatter.js`'s own
+`wireScatterZoomInteraction` adds drag-to-zoom, scoped to the zoom
+frame alone (``graph`-zoom-reset-view` stays hidden on every other
+pane, `run-graph-stage.js`'s own `openGraphZoom`).
+
+<a id="gui.test_results_screen.test_reset_view_is_hidden_for_a_non_scatter_zoomed_pane"></a>
+
+#### test\_reset\_view\_is\_hidden\_for\_a\_non\_scatter\_zoomed\_pane
+
+```python
+def test_reset_view_is_hidden_for_a_non_scatter_zoomed_pane(
+        fast_scalar_run_settings: Path, window: webview.Window,
+        drive: Callable[..., Any]) -> None
+```
+
+Drag-to-zoom is scatter-only; the trajectory pane offers no reset button.
+
 <a id="gui.test_results_screen.test_deme_pair_selectors_stay_glued_to_the_scatter_axes"></a>
 
 #### test\_deme\_pair\_selectors\_stay\_glued\_to\_the\_scatter\_axes
