@@ -177,7 +177,20 @@ function formatParameterStripSummary(values) {
  * @param {Record<string, string>} values
  */
 function updateParameterStrip(values) {
-    const summary = formatParameterStripSummary(values);
+    writeParameterStripSlots(formatParameterStripSummary(values));
+}
+
+window.fim.updateParameterStrip = updateParameterStrip;
+
+/**
+ * Write `{N, d, m, mu}` straight into the strip's own four slots --
+ * shared by `updateParameterStrip` (above, from the live Configure
+ * form) and `updateParameterStripFromSummary` (below, from an already-
+ * displayed run's own configuration), so the two can never format the
+ * same four slots two different ways.
+ * @param {{N: string, d: string, m: string, mu: string}} summary
+ */
+function writeParameterStripSlots(summary) {
     for (const key of /** @type {const} */ (["N", "d", "m", "mu"])) {
         const slot = document.getElementById(`parameter-strip-${key}`);
         if (slot !== null) {
@@ -186,7 +199,35 @@ function updateParameterStrip(values) {
     }
 }
 
-window.fim.updateParameterStrip = updateParameterStrip;
+/**
+ * Set the parameter strip from a *displayed run's own* configuration --
+ * `Api._run_config_summary`'s own already-formatted `{N, d, m, mu}`
+ * strings, exactly as `list_recent_runs`/`compare_runs`/`open_run`/
+ * `_pooled_batch_payload` already send them.
+ *
+ * Reported live: the strip is a single, always-visible widget shared
+ * across every screen, but until this function existed it had exactly
+ * one writer (`updateParameterStrip`, above, from the live Configure
+ * form) -- so opening a *different*, already-completed run (from Home,
+ * a "Generation" re-analysis, or a batch/Study reopen) left the strip
+ * showing whatever the Configure form's own current values happened to
+ * be, not the run actually on screen (a run submitted at `d=4`, viewed
+ * while Configure's own form still read `d=20` from unrelated later
+ * edits, showed "d 20" above graphs that were plainly a 4-deme run).
+ * `run-view-completed.js`'s own `enterCompletedState` -- the one shared
+ * entry point every completed-run view (live-just-finished, reopened,
+ * re-analyzed) already funnels through -- calls this with the
+ * displayed run's own `configSummary`, and `showConfigureScreen` below
+ * calls `revalidate()` to hand the strip back to the live form the
+ * moment Configure is shown again, so neither writer's own value is
+ * ever left stale on the other's screen.
+ * @param {{N: string, d: string, m: string, mu: string}} summary
+ */
+function updateParameterStripFromSummary(summary) {
+    writeParameterStripSlots(summary);
+}
+
+window.fim.updateParameterStripFromSummary = updateParameterStripFromSummary;
 
 /**
  * Populate `configure-example-select` with this visit's own built-in
@@ -219,7 +260,13 @@ async function refreshConfigureExampleOptions() {
  */
 async function showConfigureScreen() {
     window.fim.showScreen("screen-configure");
+    // Hands the parameter strip back to the live form (`revalidate`,
+    // `config-modals.js`) -- without this, arriving here straight from
+    // a completed run's own view (`updateParameterStripFromSummary`'s
+    // own doc comment) would leave that run's configuration showing
+    // above a Configure form that no longer agrees with it.
     await Promise.all([
+        revalidate(),
         refreshConfigureExampleOptions(),
         window.fim.refreshRunStudySelectOptions(),
     ]);

@@ -1173,8 +1173,9 @@ def _home_run_row(run: recent_runs.RecentRun, *, digits: int) -> dict[str, Any]:
     hierarchy-design.md`, `selby/restricted`).
 
     Returns:
-        `{"runId", "directory", "trajectoryPath", "endedAt", "label",
-        "isBatch", "configSummary", "statistics", "name"}`.
+        `{"runId", "directoryName", "directory", "trajectoryPath",
+        "endedAt", "label", "isBatch", "configSummary", "statistics",
+        "name"}`.
         `configSummary` is `_run_config_summary`'s own `{"N", "d", "m",
         "mu", "mutation_model", "seed"}`, or `None` if `run.manifest`
         was unavailable or its own parameters no longer validate.
@@ -1213,6 +1214,13 @@ def _home_run_row(run: recent_runs.RecentRun, *, digits: int) -> dict[str, Any]:
     run_name = raw_metadata.get("name") if raw_metadata is not None else None
     return {
         "runId": run.run_id,
+        # The botanist-facing identifier: the run's own output
+        # directory name (e.g. "run-20260926-205216-570020"), not
+        # `runId` above -- that is a deterministic content hash of the
+        # configuration (`fim.engine.deterministic_run_id`'s own
+        # docstring), unrelated to the directory name and useless for
+        # finding the folder "Open output folder" would reveal.
+        "directoryName": run.directory.name,
         "directory": str(run.directory),
         "trajectoryPath": (
             None if run.is_batch else str(run.directory / "trajectory.jsonl")
@@ -3402,6 +3410,9 @@ class Api:
         return [
             {
                 "runId": run.run_id,
+                # See `_home_run_row`'s own comment: the botanist-facing
+                # name is the directory, not the content-hash `runId`.
+                "directoryName": run.directory.name,
                 "directory": str(run.directory),
                 "trajectoryPath": (
                     None if run.is_batch else str(run.directory / "trajectory.jsonl")
@@ -4159,8 +4170,8 @@ class Api:
                 established).
 
         Returns:
-            `{"ok": True, "runId", "report", "panels", "statistics",
-            "outputDirectory", "trajectoryPath", "generationCount",
+            `{"ok": True, "runId", "directoryName", "report", "panels",
+            "statistics", "outputDirectory", "trajectoryPath", "generationCount",
             "demeCount", "sigmaBand", "equilibrium",
             "identityRecovery"}` on success — `trajectoryPath` echoes
             this call's own resolved `trajectoryPath` input, so the
@@ -4218,6 +4229,8 @@ class Api:
         return {
             "ok": True,
             "runId": reanalyzed.manifest.run_id,
+            "directoryName": trajectory_path.parent.name,
+            "configSummary": _run_config_summary(reanalyzed.params),
             "report": report,
             "panels": scatter_panels(reanalyzed.state),
             "statistics": {
@@ -4505,10 +4518,11 @@ class Api:
                 rows from the recent-runs list.
 
         Returns:
-            `{"ok": True, "runs": [{"runId", "trajectoryPath", "panel",
-            "statistics", "configSummary", "generations", "histories"},
-            ...], "differingFields": [...]}` — `histories` is one
-            formatted-string array per statistic (`format_statistic`'s
+            `{"ok": True, "runs": [{"runId", "directoryName",
+            "trajectoryPath", "panel", "statistics", "configSummary",
+            "generations", "histories"}, ...], "differingFields": [...]}`
+            — `histories` is one formatted-string array per statistic
+            (`format_statistic`'s
             own display shape, matching the live run view's identical
             `onRunProgress` convention exactly, so the same client-side
             `Number(...)`/`Number.isFinite` filter handles both),
@@ -4540,6 +4554,7 @@ class Api:
             runs.append(
                 {
                     "runId": reanalyzed.manifest.run_id,
+                    "directoryName": Path(path_text).parent.name,
                     "trajectoryPath": path_text,
                     "panel": scatter_panels(reanalyzed.state)[0],
                     "statistics": {
@@ -5239,6 +5254,8 @@ def _drain_run_messages(
             result = message[1]
             payload = {
                 "runId": result.run_id,
+                "directoryName": output_directory.name,
+                "configSummary": _run_config_summary(result.params),
                 "report": result.report,
                 "panels": scatter_panels(result.final_state),
                 "statistics": {
@@ -5937,6 +5954,8 @@ def _pooled_batch_payload(
         }
     return {
         "runId": run_id,
+        "directoryName": output_directory.name,
+        "configSummary": _run_config_summary(params),
         "outputDirectory": str(output_directory),
         "panels": panels,
         "replicates": replicates,

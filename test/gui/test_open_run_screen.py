@@ -415,6 +415,137 @@ def test_double_clicking_a_recent_run_row_opens_it_directly(
     assert output.exists()
 
 
+def test_opening_a_run_updates_the_parameter_strip_to_its_own_configuration(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The always-visible parameter strip reflects the *opened* run, not
+    whatever the Configure form's own current (starter) values are.
+
+    Reported live: the strip showed the starter configuration's own
+    `d` (20) above the graphs of a just-reopened `d=2` run -- the strip
+    had exactly one writer (the live Configure form) before `Api.open_
+    run` started sending `configSummary` and `run-view-completed.js`'s
+    own `enterCompletedState` started applying it
+    (`nav-rail.js`'s own `updateParameterStripFromSummary`).
+    """
+    monkeypatch.setattr(paths_module, "results_directory", lambda: tmp_path / "results")
+    _write_run(tmp_path)
+
+    window = create_window(hidden=True)
+    outcome: queue.Queue[dict[str, Any] | None] = queue.Queue(maxsize=1)
+
+    def _drive() -> None:
+        try:
+            _poll_until(window, _INPUT_SCREEN_READY, lambda value: value is True)
+            # The starter form's own default `d`, confirmed by
+            # `test_nav_rail.py`'s own
+            # `test_parameter_strip_shows_the_starter_configuration_on_launch`
+            # -- distinct from `_write_run`'s own `d=2`, so a strip that
+            # never updated would still visibly read "20" below.
+            starter_d = _poll_until(
+                window,
+                "document.getElementById('parameter-strip-d').textContent",
+                lambda value: value is not None and value != "",
+            )
+            window.evaluate_js("window.fim.menu.openRun();")
+            _expand_all_recent_run_groups(window)
+            _poll_until(
+                window,
+                f"document.querySelectorAll({_REAL_ROW_SELECTOR}).length",
+                lambda value: value is not None and value > 0,
+            )
+            window.evaluate_js(
+                f"document.querySelector({_REAL_ROW_SELECTOR})"
+                ".dispatchEvent(new MouseEvent("
+                "'dblclick', {bubbles: true}));"
+            )
+            opened_d = _poll_until(
+                window,
+                "({"
+                "runViewState: window.fim.getRunViewState(), "
+                "d: document.getElementById('parameter-strip-d').textContent"
+                "})",
+                lambda value: (
+                    value is not None and value.get("runViewState") == "completed"
+                ),
+            )
+            outcome.put({"starterD": starter_d, **opened_d})
+        finally:
+            window.destroy()
+
+    webview.start(_drive)
+    settled = outcome.get(timeout=_DRIVE_TIMEOUT_SECONDS)
+
+    assert settled is not None
+    assert settled["starterD"] == "20"
+    assert settled["d"] == "2"
+
+
+def test_returning_to_configure_hands_the_parameter_strip_back_to_the_form(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """After opening a run, clicking back to Configure un-sticks the strip.
+
+    The other half of the fix above: without `showConfigureScreen`'s own
+    `revalidate()` call (`nav-rail.js`), the strip would stay on the
+    just-closed run's own `d` (2) forever, even back on Configure's own
+    screen, which still reads the starter form's `d` (20) -- the exact
+    same "strip does not match what is actually on screen" defect, now
+    in the opposite direction.
+    """
+    monkeypatch.setattr(paths_module, "results_directory", lambda: tmp_path / "results")
+    _write_run(tmp_path)
+
+    window = create_window(hidden=True)
+    outcome: queue.Queue[dict[str, Any] | None] = queue.Queue(maxsize=1)
+
+    def _drive() -> None:
+        try:
+            _poll_until(window, _INPUT_SCREEN_READY, lambda value: value is True)
+            window.evaluate_js("window.fim.menu.openRun();")
+            _expand_all_recent_run_groups(window)
+            _poll_until(
+                window,
+                f"document.querySelectorAll({_REAL_ROW_SELECTOR}).length",
+                lambda value: value is not None and value > 0,
+            )
+            window.evaluate_js(
+                f"document.querySelector({_REAL_ROW_SELECTOR})"
+                ".dispatchEvent(new MouseEvent("
+                "'dblclick', {bubbles: true}));"
+            )
+            _poll_until(
+                window,
+                "window.fim.getRunViewState()",
+                lambda value: value == "completed",
+            )
+            window.evaluate_js(
+                "document.querySelector("
+                "'.rail-item[data-destination=\"configure\"]').click();"
+            )
+            configure_d = _poll_until(
+                window,
+                "({"
+                "configureVisible: "
+                "!document.getElementById('screen-configure').hidden, "
+                "d: document.getElementById('parameter-strip-d').textContent"
+                "})",
+                lambda value: value is not None and value.get("configureVisible"),
+            )
+            outcome.put(configure_d)
+        finally:
+            window.destroy()
+
+    webview.start(_drive)
+    settled = outcome.get(timeout=_DRIVE_TIMEOUT_SECONDS)
+
+    assert settled is not None
+    assert settled["configureVisible"] is True
+    assert settled["d"] == "20"
+
+
 def test_double_clicking_a_batch_row_opens_its_pooled_results(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -477,7 +608,9 @@ def test_double_clicking_a_batch_row_opens_its_pooled_results(
 
     assert settled is not None, "`completed` was never reached after double-clicking"
     assert settled["runViewState"] == "completed"
-    assert settled["runId"].startswith("run-")
+    # The directory's own name, not a content-hash `runId`: the botanist-
+    # facing identifier is what "Open output folder" would reveal.
+    assert settled["runId"] == "batch-output"
     assert settled["screenOpenRunHidden"] is True
     assert settled["batchTableHidden"] is False
     # 4, not 3: `renderBatchTable` prepends a p0 baseline row (the

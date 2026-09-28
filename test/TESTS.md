@@ -13594,29 +13594,33 @@ def test_run_study_select_new_study_cancel_returns_to_no_study(
 
 Cancelling the inline "New study…" row abandons it, no Study created.
 
-<a id="gui.test_home_hierarchy_screen.test_home_shows_both_runs_of_a_repeated_configuration_but_blanks_the_repeat"></a>
+<a id="gui.test_home_hierarchy_screen.test_home_shows_both_runs_of_a_repeated_configuration_by_directory_name"></a>
 
-#### test\_home\_shows\_both\_runs\_of\_a\_repeated\_configuration\_but\_blanks\_the\_repeat
+#### test\_home\_shows\_both\_runs\_of\_a\_repeated\_configuration\_by\_directory\_name
 
 ```python
-def test_home_shows_both_runs_of_a_repeated_configuration_but_blanks_the_repeat(
+def test_home_shows_both_runs_of_a_repeated_configuration_by_directory_name(
         tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None
 ```
 
-Two runs of the identical configuration share a `run_id`; both
-still render, but only the first (newest) shows the id text.
+Two runs of the identical configuration share a `run_id`, but each
+still shows its own distinct label -- neither blanked.
 
-Reported live: a Study's own expanded view showed the same `run-
-<hash>` label twice, a run apart in time -- `run_id` is a
-deterministic hash of the configuration itself (`fim.engine.
-deterministic_run_id`), not a per-invocation random id, so two
-genuinely distinct run directories sharing an identical
-configuration also share one `run_id`. Both are real, distinct
-executions worth keeping visible (a botanist re-running the same
-configuration on purpose, say, to confirm reproducibility) -- only
-the repeated *label* is noise, so `renderGroup`'s own `showRunId`
-blanks it on the second (older) row rather than hiding the row
-outright.
+Reported live, the other direction from what this test once checked:
+a Study's own expanded view used to blank the second of two same-
+configuration runs' own id *text*, on the theory that a repeated
+`run_id` meant a repeated label. `run_id` is a deterministic hash of
+the configuration itself (`fim.engine.deterministic_run_id`), not a
+per-invocation random id, so two genuinely distinct run directories
+sharing an identical configuration always share one `run_id` -- but
+the label a botanist actually sees is the run's own *directory* name
+(`directoryName`, not `run_id` -- the botanist-facing-run-name fix),
+and no two directories share a name (`_recent_run_from_file`'s own
+`root.glob("*/manifest.json")` scan cannot produce a duplicate).
+Blanking on a shared `run_id` therefore used to hide the one thing
+this list exists to show: which folder is which. `renderGroup`'s own
+`showRunId` now compares the *displayed* label instead, so both rows
+here render their own directory name in full.
 
 <a id="gui.test_home_hierarchy_screen.test_home_select_button_toggles_the_checkbox_column"></a>
 
@@ -14861,6 +14865,43 @@ Design item 5: the same "final generation, no sweep" shortcut a
 single click plus the "Open" button already gives (the test right
 above this one), reached in one interaction instead of two --
 `open-run.js`'s own `openTrajectory`, shared by both paths.
+
+<a id="gui.test_open_run_screen.test_opening_a_run_updates_the_parameter_strip_to_its_own_configuration"></a>
+
+#### test\_opening\_a\_run\_updates\_the\_parameter\_strip\_to\_its\_own\_configuration
+
+```python
+def test_opening_a_run_updates_the_parameter_strip_to_its_own_configuration(
+        tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None
+```
+
+The always-visible parameter strip reflects the *opened* run, not
+whatever the Configure form's own current (starter) values are.
+
+Reported live: the strip showed the starter configuration's own
+`d` (20) above the graphs of a just-reopened `d=2` run -- the strip
+had exactly one writer (the live Configure form) before `Api.open_
+run` started sending `configSummary` and `run-view-completed.js`'s
+own `enterCompletedState` started applying it
+(`nav-rail.js`'s own `updateParameterStripFromSummary`).
+
+<a id="gui.test_open_run_screen.test_returning_to_configure_hands_the_parameter_strip_back_to_the_form"></a>
+
+#### test\_returning\_to\_configure\_hands\_the\_parameter\_strip\_back\_to\_the\_form
+
+```python
+def test_returning_to_configure_hands_the_parameter_strip_back_to_the_form(
+        tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None
+```
+
+After opening a run, clicking back to Configure un-sticks the strip.
+
+The other half of the fix above: without `showConfigureScreen`'s own
+`revalidate()` call (`nav-rail.js`), the strip would stay on the
+just-closed run's own `d` (2) forever, even back on Configure's own
+screen, which still reads the starter form's `d` (20) -- the exact
+same "strip does not match what is actually on screen" defect, now
+in the opposite direction.
 
 <a id="gui.test_open_run_screen.test_double_clicking_a_batch_row_opens_its_pooled_results"></a>
 

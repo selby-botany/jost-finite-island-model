@@ -2827,6 +2827,7 @@ def test_list_recent_runs_reshapes_every_recent_run_into_a_json_dict(
     assert result == [
         {
             "runId": "run-1",
+            "directoryName": "run-1",
             "directory": str(tmp_path / "run-1"),
             "trajectoryPath": str(tmp_path / "run-1" / "trajectory.jsonl"),
             "endedAt": "2026-08-22T00:00:00Z",
@@ -2835,6 +2836,7 @@ def test_list_recent_runs_reshapes_every_recent_run_into_a_json_dict(
         },
         {
             "runId": "run-2",
+            "directoryName": "run-2",
             "directory": str(tmp_path / "run-2"),
             "trajectoryPath": None,
             "endedAt": "2026-08-21T00:00:00Z",

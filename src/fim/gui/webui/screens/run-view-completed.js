@@ -2459,6 +2459,13 @@ window.fim.enterCompletedState = function enterCompletedState(payload, isBatch) 
     // remains the backstop for any future draw path that still lands
     // here hidden.
     window.fim.showScreen("screen-run");
+    // The always-visible parameter strip otherwise still reflects
+    // whatever the Configure form's own current values happen to be,
+    // not this run's own -- see `updateParameterStripFromSummary`'s own
+    // doc comment (`nav-rail.js`) for the reported defect this fixes.
+    if (payload.configSummary && window.fim.updateParameterStripFromSummary) {
+        window.fim.updateParameterStripFromSummary(payload.configSummary);
+    }
     window.fim.setCompletedOutputDirectory(payload.outputDirectory);
     // `undefined` (a batch's own payload carries no such key at all) is
     // normalized to `null` here rather than left as `undefined` -- the
@@ -2471,8 +2478,12 @@ window.fim.enterCompletedState = function enterCompletedState(payload, isBatch) 
         initialStats.hidden = true;
     }
     if (runPlotTitle) {
-        runPlotTitle.textContent = payload.runId
-            ? `FIM simulation — ${payload.runId}`
+        // `directoryName`, not `runId` (a deterministic content hash of
+        // the configuration, unrelated to the directory name): the
+        // directory is what "Open output folder" reveals, and is what a
+        // botanist actually needs to find this run on disk.
+        runPlotTitle.textContent = payload.directoryName
+            ? `FIM simulation — ${payload.directoryName}`
             : "FIM simulation — completed";
     }
     runCompleted.hidden = false;
@@ -2499,7 +2510,7 @@ window.fim.enterCompletedState = function enterCompletedState(payload, isBatch) 
     // batch-and-study-results-reopen-design.md`, `selby/restricted`,
     // §3), only to there being no *single* trajectory once it is.
     resultsReanalyzeControls.hidden = isBatch;
-    resultsRunId.textContent = payload.runId;
+    resultsRunId.textContent = payload.directoryName ?? payload.runId;
     // `wireCompletedScrubber` (scalar branch, below) fetches animation
     // frames over a real, un-awaited-by-any-caller bridge call --
     // `window.__fimScrubberPending` (see that function) is how a test

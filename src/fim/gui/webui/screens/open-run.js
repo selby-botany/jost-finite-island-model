@@ -111,7 +111,8 @@ const _RUN_TABLE_COLUMNS = [
         key: "run",
         label: "Run",
         sortable: true,
-        value: (run) => (run.name ? `${run.name} (${run.runId})` : run.runId),
+        value: (run) =>
+            run.name ? `${run.name} (${run.directoryName})` : run.directoryName,
     },
     { key: "ended", label: "Ended", sortable: true, value: (run) => run.endedAt },
     { key: "outcome", label: "Outcome", sortable: true, value: (run) => run.label ?? "" },
@@ -724,6 +725,21 @@ function buildColumnHeaderRow(studyId, nested) {
 }
 
 /**
+ * The botanist-facing label for one run's own row -- its own directory
+ * name (`directoryName`; see `Api._home_run_row`'s own comment for why
+ * this, not the deterministic-hash `runId`, is what a botanist actually
+ * needs), prefixed with a custom name when the run has one. Shared
+ * between `buildRunRow`'s own cell text and `renderGroup`'s own repeat
+ * check, so the two can never independently drift on what "the same
+ * label" means.
+ * @param {object} run
+ * @returns {string}
+ */
+function runDisplayLabel(run) {
+    return run.name ? `${run.name} (${run.directoryName})` : run.directoryName;
+}
+
+/**
  * Build one run's own `<tr>` -- factored out of `refreshRecentRuns` so
  * `renderRecentRuns` can call it once per group member on every filter/
  * collapse re-render, not only on a fresh fetch. The first cell also
@@ -732,10 +748,10 @@ function buildColumnHeaderRow(studyId, nested) {
  * Experiment hierarchy design's own §10 bulk-delete idiom and §6 "Add to
  * study…" affordance.
  * @param {object} run
- * @param {boolean} showRunId Whether to render this run's own id text
+ * @param {boolean} showRunId Whether to render this run's own label text
  *     (`false` for a run immediately following another with the
- *     identical `runId` in the same Study's own sorted list -- see
- *     `renderGroup`).
+ *     identical `runDisplayLabel` in the same Study's own sorted list --
+ *     see `renderGroup`).
  * @param {boolean} nested See `buildGroupHeaderRow`.
  * @returns {HTMLTableRowElement}
  */
@@ -747,7 +763,7 @@ function buildRunRow(run, showRunId = true, nested = false) {
     }
     const configText = formatRowConfigSummary(run.configSummary);
     const statisticsText = formatRowStatistics(run.statistics);
-    const fullRunLabel = run.name ? `${run.name} (${run.runId})` : run.runId;
+    const fullRunLabel = runDisplayLabel(run);
     const runLabel = showRunId ? fullRunLabel : "";
     for (const [value, className, isLabelCell, isRunIdCell] of [
         [runLabel, null, false, true],
@@ -761,7 +777,10 @@ function buildRunRow(run, showRunId = true, nested = false) {
             const checkbox = document.createElement("input");
             checkbox.type = "checkbox";
             checkbox.className = "open-run-select-checkbox";
-            checkbox.setAttribute("aria-label", `Select ${run.runId} for deletion`);
+            checkbox.setAttribute(
+                "aria-label",
+                `Select ${run.directoryName} for deletion`
+            );
             checkbox.checked = selectedRunDirectories.has(run.directory);
             checkbox.addEventListener("click", (event) => event.stopPropagation());
             checkbox.addEventListener("change", () => {
@@ -788,7 +807,7 @@ function buildRunRow(run, showRunId = true, nested = false) {
             toggleButton.setAttribute("aria-expanded", "false");
             toggleButton.setAttribute(
                 "aria-label",
-                `Show replicates for ${run.runId}`
+                `Show replicates for ${run.directoryName}`
             );
             toggleButton.addEventListener("click", (event) => {
                 event.stopPropagation();
@@ -1310,14 +1329,19 @@ function buildGroupHeaderRow(group, nested = false) {
  * header row directly above them (`buildColumnHeaderRow`) -- skipped
  * for a Study with nothing to show yet (`group.runs.length === 0`), so
  * "Study 2 (0 runs)" reads exactly as empty as it is, no header floating
- * over nothing. Two runs adjacent in this same sorted list that share a
- * `run_id` (`fim.engine.deterministic_run_id` is a hash of the
- * configuration, not a per-invocation random id, so re-running the
- * identical configuration genuinely produces this) render with that id
- * shown once, on the first of them -- `showRunId` blank on every run
- * whose own predecessor in this same list already showed it, making
- * plain at a glance that these are repeats of one configuration, not
- * `runCount` distinct ones.
+ * over nothing. Two runs adjacent in this same sorted list whose own
+ * *displayed* label (`directoryName`, or `name (directoryName)` --
+ * `buildRunRow`'s own `fullRunLabel`) is identical render with that
+ * label shown once, on the first of them -- `showRunId` blank on every
+ * run whose own predecessor in this same list already showed the same
+ * text, so a real, visible repeat (an intentionally reused directory
+ * name, say) does not clutter the list twice, without hiding two runs
+ * that only happen to share a `run_id` (`fim.engine.
+ * deterministic_run_id`'s own content hash of the configuration --
+ * unrelated to the directory name, and re-running an identical
+ * configuration genuinely produces this) but otherwise show distinct
+ * text, since blanking those would hide the one thing this list is for:
+ * telling two real runs apart.
  * @param {object} group
  * @param {boolean} [nested] See `buildGroupHeaderRow`.
  */
@@ -1337,11 +1361,12 @@ function renderGroup(group, nested = false) {
         recentRunsBody.appendChild(buildEmptyGroupRow("No runs yet.", nested));
     } else if (group.runs.length > 0) {
         recentRunsBody.appendChild(buildColumnHeaderRow(group.studyId, nested));
-        let previousRunId = null;
+        let previousLabel = null;
         for (const run of group.runs) {
-            const showRunId = run.runId !== previousRunId;
+            const label = runDisplayLabel(run);
+            const showRunId = label !== previousLabel;
             recentRunsBody.appendChild(buildRunRow(run, showRunId, nested));
-            previousRunId = run.runId;
+            previousLabel = label;
         }
     }
 }

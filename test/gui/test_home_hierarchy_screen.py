@@ -848,23 +848,27 @@ def test_run_study_select_new_study_cancel_returns_to_no_study(
     assert names == ["Default study"]
 
 
-def test_home_shows_both_runs_of_a_repeated_configuration_but_blanks_the_repeat(
+def test_home_shows_both_runs_of_a_repeated_configuration_by_directory_name(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """Two runs of the identical configuration share a `run_id`; both
-    still render, but only the first (newest) shows the id text.
+    """Two runs of the identical configuration share a `run_id`, but each
+    still shows its own distinct label -- neither blanked.
 
-    Reported live: a Study's own expanded view showed the same `run-
-    <hash>` label twice, a run apart in time -- `run_id` is a
-    deterministic hash of the configuration itself (`fim.engine.
-    deterministic_run_id`), not a per-invocation random id, so two
-    genuinely distinct run directories sharing an identical
-    configuration also share one `run_id`. Both are real, distinct
-    executions worth keeping visible (a botanist re-running the same
-    configuration on purpose, say, to confirm reproducibility) -- only
-    the repeated *label* is noise, so `renderGroup`'s own `showRunId`
-    blanks it on the second (older) row rather than hiding the row
-    outright.
+    Reported live, the other direction from what this test once checked:
+    a Study's own expanded view used to blank the second of two same-
+    configuration runs' own id *text*, on the theory that a repeated
+    `run_id` meant a repeated label. `run_id` is a deterministic hash of
+    the configuration itself (`fim.engine.deterministic_run_id`), not a
+    per-invocation random id, so two genuinely distinct run directories
+    sharing an identical configuration always share one `run_id` -- but
+    the label a botanist actually sees is the run's own *directory* name
+    (`directoryName`, not `run_id` -- the botanist-facing-run-name fix),
+    and no two directories share a name (`_recent_run_from_file`'s own
+    `root.glob("*/manifest.json")` scan cannot produce a duplicate).
+    Blanking on a shared `run_id` therefore used to hide the one thing
+    this list exists to show: which folder is which. `renderGroup`'s own
+    `showRunId` now compares the *displayed* label instead, so both rows
+    here render their own directory name in full.
     """
     results = tmp_path / "results"
     results.mkdir()
@@ -928,11 +932,11 @@ def test_home_shows_both_runs_of_a_repeated_configuration_but_blanks_the_repeat(
     assert older_manifest["run_id"] == newer_manifest["run_id"]
     run_id_texts = result["runIdTexts"]
     assert len(run_id_texts) == 2
-    # Newest-first: the first row shows the shared run id, the second
-    # (the older run, immediately following in the same sorted list)
-    # leaves it blank.
-    assert older_manifest["run_id"] in run_id_texts[0]
-    assert run_id_texts[1] == ""
+    # Newest-first: the first row is "run-b" (the newer directory), the
+    # second is "run-a" (the older) -- both their own real names, neither
+    # blanked, even though the two share one `run_id`.
+    assert run_id_texts[0] == "run-b"
+    assert run_id_texts[1] == "run-a"
     # Both timestamps are still on screen -- only the id text is
     # blanked, everything else about the older row (Ended, Outcome,
     # Configuration, Statistics) still renders normally.

@@ -137,7 +137,7 @@ async function refreshCompareRecentRuns() {
         }
         checkboxCell.appendChild(checkbox);
         row.appendChild(checkboxCell);
-        for (const value of [run.runId, run.endedAt, run.label]) {
+        for (const value of [run.directoryName, run.endedAt, run.label]) {
             const cell = document.createElement("td");
             cell.textContent = value;
             row.appendChild(cell);
@@ -196,7 +196,7 @@ function renderCompareLegend(runs, differingFields) {
     headerRow.appendChild(document.createElement("th"));
     for (const run of runs) {
         const th = document.createElement("th");
-        th.textContent = run.runId;
+        th.textContent = run.directoryName;
         headerRow.appendChild(th);
     }
     compareLegend.appendChild(headerRow);
@@ -230,7 +230,7 @@ function renderComparePanels(runs) {
         const cell = document.createElement("div");
         cell.className = "compare-panel";
         const heading = document.createElement("h3");
-        heading.textContent = run.runId;
+        heading.textContent = run.directoryName;
         cell.appendChild(heading);
         const canvas = document.createElement("canvas");
         cell.appendChild(canvas);
@@ -382,7 +382,7 @@ function drawCompareTrajectory(runs, statisticName) {
         swatch.style.backgroundColor = color;
         item.appendChild(swatch);
         const label = document.createElement("span");
-        label.textContent = run.runId;
+        label.textContent = run.directoryName;
         item.appendChild(label);
         compareTrajectoryLegend.appendChild(item);
     });

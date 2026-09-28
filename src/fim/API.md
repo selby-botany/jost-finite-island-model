@@ -5902,8 +5902,8 @@ reuse, not a second rendering path.
 
 **Returns**:
 
-- ``{"ok"` - True, "runId", "report", "panels", "statistics",
-  "outputDirectory", "trajectoryPath", "generationCount",
+- ``{"ok"` - True, "runId", "directoryName", "report", "panels",
+  "statistics", "outputDirectory", "trajectoryPath", "generationCount",
   "demeCount", "sigmaBand", "equilibrium",
   "identityRecovery"}` on success — `trajectoryPath` echoes
   this call's own resolved `trajectoryPath` input, so the
@@ -6086,10 +6086,11 @@ animation screen's own frame sampler already computes.
 
 **Returns**:
 
-- ``{"ok"` - True, "runs": [{"runId", "trajectoryPath", "panel",
-  "statistics", "configSummary", "generations", "histories"},
-  ...], "differingFields": [...]}` — `histories` is one
-  formatted-string array per statistic (`format_statistic`'s
+- ``{"ok"` - True, "runs": [{"runId", "directoryName",
+  "trajectoryPath", "panel", "statistics", "configSummary",
+  "generations", "histories"}, ...], "differingFields": [...]}`
+  — `histories` is one formatted-string array per statistic
+  (`format_statistic`'s
   own display shape, matching the live run view's identical
   `onRunProgress` convention exactly, so the same client-side
   `Number(...)`/`Number.isFinite` filter handles both),
