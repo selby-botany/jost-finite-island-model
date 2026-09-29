@@ -257,6 +257,11 @@ function enterRunningState(isBatch = false) {
         runPlotTitle.textContent = "FIM simulation — in progress";
     }
     runCompleted.hidden = true;
+    // `run-messages` sits beside `run-reason` at the foot of the run
+    // view, not inside `runCompleted` -- hiding that above no longer
+    // hides it for free (`run-view-initial.js`'s own `enterInitialState`
+    // has the fuller account of why).
+    runMessagesList.hidden = true;
     batchResultsTable.hidden = true;
     runResultsTable.hidden = true;
     // Both run kinds scrub live: every progress tick is retained, so

@@ -606,15 +606,6 @@
           <canvas id="results-differentiation-q-canvas"></canvas>
           <div id="results-differentiation-q-lines"></div>
         </div>
-        <!-- The run's own consolidated messages -- one bulleted line per
-             message, colored by severity (info: green, warning: yellow,
-             error: red). Populated by `run-view-completed.js`'s own
-             `renderRunMessages`, not built as static markup: a scalar
-             run's own message set varies (the convergence-window note
-             is only shown when a botanist's own run settings were
-             auto-derived; the G_ST caution note only past its own
-             within-deme-diversity threshold). -->
-        <ul id="run-messages" class="run-messages" hidden></ul>
       </div>
     </div>
     <!-- Batch `completed`-only: the replicate table, full width below
@@ -664,6 +655,23 @@
       <tbody id="run-results-table-body"></tbody>
     </table>
 
+    <!-- The completed run's own consolidated messages -- one bulleted
+         line per message, colored by severity (info: green, warning:
+         yellow, error: red). Populated by `run-view-completed.js`'s own
+         `renderRunMessages`, not built as static markup: a scalar run's
+         own message set varies (the convergence-window note is only
+         shown when a botanist's own run settings were auto-derived; the
+         G_ST caution note only past its own within-deme-diversity
+         threshold). A sibling of `run-reason`, not a `run-completed`
+         descendant (`enterCompletedState`'s own `runCompleted.hidden =
+         false` no longer reaches it) -- left aligned with the page's
+         own margin the same way `run-reason` already is, rather than
+         indented under whichever column `.run-plot-row`'s own flex
+         layout happens to place `run-completed` in (reported live: the
+         G_ST caution note once lived there, on its own, and both broke
+         that layout and read out of step with `run-reason`'s own
+         plainer, page-width position immediately below it). -->
+    <ul id="run-messages" class="run-messages" hidden></ul>
     <!-- Always present, regardless of state (design §3.1.4). -->
     <p id="run-reason" class="reason"></p>
   </section>

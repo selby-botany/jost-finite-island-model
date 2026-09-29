@@ -2589,6 +2589,15 @@ window.fim.enterCompletedState = function enterCompletedState(payload, isBatch) 
     // `string|null`, matching `completedOutputDirectory`'s identical
     // shape immediately above.
     window.fim.setCompletedTrajectoryPath(payload.trajectoryPath ?? null);
+    // Whatever Configure-time note or "Saved to <path>" confirmation
+    // `run-reason` last showed is retired the moment a run's own
+    // completed messages take over that same page position -- otherwise
+    // a stale Configure-time convergence-window note (for whichever
+    // configuration happened to be in the form then, not necessarily
+    // this run's own) could sit directly above this run's own, possibly
+    // different, `convergenceNote` line below, reading as two answers
+    // to the same question.
+    runReason.textContent = "";
     runProgress.hidden = true;
     if (initialStats) {
         initialStats.hidden = true;

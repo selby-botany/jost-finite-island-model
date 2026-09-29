@@ -463,6 +463,15 @@ function enterInitialState(renderPreview = true) {
     if (initialStats) {
         initialStats.hidden = true;
     }
+    // `run-messages` sits beside `run-reason` at the foot of the run
+    // view now, not inside `runCompleted` (that div's own comment, and
+    // `run-view-completed.js`'s own comment on this same element, have
+    // the full account) -- hiding `runCompleted` above no longer hides
+    // it for free, the identical reason `resultsStats`/
+    // `batchResultsTableEl` above already need their own line here.
+    if (typeof runMessagesList !== "undefined") {
+        runMessagesList.hidden = true;
+    }
     alleleCompositionCard.hidden = true;
     frequencySpectrumCard.hidden = true;
     ibdCard.hidden = true;

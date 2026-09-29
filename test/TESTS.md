@@ -16440,6 +16440,17 @@ re-entering `enterCompletedState` with it directly, the same
 "capture a real payload and re-drive it" pattern `test_open_run_
 screen.py`'s own reopened-run tests already establish.
 
+Also proves `run-messages` sits beside `run-reason`, not inside
+`run-completed` (a real, reported layout defect: a message area
+nested inside `run-completed`'s own `.run-plot-row` indented under
+whichever column the flex layout happened to place it in, rather
+than lining up with `run-reason`'s own page-width position), and
+that `run-reason`'s own leftover Configure-time text is cleared the
+moment a completed run's own messages take over that same spot --
+otherwise a stale note for whatever configuration happened to be on
+the Configure form would sit right above this run's own, possibly
+different, one.
+
 <a id="gui.test_results_screen.test_differently_scaled_statistics_start_off_the_trajectory_panel"></a>
 
 #### test\_differently\_scaled\_statistics\_start\_off\_the\_trajectory\_panel

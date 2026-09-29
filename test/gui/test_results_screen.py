@@ -271,6 +271,17 @@ def test_completed_run_consolidates_its_messages_into_one_area(
     re-entering `enterCompletedState` with it directly, the same
     "capture a real payload and re-drive it" pattern `test_open_run_
     screen.py`'s own reopened-run tests already establish.
+
+    Also proves `run-messages` sits beside `run-reason`, not inside
+    `run-completed` (a real, reported layout defect: a message area
+    nested inside `run-completed`'s own `.run-plot-row` indented under
+    whichever column the flex layout happened to place it in, rather
+    than lining up with `run-reason`'s own page-width position), and
+    that `run-reason`'s own leftover Configure-time text is cleared the
+    moment a completed run's own messages take over that same spot --
+    otherwise a stale note for whatever configuration happened to be on
+    the Configure form would sit right above this run's own, possibly
+    different, one.
     """
     settled = drive(
         window,
@@ -278,6 +289,8 @@ def test_completed_run_consolidates_its_messages_into_one_area(
         trigger=(
             _SET_TINY_FIELDS
             + """
+            document.getElementById('run-reason').textContent =
+                "stale note from an earlier form validation";
             const original = window.fim.enterCompletedState;
             window.fim.enterCompletedState = function (payload, isBatch) {
                 window.fim.enterCompletedState = original;
@@ -291,10 +304,15 @@ def test_completed_run_consolidates_its_messages_into_one_area(
                     ),
                 });
                 original(mutated, false);
+                const list = document.getElementById("run-messages");
+                const reason = document.getElementById("run-reason");
                 window.__fimRunMessagesResult = {
                     outcomeHidden: document.getElementById("results-outcome").hidden,
                     outcomeText: document.getElementById("results-outcome").textContent,
-                    listHidden: document.getElementById("run-messages").hidden,
+                    listHidden: list.hidden,
+                    listParentIsReasonParent:
+                        list.parentElement === reason.parentElement,
+                    reasonText: reason.textContent,
                     items: Array.from(
                         document.querySelectorAll("#run-messages .run-message")
                     ).map((item) => ({
@@ -315,6 +333,8 @@ def test_completed_run_consolidates_its_messages_into_one_area(
     assert settled["outcomeHidden"] is True
     assert settled["outcomeText"].startswith("Statistic converged: generation ")
     assert settled["listHidden"] is False
+    assert settled["listParentIsReasonParent"] is True
+    assert settled["reasonText"] == ""
     assert len(settled["items"]) == 3
     info_one, info_two, warning = settled["items"]
     assert info_one["className"] == "run-message run-message-info"

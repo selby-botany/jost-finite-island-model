@@ -563,13 +563,16 @@ textarea::placeholder {
 }
 
 /* The Run card's own consolidated message area (`run-view-completed.js`'s
- * `renderRunMessages`) -- every message the same size/shape as `.hint`
- * above, prefixed with a colored dot naming its own severity, the same
- * "swatch beside text" idiom `.scatter-key-item .scatter-key-dot`
- * already established for the scatter legend. One list, not one
- * separately positioned element per message (a G_ST caution note once
- * lived beside the statistics table on its own, reported live as
- * breaking that table's own layout) -- consolidation is the point. */
+ * `renderRunMessages`) -- every message prefixed with a colored dot
+ * naming its own severity, the same "swatch beside text" idiom
+ * `.scatter-key-item .scatter-key-dot` already established for the
+ * scatter legend. One list, not one separately positioned element per
+ * message (a G_ST caution note once lived beside the statistics table
+ * on its own, reported live as breaking that table's own layout) --
+ * consolidation is the point. Same font/color as `.reason` immediately
+ * below it in `index.html` (`run-reason`'s own note this list absorbed,
+ * design §3.1.4's "always present" note) -- both plain page-width lines
+ * at the foot of the run view, not `.hint`'s smaller size. */
 .run-messages {
     list-style: none;
     margin: 0.75rem 0 0;
@@ -583,8 +586,7 @@ textarea::placeholder {
     display: flex;
     align-items: center;
     gap: 0.5rem;
-    font-size: 0.75rem;
-    color: var(--fim-foreground);
+    color: var(--fim-muted);
 }
 
 .run-message-dot {
