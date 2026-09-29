@@ -204,7 +204,7 @@ def test_pca_projection_handles_a_single_point_without_svd() -> None:
 def test_coincident_common_and_rare_points_are_grouped_and_labeled() -> None:
     """Repeated coordinates scale markers, show counts, and retain two marker styles.
 
-    One common (ring) and one rare (filled) group -- both loci's own
+    One common (red) and one rare (orange) group -- both loci's own
     allele-0 frequency ties at 0.99 in both demes, so `_highlighted_
     indices`' `argmax` picks that coordinate as each deme's own top
     allele; allele-1's own (0.01, 0.01) coordinate is not selected.
@@ -246,10 +246,10 @@ def test_coincident_common_and_rare_points_are_grouped_and_labeled() -> None:
     rare_facecolors = rare_markers.get_facecolors()  # type: ignore[attr-defined]
     assert len(rare_facecolors) == 1 and rare_facecolors[0][3] > 0  # filled, not hollow
     common_facecolors = common_markers.get_facecolors()  # type: ignore[attr-defined]
-    # `facecolors="none"` -- the ring's own hollow center.
-    assert len(common_facecolors) == 0
+    assert len(common_facecolors) == 1
+    assert tuple(common_facecolors[0][:3]) == mcolors.to_rgb("red")
     common_edgecolors = common_markers.get_edgecolors()  # type: ignore[attr-defined]
-    assert tuple(common_edgecolors[0][:3]) == mcolors.to_rgb("tab:blue")
+    assert tuple(common_edgecolors[0][:3]) == mcolors.to_rgb("black")
     assert {text.get_text() for text in axis.texts} == {"2"}
     plt.close(figure)
 
@@ -398,7 +398,7 @@ def test_pooled_frequency_points_of_no_states_is_empty() -> None:
 def test_marker_legend_states_the_tie_breaking_rule() -> None:
     """The legend explains the tie rule, not only the two colors.
 
-    A viewer seeing one blue marker where two alleles are equally most
+    A viewer seeing one red marker where two alleles are equally most
     frequent cannot otherwise tell whether the plot chose one deliberately
     or lost the other. The rule is part of the display contract, so it
     belongs on the plot rather than only in the source.
@@ -412,7 +412,7 @@ def test_marker_legend_states_the_tie_breaking_rule() -> None:
     assert legend is not None
     labels = [text.get_text() for text in legend.get_texts()]
     assert labels == [
-        "Most frequent allele in either deme (ring; ties: first)",
+        "Most frequent allele in either deme (ties: first)",
         "Other alleles",
     ]
     plt.close(figure)

@@ -1516,13 +1516,6 @@ fieldset.composite > label {
     border: 1px solid var(--fim-foreground);
 }
 
-.scatter-key-item .scatter-key-ring {
-    width: 0.7rem;
-    height: 0.7rem;
-    border: 2px solid var(--swatch-color);
-    border-radius: 50%;
-}
-
 .scatter-key-item .scatter-key-dot {
     width: 0.7rem;
     height: 0.7rem;

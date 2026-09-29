@@ -29585,7 +29585,7 @@ def test_coincident_common_and_rare_points_are_grouped_and_labeled() -> None
 
 Repeated coordinates scale markers, show counts, and retain two marker styles.
 
-One common (ring) and one rare (filled) group -- both loci's own
+One common (red) and one rare (orange) group -- both loci's own
 allele-0 frequency ties at 0.99 in both demes, so `_highlighted_
 indices`' `argmax` picks that coordinate as each deme's own top
 allele; allele-1's own (0.01, 0.01) coordinate is not selected.
@@ -29727,7 +29727,7 @@ def test_marker_legend_states_the_tie_breaking_rule() -> None
 
 The legend explains the tie rule, not only the two colors.
 
-A viewer seeing one blue marker where two alleles are equally most
+A viewer seeing one red marker where two alleles are equally most
 frequent cannot otherwise tell whether the plot chose one deliberately
 or lost the other. The rule is part of the display contract, so it
 belongs on the plot rather than only in the source.

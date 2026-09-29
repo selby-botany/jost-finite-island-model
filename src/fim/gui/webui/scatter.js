@@ -16,11 +16,9 @@
  * pdf` Figs. 1-2) uses (design §0.5), now including that same
  * reference's own `0.0`-`1.0` probability-scale tick marks on both axes
  * for a genuine deme-frequency panel. The most frequent allele in
- * either displayed deme draws as a hollow `tab:blue` ring, not merely a
- * differently colored disc: color alone distinguishing "most frequent"
- * from "other" was itself once a reported defect (§11.4's own "color is
- * never the only channel" principle) -- other alleles stay ordinary
- * filled `tab:orange` dots.
+ * either displayed deme draws as a solid, bright-red dot, the same size
+ * and shape as any other point -- other alleles stay ordinary filled
+ * `tab:orange` dots.
  *
  * `panel.kind` (`fim.viz.scatter._panel`'s own field) decides the axis
  * domain: `"frequency"` (the default, and the only `kind` the run view
@@ -600,18 +598,11 @@ function drawPoint(geometry, point, style, marks) {
     }
     context.beginPath();
     context.arc(cx, cy, radius, 0, 2 * Math.PI);
-    if (point.common && !marks.fixed) {
-        // A hollow ring, not merely a differently colored disc
-        // (`fim.viz.scatter`'s own `_scatter_on_axis` docstring):
-        // color is never the only channel distinguishing "most
-        // frequent" from "other" here.
-        context.lineWidth = Math.max(2, radius * 0.35);
-        context.strokeStyle = COLOR_COMMON;
-        context.globalAlpha = 0.9;
-        context.stroke();
-        context.globalAlpha = 1;
-    } else if (marks.fixed || marks.dots) {
-        if (marks.dots) {
+    if (marks.fixed || marks.dots || point.common) {
+        if (point.common) {
+            context.fillStyle = COLOR_COMMON;
+            context.globalAlpha = 1;
+        } else if (marks.dots) {
             context.fillStyle = COLOR_RARE;
             context.globalAlpha = 1 - Math.pow(1 - DOTS_BASE_ALPHA, point.count);
         } else {
@@ -623,15 +614,6 @@ function drawPoint(geometry, point, style, marks) {
         context.strokeStyle = "#1a1a1a";
         context.lineWidth = 0.6;
         context.stroke();
-        if (point.common) {
-            // The most frequent allele keeps its ring (a second, outer
-            // outline) so "most frequent" is still not colour alone.
-            context.beginPath();
-            context.arc(cx, cy, radius + 2, 0, 2 * Math.PI);
-            context.lineWidth = 2;
-            context.strokeStyle = COLOR_COMMON;
-            context.stroke();
-        }
     } else {
         context.fillStyle = COLOR_RARE;
         context.globalAlpha = 0.75;
@@ -789,10 +771,10 @@ function renderScatterKey(bounded) {
         key.appendChild(item);
     };
     add(
-        "scatter-key-ring",
+        "scatter-key-dot",
         "Most frequent",
         COLOR_COMMON,
-        "Most frequent allele in either deme (ring; ties: first)"
+        "Most frequent allele in either deme (ties: first)"
     );
     if (markPointsFor(_scatterStyle, true).ramp) {
         const label = document.createElement("span");

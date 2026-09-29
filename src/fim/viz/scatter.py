@@ -594,9 +594,9 @@ def _plot_three_dimensional(points: FloatArray) -> Figure:
     highlighted = _highlighted_indices(points[:, 0], points[:, 1], points[:, 2])
     rare = [index for index in range(len(points)) if index not in highlighted]
     common = [index for index in range(len(points)) if index in highlighted]
-    # Two calls, one marker shape each -- matching `_scatter_on_axis`'s
-    # own reasoning (this module's own docstring on why a hollow ring,
-    # not merely a second color, marks the common points).
+    # Two calls, one color each -- matching `_scatter_on_axis`'s own
+    # reasoning (this module's own docstring on the solid red disc that
+    # marks the common points).
     if rare:
         axis.scatter(
             points[rare, 0],
@@ -610,9 +610,7 @@ def _plot_three_dimensional(points: FloatArray) -> Figure:
             points[common, 0],
             points[common, 1],
             points[common, 2],
-            facecolors="none",
-            edgecolors="tab:blue",
-            linewidths=2.0,
+            c="red",
         )
     axis.set_xlabel("Deme 1")
     axis.set_ylabel("Deme 2")
@@ -644,12 +642,10 @@ def _scatter_on_axis(
 ) -> None:
     """Render grouped points, coincidence labels, and optional diagonal.
 
-    Common (most-frequent-per-deme) points render as a hollow ring, not
-    merely a differently colored disc: two separate `axis.scatter` calls
-    -- matplotlib has no per-point marker-*style* argument, only per-
-    point color/size -- since design principle 5.4/§11.4 (botanist GUI
-    redesign doc `20260907-claude-sonnet-5-botanist-gui-redesign.md`)
-    requires color never be the only channel distinguishing two states.
+    Common (most-frequent-per-deme) points render as a solid red disc,
+    the same size and shape as any other point -- two separate `axis.
+    scatter` calls all the same, since matplotlib has no per-point
+    color argument that also lets one subset opt out of `alpha`.
     `marker_groups`'s own `colors` list is reused to decide which rows
     go in which call (`"tab:blue"` means common — `grouped_points`'s own
     literal, checked by value rather than threading a second boolean
@@ -684,9 +680,9 @@ def _scatter_on_axis(
             unique[common, 0],
             unique[common, 1],
             s=sizes[common],
-            facecolors="none",
-            edgecolors="tab:blue",
-            linewidths=2.0,
+            c="red",
+            edgecolors="black",
+            linewidths=0.4,
             clip_on=False,
         )
     for point, label in zip(unique, labels, strict=True):
@@ -708,17 +704,14 @@ def _add_marker_legend(axis: Axes) -> None:
     """Add the shared explanation for the scatter-marker shapes.
 
     The tie rule is stated in the legend itself rather than only in this
-    module's docstrings: a viewer looking at one ring marker where two
+    module's docstrings: a viewer looking at one red marker where two
     alleles are equally most frequent can otherwise only guess whether the
     plot is picking one deliberately or has lost the other.
 
-    A `Line2D` handle for the ring entry, not a `Patch` like the plain
-    "Other alleles" swatch below it -- `Patch` has no hollow-marker
-    shape of its own; `Line2D`'s own `marker`/`markerfacecolor`/
-    `markeredgecolor` is the standard matplotlib idiom for a legend
-    swatch that is not simply a filled color block, matching what
-    `_scatter_on_axis`/`_plot_three_dimensional` actually draw for a
-    common point.
+    A `Line2D` handle for the most-frequent entry, not a `Patch` like
+    the plain "Other alleles" swatch below it, so its edge color can be
+    set independently of its fill -- matching what `_scatter_on_axis`/
+    `_plot_three_dimensional` actually draw for a common point.
 
     Worded identically to `drawMarkerLegend` in `webui/scatter.js`, so the
     saved `scatter.png` and the on-screen plot explain themselves the same
@@ -734,13 +727,13 @@ def _add_marker_legend(axis: Axes) -> None:
 
 
 def _marker_legend_handles() -> list[Artist]:
-    """Return the ring and swatch handles shared by every marker legend.
+    """Return the dot and swatch handles shared by every marker legend.
 
     Args:
         None
 
     Returns:
-        The legend handles, ring entry first.
+        The legend handles, most-frequent entry first.
     """
     return [
         Line2D(
@@ -748,11 +741,11 @@ def _marker_legend_handles() -> list[Artist]:
             [],
             marker="o",
             linestyle="None",
-            markerfacecolor="none",
-            markeredgecolor="tab:blue",
-            markeredgewidth=2,
+            markerfacecolor="red",
+            markeredgecolor="black",
+            markeredgewidth=0.4,
             markersize=9,
-            label="Most frequent allele in either deme (ring; ties: first)",
+            label="Most frequent allele in either deme (ties: first)",
         ),
         Patch(color="tab:orange", label="Other alleles"),
     ]
