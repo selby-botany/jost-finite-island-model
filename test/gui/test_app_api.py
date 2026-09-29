@@ -3532,6 +3532,31 @@ def test_open_run_echoes_the_trajectory_path_it_was_given(tmp_path: Path) -> Non
     assert result["trajectoryPath"] == trajectory_path
 
 
+def test_open_run_carries_the_derived_convergence_note(tmp_path: Path) -> None:
+    """`open_run`'s own payload carries `convergenceNote` (the Run card's
+    own consolidated message area, `webui/screens/run-view-completed.js`'s
+    `renderRunMessages`).
+
+    `_write_run`'s own config gives `convergence_window`/`max_generations`
+    explicitly, so `app_module._derived_convergence_note` -- the identical
+    function computing this same key for a live run's own "done" payload
+    (`_drain_run_messages`) and a batch's own (`_pooled_batch_payload`) --
+    returns `""` here; `test_validate_form_has_no_note_when_window_and_
+    cap_are_explicit` already covers that same "both given explicitly"
+    case directly, and `test/convergence/test_defaults.py` already covers
+    `describe_derived_convergence`'s own non-empty sentence. What only
+    this test proves: `open_run`'s payload actually carries the key this
+    function computes, not a stale or hardcoded value.
+    """
+    output = _write_run(tmp_path)
+    trajectory_path = str(output / "trajectory.jsonl")
+
+    result = Api().open_run({"trajectoryPath": trajectory_path})
+
+    assert result["ok"] is True
+    assert result["convergenceNote"] == ""
+
+
 def test_open_run_carries_the_real_identity_recovery_reference(tmp_path: Path) -> None:
     """A reopened run's own `identityRecovery` matches Whitlock's formulas directly.
 

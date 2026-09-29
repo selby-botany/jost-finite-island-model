@@ -577,15 +577,6 @@
             <tr id="stat-Ne_T"></tr>
           </tbody>
         </table>
-        <!-- Shown only once this run's own H_S crosses the threshold
-             where G_ST's own ratio-of-heterozygosities construction can
-             under-report real differentiation (`Api._effective_
-             allele_summary`'s own `gStCaution` flag). -->
-        <p class="hint" id="g-st-caution-note" hidden>
-          G<sub>ST</sub> is compressed toward zero when within-deme
-          diversity is this high, even between demes that share no
-          alleles at all — Jost's D does not have this artifact.
-        </p>
         <!-- Batch `completed`-only: `renderBatchSummary` rebuilds this
              table's rows from scratch on every render (unlike the two
              slot-based tables above), so only the `<tbody>` needs to
@@ -606,11 +597,24 @@
              in completed state; this element is kept for test compatibility
              but not displayed. -->
         <p id="results-run-id" class="results-run-id" hidden></p>
-        <p id="results-outcome" class="results-outcome"></p>
+        <!-- `results-outcome`'s own text (kept for test compatibility,
+             not displayed) is not repeated here -- this element is the
+             new "kept for test compatibility but not displayed"
+             sibling of `results-run-id`, above. -->
+        <p id="results-outcome" class="results-outcome" hidden></p>
         <div id="results-differentiation-q" hidden>
           <canvas id="results-differentiation-q-canvas"></canvas>
           <div id="results-differentiation-q-lines"></div>
         </div>
+        <!-- The run's own consolidated messages -- one bulleted line per
+             message, colored by severity (info: green, warning: yellow,
+             error: red). Populated by `run-view-completed.js`'s own
+             `renderRunMessages`, not built as static markup: a scalar
+             run's own message set varies (the convergence-window note
+             is only shown when a botanist's own run settings were
+             auto-derived; the G_ST caution note only past its own
+             within-deme-diversity threshold). -->
+        <ul id="run-messages" class="run-messages" hidden></ul>
       </div>
     </div>
     <!-- Batch `completed`-only: the replicate table, full width below

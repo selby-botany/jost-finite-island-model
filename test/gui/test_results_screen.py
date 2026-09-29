@@ -249,6 +249,84 @@ def test_a_completed_run_renders_the_run_view(
     assert settled["resultsHistoryForwardHidden"] is False
 
 
+def test_completed_run_consolidates_its_messages_into_one_area(
+    fast_scalar_run_settings: Path, window: webview.Window, drive: Callable[..., Any]
+) -> None:
+    """A completed run's own info/warning lines show in one bulleted list.
+
+    Reported live: the derived-convergence-settings note and the G_ST
+    caution note used to live in two different places on the page --
+    the caution note specifically beside the statistics table, breaking
+    that table's own layout. `enterCompletedState` now builds one
+    `#run-messages` list instead: `resultsOutcome`'s own text (kept
+    live for test compatibility, `hidden`) becomes the list's own first
+    info line; a truthy `convergenceNote` (`_drain_run_messages`'s own
+    payload key) becomes a second; a truthy `effectiveAlleles.
+    gStCaution` becomes a warning, appended by `renderEffectiveAlleles`.
+
+    `fast_scalar_run_settings`'s own convergence settings are given
+    explicitly (not auto-derived), so its real "done" payload carries
+    `convergenceNote: ""` -- both the note and the G_ST caution are
+    exercised here by mutating a captured real payload before
+    re-entering `enterCompletedState` with it directly, the same
+    "capture a real payload and re-drive it" pattern `test_open_run_
+    screen.py`'s own reopened-run tests already establish.
+    """
+    settled = drive(
+        window,
+        ready=_INPUT_SCREEN_READY,
+        trigger=(
+            _SET_TINY_FIELDS
+            + """
+            const original = window.fim.enterCompletedState;
+            window.fim.enterCompletedState = function (payload, isBatch) {
+                window.fim.enterCompletedState = original;
+                original(payload, isBatch);
+                const mutated = Object.assign({}, payload, {
+                    convergenceNote: "Convergence: window 4 generations, " +
+                        "cap 10 (derived; this model needs about 1 " +
+                        "generations to forget its starting state)",
+                    effectiveAlleles: Object.assign(
+                        {}, payload.effectiveAlleles, {gStCaution: true}
+                    ),
+                });
+                original(mutated, false);
+                window.__fimRunMessagesResult = {
+                    outcomeHidden: document.getElementById("results-outcome").hidden,
+                    outcomeText: document.getElementById("results-outcome").textContent,
+                    listHidden: document.getElementById("run-messages").hidden,
+                    items: Array.from(
+                        document.querySelectorAll("#run-messages .run-message")
+                    ).map((item) => ({
+                        className: item.className,
+                        hasDot: item.querySelector(".run-message-dot") !== null,
+                        text: item.textContent,
+                    })),
+                };
+            };
+            document.getElementById('run-button').click();
+            """
+        ),
+        read="window.__fimRunMessagesResult || null",
+        is_ready=lambda value: value is not None,
+        poll_attempts=_POLL_ATTEMPTS,
+    )
+
+    assert settled["outcomeHidden"] is True
+    assert settled["outcomeText"].startswith("Statistic converged: generation ")
+    assert settled["listHidden"] is False
+    assert len(settled["items"]) == 3
+    info_one, info_two, warning = settled["items"]
+    assert info_one["className"] == "run-message run-message-info"
+    assert info_one["hasDot"] is True
+    assert info_one["text"] == settled["outcomeText"]
+    assert info_two["className"] == "run-message run-message-info"
+    assert info_two["text"].startswith("Convergence: window ")
+    assert warning["className"] == "run-message run-message-warning"
+    assert "within-deme diversity" in warning["text"]
+    assert "Jost's D does not have this artifact" in warning["text"]
+
+
 def test_differently_scaled_statistics_start_off_the_trajectory_panel(
     fast_scalar_run_settings: Path, window: webview.Window, drive: Callable[..., Any]
 ) -> None:

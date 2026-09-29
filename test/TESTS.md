@@ -9895,6 +9895,29 @@ separately -- `_drain_run_messages`'s own `"done"` payload carries
 the identical key for a live-just-finished run
 (`test_running_screen.py`'s own coverage for that half).
 
+<a id="gui.test_app_api.test_open_run_carries_the_derived_convergence_note"></a>
+
+#### test\_open\_run\_carries\_the\_derived\_convergence\_note
+
+```python
+def test_open_run_carries_the_derived_convergence_note(tmp_path: Path) -> None
+```
+
+`open_run`'s own payload carries `convergenceNote` (the Run card's
+own consolidated message area, `webui/screens/run-view-completed.js`'s
+`renderRunMessages`).
+
+`_write_run`'s own config gives `convergence_window`/`max_generations`
+explicitly, so `app_module._derived_convergence_note` -- the identical
+function computing this same key for a live run's own "done" payload
+(`_drain_run_messages`) and a batch's own (`_pooled_batch_payload`) --
+returns `""` here; `test_validate_form_has_no_note_when_window_and_
+cap_are_explicit` already covers that same "both given explicitly"
+case directly, and `test/convergence/test_defaults.py` already covers
+`describe_derived_convergence`'s own non-empty sentence. What only
+this test proves: `open_run`'s payload actually carries the key this
+function computes, not a stale or hardcoded value.
+
 <a id="gui.test_app_api.test_open_run_carries_the_real_identity_recovery_reference"></a>
 
 #### test\_open\_run\_carries\_the\_real\_identity\_recovery\_reference
@@ -16386,6 +16409,36 @@ def test_a_completed_run_renders_the_run_view(
 ```
 
 A finished run shows its run id, outcome, all six statistics, and a scatter.
+
+<a id="gui.test_results_screen.test_completed_run_consolidates_its_messages_into_one_area"></a>
+
+#### test\_completed\_run\_consolidates\_its\_messages\_into\_one\_area
+
+```python
+def test_completed_run_consolidates_its_messages_into_one_area(
+        fast_scalar_run_settings: Path, window: webview.Window,
+        drive: Callable[..., Any]) -> None
+```
+
+A completed run's own info/warning lines show in one bulleted list.
+
+Reported live: the derived-convergence-settings note and the G_ST
+caution note used to live in two different places on the page --
+the caution note specifically beside the statistics table, breaking
+that table's own layout. `enterCompletedState` now builds one
+``run`-messages` list instead: `resultsOutcome`'s own text (kept
+live for test compatibility, `hidden`) becomes the list's own first
+info line; a truthy `convergenceNote` (`_drain_run_messages`'s own
+payload key) becomes a second; a truthy `effectiveAlleles.
+gStCaution` becomes a warning, appended by `renderEffectiveAlleles`.
+
+`fast_scalar_run_settings`'s own convergence settings are given
+explicitly (not auto-derived), so its real "done" payload carries
+`convergenceNote: ""` -- both the note and the G_ST caution are
+exercised here by mutating a captured real payload before
+re-entering `enterCompletedState` with it directly, the same
+"capture a real payload and re-drive it" pattern `test_open_run_
+screen.py`'s own reopened-run tests already establish.
 
 <a id="gui.test_results_screen.test_differently_scaled_statistics_start_off_the_trajectory_panel"></a>
 

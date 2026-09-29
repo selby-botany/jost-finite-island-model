@@ -75,6 +75,70 @@ const EFFECTIVE_ALLELE_LABELS = [
     ],
 ];
 
+// Shown only once this run's own H_S crosses the threshold where G_ST's
+// own ratio-of-heterozygosities construction can under-report real
+// differentiation (`Api._effective_allele_summary`'s own `gStCaution`
+// flag) -- one entry among `renderRunMessages`'s own consolidated list,
+// not a separately positioned element beside the statistics table
+// (reported live: that older placement broke the table's own layout).
+const G_ST_CAUTION_TEXT =
+    "Gₓₛₜ is compressed toward zero when within-deme diversity " +
+    "is this high, even between demes that share no alleles at all " +
+    "— Jost's D does not have this artifact.";
+
+// The two "always present" info lines (design: the run's own outcome,
+// and the derived-convergence-settings note when the window/cap were
+// auto-derived) -- set once per `enterCompletedState` call, then carried
+// through every later `renderRunMessages` call (a scrub tick, an
+// effective-allele re-render) so a transient warning's own comings and
+// goings never drop them. Empty for whichever state has not populated
+// them yet.
+let baseRunMessages = [];
+
+/**
+ * Replace `baseRunMessages` -- the "always present" info lines a later
+ * `renderRunMessages` call folds in automatically.
+ * @param {Array<{severity: "info"|"warning"|"error", text: string}>} messages
+ */
+function setBaseRunMessages(messages) {
+    baseRunMessages = messages;
+}
+
+/**
+ * Rebuild the Run card's own consolidated message area from
+ * `baseRunMessages` plus whatever this call adds -- one bulleted `<li>`
+ * per message, colored by `severity` (`.run-message-info`/`-warning`/
+ * `-error`, `app.css`). Replaces every message-related element this
+ * page used to position independently (the G_ST caution note beside the
+ * statistics table, chiefly) with the one list a botanist reads in one
+ * place.
+ * @param {Array<{severity: "info"|"warning"|"error", text: string}>} [extraMessages]
+ */
+// One literal class string per severity -- not a template literal
+// (`` `run-message run-message-${severity}` ``) interpolating `severity`
+// into the class name, which `dev/bin/check-webui-assets`'s own static
+// scan cannot resolve against the real, separately-defined `app.css`
+// rules it names.
+const RUN_MESSAGE_CLASSES = {
+    info: "run-message run-message-info",
+    warning: "run-message run-message-warning",
+    error: "run-message run-message-error",
+};
+
+function renderRunMessages(extraMessages = []) {
+    const messages = [...baseRunMessages, ...extraMessages];
+    runMessagesList.replaceChildren();
+    runMessagesList.hidden = messages.length === 0;
+    for (const { severity, text } of messages) {
+        const item = document.createElement("li");
+        item.className = RUN_MESSAGE_CLASSES[severity];
+        const dot = document.createElement("span");
+        dot.className = "run-message-dot";
+        item.append(dot, text);
+        runMessagesList.appendChild(item);
+    }
+}
+
 // A fixed, colorblind-safe qualitative palette (Okabe-Ito), one color
 // per named statistic — botanist GUI design doc §11.3's own "disciplined
 // statistic color language" is not otherwise built yet; this is a
@@ -191,7 +255,7 @@ const resultsDifferentiationQCanvas = document.getElementById(
 const resultsDifferentiationQLines = document.getElementById(
     "results-differentiation-q-lines"
 );
-const gStCautionNote = document.getElementById("g-st-caution-note");
+const runMessagesList = document.getElementById("run-messages");
 // `batchResultsTableEl` is the `<table>` whose own `hidden` attribute
 // gates visibility; `batchResultsSummary` is its `<tbody>`, where
 // `renderBatchSummary` rebuilds rows -- kept as two names rather than
@@ -565,7 +629,7 @@ function renderEffectiveAlleles(effectiveAlleles) {
     if (!effectiveAlleles) {
         neSRow.replaceChildren();
         neTRow.replaceChildren();
-        gStCautionNote.hidden = true;
+        renderRunMessages();
         return;
     }
     const [
@@ -580,7 +644,9 @@ function renderEffectiveAlleles(effectiveAlleles) {
         neTRow,
         buildPointMeter(totalLabel, effectiveAlleles[totalKey], totalDescription)
     );
-    gStCautionNote.hidden = !effectiveAlleles.gStCaution;
+    renderRunMessages(
+        effectiveAlleles.gStCaution ? [{ severity: "warning", text: G_ST_CAUTION_TEXT }] : []
+    );
 }
 
 /**
@@ -1830,7 +1896,9 @@ function renderBatchSummary(summary, effectiveAlleles) {
         applyStatRow(row, cells);
         batchResultsSummary.appendChild(row);
     }
-    gStCautionNote.hidden = !effectiveRows.gStCaution;
+    renderRunMessages(
+        effectiveRows.gStCaution ? [{ severity: "warning", text: G_ST_CAUTION_TEXT }] : []
+    );
 }
 
 /**
@@ -2207,7 +2275,7 @@ function updateScrubbedTrajectory(frameGeneration, isFinalFrame) {
                 : buildOmittedMeter(label, OMITTED_SCRUB_TEXT, description);
         applyStatRow(document.getElementById(rowId), cells);
     }
-    gStCautionNote.hidden = true;
+    renderRunMessages();
     renderTrajectory(
         completedTrajectoryGenerations,
         completedTrajectoryHistories,
@@ -2299,7 +2367,7 @@ function updateScrubbedBatchSummary(frameGeneration, isFinalFrame) {
         applyStatRow(row, buildOmittedMeter(label, OMITTED_SCRUB_TEXT, description));
         batchResultsSummary.appendChild(row);
     }
-    gStCautionNote.hidden = true;
+    renderRunMessages();
 }
 
 /**
@@ -2572,11 +2640,17 @@ window.fim.enterCompletedState = function enterCompletedState(payload, isBatch) 
         // -- shown here, the one line this view always clears for an
         // ordinary batch anyway, rather than a second, dedicated note
         // area built just for this one field.
+        resultsOutcome.hidden = false;
         resultsOutcome.textContent = payload.parameterMismatches
             ? `Pooled anyway — varies across members: ${Object.keys(
                   payload.parameterMismatches
               ).join(", ")}`
             : "";
+        setBaseRunMessages(
+            payload.convergenceNote
+                ? [{ severity: "info", text: payload.convergenceNote }]
+                : []
+        );
         renderBatchSummary(payload.summary, payload.effectiveAlleles);
         renderBatchTable(payload.replicates, payload.p0Statistics);
         // A batch's own completed scrubber replays the pooled scatter
@@ -2610,7 +2684,20 @@ window.fim.enterCompletedState = function enterCompletedState(payload, isBatch) 
     } else {
         const report = payload.report;
         const reason = report.reason.charAt(0).toUpperCase() + report.reason.slice(1);
+        // Kept updated for test compatibility (`results-outcome`'s own
+        // textContent), but not shown directly -- the identical text is
+        // this state's own first `run-messages` info line instead
+        // (`setBaseRunMessages`, below), consolidated with the derived-
+        // convergence-settings note rather than living in two places at
+        // once.
+        resultsOutcome.hidden = true;
         resultsOutcome.textContent = `${reason}: generation ${report.generation}`;
+        setBaseRunMessages([
+            { severity: "info", text: resultsOutcome.textContent },
+            ...(payload.convergenceNote
+                ? [{ severity: "info", text: payload.convergenceNote }]
+                : []),
+        ]);
         completedReportReason = reason;
         // Set before the row loop just below reads it (`windowStatistics
         // Description`), not after -- the two used to run in the other

@@ -5946,27 +5946,28 @@ reuse, not a second rendering path.
 - `values` - `{"trajectoryPath": "...", "generationMode":
   "final"|"choose", "generation": "...", "differentiation
 - `Orders"` - "..."}` — `webui/screens/open-run.js`'s own
-  form fields, mirroring the Tk-era `OpenRunScreen`'s
-  `_parse_generation`/`_parse_differentiation_orders`
-  (ported here as module-level functions, the same
-  presentation-adjacent-but-toolkit-independent shape
-  `_reveal_in_file_browser`/`_parse_max_workers` already
-  established).
+  "Open" button always sends `{"trajectoryPath": "..."}`
+  alone (final generation, no sweep); `generationMode`/
+  `generation`/`differentiationOrders` remain supported
+  here for any other caller that wants a specific
+  generation or a q-sweep, mirroring the Tk-era
+  `OpenRunScreen`'s `_parse_generation`/`_parse_
+  differentiation_orders` (ported here as module-level
+  functions, the same presentation-adjacent-but-toolkit-
+  independent shape `_reveal_in_file_browser`/`_parse_
+  max_workers` already established).
 
 
 **Returns**:
 
-- ``{"ok"` - True, "runId", "directoryName", "report", "panels",
-  "statistics", "outputDirectory", "trajectoryPath", "generationCount",
-  "demeCount", "sigmaBand", "equilibrium",
-  "identityRecovery"}` on success — `trajectoryPath` echoes
-  this call's own resolved `trajectoryPath` input, so the
-  Results card's own re-analysis controls (item 6) can re-
-  issue this same call with a different `generation`/
-  `differentiationOrders` against whichever run is currently
-  showing, reopened or live-just-finished (`_drain_run_
-  messages`'s own `"done"` payload carries the identical key
-  for that second case); `sigmaBand` is `_sigma_band_payload`'s
+- ``{"ok"` - True, "runId", "directoryName", "convergenceNote",
+  "report", "panels", "statistics", "outputDirectory",
+  "trajectoryPath", "generationCount", "demeCount", "sigmaBand",
+  "equilibrium", "identityRecovery"}` on success —
+  `trajectoryPath` echoes this call's own resolved
+  `trajectoryPath` input, matching the identical key
+  `_drain_run_messages`'s own `"done"` payload carries for a
+  live-just-finished run; `sigmaBand` is `_sigma_band_payload`'s
   own result (sigma-band GUI design doc `20260910-claude-
   sonnet-5-gui-sigma-band-design.md`, `selby/restricted`,
   slice 4), `None` for a run that never requested one;

@@ -4217,25 +4217,26 @@ class Api:
             values: `{"trajectoryPath": "...", "generationMode":
                 "final"|"choose", "generation": "...", "differentiation
                 Orders": "..."}` — `webui/screens/open-run.js`'s own
-                form fields, mirroring the Tk-era `OpenRunScreen`'s
-                `_parse_generation`/`_parse_differentiation_orders`
-                (ported here as module-level functions, the same
-                presentation-adjacent-but-toolkit-independent shape
-                `_reveal_in_file_browser`/`_parse_max_workers` already
-                established).
+                "Open" button always sends `{"trajectoryPath": "..."}`
+                alone (final generation, no sweep); `generationMode`/
+                `generation`/`differentiationOrders` remain supported
+                here for any other caller that wants a specific
+                generation or a q-sweep, mirroring the Tk-era
+                `OpenRunScreen`'s `_parse_generation`/`_parse_
+                differentiation_orders` (ported here as module-level
+                functions, the same presentation-adjacent-but-toolkit-
+                independent shape `_reveal_in_file_browser`/`_parse_
+                max_workers` already established).
 
         Returns:
-            `{"ok": True, "runId", "directoryName", "report", "panels",
-            "statistics", "outputDirectory", "trajectoryPath", "generationCount",
-            "demeCount", "sigmaBand", "equilibrium",
-            "identityRecovery"}` on success — `trajectoryPath` echoes
-            this call's own resolved `trajectoryPath` input, so the
-            Results card's own re-analysis controls (item 6) can re-
-            issue this same call with a different `generation`/
-            `differentiationOrders` against whichever run is currently
-            showing, reopened or live-just-finished (`_drain_run_
-            messages`'s own `"done"` payload carries the identical key
-            for that second case); `sigmaBand` is `_sigma_band_payload`'s
+            `{"ok": True, "runId", "directoryName", "convergenceNote",
+            "report", "panels", "statistics", "outputDirectory",
+            "trajectoryPath", "generationCount", "demeCount", "sigmaBand",
+            "equilibrium", "identityRecovery"}` on success —
+            `trajectoryPath` echoes this call's own resolved
+            `trajectoryPath` input, matching the identical key
+            `_drain_run_messages`'s own `"done"` payload carries for a
+            live-just-finished run; `sigmaBand` is `_sigma_band_payload`'s
             own result (sigma-band GUI design doc `20260910-claude-
             sonnet-5-gui-sigma-band-design.md`, `selby/restricted`,
             slice 4), `None` for a run that never requested one;
@@ -4286,6 +4287,10 @@ class Api:
             "runId": reanalyzed.manifest.run_id,
             "directoryName": trajectory_path.parent.name,
             "configSummary": _run_config_summary(reanalyzed.params),
+            # Same field, same source function, as the live-run "done"
+            # push (`_drain_run_messages`) -- see that payload's own
+            # comment on this key.
+            "convergenceNote": _derived_convergence_note(reanalyzed.params),
             "report": report,
             "panels": scatter_panels(reanalyzed.state),
             "statistics": {
@@ -5311,6 +5316,12 @@ def _drain_run_messages(
                 "runId": result.run_id,
                 "directoryName": output_directory.name,
                 "configSummary": _run_config_summary(result.params),
+                # The Run card's own consolidated message area (`webui/
+                # screens/run-view-completed.js`'s own `renderRunMessages`)
+                # -- `""` when the window/cap were both given explicitly,
+                # the same "nothing to say" convention `_derived_
+                # convergence_note`'s own docstring already documents.
+                "convergenceNote": _derived_convergence_note(result.params),
                 "report": result.report,
                 "panels": scatter_panels(result.final_state),
                 "statistics": {
@@ -6011,6 +6022,11 @@ def _pooled_batch_payload(
         "runId": run_id,
         "directoryName": output_directory.name,
         "configSummary": _run_config_summary(params),
+        # Same field, same source function, as a scalar run's own "done"
+        # payload (`_drain_run_messages`'s own comment on this key) --
+        # every replicate in a batch shares one `params`, so one note
+        # covers the whole batch.
+        "convergenceNote": _derived_convergence_note(params),
         "outputDirectory": str(output_directory),
         "panels": panels,
         "replicates": replicates,

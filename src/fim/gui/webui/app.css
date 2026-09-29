@@ -65,6 +65,7 @@
     --fim-shadow: rgba(36, 40, 36, 0.16);
     --fim-warning-background: #fff1c2;
     --fim-warning-mark: #8a5a00;
+    --fim-error-mark: #7a1f1f;
 }
 
 @media (prefers-color-scheme: dark) {
@@ -85,6 +86,7 @@
         --fim-shadow: rgba(0, 0, 0, 0.35);
         --fim-warning-background: #4a3c12;
         --fim-warning-mark: #ffd166;
+        --fim-error-mark: #f5b8b8;
     }
 }
 
@@ -105,6 +107,7 @@
     --fim-shadow: rgba(0, 0, 0, 0.35);
     --fim-warning-background: #4a3c12;
     --fim-warning-mark: #ffd166;
+    --fim-error-mark: #f5b8b8;
 }
 
 * {
@@ -557,6 +560,50 @@ textarea::placeholder {
     font-size: 0.75rem;
     color: var(--fim-muted);
     margin: 0;
+}
+
+/* The Run card's own consolidated message area (`run-view-completed.js`'s
+ * `renderRunMessages`) -- every message the same size/shape as `.hint`
+ * above, prefixed with a colored dot naming its own severity, the same
+ * "swatch beside text" idiom `.scatter-key-item .scatter-key-dot`
+ * already established for the scatter legend. One list, not one
+ * separately positioned element per message (a G_ST caution note once
+ * lived beside the statistics table on its own, reported live as
+ * breaking that table's own layout) -- consolidation is the point. */
+.run-messages {
+    list-style: none;
+    margin: 0.75rem 0 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 0.35rem;
+}
+
+.run-message {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    font-size: 0.75rem;
+    color: var(--fim-foreground);
+}
+
+.run-message-dot {
+    flex: none;
+    width: 0.55rem;
+    height: 0.55rem;
+    border-radius: 50%;
+}
+
+.run-message-info .run-message-dot {
+    background: var(--fim-action);
+}
+
+.run-message-warning .run-message-dot {
+    background: var(--fim-warning-mark);
+}
+
+.run-message-error .run-message-dot {
+    background: var(--fim-error-mark);
 }
 
 /* The within-run sigma band's own supplementary caption (design §7.2,
