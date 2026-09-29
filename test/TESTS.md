@@ -9888,11 +9888,11 @@ def test_open_run_echoes_the_trajectory_path_it_was_given(
 
 `open_run`'s own return payload carries `trajectoryPath` (item 6).
 
-The Results card's own re-analysis controls (`run-view-completed.js`'s
-`resultsReanalyzeButton`) need this to re-issue `open_run` against
-whichever run is currently showing without the caller having to
-remember the path separately -- `_drain_run_messages`'s own `"done"`
-payload carries the identical key for a live-just-finished run
+`window.fim.setCompletedTrajectoryPath` (`run-view-completed.js`'s
+`enterCompletedState`) needs this to track whichever run is
+currently showing without the caller having to remember the path
+separately -- `_drain_run_messages`'s own `"done"` payload carries
+the identical key for a live-just-finished run
 (`test_running_screen.py`'s own coverage for that half).
 
 <a id="gui.test_app_api.test_open_run_carries_the_real_identity_recovery_reference"></a>
@@ -10562,27 +10562,25 @@ same "third link" `test_a_completed_batch_renders_the_run_view`'s
 own module docstring already establishes for the six rows above
 these two.
 
-<a id="gui.test_batch_results_screen.test_a_completed_batch_hides_the_reanalyze_controls"></a>
+<a id="gui.test_batch_results_screen.test_a_completed_batchs_own_trajectory_path_stays_unset"></a>
 
-#### test\_a\_completed\_batch\_hides\_the\_reanalyze\_controls
+#### test\_a\_completed\_batchs\_own\_trajectory\_path\_stays\_unset
 
 ```python
-def test_a_completed_batch_hides_the_reanalyze_controls(
+def test_a_completed_batchs_own_trajectory_path_stays_unset(
         fast_batch_run_settings: Path) -> None
 ```
 
-A batch's own `completed` view hides item 6's re-analysis controls.
+A batch manifest has no single trajectory of its own.
 
-A batch manifest has no single trajectory of its own to re-analyze
-at a chosen generation -- unlike a scalar run, this is not something
-`Api.open_batch` changes (`20260919-claude-sonnet-5-unified-batch-
-and-study-results-reopen-design.md`, `selby/restricted`, §1: the
-reopened batch card still has no single trajectory, only a pooled
-one, exactly like a live batch's own completion) --
-`enterCompletedState`'s own `resultsReanalyzeControls.hidden = isBatch`
-is what enforces this; the scalar counterpart (hidden is `False`) is
-`test/gui/test_running_screen.py`'s own `test_a_live_runs_own_done_
-payload_enables_the_reanalyze_controls`.
+Unlike a scalar run, this is not something `Api.open_batch` changes
+(`20260919-claude-sonnet-5-unified-batch-and-study-results-reopen-
+design.md`, `selby/restricted`, §1: the reopened batch card still has
+no single trajectory, only a pooled one, exactly like a live batch's
+own completion) -- `window.fim.getCompletedTrajectoryPath()` stays
+`null`; the scalar counterpart (a real path) is `test/gui/
+test_running_screen.py`'s own `test_a_live_runs_own_done_payload_
+sets_its_trajectory_path`.
 
 <a id="gui.test_batch_results_screen.test_a_completed_batchs_own_pooled_trajectory_renders"></a>
 
@@ -13085,11 +13083,13 @@ swept, and the ploidy Explore evaluates with is the form's.
 
 Static-analysis guard over the inline field tooltips (botanist GUI
 design doc `20260907-claude-sonnet-5-botanist-gui-redesign.md` §4.6) on
-Configure, plus the Results card's own two re-analysis controls
-(``results`-reanalyze-controls`, inside ``screen`-run` -- design item 6)
-and the Settings dialog's own execution/convergence-selection defaults
-(``modal`-settings`) that share the same mechanism outside that section's
-own Configure-only scope.
+Configure, plus the Settings dialog's own execution/convergence-selection
+defaults (``modal`-settings`) that share the same mechanism outside that
+section's own Configure-only scope. ``screen`-run` is checked too, though
+nothing there carries a tooltip today -- its own former two re-analysis
+controls (design item 6) are gone, and `field-help.js`'s own
+`wireAllFieldTooltips` still scans it, so a field added there later
+without a tooltip is caught the same way Configure's own are.
 
 `webui/field-help.js`'s own `FIELD_HELP` object is the single content
 source every tooltip draws from -- these tests check both directions of
@@ -13196,16 +13196,13 @@ other two tests above already check for their own screens.
 
 Headless functional tests for the inline field tooltips (botanist GUI
 design doc `20260907-claude-sonnet-5-botanist-gui-redesign.md` §4.6) on
-Configure, plus the Results card's own two re-analysis controls
-(``results`-reanalyze-controls`, inside ``screen`-run` -- design item 6)
-that share the same mechanism.
+Configure.
 
 Real DOM-driven proof that `webui/field-help.js` actually shows and hides
 the tooltip bubble on hover and on keyboard focus alike --
 `test/gui/test_field_help.py`'s own static checks already prove every
-field/group on either screen has a real `FIELD_HELP` entry; these tests
-prove the page's own JavaScript actually shows it, which no static-
-analysis test can check.
+field/group has a real `FIELD_HELP` entry; these tests prove the page's
+own JavaScript actually shows it, which no static-analysis test can check.
 
 <a id="gui.test_field_help_screen.test_hovering_a_field_label_shows_its_tooltip_and_leaving_hides_it"></a>
 
@@ -13275,41 +13272,6 @@ A mode-selector group's own `<legend>` is a real, focusable tooltip trigger.
 `tabIndex = 0` is what makes this reachable at all for a keyboard-
 only user, checked directly here, not merely assumed from reading
 the source.
-
-<a id="gui.test_field_help_screen.test_the_results_cards_differentiation_orders_label_shows_its_tooltip"></a>
-
-#### test\_the\_results\_cards\_differentiation\_orders\_label\_shows\_its\_tooltip
-
-```python
-def test_the_results_cards_differentiation_orders_label_shows_its_tooltip(
-        window: webview.Window, drive: Callable[..., Any]) -> None
-```
-
-The Results card's own `data-field-help` label -- not the
-`field-<key>` id convention `wireFieldTooltip`'s callers elsewhere all
-use -- still resolves to the right `FIELD_HELP` entry.
-
-Exercises the code path `wireAllFieldTooltips` added for this screen:
-the key comes from `label.dataset.fieldHelp` directly, not from
-slicing a `field-` prefix off `label.htmlFor` (this label's own `for`
-is `results-differentiation-orders`, which has no such prefix).
-Firing a synthetic `mouseenter` works regardless of ``run`-completed`'s
-own `hidden` state (unlike `.focus()`, `dispatchEvent` does not care
-whether the target is actually visible) -- no need to drive an actual
-run to completion first just to reach this label.
-
-<a id="gui.test_field_help_screen.test_the_results_cards_generation_legend_shows_its_own_tooltip"></a>
-
-#### test\_the\_results\_cards\_generation\_legend\_shows\_its\_own\_tooltip
-
-```python
-def test_the_results_cards_generation_legend_shows_its_own_tooltip(
-        window: webview.Window, drive: Callable[..., Any]) -> None
-```
-
-The Results card's own "Generation" mode-selector group works
-the same way `m_mode`'s Configure-side legend already does, confirming
-the widened `wireAllFieldTooltips` selector actually reaches it.
 
 <a id="gui.test_fixed_per_deme_screen"></a>
 
@@ -15009,49 +14971,6 @@ A single click selects a batch row and enables "Open," exactly
 like a scalar row -- no more early-return banner (`20260919-claude-
 sonnet-5-unified-batch-and-study-results-reopen-design.md`,
 `selby/restricted`, §3).
-
-<a id="gui.test_open_run_screen.test_reanalyzing_at_a_chosen_generation_updates_the_outcome_text"></a>
-
-#### test\_reanalyzing\_at\_a\_chosen\_generation\_updates\_the\_outcome\_text
-
-```python
-def test_reanalyzing_at_a_chosen_generation_updates_the_outcome_text(
-        tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None
-```
-
-Choosing "choose" plus a generation re-analyzes at that generation.
-
-Design item 6's other half (the sweep is the test right below this
-one): ``results`-outcome`'s own text states the generation the
-current report is for (`run-view-completed.js`'s own
-`enterCompletedState`), so re-analyzing at a different, explicit
-generation than the one the run opened at (its final one) is
-observable directly from that text, without needing to inspect the
-stats table's own numbers.
-
-<a id="gui.test_open_run_screen.test_reanalyzing_a_run_with_a_differentiation_q_sweep_draws_the_curve"></a>
-
-#### test\_reanalyzing\_a\_run\_with\_a\_differentiation\_q\_sweep\_draws\_the\_curve
-
-```python
-def test_reanalyzing_a_run_with_a_differentiation_q_sweep_draws_the_curve(
-        tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None
-```
-
-A requested differentiation-q sweep renders both the lines and the curve.
-
-The sweep is entered on the Results card itself (design item 6:
-relocated from the old open-run screen, where it had to be chosen
-*before* opening) -- open the run first, at its default final
-generation with no sweep, then set ``results`-differentiation-orders`
-and click ``results`-reanalyze-button` to re-analyze in place. No
-existing test drove this specific field through the real DOM at all
-before this one (`test/gui/test_app_api.py`'s own `Api.open_run`
-coverage only ever calls it as a plain Python function) — this is
-also the first real proof that `run-view-completed.js`'s own
-`drawDifferentiationQCurve` (botanist GUI design doc `20260907-
-claude-sonnet-5-botanist-gui-redesign.md` §7.7) actually draws
-something, not only that the per-order text lines still render.
 
 <a id="gui.test_open_run_screen.test_recent_runs_row_shows_config_summary_and_statistics"></a>
 
@@ -17347,25 +17266,22 @@ label` starts empty in the markup and is set only by `onRunProgress`,
 so it stays a direct, generation-number-independent proof a push
 landed.
 
-<a id="gui.test_running_screen.test_a_live_runs_own_done_payload_enables_the_reanalyze_controls"></a>
+<a id="gui.test_running_screen.test_a_live_runs_own_done_payload_sets_its_trajectory_path"></a>
 
-#### test\_a\_live\_runs\_own\_done\_payload\_enables\_the\_reanalyze\_controls
+#### test\_a\_live\_runs\_own\_done\_payload\_sets\_its\_trajectory\_path
 
 ```python
-def test_a_live_runs_own_done_payload_enables_the_reanalyze_controls(
+def test_a_live_runs_own_done_payload_sets_its_trajectory_path(
         fast_scalar_run_settings: Path) -> None
 ```
 
-A just-finished live run's own Results card offers re-analysis too.
+A just-finished live run's own trajectory path is tracked too.
 
-Design item 6: the Generation/Differentiation-q sweep controls
-(relocated here from the old open-run screen) work for a live-just-
-finished run, not only a reopened one -- they need `window.fim.
-getCompletedTrajectoryPath()` to actually be set for that to be
-possible at all, which needs `_drain_run_messages`'s own `"done"`
-payload to carry a real `trajectoryPath` (`test/gui/test_app_api.py`'s
-own `test_open_run_echoes_the_trajectory_path_it_was_given` covers
-the reopened-run half of this same payload key).
+`window.fim.getCompletedTrajectoryPath()` needs `_drain_run_
+messages`'s own `"done"` payload to carry a real `trajectoryPath`
+(`test/gui/test_app_api.py`'s own `test_open_run_echoes_the_
+trajectory_path_it_was_given` covers the reopened-run half of this
+same payload key).
 
 <a id="gui.test_running_screen.test_run_button_shows_the_trajectory_panel_for_the_watched_statistic"></a>
 

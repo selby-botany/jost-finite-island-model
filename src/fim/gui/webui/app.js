@@ -37,12 +37,8 @@ let completedOutputDirectory = null;
 
 // The currently showing scalar run's own `trajectory.jsonl` path, `null`
 // for a batch (which has no single trajectory of its own) or before any
-// run has completed -- item 6's Results-card re-analysis controls
-// (`run-view-completed.js`'s own `results-reanalyze-button`) read this
-// via the getter below to re-issue `Api.open_run` against whichever run
-// is currently showing, live-just-finished or reopened, the same
-// one-state-model precedent `completedOutputDirectory` already
-// established immediately above.
+// run has completed -- the same one-state-model precedent
+// `completedOutputDirectory` already established immediately above.
 let completedTrajectoryPath = null;
 
 let screenHistory = ["screen-open-run"];

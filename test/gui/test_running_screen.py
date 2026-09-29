@@ -200,6 +200,45 @@ def _wait_for_cancel_run_settled(window: webview.Window) -> None:
     )
 
 
+def _wait_for_trajectory_canvas_size_to_settle(window: webview.Window) -> None:
+    """Poll until `#run-trajectory-canvas`'s own pixel buffer stops changing size.
+
+    `renderTrajectory`'s first draw, inside `enterCompletedState`, reads
+    `clientWidth`/`clientHeight` before the surrounding page's own layout
+    has necessarily finished settling (`run-graph-stage.js`'s own comment
+    on its per-pane `ResizeObserver` names this exact "blurry right after
+    opening" class of defect and accepts one transient wrong paint,
+    self-corrected once the observer's own callback fires on the next
+    real size change) -- confirmed live: a pixel-counting test read the
+    canvas immediately after `done_event` and saw a real, reproducible
+    size change (312x234, then settling to 302x226) between that first
+    read and the very next redraw. Waiting here for two consecutive
+    `[width, height]` reads to agree is the same "wait for the thing to
+    actually settle" discipline `_wait_for_cancel_run_settled` above
+    already establishes for a different async gap, applied to this one.
+
+    Raises:
+        AssertionError: If the size never stops changing.
+    """
+    dims_script = (
+        "(() => {"
+        "var c = document.getElementById('run-trajectory-canvas');"
+        "return [c.width, c.height];"
+        "})()"
+    )
+    previous = window.evaluate_js(dims_script)
+    for _ in range(_READY_POLL_ATTEMPTS):
+        time.sleep(_READY_POLL_INTERVAL_SECONDS)
+        current = window.evaluate_js(dims_script)
+        if current == previous:
+            return
+        previous = current
+    raise AssertionError(
+        "run-trajectory-canvas's own size never settled within "
+        f"{_READY_POLL_ATTEMPTS * _READY_POLL_INTERVAL_SECONDS}s"
+    )
+
+
 def test_run_button_starts_a_real_run_that_pushes_live_progress(
     fast_scalar_run_settings: Path,
 ) -> None:
@@ -283,19 +322,16 @@ def test_run_button_starts_a_real_run_that_pushes_live_progress(
     assert settled["neSText"] != ""
 
 
-def test_a_live_runs_own_done_payload_enables_the_reanalyze_controls(
+def test_a_live_runs_own_done_payload_sets_its_trajectory_path(
     fast_scalar_run_settings: Path,
 ) -> None:
-    """A just-finished live run's own Results card offers re-analysis too.
+    """A just-finished live run's own trajectory path is tracked too.
 
-    Design item 6: the Generation/Differentiation-q sweep controls
-    (relocated here from the old open-run screen) work for a live-just-
-    finished run, not only a reopened one -- they need `window.fim.
-    getCompletedTrajectoryPath()` to actually be set for that to be
-    possible at all, which needs `_drain_run_messages`'s own `"done"`
-    payload to carry a real `trajectoryPath` (`test/gui/test_app_api.py`'s
-    own `test_open_run_echoes_the_trajectory_path_it_was_given` covers
-    the reopened-run half of this same payload key).
+    `window.fim.getCompletedTrajectoryPath()` needs `_drain_run_
+    messages`'s own `"done"` payload to carry a real `trajectoryPath`
+    (`test/gui/test_app_api.py`'s own `test_open_run_echoes_the_
+    trajectory_path_it_was_given` covers the reopened-run half of this
+    same payload key).
     """
     done_event = threading.Event()
 
@@ -315,11 +351,7 @@ def test_a_live_runs_own_done_payload_enables_the_reanalyze_controls(
             settled = None
             if done_event.wait(timeout=_EVENT_WAIT_TIMEOUT_SECONDS):
                 settled = window.evaluate_js(
-                    "({"
-                    "trajectoryPath: window.fim.getCompletedTrajectoryPath(), "
-                    "reanalyzeHidden: "
-                    "document.getElementById('results-reanalyze-controls').hidden"
-                    "})"
+                    "({trajectoryPath: window.fim.getCompletedTrajectoryPath()})"
                 )
             outcome.put(settled)
         finally:
@@ -331,7 +363,6 @@ def test_a_live_runs_own_done_payload_enables_the_reanalyze_controls(
     assert settled is not None
     assert settled["trajectoryPath"] is not None
     assert settled["trajectoryPath"].endswith("trajectory.jsonl")
-    assert settled["reanalyzeHidden"] is False
 
 
 def test_run_button_shows_the_trajectory_panel_for_the_watched_statistic(
@@ -505,6 +536,7 @@ def test_trajectory_row_toggle_hides_and_restores_a_curves_own_pixels(
             if not done_event.wait(timeout=_EVENT_WAIT_TIMEOUT_SECONDS):
                 outcome.put(None)
                 return
+            _wait_for_trajectory_canvas_size_to_settle(window)
             before_pixels = window.evaluate_js(non_blank_pixel_count_script)
             row_before = window.evaluate_js(row_state_script)
             window.evaluate_js(

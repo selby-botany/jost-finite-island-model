@@ -481,21 +481,19 @@ def test_a_completed_batchs_own_effective_allele_rows_render(
     assert "uncertainty across 2 independent replicates" in settled["withinTooltip"]
 
 
-def test_a_completed_batch_hides_the_reanalyze_controls(
+def test_a_completed_batchs_own_trajectory_path_stays_unset(
     fast_batch_run_settings: Path,
 ) -> None:
-    """A batch's own `completed` view hides item 6's re-analysis controls.
+    """A batch manifest has no single trajectory of its own.
 
-    A batch manifest has no single trajectory of its own to re-analyze
-    at a chosen generation -- unlike a scalar run, this is not something
-    `Api.open_batch` changes (`20260919-claude-sonnet-5-unified-batch-
-    and-study-results-reopen-design.md`, `selby/restricted`, §1: the
-    reopened batch card still has no single trajectory, only a pooled
-    one, exactly like a live batch's own completion) --
-    `enterCompletedState`'s own `resultsReanalyzeControls.hidden = isBatch`
-    is what enforces this; the scalar counterpart (hidden is `False`) is
-    `test/gui/test_running_screen.py`'s own `test_a_live_runs_own_done_
-    payload_enables_the_reanalyze_controls`.
+    Unlike a scalar run, this is not something `Api.open_batch` changes
+    (`20260919-claude-sonnet-5-unified-batch-and-study-results-reopen-
+    design.md`, `selby/restricted`, §1: the reopened batch card still has
+    no single trajectory, only a pooled one, exactly like a live batch's
+    own completion) -- `window.fim.getCompletedTrajectoryPath()` stays
+    `null`; the scalar counterpart (a real path) is `test/gui/
+    test_running_screen.py`'s own `test_a_live_runs_own_done_payload_
+    sets_its_trajectory_path`.
     """
     done_event = threading.Event()
 
@@ -518,8 +516,6 @@ def test_a_completed_batch_hides_the_reanalyze_controls(
                 settled = window.evaluate_js(
                     "({"
                     "runViewState: window.fim.getRunViewState(), "
-                    "reanalyzeHidden: "
-                    "document.getElementById('results-reanalyze-controls').hidden, "
                     "trajectoryPath: window.fim.getCompletedTrajectoryPath()"
                     "})"
                 )
@@ -532,7 +528,6 @@ def test_a_completed_batch_hides_the_reanalyze_controls(
 
     assert settled is not None
     assert settled["runViewState"] == "completed"
-    assert settled["reanalyzeHidden"] is True
     assert settled["trajectoryPath"] is None
 
 

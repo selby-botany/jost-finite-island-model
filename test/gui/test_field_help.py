@@ -1,10 +1,12 @@
 """Static-analysis guard over the inline field tooltips (botanist GUI
 design doc `20260907-claude-sonnet-5-botanist-gui-redesign.md` §4.6) on
-Configure, plus the Results card's own two re-analysis controls
-(`#results-reanalyze-controls`, inside `#screen-run` -- design item 6)
-and the Settings dialog's own execution/convergence-selection defaults
-(`#modal-settings`) that share the same mechanism outside that section's
-own Configure-only scope.
+Configure, plus the Settings dialog's own execution/convergence-selection
+defaults (`#modal-settings`) that share the same mechanism outside that
+section's own Configure-only scope. `#screen-run` is checked too, though
+nothing there carries a tooltip today -- its own former two re-analysis
+controls (design item 6) are gone, and `field-help.js`'s own
+`wireAllFieldTooltips` still scans it, so a field added there later
+without a tooltip is caught the same way Configure's own are.
 
 `webui/field-help.js`'s own `FIELD_HELP` object is the single content
 source every tooltip draws from -- these tests check both directions of
@@ -35,14 +37,11 @@ _FIELD_HELP_JS = _WEBUI_ROOT / "field-help.js"
 # section, confirmed by `test_screen_configure_exists_exactly_once`/
 # `test_screen_run_exists_exactly_once` below, so slicing between a
 # section's own open tag and the next `</section>` cannot silently grab
-# the wrong region. `screen-run` (not the narrower `#results-reanalyze-
-# controls` div itself) is the marker for the same reason `field-help.js`
-# scopes its own selectors that wide (see its own `wireAllFieldTooltips`
-# docstring) -- a `<div>` marker would need to count nested `<div>`s to
-# find its own real close tag, since (unlike `<section>`) divs nest here;
-# `screen-run` has no other field/group needing a tooltip today, so the
-# wider, non-nesting section marker already scopes exactly as tightly in
-# practice.
+# the wrong region. `screen-run` has no field/group needing a tooltip
+# today (its own former two re-analysis controls, design item 6, are
+# gone) -- checked anyway, the same "catch a field added later without
+# a tooltip" reasoning `field-help.js`'s own `wireAllFieldTooltips`
+# docstring gives for still scanning it.
 _CONFIGURE_SECTION_START = '<section id="screen-configure"'
 _SCREEN_RUN_SECTION_START = '<section id="screen-run"'
 _SECTION_END = "</section>"

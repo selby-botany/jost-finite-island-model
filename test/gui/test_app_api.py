@@ -3516,11 +3516,11 @@ def test_open_run_carries_the_real_equilibrium_prediction(tmp_path: Path) -> Non
 def test_open_run_echoes_the_trajectory_path_it_was_given(tmp_path: Path) -> None:
     """`open_run`'s own return payload carries `trajectoryPath` (item 6).
 
-    The Results card's own re-analysis controls (`run-view-completed.js`'s
-    `resultsReanalyzeButton`) need this to re-issue `open_run` against
-    whichever run is currently showing without the caller having to
-    remember the path separately -- `_drain_run_messages`'s own `"done"`
-    payload carries the identical key for a live-just-finished run
+    `window.fim.setCompletedTrajectoryPath` (`run-view-completed.js`'s
+    `enterCompletedState`) needs this to track whichever run is
+    currently showing without the caller having to remember the path
+    separately -- `_drain_run_messages`'s own `"done"` payload carries
+    the identical key for a live-just-finished run
     (`test_running_screen.py`'s own coverage for that half).
     """
     output = _write_run(tmp_path)

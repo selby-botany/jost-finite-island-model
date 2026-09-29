@@ -1699,14 +1699,12 @@ async function withOpenRunBusy(label, work) {
  * Open `trajectoryPath` at its final generation, no differentiation-q
  * sweep, landing on the unified run view's own `completed` state --
  * the one operation both the "Open" button and a run row's own
- * double-click (item 5) reduce to, now that choosing a different
- * generation or a sweep happens on the Results card itself, after
- * opening (item 6, `run-view-completed.js`'s own `results-reanalyze-
- * button`), not before. Reports failure via this screen's own banner;
- * on success, resets the trajectory legend's own display-only
- * visibility toggle before entering `completed` (design §6.2's legend-
- * toggle; `run-view-completed.js`'s own `resetTrajectoryLegendVisibility`
- * doc comment names both points this happens at).
+ * double-click (item 5) reduce to. Reports failure via this screen's
+ * own banner; on success, resets the trajectory legend's own display-
+ * only visibility toggle before entering `completed` (design §6.2's
+ * legend-toggle; `run-view-completed.js`'s own
+ * `resetTrajectoryLegendVisibility` doc comment names both points this
+ * happens at).
  * @param {string} trajectoryPath
  * @returns {Promise<void>}
  */

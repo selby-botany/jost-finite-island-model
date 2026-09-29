@@ -4,9 +4,9 @@
  * sonnet-5-botanist-gui-redesign.md` §4.6): every Configure field and
  * mode-selector group carries a hover/focus tooltip, closing open-
  * issues-rollup item 37 ("tooltips fully scoped, never shipped, never
- * tracked as deferred"). The Home/open-run screen's own two re-analysis
- * controls (generation mode, differentiation-q sweep) carry the same
- * tooltip mechanism, outside §4.6's own Configure-only scope.
+ * tracked as deferred"). The Settings dialog's own execution/
+ * convergence-selection defaults carry the same tooltip mechanism,
+ * outside §4.6's own Configure-only scope.
  *
  * `FIELD_HELP` is the "single field-help content source" §4.6 itself
  * calls for -- a plain object, one entry per `config_form.py` field
@@ -176,13 +176,6 @@ const FIELD_HELP = {
     dark_mode_override: "Follow system matches your OS's own light/dark " +
         "setting. Light or Dark overrides it for this app only, applied " +
         "immediately.",
-    results_generation_mode: "Which persisted generation to re-analyze: " +
-        "final (the trajectory's last persisted generation), or choose " +
-        "any other generation that was actually persisted.",
-    results_differentiation_orders: "Hill-number differentiation orders " +
-        "to compute at the chosen generation, comma- or space-separated " +
-        "(e.g. 0, 1, 2) — q=0 and q=2 match the report's own K_ST and D; " +
-        "q=1 matches E_ST. Blank re-analyzes with no sweep.",
 };
 
 window.FIM_FIELD_HELP = FIELD_HELP;
@@ -282,33 +275,26 @@ function wireGroupTooltip(legendElement, key) {
 
 /**
  * Wire every field label and `[data-field-help]` legend inside Configure,
- * plus the Results card's own two re-analysis controls (generation mode,
- * differentiation-q sweep, `#results-reanalyze-controls` inside `#screen-
- * run`), plus the Settings dialog's own execution/convergence-selection
+ * plus `#screen-run` (nothing there carries a tooltip today, scanned
+ * anyway so a field added there later is caught the same way Configure's
+ * own are) and the Settings dialog's own execution/convergence-selection
  * defaults (`#modal-settings`). Called once, at parse time -- unlike
  * almost everything else this page wires, this markup is static HTML
  * present from first load, not built by a later bridge call, so there is
  * nothing to wait for.
  *
  * Configure's own labels use the `field-<key>` id convention, so their
- * `FIELD_HELP` key is derived by slicing that prefix off; the re-
- * analysis controls and Settings' own fields don't share that id
- * convention (`results-generation-value`/`results-differentiation-
- * orders` -- ids borrowed from the Tk-era screen's own naming, only the
- * `open-run-` prefix ever changed, when these moved off the open-run
- * screen entirely, design item 6; `settings-*` -- a second, independent
- * set of controls from Configure's own identically-named-in-spirit
- * fields, `index.html`'s own comment above `#modal-settings` has the
- * full account), so they carry an explicit `data-field-help="<key>"` on
- * the `<label>` itself instead, the same opt-in mechanism a composite
- * `<fieldset>`'s own `<legend>` already used for its group-level
- * tooltip. Scoped to `#screen-run`/`#modal-settings` rather than the
- * tighter `#results-reanalyze-controls`/individual-fieldset scope only
- * because that's this file's own established per-screen/per-dialog
- * scoping granularity (`#screen-configure`, above) -- neither has any
- * other `[data-field-help]`/`label[for^="field-"]` element today
- * (`test/gui/test_field_help.py`'s own static check enforces this stays
- * true), so the wider scope catches everything a tighter one would.
+ * `FIELD_HELP` key is derived by slicing that prefix off; Settings' own
+ * fields don't share that id convention (`settings-*` -- a second,
+ * independent set of controls from Configure's own identically-named-
+ * in-spirit fields, `index.html`'s own comment above `#modal-settings`
+ * has the full account), so they carry an explicit `data-field-
+ * help="<key>"` on the `<label>` itself instead, the same opt-in
+ * mechanism a composite `<fieldset>`'s own `<legend>` already used for
+ * its group-level tooltip. Scoped to `#screen-run`/`#modal-settings`
+ * rather than a tighter per-fieldset scope only because that's this
+ * file's own established per-screen/per-dialog scoping granularity
+ * (`#screen-configure`, above).
  */
 function wireAllFieldTooltips() {
     document
