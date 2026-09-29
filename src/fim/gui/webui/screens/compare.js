@@ -310,15 +310,14 @@ function drawCompareTrajectory(runs, statisticName) {
     const plotRight = width - 12;
     const plotTop = 12;
     const plotBottom = height - 22;
-    const minGeneration = Math.min(...allGenerations);
-    const maxGeneration = Math.max(...allGenerations);
+    const { min: minGeneration, max: maxGeneration } =
+        window.fim.numericExtent(allGenerations);
     // Same fixed-floor-and-ceiling domain choice `drawTrajectoryCurve`
     // already makes, for the identical reason: every named statistic's
     // own natural range starts at `[0, 1]`, so a comparison that never
     // leaves a narrow band still reads against the same axes any other
     // statistic plot on this page already uses.
-    const minValue = Math.min(0, ...allValues);
-    const maxValue = Math.max(1, ...allValues);
+    const { min: minValue, max: maxValue } = window.fim.numericExtent(allValues, 0, 1);
 
     function xToPixel(generation) {
         const fraction =

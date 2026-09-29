@@ -312,6 +312,79 @@ def test_differently_scaled_statistics_start_off_the_trajectory_panel(
     assert settled["reinstated"] == "true"
 
 
+def test_a_very_long_run_still_renders_its_trajectory_and_deme_pair_panels(
+    fast_scalar_run_settings: Path, window: webview.Window, drive: Callable[..., Any]
+) -> None:
+    """`enterCompletedState` finishes even when a run recorded 200,000 generations.
+
+    Reported live: a real, hours-long run that recorded 129,412
+    generations left its Run card's trajectory graph blank, no other
+    graph selectable, and no results table -- yet its statistics and
+    header, both set earlier in `enterCompletedState`, rendered fine.
+    Root cause: `drawTrajectoryCurve`'s own domain calculation spread
+    every recorded value into `Math.min`/`Math.max`
+    (`Math.min(0, ...allValues)`), which throws `RangeError: Maximum
+    call stack size exceeded` once that array is longer than the JS
+    engine's own per-call argument limit -- an uncaught exception
+    partway through `enterCompletedState` that aborted every statement
+    after it (the trajectory canvas, the deme-pair graph wiring, and the
+    results table alike), even though the statistics/header set earlier
+    in that same function had already applied.
+
+    A real completed run's own payload is captured first (`fast_scalar_
+    run_settings`'s tiny run, not the real many-hour one this bug needs
+    hours to reproduce) and then inflated in place -- `convergence
+    Generations`/every `convergenceHistories` entry replaced with a
+    200,000-entry array, comfortably past any JS engine's own argument
+    limit -- before re-entering `enterCompletedState` with it directly,
+    the same "capture a real payload and re-drive it" pattern already
+    established by `test_open_run_screen.py`'s own reopened-run tests.
+    """
+    settled = drive(
+        window,
+        ready=_INPUT_SCREEN_READY,
+        trigger=(
+            _SET_TINY_FIELDS
+            + """
+            const original = window.fim.enterCompletedState;
+            window.fim.enterCompletedState = function (payload, isBatch) {
+                window.fim.enterCompletedState = original;
+                original(payload, isBatch);
+                const length = 200000;
+                const inflated = Object.assign({}, payload, {
+                    convergenceGenerations: Array.from({length}, (_, i) => i),
+                    convergenceHistories: Object.fromEntries(
+                        Object.keys(payload.convergenceHistories || {}).map(
+                            (name) => [name, Array.from({length}, () => 0.5)]
+                        )
+                    ),
+                    generationCount: length - 1,
+                });
+                let threw = null;
+                try {
+                    original(inflated, false);
+                } catch (error) {
+                    threw = String((error && error.message) || error);
+                }
+                window.__fimInflatedTrajectoryResult = {
+                    threw: threw,
+                    demeSelectorHidden: document.getElementById(
+                        "run-deme-pair-selector"
+                    ).hidden,
+                };
+            };
+            document.getElementById('run-button').click();
+            """
+        ),
+        read="window.__fimInflatedTrajectoryResult || null",
+        is_ready=lambda value: value is not None,
+        poll_attempts=_POLL_ATTEMPTS,
+    )
+
+    assert settled["threw"] is None
+    assert settled["demeSelectorHidden"] is False
+
+
 def test_drawing_a_scatter_sizes_the_canvas_buffer_before_it_paints(
     window: webview.Window, drive: Callable[..., Any]
 ) -> None:

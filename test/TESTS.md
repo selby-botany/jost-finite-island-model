@@ -16489,6 +16489,41 @@ band along the bottom of the panel. They are hidden by default, not
 removed -- this test also clicks `A_CGD`'s own row back on to prove
 the legend toggle still reaches it.
 
+<a id="gui.test_results_screen.test_a_very_long_run_still_renders_its_trajectory_and_deme_pair_panels"></a>
+
+#### test\_a\_very\_long\_run\_still\_renders\_its\_trajectory\_and\_deme\_pair\_panels
+
+```python
+def test_a_very_long_run_still_renders_its_trajectory_and_deme_pair_panels(
+        fast_scalar_run_settings: Path, window: webview.Window,
+        drive: Callable[..., Any]) -> None
+```
+
+`enterCompletedState` finishes even when a run recorded 200,000 generations.
+
+Reported live: a real, hours-long run that recorded 129,412
+generations left its Run card's trajectory graph blank, no other
+graph selectable, and no results table -- yet its statistics and
+header, both set earlier in `enterCompletedState`, rendered fine.
+Root cause: `drawTrajectoryCurve`'s own domain calculation spread
+every recorded value into `Math.min`/`Math.max`
+(`Math.min(0, ...allValues)`), which throws `RangeError: Maximum
+call stack size exceeded` once that array is longer than the JS
+engine's own per-call argument limit -- an uncaught exception
+partway through `enterCompletedState` that aborted every statement
+after it (the trajectory canvas, the deme-pair graph wiring, and the
+results table alike), even though the statistics/header set earlier
+in that same function had already applied.
+
+A real completed run's own payload is captured first (`fast_scalar_
+run_settings`'s tiny run, not the real many-hour one this bug needs
+hours to reproduce) and then inflated in place -- `convergence
+Generations`/every `convergenceHistories` entry replaced with a
+200,000-entry array, comfortably past any JS engine's own argument
+limit -- before re-entering `enterCompletedState` with it directly,
+the same "capture a real payload and re-drive it" pattern already
+established by `test_open_run_screen.py`'s own reopened-run tests.
+
 <a id="gui.test_results_screen.test_drawing_a_scatter_sizes_the_canvas_buffer_before_it_paints"></a>
 
 #### test\_drawing\_a\_scatter\_sizes\_the\_canvas\_buffer\_before\_it\_paints

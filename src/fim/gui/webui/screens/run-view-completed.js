@@ -983,8 +983,7 @@ function drawTrajectoryCurve(
     // `upper` are folded into this same domain calculation (just
     // above) so a wide band is never clipped by axes sized only for
     // the curve itself.
-    const minValue = Math.min(0, ...allValues);
-    const maxValue = Math.max(1, ...allValues);
+    const { min: minValue, max: maxValue } = window.fim.numericExtent(allValues, 0, 1);
 
     function xToPixel(generation) {
         const fraction =
@@ -1538,7 +1537,11 @@ const _MIN_SAMPLE_COUNT_FRACTION_FOR_DOMAIN = 0.5;
  */
 function computeBatchTrajectoryValueDomain(visiblePooled) {
     const allPoints = Object.values(visiblePooled).flat();
-    const maxSampleCount = Math.max(0, ...allPoints.map((point) => point.sampleCount));
+    const maxSampleCount = window.fim.numericExtent(
+        allPoints.map((point) => point.sampleCount),
+        undefined,
+        0
+    ).max;
     const minSampleCountForDomain = maxSampleCount * _MIN_SAMPLE_COUNT_FRACTION_FOR_DOMAIN;
     const allValues = allPoints.flatMap((point) => {
         const values = [Number(point.mean)];
@@ -1551,10 +1554,8 @@ function computeBatchTrajectoryValueDomain(visiblePooled) {
     // own identical reasoning: every named statistic's own natural range
     // starts there, so this reads against the same fixed floor/ceiling a
     // reader of any other statistic on this page already expects.
-    return {
-        minValue: Math.min(0, ...allValues),
-        maxValue: Math.max(1, ...allValues),
-    };
+    const { min: minValue, max: maxValue } = window.fim.numericExtent(allValues, 0, 1);
+    return { minValue, maxValue };
 }
 
 /**
@@ -1603,8 +1604,8 @@ function drawBatchTrajectoryCurve(canvas, visiblePooled, scrubGeneration) {
     const allGenerations = names.flatMap((name) =>
         visiblePooled[name].map((point) => point.generation)
     );
-    const minGeneration = Math.min(...allGenerations);
-    const maxGeneration = Math.max(...allGenerations);
+    const { min: minGeneration, max: maxGeneration } =
+        window.fim.numericExtent(allGenerations);
     const { minValue, maxValue } = computeBatchTrajectoryValueDomain(visiblePooled);
 
     function xToPixel(generation) {

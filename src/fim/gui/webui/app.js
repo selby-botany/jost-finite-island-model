@@ -147,6 +147,44 @@ const fim = {
         completedTrajectoryPath = trajectoryPath;
     },
 
+    /**
+     * Min/max over a possibly very long array, without `Math.min(...values)`.
+     *
+     * Spreading an array into `Math.min`/`Math.max` (or `.apply`) passes
+     * every element as its own call argument, which throws `RangeError:
+     * Maximum call stack size exceeded` once the array is longer than the
+     * JS engine's own argument-count limit -- reached in practice by a
+     * multi-hundred-thousand-generation run's own trajectory history.
+     * Confirmed live: a converged run of 129,412 generations threw here,
+     * inside `drawTrajectoryCurve`'s domain calculation, partway through
+     * `fim.onRunDone` -- aborting every statement after it in that same
+     * handler (the trajectory canvas, the deme-pair graphs, the results
+     * table, all silently never drawn, though the statistics set just
+     * before this point had already applied).
+     *
+     * @param {number[]} values
+     * @param {number} [seedMin] a fixed floor already known to belong in
+     *     the range (e.g. `0`, the same role `Math.min(0, ...)`'s own
+     *     literal argument played) -- `Infinity` (i.e., `values` alone
+     *     decides the minimum) if omitted.
+     * @param {number} [seedMax] the same, for the maximum -- `-Infinity`
+     *     if omitted.
+     * @returns {{min: number, max: number}}
+     */
+    numericExtent(values, seedMin = Infinity, seedMax = -Infinity) {
+        let min = seedMin;
+        let max = seedMax;
+        for (const value of values) {
+            if (value < min) {
+                min = value;
+            }
+            if (value > max) {
+                max = value;
+            }
+        }
+        return { min, max };
+    },
+
     onRunProgress() {
         // Overridden by screens/run-view-running.js.
     },
