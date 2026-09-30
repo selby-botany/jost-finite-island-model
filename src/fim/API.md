@@ -5964,11 +5964,18 @@ reuse, not a second rendering path.
 - ``{"ok"` - True, "runId", "directoryName", "convergenceNote",
   "report", "panels", "statistics", "outputDirectory",
   "trajectoryPath", "generationCount", "demeCount", "sigmaBand",
+  "convergenceGenerations", "convergenceHistories",
   "equilibrium", "identityRecovery"}` on success —
   `trajectoryPath` echoes this call's own resolved
   `trajectoryPath` input, matching the identical key
   `_drain_run_messages`'s own `"done"` payload carries for a
-  live-just-finished run; `sigmaBand` is `_sigma_band_payload`'s
+  live-just-finished run; `convergenceGenerations`/
+  `convergenceHistories` are `read_persisted_convergence_
+  history`'s own result (`None`/`None` for a manifest
+  predating `convergence.json`), restoring the identical
+  trajectory-vs-generation curve a live-just-finished run's
+  own payload already carries, rather than the sigma band
+  alone; `sigmaBand` is `_sigma_band_payload`'s
   own result (sigma-band GUI design doc `20260910-claude-
   sonnet-5-gui-sigma-band-design.md`, `selby/restricted`,
   slice 4), `None` for a run that never requested one;

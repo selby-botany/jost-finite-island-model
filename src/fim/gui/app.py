@@ -117,7 +117,11 @@ from fim.model.state import ModelState
 from fim.persistence import groups
 from fim.persistence.manifest import RunManifest, read_batch_manifest, read_manifest
 from fim.persistence.run_metadata import run_metadata_path
-from fim.reanalyze import reanalyze_trajectory, replicate_convergence_history
+from fim.reanalyze import (
+    read_persisted_convergence_history,
+    reanalyze_trajectory,
+    replicate_convergence_history,
+)
 from fim.reproducibility import compare_runs
 from fim.statistics import (
     MAXIMUM_MATRIX_DEMES,
@@ -240,6 +244,34 @@ def _derived_convergence_note(params: SimulationParams) -> str:
         window=params.convergence_window,
         max_generations=params.max_generations,
         relaxation_time=params.relaxation_time,
+    )
+
+
+def _derived_convergence_note_from_manifest(
+    manifest: RunManifest, params: SimulationParams
+) -> str:
+    """The reopened-run counterpart to `_derived_convergence_note`, above.
+
+    `params` reconstructed from a manifest (`RunManifest.params()`) never
+    has a real `auto_derived`/`relaxation_time` of its own -- both are
+    deliberately excluded from `SimulationParams.to_dict()` (the source
+    `parameters` comes from), since reconstructing an equal
+    `SimulationParams` from concrete integers is that method's own
+    documented contract, and those two fields deliberately take no part
+    in equality. `manifest.auto_derived`/`manifest.relaxation_time`
+    (persisted at manifest-construction time precisely so this is
+    recoverable at all -- `RunManifest`'s own docstring on those fields)
+    stand in for them here; `params.convergence_window`/`max_generations`
+    are still read from `params` itself, identically either way, since
+    `to_dict()` always carries the real resolved numbers regardless of
+    where they came from.
+    """
+    if not manifest.auto_derived or manifest.relaxation_time is None:
+        return ""
+    return describe_derived_convergence(
+        window=params.convergence_window,
+        max_generations=params.max_generations,
+        relaxation_time=manifest.relaxation_time,
     )
 
 
@@ -4232,11 +4264,18 @@ class Api:
             `{"ok": True, "runId", "directoryName", "convergenceNote",
             "report", "panels", "statistics", "outputDirectory",
             "trajectoryPath", "generationCount", "demeCount", "sigmaBand",
+            "convergenceGenerations", "convergenceHistories",
             "equilibrium", "identityRecovery"}` on success —
             `trajectoryPath` echoes this call's own resolved
             `trajectoryPath` input, matching the identical key
             `_drain_run_messages`'s own `"done"` payload carries for a
-            live-just-finished run; `sigmaBand` is `_sigma_band_payload`'s
+            live-just-finished run; `convergenceGenerations`/
+            `convergenceHistories` are `read_persisted_convergence_
+            history`'s own result (`None`/`None` for a manifest
+            predating `convergence.json`), restoring the identical
+            trajectory-vs-generation curve a live-just-finished run's
+            own payload already carries, rather than the sigma band
+            alone; `sigmaBand` is `_sigma_band_payload`'s
             own result (sigma-band GUI design doc `20260910-claude-
             sonnet-5-gui-sigma-band-design.md`, `selby/restricted`,
             slice 4), `None` for a run that never requested one;
@@ -4272,6 +4311,16 @@ class Api:
                 generation=generation,
                 differentiation_orders=differentiation_orders,
             )
+            # `None` (nothing persisted, or nothing to persist yet for a
+            # manifest predating this artifact) leaves the trajectory
+            # panel exactly as it always has for a reopened run: the
+            # sigma band alone, no curve. A genuinely mismatched digest
+            # raises here, the identical "surfaced, not silently
+            # ignored" tamper handling `reanalyze_trajectory` itself
+            # already gives the trajectory and `report.json`.
+            convergence_history = read_persisted_convergence_history(
+                trajectory_path, reanalyzed.manifest
+            )
         except (OSError, ValueError) as error:
             # `OSError` (its own `FileNotFoundError` case, in practice):
             # `reanalyze_trajectory`'s own `read_manifest` call raises it
@@ -4287,10 +4336,13 @@ class Api:
             "runId": reanalyzed.manifest.run_id,
             "directoryName": trajectory_path.parent.name,
             "configSummary": _run_config_summary(reanalyzed.params),
-            # Same field, same source function, as the live-run "done"
-            # push (`_drain_run_messages`) -- see that payload's own
-            # comment on this key.
-            "convergenceNote": _derived_convergence_note(reanalyzed.params),
+            # Sourced from the manifest, not `reanalyzed.params` directly
+            # -- see `_derived_convergence_note_from_manifest`'s own
+            # docstring for why a reopened run's own `params` alone
+            # cannot answer this.
+            "convergenceNote": _derived_convergence_note_from_manifest(
+                reanalyzed.manifest, reanalyzed.params
+            ),
             "report": report,
             "panels": scatter_panels(reanalyzed.state),
             "statistics": {
@@ -4314,16 +4366,21 @@ class Api:
             # approach B1: `_sigma_band_payload` reused unchanged from
             # the live-run "done" push (`_drain_run_messages`) — a
             # reopened run's own manifest already carries this, no new
-            # file read. Unlike a live run, a reopened run has no
-            # `convergenceGenerations`/`convergenceHistories` of its
-            # own to draw a curve from at all (this bridge method's own
-            # docstring, above, already names that as a real, separate
-            # scope boundary) — `run-view-completed.js`'s own
-            # `renderTrajectory` shows the band alone, axes sized to
-            # its own trailing window, rather than requiring a curve
-            # that does not exist just to show a band that does.
+            # file read.
             "sigmaBand": _sigma_band_payload(
                 reanalyzed.manifest, self._significant_digits
+            ),
+            # `convergence_history` is `None` for a manifest predating
+            # `convergence.json` -- `run-view-completed.js`'s own
+            # `renderTrajectory` already treats `undefined` generations/
+            # histories as "nothing to draw a curve from," the identical
+            # fallback a batch's own reopened payload already relies on
+            # for the same two keys.
+            "convergenceGenerations": (
+                convergence_history[0] if convergence_history is not None else None
+            ),
+            "convergenceHistories": (
+                convergence_history[1] if convergence_history is not None else None
             ),
             # The trajectory panel's own predicted-equilibrium overlay
             # (design doc §6.2, `_equilibrium_reference_payload`'s own
@@ -4403,6 +4460,13 @@ class Api:
         reports: list[FinalReport] = []
         final_states: list[ModelState] = []
         trajectory_paths: list[Path] = []
+        # Every replicate shares one configuration, so the first one's
+        # own manifest speaks for the whole batch -- the same source
+        # `Api.open_run`'s own `_derived_convergence_note_from_manifest`
+        # call already reads from, for the identical "the batch's own
+        # manifest never has a real auto_derived/relaxation_time of its
+        # own" reason that function's own docstring gives.
+        first_replicate_manifest: RunManifest | None = None
         try:
             for replicate_run_id in manifest.replicate_run_ids:
                 replicate_directory = batch_runner.replicate_output_directory(
@@ -4410,6 +4474,8 @@ class Api:
                 )
                 trajectory_path = replicate_directory / "trajectory.jsonl"
                 reanalyzed = reanalyze_trajectory(trajectory_path)
+                if first_replicate_manifest is None:
+                    first_replicate_manifest = reanalyzed.manifest
                 # `ReanalyzedGeneration.report` is typed as the broader
                 # `dict[str, object]` since a caller *could* pass
                 # `differentiation_orders` and get an extra key back
@@ -4421,6 +4487,11 @@ class Api:
                 trajectory_paths.append(trajectory_path)
         except (OSError, ValueError) as error:
             return {"ok": False, "message": str(error)}
+        convergence_note = (
+            _derived_convergence_note_from_manifest(first_replicate_manifest, params)
+            if first_replicate_manifest is not None
+            else ""
+        )
         payload = _pooled_batch_payload(
             params,
             manifest.run_id,
@@ -4436,6 +4507,7 @@ class Api:
                 [params] * len(trajectory_paths),
                 self._significant_digits,
             ),
+            convergence_note=convergence_note,
         )
         return {"ok": True, **payload}
 
@@ -4505,6 +4577,14 @@ class Api:
         replicate_ids: list[str] = []
         trajectory_paths: list[Path] = []
         params_list: list[SimulationParams] = []
+        # The first member's own manifest speaks for the whole pooled
+        # payload's own `convergenceNote`, the identical simplification
+        # `params_list[0]` below already makes for `params` -- a Study's
+        # own members can genuinely disagree (`parameterMismatches`,
+        # below), but this field has never tried to average or choose
+        # among them, only to answer "was at least the first member's
+        # own convergence_window/max_generations auto-derived."
+        first_manifest: RunManifest | None = None
         try:
             for directory in groups.study_run_directories(study):
                 recent = _recent_run_at_directory(directory)
@@ -4519,6 +4599,8 @@ class Api:
                         )
                         trajectory_path = replicate_directory / "trajectory.jsonl"
                         reanalyzed = reanalyze_trajectory(trajectory_path)
+                        if first_manifest is None:
+                            first_manifest = reanalyzed.manifest
                         reports.append(cast("FinalReport", reanalyzed.report))
                         final_states.append(reanalyzed.state)
                         replicate_ids.append(replicate_run_id)
@@ -4527,6 +4609,8 @@ class Api:
                 else:
                     trajectory_path = directory / "trajectory.jsonl"
                     reanalyzed = reanalyze_trajectory(trajectory_path)
+                    if first_manifest is None:
+                        first_manifest = reanalyzed.manifest
                     reports.append(cast("FinalReport", reanalyzed.report))
                     final_states.append(reanalyzed.state)
                     replicate_ids.append(reanalyzed.manifest.run_id)
@@ -4536,6 +4620,11 @@ class Api:
             return {"ok": False, "message": str(error)}
         if not reports:
             return {"ok": False, "message": f"study {study_id} has no readable runs"}
+        convergence_note = (
+            _derived_convergence_note_from_manifest(first_manifest, params_list[0])
+            if first_manifest is not None
+            else ""
+        )
         payload = _pooled_batch_payload(
             params_list[0],
             study.study_id,
@@ -4548,6 +4637,7 @@ class Api:
             pooled_convergence_histories_payload=_rebuilt_pooled_histories(
                 replicate_ids, trajectory_paths, params_list, self._significant_digits
             ),
+            convergence_note=convergence_note,
         )
         result = {"ok": True, **payload}
         mismatches = _study_parameter_mismatches(params_list)
@@ -5755,6 +5845,7 @@ def _batch_done_payload(
         ],
         digits=digits,
         pooled_convergence_histories_payload=pooled_convergence_histories_payload,
+        convergence_note=_derived_convergence_note(params),
     )
 
 
@@ -5915,6 +6006,7 @@ def _pooled_batch_payload(
     trajectory_paths: Sequence[Path],
     digits: int,
     pooled_convergence_histories_payload: dict[str, Any],
+    convergence_note: str,
 ) -> dict[str, Any]:
     """Shared aggregation behind a batch's own "done" payload (`_batch_
     done_payload`, above), a reopened batch's own payload (`Api.open_
@@ -5929,6 +6021,15 @@ def _pooled_batch_payload(
     (`_rebuilt_pooled_histories`). It is still passed in rather than
     computed here because only the caller knows which of those two it
     has.
+
+    `convergence_note` is passed in for the identical reason: a live
+    batch's own `params` (`_batch_done_payload`'s own caller) already
+    has a real `auto_derived`/`relaxation_time`, but `params` reconstructed
+    from a reopened batch's own manifest never does
+    (`_derived_convergence_note_from_manifest`'s own docstring has the
+    full account) -- only a reopened caller has a replicate's own
+    per-run manifest on hand to source it from instead, so this function
+    itself stays agnostic to which case it is in.
 
     `replicate_ids`/`reports`/`final_states`/`trajectory_paths` are
     four parallel sequences, one entry per published replicate, rather
@@ -6022,11 +6123,7 @@ def _pooled_batch_payload(
         "runId": run_id,
         "directoryName": output_directory.name,
         "configSummary": _run_config_summary(params),
-        # Same field, same source function, as a scalar run's own "done"
-        # payload (`_drain_run_messages`'s own comment on this key) --
-        # every replicate in a batch shares one `params`, so one note
-        # covers the whole batch.
-        "convergenceNote": _derived_convergence_note(params),
+        "convergenceNote": convergence_note,
         "outputDirectory": str(output_directory),
         "panels": panels,
         "replicates": replicates,

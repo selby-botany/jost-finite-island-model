@@ -3535,18 +3535,22 @@ def test_open_run_echoes_the_trajectory_path_it_was_given(tmp_path: Path) -> Non
 def test_open_run_carries_the_derived_convergence_note(tmp_path: Path) -> None:
     """`open_run`'s own payload carries `convergenceNote` (the Run card's
     own consolidated message area, `webui/screens/run-view-completed.js`'s
-    `renderRunMessages`).
+    `renderRunMessages`), the empty half of its own two real cases.
 
     `_write_run`'s own config gives `convergence_window`/`max_generations`
-    explicitly, so `app_module._derived_convergence_note` -- the identical
-    function computing this same key for a live run's own "done" payload
-    (`_drain_run_messages`) and a batch's own (`_pooled_batch_payload`) --
-    returns `""` here; `test_validate_form_has_no_note_when_window_and_
-    cap_are_explicit` already covers that same "both given explicitly"
-    case directly, and `test/convergence/test_defaults.py` already covers
-    `describe_derived_convergence`'s own non-empty sentence. What only
-    this test proves: `open_run`'s payload actually carries the key this
-    function computes, not a stale or hardcoded value.
+    explicitly, so `app_module._derived_convergence_note_from_manifest`
+    -- the function computing this key for a reopened run, reading
+    `manifest.auto_derived`/`relaxation_time` rather than `reanalyzed.
+    params`'s own (always empty for a reconstructed `SimulationParams`,
+    that function's own docstring) -- returns `""` here;
+    `test_validate_form_has_no_note_when_window_and_cap_are_explicit`
+    already covers that same "both given explicitly" case directly, and
+    `test/convergence/test_defaults.py` already covers `describe_
+    derived_convergence`'s own non-empty sentence. What only this test
+    proves: `open_run`'s payload actually carries the key this function
+    computes, not a stale or hardcoded value. The non-empty case is
+    `test_open_run_carries_a_real_convergence_note_and_trajectory_curve`,
+    below.
     """
     output = _write_run(tmp_path)
     trajectory_path = str(output / "trajectory.jsonl")
@@ -3555,6 +3559,57 @@ def test_open_run_carries_the_derived_convergence_note(tmp_path: Path) -> None:
 
     assert result["ok"] is True
     assert result["convergenceNote"] == ""
+
+
+@pytest.mark.slow
+def test_open_run_carries_a_real_convergence_note_and_trajectory_curve(
+    tmp_path: Path,
+) -> None:
+    """A reopened, auto-derived run gets both its own note and its own curve back.
+
+    Reported live: reopening a run left `convergenceNote` empty and the
+    trajectory panel showing only a sigma band (or nothing at all),
+    regardless of whether the original live run had a real derived-
+    settings note and a real trajectory curve of its own -- both were
+    simply never persisted anywhere. `auto_derived`/`relaxation_time`
+    (`RunManifest`) and `convergence.json` (`fim.reanalyze.read_
+    persisted_convergence_history`) close both gaps at once; this is
+    the one test that drives a genuinely auto-derived run (no explicit
+    `convergence_window`/`max_generations`/`convergence_tolerance` at
+    all, unlike every other `_write_run`-based test in this file) all
+    the way through `cli.main(["run", ...])` and back through `Api.
+    open_run` to prove it.
+
+    Strong migration (`m=0.9`) and a small `N` keep the derived window/
+    cap themselves small, so this still runs in well under a second --
+    `island_relaxation_time` shrinks with migration strength, not
+    population size alone.
+    """
+    config = {
+        "N": 10,
+        "ploidy": "haploid",
+        "d": 2,
+        "m": 0.9,
+        "mu": 0.01,
+        "seed": 20260814,
+        "loci": [{"locus_id": 1, "length": 50}],
+        "n_replicates": 1,
+        "replicate_tolerance": None,
+    }
+    config_path = tmp_path / "run.yaml"
+    config_path.write_text(yaml.safe_dump(config, sort_keys=False), encoding="utf-8")
+    output = tmp_path / "output"
+    assert cli.main(["run", str(config_path), "-o", str(output), "--quiet"]) == 0
+    trajectory_path = str(output / "trajectory.jsonl")
+
+    result = Api().open_run({"trajectoryPath": trajectory_path})
+
+    assert result["ok"] is True
+    assert result["convergenceNote"].startswith("Convergence: window ")
+    assert "(derived; this model needs about" in result["convergenceNote"]
+    assert result["convergenceGenerations"] is not None
+    assert len(result["convergenceGenerations"]) > 1
+    assert "D" in result["convergenceHistories"]
 
 
 def test_open_run_carries_the_real_identity_recovery_reference(tmp_path: Path) -> None:

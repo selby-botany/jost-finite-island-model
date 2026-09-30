@@ -346,12 +346,13 @@ def test_selecting_and_opening_a_recent_run_renders_screen_three(
     assert settled["runViewState"] == "completed"
     assert settled["runId"].startswith("run-")
     assert output.exists()
-    # `Api.open_run`'s own payload carries neither `convergenceGenerations`
-    # nor `convergenceHistories` (no live monitor to have recorded a
-    # history from a re-analyzed run) — botanist GUI design doc §6.2's
-    # trajectory panel is a live-run-only first slice, a named scope
-    # boundary, not an oversight.
-    assert settled["trajectoryFrameHidden"] is True
+    # `Api.open_run`'s own payload now carries `convergenceGenerations`/
+    # `convergenceHistories`, read back from the run's own persisted
+    # `convergence.json` (`fim.reanalyze.read_persisted_convergence_
+    # history`) — a reopened run's trajectory panel shows the identical
+    # curve a live-just-finished run's own does, not the old "no live
+    # monitor, so no curve" scope boundary this test once asserted.
+    assert settled["trajectoryFrameHidden"] is False
 
 
 def test_double_clicking_a_recent_run_row_opens_it_directly(
@@ -927,26 +928,24 @@ def test_expanding_a_batch_row_shows_its_own_replicate_list(
     assert settled["afterCollapseCount"] == 1
 
 
-def test_opening_a_run_with_a_sigma_band_shows_it_with_no_curve_line(
+def test_opening_a_run_with_a_sigma_band_shows_it_alongside_the_curve(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """A reopened run's own sigma band renders — the band alone, no curve.
+    """A reopened run's own sigma band renders alongside its real curve.
 
     Sigma-band GUI design doc `20260910-claude-sonnet-5-gui-sigma-band-
-    design.md` (`selby/restricted`) slice 4: `Api.open_run` has no
-    `convergenceGenerations`/`convergenceHistories` of its own (re-
-    analysis recomputes one generation, never a full history) — the
-    trajectory panel still shows, axes sized to the band's own trailing
-    window alone, with no simulated-curve legend entry (no curve, no
-    per-statistic swatch to show for one) and a real, non-blank shaded
-    region.
+    design.md` (`selby/restricted`) slice 4, updated for `Api.open_run`
+    now carrying `convergenceGenerations`/`convergenceHistories` of its
+    own (`fim.reanalyze.read_persisted_convergence_history`, read back
+    from the run's own persisted `convergence.json` -- no longer "re-
+    analysis recomputes one generation, never a full history"): the
+    trajectory panel shows the real simulated curve, its closed-form
+    companion, and the sigma band together, not the band alone.
 
     `_write_run_with_sigma_band`'s own `N`/`m`/`mu` (`20`/`0.1`/`0.01`)
     are all plain scalars, and its sigma band covers `D` (the config's
-    own unset-so-default `convergence_statistic`). The separate
-    statistic-color key is intentionally absent; only non-statistic
-    overlays keep their own caption-style legend entries.
+    own unset-so-default `convergence_statistic`).
     """
     monkeypatch.setattr(paths_module, "results_directory", lambda: tmp_path / "results")
     _write_run_with_sigma_band(tmp_path)
@@ -1009,26 +1008,31 @@ def test_opening_a_run_with_a_sigma_band_shows_it_with_no_curve_line(
     assert settled["captionHidden"] is False
     assert "3\u03c3" in settled["captionText"]
     assert "5 generations" in settled["captionText"]
-    # No curve was ever drawn (`Api.open_run` carries no `convergence*`
-    # history at all), so there is no statistic-color key. The
-    # identity-recovery curve overlay (`_identity_recovery_reference_
-    # payload`) draws unconditionally whenever `N`/`m` alone are plain
-    # scalars, so it remains as a non-statistic overlay entry.
-    assert settled["legendNames"] == [
+    # Both non-statistic overlay entries now show: the closed-form D(t)
+    # companion (only drawn alongside a real simulated curve, which a
+    # reopened run now has) and the identity-recovery curve (draws
+    # unconditionally whenever `N`/`m` alone are plain scalars, as
+    # before). Per-statistic legend entries use a different DOM
+    # structure this selector does not capture, so their presence is
+    # not asserted here either way.
+    assert set(settled["legendNames"]) == {
+        "expected trajectory (closed form)",
         "f₀ (identity recovery, theoretical founder event)",
-    ]
+    }
     assert settled["canvasNonBlankPixelCount"] > 0
 
 
-def test_opening_a_run_without_a_sigma_band_still_hides_the_trajectory_panel(
+def test_opening_a_run_without_a_sigma_band_shows_the_curve_with_no_band(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """An ordinary reopened run (no sigma band, no curve) keeps the panel hidden.
+    """A reopened run's own trajectory panel shows without a sigma-band caption.
 
-    Unchanged behavior — the trajectory panel's own pre-existing
-    "nothing to show" case, confirmed still correct now that it shares
-    a gate with the new sigma-band-alone case above.
+    Contrasts with `test_opening_a_run_with_a_sigma_band_shows_it_
+    alongside_the_curve`, above: the same real curve now shows either
+    way (`fim.reanalyze.read_persisted_convergence_history`), but only
+    a run that actually requested a sigma band extension gets its own
+    caption/shading -- `_write_run`'s own config never does.
     """
     monkeypatch.setattr(paths_module, "results_directory", lambda: tmp_path / "results")
     _write_run(tmp_path)
@@ -1055,7 +1059,19 @@ def test_opening_a_run_without_a_sigma_band_still_hides_the_trajectory_panel(
                 "({"
                 "runViewState: window.fim.getRunViewState(), "
                 "frameHidden: "
-                "document.getElementById('run-trajectory-frame').hidden"
+                "document.getElementById('run-trajectory-frame').hidden, "
+                "captionHidden: document.getElementById("
+                "'run-trajectory-sigma-band-caption').hidden, "
+                "canvasNonBlankPixelCount: (() => {"
+                "var c = document.getElementById('run-trajectory-canvas');"
+                "var ctx = c.getContext('2d');"
+                "var data = ctx.getImageData(0, 0, c.width, c.height).data;"
+                "var count = 0;"
+                "for (var i = 3; i < data.length; i += 4) {"
+                "if (data[i] !== 0) { count += 1; }"
+                "}"
+                "return count;"
+                "})()"
                 "})",
                 lambda value: (
                     value is not None and value.get("runViewState") == "completed"
@@ -1069,7 +1085,9 @@ def test_opening_a_run_without_a_sigma_band_still_hides_the_trajectory_panel(
     settled = outcome.get(timeout=_DRIVE_TIMEOUT_SECONDS)
 
     assert settled is not None
-    assert settled["frameHidden"] is True
+    assert settled["frameHidden"] is False
+    assert settled["captionHidden"] is True
+    assert settled["canvasNonBlankPixelCount"] > 0
 
 
 def test_expanding_a_study_shows_every_run_directly_with_no_date_subgroups(

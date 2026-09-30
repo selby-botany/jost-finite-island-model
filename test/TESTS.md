@@ -10024,18 +10024,52 @@ def test_open_run_carries_the_derived_convergence_note(tmp_path: Path) -> None
 
 `open_run`'s own payload carries `convergenceNote` (the Run card's
 own consolidated message area, `webui/screens/run-view-completed.js`'s
-`renderRunMessages`).
+`renderRunMessages`), the empty half of its own two real cases.
 
 `_write_run`'s own config gives `convergence_window`/`max_generations`
-explicitly, so `app_module._derived_convergence_note` -- the identical
-function computing this same key for a live run's own "done" payload
-(`_drain_run_messages`) and a batch's own (`_pooled_batch_payload`) --
-returns `""` here; `test_validate_form_has_no_note_when_window_and_
-cap_are_explicit` already covers that same "both given explicitly"
-case directly, and `test/convergence/test_defaults.py` already covers
-`describe_derived_convergence`'s own non-empty sentence. What only
-this test proves: `open_run`'s payload actually carries the key this
-function computes, not a stale or hardcoded value.
+explicitly, so `app_module._derived_convergence_note_from_manifest`
+-- the function computing this key for a reopened run, reading
+`manifest.auto_derived`/`relaxation_time` rather than `reanalyzed.
+params`'s own (always empty for a reconstructed `SimulationParams`,
+that function's own docstring) -- returns `""` here;
+`test_validate_form_has_no_note_when_window_and_cap_are_explicit`
+already covers that same "both given explicitly" case directly, and
+`test/convergence/test_defaults.py` already covers `describe_
+derived_convergence`'s own non-empty sentence. What only this test
+proves: `open_run`'s payload actually carries the key this function
+computes, not a stale or hardcoded value. The non-empty case is
+`test_open_run_carries_a_real_convergence_note_and_trajectory_curve`,
+below.
+
+<a id="gui.test_app_api.test_open_run_carries_a_real_convergence_note_and_trajectory_curve"></a>
+
+#### test\_open\_run\_carries\_a\_real\_convergence\_note\_and\_trajectory\_curve
+
+```python
+@pytest.mark.slow
+def test_open_run_carries_a_real_convergence_note_and_trajectory_curve(
+        tmp_path: Path) -> None
+```
+
+A reopened, auto-derived run gets both its own note and its own curve back.
+
+Reported live: reopening a run left `convergenceNote` empty and the
+trajectory panel showing only a sigma band (or nothing at all),
+regardless of whether the original live run had a real derived-
+settings note and a real trajectory curve of its own -- both were
+simply never persisted anywhere. `auto_derived`/`relaxation_time`
+(`RunManifest`) and `convergence.json` (`fim.reanalyze.read_
+persisted_convergence_history`) close both gaps at once; this is
+the one test that drives a genuinely auto-derived run (no explicit
+`convergence_window`/`max_generations`/`convergence_tolerance` at
+all, unlike every other `_write_run`-based test in this file) all
+the way through `cli.main(["run", ...])` and back through `Api.
+open_run` to prove it.
+
+Strong migration (`m=0.9`) and a small `N` keep the derived window/
+cap themselves small, so this still runs in well under a second --
+`island_relaxation_time` shrinks with migration strength, not
+population size alone.
 
 <a id="gui.test_app_api.test_open_run_carries_the_real_identity_recovery_reference"></a>
 
@@ -15190,46 +15224,46 @@ them. Clicking a replicate row selects its own trajectory for
 "Open ▶", the same selection mechanism a scalar row's own click
 already uses.
 
-<a id="gui.test_open_run_screen.test_opening_a_run_with_a_sigma_band_shows_it_with_no_curve_line"></a>
+<a id="gui.test_open_run_screen.test_opening_a_run_with_a_sigma_band_shows_it_alongside_the_curve"></a>
 
-#### test\_opening\_a\_run\_with\_a\_sigma\_band\_shows\_it\_with\_no\_curve\_line
+#### test\_opening\_a\_run\_with\_a\_sigma\_band\_shows\_it\_alongside\_the\_curve
 
 ```python
-def test_opening_a_run_with_a_sigma_band_shows_it_with_no_curve_line(
+def test_opening_a_run_with_a_sigma_band_shows_it_alongside_the_curve(
         tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None
 ```
 
-A reopened run's own sigma band renders — the band alone, no curve.
+A reopened run's own sigma band renders alongside its real curve.
 
 Sigma-band GUI design doc `20260910-claude-sonnet-5-gui-sigma-band-
-design.md` (`selby/restricted`) slice 4: `Api.open_run` has no
-`convergenceGenerations`/`convergenceHistories` of its own (re-
-analysis recomputes one generation, never a full history) — the
-trajectory panel still shows, axes sized to the band's own trailing
-window alone, with no simulated-curve legend entry (no curve, no
-per-statistic swatch to show for one) and a real, non-blank shaded
-region.
+design.md` (`selby/restricted`) slice 4, updated for `Api.open_run`
+now carrying `convergenceGenerations`/`convergenceHistories` of its
+own (`fim.reanalyze.read_persisted_convergence_history`, read back
+from the run's own persisted `convergence.json` -- no longer "re-
+analysis recomputes one generation, never a full history"): the
+trajectory panel shows the real simulated curve, its closed-form
+companion, and the sigma band together, not the band alone.
 
 `_write_run_with_sigma_band`'s own `N`/`m`/`mu` (`20`/`0.1`/`0.01`)
 are all plain scalars, and its sigma band covers `D` (the config's
-own unset-so-default `convergence_statistic`). The separate
-statistic-color key is intentionally absent; only non-statistic
-overlays keep their own caption-style legend entries.
+own unset-so-default `convergence_statistic`).
 
-<a id="gui.test_open_run_screen.test_opening_a_run_without_a_sigma_band_still_hides_the_trajectory_panel"></a>
+<a id="gui.test_open_run_screen.test_opening_a_run_without_a_sigma_band_shows_the_curve_with_no_band"></a>
 
-#### test\_opening\_a\_run\_without\_a\_sigma\_band\_still\_hides\_the\_trajectory\_panel
+#### test\_opening\_a\_run\_without\_a\_sigma\_band\_shows\_the\_curve\_with\_no\_band
 
 ```python
-def test_opening_a_run_without_a_sigma_band_still_hides_the_trajectory_panel(
+def test_opening_a_run_without_a_sigma_band_shows_the_curve_with_no_band(
         tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None
 ```
 
-An ordinary reopened run (no sigma band, no curve) keeps the panel hidden.
+A reopened run's own trajectory panel shows without a sigma-band caption.
 
-Unchanged behavior — the trajectory panel's own pre-existing
-"nothing to show" case, confirmed still correct now that it shares
-a gate with the new sigma-band-alone case above.
+Contrasts with `test_opening_a_run_with_a_sigma_band_shows_it_
+alongside_the_curve`, above: the same real curve now shows either
+way (`fim.reanalyze.read_persisted_convergence_history`), but only
+a run that actually requested a sigma band extension gets its own
+caption/shading -- `_write_run`'s own config never does.
 
 <a id="gui.test_open_run_screen.test_expanding_a_study_shows_every_run_directly_with_no_date_subgroups"></a>
 
