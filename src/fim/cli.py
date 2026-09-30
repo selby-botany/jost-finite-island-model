@@ -1122,8 +1122,41 @@ def _run_artifact_targets(directory: Path) -> dict[str, Path]:
         "report": directory / "report.json",
         "scatter": directory / "scatter.png",
         "sigma_band_trajectory": directory / "sigma_band_trajectory.jsonl",
-        "convergence": directory / "convergence.json",
+        "convergence": directory / "convergence.jsonl",
     }
+
+
+def _convergence_history_rows(result: RunResult) -> list[dict[str, object]]:
+    """Return one row per generation, for `convergence.jsonl` (below).
+
+    `{"generation": N, "D": ..., "H_S": ..., ...}` -- the same shape
+    `sigma_band_trajectory.jsonl`'s own rows already use (one small
+    object per generation, `write_jsonl_rows`), rather than a single
+    large object holding a `generations` list alongside a `histories`
+    mapping of equal-length lists.
+
+    A statistic whose own history is shorter than `result.convergence_
+    generations` (only `G_ST` can be, at a currently-monomorphic locus
+    -- `fim.engine._convergence_values`'s own docstring) is left out of
+    every row entirely, not partially included: which specific
+    generations it is missing is not recoverable from the monitor's own
+    recorded shape (a name simply not appended that round, `fim.
+    convergence.monitor.ConvergenceMonitor.record`'s own docstring), so
+    there is no honest per-row placeholder to write for it.
+    `run-view-completed.js`'s own `renderTrajectory` already applies
+    the identical "length must match `generations` exactly" filter to
+    the un-rowed shape this replaces, so nothing that was ever actually
+    plottable stops being so.
+    """
+    aligned = {
+        name: values
+        for name, values in result.convergence_histories.items()
+        if len(values) == len(result.convergence_generations)
+    }
+    return [
+        {"generation": generation, **{name: aligned[name][index] for name in aligned}}
+        for index, generation in enumerate(result.convergence_generations)
+    ]
 
 
 def _utc_now() -> datetime:
@@ -1173,16 +1206,7 @@ def _write_run_artifacts(result: RunResult, directory: Path) -> dict[str, Path]:
     # curve instead of having none at all (`fim.reanalyze.
     # reanalyze_trajectory`'s own docstring on that prior scope
     # boundary has the fuller account of what reopening used to lose).
-    write_report(
-        targets["convergence"],
-        {
-            "generations": list(result.convergence_generations),
-            "histories": {
-                name: list(values)
-                for name, values in result.convergence_histories.items()
-            },
-        },
-    )
+    write_jsonl_rows(targets["convergence"], _convergence_history_rows(result))
     digested_names = ["trajectory", "report", "scatter", "convergence"]
     if result.sigma_band_trajectory is not None:
         # Written — and digested — only when the within-run sigma band

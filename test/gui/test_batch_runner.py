@@ -180,7 +180,7 @@ def test_start_batch_run_writes_every_replicate_and_batch_artifact_on_success(
             "manifest.json",
             "report.json",
             "scatter.png",
-            "convergence.json",
+            "convergence.jsonl",
         }
     # Progress no longer travels through `message_queue` at all
     # (`doc/fim-gui-design.md` §7.2): it is entirely file-mediated now, so a successful

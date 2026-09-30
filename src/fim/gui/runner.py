@@ -58,7 +58,7 @@ from fim.model.params import SimulationParams
 from fim.model.state import ModelState
 from fim.persistence.jsonl_store import JSONLTrajectoryStore
 from fim.persistence.manifest import hash_file, write_manifest
-from fim.persistence.report import write_report
+from fim.persistence.report import write_jsonl_rows, write_report
 from fim.viz.scatter import (
     FloatArray,
     frequency_points,
@@ -155,8 +155,29 @@ def run_artifact_targets(directory: Path) -> dict[str, Path]:
         "manifest": directory / "manifest.json",
         "report": directory / "report.json",
         "scatter": directory / "scatter.png",
-        "convergence": directory / "convergence.json",
+        "convergence": directory / "convergence.jsonl",
     }
+
+
+def _convergence_history_rows(result: RunResult) -> list[dict[str, object]]:
+    """Return one row per generation, for `convergence.jsonl`.
+
+    Deliberately the same shape `cli._convergence_history_rows`
+    produces -- a direct parallel, not a shared import, for the
+    identical reason `run_artifact_targets`'s own docstring already
+    gives. See that function's own docstring for exactly why a
+    statistic shorter than `result.convergence_generations` is left
+    out of every row entirely rather than partially included.
+    """
+    aligned = {
+        name: values
+        for name, values in result.convergence_histories.items()
+        if len(values) == len(result.convergence_generations)
+    }
+    return [
+        {"generation": generation, **{name: aligned[name][index] for name in aligned}}
+        for index, generation in enumerate(result.convergence_generations)
+    ]
 
 
 def start_run(
@@ -321,16 +342,7 @@ def write_run_artifacts(result: RunResult, targets: dict[str, Path]) -> None:
     # See `cli._write_run_artifacts`'s own identical comment on this
     # same artifact -- persisted so reopening restores the trajectory
     # curve instead of having none at all.
-    write_report(
-        targets["convergence"],
-        {
-            "generations": list(result.convergence_generations),
-            "histories": {
-                name: list(values)
-                for name, values in result.convergence_histories.items()
-            },
-        },
-    )
+    write_jsonl_rows(targets["convergence"], _convergence_history_rows(result))
     manifest = replace(
         result.manifest,
         artifacts={

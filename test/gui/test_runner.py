@@ -61,7 +61,7 @@ def test_run_artifact_targets_matches_the_documented_five_filenames(
         "manifest.json",
         "report.json",
         "scatter.png",
-        "convergence.json",
+        "convergence.jsonl",
     }
 
 
@@ -98,7 +98,7 @@ def test_start_run_writes_the_five_documented_artifacts_on_success(
         "manifest.json",
         "report.json",
         "scatter.png",
-        "convergence.json",
+        "convergence.jsonl",
     }
     messages = _drain(message_queue)
     assert messages[-1][0] == "done"

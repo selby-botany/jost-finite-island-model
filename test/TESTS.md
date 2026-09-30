@@ -1979,14 +1979,15 @@ def test_read_persisted_convergence_history_matches_the_live_monitor(
         tmp_path: Path) -> None
 ```
 
-`convergence.json` round-trips the exact history a live run recorded.
+`convergence.jsonl` round-trips the exact history a live run recorded.
 
 Reported live: reopening a run showed no trajectory-vs-generation
 curve at all, only the sigma band -- a named scope boundary, not an
 oversight, because nothing persisted a live run's own `Convergence
-Monitor` history to disk. `convergence.json` (`fim.cli._write_run_
-artifacts`) closes that gap; this proves the round trip through
-`read_persisted_convergence_history` reproduces it exactly.
+Monitor` history to disk. `convergence.jsonl` (`fim.cli._write_run_
+artifacts`, one row per generation, `{"generation": N, "D": ...,
+...}`) closes that gap; this proves the round trip through `read_
+persisted_convergence_history` reproduces it exactly.
 
 <a id="test.test_reanalyze.test_read_persisted_convergence_history_rejects_a_tampered_file"></a>
 
@@ -1997,7 +1998,8 @@ def test_read_persisted_convergence_history_rejects_a_tampered_file(
         tmp_path: Path) -> None
 ```
 
-An edited `convergence.json` fails its own digest check, not silently ignored.
+An edited `convergence.jsonl` fails its own digest check, not silently
+ignored.
 
 <a id="test.test_reanalyze.test_read_persisted_convergence_history_returns_none_when_absent"></a>
 
@@ -2008,13 +2010,33 @@ def test_read_persisted_convergence_history_returns_none_when_absent(
         tmp_path: Path) -> None
 ```
 
-A missing `convergence.json` degrades to "nothing to show," not an error.
+A missing `convergence.jsonl` degrades to "nothing to show," not an error.
 
 The identical graceful fallback a manifest written before this
 field existed at all gets (`manifest.artifacts` simply never naming
 `"convergence"`) -- simulated here the cheaper way, by deleting the
 file a digest is still recorded for, since both paths return
 `_cached_final_report`'s own twin, `None`.
+
+<a id="test.test_reanalyze.test_convergence_history_rows_drop_a_statistic_shorter_than_generations"></a>
+
+#### test\_convergence\_history\_rows\_drop\_a\_statistic\_shorter\_than\_generations
+
+```python
+def test_convergence_history_rows_drop_a_statistic_shorter_than_generations(
+) -> None
+```
+
+A statistic undefined on at least one generation is omitted from every row.
+
+`_convergence_history_rows`'s own docstring: a name is either
+written for every row or none -- there is no honest partial
+placeholder for "undefined this one generation" in a row-per-
+generation shape. Proven directly here by handing it a synthetic
+`G_ST`-style short history (only the two attributes this function
+actually reads matter, so a plain stand-in is exact, not an
+approximation of a real `RunResult`), rather than trusting a real
+run to happen to reproduce a monomorphic locus.
 
 <a id="test.test_reanalyze.test_differentiation_q_for_state_agrees_with_e_st_under_size_weighting"></a>
 
@@ -10058,7 +10080,7 @@ trajectory panel showing only a sigma band (or nothing at all),
 regardless of whether the original live run had a real derived-
 settings note and a real trajectory curve of its own -- both were
 simply never persisted anywhere. `auto_derived`/`relaxation_time`
-(`RunManifest`) and `convergence.json` (`fim.reanalyze.read_
+(`RunManifest`) and `convergence.jsonl` (`fim.reanalyze.read_
 persisted_convergence_history`) close both gaps at once; this is
 the one test that drives a genuinely auto-derived run (no explicit
 `convergence_window`/`max_generations`/`convergence_tolerance` at
@@ -15239,7 +15261,7 @@ Sigma-band GUI design doc `20260910-claude-sonnet-5-gui-sigma-band-
 design.md` (`selby/restricted`) slice 4, updated for `Api.open_run`
 now carrying `convergenceGenerations`/`convergenceHistories` of its
 own (`fim.reanalyze.read_persisted_convergence_history`, read back
-from the run's own persisted `convergence.json` -- no longer "re-
+from the run's own persisted `convergence.jsonl` -- no longer "re-
 analysis recomputes one generation, never a full history"): the
 trajectory panel shows the real simulated curve, its closed-form
 companion, and the sigma band together, not the band alone.

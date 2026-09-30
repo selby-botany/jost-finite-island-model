@@ -226,13 +226,18 @@ def read_persisted_convergence_history(
 ) -> tuple[list[int], dict[str, list[float]]] | None:
     """Return a run's own persisted convergence-monitor history, or `None`.
 
-    `convergence.json` (`fim.cli._write_run_artifacts`/`fim.gui.runner.
-    write_run_artifacts`) holds the exact per-generation `convergence
-    Generations`/`convergenceHistories` a live-just-finished run's own
-    GUI "done" push already carries -- reading it back is what lets
+    `convergence.jsonl` (`fim.cli._convergence_history_rows`/`fim.gui.
+    runner._convergence_history_rows`) holds one row per generation,
+    `{"generation": N, "D": ..., ...}` -- reading it back is what lets
     reopening a run restore its own trajectory-vs-generation curve
     instead of having none at all, the prior, deliberate scope boundary
-    `fim.gui.app.Api.open_run`'s own docstring used to name.
+    `fim.gui.app.Api.open_run`'s own docstring used to name. Reshaped
+    here into the `(generations, histories)` pair `fim.gui.app`'s own
+    `convergenceGenerations`/`convergenceHistories` payload keys need
+    -- every row written shares the identical key set (`_convergence_
+    history_rows`'s own docstring: a statistic is either written for
+    every row or none), so `histories[name]` is always exactly as long
+    as `generations` with no further alignment check needed here.
 
     `None` (nothing to show) under the identical conditions `_cached_
     final_report`, above, treats as "recompute instead": no digest was
@@ -246,7 +251,7 @@ def read_persisted_convergence_history(
 
     Args:
         trajectory_path: The run's own `trajectory.jsonl` --
-            `convergence.json` is expected as its sibling.
+            `convergence.jsonl` is expected as its sibling.
         manifest: The run's own manifest.
 
     Returns:
@@ -254,37 +259,43 @@ def read_persisted_convergence_history(
         persisted to show."
 
     Raises:
-        ValueError: If `convergence.json` exists, a digest was recorded
-            for it, and the two no longer match, or its own content is
-            not the documented shape.
+        ValueError: If `convergence.jsonl` exists, a digest was
+            recorded for it, and the two no longer match, or a row's
+            own content is not the documented shape.
     """
     if manifest.artifacts is None or "convergence" not in manifest.artifacts:
         return None
-    convergence_path = trajectory_path.with_name("convergence.json")
+    convergence_path = trajectory_path.with_name("convergence.jsonl")
     if not convergence_path.is_file():
         return None
     expected = manifest.artifacts["convergence"]
     actual = hash_file(convergence_path)
     if actual != expected:
         raise ValueError(
-            f"convergence.json does not match its manifest: expected sha256 "
+            f"convergence.jsonl does not match its manifest: expected sha256 "
             f"{expected['sha256']} ({expected['bytes']} bytes), found "
             f"{actual['sha256']} ({actual['bytes']} bytes) — the file may "
             "have been edited, truncated, or replaced since the run "
             "completed"
         )
+    generations: list[int] = []
+    histories: dict[str, list[float]] = {}
     with convergence_path.open("r", encoding="utf-8") as handle:
-        parsed = json.load(handle)
-    if (
-        not isinstance(parsed, dict)
-        or not isinstance(parsed.get("generations"), list)
-        or not isinstance(parsed.get("histories"), dict)
-    ):
-        raise ValueError(
-            "convergence.json must be an object with 'generations' (a list) "
-            "and 'histories' (an object)"
-        )
-    return parsed["generations"], parsed["histories"]
+        for raw_line in handle:
+            stripped = raw_line.strip()
+            if not stripped:
+                continue
+            row = json.loads(stripped)
+            if not isinstance(row, dict) or not isinstance(row.get("generation"), int):
+                raise ValueError(
+                    "convergence.jsonl row must be an object with an integer "
+                    "'generation'"
+                )
+            generations.append(row["generation"])
+            for name, value in row.items():
+                if name != "generation":
+                    histories.setdefault(name, []).append(value)
+    return generations, histories
 
 
 def reanalyze_trajectory(

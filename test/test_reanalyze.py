@@ -14,11 +14,14 @@ import json
 import weakref
 from dataclasses import replace
 from pathlib import Path
+from types import SimpleNamespace
+from typing import cast
 
 import pytest
 import yaml
 
 from fim import cli, engine, paths, reanalyze
+from fim.engine import report_for_state
 from fim.persistence.jsonl_store import JSONLTrajectoryStore
 from fim.persistence.manifest import hash_file, read_manifest, write_manifest
 
@@ -375,11 +378,10 @@ def test_reanalyze_trajectory_still_recomputes_an_earlier_generation(
     """
     output = _write_run(tmp_path)
     calls: list[int] = []
-    original = reanalyze.report_for_state
 
     def _counting_report_for_state(*args: object, **kwargs: object) -> object:
         calls.append(1)
-        return original(*args, **kwargs)  # type: ignore[arg-type]
+        return report_for_state(*args, **kwargs)  # type: ignore[arg-type]
 
     monkeypatch.setattr(reanalyze, "report_for_state", _counting_report_for_state)
 
@@ -431,18 +433,20 @@ def test_reanalyze_trajectory_falls_back_when_report_json_is_missing(
 def test_read_persisted_convergence_history_matches_the_live_monitor(
     tmp_path: Path,
 ) -> None:
-    """`convergence.json` round-trips the exact history a live run recorded.
+    """`convergence.jsonl` round-trips the exact history a live run recorded.
 
     Reported live: reopening a run showed no trajectory-vs-generation
     curve at all, only the sigma band -- a named scope boundary, not an
     oversight, because nothing persisted a live run's own `Convergence
-    Monitor` history to disk. `convergence.json` (`fim.cli._write_run_
-    artifacts`) closes that gap; this proves the round trip through
-    `read_persisted_convergence_history` reproduces it exactly.
+    Monitor` history to disk. `convergence.jsonl` (`fim.cli._write_run_
+    artifacts`, one row per generation, `{"generation": N, "D": ...,
+    ...}`) closes that gap; this proves the round trip through `read_
+    persisted_convergence_history` reproduces it exactly.
     """
     output = _write_run(tmp_path)
     manifest = read_manifest(output / "manifest.json")
-    raw = json.loads((output / "convergence.json").read_text(encoding="utf-8"))
+    convergence_text = (output / "convergence.jsonl").read_text(encoding="utf-8")
+    raw_rows = [json.loads(line) for line in convergence_text.splitlines()]
 
     result = reanalyze.read_persisted_convergence_history(
         output / "trajectory.jsonl", manifest
@@ -450,8 +454,8 @@ def test_read_persisted_convergence_history_matches_the_live_monitor(
 
     assert result is not None
     generations, histories = result
-    assert generations == raw["generations"]
-    assert histories == raw["histories"]
+    assert generations == [row["generation"] for row in raw_rows]
+    assert histories["D"] == [row["D"] for row in raw_rows]
     assert len(generations) > 1
     assert "D" in histories
 
@@ -459,17 +463,18 @@ def test_read_persisted_convergence_history_matches_the_live_monitor(
 def test_read_persisted_convergence_history_rejects_a_tampered_file(
     tmp_path: Path,
 ) -> None:
-    """An edited `convergence.json` fails its own digest check, not silently ignored."""
+    """An edited `convergence.jsonl` fails its own digest check, not silently
+    ignored."""
     output = _write_run(tmp_path)
     manifest = read_manifest(output / "manifest.json")
-    convergence_path = output / "convergence.json"
+    convergence_path = output / "convergence.jsonl"
     corrupted = convergence_path.read_text(encoding="utf-8").replace(
-        '"generations"', '"Generations"'
+        '"generation"', '"Generation"'
     )
     convergence_path.write_text(corrupted, encoding="utf-8")
 
     with pytest.raises(
-        ValueError, match=r"convergence\.json does not match its manifest"
+        ValueError, match=r"convergence\.jsonl does not match its manifest"
     ):
         reanalyze.read_persisted_convergence_history(
             output / "trajectory.jsonl", manifest
@@ -479,7 +484,7 @@ def test_read_persisted_convergence_history_rejects_a_tampered_file(
 def test_read_persisted_convergence_history_returns_none_when_absent(
     tmp_path: Path,
 ) -> None:
-    """A missing `convergence.json` degrades to "nothing to show," not an error.
+    """A missing `convergence.jsonl` degrades to "nothing to show," not an error.
 
     The identical graceful fallback a manifest written before this
     field existed at all gets (`manifest.artifacts` simply never naming
@@ -489,13 +494,38 @@ def test_read_persisted_convergence_history_returns_none_when_absent(
     """
     output = _write_run(tmp_path)
     manifest = read_manifest(output / "manifest.json")
-    (output / "convergence.json").unlink()
+    (output / "convergence.jsonl").unlink()
 
     result = reanalyze.read_persisted_convergence_history(
         output / "trajectory.jsonl", manifest
     )
 
     assert result is None
+
+
+def test_convergence_history_rows_drop_a_statistic_shorter_than_generations() -> None:
+    """A statistic undefined on at least one generation is omitted from every row.
+
+    `_convergence_history_rows`'s own docstring: a name is either
+    written for every row or none -- there is no honest partial
+    placeholder for "undefined this one generation" in a row-per-
+    generation shape. Proven directly here by handing it a synthetic
+    `G_ST`-style short history (only the two attributes this function
+    actually reads matter, so a plain stand-in is exact, not an
+    approximation of a real `RunResult`), rather than trusting a real
+    run to happen to reproduce a monomorphic locus.
+    """
+    synthetic_result = SimpleNamespace(
+        convergence_generations=(0, 1, 2),
+        convergence_histories={"D": (0.1, 0.2, 0.3), "G_ST": (0.4, 0.5)},
+    )
+
+    rows = cli._convergence_history_rows(cast("engine.RunResult", synthetic_result))
+
+    assert len(rows) == 3
+    assert all("G_ST" not in row for row in rows)
+    assert [row["D"] for row in rows] == [0.1, 0.2, 0.3]
+    assert [row["generation"] for row in rows] == [0, 1, 2]
 
 
 def test_differentiation_q_for_state_agrees_with_e_st_under_size_weighting(

@@ -348,7 +348,7 @@ def test_selecting_and_opening_a_recent_run_renders_screen_three(
     assert output.exists()
     # `Api.open_run`'s own payload now carries `convergenceGenerations`/
     # `convergenceHistories`, read back from the run's own persisted
-    # `convergence.json` (`fim.reanalyze.read_persisted_convergence_
+    # `convergence.jsonl` (`fim.reanalyze.read_persisted_convergence_
     # history`) — a reopened run's trajectory panel shows the identical
     # curve a live-just-finished run's own does, not the old "no live
     # monitor, so no curve" scope boundary this test once asserted.
@@ -938,7 +938,7 @@ def test_opening_a_run_with_a_sigma_band_shows_it_alongside_the_curve(
     design.md` (`selby/restricted`) slice 4, updated for `Api.open_run`
     now carrying `convergenceGenerations`/`convergenceHistories` of its
     own (`fim.reanalyze.read_persisted_convergence_history`, read back
-    from the run's own persisted `convergence.json` -- no longer "re-
+    from the run's own persisted `convergence.jsonl` -- no longer "re-
     analysis recomputes one generation, never a full history"): the
     trajectory panel shows the real simulated curve, its closed-form
     companion, and the sigma band together, not the band alone.

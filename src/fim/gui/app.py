@@ -4272,7 +4272,7 @@ class Api:
             live-just-finished run; `convergenceGenerations`/
             `convergenceHistories` are `read_persisted_convergence_
             history`'s own result (`None`/`None` for a manifest
-            predating `convergence.json`), restoring the identical
+            predating `convergence.jsonl`), restoring the identical
             trajectory-vs-generation curve a live-just-finished run's
             own payload already carries, rather than the sigma band
             alone; `sigmaBand` is `_sigma_band_payload`'s
@@ -4371,7 +4371,7 @@ class Api:
                 reanalyzed.manifest, self._significant_digits
             ),
             # `convergence_history` is `None` for a manifest predating
-            # `convergence.json` -- `run-view-completed.js`'s own
+            # `convergence.jsonl` -- `run-view-completed.js`'s own
             # `renderTrajectory` already treats `undefined` generations/
             # histories as "nothing to draw a curve from," the identical
             # fallback a batch's own reopened payload already relies on

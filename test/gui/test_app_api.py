@@ -3572,7 +3572,7 @@ def test_open_run_carries_a_real_convergence_note_and_trajectory_curve(
     regardless of whether the original live run had a real derived-
     settings note and a real trajectory curve of its own -- both were
     simply never persisted anywhere. `auto_derived`/`relaxation_time`
-    (`RunManifest`) and `convergence.json` (`fim.reanalyze.read_
+    (`RunManifest`) and `convergence.jsonl` (`fim.reanalyze.read_
     persisted_convergence_history`) close both gaps at once; this is
     the one test that drives a genuinely auto-derived run (no explicit
     `convergence_window`/`max_generations`/`convergence_tolerance` at

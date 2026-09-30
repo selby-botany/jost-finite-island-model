@@ -5972,7 +5972,7 @@ reuse, not a second rendering path.
   live-just-finished run; `convergenceGenerations`/
   `convergenceHistories` are `read_persisted_convergence_
   history`'s own result (`None`/`None` for a manifest
-  predating `convergence.json`), restoring the identical
+  predating `convergence.jsonl`), restoring the identical
   trajectory-vs-generation curve a live-just-finished run's
   own payload already carries, rather than the sigma band
   alone; `sigmaBand` is `_sigma_band_payload`'s
@@ -15424,13 +15424,18 @@ def read_persisted_convergence_history(
 
 Return a run's own persisted convergence-monitor history, or `None`.
 
-`convergence.json` (`fim.cli._write_run_artifacts`/`fim.gui.runner.
-write_run_artifacts`) holds the exact per-generation `convergence
-Generations`/`convergenceHistories` a live-just-finished run's own
-GUI "done" push already carries -- reading it back is what lets
+`convergence.jsonl` (`fim.cli._convergence_history_rows`/`fim.gui.
+runner._convergence_history_rows`) holds one row per generation,
+`{"generation": N, "D": ..., ...}` -- reading it back is what lets
 reopening a run restore its own trajectory-vs-generation curve
 instead of having none at all, the prior, deliberate scope boundary
-`fim.gui.app.Api.open_run`'s own docstring used to name.
+`fim.gui.app.Api.open_run`'s own docstring used to name. Reshaped
+here into the `(generations, histories)` pair `fim.gui.app`'s own
+`convergenceGenerations`/`convergenceHistories` payload keys need
+-- every row written shares the identical key set (`_convergence_
+history_rows`'s own docstring: a statistic is either written for
+every row or none), so `histories[name]` is always exactly as long
+as `generations` with no further alignment check needed here.
 
 `None` (nothing to show) under the identical conditions `_cached_
 final_report`, above, treats as "recompute instead": no digest was
@@ -15445,7 +15450,7 @@ run completed, and silently ignoring it would mask that.
 **Arguments**:
 
 - `trajectory_path` - The run's own `trajectory.jsonl` --
-  `convergence.json` is expected as its sibling.
+  `convergence.jsonl` is expected as its sibling.
 - `manifest` - The run's own manifest.
 
 
@@ -15457,9 +15462,9 @@ run completed, and silently ignoring it would mask that.
 
 **Raises**:
 
-- `ValueError` - If `convergence.json` exists, a digest was recorded
-  for it, and the two no longer match, or its own content is
-  not the documented shape.
+- `ValueError` - If `convergence.jsonl` exists, a digest was
+  recorded for it, and the two no longer match, or a row's
+  own content is not the documented shape.
 
 <a id="fim.reanalyze.reanalyze_trajectory"></a>
 

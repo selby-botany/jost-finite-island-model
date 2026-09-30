@@ -64,7 +64,7 @@ def test_run_writes_exactly_five_documented_artifacts(tmp_path: Path) -> None:
         "manifest.json",
         "report.json",
         "scatter.png",
-        "convergence.json",
+        "convergence.jsonl",
     }
     report = json.loads((output / "report.json").read_text(encoding="utf-8"))
     assert set(report) >= {
@@ -102,7 +102,7 @@ def test_run_with_sigma_band_writes_the_fifth_trajectory_artifact(
         "manifest.json",
         "report.json",
         "scatter.png",
-        "convergence.json",
+        "convergence.jsonl",
         "sigma_band_trajectory.jsonl",
     }
     rows = [
@@ -1056,7 +1056,7 @@ def test_run_batch_produces_replicate_and_summary_artifacts(
             "manifest.json",
             "report.json",
             "scatter.png",
-            "convergence.json",
+            "convergence.jsonl",
         }
     summary = json.loads((output / "summary.json").read_text(encoding="utf-8"))
     assert summary["D"]["sample_count"] == 3
