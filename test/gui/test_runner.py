@@ -50,10 +50,10 @@ def test_progress_throttle_reports_again_once_the_interval_elapses() -> None:
     assert throttle.should_report(2, 10) is True
 
 
-def test_run_artifact_targets_matches_the_documented_four_filenames(
+def test_run_artifact_targets_matches_the_documented_five_filenames(
     tmp_path: Path,
 ) -> None:
-    """The four target names match `cli._run_artifact_targets`'s own set."""
+    """The five target names match `cli._run_artifact_targets`'s own set."""
     targets = runner.run_artifact_targets(tmp_path)
 
     assert {path.name for path in targets.values()} == {
@@ -61,6 +61,7 @@ def test_run_artifact_targets_matches_the_documented_four_filenames(
         "manifest.json",
         "report.json",
         "scatter.png",
+        "convergence.json",
     }
 
 
@@ -78,11 +79,11 @@ def test_start_run_raises_when_output_directory_already_exists(
         )
 
 
-def test_start_run_writes_the_four_documented_artifacts_on_success(
+def test_start_run_writes_the_five_documented_artifacts_on_success(
     tmp_path: Path,
     tiny_params: SimulationParams,
 ) -> None:
-    """A real, uncancelled run produces the same four artifacts `fim run` does."""
+    """A real, uncancelled run produces the same five artifacts `fim run` does."""
     output_directory = tmp_path / "output"
     message_queue: queue.Queue[runner.RunMessage] = queue.Queue()
 
@@ -97,6 +98,7 @@ def test_start_run_writes_the_four_documented_artifacts_on_success(
         "manifest.json",
         "report.json",
         "scatter.png",
+        "convergence.json",
     }
     messages = _drain(message_queue)
     assert messages[-1][0] == "done"

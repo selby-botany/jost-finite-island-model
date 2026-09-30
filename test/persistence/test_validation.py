@@ -445,6 +445,73 @@ def test_manifest_sigma_band_window_rejects_negative() -> None:
         replace(_manifest(), sigma_band_window=-1)
 
 
+def test_manifest_auto_derived_fields_default_to_none_and_round_trip(
+    tmp_path: Path,
+) -> None:
+    """`auto_derived`/`relaxation_time` round-trip, `None` for an older manifest.
+
+    Mirrors `test_manifest_sigma_band_fields_default_to_none_and_round_
+    trip` -- same pattern, for the two fields `fim.engine._run_one`/
+    `_finalize_replica_lane` stamp from `SimulationParams.auto_derived`/
+    `relaxation_time` so a reopened run can recover whether its own
+    `convergence_window`/`max_generations` were auto-derived
+    (`RunManifest`'s own docstring on these two fields has the full
+    "why `parameters` alone cannot answer this" account). An empty
+    tuple (not `None`) is itself a real, valid value here -- a run
+    whose settings were both given explicitly -- asserted separately
+    below from the "never even written" `None` case.
+    """
+    manifest = _manifest()
+    assert manifest.auto_derived is None
+    assert manifest.relaxation_time is None
+
+    stamped = replace(
+        manifest,
+        auto_derived=("convergence_window", "max_generations"),
+        relaxation_time=1234.5,
+    )
+    path = tmp_path / "manifest.json"
+    write_manifest(path, stamped)
+    restored = read_manifest(path)
+
+    assert restored == stamped
+    assert restored.auto_derived == ("convergence_window", "max_generations")
+    assert restored.relaxation_time == 1234.5
+
+    explicit = replace(manifest, auto_derived=(), relaxation_time=1234.5)
+    write_manifest(path, explicit)
+    assert read_manifest(path).auto_derived == ()
+
+
+def test_manifest_from_dict_tolerates_missing_auto_derived_fields() -> None:
+    """A manifest written before these fields existed still parses.
+
+    Backward compatibility, checked directly, mirroring `test_manifest_
+    from_dict_tolerates_missing_sigma_band_fields`.
+    """
+    value = dict(_manifest().to_dict())
+    del value["auto_derived"]
+    del value["relaxation_time"]
+
+    restored = RunManifest.from_dict(value)
+
+    assert restored.auto_derived is None
+    assert restored.relaxation_time is None
+
+
+def test_manifest_relaxation_time_rejects_non_finite() -> None:
+    with pytest.raises(ValueError, match="relaxation_time must be finite"):
+        replace(_manifest(), relaxation_time=float("nan"))
+
+
+def test_manifest_auto_derived_rejects_non_string_entries() -> None:
+    value = dict(_manifest().to_dict())
+    value["auto_derived"] = ["convergence_window", 5]
+
+    with pytest.raises(ValueError, match=r"auto_derived.*must be a list of"):
+        RunManifest.from_dict(value)
+
+
 @pytest.mark.parametrize(
     ("sigma_band", "message"),
     [

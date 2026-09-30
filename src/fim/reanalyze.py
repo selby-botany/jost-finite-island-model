@@ -24,6 +24,7 @@ instead of engine logic.
 
 from __future__ import annotations
 
+import json
 import logging
 from collections.abc import Sequence
 from dataclasses import dataclass
@@ -35,6 +36,7 @@ from fim.model.state import ModelState
 from fim.persistence.jsonl_store import JSONLTrajectoryStore
 from fim.persistence.manifest import (
     RunManifest,
+    hash_file,
     read_manifest,
     verify_trajectory_integrity,
 )
@@ -158,6 +160,133 @@ def group_rows_by_generation(
     return grouped
 
 
+def _cached_final_report(
+    trajectory_path: Path, manifest: RunManifest
+) -> dict[str, object] | None:
+    """Return this run's own persisted final report, or `None` if unusable.
+
+    `report.json` (`fim.cli._write_run_artifacts`/`fim.gui.runner.
+    write_run_artifacts`) already holds exactly what `report_for_state`
+    would recompute for the run's own true final generation — recomputing
+    it anyway, every time a huge run is reopened at its final generation
+    (the common case), costs real time for no new information.
+    `reanalyze_trajectory` (below) still reads and SHA-256-verifies the
+    full trajectory unconditionally either way, for the state itself and
+    for the tamper check neither this function nor its caller weakens —
+    this only ever saves the one remaining, separately expensive step,
+    the statistics recomputation itself.
+
+    `None` (recompute as before) whenever this cannot be trusted as a
+    faithful substitute: no digest was ever recorded for `report.json`
+    at all (a manifest written before this existed), or the file is
+    simply missing. A digest that *was* recorded but no longer matches
+    is different — that means the file was edited, truncated, or
+    replaced since the run completed, exactly the condition `verify_
+    trajectory_integrity` already refuses to silently ignore for the
+    trajectory itself, so this raises rather than quietly falling back
+    to a recompute that would mask the tampering.
+
+    Args:
+        trajectory_path: The run's own `trajectory.jsonl` — `report.json`
+            is expected as its sibling, `fim.cli._run_artifact_targets`'s
+            own established convention.
+        manifest: The run's own manifest.
+
+    Returns:
+        The parsed `report.json`, or `None` to signal "recompute it."
+
+    Raises:
+        ValueError: If `report.json` exists, a digest was recorded for
+            it, and the two no longer match.
+    """
+    if manifest.artifacts is None or "report" not in manifest.artifacts:
+        return None
+    report_path = trajectory_path.with_name("report.json")
+    if not report_path.is_file():
+        return None
+    expected = manifest.artifacts["report"]
+    actual = hash_file(report_path)
+    if actual != expected:
+        raise ValueError(
+            f"report.json does not match its manifest: expected sha256 "
+            f"{expected['sha256']} ({expected['bytes']} bytes), found "
+            f"{actual['sha256']} ({actual['bytes']} bytes) — the file may "
+            "have been edited, truncated, or replaced since the run "
+            "completed"
+        )
+    with report_path.open("r", encoding="utf-8") as handle:
+        parsed = json.load(handle)
+    if not isinstance(parsed, dict):
+        raise ValueError("report.json root must be an object")
+    return parsed
+
+
+def read_persisted_convergence_history(
+    trajectory_path: Path, manifest: RunManifest
+) -> tuple[list[int], dict[str, list[float]]] | None:
+    """Return a run's own persisted convergence-monitor history, or `None`.
+
+    `convergence.json` (`fim.cli._write_run_artifacts`/`fim.gui.runner.
+    write_run_artifacts`) holds the exact per-generation `convergence
+    Generations`/`convergenceHistories` a live-just-finished run's own
+    GUI "done" push already carries -- reading it back is what lets
+    reopening a run restore its own trajectory-vs-generation curve
+    instead of having none at all, the prior, deliberate scope boundary
+    `fim.gui.app.Api.open_run`'s own docstring used to name.
+
+    `None` (nothing to show) under the identical conditions `_cached_
+    final_report`, above, treats as "recompute instead": no digest was
+    ever recorded for this artifact (a manifest written before it
+    existed), or the file is simply missing -- never an error, since the
+    trajectory curve staying absent on an old run is not a regression,
+    only unavailable extra context. A digest that *was* recorded but no
+    longer matches is different, for the identical reason `_cached_
+    final_report` already gives: that means the file changed since the
+    run completed, and silently ignoring it would mask that.
+
+    Args:
+        trajectory_path: The run's own `trajectory.jsonl` --
+            `convergence.json` is expected as its sibling.
+        manifest: The run's own manifest.
+
+    Returns:
+        `(generations, histories)`, or `None` to signal "nothing
+        persisted to show."
+
+    Raises:
+        ValueError: If `convergence.json` exists, a digest was recorded
+            for it, and the two no longer match, or its own content is
+            not the documented shape.
+    """
+    if manifest.artifacts is None or "convergence" not in manifest.artifacts:
+        return None
+    convergence_path = trajectory_path.with_name("convergence.json")
+    if not convergence_path.is_file():
+        return None
+    expected = manifest.artifacts["convergence"]
+    actual = hash_file(convergence_path)
+    if actual != expected:
+        raise ValueError(
+            f"convergence.json does not match its manifest: expected sha256 "
+            f"{expected['sha256']} ({expected['bytes']} bytes), found "
+            f"{actual['sha256']} ({actual['bytes']} bytes) — the file may "
+            "have been edited, truncated, or replaced since the run "
+            "completed"
+        )
+    with convergence_path.open("r", encoding="utf-8") as handle:
+        parsed = json.load(handle)
+    if (
+        not isinstance(parsed, dict)
+        or not isinstance(parsed.get("generations"), list)
+        or not isinstance(parsed.get("histories"), dict)
+    ):
+        raise ValueError(
+            "convergence.json must be an object with 'generations' (a list) "
+            "and 'histories' (an object)"
+        )
+    return parsed["generations"], parsed["histories"]
+
+
 def reanalyze_trajectory(
     trajectory_path: Path,
     *,
@@ -179,7 +308,10 @@ def reanalyze_trajectory(
     changes that fingerprint, so a mismatch reveals the file was altered
     — see `fim.persistence.manifest.verify_trajectory_integrity`), pick
     out the one generation actually being asked for, and build that
-    generation's own report.
+    generation's own report — reusing the run's own persisted `report.
+    json` verbatim (`_cached_final_report`, above) rather than
+    recomputing it, whenever the generation selected is genuinely the
+    run's own true final one.
 
     Args:
         trajectory_path: The `trajectory.jsonl` to read.
@@ -198,8 +330,9 @@ def reanalyze_trajectory(
 
     Raises:
         ValueError: If the trajectory has been edited, truncated, or
-            replaced since the run completed, has no rows, or the
-            requested generation does not exist.
+            replaced since the run completed, has no rows, the
+            requested generation does not exist, or a previously
+            recorded `report.json` digest no longer matches.
     """
     logger.info(
         "re-analyzing %s (generation=%s)",
@@ -298,13 +431,20 @@ def reanalyze_trajectory(
     # give its own specific stop reason) when it did not actually stop
     # there at all — the run simply kept going past it.
     final_generation = resolved_generation == manifest.generation
-    report: dict[str, object] = dict(
-        report_for_state(
-            state,
-            params,
-            run_id=manifest.run_id,
-            converged=manifest.converged if final_generation else False,
-            reason=manifest.stop_reason if final_generation else "re-analysis",
+    cached_report = (
+        _cached_final_report(trajectory_path, manifest) if final_generation else None
+    )
+    report: dict[str, object] = (
+        cached_report
+        if cached_report is not None
+        else dict(
+            report_for_state(
+                state,
+                params,
+                run_id=manifest.run_id,
+                converged=manifest.converged if final_generation else False,
+                reason=manifest.stop_reason if final_generation else "re-analysis",
+            )
         )
     )
     if differentiation_orders:

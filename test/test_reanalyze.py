@@ -330,6 +330,174 @@ def test_reanalyze_trajectory_rejects_an_unknown_generation(tmp_path: Path) -> N
         reanalyze.reanalyze_trajectory(output / "trajectory.jsonl", generation=999)
 
 
+def test_reanalyze_trajectory_reuses_report_json_at_the_final_generation(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Re-analyzing the true final generation never recomputes the report.
+
+    Reported live: reopening a run with a large persisted trajectory
+    recomputed its full statistics report from scratch every time, even
+    at the run's own final generation, where `report.json` already has
+    the exact same answer on disk. `_cached_final_report` is meant to
+    make that unnecessary -- proven directly here by monkeypatching
+    `reanalyze.report_for_state` to raise if it is ever called at all,
+    not merely by checking the two reports still agree (`test_
+    reanalyze_trajectory_matches_the_live_report`, above, already does
+    that, and would keep passing even if this fast path silently never
+    engaged).
+    """
+    output = _write_run(tmp_path)
+
+    def _must_not_be_called(*args: object, **kwargs: object) -> None:
+        raise AssertionError(
+            "report_for_state was called for the final generation, "
+            "even though a verified report.json was available"
+        )
+
+    monkeypatch.setattr(reanalyze, "report_for_state", _must_not_be_called)
+
+    result = reanalyze.reanalyze_trajectory(output / "trajectory.jsonl")
+
+    live = json.loads((output / "report.json").read_text(encoding="utf-8"))
+    assert result.report == live
+
+
+def test_reanalyze_trajectory_still_recomputes_an_earlier_generation(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The cached-report fast path never applies to a non-final generation.
+
+    The direct counterpart to the test above: re-analyzing generation 0
+    (never the run's own true final one, `_write_run`'s own `max_
+    generations=10`/`convergence_window=4`) must still call `report_for_
+    state` -- `_cached_final_report` is gated on `final_generation`
+    specifically, not "a report.json happens to exist."
+    """
+    output = _write_run(tmp_path)
+    calls: list[int] = []
+    original = reanalyze.report_for_state
+
+    def _counting_report_for_state(*args: object, **kwargs: object) -> object:
+        calls.append(1)
+        return original(*args, **kwargs)  # type: ignore[arg-type]
+
+    monkeypatch.setattr(reanalyze, "report_for_state", _counting_report_for_state)
+
+    result = reanalyze.reanalyze_trajectory(output / "trajectory.jsonl", generation=0)
+
+    assert calls
+    assert result.state.generation == 0
+
+
+def test_reanalyze_trajectory_rejects_a_tampered_report_json(tmp_path: Path) -> None:
+    """A `report.json` edited after the run completed fails the digest check.
+
+    The `report.json` counterpart to `test_reanalyze_trajectory_rejects_
+    a_tampered_trajectory`, above: the file that a verified `report.json`
+    is what `reanalyze_trajectory` now reuses instead of recomputing
+    (previous two tests), so trusting a silently-edited one without this
+    check would defeat the trajectory's own tamper detection by simply
+    editing a different, now-trusted file instead.
+    """
+    output = _write_run(tmp_path)
+    report_path = output / "report.json"
+    corrupted = report_path.read_text(encoding="utf-8").replace(
+        '"run_id": "run-', '"run_id": "other-'
+    )
+    report_path.write_text(corrupted, encoding="utf-8")
+
+    with pytest.raises(ValueError, match=r"report\.json does not match its manifest"):
+        reanalyze.reanalyze_trajectory(output / "trajectory.jsonl")
+
+
+def test_reanalyze_trajectory_falls_back_when_report_json_is_missing(
+    tmp_path: Path,
+) -> None:
+    """A run whose own `report.json` was deleted still re-analyzes correctly.
+
+    `_cached_final_report` returns `None` (recompute as before) for a
+    missing file -- the identical graceful fallback a manifest written
+    before this feature existed gets, proven here directly rather than
+    only by code inspection.
+    """
+    output = _write_run(tmp_path)
+    (output / "report.json").unlink()
+
+    result = reanalyze.reanalyze_trajectory(output / "trajectory.jsonl")
+
+    assert result.report["converged"] is True
+
+
+def test_read_persisted_convergence_history_matches_the_live_monitor(
+    tmp_path: Path,
+) -> None:
+    """`convergence.json` round-trips the exact history a live run recorded.
+
+    Reported live: reopening a run showed no trajectory-vs-generation
+    curve at all, only the sigma band -- a named scope boundary, not an
+    oversight, because nothing persisted a live run's own `Convergence
+    Monitor` history to disk. `convergence.json` (`fim.cli._write_run_
+    artifacts`) closes that gap; this proves the round trip through
+    `read_persisted_convergence_history` reproduces it exactly.
+    """
+    output = _write_run(tmp_path)
+    manifest = read_manifest(output / "manifest.json")
+    raw = json.loads((output / "convergence.json").read_text(encoding="utf-8"))
+
+    result = reanalyze.read_persisted_convergence_history(
+        output / "trajectory.jsonl", manifest
+    )
+
+    assert result is not None
+    generations, histories = result
+    assert generations == raw["generations"]
+    assert histories == raw["histories"]
+    assert len(generations) > 1
+    assert "D" in histories
+
+
+def test_read_persisted_convergence_history_rejects_a_tampered_file(
+    tmp_path: Path,
+) -> None:
+    """An edited `convergence.json` fails its own digest check, not silently ignored."""
+    output = _write_run(tmp_path)
+    manifest = read_manifest(output / "manifest.json")
+    convergence_path = output / "convergence.json"
+    corrupted = convergence_path.read_text(encoding="utf-8").replace(
+        '"generations"', '"Generations"'
+    )
+    convergence_path.write_text(corrupted, encoding="utf-8")
+
+    with pytest.raises(
+        ValueError, match=r"convergence\.json does not match its manifest"
+    ):
+        reanalyze.read_persisted_convergence_history(
+            output / "trajectory.jsonl", manifest
+        )
+
+
+def test_read_persisted_convergence_history_returns_none_when_absent(
+    tmp_path: Path,
+) -> None:
+    """A missing `convergence.json` degrades to "nothing to show," not an error.
+
+    The identical graceful fallback a manifest written before this
+    field existed at all gets (`manifest.artifacts` simply never naming
+    `"convergence"`) -- simulated here the cheaper way, by deleting the
+    file a digest is still recorded for, since both paths return
+    `_cached_final_report`'s own twin, `None`.
+    """
+    output = _write_run(tmp_path)
+    manifest = read_manifest(output / "manifest.json")
+    (output / "convergence.json").unlink()
+
+    result = reanalyze.read_persisted_convergence_history(
+        output / "trajectory.jsonl", manifest
+    )
+
+    assert result is None
+
+
 def test_differentiation_q_for_state_agrees_with_e_st_under_size_weighting(
     tmp_path: Path,
 ) -> None:

@@ -169,6 +169,21 @@ class RunManifest:
     extension, each `{"mean", "sigma", "lower", "upper"}` — see
     `fim.engine._sigma_band_summary`'s own docstring for exactly how
     those four numbers are computed.
+
+    `auto_derived`/`relaxation_time` record whether this run's own
+    `convergence_window`/`max_generations` were auto-derived from the
+    model's own relaxation time rather than given explicitly
+    (`SimulationParams._resolve_convergence_defaults`'s own identically
+    named fields, copied here at manifest-construction time) --
+    `parameters` above only ever holds the *resolved* concrete integers
+    either way (`SimulationParams.to_dict`'s own documented contract:
+    reconstructing from it must reproduce an equal `SimulationParams`,
+    and `auto_derived`/`relaxation_time` deliberately take no part in
+    that equality), so without a dedicated field of its own here, a
+    reopened run could never tell a `convergence_window` the botanist
+    typed from one this project chose on its own. `auto_derived` is
+    empty (not `None`) whenever both were given explicitly; `None` for
+    either field only means a manifest written before they existed.
     """
 
     schema_version: int
@@ -191,6 +206,8 @@ class RunManifest:
     sigma_band_multiplier: float | None = None
     sigma_band_window: int | None = None
     sigma_band: Mapping[str, Mapping[str, float]] | None = None
+    auto_derived: tuple[str, ...] | None = None
+    relaxation_time: float | None = None
 
     def __post_init__(self) -> None:
         """Validate required manifest identity, terminal, and digest fields."""
@@ -202,24 +219,6 @@ class RunManifest:
             raise ValueError("manifest timestamps must not be empty")
         if self.generation < 0:
             raise ValueError("manifest generation must be non-negative")
-        if self.equilibrium_generation_count is not None and (
-            self.equilibrium_generation_count < 0
-        ):
-            raise ValueError(
-                "manifest equilibrium_generation_count must be non-negative"
-            )
-        if self.equilibrium_final_heterozygosity is not None and not (
-            0.0 <= self.equilibrium_final_heterozygosity < 1.0
-        ):
-            raise ValueError(
-                "manifest equilibrium_final_heterozygosity must be in [0, 1)"
-            )
-        if self.sigma_band_multiplier is not None and not math.isfinite(
-            self.sigma_band_multiplier
-        ):
-            raise ValueError("manifest sigma_band_multiplier must be finite")
-        if self.sigma_band_window is not None and self.sigma_band_window < 0:
-            raise ValueError("manifest sigma_band_window must be non-negative")
         if self.generation_count < 1:
             raise ValueError("manifest generation_count must be at least 1")
         if not self.software_version:
@@ -227,6 +226,7 @@ class RunManifest:
         if self.artifacts is not None:
             for name, digest in self.artifacts.items():
                 _validate_artifact_digest(name, digest)
+        _validate_run_manifest_optional_numeric_fields(self)
 
     def params(self) -> SimulationParams:
         """Reconstruct the exact validated simulation parameters.
@@ -284,6 +284,10 @@ class RunManifest:
                 if self.sigma_band is not None
                 else None
             ),
+            "auto_derived": (
+                list(self.auto_derived) if self.auto_derived is not None else None
+            ),
+            "relaxation_time": self.relaxation_time,
         }
 
     @classmethod
@@ -339,6 +343,8 @@ class RunManifest:
             sigma_band_multiplier=_optional_float(value, "sigma_band_multiplier"),
             sigma_band_window=_optional_int(value, "sigma_band_window"),
             sigma_band=_optional_sigma_band(value.get("sigma_band")),
+            auto_derived=_optional_string_tuple(value, "auto_derived"),
+            relaxation_time=_optional_float(value, "relaxation_time"),
         )
 
 
@@ -744,6 +750,29 @@ def _optional_string(value: Mapping[str, Any], key: str) -> str | None:
     return raw_value
 
 
+def _optional_string_tuple(
+    value: Mapping[str, Any], key: str
+) -> tuple[str, ...] | None:
+    """Read one optional list-of-nonempty-strings field, or `None` when absent/null.
+
+    Used for `auto_derived` -- unlike `_optional_string` above, an empty
+    list is a normal, valid value here (a run whose own `convergence_
+    window`/`max_generations` were both given explicitly), not an
+    error; only a missing key or an explicit `null` means "a manifest
+    written before this field existed."
+    """
+    raw_value = value.get(key)
+    if raw_value is None:
+        return None
+    if not isinstance(raw_value, list) or not all(
+        isinstance(item, str) and item for item in raw_value
+    ):
+        raise ValueError(
+            f"manifest field {key!r} must be a list of nonempty strings or null"
+        )
+    return tuple(raw_value)
+
+
 def _optional_int(
     value: Mapping[str, Any], key: str, *, minimum: int = 0
 ) -> int | None:
@@ -805,6 +834,32 @@ def _required_string_or_strings(
     raise ValueError(
         f"manifest field {key!r} must be a nonempty string or list of strings"
     )
+
+
+def _validate_run_manifest_optional_numeric_fields(manifest: RunManifest) -> None:
+    """Validate `RunManifest`'s own optional numeric fields.
+
+    Extracted out of `RunManifest.__post_init__` (which calls this once,
+    last) purely to keep that method's own branch count low -- every
+    check here would otherwise live directly in `__post_init__` itself;
+    splitting them out changes nothing about what is validated or when.
+    """
+    if manifest.equilibrium_generation_count is not None and (
+        manifest.equilibrium_generation_count < 0
+    ):
+        raise ValueError("manifest equilibrium_generation_count must be non-negative")
+    if manifest.equilibrium_final_heterozygosity is not None and not (
+        0.0 <= manifest.equilibrium_final_heterozygosity < 1.0
+    ):
+        raise ValueError("manifest equilibrium_final_heterozygosity must be in [0, 1)")
+    for value, name in (
+        (manifest.sigma_band_multiplier, "sigma_band_multiplier"),
+        (manifest.relaxation_time, "relaxation_time"),
+    ):
+        if value is not None and not math.isfinite(value):
+            raise ValueError(f"manifest {name} must be finite")
+    if manifest.sigma_band_window is not None and manifest.sigma_band_window < 0:
+        raise ValueError("manifest sigma_band_window must be non-negative")
 
 
 def _validate_artifact_digest(name: str, digest: ArtifactDigest) -> None:

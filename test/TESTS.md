@@ -1897,6 +1897,125 @@ def test_reanalyze_trajectory_rejects_an_unknown_generation(
 
 An out-of-range generation is a clear error, not a silent empty result.
 
+<a id="test.test_reanalyze.test_reanalyze_trajectory_reuses_report_json_at_the_final_generation"></a>
+
+#### test\_reanalyze\_trajectory\_reuses\_report\_json\_at\_the\_final\_generation
+
+```python
+def test_reanalyze_trajectory_reuses_report_json_at_the_final_generation(
+        tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None
+```
+
+Re-analyzing the true final generation never recomputes the report.
+
+Reported live: reopening a run with a large persisted trajectory
+recomputed its full statistics report from scratch every time, even
+at the run's own final generation, where `report.json` already has
+the exact same answer on disk. `_cached_final_report` is meant to
+make that unnecessary -- proven directly here by monkeypatching
+`reanalyze.report_for_state` to raise if it is ever called at all,
+not merely by checking the two reports still agree (`test_
+reanalyze_trajectory_matches_the_live_report`, above, already does
+that, and would keep passing even if this fast path silently never
+engaged).
+
+<a id="test.test_reanalyze.test_reanalyze_trajectory_still_recomputes_an_earlier_generation"></a>
+
+#### test\_reanalyze\_trajectory\_still\_recomputes\_an\_earlier\_generation
+
+```python
+def test_reanalyze_trajectory_still_recomputes_an_earlier_generation(
+        tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None
+```
+
+The cached-report fast path never applies to a non-final generation.
+
+The direct counterpart to the test above: re-analyzing generation 0
+(never the run's own true final one, `_write_run`'s own `max_
+generations=10`/`convergence_window=4`) must still call `report_for_
+state` -- `_cached_final_report` is gated on `final_generation`
+specifically, not "a report.json happens to exist."
+
+<a id="test.test_reanalyze.test_reanalyze_trajectory_rejects_a_tampered_report_json"></a>
+
+#### test\_reanalyze\_trajectory\_rejects\_a\_tampered\_report\_json
+
+```python
+def test_reanalyze_trajectory_rejects_a_tampered_report_json(
+        tmp_path: Path) -> None
+```
+
+A `report.json` edited after the run completed fails the digest check.
+
+The `report.json` counterpart to `test_reanalyze_trajectory_rejects_
+a_tampered_trajectory`, above: the file that a verified `report.json`
+is what `reanalyze_trajectory` now reuses instead of recomputing
+(previous two tests), so trusting a silently-edited one without this
+check would defeat the trajectory's own tamper detection by simply
+editing a different, now-trusted file instead.
+
+<a id="test.test_reanalyze.test_reanalyze_trajectory_falls_back_when_report_json_is_missing"></a>
+
+#### test\_reanalyze\_trajectory\_falls\_back\_when\_report\_json\_is\_missing
+
+```python
+def test_reanalyze_trajectory_falls_back_when_report_json_is_missing(
+        tmp_path: Path) -> None
+```
+
+A run whose own `report.json` was deleted still re-analyzes correctly.
+
+`_cached_final_report` returns `None` (recompute as before) for a
+missing file -- the identical graceful fallback a manifest written
+before this feature existed gets, proven here directly rather than
+only by code inspection.
+
+<a id="test.test_reanalyze.test_read_persisted_convergence_history_matches_the_live_monitor"></a>
+
+#### test\_read\_persisted\_convergence\_history\_matches\_the\_live\_monitor
+
+```python
+def test_read_persisted_convergence_history_matches_the_live_monitor(
+        tmp_path: Path) -> None
+```
+
+`convergence.json` round-trips the exact history a live run recorded.
+
+Reported live: reopening a run showed no trajectory-vs-generation
+curve at all, only the sigma band -- a named scope boundary, not an
+oversight, because nothing persisted a live run's own `Convergence
+Monitor` history to disk. `convergence.json` (`fim.cli._write_run_
+artifacts`) closes that gap; this proves the round trip through
+`read_persisted_convergence_history` reproduces it exactly.
+
+<a id="test.test_reanalyze.test_read_persisted_convergence_history_rejects_a_tampered_file"></a>
+
+#### test\_read\_persisted\_convergence\_history\_rejects\_a\_tampered\_file
+
+```python
+def test_read_persisted_convergence_history_rejects_a_tampered_file(
+        tmp_path: Path) -> None
+```
+
+An edited `convergence.json` fails its own digest check, not silently ignored.
+
+<a id="test.test_reanalyze.test_read_persisted_convergence_history_returns_none_when_absent"></a>
+
+#### test\_read\_persisted\_convergence\_history\_returns\_none\_when\_absent
+
+```python
+def test_read_persisted_convergence_history_returns_none_when_absent(
+        tmp_path: Path) -> None
+```
+
+A missing `convergence.json` degrades to "nothing to show," not an error.
+
+The identical graceful fallback a manifest written before this
+field existed at all gets (`manifest.artifacts` simply never naming
+`"convergence"`) -- simulated here the cheaper way, by deleting the
+file a digest is still recorded for, since both paths return
+`_cached_final_report`'s own twin, `None`.
+
 <a id="test.test_reanalyze.test_differentiation_q_for_state_agrees_with_e_st_under_size_weighting"></a>
 
 #### test\_differentiation\_q\_for\_state\_agrees\_with\_e\_st\_under\_size\_weighting
@@ -2270,12 +2389,12 @@ autouse fixture.
 
 Functional tests for researcher-facing command workflows.
 
-<a id="cli.test_cli.test_run_writes_exactly_four_documented_artifacts"></a>
+<a id="cli.test_cli.test_run_writes_exactly_five_documented_artifacts"></a>
 
-#### test\_run\_writes\_exactly\_four\_documented\_artifacts
+#### test\_run\_writes\_exactly\_five\_documented\_artifacts
 
 ```python
-def test_run_writes_exactly_four_documented_artifacts(tmp_path: Path) -> None
+def test_run_writes_exactly_five_documented_artifacts(tmp_path: Path) -> None
 ```
 
 A real seeded run produces the complete v1 output set.
@@ -17152,16 +17271,16 @@ def test_progress_throttle_reports_again_once_the_interval_elapses() -> None
 
 A call past the interval reports again, driven by an injected fake clock.
 
-<a id="gui.test_runner.test_run_artifact_targets_matches_the_documented_four_filenames"></a>
+<a id="gui.test_runner.test_run_artifact_targets_matches_the_documented_five_filenames"></a>
 
-#### test\_run\_artifact\_targets\_matches\_the\_documented\_four\_filenames
+#### test\_run\_artifact\_targets\_matches\_the\_documented\_five\_filenames
 
 ```python
-def test_run_artifact_targets_matches_the_documented_four_filenames(
+def test_run_artifact_targets_matches_the_documented_five_filenames(
         tmp_path: Path) -> None
 ```
 
-The four target names match `cli._run_artifact_targets`'s own set.
+The five target names match `cli._run_artifact_targets`'s own set.
 
 <a id="gui.test_runner.test_start_run_raises_when_output_directory_already_exists"></a>
 
@@ -17174,16 +17293,16 @@ def test_start_run_raises_when_output_directory_already_exists(
 
 The pre-existing-target guard fires synchronously, before any thread.
 
-<a id="gui.test_runner.test_start_run_writes_the_four_documented_artifacts_on_success"></a>
+<a id="gui.test_runner.test_start_run_writes_the_five_documented_artifacts_on_success"></a>
 
-#### test\_start\_run\_writes\_the\_four\_documented\_artifacts\_on\_success
+#### test\_start\_run\_writes\_the\_five\_documented\_artifacts\_on\_success
 
 ```python
-def test_start_run_writes_the_four_documented_artifacts_on_success(
+def test_start_run_writes_the_five_documented_artifacts_on_success(
         tmp_path: Path, tiny_params: SimulationParams) -> None
 ```
 
-A real, uncancelled run produces the same four artifacts `fim run` does.
+A real, uncancelled run produces the same five artifacts `fim run` does.
 
 <a id="gui.test_runner.test_start_run_records_matching_digests_in_the_published_manifest"></a>
 
@@ -24422,6 +24541,41 @@ A manifest written before these fields existed (schema_version < 3) still parses
 
 Backward compatibility, checked directly, mirroring `test_manifest_
 from_dict_tolerates_missing_equilibrium_fields`.
+
+<a id="persistence.test_validation.test_manifest_auto_derived_fields_default_to_none_and_round_trip"></a>
+
+#### test\_manifest\_auto\_derived\_fields\_default\_to\_none\_and\_round\_trip
+
+```python
+def test_manifest_auto_derived_fields_default_to_none_and_round_trip(
+        tmp_path: Path) -> None
+```
+
+`auto_derived`/`relaxation_time` round-trip, `None` for an older manifest.
+
+Mirrors `test_manifest_sigma_band_fields_default_to_none_and_round_
+trip` -- same pattern, for the two fields `fim.engine._run_one`/
+`_finalize_replica_lane` stamp from `SimulationParams.auto_derived`/
+`relaxation_time` so a reopened run can recover whether its own
+`convergence_window`/`max_generations` were auto-derived
+(`RunManifest`'s own docstring on these two fields has the full
+"why `parameters` alone cannot answer this" account). An empty
+tuple (not `None`) is itself a real, valid value here -- a run
+whose settings were both given explicitly -- asserted separately
+below from the "never even written" `None` case.
+
+<a id="persistence.test_validation.test_manifest_from_dict_tolerates_missing_auto_derived_fields"></a>
+
+#### test\_manifest\_from\_dict\_tolerates\_missing\_auto\_derived\_fields
+
+```python
+def test_manifest_from_dict_tolerates_missing_auto_derived_fields() -> None
+```
+
+A manifest written before these fields existed still parses.
+
+Backward compatibility, checked directly, mirroring `test_manifest_
+from_dict_tolerates_missing_sigma_band_fields`.
 
 <a id="persistence.test_validation.test_manifest_sigma_band_shape_is_validated"></a>
 

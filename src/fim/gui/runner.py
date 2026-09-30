@@ -155,6 +155,7 @@ def run_artifact_targets(directory: Path) -> dict[str, Path]:
         "manifest": directory / "manifest.json",
         "report": directory / "report.json",
         "scatter": directory / "scatter.png",
+        "convergence": directory / "convergence.json",
     }
 
 
@@ -317,11 +318,24 @@ def write_run_artifacts(result: RunResult, targets: dict[str, Path]) -> None:
         result.final_state, result.params, targets["scatter"]
     )
     plt.close(figure)
+    # See `cli._write_run_artifacts`'s own identical comment on this
+    # same artifact -- persisted so reopening restores the trajectory
+    # curve instead of having none at all.
+    write_report(
+        targets["convergence"],
+        {
+            "generations": list(result.convergence_generations),
+            "histories": {
+                name: list(values)
+                for name, values in result.convergence_histories.items()
+            },
+        },
+    )
     manifest = replace(
         result.manifest,
         artifacts={
             name: hash_file(targets[name])
-            for name in ("trajectory", "report", "scatter")
+            for name in ("trajectory", "report", "scatter", "convergence")
         },
     )
     write_manifest(targets["manifest"], manifest)

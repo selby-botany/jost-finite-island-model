@@ -523,6 +523,7 @@ Return to the [source-tree orientation](../README.md) or the [developer guide](.
   * [ReanalyzedGeneration](#fim.reanalyze.ReanalyzedGeneration)
   * [differentiation\_q\_for\_state](#fim.reanalyze.differentiation_q_for_state)
   * [group\_rows\_by\_generation](#fim.reanalyze.group_rows_by_generation)
+  * [read\_persisted\_convergence\_history](#fim.reanalyze.read_persisted_convergence_history)
   * [reanalyze\_trajectory](#fim.reanalyze.reanalyze_trajectory)
   * [replicate\_convergence\_history](#fim.reanalyze.replicate_convergence_history)
 * [fim.reproducibility](#fim.reproducibility)
@@ -14369,6 +14370,21 @@ extension, each `{"mean", "sigma", "lower", "upper"}` — see
 `fim.engine._sigma_band_summary`'s own docstring for exactly how
 those four numbers are computed.
 
+`auto_derived`/`relaxation_time` record whether this run's own
+`convergence_window`/`max_generations` were auto-derived from the
+model's own relaxation time rather than given explicitly
+(`SimulationParams._resolve_convergence_defaults`'s own identically
+named fields, copied here at manifest-construction time) --
+`parameters` above only ever holds the *resolved* concrete integers
+either way (`SimulationParams.to_dict`'s own documented contract:
+reconstructing from it must reproduce an equal `SimulationParams`,
+and `auto_derived`/`relaxation_time` deliberately take no part in
+that equality), so without a dedicated field of its own here, a
+reopened run could never tell a `convergence_window` the botanist
+typed from one this project chose on its own. `auto_derived` is
+empty (not `None`) whenever both were given explicitly; `None` for
+either field only means a manifest written before they existed.
+
 <a id="fim.persistence.manifest.RunManifest.__post_init__"></a>
 
 #### \_\_post\_init\_\_
@@ -15389,6 +15405,55 @@ differs.
 
   Every persisted generation's rows, keyed by generation number.
 
+<a id="fim.reanalyze.read_persisted_convergence_history"></a>
+
+#### read\_persisted\_convergence\_history
+
+```python
+def read_persisted_convergence_history(
+        trajectory_path: Path, manifest: RunManifest
+) -> tuple[list[int], dict[str, list[float]]] | None
+```
+
+Return a run's own persisted convergence-monitor history, or `None`.
+
+`convergence.json` (`fim.cli._write_run_artifacts`/`fim.gui.runner.
+write_run_artifacts`) holds the exact per-generation `convergence
+Generations`/`convergenceHistories` a live-just-finished run's own
+GUI "done" push already carries -- reading it back is what lets
+reopening a run restore its own trajectory-vs-generation curve
+instead of having none at all, the prior, deliberate scope boundary
+`fim.gui.app.Api.open_run`'s own docstring used to name.
+
+`None` (nothing to show) under the identical conditions `_cached_
+final_report`, above, treats as "recompute instead": no digest was
+ever recorded for this artifact (a manifest written before it
+existed), or the file is simply missing -- never an error, since the
+trajectory curve staying absent on an old run is not a regression,
+only unavailable extra context. A digest that *was* recorded but no
+longer matches is different, for the identical reason `_cached_
+final_report` already gives: that means the file changed since the
+run completed, and silently ignoring it would mask that.
+
+**Arguments**:
+
+- `trajectory_path` - The run's own `trajectory.jsonl` --
+  `convergence.json` is expected as its sibling.
+- `manifest` - The run's own manifest.
+
+
+**Returns**:
+
+  `(generations, histories)`, or `None` to signal "nothing
+  persisted to show."
+
+
+**Raises**:
+
+- `ValueError` - If `convergence.json` exists, a digest was recorded
+  for it, and the two no longer match, or its own content is
+  not the documented shape.
+
 <a id="fim.reanalyze.reanalyze_trajectory"></a>
 
 #### reanalyze\_trajectory
@@ -15417,7 +15482,10 @@ manifest at the time the run completed, and any edit to the file
 changes that fingerprint, so a mismatch reveals the file was altered
 — see `fim.persistence.manifest.verify_trajectory_integrity`), pick
 out the one generation actually being asked for, and build that
-generation's own report.
+generation's own report — reusing the run's own persisted `report.
+json` verbatim (`_cached_final_report`, above) rather than
+recomputing it, whenever the generation selected is genuinely the
+run's own true final one.
 
 **Arguments**:
 
@@ -15441,8 +15509,9 @@ generation's own report.
 **Raises**:
 
 - `ValueError` - If the trajectory has been edited, truncated, or
-  replaced since the run completed, has no rows, or the
-  requested generation does not exist.
+  replaced since the run completed, has no rows, the
+  requested generation does not exist, or a previously
+  recorded `report.json` digest no longer matches.
 
 <a id="fim.reanalyze.replicate_convergence_history"></a>
 

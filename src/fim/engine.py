@@ -1209,6 +1209,13 @@ def _finalize_replica_lane(
             if lane.equilibration_outcome is not None
             else None
         ),
+        # Copied from `lane.params` (`RunManifest`'s own docstring on
+        # these two fields has the full account of why `parameters`
+        # above cannot carry this) -- `tuple(sorted(...))` for a
+        # deterministic manifest.json regardless of `frozenset`'s own
+        # unordered iteration.
+        auto_derived=tuple(sorted(lane.params.auto_derived)),
+        relaxation_time=lane.params.relaxation_time,
     )
     return RunResult(
         run_id=lane.run_id,
@@ -3463,6 +3470,8 @@ def _run_one(
             params.sigma_band_window if sigma_band is not None else None
         ),
         sigma_band=sigma_band,
+        auto_derived=tuple(sorted(params.auto_derived)),
+        relaxation_time=params.relaxation_time,
     )
     return RunResult(
         run_id=run_id,

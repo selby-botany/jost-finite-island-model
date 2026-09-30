@@ -50,7 +50,7 @@ def _write_config(path: Path, **updates: object) -> None:
     path.write_text(yaml.safe_dump(config, sort_keys=False), encoding="utf-8")
 
 
-def test_run_writes_exactly_four_documented_artifacts(tmp_path: Path) -> None:
+def test_run_writes_exactly_five_documented_artifacts(tmp_path: Path) -> None:
     """A real seeded run produces the complete v1 output set."""
     config = tmp_path / "run.yaml"
     output = tmp_path / "output"
@@ -64,6 +64,7 @@ def test_run_writes_exactly_four_documented_artifacts(tmp_path: Path) -> None:
         "manifest.json",
         "report.json",
         "scatter.png",
+        "convergence.json",
     }
     report = json.loads((output / "report.json").read_text(encoding="utf-8"))
     assert set(report) >= {
@@ -101,6 +102,7 @@ def test_run_with_sigma_band_writes_the_fifth_trajectory_artifact(
         "manifest.json",
         "report.json",
         "scatter.png",
+        "convergence.json",
         "sigma_band_trajectory.jsonl",
     }
     rows = [
@@ -1054,6 +1056,7 @@ def test_run_batch_produces_replicate_and_summary_artifacts(
             "manifest.json",
             "report.json",
             "scatter.png",
+            "convergence.json",
         }
     summary = json.loads((output / "summary.json").read_text(encoding="utf-8"))
     assert summary["D"]["sample_count"] == 3

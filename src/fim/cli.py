@@ -1122,6 +1122,7 @@ def _run_artifact_targets(directory: Path) -> dict[str, Path]:
         "report": directory / "report.json",
         "scatter": directory / "scatter.png",
         "sigma_band_trajectory": directory / "sigma_band_trajectory.jsonl",
+        "convergence": directory / "convergence.json",
     }
 
 
@@ -1164,7 +1165,25 @@ def _write_run_artifacts(result: RunResult, directory: Path) -> dict[str, Path]:
         result.final_state, result.params, targets["scatter"]
     )
     plt.close(figure)
-    digested_names = ["trajectory", "report", "scatter"]
+    # The convergence monitor's own full per-generation history --
+    # exactly what a live-just-finished run's own GUI "done" push
+    # already carries (`fim.gui.app._drain_run_messages`'s own
+    # `convergenceGenerations`/`convergenceHistories` payload keys) --
+    # persisted so reopening a run can restore the identical trajectory
+    # curve instead of having none at all (`fim.reanalyze.
+    # reanalyze_trajectory`'s own docstring on that prior scope
+    # boundary has the fuller account of what reopening used to lose).
+    write_report(
+        targets["convergence"],
+        {
+            "generations": list(result.convergence_generations),
+            "histories": {
+                name: list(values)
+                for name, values in result.convergence_histories.items()
+            },
+        },
+    )
+    digested_names = ["trajectory", "report", "scatter", "convergence"]
     if result.sigma_band_trajectory is not None:
         # Written — and digested — only when the within-run sigma band
         # actually ran (`RunResult.sigma_band_trajectory`'s own
