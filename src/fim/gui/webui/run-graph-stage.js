@@ -35,42 +35,40 @@
 // which stays in the DOM (visually hidden) as both the source of the
 // option label and the pane's accessible name.
 const RUN_GRAPHS = [
-    { key: "scatter", paneId: "run-scatter-card", titleId: "run-scatter-title", weight: 1 },
+    {
+        key: "scatter",
+        paneId: "run-scatter-card",
+        titleId: "run-scatter-title",
+        weight: GRAPH_WEIGHT_SCATTER,
+    },
     {
         key: "trajectory",
         paneId: "run-trajectory-frame",
         titleId: "run-trajectory-title",
-        weight: 1.5,
+        weight: GRAPH_WEIGHT_TRAJECTORY,
     },
     {
         key: "alleleComposition",
         paneId: "allele-composition-card",
         titleId: "allele-composition-title",
-        weight: 1.3,
+        weight: GRAPH_WEIGHT_WIDE,
     },
     {
         key: "frequencySpectrum",
         paneId: "frequency-spectrum-card",
         titleId: "frequency-spectrum-title",
-        weight: 1.3,
+        weight: GRAPH_WEIGHT_WIDE,
     },
     // Never offered: this card intentionally shows four graphs, not five
     // (app.css). Kept so the payload stays wired for Python callers.
-    { key: "ibd", paneId: "ibd-card", titleId: "ibd-title", weight: 1.3, offered: false },
+    {
+        key: "ibd",
+        paneId: "ibd-card",
+        titleId: "ibd-title",
+        weight: GRAPH_WEIGHT_WIDE,
+        offered: false,
+    },
 ];
-
-const ZOOM_STEP = 0.25;
-const ZOOM_MIN = 0.5;
-const ZOOM_MAX = 4;
-
-// What a fresh install shows together, matching `fim.gui.preferences.
-// DEFAULT_RUN_GRAPHS`; replaced by the saved choice once the bridge is up.
-const DEFAULT_GRAPH_KEYS = ["scatter", "trajectory"];
-const DEFAULT_GRAPH_COLUMNS = 2;
-// A pane narrower than this is unreadable, so the effective column count
-// drops until every column can have at least this much (rows then follow).
-const MIN_PANE_WIDTH_PX = 220;
-const GRAPH_GAP_PX = 16;
 
 const graphAvailability = new Map();
 const graphRedrawers = new Map();
@@ -282,10 +280,6 @@ function applyGraphLayout() {
     panels.dataset.graphColumns = String(columns);
     matchScatterAndTrajectoryHeights(panels, columns);
 }
-
-// The trajectory canvas is 4:3, so a pane's height moves by this much per
-// pixel of its width; the scatter canvas is square, so it moves by one.
-const TRAJECTORY_HEIGHT_PER_WIDTH = 0.75;
 
 /**
  * Give the scatter and the trajectory panes the same height, without ever
@@ -659,8 +653,11 @@ function applyGraphZoom() {
         // one showing, so Fit came back a scrollbar narrower than the
         // opening size. The border box is the same at every level.
         const columnBox = graphColumn.getBoundingClientRect();
-        const baseWidth = Math.max(Math.floor(columnBox.width) - scrubberWidth - gap, 320);
-        const baseHeight = Math.max(Math.floor(columnBox.height), 240);
+        const baseWidth = Math.max(
+            Math.floor(columnBox.width) - scrubberWidth - gap,
+            ZOOM_FRAME_MIN_WIDTH_PX
+        );
+        const baseHeight = Math.max(Math.floor(columnBox.height), ZOOM_FRAME_MIN_HEIGHT_PX);
         pane.style.width = `${Math.floor(baseWidth * zoomScale)}px`;
         pane.style.height = `${Math.floor(baseHeight * zoomScale)}px`;
     }

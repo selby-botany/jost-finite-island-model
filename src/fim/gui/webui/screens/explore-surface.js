@@ -152,8 +152,11 @@ function drawExploreSurface() {
     const rows = grid.values[statistic];
     const flat = rows.flat().filter((value) => value !== null);
     const proportion = EXPLORE_STATISTIC_UNITS[statistic] === "proportion";
-    exploreSurfaceCanvas.width = Math.max(exploreSurfaceCanvas.clientWidth, 320);
-    exploreSurfaceCanvas.height = 360;
+    exploreSurfaceCanvas.width = Math.max(
+        exploreSurfaceCanvas.clientWidth,
+        EXPLORE_SURFACE_CANVAS_MIN_WIDTH
+    );
+    exploreSurfaceCanvas.height = EXPLORE_SURFACE_CANVAS_HEIGHT;
     exploreSurfaceLayout = window.fim.heatmap.draw(exploreSurfaceCanvas, {
         columns: grid.xValues.map(formatExploreTick),
         rows: grid.yValues.map(formatExploreTick),
@@ -199,8 +202,8 @@ function drawExploreSlices(statistic) {
     const probe = exploreSurfaceProbe;
     const rows = grid.values[statistic];
     const draw = (canvas, axisKey, axisValues, series) => {
-        canvas.width = Math.max(canvas.clientWidth, 240);
-        canvas.height = 200;
+        canvas.width = Math.max(canvas.clientWidth, EXPLORE_SLICE_CANVAS_MIN_WIDTH);
+        canvas.height = EXPLORE_SLICE_CANVAS_HEIGHT;
         const marks = axisValues
             .map((x, index) => ({
                 x,

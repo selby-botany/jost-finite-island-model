@@ -24,18 +24,20 @@
  * Knows nothing about Explore or the sweep screen.
  */
 
-const AXIS_RANGE_SLIDER_STEPS = 1000;
-
 /**
  * Format a number for a field: short, but exact enough to re-parse.
  * @param {number} value
  * @returns {string}
  */
 function axisRangeFormat(value) {
-    if (value !== 0 && (Math.abs(value) < 0.001 || Math.abs(value) >= 100000)) {
-        return Number(value.toPrecision(4)).toExponential();
+    const magnitude = Math.abs(value);
+    if (
+        value !== 0 &&
+        (magnitude < AXIS_RANGE_EXPONENT_LOW || magnitude >= AXIS_RANGE_EXPONENT_HIGH)
+    ) {
+        return Number(value.toPrecision(AXIS_RANGE_EXPONENT_DIGITS)).toExponential();
     }
-    return String(Number(value.toPrecision(6)));
+    return String(Number(value.toPrecision(AXIS_RANGE_PLAIN_DIGITS)));
 }
 
 /**
@@ -97,7 +99,7 @@ function createAxisRange(options) {
     const state = {
         start: options.start ?? domainLow,
         stop: options.stop ?? domainHigh,
-        count: options.count ?? 4,
+        count: options.count ?? AXIS_RANGE_DEFAULT_COUNT,
         spacing: "scale",
         custom: null,
         values: [],

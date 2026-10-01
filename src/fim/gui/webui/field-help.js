@@ -215,8 +215,11 @@ function showFieldTooltip(anchor, text) {
     tooltip.textContent = text;
     tooltip.hidden = false;
     const rect = anchor.getBoundingClientRect();
-    tooltip.style.left = `${Math.max(4, rect.left)}px`;
-    tooltip.style.top = `${Math.max(4, rect.top - tooltip.offsetHeight - 4)}px`;
+    tooltip.style.left = `${Math.max(FIELD_TOOLTIP_EDGE_MARGIN_PX, rect.left)}px`;
+    tooltip.style.top = `${Math.max(
+        FIELD_TOOLTIP_EDGE_MARGIN_PX,
+        rect.top - tooltip.offsetHeight - FIELD_TOOLTIP_GAP_PX
+    )}px`;
 }
 
 function hideFieldTooltip() {

@@ -306,3 +306,13 @@ const SWEEP_Y_TITLE_INSET = 14;
 // A point's marker radius, and how close the pointer must be to pick it.
 const SWEEP_POINT_RADIUS = 4;
 const SWEEP_HIT_RADIUS_PX = 14;
+
+/* ---- Explore surface and slices -------------------------------------- */
+
+// The heat map canvas: never narrower than the minimum, always this tall.
+const EXPLORE_SURFACE_CANVAS_MIN_WIDTH = 320;
+const EXPLORE_SURFACE_CANVAS_HEIGHT = 360;
+
+// The two slice charts beside it are smaller.
+const EXPLORE_SLICE_CANVAS_MIN_WIDTH = 240;
+const EXPLORE_SLICE_CANVAS_HEIGHT = 200;

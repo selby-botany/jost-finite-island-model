@@ -23,17 +23,6 @@
  * on `#scrubber-controls` for the fuller rationale.
  */
 
-// A watchable cadence: fast enough to read as motion rather than a
-// slideshow, slow enough that individual frames (up to
-// `GUI_ANIMATION_MAX_FRAMES` of them) do not blur past unreadably --
-// the same constant the Tk-era `AnimationScreen`, and this component's
-// own animation.js predecessor, both used.
-const STEP_INTERVAL_MS = 150;
-
-// A single-frame set has nothing to play or drag through -- every
-// control stays disabled and there is nowhere to move to.
-const MINIMUM_FRAMES_TO_ANIMATE = 2;
-
 const scrubberForwardButton = document.getElementById("scrubber-step-forward");
 const scrubberBackwardButton = document.getElementById("scrubber-step-backward");
 const scrubberRange = document.getElementById("scrubber-range");
