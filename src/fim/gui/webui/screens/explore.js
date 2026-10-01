@@ -101,25 +101,6 @@ const EXPLORE_UNIT_FAMILIES = {
     flag: { title: "Mutation negligible (1 = yes)", fixed: true },
 };
 
-// Line color per series. `STATISTIC_TRAJECTORY_COLORS` (run-view-
-// completed.js, loaded first -- index.html's own <script> order) is the
-// project's one statistic-color language: a color learned as "D" on
-// Results reads as "D" here too. Names it does not cover (the entropy,
-// effective-allele, and identity-recovery predictions, none of which
-// are `FinalReport` statistics) draw from the same Okabe-Ito palette.
-// Colors need only be distinct *within* a unit family, since only one
-// family is ever on the canvas at once.
-const EXPLORE_EXTRA_SERIES_COLORS = {
-    S_S: "#0072b2",
-    S_T: "#d55e00",
-    A_S: "#0072b2",
-    A_T: "#d55e00",
-    identity_recovery_rate: "#cc79a7",
-    identity_recovery_equilibrium: "#8c564b",
-    identity_recovery_half_life: "#009e73",
-    mutation_negligible_equilibrium: "#7570b3",
-};
-
 // The family on the canvas now, and which of its members are drawn.
 // Opens on the three differentiation statistics Explore has always
 // charted, so the default view is unchanged; every other statistic is
@@ -131,13 +112,6 @@ let exploreVisibleSeries = new Set(["D", "G_ST", "E_ST"]);
 // `null` while it tracks the committed configuration. Owned by the
 // axis scrubber below.
 let exploreScrubIndex = null;
-
-// The range input's own thumb width, in CSS pixels -- see `.explore-
-// scrubber input[type="range"]::-webkit-slider-thumb` in `app.css`,
-// which is where this number is actually set. `syncExploreScrubHome`
-// needs it to line its pointer up with the thumb's travel, which is
-// inset by half a thumb at each end of the track.
-const EXPLORE_SCRUB_THUMB_WIDTH_PX = 14;
 
 /**
  * Index into `sweep.points` the dashed marker is currently on.
@@ -157,7 +131,11 @@ function exploreMarkerIndex(sweep) {
  * @returns {string}
  */
 function exploreSeriesColor(name) {
-    return STATISTIC_TRAJECTORY_COLORS[name] ?? EXPLORE_EXTRA_SERIES_COLORS[name] ?? "#666666";
+    return (
+        STATISTIC_TRAJECTORY_COLORS[name] ??
+        EXPLORE_EXTRA_SERIES_COLORS[name] ??
+        EXPLORE_FALLBACK_SERIES_COLOR
+    );
 }
 
 /**
@@ -231,10 +209,16 @@ function collectExploreValues() {
  * @returns {string}
  */
 function formatExploreTick(value) {
-    if (value !== 0 && (Math.abs(value) < 0.001 || Math.abs(value) >= 1000)) {
-        return value.toExponential(1);
+    const magnitude = Math.abs(value);
+    if (
+        value !== 0 &&
+        (magnitude < EXPLORE_TICK_EXPONENT_LOW || magnitude >= EXPLORE_TICK_EXPONENT_HIGH)
+    ) {
+        return value.toExponential(EXPLORE_TICK_EXPONENT_DIGITS);
     }
-    return Number.isInteger(value) ? String(value) : value.toPrecision(2);
+    return Number.isInteger(value)
+        ? String(value)
+        : value.toPrecision(EXPLORE_TICK_SIGNIFICANT_DIGITS);
 }
 
 /**
@@ -283,19 +267,24 @@ function exploreAxisTicks(minValue, maxValue, targetCount) {
         // or the identity-recovery family against `mu`. A flat line is
         // the most informative thing on the screen here, so give it
         // room either side rather than collapsing the axis onto it.
-        const magnitude = Math.abs(high) > 0 ? Math.abs(high) * 0.5 : 1;
+        const magnitude =
+            Math.abs(high) > 0
+                ? Math.abs(high) * EXPLORE_FLAT_PADDING_FRACTION
+                : EXPLORE_FLAT_PADDING_ZERO;
         low = high - magnitude;
         high = high + magnitude;
     }
     const rawStep = (high - low) / Math.max(targetCount - 1, 1);
     const power = Math.pow(10, Math.floor(Math.log10(rawStep)));
     const normalized = rawStep / power;
-    const niceMultiple = normalized <= 1 ? 1 : normalized <= 2 ? 2 : normalized <= 5 ? 5 : 10;
+    const niceMultiple =
+        EXPLORE_TICK_MULTIPLES.find((multiple) => normalized <= multiple) ??
+        EXPLORE_TICK_MULTIPLES[EXPLORE_TICK_MULTIPLES.length - 1];
     const step = niceMultiple * power;
     const first = Math.floor(low / step) * step;
     const last = Math.ceil(high / step) * step;
     const ticks = [];
-    for (let value = first; value <= last + step * 1e-9; value += step) {
+    for (let value = first; value <= last + step * TICK_EDGE_EPSILON; value += step) {
         ticks.push(value);
     }
     return ticks.length >= 2 ? ticks : [low, high];
@@ -326,7 +315,7 @@ function exploreValueTicks(points) {
     if (values.length === 0) {
         return PROBABILITY_TICK_VALUES;
     }
-    return exploreAxisTicks(Math.min(...values), Math.max(...values), 6);
+    return exploreAxisTicks(Math.min(...values), Math.max(...values), EXPLORE_VALUE_TICK_TARGET);
 }
 
 
@@ -381,10 +370,10 @@ function drawSweepCurve(canvas, sweep) {
     // Extra left margin (over a bare tick-label width) for the rotated
     // y-axis title; extra bottom margin (over a bare tick-label height)
     // for the x-axis title beneath the existing numeric ticks.
-    const plotLeft = 54;
-    const plotRight = width - 12;
-    const plotTop = 12;
-    const plotBottom = height - 46;
+    const plotLeft = EXPLORE_PLOT_MARGIN.left;
+    const plotRight = width - EXPLORE_PLOT_MARGIN.right;
+    const plotTop = EXPLORE_PLOT_MARGIN.top;
+    const plotBottom = height - EXPLORE_PLOT_MARGIN.bottom;
 
     const logScale = sweep.axis === "m" || sweep.axis === "mu";
     const xs = sweep.points.map((point) => point.x);
@@ -415,7 +404,7 @@ function drawSweepCurve(canvas, sweep) {
 
     // Axes.
     context.strokeStyle = borderColor;
-    context.lineWidth = 1;
+    context.lineWidth = AXIS_LINE_WIDTH;
     context.beginPath();
     context.moveTo(plotLeft, plotTop);
     context.lineTo(plotLeft, plotBottom);
@@ -424,11 +413,15 @@ function drawSweepCurve(canvas, sweep) {
 
     // Y-axis ticks: the active unit family's own scale.
     context.fillStyle = mutedColor;
-    context.font = "10px sans-serif";
+    context.font = FONT_AXIS_SMALL;
     context.textAlign = "right";
     context.textBaseline = "middle";
     for (const tick of valueTicks) {
-        context.fillText(formatExploreTick(tick), plotLeft - 6, yToPixel(tick));
+        context.fillText(
+            formatExploreTick(tick),
+            plotLeft - EXPLORE_Y_LABEL_GAP,
+            yToPixel(tick)
+        );
     }
 
     // X-axis ticks: first, middle, and last swept value only -- a
@@ -442,7 +435,11 @@ function drawSweepCurve(canvas, sweep) {
         sweep.points[sweep.points.length - 1],
     ];
     for (const point of tickPoints) {
-        context.fillText(formatExploreTick(point.x), xToPixel(point.x), plotBottom + 4);
+        context.fillText(
+            formatExploreTick(point.x),
+            xToPixel(point.x),
+            plotBottom + EXPLORE_X_LABEL_DROP
+        );
     }
 
     // X-axis title: whichever field is being swept, in `#explore-axis`'s
@@ -452,7 +449,11 @@ function drawSweepCurve(canvas, sweep) {
     // for the same concept a second time.
     context.textAlign = "center";
     context.textBaseline = "bottom";
-    context.fillText(exploreAxisLabel(sweep.axis), (plotLeft + plotRight) / 2, height - 2);
+    context.fillText(
+        exploreAxisLabel(sweep.axis),
+        (plotLeft + plotRight) / 2,
+        height - EXPLORE_X_TITLE_RISE
+    );
 
     // Y-axis title: what the plotted family measures. Only one unit
     // family is ever on the canvas at a time, so this single title is
@@ -460,7 +461,7 @@ function drawSweepCurve(canvas, sweep) {
     // whole reason the chart groups by family instead of overlaying
     // proportions, nats, and generations on one meaningless axis.
     context.save();
-    context.translate(12, (plotTop + plotBottom) / 2);
+    context.translate(EXPLORE_Y_TITLE_INSET, (plotTop + plotBottom) / 2);
     context.rotate(-QUARTER_TURN);
     context.textAlign = "center";
     context.textBaseline = "alphabetic";
@@ -473,7 +474,7 @@ function drawSweepCurve(canvas, sweep) {
      */
     function drawLine(key, color) {
         context.strokeStyle = color;
-        context.lineWidth = 2;
+        context.lineWidth = CURVE_LINE_WIDTH;
         context.beginPath();
         let started = false;
         for (const point of sweep.points) {
@@ -502,9 +503,9 @@ function drawSweepCurve(canvas, sweep) {
 
     // The scrubber's own position on this axis -- the committed
     // configuration's value until the slider is moved off it.
-    context.setLineDash([4, 3]);
+    context.setLineDash(DASH_REFERENCE_LINE);
     context.strokeStyle = mutedColor;
-    context.lineWidth = 1;
+    context.lineWidth = AXIS_LINE_WIDTH;
     const markerPoint = sweep.points[exploreMarkerIndex(sweep)];
     const currentX = xToPixel(markerPoint.x);
     context.beginPath();

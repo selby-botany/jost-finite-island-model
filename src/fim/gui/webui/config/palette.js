@@ -95,6 +95,29 @@ const COMPARE_RUN_COLORS = [
     OKABE_ITO_BLACK,
 ];
 
+/* ---- Explore screen -------------------------------------------------- */
+
+/* Line colors for the Explore predictions that are not report statistics
+ * (`STATISTIC_TRAJECTORY_COLORS` covers those, so a color learned as "D"
+ * on Results reads as "D" here too). Only one unit family is ever on the
+ * canvas at a time, so these need only be distinct within a family,
+ * which is why the entropy (`S_*`) and effective-allele (`A_*`)
+ * predictions can reuse the same two hues.
+ */
+const EXPLORE_EXTRA_SERIES_COLORS = {
+    S_S: OKABE_ITO_BLUE,
+    S_T: OKABE_ITO_VERMILLION,
+    A_S: OKABE_ITO_BLUE,
+    A_T: OKABE_ITO_VERMILLION,
+    identity_recovery_rate: OKABE_ITO_REDDISH_PURPLE,
+    identity_recovery_equilibrium: TABLEAU_BROWN,
+    identity_recovery_half_life: OKABE_ITO_BLUISH_GREEN,
+    mutation_negligible_equilibrium: DARK2_PURPLE,
+};
+
+// A series with no assigned color at all.
+const EXPLORE_FALLBACK_SERIES_COLOR = "#666666";
+
 /* ---- Theme fallbacks ------------------------------------------------ */
 
 /* Used only when a `--fim-*` custom property reads back empty (a canvas

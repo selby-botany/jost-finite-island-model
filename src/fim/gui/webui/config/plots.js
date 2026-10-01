@@ -227,3 +227,42 @@ const TRAJECTORY_TICK_DECIMALS = 1;
 const TRAJECTORY_LINE_WIDTH = 2;
 const TRAJECTORY_HIGHLIGHT_LINE_WIDTH = 4;
 const TRAJECTORY_FADED_ALPHA = 0.35;
+
+/* ---- Explore response curve ------------------------------------------ */
+
+// Extra left margin (over a bare tick-label width) for the rotated y
+// title, and extra bottom margin for the x title beneath the ticks.
+const EXPLORE_PLOT_MARGIN = { left: 54, right: 12, top: 12, bottom: 46 };
+
+// Label offsets: y tick labels left of the frame, x tick labels below
+// it, the x title above the canvas bottom, the rotated y title in from
+// the canvas left.
+const EXPLORE_Y_LABEL_GAP = 6;
+const EXPLORE_X_LABEL_DROP = 4;
+const EXPLORE_X_TITLE_RISE = 2;
+const EXPLORE_Y_TITLE_INSET = 12;
+
+// Value ticks aimed for on a family that fits its axis to the data.
+const EXPLORE_VALUE_TICK_TARGET = 6;
+
+// Tick-step rounding: the raw step divided by its power of ten is
+// rounded up to the first of these multiples.
+const EXPLORE_TICK_MULTIPLES = [1, 2, 5, 10];
+
+// A series that does not vary gets this fraction of its own magnitude
+// as room either side (or 1 either side for a flat zero).
+const EXPLORE_FLAT_PADDING_FRACTION = 0.5;
+const EXPLORE_FLAT_PADDING_ZERO = 1;
+
+// Tick labels switch to exponent form below `LOW` or at/above `HIGH` in
+// magnitude; plain labels keep this many significant digits.
+const EXPLORE_TICK_EXPONENT_LOW = 0.001;
+const EXPLORE_TICK_EXPONENT_HIGH = 1000;
+const EXPLORE_TICK_SIGNIFICANT_DIGITS = 2;
+const EXPLORE_TICK_EXPONENT_DIGITS = 1;
+
+// The range input's own thumb width in CSS pixels. This number is set
+// in `app.css` (`.explore-scrubber input[type="range"]::-webkit-slider-
+// thumb`); the scrubber needs it to line its pointer up with the
+// thumb's travel, which is inset by half a thumb at each end.
+const EXPLORE_SCRUB_THUMB_WIDTH_PX = 14;
