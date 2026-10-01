@@ -72,7 +72,7 @@ function axisRangeSpaced(low, high, count, log) {
  */
 function axisRangeSnap(values, integer) {
     const snapped = values.map((value) =>
-        integer ? Math.round(value) : Number(value.toPrecision(12))
+        integer ? Math.round(value) : Number(value.toPrecision(AXIS_RANGE_SNAP_DIGITS))
     );
     return snapped.filter((value, index) => snapped.indexOf(value) === index);
 }
@@ -125,7 +125,9 @@ function createAxisRange(options) {
         const value = useLog
             ? domainLow * (domainHigh / domainLow) ** fraction
             : domainLow + (domainHigh - domainLow) * fraction;
-        return options.integer ? Math.round(value) : Number(value.toPrecision(6));
+        return options.integer
+            ? Math.round(value)
+            : Number(value.toPrecision(AXIS_RANGE_SLIDER_VALUE_DIGITS));
     };
 
     const makeEnd = (text) => {

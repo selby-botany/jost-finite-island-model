@@ -432,7 +432,7 @@ window.fim.onReproducibilityChecked = function onReproducibilityChecked(comparis
     }
     const changed = comparison.differences
         .map((item) => `${item.label}: ${item.old} → ${item.new}`)
-        .slice(0, 6)
+        .slice(0, REPRODUCIBILITY_DIFFERENCE_LIMIT)
         .join("; ");
     showRunBanner(
         `Reproducibility warning: version ${comparison.oldVersion} computed this ` +

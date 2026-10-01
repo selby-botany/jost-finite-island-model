@@ -29,17 +29,6 @@ const exploreSweepStatistic = document.getElementById("explore-sweep-statistic")
 const exploreSweepPlan = document.getElementById("explore-sweep-plan");
 const exploreSweepButton = document.getElementById("explore-sweep-button");
 
-// Mirrors `fim.gui.app._EQUILIBRIUM_SWEEP_DOMAINS` (a test asserts they
-// agree), with each axis's default spacing and whether it is a count.
-const EXPLORE_SWEEP_AXES = {
-    N: { domain: [10, 5000], log: true, integer: true },
-    d: { domain: [2, 50], log: false, integer: true },
-    m: { domain: [0.0001, 0.5], log: true, integer: false },
-    mu: { domain: [0.000001, 0.1], log: true, integer: false },
-};
-const EXPLORE_RESPONSE_SAMPLES = 200;
-const EXPLORE_SWEEP_DEBOUNCE_MS = 250;
-
 let exploreSweepControls = [];
 let exploreSweepTimer = null;
 let exploreSweepSequence = 0;
@@ -81,16 +70,16 @@ function exploreEnteredValue(key) {
 function exploreDefaultInterval(key) {
     const { domain } = EXPLORE_SWEEP_AXES[key];
     if (key === "d") {
-        return { start: 2, stop: 16, count: 4 };
+        return { ...DEME_COUNT_DEFAULT_RANGE };
     }
     const entered = exploreEnteredValue(key);
     if (!(entered > 0)) {
-        return { start: domain[0], stop: domain[1], count: 5 };
+        return { start: domain[0], stop: domain[1], count: EXPLORE_INTERVAL_COUNT };
     }
     return {
-        start: Math.max(domain[0], entered / 10),
-        stop: Math.min(domain[1], entered * 10),
-        count: 5,
+        start: Math.max(domain[0], entered / EXPLORE_INTERVAL_DECADE_FACTOR),
+        stop: Math.min(domain[1], entered * EXPLORE_INTERVAL_DECADE_FACTOR),
+        count: EXPLORE_INTERVAL_COUNT,
     };
 }
 

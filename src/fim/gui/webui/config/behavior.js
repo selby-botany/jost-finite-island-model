@@ -78,3 +78,63 @@ const AXIS_RANGE_PLAIN_DIGITS = 6;
 // field's title.
 const FIELD_TOOLTIP_EDGE_MARGIN_PX = 4;
 const FIELD_TOOLTIP_GAP_PX = 4;
+
+/* ---- Sweep and Explore planning ------------------------------------- */
+
+// Wait this long after the last edit before asking for a new plan, so
+// typing a value does not fire a request per keystroke.
+const SWEEP_PLAN_DEBOUNCE_MS = 300;
+const EXPLORE_SWEEP_DEBOUNCE_MS = 250;
+
+// How many plan rows to draw; a larger plan says how many it omitted.
+const SWEEP_PLAN_ROW_LIMIT = 200;
+
+// How many points an Explore response curve is sampled at before it is
+// resampled to equal steps of the statistic's own change.
+const EXPLORE_RESPONSE_SAMPLES = 200;
+
+/* Mirrors `fim.gui.app._EQUILIBRIUM_SWEEP_DOMAINS` (a test asserts they
+ * agree), with each axis's default spacing and whether it is a count.
+ */
+const EXPLORE_SWEEP_AXES = {
+    N: { domain: [10, 5000], log: true, integer: true },
+    d: { domain: [2, 50], log: false, integer: true },
+    m: { domain: [0.0001, 0.5], log: true, integer: false },
+    mu: { domain: [0.000001, 0.1], log: true, integer: false },
+};
+
+// A deme count opens on 2 to 16: a handful of islands up to a dozen or
+// so, the range most studies of this model use.
+const DEME_COUNT_DEFAULT_RANGE = { start: 2, stop: 16, count: 4 };
+
+/* A new Explore interval for a rate or size spans a decade (`FACTOR`)
+ * either side of the entered value, clamped to the axis domain, with
+ * `COUNT` values.
+ */
+const EXPLORE_INTERVAL_DECADE_FACTOR = 10;
+const EXPLORE_INTERVAL_COUNT = 5;
+
+// Sensible first range per key on the sweep screen, so a new axis opens
+// on something useful rather than on the full display domain (which
+// spans decades).
+const SWEEP_DEFAULT_RANGES = {
+    m: { start: 0.0001, stop: 0.1, count: 4 },
+    mu: { start: 0.000001, stop: 0.001, count: 4 },
+    N: { start: 10, stop: 1000, count: 4 },
+    d: { ...DEME_COUNT_DEFAULT_RANGE },
+};
+
+// A sweep axis with no entry above: its value count, and the range used
+// when it has no display domain either.
+const SWEEP_DEFAULT_COUNT = 4;
+const SWEEP_FALLBACK_RANGE = { start: 1, stop: 10, count: SWEEP_DEFAULT_COUNT };
+
+// How many differences a reproducibility comparison lists before the
+// rest are left out of the banner.
+const REPRODUCIBILITY_DIFFERENCE_LIMIT = 6;
+
+// Axis range values are rounded to this many significant digits to shed
+// floating-point dust (snapping a sweep list), or this many when the
+// slider position is converted back to a value.
+const AXIS_RANGE_SNAP_DIGITS = 12;
+const AXIS_RANGE_SLIDER_VALUE_DIGITS = 6;

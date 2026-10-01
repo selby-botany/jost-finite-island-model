@@ -124,8 +124,6 @@ window.fim.updateRailHighlight = updateRailHighlight;
  * @param {Record<string, string>} values
  * @returns {{N: string, d: string, m: string, mu: string}}
  */
-const PLOIDY_NAMES = { 1: "haploid", 2: "diploid", 3: "triploid", 4: "tetraploid" };
-
 function formatParameterStripSummary(values) {
     const nItems = (values.N || "")
         .split(",")

@@ -50,20 +50,6 @@ const sweepHomeButton = document.getElementById("sweep-home-button");
 const sweepTitle = document.getElementById("sweep-title");
 const sweepViewResultsButton = document.getElementById("sweep-view-results-button");
 
-// How many plan rows to draw; a larger plan says how many it omitted.
-const SWEEP_PLAN_ROW_LIMIT = 200;
-// Wait this long after the last edit before asking for a new plan.
-const SWEEP_PLAN_DEBOUNCE_MS = 300;
-
-// Sensible first range per key, so a new axis opens on something useful
-// rather than on the full display domain (which spans decades).
-const SWEEP_DEFAULT_RANGES = {
-    m: { start: 0.0001, stop: 0.1, count: 4 },
-    mu: { start: 0.000001, stop: 0.001, count: 4 },
-    N: { start: 10, stop: 1000, count: 4 },
-    d: { start: 2, stop: 16, count: 4 },
-};
-
 let sweepKeys = null;
 let sweepBaseValues = {};
 let sweepPlanTimer = null;
@@ -110,8 +96,7 @@ function sweepKeyInfo(key) {
  * @returns {string}
  */
 function sweepBaseSummaryText(values) {
-    const ploidyNames = { 1: "haploid", 2: "diploid", 3: "triploid", 4: "tetraploid" };
-    const ploidy = ploidyNames[values.ploidy] || `ploidy ${values.ploidy || "?"}`;
+    const ploidy = PLOIDY_NAMES[values.ploidy] || `ploidy ${values.ploidy || "?"}`;
     const migration = values.m_rate ? `m ${values.m_rate}` : "m as configured";
     const mutation = values.mu_value ? `μ ${values.mu_value}` : "μ as configured";
     return (
@@ -289,8 +274,12 @@ function configureSweepAxisRow(row, key, initial) {
         return;
     }
     const fallback = info.displayDomain
-        ? { start: info.displayDomain[0], stop: info.displayDomain[1], count: 4 }
-        : { start: 1, stop: 10, count: 4 };
+        ? {
+              start: info.displayDomain[0],
+              stop: info.displayDomain[1],
+              count: SWEEP_DEFAULT_COUNT,
+          }
+        : { ...SWEEP_FALLBACK_RANGE };
     const range = { ...(SWEEP_DEFAULT_RANGES[key] || fallback), ...initial };
     row.querySelector(".sweep-axis-mode").value = initial.mode || "range";
     row.querySelector(".sweep-axis-range").hidden = (initial.mode || "range") !== "range";
@@ -612,7 +601,7 @@ const SWEEP_EVENT_STATE_TEXT = {
 function sweepDifferenceText(comparison) {
     return comparison.differences
         .map((item) => `${item.label}: ${item.old} → ${item.new}`)
-        .slice(0, 6)
+        .slice(0, REPRODUCIBILITY_DIFFERENCE_LIMIT)
         .join("; ");
 }
 
