@@ -75,6 +75,26 @@ const STATISTIC_TRAJECTORY_COLORS = {
     MI: DARK2_PURPLE,
 };
 
+/* ---- Compare screen -------------------------------------------------- */
+
+/* One color per compared run rather than per statistic: the Okabe-Ito
+ * hues without yellow, which is faint on a white plot. The list cycles
+ * if more runs are selected than colors, so two runs may share a color
+ * but the screen never runs out. Kept apart from
+ * `STATISTIC_TRAJECTORY_COLORS` because the two encode unrelated things
+ * -- run identity here, statistic identity there -- and design principle
+ * §11.1 says a data-encoding palette is not borrowed for anything else.
+ */
+const COMPARE_RUN_COLORS = [
+    OKABE_ITO_BLUE,
+    OKABE_ITO_VERMILLION,
+    OKABE_ITO_BLUISH_GREEN,
+    OKABE_ITO_REDDISH_PURPLE,
+    OKABE_ITO_ORANGE,
+    OKABE_ITO_SKY_BLUE,
+    OKABE_ITO_BLACK,
+];
+
 /* ---- Theme fallbacks ------------------------------------------------ */
 
 /* Used only when a `--fim-*` custom property reads back empty (a canvas

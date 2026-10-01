@@ -59,27 +59,6 @@ const compareTrajectoryLegend = document.getElementById("compare-trajectory-lege
 const _COMPARE_STATISTIC_NAMES = ["D", "G_ST", "E_ST", "K_ST", "H_S", "H_T", "H_ST"];
 const _COMPARE_MINIMUM_RUNS = 2;
 
-// A fixed, colorblind-safe qualitative palette (Okabe-Ito, the same
-// family `run-view-completed.js`'s own `STATISTIC_TRAJECTORY_COLORS`
-// draws from), one color per compared run rather than per statistic --
-// cycles if more runs are selected than colors, which only degrades to
-// two runs sharing a color rather than ever running out. Kept distinct
-// from that other array (not reused verbatim) since the two encode
-// unrelated things -- run identity here, statistic identity there --
-// design principle §11.1's own "no other part of the interface borrows
-// [a data-encoding palette] for anything unrelated to the data it
-// encodes," applied by construction rather than by sharing one array
-// for two different meanings.
-const _COMPARE_RUN_COLORS = [
-    "#0072b2",
-    "#d55e00",
-    "#009e73",
-    "#cc79a7",
-    "#e69f00",
-    "#56b4e9",
-    "#000000",
-];
-
 // Set once `compareRunButton`'s own click handler has a real result to
 // redraw from -- `null` before the first successful compare, or after
 // a failed one, so `compareTrajectoryStatistic`'s own `change` handler
@@ -306,10 +285,10 @@ function drawCompareTrajectory(runs, statisticName) {
         return;
     }
 
-    const plotLeft = 42;
-    const plotRight = width - 12;
-    const plotTop = 12;
-    const plotBottom = height - 22;
+    const plotLeft = TRAJECTORY_PLOT_MARGIN.left;
+    const plotRight = width - TRAJECTORY_PLOT_MARGIN.right;
+    const plotTop = TRAJECTORY_PLOT_MARGIN.top;
+    const plotBottom = height - TRAJECTORY_PLOT_MARGIN.bottom;
     const { min: minGeneration, max: maxGeneration } =
         window.fim.numericExtent(allGenerations);
     // Same fixed-floor-and-ceiling domain choice `drawTrajectoryCurve`
@@ -337,7 +316,7 @@ function drawCompareTrajectory(runs, statisticName) {
     const mutedColor = style.getPropertyValue("--fim-muted").trim();
 
     context.strokeStyle = borderColor;
-    context.lineWidth = 1;
+    context.lineWidth = AXIS_LINE_WIDTH;
     context.beginPath();
     context.moveTo(plotLeft, plotTop);
     context.lineTo(plotLeft, plotBottom);
@@ -345,24 +324,25 @@ function drawCompareTrajectory(runs, statisticName) {
     context.stroke();
 
     context.fillStyle = mutedColor;
-    context.font = "10px sans-serif";
+    context.font = FONT_AXIS_SMALL;
     context.textAlign = "right";
     context.textBaseline = "middle";
-    context.fillText(maxValue.toFixed(2), plotLeft - 6, plotTop);
-    context.fillText(minValue.toFixed(2), plotLeft - 6, plotBottom);
+    const valueLabelRight = plotLeft - TRAJECTORY_Y_LABEL_GAP;
+    context.fillText(maxValue.toFixed(TRAJECTORY_CORNER_DECIMALS), valueLabelRight, plotTop);
+    context.fillText(minValue.toFixed(TRAJECTORY_CORNER_DECIMALS), valueLabelRight, plotBottom);
     context.textBaseline = "top";
-    context.fillText(`gen ${maxGeneration}`, plotRight, plotBottom + 4);
+    context.fillText(`gen ${maxGeneration}`, plotRight, plotBottom + TRAJECTORY_X_LABEL_DROP);
     context.textAlign = "left";
-    context.fillText(`gen ${minGeneration}`, plotLeft, plotBottom + 4);
+    context.fillText(`gen ${minGeneration}`, plotLeft, plotBottom + TRAJECTORY_X_LABEL_DROP);
 
     runs.forEach((run, index) => {
         const { generations, values } = series[index];
         if (generations.length === 0) {
             return;
         }
-        const color = _COMPARE_RUN_COLORS[index % _COMPARE_RUN_COLORS.length];
+        const color = COMPARE_RUN_COLORS[index % COMPARE_RUN_COLORS.length];
         context.strokeStyle = color;
-        context.lineWidth = 2;
+        context.lineWidth = CURVE_LINE_WIDTH;
         context.beginPath();
         generations.forEach((generation, pointIndex) => {
             const x = xToPixel(generation);
