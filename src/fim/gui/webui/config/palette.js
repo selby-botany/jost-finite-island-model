@@ -118,6 +118,11 @@ const EXPLORE_EXTRA_SERIES_COLORS = {
 // A series with no assigned color at all.
 const EXPLORE_FALLBACK_SERIES_COLOR = "#666666";
 
+/* ---- Sweep results ---------------------------------------------------- */
+
+// A sweep line for a statistic with no assigned color.
+const SWEEP_FALLBACK_COLOR = OKABE_ITO_BLUE;
+
 /* ---- Theme fallbacks ------------------------------------------------ */
 
 /* Used only when a `--fim-*` custom property reads back empty (a canvas

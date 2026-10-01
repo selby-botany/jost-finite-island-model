@@ -245,10 +245,6 @@ const EXPLORE_Y_TITLE_INSET = 12;
 // Value ticks aimed for on a family that fits its axis to the data.
 const EXPLORE_VALUE_TICK_TARGET = 6;
 
-// Tick-step rounding: the raw step divided by its power of ten is
-// rounded up to the first of these multiples.
-const EXPLORE_TICK_MULTIPLES = [1, 2, 5, 10];
-
 // A series that does not vary gets this fraction of its own magnitude
 // as room either side (or 1 either side for a flat zero).
 const EXPLORE_FLAT_PADDING_FRACTION = 0.5;
@@ -266,3 +262,47 @@ const EXPLORE_TICK_EXPONENT_DIGITS = 1;
 // thumb`); the scrubber needs it to line its pointer up with the
 // thumb's travel, which is inset by half a thumb at each end.
 const EXPLORE_SCRUB_THUMB_WIDTH_PX = 14;
+
+/* ---- Sweep results (line chart and heat map) ------------------------- */
+
+// Space around the one-axis line chart's frame for labels and titles.
+const SWEEP_LINE_MARGIN = { left: 64, right: 24, top: 16, bottom: 52 };
+
+// The canvas is never narrower than this, and is this tall: a line chart
+// is shorter than the heat map, which needs room for its color bar.
+const SWEEP_CANVAS_MIN_WIDTH = 320;
+const SWEEP_LINE_CANVAS_HEIGHT = 320;
+const SWEEP_HEATMAP_CANVAS_HEIGHT = 380;
+
+// How many points the closed-form curve is sampled at.
+const SWEEP_THEORY_SAMPLES = 60;
+
+// An axis reads best on a log scale when its consecutive ratios agree to
+// within `TOLERANCE` and the whole span is `MIN_SPAN` or more (two values
+// have no ratios to compare, so they need the larger `TWO_VALUE_SPAN`).
+const SWEEP_LOG_RATIO_TOLERANCE = 0.05;
+const SWEEP_LOG_MIN_SPAN = 5;
+const SWEEP_LOG_TWO_VALUE_SPAN = 20;
+
+// Value-axis ticks: about this many intervals, rounded to this many
+// significant digits to shed floating-point dust.
+const SWEEP_TICK_INTERVALS = 4;
+const SWEEP_TICK_PRECISION = 12;
+
+// Inset of a numeric x axis from the frame, so the end points are not
+// drawn on it, and the least room per categorical x label.
+const SWEEP_X_INSET = 12;
+const SWEEP_MIN_X_LABEL_SPACING_PX = 56;
+
+// Label offsets: y tick labels left of the frame (plus a baseline nudge),
+// x labels below it, the x title above the canvas bottom, and the
+// rotated y title in from the canvas left.
+const SWEEP_Y_LABEL_GAP = 6;
+const SWEEP_Y_LABEL_BASELINE = 4;
+const SWEEP_X_LABEL_DROP = 16;
+const SWEEP_X_TITLE_RISE = 10;
+const SWEEP_Y_TITLE_INSET = 14;
+
+// A point's marker radius, and how close the pointer must be to pick it.
+const SWEEP_POINT_RADIUS = 4;
+const SWEEP_HIT_RADIUS_PX = 14;

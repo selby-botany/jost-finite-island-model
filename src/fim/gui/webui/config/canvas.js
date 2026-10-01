@@ -47,6 +47,9 @@ const DASH_REFERENCE_LINE = [4, 3];
 // reference line.
 const DASH_CLOSED_FORM = [8, 3, 2, 3];
 
+// A closed-form prediction drawn over simulation results.
+const DASH_THEORY_CURVE = [5, 4];
+
 // A fitted identity-recovery curve: dotted, a fourth distinct style.
 const DASH_DOTTED = [1, 3];
 
@@ -71,6 +74,12 @@ const NICE_STEP_BREAKS = [
     { from: 3.5, multiple: 5 },
     { from: 1.5, multiple: 2 },
 ];
+
+/* Tick spacing for the two charts that round a step *up* (Explore's
+ * response curve and the sweep chart): the raw step divided by its
+ * power of ten is rounded up to the first of these multiples.
+ */
+const TICK_STEP_MULTIPLES = [1, 2, 5, 10];
 
 // Slack for floating-point error when deciding whether the first or
 // last tick lands exactly on the axis end (`0.6000000000000001`).

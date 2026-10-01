@@ -278,8 +278,8 @@ function exploreAxisTicks(minValue, maxValue, targetCount) {
     const power = Math.pow(10, Math.floor(Math.log10(rawStep)));
     const normalized = rawStep / power;
     const niceMultiple =
-        EXPLORE_TICK_MULTIPLES.find((multiple) => normalized <= multiple) ??
-        EXPLORE_TICK_MULTIPLES[EXPLORE_TICK_MULTIPLES.length - 1];
+        TICK_STEP_MULTIPLES.find((multiple) => normalized <= multiple) ??
+        TICK_STEP_MULTIPLES[TICK_STEP_MULTIPLES.length - 1];
     const step = niceMultiple * power;
     const first = Math.floor(low / step) * step;
     const last = Math.ceil(high / step) * step;

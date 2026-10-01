@@ -43,11 +43,9 @@ const SWEEP_PROPORTION_STATISTICS = new Set([
 ]);
 // Statistics the closed form can predict (`Api.get_sweep_theory`).
 const SWEEP_THEORY_STATISTICS = new Set(["D", "G_ST", "E_ST", "H_S", "H_T"]);
-const SWEEP_THEORY_SAMPLES = 60;
 // A point whose only run came from another software version is recomputed
 // (and compared) the next time the sweep runs.
 const SWEEP_STATE_LABELS = { stale: "older version (rerun to update)" };
-const SWEEP_LINE_MARGIN = { left: 64, right: 24, top: 16, bottom: 52 };
 
 let sweepResultsData = null;
 let sweepResultsStudyId = null;
@@ -89,11 +87,13 @@ function sweepAxisIsLog(values) {
     }
     const span = Math.max(...values) / Math.min(...values);
     if (values.length < 3) {
-        return span >= 20;
+        return span >= SWEEP_LOG_TWO_VALUE_SPAN;
     }
     const ratios = values.slice(1).map((value, index) => value / values[index]);
-    const consistent = ratios.every((ratio) => Math.abs(ratio / ratios[0] - 1) < 0.05);
-    return consistent && span >= 5;
+    const consistent = ratios.every(
+        (ratio) => Math.abs(ratio / ratios[0] - 1) < SWEEP_LOG_RATIO_TOLERANCE
+    );
+    return consistent && span >= SWEEP_LOG_MIN_SPAN;
 }
 
 /**
@@ -258,8 +258,9 @@ async function renderSweepResults() {
     if (!hasTheory) {
         sweepResultsMode.value = "simulation";
     }
-    sweepResultsCanvas.width = Math.max(sweepResultsCanvas.clientWidth, 320);
-    sweepResultsCanvas.height = yKey === "" ? 320 : 380;
+    sweepResultsCanvas.width = Math.max(sweepResultsCanvas.clientWidth, SWEEP_CANVAS_MIN_WIDTH);
+    sweepResultsCanvas.height =
+        yKey === "" ? SWEEP_LINE_CANVAS_HEIGHT : SWEEP_HEATMAP_CANVAS_HEIGHT;
     if (statistic === "") {
         sweepResultsReadout.textContent = "No finished points to show yet.";
         drawSweepResultsTable(statistic);
@@ -391,12 +392,13 @@ function sweepTicks(low, high) {
     if (!(high > low)) {
         return [low];
     }
-    const rough = (high - low) / 4;
+    const rough = (high - low) / SWEEP_TICK_INTERVALS;
     const magnitude = 10 ** Math.floor(Math.log10(rough));
-    const step = [1, 2, 5, 10].map((factor) => factor * magnitude).find((s) => s >= rough);
+    const step = TICK_STEP_MULTIPLES.map((factor) => factor * magnitude).find((s) => s >= rough);
     const ticks = [];
-    for (let tick = Math.ceil(low / step) * step; tick <= high + step * 1e-9; tick += step) {
-        ticks.push(Number(tick.toPrecision(12)));
+    const end = high + step * TICK_EDGE_EPSILON;
+    for (let tick = Math.ceil(low / step) * step; tick <= end; tick += step) {
+        ticks.push(Number(tick.toPrecision(SWEEP_TICK_PRECISION)));
     }
     return ticks;
 }
@@ -410,12 +412,13 @@ function sweepTicks(low, high) {
 function drawSweepLine(canvas, spec) {
     const context = canvas.getContext("2d");
     const style = getComputedStyle(document.documentElement);
-    const muted = style.getPropertyValue("--fim-muted").trim() || "#5d6863";
-    const border = style.getPropertyValue("--fim-border").trim() || "#cdd5d0";
-    const foreground = style.getPropertyValue("--fim-foreground").trim() || "#242824";
-    const color = STATISTIC_TRAJECTORY_COLORS[spec.statistic] || "#0072b2";
+    const muted = style.getPropertyValue("--fim-muted").trim() || THEME_FALLBACK_MUTED;
+    const border = style.getPropertyValue("--fim-border").trim() || THEME_FALLBACK_BORDER;
+    const foreground =
+        style.getPropertyValue("--fim-foreground").trim() || THEME_FALLBACK_FOREGROUND;
+    const color = STATISTIC_TRAJECTORY_COLORS[spec.statistic] || SWEEP_FALLBACK_COLOR;
     context.clearRect(0, 0, canvas.width, canvas.height);
-    context.font = "12px sans-serif";
+    context.font = FONT_AXIS_LARGE;
     const left = SWEEP_LINE_MARGIN.left;
     const top = SWEEP_LINE_MARGIN.top;
     const width = canvas.width - left - SWEEP_LINE_MARGIN.right;
@@ -441,7 +444,10 @@ function drawSweepLine(canvas, spec) {
         const high = Math.max(...spec.values);
         const scale = spec.log ? Math.log : (value) => value;
         const span = scale(high) - scale(low) || 1;
-        toX = (value) => left + 12 + ((scale(value) - scale(low)) / span) * (width - 24);
+        toX = (value) =>
+            left +
+            SWEEP_X_INSET +
+            ((scale(value) - scale(low)) / span) * (width - 2 * SWEEP_X_INSET);
     } else {
         toX = (value) =>
             left + ((spec.values.indexOf(value) + 0.5) / spec.values.length) * width;
@@ -456,19 +462,28 @@ function drawSweepLine(canvas, spec) {
         context.moveTo(left, y);
         context.lineTo(left + width, y);
         context.stroke();
-        context.fillText(window.fim.heatmap.format(tick), left - 6, y + 4);
+        context.fillText(
+            window.fim.heatmap.format(tick),
+            left - SWEEP_Y_LABEL_GAP,
+            y + SWEEP_Y_LABEL_BASELINE
+        );
     }
     context.textAlign = "center";
-    const stride = Math.max(1, Math.ceil(spec.values.length / Math.max(width / 56, 1)));
+    const labelSlots = Math.max(width / SWEEP_MIN_X_LABEL_SPACING_PX, 1);
+    const stride = Math.max(1, Math.ceil(spec.values.length / labelSlots));
     spec.values.forEach((value, index) => {
         if (index % stride === 0) {
-            context.fillText(sweepFormatValue(value), toX(value), top + height + 16);
+            context.fillText(
+                sweepFormatValue(value),
+                toX(value),
+                top + height + SWEEP_X_LABEL_DROP
+            );
         }
     });
     context.fillStyle = foreground;
-    context.fillText(spec.xKey, left + width / 2, canvas.height - 10);
+    context.fillText(spec.xKey, left + width / 2, canvas.height - SWEEP_X_TITLE_RISE);
     context.save();
-    context.translate(14, top + height / 2);
+    context.translate(SWEEP_Y_TITLE_INSET, top + height / 2);
     context.rotate(-QUARTER_TURN);
     context.fillText(spec.statistic.replace("_", " "), 0, 0);
     context.restore();
@@ -478,7 +493,7 @@ function drawSweepLine(canvas, spec) {
     const pixels = spec.marks.map((mark) => ({ x: toX(mark.x), y: toY(mark.mean), mark }));
     context.strokeStyle = color;
     context.fillStyle = color;
-    context.lineWidth = 2;
+    context.lineWidth = CURVE_LINE_WIDTH;
     if (spec.numeric && pixels.length > 1) {
         context.beginPath();
         pixels.forEach((pixel, index) => {
@@ -490,7 +505,7 @@ function drawSweepLine(canvas, spec) {
         });
         context.stroke();
     }
-    context.lineWidth = 1;
+    context.lineWidth = AXIS_LINE_WIDTH;
     for (const pixel of pixels) {
         if (pixel.mark.low !== null && pixel.mark.high !== null) {
             context.beginPath();
@@ -499,7 +514,7 @@ function drawSweepLine(canvas, spec) {
             context.stroke();
         }
         context.beginPath();
-        context.arc(pixel.x, pixel.y, 4, 0, TAU);
+        context.arc(pixel.x, pixel.y, SWEEP_POINT_RADIUS, 0, TAU);
         context.fill();
     }
     return { kind: "line", pixels, statistic: spec.statistic, xKey: spec.xKey };
@@ -519,8 +534,8 @@ function drawSweepTheory(context, spec, toX, toY, color) {
     }
     context.save();
     context.strokeStyle = color;
-    context.lineWidth = 1.5;
-    context.setLineDash([5, 4]);
+    context.lineWidth = OVERLAY_LINE_WIDTH;
+    context.setLineDash(DASH_THEORY_CURVE);
     let drawing = false;
     context.beginPath();
     for (const entry of spec.theory) {
@@ -672,7 +687,7 @@ function sweepResultsTarget(event) {
         const y =
             ((event.clientY - box.top) * sweepResultsCanvas.height) / Math.max(box.height, 1);
         let best = null;
-        let bestDistance = 14;
+        let bestDistance = SWEEP_HIT_RADIUS_PX;
         for (const pixel of sweepResultsHit.pixels) {
             const distance = Math.hypot(pixel.x - x, pixel.y - y);
             if (distance < bestDistance) {
