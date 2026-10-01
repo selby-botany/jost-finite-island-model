@@ -32,6 +32,15 @@ const CHART_BLACK = "#000000";
 // Fill behind small in-plot text labels.
 const CHART_BADGE_FILL = "#f1f1f1";
 
+/* ---- Okabe-Ito data colors ------------------------------------------ */
+
+/* The Okabe-Ito qualitative palette: eight hues chosen to stay distinct
+ * under the common forms of color-blindness. The plots draw their data
+ * series from it, so a series keeps one identity across every screen.
+ * Only the hues a named constant needs are listed so far.
+ */
+const OKABE_ITO_VERMILLION = "#d55e00";
+
 /* ---- Theme fallbacks ------------------------------------------------ */
 
 /* Used only when a `--fim-*` custom property reads back empty (a canvas
@@ -73,6 +82,15 @@ const HEATMAP_DIVERGING = [
 // every color of both ramps.
 const HEATMAP_MARKER_FILL = "#ffffff";
 const HEATMAP_MARKER_STROKE = "#000000";
+
+/* ---- Supplemental graphs --------------------------------------------- */
+
+// The beta-distribution overlay on the frequency spectrum, and the fitted
+// curve on the isolation-by-distance plot: one "model" color for both.
+const SUPPLEMENTAL_MODEL_COLOR = OKABE_ITO_VERMILLION;
+
+// A bar segment whose allele arrived with no color of its own.
+const ALLELE_FALLBACK_COLOR = "#999999";
 
 /* ---- Scatter plot -------------------------------------------------- */
 

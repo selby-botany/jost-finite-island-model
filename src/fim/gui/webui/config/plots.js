@@ -175,3 +175,27 @@ const HEATMAP_SELECTED_INSET = 1;
 const HEATMAP_FORMAT_EXPONENT_HIGH = 1000;
 const HEATMAP_FORMAT_EXPONENT_LOW = 0.01;
 const HEATMAP_FORMAT_SIGNIFICANT_DIGITS = 3;
+
+/* ---- Supplemental graphs (composition, spectrum, isolation) -------- */
+
+// Pixels of space around each plot frame: left and bottom hold tick
+// labels and the axis title. The isolation plot's left is wider for its
+// longer identity tick labels.
+const ALLELE_COMPOSITION_PLOT_MARGIN = { left: 36, right: 12, top: 12, bottom: 28 };
+const FREQUENCY_SPECTRUM_PLOT_MARGIN = { left: 36, right: 12, top: 12, bottom: 28 };
+const IBD_PLOT_MARGIN = { left: 42, right: 12, top: 12, bottom: 28 };
+
+// Gap between the stacked bars of the allele-composition plot.
+const ALLELE_COMPOSITION_BAR_GAP = 4;
+
+// Each spectrum bar is inset this far on both sides so neighbours do
+// not touch.
+const SPECTRUM_BAR_INSET = 1;
+
+// Target tick count on the spectrum's count axis.
+const SPECTRUM_COUNT_TICK_TARGET = 5;
+
+// Radius of a point on the isolation-by-distance plot, and how far
+// above the canvas bottom its x-axis title sits.
+const IBD_POINT_RADIUS = 4;
+const IBD_TITLE_RISE = 12;

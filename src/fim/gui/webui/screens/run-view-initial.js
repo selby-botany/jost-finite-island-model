@@ -79,11 +79,12 @@ function drawAlleleComposition(canvas, payload) {
     const colors = Object.fromEntries(
         (payload.alleles || []).map((allele) => [allele.key, allele.color])
     );
-    const plotLeft = 36;
-    const plotRight = width - 12;
-    const plotTop = 12;
-    const plotBottom = height - 28;
-    const barGap = 4;
+    const margin = ALLELE_COMPOSITION_PLOT_MARGIN;
+    const plotLeft = margin.left;
+    const plotRight = width - margin.right;
+    const plotTop = margin.top;
+    const plotBottom = height - margin.bottom;
+    const barGap = ALLELE_COMPOSITION_BAR_GAP;
     const barWidth =
         (plotRight - plotLeft - barGap * (payload.demes.length - 1)) /
         payload.demes.length;
@@ -106,7 +107,7 @@ function drawAlleleComposition(canvas, payload) {
         plotBottom,
         (value) => plotBottom - value * (plotBottom - plotTop),
         PROBABILITY_TICK_VALUES,
-        10,
+        AXIS_TICK_FONT_SIZE,
         (value) => value.toFixed(1)
     );
     drawAxisTickMarks(
@@ -116,10 +117,10 @@ function drawAlleleComposition(canvas, payload) {
         plotBottom,
         (index) => plotLeft + index * (barWidth + barGap) + barWidth / 2,
         payload.demes.map((_, index) => index),
-        10,
+        AXIS_TICK_FONT_SIZE,
         null
     );
-    context.font = "10px sans-serif";
+    context.font = FONT_AXIS_SMALL;
     context.textAlign = "center";
     context.textBaseline = "top";
     for (const [index, deme] of payload.demes.entries()) {
@@ -128,11 +129,11 @@ function drawAlleleComposition(canvas, payload) {
         for (const segment of deme.segments) {
             const segmentHeight = segment.value * (plotBottom - plotTop);
             top -= segmentHeight;
-            context.fillStyle = colors[segment.key] || colors.other || "#999999";
+            context.fillStyle = colors[segment.key] || colors.other || ALLELE_FALLBACK_COLOR;
             context.fillRect(left, top, barWidth, segmentHeight);
         }
         context.fillStyle = mutedColor;
-        context.fillText(String(deme.deme), left + barWidth / 2, plotBottom + 5);
+        context.fillText(String(deme.deme), left + barWidth / 2, plotBottom + AXIS_LABEL_DROP);
     }
 }
 
@@ -147,10 +148,11 @@ function drawFrequencySpectrum(canvas, payload) {
     if (bins.length === 0) {
         return;
     }
-    const plotLeft = 36;
-    const plotRight = width - 12;
-    const plotTop = 12;
-    const plotBottom = height - 28;
+    const margin = FREQUENCY_SPECTRUM_PLOT_MARGIN;
+    const plotLeft = margin.left;
+    const plotRight = width - margin.right;
+    const plotTop = margin.top;
+    const plotBottom = height - margin.bottom;
     const overlay = payload.betaOverlay || [];
     const maxCount = Math.max(
         1,
@@ -177,7 +179,7 @@ function drawFrequencySpectrum(canvas, payload) {
         plotBottom,
         (value) => plotLeft + value * (plotRight - plotLeft),
         PROBABILITY_TICK_VALUES,
-        10,
+        AXIS_TICK_FONT_SIZE,
         (value) => value.toFixed(1)
     );
     drawAxisTickMarks(
@@ -186,10 +188,10 @@ function drawFrequencySpectrum(canvas, payload) {
         plotLeft,
         plotBottom,
         (value) => plotBottom - (value / maxCount) * (plotBottom - plotTop),
-        niceAxisTicks(0, maxCount, 5).filter(
+        niceAxisTicks(0, maxCount, SPECTRUM_COUNT_TICK_TARGET).filter(
             (value) => Number.isInteger(value) && value > 0 && value < maxCount
         ),
-        10,
+        AXIS_TICK_FONT_SIZE,
         (value) => String(value)
     );
     context.fillStyle = accentColor;
@@ -197,11 +199,16 @@ function drawFrequencySpectrum(canvas, payload) {
         const left = plotLeft + (index / bins.length) * (plotRight - plotLeft);
         const right = plotLeft + ((index + 1) / bins.length) * (plotRight - plotLeft);
         const barHeight = (bin.count / maxCount) * (plotBottom - plotTop);
-        context.fillRect(left + 1, plotBottom - barHeight, right - left - 2, barHeight);
+        context.fillRect(
+            left + SPECTRUM_BAR_INSET,
+            plotBottom - barHeight,
+            right - left - 2 * SPECTRUM_BAR_INSET,
+            barHeight
+        );
     });
     if (overlay.length > 0) {
-        context.strokeStyle = "#d55e00";
-        context.lineWidth = 2;
+        context.strokeStyle = SUPPLEMENTAL_MODEL_COLOR;
+        context.lineWidth = CURVE_LINE_WIDTH;
         context.beginPath();
         overlay.forEach((point, index) => {
             const x = plotLeft + point.x * (plotRight - plotLeft);
@@ -217,10 +224,10 @@ function drawFrequencySpectrum(canvas, payload) {
         context.stroke();
     }
     context.fillStyle = mutedColor;
-    context.font = "10px sans-serif";
+    context.font = FONT_AXIS_SMALL;
     context.textAlign = "center";
-    context.fillText("0", plotLeft, plotBottom + 5);
-    context.fillText("1", plotRight, plotBottom + 5);
+    context.fillText("0", plotLeft, plotBottom + AXIS_LABEL_DROP);
+    context.fillText("1", plotRight, plotBottom + AXIS_LABEL_DROP);
 }
 
 function drawIbdCurve(canvas, payload) {
@@ -234,10 +241,10 @@ function drawIbdCurve(canvas, payload) {
     if (points.length === 0) {
         return;
     }
-    const plotLeft = 42;
-    const plotRight = width - 12;
-    const plotTop = 12;
-    const plotBottom = height - 28;
+    const plotLeft = IBD_PLOT_MARGIN.left;
+    const plotRight = width - IBD_PLOT_MARGIN.right;
+    const plotTop = IBD_PLOT_MARGIN.top;
+    const plotBottom = height - IBD_PLOT_MARGIN.bottom;
     const maxDistance = Math.max(...points.map((point) => point.distance));
     const maxIdentity = Math.max(1, ...points.map((point) => point.meanIdentity));
     const style = getComputedStyle(document.documentElement);
@@ -255,8 +262,8 @@ function drawIbdCurve(canvas, payload) {
     context.strokeStyle = borderColor;
     context.strokeRect(plotLeft, plotTop, plotRight - plotLeft, plotBottom - plotTop);
     if (payload.fit && payload.fit.points) {
-        context.strokeStyle = "#d55e00";
-        context.setLineDash([4, 4]);
+        context.strokeStyle = SUPPLEMENTAL_MODEL_COLOR;
+        context.setLineDash(DASH_MODEL_CURVE);
         context.beginPath();
         payload.fit.points.forEach((point, index) => {
             const x = xToPixel(point.distance);
@@ -276,16 +283,20 @@ function drawIbdCurve(canvas, payload) {
         context.arc(
             xToPixel(point.distance),
             yToPixel(point.meanIdentity),
-            4,
+            IBD_POINT_RADIUS,
             0,
             TAU
         );
         context.fill();
     }
     context.fillStyle = mutedColor;
-    context.font = "10px sans-serif";
+    context.font = FONT_AXIS_SMALL;
     context.textAlign = "center";
-    context.fillText("migration-graph distance", (plotLeft + plotRight) / 2, height - 12);
+    context.fillText(
+        "migration-graph distance",
+        (plotLeft + plotRight) / 2,
+        height - IBD_TITLE_RISE
+    );
 }
 
 /**

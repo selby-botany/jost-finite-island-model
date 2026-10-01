@@ -10,8 +10,10 @@
 // The scatter plot's font stack: the macOS system font first.
 const FONT_FAMILY_SYSTEM = "-apple-system, sans-serif";
 
-// The plain stack at the larger size, used by the heat map and the
-// sweep chart for tick labels and axis titles.
+// The plain stack at two sizes: small for the line and bar charts' tick
+// labels, large for the heat map and sweep chart's.
+const AXIS_TICK_FONT_SIZE = 10;
+const FONT_AXIS_SMALL = `${AXIS_TICK_FONT_SIZE}px sans-serif`;
 const FONT_AXIS_LARGE = "12px sans-serif";
 
 /* ---- Axes ---------------------------------------------------------- */
@@ -25,8 +27,17 @@ const TICK_LENGTH = 4;
 const TICK_LABEL_GAP_X = 1;
 const TICK_LABEL_GAP_Y = 2;
 
-// Stroke width of axis frames, tick marks and plain guide lines.
+// Stroke width of axis frames, tick marks and plain guide lines, and of
+// a data curve drawn over them.
 const AXIS_LINE_WIDTH = 1;
+const CURVE_LINE_WIDTH = 2;
+
+// Gap below a plot frame to the top of its centered category or end
+// labels (`textBaseline = "top"`).
+const AXIS_LABEL_DROP = 5;
+
+// Dash patterns, as `[dash, gap, ...]` pixel lengths for `setLineDash`.
+const DASH_MODEL_CURVE = [4, 4];
 
 /* ---- Numeric tick selection ---------------------------------------- */
 
