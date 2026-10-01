@@ -1,0 +1,57 @@
+"use strict";
+
+/* The shared vocabulary of the GUI's canvas drawing: fonts, tick
+ * geometry and the like. Values that belong to one particular plot live
+ * in `plots.js`; colors live in `palette.js`.
+ */
+
+/* ---- Fonts --------------------------------------------------------- */
+
+// The scatter plot's font stack: the macOS system font first.
+const FONT_FAMILY_SYSTEM = "-apple-system, sans-serif";
+
+/* ---- Axes ---------------------------------------------------------- */
+
+// Length of a tick mark, in pixels.
+const TICK_LENGTH = 4;
+
+// Gap between a tick mark and its label: below an x axis, beside a y
+// axis. A y label sits a little further out because its text is
+// right-aligned against the gap.
+const TICK_LABEL_GAP_X = 1;
+const TICK_LABEL_GAP_Y = 2;
+
+// Stroke width of axis frames, tick marks and plain guide lines.
+const AXIS_LINE_WIDTH = 1;
+
+/* ---- Numeric tick selection ---------------------------------------- */
+
+/* How `niceAxisTicks` rounds a raw tick step to 1, 2 or 5 times a power
+ * of ten (d3's convention). `rawStep / 10^k` is compared against each
+ * entry in order; the first `from` it reaches picks that `multiple`, and
+ * anything below the last `from` uses 1. The breaks sit at the
+ * geometric midpoints between the allowed multiples, so the rounded step
+ * is never more than about a factor of two from the raw one.
+ */
+const NICE_STEP_BREAKS = [
+    { from: 7.5, multiple: 10 },
+    { from: 3.5, multiple: 5 },
+    { from: 1.5, multiple: 2 },
+];
+
+// Slack for floating-point error when deciding whether the first or
+// last tick lands exactly on the axis end (`0.6000000000000001`).
+const TICK_EDGE_EPSILON = 1e-9;
+
+/* Decimal places for an auto-scaled tick label by the axis range: the
+ * first entry whose `below` the range is under applies. A narrow range
+ * needs more digits or every tick would print the same.
+ */
+const AUTO_TICK_DECIMALS = [
+    { below: 0.1, decimals: 3 },
+    { below: 10, decimals: 2 },
+];
+const AUTO_TICK_DEFAULT_DECIMALS = 1;
+
+// Decimal places on a probability (`[0, 1]`) axis: `0.0`, `0.2`, ...
+const PROBABILITY_TICK_DECIMALS = 1;

@@ -43,11 +43,6 @@
  * model of what `d` means beyond the `kind` discriminator above.
  */
 
-const MARKER_BASE_RADIUS = 3;
-const MARKER_COUNT_SCALE = 1.6;
-const COLOR_COMMON = "#ff0000";
-const COLOR_RARE = "#d97a26";
-
 /* How the points are drawn (design `20260923-claude-sonnet-5-multi-graph-
  * run-card-and-scatter-encoding-design.md` Part B). Alleles at exactly the
  * same coordinates arrive merged into one point with a `count`; the
@@ -69,19 +64,7 @@ const COLOR_RARE = "#d97a26";
  *   trail        the original circles, with the last few scrubber frames
  *                faded in behind them so movement is visible.
  */
-const SCATTER_STYLES = ["circles", "color", "badge", "color-badge", "density", "dots", "trail"];
-const DEFAULT_SCATTER_STYLE = "color-badge";
 let _scatterStyle = DEFAULT_SCATTER_STYLE;
-
-// Sequential, colour-blind-safe (ColorBrewer YlGnBu) ramp for counts of
-// 1, 2-3, 4-7, 8-15 and 16 or more.
-const COUNT_RAMP = ["#c7e9b4", "#7fcdbb", "#41b6c4", "#2c7fb8", "#253494"];
-const COUNT_RAMP_LABELS = ["1", "2-3", "4-7", "8-15", "16+"];
-const COLOR_MARKER_RADIUS = 4;
-const DOTS_BASE_ALPHA = 0.18;
-const DENSITY_BINS = 20;
-const COMPACT_DENSITY_BINS = 10;
-const TRAIL_FRAMES = 4;
 
 /**
  * Return the ramp step (0-4) for a merged point's count.
@@ -246,13 +229,6 @@ window.fim.hasScatterZoomView = function hasScatterZoomView() {
     return _zoomDomain !== null;
 };
 
-// A drag shorter than this, in either dimension, is treated as an
-// accidental or aborted click rather than a real "zoom to this
-// rectangle" gesture -- chosen well above the few pixels of jitter a
-// real click can carry, comfortably below the smallest rectangle a
-// deliberate drag would draw.
-const ZOOM_DRAG_MINIMUM_PX = 12;
-
 /**
  * Let dragging a rectangle on the zoomed pane choose a data-space
  * sub-rectangle to view instead of the panel's own full extent --
@@ -306,9 +282,9 @@ function wireScatterZoomInteraction(canvas) {
         drawScatter(canvas, _currentPanel);
         const context = canvas.getContext("2d");
         context.save();
-        context.strokeStyle = "#ff0000";
-        context.fillStyle = "rgba(255, 0, 0, 0.12)";
-        context.lineWidth = 1;
+        context.strokeStyle = SCATTER_ZOOM_BOX_STROKE;
+        context.fillStyle = SCATTER_ZOOM_BOX_FILL;
+        context.lineWidth = SCATTER_ZOOM_BOX_LINE_WIDTH;
         const x = Math.min(dragStart.x, current.x);
         const y = Math.min(dragStart.y, current.y);
         const width = Math.abs(current.x - dragStart.x);
@@ -351,33 +327,6 @@ function wireScatterZoomInteraction(canvas) {
         }
     });
 }
-
-// The one panel always fills the whole canvas (simplify-main-plot
-// design: no small-multiples grid any more), so it gets generous room
-// for tick labels and an axis title on every side.
-const SINGLE_PANEL_PADDING = 44;
-const SINGLE_PANEL_TICK_FONT = 10;
-const TICK_LENGTH = 4;
-
-// The reference visualization's own tick spacing
-// (`Dear-NolanMarch17Final.pdf` Figs. 1-2) -- every `"frequency"` panel
-// is bounded `[0, 1]` by construction, so this scale is fixed and
-// identical on every one of them, never computed per-panel.
-const PROBABILITY_TICK_VALUES = [0.0, 0.2, 0.4, 0.6, 0.8, 1.0];
-const COMPACT_PROBABILITY_TICK_VALUES = [0.0, 0.5, 1.0];
-
-// An unbounded (`"pca"`) panel has no natural tick spacing -- this many
-// evenly spaced ticks across the panel's own auto-scaled domain, purely
-// for visual orientation ("what range of values is this"), not a claim
-// about any particular meaningful value.
-const AUTO_TICK_COUNT = 5;
-const COMPACT_AUTO_TICK_COUNT = 3;
-const COMPACT_PLOT_SIZE_THRESHOLD = 420;
-
-// Fraction of the data's own span added as margin on every side of an
-// auto-scaled (`"pca"`) domain, so the outermost points never sit
-// exactly on the axis frame.
-const DOMAIN_PADDING_FRACTION = 0.08;
 
 /**
  * Draw one panel filling the whole canvas as a 0-1 by 0-1 (or, for a
@@ -423,10 +372,10 @@ function drawScatter(canvas, panel) {
  */
 function computeDomain(points, bounded) {
     if (bounded) {
-        return { xMin: 0, xMax: 1, yMin: 0, yMax: 1 };
+        return { ...SCATTER_FREQUENCY_DOMAIN };
     }
     if (points.length === 0) {
-        return { xMin: -1, xMax: 1, yMin: -1, yMax: 1 };
+        return { ...SCATTER_EMPTY_DOMAIN };
     }
     const xValues = points.map((point) => point.x);
     const yValues = points.map((point) => point.y);
@@ -437,8 +386,8 @@ function computeDomain(points, bounded) {
     // `|| 1`: every point sharing one exact coordinate on an axis (a
     // degenerate zero-width span) still gets a real margin instead of a
     // zero-size domain that would divide by zero below.
-    const xPad = (rawXMax - rawXMin) * DOMAIN_PADDING_FRACTION || 1;
-    const yPad = (rawYMax - rawYMin) * DOMAIN_PADDING_FRACTION || 1;
+    const xPad = (rawXMax - rawXMin) * DOMAIN_PADDING_FRACTION || SCATTER_DEGENERATE_PADDING;
+    const yPad = (rawYMax - rawYMin) * DOMAIN_PADDING_FRACTION || SCATTER_DEGENERATE_PADDING;
     return {
         xMin: rawXMin - xPad,
         xMax: rawXMax + xPad,
@@ -476,7 +425,12 @@ function drawScatterCell(context, rect, panel, opts) {
     const domain = opts.domainOverride ?? computeDomain(panel.points, bounded);
     const side = Math.min(rect.width, rect.height);
     const adaptivePadding =
-        side < 520 ? Math.max(28, Math.floor(side * 0.09)) : opts.padding;
+        side < SCATTER_SMALL_CANVAS_SIDE
+            ? Math.max(
+                  SCATTER_SMALL_PADDING_MIN,
+                  Math.floor(side * SCATTER_SMALL_PADDING_FRACTION)
+              )
+            : opts.padding;
     const plotSize = side - 2 * adaptivePadding;
     const compact = plotSize < COMPACT_PLOT_SIZE_THRESHOLD;
     const originX = rect.x + adaptivePadding;
@@ -491,8 +445,8 @@ function drawScatterCell(context, rect, panel, opts) {
     // mapped through the domain: unlike a `"frequency"` panel's own
     // `[0, 1]` bounds, a `"pca"` panel's domain does not place "the top
     // of the frame" at any particular data value.
-    context.strokeStyle = "#9a9a9a";
-    context.lineWidth = 1;
+    context.strokeStyle = CHART_AXIS_COLOR;
+    context.lineWidth = AXIS_LINE_WIDTH;
     context.beginPath();
     context.moveTo(originX, originY);
     context.lineTo(originX, originY - plotSize);
@@ -505,8 +459,8 @@ function drawScatterCell(context, rect, panel, opts) {
         // own frequencies of the same allele, not for two principal
         // components (design §4.2's own "no meaningful diagonal" call).
         context.save();
-        context.setLineDash([4, 4]);
-        context.strokeStyle = "#bbbbbb";
+        context.setLineDash(SCATTER_DIAGONAL_DASH);
+        context.strokeStyle = CHART_GUIDE_COLOR;
         context.beginPath();
         context.moveTo(toCanvasX(0), toCanvasY(0));
         context.lineTo(toCanvasX(1), toCanvasY(1));
@@ -594,7 +548,7 @@ function drawPoint(geometry, point, style, marks) {
         radius = opts.markerScale * COLOR_MARKER_RADIUS;
     }
     if (marks.dots) {
-        radius = opts.markerScale * (COLOR_MARKER_RADIUS - 0.5);
+        radius = opts.markerScale * (COLOR_MARKER_RADIUS - SCATTER_DOTS_RADIUS_REDUCTION);
     }
     context.beginPath();
     context.arc(cx, cy, radius, 0, TAU);
@@ -611,24 +565,28 @@ function drawPoint(geometry, point, style, marks) {
         }
         context.fill();
         context.globalAlpha = 1;
-        context.strokeStyle = "#1a1a1a";
-        context.lineWidth = 0.6;
+        context.strokeStyle = CHART_INK_COLOR;
+        context.lineWidth = SCATTER_OUTLINE_WIDTH;
         context.stroke();
     } else {
         context.fillStyle = COLOR_RARE;
-        context.globalAlpha = 0.75;
+        context.globalAlpha = SCATTER_RARE_ALPHA;
         context.fill();
         context.globalAlpha = 1;
-        context.strokeStyle = "#000000";
-        context.lineWidth = 0.4;
+        context.strokeStyle = CHART_BLACK;
+        context.lineWidth = SCATTER_RARE_OUTLINE_WIDTH;
         context.stroke();
     }
     if (point.count > 1 && !compact && !marks.fixed && !marks.dots) {
-        context.fillStyle = "#1a1a1a";
-        context.font = `${opts.tickFontSize}px -apple-system, sans-serif`;
+        context.fillStyle = CHART_INK_COLOR;
+        context.font = `${opts.tickFontSize}px ${FONT_FAMILY_SYSTEM}`;
         context.textAlign = "left";
         context.textBaseline = "alphabetic";
-        context.fillText(String(point.count), cx + radius + 2, cy - radius);
+        context.fillText(
+            String(point.count),
+            cx + radius + SCATTER_COUNT_LABEL_OFFSET,
+            cy - radius
+        );
     }
 }
 
@@ -649,28 +607,28 @@ function drawOriginBadge(geometry, point) {
     const cy = toCanvasY(0);
     context.save();
     context.beginPath();
-    context.arc(cx, cy, 3, 0, TAU);
-    context.fillStyle = "#6b6b6b";
+    context.arc(cx, cy, SCATTER_ORIGIN_DOT_RADIUS, 0, TAU);
+    context.fillStyle = CHART_AXIS_LABEL_COLOR;
     context.fill();
     const text = `${point.count} at origin`;
-    context.font = `${opts.tickFontSize}px -apple-system, sans-serif`;
+    context.font = `${opts.tickFontSize}px ${FONT_FAMILY_SYSTEM}`;
     const textWidth = context.measureText(text).width;
-    const padX = 4;
-    const height = opts.tickFontSize + 6;
-    const left = originX + 8;
-    const top = originY - 8 - height;
-    context.fillStyle = "#f1f1f1";
-    context.strokeStyle = "#9a9a9a";
-    context.lineWidth = 1;
+    const padX = SCATTER_BADGE_PADDING_X;
+    const height = opts.tickFontSize + SCATTER_BADGE_EXTRA_HEIGHT;
+    const left = originX + SCATTER_BADGE_INSET;
+    const top = originY - SCATTER_BADGE_INSET - height;
+    context.fillStyle = CHART_BADGE_FILL;
+    context.strokeStyle = CHART_AXIS_COLOR;
+    context.lineWidth = AXIS_LINE_WIDTH;
     context.beginPath();
     if (typeof context.roundRect === "function") {
-        context.roundRect(left, top, textWidth + 2 * padX, height, 4);
+        context.roundRect(left, top, textWidth + 2 * padX, height, SCATTER_BADGE_CORNER_RADIUS);
     } else {
         context.rect(left, top, textWidth + 2 * padX, height);
     }
     context.fill();
     context.stroke();
-    context.fillStyle = "#1a1a1a";
+    context.fillStyle = CHART_INK_COLOR;
     context.textAlign = "left";
     context.textBaseline = "middle";
     context.fillText(text, left + padX, top + height / 2);
@@ -723,11 +681,19 @@ function drawTrail(geometry, panel) {
     context.save();
     earlier.forEach((trailPanel, index) => {
         // Oldest faintest, newest closest to the current frame.
-        context.globalAlpha = 0.12 + (0.28 * (index + 1)) / (earlier.length + 1);
+        context.globalAlpha =
+            SCATTER_TRAIL_ALPHA_MIN +
+            (SCATTER_TRAIL_ALPHA_SPAN * (index + 1)) / (earlier.length + 1);
         context.fillStyle = COLOR_RARE;
         for (const point of trailPanel.points) {
             context.beginPath();
-            context.arc(toCanvasX(point.x), toCanvasY(point.y), 2.5, 0, TAU);
+            context.arc(
+                toCanvasX(point.x),
+                toCanvasY(point.y),
+                SCATTER_TRAIL_DOT_RADIUS,
+                0,
+                TAU
+            );
             context.fill();
         }
     });
@@ -799,13 +765,8 @@ function renderScatterKey(bounded) {
  * @param {number} range - `domain.xMax - domain.xMin` (or the `y` pair).
  */
 function formatAutoTick(value, range) {
-    if (range < 0.1) {
-        return value.toFixed(3);
-    }
-    if (range < 10) {
-        return value.toFixed(2);
-    }
-    return value.toFixed(1);
+    const rule = AUTO_TICK_DECIMALS.find((entry) => range < entry.below);
+    return value.toFixed(rule ? rule.decimals : AUTO_TICK_DEFAULT_DECIMALS);
 }
 
 /**
@@ -832,16 +793,16 @@ function niceAxisTicks(min, max, targetCount) {
     const power = Math.floor(Math.log10(rawStep));
     const base = 10 ** power;
     const error = rawStep / base;
-    const step =
-        error >= 7.5 ? 10 * base : error >= 3.5 ? 5 * base : error >= 1.5 ? 2 * base : base;
+    const bracket = NICE_STEP_BREAKS.find((entry) => error >= entry.from);
+    const step = (bracket ? bracket.multiple : 1) * base;
     // Round every tick back to the step's own decimal precision:
     // `index * step` otherwise leaves floating dust (`3 * 0.2` is
     // 0.6000000000000001), harmless to a pixel position but wrong for
     // any caller comparing tick values for equality.
     const decimals = Math.max(0, -power);
     const ticks = [];
-    const start = Math.ceil(min / step - 1e-9);
-    const end = Math.floor(max / step + 1e-9);
+    const start = Math.ceil(min / step - TICK_EDGE_EPSILON);
+    const end = Math.floor(max / step + TICK_EDGE_EPSILON);
     for (let index = start; index <= end; index += 1) {
         ticks.push(Number((index * step).toFixed(decimals)));
     }
@@ -882,8 +843,8 @@ function drawAxisTickMarks(
     format
 ) {
     context.save();
-    context.lineWidth = 1;
-    context.font = `${fontSize}px -apple-system, sans-serif`;
+    context.lineWidth = AXIS_LINE_WIDTH;
+    context.font = `${fontSize}px ${FONT_FAMILY_SYSTEM}`;
     for (const value of ticks) {
         const position = toPixel(value);
         context.beginPath();
@@ -899,11 +860,11 @@ function drawAxisTickMarks(
             if (orientation === "x") {
                 context.textAlign = "center";
                 context.textBaseline = "top";
-                context.fillText(format(value), position, axisY + TICK_LENGTH + 1);
+                context.fillText(format(value), position, axisY + TICK_LENGTH + TICK_LABEL_GAP_X);
             } else {
                 context.textAlign = "right";
                 context.textBaseline = "middle";
-                context.fillText(format(value), axisX - TICK_LENGTH - 2, position);
+                context.fillText(format(value), axisX - TICK_LENGTH - TICK_LABEL_GAP_Y, position);
             }
         }
     }
@@ -950,14 +911,16 @@ function drawAxisTicks(
         : niceAxisTicks(domain.yMin, domain.yMax, targetCount + 1);
     const xRange = domain.xMax - domain.xMin;
     const yRange = domain.yMax - domain.yMin;
-    const formatX = (value) => (bounded ? value.toFixed(1) : formatAutoTick(value, xRange));
-    const formatY = (value) => (bounded ? value.toFixed(1) : formatAutoTick(value, yRange));
+    const formatX = (value) =>
+        bounded ? value.toFixed(PROBABILITY_TICK_DECIMALS) : formatAutoTick(value, xRange);
+    const formatY = (value) =>
+        bounded ? value.toFixed(PROBABILITY_TICK_DECIMALS) : formatAutoTick(value, yRange);
     const toPixelX = (value) => originX + ((value - domain.xMin) / xRange) * plotSize;
     const toPixelY = (value) => originY - ((value - domain.yMin) / yRange) * plotSize;
 
     context.save();
-    context.strokeStyle = "#9a9a9a";
-    context.fillStyle = "#6b6b6b";
+    context.strokeStyle = CHART_AXIS_COLOR;
+    context.fillStyle = CHART_AXIS_LABEL_COLOR;
     drawAxisTickMarks(context, "x", originX, originY, toPixelX, xTicks, fontSize, formatX);
     drawAxisTickMarks(context, "y", originX, originY, toPixelY, yTicks, fontSize, formatY);
     context.restore();
