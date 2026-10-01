@@ -138,3 +138,12 @@ const REPRODUCIBILITY_DIFFERENCE_LIMIT = 6;
 // slider position is converted back to a value.
 const AXIS_RANGE_SNAP_DIGITS = 12;
 const AXIS_RANGE_SLIDER_VALUE_DIGITS = 6;
+
+/* ---- Open-run table -------------------------------------------------- */
+
+// A column resize handle never drags a column narrower than this.
+const OPEN_RUN_MIN_COLUMN_WIDTH_PX = 48;
+
+// Index of the statistics summary cell in a replicate row (the one cell
+// that is long enough to need its full text as a hover title).
+const OPEN_RUN_SUMMARY_COLUMN_INDEX = 4;

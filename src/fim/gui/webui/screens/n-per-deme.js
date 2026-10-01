@@ -28,11 +28,6 @@ const nSameFields = document.getElementById("n-same-fields");
 const nPerDemeFields = document.getElementById("n-per-deme-fields");
 const nPerDemeGrid = document.getElementById("n-per-deme-grid");
 
-// A brand-new row (more rows than `field-N` currently has values for --
-// `d` grew) repeats the last known value, matching the migration-matrix
-// grid's own "pad with a sensible default, never a bare zero" instinct.
-const DEFAULT_N_VALUE = 225;
-
 /**
  * Parse `field-N`'s own current text into per-deme numbers, resized to
  * exactly `count` entries -- a single scalar replicates across every

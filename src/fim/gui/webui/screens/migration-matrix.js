@@ -16,16 +16,6 @@
 const mMatrixGrid = document.getElementById("m-matrix-grid");
 const mMatrixJsonField = document.getElementById("field-m_matrix_json");
 
-// A brand-new grid cell (no value carried over from a loaded
-// configuration) defaults to "this deme keeps everything, migrates with
-// no one" -- an identity matrix, the same trivially-valid starting
-// point `initial_allele_count`/`initial_concentration`'s own library
-// defaults already favor: every row already sums to 1, so nothing
-// warns the moment the grid first appears.
-const DEFAULT_MATRIX_SELF_RETENTION = 1;
-const DEFAULT_MATRIX_SIZE = 2;
-const ROW_SUM_TOLERANCE = 1e-6;
-
 /**
  * Read the grid's own current cell values as a `size`-by-`size` array.
  * @returns {number[][]}

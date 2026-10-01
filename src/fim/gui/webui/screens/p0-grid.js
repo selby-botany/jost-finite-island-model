@@ -21,14 +21,6 @@
 const p0Grid = document.getElementById("p0-grid");
 const p0JsonField = document.getElementById("field-p0_json");
 
-// A brand-new cell (no value carried over from a loaded configuration)
-// defaults to "this deme starts fixed for allele 0" -- already a valid,
-// sum-to-1 mapping the moment it appears, the same "obviously valid
-// default" philosophy the migration-matrix grid's own identity-matrix
-// default and the loci grid's own default length already follow.
-const DEFAULT_P0_CELL_TEXT = "0:1";
-const P0_CELL_SUM_TOLERANCE = 1e-6;
-
 /**
  * Return the loci configuration's own current locus IDs, in column
  * order -- from the real, always-populated `#loci-grid` rows

@@ -483,7 +483,7 @@ function buildReplicateRow(replicate) {
     cells.forEach((value, index) => {
         const cell = document.createElement("td");
         cell.textContent = value;
-        if (index === 4) {
+        if (index === OPEN_RUN_SUMMARY_COLUMN_INDEX) {
             cell.className = "open-run-summary-cell";
             cell.title = value;
         }
@@ -609,8 +609,6 @@ function buildAddToStudySelect(directory) {
  */
 const columnWidthsPx = new Array(_RUN_TABLE_COLUMNS.length).fill(null);
 
-const _MIN_COLUMN_WIDTH_PX = 48;
-
 /**
  * Apply `columnWidthsPx` to the table's own `<colgroup>` -- called once
  * up front (`refreshRecentRuns`) and again every time a drag actually
@@ -629,7 +627,7 @@ function applyColumnWidths() {
  * Wire one column header cell's own resize handle -- a thin strip along
  * its right edge; dragging it left/right sets that column's own
  * `columnWidthsPx` entry from the header's own current rendered width
- * plus the drag delta, clamped to `_MIN_COLUMN_WIDTH_PX` so a column can
+ * plus the drag delta, clamped to `OPEN_RUN_MIN_COLUMN_WIDTH_PX` so a column can
  * be narrowed but never dragged out of existence. Several fields
  * (Configuration, Statistics) truncate with an ellipsis and rely on a
  * hover tooltip for the rest (`.open-run-summary-cell`) -- this is what
@@ -648,7 +646,7 @@ function wireColumnResizeHandle(headerCell, columnIndex) {
         const startWidth = headerCell.getBoundingClientRect().width;
         const onMouseMove = (moveEvent) => {
             const width = Math.max(
-                _MIN_COLUMN_WIDTH_PX,
+                OPEN_RUN_MIN_COLUMN_WIDTH_PX,
                 startWidth + (moveEvent.clientX - startX)
             );
             columnWidthsPx[columnIndex] = width;

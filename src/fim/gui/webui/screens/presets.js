@@ -40,8 +40,6 @@ const configureDuplicatePresetButton = document.getElementById(
     "configure-duplicate-preset-button"
 );
 
-const USER_PRESET_ID_PREFIX = "user:";
-
 // Design §4.5's own "Duplicate current configuration": the title of
 // whichever preset (built-in or user-saved) was most recently loaded
 // into the live form via the picker, or `null` before the first one

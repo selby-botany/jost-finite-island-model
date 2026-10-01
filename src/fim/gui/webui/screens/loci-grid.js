@@ -16,13 +16,6 @@ const lociGrid = document.getElementById("loci-grid");
 const lociJsonField = document.getElementById("field-loci_json");
 const lociAddRowButton = document.getElementById("loci-add-row-button");
 
-// A brand-new row (no value carried over from a loaded configuration)
-// defaults to the next sequential locus ID and the library's own
-// default locus length (`fim.model.params.DEFAULT_LOCUS_LENGTH`) -- the
-// same "already valid the moment it appears" starting point the
-// migration-matrix grid's own identity-matrix default favors.
-const DEFAULT_LOCUS_LENGTH = 200;
-
 /**
  * Read the grid's own current rows as `{locus_id, length}` objects,
  * parsing each cell as an integer (0 for anything that does not parse,

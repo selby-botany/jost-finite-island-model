@@ -438,7 +438,7 @@ function wireSigmaBandSeedDefault() {
             }
             const windowField = document.getElementById("field-sigma_band_window");
             if (windowField.value.trim() === "") {
-                windowField.value = "100";
+                windowField.value = DEFAULT_SIGMA_BAND_WINDOW;
             }
         });
 }
