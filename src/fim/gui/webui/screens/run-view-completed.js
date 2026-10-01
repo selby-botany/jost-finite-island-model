@@ -1210,7 +1210,7 @@ function drawTrajectoryCurve(
     // top of the curves, the sigma band, and the equilibrium overlay
     // alike) so it always reads clearly regardless of what it crosses —
     // the same "current value" grammar `explore.js`'s own `drawSweepCurve`
-    // already established (`setLineDash([4, 3])`, muted color, one
+    // already established (`DASH_REFERENCE_LINE`, muted color, one
     // pixel wide, full plot height), reused verbatim rather than
     // inventing a third dashed-vertical-line convention on this page.
     // The curve itself is never redrawn/truncated for this — the design
