@@ -199,3 +199,31 @@ const SPECTRUM_COUNT_TICK_TARGET = 5;
 // above the canvas bottom its x-axis title sits.
 const IBD_POINT_RADIUS = 4;
 const IBD_TITLE_RISE = 12;
+
+/* ---- Trajectory graphs (run, batch and compare) --------------------- */
+
+// Space around the plot frame: left holds the value labels, bottom the
+// generation labels.
+const TRAJECTORY_PLOT_MARGIN = { left: 42, right: 12, top: 12, bottom: 22 };
+
+// The order-profile (q) curve's frame is a little tighter on the left
+// and has room below for the `q=` tick labels.
+const DIFFERENTIATION_Q_PLOT_MARGIN = { left: 40, right: 12, top: 12, bottom: 28 };
+const DIFFERENTIATION_Q_POINT_RADIUS = 3;
+
+// Corner labels (the exact value and generation endpoints): decimals,
+// gap left of the frame for value labels, drop below it for generations.
+const TRAJECTORY_CORNER_DECIMALS = 2;
+const TRAJECTORY_Y_LABEL_GAP = 6;
+const TRAJECTORY_X_LABEL_DROP = 4;
+
+// Interior ticks: roughly this many per axis, value labels to this many
+// decimals.
+const TRAJECTORY_TICK_TARGET = 6;
+const TRAJECTORY_TICK_DECIMALS = 1;
+
+// A statistic's curve: normal width; widths and opacities when another
+// statistic is highlighted (the highlighted one thickens, the rest fade).
+const TRAJECTORY_LINE_WIDTH = 2;
+const TRAJECTORY_HIGHLIGHT_LINE_WIDTH = 4;
+const TRAJECTORY_FADED_ALPHA = 0.35;

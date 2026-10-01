@@ -37,9 +37,43 @@ const CHART_BADGE_FILL = "#f1f1f1";
 /* The Okabe-Ito qualitative palette: eight hues chosen to stay distinct
  * under the common forms of color-blindness. The plots draw their data
  * series from it, so a series keeps one identity across every screen.
- * Only the hues a named constant needs are listed so far.
  */
+const OKABE_ITO_BLUE = "#0072b2";
 const OKABE_ITO_VERMILLION = "#d55e00";
+const OKABE_ITO_BLUISH_GREEN = "#009e73";
+const OKABE_ITO_REDDISH_PURPLE = "#cc79a7";
+const OKABE_ITO_ORANGE = "#e69f00";
+const OKABE_ITO_SKY_BLUE = "#56b4e9";
+const OKABE_ITO_YELLOW = "#f0e442";
+const OKABE_ITO_BLACK = "#000000";
+
+// Two further hues for series beyond the eight above: ColorBrewer Dark2's
+// purple and Tableau10's brown, chosen only for staying visually distinct
+// from every Okabe-Ito color, not for membership in one named palette.
+const DARK2_PURPLE = "#7570b3";
+const TABLEAU_BROWN = "#8c564b";
+
+/* ---- Statistics ------------------------------------------------------ */
+
+/* One color per named statistic, so a statistic keeps its hue in the
+ * trajectory legend and curve, the stats panel, the sweep chart and
+ * Explore alike (botanist GUI design doc §11.3's "disciplined statistic
+ * color language"). `A_CGD` takes the palette's eighth and last color
+ * (yellow); `Delta` and `MI` exhaust it, so they borrow the two extra
+ * hues above.
+ */
+const STATISTIC_TRAJECTORY_COLORS = {
+    D: OKABE_ITO_BLUE,
+    G_ST: OKABE_ITO_VERMILLION,
+    E_ST: OKABE_ITO_BLUISH_GREEN,
+    K_ST: OKABE_ITO_REDDISH_PURPLE,
+    H_S: OKABE_ITO_ORANGE,
+    H_T: OKABE_ITO_SKY_BLUE,
+    H_ST: OKABE_ITO_BLACK,
+    A_CGD: OKABE_ITO_YELLOW,
+    Delta: TABLEAU_BROWN,
+    MI: DARK2_PURPLE,
+};
 
 /* ---- Theme fallbacks ------------------------------------------------ */
 

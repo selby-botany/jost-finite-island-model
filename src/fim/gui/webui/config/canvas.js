@@ -39,6 +39,24 @@ const AXIS_LABEL_DROP = 5;
 // Dash patterns, as `[dash, gap, ...]` pixel lengths for `setLineDash`.
 const DASH_MODEL_CURVE = [4, 4];
 
+// A thin reference line over data: a predicted equilibrium, and the
+// vertical "you are here" marker of a scrubber or an Explore value.
+const DASH_REFERENCE_LINE = [4, 3];
+
+// A closed-form expected curve: dash-dot, so it is never mistaken for a
+// reference line.
+const DASH_CLOSED_FORM = [8, 3, 2, 3];
+
+// A fitted identity-recovery curve: dotted, a fourth distinct style.
+const DASH_DOTTED = [1, 3];
+
+// Width of a dashed overlay line, a little under a data curve's.
+const OVERLAY_LINE_WIDTH = 1.5;
+
+// Opacity of a translucent band (a sigma band, a pooled band) drawn
+// behind the curves it surrounds.
+const BAND_ALPHA = 0.2;
+
 /* ---- Numeric tick selection ---------------------------------------- */
 
 /* How `niceAxisTicks` rounds a raw tick step to 1, 2 or 5 times a power

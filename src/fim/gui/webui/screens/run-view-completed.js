@@ -139,28 +139,6 @@ function renderRunMessages(extraMessages = []) {
     }
 }
 
-// A fixed, colorblind-safe qualitative palette (Okabe-Ito), one color
-// per named statistic — botanist GUI design doc §11.3's own "disciplined
-// statistic color language" is not otherwise built yet; this is a
-// narrow, self-contained first use of the same idea, scoped to this one
-// legend/curve rather than a page-wide system. `A_CGD` takes the
-// palette's own eighth and last color (`#f0e442`, yellow); `Delta`/`MI`
-// exhaust it, so both borrow two further hues (ColorBrewer's Dark2/
-// Tableau10 sets) chosen only for staying visually distinct from every
-// color already used here, not for membership in any one named palette.
-const STATISTIC_TRAJECTORY_COLORS = {
-    D: "#0072b2",
-    G_ST: "#d55e00",
-    E_ST: "#009e73",
-    K_ST: "#cc79a7",
-    H_S: "#e69f00",
-    H_T: "#56b4e9",
-    H_ST: "#000000",
-    A_CGD: "#f0e442",
-    Delta: "#8c564b",
-    MI: "#7570b3",
-};
-
 // See `wireCompletedScrubber`'s own comment: counts its own in-flight
 // `get_animation_frames` calls. Zero means settled.
 window.__fimScrubberPending = 0;
@@ -376,11 +354,11 @@ let highlightedTrajectoryStatistic = null;
  */
 function trajectoryEmphasis(name) {
     if (highlightedTrajectoryStatistic === null) {
-        return { width: 2, alpha: 1 };
+        return { width: TRAJECTORY_LINE_WIDTH, alpha: 1 };
     }
     return name === highlightedTrajectoryStatistic
-        ? { width: 4, alpha: 1 }
-        : { width: 2, alpha: 0.35 };
+        ? { width: TRAJECTORY_HIGHLIGHT_LINE_WIDTH, alpha: 1 }
+        : { width: TRAJECTORY_LINE_WIDTH, alpha: TRAJECTORY_FADED_ALPHA };
 }
 
 /**
@@ -671,10 +649,10 @@ function drawDifferentiationQCurve(canvas, points) {
         return;
     }
 
-    const plotLeft = 40;
-    const plotRight = width - 12;
-    const plotTop = 12;
-    const plotBottom = height - 28;
+    const plotLeft = DIFFERENTIATION_Q_PLOT_MARGIN.left;
+    const plotRight = width - DIFFERENTIATION_Q_PLOT_MARGIN.right;
+    const plotTop = DIFFERENTIATION_Q_PLOT_MARGIN.top;
+    const plotBottom = height - DIFFERENTIATION_Q_PLOT_MARGIN.bottom;
 
     const orders = points.map((point) => point.order);
     const minOrder = Math.min(...orders);
@@ -696,7 +674,7 @@ function drawDifferentiationQCurve(canvas, points) {
     const accentColor = style.getPropertyValue("--fim-accent").trim();
 
     context.strokeStyle = borderColor;
-    context.lineWidth = 1;
+    context.lineWidth = AXIS_LINE_WIDTH;
     context.beginPath();
     context.moveTo(plotLeft, plotTop);
     context.lineTo(plotLeft, plotBottom);
@@ -712,8 +690,8 @@ function drawDifferentiationQCurve(canvas, points) {
         plotBottom,
         yToPixel,
         PROBABILITY_TICK_VALUES,
-        10,
-        (value) => value.toFixed(1)
+        AXIS_TICK_FONT_SIZE,
+        (value) => value.toFixed(PROBABILITY_TICK_DECIMALS)
     );
     drawAxisTickMarks(
         context,
@@ -722,12 +700,12 @@ function drawDifferentiationQCurve(canvas, points) {
         plotBottom,
         xToPixel,
         points.map((point) => point.order),
-        10,
+        AXIS_TICK_FONT_SIZE,
         (order) => `q=${order}`
     );
 
     context.strokeStyle = accentColor;
-    context.lineWidth = 2;
+    context.lineWidth = CURVE_LINE_WIDTH;
     context.beginPath();
     points.forEach((point, index) => {
         const x = xToPixel(point.order);
@@ -739,7 +717,7 @@ function drawDifferentiationQCurve(canvas, points) {
         }
         context.fillStyle = accentColor;
         context.beginPath();
-        context.arc(x, y, 3, 0, TAU);
+        context.arc(x, y, DIFFERENTIATION_Q_POINT_RADIUS, 0, TAU);
         context.fill();
     });
     context.stroke();
@@ -781,21 +759,35 @@ function drawTrajectoryAxisTicks(
     xToPixel,
     yToPixel
 ) {
-    const yTicks = niceAxisTicks(minValue, maxValue, 6).filter(
+    const yTicks = niceAxisTicks(minValue, maxValue, TRAJECTORY_TICK_TARGET).filter(
         (value) => value > minValue && value < maxValue
     );
     // Generations are whole numbers -- a sub-integer step (a very short
     // run) keeps only whichever nice values happen to be integers, or
     // no interior ticks at all when none are (a 2-generation run).
-    const xTicks = niceAxisTicks(minGeneration, maxGeneration, 6).filter(
+    const xTicks = niceAxisTicks(minGeneration, maxGeneration, TRAJECTORY_TICK_TARGET).filter(
         (value) =>
             Number.isInteger(value) && value > minGeneration && value < maxGeneration
     );
-    drawAxisTickMarks(context, "y", plotLeft, plotBottom, yToPixel, yTicks, 10, (v) =>
-        v.toFixed(1)
+    drawAxisTickMarks(
+        context,
+        "y",
+        plotLeft,
+        plotBottom,
+        yToPixel,
+        yTicks,
+        AXIS_TICK_FONT_SIZE,
+        (v) => v.toFixed(TRAJECTORY_TICK_DECIMALS)
     );
-    drawAxisTickMarks(context, "x", plotLeft, plotBottom, xToPixel, xTicks, 10, (v) =>
-        String(v)
+    drawAxisTickMarks(
+        context,
+        "x",
+        plotLeft,
+        plotBottom,
+        xToPixel,
+        xTicks,
+        AXIS_TICK_FONT_SIZE,
+        (v) => String(v)
     );
 }
 
@@ -999,10 +991,10 @@ function drawTrajectoryCurve(
         return;
     }
 
-    const plotLeft = 42;
-    const plotRight = width - 12;
-    const plotTop = 12;
-    const plotBottom = height - 22;
+    const plotLeft = TRAJECTORY_PLOT_MARGIN.left;
+    const plotRight = width - TRAJECTORY_PLOT_MARGIN.right;
+    const plotTop = TRAJECTORY_PLOT_MARGIN.top;
+    const plotBottom = height - TRAJECTORY_PLOT_MARGIN.bottom;
 
     const minGeneration = generations[0];
     const maxGeneration = generations[generations.length - 1];
@@ -1060,7 +1052,7 @@ function drawTrajectoryCurve(
     const accentColor = style.getPropertyValue("--fim-accent").trim();
 
     context.strokeStyle = borderColor;
-    context.lineWidth = 1;
+    context.lineWidth = AXIS_LINE_WIDTH;
     context.beginPath();
     context.moveTo(plotLeft, plotTop);
     context.lineTo(plotLeft, plotBottom);
@@ -1068,15 +1060,16 @@ function drawTrajectoryCurve(
     context.stroke();
 
     context.fillStyle = mutedColor;
-    context.font = "10px sans-serif";
+    context.font = FONT_AXIS_SMALL;
     context.textAlign = "right";
     context.textBaseline = "middle";
-    context.fillText(maxValue.toFixed(2), plotLeft - 6, plotTop);
-    context.fillText(minValue.toFixed(2), plotLeft - 6, plotBottom);
+    const valueLabelRight = plotLeft - TRAJECTORY_Y_LABEL_GAP;
+    context.fillText(maxValue.toFixed(TRAJECTORY_CORNER_DECIMALS), valueLabelRight, plotTop);
+    context.fillText(minValue.toFixed(TRAJECTORY_CORNER_DECIMALS), valueLabelRight, plotBottom);
     context.textBaseline = "top";
-    context.fillText(`gen ${maxGeneration}`, plotRight, plotBottom + 4);
+    context.fillText(`gen ${maxGeneration}`, plotRight, plotBottom + TRAJECTORY_X_LABEL_DROP);
     context.textAlign = "left";
-    context.fillText(`gen ${minGeneration}`, plotLeft, plotBottom + 4);
+    context.fillText(`gen ${minGeneration}`, plotLeft, plotBottom + TRAJECTORY_X_LABEL_DROP);
 
     context.strokeStyle = borderColor;
     context.fillStyle = mutedColor;
@@ -1105,7 +1098,7 @@ function drawTrajectoryCurve(
         const bandLeft = xToPixel(Math.max(minGeneration, maxGeneration - sigmaBand.window));
         for (const [name, interval] of Object.entries(sigmaBand.band)) {
             context.fillStyle = STATISTIC_TRAJECTORY_COLORS[name] || mutedColor;
-            context.globalAlpha = 0.2;
+            context.globalAlpha = BAND_ALPHA;
             const top = yToPixel(Number(interval.upper));
             const bottom = yToPixel(Number(interval.lower));
             context.fillRect(bandLeft, top, plotRight - bandLeft, bottom - top);
@@ -1141,8 +1134,8 @@ function drawTrajectoryCurve(
     // thin dashed line is never wide enough to obscure the data it is
     // annotating.
     if (equilibrium) {
-        context.lineWidth = 1.5;
-        context.setLineDash([4, 3]);
+        context.lineWidth = OVERLAY_LINE_WIDTH;
+        context.setLineDash(DASH_REFERENCE_LINE);
         for (const [name, value] of Object.entries(equilibrium)) {
             context.strokeStyle = STATISTIC_TRAJECTORY_COLORS[name] || mutedColor;
             const y = yToPixel(value);
@@ -1160,8 +1153,8 @@ function drawTrajectoryCurve(
     // statistic three ways. Drawn over the solid curves (thin, like the
     // equilibrium line) so the run's scatter around theory stays visible.
     if (closedFormSeries) {
-        context.lineWidth = 1.5;
-        context.setLineDash([8, 3, 2, 3]);
+        context.lineWidth = OVERLAY_LINE_WIDTH;
+        context.setLineDash(DASH_CLOSED_FORM);
         for (const [name, values] of Object.entries(closedFormSeries)) {
             context.strokeStyle = STATISTIC_TRAJECTORY_COLORS[name] || mutedColor;
             context.beginPath();
@@ -1192,8 +1185,8 @@ function drawTrajectoryCurve(
     // series.
     if (identityRecovery) {
         context.strokeStyle = accentColor;
-        context.lineWidth = 1.5;
-        context.setLineDash([1, 3]);
+        context.lineWidth = OVERLAY_LINE_WIDTH;
+        context.setLineDash(DASH_DOTTED);
         context.beginPath();
         generations.forEach((generation, index) => {
             const value =
@@ -1224,9 +1217,9 @@ function drawTrajectoryCurve(
     // note's own explicit choice is a moving marker over the whole,
     // unchanged curve, not a progressive reveal that hides its ending.
     if (scrubGeneration !== null && scrubGeneration !== undefined) {
-        context.setLineDash([4, 3]);
+        context.setLineDash(DASH_REFERENCE_LINE);
         context.strokeStyle = mutedColor;
-        context.lineWidth = 1;
+        context.lineWidth = AXIS_LINE_WIDTH;
         const x = xToPixel(scrubGeneration);
         context.beginPath();
         context.moveTo(x, plotTop);
@@ -1652,10 +1645,10 @@ function drawBatchTrajectoryCurve(canvas, visiblePooled, scrubGeneration) {
         return;
     }
 
-    const plotLeft = 42;
-    const plotRight = width - 12;
-    const plotTop = 12;
-    const plotBottom = height - 22;
+    const plotLeft = TRAJECTORY_PLOT_MARGIN.left;
+    const plotRight = width - TRAJECTORY_PLOT_MARGIN.right;
+    const plotTop = TRAJECTORY_PLOT_MARGIN.top;
+    const plotBottom = height - TRAJECTORY_PLOT_MARGIN.bottom;
 
     const allGenerations = names.flatMap((name) =>
         visiblePooled[name].map((point) => point.generation)
@@ -1682,7 +1675,7 @@ function drawBatchTrajectoryCurve(canvas, visiblePooled, scrubGeneration) {
     const mutedColor = style.getPropertyValue("--fim-muted").trim();
 
     context.strokeStyle = borderColor;
-    context.lineWidth = 1;
+    context.lineWidth = AXIS_LINE_WIDTH;
     context.beginPath();
     context.moveTo(plotLeft, plotTop);
     context.lineTo(plotLeft, plotBottom);
@@ -1690,15 +1683,16 @@ function drawBatchTrajectoryCurve(canvas, visiblePooled, scrubGeneration) {
     context.stroke();
 
     context.fillStyle = mutedColor;
-    context.font = "10px sans-serif";
+    context.font = FONT_AXIS_SMALL;
     context.textAlign = "right";
     context.textBaseline = "middle";
-    context.fillText(maxValue.toFixed(2), plotLeft - 6, plotTop);
-    context.fillText(minValue.toFixed(2), plotLeft - 6, plotBottom);
+    const valueLabelRight = plotLeft - TRAJECTORY_Y_LABEL_GAP;
+    context.fillText(maxValue.toFixed(TRAJECTORY_CORNER_DECIMALS), valueLabelRight, plotTop);
+    context.fillText(minValue.toFixed(TRAJECTORY_CORNER_DECIMALS), valueLabelRight, plotBottom);
     context.textBaseline = "top";
-    context.fillText(`gen ${maxGeneration}`, plotRight, plotBottom + 4);
+    context.fillText(`gen ${maxGeneration}`, plotRight, plotBottom + TRAJECTORY_X_LABEL_DROP);
     context.textAlign = "left";
-    context.fillText(`gen ${minGeneration}`, plotLeft, plotBottom + 4);
+    context.fillText(`gen ${minGeneration}`, plotLeft, plotBottom + TRAJECTORY_X_LABEL_DROP);
 
     context.strokeStyle = borderColor;
     context.fillStyle = mutedColor;
@@ -1724,7 +1718,7 @@ function drawBatchTrajectoryCurve(canvas, visiblePooled, scrubGeneration) {
         // pooled band's own width is not constant across generations,
         // shrinking whenever a replicate stops contributing.
         context.fillStyle = color;
-        context.globalAlpha = 0.2;
+        context.globalAlpha = BAND_ALPHA;
         context.beginPath();
         points.forEach((point, index) => {
             const x = xToPixel(point.generation);
@@ -1765,9 +1759,9 @@ function drawBatchTrajectoryCurve(canvas, visiblePooled, scrubGeneration) {
     // scalar panel draws (`drawTrajectoryCurve`), so a live batch's own
     // scrubber reads identically to a scalar run's.
     if (scrubGeneration !== null && scrubGeneration !== undefined) {
-        context.setLineDash([4, 3]);
+        context.setLineDash(DASH_REFERENCE_LINE);
         context.strokeStyle = mutedColor;
-        context.lineWidth = 1;
+        context.lineWidth = AXIS_LINE_WIDTH;
         const x = xToPixel(scrubGeneration);
         context.beginPath();
         context.moveTo(x, plotTop);
