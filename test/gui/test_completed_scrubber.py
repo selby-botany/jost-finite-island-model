@@ -77,6 +77,27 @@ setField('locus_lengths', '200');
 """
 
 
+# Pins the page's vertical scrollbar on. Whether one shows otherwise
+# depends on how tall the page happens to be when it is read, and a
+# classic scrollbar narrows every canvas by its own width: a baseline
+# snapshot and a later one would then be drawn at different pixel sizes
+# and differ for a reason that has nothing to do with the scrubber.
+_PIN_SCROLLBAR = "document.documentElement.style.overflowY = 'scroll';"
+
+
+def _buffer_synced(canvas_id: str) -> str:
+    """Return JS that is true once a canvas's buffer matches its layout size.
+
+    The graph stage corrects a canvas's drawing buffer from a
+    `ResizeObserver`, a moment after the redraw that triggered it, so a
+    snapshot taken before this holds is of a stale, soon-to-change size.
+    """
+    return (
+        f"(() => {{ const c = document.getElementById('{canvas_id}');"
+        " return c.width === c.clientWidth && c.height === c.clientHeight; })()"
+    )
+
+
 def _poll_until(
     window: webview.Window,
     script: str,
@@ -222,6 +243,7 @@ def test_scrubbing_back_to_the_final_frame_restores_the_real_statistics_and_mark
     def _drive() -> None:
         try:
             _poll_until(window, _INPUT_SCREEN_READY, lambda value: value is True)
+            window.evaluate_js(_PIN_SCROLLBAR)
             window.evaluate_js(
                 _SET_TINY_FIELDS + "document.getElementById('run-button').click();"
             )
@@ -233,6 +255,11 @@ def test_scrubbing_back_to_the_final_frame_restores_the_real_statistics_and_mark
             _poll_until(window, "window.__fimScrubberPending", lambda value: value == 0)
             final_index = (
                 len(window.evaluate_js("window.fim.getScrubberGenerations()")) - 1
+            )
+            _poll_until(
+                window,
+                _buffer_synced("run-trajectory-canvas"),
+                lambda value: value is True,
             )
             final_snapshot = window.evaluate_js(
                 "document.getElementById('run-trajectory-canvas').toDataURL()"
@@ -256,6 +283,11 @@ def test_scrubbing_back_to_the_final_frame_restores_the_real_statistics_and_mark
                 lambda value: value == "not known at this generation",
             )
             _scrub_to(window, final_index)
+            _poll_until(
+                window,
+                _buffer_synced("run-trajectory-canvas"),
+                lambda value: value is True,
+            )
             restored = window.evaluate_js(
                 "({"
                 "statGTitle: document.getElementById('stat-G_ST').title, "
@@ -305,6 +337,7 @@ def test_the_scrubber_starts_on_the_frame_that_is_actually_drawn(
     def _drive() -> None:
         try:
             _poll_until(window, _INPUT_SCREEN_READY, lambda value: value is True)
+            window.evaluate_js(_PIN_SCROLLBAR)
             window.evaluate_js(
                 _SET_TINY_FIELDS + "document.getElementById('run-button').click();"
             )
@@ -318,6 +351,9 @@ def test_the_scrubber_starts_on_the_frame_that_is_actually_drawn(
             # the last frame. If the view already sat there, the two
             # images are identical -- which is the real claim: the
             # opening view *is* the final frame's view.
+            _poll_until(
+                window, _buffer_synced("run-canvas"), lambda value: value is True
+            )
             opened = window.evaluate_js(
                 "({"
                 "label: document.getElementById('scrubber-label').textContent, "
@@ -326,6 +362,9 @@ def test_the_scrubber_starts_on_the_frame_that_is_actually_drawn(
                 "})"
             )
             _scrub_to(window, len(opened["generations"]) - 1)
+            _poll_until(
+                window, _buffer_synced("run-canvas"), lambda value: value is True
+            )
             at_final = window.evaluate_js(
                 "document.getElementById('run-canvas').toDataURL()"
             )
