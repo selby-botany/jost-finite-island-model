@@ -126,3 +126,52 @@ const SCATTER_FREQUENCY_DOMAIN = { xMin: 0, xMax: 1, yMin: 0, yMax: 1 };
 // pixels of jitter, below the smallest rectangle a deliberate drag draws.
 const ZOOM_DRAG_MINIMUM_PX = 12;
 const SCATTER_ZOOM_BOX_LINE_WIDTH = 1;
+
+/* ---- Heat map ------------------------------------------------------- */
+
+// Space around the cells for axis labels (left, bottom), the title and
+// the color bar with its labels (right).
+const HEATMAP_MARGIN = { left: 76, right: 78, top: 14, bottom: 58 };
+
+// A plot area is never drawn smaller than this, so a tiny canvas still
+// gets cells rather than a negative size.
+const HEATMAP_MIN_PLOT_PX = 10;
+
+// Column labels are thinned until neighbours are at least this far
+// apart, and row labels likewise.
+const HEATMAP_MIN_LABEL_SPACING_PX = 46;
+const HEATMAP_MIN_ROW_LABEL_SPACING_PX = 16;
+
+// Label offsets: column labels below the plot, row labels left of it
+// (plus a baseline nudge to center them on the row), the x title above
+// the canvas bottom, and the y title in from the left edge.
+const HEATMAP_COLUMN_LABEL_DROP = 16;
+const HEATMAP_ROW_LABEL_GAP = 6;
+const HEATMAP_ROW_LABEL_BASELINE = 4;
+const HEATMAP_X_TITLE_RISE = 10;
+const HEATMAP_Y_TITLE_INSET = 14;
+
+// Hatching for a cell with no value: stroke spacing along the cell.
+const HEATMAP_HATCH_STEP = 6;
+
+// The color bar: gap from the plot, width, label gap, and the baseline
+// drop of its top label.
+const HEATMAP_COLORBAR_GAP = 16;
+const HEATMAP_COLORBAR_WIDTH = 14;
+const HEATMAP_COLORBAR_LABEL_GAP = 4;
+const HEATMAP_COLORBAR_TOP_LABEL_DROP = 10;
+const HEATMAP_COLORBAR_TITLE_RISE = 2;
+
+// Dot marking a planned point: radius and ring width.
+const HEATMAP_MARKER_RADIUS = 3.5;
+const HEATMAP_MARKER_LINE_WIDTH = 1.5;
+
+// Outline of the selected cell, drawn inside the cell by this inset.
+const HEATMAP_SELECTED_LINE_WIDTH = 2;
+const HEATMAP_SELECTED_INSET = 1;
+
+// Value labels switch to exponent form at or above `HIGH` or below
+// `LOW` in magnitude, and keep this many significant digits.
+const HEATMAP_FORMAT_EXPONENT_HIGH = 1000;
+const HEATMAP_FORMAT_EXPONENT_LOW = 0.01;
+const HEATMAP_FORMAT_SIGNIFICANT_DIGITS = 3;

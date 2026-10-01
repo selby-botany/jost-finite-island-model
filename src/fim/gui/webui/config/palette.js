@@ -32,6 +32,48 @@ const CHART_BLACK = "#000000";
 // Fill behind small in-plot text labels.
 const CHART_BADGE_FILL = "#f1f1f1";
 
+/* ---- Theme fallbacks ------------------------------------------------ */
+
+/* Used only when a `--fim-*` custom property reads back empty (a canvas
+ * drawn before the stylesheet applies). They mirror the light theme's
+ * values in `app.css`, so a stale paint looks like the real one.
+ */
+const THEME_FALLBACK_MUTED = "#5d6863";
+const THEME_FALLBACK_BORDER = "#cdd5d0";
+const THEME_FALLBACK_FOREGROUND = "#242824";
+
+/* ---- Heat maps ------------------------------------------------------ */
+
+// Sequential ramp (ColorBrewer YlGnBu, the family the scatter plot's
+// count ramp comes from), light for low values to dark for high.
+const HEATMAP_SEQUENTIAL = [
+    "#ffffd9",
+    "#edf8b1",
+    "#c7e9b4",
+    "#7fcdbb",
+    "#41b6c4",
+    "#1d91c0",
+    "#225ea8",
+    "#253494",
+    "#081d58",
+];
+
+// Diverging blue-white-orange ramp for a difference centred on zero.
+const HEATMAP_DIVERGING = [
+    "#2166ac",
+    "#67a9cf",
+    "#d1e5f0",
+    "#f7f7f7",
+    "#fddbc7",
+    "#ef8a62",
+    "#b2182b",
+];
+
+// A marker on a heat map: a white dot with a black ring, readable on
+// every color of both ramps.
+const HEATMAP_MARKER_FILL = "#ffffff";
+const HEATMAP_MARKER_STROKE = "#000000";
+
 /* ---- Scatter plot -------------------------------------------------- */
 
 // The most frequent allele in either displayed deme.

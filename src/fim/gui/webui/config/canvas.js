@@ -10,6 +10,10 @@
 // The scatter plot's font stack: the macOS system font first.
 const FONT_FAMILY_SYSTEM = "-apple-system, sans-serif";
 
+// The plain stack at the larger size, used by the heat map and the
+// sweep chart for tick labels and axis titles.
+const FONT_AXIS_LARGE = "12px sans-serif";
+
 /* ---- Axes ---------------------------------------------------------- */
 
 // Length of a tick mark, in pixels.

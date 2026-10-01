@@ -20,29 +20,6 @@
  *   keyboard behavior.
  */
 
-const HEATMAP_SEQUENTIAL = [
-    "#ffffd9",
-    "#edf8b1",
-    "#c7e9b4",
-    "#7fcdbb",
-    "#41b6c4",
-    "#1d91c0",
-    "#225ea8",
-    "#253494",
-    "#081d58",
-];
-const HEATMAP_DIVERGING = [
-    "#2166ac",
-    "#67a9cf",
-    "#d1e5f0",
-    "#f7f7f7",
-    "#fddbc7",
-    "#ef8a62",
-    "#b2182b",
-];
-const HEATMAP_MARGIN = { left: 76, right: 78, top: 14, bottom: 58 };
-const HEATMAP_MIN_LABEL_SPACING_PX = 46;
-
 /**
  * Parse `#rrggbb` into `[r, g, b]`.
  * @param {string} hex
@@ -82,10 +59,13 @@ function heatmapFormat(value) {
         return "0";
     }
     const magnitude = Math.abs(value);
-    if (magnitude >= 1000 || magnitude < 0.01) {
-        return Number(value.toPrecision(3)).toExponential().replace("e+", "e");
+    const digits = HEATMAP_FORMAT_SIGNIFICANT_DIGITS;
+    const exponential =
+        magnitude >= HEATMAP_FORMAT_EXPONENT_HIGH || magnitude < HEATMAP_FORMAT_EXPONENT_LOW;
+    if (exponential) {
+        return Number(value.toPrecision(digits)).toExponential().replace("e+", "e");
     }
-    return String(Number(value.toPrecision(3)));
+    return String(Number(value.toPrecision(digits)));
 }
 
 /**
@@ -109,15 +89,16 @@ function heatmapFormat(value) {
 function drawHeatmap(canvas, spec) {
     const context = canvas.getContext("2d");
     const style = getComputedStyle(document.documentElement);
-    const muted = style.getPropertyValue("--fim-muted").trim() || "#5d6863";
-    const border = style.getPropertyValue("--fim-border").trim() || "#cdd5d0";
-    const foreground = style.getPropertyValue("--fim-foreground").trim() || "#242824";
+    const muted = style.getPropertyValue("--fim-muted").trim() || THEME_FALLBACK_MUTED;
+    const border = style.getPropertyValue("--fim-border").trim() || THEME_FALLBACK_BORDER;
+    const foreground =
+        style.getPropertyValue("--fim-foreground").trim() || THEME_FALLBACK_FOREGROUND;
     context.clearRect(0, 0, canvas.width, canvas.height);
 
     const left = HEATMAP_MARGIN.left;
     const top = HEATMAP_MARGIN.top;
-    const plotWidth = Math.max(canvas.width - left - HEATMAP_MARGIN.right, 10);
-    const plotHeight = Math.max(canvas.height - top - HEATMAP_MARGIN.bottom, 10);
+    const plotWidth = Math.max(canvas.width - left - HEATMAP_MARGIN.right, HEATMAP_MIN_PLOT_PX);
+    const plotHeight = Math.max(canvas.height - top - HEATMAP_MARGIN.bottom, HEATMAP_MIN_PLOT_PX);
     const columns = spec.columns.length;
     const rows = spec.rows.length;
     const cellWidth = plotWidth / columns;
@@ -125,7 +106,7 @@ function drawHeatmap(canvas, spec) {
     const ramp = spec.diverging ? HEATMAP_DIVERGING : HEATMAP_SEQUENTIAL;
     const span = spec.max - spec.min;
 
-    context.font = "12px sans-serif";
+    context.font = FONT_AXIS_LARGE;
     for (let row = 0; row < rows; row += 1) {
         for (let column = 0; column < columns; column += 1) {
             const x = left + column * cellWidth;
@@ -141,7 +122,7 @@ function drawHeatmap(canvas, spec) {
         }
     }
     context.strokeStyle = border;
-    context.lineWidth = 1;
+    context.lineWidth = AXIS_LINE_WIDTH;
     context.strokeRect(left, top, plotWidth, plotHeight);
 
     context.fillStyle = muted;
@@ -152,25 +133,40 @@ function drawHeatmap(canvas, spec) {
     );
     spec.columns.forEach((label, column) => {
         if (column % columnStride === 0) {
-            context.fillText(label, left + (column + 0.5) * cellWidth, top + plotHeight + 16);
+            context.fillText(
+                label,
+                left + (column + 0.5) * cellWidth,
+                top + plotHeight + HEATMAP_COLUMN_LABEL_DROP
+            );
         }
     });
     context.textAlign = "right";
-    const rowStride = Math.max(1, Math.ceil(16 / Math.max(cellHeight, 1)));
+    const rowStride = Math.max(
+        1,
+        Math.ceil(HEATMAP_MIN_ROW_LABEL_SPACING_PX / Math.max(cellHeight, 1))
+    );
     spec.rows.forEach((label, row) => {
         if (row % rowStride === 0) {
-            context.fillText(label, left - 6, top + (row + 0.5) * cellHeight + 4);
+            context.fillText(
+                label,
+                left - HEATMAP_ROW_LABEL_GAP,
+                top + (row + 0.5) * cellHeight + HEATMAP_ROW_LABEL_BASELINE
+            );
         }
     });
 
     context.fillStyle = foreground;
     context.textAlign = "center";
     if (spec.xTitle) {
-        context.fillText(spec.xTitle, left + plotWidth / 2, canvas.height - 10);
+        context.fillText(
+            spec.xTitle,
+            left + plotWidth / 2,
+            canvas.height - HEATMAP_X_TITLE_RISE
+        );
     }
     if (spec.yTitle) {
         context.save();
-        context.translate(14, top + plotHeight / 2);
+        context.translate(HEATMAP_Y_TITLE_INSET, top + plotHeight / 2);
         context.rotate(-QUARTER_TURN);
         context.fillText(spec.yTitle, 0, 0);
         context.restore();
@@ -183,25 +179,25 @@ function drawHeatmap(canvas, spec) {
         context.arc(
             left + marker.column * cellWidth,
             top + marker.row * cellHeight,
-            3.5,
+            HEATMAP_MARKER_RADIUS,
             0,
             TAU
         );
-        context.fillStyle = "#ffffff";
+        context.fillStyle = HEATMAP_MARKER_FILL;
         context.fill();
-        context.strokeStyle = "#000000";
-        context.lineWidth = 1.5;
+        context.strokeStyle = HEATMAP_MARKER_STROKE;
+        context.lineWidth = HEATMAP_MARKER_LINE_WIDTH;
         context.stroke();
     }
 
     if (spec.selected) {
         context.strokeStyle = foreground;
-        context.lineWidth = 2;
+        context.lineWidth = HEATMAP_SELECTED_LINE_WIDTH;
         context.strokeRect(
-            left + spec.selected.column * cellWidth + 1,
-            top + spec.selected.row * cellHeight + 1,
-            cellWidth - 2,
-            cellHeight - 2
+            left + spec.selected.column * cellWidth + HEATMAP_SELECTED_INSET,
+            top + spec.selected.row * cellHeight + HEATMAP_SELECTED_INSET,
+            cellWidth - 2 * HEATMAP_SELECTED_INSET,
+            cellHeight - 2 * HEATMAP_SELECTED_INSET
         );
     }
     return { left, top, cellWidth, cellHeight, rows, columns };
@@ -222,9 +218,8 @@ function drawHeatmapHatch(context, x, y, width, height, color) {
     context.rect(x, y, width, height);
     context.clip();
     context.strokeStyle = color;
-    context.lineWidth = 1;
-    const step = 6;
-    for (let offset = -height; offset < width; offset += step) {
+    context.lineWidth = AXIS_LINE_WIDTH;
+    for (let offset = -height; offset < width; offset += HEATMAP_HATCH_STEP) {
         context.beginPath();
         context.moveTo(x + offset, y + height);
         context.lineTo(x + offset + height, y);
@@ -242,8 +237,8 @@ function drawHeatmapHatch(context, x, y, width, height, color) {
  * @param {{top: number, plotHeight: number, muted: string, border: string}} frame
  */
 function drawHeatmapColorBar(context, canvas, spec, ramp, frame) {
-    const barLeft = canvas.width - HEATMAP_MARGIN.right + 16;
-    const barWidth = 14;
+    const barLeft = canvas.width - HEATMAP_MARGIN.right + HEATMAP_COLORBAR_GAP;
+    const barWidth = HEATMAP_COLORBAR_WIDTH;
     for (let step = 0; step < frame.plotHeight; step += 1) {
         context.fillStyle = heatmapRampColor(1 - step / frame.plotHeight, ramp);
         context.fillRect(barLeft, frame.top + step, barWidth, 1);
@@ -252,14 +247,19 @@ function drawHeatmapColorBar(context, canvas, spec, ramp, frame) {
     context.strokeRect(barLeft, frame.top, barWidth, frame.plotHeight);
     context.fillStyle = frame.muted;
     context.textAlign = "left";
-    context.fillText(heatmapFormat(spec.max), barLeft + barWidth + 4, frame.top + 10);
+    const labelLeft = barLeft + barWidth + HEATMAP_COLORBAR_LABEL_GAP;
     context.fillText(
-        heatmapFormat(spec.min),
-        barLeft + barWidth + 4,
-        frame.top + frame.plotHeight
+        heatmapFormat(spec.max),
+        labelLeft,
+        frame.top + HEATMAP_COLORBAR_TOP_LABEL_DROP
     );
+    context.fillText(heatmapFormat(spec.min), labelLeft, frame.top + frame.plotHeight);
     if (spec.valueTitle) {
-        context.fillText(spec.valueTitle, barLeft, frame.top - 2);
+        context.fillText(
+            spec.valueTitle,
+            barLeft,
+            frame.top - HEATMAP_COLORBAR_TITLE_RISE
+        );
     }
 }
 
