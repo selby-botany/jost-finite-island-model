@@ -19064,15 +19064,15 @@ test — the same `verify_trajectory_integrity` call underneath.
 
 Static-analysis guard against classic-script global-scope collisions.
 
-`src/fim/gui/webui/*.js`/`webui/screens/*.js` are all classic, non-module
-scripts sharing one global scope (`index.html` has no `type="module"` on
-any `<script>` tag — established by `screens/batch-results.js`'s own
-module docstring) — a `const`/`let`/`function` declared at the top level
-of two different files is a `SyntaxError` ("Identifier '...' has already
-been declared") that silently aborts the *second* file's entire
-execution, with no error surfaced anywhere a developer would naturally
-look (pywebview does not forward a page's own console errors to the
-terminal by default).
+`src/fim/gui/webui/*.js`, `webui/config/*.js` and `webui/screens/*.js` are
+all classic, non-module scripts sharing one global scope (`index.html` has
+no `type="module"` on any `<script>` tag — established by
+`screens/batch-results.js`'s own module docstring) — a `const`/`let`/
+`function` declared at the top level of two different files is a
+`SyntaxError` ("Identifier '...' has already been declared") that silently
+aborts the *second* file's entire execution, with no error surfaced
+anywhere a developer would naturally look (pywebview does not forward a
+page's own console errors to the terminal by default).
 
 A real instance of exactly this shape, found while building the
 Animation screen's own deme-pair selector: `screens/animation.js` and
@@ -19101,6 +19101,24 @@ No `const`/`let`/`function` name is declared at column 0 in two files.
 Two files sharing one name is exactly the `SyntaxError` this test
 exists to catch before a real window ever loads the page — see this
 module's own docstring for the real instance that prompted it.
+
+<a id="gui.test_webui_global_scope.test_config_scripts_load_before_every_other_script"></a>
+
+#### test\_config\_scripts\_load\_before\_every\_other\_script
+
+```python
+def test_config_scripts_load_before_every_other_script() -> None
+```
+
+Every `config/*.js` file is loaded, and ahead of all other scripts.
+
+The `config/` modules hold the GUI's named constants. Other scripts
+read them at load time (a `const` initializer, a default argument),
+so a constant declared in a script that loads later is a
+`ReferenceError` that aborts the reading script silently -- the same
+failure shape as the collision above. A config file that `index.html`
+never loads is the quieter variant: every name in it is simply
+undefined.
 
 <a id="gui.test_welcome_screen"></a>
 

@@ -469,7 +469,7 @@ function drawSweepLine(canvas, spec) {
     context.fillText(spec.xKey, left + width / 2, canvas.height - 10);
     context.save();
     context.translate(14, top + height / 2);
-    context.rotate(-Math.PI / 2);
+    context.rotate(-QUARTER_TURN);
     context.fillText(spec.statistic.replace("_", " "), 0, 0);
     context.restore();
 
@@ -499,7 +499,7 @@ function drawSweepLine(canvas, spec) {
             context.stroke();
         }
         context.beginPath();
-        context.arc(pixel.x, pixel.y, 4, 0, Math.PI * 2);
+        context.arc(pixel.x, pixel.y, 4, 0, TAU);
         context.fill();
     }
     return { kind: "line", pixels, statistic: spec.statistic, xKey: spec.xKey };

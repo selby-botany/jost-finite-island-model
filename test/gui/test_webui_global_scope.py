@@ -1,14 +1,14 @@
 """Static-analysis guard against classic-script global-scope collisions.
 
-`src/fim/gui/webui/*.js`/`webui/screens/*.js` are all classic, non-module
-scripts sharing one global scope (`index.html` has no `type="module"` on
-any `<script>` tag — established by `screens/batch-results.js`'s own
-module docstring) — a `const`/`let`/`function` declared at the top level
-of two different files is a `SyntaxError` ("Identifier '...' has already
-been declared") that silently aborts the *second* file's entire
-execution, with no error surfaced anywhere a developer would naturally
-look (pywebview does not forward a page's own console errors to the
-terminal by default).
+`src/fim/gui/webui/*.js`, `webui/config/*.js` and `webui/screens/*.js` are
+all classic, non-module scripts sharing one global scope (`index.html` has
+no `type="module"` on any `<script>` tag — established by
+`screens/batch-results.js`'s own module docstring) — a `const`/`let`/
+`function` declared at the top level of two different files is a
+`SyntaxError` ("Identifier '...' has already been declared") that silently
+aborts the *second* file's entire execution, with no error surfaced
+anywhere a developer would naturally look (pywebview does not forward a
+page's own console errors to the terminal by default).
 
 A real instance of exactly this shape, found while building the
 Animation screen's own deme-pair selector: `screens/animation.js` and
@@ -59,8 +59,10 @@ def test_no_top_level_identifier_is_declared_in_more_than_one_script() -> None:
     exists to catch before a real window ever loads the page — see this
     module's own docstring for the real instance that prompted it.
     """
-    js_files = sorted(_WEBUI_ROOT.glob("*.js")) + sorted(
-        _WEBUI_ROOT.glob("screens/*.js")
+    js_files = (
+        sorted(_WEBUI_ROOT.glob("*.js"))
+        + sorted(_WEBUI_ROOT.glob("config/*.js"))
+        + sorted(_WEBUI_ROOT.glob("screens/*.js"))
     )
     # Sanity check on the glob itself: a typo in `_WEBUI_ROOT` should
     # fail loudly here, not pass this test vacuously with zero files
@@ -74,3 +76,29 @@ def test_no_top_level_identifier_is_declared_in_more_than_one_script() -> None:
 
     collisions = {name: files for name, files in owners.items() if len(files) > 1}
     assert collisions == {}
+
+
+def test_config_scripts_load_before_every_other_script() -> None:
+    """Every `config/*.js` file is loaded, and ahead of all other scripts.
+
+    The `config/` modules hold the GUI's named constants. Other scripts
+    read them at load time (a `const` initializer, a default argument),
+    so a constant declared in a script that loads later is a
+    `ReferenceError` that aborts the reading script silently -- the same
+    failure shape as the collision above. A config file that `index.html`
+    never loads is the quieter variant: every name in it is simply
+    undefined.
+    """
+    html = (_WEBUI_ROOT / "index.html").read_text(encoding="utf-8")
+    sources = re.findall(r'<script src="([^"]+)"></script>', html)
+    config_sources = [src for src in sources if src.startswith("config/")]
+
+    on_disk = sorted(
+        path.relative_to(_WEBUI_ROOT).as_posix()
+        for path in _WEBUI_ROOT.glob("config/*.js")
+    )
+    assert on_disk, "no config/*.js files found -- is _WEBUI_ROOT right?"
+    assert sorted(config_sources) == on_disk
+
+    # Config scripts must form a prefix of the script list.
+    assert sources[: len(config_sources)] == config_sources

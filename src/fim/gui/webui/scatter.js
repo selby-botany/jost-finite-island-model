@@ -597,7 +597,7 @@ function drawPoint(geometry, point, style, marks) {
         radius = opts.markerScale * (COLOR_MARKER_RADIUS - 0.5);
     }
     context.beginPath();
-    context.arc(cx, cy, radius, 0, 2 * Math.PI);
+    context.arc(cx, cy, radius, 0, TAU);
     if (marks.fixed || marks.dots || point.common) {
         if (point.common) {
             context.fillStyle = COLOR_COMMON;
@@ -649,7 +649,7 @@ function drawOriginBadge(geometry, point) {
     const cy = toCanvasY(0);
     context.save();
     context.beginPath();
-    context.arc(cx, cy, 3, 0, 2 * Math.PI);
+    context.arc(cx, cy, 3, 0, TAU);
     context.fillStyle = "#6b6b6b";
     context.fill();
     const text = `${point.count} at origin`;
@@ -727,7 +727,7 @@ function drawTrail(geometry, panel) {
         context.fillStyle = COLOR_RARE;
         for (const point of trailPanel.points) {
             context.beginPath();
-            context.arc(toCanvasX(point.x), toCanvasY(point.y), 2.5, 0, 2 * Math.PI);
+            context.arc(toCanvasX(point.x), toCanvasY(point.y), 2.5, 0, TAU);
             context.fill();
         }
     });

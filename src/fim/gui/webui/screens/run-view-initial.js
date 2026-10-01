@@ -278,7 +278,7 @@ function drawIbdCurve(canvas, payload) {
             yToPixel(point.meanIdentity),
             4,
             0,
-            2 * Math.PI
+            TAU
         );
         context.fill();
     }

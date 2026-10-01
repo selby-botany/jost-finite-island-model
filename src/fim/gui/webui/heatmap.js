@@ -171,7 +171,7 @@ function drawHeatmap(canvas, spec) {
     if (spec.yTitle) {
         context.save();
         context.translate(14, top + plotHeight / 2);
-        context.rotate(-Math.PI / 2);
+        context.rotate(-QUARTER_TURN);
         context.fillText(spec.yTitle, 0, 0);
         context.restore();
     }
@@ -185,7 +185,7 @@ function drawHeatmap(canvas, spec) {
             top + marker.row * cellHeight,
             3.5,
             0,
-            Math.PI * 2
+            TAU
         );
         context.fillStyle = "#ffffff";
         context.fill();

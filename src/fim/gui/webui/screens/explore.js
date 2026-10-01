@@ -461,7 +461,7 @@ function drawSweepCurve(canvas, sweep) {
     // proportions, nats, and generations on one meaningless axis.
     context.save();
     context.translate(12, (plotTop + plotBottom) / 2);
-    context.rotate(-Math.PI / 2);
+    context.rotate(-QUARTER_TURN);
     context.textAlign = "center";
     context.textBaseline = "alphabetic";
     context.fillText(EXPLORE_UNIT_FAMILIES[exploreUnitFamily].title, 0, 0);

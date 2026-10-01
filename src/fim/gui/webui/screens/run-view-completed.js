@@ -739,7 +739,7 @@ function drawDifferentiationQCurve(canvas, points) {
         }
         context.fillStyle = accentColor;
         context.beginPath();
-        context.arc(x, y, 3, 0, 2 * Math.PI);
+        context.arc(x, y, 3, 0, TAU);
         context.fill();
     });
     context.stroke();
