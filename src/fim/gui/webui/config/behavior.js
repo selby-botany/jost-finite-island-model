@@ -147,3 +147,62 @@ const OPEN_RUN_MIN_COLUMN_WIDTH_PX = 48;
 // Index of the statistics summary cell in a replicate row (the one cell
 // that is long enough to need its full text as a hover title).
 const OPEN_RUN_SUMMARY_COLUMN_INDEX = 4;
+
+/* ---- Number display -------------------------------------------------- */
+
+// Significant digits of a statistic value shown in the results panels.
+// The server formats the six named statistics with `%.6g`; a raw float
+// the server sends unformatted (the order-profile values, the effective
+// allele counts) is rounded the same way here so the panel reads evenly.
+const REPORT_VALUE_SIGNIFICANT_DIGITS = 6;
+
+// Decimal places of a window mean and its standard error in a statistic's
+// tooltip, and of a meter's value in the statistics table.
+const WINDOW_STATISTIC_DECIMALS = 4;
+const METER_VALUE_DECIMALS = 2;
+
+// Decimal places of a running sum in an input grid (a migration-matrix
+// row sum, an initial-frequency cell sum).
+const GRID_SUM_DECIMALS = 3;
+
+// Significant digits for an Explore value when the server's payload does
+// not say.
+const EXPLORE_DEFAULT_SIGNIFICANT_DIGITS = 4;
+
+/* ---- Thresholds ------------------------------------------------------ */
+
+// Choosing a pair of demes to compare needs at least two demes; with
+// fewer, the selector is hidden.
+const DEMES_NEEDED_FOR_PAIR = 2;
+
+// The compare screen needs at least this many runs checked.
+const COMPARE_MINIMUM_RUNS = 2;
+
+// A confidence interval computed from only 2 or 3 independent replicates
+// is mathematically correct but can be enormous -- Student's-t with 1
+// degree of freedom (`sampleCount === 2`) has a two-tailed 95% critical
+// value near 12.7, so a perfectly ordinary difference between two
+// replicates' own values can produce a `low`/`high` many times wider
+// than the statistic's own natural range. Originally confirmed live
+// against `pooled_convergence_histories`'s own pre-carry-forward
+// behavior: the tail end of a real, staggered-stopping batch's own `D`
+// band reached `[-2.98, 3.54]` for a statistic that never otherwise
+// leaves roughly `[0, 1]`, because `sampleCount` shrank sharply as
+// replicates finished and dropped out of the pool. That engine-level
+// bug is now fixed at its own source (each replicate's own final value
+// is held constant once it stops, rather than dropped -- that
+// function's own docstring), which already keeps `sampleCount`
+// constant across every generation of one statistic's own completed
+// history. This *relative* threshold (a point counts only once its own
+// `sampleCount` is at least half of the largest `sampleCount` seen
+// anywhere in the current view) is what is left worth guarding
+// against: the *live* view's own accumulator (`run-view-running.js`'s
+// `liveBatchTrajectory`) still legitimately starts thin and grows
+// tick by tick as more replicates begin reporting, a real, still-
+// occurring case this same domain calculation is shared with. An
+// *absolute* cutoff was tried first and rejected: it would incorrectly
+// exclude a small (fewer than the cutoff) but otherwise perfectly
+// ordinary completed batch's own band from the domain entirely, since
+// carry-forward means every one of its points shares that same small
+// count uniformly, not just a thin tail.
+const MIN_SAMPLE_COUNT_FRACTION_FOR_DOMAIN = 0.5;

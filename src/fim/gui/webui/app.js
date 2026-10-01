@@ -246,7 +246,7 @@ const fim = {
     wireDemePairSelector(config) {
         const { xSelect, ySelect, container, selfComparisonNote, demeCount, onShowPair } =
             config;
-        if (!demeCount || demeCount < 2) {
+        if (!demeCount || demeCount < DEMES_NEEDED_FOR_PAIR) {
             container.hidden = true;
             return;
         }

@@ -98,7 +98,7 @@ function updateP0CellSum(input, sumSpan) {
         return;
     }
     const sum = Object.values(mapping).reduce((total, value) => total + value, 0);
-    sumSpan.textContent = sum.toFixed(3);
+    sumSpan.textContent = sum.toFixed(GRID_SUM_DECIMALS);
     sumSpan.classList.toggle(
         "p0-cell-sum-invalid",
         Math.abs(sum - 1) > P0_CELL_SUM_TOLERANCE

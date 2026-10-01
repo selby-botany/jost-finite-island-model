@@ -108,7 +108,7 @@ function drawAlleleComposition(canvas, payload) {
         (value) => plotBottom - value * (plotBottom - plotTop),
         PROBABILITY_TICK_VALUES,
         AXIS_TICK_FONT_SIZE,
-        (value) => value.toFixed(1)
+        (value) => value.toFixed(PROBABILITY_TICK_DECIMALS)
     );
     drawAxisTickMarks(
         context,
@@ -180,7 +180,7 @@ function drawFrequencySpectrum(canvas, payload) {
         (value) => plotLeft + value * (plotRight - plotLeft),
         PROBABILITY_TICK_VALUES,
         AXIS_TICK_FONT_SIZE,
-        (value) => value.toFixed(1)
+        (value) => value.toFixed(PROBABILITY_TICK_DECIMALS)
     );
     drawAxisTickMarks(
         context,

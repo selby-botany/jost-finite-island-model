@@ -188,7 +188,7 @@ function describeExploreProbe(statistic) {
     const where =
         `${exploreAxisLabel(grid.xAxis)} = ${formatExploreTick(grid.xValues[probe.column])}, ` +
         `${exploreAxisLabel(grid.yAxis)} = ${formatExploreTick(grid.yValues[probe.row])}`;
-    const shown = formatExploreSweepValue(value, grid.digits ?? 4);
+    const shown = formatExploreSweepValue(value, grid.digits ?? EXPLORE_DEFAULT_SIGNIFICANT_DIGITS);
     const note = atCurrent ? "the configuration you entered" : "exploring";
     exploreSurfaceReadout.textContent = `${where}: ${statistic.replace("_", " ")} ${shown} (${note})`;
 }
@@ -255,7 +255,10 @@ function renderExploreSurfaceTable() {
     const predictions = {};
     for (const name of EXPLORE_PREDICTION_NAMES) {
         predictions[name] = grid.values[name]
-            ? formatExploreSweepValue(grid.values[name][probe.row][probe.column], grid.digits ?? 4)
+            ? formatExploreSweepValue(
+                  grid.values[name][probe.row][probe.column],
+                  grid.digits ?? EXPLORE_DEFAULT_SIGNIFICANT_DIGITS
+              )
             : "undefined";
     }
     renderExplorePredictionRows(predictions, _committedPredictions?.qualifications);

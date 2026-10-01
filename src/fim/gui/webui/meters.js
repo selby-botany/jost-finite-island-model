@@ -27,7 +27,7 @@
  */
 function formatToTwoDigits(formattedValue) {
     const parsed = Number(formattedValue);
-    return Number.isFinite(parsed) ? parsed.toFixed(2) : String(formattedValue);
+    return Number.isFinite(parsed) ? parsed.toFixed(METER_VALUE_DECIMALS) : String(formattedValue);
 }
 
 // Two of the literature-derived supplemental statistics

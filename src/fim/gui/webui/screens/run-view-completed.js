@@ -473,8 +473,8 @@ function windowStatisticsDescription(name) {
     }
     const precision = stats.noise_adequate ? "" : ", not yet noise-adequate";
     const note =
-        ` — window mean ${stats.mean.toFixed(4)} ± ` +
-        `${stats.standard_error.toFixed(4)} (1σ, last ` +
+        ` — window mean ${stats.mean.toFixed(WINDOW_STATISTIC_DECIMALS)} ± ` +
+        `${stats.standard_error.toFixed(WINDOW_STATISTIC_DECIMALS)} (1σ, last ` +
         `${stats.window.toLocaleString()} generations${precision})`;
     return base + note;
 }
@@ -1534,35 +1534,6 @@ function renderTrajectory(
     }
 }
 
-// A confidence interval computed from only 2 or 3 independent replicates
-// is mathematically correct but can be enormous -- Student's-t with 1
-// degree of freedom (`sampleCount === 2`) has a two-tailed 95% critical
-// value near 12.7, so a perfectly ordinary difference between two
-// replicates' own values can produce a `low`/`high` many times wider
-// than the statistic's own natural range. Originally confirmed live
-// against `pooled_convergence_histories`'s own pre-carry-forward
-// behavior: the tail end of a real, staggered-stopping batch's own `D`
-// band reached `[-2.98, 3.54]` for a statistic that never otherwise
-// leaves roughly `[0, 1]`, because `sampleCount` shrank sharply as
-// replicates finished and dropped out of the pool. That engine-level
-// bug is now fixed at its own source (each replicate's own final value
-// is held constant once it stops, rather than dropped -- that
-// function's own docstring), which already keeps `sampleCount`
-// constant across every generation of one statistic's own completed
-// history. This *relative* threshold (a point counts only once its own
-// `sampleCount` is at least half of the largest `sampleCount` seen
-// anywhere in the current view) is what is left worth guarding
-// against: the *live* view's own accumulator (`run-view-running.js`'s
-// `liveBatchTrajectory`) still legitimately starts thin and grows
-// tick by tick as more replicates begin reporting, a real, still-
-// occurring case this same domain calculation is shared with. An
-// *absolute* cutoff was tried first and rejected: it would incorrectly
-// exclude a small (fewer than the cutoff) but otherwise perfectly
-// ordinary completed batch's own band from the domain entirely, since
-// carry-forward means every one of its points shares that same small
-// count uniformly, not just a thin tail.
-const _MIN_SAMPLE_COUNT_FRACTION_FOR_DOMAIN = 0.5;
-
 /**
  * Compute the y-axis domain `drawBatchTrajectoryCurve` plots against --
  * factored out into its own pure function specifically so a test can
@@ -1572,7 +1543,7 @@ const _MIN_SAMPLE_COUNT_FRACTION_FOR_DOMAIN = 0.5;
  *
  * A point's own `mean` always contributes to the domain, regardless of
  * `sampleCount`; its own `low`/`high` contribute only once `sampleCount`
- * reaches `_MIN_SAMPLE_COUNT_FRACTION_FOR_DOMAIN` of the largest
+ * reaches `MIN_SAMPLE_COUNT_FRACTION_FOR_DOMAIN` of the largest
  * `sampleCount` seen anywhere in `visiblePooled` (see that constant's
  * own comment for why a *relative*, not absolute, threshold) -- an
  * unstable, thin-sample band still *draws* at its own true, possibly
@@ -1591,7 +1562,7 @@ function computeBatchTrajectoryValueDomain(visiblePooled) {
         undefined,
         0
     ).max;
-    const minSampleCountForDomain = maxSampleCount * _MIN_SAMPLE_COUNT_FRACTION_FOR_DOMAIN;
+    const minSampleCountForDomain = maxSampleCount * MIN_SAMPLE_COUNT_FRACTION_FOR_DOMAIN;
     const allValues = allPoints.flatMap((point) => {
         const values = [Number(point.mean)];
         if (point.sampleCount >= minSampleCountForDomain) {
@@ -1830,7 +1801,8 @@ function renderDifferentiationQ(report) {
         // six named statistics go through `format_statistic` server-
         // side) -- `toPrecision` mirrors that same `%.6g`-style rounding
         // client-side for this one, not-yet-server-formatted field.
-        line.textContent = `q=${order}: ${Number(value).toPrecision(6)}`;
+        const shown = Number(value).toPrecision(REPORT_VALUE_SIGNIFICANT_DIGITS);
+        line.textContent = `q=${order}: ${shown}`;
         resultsDifferentiationQLines.appendChild(line);
         points.push({ order: Number(order), value: Number(value) });
     }
@@ -2080,7 +2052,9 @@ function renderScalarTable(frameGenerations) {
             // Same raw-float-to-display rounding `updateScrubbedTrajectory`
             // applies to these same history values, for the same reason:
             // `ConvergenceMonitor.histories` holds unformatted floats.
-            return Number.isFinite(value) ? Number(value).toPrecision(6) : "—";
+            return Number.isFinite(value)
+                ? Number(value).toPrecision(REPORT_VALUE_SIGNIFICANT_DIGITS)
+                : "—";
         });
         const row = document.createElement("tr");
         for (const value of [generation, ...values]) {
@@ -2234,7 +2208,7 @@ function updateScrubbedTrajectory(frameGeneration, isFinalFrame) {
                 // client-side, the identical established precedent
                 // `renderDifferentiationQ`'s own comment already uses for
                 // this exact situation (a not-yet-server-formatted field).
-                buildPointMeter(name, Number(value).toPrecision(6))
+                buildPointMeter(name, Number(value).toPrecision(REPORT_VALUE_SIGNIFICANT_DIGITS))
             );
         } else {
             applyStatRow(element, buildOmittedMeter(name, OMITTED_SCRUB_TEXT));
@@ -2263,7 +2237,7 @@ function updateScrubbedTrajectory(frameGeneration, isFinalFrame) {
             Number.isFinite(value) && value < 1
                 ? buildPointMeter(
                       label,
-                      (1 / (1 - value)).toPrecision(6),
+                      (1 / (1 - value)).toPrecision(REPORT_VALUE_SIGNIFICANT_DIGITS),
                       description
                   )
                 : buildOmittedMeter(label, OMITTED_SCRUB_TEXT, description);
@@ -2756,7 +2730,7 @@ window.fim.enterCompletedState = function enterCompletedState(payload, isBatch) 
     renderSupplementalPanels(payload.literatureVisuals);
     const panels = payload.panels;
     drawCompletedOverview(panels);
-    runDemePairSelector.hidden = !panels || payload.demeCount < 2;
+    runDemePairSelector.hidden = !panels || payload.demeCount < DEMES_NEEDED_FOR_PAIR;
     if (panels && panels.length > 0) {
         window.fim.wireDemePairSelector({
             xSelect: runXDeme,

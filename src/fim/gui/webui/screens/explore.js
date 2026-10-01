@@ -670,7 +670,7 @@ function renderExploreScrubbedPredictions() {
         return;
     }
     const point = _currentSweep.points[exploreMarkerIndex(_currentSweep)];
-    const digits = _currentSweep.digits ?? 4;
+    const digits = _currentSweep.digits ?? EXPLORE_DEFAULT_SIGNIFICANT_DIGITS;
     const predictions = {};
     for (const name of EXPLORE_PREDICTION_NAMES) {
         predictions[name] = formatExploreSweepValue(point[name], digits);

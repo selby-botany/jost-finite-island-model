@@ -351,7 +351,7 @@ function drawProgressPanels(payload) {
  * @param {number} demeCount
  */
 function wireLiveDemePairSelector(demeCount) {
-    runDemePairSelector.hidden = demeCount < 2;
+    runDemePairSelector.hidden = demeCount < DEMES_NEEDED_FOR_PAIR;
     window.fim.wireDemePairSelector({
         xSelect: runXDeme,
         ySelect: runYDeme,

@@ -42,7 +42,7 @@ function updateMatrixRowSums() {
             0
         );
         const sumCell = row.querySelector(".matrix-row-sum");
-        sumCell.textContent = sum.toFixed(3);
+        sumCell.textContent = sum.toFixed(GRID_SUM_DECIMALS);
         // Toggled on the whole `tr`, not just the sum cell, so the row
         // label and every input in an invalid row "pop" in the same
         // saturated, bold red as the sum itself, not just the sum alone.

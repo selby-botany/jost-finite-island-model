@@ -57,7 +57,6 @@ const compareTrajectoryCanvas = document.getElementById("compare-trajectory-canv
 const compareTrajectoryLegend = document.getElementById("compare-trajectory-legend");
 
 const _COMPARE_STATISTIC_NAMES = ["D", "G_ST", "E_ST", "K_ST", "H_S", "H_T", "H_ST"];
-const _COMPARE_MINIMUM_RUNS = 2;
 
 // Set once `compareRunButton`'s own click handler has a real result to
 // redraw from -- `null` before the first successful compare, or after
@@ -86,7 +85,7 @@ function checkedTrajectoryPaths() {
 }
 
 function updateCompareRunButton() {
-    compareRunButton.disabled = checkedTrajectoryPaths().length < _COMPARE_MINIMUM_RUNS;
+    compareRunButton.disabled = checkedTrajectoryPaths().length < COMPARE_MINIMUM_RUNS;
 }
 
 async function refreshCompareRecentRuns() {
