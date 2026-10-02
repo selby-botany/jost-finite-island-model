@@ -5082,10 +5082,11 @@ Change the saved dark-mode override (Configure's own field).
 
 **Returns**:
 
-- ``{"ok"` - True, "value": value}` on success; `{"ok": False,
-- `"message"` - ...}` if `value` is anything other than those
-  three — a caller-side bug (an unrecognized `<select>`
-  option), not a value a real user could type.
+  On success, an object with `ok` set to `True` and `value`
+  set to the requested override. For an unrecognized value,
+  an object with `ok` set to `False` and `message` describing
+  the invalid value. An unrecognized `<select>` option is a
+  caller-side bug, not a value a real user could type.
 
 <a id="fim.gui.app.Api.get_default_run_settings"></a>
 
@@ -5154,15 +5155,15 @@ form no longer submits at all.
 
 **Returns**:
 
-- ``{"ok"` - True}` on success; `{"ok": False, "message": ...}`
-  if `values`, overlaid on the starter config, does not
-  validate — the identical wording any other invalid form
-  submission already produces, since this goes through the
-  same `starter_form_values`/`form_values_to_payload`/
-  `SimulationParams.from_mapping` path. `max_workers` is not
-  part of that validation (`_parse_max_workers` tolerates any
-  text, including nonsense, by treating it as "auto") — saved
-  verbatim alongside the validated subset.
+  An object with `ok` set to `True` on success. If `values`,
+  overlaid on the starter config, does not validate, `ok` is
+  `False` and `message` contains the validation error. The
+  wording matches any other invalid form submission because
+  this uses the same `starter_form_values`/
+  `form_values_to_payload`/`SimulationParams.from_mapping`
+  path. `max_workers` is not part of that validation
+  (`_parse_max_workers` treats any text as "auto") and is
+  saved verbatim alongside the validated subset.
 
 <a id="fim.gui.app.Api.get_results_location"></a>
 
@@ -5183,16 +5184,16 @@ identical field (§5, Option D4).
 
 **Returns**:
 
-- ``{"path"` - str(paths.results_directory()), "editable": bool}`.
-  `editable` is `False` whenever something more specific than
-  a previously saved Settings value already governs `results_
-  directory()` for this process — an active `--root`/
-  `--results-directory` flag or `FIM_HOME`/`FIM_RESULTS_
-  DIRECTORY` — matching `_apply_saved_results_location_
-  override`'s own identical check one level up: editing the
-  field would have no effect until that flag/variable is
-  itself removed, and the page shows the read-only hint
-  instead of a saveable input in that case.
+  An object containing the current results-directory `path`
+  and an `editable` flag. `editable` is `False` whenever
+  something more specific than a previously saved Settings
+  value already governs `results_directory()` for this
+  process — an active `--root`/`--results-directory` flag or
+  `FIM_HOME`/`FIM_RESULTS_DIRECTORY` — matching
+  `_apply_saved_results_location_override`'s own check:
+  editing the field would have no effect until that
+  flag/variable is removed, and the page shows a read-only
+  hint instead of a saveable input.
 
 <a id="fim.gui.app.Api.set_results_location"></a>
 
@@ -5223,9 +5224,9 @@ location_override` is what applies a saved value, once, the
 
 **Returns**:
 
-- ``{"ok"` - True}` on success; `{"ok": False, "message": ...}`
-  if `path` cannot be created or is not a writable directory
-  (a file already existing at that exact name, say).
+  An object with `ok` set to `True` on success. If `path`
+  cannot be created or is not a writable directory, `ok` is
+  `False` and `message` describes the error.
 
 <a id="fim.gui.app.Api.browse_for_results_location"></a>
 
@@ -5240,12 +5241,12 @@ Browse for a results/logs directory via the OS's own native folder picker.
 
 **Returns**:
 
-- ``{"ok"` - True, "path": "..."}` on a real selection;
-- ``{"ok"` - False, "path": ""}` for a cancelled dialog —
-  mirrors `load_yaml`'s own cancelled-dialog shape exactly,
-  the established convention every dialog-backed bridge
-  method here follows, `webview.FileDialog.FOLDER` in place
-  of `OPEN`.
+  An object with `ok` set to `True` and `path` set to the
+  selected directory. If the dialog is cancelled, `ok` is
+  `False` and `path` is empty. This mirrors `load_yaml`'s
+  cancelled-dialog result, the convention every
+  dialog-backed bridge method follows, using
+  `webview.FileDialog.FOLDER` in place of `OPEN`.
 
 <a id="fim.gui.app.Api.get_welcome_dismissed"></a>
 

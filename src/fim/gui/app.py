@@ -3191,10 +3191,11 @@ class Api:
                 the OS-level preference.
 
         Returns:
-            `{"ok": True, "value": value}` on success; `{"ok": False,
-            "message": ...}` if `value` is anything other than those
-            three — a caller-side bug (an unrecognized `<select>`
-            option), not a value a real user could type.
+            On success, an object with `ok` set to `True` and `value`
+            set to the requested override. For an unrecognized value,
+            an object with `ok` set to `False` and `message` describing
+            the invalid value. An unrecognized `<select>` option is a
+            caller-side bug, not a value a real user could type.
         """
         if value is not None and value not in ("light", "dark"):
             return {
@@ -3272,15 +3273,15 @@ class Api:
                 fields, collected by `settings.js`.
 
         Returns:
-            `{"ok": True}` on success; `{"ok": False, "message": ...}`
-            if `values`, overlaid on the starter config, does not
-            validate — the identical wording any other invalid form
-            submission already produces, since this goes through the
-            same `starter_form_values`/`form_values_to_payload`/
-            `SimulationParams.from_mapping` path. `max_workers` is not
-            part of that validation (`_parse_max_workers` tolerates any
-            text, including nonsense, by treating it as "auto") — saved
-            verbatim alongside the validated subset.
+            An object with `ok` set to `True` on success. If `values`,
+            overlaid on the starter config, does not validate, `ok` is
+            `False` and `message` contains the validation error. The
+            wording matches any other invalid form submission because
+            this uses the same `starter_form_values`/
+            `form_values_to_payload`/`SimulationParams.from_mapping`
+            path. `max_workers` is not part of that validation
+            (`_parse_max_workers` treats any text as "auto") and is
+            saved verbatim alongside the validated subset.
         """
         try:
             merged = starter_form_values(overrides=values)
@@ -3303,16 +3304,16 @@ class Api:
         identical field (§5, Option D4).
 
         Returns:
-            `{"path": str(paths.results_directory()), "editable": bool}`.
-            `editable` is `False` whenever something more specific than
-            a previously saved Settings value already governs `results_
-            directory()` for this process — an active `--root`/
-            `--results-directory` flag or `FIM_HOME`/`FIM_RESULTS_
-            DIRECTORY` — matching `_apply_saved_results_location_
-            override`'s own identical check one level up: editing the
-            field would have no effect until that flag/variable is
-            itself removed, and the page shows the read-only hint
-            instead of a saveable input in that case.
+            An object containing the current results-directory `path`
+            and an `editable` flag. `editable` is `False` whenever
+            something more specific than a previously saved Settings
+            value already governs `results_directory()` for this
+            process — an active `--root`/`--results-directory` flag or
+            `FIM_HOME`/`FIM_RESULTS_DIRECTORY` — matching
+            `_apply_saved_results_location_override`'s own check:
+            editing the field would have no effect until that
+            flag/variable is removed, and the page shows a read-only
+            hint instead of a saveable input.
         """
         overridden_elsewhere = (
             paths.results_directory_override() is not None
@@ -3344,9 +3345,9 @@ class Api:
                 paths.atomic_directory`).
 
         Returns:
-            `{"ok": True}` on success; `{"ok": False, "message": ...}`
-            if `path` cannot be created or is not a writable directory
-            (a file already existing at that exact name, say).
+            An object with `ok` set to `True` on success. If `path`
+            cannot be created or is not a writable directory, `ok` is
+            `False` and `message` describes the error.
         """
         target = Path(path)
         try:
@@ -3366,12 +3367,12 @@ class Api:
         """Browse for a results/logs directory via the OS's own native folder picker.
 
         Returns:
-            `{"ok": True, "path": "..."}` on a real selection;
-            `{"ok": False, "path": ""}` for a cancelled dialog —
-            mirrors `load_yaml`'s own cancelled-dialog shape exactly,
-            the established convention every dialog-backed bridge
-            method here follows, `webview.FileDialog.FOLDER` in place
-            of `OPEN`.
+            An object with `ok` set to `True` and `path` set to the
+            selected directory. If the dialog is cancelled, `ok` is
+            `False` and `path` is empty. This mirrors `load_yaml`'s
+            cancelled-dialog result, the convention every
+            dialog-backed bridge method follows, using
+            `webview.FileDialog.FOLDER` in place of `OPEN`.
         """
         window = _active_window()
         if window is None:

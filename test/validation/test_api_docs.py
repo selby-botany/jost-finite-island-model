@@ -66,6 +66,36 @@ def test_generator_documents_every_source_module(tmp_path: Path) -> None:
         assert f'<a id="{module}"></a>' in rendered, module
 
 
+def test_gui_settings_results_do_not_parse_json_as_return_fields(
+    tmp_path: Path,
+) -> None:
+    """Dictionary examples in bridge returns stay readable in generated Markdown."""
+    output = tmp_path / "API.md"
+    result = subprocess.run(
+        [str(GENERATOR), str(output)],
+        cwd=PROJECT_ROOT,
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 0, result.stderr
+    rendered = output.read_text(encoding="utf-8")
+    methods = (
+        "set_dark_mode_override",
+        "set_default_run_settings",
+        "get_results_location",
+        "set_results_location",
+        "browse_for_results_location",
+    )
+    for method in methods:
+        start = rendered.index(f'<a id="fim.gui.app.Api.{method}"></a>')
+        end = rendered.find("\n<a id=", start + 1)
+        section = rendered[start:] if end < 0 else rendered[start:end]
+        assert '- ``{"' not in section, method
+        assert '- `"message"` -' not in section, method
+
+
 def test_generator_runs_without_an_activated_virtualenv(tmp_path: Path) -> None:
     """The generator resolves its own virtualenv from the repository's own
     path, with no dependency on the caller's shell having activated one

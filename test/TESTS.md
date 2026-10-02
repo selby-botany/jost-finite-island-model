@@ -26427,6 +26427,17 @@ def test_generator_documents_every_source_module(tmp_path: Path) -> None
 
 Every committed Python module receives an API section.
 
+<a id="validation.test_api_docs.test_gui_settings_results_do_not_parse_json_as_return_fields"></a>
+
+#### test\_gui\_settings\_results\_do\_not\_parse\_json\_as\_return\_fields
+
+```python
+def test_gui_settings_results_do_not_parse_json_as_return_fields(
+        tmp_path: Path) -> None
+```
+
+Dictionary examples in bridge returns stay readable in generated Markdown.
+
 <a id="validation.test_api_docs.test_generator_runs_without_an_activated_virtualenv"></a>
 
 #### test\_generator\_runs\_without\_an\_activated\_virtualenv
