@@ -21,6 +21,9 @@ It is organized into three modules by subject:
   identity statistics between populations (Nei 1972 standard distance
   `D`, geometric/arithmetic distance `D'`, normalized identity `I`,
   cross identity `J_XY`, and founder-effect identity `I_0`).
+- `fim.statistics.pairwise` — every deme pair's Nei identities at once,
+  vectorized with numpy (the one module here that needs it), for
+  capturing all-pairs matrices at large deme counts.
 - `fim.statistics.interval` — confidence intervals for a sample mean
   (the "± 3%" half of a "52% ± 3%"-style report) computed across a run's
   independent replicates. See that module's own docstring for what a
@@ -113,6 +116,7 @@ from .identity_recursion import (
     matrix_identity_trajectory,
 )
 from .interval import ConfidenceInterval, confidence_interval, student_t_critical_value
+from .pairwise import locus_frequency_matrix, pairwise_nei_identities, upper_triangle
 
 __all__ = [
     "IDENTITY_STATISTIC_NAMES",
@@ -164,6 +168,7 @@ __all__ = [
     "identity_recursion",
     "jost_d",
     "k_st",
+    "locus_frequency_matrix",
     "matrix_identity_trajectory",
     "mutation_negligible_equilibrium",
     "mutation_negligible_transition",
@@ -184,6 +189,7 @@ __all__ = [
     "nei_standard_distance",
     "overall_coancestry_f_st",
     "pairwise_f_st",
+    "pairwise_nei_identities",
     "population_pair_f_st",
     "population_specific_f_st",
     "r_st",
@@ -191,5 +197,6 @@ __all__ = [
     "student_t_critical_value",
     "total_hill_number",
     "unbiased_heterozygosity",
+    "upper_triangle",
     "within_hill_number",
 ]

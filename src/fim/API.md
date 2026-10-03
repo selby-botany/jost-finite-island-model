@@ -611,6 +611,10 @@ Return to the [source-tree orientation](../README.md) or the [developer guide](.
   * [ConfidenceInterval](#fim.statistics.interval.ConfidenceInterval)
   * [confidence\_interval](#fim.statistics.interval.confidence_interval)
   * [student\_t\_critical\_value](#fim.statistics.interval.student_t_critical_value)
+* [fim.statistics.pairwise](#fim.statistics.pairwise)
+  * [locus\_frequency\_matrix](#fim.statistics.pairwise.locus_frequency_matrix)
+  * [pairwise\_nei\_identities](#fim.statistics.pairwise.pairwise_nei_identities)
+  * [upper\_triangle](#fim.statistics.pairwise.upper_triangle)
 * [fim.sweep](#fim.sweep)
   * [SWEEP\_SPEC\_VERSION](#fim.sweep.SWEEP_SPEC_VERSION)
   * [SIZE\_CONFIRMATION\_THRESHOLD](#fim.sweep.SIZE_CONFIRMATION_THRESHOLD)
@@ -15696,6 +15700,9 @@ It is organized into three modules by subject:
   identity statistics between populations (Nei 1972 standard distance
   `D`, geometric/arithmetic distance `D'`, normalized identity `I`,
   cross identity `J_XY`, and founder-effect identity `I_0`).
+- `fim.statistics.pairwise` — every deme pair's Nei identities at once,
+  vectorized with numpy (the one module here that needs it), for
+  capturing all-pairs matrices at large deme counts.
 - `fim.statistics.interval` — confidence intervals for a sample mean
   (the "± 3%" half of a "52% ± 3%"-style report) computed across a run's
   independent replicates. See that module's own docstring for what a
@@ -18356,6 +18363,108 @@ the exact large-sample (normal-distribution) answer once
 
 - `ValueError` - If `degrees_of_freedom` is not a positive integer or
   `confidence` is not a supported level.
+
+<a id="fim.statistics.pairwise"></a>
+
+# fim.statistics.pairwise
+
+Every deme pair's Nei identities at once, vectorized.
+
+`fim.statistics.genetic_distance.nei_pair_identity` answers for one pair
+in pure Python, which is right for the one pair a plot shows. Capturing
+*every* pair for a run (`pairwise.json`) needs ``d * (d - 1) / 2`` of
+them: half a million at ``d = 1024``. This module computes all of them
+from one matrix product per locus.
+
+For one locus, put the frequencies in a ``d x A`` matrix ``P`` (one row
+per deme, one column per allele seen anywhere at that locus). Then
+``G = P @ P.T`` holds every cross identity ``J_kl`` off the diagonal and
+every within-deme identity ``J_k`` on it. Every Nei identity is an
+element-wise function of ``G`` and its diagonal, so the whole family for
+all pairs costs one BLAS matrix product plus a few element-wise passes
+per locus: ``O(d^2 * A)`` arithmetic and ``O(d^2)`` memory (a few
+megabytes per working array at ``d = 1024``).
+
+numpy is used here, unlike the rest of this package, because the
+pure-Python loop over pairs is about a thousand times slower at the
+deme counts this is for. The inputs are still plain numbers: one
+frequency table per locus.
+
+<a id="fim.statistics.pairwise.locus_frequency_matrix"></a>
+
+#### locus\_frequency\_matrix
+
+```python
+def locus_frequency_matrix(
+        table: Sequence[Mapping[Any, float]]) -> FloatMatrix
+```
+
+Return one locus's ``d x A`` frequency matrix, alleles in first-seen order.
+
+**Arguments**:
+
+- `table` - Every deme's allele-frequency mapping at one locus.
+
+
+**Returns**:
+
+  A dense float matrix, one row per deme. An allele absent from a
+  deme is 0 in that row.
+
+<a id="fim.statistics.pairwise.pairwise_nei_identities"></a>
+
+#### pairwise\_nei\_identities
+
+```python
+def pairwise_nei_identities(
+    locus_tables: Sequence[Sequence[Mapping[Any, float]]]
+) -> dict[tuple[NeiDenominator, NeiLocusRule], FloatMatrix]
+```
+
+Return all four Nei identity matrices for every pair of demes.
+
+Element ``[k, l]`` equals `nei_pair_identity` for demes ``k`` and
+``l`` with the same denominator and locus rule; the diagonal is 1.
+
+**Arguments**:
+
+- `locus_tables` - One frequency table per locus, demes in the same
+  order at every locus.
+
+
+**Returns**:
+
+  ``{(denominator, locus_rule): d x d matrix}``, symmetric, every
+  value in ``[0, 1]``.
+
+
+**Raises**:
+
+- `ValueError` - For no loci, no demes, or loci with different deme
+  counts.
+
+<a id="fim.statistics.pairwise.upper_triangle"></a>
+
+#### upper\_triangle
+
+```python
+def upper_triangle(matrix: FloatMatrix) -> list[float]
+```
+
+Return the strict upper triangle, row by row, as plain floats.
+
+The order is ``[0,1], [0,2], ..., [0,d-1], [1,2], ...``: the compact
+form `pairwise.json` stores for a symmetric matrix with a known
+diagonal.
+
+**Arguments**:
+
+- `matrix` - A square matrix.
+
+
+**Returns**:
+
+  ``d * (d - 1) / 2`` floats.
 
 <a id="fim.sweep"></a>
 

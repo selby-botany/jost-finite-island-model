@@ -111,6 +111,7 @@ Every test module, fixture, and test function documented here in full; `doc/fim-
   - [`test_genetic_distance`](#statistics.test_genetic_distance)
   - [`test_identity_recursion`](#statistics.test_identity_recursion)
   - [`test_interval`](#statistics.test_interval)
+  - [`test_pairwise`](#statistics.test_pairwise)
   - [`test_properties`](#statistics.test_properties)
 - [`test/validation/`](#group-validation)
   - [`test_api_docs`](#validation.test_api_docs)
@@ -26366,6 +26367,82 @@ existed here at all — a `nan` among the observations used to
 silently produce a `nan` mean and interval instead, matching
 `fim.convergence.monitor.ConvergenceMonitor.record`'s own
 identical rule for a watched statistic's own value.
+
+<a id="statistics.test_pairwise"></a>
+
+# statistics.test\_pairwise
+
+Tests for the vectorized all-pairs Nei identity matrices.
+
+<a id="statistics.test_pairwise.PairwiseNeiTests"></a>
+
+## PairwiseNeiTests Objects
+
+```python
+class PairwiseNeiTests(unittest.TestCase)
+```
+
+Matrices agree with the scalar pair functions, element by element.
+
+<a id="statistics.test_pairwise.PairwiseNeiTests.test_every_element_matches_nei_pair_identity"></a>
+
+#### test\_every\_element\_matches\_nei\_pair\_identity
+
+```python
+def test_every_element_matches_nei_pair_identity() -> None
+```
+
+All four matrices equal the pure-Python pair function per pair.
+
+<a id="statistics.test_pairwise.PairwiseNeiTests.test_symmetric_unit_diagonal_and_bounded"></a>
+
+#### test\_symmetric\_unit\_diagonal\_and\_bounded
+
+```python
+def test_symmetric_unit_diagonal_and_bounded() -> None
+```
+
+Every matrix is symmetric, has a diagonal of 1 and stays in [0, 1].
+
+<a id="statistics.test_pairwise.PairwiseNeiTests.test_no_shared_allele_gives_zero_identity"></a>
+
+#### test\_no\_shared\_allele\_gives\_zero\_identity
+
+```python
+def test_no_shared_allele_gives_zero_identity() -> None
+```
+
+Disjoint demes: 0 in every form, including the locus mean.
+
+<a id="statistics.test_pairwise.PairwiseNeiTests.test_upper_triangle_order_and_length"></a>
+
+#### test\_upper\_triangle\_order\_and\_length
+
+```python
+def test_upper_triangle_order_and_length() -> None
+```
+
+Row-major strict upper triangle: [0,1], [0,2], [1,2].
+
+<a id="statistics.test_pairwise.PairwiseNeiTests.test_frequency_matrix_and_shape_errors"></a>
+
+#### test\_frequency\_matrix\_and\_shape\_errors
+
+```python
+def test_frequency_matrix_and_shape_errors() -> None
+```
+
+Absent alleles are zero; empty or ragged input is rejected.
+
+<a id="statistics.test_pairwise.PairwiseNeiTests.test_large_deme_count_shape"></a>
+
+#### test\_large\_deme\_count\_shape
+
+```python
+def test_large_deme_count_shape() -> None
+```
+
+A 300-deme run produces full-size matrices (the capture path's scale).
 
 <a id="statistics.test_properties"></a>
 
