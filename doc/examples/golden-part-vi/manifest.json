@@ -1,18 +1,26 @@
 {
   "artifacts": {
+    "convergence": {
+      "bytes": 16874700,
+      "sha256": "406d6942ed216af38ce3cdccbec7cb951470e6e2c4aea4e6d1c6ab1027d7aa01"
+    },
     "report": {
-      "bytes": 1731,
-      "sha256": "07e10b7f425be49f3adea5c7d39ffa950ab2b05a37d064c099537b60ce8e66cb"
+      "bytes": 2099,
+      "sha256": "91e3841aefca7d2a400a446f4a37ce4146b4a715dd7c38241779eb8ca4e1e00a"
     },
     "scatter": {
-      "bytes": 143620,
-      "sha256": "b8e199a027cdf4b1d2cec89959601fb1c87da8a6ebf135445345df81d954ac51"
+      "bytes": 140397,
+      "sha256": "edcbc77e186b1117027a218c40aae2bd18fb6183d770b9f9c7e5b0082e465ecc"
     },
     "trajectory": {
       "bytes": 478638685,
       "sha256": "b2c529614f6dfd27487aeaa2d5c7a988138c1cd5584842d2e7bb322cb7f29f56"
     }
   },
+  "auto_derived": [
+    "convergence_window",
+    "max_generations"
+  ],
   "convergence": {
     "converged": true,
     "generation": 130194,
@@ -20,7 +28,7 @@
     "reason": "statistic converged",
     "statistic": "D"
   },
-  "ended_at": "2026-09-28T00:19:35.715389Z",
+  "ended_at": "2026-10-03T21:22:58.223177Z",
   "engine_backend": "lineal",
   "equilibrium_final_heterozygosity": null,
   "equilibrium_generation_count": null,
@@ -60,11 +68,12 @@
     "seed": 20260825,
     "track_expensive_statistics": false
   },
+  "relaxation_time": 84.61538461538461,
   "run_id": "run-ee31b99525651c07",
   "schema_version": 3,
   "sigma_band": null,
   "sigma_band_multiplier": null,
   "sigma_band_window": null,
   "software_version": "1.2.0",
-  "started_at": "2026-09-28T00:11:08.494779Z"
+  "started_at": "2026-10-03T21:09:46.819666Z"
 }
