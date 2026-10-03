@@ -58,7 +58,13 @@ from fim.model.params import SimulationParams
 from fim.model.state import ModelState
 from fim.persistence.jsonl_store import JSONLTrajectoryStore
 from fim.persistence.manifest import hash_file, write_manifest
+from fim.persistence.pairwise import (
+    SLOW_PAIRWISE_DEMES,
+    pairwise_payload,
+    write_pairwise,
+)
 from fim.persistence.report import write_jsonl_rows, write_report
+from fim.statistics.catalog import DEFAULT_PAIRWISE_MAX_DEMES
 from fim.viz.scatter import (
     FloatArray,
     frequency_points,
@@ -94,7 +100,12 @@ ProgressMessage = tuple[
 DoneMessage = tuple[Literal["done"], RunResult]
 CancelledMessage = tuple[Literal["cancelled"], int]
 ErrorMessage = tuple[Literal["error"], str]
-RunMessage = ProgressMessage | DoneMessage | CancelledMessage | ErrorMessage
+# A non-terminal note for the Run card's status line, such as "saving
+# every deme pair's statistics" for a large run.
+StatusMessage = tuple[Literal["status"], str]
+RunMessage = (
+    ProgressMessage | DoneMessage | CancelledMessage | ErrorMessage | StatusMessage
+)
 
 logger = logging.getLogger(__name__)
 
@@ -142,11 +153,11 @@ class ProgressThrottle:
 
 
 def run_artifact_targets(directory: Path) -> dict[str, Path]:
-    """Return the four documented scalar-run artifact paths in one directory.
+    """Return every documented scalar-run artifact path in one directory.
 
-    Deliberately the same four names `cli._run_artifact_targets` uses
-    — the exact same four calls, same target filenames, same directory
-    — a direct parallel, not a shared import, since
+    Deliberately the same names `cli._run_artifact_targets` uses for a
+    scalar run (it also names the optional sigma-band file) — same
+    target filenames, same directory — a direct parallel, not a shared import, since
     `cli._run_artifact_targets` is a private module-level function of
     the CLI's own front end.
     """
@@ -156,6 +167,7 @@ def run_artifact_targets(directory: Path) -> dict[str, Path]:
         "report": directory / "report.json",
         "scatter": directory / "scatter.png",
         "convergence": directory / "convergence.jsonl",
+        "pairwise": directory / "pairwise.json",
     }
 
 
@@ -180,6 +192,24 @@ def _convergence_history_rows(result: RunResult) -> list[dict[str, object]]:
     ]
 
 
+def pairwise_status_text(deme_count: int, run_count: int) -> str:
+    """Return the status line shown while large `pairwise.json` files are saved.
+
+    Args:
+        deme_count: The run's deme count.
+        run_count: How many runs (replicates) are being saved.
+
+    Returns:
+        A short sentence for the Run card's status line.
+    """
+    pairs = deme_count * (deme_count - 1) // 2
+    files = "file" if run_count == 1 else f"files for {run_count} replicates"
+    return (
+        f"Saving every deme pair's statistics ({pairs:,} pairs of {deme_count} "
+        f"demes) to the pairwise {files}…"
+    )
+
+
 def start_run(
     params: SimulationParams,
     output_directory: Path,
@@ -187,6 +217,7 @@ def start_run(
     cancel_event: threading.Event,
     *,
     clock: Callable[[], float] = time.monotonic,
+    pairwise_max_demes: int = DEFAULT_PAIRWISE_MAX_DEMES,
 ) -> threading.Thread:
     """Resolve targets, guard the existing target, and start the worker thread.
 
@@ -218,6 +249,7 @@ def start_run(
     thread = threading.Thread(
         target=_run_worker,
         args=(params, run_id, output_directory, message_queue, cancel_event, clock),
+        kwargs={"pairwise_max_demes": pairwise_max_demes},
     )
     thread.start()
     logger.debug("scalar run worker thread started: %s -> %s", run_id, output_directory)
@@ -231,6 +263,8 @@ def _run_worker(
     message_queue: queue.Queue[RunMessage],
     cancel_event: threading.Event,
     clock: Callable[[], float],
+    *,
+    pairwise_max_demes: int = DEFAULT_PAIRWISE_MAX_DEMES,
 ) -> None:
     """Run one scalar simulation and post its outcome to `message_queue`.
 
@@ -305,7 +339,9 @@ def _run_worker(
                 # `atomic_directory` discards the temporary directory
                 # exactly as it would for any other engine error.
                 raise RuntimeError("unexpected batch result from a scalar run")
-            write_run_artifacts(result, targets)
+            if SLOW_PAIRWISE_DEMES <= params.d <= pairwise_max_demes:
+                message_queue.put(("status", pairwise_status_text(params.d, 1)))
+            write_run_artifacts(result, targets, pairwise_max_demes=pairwise_max_demes)
     except RunCancelledError as cancelled:
         message_queue.put(("cancelled", cancelled.generation))
         return
@@ -315,7 +351,12 @@ def _run_worker(
     message_queue.put(("done", result))
 
 
-def write_run_artifacts(result: RunResult, targets: dict[str, Path]) -> None:
+def write_run_artifacts(
+    result: RunResult,
+    targets: dict[str, Path],
+    *,
+    pairwise_max_demes: int = DEFAULT_PAIRWISE_MAX_DEMES,
+) -> None:
     """Write `report.json`, `scatter.png`, and — last — `manifest.json`.
 
     Mirrors `cli._write_run_artifacts` exactly: `trajectory.jsonl` is
@@ -343,11 +384,16 @@ def write_run_artifacts(result: RunResult, targets: dict[str, Path]) -> None:
     # same artifact -- persisted so reopening restores the trajectory
     # curve instead of having none at all.
     write_jsonl_rows(targets["convergence"], _convergence_history_rows(result))
+    # See `cli._write_run_artifacts`: every deme pair's Nei identities.
+    write_pairwise(
+        targets["pairwise"],
+        pairwise_payload(result.final_state, max_demes=pairwise_max_demes),
+    )
     manifest = replace(
         result.manifest,
         artifacts={
             name: hash_file(targets[name])
-            for name in ("trajectory", "report", "scatter", "convergence")
+            for name in ("trajectory", "report", "scatter", "convergence", "pairwise")
         },
     )
     write_manifest(targets["manifest"], manifest)

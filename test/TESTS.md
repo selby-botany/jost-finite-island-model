@@ -102,6 +102,7 @@ Every test module, fixture, and test function documented here in full; `doc/fim-
 - [`test/persistence/`](#group-persistence)
   - [`test_groups`](#persistence.test_groups)
   - [`test_manifest`](#persistence.test_manifest)
+  - [`test_pairwise_file`](#persistence.test_pairwise_file)
   - [`test_report`](#persistence.test_report)
   - [`test_run_metadata`](#persistence.test_run_metadata)
   - [`test_store`](#persistence.test_store)
@@ -2413,15 +2414,47 @@ autouse fixture.
 
 Functional tests for researcher-facing command workflows.
 
-<a id="cli.test_cli.test_run_writes_exactly_five_documented_artifacts"></a>
+<a id="cli.test_cli.test_run_writes_exactly_six_documented_artifacts"></a>
 
-#### test\_run\_writes\_exactly\_five\_documented\_artifacts
+#### test\_run\_writes\_exactly\_six\_documented\_artifacts
 
 ```python
-def test_run_writes_exactly_five_documented_artifacts(tmp_path: Path) -> None
+def test_run_writes_exactly_six_documented_artifacts(tmp_path: Path) -> None
 ```
 
 A real seeded run produces the complete v1 output set.
+
+<a id="cli.test_cli.test_run_writes_every_deme_pair_to_pairwise_json"></a>
+
+#### test\_run\_writes\_every\_deme\_pair\_to\_pairwise\_json
+
+```python
+def test_run_writes_every_deme_pair_to_pairwise_json(tmp_path: Path) -> None
+```
+
+`pairwise.json` holds every pair's Nei identities and is digested.
+
+<a id="cli.test_cli.test_pairwise_max_demes_skips_the_matrices_above_the_limit"></a>
+
+#### test\_pairwise\_max\_demes\_skips\_the\_matrices\_above\_the\_limit
+
+```python
+def test_pairwise_max_demes_skips_the_matrices_above_the_limit(
+        tmp_path: Path) -> None
+```
+
+`--pairwise-max-demes 1` records the limit instead of the matrices.
+
+<a id="cli.test_cli.test_pairwise_max_demes_rejects_a_non_positive_value"></a>
+
+#### test\_pairwise\_max\_demes\_rejects\_a\_non\_positive\_value
+
+```python
+def test_pairwise_max_demes_rejects_a_non_positive_value(
+        tmp_path: Path) -> None
+```
+
+A zero limit is a usage error, not a traceback.
 
 <a id="cli.test_cli.test_run_with_sigma_band_writes_the_fifth_trajectory_artifact"></a>
 
@@ -9639,6 +9672,27 @@ No test calls `_drain_run_messages` directly elsewhere in this file
 it via `_start_scalar_run`'s own thread) — this is the first, added
 specifically to prove the new `live_deme_pair` parameter without
 needing a real background thread or a `gui` marker.
+
+<a id="gui.test_app_api.test_drain_run_messages_forwards_a_status_note_and_keeps_draining"></a>
+
+#### test\_drain\_run\_messages\_forwards\_a\_status\_note\_and\_keeps\_draining
+
+```python
+def test_drain_run_messages_forwards_a_status_note_and_keeps_draining(
+) -> None
+```
+
+A "status" message reaches `fim.onRunStatus` and is not terminal.
+
+<a id="gui.test_app_api.test_pairwise_status_text_names_pairs_and_replicates"></a>
+
+#### test\_pairwise\_status\_text\_names\_pairs\_and\_replicates
+
+```python
+def test_pairwise_status_text_names_pairs_and_replicates() -> None
+```
+
+The status line counts pairs and, for a batch, replicates.
 
 <a id="gui.test_app_api.test_parse_generation_accepts_valid_input"></a>
 
@@ -17352,16 +17406,16 @@ def test_progress_throttle_reports_again_once_the_interval_elapses() -> None
 
 A call past the interval reports again, driven by an injected fake clock.
 
-<a id="gui.test_runner.test_run_artifact_targets_matches_the_documented_five_filenames"></a>
+<a id="gui.test_runner.test_run_artifact_targets_matches_the_documented_six_filenames"></a>
 
-#### test\_run\_artifact\_targets\_matches\_the\_documented\_five\_filenames
+#### test\_run\_artifact\_targets\_matches\_the\_documented\_six\_filenames
 
 ```python
-def test_run_artifact_targets_matches_the_documented_five_filenames(
+def test_run_artifact_targets_matches_the_documented_six_filenames(
         tmp_path: Path) -> None
 ```
 
-The five target names match `cli._run_artifact_targets`'s own set.
+The six target names match `cli._run_artifact_targets`'s own scalar set.
 
 <a id="gui.test_runner.test_start_run_raises_when_output_directory_already_exists"></a>
 
@@ -17374,16 +17428,16 @@ def test_start_run_raises_when_output_directory_already_exists(
 
 The pre-existing-target guard fires synchronously, before any thread.
 
-<a id="gui.test_runner.test_start_run_writes_the_five_documented_artifacts_on_success"></a>
+<a id="gui.test_runner.test_start_run_writes_the_six_documented_artifacts_on_success"></a>
 
-#### test\_start\_run\_writes\_the\_five\_documented\_artifacts\_on\_success
+#### test\_start\_run\_writes\_the\_six\_documented\_artifacts\_on\_success
 
 ```python
-def test_start_run_writes_the_five_documented_artifacts_on_success(
+def test_start_run_writes_the_six_documented_artifacts_on_success(
         tmp_path: Path, tiny_params: SimulationParams) -> None
 ```
 
-A real, uncancelled run produces the same five artifacts `fim run` does.
+A real, uncancelled run produces the same six artifacts `fim run` does.
 
 <a id="gui.test_runner.test_start_run_records_matching_digests_in_the_published_manifest"></a>
 
@@ -23986,6 +24040,73 @@ def test_verify_trajectory_integrity_rejects_a_manifest_missing_the_trajectory_d
 ```
 
 `artifacts` populated but with no `trajectory` entry is rejected too.
+
+<a id="persistence.test_pairwise_file"></a>
+
+# persistence.test\_pairwise\_file
+
+Tests for `pairwise.json`: every deme pair's Nei identities.
+
+<a id="persistence.test_pairwise_file.test_upper_triangle_index_is_row_major"></a>
+
+#### test\_upper\_triangle\_index\_is\_row\_major
+
+```python
+def test_upper_triangle_index_is_row_major() -> None
+```
+
+(0,1), (0,2), (0,3), (1,2), (1,3), (2,3) map to 0..5, either order.
+
+<a id="persistence.test_pairwise_file.test_payload_holds_every_pair_matching_the_pair_function"></a>
+
+#### test\_payload\_holds\_every\_pair\_matching\_the\_pair\_function
+
+```python
+def test_payload_holds_every_pair_matching_the_pair_function(
+        tmp_path: Path) -> None
+```
+
+Written, read back, and equal to `nei_pair_identity` for every pair.
+
+<a id="persistence.test_pairwise_file.test_no_shared_allele_is_stored_as_a_finite_zero"></a>
+
+#### test\_no\_shared\_allele\_is\_stored\_as\_a\_finite\_zero
+
+```python
+def test_no_shared_allele_is_stored_as_a_finite_zero(tmp_path: Path) -> None
+```
+
+Strict JSON: an infinite distance is stored as identity 0.
+
+<a id="persistence.test_pairwise_file.test_above_the_limit_the_matrices_are_skipped"></a>
+
+#### test\_above\_the\_limit\_the\_matrices\_are\_skipped
+
+```python
+def test_above_the_limit_the_matrices_are_skipped() -> None
+```
+
+A deme count over the limit records the limit, not the matrices.
+
+<a id="persistence.test_pairwise_file.test_written_bytes_are_deterministic"></a>
+
+#### test\_written\_bytes\_are\_deterministic
+
+```python
+def test_written_bytes_are_deterministic(tmp_path: Path) -> None
+```
+
+Writing the same state twice gives identical bytes.
+
+<a id="persistence.test_pairwise_file.test_unknown_schema_version_is_rejected"></a>
+
+#### test\_unknown\_schema\_version\_is\_rejected
+
+```python
+def test_unknown_schema_version_is_rejected(tmp_path: Path) -> None
+```
+
+A future format is not misread.
 
 <a id="persistence.test_report"></a>
 

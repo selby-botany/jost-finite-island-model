@@ -5489,6 +5489,10 @@ def _drain_run_messages(
             if on_message is not None:
                 on_message(message)
             return
+        elif message[0] == "status":
+            # Not terminal: a note such as "saving every deme pair's
+            # statistics" while a large run's artifacts are written.
+            window.evaluate_js(f"fim.onRunStatus({json.dumps(message[1])})")
         elif message[0] == "cancelled":
             logger.info("run cancelled: %s", output_directory)
             window.evaluate_js(f"fim.onRunCancelled({json.dumps(message[1])})")
@@ -6229,6 +6233,11 @@ def _drain_batch_messages(
                 initial_states,
                 on_progress,
             )
+            continue
+        if message[0] == "status":
+            # Not terminal (`batch_runner.StatusMessage`): show it and
+            # keep draining.
+            window.evaluate_js(f"fim.onRunStatus({json.dumps(message[1])})")
             continue
         if message[0] == "done":
             payload = _batch_done_payload(

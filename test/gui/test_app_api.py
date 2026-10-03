@@ -2704,6 +2704,32 @@ def test_drain_run_messages_includes_a_live_deme_pair_panel_when_selected() -> N
     assert progress_payload["literatureVisuals"] == visuals
 
 
+def test_drain_run_messages_forwards_a_status_note_and_keeps_draining() -> None:
+    """A "status" message reaches `fim.onRunStatus` and is not terminal."""
+    message_queue: queue.Queue[runner_module.RunMessage] = queue.Queue()
+    message_queue.put(("status", runner_module.pairwise_status_text(300, 1)))
+    message_queue.put(("cancelled", 3))
+    window = _FakeWindow()
+
+    app_module._drain_run_messages(
+        window,
+        message_queue,
+        max_generations=10,
+        deme_count=300,
+        output_directory=Path("/unused"),
+    )
+
+    assert window.scripts[0].startswith("fim.onRunStatus(")
+    assert "44,850 pairs of 300 demes" in window.scripts[0]
+    assert window.scripts[1].startswith("fim.onRunCancelled(")
+
+
+def test_pairwise_status_text_names_pairs_and_replicates() -> None:
+    """The status line counts pairs and, for a batch, replicates."""
+    assert "1,225 pairs of 50 demes" in runner_module.pairwise_status_text(50, 1)
+    assert "files for 8 replicates" in runner_module.pairwise_status_text(50, 8)
+
+
 def _write_run(
     tmp_path: Path, *, study_id: str | None = None, **overrides: object
 ) -> Path:

@@ -248,6 +248,7 @@ function enterRunningState(isBatch = false) {
     // produced: starting a new run briefly showed the previous run's
     // own final progress text until the first tick arrived.
     progressLabel.textContent = "";
+    progressLabel.classList.remove("progress-label-busy");
     runProgress.hidden = false;
     if (initialStats) {
         initialStats.hidden = true;
@@ -577,8 +578,22 @@ window.fim.onRunProgress = function onRunProgress(payload) {
     });
 };
 
+/**
+ * Show a non-terminal note on the progress line, with a spinner: the
+ * engine has finished and the run's files are still being written, as
+ * when every deme pair's statistics are saved for a large run
+ * (`fim.gui.runner.pairwise_status_text`).
+ *
+ * @param {string} text
+ */
+window.fim.onRunStatus = function onRunStatus(text) {
+    progressLabel.textContent = text;
+    progressLabel.classList.add("progress-label-busy");
+};
+
 window.fim.onRunDone = function onRunDone(payload) {
     cancelButton.disabled = true;
+    progressLabel.classList.remove("progress-label-busy");
     window.fim.enterCompletedState(payload, false);
 };
 
@@ -648,6 +663,7 @@ window.fim.onBatchProgress = function onBatchProgress(payload) {
 
 window.fim.onBatchDone = function onBatchDone(payload) {
     cancelButton.disabled = true;
+    progressLabel.classList.remove("progress-label-busy");
     window.fim.enterCompletedState(payload, true);
 };
 

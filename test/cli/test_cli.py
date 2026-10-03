@@ -50,7 +50,7 @@ def _write_config(path: Path, **updates: object) -> None:
     path.write_text(yaml.safe_dump(config, sort_keys=False), encoding="utf-8")
 
 
-def test_run_writes_exactly_five_documented_artifacts(tmp_path: Path) -> None:
+def test_run_writes_exactly_six_documented_artifacts(tmp_path: Path) -> None:
     """A real seeded run produces the complete v1 output set."""
     config = tmp_path / "run.yaml"
     output = tmp_path / "output"
@@ -65,6 +65,7 @@ def test_run_writes_exactly_five_documented_artifacts(tmp_path: Path) -> None:
         "report.json",
         "scatter.png",
         "convergence.jsonl",
+        "pairwise.json",
     }
     report = json.loads((output / "report.json").read_text(encoding="utf-8"))
     assert set(report) >= {
@@ -79,6 +80,57 @@ def test_run_writes_exactly_five_documented_artifacts(tmp_path: Path) -> None:
         "H_S",
         "H_T",
     }
+
+
+def test_run_writes_every_deme_pair_to_pairwise_json(tmp_path: Path) -> None:
+    """`pairwise.json` holds every pair's Nei identities and is digested."""
+    config = tmp_path / "run.yaml"
+    output = tmp_path / "output"
+    _write_config(config)
+
+    assert cli.main(["run", str(config), "--output", str(output), "--quiet"]) == 0
+
+    payload = json.loads((output / "pairwise.json").read_text(encoding="utf-8"))
+    deme_count = payload["deme_count"]
+    assert payload["mode"] == "full"
+    for values in payload["identities"].values():
+        assert len(values) == deme_count * (deme_count - 1) // 2
+    manifest = json.loads((output / "manifest.json").read_text(encoding="utf-8"))
+    assert "pairwise" in manifest["artifacts"]
+
+
+def test_pairwise_max_demes_skips_the_matrices_above_the_limit(
+    tmp_path: Path,
+) -> None:
+    """`--pairwise-max-demes 1` records the limit instead of the matrices."""
+    config = tmp_path / "run.yaml"
+    output = tmp_path / "output"
+    _write_config(config)
+
+    status = cli.main(
+        [
+            "run",
+            str(config),
+            "--output",
+            str(output),
+            "--quiet",
+            "--pairwise-max-demes",
+            "1",
+        ]
+    )
+
+    assert status == 0
+    payload = json.loads((output / "pairwise.json").read_text(encoding="utf-8"))
+    assert payload["mode"] == "skipped"
+    assert payload["max_demes"] == 1
+
+
+def test_pairwise_max_demes_rejects_a_non_positive_value(tmp_path: Path) -> None:
+    """A zero limit is a usage error, not a traceback."""
+    config = tmp_path / "run.yaml"
+    _write_config(config)
+    with pytest.raises(SystemExit):
+        cli.main(["run", str(config), "--quiet", "--pairwise-max-demes", "0"])
 
 
 def test_run_with_sigma_band_writes_the_fifth_trajectory_artifact(
@@ -103,6 +155,7 @@ def test_run_with_sigma_band_writes_the_fifth_trajectory_artifact(
         "report.json",
         "scatter.png",
         "convergence.jsonl",
+        "pairwise.json",
         "sigma_band_trajectory.jsonl",
     }
     rows = [
@@ -1057,6 +1110,7 @@ def test_run_batch_produces_replicate_and_summary_artifacts(
             "report.json",
             "scatter.png",
             "convergence.jsonl",
+            "pairwise.json",
         }
     summary = json.loads((output / "summary.json").read_text(encoding="utf-8"))
     assert summary["D"]["sample_count"] == 3

@@ -274,6 +274,7 @@ Return to the [source-tree orientation](../README.md) or the [developer guide](.
     * [\_\_init\_\_](#fim.gui.runner.ProgressThrottle.__init__)
     * [should\_report](#fim.gui.runner.ProgressThrottle.should_report)
   * [run\_artifact\_targets](#fim.gui.runner.run_artifact_targets)
+  * [pairwise\_status\_text](#fim.gui.runner.pairwise_status_text)
   * [start\_run](#fim.gui.runner.start_run)
   * [write\_run\_artifacts](#fim.gui.runner.write_run_artifacts)
 * [fim.gui.store](#fim.gui.store)
@@ -488,6 +489,13 @@ Return to the [source-tree orientation](../README.md) or the [developer guide](.
     * [from\_dict](#fim.persistence.manifest.BatchManifest.from_dict)
   * [read\_batch\_manifest](#fim.persistence.manifest.read_batch_manifest)
   * [write\_batch\_manifest](#fim.persistence.manifest.write_batch_manifest)
+* [fim.persistence.pairwise](#fim.persistence.pairwise)
+  * [SLOW\_PAIRWISE\_DEMES](#fim.persistence.pairwise.SLOW_PAIRWISE_DEMES)
+  * [upper\_triangle\_index](#fim.persistence.pairwise.upper_triangle_index)
+  * [pairwise\_payload](#fim.persistence.pairwise.pairwise_payload)
+  * [write\_pairwise](#fim.persistence.pairwise.write_pairwise)
+  * [read\_pairwise](#fim.persistence.pairwise.read_pairwise)
+  * [pair\_identity](#fim.persistence.pairwise.pair_identity)
 * [fim.persistence.report](#fim.persistence.report)
   * [write\_report](#fim.persistence.report.write_report)
   * [write\_jsonl\_rows](#fim.persistence.report.write_jsonl_rows)
@@ -6929,12 +6937,15 @@ is private to the CLI's own front end.
 #### start\_batch\_run
 
 ```python
-def start_batch_run(params: SimulationParams,
-                    output_directory: Path,
-                    message_queue: queue.Queue[BatchMessage],
-                    cancel_event: threading.Event,
-                    *,
-                    max_workers: int | None = None) -> threading.Thread
+def start_batch_run(
+        params: SimulationParams,
+        output_directory: Path,
+        message_queue: queue.Queue[BatchMessage],
+        cancel_event: threading.Event,
+        *,
+        max_workers: int | None = None,
+        pairwise_max_demes: int = DEFAULT_PAIRWISE_MAX_DEMES
+) -> threading.Thread
 ```
 
 Resolve targets, guard the existing target, and start the worker thread.
@@ -8810,25 +8821,48 @@ Return whether `generation` should be posted to the UI now.
 def run_artifact_targets(directory: Path) -> dict[str, Path]
 ```
 
-Return the four documented scalar-run artifact paths in one directory.
+Return every documented scalar-run artifact path in one directory.
 
-Deliberately the same four names `cli._run_artifact_targets` uses
-— the exact same four calls, same target filenames, same directory
-— a direct parallel, not a shared import, since
+Deliberately the same names `cli._run_artifact_targets` uses for a
+scalar run (it also names the optional sigma-band file) — same
+target filenames, same directory — a direct parallel, not a shared import, since
 `cli._run_artifact_targets` is a private module-level function of
 the CLI's own front end.
+
+<a id="fim.gui.runner.pairwise_status_text"></a>
+
+#### pairwise\_status\_text
+
+```python
+def pairwise_status_text(deme_count: int, run_count: int) -> str
+```
+
+Return the status line shown while large `pairwise.json` files are saved.
+
+**Arguments**:
+
+- `deme_count` - The run's deme count.
+- `run_count` - How many runs (replicates) are being saved.
+
+
+**Returns**:
+
+  A short sentence for the Run card's status line.
 
 <a id="fim.gui.runner.start_run"></a>
 
 #### start\_run
 
 ```python
-def start_run(params: SimulationParams,
-              output_directory: Path,
-              message_queue: queue.Queue[RunMessage],
-              cancel_event: threading.Event,
-              *,
-              clock: Callable[[], float] = time.monotonic) -> threading.Thread
+def start_run(
+        params: SimulationParams,
+        output_directory: Path,
+        message_queue: queue.Queue[RunMessage],
+        cancel_event: threading.Event,
+        *,
+        clock: Callable[[], float] = time.monotonic,
+        pairwise_max_demes: int = DEFAULT_PAIRWISE_MAX_DEMES
+) -> threading.Thread
 ```
 
 Resolve targets, guard the existing target, and start the worker thread.
@@ -8865,7 +8899,11 @@ Resolve targets, guard the existing target, and start the worker thread.
 #### write\_run\_artifacts
 
 ```python
-def write_run_artifacts(result: RunResult, targets: dict[str, Path]) -> None
+def write_run_artifacts(
+        result: RunResult,
+        targets: dict[str, Path],
+        *,
+        pairwise_max_demes: int = DEFAULT_PAIRWISE_MAX_DEMES) -> None
 ```
 
 Write `report.json`, `scatter.png`, and — last — `manifest.json`.
@@ -14725,6 +14763,164 @@ def write_batch_manifest(path: Path | str, manifest: BatchManifest) -> None
 Write a batch manifest deterministically, replacing any prior file.
 
 The batch-level counterpart to `write_manifest`, above.
+
+<a id="fim.persistence.pairwise"></a>
+
+# fim.persistence.pairwise
+
+`pairwise.json`: every deme pair's Nei identities at a run's last generation.
+
+The scatter plot compares two demes at a time, and the pair-scope Nei
+statistics describe whichever pair is chosen. This file records them for
+*every* pair, so a researcher can compare any pair later, or analyze the
+whole matrix outside fim, without reopening the run in the GUI.
+
+Format (version 1)::
+
+    {
+      "schema_version": 1,
+      "generation": 1234,
+      "deme_count": 4,
+      "mode": "full",
+      "encoding": "upper-triangle-row-major",
+      "identities": {
+        "NEI_I_PAIR_GEO": [I_01, I_02, I_03, I_12, I_13, I_23],
+        "NEI_I_PAIR_GEO_LOCUS_MEAN": [...],
+        "NEI_I_PAIR_ARITH": [...],
+        "NEI_I_PAIR_ARITH_LOCUS_MEAN": [...]
+      }
+    }
+
+Each list is the strict upper triangle of a symmetric ``d x d`` matrix,
+row by row (pair ``(0, 1)``, ``(0, 2)``, ..., ``(1, 2)``, ...); the
+diagonal is 1 by definition. Only identities are stored: they are always
+finite (a distance is infinite when nothing is shared, and strict JSON
+has no infinity), and each distance is exactly ``-ln(identity)``.
+
+Above the deme-count limit (`fim.statistics.catalog.
+DEFAULT_PAIRWISE_MAX_DEMES` unless the researcher sets another) the file
+records ``"mode": "skipped"`` and the limit instead of the matrices; any
+specific pair can still be recomputed from `trajectory.jsonl`.
+
+Size: four lists of ``d (d - 1) / 2`` numbers, about 20 bytes each in
+compact JSON. At ``d = 1024`` that is about 42 MB per run (each replicate
+of a batch writes its own); at ``d = 100``, about 0.4 MB.
+
+<a id="fim.persistence.pairwise.SLOW_PAIRWISE_DEMES"></a>
+
+#### SLOW\_PAIRWISE\_DEMES
+
+Deme count from which saving `pairwise.json` is slow enough to announce.
+
+Below it the file takes a fraction of a second; at 1024 demes it is about
+42 MB per run, dominated by writing the JSON, and a batch writes one per
+replicate. The GUI shows a status line with a spinner while it saves.
+
+<a id="fim.persistence.pairwise.upper_triangle_index"></a>
+
+#### upper\_triangle\_index
+
+```python
+def upper_triangle_index(deme_count: int, first: int, second: int) -> int
+```
+
+Return the position of pair ``(first, second)`` in an upper-triangle list.
+
+**Arguments**:
+
+- `deme_count` - ``d``.
+- `first` - Zero-based deme index.
+- `second` - Zero-based deme index, different from `first` (order does
+  not matter).
+
+
+**Returns**:
+
+  The index into a `pairwise.json` identity list.
+
+
+**Raises**:
+
+- `ValueError` - For equal or out-of-range indices.
+
+<a id="fim.persistence.pairwise.pairwise_payload"></a>
+
+#### pairwise\_payload
+
+```python
+def pairwise_payload(state: ModelState, *, max_demes: int) -> dict[str, Any]
+```
+
+Return the `pairwise.json` content for `state`.
+
+**Arguments**:
+
+- `state` - The population state (a run's final generation).
+- `max_demes` - Largest deme count whose full matrices are computed.
+
+
+**Returns**:
+
+  The version-1 payload described in the module docstring.
+
+<a id="fim.persistence.pairwise.write_pairwise"></a>
+
+#### write\_pairwise
+
+```python
+def write_pairwise(path: Path | str, payload: Mapping[str, Any]) -> None
+```
+
+Write `payload` as compact, deterministic JSON.
+
+Compact (no indentation) rather than `write_report`'s two-space
+indentation, which would add a line and its indent per number and
+roughly double the size; still sorted keys, strict JSON, and one
+trailing newline, so identical results give identical bytes.
+
+**Arguments**:
+
+- `path` - Destination; parent directories are created.
+- `payload` - A `pairwise_payload` result.
+
+<a id="fim.persistence.pairwise.read_pairwise"></a>
+
+#### read\_pairwise
+
+```python
+def read_pairwise(path: Path | str) -> dict[str, Any]
+```
+
+Read a `pairwise.json`.
+
+**Raises**:
+
+- `ValueError` - For an unknown schema version or a malformed file.
+- `OSError` - If the file cannot be read.
+
+<a id="fim.persistence.pairwise.pair_identity"></a>
+
+#### pair\_identity
+
+```python
+def pair_identity(payload: Mapping[str, Any], key: str, first: int,
+                  second: int) -> float | None
+```
+
+Return one pair's saved identity, or `None` if the file has none.
+
+**Arguments**:
+
+- `payload` - A `read_pairwise` result.
+- `key` - A pair identity key such as ``"NEI_I_PAIR_ARITH"``.
+- `first` - Zero-based deme index.
+- `second` - Zero-based deme index.
+
+
+**Returns**:
+
+  The identity; 1.0 for a deme with itself; `None` when the matrices
+  were skipped for a large deme count.
 
 <a id="fim.persistence.report"></a>
 

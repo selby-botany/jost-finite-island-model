@@ -173,7 +173,7 @@ def test_start_batch_run_writes_every_replicate_and_batch_artifact_on_success(
         replicate_directory = output_directory / f"replicate-{index:03}"
         # `.progress` is a GUI-only sidecar removed once a
         # replicate's real artifacts are written — the published set
-        # stays exactly the CLI's own five-file contract, nothing extra
+        # stays exactly the CLI's own six-file contract, nothing extra
         # left behind.
         assert {path.name for path in replicate_directory.iterdir()} == {
             "trajectory.jsonl",
@@ -181,6 +181,7 @@ def test_start_batch_run_writes_every_replicate_and_batch_artifact_on_success(
             "report.json",
             "scatter.png",
             "convergence.jsonl",
+            "pairwise.json",
         }
     # Progress no longer travels through `message_queue` at all
     # (`doc/fim-gui-design.md` §7.2): it is entirely file-mediated now, so a successful

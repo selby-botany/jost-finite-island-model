@@ -54,7 +54,11 @@ from typing import Final, Literal
 
 from fim import __version__, paths
 from fim.engine import RunResult, deterministic_run_id, fim, replicate_summary
-from fim.gui.runner import run_artifact_targets, write_run_artifacts
+from fim.gui.runner import (
+    pairwise_status_text,
+    run_artifact_targets,
+    write_run_artifacts,
+)
 from fim.gui.store import LiveProgressStore, RunCancelledError
 from fim.model.params import SimulationParams
 from fim.persistence.jsonl_store import JSONLTrajectoryStore
@@ -65,7 +69,9 @@ from fim.persistence.manifest import (
     hash_file,
     write_batch_manifest,
 )
+from fim.persistence.pairwise import SLOW_PAIRWISE_DEMES
 from fim.persistence.report import write_report
+from fim.statistics.catalog import DEFAULT_PAIRWISE_MAX_DEMES
 
 # Mirrors `fim.gui.runner`'s own catch-all — see its definition for the
 # full rationale. Duplicated rather than imported: `fim.gui.runner`'s
@@ -91,7 +97,11 @@ StartedMessage = tuple[Literal["started"], Path]
 DoneMessage = tuple[Literal["done"], tuple[RunResult, ...]]
 CancelledMessage = tuple[Literal["cancelled"], int, int]
 ErrorMessage = tuple[Literal["error"], str]
-BatchMessage = StartedMessage | DoneMessage | CancelledMessage | ErrorMessage
+# A non-terminal note for the status line (`fim.gui.runner.StatusMessage`).
+StatusMessage = tuple[Literal["status"], str]
+BatchMessage = (
+    StartedMessage | DoneMessage | CancelledMessage | ErrorMessage | StatusMessage
+)
 
 logger = logging.getLogger(__name__)
 
@@ -137,6 +147,7 @@ def start_batch_run(
     cancel_event: threading.Event,
     *,
     max_workers: int | None = None,
+    pairwise_max_demes: int = DEFAULT_PAIRWISE_MAX_DEMES,
 ) -> threading.Thread:
     """Resolve targets, guard the existing target, and start the worker thread.
 
@@ -194,6 +205,7 @@ def start_batch_run(
             cancel_event,
             resolved_workers,
         ),
+        kwargs={"pairwise_max_demes": pairwise_max_demes},
     )
     thread.start()
     logger.debug(
@@ -212,6 +224,8 @@ def _batch_worker(
     message_queue: queue.Queue[BatchMessage],
     cancel_event: threading.Event,
     max_workers: int,
+    *,
+    pairwise_max_demes: int = DEFAULT_PAIRWISE_MAX_DEMES,
 ) -> None:
     """Run one replicate batch in parallel and post its outcome to `message_queue`.
 
@@ -289,8 +303,18 @@ def _batch_worker(
                 # other engine error.
                 raise RuntimeError("unexpected scalar result from a batch run")
             ended_at = _format_timestamp(_utc_now())
+            if SLOW_PAIRWISE_DEMES <= params.d <= pairwise_max_demes:
+                message_queue.put(
+                    ("status", pairwise_status_text(params.d, len(results)))
+                )
             _write_batch_artifacts(
-                results, working_directory, run_id, params, started_at, ended_at
+                results,
+                working_directory,
+                run_id,
+                params,
+                started_at,
+                ended_at,
+                pairwise_max_demes=pairwise_max_demes,
             )
     except RunCancelledError as cancelled:
         # Whichever replicate's cancellation surfaced first — under real
@@ -430,6 +454,8 @@ def _write_batch_artifacts(
     params: SimulationParams,
     started_at: str,
     ended_at: str,
+    *,
+    pairwise_max_demes: int = DEFAULT_PAIRWISE_MAX_DEMES,
 ) -> None:
     """Write every replicate's artifacts, then the batch-level summary and manifest.
 
@@ -455,7 +481,11 @@ def _write_batch_artifacts(
     artifact_digests: dict[str, ArtifactDigest] = {}
     for result in results:
         directory = replicate_output_directory(working_directory, run_id, result.run_id)
-        write_run_artifacts(result, run_artifact_targets(directory))
+        write_run_artifacts(
+            result,
+            run_artifact_targets(directory),
+            pairwise_max_demes=pairwise_max_demes,
+        )
         (directory / ".progress").unlink(missing_ok=True)
         artifact_digests[directory.name] = hash_file(directory / "manifest.json")
     write_report(working_directory / "summary.json", replicate_summary(results))

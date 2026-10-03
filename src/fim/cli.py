@@ -100,6 +100,7 @@ from fim.persistence.manifest import (
     write_batch_manifest,
     write_manifest,
 )
+from fim.persistence.pairwise import pairwise_payload, write_pairwise
 from fim.persistence.report import write_jsonl_rows
 
 # Explicit re-export (not a rename): test/cli/test_cli.py patches
@@ -108,6 +109,7 @@ from fim.persistence.report import write_jsonl_rows
 # mypy strict, not merely an unexported transitive import.
 from fim.persistence.report import write_report as write_report  # noqa: PLC0414
 from fim.persistence.run_metadata import replace_run_metadata
+from fim.statistics.catalog import DEFAULT_PAIRWISE_MAX_DEMES
 from fim.viz.scatter import plot_frequency_scatter
 
 logger = logging.getLogger(__name__)
@@ -413,7 +415,12 @@ def _command_run(arguments: argparse.Namespace, parser: argparse.ArgumentParser)
         output_directory,
     )
     if params.n_replicates == 1:
-        status = _command_run_scalar(params, output_directory, arguments.quiet)
+        status = _command_run_scalar(
+            params,
+            output_directory,
+            arguments.quiet,
+            pairwise_max_demes=arguments.pairwise_max_demes,
+        )
     else:
         status = _command_run_batch(params, output_directory, arguments, parser)
     if status == 0:
@@ -460,12 +467,30 @@ def _record_run_organization(
         add_run_to_study(ensure_default_study().study_id, output_directory)
 
 
+def _positive_integer(text: str) -> int:
+    """Parse a strictly positive integer command-line value.
+
+    Raises:
+        argparse.ArgumentTypeError: For anything else, so argparse reports
+            the bad value instead of a traceback.
+    """
+    try:
+        value = int(text)
+    except ValueError:
+        raise argparse.ArgumentTypeError(f"{text!r} is not an integer") from None
+    if value < 1:
+        raise argparse.ArgumentTypeError(f"{value} is not a positive integer")
+    return value
+
+
 def _command_run_scalar(
     params: SimulationParams,
     output_directory: Path,
     quiet: bool,
+    *,
+    pairwise_max_demes: int = DEFAULT_PAIRWISE_MAX_DEMES,
 ) -> int:
-    """Execute one scalar run and write the four documented artifacts.
+    """Execute one scalar run and write its documented artifacts.
 
     The ordinary "run one simulation" path — every `fim run` invocation
     whose configuration does not set `n_replicates` above 1 reaches this
@@ -521,7 +546,9 @@ def _command_run_scalar(
         if not isinstance(output, RunResult):
             raise RuntimeError("scalar CLI run unexpectedly returned a batch")
         logger.debug("writing run artifacts to %s", working_directory)
-        _write_run_artifacts(output, working_directory)
+        _write_run_artifacts(
+            output, working_directory, pairwise_max_demes=pairwise_max_demes
+        )
 
     logger.info(
         "run %s finished: %s at generation %s (D=%.6g)",
@@ -658,7 +685,9 @@ def _command_run_batch(
                 working_directory, run_id, result.run_id
             )
             logger.debug("writing replicate artifacts to %s", directory)
-            _write_run_artifacts(result, directory)
+            _write_run_artifacts(
+                result, directory, pairwise_max_demes=arguments.pairwise_max_demes
+            )
             artifact_digests[directory.name] = hash_file(directory / "manifest.json")
         write_report(working_directory / "summary.json", replicate_summary(output))
         artifact_digests["summary"] = hash_file(working_directory / "summary.json")
@@ -1123,6 +1152,7 @@ def _run_artifact_targets(directory: Path) -> dict[str, Path]:
         "scatter": directory / "scatter.png",
         "sigma_band_trajectory": directory / "sigma_band_trajectory.jsonl",
         "convergence": directory / "convergence.jsonl",
+        "pairwise": directory / "pairwise.json",
     }
 
 
@@ -1169,7 +1199,12 @@ def _utc_now() -> datetime:
     return datetime.now(UTC)
 
 
-def _write_run_artifacts(result: RunResult, directory: Path) -> dict[str, Path]:
+def _write_run_artifacts(
+    result: RunResult,
+    directory: Path,
+    *,
+    pairwise_max_demes: int = DEFAULT_PAIRWISE_MAX_DEMES,
+) -> dict[str, Path]:
     """Write one run's report, scatter plot, and — last — its verifiable manifest.
 
     ``trajectory.jsonl`` is not written here: it is streamed
@@ -1207,7 +1242,13 @@ def _write_run_artifacts(result: RunResult, directory: Path) -> dict[str, Path]:
     # reanalyze_trajectory`'s own docstring on that prior scope
     # boundary has the fuller account of what reopening used to lose).
     write_jsonl_rows(targets["convergence"], _convergence_history_rows(result))
-    digested_names = ["trajectory", "report", "scatter", "convergence"]
+    # Every deme pair's Nei identities at the final generation
+    # (`fim.persistence.pairwise`), so any pair can be compared later.
+    write_pairwise(
+        targets["pairwise"],
+        pairwise_payload(result.final_state, max_demes=pairwise_max_demes),
+    )
+    digested_names = ["trajectory", "report", "scatter", "convergence", "pairwise"]
     if result.sigma_band_trajectory is not None:
         # Written — and digested — only when the within-run sigma band
         # actually ran (`RunResult.sigma_band_trajectory`'s own
@@ -1352,6 +1393,17 @@ def _parser() -> argparse.ArgumentParser:
         "--quiet",
         action="store_true",
         help="suppress progress and artifact messages",
+    )
+    run_parser.add_argument(
+        "--pairwise-max-demes",
+        type=_positive_integer,
+        default=DEFAULT_PAIRWISE_MAX_DEMES,
+        metavar="N",
+        help=(
+            "save every deme pair's Nei identities (pairwise.json) when the "
+            f"run has at most N demes (default: {DEFAULT_PAIRWISE_MAX_DEMES}); "
+            "the file grows with N squared, about 42 MB per run at 1024"
+        ),
     )
     workers_group = run_parser.add_mutually_exclusive_group()
     workers_group.add_argument(

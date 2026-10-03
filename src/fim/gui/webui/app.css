@@ -2703,9 +2703,26 @@ fieldset.composite > label {
     }
 }
 
+/* The progress line while a finished run's files are still being saved
+   (`fim.onRunStatus`), such as every deme pair's statistics for a large
+   run: the same spinner as the reopen indicator, before the text. */
+.progress-label-busy::before {
+    content: "";
+    display: inline-block;
+    width: 0.8em;
+    height: 0.8em;
+    margin-right: 0.4em;
+    vertical-align: -0.1em;
+    border: 2px solid var(--fim-border);
+    border-top-color: var(--fim-accent);
+    border-radius: 50%;
+    animation: open-run-busy-spin 0.8s linear infinite;
+}
+
 /* Honor a reader who has asked for less motion: the indicator still
    appears and still says what is happening, it just stops spinning. */
 @media (prefers-reduced-motion: reduce) {
+    .progress-label-busy::before,
     .open-run-busy-spinner {
         animation: none;
     }
