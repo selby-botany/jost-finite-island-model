@@ -44,6 +44,9 @@ from .genetic_distance import (
 __all__ = [
     "CATALOG",
     "DEFAULT_PAIRWISE_MAX_DEMES",
+    "History",
+    "Measure",
+    "Scope",
     "StatisticSpec",
     "catalog_payload",
     "convergence_statistic_keys",

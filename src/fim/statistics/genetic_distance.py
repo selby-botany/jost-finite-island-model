@@ -78,6 +78,7 @@ __all__ = [
     "NeiDenominator",
     "NeiLocusRule",
     "cross_identity",
+    "deme_gene_identities",
     "nei_all_demes_distance",
     "nei_all_demes_identity",
     "nei_d",
@@ -415,13 +416,13 @@ def nei_standard_distance(
     return -log(ident)
 
 
-def _within_deme_identities(table: Sequence[Mapping[int, float]]) -> list[float]:
+def _within_deme_identities(table: Sequence[Mapping[Any, float]]) -> list[float]:
     """Return each deme's own gene identity ``J_k = sum_i p_k,i^2``."""
     return [fsum(value * value for value in deme.values()) for deme in table]
 
 
 def _between_deme_identity(
-    table: Sequence[Mapping[int, float]], within: Sequence[float]
+    table: Sequence[Mapping[Any, float]], within: Sequence[float]
 ) -> float:
     """Return ``J_between``, the mean cross identity over every pair of demes.
 
@@ -432,7 +433,7 @@ def _between_deme_identity(
     counts this project supports.
     """
     deme_count = len(table)
-    pooled: dict[int, float] = {}
+    pooled: dict[Any, float] = {}
     for deme in table:
         for allele_id, value in deme.items():
             pooled[allele_id] = pooled.get(allele_id, 0.0) + value
@@ -460,6 +461,31 @@ def _nei_ratio(
             f"denominator must be one of {NEI_DENOMINATORS!r}, got {denominator!r}"
         )
     return between / scale
+
+
+def deme_gene_identities(
+    table: Sequence[Mapping[Any, float]],
+) -> tuple[list[float], float]:
+    """Return one locus's within-deme identities and ``J_between``.
+
+    For callers that already hold validated frequency maps (the engine)
+    and want the inputs to `nei_family_from_identities` without
+    revalidating them.
+
+    Args:
+        table: Every deme's normalized allele frequencies at one locus;
+            at least two demes.
+
+    Returns:
+        ``([J_1, ..., J_d], J_between)``.
+
+    Raises:
+        ValueError: If `table` has fewer than two demes.
+    """
+    if len(table) < _MINIMUM_DEMES:
+        raise ValueError("J_between needs at least two demes")
+    within = _within_deme_identities(table)
+    return within, _between_deme_identity(table, within)
 
 
 def nei_distance_from_identity(identity_value: float) -> float:

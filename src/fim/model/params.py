@@ -42,6 +42,7 @@ from fim.model.topology import (
     dense_matrix_from_neighbors,
     stepping_stone_neighbors,
 )
+from fim.statistics.catalog import convergence_statistic_keys
 
 PopulationSize = int | tuple[int, ...]
 ALLOWED_PLOIDIES: Final = (1, 2, 3, 4)
@@ -339,10 +340,13 @@ _CONFIG_KEYS: Final = frozenset(
     }
 )
 
-_CONVERGENCE_STATISTICS: Final = frozenset(
-    {"D", "G_ST", "E_ST", "K_ST", "H_S", "H_T", "H_ST", "A_CGD", "Delta", "MI"}
-)
+_CONVERGENCE_STATISTICS: Final = frozenset(convergence_statistic_keys())
 """Every statistic name `convergence_statistic` may watch.
+
+Derived from `fim.statistics.catalog` (`convergence_eligible`). Only
+statistics the convergence monitor was designed for are eligible: the
+Nei distance family, `Gs` and `Gd` are captured and shown but never
+stop a run.
 
 `H_ST` was missing here until this project's own multi-model engine
 review, 2026-09-04 (`FIM-51`/finding Gemini M-03/finding Grok P3-1):

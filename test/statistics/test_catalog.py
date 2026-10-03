@@ -9,6 +9,8 @@ import unittest
 from fim.statistics import NEI_DENOMINATORS, NEI_LOCUS_RULES
 from fim.statistics.catalog import (
     CATALOG,
+    Measure,
+    Scope,
     catalog_payload,
     convergence_statistic_keys,
     default_shown_keys,
@@ -56,9 +58,11 @@ class CatalogTests(unittest.TestCase):
 
     def test_nei_family_is_complete_and_hidden_by_default(self) -> None:
         """Every measure x scope x denominator x rule exists, hidden, ineligible."""
+        measures: tuple[Measure, ...] = ("distance", "identity")
+        scopes: tuple[Scope, ...] = ("global", "pair")
         for measure, scope, denominator, locus_rule in itertools.product(
-            ("distance", "identity"),
-            ("global", "pair"),
+            measures,
+            scopes,
             NEI_DENOMINATORS,
             NEI_LOCUS_RULES,
         ):

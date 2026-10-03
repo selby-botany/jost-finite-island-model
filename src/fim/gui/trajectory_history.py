@@ -22,9 +22,10 @@ for the identical reason (`fim.gui.animation`'s own module docstring).
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Final
+from typing import Final, cast
 
 from fim.engine import report_for_state
 from fim.gui.animation import GUI_ANIMATION_MAX_FRAMES, select_sample_generations
@@ -36,37 +37,15 @@ from fim.persistence.manifest import (
     verify_trajectory_integrity,
 )
 from fim.reanalyze import group_rows_by_generation
+from fim.statistics.catalog import report_keys
 
-# The statistics `Api.compare_runs`'s own `_RESULT_STATISTIC_NAMES`
-# reports for a single generation — declared again here, not
-# imported, so `report[name]` below stays a plain literal-key `FinalReport`
-# access (mypy narrows a `for name in <this exact Final tuple>` loop
-# variable to the matching literal union; a generic `Sequence[str]`
-# parameter would not, forcing a `cast` at every access instead — this
-# module has exactly one caller and one fixed statistic set, so a
-# parameter buys no real flexibility to trade that precision away for).
-# Keep this tuple's own contents in sync with `_RESULT_STATISTIC_NAMES`
-# (`fim.gui.app`) — the two drifting apart is exactly the bug `A_CGD`/
-# `Delta`/`MI` joining one but not the other caused (confirmed live: a
-# real `Api.compare_runs` call raised `KeyError: 'A_CGD'` reading
-# `history.histories[name]` for a name this tuple did not yet have).
-# `report_for_state` (below) already computes all ten unconditionally
-# for any persisted trajectory, `track_expensive_statistics` or not —
-# unlike a live run's own `convergence_histories`, this module always
-# re-derives every statistic fresh from the persisted rows, unaffected
-# by what the *original* run happened to opt into.
-STATISTIC_NAMES: Final = (
-    "D",
-    "G_ST",
-    "E_ST",
-    "K_ST",
-    "H_S",
-    "H_T",
-    "H_ST",
-    "A_CGD",
-    "Delta",
-    "MI",
-)
+# Every global statistic `report_for_state` computes, from
+# `fim.statistics.catalog` -- the same list `fim.gui.app.
+# _RESULT_STATISTIC_NAMES` derives from, so the two can no longer drift
+# (they once did: `A_CGD` in one but not the other raised `KeyError`
+# in `Api.compare_runs`). `report_for_state` computes every one of them
+# for any persisted trajectory, `track_expensive_statistics` or not.
+STATISTIC_NAMES: Final = report_keys()
 
 
 @dataclass(frozen=True, slots=True)
@@ -145,7 +124,7 @@ def sampled_statistic_history(
             reason=manifest.stop_reason if final_generation else "re-analysis",
         )
         for name in STATISTIC_NAMES:
-            histories[name].append(report[name])
+            histories[name].append(cast("Mapping[str, float | None]", report)[name])
     return TrajectoryHistory(
         manifest=manifest, params=params, generations=sampled, histories=histories
     )

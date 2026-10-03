@@ -93,6 +93,7 @@ Return to the [source-tree orientation](../README.md) or the [developer guide](.
   * [pooled\_convergence\_histories\_from\_pairs](#fim.engine.pooled_convergence_histories_from_pairs)
   * [bootstrap\_replicate\_summary](#fim.engine.bootstrap_replicate_summary)
   * [tracked\_statistic\_values](#fim.engine.tracked_statistic_values)
+  * [report\_statistic](#fim.engine.report_statistic)
 * [fim.gui](#fim.gui)
 * [fim.gui.animation](#fim.gui.animation)
   * [AnimationFrame](#fim.gui.animation.AnimationFrame)
@@ -604,6 +605,7 @@ Return to the [source-tree orientation](../README.md) or the [developer guide](.
   * [nei\_identity](#fim.statistics.genetic_distance.nei_identity)
   * [nei\_mean\_distance](#fim.statistics.genetic_distance.nei_mean_distance)
   * [nei\_standard\_distance](#fim.statistics.genetic_distance.nei_standard_distance)
+  * [deme\_gene\_identities](#fim.statistics.genetic_distance.deme_gene_identities)
   * [nei\_distance\_from\_identity](#fim.statistics.genetic_distance.nei_distance_from_identity)
   * [nei\_family\_from\_identities](#fim.statistics.genetic_distance.nei_family_from_identities)
   * [nei\_pair\_identity](#fim.statistics.genetic_distance.nei_pair_identity)
@@ -2156,6 +2158,21 @@ Fields:
         added for Phase 4 GUI visual interpretation: Caballero-
         Garcia-Dorado allelic distance, Gregorius delta, and Sherwin
         mutual information.
+    NEI_D_ALL_GEO, NEI_D_ALL_GEO_LOCUS_MEAN, NEI_D_ALL_ARITH,
+        NEI_D_ALL_ARITH_LOCUS_MEAN: Nei's genetic distance across all
+        demes, ``-ln(J_between / mean(J_k))``, with the geometric
+        (Nei 1972) or arithmetic (Jost, L. (2026) private
+        communication) mean of the within-deme identities, loci
+        combined by Nei's pooled rule or by averaging per-locus
+        distances (`fim.statistics.genetic_distance`). ``None`` when
+        infinite (no allele shared between any pair of demes), since
+        the report is written as strict JSON. The geometric forms can
+        be negative; see `nei_all_demes_identity`.
+    NEI_I_ALL_GEO, NEI_I_ALL_GEO_LOCUS_MEAN, NEI_I_ALL_ARITH,
+        NEI_I_ALL_ARITH_LOCUS_MEAN: The matching identities ``I``
+        (``D = -ln(I)``). Always finite, so they are the lossless
+        record when a distance is ``None``. The arithmetic pooled
+        identity equals ``Gd / Gs``.
     window_statistics: How precisely each recorded statistic's own
         trailing-window mean was actually known at the generation this
         run stopped at — `{name: {"mean", "standard_error",
@@ -3696,6 +3713,36 @@ would diverge the first time either changed.
   every tracked locus is monomorphic, say) is absent rather than
   present as a placeholder, matching what the live monitor
   records for that same generation.
+
+<a id="fim.engine.report_statistic"></a>
+
+#### report\_statistic
+
+```python
+def report_statistic(report: FinalReport, statistic: str) -> float | None
+```
+
+Return one named global statistic from a final report.
+
+The public form of the engine's own lookup, for callers that iterate
+`fim.statistics.catalog.report_keys` rather than naming each field.
+
+**Arguments**:
+
+- `report` - A `FinalReport`.
+- `statistic` - A key from `fim.statistics.catalog.report_keys`.
+
+
+**Returns**:
+
+  The value; ``None`` where the statistic is undefined (`G_ST` at a
+  monomorphic locus) or infinite (a Nei distance with no allele
+  shared).
+
+
+**Raises**:
+
+- `ValueError` - If `statistic` is not a report statistic.
 
 <a id="fim.gui"></a>
 
@@ -17920,6 +17967,36 @@ infinite-alleles neutral mutation model.
 
   Genetic distance D in [0, +inf). Returns 0.0 if allele frequencies
   are identical at all loci; returns math.inf if no alleles are shared.
+
+<a id="fim.statistics.genetic_distance.deme_gene_identities"></a>
+
+#### deme\_gene\_identities
+
+```python
+def deme_gene_identities(
+        table: Sequence[Mapping[Any, float]]) -> tuple[list[float], float]
+```
+
+Return one locus's within-deme identities and ``J_between``.
+
+For callers that already hold validated frequency maps (the engine)
+and want the inputs to `nei_family_from_identities` without
+revalidating them.
+
+**Arguments**:
+
+- `table` - Every deme's normalized allele frequencies at one locus;
+  at least two demes.
+
+
+**Returns**:
+
+  ``([J_1, ..., J_d], J_between)``.
+
+
+**Raises**:
+
+- `ValueError` - If `table` has fewer than two demes.
 
 <a id="fim.statistics.genetic_distance.nei_distance_from_identity"></a>
 

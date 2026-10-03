@@ -83,6 +83,7 @@ from fim.statistics import (
     identity_recursion,
     mutation_negligible_equilibrium,
 )
+from fim.statistics.catalog import report_keys
 from fim.viz.scatter import frequency_points, pooled_scatter_panels
 
 
@@ -3425,18 +3426,7 @@ def test_open_run_reanalyzes_the_final_generation_by_default(tmp_path: Path) -> 
     assert result["report"]["reason"] == manifest.stop_reason
     assert result["outputDirectory"] == str(output)
     assert result["generationCount"] == manifest.generation_count
-    assert set(result["statistics"]) == {
-        "D",
-        "G_ST",
-        "E_ST",
-        "K_ST",
-        "H_S",
-        "H_T",
-        "H_ST",
-        "A_CGD",
-        "Delta",
-        "MI",
-    }
+    assert set(result["statistics"]) == set(report_keys())
     assert {"A_CGD", "Delta", "MI"} <= set(result["report"])
     literature_visuals = result["literatureVisuals"]
     assert isinstance(literature_visuals, dict)
@@ -3740,32 +3730,10 @@ def test_compare_runs_overlays_two_runs_and_names_the_differing_field(
     assert result["differingFields"] == ["seed"]
     for run in result["runs"]:
         assert isinstance(run["panel"], dict)
-        assert set(run["statistics"]) == {
-            "D",
-            "G_ST",
-            "E_ST",
-            "K_ST",
-            "H_S",
-            "H_T",
-            "H_ST",
-            "A_CGD",
-            "Delta",
-            "MI",
-        }
+        assert set(run["statistics"]) == set(report_keys())
         assert run["configSummary"]["N"] == "20 haploid"
         assert run["configSummary"]["m"] == "0.1"
-        assert set(run["histories"]) == {
-            "D",
-            "G_ST",
-            "E_ST",
-            "K_ST",
-            "H_S",
-            "H_T",
-            "H_ST",
-            "A_CGD",
-            "Delta",
-            "MI",
-        }
+        assert set(run["histories"]) == set(report_keys())
         assert len(run["generations"]) > 0
         for name, values in run["histories"].items():
             assert len(values) == len(run["generations"])
@@ -4014,18 +3982,7 @@ def test_get_batch_replicate_summary_lists_every_replicate(tmp_path: Path) -> No
         assert Path(replicate["trajectoryPath"]).name == "trajectory.jsonl"
         assert Path(replicate["trajectoryPath"]).exists()
         assert replicate["statistics"] is not None
-        assert set(replicate["statistics"]) == {
-            "D",
-            "G_ST",
-            "E_ST",
-            "K_ST",
-            "H_S",
-            "H_T",
-            "H_ST",
-            "A_CGD",
-            "Delta",
-            "MI",
-        }
+        assert set(replicate["statistics"]) == set(report_keys())
 
 
 def test_get_batch_replicate_summary_omits_statistics_for_a_missing_report(

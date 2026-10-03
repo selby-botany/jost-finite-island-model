@@ -108,7 +108,7 @@ from collections.abc import Callable, Collection, Mapping, Sequence
 from concurrent.futures import Future, ProcessPoolExecutor, ThreadPoolExecutor
 from dataclasses import dataclass, replace
 from datetime import UTC, datetime
-from typing import Any, Final, Literal, Protocol, TypeAlias, TypedDict
+from typing import Any, Final, Literal, Protocol, TypeAlias, TypedDict, cast
 
 import numpy as np
 
@@ -163,12 +163,18 @@ from fim.persistence.store import (
     ReplicateFanoutStore,
     TrajectoryStore,
 )
+from fim.statistics.catalog import history_keys, report_keys
 from fim.statistics.differentiation import (
     DifferentiationReport,
     _g_st_from_demes,
     _gd_from_within_and_total,
     _jost_d_from_within_and_total,
     statistics_report,
+)
+from fim.statistics.genetic_distance import (
+    deme_gene_identities,
+    nei_distance_from_identity,
+    nei_family_from_identities,
 )
 from fim.statistics.interval import ConfidenceInterval, confidence_interval
 
@@ -248,6 +254,21 @@ class FinalReport(TypedDict):
             added for Phase 4 GUI visual interpretation: Caballero-
             Garcia-Dorado allelic distance, Gregorius delta, and Sherwin
             mutual information.
+        NEI_D_ALL_GEO, NEI_D_ALL_GEO_LOCUS_MEAN, NEI_D_ALL_ARITH,
+            NEI_D_ALL_ARITH_LOCUS_MEAN: Nei's genetic distance across all
+            demes, ``-ln(J_between / mean(J_k))``, with the geometric
+            (Nei 1972) or arithmetic (Jost, L. (2026) private
+            communication) mean of the within-deme identities, loci
+            combined by Nei's pooled rule or by averaging per-locus
+            distances (`fim.statistics.genetic_distance`). ``None`` when
+            infinite (no allele shared between any pair of demes), since
+            the report is written as strict JSON. The geometric forms can
+            be negative; see `nei_all_demes_identity`.
+        NEI_I_ALL_GEO, NEI_I_ALL_GEO_LOCUS_MEAN, NEI_I_ALL_ARITH,
+            NEI_I_ALL_ARITH_LOCUS_MEAN: The matching identities ``I``
+            (``D = -ln(I)``). Always finite, so they are the lossless
+            record when a distance is ``None``. The arithmetic pooled
+            identity equals ``Gd / Gs``.
         window_statistics: How precisely each recorded statistic's own
             trailing-window mean was actually known at the generation this
             run stopped at — `{name: {"mean", "standard_error",
@@ -290,6 +311,14 @@ class FinalReport(TypedDict):
     MI: float
     Gs: float
     Gd: float
+    NEI_D_ALL_GEO: float | None
+    NEI_D_ALL_GEO_LOCUS_MEAN: float | None
+    NEI_D_ALL_ARITH: float | None
+    NEI_D_ALL_ARITH_LOCUS_MEAN: float | None
+    NEI_I_ALL_GEO: float
+    NEI_I_ALL_GEO_LOCUS_MEAN: float
+    NEI_I_ALL_ARITH: float
+    NEI_I_ALL_ARITH_LOCUS_MEAN: float
     window_statistics: dict[str, dict[str, float | int | bool]]
 
 
@@ -2380,7 +2409,61 @@ def report_for_state(
         "MI": _mean(tuple(report["MI"] for report in locus_reports)),
         "Gs": 1.0 - mean_h_s,
         "Gd": _gd_from_within_and_total(mean_h_s, mean_h_t, state.deme_count),
+        **_nei_all_demes_fields(state),
         "window_statistics": dict(window_statistics) if window_statistics else {},
+    }
+
+
+class _NeiAllDemesFields(TypedDict):
+    """The eight all-demes Nei fields `report_for_state` merges in."""
+
+    NEI_D_ALL_GEO: float | None
+    NEI_D_ALL_GEO_LOCUS_MEAN: float | None
+    NEI_D_ALL_ARITH: float | None
+    NEI_D_ALL_ARITH_LOCUS_MEAN: float | None
+    NEI_I_ALL_GEO: float
+    NEI_I_ALL_GEO_LOCUS_MEAN: float
+    NEI_I_ALL_ARITH: float
+    NEI_I_ALL_ARITH_LOCUS_MEAN: float
+
+
+def _nei_all_demes_fields(state: ModelState) -> _NeiAllDemesFields:
+    """Return the all-demes Nei identities and distances for `state`.
+
+    One O(d * alleles) pass per locus (`deme_gene_identities`) feeds all
+    eight values (`nei_family_from_identities`). An infinite distance is
+    reported as ``None`` because reports are strict JSON; the identity
+    beside it is always finite.
+    """
+    within_by_locus: list[list[float]] = []
+    between_by_locus: list[float] = []
+    for locus_index in range(state.locus_count):
+        table = [
+            state.frequency_map(deme_index, locus_index)
+            for deme_index in range(state.deme_count)
+        ]
+        within, between = deme_gene_identities(table)
+        within_by_locus.append(within)
+        between_by_locus.append(between)
+    family = nei_family_from_identities(within_by_locus, between_by_locus)
+
+    def distance(identity_value: float) -> float | None:
+        value = nei_distance_from_identity(identity_value)
+        return None if math.isinf(value) else value
+
+    geo = family[("geometric", "pooled")]
+    geo_mean = family[("geometric", "locus_mean")]
+    arith = family[("arithmetic", "pooled")]
+    arith_mean = family[("arithmetic", "locus_mean")]
+    return {
+        "NEI_D_ALL_GEO": distance(geo),
+        "NEI_D_ALL_GEO_LOCUS_MEAN": distance(geo_mean),
+        "NEI_D_ALL_ARITH": distance(arith),
+        "NEI_D_ALL_ARITH_LOCUS_MEAN": distance(arith_mean),
+        "NEI_I_ALL_GEO": geo,
+        "NEI_I_ALL_GEO_LOCUS_MEAN": geo_mean,
+        "NEI_I_ALL_ARITH": arith,
+        "NEI_I_ALL_ARITH_LOCUS_MEAN": arith_mean,
     }
 
 
@@ -2445,20 +2528,9 @@ def reports_summary(
         placeholder standing in for one.
     """
     summary: dict[str, ConfidenceInterval] = {}
-    for statistic in (
-        "D",
-        "G_ST",
-        "E_ST",
-        "K_ST",
-        "H_S",
-        "H_T",
-        "H_ST",
-        "A_CGD",
-        "Delta",
-        "MI",
-        "Gs",
-        "Gd",
-    ):
+    # Every global statistic in `fim.statistics.catalog`, so a statistic
+    # added there is summarized here with no further edit.
+    for statistic in report_keys():
         values = [
             value
             for report in reports
@@ -3487,8 +3559,10 @@ def _run_one(
     )
 
 
-_ALWAYS_TRACKED_STATISTICS: Final[tuple[str, ...]] = ("D", "G_ST", "H_S", "H_T", "H_ST")
-"""Statistics `_watched_statistic_values` always returns, regardless of
+_ALWAYS_TRACKED_STATISTICS: Final[tuple[str, ...]] = history_keys("always")
+"""Derived from `fim.statistics.catalog` (`history == "always"`).
+
+Statistics `_watched_statistic_values` always returns, regardless of
 `params.convergence_statistics`/`track_expensive_statistics`.
 
 `fim.statistics.differentiation.statistics_report`'s own `statistics`
@@ -3521,10 +3595,10 @@ for those two as well (see `_statistics_to_compute`, below).
 """
 
 
-_EXPENSIVE_OPT_IN_STATISTICS: Final[frozenset[str]] = frozenset(
-    {"E_ST", "K_ST", "A_CGD", "Delta", "MI"}
-)
-"""Statistics `params.track_expensive_statistics` opts into computing.
+_EXPENSIVE_OPT_IN_STATISTICS: Final[frozenset[str]] = frozenset(history_keys("opt_in"))
+"""Derived from `fim.statistics.catalog` (`history == "opt_in"`).
+
+Statistics `params.track_expensive_statistics` opts into computing.
 
 All five are genuinely expensive per-generation and watchable —
 `_CONVERGENCE_STATISTICS` (`fim.model.params`) includes every one of
@@ -3888,33 +3962,40 @@ def _mean_statistic_across_loci(
 
 
 def _final_report_statistic(report: FinalReport, statistic: str) -> float | None:
-    """Read one named field from a final run report.
+    """Read one named statistic from a final run report.
 
-    A small, explicit lookup table rather than `report[statistic]`
-    directly: `statistic` is an arbitrary string (ultimately from user-
-    supplied configuration, by way of `SimulationParams.
-    convergence_statistics`), and indexing a `TypedDict` with a name
-    that turns out not to be one of its declared fields would raise
-    Python's own generic, unhelpful `KeyError` rather than the specific,
-    named-statistic error this function raises instead.
+    Checked against `fim.statistics.catalog.report_keys` rather than
+    indexing the `TypedDict` directly: `statistic` is an arbitrary string
+    (ultimately from user-supplied configuration, by way of
+    `SimulationParams.convergence_statistics`), and a name that is not a
+    report field should raise this specific, named-statistic error, not
+    Python's own generic `KeyError`.
     """
-    fields: Mapping[str, float | None] = {
-        "D": report["D"],
-        "G_ST": report["G_ST"],
-        "E_ST": report["E_ST"],
-        "K_ST": report["K_ST"],
-        "H_S": report["H_S"],
-        "H_T": report["H_T"],
-        "H_ST": report["H_ST"],
-        "A_CGD": report["A_CGD"],
-        "Delta": report["Delta"],
-        "MI": report["MI"],
-        "Gs": report["Gs"],
-        "Gd": report["Gd"],
-    }
-    if statistic not in fields:
+    if statistic not in report_keys():
         raise ValueError(f"unsupported statistic: {statistic}")
-    return fields[statistic]
+    value = cast("Mapping[str, float | None]", report)[statistic]
+    return value
+
+
+def report_statistic(report: FinalReport, statistic: str) -> float | None:
+    """Return one named global statistic from a final report.
+
+    The public form of the engine's own lookup, for callers that iterate
+    `fim.statistics.catalog.report_keys` rather than naming each field.
+
+    Args:
+        report: A `FinalReport`.
+        statistic: A key from `fim.statistics.catalog.report_keys`.
+
+    Returns:
+        The value; ``None`` where the statistic is undefined (`G_ST` at a
+        monomorphic locus) or infinite (a Nei distance with no allele
+        shared).
+
+    Raises:
+        ValueError: If `statistic` is not a report statistic.
+    """
+    return _final_report_statistic(report, statistic)
 
 
 def _format_timestamp(value: datetime) -> str:

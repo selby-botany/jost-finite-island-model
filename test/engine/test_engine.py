@@ -4,10 +4,11 @@ import functools
 import itertools
 import math
 import statistics
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from dataclasses import replace
 from datetime import UTC, datetime
 from pathlib import Path
+from typing import cast
 
 import numpy as np
 import pytest
@@ -49,6 +50,12 @@ from fim.model.vectorized import (
 from fim.persistence.jsonl_store import JSONLTrajectoryStore
 from fim.persistence.store import InMemoryTrajectoryStore, TrajectoryStore
 from fim.statistics import differentiation
+from fim.statistics.catalog import report_keys
+from fim.statistics.genetic_distance import (
+    NEI_DENOMINATORS,
+    NEI_LOCUS_RULES,
+    nei_all_demes_identity,
+)
 
 
 def _clock() -> datetime:
@@ -1129,20 +1136,7 @@ def test_replicate_summary_reports_a_confidence_interval_per_statistic(
 
     summary = replicate_summary(output)
 
-    assert set(summary) == {
-        "D",
-        "G_ST",
-        "E_ST",
-        "K_ST",
-        "H_S",
-        "H_T",
-        "H_ST",
-        "A_CGD",
-        "Delta",
-        "MI",
-        "Gs",
-        "Gd",
-    }
+    assert set(summary) == set(report_keys())
     assert summary["D"]["sample_count"] == 5
     assert summary["D"]["low"] <= summary["D"]["mean"] <= summary["D"]["high"]
     assert summary["D"]["confidence"] == 0.95
@@ -2415,6 +2409,57 @@ def test_report_for_state_supports_multiple_loci_and_equal_weighting() -> None:
     )
     assert report["run_id"] == "run-a"
     assert report["G_ST"] is not None
+
+
+def test_report_for_state_captures_the_all_demes_nei_family() -> None:
+    """All eight all-demes Nei fields, matching the library functions.
+
+    The arithmetic pooled identity is `Gd / Gs` (Jost's `1 - D` for the
+    pooled locus rule), a check that shares no code with the Nei family.
+    """
+    loci = (LocusSpec(1, 100), LocusSpec(2, 100))
+    frequencies = (
+        ({AlleleId(0): 1.0}, {AlleleId(0): 0.5, AlleleId(1): 0.5}),
+        ({AlleleId(0): 0.2, AlleleId(2): 0.8}, {AlleleId(1): 1.0}),
+        ({AlleleId(0): 0.5, AlleleId(2): 0.5}, {AlleleId(0): 0.3, AlleleId(1): 0.7}),
+    )
+    state = ModelState(loci=loci, frequencies=frequencies)
+    params = SimulationParams(gene_copies=10, m=0.1, mu=0.0, d=3, seed=7, loci=loci)
+    report = report_for_state(
+        state, params, run_id="run-a", converged=False, reason="test"
+    )
+    tables = [[frequencies[deme][locus] for deme in range(3)] for locus in range(2)]
+    for denominator in NEI_DENOMINATORS:
+        suffix = "GEO" if denominator == "geometric" else "ARITH"
+        for locus_rule in NEI_LOCUS_RULES:
+            rule = "_LOCUS_MEAN" if locus_rule == "locus_mean" else ""
+            fields = cast("Mapping[str, float]", report)
+            identity_value = fields[f"NEI_I_ALL_{suffix}{rule}"]
+            assert identity_value == pytest.approx(
+                nei_all_demes_identity(
+                    tables, denominator=denominator, locus_rule=locus_rule
+                )
+            )
+            assert fields[f"NEI_D_ALL_{suffix}{rule}"] == pytest.approx(
+                -math.log(identity_value)
+            )
+    assert report["NEI_I_ALL_ARITH"] == pytest.approx(report["Gd"] / report["Gs"])
+
+
+def test_report_for_state_reports_an_infinite_nei_distance_as_none() -> None:
+    """No allele shared between any pair: distance `None`, identity 0."""
+    loci = (LocusSpec(1, 100),)
+    state = ModelState(
+        loci=loci,
+        frequencies=(({AlleleId(0): 1.0},), ({AlleleId(1): 1.0},)),
+    )
+    params = SimulationParams(gene_copies=10, m=0.1, mu=0.0, d=2, seed=7, loci=loci)
+    report = report_for_state(
+        state, params, run_id="run-a", converged=False, reason="test"
+    )
+    assert report["NEI_D_ALL_GEO"] is None
+    assert report["NEI_D_ALL_ARITH_LOCUS_MEAN"] is None
+    assert report["NEI_I_ALL_GEO"] == 0.0
 
 
 def test_report_for_state_drops_a_monomorphic_locus_from_the_g_st_average() -> None:

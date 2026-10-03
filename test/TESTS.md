@@ -5477,6 +5477,29 @@ def test_report_for_state_supports_multiple_loci_and_equal_weighting() -> None
 
 Independent per-locus reports are averaged under equal deme weighting.
 
+<a id="engine.test_engine.test_report_for_state_captures_the_all_demes_nei_family"></a>
+
+#### test\_report\_for\_state\_captures\_the\_all\_demes\_nei\_family
+
+```python
+def test_report_for_state_captures_the_all_demes_nei_family() -> None
+```
+
+All eight all-demes Nei fields, matching the library functions.
+
+The arithmetic pooled identity is `Gd / Gs` (Jost's `1 - D` for the
+pooled locus rule), a check that shares no code with the Nei family.
+
+<a id="engine.test_engine.test_report_for_state_reports_an_infinite_nei_distance_as_none"></a>
+
+#### test\_report\_for\_state\_reports\_an\_infinite\_nei\_distance\_as\_none
+
+```python
+def test_report_for_state_reports_an_infinite_nei_distance_as_none() -> None
+```
+
+No allele shared between any pair: distance `None`, identity 0.
+
 <a id="engine.test_engine.test_report_for_state_drops_a_monomorphic_locus_from_the_g_st_average"></a>
 
 #### test\_report\_for\_state\_drops\_a\_monomorphic\_locus\_from\_the\_g\_st\_average

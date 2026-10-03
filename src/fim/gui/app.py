@@ -78,6 +78,7 @@ from fim.engine import (
     pooled_convergence_histories,
     pooled_convergence_histories_from_pairs,
     report_for_state,
+    report_statistic,
     reports_summary,
 )
 from fim.gui import batch_runner, presets, recent_runs, runner, sweep_bridge
@@ -141,6 +142,7 @@ from fim.statistics import (
     matrix_identity_trajectory,
     mutation_negligible_equilibrium,
 )
+from fim.statistics.catalog import report_keys
 from fim.sweep import SweepSpec, apply_coordinates, enumerate_points
 from fim.sweep_run import (
     LocalPointRunner,
@@ -334,18 +336,7 @@ _BATCH_POLL_INTERVAL_SECONDS: Final = 0.5
 # show them final-report-only, since they now flow through the exact
 # same live/trajectory pipeline as every other watched-or-tracked
 # statistic.
-_RESULT_STATISTIC_NAMES: Final = (
-    "D",
-    "G_ST",
-    "E_ST",
-    "K_ST",
-    "H_S",
-    "H_T",
-    "H_ST",
-    "A_CGD",
-    "Delta",
-    "MI",
-)
+_RESULT_STATISTIC_NAMES: Final = report_keys()
 
 # Distinguishes a user-saved preset's own id (`Api.save_current_as_
 # preset`) from a built-in worked-example's bare slug (`fim.gui.
@@ -2363,7 +2354,9 @@ class Api:
             reason="initial conditions",
         )
         statistics = {
-            name: format_statistic(report[name], self._significant_digits)
+            name: format_statistic(
+                report_statistic(report, name), self._significant_digits
+            )
             for name in _RESULT_STATISTIC_NAMES
         }
         return {
@@ -5375,7 +5368,7 @@ def _drain_run_messages(
                 # the running-state stats table live and populated
                 # rather than blank until the run finishes.
                 "statistics": {
-                    name: format_statistic(message[4][name], digits)
+                    name: format_statistic(report_statistic(message[4], name), digits)
                     for name in _RESULT_STATISTIC_NAMES
                 },
                 "literatureVisuals": message[5],
@@ -5416,7 +5409,9 @@ def _drain_run_messages(
                 "report": result.report,
                 "panels": scatter_panels(result.final_state),
                 "statistics": {
-                    name: format_statistic(result.report[name], digits)
+                    name: format_statistic(
+                        report_statistic(result.report, name), digits
+                    )
                     for name in _RESULT_STATISTIC_NAMES
                 },
                 "effectiveAlleles": _effective_allele_summary(result.report, digits),
@@ -6055,7 +6050,7 @@ def _pooled_batch_payload(
             "converged": report["converged"],
             "reason": report["reason"],
             "statistics": {
-                name: format_statistic(report[name], digits)
+                name: format_statistic(report_statistic(report, name), digits)
                 for name in _RESULT_STATISTIC_NAMES
             },
             "trajectoryPath": str(trajectory_path),
@@ -6096,7 +6091,7 @@ def _pooled_batch_payload(
         reason="initial conditions",
     )
     p0_statistics = {
-        name: format_statistic(p0_report[name], digits)
+        name: format_statistic(report_statistic(p0_report, name), digits)
         for name in _RESULT_STATISTIC_NAMES
     }
     # A live batch's own replicates, or a reopened batch's own, always
