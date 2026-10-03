@@ -38,6 +38,7 @@ per deme and `ploidy` says how many gene copies each carries, so `N: 225` with
 ```console
 fim run CONFIG [-o DIRECTORY | --output DIRECTORY] [--quiet]
     [--workers N] [--sequential] [--max-concurrent-replicates N]
+    [--pairwise-max-demes N]
 ```
 
 `CONFIG` is a YAML file described in
@@ -45,6 +46,14 @@ fim run CONFIG [-o DIRECTORY | --output DIRECTORY] [--quiet]
 directory is created under `project-root/results/`. The timestamp affects only
 the folder name and manifest metadata; it never affects the trajectory,
 statistics, convergence decision, or deterministic run_id.
+
+`--pairwise-max-demes N` (default 1024) is the largest deme count for which
+the run saves every deme pair's statistics in [`pairwise.json`](#pairwisejson).
+The file grows with the square of the deme count: about 0.5 MB at 100 demes
+and 52 MB at 1024, per run and per batch replicate, and about a second to
+write at the largest size. Above the limit the file records only that the
+matrices were skipped; any single pair can still be recomputed from the
+saved trajectory, which the desktop GUI does on demand.
 
 `--quiet` suppresses progress and artifact-path messages. Validation errors
 name the offending key or value and return status 2. A run that reaches
@@ -831,7 +840,7 @@ action the matching on-screen control already performs.
 | Home | An Experiment/Study/Run tree: every Experiment expands to its own Studies, each expanding to its own Runs, each row carrying a config-summary and a final-statistics/outcome column read from that run's own `report.json`/`summary.json` — a batch row's outcome is its own confidence interval, and is expandable to its individual replicates, each independently reachable for re-analysis. Selecting a scalar or batch row and clicking "Open" (or double-clicking it directly) opens the identical Results card either way — a batch's own pooled statistics, table, and scatter, rebuilt fresh from its own persisted replicates, not only what a live batch's own completion shows. A Study row's own "Open…" goes one level up: every member run, and every replicate of every member batch, pooled together the same way — a mismatched parameter across members (say, two different `d` values) is never refused, only named in a "varies across members" note, since intentionally pooling runs in the same parameter neighborhood is a legitimate choice a botanist is free to make. A run always belongs to a Study; a botanist who never organizes anything still has one to start from — a default Study, inside a default Experiment, created automatically the first time it's needed. An Experiment row's own "Create study…" and a Study row's own "Create run…" (which opens Configure with that Study already selected) put creation on the row that receives it, rather than a separate step elsewhere; "Create experiment…" beside the filter bar is the one page-level exception, since a new Experiment has no row of its own yet to hang the action off of. Deletion is Select/Select all/Delete: every row (Run, Study, Experiment) gets a checkbox, hidden until "Select" is toggled on, and "Delete selected" removes exactly what was checked — deleting a Study or Experiment cascades to its own Runs, named explicitly in the confirmation so a botanist never underestimates what is about to disappear. A recent-runs row, or browsing for a `trajectory.jsonl` directly, re-renders its summary and scatter (and, for a multi-generation run, its own scrubber) at any persisted generation, with the same optional differentiation-`q` sweep. Reachable from the rail's own Home button, or the File menu's "Open run…", from any screen | [Re-analyze a trajectory](#re-analyze-a-trajectory) |
 | Configure | Two always-visible, independently scrollable panels: FIM parameters (ploidy — chosen first and never guessed, starting on diploid unless Settings' default ploidy says otherwise ("Ask me each time" leaves it blank, and a blank ploidy blocks the run) — then N, the number of *individuals* per deme, scalar or a per-deme table, then d, m, mu, seed: the values that together are "the finite island model"; the app multiplies individuals by ploidy into the gene-copy `N` the simulator and the YAML format use) and Structure (initial conditions, migrant sampling, mutation model, deme weighting, loci, which convergence statistic(s) to watch, replicate tolerance/minimum, and the within-run σ band) — one per [configuration reference](configuration.md) section, no dialog to open for any of them; every field and mode-selector group has a hover/focus tooltip. Default ploidy, the Run card's graph columns and scatter-plot style, execution engine, n<sub>replicates</sub>, max_generations, convergence window/tolerance, replicate confidence, and the batch-execution tuning fields (JIT, the `auto` engine's own two thresholds, parallel workers, max concurrent replicates) live in Settings instead, as defaults every fresh configuration starts from — loading a saved configuration or a worked example updates them to match what was loaded. "Load configuration…"/"Save configuration…" read and write the exact YAML file format above, "Load example…" opens the Presets picker (each preset also viewable as plain YAML, with a copy-to-clipboard action, and a loaded preset can be duplicated under a new name), and "▶ Run"/"🔮 Explore" jump to those destinations with the configuration exactly as shown. An invalid field on "Run simulation" (from anywhere) navigates here and marks the specific field, not only the section it lives in | [Create a configuration](#create-a-configuration) |
 | Run view — running | The scatter plot and the trajectories side by side by default — a "Graphs" menu on the card chooses which graphs to show together (the choice is remembered), the columns they use are a Settings choice, and the statistics table beside them stays visible as both the colour legend and the on/off control for each trajectory line. A live scatter plot of the run's own current-generation frequencies (or, for a batch, every replicate's frequencies pooled onto one plot, filling in as replicates advance), with a generation progress indicator and a "Cancel" button — the window stays responsive throughout; the same axis selectors `completed` (below) has, live — picking a pair affects every subsequent push for the rest of the run, not just a one-time snapshot. For a scalar run, a statistic-vs-generation trajectory panel grows alongside the scatter as the run advances, plotting all six report statistics, each beside its own predicted-equilibrium reference line (D, G<sub>ST</sub>, E<sub>ST</sub> only — the three with a closed-form prediction). D, G<sub>ST</sub>, H<sub>S</sub>, H<sub>T</sub> and H<sub>ST</sub> also get a dash-dot closed-form curve: the value theory expects at every generation, starting from the state the run itself started in and settling at that statistic's equilibrium, so you can see whether the run is on track and how far drift has carried it. It is the model's expectation, so a run with few loci scatters around it and its D and G<sub>ST</sub> sit somewhat below it on average (a ratio of noisy quantities); with several loci the two agree closely. It covers unequal deme sizes and explicit migration matrices too (up to 24 demes), starting from the run's own seeded founding population. It is not drawn for per-locus mutation rates, for a founding population built by equilibration, or for a matrix with more than 24 demes, and it is shown and hidden together with its own statistic's on/off control. Cancelling, or the run ending in an error, leaves this same view showing exactly as it last rendered, with a banner on top | `run`'s own progress/error output, on one screen instead of terminal lines |
-| Run view — completed | A scalar run's summary (all six named statistics, convergence outcome, each shown as a meter against the same `[0, 1]` scale the confidence-interval bars below use) beside the canonical scatter plot and the same trajectory panel described above — replaced, once the run finishes, by the real persisted trajectory, and showing the within-run σ band (a shaded region plus its own `mean [lower, upper]` caption) whenever [sigma_band_multiplier](configuration.md#sigma_band_multiplier) was set — or — for a batch — a pooled scatter across every replicate's final state beside a replicate table (status, final generation, every named statistic) and each statistic's across-replicate confidence interval as a meter, explicitly labeled "uncertainty across N independent replicates" so it is never confused with the within-run σ band; either way, one panel (Deme 1 vs. Deme 2 by default) with a labeled, numbered `0.0`-`1.0` probability scale on both axes; axis selectors on the plot choose which two demes to compare directly, and selecting Deme 1 vs. Deme 2 again returns to the default panel; a scalar run with more than one persisted generation auto-populates a play/pause-and-scrub time slider over the persisted trajectory in the background, with no separate button to reach it; each batch replicate row's own "Open" button reaches this same view for that one replicate; "Open output folder" reveals the run's own artifacts (a batch's own `summary.json` and every replicate subdirectory, for a batch) | [Output schemas](#output-schemas), [Batch `summary.json` and `manifest.json`](#batch-summaryjson-and-manifestjson) |
+| Run view — completed | A scalar run's summary (all six named statistics, convergence outcome, each shown as a meter against the same `[0, 1]` scale the confidence-interval bars below use) beside the canonical scatter plot and the same trajectory panel described above — replaced, once the run finishes, by the real persisted trajectory, and showing the within-run σ band (a shaded region plus its own `mean [lower, upper]` caption) whenever [sigma_band_multiplier](configuration.md#sigma_band_multiplier) was set — or — for a batch — a pooled scatter across every replicate's final state beside a replicate table (status, final generation, every named statistic) and each statistic's across-replicate confidence interval as a meter, explicitly labeled "uncertainty across N independent replicates" so it is never confused with the within-run σ band; either way, one panel (Deme 1 vs. Deme 2 by default) with a labeled, numbered `0.0`-`1.0` probability scale on both axes; axis selectors on the plot choose which two demes to compare directly, and selecting Deme 1 vs. Deme 2 again returns to the default panel; the statistics panel's deme-pair rows (Nei distances and pairwise F<sub>ST</sub>, when shown) follow the same choice, live, after the run and while scrubbing; which statistics the panel, the results tables, the trajectory chart and the sweep charts show is a Settings choice ("Statistics shown", or "Choose…" in the panel's caption) that never changes what is computed or saved — see [Nei distances](#nei-distances); a scalar run with more than one persisted generation auto-populates a play/pause-and-scrub time slider over the persisted trajectory in the background, with no separate button to reach it; each batch replicate row's own "Open" button reaches this same view for that one replicate; "Open output folder" reveals the run's own artifacts (a batch's own `summary.json` and every replicate subdirectory, for a batch) | [Output schemas](#output-schemas), [Batch `summary.json` and `manifest.json`](#batch-summaryjson-and-manifestjson) |
 | Explore | Four fields (N in individuals, d, m, mu; predictions use the form's ploidy to turn individuals into gene copies) and a theoretical-prediction table covering differentiation (D, G<sub>ST</sub>, E<sub>ST</sub>), equilibrium diversity (within-deme and pooled heterozygosity, Shannon entropy, and effective allele counts), and Whitlock identity-recovery metrics. The table also reports whether mutation is negligible at equilibrium and marks the typical-deme entropy as approximate, especially at d = 2. Values update when a field is committed — no simulation ever runs, so this remains immediate regardless of N or d. A sweep curve plots any of the predicted statistics across a fixed range of the selected field. Every statistic can be charted on every one of the four sweeps — click a table row to plot it. Because these are measured in different units (proportions, nats, effective alleles, generations), the chart shows one unit family at a time and switches families when you pick a statistic from another one. A statistic that does not depend on the swept field draws a flat line, which is itself informative: D does not vary with N at all, and the identity-recovery metrics do not vary with mutation rate. A slider beneath the chart moves the marker along the swept range and re-reads the whole table at that value, leaving your four fields untouched until you change them yourself. "▶ Run this for real" seeds Configure with these same four values and takes you there, with a new study pre-selected (change or clear it before running). Reachable from the rail's own Explore button, or "🔮 Explore" on Configure (which carries Configure's own current values over), from any screen; Back/Forward use the shared screen history | No CLI equivalent — a direct `fim.statistics` call from Python or a script is the closest terminal equivalent |
 | Compare | Pick two or more previously completed runs from a recent-runs list, then overlay their final-state scatter panels as small multiples with a legend naming whichever configuration field(s) actually differ across the selection, plus a trajectory-over-generations overlay (one statistic at a time, one color per run, selectable from the same six named statistics) — "how does the conclusion change as I vary this one knob," on real simulated runs, no re-run needed. Reachable from the rail's own Compare button from any screen; Back/Forward use the shared screen history | No CLI equivalent — comparing several `trajectory.jsonl`/`report.json` files by hand is the closest terminal equivalent |
 | Help | This guide and the [configuration reference](configuration.md), rendered in-app with working cross-links; every other doc opens on GitHub in the OS default browser instead. Reachable from the rail's own Help button, or the Help menu, from any screen; Back/Forward use the shared screen history | No CLI equivalent — the terminal reads these same two files directly |
@@ -892,8 +901,9 @@ FIM_GUI_SHUTDOWN_TIMEOUT=0 fim --graphical
 
 ### Saved preferences
 
-The GUI remembers six things between launches: Settings' own Significant
-digits setting, the light/dark override (absent/`null` means "follow the
+The GUI remembers these things between launches: Settings' own Significant
+digits setting, which statistics are shown ("Statistics shown"), the
+largest deme count for which runs save every pair's statistics, the light/dark override (absent/`null` means "follow the
 OS," the default), whether the first-launch welcome panel has already been
 dismissed, the startup behavior selected in Settings, the execution defaults
 (execution engine, n<sub>replicates</sub>, and the rest of Settings' own
@@ -1068,7 +1078,23 @@ The final report contains:
   differentiation K<sub>ST</sub>;
 - literature-derived supplemental statistics:
   Caballero-García-Dorado allelic distance A<sub>CGD</sub>, Gregorius
-  δ, and Sherwin mutual information `MI`.
+  δ, and Sherwin mutual information `MI`;
+- the within- and between-deme gene identities G<sub>s</sub> (`Gs`) and
+  G<sub>d</sub> (`Gd`);
+- Nei's (1973) D<sub>m</sub> (`D_m`) and R<sub>ST</sub> (`R_ST`), Nei's
+  logarithmic G'<sub>ST</sub> (`G_ST_NEI_LOG`), Hedrick's standardized
+  G'<sub>ST</sub> (`G_ST_HEDRICK`), and coancestry F<sub>ST</sub> (`F_ST`),
+  each computed from the pooled H<sub>S</sub>/H<sub>T</sub> and `null` where
+  undefined;
+- Nei's genetic distance across all demes in four forms, and the matching
+  identities: `NEI_D_ALL_GEO`, `NEI_D_ALL_GEO_LOCUS_MEAN`, `NEI_D_ALL_ARITH`,
+  `NEI_D_ALL_ARITH_LOCUS_MEAN`, `NEI_I_ALL_*` (see
+  [Nei distances](#nei-distances)). A distance is `null` when infinite; its
+  identity is always a number.
+
+A `report.json` written before a statistic existed simply lacks that key.
+Opening such a run computes the missing values from its saved trajectory
+without rewriting the file.
 
 Multiple loci are independent repeats. H<sub>S</sub>, H<sub>T</sub>, H<sub>ST</sub>, E<sub>ST</sub>,
 and K<sub>ST</sub> are always each locus's own arithmetic mean. `D` and G<sub>ST</sub>
@@ -1078,6 +1104,65 @@ first and one `D`/G<sub>ST</sub> is computed from those pooled values, not
 averaged per-locus ratios; the opt-in `mean_of_ratios` restores the
 per-locus-ratio-then-average behavior. `D` and K<sub>ST</sub> always use equal
 deme weighting. deme_weighting affects E<sub>ST</sub>.
+
+### `pairwise.json`
+
+Every pair of demes' Nei identities and pairwise F<sub>ST</sub> at the run's
+final generation, so any pair can be compared later or analyzed outside
+`fim`. Written for every scalar run and every batch replicate, and digested
+in the manifest.
+
+```json
+{
+  "schema_version": 1,
+  "generation": 1234,
+  "deme_count": 4,
+  "mode": "full",
+  "encoding": "upper-triangle-row-major",
+  "matrices": {
+    "NEI_I_PAIR_GEO": [0.91, 0.87, 0.80, 0.93, 0.85, 0.88],
+    "NEI_I_PAIR_GEO_LOCUS_MEAN": [],
+    "NEI_I_PAIR_ARITH": [],
+    "NEI_I_PAIR_ARITH_LOCUS_MEAN": [],
+    "F_ST_PAIR": []
+  }
+}
+```
+
+(The empty lists stand for lists of the same length.) Each list is the upper
+triangle of a symmetric matrix, row by row: pairs (1, 2), (1, 3), (1, 4),
+(2, 3), (2, 4), (3, 4) for four demes, numbered from 1 as everywhere else in
+`fim`. The diagonal is not stored (identity 1, F<sub>ST</sub> 0). Each
+distance is `-ln` of its identity; a pairwise F<sub>ST</sub> is `null` where
+undefined (both demes fixed for the same allele). With more demes than
+[`--pairwise-max-demes`](#run-a-simulation), `"mode"` is `"skipped"`, the
+limit is recorded as `"max_demes"`, and there are no matrices.
+
+### Nei distances
+
+`fim` reports Nei's genetic distance with Nei's own geometric-mean
+denominator and with the arithmetic-mean denominator (Jost, L. (2026)
+private communication), for the pair of demes the scatter plot shows and
+across all demes, combining loci by Nei's rule or by averaging per-locus
+distances. In the desktop GUI the forms start hidden: choose them in
+Settings, "Statistics shown", or with "Choose…" in the statistics panel's
+caption. The pair rows name the pair they describe and follow the scatter
+plot's deme selectors, live, after the run, and while scrubbing.
+
+Two results need a word of explanation:
+
+- **∞** means the demes share no allele, so the identity is 0.
+- A **negative** all-demes geometric distance is not an error. That form
+  divides the average between-deme identity by the *geometric* mean of the
+  within-deme identities, which one very diverse deme can drag far down.
+  It signals strongly unequal within-deme diversity: compare the arithmetic
+  form beside it, which stays non-negative, and the within-deme diversity
+  (H<sub>S</sub>, effective number of alleles). Pair forms and arithmetic forms
+  are never negative.
+
+The arithmetic all-demes distance equals `-ln(1 - D)` for Jost's `D`.
+[Nei distances in fim](nei-distances.md) has the full explanation, a worked
+example of a negative value, and the formulas.
 
 ### `scatter.png`
 
@@ -1117,13 +1202,15 @@ the alleles are rare and nearly equal.
 ### Batch `summary.json` and `manifest.json`
 
 Written only for n<sub>replicates</sub> greater than one, alongside the
-`replicate-NNN/` subdirectories, each of which holds the four scalar-run
-files above.
+`replicate-NNN/` subdirectories, each of which holds the scalar-run files
+above.
 
-`summary.json` maps each reported statistic name (`D`, G<sub>ST</sub>, E<sub>ST</sub>,
-K<sub>ST</sub>, H<sub>S</sub>, H<sub>T</sub>, H<sub>ST</sub>,
-A<sub>CGD</sub>, Gregorius δ, `MI`, G<sub>s</sub>, G<sub>d</sub>) to its across-replicate
-confidence interval:
+`summary.json` maps each reported statistic name (every global statistic in
+[`report.json`](#reportjson): `D`, G<sub>ST</sub>, E<sub>ST</sub>,
+K<sub>ST</sub>, H<sub>S</sub>, H<sub>T</sub>, H<sub>ST</sub>, A<sub>CGD</sub>,
+Gregorius δ, `MI`, G<sub>s</sub>, G<sub>d</sub>, the pooled-heterozygosity
+measures and the all-demes Nei forms) to its across-replicate confidence
+interval:
 
 ```json
 {
@@ -1165,8 +1252,13 @@ reads such a file as though the value were `null`.
 G<sub>ST</sub> can have a smaller sample_count than the other statistics: a
 replicate whose locus is monomorphic across every deme reports G<sub>ST</sub> as
 `null` in its own `report.json`, and that replicate is excluded from
-G<sub>ST</sub>'s interval rather than papered over with a substitute value. A
-statistic left with fewer than two defined replicates is omitted from
+G<sub>ST</sub>'s interval rather than papered over with a substitute value. The
+other statistics that can be `null` because they are undefined (R<sub>ST</sub>,
+both G'<sub>ST</sub>, F<sub>ST</sub>) are treated the same way. A Nei distance
+is different: `null` there means *infinite*, and a mean that includes an
+infinite value has no finite value, so a Nei distance infinite in any
+replicate is omitted from `summary.json`; its identity is still summarized.
+A statistic left with fewer than two defined replicates is omitted from
 `summary.json` entirely.
 
 The batch's own `manifest.json` (distinct from each replicate's own) records

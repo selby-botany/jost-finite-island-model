@@ -8,6 +8,37 @@ project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- **Nei's genetic distance, two ways, for a pair of demes and for all of
+  them.** Every run now reports Nei's distance with Nei's own geometric-mean
+  denominator and with the arithmetic-mean denominator (Jost, L. (2026)
+  private communication), for the two demes the scatter plot shows and
+  across all demes, combining loci by Nei's rule or by averaging per-locus
+  distances, together with the matching identities. The pair values follow
+  the scatter's deme selectors live, after the run, and while scrubbing; a
+  batch shows their mean and interval across replicates. The all-demes
+  geometric form can be negative when within-deme diversity is very uneven;
+  [Nei distances in fim](doc/nei-distances.md) explains how to read that.
+- **More measures captured with every run.** Nei's D<sub>m</sub> and
+  R<sub>ST</sub>, Nei's logarithmic and Hedrick's standardized G'<sub>ST</sub>,
+  coancestry F<sub>ST</sub>, pairwise F<sub>ST</sub>, and the gene identities
+  G<sub>s</sub> and G<sub>d</sub> are now in `report.json`, `summary.json` and
+  the statistics panel.
+- **Choose which statistics are shown.** Settings, "Statistics shown" (or
+  "Choose…" in the statistics panel's caption) picks the statistics the
+  panel, results tables, trajectory chart and sweep charts show, with
+  presets and a filter. Hidden statistics are still computed and saved. A
+  fresh install shows what it showed before; the new measures start
+  hidden.
+- **`pairwise.json`: every deme pair's statistics.** Each run, and each batch
+  replicate, saves every pair's Nei identities and pairwise F<sub>ST</sub> at
+  the final generation, up to a deme-count limit (default 1024, about 52 MB
+  per run at that size; Settings or `fim run --pairwise-max-demes`). A large
+  run shows a status line with a spinner while the file is written.
+- **One definition per statistic.** `fim.statistics.catalog` now defines every
+  statistic once; the engine, the GUI's rows, columns and checkboxes, and
+  the Settings list all derive from it. H<sub>ST</sub> gains its missing
+  convergence checkbox.
+
 - **Sweep points run in their own processes, so sweeps fill the machine.**
   Points that run at the same time (several at once, automatic by default) each
   get a worker process. The generational engines, which "auto" always picks,

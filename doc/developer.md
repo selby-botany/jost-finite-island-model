@@ -12,6 +12,7 @@ use the [generated API reference](../src/fim/API.md) for exact signatures.
 - [Engine backends](#engine-backends)
 - [Determinism](#determinism)
 - [Persistence and reports](#persistence-and-reports)
+- [Adding a statistic](#adding-a-statistic)
 - [Adding a new what-if](#adding-a-new-what-if)
 - [Testing](#testing)
 - [Documentation](#documentation)
@@ -294,6 +295,37 @@ lambda), which is exactly how the CLI wires each replicate to its own real
 Statistics are computed per locus, then arithmetic-mean aggregated in the final
 report. Keep locus-specific analysis in pure statistics functions rather than
 adding engine state.
+
+## Adding a statistic
+
+Every statistic is defined once, in `fim.statistics.catalog`. The engine's
+tracked sets, the convergence choices, the GUI's result lists, the
+statistics panel's rows, the results tables' columns, the convergence
+checkboxes and the Settings dialog's "Statistics shown" list are all derived
+from it, so a new statistic touches one entry plus its formula:
+
+1. Write the formula as a pure function in `fim.statistics` (numbers in,
+   numbers out), with tests against hand-computed values.
+2. Add a `StatisticSpec` to the catalog: key, HTML and text labels, a
+   one-sentence description, group, scope (`global` or `pair`), history
+   policy, bounds, whether a run may stop on it, and whether a fresh
+   install shows it.
+3. Compute it where its scope says:
+   - a global statistic: a `FinalReport` field filled in
+     `fim.engine.report_for_state`, and, if it has no per-generation
+     history, `history_free_statistic_values` so a scrubbed frame shows it;
+   - a pair statistic: `fim.engine.pair_statistic_values`, and a matrix in
+     `fim.persistence.pairwise` if every pair should be saved.
+4. Regenerate the committed worked examples (`doc/examples/`): their
+   `report.json` files are compared with a fresh run.
+
+The GUI needs no edit: it receives the catalog through
+`Api.get_statistics_catalog` and builds everything from it. Drawing
+constants for the GUI's plots live in the
+[`webui/config/` modules](../src/fim/gui/webui/config/README.md).
+
+Showing a statistic is display only. Nothing that computes or saves results
+may read the GUI's shown set; a test enforces that.
 
 ## Adding a new what-if
 

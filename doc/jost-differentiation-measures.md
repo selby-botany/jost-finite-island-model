@@ -1556,6 +1556,12 @@ D = \left(1 - \frac{1}{\beta}\right)\cdot\frac{d}{d-1}, \qquad \beta = {}^{H}D_{
 G_{ST} \leq 1 - H_S
 ```
 
+The middle form of `D` in Part III, `1 - J_between/J_within`, also links
+`D` to Nei's genetic distance with an arithmetic-mean denominator:
+<code>NGD<sub>arith</sub> = -ln(1 - D)</code>. `fim` reports that distance,
+Nei's original geometric-mean form, and pair and all-demes versions of
+both; see [Nei distances in fim](nei-distances.md).
+
 ---
 
 ## Appendix B: errata and ambiguities in the accepted-article text

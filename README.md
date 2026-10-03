@@ -217,6 +217,8 @@ defines the complete scientific and architectural contract.
 
 - [Finite island model introduction](doc/finite-island-model-introduction.md)
 - [Jost differentiation measures](doc/jost-differentiation-measures.md)
+- [Nei distances in fim](doc/nei-distances.md): the two denominators, pair
+  and all-demes forms, and how to read a negative value
 - [Simulator design](doc/fim-simulator-design.md)
 - [Test plan](doc/fim-simulator-test-plan.md) — how this project knows
   its own numbers are trustworthy, written for a non-programmer

@@ -30,12 +30,20 @@ per deme and <code>ploidy</code> says how many gene copies each carries, so <cod
 <h2 id="run-a-simulation">Run a simulation</h2>
 <pre><code class="language-console">fim run CONFIG [-o DIRECTORY | --output DIRECTORY] [--quiet]
     [--workers N] [--sequential] [--max-concurrent-replicates N]
+    [--pairwise-max-demes N]
 </code></pre>
 <p><code>CONFIG</code> is a YAML file described in
 <a href="#" data-fim-help="configuration" data-fim-anchor="">configuration.md</a>. Without <code>--output</code>, a timestamped
 directory is created under <code>project-root/results/</code>. The timestamp affects only
 the folder name and manifest metadata; it never affects the trajectory,
 statistics, convergence decision, or deterministic run_id.</p>
+<p><code>--pairwise-max-demes N</code> (default 1024) is the largest deme count for which
+the run saves every deme pair's statistics in <a href="#pairwisejson"><code>pairwise.json</code></a>.
+The file grows with the square of the deme count: about 0.5 MB at 100 demes
+and 52 MB at 1024, per run and per batch replicate, and about a second to
+write at the largest size. Above the limit the file records only that the
+matrices were skipped; any single pair can still be recomputed from the
+saved trajectory, which the desktop GUI does on demand.</p>
 <p><code>--quiet</code> suppresses progress and artifact-path messages. Validation errors
 name the offending key or value and return status 2. A run that reaches
 max_generations also returns status 0 because it is a valid, inspectable
@@ -704,7 +712,7 @@ action the matching on-screen control already performs.</p>
 </tr>
 <tr>
 <td>Run view — completed</td>
-<td>A scalar run's summary (all six named statistics, convergence outcome, each shown as a meter against the same <code>[0, 1]</code> scale the confidence-interval bars below use) beside the canonical scatter plot and the same trajectory panel described above — replaced, once the run finishes, by the real persisted trajectory, and showing the within-run σ band (a shaded region plus its own <code>mean [lower, upper]</code> caption) whenever <a href="#" data-fim-help="configuration" data-fim-anchor="sigma_band_multiplier">sigma_band_multiplier</a> was set — or — for a batch — a pooled scatter across every replicate's final state beside a replicate table (status, final generation, every named statistic) and each statistic's across-replicate confidence interval as a meter, explicitly labeled &quot;uncertainty across N independent replicates&quot; so it is never confused with the within-run σ band; either way, one panel (Deme 1 vs. Deme 2 by default) with a labeled, numbered <code>0.0</code>-<code>1.0</code> probability scale on both axes; axis selectors on the plot choose which two demes to compare directly, and selecting Deme 1 vs. Deme 2 again returns to the default panel; a scalar run with more than one persisted generation auto-populates a play/pause-and-scrub time slider over the persisted trajectory in the background, with no separate button to reach it; each batch replicate row's own &quot;Open&quot; button reaches this same view for that one replicate; &quot;Open output folder&quot; reveals the run's own artifacts (a batch's own <code>summary.json</code> and every replicate subdirectory, for a batch)</td>
+<td>A scalar run's summary (all six named statistics, convergence outcome, each shown as a meter against the same <code>[0, 1]</code> scale the confidence-interval bars below use) beside the canonical scatter plot and the same trajectory panel described above — replaced, once the run finishes, by the real persisted trajectory, and showing the within-run σ band (a shaded region plus its own <code>mean [lower, upper]</code> caption) whenever <a href="#" data-fim-help="configuration" data-fim-anchor="sigma_band_multiplier">sigma_band_multiplier</a> was set — or — for a batch — a pooled scatter across every replicate's final state beside a replicate table (status, final generation, every named statistic) and each statistic's across-replicate confidence interval as a meter, explicitly labeled &quot;uncertainty across N independent replicates&quot; so it is never confused with the within-run σ band; either way, one panel (Deme 1 vs. Deme 2 by default) with a labeled, numbered <code>0.0</code>-<code>1.0</code> probability scale on both axes; axis selectors on the plot choose which two demes to compare directly, and selecting Deme 1 vs. Deme 2 again returns to the default panel; the statistics panel's deme-pair rows (Nei distances and pairwise F<sub>ST</sub>, when shown) follow the same choice, live, after the run and while scrubbing; which statistics the panel, the results tables, the trajectory chart and the sweep charts show is a Settings choice (&quot;Statistics shown&quot;, or &quot;Choose…&quot; in the panel's caption) that never changes what is computed or saved — see <a href="#nei-distances">Nei distances</a>; a scalar run with more than one persisted generation auto-populates a play/pause-and-scrub time slider over the persisted trajectory in the background, with no separate button to reach it; each batch replicate row's own &quot;Open&quot; button reaches this same view for that one replicate; &quot;Open output folder&quot; reveals the run's own artifacts (a batch's own <code>summary.json</code> and every replicate subdirectory, for a batch)</td>
 <td><a href="#output-schemas">Output schemas</a>, <a href="#batch-summaryjson-and-manifestjson">Batch <code>summary.json</code> and <code>manifest.json</code></a></td>
 </tr>
 <tr>
@@ -766,8 +774,9 @@ the number of seconds to allow, or to <code>0</code> to wait indefinitely:</p>
 <pre><code class="language-console">FIM_GUI_SHUTDOWN_TIMEOUT=0 fim --graphical
 </code></pre>
 <h3 id="saved-preferences">Saved preferences</h3>
-<p>The GUI remembers six things between launches: Settings' own Significant
-digits setting, the light/dark override (absent/<code>null</code> means &quot;follow the
+<p>The GUI remembers these things between launches: Settings' own Significant
+digits setting, which statistics are shown (&quot;Statistics shown&quot;), the
+largest deme count for which runs save every pair's statistics, the light/dark override (absent/<code>null</code> means &quot;follow the
 OS,&quot; the default), whether the first-launch welcome panel has already been
 dismissed, the startup behavior selected in Settings, the execution defaults
 (execution engine, n<sub>replicates</sub>, and the rest of Settings' own
@@ -992,8 +1001,23 @@ genuinely polymorphic loci are averaged);</li>
 differentiation K<sub>ST</sub>;</li>
 <li>literature-derived supplemental statistics:
 Caballero-García-Dorado allelic distance A<sub>CGD</sub>, Gregorius
-δ, and Sherwin mutual information <code>MI</code>.</li>
+δ, and Sherwin mutual information <code>MI</code>;</li>
+<li>the within- and between-deme gene identities G<sub>s</sub> (<code>Gs</code>) and
+G<sub>d</sub> (<code>Gd</code>);</li>
+<li>Nei's (1973) D<sub>m</sub> (<code>D_m</code>) and R<sub>ST</sub> (<code>R_ST</code>), Nei's
+logarithmic G'<sub>ST</sub> (<code>G_ST_NEI_LOG</code>), Hedrick's standardized
+G'<sub>ST</sub> (<code>G_ST_HEDRICK</code>), and coancestry F<sub>ST</sub> (<code>F_ST</code>),
+each computed from the pooled H<sub>S</sub>/H<sub>T</sub> and <code>null</code> where
+undefined;</li>
+<li>Nei's genetic distance across all demes in four forms, and the matching
+identities: <code>NEI_D_ALL_GEO</code>, <code>NEI_D_ALL_GEO_LOCUS_MEAN</code>, <code>NEI_D_ALL_ARITH</code>,
+<code>NEI_D_ALL_ARITH_LOCUS_MEAN</code>, <code>NEI_I_ALL_*</code> (see
+<a href="#nei-distances">Nei distances</a>). A distance is <code>null</code> when infinite; its
+identity is always a number.</li>
 </ul>
+<p>A <code>report.json</code> written before a statistic existed simply lacks that key.
+Opening such a run computes the missing values from its saved trajectory
+without rewriting the file.</p>
 <p>Multiple loci are independent repeats. H<sub>S</sub>, H<sub>T</sub>, H<sub>ST</sub>, E<sub>ST</sub>,
 and K<sub>ST</sub> are always each locus's own arithmetic mean. <code>D</code> and G<sub>ST</sub>
 instead follow <a href="#" data-fim-help="configuration" data-fim-anchor="locus_aggregation">locus_aggregation</a>:
@@ -1002,6 +1026,57 @@ first and one <code>D</code>/G<sub>ST</sub> is computed from those pooled values
 averaged per-locus ratios; the opt-in <code>mean_of_ratios</code> restores the
 per-locus-ratio-then-average behavior. <code>D</code> and K<sub>ST</sub> always use equal
 deme weighting. deme_weighting affects E<sub>ST</sub>.</p>
+<h3 id="pairwisejson"><code>pairwise.json</code></h3>
+<p>Every pair of demes' Nei identities and pairwise F<sub>ST</sub> at the run's
+final generation, so any pair can be compared later or analyzed outside
+<code>fim</code>. Written for every scalar run and every batch replicate, and digested
+in the manifest.</p>
+<pre><code class="language-json">{
+  &quot;schema_version&quot;: 1,
+  &quot;generation&quot;: 1234,
+  &quot;deme_count&quot;: 4,
+  &quot;mode&quot;: &quot;full&quot;,
+  &quot;encoding&quot;: &quot;upper-triangle-row-major&quot;,
+  &quot;matrices&quot;: {
+    &quot;NEI_I_PAIR_GEO&quot;: [0.91, 0.87, 0.80, 0.93, 0.85, 0.88],
+    &quot;NEI_I_PAIR_GEO_LOCUS_MEAN&quot;: [],
+    &quot;NEI_I_PAIR_ARITH&quot;: [],
+    &quot;NEI_I_PAIR_ARITH_LOCUS_MEAN&quot;: [],
+    &quot;F_ST_PAIR&quot;: []
+  }
+}
+</code></pre>
+<p>(The empty lists stand for lists of the same length.) Each list is the upper
+triangle of a symmetric matrix, row by row: pairs (1, 2), (1, 3), (1, 4),
+(2, 3), (2, 4), (3, 4) for four demes, numbered from 1 as everywhere else in
+<code>fim</code>. The diagonal is not stored (identity 1, F<sub>ST</sub> 0). Each
+distance is <code>-ln</code> of its identity; a pairwise F<sub>ST</sub> is <code>null</code> where
+undefined (both demes fixed for the same allele). With more demes than
+<a href="#run-a-simulation"><code>--pairwise-max-demes</code></a>, <code>&quot;mode&quot;</code> is <code>&quot;skipped&quot;</code>, the
+limit is recorded as <code>&quot;max_demes&quot;</code>, and there are no matrices.</p>
+<h3 id="nei-distances">Nei distances</h3>
+<p><code>fim</code> reports Nei's genetic distance with Nei's own geometric-mean
+denominator and with the arithmetic-mean denominator (Jost, L. (2026)
+private communication), for the pair of demes the scatter plot shows and
+across all demes, combining loci by Nei's rule or by averaging per-locus
+distances. In the desktop GUI the forms start hidden: choose them in
+Settings, &quot;Statistics shown&quot;, or with &quot;Choose…&quot; in the statistics panel's
+caption. The pair rows name the pair they describe and follow the scatter
+plot's deme selectors, live, after the run, and while scrubbing.</p>
+<p>Two results need a word of explanation:</p>
+<ul>
+<li><strong>∞</strong> means the demes share no allele, so the identity is 0.</li>
+<li>A <strong>negative</strong> all-demes geometric distance is not an error. That form
+divides the average between-deme identity by the <em>geometric</em> mean of the
+within-deme identities, which one very diverse deme can drag far down.
+It signals strongly unequal within-deme diversity: compare the arithmetic
+form beside it, which stays non-negative, and the within-deme diversity
+(H<sub>S</sub>, effective number of alleles). Pair forms and arithmetic forms
+are never negative.</li>
+</ul>
+<p>The arithmetic all-demes distance equals <code>-ln(1 - D)</code> for Jost's <code>D</code>.
+<a href="#" data-fim-external="https://github.com/selby-botany/jost-finite-island-model/blob/main/doc/nei-distances.md">Nei distances in fim</a> has the full explanation, a worked
+example of a negative value, and the formulas.</p>
 <h3 id="scatterpng"><code>scatter.png</code></h3>
 <ul>
 <li><code>d = 2</code>: direct Deme 1 versus Deme 2 scatter with a diagonal reference.</li>
@@ -1046,12 +1121,14 @@ a maximum, and a maximum exists in every data set — including one where all
 the alleles are rare and nearly equal.</p>
 <h3 id="batch-summaryjson-and-manifestjson">Batch <code>summary.json</code> and <code>manifest.json</code></h3>
 <p>Written only for n<sub>replicates</sub> greater than one, alongside the
-<code>replicate-NNN/</code> subdirectories, each of which holds the four scalar-run
-files above.</p>
-<p><code>summary.json</code> maps each reported statistic name (<code>D</code>, G<sub>ST</sub>, E<sub>ST</sub>,
-K<sub>ST</sub>, H<sub>S</sub>, H<sub>T</sub>, H<sub>ST</sub>,
-A<sub>CGD</sub>, Gregorius δ, <code>MI</code>, G<sub>s</sub>, G<sub>d</sub>) to its across-replicate
-confidence interval:</p>
+<code>replicate-NNN/</code> subdirectories, each of which holds the scalar-run files
+above.</p>
+<p><code>summary.json</code> maps each reported statistic name (every global statistic in
+<a href="#reportjson"><code>report.json</code></a>: <code>D</code>, G<sub>ST</sub>, E<sub>ST</sub>,
+K<sub>ST</sub>, H<sub>S</sub>, H<sub>T</sub>, H<sub>ST</sub>, A<sub>CGD</sub>,
+Gregorius δ, <code>MI</code>, G<sub>s</sub>, G<sub>d</sub>, the pooled-heterozygosity
+measures and the all-demes Nei forms) to its across-replicate confidence
+interval:</p>
 <pre><code class="language-json">{
   &quot;D&quot;: {
     &quot;mean&quot;: 0.643,
@@ -1088,8 +1165,13 @@ reads such a file as though the value were <code>null</code>.</p>
 <p>G<sub>ST</sub> can have a smaller sample_count than the other statistics: a
 replicate whose locus is monomorphic across every deme reports G<sub>ST</sub> as
 <code>null</code> in its own <code>report.json</code>, and that replicate is excluded from
-G<sub>ST</sub>'s interval rather than papered over with a substitute value. A
-statistic left with fewer than two defined replicates is omitted from
+G<sub>ST</sub>'s interval rather than papered over with a substitute value. The
+other statistics that can be <code>null</code> because they are undefined (R<sub>ST</sub>,
+both G'<sub>ST</sub>, F<sub>ST</sub>) are treated the same way. A Nei distance
+is different: <code>null</code> there means <em>infinite</em>, and a mean that includes an
+infinite value has no finite value, so a Nei distance infinite in any
+replicate is omitted from <code>summary.json</code>; its identity is still summarized.
+A statistic left with fewer than two defined replicates is omitted from
 <code>summary.json</code> entirely.</p>
 <p>The batch's own <code>manifest.json</code> (distinct from each replicate's own) records
 schema_version, the batch run_id, every replicate_run_ids entry,
