@@ -82,6 +82,7 @@ Every test module, fixture, and test function documented here in full; `doc/fim-
   - [`test_settings_modal`](#gui.test_settings_modal)
   - [`test_shutdown_deadman`](#gui.test_shutdown_deadman)
   - [`test_shutdown_signals`](#gui.test_shutdown_signals)
+  - [`test_statistics_shown_screen`](#gui.test_statistics_shown_screen)
   - [`test_store`](#gui.test_store)
   - [`test_sweep_api`](#gui.test_sweep_api)
   - [`test_sweep_results_screen`](#gui.test_sweep_results_screen)
@@ -9673,6 +9674,53 @@ it via `_start_scalar_run`'s own thread) — this is the first, added
 specifically to prove the new `live_deme_pair` parameter without
 needing a real background thread or a `gui` marker.
 
+<a id="gui.test_app_api.test_statistics_catalog_starts_on_the_catalog_defaults"></a>
+
+#### test\_statistics\_catalog\_starts\_on\_the\_catalog\_defaults
+
+```python
+def test_statistics_catalog_starts_on_the_catalog_defaults(
+        tmp_path: Path) -> None
+```
+
+A fresh install shows the catalog's defaults and sends every entry.
+
+<a id="gui.test_app_api.test_set_shown_statistics_persists_filters_and_resets"></a>
+
+#### test\_set\_shown\_statistics\_persists\_filters\_and\_resets
+
+```python
+def test_set_shown_statistics_persists_filters_and_resets(
+        tmp_path: Path) -> None
+```
+
+Unknown keys are dropped, order follows the catalog, `None` resets.
+
+<a id="gui.test_app_api.test_set_pairwise_max_demes_validates_and_persists"></a>
+
+#### test\_set\_pairwise\_max\_demes\_validates\_and\_persists
+
+```python
+def test_set_pairwise_max_demes_validates_and_persists(tmp_path: Path) -> None
+```
+
+A positive integer is saved; anything else is refused.
+
+<a id="gui.test_app_api.test_the_shown_set_never_reaches_computation_or_saved_results"></a>
+
+#### test\_the\_shown\_set\_never\_reaches\_computation\_or\_saved\_results
+
+```python
+def test_the_shown_set_never_reaches_computation_or_saved_results() -> None
+```
+
+Showing or hiding a statistic is display only.
+
+Static guard for the catalog design's first invariant: nothing outside
+the preferences store and the bridge methods that read and write it
+names `shown_statistics`, so the engine, the runners and every writer
+of saved results cannot depend on it.
+
 <a id="gui.test_app_api.test_drain_run_messages_forwards_a_status_note_and_keeps_draining"></a>
 
 #### test\_drain\_run\_messages\_forwards\_a\_status\_note\_and\_keeps\_draining
@@ -16290,6 +16338,48 @@ def test_the_preferences_file_is_not_owner_only(tmp_path: Path) -> None
 
 Saved preferences are readable like any other file the user creates.
 
+<a id="gui.test_preferences.test_shown_statistics_and_pairwise_limit_round_trip"></a>
+
+#### test\_shown\_statistics\_and\_pairwise\_limit\_round\_trip
+
+```python
+def test_shown_statistics_and_pairwise_limit_round_trip(
+        tmp_path: Path) -> None
+```
+
+Both statistic preferences survive a save and load.
+
+<a id="gui.test_preferences.test_shown_statistics_drops_unknown_keys_and_keeps_an_empty_choice"></a>
+
+#### test\_shown\_statistics\_drops\_unknown\_keys\_and\_keeps\_an\_empty\_choice
+
+```python
+def test_shown_statistics_drops_unknown_keys_and_keeps_an_empty_choice(
+        tmp_path: Path) -> None
+```
+
+A statistic a later version removed is dropped; hiding all is kept.
+
+<a id="gui.test_preferences.test_defaults_write_neither_statistic_preference"></a>
+
+#### test\_defaults\_write\_neither\_statistic\_preference
+
+```python
+def test_defaults_write_neither_statistic_preference(tmp_path: Path) -> None
+```
+
+An untouched install stores nothing for either preference.
+
+<a id="gui.test_preferences.test_a_non_positive_pairwise_limit_is_quarantined"></a>
+
+#### test\_a\_non\_positive\_pairwise\_limit\_is\_quarantined
+
+```python
+def test_a_non_positive_pairwise_limit_is_quarantined(tmp_path: Path) -> None
+```
+
+A hand-edited zero limit is rejected like any malformed field.
+
 <a id="gui.test_presets"></a>
 
 # gui.test\_presets
@@ -18720,6 +18810,61 @@ child interpreter, not this test's own process, for the same reason
 `test_shutdown_deadman.py`'s wedged-process test uses one: nothing
 here should risk a real termination signal reaching the process
 running this suite.
+
+<a id="gui.test_statistics_shown_screen"></a>
+
+# gui.test\_statistics\_shown\_screen
+
+Headless functional tests for Settings' "Statistics shown" chooser.
+
+`test/gui/test_app_api.py` proves the bridge methods as plain Python
+calls; these prove the page builds the chooser from the statistic catalog,
+applies a choice to the statistics panel at once, and hides the Nei
+family by default (statistics catalog design, section 6.5).
+
+<a id="gui.test_statistics_shown_screen.test_the_nei_family_starts_hidden_and_the_long_standing_statistics_shown"></a>
+
+#### test\_the\_nei\_family\_starts\_hidden\_and\_the\_long\_standing\_statistics\_shown
+
+```python
+def test_the_nei_family_starts_hidden_and_the_long_standing_statistics_shown(
+        window: webview.Window, drive: Callable[..., Any]) -> None
+```
+
+A fresh install: `D` shown, every Nei row and the pair heading hidden.
+
+<a id="gui.test_statistics_shown_screen.test_the_chooser_lists_every_catalog_statistic_grouped"></a>
+
+#### test\_the\_chooser\_lists\_every\_catalog\_statistic\_grouped
+
+```python
+def test_the_chooser_lists_every_catalog_statistic_grouped(
+        window: webview.Window, drive: Callable[..., Any]) -> None
+```
+
+Opening it from the panel builds one checkbox per catalog entry.
+
+<a id="gui.test_statistics_shown_screen.test_the_nei_distances_preset_applies_to_the_panel_at_once"></a>
+
+#### test\_the\_nei\_distances\_preset\_applies\_to\_the\_panel\_at\_once
+
+```python
+def test_the_nei_distances_preset_applies_to_the_panel_at_once(
+        window: webview.Window, drive: Callable[..., Any]) -> None
+```
+
+The preset shows Nei's pooled-rule distances and hides the rest.
+
+<a id="gui.test_statistics_shown_screen.test_the_filter_narrows_the_list_to_matching_statistics"></a>
+
+#### test\_the\_filter\_narrows\_the\_list\_to\_matching\_statistics
+
+```python
+def test_the_filter_narrows_the_list_to_matching_statistics(
+        window: webview.Window, drive: Callable[..., Any]) -> None
+```
+
+Typing "Jost" leaves only entries whose text mentions it visible.
 
 <a id="gui.test_store"></a>
 

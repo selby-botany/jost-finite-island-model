@@ -103,6 +103,7 @@ from pathlib import Path
 from typing import Any, Final
 
 from fim.paths import write_text_atomically
+from fim.statistics.catalog import CATALOG, DEFAULT_PAIRWISE_MAX_DEMES
 
 logger = logging.getLogger(__name__)
 
@@ -164,6 +165,32 @@ SCATTER_STYLES: tuple[str, ...] = (
 `circles` is the original encoding (radius grows with count)."""
 
 DEFAULT_SCATTER_STYLE = "color-badge"
+
+
+def _parse_shown_statistics(gui: Mapping[str, Any]) -> tuple[str, ...] | None:
+    """Read `gui.shown_statistics`: catalog keys, or `None` for the default.
+
+    Unknown keys (a statistic a later version removed) are dropped rather
+    than rejected. An empty list is kept: hiding every statistic is a
+    choice, not a missing value.
+    """
+    raw = gui.get("shown_statistics")
+    if raw is None:
+        return None
+    if not isinstance(raw, list) or not all(isinstance(key, str) for key in raw):
+        raise ValueError("preferences 'gui.shown_statistics' must be a list of strings")
+    wanted = set(raw)
+    return tuple(entry.key for entry in CATALOG if entry.key in wanted)
+
+
+def _parse_pairwise_max_demes(gui: Mapping[str, Any]) -> int:
+    """Read `gui.pairwise_max_demes`: a positive integer."""
+    value = gui.get("pairwise_max_demes", DEFAULT_PAIRWISE_MAX_DEMES)
+    if isinstance(value, bool) or not isinstance(value, int) or value < 1:
+        raise ValueError(
+            "preferences 'gui.pairwise_max_demes' must be a positive integer"
+        )
+    return value
 
 
 def _parse_run_graphs(gui: Mapping[str, Any]) -> tuple[str, ...] | None:
@@ -259,6 +286,12 @@ class GuiPreferences:
         run_graph_columns: How many columns the shown graphs are laid out
             in (rows follow); 1 to `MAX_RUN_GRAPH_COLUMNS`.
         scatter_style: One of `SCATTER_STYLES`.
+        shown_statistics: The statistics shown (Settings, "Statistics
+            shown"), as catalog keys in catalog order, or `None` for the
+            catalog's own defaults. Display only: every statistic is
+            computed and saved whatever this holds.
+        pairwise_max_demes: Largest deme count for which a run saves
+            every deme pair's Nei identities (`pairwise.json`).
         default_ploidy: `"2"` (the default: diploid) or `"1"`-`"4"`, or
             `""` when the botanist chose "Ask me each time" -- the
             ploidy a fresh configuration's form starts on (Settings'
@@ -283,6 +316,8 @@ class GuiPreferences:
     run_graphs: tuple[str, ...] | None = None
     run_graph_columns: int = DEFAULT_RUN_GRAPH_COLUMNS
     scatter_style: str = DEFAULT_SCATTER_STYLE
+    shown_statistics: tuple[str, ...] | None = None
+    pairwise_max_demes: int = DEFAULT_PAIRWISE_MAX_DEMES
 
     def _run_card_dict(self) -> dict[str, Any]:
         """The Run card display choices that differ from their defaults."""
@@ -293,6 +328,10 @@ class GuiPreferences:
             result["run_graph_columns"] = self.run_graph_columns
         if self.scatter_style != DEFAULT_SCATTER_STYLE:
             result["scatter_style"] = self.scatter_style
+        if self.shown_statistics is not None:
+            result["shown_statistics"] = list(self.shown_statistics)
+        if self.pairwise_max_demes != DEFAULT_PAIRWISE_MAX_DEMES:
+            result["pairwise_max_demes"] = self.pairwise_max_demes
         return result
 
     def to_dict(self) -> dict[str, Any]:
@@ -421,6 +460,8 @@ class GuiPreferences:
             scatter_style=_choice(
                 gui, "scatter_style", DEFAULT_SCATTER_STYLE, SCATTER_STYLES
             ),
+            shown_statistics=_parse_shown_statistics(gui),
+            pairwise_max_demes=_parse_pairwise_max_demes(gui),
         )
 
     def with_form_values(self, form_values: Mapping[str, str]) -> GuiPreferences:
@@ -546,6 +587,14 @@ class GuiPreferences:
                 self.scatter_style if scatter_style is None else scatter_style
             ),
         )
+
+    def with_shown_statistics(self, keys: tuple[str, ...] | None) -> GuiPreferences:
+        """Return a copy with the shown statistics replaced (`None`: defaults)."""
+        return replace(self, shown_statistics=keys)
+
+    def with_pairwise_max_demes(self, max_demes: int) -> GuiPreferences:
+        """Return a copy with the `pairwise.json` deme-count limit replaced."""
+        return replace(self, pairwise_max_demes=max_demes)
 
     def with_default_ploidy(self, default_ploidy: str) -> GuiPreferences:
         """Return a copy with `default_ploidy` replaced.

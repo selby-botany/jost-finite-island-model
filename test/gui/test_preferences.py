@@ -765,3 +765,56 @@ def test_the_preferences_file_is_not_owner_only(tmp_path: Path) -> None:
     save_preferences(path, GuiPreferences())
 
     assert stat.S_IMODE(path.stat().st_mode) == paths.default_file_mode()
+
+
+def test_shown_statistics_and_pairwise_limit_round_trip(tmp_path: Path) -> None:
+    """Both statistic preferences survive a save and load."""
+    path = tmp_path / "preferences.json"
+    original = GuiPreferences(
+        shown_statistics=("D", "NEI_D_PAIR_ARITH"), pairwise_max_demes=200
+    )
+    save_preferences(path, original)
+    loaded, warning = load_preferences(path)
+    assert warning is None
+    assert loaded == original
+
+
+def test_shown_statistics_drops_unknown_keys_and_keeps_an_empty_choice(
+    tmp_path: Path,
+) -> None:
+    """A statistic a later version removed is dropped; hiding all is kept."""
+    path = tmp_path / "preferences.json"
+    for shown, expected in ((["NOPE", "G_ST", "D"], ("D", "G_ST")), ([], ())):
+        path.write_text(
+            json.dumps(
+                {
+                    "schema_version": CURRENT_SCHEMA_VERSION,
+                    "gui": {"shown_statistics": shown},
+                }
+            ),
+            encoding="utf-8",
+        )
+        loaded, warning = load_preferences(path)
+        assert warning is None
+        assert loaded.shown_statistics == expected
+
+
+def test_defaults_write_neither_statistic_preference(tmp_path: Path) -> None:
+    """An untouched install stores nothing for either preference."""
+    gui = GuiPreferences().to_dict()["gui"]
+    assert "shown_statistics" not in gui
+    assert "pairwise_max_demes" not in gui
+
+
+def test_a_non_positive_pairwise_limit_is_quarantined(tmp_path: Path) -> None:
+    """A hand-edited zero limit is rejected like any malformed field."""
+    path = tmp_path / "preferences.json"
+    path.write_text(
+        json.dumps(
+            {"schema_version": CURRENT_SCHEMA_VERSION, "gui": {"pairwise_max_demes": 0}}
+        ),
+        encoding="utf-8",
+    )
+    loaded, warning = load_preferences(path)
+    assert loaded == GuiPreferences()
+    assert warning is not None

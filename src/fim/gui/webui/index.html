@@ -526,6 +526,12 @@
           <caption class="stats-table-caption"
                    title="Click any statistic to plot it on the trajectory chart.">
             Statistics
+            <!-- Opens Settings at "Statistics shown", so this panel can be
+                 decluttered without leaving the results. -->
+            <button type="button" class="stats-choose-button"
+                    title="Choose which statistics are shown. Hidden statistics are still computed and saved.">
+              Choose…
+            </button>
           </caption>
           <tbody>
             <!-- One row per global statistic, built from the catalog
@@ -542,6 +548,12 @@
           <caption class="stats-table-caption"
                    title="Click any statistic to plot it on the trajectory chart.">
             Statistics
+            <!-- Opens Settings at "Statistics shown", so this panel can be
+                 decluttered without leaving the results. -->
+            <button type="button" class="stats-choose-button"
+                    title="Choose which statistics are shown. Hidden statistics are still computed and saved.">
+              Choose…
+            </button>
           </caption>
           <tbody>
             <!-- One row per global statistic, built from the catalog
@@ -568,6 +580,12 @@
           <caption class="stats-table-caption"
                    title="Click any statistic to plot it on the trajectory chart.">
             Statistics
+            <!-- Opens Settings at "Statistics shown", so this panel can be
+                 decluttered without leaving the results. -->
+            <button type="button" class="stats-choose-button"
+                    title="Choose which statistics are shown. Hidden statistics are still computed and saved.">
+              Choose…
+            </button>
           </caption>
           <tbody id="batch-results-summary-body"></tbody>
         </table>
@@ -1923,6 +1941,42 @@
       <p class="hint">
         Alleles at the same spot are counted together. Different styles show
         that count differently; try each on a real run.
+      </p>
+    </div>
+
+    <!-- Which statistics are shown (statistics catalog design, section
+         6.5). Display only: every statistic is still computed and saved.
+         The list is built from the catalog (`settings.js`). -->
+    <fieldset class="settings-statistics" id="settings-statistics">
+      <legend>Statistics shown</legend>
+      <p class="hint">
+        Choose the statistics the statistics panel, the results tables, the
+        trajectory chart and the sweep charts show. Hidden statistics are
+        still computed and saved with every run, so you can show them later,
+        even for runs you have already made.
+      </p>
+      <div class="settings-statistics-presets">
+        <button type="button" data-statistics-preset="essentials">Essentials</button>
+        <button type="button" data-statistics-preset="differentiation">Differentiation</button>
+        <button type="button" data-statistics-preset="distances">Nei distances</button>
+        <button type="button" data-statistics-preset="everything">Everything</button>
+      </div>
+      <input type="search" id="settings-statistics-filter"
+             placeholder="Filter statistics" aria-label="Filter statistics">
+      <div id="settings-statistics-list"></div>
+    </fieldset>
+
+    <!-- `pairwise.json` deme-count limit (`fim.persistence.pairwise`). -->
+    <div class="field">
+      <label for="settings-pairwise-max-demes">Save every deme pair for runs with up to</label>
+      <input type="number" id="settings-pairwise-max-demes" min="1" step="1">
+      <p class="hint">
+        demes. Each run then saves the Nei identities of every pair of demes,
+        so any pair can be compared later. The file grows with the square of
+        the deme count: about 0.4 MB at 100 demes and 42 MB at 1024, for each
+        run and each replicate of a batch, and saving it takes a few seconds
+        at the largest sizes. Above the limit no matrix is saved; any single
+        pair can still be recomputed from the run's saved trajectory.
       </p>
     </div>
 

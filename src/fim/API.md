@@ -148,6 +148,9 @@ Return to the [source-tree orientation](../README.md) or the [developer guide](.
     * [get\_welcome\_dismissed](#fim.gui.app.Api.get_welcome_dismissed)
     * [dismiss\_welcome](#fim.gui.app.Api.dismiss_welcome)
     * [get\_statistics\_catalog](#fim.gui.app.Api.get_statistics_catalog)
+    * [set\_shown\_statistics](#fim.gui.app.Api.set_shown_statistics)
+    * [get\_pairwise\_max\_demes](#fim.gui.app.Api.get_pairwise_max_demes)
+    * [set\_pairwise\_max\_demes](#fim.gui.app.Api.set_pairwise_max_demes)
     * [get\_startup\_warnings](#fim.gui.app.Api.get_startup_warnings)
     * [get\_live\_deme\_pair](#fim.gui.app.Api.get_live_deme_pair)
     * [set\_live\_deme\_pair](#fim.gui.app.Api.set_live_deme_pair)
@@ -256,6 +259,8 @@ Return to the [source-tree orientation](../README.md) or the [developer guide](.
     * [with\_default\_run\_settings](#fim.gui.preferences.GuiPreferences.with_default_run_settings)
     * [with\_results\_location\_override](#fim.gui.preferences.GuiPreferences.with_results_location_override)
     * [with\_run\_card\_layout](#fim.gui.preferences.GuiPreferences.with_run_card_layout)
+    * [with\_shown\_statistics](#fim.gui.preferences.GuiPreferences.with_shown_statistics)
+    * [with\_pairwise\_max\_demes](#fim.gui.preferences.GuiPreferences.with_pairwise_max_demes)
     * [with\_default\_ploidy](#fim.gui.preferences.GuiPreferences.with_default_ploidy)
   * [load\_preferences](#fim.gui.preferences.load_preferences)
   * [set\_preferences\_file\_override](#fim.gui.preferences.set_preferences_file_override)
@@ -5381,6 +5386,65 @@ statistic is defined.
   every catalog entry in display order (`catalog_payload`), the
   keys currently shown, and the keys a fresh install shows.
 
+<a id="fim.gui.app.Api.set_shown_statistics"></a>
+
+#### set\_shown\_statistics
+
+```python
+@_log_bridge_call
+def set_shown_statistics(keys: list[str] | None) -> dict[str, Any]
+```
+
+Remember which statistics are shown (Settings, "Statistics shown").
+
+Display only: what a run computes and saves never depends on it.
+
+**Arguments**:
+
+- `keys` - Catalog keys to show; unknown keys are ignored and an
+  empty list hides every statistic. `None` returns to the
+  catalog's defaults.
+
+
+**Returns**:
+
+- ``{"ok"` - True, "shown": [...]}`, the keys kept, in catalog order.
+
+<a id="fim.gui.app.Api.get_pairwise_max_demes"></a>
+
+#### get\_pairwise\_max\_demes
+
+```python
+@_log_bridge_call
+def get_pairwise_max_demes() -> int
+```
+
+Return the largest deme count whose runs save `pairwise.json` in full.
+
+<a id="fim.gui.app.Api.set_pairwise_max_demes"></a>
+
+#### set\_pairwise\_max\_demes
+
+```python
+@_log_bridge_call
+def set_pairwise_max_demes(max_demes: int) -> dict[str, Any]
+```
+
+Set the largest deme count whose runs save every pair's statistics.
+
+**Arguments**:
+
+- `max_demes` - A positive integer. Larger values save bigger files
+  (about 42 MB per run at 1024 demes) and take longer to
+  write; any pair can still be recomputed from the saved
+  trajectory above the limit.
+
+
+**Returns**:
+
+- ``{"ok"` - True, "value": max_demes}`, or `{"ok": False,
+- `"message"` - ...}`.
+
 <a id="fim.gui.app.Api.get_startup_warnings"></a>
 
 #### get\_startup\_warnings
@@ -8224,6 +8288,12 @@ One loaded (or default) snapshot of the GUI's own preferences.
 - `run_graph_columns` - How many columns the shown graphs are laid out
   in (rows follow); 1 to `MAX_RUN_GRAPH_COLUMNS`.
 - `scatter_style` - One of `SCATTER_STYLES`.
+- `shown_statistics` - The statistics shown (Settings, "Statistics
+  shown"), as catalog keys in catalog order, or `None` for the
+  catalog's own defaults. Display only: every statistic is
+  computed and saved whatever this holds.
+- `pairwise_max_demes` - Largest deme count for which a run saves
+  every deme pair's Nei identities (`pairwise.json`).
 - `default_ploidy` - `"2"` (the default: diploid) or `"1"`-`"4"`, or
   `""` when the botanist chose "Ask me each time" -- the
   ploidy a fresh configuration's form starts on (Settings'
@@ -8420,6 +8490,26 @@ Return a copy with any of the Run card's display choices replaced.
 
 The `Api.set_run_*`/`set_scatter_style` bridge methods' own update:
 each argument left `None` keeps the current value.
+
+<a id="fim.gui.preferences.GuiPreferences.with_shown_statistics"></a>
+
+#### with\_shown\_statistics
+
+```python
+def with_shown_statistics(keys: tuple[str, ...] | None) -> GuiPreferences
+```
+
+Return a copy with the shown statistics replaced (`None`: defaults).
+
+<a id="fim.gui.preferences.GuiPreferences.with_pairwise_max_demes"></a>
+
+#### with\_pairwise\_max\_demes
+
+```python
+def with_pairwise_max_demes(max_demes: int) -> GuiPreferences
+```
+
+Return a copy with the `pairwise.json` deme-count limit replaced.
 
 <a id="fim.gui.preferences.GuiPreferences.with_default_ploidy"></a>
 
@@ -19442,6 +19532,8 @@ call from several threads at once, one call per point in flight.
 - `max_workers` - Worker processes for a lineal batch point, or `None`
   for the runner's default (one per core). `run_point`'s own
   `max_workers` argument overrides it for one call.
+- `pairwise_max_demes` - Largest deme count for which each point saves
+  every deme pair's Nei identities (`pairwise.json`).
 
 <a id="fim.sweep_run.LocalPointRunner.run_point"></a>
 

@@ -142,7 +142,12 @@ from fim.statistics import (
     matrix_identity_trajectory,
     mutation_negligible_equilibrium,
 )
-from fim.statistics.catalog import catalog_payload, default_shown_keys, report_keys
+from fim.statistics.catalog import (
+    CATALOG,
+    catalog_payload,
+    default_shown_keys,
+    report_keys,
+)
 from fim.sweep import SweepSpec, apply_coordinates, enumerate_points
 from fim.sweep_run import (
     LocalPointRunner,
@@ -1806,7 +1811,13 @@ class Api:
         message_queue: queue.Queue[runner.RunMessage] = queue.Queue()
         cancel_event = threading.Event()
         try:
-            runner.start_run(params, output_directory, message_queue, cancel_event)
+            runner.start_run(
+                params,
+                output_directory,
+                message_queue,
+                cancel_event,
+                pairwise_max_demes=self._preferences.pairwise_max_demes,
+            )
         except FileExistsError as error:
             logger.warning("scalar run failed to start: %s", error)
             return {"ok": False, "message": str(error)}
@@ -1909,6 +1920,7 @@ class Api:
                 message_queue,
                 cancel_event,
                 max_workers=max_workers,
+                pairwise_max_demes=self._preferences.pairwise_max_demes,
             )
         except (FileExistsError, ValueError) as error:
             logger.warning("batch run failed to start: %s", error)
@@ -3411,11 +3423,68 @@ class Api:
             every catalog entry in display order (`catalog_payload`), the
             keys currently shown, and the keys a fresh install shows.
         """
+        shown = self._preferences.shown_statistics
         return {
             "statistics": catalog_payload(),
-            "shown": list(default_shown_keys()),
+            "shown": list(default_shown_keys() if shown is None else shown),
             "defaultShown": list(default_shown_keys()),
         }
+
+    @_log_bridge_call
+    def set_shown_statistics(self, keys: list[str] | None) -> dict[str, Any]:
+        """Remember which statistics are shown (Settings, "Statistics shown").
+
+        Display only: what a run computes and saves never depends on it.
+
+        Args:
+            keys: Catalog keys to show; unknown keys are ignored and an
+                empty list hides every statistic. `None` returns to the
+                catalog's defaults.
+
+        Returns:
+            `{"ok": True, "shown": [...]}`, the keys kept, in catalog order.
+        """
+        wanted = set(keys or ())
+        kept = (
+            None
+            if keys is None
+            else tuple(entry.key for entry in CATALOG if entry.key in wanted)
+        )
+        self._preferences = self._preferences.with_shown_statistics(kept)
+        save_preferences(self._preferences_path, self._preferences)
+        return {
+            "ok": True,
+            "shown": list(default_shown_keys() if kept is None else kept),
+        }
+
+    @_log_bridge_call
+    def get_pairwise_max_demes(self) -> int:
+        """Return the largest deme count whose runs save `pairwise.json` in full."""
+        return self._preferences.pairwise_max_demes
+
+    @_log_bridge_call
+    def set_pairwise_max_demes(self, max_demes: int) -> dict[str, Any]:
+        """Set the largest deme count whose runs save every pair's statistics.
+
+        Args:
+            max_demes: A positive integer. Larger values save bigger files
+                (about 42 MB per run at 1024 demes) and take longer to
+                write; any pair can still be recomputed from the saved
+                trajectory above the limit.
+
+        Returns:
+            `{"ok": True, "value": max_demes}`, or `{"ok": False,
+            "message": ...}`.
+        """
+        if (
+            isinstance(max_demes, bool)
+            or not isinstance(max_demes, int)
+            or max_demes < 1
+        ):
+            return {"ok": False, "message": "the deme limit must be a positive integer"}
+        self._preferences = self._preferences.with_pairwise_max_demes(max_demes)
+        save_preferences(self._preferences_path, self._preferences)
+        return {"ok": True, "value": max_demes}
 
     @_log_bridge_call
     def get_startup_warnings(self) -> list[str]:
@@ -4072,11 +4141,13 @@ class Api:
         def push(event: SweepEvent) -> None:
             _push_sweep_event(window, event)
 
+        pairwise_max_demes = self._preferences.pairwise_max_demes
+
         def work() -> None:
             try:
                 run_sweep(
                     study_id,
-                    LocalPointRunner(),
+                    LocalPointRunner(pairwise_max_demes=pairwise_max_demes),
                     push,
                     cancel_event,
                     retry_failed=retry_failed,

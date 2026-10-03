@@ -1342,6 +1342,50 @@ fieldset.composite > label {
     color: var(--fim-muted);
 }
 
+/* "Choose…" in a statistics panel's caption: a quiet link-like button,
+   since it is a shortcut into Settings, not a primary action. */
+.stats-choose-button {
+    border: none;
+    background: none;
+    padding: 0 0 0 0.4rem;
+    font-weight: normal;
+    color: var(--fim-accent);
+    font-size: 0.85rem;
+    cursor: pointer;
+    text-decoration: underline;
+}
+
+/* Settings, "Statistics shown": presets, then the grouped checklist. */
+.settings-statistics {
+    border: 1px solid var(--fim-border);
+    padding: 0.5rem 0.75rem;
+    margin: 0.75rem 0;
+}
+
+.settings-statistics-presets {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.4rem;
+    margin: 0.4rem 0;
+}
+
+.settings-statistics-group h4 {
+    margin: 0.6rem 0 0.2rem;
+    font-size: 0.9rem;
+}
+
+.settings-statistics-item {
+    display: block;
+    margin: 0.2rem 0;
+}
+
+.settings-statistics-description {
+    display: block;
+    margin-left: 1.6em;
+    font-size: 0.8rem;
+    color: var(--fim-muted);
+}
+
 .stats-table td {
     padding: 0.25rem 0.6rem;
     border-bottom: 1px solid var(--fim-border);

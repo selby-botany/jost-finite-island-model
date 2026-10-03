@@ -77,6 +77,51 @@ const G_ST_CAUTION_TEXT =
 // them yet.
 let baseRunMessages = [];
 
+// The statistic(s) a completed scalar run stopped on (`report.
+// converged_on`), so a run that stopped on a statistic the researcher has
+// hidden can say so; `null` when no such run is shown.
+let completedConvergedOn = null;
+
+/**
+ * A note when the shown run stopped on a statistic that is hidden: the
+ * stop reason names a statistic nothing on screen shows otherwise.
+ * Never forces it visible; that would defeat the choice.
+ *
+ * @returns {Array<{severity: "info", text: string}>}
+ */
+function hiddenStopMessages() {
+    if (completedConvergedOn === null) {
+        return [];
+    }
+    const watched = Array.isArray(completedConvergedOn)
+        ? completedConvergedOn
+        : [completedConvergedOn];
+    const hidden = watched.filter((key) => statisticSpec(key) && !isStatisticShown(key));
+    if (hidden.length === 0) {
+        return [];
+    }
+    const names = hidden.map((key) => plainStatisticLabel(key)).join(", ");
+    return [
+        {
+            severity: "info",
+            text:
+                `This run stopped on a statistic you have hidden: ${names}. ` +
+                'Show it with "Choose statistics…".',
+        },
+    ];
+}
+
+/**
+ * Repaint what depends on the shown set: the trajectory curves, the
+ * toggle states and the run messages (`statistics-catalog.js` calls this
+ * after `setShownStatistics`).
+ */
+window.fim.onShownStatisticsChanged = function onShownStatisticsChanged() {
+    repaintTrajectory();
+    refreshTrajectoryStatisticRowStates();
+    renderRunMessages();
+};
+
 /**
  * Replace `baseRunMessages` -- the "always present" info lines a later
  * `renderRunMessages` call folds in automatically.
@@ -108,7 +153,7 @@ const RUN_MESSAGE_CLASSES = {
 };
 
 function renderRunMessages(extraMessages = []) {
-    const messages = [...baseRunMessages, ...extraMessages];
+    const messages = [...baseRunMessages, ...hiddenStopMessages(), ...extraMessages];
     runMessagesList.replaceChildren();
     runMessagesList.hidden = messages.length === 0;
     for (const { severity, text } of messages) {
@@ -2664,6 +2709,7 @@ window.fim.enterCompletedState = function enterCompletedState(payload, isBatch) 
         completedFinalStatistics = null;
         completedFinalLiteratureVisuals = null;
         completedReportReason = null;
+        completedConvergedOn = null;
         completedEffectiveAlleles = null;
         completedBatchSummary = payload.summary || null;
         completedBatchEffectiveAlleles = payload.effectiveAlleles || null;
@@ -2686,6 +2732,7 @@ window.fim.enterCompletedState = function enterCompletedState(payload, isBatch) 
                 : []),
         ]);
         completedReportReason = reason;
+        completedConvergedOn = report.converged_on ?? null;
         // Set before the row loop just below reads it (`windowStatistics
         // Description`), not after -- the two used to run in the other
         // order, which meant every row's own tooltip always showed the

@@ -42,6 +42,7 @@ from fim.model.params import SimulationParams
 from fim.persistence import groups
 from fim.persistence.groups import StudyManifest
 from fim.reproducibility import compare_runs
+from fim.statistics.catalog import DEFAULT_PAIRWISE_MAX_DEMES
 from fim.sweep import SweepPlan, SweepPoint, SweepSpec, enumerate_points
 
 logger = logging.getLogger(__name__)
@@ -172,10 +173,18 @@ class LocalPointRunner:
         max_workers: Worker processes for a lineal batch point, or `None`
             for the runner's default (one per core). `run_point`'s own
             `max_workers` argument overrides it for one call.
+        pairwise_max_demes: Largest deme count for which each point saves
+            every deme pair's Nei identities (`pairwise.json`).
     """
 
-    def __init__(self, max_workers: int | None = None) -> None:
+    def __init__(
+        self,
+        max_workers: int | None = None,
+        *,
+        pairwise_max_demes: int = DEFAULT_PAIRWISE_MAX_DEMES,
+    ) -> None:
         self.max_workers = max_workers
+        self.pairwise_max_demes = pairwise_max_demes
 
     def run_point(
         self,
@@ -220,9 +229,16 @@ class LocalPointRunner:
                     message_queue,
                     cancel_event,
                     max_workers=workers,
+                    pairwise_max_demes=self.pairwise_max_demes,
                 )
             else:
-                runner.start_run(params, output_directory, message_queue, cancel_event)
+                runner.start_run(
+                    params,
+                    output_directory,
+                    message_queue,
+                    cancel_event,
+                    pairwise_max_demes=self.pairwise_max_demes,
+                )
         except FileExistsError:
             return PointFailure("the output directory already exists")
         while True:

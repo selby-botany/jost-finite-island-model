@@ -7,6 +7,37 @@ const startupBehaviorSelect = document.getElementById("settings-startup-behavior
 const defaultPloidySelect = document.getElementById("settings-default-ploidy");
 const runGraphColumnsSelect = document.getElementById("settings-run-graph-columns");
 const scatterStyleSelect = document.getElementById("settings-scatter-style");
+const statisticsList = document.getElementById("settings-statistics-list");
+const statisticsFilter = document.getElementById("settings-statistics-filter");
+const pairwiseMaxDemesInput = document.getElementById("settings-pairwise-max-demes");
+
+// Section titles for the catalog's `group` values, in display order.
+const STATISTIC_GROUP_TITLES = {
+    differentiation: "Differentiation",
+    diversity: "Diversity",
+    distance: "Distance",
+    identity: "Gene identity",
+    "nei-distance": "Nei distances",
+    "nei-identity": "Nei identities",
+};
+
+// The preset buttons. Each returns the keys it shows; a preset replaces
+// the current choice rather than adding to it.
+const STATISTICS_PRESETS = {
+    essentials: () => [...defaultShownStatistics],
+    differentiation: () =>
+        STATISTIC_CATALOG.filter((spec) =>
+            ["differentiation", "diversity"].includes(spec.group)
+        ).map((spec) => spec.key),
+    // Nei's own multi-locus rule; the per-locus-mean forms are one click
+    // away in the list below.
+    distances: () =>
+        STATISTIC_CATALOG.filter(
+            (spec) =>
+                spec.nei && spec.nei[0] === "distance" && spec.nei[2] === "pooled"
+        ).map((spec) => spec.key),
+    everything: () => STATISTIC_CATALOG.map((spec) => spec.key),
+};
 
 const settingsEngineBackendSelect = document.getElementById("settings-engine_backend");
 const settingsNReplicatesInput = document.getElementById("settings-n_replicates");
@@ -157,14 +188,125 @@ async function loadSettingsDialog() {
     runGraphColumnsSelect.value = String(runCardLayout.columns);
     scatterStyleSelect.value = runCardLayout.scatterStyle;
     applyDefaultRunSettingsValues(await window.pywebview.api.get_default_run_settings());
+    renderStatisticsChooser();
+    pairwiseMaxDemesInput.value = String(
+        await window.pywebview.api.get_pairwise_max_demes()
+    );
     await loadSettingsResultsLocation();
 }
+
+/**
+ * Build the "Statistics shown" checklist from the catalog, grouped, with
+ * each statistic's one-sentence description beneath its name.
+ */
+function renderStatisticsChooser() {
+    statisticsList.replaceChildren();
+    for (const [group, title] of Object.entries(STATISTIC_GROUP_TITLES)) {
+        const members = STATISTIC_CATALOG.filter((spec) => spec.group === group);
+        if (members.length === 0) {
+            continue;
+        }
+        const section = document.createElement("div");
+        section.className = "settings-statistics-group";
+        const heading = document.createElement("h4");
+        heading.textContent = title;
+        section.appendChild(heading);
+        for (const spec of members) {
+            const item = document.createElement("label");
+            item.className = "settings-statistics-item";
+            item.dataset.filterText =
+                `${spec.label_text} ${spec.description}`.toLowerCase();
+            const box = document.createElement("input");
+            box.type = "checkbox";
+            box.value = spec.key;
+            box.checked = isStatisticShown(spec.key);
+            const name = document.createElement("span");
+            name.innerHTML = spec.label_html;
+            const description = document.createElement("span");
+            description.className = "settings-statistics-description";
+            description.textContent =
+                spec.scope === "pair"
+                    ? `Uses the deme pair chosen for the scatter plot. ${spec.description}`
+                    : spec.description;
+            item.append(box, " ", name, description);
+            section.appendChild(item);
+        }
+        statisticsList.appendChild(section);
+    }
+    applyStatisticsFilter();
+}
+
+/**
+ * Hide checklist entries whose name and description do not contain the
+ * filter text.
+ */
+function applyStatisticsFilter() {
+    const needle = statisticsFilter.value.trim().toLowerCase();
+    for (const item of statisticsList.querySelectorAll(".settings-statistics-item")) {
+        item.hidden = needle !== "" && !item.dataset.filterText.includes(needle);
+    }
+}
+
+/**
+ * Save a new shown set and apply it everywhere at once.
+ *
+ * @param {string[]} keys
+ */
+async function saveShownStatistics(keys) {
+    const result = await window.pywebview.api.set_shown_statistics(keys);
+    window.fim.setShownStatistics(result.shown);
+    for (const box of statisticsList.querySelectorAll("input[type=checkbox]")) {
+        box.checked = isStatisticShown(box.value);
+    }
+}
+
+statisticsList.addEventListener("change", async () => {
+    const keys = Array.from(
+        statisticsList.querySelectorAll("input[type=checkbox]:checked"),
+        (box) => box.value
+    );
+    await saveShownStatistics(keys);
+});
+
+statisticsFilter.addEventListener("input", applyStatisticsFilter);
+
+for (const button of document.querySelectorAll("[data-statistics-preset]")) {
+    button.addEventListener("click", async () => {
+        await saveShownStatistics(STATISTICS_PRESETS[button.dataset.statisticsPreset]());
+    });
+}
+
+pairwiseMaxDemesInput.addEventListener("change", async () => {
+    const result = await window.pywebview.api.set_pairwise_max_demes(
+        Number(pairwiseMaxDemesInput.value)
+    );
+    showSettingsBanner(result.ok ? "" : result.message);
+});
+
+/**
+ * Open Settings scrolled to "Statistics shown" (the statistics panel's
+ * own "Choose statistics…" button).
+ */
+window.fim.openStatisticsSettings = async function openStatisticsSettings() {
+    await loadSettingsDialog();
+    window.fim.wireModal("modal-settings");
+    settingsDialog.showModal();
+    document.getElementById("settings-statistics").scrollIntoView({ block: "start" });
+};
 
 settingsButton.addEventListener("click", async () => {
     await loadSettingsDialog();
     window.fim.wireModal("modal-settings");
     settingsDialog.showModal();
 });
+
+// One "Choose…" button in each statistics panel's caption.
+for (const button of document.querySelectorAll(".stats-choose-button")) {
+    button.addEventListener("click", (event) => {
+        event.stopPropagation();
+        window.fim.openStatisticsSettings();
+    });
+}
 
 startupBehaviorSelect.addEventListener("change", async () => {
     const result = await window.pywebview.api.set_startup_behavior(

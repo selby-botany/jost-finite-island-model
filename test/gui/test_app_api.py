@@ -83,7 +83,12 @@ from fim.statistics import (
     identity_recursion,
     mutation_negligible_equilibrium,
 )
-from fim.statistics.catalog import report_keys
+from fim.statistics.catalog import (
+    CATALOG,
+    DEFAULT_PAIRWISE_MAX_DEMES,
+    default_shown_keys,
+    report_keys,
+)
 from fim.viz.scatter import frequency_points, pooled_scatter_panels
 
 
@@ -2702,6 +2707,59 @@ def test_drain_run_messages_includes_a_live_deme_pair_panel_when_selected() -> N
     assert pair_panel["x_label"] == "Deme 1"
     assert pair_panel["y_label"] == "Deme 3"
     assert progress_payload["literatureVisuals"] == visuals
+
+
+def test_statistics_catalog_starts_on_the_catalog_defaults(tmp_path: Path) -> None:
+    """A fresh install shows the catalog's defaults and sends every entry."""
+    result = Api(
+        preferences_path=tmp_path / "preferences.json"
+    ).get_statistics_catalog()
+    assert result["shown"] == list(default_shown_keys())
+    assert result["defaultShown"] == list(default_shown_keys())
+    assert [row["key"] for row in result["statistics"]] == [e.key for e in CATALOG]
+
+
+def test_set_shown_statistics_persists_filters_and_resets(tmp_path: Path) -> None:
+    """Unknown keys are dropped, order follows the catalog, `None` resets."""
+    path = tmp_path / "preferences.json"
+    api = Api(preferences_path=path)
+    assert api.set_shown_statistics(["NEI_D_PAIR_ARITH", "NOPE", "D"]) == {
+        "ok": True,
+        "shown": ["D", "NEI_D_PAIR_ARITH"],
+    }
+    assert Api(preferences_path=path).get_statistics_catalog()["shown"] == [
+        "D",
+        "NEI_D_PAIR_ARITH",
+    ]
+    assert api.set_shown_statistics(None)["shown"] == list(default_shown_keys())
+
+
+def test_set_pairwise_max_demes_validates_and_persists(tmp_path: Path) -> None:
+    """A positive integer is saved; anything else is refused."""
+    path = tmp_path / "preferences.json"
+    api = Api(preferences_path=path)
+    assert api.get_pairwise_max_demes() == DEFAULT_PAIRWISE_MAX_DEMES
+    assert api.set_pairwise_max_demes(64) == {"ok": True, "value": 64}
+    assert Api(preferences_path=path).get_pairwise_max_demes() == 64
+    for bad in (0, -3, True, 2.5):
+        assert api.set_pairwise_max_demes(bad)["ok"] is False  # type: ignore[arg-type]
+
+
+def test_the_shown_set_never_reaches_computation_or_saved_results() -> None:
+    """Showing or hiding a statistic is display only.
+
+    Static guard for the catalog design's first invariant: nothing outside
+    the preferences store and the bridge methods that read and write it
+    names `shown_statistics`, so the engine, the runners and every writer
+    of saved results cannot depend on it.
+    """
+    source_root = Path(app_module.__file__).resolve().parents[1]
+    readers = sorted(
+        path.relative_to(source_root).as_posix()
+        for path in source_root.rglob("*.py")
+        if "shown_statistics" in path.read_text(encoding="utf-8")
+    )
+    assert readers == ["gui/app.py", "gui/preferences.py"]
 
 
 def test_drain_run_messages_forwards_a_status_note_and_keeps_draining() -> None:
