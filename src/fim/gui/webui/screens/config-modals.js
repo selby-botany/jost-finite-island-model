@@ -71,21 +71,11 @@ function collectFormValues() {
     for (const [key, value] of data.entries()) {
         values[key] = value;
     }
-    for (const name of [
-        "cs_D",
-        "cs_G_ST",
-        "cs_E_ST",
-        "cs_K_ST",
-        "cs_H_S",
-        "cs_H_T",
-        "cs_A_CGD",
-        "cs_Delta",
-        "cs_MI",
-    ]) {
+    for (const name of CONVERGENCE_STATISTIC_KEYS.map((key) => `cs_${key}`)) {
         values[name] = data.has(name) ? "true" : "false";
     }
     // An unchecked checkbox is simply absent from `FormData`, the same
-    // reason the nine `cs_*` checkboxes just above need this too --
+    // reason the `cs_*` checkboxes just above need this too --
     // `sigma_band_to_payload` (`config_form.py`) reads this key
     // unconditionally, so it must always be present as an explicit
     // "true"/"false" string, never missing.
@@ -111,17 +101,9 @@ function collectFormValues() {
 }
 
 function checkedStatisticCount() {
-    return [
-        "cs_D",
-        "cs_G_ST",
-        "cs_E_ST",
-        "cs_K_ST",
-        "cs_H_S",
-        "cs_H_T",
-        "cs_A_CGD",
-        "cs_Delta",
-        "cs_MI",
-    ].filter((name) => form.elements.namedItem(name).checked).length;
+    return CONVERGENCE_STATISTIC_KEYS.filter(
+        (key) => form.elements.namedItem(`cs_${key}`).checked
+    ).length;
 }
 
 function syncConditionalVisibility() {

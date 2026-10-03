@@ -30,18 +30,12 @@ function formatToTwoDigits(formattedValue) {
     return Number.isFinite(parsed) ? parsed.toFixed(METER_VALUE_DECIMALS) : String(formattedValue);
 }
 
-// Two of the literature-derived supplemental statistics
-// (`fim.engine._EXPENSIVE_OPT_IN_STATISTICS`) do not follow the plain
-// `X_YZ` subscript shape `formatStatisticLabel` otherwise handles
-// generically -- their own report field names ("Delta", "MI") are not
-// what the differentiation literature actually calls them (Gregorius's
-// own δ, conventionally subscripted "G" for "Gregorius" to distinguish
-// it from any other δ; Sherwin's own mutual information, conventionally
-// "I"). `A_CGD` needs no entry here -- `A<sub>CGD</sub>`, the generic
-// split, already matches its own literature notation exactly.
+// Labels for names the statistic catalog does not hold. A catalog
+// statistic's label comes from the catalog itself (`label_html`,
+// `fim.statistics.catalog`), including the two whose report names are
+// not their literature names (`Delta` is Gregorius's δ<sub>G</sub>,
+// `MI` is Sherwin's I).
 const STATISTIC_LABEL_OVERRIDES = {
-    Delta: "δ<sub>G</sub>",
-    MI: "I",
     // Explore's own predicted quantities. The four identity/regime
     // names are ordinary prose, not `X_YZ` statistic names, so generic
     // subscript splitting would mangle them (`identity_recovery_half_
@@ -67,6 +61,9 @@ const STATISTIC_LABEL_OVERRIDES = {
  * at once: the two tables now render identically, and every name is a
  * clean `X_YZ` that subscripts correctly.
  *
+ * Only Explore's predicted quantities are listed here: a catalog
+ * statistic's gloss is the catalog's own `description`.
+ *
  * Wording follows `doc/jost-differentiation-measures.md` Part VIII's
  * own two-family framing -- `G_ST`/`H_ST` measure nearness to
  * fixation, `D`/`E_ST`/`K_ST` measure allelic differentiation -- so a
@@ -74,16 +71,6 @@ const STATISTIC_LABEL_OVERRIDES = {
  * not merely what its letters stand for.
  */
 const STATISTIC_DESCRIPTIONS = {
-    D: "allelic differentiation, weighting alleles by frequency (Jost's D, q=2)",
-    G_ST: "nearness to fixation (Nei's G_ST), not a measure of differentiation",
-    E_ST: "allelic differentiation, weighting every allele by its information (q=1)",
-    K_ST: "allelic differentiation, counting alleles unique to a deme (q=0)",
-    H_S: "within-deme heterozygosity",
-    H_T: "pooled heterozygosity across all demes",
-    H_ST: "nearness to fixation, Hedrick's maximum-standardized form",
-    A_CGD: "coancestry-based genetic distance",
-    Delta: "Gregorius's δ — mean pairwise allelic differentiation over deme pairs",
-    MI: "Sherwin's mutual information between allele and deme",
     S_S: "within-deme entropy, in nats",
     S_T: "pooled entropy across all demes, in nats",
     A_S: "effective number of alleles per deme",
@@ -104,6 +91,10 @@ const STATISTIC_DESCRIPTIONS = {
  * @returns {string}
  */
 function statisticDescription(name) {
+    const spec = statisticSpec(name);
+    if (spec) {
+        return spec.description;
+    }
     return STATISTIC_DESCRIPTIONS[name] || "";
 }
 
@@ -114,14 +105,17 @@ function statisticDescription(name) {
  * unchanged. `STATISTIC_LABEL_OVERRIDES` (above) takes precedence for the
  * two names that generic splitting gets wrong. Every statistic name
  * reaching this function comes from a fixed, hardcoded set
- * (`results.js`'s/`batch-results.js`'s own `STATISTIC_NAMES`), never
- * user input, so returning HTML for a caller to assign via `innerHTML`
+ * (the statistic catalog, `statistics-catalog.js`), never user input, so returning HTML for a caller to assign via `innerHTML`
  * is safe here.
  *
  * @param {string} name
  * @returns {string}
  */
 function formatStatisticLabel(name) {
+    const spec = statisticSpec(name);
+    if (spec) {
+        return spec.label_html;
+    }
     if (name in STATISTIC_LABEL_OVERRIDES) {
         return STATISTIC_LABEL_OVERRIDES[name];
     }
@@ -316,10 +310,18 @@ function buildCiMeter(name, interval, description) {
  * @returns {DocumentFragment}
  */
 function buildPointMeter(name, formattedValue, description) {
-    const cells = buildStatCells(name, formatToTwoDigits(formattedValue));
+    // A Nei distance with no allele shared is infinite; the server sends
+    // it as "undefined" because saved results are strict JSON.
+    const infinite = isInfiniteStatisticValue(name, formattedValue);
+    const cells = buildStatCells(
+        name,
+        infinite ? "∞" : formatToTwoDigits(formattedValue)
+    );
     const plainName = plainStatisticLabel(name);
     cells.tooltip = withStatisticDescription(
-        `${plainName} = ${formattedValue}`,
+        infinite
+            ? `${plainName} = infinite (no allele is shared)`
+            : `${plainName} = ${formattedValue}`,
         description === undefined ? statisticDescription(name) : description
     );
     return cells;

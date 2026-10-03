@@ -142,7 +142,7 @@ from fim.statistics import (
     matrix_identity_trajectory,
     mutation_negligible_equilibrium,
 )
-from fim.statistics.catalog import report_keys
+from fim.statistics.catalog import catalog_payload, default_shown_keys, report_keys
 from fim.sweep import SweepSpec, apply_coordinates, enumerate_points
 from fim.sweep_run import (
     LocalPointRunner,
@@ -3396,6 +3396,26 @@ class Api:
         """
         self._preferences = self._preferences.with_welcome_dismissed()
         save_preferences(self._preferences_path, self._preferences)
+
+    @_log_bridge_call
+    def get_statistics_catalog(self) -> dict[str, Any]:
+        """Return the statistic catalog and which statistics are shown.
+
+        The page builds every statistics row, results-table column and
+        convergence checkbox from this (`webui/statistics-catalog.js`),
+        so the Python catalog (`fim.statistics.catalog`) is the one place a
+        statistic is defined.
+
+        Returns:
+            `{"statistics": [...], "shown": [...], "defaultShown": [...]}`:
+            every catalog entry in display order (`catalog_payload`), the
+            keys currently shown, and the keys a fresh install shows.
+        """
+        return {
+            "statistics": catalog_payload(),
+            "shown": list(default_shown_keys()),
+            "defaultShown": list(default_shown_keys()),
+        }
 
     @_log_bridge_call
     def get_startup_warnings(self) -> list[str]:

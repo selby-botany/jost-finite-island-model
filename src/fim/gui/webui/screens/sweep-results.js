@@ -31,16 +31,8 @@ const sweepResultsBody = document.getElementById("sweep-results-body");
 const sweepResultsSetupButton = document.getElementById("sweep-results-setup-button");
 const sweepResultsView = document.getElementById("sweep-results");
 
-// Statistics on a fixed 0 to 1 scale; every other statistic fits its data.
-const SWEEP_PROPORTION_STATISTICS = new Set([
-    "D",
-    "G_ST",
-    "E_ST",
-    "K_ST",
-    "H_S",
-    "H_T",
-    "H_ST",
-]);
+// Whether a statistic is on a fixed 0-to-1 scale comes from the catalog
+// (`isProportionStatistic`); every other statistic fits its data.
 // Statistics the closed form can predict (`Api.get_sweep_theory`).
 const SWEEP_THEORY_STATISTICS = new Set(["D", "G_ST", "E_ST", "H_S", "H_T"]);
 // A point whose only run came from another software version is recomputed
@@ -178,10 +170,14 @@ function populateSweepResultsControls(data) {
     );
     const previous = sweepResultsStatistic.value;
     sweepResultsStatistic.replaceChildren();
-    for (const name of STATISTIC_NAMES.filter((entry) => available.has(entry))) {
+    // Only statistics the researcher has chosen to show are offered.
+    const offered = STATISTIC_NAMES.filter(
+        (entry) => available.has(entry) && isStatisticShown(entry)
+    );
+    for (const name of offered) {
         const option = document.createElement("option");
         option.value = name;
-        option.textContent = name.replace("_", " ");
+        option.textContent = statisticDisplayName(name);
         sweepResultsStatistic.appendChild(option);
     }
     if (previous && available.has(previous)) {
@@ -429,7 +425,7 @@ function drawSweepLine(canvas, spec) {
     const theoryValues = spec.theory.map((entry) => entry.y).filter((y) => y !== null);
     let yLow = Math.min(...lows, ...theoryValues, Infinity);
     let yHigh = Math.max(...highs, ...theoryValues, -Infinity);
-    if (SWEEP_PROPORTION_STATISTICS.has(spec.statistic)) {
+    if (isProportionStatistic(spec.statistic)) {
         yLow = 0;
         yHigh = 1;
     } else if (!(yHigh > yLow)) {
@@ -485,7 +481,7 @@ function drawSweepLine(canvas, spec) {
     context.save();
     context.translate(SWEEP_Y_TITLE_INSET, top + height / 2);
     context.rotate(-QUARTER_TURN);
-    context.fillText(spec.statistic.replace("_", " "), 0, 0);
+    context.fillText(statisticDisplayName(spec.statistic), 0, 0);
     context.restore();
 
     drawSweepTheory(context, spec, toX, toY, muted);
@@ -613,7 +609,7 @@ async function renderSweepHeatmap(sequence, points, xKey, yKey, statistic) {
         const reach = Math.max(Math.abs(min), Math.abs(max), 1e-9);
         min = -reach;
         max = reach;
-    } else if (SWEEP_PROPORTION_STATISTICS.has(statistic)) {
+    } else if (isProportionStatistic(statistic)) {
         min = 0;
         max = 1;
     }
@@ -626,7 +622,7 @@ async function renderSweepHeatmap(sequence, points, xKey, yKey, statistic) {
         diverging,
         xTitle: xKey,
         yTitle: yKey,
-        valueTitle: `${diverging ? "Δ " : ""}${statistic.replace("_", " ")}`,
+        valueTitle: `${diverging ? "Δ " : ""}${statisticDisplayName(statistic)}`,
         selected: null,
     });
     sweepResultsHit = { kind: "heatmap", layout, cells, shownValues, xValues, yValues, mode };
@@ -655,7 +651,7 @@ function sweepPointReadout(point, statistic) {
             ? ` [${sweepFormatValue(stat.low)}, ${sweepFormatValue(stat.high)}]`
             : "";
     return (
-        `${where}: ${statistic.replace("_", " ")} ${sweepFormatValue(stat.mean)}${interval}` +
+        `${where}: ${statisticDisplayName(statistic)} ${sweepFormatValue(stat.mean)}${interval}` +
         ` (${point.result.nReplicates} replicate${point.result.nReplicates === 1 ? "" : "s"})`
     );
 }
@@ -761,7 +757,7 @@ function drawSweepResultsTable(statistic) {
     sweepResultsHead.replaceChildren(
         sweepHeaderRow([
             ...keys,
-            statistic ? `${statistic.replace("_", " ")} mean` : "mean",
+            statistic ? `${statisticDisplayName(statistic)} mean` : "mean",
             "low",
             "high",
             "replicates",

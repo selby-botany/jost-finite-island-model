@@ -1333,6 +1333,15 @@ fieldset.composite > label {
     cursor: help;
 }
 
+/* Heading row above the deme-pair statistics in the statistics panel
+   (`statistics-catalog.js`): names the pair the rows below describe. */
+.stats-section-heading th {
+    padding-top: 0.6em;
+    text-align: left;
+    font-weight: 600;
+    color: var(--fim-muted);
+}
+
 .stats-table td {
     padding: 0.25rem 0.6rem;
     border-bottom: 1px solid var(--fim-border);

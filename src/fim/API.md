@@ -147,6 +147,7 @@ Return to the [source-tree orientation](../README.md) or the [developer guide](.
     * [browse\_for\_results\_location](#fim.gui.app.Api.browse_for_results_location)
     * [get\_welcome\_dismissed](#fim.gui.app.Api.get_welcome_dismissed)
     * [dismiss\_welcome](#fim.gui.app.Api.dismiss_welcome)
+    * [get\_statistics\_catalog](#fim.gui.app.Api.get_statistics_catalog)
     * [get\_startup\_warnings](#fim.gui.app.Api.get_startup_warnings)
     * [get\_live\_deme\_pair](#fim.gui.app.Api.get_live_deme_pair)
     * [set\_live\_deme\_pair](#fim.gui.app.Api.set_live_deme_pair)
@@ -5350,6 +5351,28 @@ One-directional (`GuiPreferences.with_welcome_dismissed`'s own
 docstring) — called once, whichever of the panel's own two
 actions the user picks, never un-called.
 
+<a id="fim.gui.app.Api.get_statistics_catalog"></a>
+
+#### get\_statistics\_catalog
+
+```python
+@_log_bridge_call
+def get_statistics_catalog() -> dict[str, Any]
+```
+
+Return the statistic catalog and which statistics are shown.
+
+The page builds every statistics row, results-table column and
+convergence checkbox from this (`webui/statistics-catalog.js`),
+so the Python catalog (`fim.statistics.catalog`) is the one place a
+statistic is defined.
+
+**Returns**:
+
+- ``{"statistics"` - [...], "shown": [...], "defaultShown": [...]}`:
+  every catalog entry in display order (`catalog_payload`), the
+  keys currently shown, and the keys a fresh install shows.
+
 <a id="fim.gui.app.Api.get_startup_warnings"></a>
 
 #### get\_startup\_warnings
@@ -7078,12 +7101,10 @@ instead of appearing in any `TabSpec.fields` tuple.
 #### CONVERGENCE\_STATISTIC\_NAMES
 
 Every checkbox the Structure panel's "convergence statistic(s)" group
-offers. `H_ST` is a real, legal `SimulationParams.convergence_statistic`
-choice (`fim.model.params._CONVERGENCE_STATISTICS`) with no checkbox
-here — a separate, pre-existing gap, found but not fixed alongside
-`A_CGD`/`Delta`/`MI` joining this tuple on a real, reported request
-(they too are legal `_CONVERGENCE_STATISTICS` members with no checkbox
-until now).
+offers: every convergence-eligible statistic in `fim.statistics.catalog`,
+which the page builds its checkboxes from too. Deriving it closed an old
+gap: `H_ST` was a legal `SimulationParams.convergence_statistic` with no
+checkbox.
 
 <a id="fim.gui.config_form.all_fields"></a>
 

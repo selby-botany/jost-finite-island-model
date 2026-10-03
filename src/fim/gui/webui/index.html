@@ -528,21 +528,8 @@
             Statistics
           </caption>
           <tbody>
-            <tr data-stat="D"></tr>
-            <tr data-stat="G_ST"></tr>
-            <tr data-stat="E_ST"></tr>
-            <tr data-stat="K_ST"></tr>
-            <tr data-stat="H_S"></tr>
-            <tr data-stat="H_T"></tr>
-            <tr data-stat="H_ST"></tr>
-            <!-- Expensive, opt-in "bonus" measurements
-                 (`track_expensive_statistics`) -- same treatment as
-                 `E_ST`/`K_ST` above, including being watchable
-                 (`SimulationParams._CONVERGENCE_STATISTICS`,
-                 `#cs-selector`'s own checkboxes, above). -->
-            <tr data-stat="A_CGD"></tr>
-            <tr data-stat="Delta"></tr>
-            <tr data-stat="MI"></tr>
+            <!-- One row per global statistic, built from the catalog
+                 (`statistics-catalog.js`, `fim.statistics.catalog`). -->
           </tbody>
         </table>
         <!-- Scalar `completed`-only: same shape as `initial-stats`,
@@ -557,16 +544,9 @@
             Statistics
           </caption>
           <tbody>
-            <tr id="stat-D"></tr>
-            <tr id="stat-G_ST"></tr>
-            <tr id="stat-E_ST"></tr>
-            <tr id="stat-K_ST"></tr>
-            <tr id="stat-H_S"></tr>
-            <tr id="stat-H_T"></tr>
-            <tr id="stat-H_ST"></tr>
-            <tr id="stat-A_CGD"></tr>
-            <tr id="stat-Delta"></tr>
-            <tr id="stat-MI"></tr>
+            <!-- One row per global statistic, built from the catalog
+                 (`statistics-catalog.js`), goes before the two
+                 effective-allele rows; the deme-pair section after them. -->
             <!-- The order-2 Hill number's own closed form, `1 / (1 - H)`
                  (botanist GUI design doc §7.7) -- shown beside H_S/H_T,
                  not instead of them, per Jost's own foundational
@@ -612,19 +592,10 @@
          the flex row above rather than squeezed into it. -->
     <table class="batch-results-table results-table" id="batch-results-table" hidden>
       <thead>
-        <tr>
+        <tr data-statistic-columns data-trailing-columns="1">
           <th>Generation</th>
           <th>Replicate</th>
-          <th>D</th>
-          <th>G<sub>ST</sub></th>
-          <th>E<sub>ST</sub></th>
-          <th>K<sub>ST</sub></th>
-          <th>H<sub>S</sub></th>
-          <th>H<sub>T</sub></th>
-          <th>H<sub>ST</sub></th>
-          <th>A<sub>CGD</sub></th>
-          <th>δ<sub>G</sub></th>
-          <th>I</th>
+          <!-- Statistic columns are inserted here from the catalog. -->
           <th></th>
         </tr>
       </thead>
@@ -638,18 +609,9 @@
          scrub position always mean the same thing. -->
     <table class="results-table" id="run-results-table" hidden>
       <thead>
-        <tr>
+        <tr data-statistic-columns>
           <th>Generation</th>
-          <th>D</th>
-          <th>G<sub>ST</sub></th>
-          <th>E<sub>ST</sub></th>
-          <th>K<sub>ST</sub></th>
-          <th>H<sub>S</sub></th>
-          <th>H<sub>T</sub></th>
-          <th>H<sub>ST</sub></th>
-          <th>A<sub>CGD</sub></th>
-          <th>δ<sub>G</sub></th>
-          <th>I</th>
+          <!-- Statistic columns are inserted here from the catalog. -->
         </tr>
       </thead>
       <tbody id="run-results-table-body"></tbody>
@@ -1506,19 +1468,9 @@
              not administrative defaults. -->
         <fieldset class="composite" id="cs-selector">
           <legend data-field-help="cs_group">convergence statistic(s)</legend>
-          <label><input type="checkbox" name="cs_D" value="true" checked form="input-form"> D</label>
-          <label><input type="checkbox" name="cs_G_ST" value="true" form="input-form"> G<sub>ST</sub></label>
-          <label><input type="checkbox" name="cs_E_ST" value="true" form="input-form"> E<sub>ST</sub></label>
-          <label><input type="checkbox" name="cs_K_ST" value="true" form="input-form"> K<sub>ST</sub></label>
-          <label><input type="checkbox" name="cs_H_S" value="true" form="input-form"> H<sub>S</sub></label>
-          <label><input type="checkbox" name="cs_H_T" value="true" form="input-form"> H<sub>T</sub></label>
-          <!-- Expensive, opt-in "bonus" measurements
-               (`track_expensive_statistics`) -- watchable exactly like
-               `E_ST`/`K_ST` above, on a real, reported request
-               (`SimulationParams._CONVERGENCE_STATISTICS`). -->
-          <label><input type="checkbox" name="cs_A_CGD" value="true" form="input-form"> A<sub>CGD</sub></label>
-          <label><input type="checkbox" name="cs_Delta" value="true" form="input-form"> &delta;<sub>G</sub></label>
-          <label><input type="checkbox" name="cs_MI" value="true" form="input-form"> I</label>
+          <!-- One checkbox per convergence-eligible statistic, built from
+               the catalog (`statistics-catalog.js`). Only measures the
+               convergence monitor was designed for are eligible. -->
         </fieldset>
         <div class="field" id="combinator-field" hidden>
           <label for="field-convergence_combinator">combinator</label>
@@ -2239,6 +2191,7 @@
 <script src="config/behavior.js"></script>
 <script src="config/model-defaults.js"></script>
 <script src="app.js"></script>
+<script src="statistics-catalog.js"></script>
 <script src="scatter.js"></script>
 <script src="meters.js"></script>
 <script src="scrubber.js"></script>

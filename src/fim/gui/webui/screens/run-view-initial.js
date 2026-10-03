@@ -382,7 +382,7 @@ async function renderInitialPreview() {
     // Statistics for p_0.
     if (initialStats) {
         initialStats.hidden = false;
-        for (const name of ["D", "G_ST", "E_ST", "K_ST", "H_S", "H_T", "H_ST"]) {
+        for (const name of STATISTIC_NAMES) {
             const value = result.statistics[name];
             const slot = initialStats.querySelector(`[data-stat="${name}"]`);
             if (slot) {
@@ -540,6 +540,10 @@ window.fim.menu.newConfiguration = async function newConfiguration() {
 };
 
 async function initializeRunView() {
+    // First, before any form or table exists to fill: the statistic
+    // catalog builds the statistics rows, results columns and
+    // convergence checkboxes every later step reads.
+    await window.fim.loadStatisticsCatalog();
     // Avoid starting a preview against the blank form before its initial
     // load has completed. `loadInitialForm` (not `resetInputForm`): a
     // fresh launch prefers the last successfully submitted form over

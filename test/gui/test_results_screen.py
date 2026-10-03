@@ -579,7 +579,8 @@ def test_a_single_replicate_run_gets_a_per_generation_results_table(
             "batchTableHidden: "
             "document.getElementById('batch-results-table').hidden, "
             "headers: Array.from(document.querySelectorAll("
-            "'#run-results-table thead th')).map((th) => th.textContent), "
+            "'#run-results-table thead th:not([hidden])'))"
+            ".map((th) => th.textContent), "
             "rowCount: "
             "document.getElementById('run-results-table-body').children.length, "
             # `scrubber.js` keeps its frame list private; this is its

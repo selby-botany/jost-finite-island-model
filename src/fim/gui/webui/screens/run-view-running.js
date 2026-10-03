@@ -422,7 +422,9 @@ function accumulateLiveTrajectory(generation, statistics) {
         return;
     }
     liveTrajectoryGenerations.push(generation);
-    for (const name of STATISTIC_NAMES) {
+    // Only statistics with a per-generation history get a curve, so the
+    // live chart and the completed one plot the same set.
+    for (const name of TRAJECTORY_STATISTIC_NAMES) {
         const value = Number(statistics[name]);
         if (Number.isFinite(value)) {
             if (!liveTrajectoryHistories[name]) {
@@ -492,7 +494,7 @@ function setLiveBatchTrajectoryInitialPoint(initialStatistics) {
     if (!initialStatistics) {
         return;
     }
-    for (const name of STATISTIC_NAMES) {
+    for (const name of TRAJECTORY_STATISTIC_NAMES) {
         const interval = initialStatistics[name];
         if (!interval) {
             continue;
@@ -518,7 +520,7 @@ function accumulateLiveBatchTrajectory(meanGeneration, statistics) {
     if (meanGeneration === undefined || !statistics) {
         return;
     }
-    for (const name of STATISTIC_NAMES) {
+    for (const name of TRAJECTORY_STATISTIC_NAMES) {
         const interval = statistics[name];
         if (!interval) {
             continue;

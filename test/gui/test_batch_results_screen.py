@@ -249,9 +249,10 @@ def test_a_completed_batch_renders_the_run_view(fast_batch_run_settings: Path) -
                     "rowCount: "
                     "document.getElementById('batch-results-table-body')"
                     ".children.length, "
-                    "ciBarCount: "
-                    "document.getElementById('batch-results-summary-body')"
-                    ".children.length, "
+                    # Rows actually shown: a statistic left out of the
+                    # "Statistics shown" choice has a hidden row.
+                    "ciBarCount: document.querySelectorAll("
+                    "'#batch-results-summary-body > tr:not([hidden])').length, "
                     "firstRowCells: Array.from("
                     "document.getElementById('batch-results-table-body')"
                     ".children[0].children"
@@ -448,8 +449,10 @@ def test_a_completed_batchs_own_effective_allele_rows_render(
             if done_event.wait(timeout=_EVENT_WAIT_TIMEOUT_SECONDS):
                 settled = window.evaluate_js(
                     "(function() {"
+                    # Shown rows only: statistics left out of the
+                    # "Statistics shown" choice have hidden rows.
                     "var rows = document.querySelectorAll("
-                    "'#batch-results-summary-body tr');"
+                    "'#batch-results-summary-body tr:not([hidden])');"
                     "var within = rows[rows.length - 2];"
                     "var total = rows[rows.length - 1];"
                     "return {"

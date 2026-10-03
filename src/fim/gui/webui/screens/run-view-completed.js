@@ -36,27 +36,9 @@
  * answer yet.
  */
 
-// `A_CGD`/`Delta`/`MI` (the literature-derived supplemental
-// measurements) joined this list once `track_expensive_statistics`
-// started tracking them per-generation like `E_ST`/`K_ST`
-// (`fim.engine._EXPENSIVE_OPT_IN_STATISTICS`) -- they retired the
-// separate "Supplemental statistics" panel that used to show them
-// final-report-only (`LITERATURE_STATISTIC_LABELS`, removed), since
-// every function below that iterates this list already handles a
-// statistic that is `"undefined"` this run (unwatched, not opted in)
-// exactly like it already does for `E_ST`/`K_ST`.
-const STATISTIC_NAMES = [
-    "D",
-    "G_ST",
-    "E_ST",
-    "K_ST",
-    "H_S",
-    "H_T",
-    "H_ST",
-    "A_CGD",
-    "Delta",
-    "MI",
-];
+// `STATISTIC_NAMES` (every global statistic) and the other statistic
+// lists come from the catalog (`statistics-catalog.js`), not from a
+// list kept here.
 
 // The two effective-allele rows (botanist GUI design doc §7.7), shared
 // between the scalar completed view's own `renderEffectiveAlleles` and
@@ -164,18 +146,33 @@ window.__fimScrubberPending = 0;
 // file's own `showingLiveDemePair`-style precedent (`run-view-
 // running.js`) for "a user-driven, page-local display toggle" -- no
 // need to survive a reload.
-// Statistics whose trajectory curve starts hidden. `A_CGD`, `Delta`
-// (δ_G), and `MI` (I) are not differentiation measures on the same
-// `[0, 1]` scale the six report statistics share -- `A_CGD` is an
-// effective-allele *count*, so a single one of them can stretch the
-// shared y-axis far enough to flatten every curve that does live on
-// `[0, 1]` into a band near the bottom of the panel. They stay in the
-// legend and in the statistics table, one click away, rather than
-// being dropped: this is the panel's own default reading, not a
-// restriction on what can be plotted.
-const DEFAULT_HIDDEN_TRAJECTORY_STATISTICS = ["A_CGD", "Delta", "MI"];
+// Statistics whose trajectory curve starts hidden come from the
+// catalog's `default_plotted` (`DEFAULT_HIDDEN_TRAJECTORY_STATISTICS`,
+// `statistics-catalog.js`): `A_CGD`, `Delta` (δ_G) and `MI` (I) are not
+// on the `[0, 1]` scale the report statistics share, so one of them can
+// stretch the shared y-axis until every other curve is a flat band near
+// the bottom. They stay in the legend and the table, one click away.
 
 let hiddenTrajectoryStatistics = new Set(DEFAULT_HIDDEN_TRAJECTORY_STATISTICS);
+
+/**
+ * Whether `name`'s curve is left off the trajectory chart: hidden with
+ * the legend toggle, or not among the statistics shown at all.
+ *
+ * @param {string} name
+ * @returns {boolean}
+ */
+function isTrajectoryHidden(name) {
+    return hiddenTrajectoryStatistics.has(name) || !isStatisticShown(name);
+}
+
+// The catalog arrives after this script loads: the default-hidden
+// curves and the results tables' statistic columns exist only then.
+onStatisticCatalogReady(() => {
+    hiddenTrajectoryStatistics = new Set(DEFAULT_HIDDEN_TRAJECTORY_STATISTICS);
+    wireResultsTableHeaders(document.getElementById("batch-results-table"), 2);
+    wireResultsTableHeaders(runResultsTableEl, 1);
+});
 
 // The most recent `renderTrajectory` call's own arguments, so a legend
 // click can re-render the panel with the same underlying data (whatever
@@ -248,9 +245,8 @@ const runResultsTableEl = document.getElementById("run-results-table");
 const runResultsTableBody = document.getElementById("run-results-table-body");
 
 // The two results tables' column headers double as the statistic
-// toggles (`wireResultsTableHeaders`), after the definitions it needs.
-wireResultsTableHeaders(document.getElementById("batch-results-table"), 2);
-wireResultsTableHeaders(runResultsTableEl, 1);
+// toggles (`wireResultsTableHeaders`), wired once the catalog has built
+// them (`onStatisticCatalogReady`, above).
 const resultsBackButton = document.getElementById("results-back-button");
 const resultsHistoryBackButton = document.getElementById("results-history-back-button");
 const resultsHistoryForwardButton = document.getElementById(
@@ -406,7 +402,9 @@ function wireResultsTableHeaders(table, offset) {
     const headers = table.querySelectorAll("thead th");
     STATISTIC_NAMES.forEach((name, index) => {
         const header = headers[offset + index];
-        if (!header) {
+        // A statistic with no curve gets no toggle (see
+        // `decorateTrajectoryStatisticRow`).
+        if (!header || !TRAJECTORY_STATISTIC_NAMES.includes(name)) {
             return;
         }
         header.dataset.statistic = name;
@@ -441,10 +439,14 @@ function tagStatisticCells(tbody, offset) {
         STATISTIC_NAMES.forEach((name, index) => {
             const cell = row.children[offset + index];
             if (cell) {
-                cell.dataset.statistic = name;
+                if (TRAJECTORY_STATISTIC_NAMES.includes(name)) {
+                    cell.dataset.statistic = name;
+                }
+                cell.dataset.shownKey = name;
             }
         });
     }
+    applyStatisticVisibility();
     refreshTrajectoryStatisticRowStates();
 }
 
@@ -490,6 +492,12 @@ function windowStatisticsDescription(name) {
  * @returns {HTMLTableRowElement}
  */
 function decorateTrajectoryStatisticRow(row, name) {
+    // Only a statistic with a per-generation history has a curve to show
+    // or hide; the rest (`Gs`, `Gd`, the Nei family) keep the empty color
+    // column every row has, so all rows still line up.
+    if (!TRAJECTORY_STATISTIC_NAMES.includes(name)) {
+        return row;
+    }
     if (row.dataset.trajectoryStatistic !== name) {
         row.dataset.trajectoryStatistic = name;
         wireStatisticHighlight(row, name);
@@ -1453,12 +1461,10 @@ function renderTrajectory(
     // deliberately never filtered by this set, matching this feature's
     // own "never affects anything else drawn on the same canvas" scope.
     const visiblePlottable = Object.fromEntries(
-        Object.entries(plottable).filter(([name]) => !hiddenTrajectoryStatistics.has(name))
+        Object.entries(plottable).filter(([name]) => !isTrajectoryHidden(name))
     );
     const visiblePlottableEquilibrium = Object.fromEntries(
-        Object.entries(plottableEquilibrium).filter(
-            ([name]) => !hiddenTrajectoryStatistics.has(name)
-        )
+        Object.entries(plottableEquilibrium).filter(([name]) => !isTrajectoryHidden(name))
     );
     // The closed-form expected trajectories follow the same per-statistic
     // visibility as the simulated curve they accompany: a statistic that
@@ -1471,7 +1477,7 @@ function renderTrajectory(
                   closedFormTrajectories(closedForm, effectiveGenerations, plottable)
               ).filter(
                   ([name]) =>
-                      name in visiblePlottable && !hiddenTrajectoryStatistics.has(name)
+                      name in visiblePlottable && !isTrajectoryHidden(name)
               )
           )
         : {};
@@ -1772,7 +1778,7 @@ function renderBatchTrajectory(pooledConvergenceHistories, scrubGeneration) {
     canvas.height = canvas.clientHeight || canvas.height;
     const visiblePooled = Object.fromEntries(
         names
-            .filter((name) => !hiddenTrajectoryStatistics.has(name))
+            .filter((name) => !isTrajectoryHidden(name))
             .map((name) => [name, pooledConvergenceHistories[name]])
     );
     drawBatchTrajectoryCurve(canvas, visiblePooled, scrubGeneration);
@@ -1850,6 +1856,8 @@ function renderBatchSummary(summary, effectiveAlleles) {
         const row = document.createElement("tr");
         applyStatRow(row, cells);
         decorateTrajectoryStatisticRow(row, name);
+        row.dataset.shownKey = name;
+        row.hidden = !isStatisticShown(name);
         batchResultsSummary.appendChild(row);
     }
     for (const [label, key, description] of EFFECTIVE_ALLELE_LABELS) {
@@ -2328,6 +2336,8 @@ function updateScrubbedBatchSummary(frameGeneration, isFinalFrame) {
         const row = document.createElement("tr");
         applyStatRow(row, cells);
         decorateTrajectoryStatisticRow(row, name);
+        row.dataset.shownKey = name;
+        row.hidden = !isStatisticShown(name);
         batchResultsSummary.appendChild(row);
     }
     for (const [label, , description] of EFFECTIVE_ALLELE_LABELS) {

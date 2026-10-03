@@ -41,6 +41,7 @@ import yaml
 
 from fim.cli import STARTER_CONFIG
 from fim.model.params import PLOIDY_WORDS, SimulationParams
+from fim.statistics.catalog import convergence_statistic_keys
 
 FieldKind = Literal[
     "int",
@@ -277,24 +278,12 @@ BATCH_FIELDS: Final[tuple[FormField, ...]] = (
     FormField("auto_vector_max_capacity", "auto-vector max capacity", "int"),
 )
 
-CONVERGENCE_STATISTIC_NAMES: Final[tuple[str, ...]] = (
-    "D",
-    "G_ST",
-    "E_ST",
-    "K_ST",
-    "H_S",
-    "H_T",
-    "A_CGD",
-    "Delta",
-    "MI",
-)
+CONVERGENCE_STATISTIC_NAMES: Final[tuple[str, ...]] = convergence_statistic_keys()
 """Every checkbox the Structure panel's "convergence statistic(s)" group
-offers. `H_ST` is a real, legal `SimulationParams.convergence_statistic`
-choice (`fim.model.params._CONVERGENCE_STATISTICS`) with no checkbox
-here — a separate, pre-existing gap, found but not fixed alongside
-`A_CGD`/`Delta`/`MI` joining this tuple on a real, reported request
-(they too are legal `_CONVERGENCE_STATISTICS` members with no checkbox
-until now)."""
+offers: every convergence-eligible statistic in `fim.statistics.catalog`,
+which the page builds its checkboxes from too. Deriving it closed an old
+gap: `H_ST` was a legal `SimulationParams.convergence_statistic` with no
+checkbox."""
 
 TABS: Final[tuple[TabSpec, ...]] = (
     TabSpec("population", "Population", POPULATION_FIELDS),
