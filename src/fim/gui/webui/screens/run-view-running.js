@@ -553,12 +553,14 @@ window.fim.onRunProgress = function onRunProgress(payload) {
         generation: payload.generation,
         panels: payload.panels,
         pairPanel: payload.pairPanel,
+        pairStatistics: payload.pairStatistics,
         statistics: payload.statistics,
         literatureVisuals: payload.literatureVisuals,
     };
 
     window.fim.appendLiveFrame(liveFrame, (f, _index, isLiveHead) => {
         renderLiveStatistics(f.statistics);
+        renderPairStatistics(f.pairStatistics);
         if (typeof renderTrajectory === "function") {
             renderTrajectory(
                 liveTrajectoryGenerations,

@@ -5524,6 +5524,26 @@ All eight all-demes Nei fields, matching the library functions.
 The arithmetic pooled identity is `Gd / Gs` (Jost's `1 - D` for the
 pooled locus rule), a check that shares no code with the Nei family.
 
+<a id="engine.test_engine.test_pair_statistic_values_match_the_library_pair_functions"></a>
+
+#### test\_pair\_statistic\_values\_match\_the\_library\_pair\_functions
+
+```python
+def test_pair_statistic_values_match_the_library_pair_functions() -> None
+```
+
+All eight pair values for demes 1 and 3 equal `nei_pair_identity`.
+
+<a id="engine.test_engine.test_history_free_values_equal_the_reports_gs_gd_and_nei"></a>
+
+#### test\_history\_free\_values\_equal\_the\_reports\_gs\_gd\_and\_nei
+
+```python
+def test_history_free_values_equal_the_reports_gs_gd_and_nei() -> None
+```
+
+The scrubber's cheap per-frame values equal `report_for_state`'s.
+
 <a id="engine.test_engine.test_report_for_state_reports_an_infinite_nei_distance_as_none"></a>
 
 #### test\_report\_for\_state\_reports\_an\_infinite\_nei\_distance\_as\_none
@@ -10351,6 +10371,75 @@ def test_get_deme_pair_panel_names_the_requested_pair(tmp_path: Path) -> None
 
 The Screen 3 on-demand pair view names its axes by 1-based deme number.
 
+<a id="gui.test_app_api.test_get_deme_pair_panel_carries_that_pairs_nei_statistics"></a>
+
+#### test\_get\_deme\_pair\_panel\_carries\_that\_pairs\_nei\_statistics
+
+```python
+def test_get_deme_pair_panel_carries_that_pairs_nei_statistics(
+        tmp_path: Path) -> None
+```
+
+The pair rows follow the requested pair: values match the saved matrix.
+
+<a id="gui.test_app_api.test_a_self_comparison_has_identity_one_and_distance_zero"></a>
+
+#### test\_a\_self\_comparison\_has\_identity\_one\_and\_distance\_zero
+
+```python
+def test_a_self_comparison_has_identity_one_and_distance_zero(
+        tmp_path: Path) -> None
+```
+
+A deme compared with itself: every identity 1, every distance 0.
+
+<a id="gui.test_app_api.test_animation_frames_carry_history_free_and_default_pair_statistics"></a>
+
+#### test\_animation\_frames\_carry\_history\_free\_and\_default\_pair\_statistics
+
+```python
+def test_animation_frames_carry_history_free_and_default_pair_statistics(
+        tmp_path: Path) -> None
+```
+
+Each frame has Gs/Gd/all-demes Nei and demes 1 and 2's pair values.
+
+<a id="gui.test_app_api.test_animation_pair_frames_carry_the_chosen_pairs_statistics"></a>
+
+#### test\_animation\_pair\_frames\_carry\_the\_chosen\_pairs\_statistics
+
+```python
+def test_animation_pair_frames_carry_the_chosen_pairs_statistics(
+        tmp_path: Path) -> None
+```
+
+Choosing a pair gives its statistics for every scrubber frame.
+
+<a id="gui.test_app_api.test_reopening_a_run_saved_before_a_statistic_existed_fills_it_in"></a>
+
+#### test\_reopening\_a\_run\_saved\_before\_a\_statistic\_existed\_fills\_it\_in
+
+```python
+def test_reopening_a_run_saved_before_a_statistic_existed_fills_it_in(
+        tmp_path: Path) -> None
+```
+
+An old report.json without the Nei fields still opens, values computed.
+
+Simulates a run saved before the all-demes Nei family existed: the
+fields are removed and the manifest's report digest updated to match,
+as it would have been at the time. The saved file is not rewritten.
+
+<a id="gui.test_app_api.test_format_report_statistic_tells_infinite_from_missing"></a>
+
+#### test\_format\_report\_statistic\_tells\_infinite\_from\_missing
+
+```python
+def test_format_report_statistic_tells_infinite_from_missing() -> None
+```
+
+A present `None` Nei distance is infinite; an absent key is undefined.
+
 <a id="gui.test_app_api.test_get_deme_pair_panel_permits_a_self_comparison"></a>
 
 #### test\_get\_deme\_pair\_panel\_permits\_a\_self\_comparison
@@ -10391,6 +10480,27 @@ def test_get_batch_deme_pair_panel_permits_a_self_comparison(
 ```
 
 `first_deme == second_deme` succeeds for a pooled batch panel too.
+
+<a id="gui.test_app_api.test_get_batch_pair_statistics_summarizes_across_replicates"></a>
+
+#### test\_get\_batch\_pair\_statistics\_summarizes\_across\_replicates
+
+```python
+def test_get_batch_pair_statistics_summarizes_across_replicates(
+        tmp_path: Path) -> None
+```
+
+Mean and interval of a pair's statistics over the replicates.
+
+<a id="gui.test_app_api.test_get_batch_pair_statistics_reports_an_unreadable_batch"></a>
+
+#### test\_get\_batch\_pair\_statistics\_reports\_an\_unreadable\_batch
+
+```python
+def test_get_batch_pair_statistics_reports_an_unreadable_batch() -> None
+```
+
+A directory with no batch manifest is an error message, not a raise.
 
 <a id="gui.test_app_api.test_get_batch_replicate_summary_lists_every_replicate"></a>
 
@@ -18865,6 +18975,17 @@ def test_the_filter_narrows_the_list_to_matching_statistics(
 ```
 
 Typing "Jost" leaves only entries whose text mentions it visible.
+
+<a id="gui.test_statistics_shown_screen.test_pair_rows_follow_the_deme_pair_chosen_for_the_scatter"></a>
+
+#### test\_pair\_rows\_follow\_the\_deme\_pair\_chosen\_for\_the\_scatter
+
+```python
+def test_pair_rows_follow_the_deme_pair_chosen_for_the_scatter(
+        fast_scalar_run_settings: Path, window: webview.Window) -> None
+```
+
+After a run: demes 1 and 2 by default; choosing 1 and 3 updates them.
 
 <a id="gui.test_store"></a>
 

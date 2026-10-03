@@ -82,6 +82,79 @@ let baseRunMessages = [];
 // hidden can say so; `null` when no such run is shown.
 let completedConvergedOn = null;
 
+// The deme pair the completed view's scatter shows (`[x, y]`, 1-based),
+// its final-generation statistics, and, once fetched, its per-frame
+// statistics for the scrubber (`null` until then; the default pair's
+// ride on the scrubber's own frames).
+let completedPair = [1, 2];
+let completedFinalPairStatistics = null;
+let completedPairFrameStatistics = null;
+
+// The scrubber frame last shown, so pair values fetched later can be
+// painted onto it (`loadPairFrameStatistics`).
+let lastScrubbedPairFrame = null;
+
+/**
+ * Fetch the chosen pair's statistics for every scrubber frame, once, and
+ * repaint the frame on screen. Only reached when someone scrubs a pair
+ * other than the default, so choosing a pair costs no extra bridge call
+ * until it is needed. Counted in `window.__fimScrubberPending`, like the
+ * scrubber's own fetches.
+ */
+async function loadPairFrameStatistics() {
+    const outputDirectory = window.fim.getCompletedOutputDirectory();
+    if (outputDirectory === null || completedPairFrameStatistics !== null) {
+        return;
+    }
+    const [x, y] = completedPair;
+    completedPairFrameStatistics = [];
+    window.__fimScrubberPending = (window.__fimScrubberPending || 0) + 1;
+    try {
+        const result = await window.pywebview.api.get_animation_deme_pair_frames(
+            outputDirectory,
+            x,
+            y
+        );
+        if (completedPair[0] !== x || completedPair[1] !== y) {
+            return;
+        }
+        completedPairFrameStatistics = result.ok
+            ? result.frames.map((frame) => frame.pairStatistics)
+            : null;
+        if (lastScrubbedPairFrame) {
+            const { frame, index, isFinal } = lastScrubbedPairFrame;
+            renderPairStatistics(
+                pairStatisticsForFrame(frame, index, isFinal),
+                "not known at this generation for this pair"
+            );
+        }
+    } finally {
+        window.__fimScrubberPending -= 1;
+    }
+}
+
+/**
+ * The pair statistics to show for one scrubber frame.
+ *
+ * @param {object} frame
+ * @param {number} index
+ * @param {boolean} isFinal
+ * @returns {object|null}
+ */
+function pairStatisticsForFrame(frame, index, isFinal) {
+    if (isFinal && completedFinalPairStatistics) {
+        return completedFinalPairStatistics;
+    }
+    if (completedPair[0] === 1 && completedPair[1] === 2) {
+        return frame.pairStatistics || null;
+    }
+    if (completedPairFrameStatistics === null) {
+        loadPairFrameStatistics();
+        return null;
+    }
+    return completedPairFrameStatistics[index] || null;
+}
+
 /**
  * A note when the shown run stopped on a statistic that is hidden: the
  * stop reason names a statistic nothing on screen shows otherwise.
@@ -2075,7 +2148,7 @@ function renderBatchTable(replicates, p0Statistics) {
  * @param {number[]} frameGenerations - The scrubber's own frame
  *     generations, ascending.
  */
-function renderScalarTable(frameGenerations) {
+function renderScalarTable(frameGenerations, frameStatistics = []) {
     runResultsTableBody.replaceChildren();
     if (
         !completedTrajectoryGenerations ||
@@ -2097,6 +2170,11 @@ function renderScalarTable(frameGenerations) {
         const values = STATISTIC_NAMES.map((name) => {
             if (isFinal && completedFinalStatistics) {
                 return completedFinalStatistics[name];
+            }
+            // A statistic with no per-generation history takes the
+            // frame's own value (`Api.get_animation_frames`).
+            if (frameStatistics[index] && name in frameStatistics[index]) {
+                return frameStatistics[index][name];
             }
             const history = completedTrajectoryHistories
                 ? completedTrajectoryHistories[name]
@@ -2476,13 +2554,26 @@ async function wireCompletedScrubber(outputDirectory, generationCount) {
         // generations (`renderScalarTable`'s own docstring), so it is
         // built here, where that sampled list first exists client-side,
         // rather than in `enterCompletedState`, which never sees it.
-        renderScalarTable(result.frames.map((frame) => frame.generation));
+        renderScalarTable(
+            result.frames.map((frame) => frame.generation),
+            result.frames.map((frame) => frame.statistics || null)
+        );
         window.fim.setScrubberFrames(
             result.frames,
             (frame, index) => {
                 const isFinal = index === result.frames.length - 1;
                 drawCompletedOverview(frame.panels);
                 updateScrubbedTrajectory(frame.generation, isFinal);
+                // Statistics with no per-generation history come with the
+                // frame itself (the final frame's are already exact).
+                if (!isFinal) {
+                    renderHistoryFreeStatistics(frame.statistics);
+                }
+                lastScrubbedPairFrame = { frame, index, isFinal };
+                renderPairStatistics(
+                    pairStatisticsForFrame(frame, index, isFinal),
+                    "loading the values for this pair…"
+                );
                 if (isFinal && completedFinalLiteratureVisuals) {
                     renderSupplementalPanels(completedFinalLiteratureVisuals);
                 } else if (frame.literatureVisuals) {
@@ -2710,6 +2801,22 @@ window.fim.enterCompletedState = function enterCompletedState(payload, isBatch) 
         completedFinalLiteratureVisuals = null;
         completedReportReason = null;
         completedConvergedOn = null;
+        completedPair = [1, 2];
+        completedFinalPairStatistics = null;
+        completedPairFrameStatistics = null;
+        renderPairStatistics(null, "loading…");
+        if (payload.demeCount >= DEMES_NEEDED_FOR_PAIR) {
+            // Counted with the scrubber's own fetches, so anything waiting
+            // for "settled" (`window.__fimScrubberPending`) waits for this
+            // bridge call too instead of tearing the page down under it.
+            window.__fimScrubberPending = (window.__fimScrubberPending || 0) + 1;
+            window.pywebview.api
+                .get_batch_pair_statistics(payload.outputDirectory, 1, 2)
+                .then(renderPairSummary)
+                .finally(() => {
+                    window.__fimScrubberPending -= 1;
+                });
+        }
         completedEffectiveAlleles = null;
         completedBatchSummary = payload.summary || null;
         completedBatchEffectiveAlleles = payload.effectiveAlleles || null;
@@ -2733,6 +2840,10 @@ window.fim.enterCompletedState = function enterCompletedState(payload, isBatch) 
         ]);
         completedReportReason = reason;
         completedConvergedOn = report.converged_on ?? null;
+        completedPair = [1, 2];
+        completedFinalPairStatistics = payload.pairStatistics || null;
+        completedPairFrameStatistics = null;
+        renderPairStatistics(completedFinalPairStatistics, "no second deme to compare");
         // Set before the row loop just below reads it (`windowStatistics
         // Description`), not after -- the two used to run in the other
         // order, which meant every row's own tooltip always showed the
@@ -2807,6 +2918,26 @@ window.fim.enterCompletedState = function enterCompletedState(payload, isBatch) 
                 if (result.ok) {
                     drawScatter(runCanvas, result.panel);
                 }
+                // The pair rows follow the pair the scatter now shows.
+                completedPair = [x, y];
+                completedPairFrameStatistics = null;
+                if (isBatch) {
+                    window.__fimScrubberPending = (window.__fimScrubberPending || 0) + 1;
+                    try {
+                        renderPairSummary(
+                            await window.pywebview.api.get_batch_pair_statistics(
+                                outputDirectory,
+                                x,
+                                y
+                            )
+                        );
+                    } finally {
+                        window.__fimScrubberPending -= 1;
+                    }
+                    return;
+                }
+                completedFinalPairStatistics = result.ok ? result.pairStatistics : null;
+                renderPairStatistics(completedFinalPairStatistics);
             },
         });
     }

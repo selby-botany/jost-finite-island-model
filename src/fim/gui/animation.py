@@ -74,12 +74,17 @@ class AnimationFrame:
         frequency_spectrum: Empirical allele-frequency spectrum payload,
             or ``None`` when unavailable. Pooled for batch frames, as
             `allele_composition` is.
+        state: The frame's own population state, so a caller can compute
+            statistics at that generation (the scrubber's pair and
+            history-free statistics); ``None`` for a pooled batch frame,
+            which has no single state.
     """
 
     generation: int
     points: FloatArray
     allele_composition: dict[str, Any] | None = None
     frequency_spectrum: dict[str, Any] | None = None
+    state: ModelState | None = None
 
 
 def pre_render_frames(
@@ -116,6 +121,7 @@ def pre_render_frames(
                 points=points,
                 allele_composition=allele_composition_payload(state),
                 frequency_spectrum=frequency_spectrum_payload(state, params),
+                state=state,
             )
         )
     logger.debug(

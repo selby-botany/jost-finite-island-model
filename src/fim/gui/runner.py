@@ -89,6 +89,8 @@ _EXPECTED_ENGINE_ERRORS: Final = (
     ValueError,
 )
 
+# The trailing `ModelState` lets the message drain compute the
+# statistics of whichever deme pair the scatter shows this tick.
 ProgressMessage = tuple[
     Literal["progress"],
     int,
@@ -96,6 +98,7 @@ ProgressMessage = tuple[
     FloatArray,
     FinalReport,
     dict[str, Any],
+    ModelState,
 ]
 DoneMessage = tuple[Literal["done"], RunResult]
 CancelledMessage = tuple[Literal["cancelled"], int]
@@ -309,7 +312,9 @@ def _run_worker(
                 "alleleComposition": allele_composition_payload(state),
                 "frequencySpectrum": frequency_spectrum_payload(state, params),
             }
-            message_queue.put(("progress", generation, panels, points, report, visuals))
+            message_queue.put(
+                ("progress", generation, panels, points, report, visuals, state)
+            )
 
     try:
         with paths.atomic_directory(output_directory) as working_directory:

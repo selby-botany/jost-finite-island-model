@@ -65,7 +65,9 @@ from fim.model.params import SimulationParams
 from fim.model.state import ModelState
 from fim.persistence import groups
 from fim.persistence.jsonl_store import JSONLTrajectoryStore
-from fim.persistence.manifest import read_manifest
+from fim.persistence.manifest import hash_file, read_manifest
+from fim.persistence.pairwise import pair_identity, read_pairwise
+from fim.persistence.report import write_report
 from fim.statistics import (
     MAXIMUM_MATRIX_DEMES,
     confidence_interval,
@@ -87,6 +89,7 @@ from fim.statistics.catalog import (
     CATALOG,
     DEFAULT_PAIRWISE_MAX_DEMES,
     default_shown_keys,
+    pair_keys,
     report_keys,
 )
 from fim.viz.scatter import frequency_points, pooled_scatter_panels
@@ -2685,7 +2688,7 @@ def test_drain_run_messages_includes_a_live_deme_pair_panel_when_selected() -> N
         "frequencySpectrum": {"bins": []},
     }
     message_queue: queue.Queue[runner_module.RunMessage] = queue.Queue()
-    message_queue.put(("progress", 3, [], points, report, visuals))
+    message_queue.put(("progress", 3, [], points, report, visuals, state))
     # A terminal message right behind it: `_drain_run_messages`'s own
     # `while True` loop only returns once it sees one, and this test
     # cares only about the "progress" push's own first `evaluate_js`
@@ -3972,6 +3975,106 @@ def test_get_deme_pair_panel_names_the_requested_pair(tmp_path: Path) -> None:
     assert isinstance(panel["points"], list)
 
 
+def test_get_deme_pair_panel_carries_that_pairs_nei_statistics(tmp_path: Path) -> None:
+    """The pair rows follow the requested pair: values match the saved matrix."""
+    output = _write_run(tmp_path, d=4)
+
+    result = Api().get_deme_pair_panel(str(output), first_deme=2, second_deme=4)
+
+    pair_statistics = result["pairStatistics"]
+    assert pair_statistics["pair"] == [2, 4]
+    assert set(pair_statistics["values"]) == set(pair_keys())
+    saved = read_pairwise(output / "pairwise.json")
+    expected = pair_identity(saved, "NEI_I_PAIR_ARITH", 1, 3)
+    assert expected is not None
+    # Shown values are rounded to the display's significant digits.
+    api_digits = Api()._significant_digits
+    assert pair_statistics["values"]["NEI_I_PAIR_ARITH"] == app_module.format_statistic(
+        expected, api_digits
+    )
+
+
+def test_a_self_comparison_has_identity_one_and_distance_zero(tmp_path: Path) -> None:
+    """A deme compared with itself: every identity 1, every distance 0."""
+    output = _write_run(tmp_path, d=4)
+
+    values = Api().get_deme_pair_panel(str(output), 3, 3)["pairStatistics"]["values"]
+
+    for key in pair_keys():
+        assert float(values[key]) == (1.0 if key.startswith("NEI_I_") else 0.0)
+
+
+def test_animation_frames_carry_history_free_and_default_pair_statistics(
+    tmp_path: Path,
+) -> None:
+    """Each frame has Gs/Gd/all-demes Nei and demes 1 and 2's pair values."""
+    output = _write_run(tmp_path, d=3)
+
+    frames = Api().get_animation_frames(str(output))["frames"]
+
+    final = frames[-1]
+    assert set(final["statistics"]) == {"Gs", "Gd"} | {
+        key for key in report_keys() if key.startswith("NEI_")
+    }
+    assert final["pairStatistics"]["pair"] == [1, 2]
+    report = json.loads((output / "report.json").read_text(encoding="utf-8"))
+    digits = Api()._significant_digits
+    for key in ("Gd", "NEI_I_ALL_GEO"):
+        assert final["statistics"][key] == app_module.format_statistic(
+            report[key], digits
+        )
+
+
+def test_animation_pair_frames_carry_the_chosen_pairs_statistics(
+    tmp_path: Path,
+) -> None:
+    """Choosing a pair gives its statistics for every scrubber frame."""
+    output = _write_run(tmp_path, d=3)
+
+    result = Api().get_animation_deme_pair_frames(str(output), 3, 1)
+
+    assert all(frame["pairStatistics"]["pair"] == [3, 1] for frame in result["frames"])
+
+
+def test_reopening_a_run_saved_before_a_statistic_existed_fills_it_in(
+    tmp_path: Path,
+) -> None:
+    """An old report.json without the Nei fields still opens, values computed.
+
+    Simulates a run saved before the all-demes Nei family existed: the
+    fields are removed and the manifest's report digest updated to match,
+    as it would have been at the time. The saved file is not rewritten.
+    """
+    output = _write_run(tmp_path, d=3)
+    report_path = output / "report.json"
+    report = json.loads(report_path.read_text(encoding="utf-8"))
+    expected = report["NEI_D_ALL_ARITH"]
+    old = {key: value for key, value in report.items() if not key.startswith("NEI_")}
+    write_report(report_path, old)
+    manifest_path = output / "manifest.json"
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    manifest["artifacts"]["report"] = dict(hash_file(report_path))
+    manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
+    before = report_path.read_bytes()
+
+    result = Api().open_run({"trajectoryPath": str(output / "trajectory.jsonl")})
+
+    assert result["ok"] is True
+    assert result["statistics"]["NEI_D_ALL_ARITH"] == app_module.format_statistic(
+        expected, Api()._significant_digits
+    )
+    assert report_path.read_bytes() == before
+
+
+def test_format_report_statistic_tells_infinite_from_missing() -> None:
+    """A present `None` Nei distance is infinite; an absent key is undefined."""
+    values = {"NEI_D_PAIR_GEO": None, "G_ST": None, "D": 0.5}
+    assert app_module.format_report_statistic(values, "NEI_D_PAIR_GEO", 4) == "∞"
+    assert app_module.format_report_statistic(values, "G_ST", 4) == "undefined"
+    assert app_module.format_report_statistic(values, "NEI_D_ALL_GEO", 4) == "undefined"
+    assert app_module.format_report_statistic(values, "D", 4) == "0.5"
+
+
 def test_get_deme_pair_panel_permits_a_self_comparison(tmp_path: Path) -> None:
     """`first_deme == second_deme` succeeds as a deliberate diagonal baseline.
 
@@ -4047,6 +4150,27 @@ def test_get_batch_deme_pair_panel_rejects_an_out_of_range_deme(
 
     assert result["ok"] is False
     assert "message" in result
+
+
+def test_get_batch_pair_statistics_summarizes_across_replicates(
+    tmp_path: Path,
+) -> None:
+    """Mean and interval of a pair's statistics over the replicates."""
+    output = _write_run(tmp_path, n_replicates=3, d=3)
+
+    result = Api().get_batch_pair_statistics(str(output), 1, 3)
+
+    assert result["ok"] is True
+    assert result["pair"] == [1, 3]
+    interval = result["summary"]["NEI_I_PAIR_GEO"]
+    assert interval["sampleCount"] == 3
+    assert float(interval["low"]) <= float(interval["mean"]) <= float(interval["high"])
+
+
+def test_get_batch_pair_statistics_reports_an_unreadable_batch() -> None:
+    """A directory with no batch manifest is an error message, not a raise."""
+    result = Api().get_batch_pair_statistics("/no/such/batch", 1, 2)
+    assert result["ok"] is False
 
 
 def test_get_batch_replicate_summary_lists_every_replicate(tmp_path: Path) -> None:

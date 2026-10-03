@@ -32,6 +32,8 @@ from fim.engine import (
     build_engine_backend,
     deterministic_run_id,
     fim,
+    history_free_statistic_values,
+    pair_statistic_values,
     pooled_convergence_histories,
     replicate_summary,
     report_for_state,
@@ -55,6 +57,7 @@ from fim.statistics.genetic_distance import (
     NEI_DENOMINATORS,
     NEI_LOCUS_RULES,
     nei_all_demes_identity,
+    nei_pair_identity,
 )
 
 
@@ -2444,6 +2447,56 @@ def test_report_for_state_captures_the_all_demes_nei_family() -> None:
                 -math.log(identity_value)
             )
     assert report["NEI_I_ALL_ARITH"] == pytest.approx(report["Gd"] / report["Gs"])
+
+
+def test_pair_statistic_values_match_the_library_pair_functions() -> None:
+    """All eight pair values for demes 1 and 3 equal `nei_pair_identity`."""
+    loci = (LocusSpec(1, 100), LocusSpec(2, 100))
+    frequencies = (
+        ({AlleleId(0): 1.0}, {AlleleId(0): 0.5, AlleleId(1): 0.5}),
+        ({AlleleId(0): 0.2, AlleleId(2): 0.8}, {AlleleId(1): 1.0}),
+        ({AlleleId(0): 0.5, AlleleId(2): 0.5}, {AlleleId(0): 0.3, AlleleId(1): 0.7}),
+    )
+    state = ModelState(loci=loci, frequencies=frequencies)
+
+    values = pair_statistic_values(state, 0, 2)
+
+    for denominator in NEI_DENOMINATORS:
+        suffix = "GEO" if denominator == "geometric" else "ARITH"
+        for locus_rule in NEI_LOCUS_RULES:
+            rule = "_LOCUS_MEAN" if locus_rule == "locus_mean" else ""
+            expected = nei_pair_identity(
+                [frequencies[0][0], frequencies[0][1]],
+                [frequencies[2][0], frequencies[2][1]],
+                denominator=denominator,
+                locus_rule=locus_rule,
+            )
+            assert values[f"NEI_I_PAIR_{suffix}{rule}"] == pytest.approx(expected)
+            assert values[f"NEI_D_PAIR_{suffix}{rule}"] == pytest.approx(
+                -math.log(expected)
+            )
+    with pytest.raises(ValueError, match="outside"):
+        pair_statistic_values(state, 0, 3)
+
+
+def test_history_free_values_equal_the_reports_gs_gd_and_nei() -> None:
+    """The scrubber's cheap per-frame values equal `report_for_state`'s."""
+    loci = (LocusSpec(1, 100), LocusSpec(2, 100))
+    frequencies = (
+        ({AlleleId(0): 1.0}, {AlleleId(0): 0.5, AlleleId(1): 0.5}),
+        ({AlleleId(0): 0.2, AlleleId(2): 0.8}, {AlleleId(1): 1.0}),
+    )
+    state = ModelState(loci=loci, frequencies=frequencies)
+    params = SimulationParams(gene_copies=10, m=0.1, mu=0.0, d=2, seed=7, loci=loci)
+    report = cast(
+        "Mapping[str, float | None]",
+        report_for_state(state, params, run_id="r", converged=False, reason="test"),
+    )
+
+    values = history_free_statistic_values(state)
+
+    for key, value in values.items():
+        assert value == pytest.approx(report[key])
 
 
 def test_report_for_state_reports_an_infinite_nei_distance_as_none() -> None:

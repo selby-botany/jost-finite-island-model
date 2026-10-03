@@ -93,6 +93,8 @@ Return to the [source-tree orientation](../README.md) or the [developer guide](.
   * [pooled\_convergence\_histories\_from\_pairs](#fim.engine.pooled_convergence_histories_from_pairs)
   * [bootstrap\_replicate\_summary](#fim.engine.bootstrap_replicate_summary)
   * [tracked\_statistic\_values](#fim.engine.tracked_statistic_values)
+  * [pair\_statistic\_values](#fim.engine.pair_statistic_values)
+  * [history\_free\_statistic\_values](#fim.engine.history_free_statistic_values)
   * [report\_statistic](#fim.engine.report_statistic)
 * [fim.gui](#fim.gui)
 * [fim.gui.animation](#fim.gui.animation)
@@ -102,6 +104,8 @@ Return to the [source-tree orientation](../README.md) or the [developer guide](.
   * [select\_sample\_generations](#fim.gui.animation.select_sample_generations)
 * [fim.gui.app](#fim.gui.app)
   * [format\_statistic](#fim.gui.app.format_statistic)
+  * [INFINITE\_DISTANCE\_TEXT](#fim.gui.app.INFINITE_DISTANCE_TEXT)
+  * [format\_report\_statistic](#fim.gui.app.format_report_statistic)
   * [Api](#fim.gui.app.Api)
     * [\_\_init\_\_](#fim.gui.app.Api.__init__)
     * [start\_run](#fim.gui.app.Api.start_run)
@@ -180,6 +184,7 @@ Return to the [source-tree orientation](../README.md) or the [developer guide](.
     * [delete\_runs](#fim.gui.app.Api.delete_runs)
     * [delete\_selected](#fim.gui.app.Api.delete_selected)
     * [get\_batch\_replicate\_summary](#fim.gui.app.Api.get_batch_replicate_summary)
+    * [get\_batch\_pair\_statistics](#fim.gui.app.Api.get_batch_pair_statistics)
     * [open\_run](#fim.gui.app.Api.open_run)
     * [open\_batch](#fim.gui.app.Api.open_batch)
     * [open\_study](#fim.gui.app.Api.open_study)
@@ -3728,6 +3733,65 @@ would diverge the first time either changed.
   present as a placeholder, matching what the live monitor
   records for that same generation.
 
+<a id="fim.engine.pair_statistic_values"></a>
+
+#### pair\_statistic\_values
+
+```python
+def pair_statistic_values(state: ModelState, first: int,
+                          second: int) -> dict[str, float | None]
+```
+
+Return every pair-scope Nei statistic for two demes of `state`.
+
+The statistics the GUI shows for the deme pair chosen for the scatter
+plot: the four identities `NEI_I_PAIR_*` and the four distances
+`NEI_D_PAIR_*` (`fim.statistics.catalog`). One O(alleles) pass per
+locus. A deme compared with itself gives identity 1 and distance 0.
+
+**Arguments**:
+
+- `state` - The population state.
+- `first` - Zero-based index of one deme.
+- `second` - Zero-based index of the other (may equal `first`).
+
+
+**Returns**:
+
+- ```{key` - value}``; a distance is ``None`` where it is infinite (no
+  allele shared), matching how reports store it.
+
+
+**Raises**:
+
+- `ValueError` - For a deme index outside the state.
+
+<a id="fim.engine.history_free_statistic_values"></a>
+
+#### history\_free\_statistic\_values
+
+```python
+def history_free_statistic_values(
+        state: ModelState) -> dict[str, float | None]
+```
+
+Return the global statistics that have no per-generation history.
+
+`Gs`, `Gd` and the eight all-demes Nei fields: what a scrubbed frame
+of a completed run needs to show those rows at that frame's
+generation. Computed directly and cheaply (O(d * alleles) per locus),
+not through `report_for_state`, which would also pay for every
+expensive statistic. `Gs` and `Gd` equal `report_for_state`'s.
+
+**Arguments**:
+
+- `state` - The population state.
+
+
+**Returns**:
+
+- ```{key` - value}`` keyed as in `FinalReport`.
+
 <a id="fim.engine.report_statistic"></a>
 
 #### report\_statistic
@@ -3836,6 +3900,10 @@ One sampled animation frame's raw scatter coordinates and supplemental payloads.
 - `frequency_spectrum` - Empirical allele-frequency spectrum payload,
   or ``None`` when unavailable. Pooled for batch frames, as
   `allele_composition` is.
+- `state` - The frame's own population state, so a caller can compute
+  statistics at that generation (the scrubber's pair and
+  history-free statistics); ``None`` for a pooled batch frame,
+  which has no single state.
 
 <a id="fim.gui.animation.pre_render_frames"></a>
 
@@ -4011,6 +4079,43 @@ explicitly by a real caller (`Api._significant_digits`, the View
 menu's own "Significant digits" submenu) — see `_FORMAT_STATISTIC_
 DEFAULT_DIGITS`'s own comment for why the default here stays at
 six regardless of that configurable value's own default.
+
+<a id="fim.gui.app.INFINITE_DISTANCE_TEXT"></a>
+
+#### INFINITE\_DISTANCE\_TEXT
+
+How an infinite Nei distance (no allele shared) reaches the page.
+
+Saved results store it as `null`, the only option in strict JSON; on
+screen it must not read like a missing value, which `format_statistic`
+spells "undefined".
+
+<a id="fim.gui.app.format_report_statistic"></a>
+
+#### format\_report\_statistic
+
+```python
+def format_report_statistic(values: Mapping[str, object], name: str,
+                            digits: int) -> str
+```
+
+Format one named statistic from a report-shaped mapping for display.
+
+Unlike a bare `format_statistic(values.get(name))`, this keeps two
+different absences apart: a key the mapping lacks (a statistic added
+after the result was saved) is "undefined", while a Nei distance that
+is present but `None` is infinite and shows as `INFINITE_DISTANCE_TEXT`.
+
+**Arguments**:
+
+- `values` - A report, or any mapping keyed by catalog key.
+- `name` - A catalog key.
+- `digits` - Significant digits.
+
+
+**Returns**:
+
+  The display string.
 
 <a id="fim.gui.app.Api"></a>
 
@@ -6086,6 +6191,40 @@ already uses — no second naming scheme.
   replicates are still worth showing even if one replicate's
   file is missing). `{"ok": False, "message": ...}` if
   `directory` names no readable batch manifest at all.
+
+<a id="fim.gui.app.Api.get_batch_pair_statistics"></a>
+
+#### get\_batch\_pair\_statistics
+
+```python
+@_log_bridge_call
+def get_batch_pair_statistics(directory: str, first_deme: int,
+                              second_deme: int) -> dict[str, Any]
+```
+
+Return the across-replicate summary of two demes' pair statistics.
+
+Each replicate has its own value for the pair; this reports their
+mean and confidence interval, the same way a batch summarizes every
+other statistic (`replicate_summary`). Read from each replicate's
+`pairwise.json` when it holds the matrices, otherwise recomputed
+from that replicate's final state (a run saved before the file
+existed, or above its deme-count limit).
+
+**Arguments**:
+
+- `directory` - The batch's own directory (its `manifest.json`).
+- `first_deme` - 1-based deme number (the scatter's x axis).
+- `second_deme` - 1-based deme number (the y axis).
+
+
+**Returns**:
+
+- ``{"ok"` - True, "pair": [first, second], "summary": {key:
+  interval}}` with an interval for every pair statistic defined
+  in at least two replicates (a distance that is infinite in any
+  replicate has no finite mean and is left out), or `{"ok":
+  False, "message": ...}`.
 
 <a id="fim.gui.app.Api.open_run"></a>
 

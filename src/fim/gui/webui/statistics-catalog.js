@@ -105,10 +105,12 @@ function onStatisticCatalogReady(callback) {
     _statisticCatalogReadyCallbacks.push(callback);
 }
 
+// How the server marks an infinite Nei distance (no allele shared):
+// `fim.gui.app.INFINITE_DISTANCE_TEXT`. Saved results store it as null.
+const INFINITE_DISTANCE_TEXT = "∞";
+
 /**
- * Whether a Nei distance's value string means "infinite": the server
- * sends `undefined` for a distance whose identity is 0 (no allele
- * shared), because saved results are strict JSON with no infinity.
+ * Whether a Nei distance's value string means "infinite".
  *
  * @param {string} key
  * @param {*} value
@@ -117,8 +119,91 @@ function onStatisticCatalogReady(callback) {
 function isInfiniteStatisticValue(key, value) {
     const spec = statisticSpec(key);
     return Boolean(
-        spec && spec.nei && spec.nei[0] === "distance" && value === "undefined"
+        spec && spec.nei && spec.nei[0] === "distance" && value === INFINITE_DISTANCE_TEXT
     );
+}
+
+/**
+ * Fill the deme-pair section from one pair's statistics, and name the
+ * pair in its heading. `null` (no pair: a single-deme run, or a scrubbed
+ * frame of a pair whose per-frame values are not loaded) shows every row
+ * as not known.
+ *
+ * @param {{pair: number[], values: Record<string, string>}|null|undefined} pairStatistics
+ * @param {string} [missingText]
+ */
+function renderPairStatistics(pairStatistics, missingText = "not known for this pair here") {
+    const heading = document.getElementById("pair-statistics-heading-text");
+    if (pairStatistics && heading) {
+        const [first, second] = pairStatistics.pair;
+        heading.textContent =
+            first === second ? `Deme ${first} with itself` : `Demes ${first} and ${second}`;
+    }
+    for (const key of PAIR_STATISTIC_NAMES) {
+        const row = document.getElementById(`stat-${key}`);
+        if (!row) {
+            continue;
+        }
+        applyStatRow(
+            row,
+            pairStatistics
+                ? buildPointMeter(key, pairStatistics.values[key])
+                : buildOmittedMeter(key, missingText)
+        );
+    }
+}
+
+/**
+ * Fill the deme-pair section from a batch's across-replicate summary
+ * (`Api.get_batch_pair_statistics`): mean and interval per statistic.
+ *
+ * @param {{ok: boolean, pair?: number[], summary?: object}} result
+ */
+function renderPairSummary(result) {
+    if (!result || !result.ok) {
+        renderPairStatistics(null);
+        return;
+    }
+    const heading = document.getElementById("pair-statistics-heading-text");
+    if (heading) {
+        const [first, second] = result.pair;
+        heading.textContent =
+            first === second ? `Deme ${first} with itself` : `Demes ${first} and ${second}`;
+    }
+    for (const key of PAIR_STATISTIC_NAMES) {
+        const row = document.getElementById(`stat-${key}`);
+        if (!row) {
+            continue;
+        }
+        const interval = result.summary[key];
+        applyStatRow(
+            row,
+            interval
+                ? buildCiMeter(key, interval)
+                : buildOmittedMeter(
+                      key,
+                      "omitted: infinite in at least one replicate, or fewer than two replicates"
+                  )
+        );
+    }
+}
+
+/**
+ * Fill the rows of global statistics with no per-generation history
+ * (`Gs`, `Gd`, the all-demes Nei family) from one scrubbed frame.
+ *
+ * @param {Record<string, string>|null|undefined} statistics
+ */
+function renderHistoryFreeStatistics(statistics) {
+    if (!statistics) {
+        return;
+    }
+    for (const [key, value] of Object.entries(statistics)) {
+        const row = document.getElementById(`stat-${key}`);
+        if (row) {
+            applyStatRow(row, buildPointMeter(key, value));
+        }
+    }
 }
 
 /**

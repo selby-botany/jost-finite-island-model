@@ -26,9 +26,10 @@ from __future__ import annotations
 
 import json
 import logging
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
+from typing import cast
 
 from fim.engine import report_for_state, tracked_statistic_values
 from fim.model.params import SimulationParams
@@ -41,6 +42,7 @@ from fim.persistence.manifest import (
     verify_trajectory_integrity,
 )
 from fim.persistence.store import TrajectoryRow
+from fim.statistics.catalog import report_keys
 from fim.statistics.differentiation import differentiation_q
 
 logger = logging.getLogger(__name__)
@@ -458,6 +460,29 @@ def reanalyze_trajectory(
             )
         )
     )
+    if cached_report is not None:
+        missing = [key for key in report_keys() if key not in report]
+        if missing:
+            # A run saved before a statistic was added (the all-demes Nei
+            # family, for one) has no field for it. Compute only what is
+            # missing from the saved state; the saved report and its
+            # digest stay untouched on disk.
+            logger.info(
+                "re-analysis of %s: computing %d statistic(s) absent from "
+                "its saved report.json",
+                manifest.run_id,
+                len(missing),
+            )
+            fresh = report_for_state(
+                state,
+                params,
+                run_id=manifest.run_id,
+                converged=manifest.converged,
+                reason=manifest.stop_reason,
+            )
+            fresh_values = cast("Mapping[str, object]", fresh)
+            for key in missing:
+                report[key] = fresh_values[key]
     if differentiation_orders:
         # See `differentiation_q_for_state`'s own docstring for what a
         # "differentiation-q sweep" is and why someone would want one.

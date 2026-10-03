@@ -163,7 +163,7 @@ from fim.persistence.store import (
     ReplicateFanoutStore,
     TrajectoryStore,
 )
-from fim.statistics.catalog import history_keys, report_keys
+from fim.statistics.catalog import history_keys, nei_key, report_keys
 from fim.statistics.differentiation import (
     DifferentiationReport,
     _g_st_from_demes,
@@ -3975,6 +3975,96 @@ def _final_report_statistic(report: FinalReport, statistic: str) -> float | None
         raise ValueError(f"unsupported statistic: {statistic}")
     value = cast("Mapping[str, float | None]", report)[statistic]
     return value
+
+
+def pair_statistic_values(
+    state: ModelState, first: int, second: int
+) -> dict[str, float | None]:
+    """Return every pair-scope Nei statistic for two demes of `state`.
+
+    The statistics the GUI shows for the deme pair chosen for the scatter
+    plot: the four identities `NEI_I_PAIR_*` and the four distances
+    `NEI_D_PAIR_*` (`fim.statistics.catalog`). One O(alleles) pass per
+    locus. A deme compared with itself gives identity 1 and distance 0.
+
+    Args:
+        state: The population state.
+        first: Zero-based index of one deme.
+        second: Zero-based index of the other (may equal `first`).
+
+    Returns:
+        ``{key: value}``; a distance is ``None`` where it is infinite (no
+        allele shared), matching how reports store it.
+
+    Raises:
+        ValueError: For a deme index outside the state.
+    """
+    for index in (first, second):
+        if not 0 <= index < state.deme_count:
+            raise ValueError(f"deme {index + 1} is outside 1..{state.deme_count}")
+    within_by_locus: list[list[float]] = []
+    between_by_locus: list[float] = []
+    for locus_index in range(state.locus_count):
+        deme_x = state.frequency_map(first, locus_index)
+        deme_y = state.frequency_map(second, locus_index)
+        within_by_locus.append(
+            [
+                math.fsum(value * value for value in deme_x.values()),
+                math.fsum(value * value for value in deme_y.values()),
+            ]
+        )
+        between_by_locus.append(
+            math.fsum(
+                value * deme_y[allele]
+                for allele, value in deme_x.items()
+                if allele in deme_y
+            )
+        )
+    family = nei_family_from_identities(within_by_locus, between_by_locus)
+    values: dict[str, float | None] = {}
+    for (denominator, locus_rule), raw in family.items():
+        # Both pair forms are bounded by 1 (Cauchy-Schwarz, AM-GM); the
+        # clamp removes only rounding.
+        identity_value = min(1.0, max(0.0, raw))
+        distance = nei_distance_from_identity(identity_value)
+        values[nei_key("identity", "pair", denominator, locus_rule)] = identity_value
+        values[nei_key("distance", "pair", denominator, locus_rule)] = (
+            None if math.isinf(distance) else distance
+        )
+    return values
+
+
+def history_free_statistic_values(state: ModelState) -> dict[str, float | None]:
+    """Return the global statistics that have no per-generation history.
+
+    `Gs`, `Gd` and the eight all-demes Nei fields: what a scrubbed frame
+    of a completed run needs to show those rows at that frame's
+    generation. Computed directly and cheaply (O(d * alleles) per locus),
+    not through `report_for_state`, which would also pay for every
+    expensive statistic. `Gs` and `Gd` equal `report_for_state`'s.
+
+    Args:
+        state: The population state.
+
+    Returns:
+        ``{key: value}`` keyed as in `FinalReport`.
+    """
+    within_sum = 0.0
+    between_sum = 0.0
+    for locus_index in range(state.locus_count):
+        table = [
+            state.frequency_map(deme_index, locus_index)
+            for deme_index in range(state.deme_count)
+        ]
+        within, between = deme_gene_identities(table)
+        within_sum += math.fsum(within) / len(within)
+        between_sum += between
+    values: dict[str, float | None] = {
+        "Gs": within_sum / state.locus_count,
+        "Gd": between_sum / state.locus_count,
+    }
+    values.update(cast("Mapping[str, float | None]", _nei_all_demes_fields(state)))
+    return values
 
 
 def report_statistic(report: FinalReport, statistic: str) -> float | None:

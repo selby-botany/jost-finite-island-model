@@ -39,6 +39,7 @@ import faulthandler
 import functools
 import json
 import logging
+import math
 import multiprocessing
 import os
 import queue
@@ -75,14 +76,19 @@ from fim.engine import (
     FinalReport,
     RunResult,
     deterministic_run_id,
+    history_free_statistic_values,
+    pair_statistic_values,
     pooled_convergence_histories,
     pooled_convergence_histories_from_pairs,
     report_for_state,
-    report_statistic,
     reports_summary,
 )
 from fim.gui import batch_runner, presets, recent_runs, runner, sweep_bridge
-from fim.gui.animation import pre_render_batch_frames, pre_render_frames
+from fim.gui.animation import (
+    AnimationFrame,
+    pre_render_batch_frames,
+    pre_render_frames,
+)
 from fim.gui.config_form import (
     DEFAULT_RUN_SETTING_FIELD_NAMES,
     PLOIDY_NAMES,
@@ -115,8 +121,10 @@ from fim.gui.trajectory_history import sampled_statistic_history
 from fim.model.initial import generate_initial_state
 from fim.model.params import ALLOWED_PLOIDIES, SimulationParams
 from fim.model.state import ModelState
+from fim.model.topology import MINIMUM_DEMES
 from fim.persistence import groups
 from fim.persistence.manifest import RunManifest, read_batch_manifest, read_manifest
+from fim.persistence.pairwise import pair_identity, read_pairwise
 from fim.persistence.run_metadata import run_metadata_path
 from fim.reanalyze import (
     read_persisted_convergence_history,
@@ -146,8 +154,14 @@ from fim.statistics.catalog import (
     CATALOG,
     catalog_payload,
     default_shown_keys,
+    pair_keys,
     report_keys,
 )
+from fim.statistics.catalog import (
+    spec as catalog_spec,
+)
+from fim.statistics.genetic_distance import nei_distance_from_identity
+from fim.statistics.interval import confidence_interval
 from fim.sweep import SweepSpec, apply_coordinates, enumerate_points
 from fim.sweep_run import (
     LocalPointRunner,
@@ -393,6 +407,116 @@ def format_statistic(
     six regardless of that configurable value's own default.
     """
     return "undefined" if value is None else f"{value:.{digits}g}"
+
+
+INFINITE_DISTANCE_TEXT: Final = "∞"
+"""How an infinite Nei distance (no allele shared) reaches the page.
+
+Saved results store it as `null`, the only option in strict JSON; on
+screen it must not read like a missing value, which `format_statistic`
+spells "undefined"."""
+
+
+def format_report_statistic(
+    values: Mapping[str, object], name: str, digits: int
+) -> str:
+    """Format one named statistic from a report-shaped mapping for display.
+
+    Unlike a bare `format_statistic(values.get(name))`, this keeps two
+    different absences apart: a key the mapping lacks (a statistic added
+    after the result was saved) is "undefined", while a Nei distance that
+    is present but `None` is infinite and shows as `INFINITE_DISTANCE_TEXT`.
+
+    Args:
+        values: A report, or any mapping keyed by catalog key.
+        name: A catalog key.
+        digits: Significant digits.
+
+    Returns:
+        The display string.
+    """
+    if name not in values:
+        return format_statistic(None, digits)
+    value = values[name]
+    if value is None:
+        entry = catalog_spec(name)
+        if entry.nei is not None and entry.nei[0] == "distance":
+            return INFINITE_DISTANCE_TEXT
+        return format_statistic(None, digits)
+    return format_statistic(cast("float", value), digits)
+
+
+def _pair_statistics_payload(
+    state: ModelState, first_deme: int, second_deme: int, digits: int
+) -> dict[str, Any]:
+    """Return the pair-scope Nei statistics for two demes, ready to show.
+
+    Args:
+        state: The population state.
+        first_deme: 1-based deme number (the scatter's x axis).
+        second_deme: 1-based deme number (the y axis); may equal
+            `first_deme`.
+
+    Returns:
+        `{"pair": [first, second], "values": {key: text}}`.
+    """
+    values = pair_statistic_values(state, first_deme - 1, second_deme - 1)
+    return {
+        "pair": [first_deme, second_deme],
+        "values": {
+            name: format_report_statistic(values, name, digits) for name in values
+        },
+    }
+
+
+def _frame_statistics(frame: AnimationFrame, digits: int) -> dict[str, str] | None:
+    """Format a frame's history-free global statistics, or `None` without a state."""
+    if frame.state is None:
+        return None
+    values = history_free_statistic_values(frame.state)
+    return {name: format_report_statistic(values, name, digits) for name in values}
+
+
+def _replicate_pair_values(
+    replicate_directory: Path, first: int, second: int
+) -> dict[str, float | None]:
+    """One replicate's pair statistics for zero-based demes `first`, `second`.
+
+    From its `pairwise.json` when that holds the matrices (each distance is
+    `-ln` of its identity); otherwise recomputed from the replicate's
+    final state.
+    """
+    pairwise_path = replicate_directory / "pairwise.json"
+    payload = read_pairwise(pairwise_path) if pairwise_path.exists() else None
+    if payload is not None and payload.get("mode") == "full":
+        values: dict[str, float | None] = {}
+        # `pairwise.json` stores identities; each distance key is its
+        # identity key with `NEI_I_` read as `NEI_D_`.
+        for key in pair_keys():
+            if not key.startswith("NEI_I_"):
+                continue
+            identity_value = pair_identity(payload, key, first, second)
+            if identity_value is None:
+                break
+            distance = nei_distance_from_identity(identity_value)
+            values[key] = identity_value
+            values[key.replace("NEI_I_", "NEI_D_", 1)] = (
+                None if math.isinf(distance) else distance
+            )
+        else:
+            return values
+    state = reanalyze_trajectory(replicate_directory / "trajectory.jsonl").state
+    return pair_statistic_values(state, first, second)
+
+
+def _default_pair_statistics(state: ModelState, digits: int) -> dict[str, Any] | None:
+    """Pair statistics for demes 1 and 2, the scatter's default pair.
+
+    `None` for a single-deme state, which has no pair.
+    """
+    if state.deme_count < MINIMUM_DEMES:
+        return None
+    return _pair_statistics_payload(state, 1, 2, digits)
 
 
 def _interval_payload(interval: Mapping[str, Any], digits: int) -> dict[str, Any]:
@@ -1234,9 +1358,7 @@ def _home_run_row(run: recent_runs.RecentRun, *, digits: int) -> dict[str, Any]:
         raw_report = _read_json_object(run.directory / "report.json")
         if raw_report is not None:
             statistics = {
-                name: format_statistic(
-                    cast("float | None", raw_report.get(name)), digits
-                )
+                name: format_report_statistic(raw_report, name, digits)
                 for name in _RESULT_STATISTIC_NAMES
                 if name in raw_report
             }
@@ -2366,8 +2488,8 @@ class Api:
             reason="initial conditions",
         )
         statistics = {
-            name: format_statistic(
-                report_statistic(report, name), self._significant_digits
+            name: format_report_statistic(
+                cast("Mapping[str, object]", report), name, self._significant_digits
             )
             for name in _RESULT_STATISTIC_NAMES
         }
@@ -2376,6 +2498,7 @@ class Api:
             "panels": scatter_panels(state),
             "demeCount": params.d,
             "statistics": statistics,
+            "pairStatistics": _default_pair_statistics(state, self._significant_digits),
             "generation": 0,
             "maxGenerations": params.max_generations,
         }
@@ -2409,7 +2532,13 @@ class Api:
             )
         except ValueError as error:
             return {"ok": False, "message": str(error)}
-        return {"ok": True, "panel": panel}
+        return {
+            "ok": True,
+            "panel": panel,
+            "pairStatistics": _pair_statistics_payload(
+                state, first_deme, second_deme, self._significant_digits
+            ),
+        }
 
     @_log_bridge_call
     def get_equilibrium_predictions(
@@ -4299,7 +4428,7 @@ class Api:
             raw_report = _read_json_object(replicate_directory / "report.json")
             statistics = (
                 {
-                    name: format_statistic(raw_report.get(name), digits)
+                    name: format_report_statistic(raw_report, name, digits)
                     for name in _RESULT_STATISTIC_NAMES
                     if name in raw_report
                 }
@@ -4314,6 +4443,56 @@ class Api:
                 }
             )
         return {"ok": True, "replicates": replicates}
+
+    @_log_bridge_call
+    def get_batch_pair_statistics(
+        self, directory: str, first_deme: int, second_deme: int
+    ) -> dict[str, Any]:
+        """Return the across-replicate summary of two demes' pair statistics.
+
+        Each replicate has its own value for the pair; this reports their
+        mean and confidence interval, the same way a batch summarizes every
+        other statistic (`replicate_summary`). Read from each replicate's
+        `pairwise.json` when it holds the matrices, otherwise recomputed
+        from that replicate's final state (a run saved before the file
+        existed, or above its deme-count limit).
+
+        Args:
+            directory: The batch's own directory (its `manifest.json`).
+            first_deme: 1-based deme number (the scatter's x axis).
+            second_deme: 1-based deme number (the y axis).
+
+        Returns:
+            `{"ok": True, "pair": [first, second], "summary": {key:
+            interval}}` with an interval for every pair statistic defined
+            in at least two replicates (a distance that is infinite in any
+            replicate has no finite mean and is left out), or `{"ok":
+            False, "message": ...}`.
+        """
+        try:
+            manifest = read_batch_manifest(Path(directory) / "manifest.json")
+            samples: dict[str, list[float]] = {key: [] for key in pair_keys()}
+            for replicate_run_id in manifest.replicate_run_ids:
+                replicate_directory = batch_runner.replicate_output_directory(
+                    Path(directory), manifest.run_id, replicate_run_id
+                )
+                values = _replicate_pair_values(
+                    replicate_directory, first_deme - 1, second_deme - 1
+                )
+                for key, value in values.items():
+                    if value is not None:
+                        samples[key].append(value)
+        except (OSError, ValueError, KeyError) as error:
+            return {"ok": False, "message": str(error)}
+        replicate_count = len(manifest.replicate_run_ids)
+        summary = {
+            key: _interval_payload(
+                confidence_interval(values), self._significant_digits
+            )
+            for key, values in samples.items()
+            if len(values) == replicate_count and len(values) >= MINIMUM_DEMES
+        }
+        return {"ok": True, "pair": [first_deme, second_deme], "summary": summary}
 
     @_log_bridge_call
     def open_run(self, values: dict[str, str]) -> dict[str, Any]:
@@ -4431,11 +4610,12 @@ class Api:
             "report": report,
             "panels": scatter_panels(reanalyzed.state),
             "statistics": {
-                name: format_statistic(
-                    cast("float | None", report[name]), self._significant_digits
-                )
+                name: format_report_statistic(report, name, self._significant_digits)
                 for name in _RESULT_STATISTIC_NAMES
             },
+            "pairStatistics": _default_pair_statistics(
+                reanalyzed.state, self._significant_digits
+            ),
             "effectiveAlleles": _effective_allele_summary(
                 report, self._significant_digits
             ),
@@ -4793,9 +4973,8 @@ class Api:
                     "trajectoryPath": path_text,
                     "panel": scatter_panels(reanalyzed.state)[0],
                     "statistics": {
-                        name: format_statistic(
-                            cast("float | None", report[name]),
-                            self._significant_digits,
+                        name: format_report_statistic(
+                            report, name, self._significant_digits
                         )
                         for name in _RESULT_STATISTIC_NAMES
                     },
@@ -4863,6 +5042,16 @@ class Api:
                 {
                     "generation": frame.generation,
                     "panels": panels_from_points(frame.points, params.d),
+                    # Statistics with no per-generation history (`Gs`,
+                    # `Gd`, the all-demes Nei family) at this frame, and
+                    # the default pair's statistics, so a scrub moves
+                    # those rows too.
+                    "statistics": _frame_statistics(frame, self._significant_digits),
+                    "pairStatistics": (
+                        _default_pair_statistics(frame.state, self._significant_digits)
+                        if frame.state is not None
+                        else None
+                    ),
                     "literatureVisuals": {
                         "alleleComposition": frame.allele_composition,
                         "frequencySpectrum": frame.frequency_spectrum,
@@ -4922,6 +5111,16 @@ class Api:
                     "panel": deme_pair_panel(
                         frame.points, first_deme - 1, second_deme - 1
                     ),
+                    "pairStatistics": (
+                        _pair_statistics_payload(
+                            frame.state,
+                            first_deme,
+                            second_deme,
+                            self._significant_digits,
+                        )
+                        if frame.state is not None
+                        else None
+                    ),
                 }
                 for frame in frames
             ]
@@ -4968,9 +5167,12 @@ class Api:
             panel = deme_pair_panel(
                 frequency_points(state), first_deme - 1, second_deme - 1
             )
+            pair_statistics = _pair_statistics_payload(
+                state, first_deme, second_deme, self._significant_digits
+            )
         except (OSError, ValueError) as error:
             return {"ok": False, "message": str(error)}
-        return {"ok": True, "panel": panel}
+        return {"ok": True, "panel": panel, "pairStatistics": pair_statistics}
 
     @_log_bridge_call
     def get_batch_deme_pair_panel(
@@ -5365,6 +5567,45 @@ def _attach_finished_run_to_study(study_id: str | None, output_directory: Path) 
         )
 
 
+def _attach_live_pair(
+    progress_payload: dict[str, object],
+    message: runner.ProgressMessage,
+    pair: tuple[int, int] | None,
+    deme_count: int,
+    digits: int,
+) -> None:
+    """Add the shown deme pair's statistics, and a chosen pair's panel, to a tick.
+
+    The scatter shows the chosen pair, or demes 1 and 2 when none is
+    chosen; its statistics ride along either way, so the pair rows move
+    with the plot. A pair outside this run's `d` (a stale choice from a
+    previous run) skips this one tick rather than dropping the push.
+
+    Args:
+        progress_payload: The tick's payload, extended in place.
+        message: The `"progress"` message (state last).
+        pair: The chosen 1-based pair, or `None`.
+        deme_count: The run's deme count.
+        digits: Significant digits.
+    """
+    shown_pair = pair if pair is not None else (1, 2)
+    if deme_count >= MINIMUM_DEMES:
+        with contextlib.suppress(ValueError):
+            progress_payload["pairStatistics"] = _pair_statistics_payload(
+                message[6], shown_pair[0], shown_pair[1], digits
+            )
+    if pair is not None:
+        first_deme, second_deme = pair
+        # `first_deme == second_deme` is a deliberate self-comparison,
+        # not an error (`deme_pair_panel`'s own docstring), so it never
+        # reaches this `suppress`; only the genuinely out-of-range case
+        # does.
+        with contextlib.suppress(ValueError):
+            progress_payload["pairPanel"] = deme_pair_panel(
+                message[3], first_deme - 1, second_deme - 1
+            )
+
+
 def _drain_run_messages(
     window: _EvaluatesJs,
     message_queue: queue.Queue[runner.RunMessage],
@@ -5459,27 +5700,16 @@ def _drain_run_messages(
                 # the running-state stats table live and populated
                 # rather than blank until the run finishes.
                 "statistics": {
-                    name: format_statistic(report_statistic(message[4], name), digits)
+                    name: format_report_statistic(
+                        cast("Mapping[str, object]", message[4]), name, digits
+                    )
                     for name in _RESULT_STATISTIC_NAMES
                 },
                 "literatureVisuals": message[5],
             }
-            pair = live_deme_pair()
-            if pair is not None:
-                first_deme, second_deme = pair
-                # Out of range for this run's own `d` — a stale
-                # selection from a previous run with a different `d`,
-                # since the selector itself only ever offers `1..d` for
-                # the run actually in progress. `first_deme ==
-                # second_deme` is a deliberate self-comparison, not an
-                # error (`deme_pair_panel`'s own docstring), so it never
-                # reaches this `suppress` at all; skip this one tick's
-                # `pairPanel` rather than drop the whole progress push
-                # over the genuinely out-of-range case.
-                with contextlib.suppress(ValueError):
-                    progress_payload["pairPanel"] = deme_pair_panel(
-                        message[3], first_deme - 1, second_deme - 1
-                    )
+            _attach_live_pair(
+                progress_payload, message, live_deme_pair(), deme_count, digits
+            )
             if logger.isEnabledFor(logging.DEBUG):
                 logger.debug("run progress: generation=%s", message[1])
             window.evaluate_js(f"fim.onRunProgress({json.dumps(progress_payload)})")
@@ -5499,9 +5729,10 @@ def _drain_run_messages(
                 "convergenceNote": _derived_convergence_note(result.params),
                 "report": result.report,
                 "panels": scatter_panels(result.final_state),
+                "pairStatistics": _default_pair_statistics(result.final_state, digits),
                 "statistics": {
-                    name: format_statistic(
-                        report_statistic(result.report, name), digits
+                    name: format_report_statistic(
+                        cast("Mapping[str, object]", result.report), name, digits
                     )
                     for name in _RESULT_STATISTIC_NAMES
                 },
@@ -6145,7 +6376,9 @@ def _pooled_batch_payload(
             "converged": report["converged"],
             "reason": report["reason"],
             "statistics": {
-                name: format_statistic(report_statistic(report, name), digits)
+                name: format_report_statistic(
+                    cast("Mapping[str, object]", report), name, digits
+                )
                 for name in _RESULT_STATISTIC_NAMES
             },
             "trajectoryPath": str(trajectory_path),
@@ -6186,7 +6419,9 @@ def _pooled_batch_payload(
         reason="initial conditions",
     )
     p0_statistics = {
-        name: format_statistic(report_statistic(p0_report, name), digits)
+        name: format_report_statistic(
+            cast("Mapping[str, object]", p0_report), name, digits
+        )
         for name in _RESULT_STATISTIC_NAMES
     }
     # A live batch's own replicates, or a reopened batch's own, always

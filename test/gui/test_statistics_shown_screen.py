@@ -8,7 +8,10 @@ family by default (statistics catalog design, section 6.5).
 
 from __future__ import annotations
 
+import queue
+import time
 from collections.abc import Callable
+from pathlib import Path
 from typing import Any
 
 import pytest
@@ -126,3 +129,78 @@ def test_the_filter_narrows_the_list_to_matching_statistics(
     assert "D" in settled
     assert "NEI_D_PAIR_ARITH" in settled
     assert "NEI_D_PAIR_GEO" not in settled
+
+
+def _poll(window: webview.Window, script: str, predicate: Callable[[Any], bool]) -> Any:
+    """Evaluate `script` until `predicate` holds (bounded), returning the value."""
+    value = None
+    for _ in range(600):
+        value = window.evaluate_js(script)
+        if predicate(value):
+            return value
+        time.sleep(0.1)
+    return value
+
+
+def test_pair_rows_follow_the_deme_pair_chosen_for_the_scatter(
+    fast_scalar_run_settings: Path, window: webview.Window
+) -> None:
+    """After a run: demes 1 and 2 by default; choosing 1 and 3 updates them."""
+    set_fields = (
+        "function setField(name, value) {"
+        "const field = document.getElementById(`field-${name}`);"
+        "field.value = value;"
+        "field.dispatchEvent(new Event('input', {bubbles: true}));"
+        "}"
+        "setField('N', '20'); setField('d', '3'); setField('seed', '20260814');"
+        "setField('m_rate', '0.1'); setField('mu_value', '0.01');"
+        "setField('locus_lengths', '200');"
+    )
+    pair_state = (
+        "({"
+        "heading: document.getElementById('pair-statistics-heading-text').textContent, "
+        "value: document.getElementById('stat-NEI_D_PAIR_GEO').title, "
+        "hidden: document.getElementById('stat-NEI_D_PAIR_GEO').hidden, "
+        "state: window.fim.getRunViewState(), "
+        "pending: window.__fimScrubberPending"
+        "})"
+    )
+    outcome: queue.Queue[dict[str, Any]] = queue.Queue(maxsize=1)
+
+    def _drive() -> None:
+        try:
+            _poll(window, _INPUT_SCREEN_READY, lambda value: value is True)
+            window.evaluate_js(
+                "window.fim.setShownStatistics(['D', 'NEI_D_PAIR_GEO']);"
+                + set_fields
+                + "document.getElementById('run-button').click();"
+            )
+            default_pair = _poll(
+                window,
+                pair_state,
+                lambda value: value["state"] == "completed" and value["pending"] == 0,
+            )
+            window.evaluate_js(
+                "document.getElementById('run-x-deme').value = '1';"
+                "document.getElementById('run-y-deme').value = '3';"
+                "document.getElementById('run-y-deme')"
+                ".dispatchEvent(new Event('change'));"
+            )
+            chosen_pair = _poll(
+                window,
+                pair_state,
+                lambda value: (
+                    value["heading"] == "Demes 1 and 3" and value["pending"] == 0
+                ),
+            )
+            outcome.put({"default": default_pair, "chosen": chosen_pair})
+        finally:
+            window.destroy()
+
+    webview.start(_drive)
+    settled = outcome.get(timeout=120)
+
+    assert settled["default"]["hidden"] is False
+    assert settled["default"]["heading"] == "Demes 1 and 2"
+    assert settled["default"]["value"].startswith("Nei D_pair")
+    assert settled["chosen"]["heading"] == "Demes 1 and 3"
