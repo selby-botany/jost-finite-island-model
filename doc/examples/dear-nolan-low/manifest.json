@@ -4,9 +4,13 @@
       "bytes": 35000280,
       "sha256": "92ca9687c6d15bc842ea7b9f6b908d3e16f8fa85a1446dd6107f838a47b3710f"
     },
+    "pairwise": {
+      "bytes": 808,
+      "sha256": "e51a051104302f0d6219b295c83917fa5aeaa376c9e13d913d4df88b190d8214"
+    },
     "report": {
-      "bytes": 2135,
-      "sha256": "dc70c224fc56267f5bc079133bb376f453d7d2ae504089513bbdaad59e4f370e"
+      "bytes": 2301,
+      "sha256": "629932ebd3d1f65e4d973c446a95a8f44566da6ce5921a52f20adc33e0a94e51"
     },
     "scatter": {
       "bytes": 218060,
@@ -28,7 +32,7 @@
     "reason": "hit the cap",
     "statistic": "D"
   },
-  "ended_at": "2026-10-03T22:03:13.601381Z",
+  "ended_at": "2026-10-03T23:39:27.171535Z",
   "engine_backend": "lineal",
   "equilibrium_final_heterozygosity": null,
   "equilibrium_generation_count": null,
@@ -191,5 +195,5 @@
   "sigma_band_multiplier": null,
   "sigma_band_window": null,
   "software_version": "1.2.0",
-  "started_at": "2026-10-03T21:23:00.718249Z"
+  "started_at": "2026-10-03T23:16:42.266634Z"
 }

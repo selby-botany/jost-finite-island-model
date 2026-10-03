@@ -4,9 +4,13 @@
       "bytes": 16874700,
       "sha256": "406d6942ed216af38ce3cdccbec7cb951470e6e2c4aea4e6d1c6ab1027d7aa01"
     },
+    "pairwise": {
+      "bytes": 819,
+      "sha256": "5a00adce476e3232fc6f8510e4feb232e61860c69592815c04ee0872c6283417"
+    },
     "report": {
-      "bytes": 2099,
-      "sha256": "91e3841aefca7d2a400a446f4a37ce4146b4a715dd7c38241779eb8ca4e1e00a"
+      "bytes": 2266,
+      "sha256": "613114b68626f4216f223e13c431f896f0ce2b2c5bec8a7ae373e197a562572e"
     },
     "scatter": {
       "bytes": 140397,
@@ -28,7 +32,7 @@
     "reason": "statistic converged",
     "statistic": "D"
   },
-  "ended_at": "2026-10-03T21:22:58.223177Z",
+  "ended_at": "2026-10-03T23:16:39.747653Z",
   "engine_backend": "lineal",
   "equilibrium_final_heterozygosity": null,
   "equilibrium_generation_count": null,
@@ -75,5 +79,5 @@
   "sigma_band_multiplier": null,
   "sigma_band_window": null,
   "software_version": "1.2.0",
-  "started_at": "2026-10-03T21:09:46.819666Z"
+  "started_at": "2026-10-03T23:03:13.365148Z"
 }
