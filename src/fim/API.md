@@ -581,6 +581,8 @@ Return to the [source-tree orientation](../README.md) or the [developer guide](.
   * [equilibrium\_shannon\_differentiation](#fim.statistics.differentiation.equilibrium_shannon_differentiation)
   * [statistics\_report](#fim.statistics.differentiation.statistics_report)
 * [fim.statistics.genetic\_distance](#fim.statistics.genetic_distance)
+  * [NEI\_DENOMINATORS](#fim.statistics.genetic_distance.NEI_DENOMINATORS)
+  * [NEI\_LOCUS\_RULES](#fim.statistics.genetic_distance.NEI_LOCUS_RULES)
   * [cross\_identity](#fim.statistics.genetic_distance.cross_identity)
   * [nei\_d](#fim.statistics.genetic_distance.nei_d)
   * [nei\_d\_prime](#fim.statistics.genetic_distance.nei_d_prime)
@@ -590,6 +592,12 @@ Return to the [source-tree orientation](../README.md) or the [developer guide](.
   * [nei\_identity](#fim.statistics.genetic_distance.nei_identity)
   * [nei\_mean\_distance](#fim.statistics.genetic_distance.nei_mean_distance)
   * [nei\_standard\_distance](#fim.statistics.genetic_distance.nei_standard_distance)
+  * [nei\_distance\_from\_identity](#fim.statistics.genetic_distance.nei_distance_from_identity)
+  * [nei\_family\_from\_identities](#fim.statistics.genetic_distance.nei_family_from_identities)
+  * [nei\_pair\_identity](#fim.statistics.genetic_distance.nei_pair_identity)
+  * [nei\_pair\_distance](#fim.statistics.genetic_distance.nei_pair_distance)
+  * [nei\_all\_demes\_identity](#fim.statistics.genetic_distance.nei_all_demes_identity)
+  * [nei\_all\_demes\_distance](#fim.statistics.genetic_distance.nei_all_demes_distance)
 * [fim.statistics.identity\_recursion](#fim.statistics.identity_recursion)
   * [IdentityRecursion](#fim.statistics.identity_recursion.IdentityRecursion)
     * [identities\_after](#fim.statistics.identity_recursion.IdentityRecursion.identities_after)
@@ -17427,6 +17435,45 @@ Key measures implemented:
   after a parental population splits into two isolated populations of
   finite size (Nei 1972 Eq. 9).
 
+The Nei distance family (`nei_pair_identity`, `nei_pair_distance`,
+`nei_all_demes_identity`, `nei_all_demes_distance`) generalizes Eq. 1-4
+along two independent choices:
+
+- **Denominator.** ``"geometric"`` is Nei's own ``sqrt(J_X * J_Y)``, and
+  for ``d`` demes the geometric mean ``(J_1 * ... * J_d)^(1/d)``.
+  ``"arithmetic"`` is ``(J_X + J_Y) / 2``, and for ``d`` demes the mean
+  within-deme identity ``J_within`` (Jost, L. (2026) private
+  communication). The numerator is ``J_XY`` for a pair and, for all
+  demes, ``J_between``: the mean identity over every pair of demes, so
+  the all-demes form is the pair form exactly when ``d = 2``.
+- **Locus rule.** ``"pooled"`` is Nei's own multi-locus rule: average
+  every identity across loci first, then take one ratio (Eq. 2).
+  ``"locus_mean"`` takes one ratio per locus and averages the per-locus
+  distances (Eq. 4'), so the reported identity is the geometric mean of
+  the per-locus identities.
+
+Two facts follow and are relied on by tests and documentation:
+
+- The arithmetic all-demes identity is ``J_between / J_within``, which is
+  ``1 - D`` for Jost's ``D``, so its distance is ``-ln(1 - D)``.
+- The geometric all-demes identity is *not* bounded by 1. When demes
+  differ greatly in diversity, the pair-averaged numerator can exceed the
+  geometric mean of the within-deme identities, and the distance is
+  negative. It is reported as computed, never clamped; see
+  `nei_all_demes_identity`.
+
+<a id="fim.statistics.genetic_distance.NEI_DENOMINATORS"></a>
+
+#### NEI\_DENOMINATORS
+
+Every denominator the Nei distance family accepts, Nei's own first.
+
+<a id="fim.statistics.genetic_distance.NEI_LOCUS_RULES"></a>
+
+#### NEI\_LOCUS\_RULES
+
+Every multi-locus rule the Nei distance family accepts, Nei's own first.
+
 <a id="fim.statistics.genetic_distance.cross_identity"></a>
 
 #### cross\_identity
@@ -17668,6 +17715,195 @@ infinite-alleles neutral mutation model.
 
   Genetic distance D in [0, +inf). Returns 0.0 if allele frequencies
   are identical at all loci; returns math.inf if no alleles are shared.
+
+<a id="fim.statistics.genetic_distance.nei_distance_from_identity"></a>
+
+#### nei\_distance\_from\_identity
+
+```python
+def nei_distance_from_identity(identity_value: float) -> float
+```
+
+Return Nei's distance ``-ln(I)`` for an identity ``I``.
+
+``I == 0`` (no allele shared) is an infinite distance; ``I`` within
+rounding of 1 is exactly 0. ``I > 1`` is legitimate only for the
+geometric all-demes form and gives a negative distance.
+
+**Arguments**:
+
+- `identity_value` - A Nei identity, ``>= 0``.
+
+
+**Returns**:
+
+  The distance, possibly ``math.inf`` or negative as described.
+
+<a id="fim.statistics.genetic_distance.nei_family_from_identities"></a>
+
+#### nei\_family\_from\_identities
+
+```python
+def nei_family_from_identities(
+    within_by_locus: Sequence[Sequence[float]],
+    between_by_locus: Sequence[float]
+) -> dict[tuple[NeiDenominator, NeiLocusRule], float]
+```
+
+Return all four Nei identities from already-computed gene identities.
+
+The shared core of every Nei family function, public so a caller that
+already holds the within- and between-deme identities (the engine,
+once per generation) pays for nothing else.
+
+**Arguments**:
+
+- `within_by_locus` - One sequence per locus of every deme's own
+  ``J_k``, all of the same length (the deme count).
+- `between_by_locus` - One ``J_between`` (or ``J_XY`` for a pair) per
+  locus, in the same locus order.
+
+
+**Returns**:
+
+  ``{(denominator, locus_rule): identity}`` for every combination in
+  `NEI_DENOMINATORS` x `NEI_LOCUS_RULES`. The geometric value for
+  more than two demes may exceed 1 (see the module docstring).
+
+
+**Raises**:
+
+- `ValueError` - If the sequences are empty or do not line up.
+
+<a id="fim.statistics.genetic_distance.nei_pair_identity"></a>
+
+#### nei\_pair\_identity
+
+```python
+def nei_pair_identity(loci_x: Sequence[Mapping[Any, Any]] | Mapping[Any, Any],
+                      loci_y: Sequence[Mapping[Any, Any]] | Mapping[Any, Any],
+                      *,
+                      denominator: NeiDenominator = "geometric",
+                      locus_rule: NeiLocusRule = "pooled") -> float
+```
+
+Return a Nei identity between two populations.
+
+With the defaults this equals `nei_identity` (Nei 1972 Eq. 1-2). See
+the module docstring for the two choices.
+
+**Arguments**:
+
+- `loci_x` - Allele frequencies for population X across loci.
+- `loci_y` - Allele frequencies for population Y across loci.
+- `denominator` - ``"geometric"`` (Nei) or ``"arithmetic"``.
+- `locus_rule` - ``"pooled"`` (Nei) or ``"locus_mean"``.
+
+
+**Returns**:
+
+  The identity in ``[0, 1]``: 1 when the populations are identical,
+  0 when no allele is shared (at any locus, for ``"locus_mean"``; at
+  every locus, for ``"pooled"``).
+
+<a id="fim.statistics.genetic_distance.nei_pair_distance"></a>
+
+#### nei\_pair\_distance
+
+```python
+def nei_pair_distance(loci_x: Sequence[Mapping[Any, Any]] | Mapping[Any, Any],
+                      loci_y: Sequence[Mapping[Any, Any]] | Mapping[Any, Any],
+                      *,
+                      denominator: NeiDenominator = "geometric",
+                      locus_rule: NeiLocusRule = "pooled") -> float
+```
+
+Return a Nei distance ``-ln(I)`` between two populations.
+
+The arithmetic form is never smaller than the geometric one, and the
+two agree exactly when the populations are equally diverse.
+
+**Arguments**:
+
+- `loci_x` - Allele frequencies for population X across loci.
+- `loci_y` - Allele frequencies for population Y across loci.
+- `denominator` - ``"geometric"`` (Nei) or ``"arithmetic"``.
+- `locus_rule` - ``"pooled"`` (Nei) or ``"locus_mean"``.
+
+
+**Returns**:
+
+  The distance in ``[0, +inf)``; ``math.inf`` when no allele is shared.
+
+<a id="fim.statistics.genetic_distance.nei_all_demes_identity"></a>
+
+#### nei\_all\_demes\_identity
+
+```python
+def nei_all_demes_identity(tables: Sequence[FrequencyTable],
+                           *,
+                           denominator: NeiDenominator = "geometric",
+                           locus_rule: NeiLocusRule = "pooled") -> float
+```
+
+Return the all-demes Nei identity ``J_between / mean(J_k)``.
+
+The arithmetic form is bounded in ``[0, 1]`` (``J_between`` never
+exceeds ``J_within``) and equals ``1 - D`` for Jost's ``D``.
+
+The geometric form is **not bounded by 1**. Example: one locus, demes
+1 and 2 fixed for allele A, deme 3 spread evenly over 1000 alleles
+including A. Then ``J = (1, 1, 0.001)``, ``J_between = 0.334``, the
+geometric mean of ``J`` is ``0.1`` and the identity is ``3.34``. The
+value is returned as computed: a negative distance is the honest
+answer to "how does mean between-deme sharing compare with the
+geometric mean of within-deme sharing" when one deme is far more
+diverse than the rest.
+
+**Arguments**:
+
+- `tables` - One frequency table per locus, each listing every deme
+  in the same order (at least two demes).
+- `denominator` - ``"geometric"`` or ``"arithmetic"``.
+- `locus_rule` - ``"pooled"`` (Nei) or ``"locus_mean"``.
+
+
+**Returns**:
+
+  The identity, ``>= 0``.
+
+
+**Raises**:
+
+- `ValueError` - For no loci, fewer than two demes, or loci listing
+  different deme counts.
+
+<a id="fim.statistics.genetic_distance.nei_all_demes_distance"></a>
+
+#### nei\_all\_demes\_distance
+
+```python
+def nei_all_demes_distance(tables: Sequence[FrequencyTable],
+                           *,
+                           denominator: NeiDenominator = "geometric",
+                           locus_rule: NeiLocusRule = "pooled") -> float
+```
+
+Return the all-demes Nei distance ``-ln(I)``.
+
+See `nei_all_demes_identity`: the geometric form can be negative.
+
+**Arguments**:
+
+- `tables` - One frequency table per locus, demes in the same order.
+- `denominator` - ``"geometric"`` or ``"arithmetic"``.
+- `locus_rule` - ``"pooled"`` (Nei) or ``"locus_mean"``.
+
+
+**Returns**:
+
+  The distance; ``math.inf`` when no allele is shared between any
+  pair of demes.
 
 <a id="fim.statistics.identity_recursion"></a>
 

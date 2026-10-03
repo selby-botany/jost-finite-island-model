@@ -25807,6 +25807,167 @@ def test_hypothesis_genetic_distance_properties(
 
 Property test: bounds, symmetry, and Cauchy-Schwarz for random profiles.
 
+<a id="statistics.test_genetic_distance.random_frequency_table"></a>
+
+#### random\_frequency\_table
+
+```python
+@st.composite
+def random_frequency_table(draw: st.DrawFn,
+                           deme_count: int,
+                           max_alleles: int = 6) -> list[dict[int, float]]
+```
+
+Generate one locus's frequency table for `deme_count` demes.
+
+<a id="statistics.test_genetic_distance.NeiFamilyTests"></a>
+
+## NeiFamilyTests Objects
+
+```python
+class NeiFamilyTests(unittest.TestCase)
+```
+
+The geometric/arithmetic x pooled/locus-mean Nei distance family.
+
+Worked values are the ones in the statistics catalog design document
+(`20261002-claude-sonnet-5-5-statistics-catalog-and-display-selection-
+design.md`, `selby/restricted`, section 3.3), computed by hand.
+
+<a id="statistics.test_genetic_distance.NeiFamilyTests.test_pair_worked_example"></a>
+
+#### test\_pair\_worked\_example
+
+```python
+def test_pair_worked_example() -> None
+```
+
+X = (0.5, 0.5), Y = (1, 0): the hand-computed table.
+
+<a id="statistics.test_genetic_distance.NeiFamilyTests.test_geometric_pooled_pair_is_nei_1972"></a>
+
+#### test\_geometric\_pooled\_pair\_is\_nei\_1972
+
+```python
+def test_geometric_pooled_pair_is_nei_1972() -> None
+```
+
+The default pair identity is the existing Nei (1972) `nei_identity`.
+
+<a id="statistics.test_genetic_distance.NeiFamilyTests.test_arithmetic_pair_equals_minus_log_one_minus_jost_d"></a>
+
+#### test\_arithmetic\_pair\_equals\_minus\_log\_one\_minus\_jost\_d
+
+```python
+def test_arithmetic_pair_equals_minus_log_one_minus_jost_d() -> None
+```
+
+Independent oracle: at one locus, D_arith = -ln(1 - Jost's D).
+
+<a id="statistics.test_genetic_distance.NeiFamilyTests.test_three_deme_worked_example"></a>
+
+#### test\_three\_deme\_worked\_example
+
+```python
+def test_three_deme_worked_example() -> None
+```
+
+Demes fixed, fixed, uniform over four alleles.
+
+<a id="statistics.test_genetic_distance.NeiFamilyTests.test_geometric_all_demes_can_be_negative"></a>
+
+#### test\_geometric\_all\_demes\_can\_be\_negative
+
+```python
+def test_geometric_all_demes_can_be_negative() -> None
+```
+
+Very uneven diversity: identity 3.34, distance -1.206, not clamped.
+
+<a id="statistics.test_genetic_distance.NeiFamilyTests.test_arithmetic_all_demes_is_one_minus_jost_d"></a>
+
+#### test\_arithmetic\_all\_demes\_is\_one\_minus\_jost\_d
+
+```python
+def test_arithmetic_all_demes_is_one_minus_jost_d() -> None
+```
+
+At one locus, the arithmetic all-demes identity is 1 - D.
+
+<a id="statistics.test_genetic_distance.NeiFamilyTests.test_all_demes_at_two_demes_is_the_pair_form"></a>
+
+#### test\_all\_demes\_at\_two\_demes\_is\_the\_pair\_form
+
+```python
+def test_all_demes_at_two_demes_is_the_pair_form() -> None
+```
+
+`d = 2`: every all-demes variant equals its pair counterpart.
+
+<a id="statistics.test_genetic_distance.NeiFamilyTests.test_pooled_and_locus_mean_differ_for_uneven_loci"></a>
+
+#### test\_pooled\_and\_locus\_mean\_differ\_for\_uneven\_loci
+
+```python
+def test_pooled_and_locus_mean_differ_for_uneven_loci() -> None
+```
+
+Nei's pooled rule and the per-locus mean are different estimators.
+
+<a id="statistics.test_genetic_distance.NeiFamilyTests.test_no_shared_allele_and_self_comparison"></a>
+
+#### test\_no\_shared\_allele\_and\_self\_comparison
+
+```python
+def test_no_shared_allele_and_self_comparison() -> None
+```
+
+No allele shared: infinite distance; a population with itself: zero.
+
+<a id="statistics.test_genetic_distance.NeiFamilyTests.test_family_from_identities_matches_the_public_functions"></a>
+
+#### test\_family\_from\_identities\_matches\_the\_public\_functions
+
+```python
+def test_family_from_identities_matches_the_public_functions() -> None
+```
+
+The shared core gives the same four values as the public functions.
+
+<a id="statistics.test_genetic_distance.NeiFamilyTests.test_rejects_unknown_choices_and_bad_shapes"></a>
+
+#### test\_rejects\_unknown\_choices\_and\_bad\_shapes
+
+```python
+def test_rejects_unknown_choices_and_bad_shapes() -> None
+```
+
+Named errors for a typo'd choice, one deme, or ragged loci.
+
+<a id="statistics.test_genetic_distance.NeiFamilyTests.test_pair_ordering_property"></a>
+
+#### test\_pair\_ordering\_property
+
+```python
+@given(random_frequency_table(2), random_frequency_table(2))
+def test_pair_ordering_property(locus_a: list[dict[int, float]],
+                                locus_b: list[dict[int, float]]) -> None
+```
+
+0 <= I_arith <= I_geo <= 1 pairwise, for both locus rules.
+
+<a id="statistics.test_genetic_distance.NeiFamilyTests.test_all_demes_permutation_invariance"></a>
+
+#### test\_all\_demes\_permutation\_invariance
+
+```python
+@given(st.integers(min_value=2, max_value=5).flatmap(random_frequency_table))
+def test_all_demes_permutation_invariance(
+        table: list[dict[int, float]]) -> None
+```
+
+Reordering demes leaves every all-demes value unchanged.
+
 <a id="statistics.test_identity_recursion"></a>
 
 # statistics.test\_identity\_recursion

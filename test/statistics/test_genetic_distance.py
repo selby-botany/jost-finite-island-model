@@ -9,15 +9,23 @@ from hypothesis import given
 from hypothesis import strategies as st
 
 from fim.statistics import (
+    NEI_DENOMINATORS,
+    NEI_LOCUS_RULES,
     cross_identity,
     identity,
+    jost_d,
+    nei_all_demes_distance,
+    nei_all_demes_identity,
     nei_d,
     nei_d_prime,
+    nei_family_from_identities,
     nei_founder_identity,
     nei_geometric_distance,
     nei_geometric_identity,
     nei_identity,
     nei_mean_distance,
+    nei_pair_distance,
+    nei_pair_identity,
     nei_standard_distance,
 )
 
@@ -395,3 +403,190 @@ def test_hypothesis_genetic_distance_properties(
         d_geom = nei_geometric_distance(profile_x, profile_y)
         d_mean = nei_mean_distance(profile_x, profile_y)
         assert math.isclose(d_geom, d_mean, rel_tol=1e-9, abs_tol=1e-9)
+
+
+@st.composite
+def random_frequency_table(
+    draw: st.DrawFn, deme_count: int, max_alleles: int = 6
+) -> list[dict[int, float]]:
+    """Generate one locus's frequency table for `deme_count` demes."""
+    table: list[dict[int, float]] = []
+    for _ in range(deme_count):
+        k = draw(st.integers(min_value=1, max_value=max_alleles))
+        allele_ids = draw(
+            st.lists(
+                st.integers(min_value=0, max_value=max_alleles),
+                min_size=k,
+                max_size=k,
+                unique=True,
+            )
+        )
+        counts = [draw(st.integers(min_value=1, max_value=20)) for _ in allele_ids]
+        total = sum(counts)
+        table.append(
+            {
+                allele: count / total
+                for allele, count in zip(allele_ids, counts, strict=True)
+            }
+        )
+    return table
+
+
+class NeiFamilyTests(unittest.TestCase):
+    """The geometric/arithmetic x pooled/locus-mean Nei distance family.
+
+    Worked values are the ones in the statistics catalog design document
+    (`20261002-claude-sonnet-5-5-statistics-catalog-and-display-selection-
+    design.md`, `selby/restricted`, section 3.3), computed by hand.
+    """
+
+    def test_pair_worked_example(self) -> None:
+        """X = (0.5, 0.5), Y = (1, 0): the hand-computed table."""
+        x, y = {0: 0.5, 1: 0.5}, {0: 1.0}
+        self.assertAlmostEqual(nei_pair_identity(x, y), 0.70711, places=5)
+        self.assertAlmostEqual(nei_pair_distance(x, y), 0.34657, places=5)
+        self.assertAlmostEqual(
+            nei_pair_identity(x, y, denominator="arithmetic"), 0.66667, places=5
+        )
+        self.assertAlmostEqual(
+            nei_pair_distance(x, y, denominator="arithmetic"), 0.40547, places=5
+        )
+
+    def test_geometric_pooled_pair_is_nei_1972(self) -> None:
+        """The default pair identity is the existing Nei (1972) `nei_identity`."""
+        x = [{0: 0.2, 1: 0.8}, {0: 0.5, 2: 0.5}]
+        y = [{0: 0.6, 1: 0.4}, {2: 0.9, 3: 0.1}]
+        self.assertAlmostEqual(nei_pair_identity(x, y), nei_identity(x, y))
+        self.assertAlmostEqual(
+            nei_pair_distance(x, y, locus_rule="locus_mean"), nei_mean_distance(x, y)
+        )
+
+    def test_arithmetic_pair_equals_minus_log_one_minus_jost_d(self) -> None:
+        """Independent oracle: at one locus, D_arith = -ln(1 - Jost's D)."""
+        x, y = {0: 0.3, 1: 0.7}, {0: 0.6, 1: 0.1, 2: 0.3}
+        self.assertAlmostEqual(
+            nei_pair_distance(x, y, denominator="arithmetic"),
+            -math.log(1.0 - jost_d([x, y])),
+        )
+
+    def test_three_deme_worked_example(self) -> None:
+        """Demes fixed, fixed, uniform over four alleles."""
+        tables = [[{0: 1.0}, {0: 1.0}, {0: 0.25, 1: 0.25, 2: 0.25, 3: 0.25}]]
+        self.assertAlmostEqual(
+            nei_all_demes_identity(tables, denominator="arithmetic"), 0.66667, places=5
+        )
+        self.assertAlmostEqual(nei_all_demes_identity(tables), 0.79370, places=5)
+        self.assertAlmostEqual(nei_all_demes_distance(tables), 0.23105, places=5)
+
+    def test_geometric_all_demes_can_be_negative(self) -> None:
+        """Very uneven diversity: identity 3.34, distance -1.206, not clamped."""
+        uniform = dict.fromkeys(range(1000), 0.001)
+        tables = [[{0: 1.0}, {0: 1.0}, uniform]]
+        self.assertAlmostEqual(nei_all_demes_identity(tables), 3.34, places=9)
+        self.assertAlmostEqual(nei_all_demes_distance(tables), -math.log(3.34))
+        self.assertLess(nei_all_demes_distance(tables), 0.0)
+        arithmetic = nei_all_demes_identity(tables, denominator="arithmetic")
+        self.assertTrue(0.0 <= arithmetic <= 1.0)
+
+    def test_arithmetic_all_demes_is_one_minus_jost_d(self) -> None:
+        """At one locus, the arithmetic all-demes identity is 1 - D."""
+        table = [{0: 0.5, 1: 0.5}, {1: 0.2, 2: 0.8}, {0: 0.1, 2: 0.9}]
+        self.assertAlmostEqual(
+            nei_all_demes_identity([table], denominator="arithmetic"),
+            1.0 - jost_d(table),
+        )
+
+    def test_all_demes_at_two_demes_is_the_pair_form(self) -> None:
+        """`d = 2`: every all-demes variant equals its pair counterpart."""
+        x = [{0: 0.2, 1: 0.8}, {0: 0.5, 2: 0.5}]
+        y = [{0: 0.6, 1: 0.4}, {2: 0.9, 3: 0.1}]
+        tables = [[x[0], y[0]], [x[1], y[1]]]
+        for denominator in NEI_DENOMINATORS:
+            for locus_rule in NEI_LOCUS_RULES:
+                self.assertAlmostEqual(
+                    nei_all_demes_identity(
+                        tables, denominator=denominator, locus_rule=locus_rule
+                    ),
+                    nei_pair_identity(
+                        x, y, denominator=denominator, locus_rule=locus_rule
+                    ),
+                )
+
+    def test_pooled_and_locus_mean_differ_for_uneven_loci(self) -> None:
+        """Nei's pooled rule and the per-locus mean are different estimators."""
+        x = [{0: 1.0}, {0: 0.5, 1: 0.5}]
+        y = [{0: 1.0}, {2: 1.0}]
+        # Locus 2 shares nothing: one infinite per-locus distance makes the
+        # locus mean infinite, while the pooled rule stays finite.
+        self.assertEqual(nei_pair_distance(x, y, locus_rule="locus_mean"), math.inf)
+        self.assertTrue(math.isfinite(nei_pair_distance(x, y)))
+
+    def test_no_shared_allele_and_self_comparison(self) -> None:
+        """No allele shared: infinite distance; a population with itself: zero."""
+        x, y = {0: 1.0}, {1: 1.0}
+        for denominator in NEI_DENOMINATORS:
+            self.assertEqual(nei_pair_identity(x, y, denominator=denominator), 0.0)
+            self.assertEqual(nei_pair_distance(x, y, denominator=denominator), math.inf)
+            self.assertEqual(nei_pair_distance(x, x, denominator=denominator), 0.0)
+
+    def test_family_from_identities_matches_the_public_functions(self) -> None:
+        """The shared core gives the same four values as the public functions."""
+        table = [{0: 0.5, 1: 0.5}, {1: 0.2, 2: 0.8}, {0: 0.1, 2: 0.9}]
+        within = [sum(v * v for v in deme.values()) for deme in table]
+        pairs = [(0, 1), (0, 2), (1, 2)]
+        between = sum(
+            sum(table[a].get(k, 0.0) * table[b].get(k, 0.0) for k in range(3))
+            for a, b in pairs
+        ) / len(pairs)
+        family = nei_family_from_identities([within], [between])
+        for (denominator, locus_rule), value in family.items():
+            self.assertAlmostEqual(
+                value,
+                nei_all_demes_identity(
+                    [table], denominator=denominator, locus_rule=locus_rule
+                ),
+            )
+
+    def test_rejects_unknown_choices_and_bad_shapes(self) -> None:
+        """Named errors for a typo'd choice, one deme, or ragged loci."""
+        x = {0: 1.0}
+        with self.assertRaises(ValueError):
+            nei_pair_identity(x, x, denominator="harmonic")  # type: ignore[arg-type]
+        with self.assertRaises(ValueError):
+            nei_pair_identity(x, x, locus_rule="median")  # type: ignore[arg-type]
+        with self.assertRaises(ValueError):
+            nei_all_demes_identity([[x]])
+        with self.assertRaises(ValueError):
+            nei_all_demes_identity([[x, x], [x, x, x]])
+        with self.assertRaises(ValueError):
+            nei_all_demes_identity([])
+
+    @given(random_frequency_table(2), random_frequency_table(2))
+    def test_pair_ordering_property(
+        self, locus_a: list[dict[int, float]], locus_b: list[dict[int, float]]
+    ) -> None:
+        """0 <= I_arith <= I_geo <= 1 pairwise, for both locus rules."""
+        x = [locus_a[0], locus_b[0]]
+        y = [locus_a[1], locus_b[1]]
+        for locus_rule in NEI_LOCUS_RULES:
+            geometric = nei_pair_identity(x, y, locus_rule=locus_rule)
+            arithmetic = nei_pair_identity(
+                x, y, denominator="arithmetic", locus_rule=locus_rule
+            )
+            self.assertLessEqual(0.0, arithmetic)
+            self.assertLessEqual(arithmetic, geometric + 1e-12)
+            self.assertLessEqual(geometric, 1.0)
+
+    @given(st.integers(min_value=2, max_value=5).flatmap(random_frequency_table))
+    def test_all_demes_permutation_invariance(
+        self, table: list[dict[int, float]]
+    ) -> None:
+        """Reordering demes leaves every all-demes value unchanged."""
+        reordered = list(reversed(table))
+        for denominator in NEI_DENOMINATORS:
+            self.assertAlmostEqual(
+                nei_all_demes_identity([table], denominator=denominator),
+                nei_all_demes_identity([reordered], denominator=denominator),
+            )
+            arithmetic = nei_all_demes_identity([table], denominator="arithmetic")
+            self.assertTrue(0.0 <= arithmetic <= 1.0)
