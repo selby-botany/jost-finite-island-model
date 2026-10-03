@@ -505,7 +505,7 @@ Return to the [source-tree orientation](../README.md) or the [developer guide](.
   * [pairwise\_payload](#fim.persistence.pairwise.pairwise_payload)
   * [write\_pairwise](#fim.persistence.pairwise.write_pairwise)
   * [read\_pairwise](#fim.persistence.pairwise.read_pairwise)
-  * [pair\_identity](#fim.persistence.pairwise.pair_identity)
+  * [pair\_value](#fim.persistence.pairwise.pair_value)
 * [fim.persistence.report](#fim.persistence.report)
   * [write\_report](#fim.persistence.report.write_report)
   * [write\_jsonl\_rows](#fim.persistence.report.write_jsonl_rows)
@@ -583,6 +583,7 @@ Return to the [source-tree orientation](../README.md) or the [developer guide](.
   * [r\_st](#fim.statistics.differentiation.r_st)
   * [g\_st\_log](#fim.statistics.differentiation.g_st_log)
   * [g\_st\_max](#fim.statistics.differentiation.g_st_max)
+  * [derived\_differentiation](#fim.statistics.differentiation.derived_differentiation)
   * [g\_st\_prime](#fim.statistics.differentiation.g_st_prime)
   * [jost\_d](#fim.statistics.differentiation.jost_d)
   * [e\_st](#fim.statistics.differentiation.e_st)
@@ -646,6 +647,7 @@ Return to the [source-tree orientation](../README.md) or the [developer guide](.
   * [student\_t\_critical\_value](#fim.statistics.interval.student_t_critical_value)
 * [fim.statistics.pairwise](#fim.statistics.pairwise)
   * [locus\_frequency\_matrix](#fim.statistics.pairwise.locus_frequency_matrix)
+  * [pairwise\_matrices](#fim.statistics.pairwise.pairwise_matrices)
   * [pairwise\_nei\_identities](#fim.statistics.pairwise.pairwise_nei_identities)
   * [upper\_triangle](#fim.statistics.pairwise.upper_triangle)
 * [fim.sweep](#fim.sweep)
@@ -2177,6 +2179,13 @@ Fields:
         added for Phase 4 GUI visual interpretation: Caballero-
         Garcia-Dorado allelic distance, Gregorius delta, and Sherwin
         mutual information.
+    D_m, R_ST, G_ST_NEI_LOG, G_ST_HEDRICK, F_ST: Nei's (1973) mean
+        pairwise between-deme diversity and its ratio to `H_S`, Nei's
+        logarithmic and Hedrick's standardized `G'_ST`, and coancestry
+        `F_ST` (`fim.statistics.differentiation.
+        derived_differentiation`), each one ratio of the pooled
+        `H_S`/`H_T` (whatever `locus_aggregation` says, which governs
+        `D` and `G_ST` only). ``None`` where undefined.
     NEI_D_ALL_GEO, NEI_D_ALL_GEO_LOCUS_MEAN, NEI_D_ALL_ARITH,
         NEI_D_ALL_ARITH_LOCUS_MEAN: Nei's genetic distance across all
         demes, ``-ln(J_between / mean(J_k))``, with the geometric
@@ -3742,12 +3751,14 @@ def pair_statistic_values(state: ModelState, first: int,
                           second: int) -> dict[str, float | None]
 ```
 
-Return every pair-scope Nei statistic for two demes of `state`.
+Return every pair-scope statistic for two demes of `state`.
 
 The statistics the GUI shows for the deme pair chosen for the scatter
-plot: the four identities `NEI_I_PAIR_*` and the four distances
-`NEI_D_PAIR_*` (`fim.statistics.catalog`). One O(alleles) pass per
-locus. A deme compared with itself gives identity 1 and distance 0.
+plot: the four identities `NEI_I_PAIR_*`, the four distances
+`NEI_D_PAIR_*` and pairwise `F_ST_PAIR` (`fim.statistics.catalog`).
+One O(alleles) pass per locus. A deme compared with itself gives
+identity 1, distance 0 and pairwise F_ST 0 (undefined, `None`, if
+that deme is fixed).
 
 **Arguments**:
 
@@ -3777,7 +3788,9 @@ def history_free_statistic_values(
 
 Return the global statistics that have no per-generation history.
 
-`Gs`, `Gd` and the eight all-demes Nei fields: what a scrubbed frame
+`Gs`, `Gd`, the five pooled-heterozygosity measures (`D_m`, `R_ST`,
+both `G'_ST`, coancestry `F_ST`) and the eight all-demes Nei fields:
+what a scrubbed frame
 of a completed run needs to show those rows at that frame's
 generation. Computed directly and cheaply (O(d * alleles) per locus),
 not through `report_for_state`, which would also pay for every
@@ -5540,7 +5553,7 @@ Set the largest deme count whose runs save every pair's statistics.
 **Arguments**:
 
 - `max_demes` - A positive integer. Larger values save bigger files
-  (about 42 MB per run at 1024 demes) and take longer to
+  (about 52 MB per run at 1024 demes) and take longer to
   write; any pair can still be recomputed from the saved
   trajectory above the limit.
 
@@ -15012,28 +15025,31 @@ Format (version 1)::
       "deme_count": 4,
       "mode": "full",
       "encoding": "upper-triangle-row-major",
-      "identities": {
+      "matrices": {
         "NEI_I_PAIR_GEO": [I_01, I_02, I_03, I_12, I_13, I_23],
         "NEI_I_PAIR_GEO_LOCUS_MEAN": [...],
         "NEI_I_PAIR_ARITH": [...],
-        "NEI_I_PAIR_ARITH_LOCUS_MEAN": [...]
+        "NEI_I_PAIR_ARITH_LOCUS_MEAN": [...],
+        "F_ST_PAIR": [...]
       }
     }
 
 Each list is the strict upper triangle of a symmetric ``d x d`` matrix,
 row by row (pair ``(0, 1)``, ``(0, 2)``, ..., ``(1, 2)``, ...); the
-diagonal is 1 by definition. Only identities are stored: they are always
-finite (a distance is infinite when nothing is shared, and strict JSON
-has no infinity), and each distance is exactly ``-ln(identity)``.
+diagonal is known (1 for an identity, 0 for F_ST). For the Nei family only
+identities are stored: they are always finite (a distance is infinite
+when nothing is shared, and strict JSON has no infinity), and each
+distance is exactly ``-ln(identity)``. A pairwise F_ST is ``null`` where it
+is undefined (both demes fixed for the same allele).
 
 Above the deme-count limit (`fim.statistics.catalog.
 DEFAULT_PAIRWISE_MAX_DEMES` unless the researcher sets another) the file
 records ``"mode": "skipped"`` and the limit instead of the matrices; any
 specific pair can still be recomputed from `trajectory.jsonl`.
 
-Size: four lists of ``d (d - 1) / 2`` numbers, about 20 bytes each in
-compact JSON. At ``d = 1024`` that is about 42 MB per run (each replicate
-of a batch writes its own); at ``d = 100``, about 0.4 MB.
+Size: five lists of ``d (d - 1) / 2`` numbers, about 20 bytes each in
+compact JSON. At ``d = 1024`` that is about 52 MB per run (each replicate
+of a batch writes its own); at ``d = 100``, about 0.5 MB.
 
 <a id="fim.persistence.pairwise.SLOW_PAIRWISE_DEMES"></a>
 
@@ -15042,7 +15058,7 @@ of a batch writes its own); at ``d = 100``, about 0.4 MB.
 Deme count from which saving `pairwise.json` is slow enough to announce.
 
 Below it the file takes a fraction of a second; at 1024 demes it is about
-42 MB per run, dominated by writing the JSON, and a batch writes one per
+52 MB per run, dominated by writing the JSON, and a batch writes one per
 replicate. The GUI shows a status line with a spinner while it saves.
 
 <a id="fim.persistence.pairwise.upper_triangle_index"></a>
@@ -15127,29 +15143,30 @@ Read a `pairwise.json`.
 - `ValueError` - For an unknown schema version or a malformed file.
 - `OSError` - If the file cannot be read.
 
-<a id="fim.persistence.pairwise.pair_identity"></a>
+<a id="fim.persistence.pairwise.pair_value"></a>
 
-#### pair\_identity
+#### pair\_value
 
 ```python
-def pair_identity(payload: Mapping[str, Any], key: str, first: int,
-                  second: int) -> float | None
+def pair_value(payload: Mapping[str, Any], key: str, first: int,
+               second: int) -> float | None
 ```
 
-Return one pair's saved identity, or `None` if the file has none.
+Return one pair's saved value, or `None` if the file has none.
 
 **Arguments**:
 
 - `payload` - A `read_pairwise` result.
-- `key` - A pair identity key such as ``"NEI_I_PAIR_ARITH"``.
+- `key` - A matrix key such as ``"NEI_I_PAIR_ARITH"`` or ``"F_ST_PAIR"``.
 - `first` - Zero-based deme index.
 - `second` - Zero-based deme index.
 
 
 **Returns**:
 
-  The identity; 1.0 for a deme with itself; `None` when the matrices
-  were skipped for a large deme count.
+  The value (a deme with itself: identity 1, F_ST 0); `None` when the
+  matrices were skipped for a large deme count, or the value is
+  undefined (a `null` pairwise F_ST).
 
 <a id="fim.persistence.report"></a>
 
@@ -16257,10 +16274,10 @@ This module imports nothing from the simulator or the GUI. It sits in
 
 Largest deme count whose full all-pairs matrices are saved by default.
 
-At d = 1024 one run's `pairwise.json` is about 40 MB (four matrices of
-523,776 values) and takes well under a second to compute. Above the
-limit only a summary of each matrix is saved; any specific pair can
-still be recomputed from the saved trajectory. A researcher can raise or
+At d = 1024 one run's `pairwise.json` is about 52 MB (five matrices of
+523,776 values) and takes about a second to compute and write. Above the
+limit the file records only that the matrices were skipped; any specific
+pair can still be recomputed from the saved trajectory. A researcher can raise or
 lower the limit in Settings or with `fim run --pairwise-max-demes`.
 
 <a id="fim.statistics.catalog.StatisticSpec"></a>
@@ -16960,6 +16977,56 @@ dividing by this ceiling is actually for.
 **Raises**:
 
 - `ValueError` - If `h_s` is not in `[0, 1)`, or `deme_count < 2`.
+
+<a id="fim.statistics.differentiation.derived_differentiation"></a>
+
+#### derived\_differentiation
+
+```python
+def derived_differentiation(h_s: float, h_t: float,
+                            deme_count: int) -> dict[str, float | None]
+```
+
+Return five differentiation measures that depend only on ``H_S``, ``H_T``, ``d``.
+
+The engine's per-report companion to the table-based functions in
+this module, for measures that are functions of the pooled
+heterozygosities alone, so they cost nothing beyond what a report
+already computes. Equal deme weighting throughout. For one locus each
+equals its table-based counterpart:
+
+- ``"D_m"``: Nei (1973) mean pairwise between-deme diversity,
+``(H_T - H_S) * d / (d - 1)`` (`d_m`).
+- ``"R_ST"``: ``D_m / H_S`` (`r_st`); ``None`` when ``H_S = 0``.
+- ``"G_ST_NEI_LOG"``: Nei's logarithmic ``G'_ST``,
+``ln(J_S / J_T) / -ln(J_T)`` with ``J = 1 - H`` (`g_st_log`);
+``None`` when ``H_T = 0`` or ``H_S = 1``.
+- ``"G_ST_HEDRICK"``: Hedrick's standardized ``G'_ST``
+(`g_st_prime` of ``G_ST = (H_T - H_S) / H_T``); ``None`` when
+``H_T = 0``.
+- ``"F_ST"``: coancestry ``F_ST`` (Goudet & Weir 2023),
+``(G_s - G_d) / (1 - G_d)`` (`overall_coancestry_f_st`); ``None``
+when ``G_d = 1`` (every deme fixed for the same allele).
+
+For several loci, pass the per-locus means of ``H_S`` and ``H_T``:
+each measure is then one ratio of pooled quantities, the same rule
+the engine's default ``D`` and ``G_ST`` use.
+
+**Arguments**:
+
+- `h_s` - Mean within-deme heterozygosity, in ``[0, 1]``.
+- `h_t` - Pooled heterozygosity, in ``[0, 1]``.
+- `deme_count` - ``d``, at least 2.
+
+
+**Returns**:
+
+- ```{key` - value}``, ``None`` where a measure is undefined.
+
+
+**Raises**:
+
+- `ValueError` - If `deme_count` is below 2.
 
 <a id="fim.statistics.differentiation.g_st_prime"></a>
 
@@ -19132,6 +19199,44 @@ Return one locus's ``d x A`` frequency matrix, alleles in first-seen order.
   A dense float matrix, one row per deme. An allele absent from a
   deme is 0 in that row.
 
+<a id="fim.statistics.pairwise.pairwise_matrices"></a>
+
+#### pairwise\_matrices
+
+```python
+def pairwise_matrices(
+    locus_tables: Sequence[Sequence[Mapping[Any, float]]]
+) -> tuple[dict[tuple[NeiDenominator, NeiLocusRule], FloatMatrix],
+           FloatMatrix]
+```
+
+Return all four Nei identity matrices and the pairwise F_ST matrix.
+
+One pass over the loci feeds both: the Nei identities (element
+``[k, l]`` equals `nei_pair_identity` for demes ``k`` and ``l``,
+diagonal 1) and pairwise F_ST (Goudet & Weir 2023 Eq. 10, loci pooled
+as in Nei's rule: ``((J_k + J_l) / 2 - J_kl) / (1 - J_kl)``, diagonal
+0). An F_ST entry is NaN where it is undefined: both demes fixed for
+the same allele (``J_kl = 1``).
+
+**Arguments**:
+
+- `locus_tables` - One frequency table per locus, demes in the same
+  order at every locus.
+
+
+**Returns**:
+
+  ``(nei, f_st)``: ``nei`` maps ``(denominator, locus_rule)`` to a
+  symmetric ``d x d`` matrix in ``[0, 1]``; ``f_st`` is a symmetric
+  ``d x d`` matrix in ``[0, 1]`` or NaN.
+
+
+**Raises**:
+
+- `ValueError` - For no loci, no demes, or loci with different deme
+  counts.
+
 <a id="fim.statistics.pairwise.pairwise_nei_identities"></a>
 
 #### pairwise\_nei\_identities
@@ -19144,8 +19249,7 @@ def pairwise_nei_identities(
 
 Return all four Nei identity matrices for every pair of demes.
 
-Element ``[k, l]`` equals `nei_pair_identity` for demes ``k`` and
-``l`` with the same denominator and locus rule; the diagonal is 1.
+The Nei half of `pairwise_matrices`; see it for the details.
 
 **Arguments**:
 
@@ -19158,18 +19262,12 @@ Element ``[k, l]`` equals `nei_pair_identity` for demes ``k`` and
   ``{(denominator, locus_rule): d x d matrix}``, symmetric, every
   value in ``[0, 1]``.
 
-
-**Raises**:
-
-- `ValueError` - For no loci, no demes, or loci with different deme
-  counts.
-
 <a id="fim.statistics.pairwise.upper_triangle"></a>
 
 #### upper\_triangle
 
 ```python
-def upper_triangle(matrix: FloatMatrix) -> list[float]
+def upper_triangle(matrix: FloatMatrix) -> list[float | None]
 ```
 
 Return the strict upper triangle, row by row, as plain floats.
@@ -19185,7 +19283,8 @@ diagonal.
 
 **Returns**:
 
-  ``d * (d - 1) / 2`` floats.
+  ``d * (d - 1) / 2`` values; a NaN entry (an undefined value) is
+  ``None``, since strict JSON has no NaN.
 
 <a id="fim.sweep"></a>
 

@@ -1402,7 +1402,7 @@ def _parser() -> argparse.ArgumentParser:
         help=(
             "save every deme pair's Nei identities (pairwise.json) when the "
             f"run has at most N demes (default: {DEFAULT_PAIRWISE_MAX_DEMES}); "
-            "the file grows with N squared, about 42 MB per run at 1024"
+            "the file grows with N squared, about 52 MB per run at 1024"
         ),
     )
     workers_group = run_parser.add_mutually_exclusive_group()

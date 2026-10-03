@@ -14,6 +14,7 @@ from unittest.mock import patch
 from fim.statistics import (
     allelic_distance,
     d_m,
+    derived_differentiation,
     differentiation,
     differentiation_q,
     e_st,
@@ -1232,3 +1233,37 @@ class DifferentiationStatisticsTests(unittest.TestCase):
             unbiased_heterozygosity(freqs, sample_size=-5)
         with self.assertRaises(ValueError):
             unbiased_heterozygosity(freqs, sample_size=1, is_gene_copies=True)
+
+
+class DerivedDifferentiationTests(unittest.TestCase):
+    """`derived_differentiation` equals the table-based functions at one locus."""
+
+    def test_matches_each_table_based_function(self) -> None:
+        """D_m, R_ST, both G'_ST and coancestry F_ST, for a three-deme table."""
+        table = [{0: 0.5, 1: 0.5}, {1: 0.2, 2: 0.8}, {0: 0.1, 2: 0.9}]
+        within, total = h_s(table), h_t(table)
+        values = derived_differentiation(within, total, 3)
+        g_st_value = g_st(table)
+        assert g_st_value is not None
+        expected = {
+            "D_m": d_m(table),
+            "R_ST": r_st(table),
+            "G_ST_NEI_LOG": g_st_log(table),
+            "G_ST_HEDRICK": g_st_prime(g_st_value, within, 3),
+            "F_ST": overall_coancestry_f_st(table),
+        }
+        for key, value in expected.items():
+            actual = values[key]
+            assert actual is not None and value is not None
+            self.assertAlmostEqual(actual, value)
+
+    def test_undefined_cases_are_none(self) -> None:
+        """Fixed everywhere: R_ST, both G'_ST and F_ST undefined; D_m is 0."""
+        values = derived_differentiation(0.0, 0.0, 2)
+        self.assertEqual(values["D_m"], 0.0)
+        self.assertIsNone(values["R_ST"])
+        self.assertIsNone(values["G_ST_NEI_LOG"])
+        self.assertIsNone(values["G_ST_HEDRICK"])
+        self.assertIsNone(values["F_ST"])
+        with self.assertRaises(ValueError):
+            derived_differentiation(0.2, 0.3, 1)

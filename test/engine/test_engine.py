@@ -53,6 +53,7 @@ from fim.persistence.jsonl_store import JSONLTrajectoryStore
 from fim.persistence.store import InMemoryTrajectoryStore, TrajectoryStore
 from fim.statistics import differentiation
 from fim.statistics.catalog import report_keys
+from fim.statistics.differentiation import derived_differentiation
 from fim.statistics.genetic_distance import (
     NEI_DENOMINATORS,
     NEI_LOCUS_RULES,
@@ -2497,6 +2498,30 @@ def test_history_free_values_equal_the_reports_gs_gd_and_nei() -> None:
 
     for key, value in values.items():
         assert value == pytest.approx(report[key])
+
+
+def test_report_for_state_captures_the_pooled_heterozygosity_measures() -> None:
+    """D_m, R_ST, both G'_ST and coancestry F_ST from the pooled H_S/H_T."""
+    loci = (LocusSpec(1, 100), LocusSpec(2, 100))
+    frequencies = (
+        ({AlleleId(0): 1.0}, {AlleleId(0): 0.5, AlleleId(1): 0.5}),
+        ({AlleleId(0): 0.2, AlleleId(2): 0.8}, {AlleleId(1): 1.0}),
+        ({AlleleId(0): 0.5, AlleleId(2): 0.5}, {AlleleId(0): 0.3, AlleleId(1): 0.7}),
+    )
+    state = ModelState(loci=loci, frequencies=frequencies)
+    params = SimulationParams(gene_copies=10, m=0.1, mu=0.0, d=3, seed=7, loci=loci)
+    report = cast(
+        "Mapping[str, float | None]",
+        report_for_state(state, params, run_id="r", converged=False, reason="test"),
+    )
+    h_s_value, h_t_value = report["H_S"], report["H_T"]
+    assert h_s_value is not None and h_t_value is not None
+    expected = derived_differentiation(h_s_value, h_t_value, 3)
+    for key, value in expected.items():
+        assert report[key] == pytest.approx(value)
+    assert report["F_ST"] == pytest.approx(
+        (report["Gs"] - report["Gd"]) / (1.0 - report["Gd"])  # type: ignore[operator]
+    )
 
 
 def test_report_for_state_reports_an_infinite_nei_distance_as_none() -> None:

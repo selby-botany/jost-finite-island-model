@@ -124,7 +124,7 @@ from fim.model.state import ModelState
 from fim.model.topology import MINIMUM_DEMES
 from fim.persistence import groups
 from fim.persistence.manifest import RunManifest, read_batch_manifest, read_manifest
-from fim.persistence.pairwise import pair_identity, read_pairwise
+from fim.persistence.pairwise import pair_value, read_pairwise
 from fim.persistence.run_metadata import run_metadata_path
 from fim.reanalyze import (
     read_persisted_convergence_history,
@@ -490,12 +490,12 @@ def _replicate_pair_values(
     payload = read_pairwise(pairwise_path) if pairwise_path.exists() else None
     if payload is not None and payload.get("mode") == "full":
         values: dict[str, float | None] = {}
-        # `pairwise.json` stores identities; each distance key is its
-        # identity key with `NEI_I_` read as `NEI_D_`.
+        # `pairwise.json` stores the Nei identities (each distance key is
+        # its identity key with `NEI_I_` read as `NEI_D_`) and F_ST_PAIR.
         for key in pair_keys():
             if not key.startswith("NEI_I_"):
                 continue
-            identity_value = pair_identity(payload, key, first, second)
+            identity_value = pair_value(payload, key, first, second)
             if identity_value is None:
                 break
             distance = nei_distance_from_identity(identity_value)
@@ -504,6 +504,7 @@ def _replicate_pair_values(
                 None if math.isinf(distance) else distance
             )
         else:
+            values["F_ST_PAIR"] = pair_value(payload, "F_ST_PAIR", first, second)
             return values
     state = reanalyze_trajectory(replicate_directory / "trajectory.jsonl").state
     return pair_statistic_values(state, first, second)
@@ -3597,7 +3598,7 @@ class Api:
 
         Args:
             max_demes: A positive integer. Larger values save bigger files
-                (about 42 MB per run at 1024 demes) and take longer to
+                (about 52 MB per run at 1024 demes) and take longer to
                 write; any pair can still be recomputed from the saved
                 trajectory above the limit.
 

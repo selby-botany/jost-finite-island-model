@@ -66,7 +66,7 @@ from fim.model.state import ModelState
 from fim.persistence import groups
 from fim.persistence.jsonl_store import JSONLTrajectoryStore
 from fim.persistence.manifest import hash_file, read_manifest
-from fim.persistence.pairwise import pair_identity, read_pairwise
+from fim.persistence.pairwise import pair_value, read_pairwise
 from fim.persistence.report import write_report
 from fim.statistics import (
     MAXIMUM_MATRIX_DEMES,
@@ -3985,7 +3985,7 @@ def test_get_deme_pair_panel_carries_that_pairs_nei_statistics(tmp_path: Path) -
     assert pair_statistics["pair"] == [2, 4]
     assert set(pair_statistics["values"]) == set(pair_keys())
     saved = read_pairwise(output / "pairwise.json")
-    expected = pair_identity(saved, "NEI_I_PAIR_ARITH", 1, 3)
+    expected = pair_value(saved, "NEI_I_PAIR_ARITH", 1, 3)
     assert expected is not None
     # Shown values are rounded to the display's significant digits.
     api_digits = Api()._significant_digits
@@ -4013,8 +4013,11 @@ def test_animation_frames_carry_history_free_and_default_pair_statistics(
     frames = Api().get_animation_frames(str(output))["frames"]
 
     final = frames[-1]
-    assert set(final["statistics"]) == {"Gs", "Gd"} | {
-        key for key in report_keys() if key.startswith("NEI_")
+    # Exactly the global statistics with no per-generation history.
+    assert set(final["statistics"]) == {
+        entry.key
+        for entry in CATALOG
+        if entry.scope == "global" and entry.history == "none"
     }
     assert final["pairStatistics"]["pair"] == [1, 2]
     report = json.loads((output / "report.json").read_text(encoding="utf-8"))

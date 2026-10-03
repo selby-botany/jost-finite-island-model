@@ -23,6 +23,7 @@ frequency table per locus.
 
 from __future__ import annotations
 
+import math
 from collections.abc import Mapping, Sequence
 from typing import Any
 
@@ -33,6 +34,7 @@ from .genetic_distance import NEI_DENOMINATORS, NeiDenominator, NeiLocusRule
 
 __all__ = [
     "locus_frequency_matrix",
+    "pairwise_matrices",
     "pairwise_nei_identities",
     "upper_triangle",
 ]
@@ -73,21 +75,26 @@ def _ratio(
     return result
 
 
-def pairwise_nei_identities(
+def pairwise_matrices(
     locus_tables: Sequence[Sequence[Mapping[Any, float]]],
-) -> dict[tuple[NeiDenominator, NeiLocusRule], FloatMatrix]:
-    """Return all four Nei identity matrices for every pair of demes.
+) -> tuple[dict[tuple[NeiDenominator, NeiLocusRule], FloatMatrix], FloatMatrix]:
+    """Return all four Nei identity matrices and the pairwise F_ST matrix.
 
-    Element ``[k, l]`` equals `nei_pair_identity` for demes ``k`` and
-    ``l`` with the same denominator and locus rule; the diagonal is 1.
+    One pass over the loci feeds both: the Nei identities (element
+    ``[k, l]`` equals `nei_pair_identity` for demes ``k`` and ``l``,
+    diagonal 1) and pairwise F_ST (Goudet & Weir 2023 Eq. 10, loci pooled
+    as in Nei's rule: ``((J_k + J_l) / 2 - J_kl) / (1 - J_kl)``, diagonal
+    0). An F_ST entry is NaN where it is undefined: both demes fixed for
+    the same allele (``J_kl = 1``).
 
     Args:
         locus_tables: One frequency table per locus, demes in the same
             order at every locus.
 
     Returns:
-        ``{(denominator, locus_rule): d x d matrix}``, symmetric, every
-        value in ``[0, 1]``.
+        ``(nei, f_st)``: ``nei`` maps ``(denominator, locus_rule)`` to a
+        symmetric ``d x d`` matrix in ``[0, 1]``; ``f_st`` is a symmetric
+        ``d x d`` matrix in ``[0, 1]`` or NaN.
 
     Raises:
         ValueError: For no loci, no demes, or loci with different deme
@@ -121,11 +128,11 @@ def pairwise_nei_identities(
                     np.clip(_ratio(identities, within, denominator), 0.0, 1.0)
                 )
 
+    mean_between = between_sum / locus_count
+    mean_within = within_sum / locus_count
     family: dict[tuple[NeiDenominator, NeiLocusRule], FloatMatrix] = {}
     for denominator in NEI_DENOMINATORS:
-        pooled = _ratio(
-            between_sum / locus_count, within_sum / locus_count, denominator
-        )
+        pooled = _ratio(mean_between, mean_within, denominator)
         locus_mean = np.exp(log_sums[denominator] / locus_count)
         by_rule: tuple[tuple[NeiLocusRule, FloatMatrix], ...] = (
             ("pooled", pooled),
@@ -137,10 +144,39 @@ def pairwise_nei_identities(
             bounded = np.clip(matrix, 0.0, 1.0)
             np.fill_diagonal(bounded, 1.0)
             family[(denominator, locus_rule)] = bounded
+
+    pair_within = (mean_within[:, None] + mean_within[None, :]) / 2.0
+    with np.errstate(divide="ignore", invalid="ignore"):
+        f_st = np.where(
+            mean_between < 1.0,
+            (pair_within - mean_between) / (1.0 - mean_between),
+            np.nan,
+        )
+    f_st = np.clip(f_st, 0.0, 1.0)  # NaN passes through `clip` unchanged.
+    np.fill_diagonal(f_st, np.where(mean_within < 1.0, 0.0, np.nan))
+    return family, f_st
+
+
+def pairwise_nei_identities(
+    locus_tables: Sequence[Sequence[Mapping[Any, float]]],
+) -> dict[tuple[NeiDenominator, NeiLocusRule], FloatMatrix]:
+    """Return all four Nei identity matrices for every pair of demes.
+
+    The Nei half of `pairwise_matrices`; see it for the details.
+
+    Args:
+        locus_tables: One frequency table per locus, demes in the same
+            order at every locus.
+
+    Returns:
+        ``{(denominator, locus_rule): d x d matrix}``, symmetric, every
+        value in ``[0, 1]``.
+    """
+    family, _ = pairwise_matrices(locus_tables)
     return family
 
 
-def upper_triangle(matrix: FloatMatrix) -> list[float]:
+def upper_triangle(matrix: FloatMatrix) -> list[float | None]:
     """Return the strict upper triangle, row by row, as plain floats.
 
     The order is ``[0,1], [0,2], ..., [0,d-1], [1,2], ...``: the compact
@@ -151,8 +187,9 @@ def upper_triangle(matrix: FloatMatrix) -> list[float]:
         matrix: A square matrix.
 
     Returns:
-        ``d * (d - 1) / 2`` floats.
+        ``d * (d - 1) / 2`` values; a NaN entry (an undefined value) is
+        ``None``, since strict JSON has no NaN.
     """
     rows, columns = np.triu_indices(matrix.shape[0], k=1)
     values: list[float] = matrix[rows, columns].tolist()
-    return values
+    return [None if math.isnan(value) else value for value in values]

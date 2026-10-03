@@ -39,6 +39,7 @@ from .differentiation import (
     DifferentiationReport,
     allelic_distance,
     d_m,
+    derived_differentiation,
     differentiation_q,
     e_st,
     effective_allele_count,
@@ -117,7 +118,12 @@ from .identity_recursion import (
     matrix_identity_trajectory,
 )
 from .interval import ConfidenceInterval, confidence_interval, student_t_critical_value
-from .pairwise import locus_frequency_matrix, pairwise_nei_identities, upper_triangle
+from .pairwise import (
+    locus_frequency_matrix,
+    pairwise_matrices,
+    pairwise_nei_identities,
+    upper_triangle,
+)
 
 __all__ = [
     "IDENTITY_STATISTIC_NAMES",
@@ -134,6 +140,7 @@ __all__ = [
     "cross_identity",
     "d_m",
     "deme_gene_identities",
+    "derived_differentiation",
     "differentiation_q",
     "e_st",
     "effective_allele_count",
@@ -191,6 +198,7 @@ __all__ = [
     "nei_standard_distance",
     "overall_coancestry_f_st",
     "pairwise_f_st",
+    "pairwise_matrices",
     "pairwise_nei_identities",
     "population_pair_f_st",
     "population_specific_f_st",

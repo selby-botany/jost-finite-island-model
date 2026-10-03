@@ -73,8 +73,9 @@ class CatalogTests(unittest.TestCase):
             self.assertFalse(entry.convergence_eligible)
 
     def test_scope_lists(self) -> None:
-        """Report keys are the global ones; pair keys are the 8 pair Nei members."""
-        self.assertEqual(len(pair_keys()), 8)
+        """Report keys are the global ones; pair keys: 8 Nei members and F_ST."""
+        self.assertEqual(len(pair_keys()), 9)
+        self.assertIn("F_ST_PAIR", pair_keys())
         self.assertTrue(set(report_keys()).isdisjoint(pair_keys()))
         self.assertEqual(
             set(report_keys()) | set(pair_keys()), {e.key for e in CATALOG}

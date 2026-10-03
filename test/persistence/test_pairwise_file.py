@@ -12,13 +12,13 @@ from fim.model.allele import AlleleId
 from fim.model.locus import LocusSpec
 from fim.model.state import ModelState
 from fim.persistence.pairwise import (
-    pair_identity,
+    pair_value,
     pairwise_payload,
     read_pairwise,
     upper_triangle_index,
     write_pairwise,
 )
-from fim.statistics import nei_pair_identity
+from fim.statistics import nei_pair_identity, pairwise_f_st
 
 _LOCI = (LocusSpec(1, 100), LocusSpec(2, 100))
 _FREQUENCIES = (
@@ -64,10 +64,10 @@ def test_payload_holds_every_pair_matching_the_pair_function(tmp_path: Path) -> 
                 denominator=denominator,  # type: ignore[arg-type]
                 locus_rule=locus_rule,  # type: ignore[arg-type]
             )
-            assert pair_identity(payload, key, first, second) == pytest.approx(
+            assert pair_value(payload, key, first, second) == pytest.approx(
                 expected, abs=1e-12
             )
-    assert pair_identity(payload, "NEI_I_PAIR_GEO", 2, 2) == 1.0
+    assert pair_value(payload, "NEI_I_PAIR_GEO", 2, 2) == 1.0
 
 
 def test_no_shared_allele_is_stored_as_a_finite_zero(tmp_path: Path) -> None:
@@ -76,7 +76,7 @@ def test_no_shared_allele_is_stored_as_a_finite_zero(tmp_path: Path) -> None:
     write_pairwise(path, pairwise_payload(_state(), max_demes=1024))
     payload = read_pairwise(path)
     # Demes 0 and 3 share nothing at locus 1, so the locus mean is 0.
-    assert pair_identity(payload, "NEI_I_PAIR_GEO_LOCUS_MEAN", 0, 3) == 0.0
+    assert pair_value(payload, "NEI_I_PAIR_GEO_LOCUS_MEAN", 0, 3) == 0.0
 
 
 def test_above_the_limit_the_matrices_are_skipped() -> None:
@@ -84,8 +84,8 @@ def test_above_the_limit_the_matrices_are_skipped() -> None:
     payload = pairwise_payload(_state(), max_demes=3)
     assert payload["mode"] == "skipped"
     assert payload["max_demes"] == 3
-    assert "identities" not in payload
-    assert pair_identity(payload, "NEI_I_PAIR_GEO", 0, 1) is None
+    assert "matrices" not in payload
+    assert pair_value(payload, "NEI_I_PAIR_GEO", 0, 1) is None
 
 
 def test_written_bytes_are_deterministic(tmp_path: Path) -> None:
@@ -103,3 +103,34 @@ def test_unknown_schema_version_is_rejected(tmp_path: Path) -> None:
     path.write_text(json.dumps({"schema_version": 99}), encoding="utf-8")
     with pytest.raises(ValueError, match="schema_version"):
         read_pairwise(path)
+
+
+def test_pairwise_f_st_matrix_matches_the_pair_function(tmp_path: Path) -> None:
+    """The saved pairwise F_ST equals `pairwise_f_st` at one locus, pooled at two."""
+    loci = (LocusSpec(1, 100),)
+    frequencies = (
+        ({AlleleId(0): 0.5, AlleleId(1): 0.5},),
+        ({AlleleId(1): 0.2, AlleleId(2): 0.8},),
+        ({AlleleId(0): 0.1, AlleleId(2): 0.9},),
+    )
+    state = ModelState(loci=loci, frequencies=frequencies)
+    payload = pairwise_payload(state, max_demes=1024)
+    for first, second in itertools.combinations(range(3), 2):
+        assert pair_value(payload, "F_ST_PAIR", first, second) == pytest.approx(
+            pairwise_f_st(dict(frequencies[first][0]), dict(frequencies[second][0]))
+        )
+    assert pair_value(payload, "F_ST_PAIR", 1, 1) == 0.0
+
+
+def test_pairwise_f_st_is_null_where_undefined(tmp_path: Path) -> None:
+    """Two demes fixed for the same allele: F_ST undefined, saved as null."""
+    loci = (LocusSpec(1, 100),)
+    state = ModelState(
+        loci=loci,
+        frequencies=(({AlleleId(0): 1.0},), ({AlleleId(0): 1.0},)),
+    )
+    path = tmp_path / "pairwise.json"
+    write_pairwise(path, pairwise_payload(state, max_demes=1024))
+    payload = read_pairwise(path)
+    assert payload["matrices"]["F_ST_PAIR"] == [None]
+    assert pair_value(payload, "F_ST_PAIR", 0, 1) is None

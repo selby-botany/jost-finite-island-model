@@ -93,7 +93,7 @@ def test_run_writes_every_deme_pair_to_pairwise_json(tmp_path: Path) -> None:
     payload = json.loads((output / "pairwise.json").read_text(encoding="utf-8"))
     deme_count = payload["deme_count"]
     assert payload["mode"] == "full"
-    for values in payload["identities"].values():
+    for values in payload["matrices"].values():
         assert len(values) == deme_count * (deme_count - 1) // 2
     manifest = json.loads((output / "manifest.json").read_text(encoding="utf-8"))
     assert "pairwise" in manifest["artifacts"]

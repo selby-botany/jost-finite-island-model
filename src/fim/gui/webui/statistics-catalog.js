@@ -77,16 +77,16 @@ function isProportionStatistic(key) {
 }
 
 /**
- * A short plain-text name for charts and readouts: the catalog's own
- * text label for a Nei family member, the familiar "G ST" spacing for
- * the rest.
+ * A short plain-text name for charts and readouts: the familiar "G ST"
+ * spacing for the long-standing statistics, the catalog's own text label
+ * for the rest (`G'_ST (Hedrick)`, `Nei D (pair, arithmetic)`, ...).
  *
  * @param {string} key
  * @returns {string}
  */
 function statisticDisplayName(key) {
     const spec = statisticSpec(key);
-    if (spec && spec.nei) {
+    if (spec && !spec.convergence_eligible) {
         return spec.label_text;
     }
     return key.replace("_", " ");

@@ -65,10 +65,10 @@ Measure: TypeAlias = Literal["distance", "identity"]
 DEFAULT_PAIRWISE_MAX_DEMES: Final = 1024
 """Largest deme count whose full all-pairs matrices are saved by default.
 
-At d = 1024 one run's `pairwise.json` is about 40 MB (four matrices of
-523,776 values) and takes well under a second to compute. Above the
-limit only a summary of each matrix is saved; any specific pair can
-still be recomputed from the saved trajectory. A researcher can raise or
+At d = 1024 one run's `pairwise.json` is about 52 MB (five matrices of
+523,776 values) and takes about a second to compute and write. Above the
+limit the file records only that the matrices were skipped; any specific
+pair can still be recomputed from the saved trajectory. A researcher can raise or
 lower the limit in Settings or with `fim run --pairwise-max-demes`.
 """
 
@@ -388,7 +388,89 @@ def _nei_family() -> tuple[StatisticSpec, ...]:
     )
 
 
-CATALOG: Final[tuple[StatisticSpec, ...]] = _ORIGINAL + _IDENTITIES + _nei_family()
+def _derived(
+    key: str,
+    label_html: str,
+    label_text: str,
+    description: str,
+    bounds: Bounds,
+    scope: Scope = "global",
+) -> StatisticSpec:
+    """A hidden-by-default, not-eligible measure computed from shared quantities."""
+    return StatisticSpec(
+        key=key,
+        label_html=label_html,
+        label_text=label_text,
+        description=description,
+        group="differentiation",
+        scope=scope,
+        history="none",
+        bounds=bounds,
+        convergence_eligible=False,
+        default_shown=False,
+    )
+
+
+# Measures that are functions of quantities every report already has
+# (`fim.statistics.differentiation.derived_differentiation`, and the pair
+# identities for pairwise F_ST), so capturing them costs nothing.
+_DERIVED: Final[tuple[StatisticSpec, ...]] = (
+    _derived(
+        "D_m",
+        "D<sub>m</sub>",
+        "D_m",
+        "Nei's (1973) mean pairwise between-deme gene diversity: how much a "
+        "typical pair of demes differs, in the same units as heterozygosity "
+        "rather than rescaled to 0-1",
+        _NON_NEGATIVE,
+    ),
+    _derived(
+        "R_ST",
+        "R<sub>ST</sub>",
+        "R_ST",
+        "Nei's (1973) D_m relative to within-deme diversity (D_m / H_S): the "
+        "between-deme signal measured against the within-deme diversity",
+        _NON_NEGATIVE,
+    ),
+    _derived(
+        "G_ST_NEI_LOG",
+        "G′<sub>ST</sub> (Nei)",  # noqa: RUF001 - the prime is meant
+        "G'_ST (Nei)",
+        "Nei's (1973) logarithmic G'_ST, offered for large differentiation, "
+        "where ordinary G_ST crowds toward 1. Not Hedrick's G'_ST",
+        _PROPORTION,
+    ),
+    _derived(
+        "G_ST_HEDRICK",
+        "G′<sub>ST</sub> (Hedrick)",  # noqa: RUF001 - the prime is meant
+        "G'_ST (Hedrick)",
+        "Hedrick's (2005) standardized G'_ST: G_ST divided by the largest "
+        "value it could take at this H_S, so complete differentiation reads 1. "
+        "Not Nei's logarithmic G'_ST",
+        _PROPORTION,
+    ),
+    _derived(
+        "F_ST",
+        "F<sub>ST</sub> (coancestry)",
+        "F_ST (coancestry)",
+        "coancestry F_ST (Goudet & Weir 2023): how much more alike two gene "
+        "copies from the same deme are than two from different demes",
+        _PROPORTION,
+    ),
+    _derived(
+        "F_ST_PAIR",
+        "F<sub>ST</sub><sub>pair</sub>",
+        "F_ST (pair)",
+        "pairwise F_ST (Goudet & Weir 2023 Eq. 10) between the two demes chosen "
+        "for the scatter plot, from those two demes' data alone",
+        _PROPORTION,
+        scope="pair",
+    ),
+)
+
+CATALOG: Final[tuple[StatisticSpec, ...]] = (
+    _ORIGINAL + _IDENTITIES + _DERIVED + _nei_family()
+)
 """Every statistic, in display order. Keys are unique."""
 
 _BY_KEY: Final[dict[str, StatisticSpec]] = {entry.key: entry for entry in CATALOG}

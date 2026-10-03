@@ -13,28 +13,31 @@ Format (version 1)::
       "deme_count": 4,
       "mode": "full",
       "encoding": "upper-triangle-row-major",
-      "identities": {
+      "matrices": {
         "NEI_I_PAIR_GEO": [I_01, I_02, I_03, I_12, I_13, I_23],
         "NEI_I_PAIR_GEO_LOCUS_MEAN": [...],
         "NEI_I_PAIR_ARITH": [...],
-        "NEI_I_PAIR_ARITH_LOCUS_MEAN": [...]
+        "NEI_I_PAIR_ARITH_LOCUS_MEAN": [...],
+        "F_ST_PAIR": [...]
       }
     }
 
 Each list is the strict upper triangle of a symmetric ``d x d`` matrix,
 row by row (pair ``(0, 1)``, ``(0, 2)``, ..., ``(1, 2)``, ...); the
-diagonal is 1 by definition. Only identities are stored: they are always
-finite (a distance is infinite when nothing is shared, and strict JSON
-has no infinity), and each distance is exactly ``-ln(identity)``.
+diagonal is known (1 for an identity, 0 for F_ST). For the Nei family only
+identities are stored: they are always finite (a distance is infinite
+when nothing is shared, and strict JSON has no infinity), and each
+distance is exactly ``-ln(identity)``. A pairwise F_ST is ``null`` where it
+is undefined (both demes fixed for the same allele).
 
 Above the deme-count limit (`fim.statistics.catalog.
 DEFAULT_PAIRWISE_MAX_DEMES` unless the researcher sets another) the file
 records ``"mode": "skipped"`` and the limit instead of the matrices; any
 specific pair can still be recomputed from `trajectory.jsonl`.
 
-Size: four lists of ``d (d - 1) / 2`` numbers, about 20 bytes each in
-compact JSON. At ``d = 1024`` that is about 42 MB per run (each replicate
-of a batch writes its own); at ``d = 100``, about 0.4 MB.
+Size: five lists of ``d (d - 1) / 2`` numbers, about 20 bytes each in
+compact JSON. At ``d = 1024`` that is about 52 MB per run (each replicate
+of a batch writes its own); at ``d = 100``, about 0.5 MB.
 """
 
 from __future__ import annotations
@@ -48,12 +51,12 @@ from typing import Any, Final
 from fim.model.state import ModelState
 from fim.statistics.catalog import nei_key
 from fim.statistics.genetic_distance import NEI_DENOMINATORS, NEI_LOCUS_RULES
-from fim.statistics.pairwise import pairwise_nei_identities, upper_triangle
+from fim.statistics.pairwise import pairwise_matrices, upper_triangle
 
 __all__ = [
     "PAIRWISE_SCHEMA_VERSION",
     "SLOW_PAIRWISE_DEMES",
-    "pair_identity",
+    "pair_value",
     "pairwise_payload",
     "read_pairwise",
     "upper_triangle_index",
@@ -68,7 +71,7 @@ SLOW_PAIRWISE_DEMES: Final = 256
 """Deme count from which saving `pairwise.json` is slow enough to announce.
 
 Below it the file takes a fraction of a second; at 1024 demes it is about
-42 MB per run, dominated by writing the JSON, and a batch writes one per
+52 MB per run, dominated by writing the JSON, and a batch writes one per
 replicate. The GUI shows a status line with a spinner while it saves.
 """
 
@@ -123,19 +126,20 @@ def pairwise_payload(state: ModelState, *, max_demes: int) -> dict[str, Any]:
         [state.frequency_map(deme, locus) for deme in range(deme_count)]
         for locus in range(state.locus_count)
     ]
-    family = pairwise_nei_identities(tables)
-    identities = {
+    family, f_st = pairwise_matrices(tables)
+    matrices: dict[str, list[float | None]] = {
         nei_key("identity", "pair", denominator, locus_rule): upper_triangle(
             family[(denominator, locus_rule)]
         )
         for denominator in NEI_DENOMINATORS
         for locus_rule in NEI_LOCUS_RULES
     }
+    matrices["F_ST_PAIR"] = upper_triangle(f_st)
     return {
         **header,
         "mode": "full",
         "encoding": "upper-triangle-row-major",
-        "identities": identities,
+        "matrices": matrices,
     }
 
 
@@ -173,25 +177,26 @@ def read_pairwise(path: Path | str) -> dict[str, Any]:
     return payload
 
 
-def pair_identity(
+def pair_value(
     payload: Mapping[str, Any], key: str, first: int, second: int
 ) -> float | None:
-    """Return one pair's saved identity, or `None` if the file has none.
+    """Return one pair's saved value, or `None` if the file has none.
 
     Args:
         payload: A `read_pairwise` result.
-        key: A pair identity key such as ``"NEI_I_PAIR_ARITH"``.
+        key: A matrix key such as ``"NEI_I_PAIR_ARITH"`` or ``"F_ST_PAIR"``.
         first: Zero-based deme index.
         second: Zero-based deme index.
 
     Returns:
-        The identity; 1.0 for a deme with itself; `None` when the matrices
-        were skipped for a large deme count.
+        The value (a deme with itself: identity 1, F_ST 0); `None` when the
+        matrices were skipped for a large deme count, or the value is
+        undefined (a `null` pairwise F_ST).
     """
     if payload.get("mode") != "full":
         return None
     if first == second:
-        return 1.0
-    values = payload["identities"][key]
-    index = upper_triangle_index(int(payload["deme_count"]), first, second)
-    return float(values[index])
+        return 0.0 if key == "F_ST_PAIR" else 1.0
+    values = payload["matrices"][key]
+    value = values[upper_triangle_index(int(payload["deme_count"]), first, second)]
+    return None if value is None else float(value)

@@ -990,6 +990,81 @@ def g_st_max(h_s: float, deme_count: int) -> float:
     return (deme_count - 1) * (1.0 - h_s) / (deme_count - 1 + h_s)
 
 
+def derived_differentiation(
+    h_s: float, h_t: float, deme_count: int
+) -> dict[str, float | None]:
+    """Return five differentiation measures that depend only on ``H_S``, ``H_T``, ``d``.
+
+    The engine's per-report companion to the table-based functions in
+    this module, for measures that are functions of the pooled
+    heterozygosities alone, so they cost nothing beyond what a report
+    already computes. Equal deme weighting throughout. For one locus each
+    equals its table-based counterpart:
+
+    - ``"D_m"``: Nei (1973) mean pairwise between-deme diversity,
+      ``(H_T - H_S) * d / (d - 1)`` (`d_m`).
+    - ``"R_ST"``: ``D_m / H_S`` (`r_st`); ``None`` when ``H_S = 0``.
+    - ``"G_ST_NEI_LOG"``: Nei's logarithmic ``G'_ST``,
+      ``ln(J_S / J_T) / -ln(J_T)`` with ``J = 1 - H`` (`g_st_log`);
+      ``None`` when ``H_T = 0`` or ``H_S = 1``.
+    - ``"G_ST_HEDRICK"``: Hedrick's standardized ``G'_ST``
+      (`g_st_prime` of ``G_ST = (H_T - H_S) / H_T``); ``None`` when
+      ``H_T = 0``.
+    - ``"F_ST"``: coancestry ``F_ST`` (Goudet & Weir 2023),
+      ``(G_s - G_d) / (1 - G_d)`` (`overall_coancestry_f_st`); ``None``
+      when ``G_d = 1`` (every deme fixed for the same allele).
+
+    For several loci, pass the per-locus means of ``H_S`` and ``H_T``:
+    each measure is then one ratio of pooled quantities, the same rule
+    the engine's default ``D`` and ``G_ST`` use.
+
+    Args:
+        h_s: Mean within-deme heterozygosity, in ``[0, 1]``.
+        h_t: Pooled heterozygosity, in ``[0, 1]``.
+        deme_count: ``d``, at least 2.
+
+    Returns:
+        ``{key: value}``, ``None`` where a measure is undefined.
+
+    Raises:
+        ValueError: If `deme_count` is below 2.
+    """
+    if deme_count < _MINIMUM_DEMES:
+        raise ValueError("derived differentiation needs at least two demes")
+    scale = deme_count / (deme_count - 1)
+    d_m_value = max(0.0, (h_t - h_s) * scale)
+    within_identity = 1.0 - h_s
+    total_identity = 1.0 - h_t
+    between_identity = (deme_count * total_identity - within_identity) / (
+        deme_count - 1
+    )
+    g_st_value = None if h_t == 0.0 else (h_t - h_s) / h_t
+    hedrick = (
+        None
+        if g_st_value is None or h_s >= 1.0
+        else min(1.0, max(0.0, g_st_prime(g_st_value, h_s, deme_count)))
+    )
+    nei_log = (
+        None
+        if h_t == 0.0 or h_s == 1.0
+        else _bounded(
+            log(within_identity / total_identity) / -log(total_identity), "G_ST_log"
+        )
+    )
+    f_st = (
+        None
+        if between_identity >= 1.0
+        else max(0.0, (within_identity - between_identity) / (1.0 - between_identity))
+    )
+    return {
+        "D_m": d_m_value,
+        "R_ST": None if h_s == 0.0 else d_m_value / h_s,
+        "G_ST_NEI_LOG": nei_log,
+        "G_ST_HEDRICK": hedrick,
+        "F_ST": f_st,
+    }
+
+
 def g_st_prime(g_st_value: float, h_s: float, deme_count: int) -> float:
     """Return Hedrick (2005)'s own standardized ``G'_ST = G_ST / G_ST(max)``.
 

@@ -169,6 +169,7 @@ from fim.statistics.differentiation import (
     _g_st_from_demes,
     _gd_from_within_and_total,
     _jost_d_from_within_and_total,
+    derived_differentiation,
     statistics_report,
 )
 from fim.statistics.genetic_distance import (
@@ -254,6 +255,13 @@ class FinalReport(TypedDict):
             added for Phase 4 GUI visual interpretation: Caballero-
             Garcia-Dorado allelic distance, Gregorius delta, and Sherwin
             mutual information.
+        D_m, R_ST, G_ST_NEI_LOG, G_ST_HEDRICK, F_ST: Nei's (1973) mean
+            pairwise between-deme diversity and its ratio to `H_S`, Nei's
+            logarithmic and Hedrick's standardized `G'_ST`, and coancestry
+            `F_ST` (`fim.statistics.differentiation.
+            derived_differentiation`), each one ratio of the pooled
+            `H_S`/`H_T` (whatever `locus_aggregation` says, which governs
+            `D` and `G_ST` only). ``None`` where undefined.
         NEI_D_ALL_GEO, NEI_D_ALL_GEO_LOCUS_MEAN, NEI_D_ALL_ARITH,
             NEI_D_ALL_ARITH_LOCUS_MEAN: Nei's genetic distance across all
             demes, ``-ln(J_between / mean(J_k))``, with the geometric
@@ -311,6 +319,11 @@ class FinalReport(TypedDict):
     MI: float
     Gs: float
     Gd: float
+    D_m: float
+    R_ST: float | None
+    G_ST_NEI_LOG: float | None
+    G_ST_HEDRICK: float | None
+    F_ST: float | None
     NEI_D_ALL_GEO: float | None
     NEI_D_ALL_GEO_LOCUS_MEAN: float | None
     NEI_D_ALL_ARITH: float | None
@@ -2409,8 +2422,34 @@ def report_for_state(
         "MI": _mean(tuple(report["MI"] for report in locus_reports)),
         "Gs": 1.0 - mean_h_s,
         "Gd": _gd_from_within_and_total(mean_h_s, mean_h_t, state.deme_count),
+        **_derived_fields(mean_h_s, mean_h_t, state.deme_count),
         **_nei_all_demes_fields(state),
         "window_statistics": dict(window_statistics) if window_statistics else {},
+    }
+
+
+class _DerivedFields(TypedDict):
+    """The five pooled-heterozygosity measures `report_for_state` merges in."""
+
+    D_m: float
+    R_ST: float | None
+    G_ST_NEI_LOG: float | None
+    G_ST_HEDRICK: float | None
+    F_ST: float | None
+
+
+def _derived_fields(h_s: float, h_t: float, deme_count: int) -> _DerivedFields:
+    """Return `derived_differentiation` for the pooled heterozygosities."""
+    values = derived_differentiation(h_s, h_t, deme_count)
+    d_m_value = values["D_m"]
+    if d_m_value is None:  # pragma: no cover - D_m is always defined
+        raise ValueError("D_m is unexpectedly undefined")
+    return {
+        "D_m": d_m_value,
+        "R_ST": values["R_ST"],
+        "G_ST_NEI_LOG": values["G_ST_NEI_LOG"],
+        "G_ST_HEDRICK": values["G_ST_HEDRICK"],
+        "F_ST": values["F_ST"],
     }
 
 
@@ -3980,12 +4019,14 @@ def _final_report_statistic(report: FinalReport, statistic: str) -> float | None
 def pair_statistic_values(
     state: ModelState, first: int, second: int
 ) -> dict[str, float | None]:
-    """Return every pair-scope Nei statistic for two demes of `state`.
+    """Return every pair-scope statistic for two demes of `state`.
 
     The statistics the GUI shows for the deme pair chosen for the scatter
-    plot: the four identities `NEI_I_PAIR_*` and the four distances
-    `NEI_D_PAIR_*` (`fim.statistics.catalog`). One O(alleles) pass per
-    locus. A deme compared with itself gives identity 1 and distance 0.
+    plot: the four identities `NEI_I_PAIR_*`, the four distances
+    `NEI_D_PAIR_*` and pairwise `F_ST_PAIR` (`fim.statistics.catalog`).
+    One O(alleles) pass per locus. A deme compared with itself gives
+    identity 1, distance 0 and pairwise F_ST 0 (undefined, `None`, if
+    that deme is fixed).
 
     Args:
         state: The population state.
@@ -4022,6 +4063,17 @@ def pair_statistic_values(
         )
     family = nei_family_from_identities(within_by_locus, between_by_locus)
     values: dict[str, float | None] = {}
+    # Pairwise F_ST (Goudet & Weir 2023 Eq. 10), loci pooled like Nei's
+    # rule: ((J_X + J_Y) / 2 - J_XY) / (1 - J_XY); undefined when both
+    # demes are fixed for the same allele (J_XY = 1).
+    locus_count = len(between_by_locus)
+    mean_within = math.fsum(sum(pair) / 2.0 for pair in within_by_locus) / locus_count
+    mean_between = math.fsum(between_by_locus) / locus_count
+    values["F_ST_PAIR"] = (
+        None
+        if mean_between >= 1.0
+        else max(0.0, (mean_within - mean_between) / (1.0 - mean_between))
+    )
     for (denominator, locus_rule), raw in family.items():
         # Both pair forms are bounded by 1 (Cauchy-Schwarz, AM-GM); the
         # clamp removes only rounding.
@@ -4037,7 +4089,9 @@ def pair_statistic_values(
 def history_free_statistic_values(state: ModelState) -> dict[str, float | None]:
     """Return the global statistics that have no per-generation history.
 
-    `Gs`, `Gd` and the eight all-demes Nei fields: what a scrubbed frame
+    `Gs`, `Gd`, the five pooled-heterozygosity measures (`D_m`, `R_ST`,
+    both `G'_ST`, coancestry `F_ST`) and the eight all-demes Nei fields:
+    what a scrubbed frame
     of a completed run needs to show those rows at that frame's
     generation. Computed directly and cheaply (O(d * alleles) per locus),
     not through `report_for_state`, which would also pay for every
@@ -4059,10 +4113,15 @@ def history_free_statistic_values(state: ModelState) -> dict[str, float | None]:
         within, between = deme_gene_identities(table)
         within_sum += math.fsum(within) / len(within)
         between_sum += between
-    values: dict[str, float | None] = {
-        "Gs": within_sum / state.locus_count,
-        "Gd": between_sum / state.locus_count,
-    }
+    gs_value = within_sum / state.locus_count
+    gd_value = between_sum / state.locus_count
+    values: dict[str, float | None] = {"Gs": gs_value, "Gd": gd_value}
+    # The pooled heterozygosities, from the identities: `H_S = 1 - Gs`,
+    # and `1 - H_T` is the pooled identity `(Gs + (d - 1) Gd) / d`.
+    deme_count = state.deme_count
+    h_s_value = 1.0 - gs_value
+    h_t_value = 1.0 - (gs_value + (deme_count - 1) * gd_value) / deme_count
+    values.update(derived_differentiation(h_s_value, h_t_value, deme_count))
     values.update(cast("Mapping[str, float | None]", _nei_all_demes_fields(state)))
     return values
 

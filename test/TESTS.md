@@ -5544,6 +5544,17 @@ def test_history_free_values_equal_the_reports_gs_gd_and_nei() -> None
 
 The scrubber's cheap per-frame values equal `report_for_state`'s.
 
+<a id="engine.test_engine.test_report_for_state_captures_the_pooled_heterozygosity_measures"></a>
+
+#### test\_report\_for\_state\_captures\_the\_pooled\_heterozygosity\_measures
+
+```python
+def test_report_for_state_captures_the_pooled_heterozygosity_measures(
+) -> None
+```
+
+D_m, R_ST, both G'_ST and coancestry F_ST from the pooled H_S/H_T.
+
 <a id="engine.test_engine.test_report_for_state_reports_an_infinite_nei_distance_as_none"></a>
 
 #### test\_report\_for\_state\_reports\_an\_infinite\_nei\_distance\_as\_none
@@ -24374,6 +24385,27 @@ def test_unknown_schema_version_is_rejected(tmp_path: Path) -> None
 
 A future format is not misread.
 
+<a id="persistence.test_pairwise_file.test_pairwise_f_st_matrix_matches_the_pair_function"></a>
+
+#### test\_pairwise\_f\_st\_matrix\_matches\_the\_pair\_function
+
+```python
+def test_pairwise_f_st_matrix_matches_the_pair_function(
+        tmp_path: Path) -> None
+```
+
+The saved pairwise F_ST equals `pairwise_f_st` at one locus, pooled at two.
+
+<a id="persistence.test_pairwise_file.test_pairwise_f_st_is_null_where_undefined"></a>
+
+#### test\_pairwise\_f\_st\_is\_null\_where\_undefined
+
+```python
+def test_pairwise_f_st_is_null_where_undefined(tmp_path: Path) -> None
+```
+
+Two demes fixed for the same allele: F_ST undefined, saved as null.
+
 <a id="persistence.test_report"></a>
 
 # persistence.test\_report
@@ -25308,7 +25340,7 @@ Every measure x scope x denominator x rule exists, hidden, ineligible.
 def test_scope_lists() -> None
 ```
 
-Report keys are the global ones; pair keys are the 8 pair Nei members.
+Report keys are the global ones; pair keys: 8 Nei members and F_ST.
 
 <a id="statistics.test_catalog.CatalogTests.test_attribution_and_negative_note"></a>
 
@@ -26181,6 +26213,36 @@ def test_aoki_2023_claim_1_unbiased_heterozygosity() -> None
 Claim 1: Nei (1977) finite-sample bias correction Eq. 2.
 
 \hat{H}_e = (2n / (2n - 1)) * (1 - sum(p_i^2)).
+
+<a id="statistics.test_differentiation.DerivedDifferentiationTests"></a>
+
+## DerivedDifferentiationTests Objects
+
+```python
+class DerivedDifferentiationTests(unittest.TestCase)
+```
+
+`derived_differentiation` equals the table-based functions at one locus.
+
+<a id="statistics.test_differentiation.DerivedDifferentiationTests.test_matches_each_table_based_function"></a>
+
+#### test\_matches\_each\_table\_based\_function
+
+```python
+def test_matches_each_table_based_function() -> None
+```
+
+D_m, R_ST, both G'_ST and coancestry F_ST, for a three-deme table.
+
+<a id="statistics.test_differentiation.DerivedDifferentiationTests.test_undefined_cases_are_none"></a>
+
+#### test\_undefined\_cases\_are\_none
+
+```python
+def test_undefined_cases_are_none() -> None
+```
+
+Fixed everywhere: R_ST, both G'_ST and F_ST undefined; D_m is 0.
 
 <a id="statistics.test_genetic_distance"></a>
 
