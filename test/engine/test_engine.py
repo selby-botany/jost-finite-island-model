@@ -37,6 +37,7 @@ from fim.engine import (
     pooled_convergence_histories,
     replicate_summary,
     report_for_state,
+    reports_summary,
     run_batch,
 )
 from fim.model.allele import MINTED_ID_START, AlleleId
@@ -2522,6 +2523,36 @@ def test_report_for_state_captures_the_pooled_heterozygosity_measures() -> None:
     assert report["F_ST"] == pytest.approx(
         (report["Gs"] - report["Gd"]) / (1.0 - report["Gd"])  # type: ignore[operator]
     )
+
+
+def test_reports_summary_omits_a_nei_distance_infinite_in_any_report() -> None:
+    """`None` for a Nei distance is infinite: no finite mean, so omitted.
+
+    `G_ST`'s `None` (undefined) still just drops that replicate, as before.
+    """
+    loci = (LocusSpec(1, 100),)
+    params = SimulationParams(gene_copies=10, m=0.1, mu=0.0, d=2, seed=7, loci=loci)
+    shared = ModelState(
+        loci=loci,
+        frequencies=(
+            ({AlleleId(0): 0.5, AlleleId(1): 0.5},),
+            ({AlleleId(0): 0.2, AlleleId(1): 0.8},),
+        ),
+    )
+    disjoint = ModelState(
+        loci=loci, frequencies=(({AlleleId(0): 1.0},), ({AlleleId(1): 1.0},))
+    )
+    reports = [
+        report_for_state(state, params, run_id="r", converged=False, reason="t")
+        for state in (shared, shared, disjoint)
+    ]
+
+    summary = reports_summary(reports)
+
+    assert "NEI_D_ALL_GEO" not in summary
+    assert summary["NEI_I_ALL_GEO"]["sample_count"] == 3
+    finite = reports_summary(reports[:2])
+    assert finite["NEI_D_ALL_GEO"]["sample_count"] == 2
 
 
 def test_report_for_state_reports_an_infinite_nei_distance_as_none() -> None:

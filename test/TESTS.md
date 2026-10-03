@@ -5555,6 +5555,18 @@ def test_report_for_state_captures_the_pooled_heterozygosity_measures(
 
 D_m, R_ST, both G'_ST and coancestry F_ST from the pooled H_S/H_T.
 
+<a id="engine.test_engine.test_reports_summary_omits_a_nei_distance_infinite_in_any_report"></a>
+
+#### test\_reports\_summary\_omits\_a\_nei\_distance\_infinite\_in\_any\_report
+
+```python
+def test_reports_summary_omits_a_nei_distance_infinite_in_any_report() -> None
+```
+
+`None` for a Nei distance is infinite: no finite mean, so omitted.
+
+`G_ST`'s `None` (undefined) still just drops that replicate, as before.
+
 <a id="engine.test_engine.test_report_for_state_reports_an_infinite_nei_distance_as_none"></a>
 
 #### test\_report\_for\_state\_reports\_an\_infinite\_nei\_distance\_as\_none

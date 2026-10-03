@@ -164,6 +164,7 @@ from fim.persistence.store import (
     TrajectoryStore,
 )
 from fim.statistics.catalog import history_keys, nei_key, report_keys
+from fim.statistics.catalog import spec as catalog_spec
 from fim.statistics.differentiation import (
     DifferentiationReport,
     _g_st_from_demes,
@@ -2570,15 +2571,24 @@ def reports_summary(
     # Every global statistic in `fim.statistics.catalog`, so a statistic
     # added there is summarized here with no further edit.
     for statistic in report_keys():
-        values = [
-            value
-            for report in reports
-            if (value := _final_report_statistic(report, statistic)) is not None
-        ]
+        raw = [_final_report_statistic(report, statistic) for report in reports]
+        if None in raw and _is_nei_distance(statistic):
+            # `None` for a Nei distance means infinite, not undefined: a
+            # mean over the finite replicates only would understate it,
+            # and a mean including infinity has no finite value. Omitted;
+            # its identity (always finite) is still summarized.
+            continue
+        values = [value for value in raw if value is not None]
         if len(values) < _MINIMUM_REPLICATE_SUMMARY_COUNT:
             continue
         summary[statistic] = confidence_interval(values, confidence=confidence)
     return summary
+
+
+def _is_nei_distance(statistic: str) -> bool:
+    """Whether `statistic` is a Nei distance, whose `None` means infinite."""
+    entry = catalog_spec(statistic)
+    return entry.nei is not None and entry.nei[0] == "distance"
 
 
 def replicate_summary(
