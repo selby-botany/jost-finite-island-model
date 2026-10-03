@@ -107,6 +107,7 @@ Every test module, fixture, and test function documented here in full; `doc/fim-
   - [`test_store`](#persistence.test_store)
   - [`test_validation`](#persistence.test_validation)
 - [`test/statistics/`](#group-statistics)
+  - [`test_catalog`](#statistics.test_catalog)
   - [`test_differentiation`](#statistics.test_differentiation)
   - [`test_genetic_distance`](#statistics.test_genetic_distance)
   - [`test_identity_recursion`](#statistics.test_identity_recursion)
@@ -24832,6 +24833,102 @@ A batch manifest file must contain a JSON object at its root.
 <a id="group-statistics"></a>
 
 ## `test/statistics/`
+
+<a id="statistics.test_catalog"></a>
+
+# statistics.test\_catalog
+
+Tests for the statistic catalog, the one list every other list derives from.
+
+<a id="statistics.test_catalog.CatalogTests"></a>
+
+## CatalogTests Objects
+
+```python
+class CatalogTests(unittest.TestCase)
+```
+
+Structure, derived lists and the Nei family's coverage.
+
+<a id="statistics.test_catalog.CatalogTests.test_keys_are_unique"></a>
+
+#### test\_keys\_are\_unique
+
+```python
+def test_keys_are_unique() -> None
+```
+
+No key appears twice.
+
+<a id="statistics.test_catalog.CatalogTests.test_original_statistics_keep_their_order_and_defaults"></a>
+
+#### test\_original\_statistics\_keep\_their\_order\_and\_defaults
+
+```python
+def test_original_statistics_keep_their_order_and_defaults() -> None
+```
+
+The ten long-standing statistics lead, shown, and stay eligible.
+
+<a id="statistics.test_catalog.CatalogTests.test_history_policies_match_the_engine_split"></a>
+
+#### test\_history\_policies\_match\_the\_engine\_split
+
+```python
+def test_history_policies_match_the_engine_split() -> None
+```
+
+Five always tracked, five opt-in; everything new is not tracked.
+
+<a id="statistics.test_catalog.CatalogTests.test_nei_family_is_complete_and_hidden_by_default"></a>
+
+#### test\_nei\_family\_is\_complete\_and\_hidden\_by\_default
+
+```python
+def test_nei_family_is_complete_and_hidden_by_default() -> None
+```
+
+Every measure x scope x denominator x rule exists, hidden, ineligible.
+
+<a id="statistics.test_catalog.CatalogTests.test_scope_lists"></a>
+
+#### test\_scope\_lists
+
+```python
+def test_scope_lists() -> None
+```
+
+Report keys are the global ones; pair keys are the 8 pair Nei members.
+
+<a id="statistics.test_catalog.CatalogTests.test_attribution_and_negative_note"></a>
+
+#### test\_attribution\_and\_negative\_note
+
+```python
+def test_attribution_and_negative_note() -> None
+```
+
+Arithmetic forms cite Jost; only the geometric all-demes forms warn.
+
+<a id="statistics.test_catalog.CatalogTests.test_unknown_key_is_named"></a>
+
+#### test\_unknown\_key\_is\_named
+
+```python
+def test_unknown_key_is_named() -> None
+```
+
+A typo raises a `KeyError` naming the key.
+
+<a id="statistics.test_catalog.CatalogTests.test_payload_is_json_and_ordered"></a>
+
+#### test\_payload\_is\_json\_and\_ordered
+
+```python
+def test_payload_is_json_and_ordered() -> None
+```
+
+The bridge payload round-trips through JSON in catalog order.
 
 <a id="statistics.test_differentiation"></a>
 

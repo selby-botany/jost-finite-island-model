@@ -532,6 +532,18 @@ Return to the [source-tree orientation](../README.md) or the [developer guide](.
     * [to\_dict](#fim.reproducibility.Comparison.to_dict)
   * [compare\_runs](#fim.reproducibility.compare_runs)
 * [fim.statistics](#fim.statistics)
+* [fim.statistics.catalog](#fim.statistics.catalog)
+  * [DEFAULT\_PAIRWISE\_MAX\_DEMES](#fim.statistics.catalog.DEFAULT_PAIRWISE_MAX_DEMES)
+  * [StatisticSpec](#fim.statistics.catalog.StatisticSpec)
+  * [nei\_key](#fim.statistics.catalog.nei_key)
+  * [CATALOG](#fim.statistics.catalog.CATALOG)
+  * [spec](#fim.statistics.catalog.spec)
+  * [history\_keys](#fim.statistics.catalog.history_keys)
+  * [report\_keys](#fim.statistics.catalog.report_keys)
+  * [pair\_keys](#fim.statistics.catalog.pair_keys)
+  * [convergence\_statistic\_keys](#fim.statistics.catalog.convergence_statistic_keys)
+  * [default\_shown\_keys](#fim.statistics.catalog.default_shown_keys)
+  * [catalog\_payload](#fim.statistics.catalog.catalog_payload)
 * [fim.statistics.differentiation](#fim.statistics.differentiation)
   * [DifferentiationReport](#fim.statistics.differentiation.DifferentiationReport)
   * [heterozygosity](#fim.statistics.differentiation.heterozygosity)
@@ -15712,6 +15724,192 @@ Every public name from all modules is re-exported here, so a caller
 elsewhere in the project writes ``from fim.statistics import h_s,
 jost_d, nei_d, confidence_interval`` rather than reaching into any module
 by its own name directly.
+
+<a id="fim.statistics.catalog"></a>
+
+# fim.statistics.catalog
+
+The one list of every statistic fim computes, captures or shows.
+
+Every statistic's name used to be spelled out by hand in a dozen places:
+the engine's tracked sets, the convergence choices, the GUI's result
+list, the Compare history sampler, the statistics table's rows, the
+results tables' columns, the tooltips. Two recorded bugs came from those
+copies drifting apart (`A_CGD` missing from one list raised `KeyError`
+in Compare; `H_ST` missing from another left it with no history). This
+module is the single definition the others now derive from: one
+`StatisticSpec` per statistic, in display order.
+
+Each spec answers four separate questions:
+
+- **What is it?** `key`, the labels, `description`, `help`.
+- **What does it describe?** `scope`: one value per generation
+  (``"global"``) or one value per pair of demes (``"pair"``).
+- **When is it computed?** `history`: tracked every generation always
+  (``"always"``), every generation only when
+  `SimulationParams.track_expensive_statistics` opts in (``"opt_in"``),
+  or not tracked per generation (``"none"``: computed for each report,
+  each displayed frame and each saved result instead).
+- **Is it shown by default?** `default_shown`. What a researcher
+  actually sees is their own choice (the GUI's "Statistics shown"
+  setting); this is only the starting point. Showing or hiding a
+  statistic never changes what is computed or saved.
+
+This module imports nothing from the simulator or the GUI. It sits in
+`fim.statistics` beside the formulas it describes.
+
+<a id="fim.statistics.catalog.DEFAULT_PAIRWISE_MAX_DEMES"></a>
+
+#### DEFAULT\_PAIRWISE\_MAX\_DEMES
+
+Largest deme count whose full all-pairs matrices are saved by default.
+
+At d = 1024 one run's `pairwise.json` is about 40 MB (four matrices of
+523,776 values) and takes well under a second to compute. Above the
+limit only a summary of each matrix is saved; any specific pair can
+still be recomputed from the saved trajectory. A researcher can raise or
+lower the limit in Settings or with `fim run --pairwise-max-demes`.
+
+<a id="fim.statistics.catalog.StatisticSpec"></a>
+
+## StatisticSpec Objects
+
+```python
+@dataclass(frozen=True, slots=True)
+class StatisticSpec()
+```
+
+One statistic's identity, scope, cost and presentation.
+
+**Arguments**:
+
+- `key` - Stable identifier. The JSON key in every saved result and
+  the name every caller uses.
+- `label_html` - Display name with HTML subscripts, for table rows.
+- `label_text` - The same name as plain text, for tooltips and files.
+- `description` - One sentence a researcher sees on hover.
+- `group` - Section the Settings dialog lists it under.
+- `scope` - ``"global"`` or ``"pair"``.
+- `history` - ``"always"``, ``"opt_in"`` or ``"none"`` (module
+  docstring).
+- `bounds` - ``(lower, upper)``; ``None`` for an open end. A
+  ``(0, 1)`` statistic is drawn on a fixed proportion axis.
+- `convergence_eligible` - Whether a run may stop on it. Only measures
+  the convergence monitor was designed for are eligible.
+- `default_shown` - Whether a fresh install shows it.
+- `default_plotted` - Whether its trajectory curve starts visible
+  (only meaningful for a statistic with a per-generation
+  history).
+- `help` - Longer explanation for Settings and Help, or ``""``.
+- `nei` - For the Nei family, ``(measure, denominator, locus_rule)``;
+  ``None`` otherwise.
+
+<a id="fim.statistics.catalog.nei_key"></a>
+
+#### nei\_key
+
+```python
+def nei_key(measure: Measure, scope: Scope, denominator: NeiDenominator,
+            locus_rule: NeiLocusRule) -> str
+```
+
+Return the catalog key of one Nei family member.
+
+**Arguments**:
+
+- `measure` - ``"distance"`` or ``"identity"``.
+- `scope` - ``"pair"`` or ``"global"`` (all demes).
+- `denominator` - ``"geometric"`` or ``"arithmetic"``.
+- `locus_rule` - ``"pooled"`` (Nei's rule) or ``"locus_mean"``.
+
+
+**Returns**:
+
+  A key such as ``"NEI_D_PAIR_ARITH"`` or
+  ``"NEI_I_ALL_GEO_LOCUS_MEAN"``.
+
+<a id="fim.statistics.catalog.CATALOG"></a>
+
+#### CATALOG
+
+Every statistic, in display order. Keys are unique.
+
+<a id="fim.statistics.catalog.spec"></a>
+
+#### spec
+
+```python
+def spec(key: str) -> StatisticSpec
+```
+
+Return the spec for `key`.
+
+**Raises**:
+
+- `KeyError` - Naming the unknown key.
+
+<a id="fim.statistics.catalog.history_keys"></a>
+
+#### history\_keys
+
+```python
+def history_keys(history: History) -> tuple[str, ...]
+```
+
+Return the keys tracked per generation under one `history` policy.
+
+<a id="fim.statistics.catalog.report_keys"></a>
+
+#### report\_keys
+
+```python
+def report_keys() -> tuple[str, ...]
+```
+
+Return every global statistic a `FinalReport` carries, in catalog order.
+
+<a id="fim.statistics.catalog.pair_keys"></a>
+
+#### pair\_keys
+
+```python
+def pair_keys() -> tuple[str, ...]
+```
+
+Return every pair-scope statistic, in catalog order.
+
+<a id="fim.statistics.catalog.convergence_statistic_keys"></a>
+
+#### convergence\_statistic\_keys
+
+```python
+def convergence_statistic_keys() -> tuple[str, ...]
+```
+
+Return every statistic a run may stop on, in catalog order.
+
+<a id="fim.statistics.catalog.default_shown_keys"></a>
+
+#### default\_shown\_keys
+
+```python
+def default_shown_keys() -> tuple[str, ...]
+```
+
+Return what a fresh install shows, in catalog order.
+
+<a id="fim.statistics.catalog.catalog_payload"></a>
+
+#### catalog\_payload
+
+```python
+def catalog_payload() -> list[dict[str, object]]
+```
+
+Return the whole catalog as JSON-ready dictionaries, in order.
+
+The GUI receives exactly this (`Api.get_statistics_catalog`) and builds
+its rows, columns, checkboxes and tooltips from it.
 
 <a id="fim.statistics.differentiation"></a>
 
