@@ -390,10 +390,10 @@ function wireLiveDemePairSelector(demeCount) {
  * shape) should leave whatever the table already shows alone rather
  * than throwing trying to read `undefined[name]`.
  *
- * A statistic with a closed-form expected trajectory also gets, in its
- * tooltip, observed minus predicted at this tick's generation and the
- * trajectory-so-far's mean squared error from the closed form
- * (`closedFormComparisons`, `run-view-completed.js`).
+ * A statistic with a prediction (the closed-form trajectory, else the
+ * predicted equilibrium) also gets, first in its tooltip, observed minus
+ * predicted at this tick's generation and the trajectory-so-far's mean
+ * squared error (`closedFormComparisons`, `run-view-completed.js`).
  *
  * @param {Record<string, string> | undefined} statistics
  * @param {number} [generation] the tick's generation; the latest when omitted.
@@ -405,7 +405,8 @@ function renderLiveStatistics(statistics, generation) {
     const comparisons = closedFormComparisons(
         liveTrajectoryGenerations,
         liveTrajectoryHistories,
-        liveClosedForm
+        liveClosedForm,
+        liveEquilibriumReference
     );
     const index =
         generation === undefined ? null : liveTrajectoryGenerations.indexOf(generation);
@@ -416,7 +417,10 @@ function renderLiveStatistics(statistics, generation) {
             buildPointMeter(
                 name,
                 statistics[name],
-                statisticDescription(name) + closedFormNote(comparisons, name, index)
+                withPredictionNote(
+                    closedFormNote(comparisons, name, index),
+                    statisticDescription(name)
+                )
             )
         );
         if (typeof decorateTrajectoryStatisticRow === "function") {

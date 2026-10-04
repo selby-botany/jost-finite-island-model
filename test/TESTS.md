@@ -11851,12 +11851,15 @@ option of the example is kept; only the locus count is raised to `LOCI`
 
 # gui.test\_closed\_form\_tooltip\_screen
 
-Headless functional tests for the closed-form comparison in statistic tooltips.
+Headless functional tests for the prediction comparison in statistic tooltips.
 
-A statistic with a closed-form expected trajectory (`D`, `G_ST`, `H_S`,
-`H_T`, `H_ST`) shows, in its statistics-row tooltip, the observed value
-minus the closed-form prediction at the displayed generation and the
-recorded trajectory's mean squared error from the closed-form trajectory.
+A statistic with a prediction shows, first in its statistics-row tooltip,
+`ΔXₚ` (observed minus predicted at the displayed generation) and the
+running mean squared error of the trajectory so far. The prediction is
+the closed-form expected trajectory when the model has one (`D`, `G_ST`,
+`H_S`, `H_T`, `H_ST`), otherwise the predicted equilibrium (`D`, `G_ST`,
+`E_ST`): a run with stochastic migrants has no closed-form trajectory but
+is still compared.
 
 <a id="gui.test_closed_form_tooltip_screen.test_the_comparison_arithmetic_on_a_known_trajectory"></a>
 
@@ -11869,16 +11872,27 @@ def test_the_comparison_arithmetic_on_a_known_trajectory(
 
 Hand-computed difference and MSE; a short history is left out.
 
-<a id="gui.test_closed_form_tooltip_screen.test_a_completed_runs_closed_form_rows_carry_the_comparison"></a>
+<a id="gui.test_closed_form_tooltip_screen.test_a_completed_runs_predicted_rows_carry_the_comparison"></a>
 
-#### test\_a\_completed\_runs\_closed\_form\_rows\_carry\_the\_comparison
+#### test\_a\_completed\_runs\_predicted\_rows\_carry\_the\_comparison
 
 ```python
-def test_a_completed_runs_closed_form_rows_carry_the_comparison(
-        fast_scalar_run_settings: Path, window: webview.Window) -> None
+@pytest.mark.parametrize(
+    ("migrant_sampling", "basis"),
+    [
+        ("continuous", "vs closed-form trajectory"),
+        ("stochastic", "vs predicted equilibrium"),
+    ],
+)
+def test_a_completed_runs_predicted_rows_carry_the_comparison(
+        fast_scalar_run_settings: Path, window: webview.Window,
+        migrant_sampling: str, basis: str) -> None
 ```
 
-After a real run: closed-form rows have it, others do not.
+After a real run, D's tooltip leads with ΔDₚ and the MSE; K_ST's has none.
+
+Stochastic migrants put the run outside the closed-form trajectory's
+model, so D is compared with its predicted equilibrium instead.
 
 <a id="gui.test_compare_screen"></a>
 

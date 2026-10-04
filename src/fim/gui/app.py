@@ -938,6 +938,15 @@ def _equilibrium_prediction_payload(
     return predictions, qualifications
 
 
+FULL_PRECISION_DIGITS: Final = 17
+"""Significant digits that round-trip any float exactly through text.
+
+For values the page computes with rather than shows: the trajectory
+panel's predicted equilibrium is drawn as a line and subtracted from the
+observed value (`ΔDₚ`), so rounding it to the display precision first
+would shift that difference by up to half a display digit."""
+
+
 def _equilibrium_reference_payload(
     params: SimulationParams, digits: int
 ) -> dict[str, str] | None:
@@ -967,7 +976,9 @@ def _equilibrium_reference_payload(
         params: A validated configuration — `SimulationParams.from_
             mapping`'s own result at run-start, or a reopened run's own
             `ReanalyzedGeneration.params`.
-        digits: The GUI's own configured display precision.
+        digits: Significant digits. The trajectory panel passes
+            `FULL_PRECISION_DIGITS`: it computes with these values (the
+            dashed line, `ΔDₚ`) and never shows the raw text.
 
     Returns:
         `None` when `N`/`m`/`mu` are not all plain scalars — a per-deme
@@ -1963,7 +1974,7 @@ class Api:
         # and draw on every progress tick while the run is still going) —
         # one shared computation each, not a second one for each of the
         # two places either is needed.
-        equilibrium = _equilibrium_reference_payload(params, self._significant_digits)
+        equilibrium = _equilibrium_reference_payload(params, FULL_PRECISION_DIGITS)
         identity_recovery = _identity_recovery_reference_payload(params)
         # The closed-form D(t)/G_ST(t) curves (`_closed_form_trajectory_
         # payload`'s own docstring), computed once for the same two uses.
@@ -4657,7 +4668,7 @@ class Api:
             # `start_run` time: a pure function of `(N, m, mu, d)`, never
             # stale, and cheap enough to not bother caching.
             "equilibrium": _equilibrium_reference_payload(
-                reanalyzed.params, self._significant_digits
+                reanalyzed.params, FULL_PRECISION_DIGITS
             ),
             # The trajectory panel's own identity-recovery curve overlay
             # (design doc §6.2, `_identity_recovery_reference_payload`'s

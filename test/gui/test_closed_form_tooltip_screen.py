@@ -1,9 +1,12 @@
-"""Headless functional tests for the closed-form comparison in statistic tooltips.
+"""Headless functional tests for the prediction comparison in statistic tooltips.
 
-A statistic with a closed-form expected trajectory (`D`, `G_ST`, `H_S`,
-`H_T`, `H_ST`) shows, in its statistics-row tooltip, the observed value
-minus the closed-form prediction at the displayed generation and the
-recorded trajectory's mean squared error from the closed-form trajectory.
+A statistic with a prediction shows, first in its statistics-row tooltip,
+`ΔXₚ` (observed minus predicted at the displayed generation) and the
+running mean squared error of the trajectory so far. The prediction is
+the closed-form expected trajectory when the model has one (`D`, `G_ST`,
+`H_S`, `H_T`, `H_ST`), otherwise the predicted equilibrium (`D`, `G_ST`,
+`E_ST`): a run with stochastic migrants has no closed-form trajectory but
+is still compared.
 """
 
 from __future__ import annotations
@@ -25,8 +28,10 @@ _INPUT_SCREEN_READY = "window.__fimRunViewReady === true"
 _MINUS = "\u2212"
 
 # A sampled closed form (the unequal-sizes shape) on the same grid as the
-# history, so the expected values need no interpolation: differences
-# 0, -0.05, +0.05, -0.1, mean square 0.00375.
+# history, so the expected values need no interpolation: differences 0,
+# -0.05, +0.05, -0.1. Running MSE: 0.00375 over all four, 0.001667 over
+# the first three. Against a predicted equilibrium of 0.25 instead:
+# differences -0.15, -0.05, +0.05, +0.15, MSE 0.0125.
 _COMPARISON = """
 (() => {
     const generations = [0, 1, 2, 3];
@@ -41,14 +46,16 @@ _COMPARISON = """
         statistics: {D: [0.1, 0.25, 0.25, 0.5], G_ST: [0, 0, 0, 0]},
     };
     const comparisons = closedFormComparisons(generations, histories, closedForm);
+    const fallback = closedFormComparisons(generations, histories, null, {D: "0.25"});
     return {
         names: Object.keys(comparisons),
-        mse: comparisons.D.mse,
-        count: comparisons.D.count,
         last: closedFormNote(comparisons, "D"),
         second: closedFormNote(comparisons, "D", 2),
         none: closedFormNote(comparisons, "K_ST"),
         empty: Object.keys(closedFormComparisons(generations, histories, null)),
+        fallbackNames: Object.keys(fallback),
+        fallback: closedFormNote(fallback, "D"),
+        placed: withPredictionNote(closedFormNote(comparisons, "D"), "description"),
     };
 })()
 """
@@ -61,13 +68,18 @@ def test_the_comparison_arithmetic_on_a_known_trajectory(
     settled = drive(window, ready=_INPUT_SCREEN_READY, trigger="null", read=_COMPARISON)
 
     assert settled["names"] == ["D"]
-    assert settled["mse"] == pytest.approx(0.00375)
-    assert settled["count"] == 4
-    assert f"D {_MINUS} D_predicted = {_MINUS}0.100 at generation 3" in settled["last"]
-    assert "trajectory MSE from predicted = 0.00375 over 4" in settled["last"]
-    assert f"D {_MINUS} D_predicted = +0.0500 at generation 2" in settled["second"]
+    assert settled["last"] == (
+        f"ΔDₚ = {_MINUS}0.100, MSE = 0.00375 (vs closed-form trajectory; "
+        "MSE over 4 recorded generations to generation 3)"
+    )
+    assert settled["second"].startswith("ΔDₚ = +0.0500, MSE = 0.00167 ")
+    assert "over 3 recorded generations to generation 2" in settled["second"]
     assert settled["none"] == ""
     assert settled["empty"] == []
+    assert settled["fallbackNames"] == ["D"]
+    assert settled["fallback"].startswith("ΔDₚ = +0.150, MSE = 0.0125 ")
+    assert "vs predicted equilibrium 0.250" in settled["fallback"]
+    assert settled["placed"].endswith(" — description")
 
 
 def _poll(window: webview.Window, script: str, predicate: Callable[[Any], bool]) -> Any:
@@ -81,10 +93,24 @@ def _poll(window: webview.Window, script: str, predicate: Callable[[Any], bool])
     return value
 
 
-def test_a_completed_runs_closed_form_rows_carry_the_comparison(
-    fast_scalar_run_settings: Path, window: webview.Window
+@pytest.mark.parametrize(
+    ("migrant_sampling", "basis"),
+    [
+        ("continuous", "vs closed-form trajectory"),
+        ("stochastic", "vs predicted equilibrium"),
+    ],
+)
+def test_a_completed_runs_predicted_rows_carry_the_comparison(
+    fast_scalar_run_settings: Path,
+    window: webview.Window,
+    migrant_sampling: str,
+    basis: str,
 ) -> None:
-    """After a real run: closed-form rows have it, others do not."""
+    """After a real run, D's tooltip leads with ΔDₚ and the MSE; K_ST's has none.
+
+    Stochastic migrants put the run outside the closed-form trajectory's
+    model, so D is compared with its predicted equilibrium instead.
+    """
     set_fields = (
         "function setField(name, value) {"
         "const field = document.getElementById(`field-${name}`);"
@@ -94,13 +120,15 @@ def test_a_completed_runs_closed_form_rows_carry_the_comparison(
         "setField('N', '20'); setField('d', '2'); setField('seed', '20260814');"
         "setField('m_rate', '0.1'); setField('mu_value', '0.01');"
         "setField('locus_lengths', '200');"
+        "const sampling = document.getElementById('field-migrant_sampling');"
+        f"sampling.value = '{migrant_sampling}';"
+        "sampling.dispatchEvent(new Event('change', {bubbles: true}));"
     )
     titles = (
         "({"
         "state: window.fim.getRunViewState(), "
         "pending: window.__fimScrubberPending, "
         "D: document.getElementById('stat-D').title, "
-        "H_S: document.getElementById('stat-H_S').title, "
         "K_ST: document.getElementById('stat-K_ST').title"
         "})"
     )
@@ -127,7 +155,9 @@ def test_a_completed_runs_closed_form_rows_carry_the_comparison(
     webview.start(_drive)
     settled = outcome.get(timeout=120)
 
-    for name in ("D", "H_S"):
-        assert f"{name} {_MINUS} {name}_predicted = " in settled[name]
-        assert "trajectory MSE from predicted = " in settled[name]
-    assert "_predicted" not in settled["K_ST"]
+    assert " — ΔDₚ = " in settled["D"]
+    assert "MSE = " in settled["D"]
+    assert basis in settled["D"]
+    # The comparison comes right after the value, before the description.
+    assert settled["D"].index("ΔDₚ") < settled["D"].index("allelic differentiation")
+    assert "ₚ" not in settled["K_ST"]

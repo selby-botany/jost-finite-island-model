@@ -3578,16 +3578,17 @@ def test_open_run_carries_the_real_equilibrium_prediction(tmp_path: Path) -> Non
     result = api.open_run({"trajectoryPath": str(output / "trajectory.jsonl")})
 
     assert result["ok"] is True
+    # Full precision: the page computes with these (the dashed line and
+    # ΔDₚ), so they are not rounded to the display's digits.
+    digits = app_module.FULL_PRECISION_DIGITS
     assert result["equilibrium"] == {
-        "D": format_statistic(equilibrium_d(0.1, 0.01, 2), api._significant_digits),
-        "G_ST": format_statistic(
-            equilibrium_g_st(20, 0.1, 0.01, 2), api._significant_digits
-        ),
+        "D": format_statistic(equilibrium_d(0.1, 0.01, 2), digits),
+        "G_ST": format_statistic(equilibrium_g_st(20, 0.1, 0.01, 2), digits),
         "E_ST": format_statistic(
-            equilibrium_shannon_differentiation(20, 0.1, 0.01, 2),
-            api._significant_digits,
+            equilibrium_shannon_differentiation(20, 0.1, 0.01, 2), digits
         ),
     }
+    assert float(result["equilibrium"]["D"]) == equilibrium_d(0.1, 0.01, 2)
 
 
 def test_open_run_echoes_the_trajectory_path_it_was_given(tmp_path: Path) -> None:

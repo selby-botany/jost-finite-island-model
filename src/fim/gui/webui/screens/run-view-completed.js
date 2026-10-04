@@ -586,62 +586,84 @@ function tagStatisticCells(tbody, offset) {
  *     description plus a trailing-window mean/standard-error clause.
  */
 /**
- * Compare each statistic that has a closed-form expected trajectory with
- * the run's own recorded trajectory.
+ * Compare each statistic that has a prediction with the run's own
+ * recorded trajectory.
  *
- * Uses the same closed-form series the trajectory chart draws
- * (`closedFormTrajectories`): `D`, `G_ST`, `H_S`, `H_T` and `H_ST` when
- * the model has a closed form at all, nothing otherwise. A statistic
- * whose history does not cover every generation (`G_ST` at a
- * monomorphic locus) is left out rather than compared misaligned.
+ * The prediction is the closed-form expected trajectory when the model
+ * has one (`closedFormTrajectories`, the dash-dot curve: `D`, `G_ST`,
+ * `H_S`, `H_T`, `H_ST`), and otherwise the predicted equilibrium (the
+ * dashed line: `D`, `G_ST`, `E_ST`), so a run whose model has no
+ * closed-form trajectory (stochastic migrants, finite alleles) is still
+ * compared with what the chart draws. A statistic whose history does not
+ * cover every generation (`G_ST` at a monomorphic locus) is left out
+ * rather than compared misaligned.
  *
  * @param {number[]|null|undefined} generations the recorded generations.
  * @param {Object<string, number[]>|null|undefined} histories the run's
  *     recorded values, one array per statistic.
  * @param {object|null|undefined} closedForm `_closed_form_trajectory_
- *     payload`'s result.
+ *     payload`'s result, or `null`.
+ * @param {Object<string, string>|null|undefined} [equilibrium] the
+ *     predicted equilibrium per statistic, as display strings.
  * @returns {Object<string, {generations: number[], observed: number[],
- *     predicted: number[], mse: number, count: number}>} per statistic:
- *     the aligned series and the mean squared error of observed minus
- *     predicted over the `count` generations where both are finite.
+ *     predicted: number[], basis: string, squares: number[],
+ *     counts: number[]}>} per statistic: the aligned series, what the
+ *     prediction is, and running totals of squared error and of finite
+ *     points, so the mean squared error up to any generation is O(1).
  */
-function closedFormComparisons(generations, histories, closedForm) {
-    if (!generations || !histories || !closedForm || generations.length === 0) {
+function closedFormComparisons(generations, histories, closedForm, equilibrium = null) {
+    if (!generations || !histories || generations.length === 0) {
         return {};
     }
-    const predictedSeries = closedFormTrajectories(closedForm, generations, histories);
+    const trajectories = closedForm
+        ? closedFormTrajectories(closedForm, generations, histories)
+        : {};
     const comparisons = {};
-    for (const [name, predicted] of Object.entries(predictedSeries)) {
-        const observed = histories[name];
+    for (const [name, observed] of Object.entries(histories)) {
         if (!observed || observed.length !== generations.length) {
             continue;
         }
-        let squares = 0;
+        let predicted = trajectories[name];
+        let basis = "closed-form trajectory";
+        if (!predicted) {
+            const level = equilibrium ? Number(equilibrium[name]) : NaN;
+            if (!Number.isFinite(level)) {
+                continue;
+            }
+            predicted = generations.map(() => level);
+            basis = `predicted equilibrium ${level.toPrecision(CLOSED_FORM_COMPARISON_DIGITS)}`;
+        }
+        const squares = [];
+        const counts = [];
+        let squareTotal = 0;
         let count = 0;
         for (const [index, value] of observed.entries()) {
             const difference = value - predicted[index];
             if (Number.isFinite(difference)) {
-                squares += difference * difference;
+                squareTotal += difference * difference;
                 count += 1;
             }
+            squares.push(squareTotal);
+            counts.push(count);
         }
         if (count > 0) {
-            comparisons[name] = { generations, observed, predicted, mse: squares / count, count };
+            comparisons[name] = { generations, observed, predicted, basis, squares, counts };
         }
     }
     return comparisons;
 }
 
 /**
- * The tooltip clause comparing one statistic with its closed form:
- * observed minus predicted at one generation, and the whole recorded
- * trajectory's mean squared error from the closed-form trajectory.
+ * The running comparison of one statistic with its prediction, as a
+ * tooltip clause: `ΔDₚ` (observed minus predicted) at the generation
+ * shown, and the mean squared error of the trajectory so far, from the
+ * first recorded generation up to that one.
  *
  * @param {object} comparisons `closedFormComparisons`'s result.
  * @param {string} name
  * @param {number|null} [index] index into the recorded generations; the
- *     last (the generation the run stopped at) when omitted.
- * @returns {string} the clause, or `""` for a statistic with no closed form.
+ *     last (the latest generation) when omitted or negative.
+ * @returns {string} the clause, or `""` for a statistic with no prediction.
  */
 function closedFormNote(comparisons, name, index = null) {
     const entry = comparisons && comparisons[name];
@@ -650,21 +672,37 @@ function closedFormNote(comparisons, name, index = null) {
     }
     const at = index === null || index < 0 ? entry.generations.length - 1 : index;
     const difference = entry.observed[at] - entry.predicted[at];
-    if (!Number.isFinite(difference)) {
+    if (!Number.isFinite(difference) || entry.counts[at] === 0) {
         return "";
     }
-    const label = plainStatisticLabel(name);
     const sign = difference < 0 ? "−" : "+";
     const magnitude = Math.abs(difference).toPrecision(CLOSED_FORM_COMPARISON_DIGITS);
-    const mse = entry.mse.toPrecision(CLOSED_FORM_COMPARISON_DIGITS);
+    const mse = (entry.squares[at] / entry.counts[at]).toPrecision(
+        CLOSED_FORM_COMPARISON_DIGITS
+    );
     return (
-        ` — ${label} − ${label}_predicted = ${sign}${magnitude} at generation ` +
-        `${entry.generations[at].toLocaleString()} (closed form); trajectory MSE ` +
-        `from predicted = ${mse} over ${entry.count.toLocaleString()} recorded generations`
+        `Δ${plainStatisticLabel(name)}ₚ = ${sign}${magnitude}, MSE = ${mse} ` +
+        `(vs ${entry.basis}; MSE over ${entry.counts[at].toLocaleString()} ` +
+        `recorded generations to generation ${entry.generations[at].toLocaleString()})`
     );
 }
 
-// The completed run's closed-form comparisons, computed once per
+/**
+ * Put a comparison clause right after the value in a row's tooltip, ahead
+ * of the statistic's description.
+ *
+ * @param {string} note `closedFormNote`'s result (may be empty).
+ * @param {string} description
+ * @returns {string}
+ */
+function withPredictionNote(note, description) {
+    if (!note) {
+        return description;
+    }
+    return description ? `${note} — ${description}` : note;
+}
+
+// The completed run's comparisons with its predictions, computed once per
 // completed entry and reused by every scrub tick.
 let completedClosedFormComparisons = {};
 
@@ -2379,8 +2417,10 @@ function updateScrubbedTrajectory(frameGeneration, isFinalFrame) {
                 buildPointMeter(
                     name,
                     completedFinalStatistics[name],
-                    windowStatisticsDescription(name) +
-                        closedFormNote(completedClosedFormComparisons, name)
+                    withPredictionNote(
+                        closedFormNote(completedClosedFormComparisons, name),
+                        windowStatisticsDescription(name)
+                    )
                 )
             );
             decorateTrajectoryStatisticRow(element, name);
@@ -2426,8 +2466,10 @@ function updateScrubbedTrajectory(frameGeneration, isFinalFrame) {
                 buildPointMeter(
                     name,
                     Number(value).toPrecision(REPORT_VALUE_SIGNIFICANT_DIGITS),
-                    statisticDescription(name) +
-                        closedFormNote(completedClosedFormComparisons, name, scrubIndex)
+                    withPredictionNote(
+                        closedFormNote(completedClosedFormComparisons, name, scrubIndex),
+                        statisticDescription(name)
+                    )
                 )
             );
         } else {
@@ -2943,7 +2985,8 @@ window.fim.enterCompletedState = function enterCompletedState(payload, isBatch) 
         completedClosedFormComparisons = closedFormComparisons(
             payload.convergenceGenerations,
             payload.convergenceHistories,
-            payload.closedForm
+            payload.closedForm,
+            payload.equilibrium
         );
         for (const name of STATISTIC_NAMES) {
             const value = payload.statistics[name];
@@ -2953,8 +2996,10 @@ window.fim.enterCompletedState = function enterCompletedState(payload, isBatch) 
                 buildPointMeter(
                     name,
                     value,
-                    windowStatisticsDescription(name) +
-                        closedFormNote(completedClosedFormComparisons, name)
+                    withPredictionNote(
+                        closedFormNote(completedClosedFormComparisons, name),
+                        windowStatisticsDescription(name)
+                    )
                 )
             );
             decorateTrajectoryStatisticRow(element, name);

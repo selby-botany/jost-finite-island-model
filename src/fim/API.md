@@ -106,6 +106,7 @@ Return to the [source-tree orientation](../README.md) or the [developer guide](.
   * [format\_statistic](#fim.gui.app.format_statistic)
   * [INFINITE\_DISTANCE\_TEXT](#fim.gui.app.INFINITE_DISTANCE_TEXT)
   * [format\_report\_statistic](#fim.gui.app.format_report_statistic)
+  * [FULL\_PRECISION\_DIGITS](#fim.gui.app.FULL_PRECISION_DIGITS)
   * [Api](#fim.gui.app.Api)
     * [\_\_init\_\_](#fim.gui.app.Api.__init__)
     * [start\_run](#fim.gui.app.Api.start_run)
@@ -4129,6 +4130,17 @@ is present but `None` is infinite and shows as `INFINITE_DISTANCE_TEXT`.
 **Returns**:
 
   The display string.
+
+<a id="fim.gui.app.FULL_PRECISION_DIGITS"></a>
+
+#### FULL\_PRECISION\_DIGITS
+
+Significant digits that round-trip any float exactly through text.
+
+For values the page computes with rather than shows: the trajectory
+panel's predicted equilibrium is drawn as a line and subtracted from the
+observed value (`ΔDₚ`), so rounding it to the display precision first
+would shift that difference by up to half a display digit.
 
 <a id="fim.gui.app.Api"></a>
 
