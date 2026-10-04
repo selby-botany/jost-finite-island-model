@@ -49,6 +49,7 @@ Every test module, fixture, and test function documented here in full; `doc/fim-
   - [`test_batch_running`](#gui.test_batch_running)
   - [`test_branding`](#gui.test_branding)
   - [`test_closed_form_examples`](#gui.test_closed_form_examples)
+  - [`test_closed_form_tooltip_screen`](#gui.test_closed_form_tooltip_screen)
   - [`test_compare_screen`](#gui.test_compare_screen)
   - [`test_completed_scrubber`](#gui.test_completed_scrubber)
   - [`test_config_form`](#gui.test_config_form)
@@ -11845,6 +11846,39 @@ a run stops). At five checkpoints the mean paired difference (simulated
 minus curve) must lie within five standard errors of zero. Every other
 option of the example is kept; only the locus count is raised to `LOCI`
 (see there), so this catches a wrong model, not the single-locus bias.
+
+<a id="gui.test_closed_form_tooltip_screen"></a>
+
+# gui.test\_closed\_form\_tooltip\_screen
+
+Headless functional tests for the closed-form comparison in statistic tooltips.
+
+A statistic with a closed-form expected trajectory (`D`, `G_ST`, `H_S`,
+`H_T`, `H_ST`) shows, in its statistics-row tooltip, the observed value
+minus the closed-form prediction at the displayed generation and the
+recorded trajectory's mean squared error from the closed-form trajectory.
+
+<a id="gui.test_closed_form_tooltip_screen.test_the_comparison_arithmetic_on_a_known_trajectory"></a>
+
+#### test\_the\_comparison\_arithmetic\_on\_a\_known\_trajectory
+
+```python
+def test_the_comparison_arithmetic_on_a_known_trajectory(
+        window: webview.Window, drive: Callable[..., Any]) -> None
+```
+
+Hand-computed difference and MSE; a short history is left out.
+
+<a id="gui.test_closed_form_tooltip_screen.test_a_completed_runs_closed_form_rows_carry_the_comparison"></a>
+
+#### test\_a\_completed\_runs\_closed\_form\_rows\_carry\_the\_comparison
+
+```python
+def test_a_completed_runs_closed_form_rows_carry_the_comparison(
+        fast_scalar_run_settings: Path, window: webview.Window) -> None
+```
+
+After a real run: closed-form rows have it, others do not.
 
 <a id="gui.test_compare_screen"></a>
 

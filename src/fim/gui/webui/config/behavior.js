@@ -156,6 +156,11 @@ const OPEN_RUN_SUMMARY_COLUMN_INDEX = 4;
 // allele counts) is rounded the same way here so the panel reads evenly.
 const REPORT_VALUE_SIGNIFICANT_DIGITS = 6;
 
+// Significant digits of the closed-form comparison in a statistic's
+// tooltip (observed minus predicted, and the trajectory's mean squared
+// error from the closed form): a diagnostic, so three are enough.
+const CLOSED_FORM_COMPARISON_DIGITS = 3;
+
 // Decimal places of a window mean and its standard error in a statistic's
 // tooltip, and of a meter's value in the statistics table.
 const WINDOW_STATISTIC_DECIMALS = 4;

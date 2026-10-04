@@ -585,6 +585,89 @@ function tagStatisticCells(tbody, offset) {
  *     `completedWindowStatistics` has no entry for `name`; otherwise that
  *     description plus a trailing-window mean/standard-error clause.
  */
+/**
+ * Compare each statistic that has a closed-form expected trajectory with
+ * the run's own recorded trajectory.
+ *
+ * Uses the same closed-form series the trajectory chart draws
+ * (`closedFormTrajectories`): `D`, `G_ST`, `H_S`, `H_T` and `H_ST` when
+ * the model has a closed form at all, nothing otherwise. A statistic
+ * whose history does not cover every generation (`G_ST` at a
+ * monomorphic locus) is left out rather than compared misaligned.
+ *
+ * @param {number[]|null|undefined} generations the recorded generations.
+ * @param {Object<string, number[]>|null|undefined} histories the run's
+ *     recorded values, one array per statistic.
+ * @param {object|null|undefined} closedForm `_closed_form_trajectory_
+ *     payload`'s result.
+ * @returns {Object<string, {generations: number[], observed: number[],
+ *     predicted: number[], mse: number, count: number}>} per statistic:
+ *     the aligned series and the mean squared error of observed minus
+ *     predicted over the `count` generations where both are finite.
+ */
+function closedFormComparisons(generations, histories, closedForm) {
+    if (!generations || !histories || !closedForm || generations.length === 0) {
+        return {};
+    }
+    const predictedSeries = closedFormTrajectories(closedForm, generations, histories);
+    const comparisons = {};
+    for (const [name, predicted] of Object.entries(predictedSeries)) {
+        const observed = histories[name];
+        if (!observed || observed.length !== generations.length) {
+            continue;
+        }
+        let squares = 0;
+        let count = 0;
+        for (const [index, value] of observed.entries()) {
+            const difference = value - predicted[index];
+            if (Number.isFinite(difference)) {
+                squares += difference * difference;
+                count += 1;
+            }
+        }
+        if (count > 0) {
+            comparisons[name] = { generations, observed, predicted, mse: squares / count, count };
+        }
+    }
+    return comparisons;
+}
+
+/**
+ * The tooltip clause comparing one statistic with its closed form:
+ * observed minus predicted at one generation, and the whole recorded
+ * trajectory's mean squared error from the closed-form trajectory.
+ *
+ * @param {object} comparisons `closedFormComparisons`'s result.
+ * @param {string} name
+ * @param {number|null} [index] index into the recorded generations; the
+ *     last (the generation the run stopped at) when omitted.
+ * @returns {string} the clause, or `""` for a statistic with no closed form.
+ */
+function closedFormNote(comparisons, name, index = null) {
+    const entry = comparisons && comparisons[name];
+    if (!entry) {
+        return "";
+    }
+    const at = index === null || index < 0 ? entry.generations.length - 1 : index;
+    const difference = entry.observed[at] - entry.predicted[at];
+    if (!Number.isFinite(difference)) {
+        return "";
+    }
+    const label = plainStatisticLabel(name);
+    const sign = difference < 0 ? "−" : "+";
+    const magnitude = Math.abs(difference).toPrecision(CLOSED_FORM_COMPARISON_DIGITS);
+    const mse = entry.mse.toPrecision(CLOSED_FORM_COMPARISON_DIGITS);
+    return (
+        ` — ${label} − ${label}_predicted = ${sign}${magnitude} at generation ` +
+        `${entry.generations[at].toLocaleString()} (closed form); trajectory MSE ` +
+        `from predicted = ${mse} over ${entry.count.toLocaleString()} recorded generations`
+    );
+}
+
+// The completed run's closed-form comparisons, computed once per
+// completed entry and reused by every scrub tick.
+let completedClosedFormComparisons = {};
+
 function windowStatisticsDescription(name) {
     const base = statisticDescription(name);
     const stats = completedWindowStatistics && completedWindowStatistics[name];
@@ -2296,7 +2379,8 @@ function updateScrubbedTrajectory(frameGeneration, isFinalFrame) {
                 buildPointMeter(
                     name,
                     completedFinalStatistics[name],
-                    windowStatisticsDescription(name)
+                    windowStatisticsDescription(name) +
+                        closedFormNote(completedClosedFormComparisons, name)
                 )
             );
             decorateTrajectoryStatisticRow(element, name);
@@ -2339,7 +2423,12 @@ function updateScrubbedTrajectory(frameGeneration, isFinalFrame) {
                 // client-side, the identical established precedent
                 // `renderDifferentiationQ`'s own comment already uses for
                 // this exact situation (a not-yet-server-formatted field).
-                buildPointMeter(name, Number(value).toPrecision(REPORT_VALUE_SIGNIFICANT_DIGITS))
+                buildPointMeter(
+                    name,
+                    Number(value).toPrecision(REPORT_VALUE_SIGNIFICANT_DIGITS),
+                    statisticDescription(name) +
+                        closedFormNote(completedClosedFormComparisons, name, scrubIndex)
+                )
             );
         } else {
             applyStatRow(element, buildOmittedMeter(name, OMITTED_SCRUB_TEXT));
@@ -2801,6 +2890,7 @@ window.fim.enterCompletedState = function enterCompletedState(payload, isBatch) 
         completedFinalLiteratureVisuals = null;
         completedReportReason = null;
         completedConvergedOn = null;
+        completedClosedFormComparisons = {};
         completedPair = [1, 2];
         completedFinalPairStatistics = null;
         completedPairFrameStatistics = null;
@@ -2850,12 +2940,22 @@ window.fim.enterCompletedState = function enterCompletedState(payload, isBatch) 
         // *previous* run's window statistics (or none, on the first run
         // of a session), never this one's.
         completedWindowStatistics = report.window_statistics || null;
+        completedClosedFormComparisons = closedFormComparisons(
+            payload.convergenceGenerations,
+            payload.convergenceHistories,
+            payload.closedForm
+        );
         for (const name of STATISTIC_NAMES) {
             const value = payload.statistics[name];
             const element = document.getElementById(`stat-${name}`);
             applyStatRow(
                 element,
-                buildPointMeter(name, value, windowStatisticsDescription(name))
+                buildPointMeter(
+                    name,
+                    value,
+                    windowStatisticsDescription(name) +
+                        closedFormNote(completedClosedFormComparisons, name)
+                )
             );
             decorateTrajectoryStatisticRow(element, name);
         }

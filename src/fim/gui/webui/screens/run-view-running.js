@@ -390,15 +390,35 @@ function wireLiveDemePairSelector(demeCount) {
  * shape) should leave whatever the table already shows alone rather
  * than throwing trying to read `undefined[name]`.
  *
+ * A statistic with a closed-form expected trajectory also gets, in its
+ * tooltip, observed minus predicted at this tick's generation and the
+ * trajectory-so-far's mean squared error from the closed form
+ * (`closedFormComparisons`, `run-view-completed.js`).
+ *
  * @param {Record<string, string> | undefined} statistics
+ * @param {number} [generation] the tick's generation; the latest when omitted.
  */
-function renderLiveStatistics(statistics) {
+function renderLiveStatistics(statistics, generation) {
     if (!statistics) {
         return;
     }
+    const comparisons = closedFormComparisons(
+        liveTrajectoryGenerations,
+        liveTrajectoryHistories,
+        liveClosedForm
+    );
+    const index =
+        generation === undefined ? null : liveTrajectoryGenerations.indexOf(generation);
     for (const name of STATISTIC_NAMES) {
         const element = document.getElementById(`stat-${name}`);
-        applyStatRow(element, buildPointMeter(name, statistics[name]));
+        applyStatRow(
+            element,
+            buildPointMeter(
+                name,
+                statistics[name],
+                statisticDescription(name) + closedFormNote(comparisons, name, index)
+            )
+        );
         if (typeof decorateTrajectoryStatisticRow === "function") {
             decorateTrajectoryStatisticRow(element, name);
         }
@@ -559,7 +579,7 @@ window.fim.onRunProgress = function onRunProgress(payload) {
     };
 
     window.fim.appendLiveFrame(liveFrame, (f, _index, isLiveHead) => {
-        renderLiveStatistics(f.statistics);
+        renderLiveStatistics(f.statistics, f.generation);
         renderPairStatistics(f.pairStatistics);
         if (typeof renderTrajectory === "function") {
             renderTrajectory(
