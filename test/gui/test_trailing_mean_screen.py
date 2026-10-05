@@ -392,13 +392,23 @@ def test_a_completed_run_leads_with_its_estimate_and_offers_the_averages(
                 ("trailing_mean", "trailing mean"),
                 ("cumulative_mean", "cumulative mean"),
             ):
+
+                def matches_display(
+                    value: Any,
+                    expected_legend: str = legend,
+                    expected_display: str = display,
+                ) -> bool:
+                    """Match the legend and saved setting for this selection."""
+                    return (
+                        expected_legend in value["legend"]
+                        and value["saved"] == expected_display
+                    )
+
                 window.evaluate_js(choose(display))
                 chosen_displays[display] = _poll(
                     window,
                     chosen,
-                    lambda value, legend=legend, display=display: (
-                        legend in value["legend"] and value["saved"] == display
-                    ),
+                    matches_display,
                 )
             outcome.put({"before": before, **chosen_displays})
         finally:
