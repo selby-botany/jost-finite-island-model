@@ -372,7 +372,17 @@ class ConvergenceMonitor:
         # agree ("all") or just one of them needs to ("any"). See
         # `ConvergenceMonitor`'s own class docstring for why this is a
         # genuine no-op with only one watched statistic.
-        per_statistic_stable = (
+        #
+        # A list, not a generator: `_gated_stable` is stateful (it anchors
+        # each statistic's evidence window the first round its trend is
+        # stable, and schedules that statistic's next noise check), so
+        # every watched statistic must be judged every round. Handing a
+        # generator to `all`/`any` would short-circuit — once one answer
+        # decides the round, the statistics listed after it would never
+        # be judged, their evidence windows anchored late (or never), and
+        # the stop generation would depend on the order the statistics
+        # happen to be listed in.
+        per_statistic_stable = [
             self._gated_stable(
                 name,
                 self._trackers[name].is_stable()
@@ -380,7 +390,7 @@ class ConvergenceMonitor:
                 else self._criterion.is_stable(self._histories[name]),
             )
             for name in self._statistics
-        )
+        ]
         is_stable = (
             all(per_statistic_stable)
             if self._combinator == "all"

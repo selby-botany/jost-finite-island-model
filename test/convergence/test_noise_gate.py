@@ -13,14 +13,19 @@ reaching noise-adequacy reports that honestly.
 
 from __future__ import annotations
 
+import itertools
 import math
 import random
+from typing import Literal
 
 import pytest
 
 from fim.convergence.criteria import TrailingWindowCriterion, trailing_window_stable
-from fim.convergence.monitor import ConvergenceMonitor
-from fim.convergence.window_statistics import MINIMUM_NOISE_CHECK_WINDOW
+from fim.convergence.monitor import ConvergenceMonitor, ConvergenceOutcome
+from fim.convergence.window_statistics import (
+    MINIMUM_NOISE_CHECK_WINDOW,
+    WindowStatistics,
+)
 
 
 def _noisy_flat_series(
@@ -228,3 +233,111 @@ def test_the_evidence_window_grows_past_a_flickering_trend_check() -> None:
     assert stats is not None
     assert stats.window > window
     assert stats.noise_adequate(tolerance)
+
+
+def _several_statistic_histories(length: int) -> dict[str, list[float]]:
+    """Four watched statistics whose noise gates settle at different times.
+
+    `slow` (strongly correlated, `phi=0.85`) needs a long evidence window,
+    `medium` a shorter one, while `flat` (constant) and `precise` (tiny
+    independent noise) are noise-adequate at their very first check — a
+    mix in which, before the order-dependence fix, whichever statistic was
+    listed first decided which of the others ever had their gates
+    consulted at all.
+    """
+    return {
+        "slow": _ar1_series(phi=0.85, sigma=0.05, length=length, seed=8),
+        "medium": _ar1_series(phi=0.6, sigma=0.04, length=length, seed=3, mean=0.6),
+        "flat": [0.5] * length,
+        "precise": _noisy_flat_series(mean=0.6, sigma=0.0005, length=length, seed=3),
+    }
+
+
+def _run_several(
+    histories: dict[str, list[float]],
+    statistics: tuple[str, ...],
+    combinator: Literal["any", "all"],
+    *,
+    window: int = 24,
+    tolerance: float = 0.03,
+) -> ConvergenceMonitor:
+    """Drive a several-statistic monitor over `histories` until it stops."""
+    length = len(next(iter(histories.values())))
+    monitor = ConvergenceMonitor(
+        TrailingWindowCriterion(window, tolerance),
+        max_generations=length - 1,
+        statistics=statistics,
+        combinator=combinator,
+    )
+    for generation in range(length):
+        values = {name: histories[name][generation] for name in statistics}
+        if monitor.record(generation, values).stopped:
+            break
+    return monitor
+
+
+@pytest.mark.parametrize("combinator", ["any", "all"])
+def test_the_stop_decision_does_not_depend_on_statistic_order(
+    combinator: Literal["any", "all"],
+) -> None:
+    """Every ordering of the same statistics stops identically.
+
+    `record` once handed a generator to `all`/`any`, which short-circuit:
+    a statistic listed after the one that decided a round was never
+    judged that round, so its evidence window was anchored late (or never)
+    and its noise checks fell on a different schedule. Measured on exactly
+    these histories, the old code stopped `"all"` at generation 456 in one
+    order and 129 in another. Every permutation must now agree on the
+    stop generation and on every statistic's `window_statistics` (whether
+    available at all, and its exact value when it is).
+    """
+    histories = _several_statistic_histories(3000)
+    names = tuple(histories)
+
+    def summary(
+        order: tuple[str, ...],
+    ) -> tuple[ConvergenceOutcome, dict[str, WindowStatistics | None]]:
+        """Return one ordering's outcome and every statistic's window check."""
+        monitor = _run_several(histories, order, combinator)
+        return (
+            monitor.outcome(),
+            {name: monitor.window_statistics(name) for name in names},
+        )
+
+    reference = summary(names)
+    assert reference[0].converged
+    for order in itertools.permutations(names):
+        assert summary(order) == reference, order
+
+
+def test_all_anchors_a_statistic_that_is_not_deciding_the_outcome() -> None:
+    """Under `"all"`, a statistic waited on by others is still gated each round.
+
+    `slow` is listed first and is still far from noise-adequate at
+    generation 23, so it alone decides that `"all"` is not yet satisfied.
+    `precise` is trend-stable from its first full window, and must have its
+    own evidence window anchored and checked right then — not deferred
+    until `slow` happens to read `True`, as the short-circuiting `all()`
+    once did (leaving `precise` with no `window_statistics` at all here).
+    """
+    window, tolerance = 24, 0.03
+    histories = _several_statistic_histories(window)
+    statistics = ("slow", "precise")
+    monitor = ConvergenceMonitor(
+        TrailingWindowCriterion(window, tolerance),
+        max_generations=1000,
+        statistics=statistics,
+        combinator="all",
+    )
+    for generation in range(window):
+        monitor.record(
+            generation, {name: histories[name][generation] for name in statistics}
+        )
+
+    assert not monitor.should_stop()
+    slow = monitor.window_statistics("slow")
+    assert slow is None or not slow.noise_adequate(tolerance)
+    precise = monitor.window_statistics("precise")
+    assert precise is not None
+    assert precise.window == window
+    assert precise.noise_adequate(tolerance)

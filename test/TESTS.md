@@ -4505,6 +4505,44 @@ the trend check more often than the doubling interval allows. This
 seeds one such flickering series and checks the window really did grow
 beyond its own base length by the time the run stopped.
 
+<a id="convergence.test_noise_gate.test_the_stop_decision_does_not_depend_on_statistic_order"></a>
+
+#### test\_the\_stop\_decision\_does\_not\_depend\_on\_statistic\_order
+
+```python
+@pytest.mark.parametrize("combinator", ["any", "all"])
+def test_the_stop_decision_does_not_depend_on_statistic_order(
+        combinator: Literal["any", "all"]) -> None
+```
+
+Every ordering of the same statistics stops identically.
+
+`record` once handed a generator to `all`/`any`, which short-circuit:
+a statistic listed after the one that decided a round was never
+judged that round, so its evidence window was anchored late (or never)
+and its noise checks fell on a different schedule. Measured on exactly
+these histories, the old code stopped `"all"` at generation 456 in one
+order and 129 in another. Every permutation must now agree on the
+stop generation and on every statistic's `window_statistics` (whether
+available at all, and its exact value when it is).
+
+<a id="convergence.test_noise_gate.test_all_anchors_a_statistic_that_is_not_deciding_the_outcome"></a>
+
+#### test\_all\_anchors\_a\_statistic\_that\_is\_not\_deciding\_the\_outcome
+
+```python
+def test_all_anchors_a_statistic_that_is_not_deciding_the_outcome() -> None
+```
+
+Under `"all"`, a statistic waited on by others is still gated each round.
+
+`slow` is listed first and is still far from noise-adequate at
+generation 23, so it alone decides that `"all"` is not yet satisfied.
+`precise` is trend-stable from its first full window, and must have its
+own evidence window anchored and checked right then — not deferred
+until `slow` happens to read `True`, as the short-circuiting `all()`
+once did (leaving `precise` with no `window_statistics` at all here).
+
 <a id="convergence.test_tracker"></a>
 
 # convergence.test\_tracker
