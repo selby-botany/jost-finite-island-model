@@ -45,7 +45,7 @@ _REAL_PRESETS = list_presets(_REAL_WEBUI_DIRECTORY)
 
 
 def test_list_presets_returns_the_fourteen_worked_examples() -> None:
-    """Every `doc/usage.md` worked example is found, in its own document order.
+    """Every usage-guide worked example is found, in document order.
 
     Reads the real, committed `webui/help/usage.html` directly — this
     is the one test proving that file (and this module's own parser)
@@ -55,6 +55,23 @@ def test_list_presets_returns_the_fourteen_worked_examples() -> None:
     for preset in _REAL_PRESETS:
         assert preset.yaml_text.strip() != ""
         assert preset.preset_id != ""
+
+
+def test_presets_use_the_canonical_worked_example_configs() -> None:
+    """The GUI's rendered presets match the standalone YAML source files."""
+    examples_directory = Path(__file__).resolve().parents[2] / "doc" / "examples"
+    preset_ids = {preset.preset_id for preset in _REAL_PRESETS}
+    configs = {
+        path.parent.name: path.read_text(encoding="utf-8")
+        for path in examples_directory.glob("*/config.yaml")
+        if path.parent.name in preset_ids
+    }
+
+    assert all(
+        (examples_directory / preset_id / "README.md").is_file()
+        for preset_id in preset_ids
+    )
+    assert {preset.preset_id: preset.yaml_text for preset in _REAL_PRESETS} == configs
 
 
 def test_get_preset_returns_the_matching_preset() -> None:

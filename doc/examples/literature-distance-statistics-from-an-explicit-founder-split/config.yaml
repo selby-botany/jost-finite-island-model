@@ -1,0 +1,19 @@
+N: 200
+ploidy: haploid
+d: 3
+m: 0.0
+mu: 0.0
+seed: 20260914
+loci:
+  - locus_id: 1
+    length: 100
+p_0:
+  - - 0: 1.0
+  - - 1: 1.0
+  - - 2: 1.0
+convergence_statistic: D
+convergence_window: 2
+convergence_tolerance: 0.000001
+max_generations: 1
+track_expensive_statistics: true
+n_replicates: 1   # a single scalar run; the default (200) would batch

@@ -494,6 +494,16 @@ def test_every_configuration_snippet_that_sets_n_also_sets_a_ploidy_word(
 A snippet copied into a file must run, and a number is refused
 (`SimulationParams.from_mapping`), so the ploidy is checked as a word.
 
+<a id="test.test_doc_snippets.test_worked_example_configs_are_the_source_of_usage_yaml"></a>
+
+#### test\_worked\_example\_configs\_are\_the\_source\_of\_usage\_yaml
+
+```python
+def test_worked_example_configs_are_the_source_of_usage_yaml() -> None
+```
+
+Every inline worked-example config matches its canonical YAML file.
+
 <a id="test.test_doc_snippets.test_worked_examples_use_derived_convergence_unless_deliberately_pinned"></a>
 
 #### test\_worked\_examples\_use\_derived\_convergence\_unless\_deliberately\_pinned
@@ -16578,11 +16588,21 @@ none of the pywebview machinery this package's other tests need.
 def test_list_presets_returns_the_fourteen_worked_examples() -> None
 ```
 
-Every `doc/usage.md` worked example is found, in its own document order.
+Every usage-guide worked example is found, in document order.
 
 Reads the real, committed `webui/help/usage.html` directly — this
 is the one test proving that file (and this module's own parser)
 actually agree, not a synthetic fixture standing in for it.
+
+<a id="gui.test_presets.test_presets_use_the_canonical_worked_example_configs"></a>
+
+#### test\_presets\_use\_the\_canonical\_worked\_example\_configs
+
+```python
+def test_presets_use_the_canonical_worked_example_configs() -> None
+```
+
+The GUI's rendered presets match the standalone YAML source files.
 
 <a id="gui.test_presets.test_get_preset_returns_the_matching_preset"></a>
 

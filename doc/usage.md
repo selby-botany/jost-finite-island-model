@@ -152,6 +152,7 @@ Four demes of very different size, connected by an explicit `d x d`
 migration matrix rather than one shared rate — a small "hub" topology
 where deme 4 is both the largest and the best-connected:
 
+<!-- worked-example-config: examples/unequal-island-sizes-with-a-migration-hub/config.yaml -->
 ```yaml
 N: [200, 200, 200, 800]
 ploidy: haploid
@@ -192,6 +193,7 @@ Six demes arranged on a ring, each migrating only with its two neighbors —
 `fim.model.topology`'s compact sugar for a sparse migration matrix, instead
 of hand-writing all 36 matrix entries:
 
+<!-- worked-example-config: examples/stepping-stone-spatial-migration/config.yaml -->
 ```yaml
 N: 150
 ploidy: haploid
@@ -234,6 +236,7 @@ computes every statistic at the converged generation regardless of this
 setting; the flag only changes what is available generation by generation
 before that point.
 
+<!-- worked-example-config: examples/literature-distance-statistics-from-an-explicit-founder-split/config.yaml -->
 ```yaml
 N: 200
 ploidy: haploid
@@ -279,6 +282,7 @@ splits into your demes by sampling without replacement, so the demes
 already differ a little at generation 0 purely from which copies each one
 happened to receive, a genuine founder effect rather than an assumption:
 
+<!-- worked-example-config: examples/equilibrium-split-founding/config.yaml -->
 ```yaml
 N: 200
 ploidy: haploid
@@ -318,6 +322,7 @@ generation's frequencies. migrant_sampling: stochastic instead draws the
 migrant *count* from `Binomial(N, rate)`, adding a genuine, explicit source
 of randomness some studies want counted:
 
+<!-- worked-example-config: examples/stochastic-migrant-counts/config.yaml -->
 ```yaml
 N: 100
 ploidy: haploid
@@ -352,6 +357,7 @@ elsewhere in the run — deliberately exercised here with a very short
 3-base locus (only 4<sup>3</sup> = 64 states) and a high `mu` so recurrence is
 actually likely within the run, not just theoretically possible:
 
+<!-- worked-example-config: examples/finite-length-alleles-the-k-allele-model/config.yaml -->
 ```yaml
 N: 100
 ploidy: haploid
@@ -387,6 +393,7 @@ carry an explicit finite-`d` correction. This example keeps `d` small enough
 that the correction matters; increasing `d` while holding `N`, `m`, and `mu`
 fixed moves G<sub>ST</sub> toward the infinite-island approximation.
 
+<!-- worked-example-config: examples/wright-takahata-finite-deme-correction/config.yaml -->
 ```yaml
 N: 500
 ploidy: haploid
@@ -420,6 +427,7 @@ isolation-by-distance panel to show the short-distance decay pattern from
 Kimura and Weiss. The run is still small enough for an interactive example,
 but large enough that distances 1 through 10 exist on the ring.
 
+<!-- worked-example-config: examples/kimura-weiss-isolation-by-distance/config.yaml -->
 ```yaml
 N: 200
 ploidy: haploid
@@ -453,6 +461,7 @@ probability; each locus derives its own `mu` from μ<sub>b</sub> and its own
 `length` via mu = 1 - (1 - μ<sub>b</sub>)<sup>length</sup> — so two loci of very
 different lengths do not silently mutate at the same rate:
 
+<!-- worked-example-config: examples/per-base-mutation-rate-across-unequal-locus-lengths/config.yaml -->
 ```yaml
 N: 150
 ploidy: haploid
@@ -484,6 +493,7 @@ Watch more than one statistic and decide whether stopping needs every one
 of them stable (convergence_combinator: all, the default) or just one
 (`any`):
 
+<!-- worked-example-config: examples/several-convergence-statistics/config.yaml -->
 ```yaml
 N: 150
 ploidy: haploid
@@ -516,6 +526,7 @@ across-replicate confidence interval in the next example, which asks how
 much independent replicates disagree with each other, not how noisy any one
 of them still is:
 
+<!-- worked-example-config: examples/within-run-sigma-band/config.yaml -->
 ```yaml
 N: 150
 ploidy: haploid
@@ -552,6 +563,7 @@ set n<sub>replicates</sub> well above the plausible requirement and let
 [replicate_tolerance](configuration.md#replicate_tolerance) decide when
 enough have run:
 
+<!-- worked-example-config: examples/an-adaptive-replicate-batch-with-a-confidence-interval/config.yaml -->
 ```yaml
 N: 100
 ploidy: haploid
@@ -601,6 +613,7 @@ grows large enough — see [choosing an engine
 backend](fim-simulator-design.md#46-choosing-an-engine-backend) for the
 full measured comparison this example's own shape is drawn from:
 
+<!-- worked-example-config: examples/a-large-d-batch-under-generational-vector/config.yaml -->
 ```yaml
 N: 500
 ploidy: haploid
@@ -643,6 +656,7 @@ and the plain `generational` engine, which this project's own measured
 benchmarks find winning over `generational-vector` in exactly this kind of
 region (moderate `d`, a longer locus):
 
+<!-- worked-example-config: examples/a-long-locus-batch-under-the-generational-engine/config.yaml -->
 ```yaml
 N: 500
 ploidy: haploid

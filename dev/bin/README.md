@@ -15,10 +15,11 @@
   - [`generate-heatmap-queue`](#generate-heatmap-queue)
   - [`generate-help-html`](#generate-help-html)
   - [`render-heatmap`](#render-heatmap)
+  - [`update-worked-examples`](#update-worked-examples)
   - [`validate-repository`](#validate-repository)
   - [Related documents](#related-documents)
 
-These thirteen commands keep the project trustworthy: they make sure the
+These fourteen commands keep the project trustworthy: they make sure the
 documentation you read matches the code that actually runs, that a
 release's own history is recorded accurately, and that no credential or
 badly formed file ever gets committed. None of them run a simulation --
@@ -76,6 +77,7 @@ run by hand.
 | [`generate-heatmap-queue`](#generate-heatmap-queue) | Writes a `benchmark-queue` file that measures every combination of deme count and locus length at once, to check whether the engines' own speed crossover is really a simple rectangle in that two-setting space |
 | [`generate-help-html`](#generate-help-html) | Rebuilds the desktop app's in-app Help screen content from `doc/usage.md`/`doc/configuration.md` |
 | [`render-heatmap`](#render-heatmap) | Turns `generate-heatmap-queue`'s own results into two readable grids: which engine won at each combination, and by how much |
+| [`update-worked-examples`](#update-worked-examples) | Keeps the usage guide's inline worked-example YAML synchronized with canonical configs under `doc/examples/<example>/config.yaml` |
 | [`validate-repository`](#validate-repository) | Runs every repository-hygiene checker (shell scripts, YAML, Markdown, JavaScript, CSS, HTML, leaked secrets) over the whole checkout |
 
 Every command supports `-h`/`--help` for the same explanation you are
@@ -669,7 +671,9 @@ itself, and (once `benchmark-queue` has actually run it)
 **What it does:** Converts the two operational guides
 `doc/usage.md`/`doc/configuration.md` into the HTML shown by the desktop
 app's (`fim-gui`) own built-in Help screen, and writes that HTML into
-`src/fim/gui/webui/help/`.
+`src/fim/gui/webui/help/`. Worked-example YAML blocks in `usage.md` are
+generated from the canonical files under `doc/examples/<example>/config.yaml`
+by [`update-worked-examples`](#update-worked-examples) first.
 
 **Why it matters:** The Help screen exists so you can look up how a
 command or a configuration field works without leaving the app or
@@ -702,6 +706,28 @@ With no arguments, overwrites the real, committed HTML files under
 `src/fim/gui/webui/help/`. `--output-dir PATH` writes to a scratch
 directory of your choosing instead, without touching the committed
 files -- used by the freshness check described above.
+
+## `update-worked-examples`
+
+**What it does:** Copies each canonical YAML config in
+`doc/examples/<example>/config.yaml` into its marked code block in
+`doc/usage.md`.
+
+**Why it matters:** The configs are editable standalone files, while the
+usage guide and the GUI Help screen still show each complete example in
+context. A single source prevents those displayed copies from drifting.
+The pre-commit hook refreshes `doc/usage.md` when a config or the guide
+changes; tests also verify that every config is included exactly once.
+
+**Usage:**
+
+```console
+dev/bin/update-worked-examples
+dev/bin/update-worked-examples --check
+```
+
+The default command refreshes `doc/usage.md`. `--check` reports stale or
+unreferenced configs without changing files.
 
 ## `render-heatmap`
 

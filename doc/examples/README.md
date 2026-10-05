@@ -1,12 +1,14 @@
 # Worked examples
 
-Three reproducible simulation scenarios drawn from the `fim` validation
-suite. Two are plain YAML demos; the high-migration Dear-Nolan case uses a
-Python-generated near-equilibrium initial state, because the published
-stationary condition is not representable as a simple YAML `p_0` table.
+Runnable demonstrations and reproducible simulation scenarios drawn from
+the `fim` validation suite. Every example has its own directory with a
+`README.md`; runnable YAML examples also provide a `config.yaml`.
 
-Each subdirectory contains the exact example input and the corresponding
-results, plus a `README.md` explaining the biological context.
+The [Configure card examples](#configure-card-examples) are canonical YAML
+configs with explanations mirrored inline in `doc/usage.md`. The
+Dear-Nolan high example instead uses a Python-generated near-equilibrium
+initial state, because its stationary condition is not representable as a
+simple YAML `p_0` table.
 
 ## Running an example
 
@@ -66,12 +68,34 @@ fixed point rather than slowly integrating from an undifferentiated state.
 The reproduced 5-replicate sample lands at mean G_ST ≈ 0.0219 and
 mean D ≈ 0.9079, in line with the published G_ST ≈ 0.02 and D ≈ 0.90.
 
+## Configure card examples
+
+Each directory contains the canonical `config.yaml` and a README with the
+scenario's explanation. The YAML blocks in `doc/usage.md` are generated
+from those files, keeping every example visible in the guide and GUI Help.
+
+- [Unequal island sizes with a migration hub](unequal-island-sizes-with-a-migration-hub/README.md)
+- [Stepping-stone (spatial) migration](stepping-stone-spatial-migration/README.md)
+- [Literature distance statistics from an explicit founder split](literature-distance-statistics-from-an-explicit-founder-split/README.md)
+- [Equilibrium-split founding](equilibrium-split-founding/README.md)
+- [Stochastic migrant counts](stochastic-migrant-counts/README.md)
+- [Finite-length alleles (the K-allele model)](finite-length-alleles-the-k-allele-model/README.md)
+- [Wright-Takahata finite-deme correction](wright-takahata-finite-deme-correction/README.md)
+- [Kimura-Weiss isolation by distance](kimura-weiss-isolation-by-distance/README.md)
+- [Per-base mutation rate across unequal locus lengths](per-base-mutation-rate-across-unequal-locus-lengths/README.md)
+- [Several convergence statistics](several-convergence-statistics/README.md)
+- [Within-run sigma band](within-run-sigma-band/README.md)
+- [An adaptive replicate batch with a confidence interval](an-adaptive-replicate-batch-with-a-confidence-interval/README.md)
+- [A large-d batch under generational-vector](a-large-d-batch-under-generational-vector/README.md)
+- [A long-locus batch under the generational engine](a-long-locus-batch-under-the-generational-engine/README.md)
+
 ## Further reading
 
 - [Configuration reference](../configuration.md) — every parameter with
   defaults and constraints
 - [Usage guide](../usage.md) — all `fim` commands, output schemas, and
-  additional worked examples with inline YAML
+  worked examples with inline YAML generated from each example's
+  [standalone config](README.md#configure-card-examples)
 - Calibration validation tests:
   `test/validation/test_simulator_equilibrium.py` — the equilibrium tests,
   including the Dear-Nolan low- and high-migration scenarios

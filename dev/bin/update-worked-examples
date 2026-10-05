@@ -1,0 +1,127 @@
+#!/usr/bin/env python3
+"""Refresh usage.md YAML examples from their canonical config files.
+
+The standalone YAML files under ``doc/examples/<example>/config.yaml`` are
+the source of truth. Their marked code fences in ``doc/usage.md`` are
+generated copies, kept inline so the guide remains complete on GitHub and
+in the GUI.
+"""
+
+from __future__ import annotations
+
+import argparse
+import re
+import sys
+from collections.abc import Sequence
+from pathlib import Path
+
+ROOT = Path(__file__).resolve().parents[2]
+DOC_DIR = ROOT / "doc"
+EXAMPLES_DIR = DOC_DIR / "examples"
+USAGE_PATH = DOC_DIR / "usage.md"
+BLOCK_PATTERN = re.compile(
+    r"(?P<prefix><!-- worked-example-config: "
+    r"(?P<relative_path>examples/[a-z0-9-]+/config\.yaml) -->\n"
+    r"```yaml\n)"
+    r"(?P<configuration>.*?)"
+    r"(?P<suffix>\n```)",
+    re.DOTALL,
+)
+MARKER_PATTERN = re.compile(r"<!-- worked-example-config:")
+
+
+def synchronized_usage(source: str) -> str:
+    """Return usage Markdown with marked YAML blocks copied from config files.
+
+    Args:
+        source: The current contents of ``doc/usage.md``.
+
+    Returns:
+        The contents with every marked worked-example code block refreshed.
+
+    Raises:
+        ValueError: If a marker is malformed, duplicated, missing its file,
+            or is missing its example README.
+    """
+    references: set[Path] = set()
+    block_count = 0
+
+    def replace_block(match: re.Match[str]) -> str:
+        nonlocal block_count
+        block_count += 1
+        config_path = (DOC_DIR / match.group("relative_path")).resolve()
+        if (
+            config_path.parent.parent != EXAMPLES_DIR.resolve()
+            or config_path.name != "config.yaml"
+        ):
+            raise ValueError(f"invalid worked-example config path: {config_path}")
+        if config_path in references:
+            raise ValueError(f"duplicate worked-example config: {config_path}")
+        references.add(config_path)
+        if not config_path.is_file():
+            raise ValueError(f"worked-example config not found: {config_path}")
+        readme_path = config_path.parent / "README.md"
+        if not readme_path.is_file():
+            raise ValueError(f"worked-example README not found: {readme_path}")
+        configuration = config_path.read_text(encoding="utf-8")
+        if not configuration.endswith("\n"):
+            raise ValueError(f"config must end with a newline: {config_path}")
+        return (
+            match.group("prefix")
+            + configuration.removesuffix("\n")
+            + match.group("suffix")
+        )
+
+    synchronized = BLOCK_PATTERN.sub(replace_block, source)
+    marker_count = len(MARKER_PATTERN.findall(source))
+    if marker_count != block_count:
+        raise ValueError(
+            f"found {marker_count} worked-example marker(s) but "
+            f"{block_count} YAML code block(s)"
+        )
+
+    return synchronized
+
+
+def main(argv: Sequence[str] | None = None) -> int:
+    """Refresh marked usage examples or check whether they are current.
+
+    Args:
+        argv: Command-line arguments, excluding the program name.
+
+    Returns:
+        0 when examples are current or successfully refreshed, otherwise 1.
+    """
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument(
+        "--check",
+        action="store_true",
+        help="report stale generated blocks without changing usage.md",
+    )
+    args = parser.parse_args(argv)
+
+    try:
+        source = USAGE_PATH.read_text(encoding="utf-8")
+        synchronized = synchronized_usage(source)
+    except (OSError, ValueError) as error:
+        print(f"update-worked-examples: {error}", file=sys.stderr)
+        return 1
+
+    if synchronized == source:
+        print("update-worked-examples: worked examples are current")
+        return 0
+    if args.check:
+        print(
+            "update-worked-examples: doc/usage.md has stale worked-example "
+            "YAML; run dev/bin/update-worked-examples",
+            file=sys.stderr,
+        )
+        return 1
+
+    USAGE_PATH.write_text(synchronized, encoding="utf-8")
+    print("update-worked-examples: refreshed doc/usage.md")
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

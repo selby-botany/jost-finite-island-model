@@ -18,6 +18,12 @@ DOCS = sorted(
     if path.name in {"usage.md", "configuration.md", "convergence.md", "README.md"}
 )
 YAML_BLOCK = re.compile(r"```(?:yaml|yml)\n(.*?)\n```", re.S)
+WORKED_EXAMPLE_BLOCK = re.compile(
+    r"<!-- worked-example-config: (?P<relative_path>"
+    r"examples/[a-z0-9-]+/config\.yaml) -->\n"
+    r"```yaml\n(?P<configuration>.*?)\n```",
+    re.S,
+)
 PLOIDY_WORDS = ("haploid", "diploid", "triploid", "tetraploid")
 
 
@@ -38,6 +44,23 @@ def test_every_configuration_snippet_that_sets_n_also_sets_a_ploidy_word(
             f"{path.name}: snippet sets N but not ploidy:\n{block}"
         )
         assert match.group(1) in PLOIDY_WORDS, block
+
+
+def test_worked_example_configs_are_the_source_of_usage_yaml() -> None:
+    """Every inline worked-example config matches its canonical YAML file."""
+    usage = (ROOT / "doc" / "usage.md").read_text(encoding="utf-8")
+    references: set[Path] = set()
+
+    for match in WORKED_EXAMPLE_BLOCK.finditer(usage):
+        config_path = ROOT / "doc" / match.group("relative_path")
+        assert config_path not in references
+        references.add(config_path)
+        assert (config_path.parent / "README.md").is_file()
+        assert match.group("configuration") == config_path.read_text(
+            encoding="utf-8"
+        ).removesuffix("\n")
+
+    assert len(references) == 14
 
 
 # Worked examples that deliberately pin a run length: a one-generation

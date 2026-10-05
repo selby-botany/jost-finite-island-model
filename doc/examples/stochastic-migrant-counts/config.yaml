@@ -1,0 +1,12 @@
+N: 100
+ploidy: haploid
+d: 4
+m: 0.05
+mu: 0.001
+seed: 20260819
+migrant_sampling: stochastic
+loci:
+  - locus_id: 1
+    length: 100
+convergence_statistic: D
+n_replicates: 1   # a single scalar run; the default (200) would batch

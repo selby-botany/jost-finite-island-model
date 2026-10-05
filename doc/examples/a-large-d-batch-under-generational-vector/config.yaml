@@ -1,0 +1,17 @@
+N: 500
+ploidy: haploid
+d: 70
+m: 0.05
+mu: 0.001
+seed: 20260916
+mutation_model: finite_alleles
+migrant_sampling: continuous
+loci:
+  - locus_id: 1
+    length: 5
+engine_backend: generational-vector
+convergence_statistic: D
+convergence_window: 10
+convergence_tolerance: 0.02
+max_generations: 100
+n_replicates: 16

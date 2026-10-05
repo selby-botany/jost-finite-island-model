@@ -1,0 +1,13 @@
+N: 100
+ploidy: haploid
+d: 3
+m: 0.02
+mu: 0.02
+seed: 20260819
+mutation_model: finite_alleles
+initial_allele_count: 2
+loci:
+  - locus_id: 1
+    length: 3
+convergence_statistic: D
+n_replicates: 1   # a single scalar run; the default (200) would batch
