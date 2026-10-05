@@ -2544,7 +2544,8 @@ function renderTrajectory(
             const item = document.createElement("span");
             item.className = "legend-item";
             const swatch = document.createElement("span");
-            swatch.className = `swatch ${swatchClass}`;
+            swatch.className = "swatch";
+            swatch.classList.add(swatchClass);
             item.appendChild(swatch);
             item.appendChild(document.createTextNode(text));
             runTrajectoryLegend.appendChild(item);
