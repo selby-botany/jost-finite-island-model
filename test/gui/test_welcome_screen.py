@@ -89,17 +89,18 @@ def test_welcome_panel_does_not_show_once_already_dismissed(
     assert settled is False
 
 
-def test_try_a_worked_example_opens_presets_and_dismisses_welcome(
+def test_examples_button_opens_the_examples_dialog_and_dismisses_welcome(
     _isolate_gui_preferences: Path, drive: Callable[..., Any]
 ) -> None:
-    """ "Try a worked example…" hands off to the presets gallery, closing itself.
+    """ "Examples…" hands off to the Examples dialog, closing itself.
 
     `welcomeDialog.close()` fires synchronously, from inside the button's
-    own click handler, before `fim.menu.loadExample`'s own `await
-    refreshPresetsList()` resolves and opens `modal-presets` -- `is_ready`
-    below waits for *both* dialogs to reach their settled state, not just
-    the welcome panel's own closing half of this handoff, so this cannot
-    pass on a lucky read caught between the two.
+    own click handler, before `fim.showExamplesDialog`'s own `await
+    list_examples()` resolves and opens `modal-examples` -- `is_ready`
+    below waits for *both* dialogs to reach their settled state (and for
+    the dialog's own ready flag), not just the welcome panel's own
+    closing half of this handoff, so this cannot pass on a lucky read
+    caught between the two.
     """
     own_window = _build_window_with_welcome_not_dismissed(_isolate_gui_preferences)
 
@@ -107,19 +108,26 @@ def test_try_a_worked_example_opens_presets_and_dismisses_welcome(
         own_window,
         ready=_INPUT_SCREEN_READY,
         trigger=(
-            "document.getElementById('welcome-try-example-button')"
+            "document.getElementById('welcome-examples-button')"
             ".dispatchEvent(new Event('click'));"
         ),
         read=(
             "({"
             "welcomeOpen: document.getElementById('modal-welcome').open, "
+            "examplesOpen: document.getElementById('modal-examples').open, "
+            "examplesReady: window.__fimExamplesDialogReady === true, "
             "presetsOpen: document.getElementById('modal-presets').open"
             "})"
         ),
-        is_ready=lambda value: value["welcomeOpen"] is False and value["presetsOpen"],
+        is_ready=lambda value: value["welcomeOpen"] is False and value["examplesReady"],
     )
 
-    assert settled == {"welcomeOpen": False, "presetsOpen": True}
+    assert settled == {
+        "welcomeOpen": False,
+        "examplesOpen": True,
+        "examplesReady": True,
+        "presetsOpen": False,
+    }
 
 
 def test_start_from_scratch_just_closes_the_panel(
@@ -148,7 +156,7 @@ def test_start_from_scratch_just_closes_the_panel(
 
 
 @pytest.mark.parametrize(
-    "button_id", ["welcome-try-example-button", "welcome-start-scratch-button"]
+    "button_id", ["welcome-examples-button", "welcome-start-scratch-button"]
 )
 def test_dismissing_the_welcome_panel_persists_through_the_bridge(
     button_id: str, _isolate_gui_preferences: Path

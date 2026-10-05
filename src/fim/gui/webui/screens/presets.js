@@ -1,14 +1,20 @@
 "use strict";
 
 /* Presets (botanist GUI design doc `20260907-claude-sonnet-5-botanist-
- * gui-redesign.md` §4.5/§12): every `doc/usage.md` worked example, plus
- * any user-saved configuration, listed live from `Api.list_presets` and
+ * gui-redesign.md` §4.5/§12): every bundled example with a configuration,
+ * plus any user-saved configuration, listed live from `Api.list_presets` and
  * applied to the real Configure form the same way a loaded YAML file
  * already is (`config-modals.js`'s own `applyFormValues`) -- picking
  * one is a shortcut for hand-typing that same configuration's own
  * values, never a second, independent configuration mechanism.
  *
- * Reachable from any screen via the File menu (`fim.menu.loadExample`),
+ * Reachable from any screen via the File menu (`fim.menu.loadExample`).
+ * The Examples dialog (`screens/examples.js`) is the class-organized
+ * view of the same bundled examples, opened from Configure and the
+ * Welcome panel; this picker stays for user-saved presets until it is
+ * folded into that dialog (design doc `20261005-claude-opus-5-5-read-
+ * only-examples-and-classes-design.md` §5, `selby/restricted`). This
+ * menu entry point matches
  * matching `fim.menu.openRun`/`fim.menu.explore`'s own "always
  * reachable" precedent. `applyFormValues`/`revalidate`/`collectFormValues`
  * (called below) are plain top-level functions declared in `config-
@@ -41,9 +47,10 @@ const configureDuplicatePresetButton = document.getElementById(
 );
 
 // Design §4.5's own "Duplicate current configuration": the title of
-// whichever preset (built-in or user-saved) was most recently loaded
-// into the live form via the picker, or `null` before the first one
-// ever is -- `applyPreset`, below, is the one place this is set;
+// whichever preset or example was most recently loaded into the live
+// form via the picker or the Examples dialog, or `null` before the
+// first one ever is -- `rememberLoadedPreset`, below, is the one place
+// this is set;
 // `configureDuplicatePresetButton`'s own click handler and `window.fim.
 // clearLastLoadedPreset` (called from `fim.menu.newConfiguration`) are
 // the only other places that read or clear it.
@@ -80,11 +87,8 @@ async function refreshPresetsList() {
         const openButton = document.createElement("button");
         openButton.type = "button";
         openButton.tabIndex = 0;
-        // `home-example-select`/`configure-example-select`'s own
-        // identical "(view YAML only)" label (`refreshExampleOptions`,
-        // above) for the same reason -- a preset this form has no way
-        // to apply, labeled before it is picked rather than only
-        // discovered by picking it.
+        // A preset this form has no way to apply is labeled before it
+        // is picked rather than only discovered by picking it.
         openButton.textContent = preset.loadable
             ? preset.title
             : `${preset.title} (view YAML only)`;
@@ -134,14 +138,13 @@ async function refreshPresetsList() {
  * Show a small, dismissible, non-modal note that a worked example could
  * not be applied — `window.alert`'s blocking OS chrome is jarring
  * mid-exploration for the one built-in example this affects today, an
- * already-labeled (`refreshExampleOptions`, above), expected limitation
+ * already-labeled (`refreshPresetsList`, above), expected limitation
  * rather than a real error (design doc `20260913-claude-sonnet-5-gui-
  * worked-example-loadability-design.md`, `selby/restricted`, Option C).
  * Shown on whichever screen is actually visible when the failure
- * happens — `home-example-select`/`configure-example-select` are each
- * reachable from exactly one screen, but the full `modal-presets`
- * picker this function's other caller closes first is reachable from
- * any of them (`fim.menu.loadExample`'s own docstring) — rather than a
+ * happens — the `modal-presets` picker `applyPreset` closes first is
+ * reachable from any screen (`fim.menu.loadExample`'s own docstring) —
+ * rather than a
  * new, fourth-or-fifth banner element of its own. Every screen
  * `applyPreset` can actually be reached from already has its own
  * dedicated `showXBanner` function (`run-view-controls.js`,
@@ -179,10 +182,7 @@ function showExampleLoadNotice(title, message) {
  * same YAML file.
  * @param {string} presetId
  * @param {string} presetTitle
- * @returns {Promise<boolean>} whether the preset actually applied --
- *     a caller that also wants to navigate somewhere on success (Home's
- *     own `home-example-select`, `screens/open-run.js`) needs this to
- *     avoid jumping to Configure after a load that only showed an alert.
+ * @returns {Promise<boolean>} whether the preset actually applied.
  */
 async function applyPreset(presetId, presetTitle) {
     const result = await window.pywebview.api.load_preset(presetId);
@@ -197,74 +197,27 @@ async function applyPreset(presetId, presetTitle) {
     if (window.fim.getRunViewState() === "initial") {
         window.fim.renderInitialPreview();
     }
-    // Design §4.5's own "Duplicate current configuration": remembered
-    // only from here (a *successful* load), not attempted on the
-    // rejected-values early return above -- there is nothing to fork
-    // from a preset that was never actually applied. Never cleared by
-    // a later form edit: forking "the loaded preset, plus whatever I
-    // have tweaked since" is exactly the point (this function's own
-    // docstring), not only forking it verbatim.
-    lastLoadedPresetTitle = presetTitle;
-    configureDuplicatePresetButton.disabled = false;
+    rememberLoadedPreset(presetTitle);
     return true;
 }
 
-// Exported so a second entry point can apply a preset without going
-// through `modal-presets` itself -- Home's own worked-example shortcut
-// (`screens/open-run.js`'s `home-example-select`) and Configure's own
-// identical shortcut (`screens/nav-rail.js`'s `configure-example-select`)
-// are both callers, mirroring how `loadExample`, above, is already
-// exported the same way. `presetsDialog.close()` inside `applyPreset` is
-// a safe no-op when that dialog was never opened (a closed `<dialog>`'s
-// own `close()` does nothing), so this thin wrapper needs no guard of its
-// own.
-window.fim.applyPreset = applyPreset;
-
 /**
- * Populate `selectElement` with this visit's own built-in worked
- * examples -- `Api.list_presets`'s own combined list, filtered to
- * `builtin` entries only (a user-saved preset is deliberately left out
- * of this shortcut and stays reachable only from the full picker this
- * file's own `modal-presets` opens, matching "one of the examples"
- * rather than every saved configuration). Shared by Home's own
- * `home-example-select` (`screens/open-run.js`) and Configure's own
- * `configure-example-select` (`screens/nav-rail.js`) — both offer the
- * identical shortcut, so this is the one place that builds the option
- * list rather than two independently maintained copies.
- * @param {HTMLSelectElement} selectElement
+ * Remember the title of a configuration just loaded from a preset or an
+ * example, enabling "Duplicate current configuration" (design §4.5).
+ * Called only after a *successful* load -- there is nothing to fork from
+ * a preset that was never actually applied. Never cleared by a later
+ * form edit: forking "the loaded preset, plus whatever I have tweaked
+ * since" is exactly the point, not only forking it verbatim. Shared with
+ * the Examples dialog (`screens/examples.js`).
+ * @param {string} title
  */
-async function refreshExampleOptions(selectElement) {
-    const placeholder = selectElement.options[0];
-    selectElement.replaceChildren(placeholder);
-    selectElement.value = "";
-    const result = await window.pywebview.api.list_presets();
-    const examples = result.ok
-        ? result.presets.filter((preset) => preset.builtin)
-        : [];
-    for (const example of examples) {
-        const option = document.createElement("option");
-        option.value = example.id;
-        // The option's own bare title, separate from its visible
-        // `textContent` below -- a caller that needs the preset's own
-        // real title (`showExampleLoadNotice`'s own message, via each
-        // `<select>`'s own `change` handler) reads this rather than the
-        // "(view YAML only)" suffix meant for the visible label alone.
-        option.dataset.presetTitle = example.title;
-        // `example.loadable` is `false` for the rare built-in example
-        // this form has no way to apply at all (design doc `20260913-
-        // claude-sonnet-5-gui-worked-example-loadability-design.md`,
-        // `selby/restricted` -- today, exactly the one genuinely
-        // per-locus-`mu` worked example) -- labeled here, before the
-        // user picks it, rather than only discovered by picking it and
-        // hitting `applyPreset`'s own failure notice.
-        option.textContent = example.loadable
-            ? example.title
-            : `${example.title} (view YAML only)`;
-        selectElement.appendChild(option);
-    }
+function rememberLoadedPreset(title) {
+    lastLoadedPresetTitle = title;
+    configureDuplicatePresetButton.disabled = false;
 }
 
-window.fim.refreshExampleOptions = refreshExampleOptions;
+window.fim.rememberLoadedPreset = rememberLoadedPreset;
+
 
 // Set once `showPresetYaml`'s own bridge call has settled and the
 // dialog is genuinely showing the requested preset's own text --
@@ -292,6 +245,10 @@ async function showPresetYaml(presetId) {
     presetYamlDialog.showModal();
     window.__fimPresetYamlReady = true;
 }
+
+// The Examples dialog's "View YAML" (`screens/examples.js`) opens this
+// same dialog on top of itself.
+window.fim.showPresetYaml = showPresetYaml;
 
 // Set once a "Copy to clipboard" click has actually finished writing --
 // same flag idiom as `__fimPresetYamlReady` above, for the identical

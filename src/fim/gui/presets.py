@@ -1,50 +1,122 @@
-"""Parse the "Worked examples" section of the bundled usage guide into
-selectable Configure presets (botanist GUI design doc
-`20260907-claude-sonnet-5-botanist-gui-redesign.md` §4.5, `selby/restricted`).
+"""Read the bundled examples catalog for the Examples dialog and presets.
 
-Each Configure-card example has its own directory under `doc/examples/`
-with a canonical `config.yaml` and an explanatory `README.md`.
-`doc/usage.md` displays generated copies of those YAML files alongside
-their explanations and commands, and
-`dev/bin/generate-help-html` renders that guide into
-`webui/help/usage.html` at commit time (the Help screen's own content
-source, `screens/help.js`). `packaging/fim.spec` bundles the whole
-`webui/` tree into every packaged executable — so that rendered HTML,
-not `doc/usage.md` itself, is the one artifact guaranteed to exist both
-in a development checkout and inside a frozen `.exe`/`.app`
-(`doc/usage.md` is not bundled on its own; only `webui/` is).
+Every `doc/examples/<id>/` directory is one example.
+`dev/bin/build-examples-catalog` writes them, with the class tree from
+`doc/examples/classes.yaml`, into `webui/examples/catalog.json` at commit
+time (design doc
+`20261005-claude-opus-5-5-read-only-examples-and-classes-design.md`
+§4.1, `selby/restricted`). `packaging/fim.spec` bundles the whole
+`webui/` tree into every packaged executable, so the catalog exists both
+in a development checkout and inside a frozen application, while
+`doc/examples/` itself is not bundled.
 
-This module reads that already-bundled HTML back instead of embedding
-another set of configurations. `dev/bin/update-worked-examples` keeps
-the guide's visible YAML blocks synchronized with the canonical files;
-the commit hook runs it whenever either side changes. The generated
-HTML is still the one artifact guaranteed to exist both in a development
-checkout and inside a frozen application.
+An example's configuration may carry labels (`name`, `description`,
+`class`) and internal attributes (`_read_only` and any other key that
+starts with `_`). `split_configuration` separates them from the model
+keys, so a loaded example reaches the Configure form as an ordinary,
+editable configuration (design §1, "Consequence").
+
+`list_presets` and `get_preset` are the older, flat view of the same
+catalog, kept as thin aliases until their callers (the File menu's
+"Load example…" picker) move to the Examples dialog (design §5).
 """
 
 from __future__ import annotations
 
+import json
+import re
+from collections.abc import Mapping
 from dataclasses import dataclass
-from html.parser import HTMLParser
 from pathlib import Path
+from typing import Any
 
-_WORKED_EXAMPLES_SECTION_ID = "worked-examples"
+# The bundled catalog, relative to the `webui/` directory.
+CATALOG_RELATIVE_PATH = Path("examples") / "catalog.json"
+
+# Configuration keys that label a run rather than configure the model
+# (design §1). Never part of the run ID; never sent to the form.
+LABEL_KEYS = ("name", "description", "class")
+
+# A top-level configuration key starting with this is an internal
+# attribute (`_read_only`), which the form always drops.
+INTERNAL_KEY_PREFIX = "_"
+
+# A top-level `_key:` line in YAML text, with any indented lines that
+# belong to it. Only the plain block style the examples use is handled.
+_INTERNAL_YAML_KEY = re.compile(r"^_[^\s:]*:.*\n(?:[ \t]+.*\n|[ \t]*\n)*", re.MULTILINE)
+
+
+@dataclass(frozen=True, slots=True)
+class ExampleClass:
+    """One class in the examples tree (design §2).
+
+    Args:
+        class_id: Lowercase kebab-case ID, unique across the tree.
+        title: Display title.
+        description: One line about the class; empty when none is given.
+        children: Child classes; the tree is at most two levels deep.
+    """
+
+    class_id: str
+    title: str
+    description: str
+    children: tuple[ExampleClass, ...] = ()
+
+    def to_dict(self) -> dict[str, Any]:
+        """Return the class as the JSON shape the bridge sends the page."""
+        return {
+            "id": self.class_id,
+            "title": self.title,
+            "description": self.description,
+            "children": [child.to_dict() for child in self.children],
+        }
+
+
+@dataclass(frozen=True, slots=True)
+class Example:
+    """One bundled example.
+
+    Args:
+        example_id: The example directory's name.
+        name: Display name: the `name` label, or the README's heading.
+        description: The `description` label, or the README's first
+            paragraph.
+        class_id: The `class` label, or `"unclassified"`.
+        readme: The full README Markdown.
+        readme_excerpt: A short plain-text excerpt of the README.
+        yaml_text: The configuration's YAML text, unmodified, or `None`
+            for an example reproduced by a script instead.
+        outputs: The example's bundled output files, relative to
+            `webui/examples/<example_id>/`.
+    """
+
+    example_id: str
+    name: str
+    description: str
+    class_id: str
+    readme: str
+    readme_excerpt: str
+    yaml_text: str | None
+    outputs: tuple[str, ...] = ()
+
+
+@dataclass(frozen=True, slots=True)
+class Catalog:
+    """The bundled class tree and examples, in display order."""
+
+    classes: tuple[ExampleClass, ...] = ()
+    examples: tuple[Example, ...] = ()
 
 
 @dataclass(frozen=True, slots=True)
 class Preset:
-    """One worked example: its stable id, display title, and raw YAML text.
+    """One example with a configuration, in the older flat preset view.
 
     Args:
-        preset_id: The heading's own HTML `id` attribute (`dev/bin/
-            generate-help-html`'s own GitHub-style slug of the title) —
-            stable across a regeneration as long as the title itself
-            does not change, and already unique (one `<h3>` per
-            example, `doc/usage.md`'s own structure).
-        title: The example's own heading text, plain (no embedded
-            `<code>` markup — none of the fourteen titles use any).
-        yaml_text: The example's own complete canonical YAML
-            configuration — ready for `yaml.safe_load`.
+        preset_id: The example's ID.
+        title: The example's display name.
+        yaml_text: The example's configuration, ready for
+            `yaml.safe_load`.
     """
 
     preset_id: str
@@ -52,104 +124,46 @@ class Preset:
     yaml_text: str
 
 
-class _WorkedExamplesParser(HTMLParser):
-    """Extract every `(id, title, yaml)` triple from one `<h2>` section.
-
-    Built once per `list_presets`/`get_preset` call rather than kept
-    reusable: `HTMLParser` instances are cheap, and a fresh one avoids
-    any doubt about stale state across repeated `feed()` calls, which no
-    call site here ever needs to make more than once anyway.
-    """
-
-    def __init__(self, section_id: str) -> None:
-        super().__init__(convert_charrefs=True)
-        self._section_id = section_id
-        self._in_section = False
-        self._in_heading = False
-        self._in_yaml_block = False
-        self._current_id: str | None = None
-        self._current_title_parts: list[str] = []
-        self._current_yaml_parts: list[str] = []
-        self.presets: list[Preset] = []
-
-    def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
-        attr_map = dict(attrs)
-        if tag == "h2":
-            self._in_section = attr_map.get("id") == self._section_id
-            return
-        if not self._in_section:
-            return
-        if tag == "h3":
-            self._in_heading = True
-            self._current_id = attr_map.get("id")
-            self._current_title_parts = []
-            return
-        if tag == "code" and (attr_map.get("class") or "") == "language-yaml":
-            self._in_yaml_block = True
-            self._current_yaml_parts = []
-
-    def handle_endtag(self, tag: str) -> None:
-        # No `h2`-close handling here on purpose: the opening `<h2
-        # id="worked-examples">` tag's own closing `</h2>` (the same
-        # element, one line later) would otherwise end the section
-        # before a single `<h3>` inside it is ever reached. `handle_
-        # starttag`'s own `h2` branch already reassigns `_in_section` on
-        # every `<h2>` *start* tag it sees — `True` for this section's
-        # own opening tag, `False` the moment the next section's `<h2
-        # id="re-analyze-a-trajectory">` starts — which is both
-        # necessary and sufficient, with no lookahead needed.
-        if tag == "h3" and self._in_heading:
-            self._in_heading = False
-        elif tag == "code" and self._in_yaml_block:
-            self._in_yaml_block = False
-            if self._current_id is not None:
-                self.presets.append(
-                    Preset(
-                        preset_id=self._current_id,
-                        title="".join(self._current_title_parts).strip(),
-                        yaml_text="".join(self._current_yaml_parts),
-                    )
-                )
-
-    def handle_data(self, data: str) -> None:
-        if self._in_heading:
-            self._current_title_parts.append(data)
-        elif self._in_yaml_block:
-            self._current_yaml_parts.append(data)
+def _example_class(raw: Mapping[str, Any]) -> ExampleClass:
+    """Build one `ExampleClass` from its catalog mapping."""
+    return ExampleClass(
+        class_id=str(raw["id"]),
+        title=str(raw["title"]),
+        description=str(raw.get("description") or ""),
+        children=tuple(_example_class(child) for child in raw.get("children", [])),
+    )
 
 
-def _parse_worked_examples(html_text: str) -> list[Preset]:
-    """Return every worked-example preset found in `html_text`, in document order."""
-    parser = _WorkedExamplesParser(_WORKED_EXAMPLES_SECTION_ID)
-    parser.feed(html_text)
-    return parser.presets
+def _example(raw: Mapping[str, Any]) -> Example:
+    """Build one `Example` from its catalog mapping."""
+    yaml_text = raw.get("config_yaml")
+    return Example(
+        example_id=str(raw["id"]),
+        name=str(raw["name"]),
+        description=str(raw.get("description") or ""),
+        class_id=str(raw["class"]),
+        readme=str(raw.get("readme") or ""),
+        readme_excerpt=str(raw.get("readme_excerpt") or ""),
+        yaml_text=None if yaml_text is None else str(yaml_text),
+        outputs=tuple(str(path) for path in raw.get("outputs", [])),
+    )
 
 
-def list_presets(webui_directory: Path) -> list[Preset]:
-    """Return every worked-example preset bundled at `webui_directory`.
+def get_example(webui_directory: Path, example_id: str) -> Example | None:
+    """Return one example by ID, or `None` if the catalog has no such example.
 
     Args:
-        webui_directory: `fim.gui.app._webui_directory()`'s own return
-            value — the directory holding `index.html` and `help/
-            usage.html`, frozen or not.
-
-    Returns:
-        One `Preset` per `doc/usage.md` "Worked examples" `<h3>`
-        section, in the same order the guide presents them. Empty if
-        `help/usage.html` is missing or has no such section — callers
-        treat that as "no presets available" (a stale or hand-modified
-        install), not a reason to fail the Configure screen outright.
+        webui_directory: Same as `load_catalog`.
+        example_id: An `Example.example_id`.
     """
-    usage_html_path = webui_directory / "help" / "usage.html"
-    try:
-        html_text = usage_html_path.read_text(encoding="utf-8")
-    except OSError:
-        return []
-    return _parse_worked_examples(html_text)
+    for example in load_catalog(webui_directory).examples:
+        if example.example_id == example_id:
+            return example
+    return None
 
 
 def get_preset(webui_directory: Path, preset_id: str) -> Preset | None:
-    """Return one preset by its own id, or `None` if no such preset exists.
+    """Return one preset by ID, or `None` if no such preset exists.
 
     Args:
         webui_directory: Same as `list_presets`.
@@ -159,3 +173,98 @@ def get_preset(webui_directory: Path, preset_id: str) -> Preset | None:
         if preset.preset_id == preset_id:
             return preset
     return None
+
+
+def list_presets(webui_directory: Path) -> list[Preset]:
+    """Return every example that has a configuration, as a flat preset list.
+
+    Args:
+        webui_directory: `fim.gui.app._webui_directory()`'s return value.
+
+    Returns:
+        One `Preset` per example with a `config.yaml`, in catalog order.
+        An example reproduced by a script has no configuration to load
+        and is left out. Empty when the catalog is missing or unreadable.
+    """
+    return [
+        Preset(
+            preset_id=example.example_id,
+            title=example.name,
+            yaml_text=example.yaml_text,
+        )
+        for example in load_catalog(webui_directory).examples
+        if example.yaml_text is not None
+    ]
+
+
+def load_catalog(webui_directory: Path) -> Catalog:
+    """Return the bundled examples catalog.
+
+    Args:
+        webui_directory: `fim.gui.app._webui_directory()`'s return value,
+            the directory holding `index.html` and `examples/`, frozen
+            or not.
+
+    Returns:
+        The catalog, or an empty `Catalog` if `examples/catalog.json` is
+        missing or malformed. Callers treat that as "no examples
+        available" (a stale or hand-modified install), not a reason to
+        fail the Configure screen.
+    """
+    try:
+        data = json.loads(
+            (webui_directory / CATALOG_RELATIVE_PATH).read_text(encoding="utf-8")
+        )
+        return Catalog(
+            classes=tuple(_example_class(raw) for raw in data["classes"]),
+            examples=tuple(_example(raw) for raw in data["examples"]),
+        )
+    except (OSError, ValueError, KeyError, TypeError):
+        return Catalog()
+
+
+def split_configuration(
+    configuration: Mapping[str, Any],
+) -> tuple[dict[str, Any], dict[str, Any]]:
+    """Separate a configuration's model keys from its labels.
+
+    Internal attributes (any top-level key starting with `_`) are
+    dropped, so a run started from a loaded example is an ordinary,
+    editable run (design §1).
+
+    Args:
+        configuration: A parsed `config.yaml` mapping.
+
+    Returns:
+        `(model, labels)`: the configuration without labels or internal
+        attributes, and the labels that were present (a subset of
+        `LABEL_KEYS`).
+    """
+    model: dict[str, Any] = {}
+    labels: dict[str, Any] = {}
+    for key, value in configuration.items():
+        if key in LABEL_KEYS:
+            labels[key] = value
+        elif not str(key).startswith(INTERNAL_KEY_PREFIX):
+            model[key] = value
+    return model, labels
+
+
+def strip_internal_yaml_keys(yaml_text: str) -> str:
+    """Return `yaml_text` without its top-level `_` keys.
+
+    The "View YAML" text is meant to be copied into a new configuration
+    file; an internal attribute such as `_read_only: true` would make
+    the copy's run read-only, with the shipped example's run ID. Labels
+    stay, since `fim run` records them as the new run's name.
+
+    Args:
+        yaml_text: A configuration in plain block-style YAML.
+
+    Returns:
+        The same text with each top-level `_key:` entry, and any
+        indented lines belonging to it, removed.
+    """
+    text = yaml_text if yaml_text.endswith("\n") else yaml_text + "\n"
+    stripped = _INTERNAL_YAML_KEY.sub("", text)
+    return stripped if yaml_text.endswith("\n") else stripped.removesuffix("\n")

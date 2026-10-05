@@ -768,15 +768,14 @@ fieldset.composite > label {
     background: var(--fim-surface-soft);
 }
 
-/* `configure-example-select` (Configure's "Load example…" shortcut): a
+/* `run-study-select` (Configure's study choice): a
  * plain `<select>` sharing an `.actions` row with a real `<button>` --
  * matched to that button's own sizing/border/radius so the two read as
  * one action group, not a mismatched form control dropped beside styled
  * buttons. `min-width: 0` overrides a flex item's own default `min-
  * width: auto` -- without it, a `<select>` refuses to shrink below its
- * own widest `<option>`'s rendered width (several real worked-example
- * titles are long, e.g. "Per-base mutation rate across unequal locus
- * lengths"), overflowing its own container's bounding box at a narrow
+ * own widest `<option>`'s rendered width (a study name can be long),
+ * overflowing its own container's bounding box at a narrow
  * window width instead of wrapping or shrinking the way `.actions`'s
  * own `flex-wrap` otherwise allows every other child to. `max-width:
  * 100%` is the actual shrink target once `min-width` no longer forbids
@@ -2274,6 +2273,124 @@ fieldset.composite > label {
 
 .presets-list button:hover {
     background: var(--fim-border);
+}
+
+/* The Examples dialog (`modal-examples`, `screens/examples.js`): the
+ * class tree in a narrow left column, the selected class's examples and
+ * the selected example's README excerpt on the right. Sized to fit the
+ * default 900x700 window with room to spare: the list and the excerpt
+ * scroll inside the dialog rather than growing it past the viewport. */
+#modal-examples {
+    max-width: 52rem;
+    max-height: min(92vh, 660px);
+    overflow-y: auto;
+}
+
+.examples-layout {
+    display: grid;
+    grid-template-columns: minmax(10rem, 13rem) minmax(0, 1fr);
+    gap: 1rem;
+    margin: 0.75rem 0 1rem;
+}
+
+.examples-class-tree,
+.examples-list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    overflow-y: auto;
+}
+
+.examples-class-tree {
+    max-height: 26rem;
+    border-right: 1px solid var(--fim-border);
+    padding-right: 0.5rem;
+}
+
+.examples-class,
+.examples-list li {
+    border-radius: 4px;
+    border-left: 3px solid transparent;
+    padding: 0.4rem 0.6rem;
+    cursor: pointer;
+}
+
+.examples-class-child {
+    padding-left: 1.5rem;
+    font-size: 0.9rem;
+}
+
+.examples-class:hover,
+.examples-list li:hover {
+    background: var(--fim-surface-soft);
+}
+
+.examples-class[aria-selected="true"],
+.examples-list li[aria-selected="true"] {
+    background: var(--fim-accent-soft);
+    border-left-color: var(--fim-accent);
+}
+
+.examples-class:focus-visible,
+.examples-list li:focus-visible {
+    outline: 2px solid var(--fim-action);
+    outline-offset: -2px;
+}
+
+.examples-main {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+    min-width: 0;
+}
+
+.examples-list {
+    max-height: 13rem;
+    border: 1px solid var(--fim-border);
+    border-radius: 4px;
+}
+
+.examples-list li + li {
+    border-top: 1px solid var(--fim-border);
+}
+
+.examples-item-name {
+    display: block;
+    font-weight: 700;
+}
+
+.examples-item-description {
+    display: block;
+    font-size: 0.8rem;
+    color: var(--fim-muted);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.examples-detail h3 {
+    margin: 0 0 0.35rem;
+    font-size: 0.95rem;
+    color: var(--fim-accent);
+}
+
+/* The excerpt keeps the generator's blank lines between paragraphs. */
+.examples-detail-excerpt {
+    margin: 0;
+    max-height: 9rem;
+    overflow-y: auto;
+    font-size: 0.85rem;
+    white-space: pre-line;
+}
+
+.examples-load-error {
+    margin: 0.5rem 0 0;
+    font-size: 0.85rem;
+    color: var(--fim-error-mark);
+}
+
+#modal-examples .actions {
+    justify-content: flex-end;
 }
 
 /* The examples library's plain-text half (`modal-preset-yaml`, design

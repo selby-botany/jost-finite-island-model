@@ -132,6 +132,8 @@ Return to the [source-tree orientation](../README.md) or the [developer guide](.
     * [get\_equilibrium\_curve](#fim.gui.app.Api.get_equilibrium_curve)
     * [get\_equilibrium\_sweep](#fim.gui.app.Api.get_equilibrium_sweep)
     * [load\_yaml](#fim.gui.app.Api.load_yaml)
+    * [list\_examples](#fim.gui.app.Api.list_examples)
+    * [load\_example](#fim.gui.app.Api.load_example)
     * [list\_presets](#fim.gui.app.Api.list_presets)
     * [get\_preset\_form\_values](#fim.gui.app.Api.get_preset_form_values)
     * [load\_preset](#fim.gui.app.Api.load_preset)
@@ -282,9 +284,17 @@ Return to the [source-tree orientation](../README.md) or the [developer guide](.
   * [preferences\_file\_path](#fim.gui.preferences.preferences_file_path)
   * [save\_preferences](#fim.gui.preferences.save_preferences)
 * [fim.gui.presets](#fim.gui.presets)
+  * [ExampleClass](#fim.gui.presets.ExampleClass)
+    * [to\_dict](#fim.gui.presets.ExampleClass.to_dict)
+  * [Example](#fim.gui.presets.Example)
+  * [Catalog](#fim.gui.presets.Catalog)
   * [Preset](#fim.gui.presets.Preset)
-  * [list\_presets](#fim.gui.presets.list_presets)
+  * [get\_example](#fim.gui.presets.get_example)
   * [get\_preset](#fim.gui.presets.get_preset)
+  * [list\_presets](#fim.gui.presets.list_presets)
+  * [load\_catalog](#fim.gui.presets.load_catalog)
+  * [split\_configuration](#fim.gui.presets.split_configuration)
+  * [strip\_internal\_yaml\_keys](#fim.gui.presets.strip_internal_yaml_keys)
 * [fim.gui.recent\_runs](#fim.gui.recent_runs)
   * [RecentRun](#fim.gui.recent_runs.RecentRun)
   * [list\_recent\_runs](#fim.gui.recent_runs.list_recent_runs)
@@ -4935,6 +4945,68 @@ loaded preset.
   (no banner to show); `{"ok": False, "message": "..."}` on a
   real load or validation failure.
 
+<a id="fim.gui.app.Api.list_examples"></a>
+
+#### list\_examples
+
+```python
+@_log_bridge_call
+def list_examples() -> dict[str, Any]
+```
+
+Return the Examples dialog's class tree and examples.
+
+Design doc `20261005-claude-opus-5-5-read-only-examples-and-
+classes-design.md` §5, `selby/restricted`: read from the bundled
+`webui/examples/catalog.json` (`fim.gui.presets.load_catalog`).
+No configuration text is sent; `load_example` fetches one
+example's form values once the user loads it.
+
+**Returns**:
+
+- ``{"ok"` - True, "classes": [...], "examples": [...]}`. Each
+  class is `{"id", "title", "description", "children"}`, in
+  display order. Each example is `{"id", "name",
+  "description", "class", "excerpt", "has_configuration",
+  "loadable", "message"}`, in display order;
+  `has_configuration` is `False` for an example reproduced by
+  a script instead of a `config.yaml`; `loadable` is `False` when
+  `load_example(id)` would fail (no configuration, or one this
+  form cannot represent), and `message` then says why, so the
+  dialog can explain it before the user tries.
+
+<a id="fim.gui.app.Api.load_example"></a>
+
+#### load\_example
+
+```python
+@_log_bridge_call
+def load_example(example_id: str) -> dict[str, Any]
+```
+
+Return one example's form values and labels, syncing Settings.
+
+The Examples dialog's "Load into Configure" (design §5). Labels
+(`name`, `description`, `class`) are taken out of the
+configuration and internal `_` keys are dropped
+(`presets.split_configuration`), so the form sees an ordinary,
+editable configuration. Settings' execution defaults follow the
+loaded configuration, as for `load_preset`.
+
+**Arguments**:
+
+- `example_id` - An example `id` from `list_examples`.
+
+
+**Returns**:
+
+- ``{"ok"` - True, "values": {...}, "name": ..., "description":
+  ..., "class": ...}` on success, where `name` and
+  `description` fill Configure's "Run name" and "Run
+  description" boxes; `{"ok": False, "message": ...}` if no
+  such example exists or its configuration cannot be loaded
+  into the form.
+
 <a id="fim.gui.app.Api.list_presets"></a>
 
 #### list\_presets
@@ -4948,10 +5020,13 @@ Return every preset's own id, title, and origin — built-in or user-saved.
 
 Botanist GUI design doc `20260907-claude-sonnet-5-botanist-gui-
 redesign.md` §4.5/§12, `selby/restricted`: built-in presets are
-the worked examples `fim.gui.presets` parses from the bundled
-`webui/help/usage.html` — see that module's own docstring for
-why that file, not `doc/usage.md` itself, is the one this reads.
-User-saved presets are `self._preferences.named_presets`
+the bundled examples that have a configuration
+(`fim.gui.presets.list_presets`, read from `webui/examples/
+catalog.json`). This is the thin alias design doc `20261005-
+claude-opus-5-5-read-only-examples-and-classes-design.md` §5
+keeps for the File menu's "Load example…" picker until it moves
+to the Examples dialog (`list_examples`, below). User-saved
+presets are `self._preferences.named_presets`
 (`save_current_as_preset`, below) — distinct in every way that
 matters: created and deleted by the user, at any time, never
 shipped with the app. No YAML/form text is sent for either kind
@@ -4962,7 +5037,7 @@ only once the user actually picks it.
 
 - ``{"ok"` - True, "presets": [{"id": ..., "title": ...,
 - `"builtin"` - <bool>, "loadable": <bool>}, ...]}` — built-in
-  presets first, in `doc/usage.md`'s own document order, then
+  presets first, in the catalog's display order, then
   user-saved presets sorted by name. A built-in preset's own
   `id` is its bare slug (`get_preset_form_values` reads it
   directly); a user-saved preset's own `id` is
@@ -5082,8 +5157,11 @@ saved preset).
 **Returns**:
 
 - ``{"ok"` - True, "title": ..., "yaml": "..."}` on success — a
-  built-in preset's own `yaml_text` is returned exactly as
-  `doc/usage.md` presents it, unparsed and unreformatted; a
+  built-in preset's own `yaml_text` is returned as its
+  `config.yaml` holds it, unparsed and unreformatted, except
+  that internal `_` keys (`_read_only`) are removed so a copy
+  makes an ordinary, editable run
+  (`presets.strip_internal_yaml_keys`); a
   user-saved preset's own values are rendered fresh through
   `payload_to_yaml_text`, in `configuration.md`'s own key
   order, matching what "Save current as…" would write to a
@@ -9014,28 +9092,91 @@ previous complete file or the new one, never a torn write.
 
 # fim.gui.presets
 
-Parse the "Worked examples" section of the bundled usage guide into
-selectable Configure presets (botanist GUI design doc
-`20260907-claude-sonnet-5-botanist-gui-redesign.md` §4.5, `selby/restricted`).
+Read the bundled examples catalog for the Examples dialog and presets.
 
-Each Configure-card example has its own directory under `doc/examples/`
-with a canonical `config.yaml` and an explanatory `README.md`.
-`doc/usage.md` displays generated copies of those YAML files alongside
-their explanations and commands, and
-`dev/bin/generate-help-html` renders that guide into
-`webui/help/usage.html` at commit time (the Help screen's own content
-source, `screens/help.js`). `packaging/fim.spec` bundles the whole
-`webui/` tree into every packaged executable — so that rendered HTML,
-not `doc/usage.md` itself, is the one artifact guaranteed to exist both
-in a development checkout and inside a frozen `.exe`/`.app`
-(`doc/usage.md` is not bundled on its own; only `webui/` is).
+Every `doc/examples/<id>/` directory is one example.
+`dev/bin/build-examples-catalog` writes them, with the class tree from
+`doc/examples/classes.yaml`, into `webui/examples/catalog.json` at commit
+time (design doc
+`20261005-claude-opus-5-5-read-only-examples-and-classes-design.md`
+§4.1, `selby/restricted`). `packaging/fim.spec` bundles the whole
+`webui/` tree into every packaged executable, so the catalog exists both
+in a development checkout and inside a frozen application, while
+`doc/examples/` itself is not bundled.
 
-This module reads that already-bundled HTML back instead of embedding
-another set of configurations. `dev/bin/update-worked-examples` keeps
-the guide's visible YAML blocks synchronized with the canonical files;
-the commit hook runs it whenever either side changes. The generated
-HTML is still the one artifact guaranteed to exist both in a development
-checkout and inside a frozen application.
+An example's configuration may carry labels (`name`, `description`,
+`class`) and internal attributes (`_read_only` and any other key that
+starts with `_`). `split_configuration` separates them from the model
+keys, so a loaded example reaches the Configure form as an ordinary,
+editable configuration (design §1, "Consequence").
+
+`list_presets` and `get_preset` are the older, flat view of the same
+catalog, kept as thin aliases until their callers (the File menu's
+"Load example…" picker) move to the Examples dialog (design §5).
+
+<a id="fim.gui.presets.ExampleClass"></a>
+
+## ExampleClass Objects
+
+```python
+@dataclass(frozen=True, slots=True)
+class ExampleClass()
+```
+
+One class in the examples tree (design §2).
+
+**Arguments**:
+
+- `class_id` - Lowercase kebab-case ID, unique across the tree.
+- `title` - Display title.
+- `description` - One line about the class; empty when none is given.
+- `children` - Child classes; the tree is at most two levels deep.
+
+<a id="fim.gui.presets.ExampleClass.to_dict"></a>
+
+#### to\_dict
+
+```python
+def to_dict() -> dict[str, Any]
+```
+
+Return the class as the JSON shape the bridge sends the page.
+
+<a id="fim.gui.presets.Example"></a>
+
+## Example Objects
+
+```python
+@dataclass(frozen=True, slots=True)
+class Example()
+```
+
+One bundled example.
+
+**Arguments**:
+
+- `example_id` - The example directory's name.
+- `name` - Display name: the `name` label, or the README's heading.
+- `description` - The `description` label, or the README's first
+  paragraph.
+- `class_id` - The `class` label, or `"unclassified"`.
+- `readme` - The full README Markdown.
+- `readme_excerpt` - A short plain-text excerpt of the README.
+- `yaml_text` - The configuration's YAML text, unmodified, or `None`
+  for an example reproduced by a script instead.
+- `outputs` - The example's bundled output files, relative to
+  `webui/examples/<example_id>/`.
+
+<a id="fim.gui.presets.Catalog"></a>
+
+## Catalog Objects
+
+```python
+@dataclass(frozen=True, slots=True)
+class Catalog()
+```
+
+The bundled class tree and examples, in display order.
 
 <a id="fim.gui.presets.Preset"></a>
 
@@ -9046,44 +9187,29 @@ checkout and inside a frozen application.
 class Preset()
 ```
 
-One worked example: its stable id, display title, and raw YAML text.
+One example with a configuration, in the older flat preset view.
 
 **Arguments**:
 
-- `preset_id` - The heading's own HTML `id` attribute (`dev/bin/
-  generate-help-html`'s own GitHub-style slug of the title) —
-  stable across a regeneration as long as the title itself
-  does not change, and already unique (one `<h3>` per
-  example, `doc/usage.md`'s own structure).
-- `title` - The example's own heading text, plain (no embedded
-  `<code>` markup — none of the fourteen titles use any).
-- `yaml_text` - The example's own complete canonical YAML
-  configuration — ready for `yaml.safe_load`.
+- `preset_id` - The example's ID.
+- `title` - The example's display name.
+- `yaml_text` - The example's configuration, ready for
+  `yaml.safe_load`.
 
-<a id="fim.gui.presets.list_presets"></a>
+<a id="fim.gui.presets.get_example"></a>
 
-#### list\_presets
+#### get\_example
 
 ```python
-def list_presets(webui_directory: Path) -> list[Preset]
+def get_example(webui_directory: Path, example_id: str) -> Example | None
 ```
 
-Return every worked-example preset bundled at `webui_directory`.
+Return one example by ID, or `None` if the catalog has no such example.
 
 **Arguments**:
 
-- `webui_directory` - `fim.gui.app._webui_directory()`'s own return
-  value — the directory holding `index.html` and `help/
-  usage.html`, frozen or not.
-
-
-**Returns**:
-
-  One `Preset` per `doc/usage.md` "Worked examples" `<h3>`
-  section, in the same order the guide presents them. Empty if
-  `help/usage.html` is missing or has no such section — callers
-  treat that as "no presets available" (a stale or hand-modified
-  install), not a reason to fail the Configure screen outright.
+- `webui_directory` - Same as `load_catalog`.
+- `example_id` - An `Example.example_id`.
 
 <a id="fim.gui.presets.get_preset"></a>
 
@@ -9093,12 +9219,109 @@ Return every worked-example preset bundled at `webui_directory`.
 def get_preset(webui_directory: Path, preset_id: str) -> Preset | None
 ```
 
-Return one preset by its own id, or `None` if no such preset exists.
+Return one preset by ID, or `None` if no such preset exists.
 
 **Arguments**:
 
 - `webui_directory` - Same as `list_presets`.
 - `preset_id` - A `Preset.preset_id` from a prior `list_presets` call.
+
+<a id="fim.gui.presets.list_presets"></a>
+
+#### list\_presets
+
+```python
+def list_presets(webui_directory: Path) -> list[Preset]
+```
+
+Return every example that has a configuration, as a flat preset list.
+
+**Arguments**:
+
+- `webui_directory` - `fim.gui.app._webui_directory()`'s return value.
+
+
+**Returns**:
+
+  One `Preset` per example with a `config.yaml`, in catalog order.
+  An example reproduced by a script has no configuration to load
+  and is left out. Empty when the catalog is missing or unreadable.
+
+<a id="fim.gui.presets.load_catalog"></a>
+
+#### load\_catalog
+
+```python
+def load_catalog(webui_directory: Path) -> Catalog
+```
+
+Return the bundled examples catalog.
+
+**Arguments**:
+
+- `webui_directory` - `fim.gui.app._webui_directory()`'s return value,
+  the directory holding `index.html` and `examples/`, frozen
+  or not.
+
+
+**Returns**:
+
+  The catalog, or an empty `Catalog` if `examples/catalog.json` is
+  missing or malformed. Callers treat that as "no examples
+  available" (a stale or hand-modified install), not a reason to
+  fail the Configure screen.
+
+<a id="fim.gui.presets.split_configuration"></a>
+
+#### split\_configuration
+
+```python
+def split_configuration(
+        configuration: Mapping[str,
+                               Any]) -> tuple[dict[str, Any], dict[str, Any]]
+```
+
+Separate a configuration's model keys from its labels.
+
+Internal attributes (any top-level key starting with `_`) are
+dropped, so a run started from a loaded example is an ordinary,
+editable run (design §1).
+
+**Arguments**:
+
+- `configuration` - A parsed `config.yaml` mapping.
+
+
+**Returns**:
+
+  `(model, labels)`: the configuration without labels or internal
+  attributes, and the labels that were present (a subset of
+  `LABEL_KEYS`).
+
+<a id="fim.gui.presets.strip_internal_yaml_keys"></a>
+
+#### strip\_internal\_yaml\_keys
+
+```python
+def strip_internal_yaml_keys(yaml_text: str) -> str
+```
+
+Return `yaml_text` without its top-level `_` keys.
+
+The "View YAML" text is meant to be copied into a new configuration
+file; an internal attribute such as `_read_only: true` would make
+the copy's run read-only, with the shipped example's run ID. Labels
+stay, since `fim run` records them as the new run's name.
+
+**Arguments**:
+
+- `yaml_text` - A configuration in plain block-style YAML.
+
+
+**Returns**:
+
+  The same text with each top-level `_key:` entry, and any
+  indented lines belonging to it, removed.
 
 <a id="fim.gui.recent_runs"></a>
 

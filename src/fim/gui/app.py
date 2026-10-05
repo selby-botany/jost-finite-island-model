@@ -3050,15 +3050,99 @@ class Api:
         return {"ok": True, "values": values}
 
     @_log_bridge_call
+    def list_examples(self) -> dict[str, Any]:
+        """Return the Examples dialog's class tree and examples.
+
+        Design doc `20261005-claude-opus-5-5-read-only-examples-and-
+        classes-design.md` §5, `selby/restricted`: read from the bundled
+        `webui/examples/catalog.json` (`fim.gui.presets.load_catalog`).
+        No configuration text is sent; `load_example` fetches one
+        example's form values once the user loads it.
+
+        Returns:
+            `{"ok": True, "classes": [...], "examples": [...]}`. Each
+            class is `{"id", "title", "description", "children"}`, in
+            display order. Each example is `{"id", "name",
+            "description", "class", "excerpt", "has_configuration",
+            "loadable", "message"}`, in display order;
+            `has_configuration` is `False` for an example reproduced by
+            a script instead of a `config.yaml`; `loadable` is `False` when
+            `load_example(id)` would fail (no configuration, or one this
+            form cannot represent), and `message` then says why, so the
+            dialog can explain it before the user tries.
+        """
+        catalog = presets.load_catalog(_webui_directory())
+        examples = []
+        for example in catalog.examples:
+            probe = _example_form_values(example)
+            examples.append(
+                {
+                    "id": example.example_id,
+                    "name": example.name,
+                    "description": example.description,
+                    "class": example.class_id,
+                    "excerpt": example.readme_excerpt,
+                    "has_configuration": example.yaml_text is not None,
+                    "loadable": probe["ok"],
+                    "message": "" if probe["ok"] else probe["message"],
+                }
+            )
+        return {
+            "ok": True,
+            "classes": [example_class.to_dict() for example_class in catalog.classes],
+            "examples": examples,
+        }
+
+    @_log_bridge_call
+    def load_example(self, example_id: str) -> dict[str, Any]:
+        """Return one example's form values and labels, syncing Settings.
+
+        The Examples dialog's "Load into Configure" (design §5). Labels
+        (`name`, `description`, `class`) are taken out of the
+        configuration and internal `_` keys are dropped
+        (`presets.split_configuration`), so the form sees an ordinary,
+        editable configuration. Settings' execution defaults follow the
+        loaded configuration, as for `load_preset`.
+
+        Args:
+            example_id: An example `id` from `list_examples`.
+
+        Returns:
+            `{"ok": True, "values": {...}, "name": ..., "description":
+            ..., "class": ...}` on success, where `name` and
+            `description` fill Configure's "Run name" and "Run
+            description" boxes; `{"ok": False, "message": ...}` if no
+            such example exists or its configuration cannot be loaded
+            into the form.
+        """
+        example = presets.get_example(_webui_directory(), example_id)
+        if example is None:
+            return {"ok": False, "message": f"no such example: {example_id}"}
+        result = _example_form_values(example)
+        if not result["ok"]:
+            return result
+        self._sync_default_run_settings_from_loaded_config(result["values"])
+        return {
+            "ok": True,
+            "values": result["values"],
+            "name": example.name,
+            "description": example.description,
+            "class": example.class_id,
+        }
+
+    @_log_bridge_call
     def list_presets(self) -> dict[str, Any]:
         """Return every preset's own id, title, and origin — built-in or user-saved.
 
         Botanist GUI design doc `20260907-claude-sonnet-5-botanist-gui-
         redesign.md` §4.5/§12, `selby/restricted`: built-in presets are
-        the worked examples `fim.gui.presets` parses from the bundled
-        `webui/help/usage.html` — see that module's own docstring for
-        why that file, not `doc/usage.md` itself, is the one this reads.
-        User-saved presets are `self._preferences.named_presets`
+        the bundled examples that have a configuration
+        (`fim.gui.presets.list_presets`, read from `webui/examples/
+        catalog.json`). This is the thin alias design doc `20261005-
+        claude-opus-5-5-read-only-examples-and-classes-design.md` §5
+        keeps for the File menu's "Load example…" picker until it moves
+        to the Examples dialog (`list_examples`, below). User-saved
+        presets are `self._preferences.named_presets`
         (`save_current_as_preset`, below) — distinct in every way that
         matters: created and deleted by the user, at any time, never
         shipped with the app. No YAML/form text is sent for either kind
@@ -3068,7 +3152,7 @@ class Api:
         Returns:
             `{"ok": True, "presets": [{"id": ..., "title": ...,
             "builtin": <bool>, "loadable": <bool>}, ...]}` — built-in
-            presets first, in `doc/usage.md`'s own document order, then
+            presets first, in the catalog's display order, then
             user-saved presets sorted by name. A built-in preset's own
             `id` is its bare slug (`get_preset_form_values` reads it
             directly); a user-saved preset's own `id` is
@@ -3148,16 +3232,10 @@ class Api:
             except ValueError as error:
                 return {"ok": False, "message": str(error)}
             return {"ok": True, "values": values}
-        preset = presets.get_preset(_webui_directory(), preset_id)
-        if preset is None:
+        example = presets.get_example(_webui_directory(), preset_id)
+        if example is None or example.yaml_text is None:
             return {"ok": False, "message": f"no such preset: {preset_id}"}
-        try:
-            payload = yaml.safe_load(preset.yaml_text)
-            params = SimulationParams.from_mapping(payload)
-            values = params_to_form_values(params)
-        except (ValueError, yaml.YAMLError) as error:
-            return {"ok": False, "message": str(error)}
-        return {"ok": True, "values": values}
+        return _example_form_values(example)
 
     @_log_bridge_call
     def load_preset(self, preset_id: str) -> dict[str, Any]:
@@ -3209,8 +3287,11 @@ class Api:
 
         Returns:
             `{"ok": True, "title": ..., "yaml": "..."}` on success — a
-            built-in preset's own `yaml_text` is returned exactly as
-            `doc/usage.md` presents it, unparsed and unreformatted; a
+            built-in preset's own `yaml_text` is returned as its
+            `config.yaml` holds it, unparsed and unreformatted, except
+            that internal `_` keys (`_read_only`) are removed so a copy
+            makes an ordinary, editable run
+            (`presets.strip_internal_yaml_keys`); a
             user-saved preset's own values are rendered fresh through
             `payload_to_yaml_text`, in `configuration.md`'s own key
             order, matching what "Save current as…" would write to a
@@ -3235,7 +3316,11 @@ class Api:
         preset = presets.get_preset(_webui_directory(), preset_id)
         if preset is None:
             return {"ok": False, "message": f"no such preset: {preset_id}"}
-        return {"ok": True, "title": preset.title, "yaml": preset.yaml_text}
+        return {
+            "ok": True,
+            "title": preset.title,
+            "yaml": presets.strip_internal_yaml_keys(preset.yaml_text),
+        }
 
     @_log_bridge_call
     def save_current_as_preset(
@@ -7918,6 +8003,45 @@ def main(argv: Sequence[str] | None = None) -> int:
     # legitimately leave the application open.
     _start_shutdown_deadman(shutdown_timeout())
     return 0
+
+
+def _example_form_values(example: presets.Example) -> dict[str, Any]:
+    """Return one bundled example's configuration as form values.
+
+    The one path every built-in example takes into the form
+    (`Api.load_example`, `Api.get_preset_form_values`, and the
+    `loadable` probe in `Api.list_examples`/`Api.list_presets`). Labels
+    and internal `_` keys are removed first (`presets.split_
+    configuration`), so a configuration carrying `_read_only: true`
+    loads as an ordinary, editable one. Never touches Settings: the
+    probes call this once per example on every listing.
+
+    Args:
+        example: A catalog example.
+
+    Returns:
+        `{"ok": True, "values": {...}}`, or `{"ok": False, "message":
+        ...}` when the example has no configuration, or its
+        configuration does not validate or has no form representation
+        (a per-locus `mu` list, for instance).
+    """
+    if example.yaml_text is None:
+        return {
+            "ok": False,
+            "message": (
+                "this example has no configuration file; its README "
+                "explains how to reproduce it"
+            ),
+        }
+    try:
+        payload = yaml.safe_load(example.yaml_text)
+        if not isinstance(payload, Mapping):
+            return {"ok": False, "message": "the configuration is not a mapping"}
+        model, _labels = presets.split_configuration(payload)
+        values = params_to_form_values(SimulationParams.from_mapping(model))
+    except (ValueError, yaml.YAMLError) as error:
+        return {"ok": False, "message": str(error)}
+    return {"ok": True, "values": values}
 
 
 def _branding_directory() -> Path:

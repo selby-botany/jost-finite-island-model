@@ -4,7 +4,7 @@ The closed-form trajectory is exact for one model (infinite alleles,
 expected migrant fractions, ratio-of-means loci) and
 wrong for others, so it must be offered for exactly the configurations it
 is right for. This walks every configuration the project ships or
-documents (the fourteen worked examples, `doc/examples/`, and the
+documents (the bundled examples, `doc/examples/`, and the
 `fim init` starter) and pins, per configuration, whether the payload is
 the two-variable form, the sampled matrix form, or absent. A new example,
 or a change to the model options that decide this, fails here until the
@@ -70,8 +70,8 @@ EXPECTED: dict[str, str | None] = {
     # mutation_model: finite_alleles
     "a-large-d-batch-under-generational-vector": NONE,
     "a-long-locus-batch-under-the-generational-engine": NONE,
-    "doc/examples/dear-nolan-low": ISLAND,
-    "doc/examples/golden-part-vi": ISLAND,
+    "dear-nolan-low": ISLAND,
+    "golden-part-vi": ISLAND,
     "starter": ISLAND,
 }
 

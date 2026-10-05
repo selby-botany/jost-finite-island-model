@@ -57,6 +57,7 @@ Every test module, fixture, and test function documented here in full; `doc/fim-
   - [`test_config_modal_dialogs`](#gui.test_config_modal_dialogs)
   - [`test_dark_mode_screen`](#gui.test_dark_mode_screen)
   - [`test_details_screen`](#gui.test_details_screen)
+  - [`test_examples_dialog_screen`](#gui.test_examples_dialog_screen)
   - [`test_explore_screen`](#gui.test_explore_screen)
   - [`test_explore_surface`](#gui.test_explore_surface)
   - [`test_explore_sweep`](#gui.test_explore_sweep)
@@ -8429,6 +8430,104 @@ assume the representable/unrepresentable split
 `test_every_other_builtin_preset_loads_into_form_values` exists
 specifically to verify.
 
+<a id="gui.test_app_api.test_list_examples_mirrors_the_bundled_catalog"></a>
+
+#### test\_list\_examples\_mirrors\_the\_bundled\_catalog
+
+```python
+def test_list_examples_mirrors_the_bundled_catalog() -> None
+```
+
+Classes and examples come from the catalog, in its order, with loadability.
+
+`loadable` is computed, not assumed: the per-locus-`mu` example has
+no form representation and the Dear-Nolan high example has no
+configuration at all, and each says why in `message`.
+
+<a id="gui.test_app_api.test_load_example_returns_form_values_and_run_labels"></a>
+
+#### test\_load\_example\_returns\_form\_values\_and\_run\_labels
+
+```python
+def test_load_example_returns_form_values_and_run_labels() -> None
+```
+
+The form values, plus the name and description for the Run boxes.
+
+<a id="gui.test_app_api.test_load_example_strips_labels_and_internal_keys"></a>
+
+#### test\_load\_example\_strips\_labels\_and\_internal\_keys
+
+```python
+def test_load_example_strips_labels_and_internal_keys(
+        tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None
+```
+
+Labels and `_read_only` never reach the form; name/description are returned.
+
+<a id="gui.test_app_api.test_get_preset_form_values_strips_labels_and_internal_keys"></a>
+
+#### test\_get\_preset\_form\_values\_strips\_labels\_and\_internal\_keys
+
+```python
+def test_get_preset_form_values_strips_labels_and_internal_keys(
+        tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None
+```
+
+The File menu picker's alias takes the same stripping path.
+
+<a id="gui.test_app_api.test_get_preset_yaml_drops_internal_keys_but_keeps_labels"></a>
+
+#### test\_get\_preset\_yaml\_drops\_internal\_keys\_but\_keeps\_labels
+
+```python
+def test_get_preset_yaml_drops_internal_keys_but_keeps_labels(
+        tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None
+```
+
+A copied configuration makes an ordinary run, still named by its labels.
+
+<a id="gui.test_app_api.test_load_example_rejects_an_unknown_id"></a>
+
+#### test\_load\_example\_rejects\_an\_unknown\_id
+
+```python
+def test_load_example_rejects_an_unknown_id() -> None
+```
+
+An unknown example id is a clear error.
+
+<a id="gui.test_app_api.test_load_example_without_a_configuration_does_not_touch_settings"></a>
+
+#### test\_load\_example\_without\_a\_configuration\_does\_not\_touch\_settings
+
+```python
+def test_load_example_without_a_configuration_does_not_touch_settings(
+) -> None
+```
+
+The script-reproduced example cannot load, and Settings stay as they were.
+
+<a id="gui.test_app_api.test_load_example_syncs_settings_execution_defaults"></a>
+
+#### test\_load\_example\_syncs\_settings\_execution\_defaults
+
+```python
+def test_load_example_syncs_settings_execution_defaults() -> None
+```
+
+Loading an example makes its execution fields Settings' defaults.
+
+<a id="gui.test_app_api.test_list_examples_does_not_sync_settings_execution_defaults"></a>
+
+#### test\_list\_examples\_does\_not\_sync\_settings\_execution\_defaults
+
+```python
+def test_list_examples_does_not_sync_settings_execution_defaults() -> None
+```
+
+Listing probes every example's loadability without touching Settings.
+
 <a id="gui.test_app_api.test_save_current_as_preset_then_list_and_load_it_back"></a>
 
 #### test\_save\_current\_as\_preset\_then\_list\_and\_load\_it\_back
@@ -8661,7 +8760,10 @@ discovered live by a real user.
 def test_get_preset_yaml_returns_a_builtin_preset_unmodified() -> None
 ```
 
-A built-in preset's own `yaml_text`, exactly as `doc/usage.md` presents it.
+A built-in preset's own `yaml_text`, as its `config.yaml` holds it.
+
+Only internal `_` keys are removed (`test_get_preset_yaml_drops_
+internal_keys_but_keeps_labels`, above); this example has none.
 
 <a id="gui.test_app_api.test_get_preset_yaml_rejects_an_unknown_id"></a>
 
@@ -12133,7 +12235,7 @@ The closed-form trajectory is exact for one model (infinite alleles,
 expected migrant fractions, ratio-of-means loci) and
 wrong for others, so it must be offered for exactly the configurations it
 is right for. This walks every configuration the project ships or
-documents (the fourteen worked examples, `doc/examples/`, and the
+documents (the bundled examples, `doc/examples/`, and the
 `fim init` starter) and pins, per configuration, whether the payload is
 the two-variable form, the sampled matrix form, or absent. A new example,
 or a change to the model options that decide this, fails here until the
@@ -13812,6 +13914,61 @@ def test_a_runs_details_dialog_names_it_without_documentation(
 ```
 
 A run's dialog has no documentation field, and a typed name shows in Home.
+
+<a id="gui.test_examples_dialog_screen"></a>
+
+# gui.test\_examples\_dialog\_screen
+
+Headless functional tests for the Examples dialog (`screens/examples.js`).
+
+Design doc `20261005-claude-opus-5-5-read-only-examples-and-classes-
+design.md` §5, `selby/restricted`: Configure's "Examples…" button opens a
+modal with the class tree on the left and the selected class's examples
+on the right; "Load into Configure" (or Return) applies the example to
+the form and fills the Run name/description boxes.
+
+`test_app_api.py` already proves `Api.list_examples`/`Api.load_example`
+as plain Python calls; these tests prove the page wires them: keyboard
+navigation through the real catalog's tree and list, the load itself,
+and the dialog's fit inside the 900x700 test window. Expected positions
+are computed from the bundled catalog, not hard-coded, so assigning
+classes to the examples changes the route the keys take, not the test.
+
+<a id="gui.test_examples_dialog_screen.test_keyboard_navigation_loads_an_example_into_configure"></a>
+
+#### test\_keyboard\_navigation\_loads\_an\_example\_into\_configure
+
+```python
+def test_keyboard_navigation_loads_an_example_into_configure(
+        window: webview.Window) -> None
+```
+
+Arrow keys reach the example, Return loads it, and the Run boxes are filled.
+
+<a id="gui.test_examples_dialog_screen.test_unloadable_example_explains_itself_and_offers_its_yaml"></a>
+
+#### test\_unloadable\_example\_explains\_itself\_and\_offers\_its\_yaml
+
+```python
+def test_unloadable_example_explains_itself_and_offers_its_yaml(
+        window: webview.Window) -> None
+```
+
+The per-locus-`mu` example cannot load; the dialog says why up front.
+
+Selected by clicking, the other way into the list. "View YAML" still
+opens its configuration, on top of the Examples dialog.
+
+<a id="gui.test_examples_dialog_screen.test_dialog_fits_the_default_window_and_labels_every_control"></a>
+
+#### test\_dialog\_fits\_the\_default\_window\_and\_labels\_every\_control
+
+```python
+def test_dialog_fits_the_default_window_and_labels_every_control(
+        window: webview.Window) -> None
+```
+
+At 900x700 the dialog fits with no horizontal overflow; controls are labelled.
 
 <a id="gui.test_explore_screen"></a>
 
@@ -15692,67 +15849,6 @@ return screen is already `screen-open-run` (Home) before this test
 ever runs, so returning to Home would pass even if this bookkeeping
 never actually updated `configureReturnScreen` at all.
 
-<a id="gui.test_nav_rail.test_configure_example_select_lists_only_built_in_examples"></a>
-
-#### test\_configure\_example\_select\_lists\_only\_built\_in\_examples
-
-```python
-def test_configure_example_select_lists_only_built_in_examples(
-        window: webview.Window) -> None
-```
-
-`configure-example-select` offers a built-in-examples-only shortcut,
-populated by the shared `refreshExampleOptions` (`screens/presets.js`)
--- the same mechanism `fim.menu.loadExample`'s own full picker uses,
-not a second, independently maintained option list that could drift
-from it. Home's own former copy of this shortcut (`home-example-
-select`) was removed along with `.home-cards` (`20260918-claude-
-sonnet-5-home-tree-reorg-design.md`, `selby/restricted`, §7); this is
-now the only such shortcut in the app.
-
-<a id="gui.test_nav_rail.test_choosing_a_configure_example_applies_it_without_leaving_configure"></a>
-
-#### test\_choosing\_a\_configure\_example\_applies\_it\_without\_leaving\_configure
-
-```python
-def test_choosing_a_configure_example_applies_it_without_leaving_configure(
-        window: webview.Window) -> None
-```
-
-Picking an example applies its values in place, then resets — no
-navigation, unlike Home's own identical shortcut: there is nowhere
-else to jump to, since the whole point is loading a different
-example without leaving Configure. Selects "Stepping-stone (spatial)
-migration" (option index 2) specifically, the same real, distinct-
-from-the-starter-defaults choice `test_open_run_screen.py`'s own
-`test_choosing_a_home_example_applies_it_and_opens_configure` and
-`test_presets_screen.py`'s own equivalent test both already use.
-
-<a id="gui.test_nav_rail.test_choosing_the_non_loadable_configure_example_shows_an_inline_notice"></a>
-
-#### test\_choosing\_the\_non\_loadable\_configure\_example\_shows\_an\_inline\_notice
-
-```python
-def test_choosing_the_non_loadable_configure_example_shows_an_inline_notice(
-        window: webview.Window) -> None
-```
-
-The one non-loadable example shows Configure's own banner, not an alert.
-
-Design doc `20260913-claude-sonnet-5-gui-worked-example-loadability-
-design.md` (`selby/restricted`), Option C: `window.alert`'s blocking
-OS chrome replaced with `showExampleLoadNotice`'s own inline,
-non-modal banner. "Per-base mutation rate across unequal locus
-lengths" is the one built-in example
-`test_every_other_builtin_preset_loads_into_form_values`
-(`test_app_api.py`) confirms has no form representation; picked by
-stable preset id rather than index so adding another worked example
-cannot quietly turn this into a loadable-example test. The bare
-title, not the "(view YAML only)" label text, must appear in the
-notice — a real regression found live while writing this test,
-before `refreshExampleOptions`'s own `dataset.presetTitle` existed
-to separate the two.
-
 <a id="gui.test_open_run_screen"></a>
 
 # gui.test\_open\_run\_screen
@@ -17005,32 +17101,50 @@ A hand-edited zero limit is rejected like any malformed field.
 
 Unit tests for `fim.gui.presets` (no display, no `gui` marker).
 
-`list_presets`/`get_preset` only ever read a plain HTML file from disk —
-none of the pywebview machinery this package's other tests need.
+`load_catalog`/`list_presets`/`get_preset` only read the bundled
+`webui/examples/catalog.json` from disk (written by
+`dev/bin/build-examples-catalog`) — none of the pywebview machinery this
+package's other tests need.
 
-<a id="gui.test_presets.test_list_presets_returns_the_fourteen_worked_examples"></a>
+<a id="gui.test_presets.test_list_presets_returns_every_example_with_a_configuration"></a>
 
-#### test\_list\_presets\_returns\_the\_fourteen\_worked\_examples
-
-```python
-def test_list_presets_returns_the_fourteen_worked_examples() -> None
-```
-
-Every usage-guide worked example is found, in document order.
-
-Reads the real, committed `webui/help/usage.html` directly — this
-is the one test proving that file (and this module's own parser)
-actually agree, not a synthetic fixture standing in for it.
-
-<a id="gui.test_presets.test_presets_use_the_canonical_worked_example_configs"></a>
-
-#### test\_presets\_use\_the\_canonical\_worked\_example\_configs
+#### test\_list\_presets\_returns\_every\_example\_with\_a\_configuration
 
 ```python
-def test_presets_use_the_canonical_worked_example_configs() -> None
+def test_list_presets_returns_every_example_with_a_configuration() -> None
 ```
 
-The GUI's rendered presets match the standalone YAML source files.
+Every bundled example with a `config.yaml` is a preset, in catalog order.
+
+<a id="gui.test_presets.test_presets_use_the_canonical_example_configs"></a>
+
+#### test\_presets\_use\_the\_canonical\_example\_configs
+
+```python
+def test_presets_use_the_canonical_example_configs() -> None
+```
+
+Each preset's text is its `doc/examples/<id>/config.yaml`, unmodified.
+
+<a id="gui.test_presets.test_catalog_includes_the_script_reproduced_example_without_yaml"></a>
+
+#### test\_catalog\_includes\_the\_script\_reproduced\_example\_without\_yaml
+
+```python
+def test_catalog_includes_the_script_reproduced_example_without_yaml() -> None
+```
+
+`dear-nolan-high` has no `config.yaml`: listed, but not as a preset.
+
+<a id="gui.test_presets.test_every_catalog_example_names_a_class_in_the_tree"></a>
+
+#### test\_every\_catalog\_example\_names\_a\_class\_in\_the\_tree
+
+```python
+def test_every_catalog_example_names_a_class_in_the_tree() -> None
+```
+
+The bundled class tree covers every example's class.
 
 <a id="gui.test_presets.test_get_preset_returns_the_matching_preset"></a>
 
@@ -17040,7 +17154,7 @@ The GUI's rendered presets match the standalone YAML source files.
 def test_get_preset_returns_the_matching_preset() -> None
 ```
 
-`get_preset` finds one preset by its own id, out of the real fourteen.
+`get_preset` finds one preset by its own id.
 
 <a id="gui.test_presets.test_get_preset_returns_none_for_an_unknown_id"></a>
 
@@ -17052,58 +17166,67 @@ def test_get_preset_returns_none_for_an_unknown_id() -> None
 
 An id naming no real preset is `None`, not a raised exception.
 
-<a id="gui.test_presets.test_list_presets_returns_empty_for_a_directory_with_no_help_html"></a>
+<a id="gui.test_presets.test_list_presets_returns_empty_for_a_directory_with_no_catalog"></a>
 
-#### test\_list\_presets\_returns\_empty\_for\_a\_directory\_with\_no\_help\_html
+#### test\_list\_presets\_returns\_empty\_for\_a\_directory\_with\_no\_catalog
 
 ```python
-def test_list_presets_returns_empty_for_a_directory_with_no_help_html(
+def test_list_presets_returns_empty_for_a_directory_with_no_catalog(
         tmp_path: Path) -> None
 ```
 
-A missing `help/usage.html` (a stale install) is `[]`, not a crash.
+A missing `examples/catalog.json` (a stale install) is `[]`, not a crash.
 
-<a id="gui.test_presets.test_parser_scopes_to_the_worked_examples_section_only"></a>
+<a id="gui.test_presets.test_malformed_catalog_reads_as_empty"></a>
 
-#### test\_parser\_scopes\_to\_the\_worked\_examples\_section\_only
-
-```python
-def test_parser_scopes_to_the_worked_examples_section_only(
-        tmp_path: Path) -> None
-```
-
-A heading and YAML block outside the section are not mistaken for a preset.
-
-Direct regression coverage for a real bug found writing this
-module: the opening `<h2 id="worked-examples">Worked examples</h2>`
-tag's own *closing* tag was originally mistaken for the section's
-own end (both tags are on the same line, immediately adjacent),
-closing the section before a single `<h3>` inside it was ever
-reached — every real preset silently vanished (`list_presets`
-returned `[]` against the real file, not a subtly wrong single
-entry). This synthetic fixture puts one heading before the section,
-one correctly inside it, and one after — the exact shape that bug
-would get wrong in three different ways at once.
-
-<a id="gui.test_presets.test_every_preset_parses_as_yaml"></a>
-
-#### test\_every\_preset\_parses\_as\_yaml
+#### test\_malformed\_catalog\_reads\_as\_empty
 
 ```python
-@pytest.mark.parametrize("preset",
-                         _REAL_PRESETS,
-                         ids=[p.preset_id for p in _REAL_PRESETS])
-def test_every_preset_parses_as_yaml(preset: Preset) -> None
+def test_malformed_catalog_reads_as_empty(tmp_path: Path) -> None
 ```
 
-Every real preset's own text is at least syntactically valid YAML.
+A catalog missing its keys is treated as no examples at all.
 
-Whether it also validates as a full `SimulationParams` (thirteen of
-the fourteen do; the "Per-base mutation rate across unequal locus
-lengths" example's own genuinely per-locus `mu` has no form
-representation, exactly like a hand-loaded YAML file with the same
-shape already does not) is `test/gui/test_app_api.py`'s own concern
-(`get_preset_form_values`), not this module's.
+<a id="gui.test_presets.test_load_catalog_reads_classes_and_examples"></a>
+
+#### test\_load\_catalog\_reads\_classes\_and\_examples
+
+```python
+def test_load_catalog_reads_classes_and_examples(tmp_path: Path) -> None
+```
+
+A fixture catalog round-trips into `ExampleClass`/`Example` values.
+
+<a id="gui.test_presets.test_split_configuration_separates_labels_and_drops_internal_keys"></a>
+
+#### test\_split\_configuration\_separates\_labels\_and\_drops\_internal\_keys
+
+```python
+def test_split_configuration_separates_labels_and_drops_internal_keys(
+) -> None
+```
+
+Labels come out; `_` keys vanish; every model key stays.
+
+<a id="gui.test_presets.test_strip_internal_yaml_keys"></a>
+
+#### test\_strip\_internal\_yaml\_keys
+
+```python
+@pytest.mark.parametrize(
+    ("text", "expected"),
+    [
+        ("_read_only: true\nN: 10\n", "N: 10\n"),
+        ("N: 10\n_read_only: true\nd: 2\n", "N: 10\nd: 2\n"),
+        ("N: 10\n_nested:\n  a: 1\n  b: 2\nd: 2\n", "N: 10\nd: 2\n"),
+        ("name: Kept\nN: 10\n_read_only: true", "name: Kept\nN: 10"),
+        ("loci:\n  - _not_top_level: 1\n", "loci:\n  - _not_top_level: 1\n"),
+    ],
+)
+def test_strip_internal_yaml_keys(text: str, expected: str) -> None
+```
+
+Only top-level `_` keys (and their indented blocks) are removed.
 
 <a id="gui.test_presets_screen"></a>
 
@@ -20123,23 +20246,24 @@ def test_welcome_panel_does_not_show_once_already_dismissed(
 
 The ambient, already-dismissed default (every other test's own baseline).
 
-<a id="gui.test_welcome_screen.test_try_a_worked_example_opens_presets_and_dismisses_welcome"></a>
+<a id="gui.test_welcome_screen.test_examples_button_opens_the_examples_dialog_and_dismisses_welcome"></a>
 
-#### test\_try\_a\_worked\_example\_opens\_presets\_and\_dismisses\_welcome
+#### test\_examples\_button\_opens\_the\_examples\_dialog\_and\_dismisses\_welcome
 
 ```python
-def test_try_a_worked_example_opens_presets_and_dismisses_welcome(
+def test_examples_button_opens_the_examples_dialog_and_dismisses_welcome(
         _isolate_gui_preferences: Path, drive: Callable[..., Any]) -> None
 ```
 
-"Try a worked example…" hands off to the presets gallery, closing itself.
+"Examples…" hands off to the Examples dialog, closing itself.
 
 `welcomeDialog.close()` fires synchronously, from inside the button's
-own click handler, before `fim.menu.loadExample`'s own `await
-refreshPresetsList()` resolves and opens `modal-presets` -- `is_ready`
-below waits for *both* dialogs to reach their settled state, not just
-the welcome panel's own closing half of this handoff, so this cannot
-pass on a lucky read caught between the two.
+own click handler, before `fim.showExamplesDialog`'s own `await
+list_examples()` resolves and opens `modal-examples` -- `is_ready`
+below waits for *both* dialogs to reach their settled state (and for
+the dialog's own ready flag), not just the welcome panel's own
+closing half of this handoff, so this cannot pass on a lucky read
+caught between the two.
 
 <a id="gui.test_welcome_screen.test_start_from_scratch_just_closes_the_panel"></a>
 
@@ -20158,8 +20282,7 @@ def test_start_from_scratch_just_closes_the_panel(
 
 ```python
 @pytest.mark.parametrize(
-    "button_id",
-    ["welcome-try-example-button", "welcome-start-scratch-button"])
+    "button_id", ["welcome-examples-button", "welcome-start-scratch-button"])
 def test_dismissing_the_welcome_panel_persists_through_the_bridge(
         button_id: str, _isolate_gui_preferences: Path) -> None
 ```

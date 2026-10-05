@@ -1597,22 +1597,17 @@
          just as often wanted after the picker has already closed and a
          field or two has already been tweaked, so this stays reachable
          the whole time Configure is showing, not only while the picker
-         itself is open. Disabled until a preset has actually been
-         loaded via the picker (`screens/presets.js`'s own `lastLoaded
+         itself is open. Disabled until a preset or example has
+         actually been loaded (`screens/presets.js`'s own `lastLoaded
          PresetTitle`) -- there is nothing to fork before then; "Save
          current as…" (inside the picker) already covers a genuinely
          from-scratch save.
 
-         `configure-example-select` (added afterward, on top of this
-         slice): the identical shortcut Home's own `home-example-select`
-         already offers (`screens/open-run.js`), so a user already on
-         Configure who decides to start from a different worked example
-         instead does not have to leave the screen and come back to
-         reach it. Populated the same way, from the same shared
-         `refreshExampleOptions` (`screens/presets.js`); applies in
-         place via `window.fim.applyPreset` with no navigation, since
-         there is nowhere else to jump to -- unlike Home's own version,
-         which jumps to Configure on success.
+         `configure-examples-button` opens the Examples dialog
+         (`modal-examples`, `screens/examples.js`; design doc
+         `20261005-claude-opus-5-5-read-only-examples-and-classes-
+         design.md` §5, `selby/restricted`), which replaced the earlier
+         "Try a worked example…" drop-down.
 
          `run-study-select` (Run/Study/Experiment workflow-ergonomics
          design `20260917-claude-sonnet-5-run-study-experiment-
@@ -1637,9 +1632,12 @@
          since app launch appears with no restart needed. -->
     <div class="actions">
       <button type="button" id="configure-load-button">Load configuration…</button>
-      <select id="configure-example-select" aria-label="Try a worked example">
-        <option value="" selected>Try a worked example…</option>
-      </select>
+      <button
+        type="button"
+        id="configure-examples-button"
+        aria-haspopup="dialog"
+        aria-label="Browse the bundled examples"
+      >Examples…</button>
       <button type="button" id="configure-save-button">Save configuration…</button>
       <button type="button" id="configure-duplicate-preset-button" disabled>
         Duplicate current configuration
@@ -1797,11 +1795,13 @@
     <div class="actions">
       <button
         type="button"
-        id="welcome-try-example-button"
+        id="welcome-examples-button"
         class="primary-action"
         tabindex="0"
+        aria-haspopup="dialog"
+        aria-label="Browse the bundled examples"
       >
-        Try a worked example…
+        Examples…
       </button>
       <button type="button" id="welcome-start-scratch-button" tabindex="0">
         Start from scratch
@@ -1809,8 +1809,79 @@
     </div>
   </dialog>
 
-  <!-- Presets (botanist GUI design doc §4.5): every `doc/usage.md`
-       worked example, one click away, sourced live from `Api.list_
+  <!-- Examples (design doc `20261005-claude-opus-5-5-read-only-
+       examples-and-classes-design.md` §5, `selby/restricted`;
+       `screens/examples.js`): the class tree on the left, the selected
+       class's examples on the right, and the selected example's README
+       excerpt below them. "Load into Configure" applies the example to
+       the form and fills the Run name/description boxes. Not wired
+       through `wireModal`, whose Return-closes-the-dialog handler would
+       defeat Return-to-load. "Open saved result" is not offered yet:
+       it needs the seeded read-only runs and the report-only open of
+       design §4.2/§4.3 (TODO there). -->
+  <dialog
+    class="config-modal"
+    id="modal-examples"
+    aria-labelledby="examples-title"
+    aria-describedby="examples-keyboard-hint"
+  >
+    <h2 id="examples-title">Examples</h2>
+    <p class="hint" id="examples-keyboard-hint">
+      Choose a class, then an example. Arrow keys move; Return loads
+      the selected example.
+    </p>
+    <p class="hint" id="examples-empty-note" hidden>
+      No examples are bundled with this build.
+    </p>
+    <div class="examples-layout">
+      <ul
+        id="examples-class-tree"
+        class="examples-class-tree"
+        role="tree"
+        aria-label="Example classes"
+      ></ul>
+      <div class="examples-main">
+        <p class="hint" id="examples-class-description"></p>
+        <ul
+          id="examples-list"
+          class="examples-list"
+          role="listbox"
+          aria-label="Examples in the selected class"
+        ></ul>
+        <section
+          class="examples-detail"
+          id="examples-detail"
+          aria-label="About the selected example"
+          aria-live="polite"
+        >
+          <h3 id="examples-detail-name"></h3>
+          <p id="examples-detail-excerpt" class="examples-detail-excerpt"></p>
+          <p class="examples-load-error" id="examples-load-error" role="alert" hidden></p>
+        </section>
+      </div>
+    </div>
+    <div class="actions">
+      <button
+        type="button"
+        id="examples-cancel-button"
+        aria-label="Close the Examples dialog"
+      >Cancel</button>
+      <button
+        type="button"
+        id="examples-view-yaml-button"
+        aria-label="View the selected example's configuration as YAML"
+      >View YAML</button>
+      <button
+        type="button"
+        id="examples-load-button"
+        class="primary-action"
+        aria-label="Load the selected example into Configure"
+      >Load into Configure</button>
+    </div>
+  </dialog>
+
+  <!-- Presets (botanist GUI design doc §4.5): every bundled example
+       with a configuration, one click away, sourced live from `Api.list_
        presets` -- not a `.config-modal` (it edits nothing of its own;
        picking a row loads that preset into the real Configure fields
        and closes this dialog immediately, so it needs no "Close"
@@ -2355,6 +2426,7 @@
 <script src="screens/explore-sweep.js"></script>
 <script src="screens/compare.js"></script>
 <script src="screens/presets.js"></script>
+<script src="screens/examples.js"></script>
 <script src="screens/settings.js"></script>
 <script src="screens/welcome.js"></script>
 <script src="screens/nav-rail.js"></script>

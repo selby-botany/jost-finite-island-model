@@ -547,6 +547,198 @@ def test_list_presets_matches_presets_module_directly() -> None:
     assert len(result["presets"]) > 0
 
 
+def _labelled_example_catalog(webui: Path) -> None:
+    """Write a one-example fixture catalog whose configuration carries labels.
+
+    The configuration carries `name`, `description`, `class`, and
+    `_read_only` (design doc `20261005-claude-opus-5-5-read-only-
+    examples-and-classes-design.md` §1, `selby/restricted`); loading it
+    succeeds only if every one of them is kept away from
+    `SimulationParams.from_mapping` and the form.
+    """
+    config = (
+        "name: Labelled example\n"
+        "description: Carries every label.\n"
+        "class: migration\n"
+        "_read_only: true\n"
+        "N: 40\n"
+        "ploidy: haploid\n"
+        "d: 3\n"
+        "m: 0.05\n"
+        "mu: 0.001\n"
+        "seed: 7\n"
+    )
+    (webui / "examples").mkdir(parents=True)
+    (webui / "examples" / "catalog.json").write_text(
+        json.dumps(
+            {
+                "classes": [
+                    {
+                        "id": "migration",
+                        "title": "Migration structure",
+                        "description": "",
+                        "children": [],
+                    }
+                ],
+                "examples": [
+                    {
+                        "id": "labelled",
+                        "name": "Labelled example",
+                        "description": "Carries every label.",
+                        "class": "migration",
+                        "readme": "# Labelled example\n",
+                        "readme_excerpt": "An excerpt.",
+                        "config_yaml": config,
+                        "outputs": [],
+                    }
+                ],
+            }
+        ),
+        encoding="utf-8",
+    )
+
+
+def test_list_examples_mirrors_the_bundled_catalog() -> None:
+    """Classes and examples come from the catalog, in its order, with loadability.
+
+    `loadable` is computed, not assumed: the per-locus-`mu` example has
+    no form representation and the Dear-Nolan high example has no
+    configuration at all, and each says why in `message`.
+    """
+    catalog = presets_module.load_catalog(app_module._webui_directory())
+
+    result = Api().list_examples()
+
+    assert result["ok"] is True
+    assert result["classes"] == [entry.to_dict() for entry in catalog.classes]
+    assert [example["id"] for example in result["examples"]] == [
+        example.example_id for example in catalog.examples
+    ]
+    by_id = {example["id"]: example for example in result["examples"]}
+    stepping_stone = by_id["stepping-stone-spatial-migration"]
+    assert stepping_stone["loadable"] is True
+    assert stepping_stone["has_configuration"] is True
+    assert stepping_stone["message"] == ""
+    assert stepping_stone["excerpt"] != ""
+    per_locus = by_id[_KNOWN_UNREPRESENTABLE_PRESET_ID]
+    assert per_locus["loadable"] is False
+    assert per_locus["has_configuration"] is True
+    assert "per-locus mu" in per_locus["message"]
+    scripted = by_id["dear-nolan-high"]
+    assert scripted["loadable"] is False
+    assert scripted["has_configuration"] is False
+    assert "no configuration file" in scripted["message"]
+
+
+def test_load_example_returns_form_values_and_run_labels() -> None:
+    """The form values, plus the name and description for the Run boxes."""
+    example = presets_module.get_example(
+        app_module._webui_directory(), "stepping-stone-spatial-migration"
+    )
+    assert example is not None
+
+    result = Api().load_example("stepping-stone-spatial-migration")
+
+    assert result["ok"] is True
+    assert result["values"]["N"] == "150"
+    assert result["values"]["m_mode"] == "matrix"
+    assert result["name"] == example.name
+    assert result["description"] == example.description
+    assert result["class"] == example.class_id
+
+
+def test_load_example_strips_labels_and_internal_keys(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Labels and `_read_only` never reach the form; name/description are returned."""
+    _labelled_example_catalog(tmp_path)
+    monkeypatch.setattr(app_module, "_webui_directory", lambda: tmp_path)
+
+    result = Api().load_example("labelled")
+
+    assert result["ok"] is True, result.get("message")
+    assert result["name"] == "Labelled example"
+    assert result["description"] == "Carries every label."
+    assert result["class"] == "migration"
+    for key in ("name", "description", "class", "_read_only", "read_only"):
+        assert key not in result["values"]
+    assert result["values"]["N"] == "40"
+    # The values are an ordinary, submittable configuration.
+    SimulationParams.from_mapping(form_values_to_payload(result["values"]))
+
+
+def test_get_preset_form_values_strips_labels_and_internal_keys(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The File menu picker's alias takes the same stripping path."""
+    _labelled_example_catalog(tmp_path)
+    monkeypatch.setattr(app_module, "_webui_directory", lambda: tmp_path)
+
+    result = Api().get_preset_form_values("labelled")
+
+    assert result["ok"] is True, result.get("message")
+    assert "_read_only" not in result["values"]
+
+
+def test_get_preset_yaml_drops_internal_keys_but_keeps_labels(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A copied configuration makes an ordinary run, still named by its labels."""
+    _labelled_example_catalog(tmp_path)
+    monkeypatch.setattr(app_module, "_webui_directory", lambda: tmp_path)
+
+    result = Api().get_preset_yaml("labelled")
+
+    assert result["ok"] is True
+    assert "_read_only" not in result["yaml"]
+    assert result["yaml"].startswith("name: Labelled example\n")
+
+
+def test_load_example_rejects_an_unknown_id() -> None:
+    """An unknown example id is a clear error."""
+    result = Api().load_example("not-a-real-example")
+
+    assert result == {"ok": False, "message": "no such example: not-a-real-example"}
+
+
+def test_load_example_without_a_configuration_does_not_touch_settings() -> None:
+    """The script-reproduced example cannot load, and Settings stay as they were."""
+    api = Api()
+    before = api.get_default_run_settings()
+
+    result = api.load_example("dear-nolan-high")
+
+    assert result["ok"] is False
+    assert "no configuration file" in result["message"]
+    assert api.get_default_run_settings() == before
+
+
+def test_load_example_syncs_settings_execution_defaults() -> None:
+    """Loading an example makes its execution fields Settings' defaults."""
+    api = Api()
+    set_result = api.set_default_run_settings({"engine_backend": "lineal"})
+    assert set_result == {"ok": True}
+
+    result = api.load_example("a-long-locus-batch-under-the-generational-engine")
+
+    assert result["ok"] is True
+    defaults = api.get_default_run_settings()
+    assert defaults["engine_backend"] == "generational"
+    assert defaults["n_replicates"] == "16"
+
+
+def test_list_examples_does_not_sync_settings_execution_defaults() -> None:
+    """Listing probes every example's loadability without touching Settings."""
+    api = Api()
+    set_result = api.set_default_run_settings({"engine_backend": "generational"})
+    assert set_result == {"ok": True}
+    before = api.get_default_run_settings()
+
+    api.list_examples()
+
+    assert api.get_default_run_settings() == before
+
+
 def test_save_current_as_preset_then_list_and_load_it_back() -> None:
     """A saved preset appears in `list_presets` and loads back its own values."""
     api = Api()
@@ -834,7 +1026,11 @@ def test_every_other_builtin_preset_loads_into_form_values(
 
 
 def test_get_preset_yaml_returns_a_builtin_preset_unmodified() -> None:
-    """A built-in preset's own `yaml_text`, exactly as `doc/usage.md` presents it."""
+    """A built-in preset's own `yaml_text`, as its `config.yaml` holds it.
+
+    Only internal `_` keys are removed (`test_get_preset_yaml_drops_
+    internal_keys_but_keeps_labels`, above); this example has none.
+    """
     preset = presets_module.get_preset(
         app_module._webui_directory(), "stepping-stone-spatial-migration"
     )
@@ -842,7 +1038,11 @@ def test_get_preset_yaml_returns_a_builtin_preset_unmodified() -> None:
 
     result = Api().get_preset_yaml("stepping-stone-spatial-migration")
 
-    assert result == {"ok": True, "title": preset.title, "yaml": preset.yaml_text}
+    assert result == {
+        "ok": True,
+        "title": preset.title,
+        "yaml": presets_module.strip_internal_yaml_keys(preset.yaml_text),
+    }
 
 
 def test_get_preset_yaml_rejects_an_unknown_id() -> None:

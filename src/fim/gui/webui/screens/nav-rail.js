@@ -44,7 +44,6 @@ const STATIC_DESTINATION_TO_SCREEN = {
 
 const railButtons = document.querySelectorAll(".rail-item");
 const configureBackButton = document.getElementById("configure-back-button");
-const configureExampleSelect = document.getElementById("configure-example-select");
 const configureBanner = document.getElementById("configure-banner");
 
 /**
@@ -65,14 +64,6 @@ function showConfigureBanner(message) {
     configureBanner.hidden = false;
     configureBanner.textContent = message;
 }
-
-// Set once `refreshConfigureExampleOptions`'s own bridge call has
-// settled and the dropdown genuinely lists this visit's own built-in
-// examples -- the same `window.__fimHomeExampleOptionsReady` precedent
-// (`screens/open-run.js`) for the identical reason: a test polling only
-// "the select exists" could otherwise observe it with no example
-// options yet, in the narrow window before this async call resolves.
-window.__fimConfigureExampleOptionsReady = false;
 
 /**
  * The rail destination that owns `screenId` -- every screen id now maps
@@ -228,20 +219,6 @@ function updateParameterStripFromSummary(summary) {
 window.fim.updateParameterStripFromSummary = updateParameterStripFromSummary;
 
 /**
- * Populate `configure-example-select` with this visit's own built-in
- * worked examples -- `screens/presets.js`'s own shared `refreshExample
- * Options`, the identical source Home's own `home-example-select` uses.
- * Re-fetched on every visit to Configure, matching that same "never
- * trust a stale fetch across visits" precedent, even though the
- * built-in set itself never changes at runtime.
- */
-async function refreshConfigureExampleOptions() {
-    window.__fimConfigureExampleOptionsReady = false;
-    await window.fim.refreshExampleOptions(configureExampleSelect);
-    window.__fimConfigureExampleOptionsReady = true;
-}
-
-/**
  * Open the Configure landing destination (interim this phase -- see
  * this file's own module docstring). Exposed on `window.fim` the same
  * way every other destination's own `show*` entry point is, for the
@@ -250,10 +227,9 @@ async function refreshConfigureExampleOptions() {
  * file for now.
  *
  * Screen history is owned centrally by `window.fim.showScreen`, so this
- * entry point only shows Configure and refreshes its example dropdown
- * and its own Study picker (`run-view-controls.js`'s own `run-study-
+ * entry point only shows Configure and refreshes its own Study picker (`run-view-controls.js`'s own `run-study-
  * select` -- Run/Study/Experiment workflow-ergonomics design, `selby/
- * restricted`, item 3), so either reflects anything created since app
+ * restricted`, item 3), so it reflects anything created since app
  * launch with no restart needed.
  */
 async function showConfigureScreen() {
@@ -265,7 +241,6 @@ async function showConfigureScreen() {
     // above a Configure form that no longer agrees with it.
     await Promise.all([
         revalidate(),
-        refreshConfigureExampleOptions(),
         window.fim.refreshRunStudySelectOptions(),
     ]);
 }
@@ -355,30 +330,6 @@ function wireNavRail() {
         });
     configureBackButton.addEventListener("click", () => {
         window.fim.navigateBack();
-    });
-    // A plain, immediately-acting pulldown, the identical "jump-start"
-    // shortcut Home's own `home-example-select` offers
-    // (`screens/open-run.js`) -- applies in place via `window.fim.
-    // applyPreset` and resets to its own placeholder so the control
-    // always reads as an action, never as "currently showing example X."
-    // No navigation on success (unlike Home's own version): there is
-    // nowhere else to jump to, since the point is loading a different
-    // example without leaving Configure at all.
-    configureExampleSelect.addEventListener("change", async () => {
-        const presetId = configureExampleSelect.value;
-        if (!presetId) {
-            return;
-        }
-        // The option's own bare title (`refreshExampleOptions`'s own
-        // `dataset.presetTitle`, `screens/presets.js`), not its visible
-        // `textContent` -- the latter carries a "(view YAML only)"
-        // suffix for the one example this affects, meant for the
-        // pulldown's own label, not to be echoed back inside
-        // `showExampleLoadNotice`'s own message.
-        const presetTitle = configureExampleSelect.selectedOptions[0].dataset
-            .presetTitle;
-        configureExampleSelect.value = "";
-        await window.fim.applyPreset(presetId, presetTitle);
     });
 
     // Matches `index.html`'s own static default (`screen-open-run` is

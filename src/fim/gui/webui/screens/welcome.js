@@ -3,9 +3,9 @@
 /* The first-launch welcome panel (botanist GUI design doc `20260907-
  * claude-sonnet-5-botanist-gui-redesign.md` §10): shown once, the very
  * first time `Api.get_welcome_dismissed()` says it has not been shown
- * yet, offering "Try a worked example…" (opens the same `modal-presets`
- * gallery the File menu's own "Load example…" already does,
- * `screens/presets.js`'s `fim.menu.loadExample`) or "Start from
+ * yet, offering "Examples…" (opens the Examples dialog Configure's own
+ * "Examples…" button opens, `screens/examples.js`'s
+ * `fim.showExamplesDialog`) or "Start from
  * scratch" (the current, already-showing starter form -- there is
  * nothing else to do).
  *
@@ -50,10 +50,10 @@ welcomeDialog.addEventListener("close", () => {
 });
 
 document
-    .getElementById("welcome-try-example-button")
+    .getElementById("welcome-examples-button")
     .addEventListener("click", () => {
         welcomeDialog.close();
-        window.fim.menu.loadExample();
+        window.fim.showExamplesDialog();
     });
 
 document
