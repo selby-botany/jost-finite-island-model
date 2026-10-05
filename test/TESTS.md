@@ -4543,6 +4543,28 @@ own evidence window anchored and checked right then — not deferred
 until `slow` happens to read `True`, as the short-circuiting `all()`
 once did (leaving `precise` with no `window_statistics` at all here).
 
+<a id="convergence.test_noise_gate.test_an_already_adequate_statistic_is_not_rechecked_while_waiting"></a>
+
+#### test\_an\_already\_adequate\_statistic\_is\_not\_rechecked\_while\_waiting
+
+```python
+def test_an_already_adequate_statistic_is_not_rechecked_while_waiting(
+        monkeypatch: pytest.MonkeyPatch) -> None
+```
+
+Once noise-adequate, a statistic's cached verdict is reused, not recomputed.
+
+Under `"all"`, `precise` is noise-adequate at its first check (generation
+23), while `drifting` keeps falling for 200 generations before it
+levels off — so `"all"` cannot fire for a long while after `precise` has
+already passed. `_gated_stable`'s own docstring promises that a
+statistic in that position stops growing and keeps returning its one
+cached verdict; the `O(window)` `window_statistics` computation must
+therefore run exactly once for `precise` over the whole run (it was
+once recomputed every generation, over an ever-growing window), and
+that cached `True` must still be what lets the run converge once
+`drifting` settles.
+
 <a id="convergence.test_tracker"></a>
 
 # convergence.test\_tracker

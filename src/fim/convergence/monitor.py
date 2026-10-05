@@ -232,9 +232,11 @@ class ConvergenceMonitor:
         # actively growing one for; absent while the trend is not
         # currently stable. The window at which the *next* noise check is
         # due, doubling after each inadequate one — see `_gated_stable`'s
-        # own docstring for why both exist.
+        # own docstring for why both exist. The statistics already judged
+        # noise-adequate, whose verdict is cached rather than recomputed.
         self._noise_window_start: dict[str, int] = {}
         self._noise_next_check_length: dict[str, int] = {}
+        self._noise_adequate: set[str] = set()
         self._last_window_statistics: dict[str, WindowStatistics] = {}
         self._outcome = ConvergenceOutcome(False, False, None, None)
 
@@ -444,15 +446,23 @@ class ConvergenceMonitor:
         """Return the most recent noise-adequacy check computed for `name`.
 
         Set only as a side effect of `_gated_stable` actually running the
-        expensive check (below) — most recently, and therefore most
-        informatively, at the exact generation `name` was declared stable
-        (`record`'s own `is_stable` branch fires in the same call that just
-        set this). A caller building a final report reads this once, after
-        the run has stopped, to say not just *that* a statistic converged
-        but how precisely its own (possibly grown well past the criterion's
-        own configured `window`) trailing evidence window was actually
-        known — `WindowStatistics.window` carries however long that
-        evidence window actually ended up being, not the configured one.
+        expensive check (below) — for a statistic that reached
+        noise-adequate, at the generation it first did so, after which
+        its verdict is cached and this value no longer changes. For the
+        statistic(s) that decided the stop, that is the stop generation
+        itself (`record`'s own `is_stable` branch fires in the same call
+        that just set this); under ``combinator="all"``, a statistic that
+        passed before the others keeps the window it passed with while
+        the run waits on the rest (`_gated_stable`'s own docstring). A
+        statistic that never reached noise-adequate holds its most recent,
+        inadequate check instead.
+
+        A caller building a final report reads this once, after the run
+        has stopped, to say not just *that* a statistic converged but how
+        precisely its own (possibly grown well past the criterion's own
+        configured `window`) trailing evidence window was actually known
+        — `WindowStatistics.window` carries however long that evidence
+        window actually ended up being, not the configured one.
 
         Args:
             name: A configured statistic name (watched or extra).
@@ -555,6 +565,12 @@ class ConvergenceMonitor:
         """
         if self._noise_window is None:
             return trend_stable
+        if name in self._noise_adequate:
+            # Already judged noise-adequate on an earlier round: the cached
+            # verdict stands (see above). No further `O(window)` check, and
+            # the evidence window `window_statistics(name)` reports stops
+            # growing here.
+            return True
         history = self._histories[name]
         start = self._noise_window_start.get(name)
         if start is None:
@@ -579,6 +595,7 @@ class ConvergenceMonitor:
         self._last_window_statistics[name] = stats
         assert self._noise_tolerance is not None  # set alongside self._noise_window
         if stats.noise_adequate(self._noise_tolerance):
+            self._noise_adequate.add(name)
             return True
         self._noise_next_check_length[name] = current_length * 2
         return False

@@ -1915,15 +1915,23 @@ def window_statistics(name: str) -> WindowStatistics | None
 Return the most recent noise-adequacy check computed for `name`.
 
 Set only as a side effect of `_gated_stable` actually running the
-expensive check (below) — most recently, and therefore most
-informatively, at the exact generation `name` was declared stable
-(`record`'s own `is_stable` branch fires in the same call that just
-set this). A caller building a final report reads this once, after
-the run has stopped, to say not just *that* a statistic converged
-but how precisely its own (possibly grown well past the criterion's
-own configured `window`) trailing evidence window was actually
-known — `WindowStatistics.window` carries however long that
-evidence window actually ended up being, not the configured one.
+expensive check (below) — for a statistic that reached
+noise-adequate, at the generation it first did so, after which
+its verdict is cached and this value no longer changes. For the
+statistic(s) that decided the stop, that is the stop generation
+itself (`record`'s own `is_stable` branch fires in the same call
+that just set this); under ``combinator="all"``, a statistic that
+passed before the others keeps the window it passed with while
+the run waits on the rest (`_gated_stable`'s own docstring). A
+statistic that never reached noise-adequate holds its most recent,
+inadequate check instead.
+
+A caller building a final report reads this once, after the run
+has stopped, to say not just *that* a statistic converged but how
+precisely its own (possibly grown well past the criterion's own
+configured `window`) trailing evidence window was actually known
+— `WindowStatistics.window` carries however long that evidence
+window actually ended up being, not the configured one.
 
 **Arguments**:
 

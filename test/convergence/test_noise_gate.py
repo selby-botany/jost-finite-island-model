@@ -16,6 +16,7 @@ from __future__ import annotations
 import itertools
 import math
 import random
+from collections.abc import Sequence
 from typing import Literal
 
 import pytest
@@ -25,6 +26,7 @@ from fim.convergence.monitor import ConvergenceMonitor, ConvergenceOutcome
 from fim.convergence.window_statistics import (
     MINIMUM_NOISE_CHECK_WINDOW,
     WindowStatistics,
+    window_statistics,
 )
 
 
@@ -340,4 +342,66 @@ def test_all_anchors_a_statistic_that_is_not_deciding_the_outcome() -> None:
     precise = monitor.window_statistics("precise")
     assert precise is not None
     assert precise.window == window
+    assert precise.noise_adequate(tolerance)
+
+
+def test_an_already_adequate_statistic_is_not_rechecked_while_waiting(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Once noise-adequate, a statistic's cached verdict is reused, not recomputed.
+
+    Under `"all"`, `precise` is noise-adequate at its first check (generation
+    23), while `drifting` keeps falling for 200 generations before it
+    levels off — so `"all"` cannot fire for a long while after `precise` has
+    already passed. `_gated_stable`'s own docstring promises that a
+    statistic in that position stops growing and keeps returning its one
+    cached verdict; the `O(window)` `window_statistics` computation must
+    therefore run exactly once for `precise` over the whole run (it was
+    once recomputed every generation, over an ever-growing window), and
+    that cached `True` must still be what lets the run converge once
+    `drifting` settles.
+    """
+    window, tolerance = 24, 0.03
+    length = 600
+    precise_series = _noisy_flat_series(mean=0.6, sigma=0.0005, length=length, seed=3)
+    # Strictly negative throughout, so a computation over `drifting`'s
+    # values can never be mistaken for one over `precise`'s (all near 0.6).
+    drifting_series = [
+        -0.01 - 0.01 * min(generation, 200) for generation in range(length)
+    ]
+
+    precise_windows: list[int] = []
+
+    def counting_window_statistics(values: Sequence[float]) -> WindowStatistics:
+        """Record each computation over `precise`'s values, then delegate."""
+        if min(values) > 0.0:
+            precise_windows.append(len(values))
+        return window_statistics(values)
+
+    monkeypatch.setattr(
+        "fim.convergence.monitor.window_statistics", counting_window_statistics
+    )
+    monitor = ConvergenceMonitor(
+        TrailingWindowCriterion(window, tolerance),
+        max_generations=length - 1,
+        statistics=("precise", "drifting"),
+        combinator="all",
+    )
+    stop = None
+    for generation in range(length):
+        values = {
+            "precise": precise_series[generation],
+            "drifting": drifting_series[generation],
+        }
+        if monitor.record(generation, values).stopped:
+            stop = generation
+            break
+
+    assert precise_windows == [window]
+    assert stop is not None
+    assert stop > 200  # `drifting`, not `precise`, decided when "all" fired
+    assert monitor.outcome().converged
+    precise = monitor.window_statistics("precise")
+    assert precise is not None
+    assert precise.window == window  # the cached window stopped growing
     assert precise.noise_adequate(tolerance)
