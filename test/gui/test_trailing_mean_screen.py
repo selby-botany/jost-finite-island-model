@@ -170,11 +170,25 @@ def test_the_trailing_window_counts_generations_and_starts_with_enough_points(
     assert settled["anchors"] == {"D": 10}
 
 
+@pytest.mark.parametrize("formatted_window", ["1,356", "1356"])
 def test_the_cumulative_mean_its_start_and_the_window_marker(
-    window: webview.Window, drive: Callable[..., Any]
+    window: webview.Window, drive: Callable[..., Any], formatted_window: str
 ) -> None:
-    """Cumulative averaging starts at the anchor or burn-in; the marker follows."""
-    settled = drive(window, ready=_INPUT_SCREEN_READY, trigger="null", read=_CUMULATIVE)
+    """Averaging and legends agree with a controlled number formatter."""
+    # Browser locale data differs across platforms; control formatting,
+    # not the legend implementation, and restore it before the next test.
+    script = (
+        "(() => {"
+        "const original = Number.prototype.toLocaleString;"
+        "Number.prototype.toLocaleString = function () {"
+        f"return Number(this) === 1356 ? {json.dumps(formatted_window)} : String(this);"
+        "};"
+        "try {"
+        f"return {_CUMULATIVE.strip().removesuffix(';')};"
+        "} finally { Number.prototype.toLocaleString = original; }"
+        "})()"
+    )
+    settled = drive(window, ready=_INPUT_SCREEN_READY, trigger="null", read=script)
 
     # Averaging from index 3 needs eight points: the first mean is at 10.
     assert settled["gaps"] is True
@@ -203,7 +217,7 @@ def test_the_cumulative_mean_its_start_and_the_window_marker(
     # A window that begins after the shown generation draws no marker.
     assert settled["notYet"] is None
     assert settled["trailingLegend"] == [
-        ["swatch-band", "trailing mean ± 2 SE (last 1,356 generations)"],
+        ["swatch-band", f"trailing mean ± 2 SE (last {formatted_window} generations)"],
         ["swatch-window-start", "trailing window start"],
     ]
     assert settled["cumulativeLegend"] == [

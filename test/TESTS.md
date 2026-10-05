@@ -19719,11 +19719,13 @@ The window spans generations; the curve begins at eight points.
 #### test\_the\_cumulative\_mean\_its\_start\_and\_the\_window\_marker
 
 ```python
+@pytest.mark.parametrize("formatted_window", ["1,356", "1356"])
 def test_the_cumulative_mean_its_start_and_the_window_marker(
-        window: webview.Window, drive: Callable[..., Any]) -> None
+        window: webview.Window, drive: Callable[..., Any],
+        formatted_window: str) -> None
 ```
 
-Cumulative averaging starts at the anchor or burn-in; the marker follows.
+Averaging and legends agree with a controlled number formatter.
 
 <a id="gui.test_trailing_mean_screen.test_the_estimate_note_text"></a>
 
