@@ -1661,9 +1661,33 @@
           placeholder="Study name"
           aria-label="New study name"
         >
+        <input
+          type="text"
+          id="run-study-new-description"
+          placeholder="Study description (optional)"
+          aria-label="New study description"
+        >
         <select id="run-study-new-experiment" aria-label="Experiment for the new study"></select>
         <button type="button" id="run-study-new-create-button">Create</button>
         <button type="button" id="run-study-new-cancel-button">Cancel</button>
+      </span>
+      <!-- The next run's own name and description, both optional
+           (`Api.start_run`'s `run_name`/`run_description`, written to the
+           run's `metadata.json`). Hidden while Sweep is on: a sweep names
+           each point's run after its Study (`fim.sweep.point_run_name`). -->
+      <span id="run-details-row" class="inline-create-row">
+        <input
+          type="text"
+          id="run-name-input"
+          placeholder="Run name (optional)"
+          aria-label="Name for the next run"
+        >
+        <input
+          type="text"
+          id="run-description-input"
+          placeholder="Run description (optional)"
+          aria-label="Description for the next run"
+        >
       </span>
       <button type="button" id="configure-run-button">
         <svg class="button-icon" aria-hidden="true">
@@ -1843,6 +1867,49 @@
           type="submit"
           value="save"
           id="save-preset-accept-button"
+          class="primary-action"
+          tabindex="0"
+        >Save</button>
+      </div>
+    </form>
+  </dialog>
+
+  <!-- Details of one Experiment, Study, or Run (`screens/details.js`):
+       its name, its one-line description (the tooltip every displayed
+       name shows), and, for an Experiment or Study, longer documentation
+       of what it is for and why. Opened by clicking a name or its "ⓘ"
+       button. Same Accept/Cancel discipline as `modal-save-preset`. -->
+  <dialog class="config-modal" id="modal-details">
+    <h2 id="details-title">Details</h2>
+    <form method="dialog" id="details-form">
+      <p class="hint fim-copyable-text" id="details-identity"></p>
+      <div class="field">
+        <label for="details-name">Name</label>
+        <input type="text" id="details-name">
+      </div>
+      <div class="field">
+        <label for="details-description">Description</label>
+        <input
+          type="text"
+          id="details-description"
+          placeholder="One line: what this is"
+        >
+      </div>
+      <div class="field" id="details-documentation-field">
+        <label for="details-documentation">Documentation</label>
+        <textarea
+          id="details-documentation"
+          rows="10"
+          placeholder="What this is for and why: the question, the rationale, the setup, what was found."
+        ></textarea>
+      </div>
+      <p class="hint" id="details-error" hidden></p>
+      <div class="actions">
+        <button type="button" id="details-cancel-button" tabindex="0">Cancel</button>
+        <button
+          type="submit"
+          value="save"
+          id="details-save-button"
           class="primary-action"
           tabindex="0"
         >Save</button>
@@ -2265,6 +2332,8 @@
 <script src="meters.js"></script>
 <script src="scrubber.js"></script>
 <script src="run-graph-stage.js"></script>
+<script src="screens/details.js"></script>
+<script src="screens/run-title.js"></script>
 <script src="screens/config-modals.js"></script>
 <script src="screens/migration-matrix.js"></script>
 <script src="screens/loci-grid.js"></script>

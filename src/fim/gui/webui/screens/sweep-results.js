@@ -139,6 +139,7 @@ window.fim.showSweepResults = async function showSweepResults(studyId) {
     sweepResultsSummary.textContent = sweepResultsSummaryText(data);
     populateSweepResultsControls(data);
     sweepTitle.textContent = data.name;
+    window.fim.attachDetails(sweepTitle, sweepStudyDetails(data));
     sweepProgressView.hidden = true;
     sweepResultsView.hidden = false;
     window.fim.showScreen("screen-sweep");

@@ -4996,3 +4996,190 @@ def test_list_studies_counts_only_the_member_runs_that_exist(
 
     assert row["runDirectories"] == [str(real)]
     assert row["runCount"] == 1
+
+
+# -- Names, descriptions and documentation (`webui/screens/details.js`) ------
+
+
+def test_create_study_and_experiment_store_documentation_and_list_it(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Documentation given at creation is listed; blank text is stored as unset."""
+    _use_isolated_results_directory(tmp_path, monkeypatch)
+    api = Api()
+
+    api.create_experiment("Topology", "  ", "Long-running goal.")
+    api.create_study("Ring sweep", "One line.", None, "Why a ring.")
+
+    [experiment] = api.list_experiments()
+    [study] = api.list_studies()
+    assert (experiment["description"], experiment["documentation"]) == (
+        None,
+        "Long-running goal.",
+    )
+    assert (study["description"], study["documentation"]) == (
+        "One line.",
+        "Why a ring.",
+    )
+
+
+def test_update_study_and_experiment_details_round_trip(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The details dialog's Save replaces name, description and documentation."""
+    _use_isolated_results_directory(tmp_path, monkeypatch)
+    api = Api()
+    study_id = api.create_study("Old")["studyId"]
+    experiment_id = api.create_experiment("Old")["experimentId"]
+
+    saved_study = api.update_study_details(study_id, "New", "Line.", "Notes.")
+    saved_experiment = api.update_experiment_details(experiment_id, "E", "", "Doc.")
+
+    assert saved_study == {
+        "ok": True,
+        "details": {
+            "kind": "study",
+            "id": study_id,
+            "name": "New",
+            "description": "Line.",
+            "documentation": "Notes.",
+        },
+    }
+    assert saved_experiment["details"]["description"] is None
+    assert api.get_details("study", study_id) == saved_study
+    assert api.get_details("experiment", experiment_id) == saved_experiment
+
+
+def test_update_details_reports_a_blank_name_or_unknown_id(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A failed save leaves a message for the dialog, and changes nothing."""
+    _use_isolated_results_directory(tmp_path, monkeypatch)
+    api = Api()
+    study_id = api.create_study("Kept")["studyId"]
+
+    blank = api.update_study_details(study_id, "  ", "", "")
+    unknown = api.update_experiment_details("experiment-ffffffff", "E", "", "")
+
+    assert blank == {"ok": False, "message": "study name must not be blank"}
+    assert unknown == {
+        "ok": False,
+        "message": "no such experiment: experiment-ffffffff",
+    }
+    assert api.list_studies()[0]["name"] == "Kept"
+    assert api.get_details("study", "study-ffffffff")["ok"] is False
+    assert api.get_details("nonsense", study_id) == {
+        "ok": False,
+        "message": "unknown kind: nonsense",
+    }
+
+
+def test_update_run_details_writes_the_sidecar_and_home_lists_it(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A run's name and description are saved and shown in its Home row."""
+    results = _use_isolated_results_directory(tmp_path, monkeypatch)
+    output = _write_run_under(results, "run-a")
+    api = Api()
+
+    saved = api.update_run_details(str(output), " Baseline ", "Low m control.")
+
+    assert saved == {
+        "ok": True,
+        "details": {
+            "kind": "run",
+            "id": str(output),
+            "name": "Baseline",
+            "description": "Low m control.",
+            "directoryName": output.name,
+        },
+    }
+    assert api.get_details("run", str(output)) == saved
+    study_id = groups.DEFAULT_STUDY_ID
+    [row] = api.get_study_run_summary(study_id)["runs"]
+    assert (row["name"], row["description"]) == ("Baseline", "Low m control.")
+
+
+def test_update_run_details_clears_with_blank_text_and_rejects_a_non_run(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Blank clears a field; a directory with no manifest is not a run."""
+    results = _use_isolated_results_directory(tmp_path, monkeypatch)
+    output = _write_run_under(results, "run-a")
+    api = Api()
+    api.update_run_details(str(output), "Named", "Described")
+
+    cleared = api.update_run_details(str(output), "", "")
+
+    assert (cleared["details"]["name"], cleared["details"]["description"]) == (
+        None,
+        None,
+    )
+    assert api.update_run_details(str(tmp_path), "X", "")["ok"] is False
+
+
+def test_get_run_context_names_a_runs_study_and_experiment(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A run filed in a chosen Study is shown under it, not under the default."""
+    results = _use_isolated_results_directory(tmp_path, monkeypatch)
+    output = _write_run_under(results, "run-a")
+    api = Api()
+    experiment_id = api.create_experiment("Topology", "Ring vs island.")["experimentId"]
+    study_id = api.create_study("Ring sweep", "", experiment_id)["studyId"]
+    api.add_run_to_study(study_id, str(output))
+    api.update_run_details(str(output), "Baseline", "")
+
+    context = api.get_run_context(str(output))
+
+    assert context["run"]["name"] == "Baseline"
+    assert context["study"]["id"] == study_id
+    assert context["experiment"] == {
+        "kind": "experiment",
+        "id": experiment_id,
+        "name": "Topology",
+        "description": "Ring vs island.",
+        "documentation": None,
+    }
+
+
+def test_get_run_context_before_a_run_uses_the_selected_or_default_study(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """With no run yet, the title names the chosen Study's Experiment."""
+    _use_isolated_results_directory(tmp_path, monkeypatch)
+    api = Api()
+    experiment_id = api.create_experiment("Topology")["experimentId"]
+    study_id = api.create_study("Ring sweep", "", experiment_id)["studyId"]
+
+    chosen = api.get_run_context(None, study_id)
+    before_default = api.get_run_context()
+    api.ensure_default_study()
+    default = api.get_run_context()
+
+    assert chosen["run"] is None
+    assert chosen["experiment"]["id"] == experiment_id
+    # Read only: asking for the default never creates it.
+    assert (before_default["study"], before_default["experiment"]) == (None, None)
+    assert default["study"]["id"] == groups.DEFAULT_STUDY_ID
+    assert default["experiment"]["name"] == groups.DEFAULT_EXPERIMENT_NAME
+    assert api.get_run_context(None, "study-ffffffff")["study"] is None
+
+
+def test_attach_finished_run_writes_configures_run_name_and_keeps_the_rest(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Configure's run name lands in the sidecar; a blank field keeps the old one."""
+    results = _use_isolated_results_directory(tmp_path, monkeypatch)
+    output = _write_run_under(results, "run-a")
+    Api().update_run_details(str(output), "Earlier", "Kept description.")
+
+    app_module._attach_finished_run_to_study(
+        None, output, app_module.RunDetails("Typed name", None)
+    )
+
+    details = Api().get_details("run", str(output))["details"]
+    assert (details["name"], details["description"]) == (
+        "Typed name",
+        "Kept description.",
+    )

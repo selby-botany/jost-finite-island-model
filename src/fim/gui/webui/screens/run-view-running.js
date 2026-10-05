@@ -261,9 +261,8 @@ function enterRunningState(isBatch = false) {
         initialStats.hidden = true;
     }
     applyRunKind(isBatch);
-    if (runPlotTitle) {
-        runPlotTitle.textContent = "FIM simulation — in progress";
-    }
+    // "<Experiment> — in progress"; `onRunClicked` adds the run's name.
+    window.fim.setRunCardTitle({ phase: "running" });
     runCompleted.hidden = true;
     // `run-messages` sits beside `run-reason` at the foot of the run
     // view, not inside `runCompleted` -- hiding that above no longer

@@ -56,7 +56,7 @@ from math import exp, isfinite
 from pathlib import Path
 from socketserver import ThreadingMixIn
 from types import FrameType
-from typing import Any, Final, Protocol, TextIO, cast
+from typing import Any, Final, NamedTuple, Protocol, TextIO, cast
 
 import numpy as np
 import webview
@@ -126,7 +126,7 @@ from fim.model.topology import MINIMUM_DEMES
 from fim.persistence import groups
 from fim.persistence.manifest import RunManifest, read_batch_manifest, read_manifest
 from fim.persistence.pairwise import pair_value, read_pairwise
-from fim.persistence.run_metadata import run_metadata_path
+from fim.persistence.run_metadata import replace_run_metadata, run_metadata_path
 from fim.reanalyze import (
     read_persisted_convergence_history,
     reanalyze_trajectory,
@@ -1365,7 +1365,7 @@ def _home_run_row(run: recent_runs.RecentRun, *, digits: int) -> dict[str, Any]:
     Returns:
         `{"runId", "directoryName", "directory", "trajectoryPath",
         "endedAt", "label", "isBatch", "configSummary", "statistics",
-        "name"}`.
+        "name", "description"}`.
         `configSummary` is `_run_config_summary`'s own `{"N", "d", "m",
         "mu", "mutation_model", "seed"}`, or `None` if `run.manifest`
         was unavailable or its own parameters no longer validate.
@@ -1373,7 +1373,7 @@ def _home_run_row(run: recent_runs.RecentRun, *, digits: int) -> dict[str, Any]:
         `summary.json` could not be read; otherwise one entry per
         `_RESULT_STATISTIC_NAMES` name. `name` is the run's own
         `metadata.json` name (`fim.persistence.run_metadata`), or
-        `None` if it was never set.
+        `None` if it was never set; `description` likewise.
     """
     config_summary: dict[str, str] | None = None
     if run.manifest is not None:
@@ -1398,8 +1398,7 @@ def _home_run_row(run: recent_runs.RecentRun, *, digits: int) -> dict[str, Any]:
                 for name in _RESULT_STATISTIC_NAMES
                 if name in raw_report
             }
-    raw_metadata = _read_json_object(run_metadata_path(run.directory))
-    run_name = raw_metadata.get("name") if raw_metadata is not None else None
+    run_name, run_description = _run_name_and_description(run.directory)
     return {
         "runId": run.run_id,
         # The botanist-facing identifier: the run's own output
@@ -1418,8 +1417,95 @@ def _home_run_row(run: recent_runs.RecentRun, *, digits: int) -> dict[str, Any]:
         "isBatch": run.is_batch,
         "configSummary": config_summary,
         "statistics": statistics,
-        "name": run_name if isinstance(run_name, str) else None,
+        "name": run_name,
+        "description": run_description,
     }
+
+
+def _run_name_and_description(directory: Path) -> tuple[str | None, str | None]:
+    """Return a run's `metadata.json` name and description, each `None` if unset.
+
+    Missing or malformed metadata reads as "nothing set", never an error
+    (`fim.persistence.run_metadata`'s own module docstring).
+    """
+    raw_metadata = _read_json_object(run_metadata_path(directory))
+    if raw_metadata is None:
+        return None, None
+    name = raw_metadata.get("name")
+    description = raw_metadata.get("description")
+    return (
+        name if isinstance(name, str) and name else None,
+        description if isinstance(description, str) and description else None,
+    )
+
+
+def _run_details_payload(directory: Path) -> dict[str, Any]:
+    """Return a run's details in the shape the details dialog reads.
+
+    `{"kind": "run", "id", "name", "description", "directoryName"}`:
+    `id` is the run directory (what `Api.update_run_details` takes) and
+    `directoryName` stands in for a run with no name.
+    """
+    name, description = _run_name_and_description(directory)
+    return {
+        "kind": "run",
+        "id": str(directory),
+        "name": name,
+        "description": description,
+        "directoryName": directory.name,
+    }
+
+
+def _group_details_payload(
+    manifest: groups.StudyManifest | groups.ExperimentManifest,
+) -> dict[str, Any]:
+    """Return a Study's or Experiment's id, name, description and documentation.
+
+    The shape the details dialog and every name tooltip read
+    (`webui/screens/details.js`): `{"kind", "id", "name", "description",
+    "documentation"}`, `kind` being `"study"` or `"experiment"`.
+    """
+    if isinstance(manifest, groups.StudyManifest):
+        kind, identifier = "study", manifest.study_id
+    else:
+        kind, identifier = "experiment", manifest.experiment_id
+    return {
+        "kind": kind,
+        "id": identifier,
+        "name": manifest.name,
+        "description": manifest.description,
+        "documentation": manifest.documentation,
+    }
+
+
+def _prefer_non_default(
+    candidates: Sequence[groups.StudyManifest] | Sequence[groups.ExperimentManifest],
+    preferred: str | None,
+) -> groups.StudyManifest | groups.ExperimentManifest | None:
+    """Pick the grouping a run or Study is shown under, out of several.
+
+    `preferred` (an id the caller already has in hand, such as the
+    Study Configure has selected) wins when it is among `candidates`;
+    otherwise the oldest that is not the default Study/Experiment, since
+    a run filed somewhere deliberately is better described by that than
+    by the catch-all; otherwise the default itself; otherwise `None`.
+    """
+    defaults = {groups.DEFAULT_STUDY_ID, groups.DEFAULT_EXPERIMENT_ID}
+
+    def identifier(
+        manifest: groups.StudyManifest | groups.ExperimentManifest,
+    ) -> str:
+        if isinstance(manifest, groups.StudyManifest):
+            return manifest.study_id
+        return manifest.experiment_id
+
+    for candidate in candidates:
+        if preferred is not None and identifier(candidate) == preferred:
+            return candidate
+    for candidate in candidates:
+        if identifier(candidate) not in defaults:
+            return candidate
+    return candidates[0] if candidates else None
 
 
 def _recent_run_at_directory(directory: Path) -> recent_runs.RecentRun | None:
@@ -1820,7 +1906,11 @@ class Api:
 
     @_log_bridge_call
     def start_run(
-        self, values: dict[str, str], study_id: str | None = None
+        self,
+        values: dict[str, str],
+        study_id: str | None = None,
+        run_name: str = "",
+        run_description: str = "",
     ) -> dict[str, Any]:
         """Validate the form, then start a run pushing live progress to the page.
 
@@ -1852,6 +1942,11 @@ class Api:
                 deleted moments ago in another window) fails the launch
                 outright rather than silently producing an unattached
                 run the botanist thought they had organized.
+            run_name: Configure's optional run name, written to the run's
+                `metadata.json` once it finishes (or at once, for a
+                reused run) — the GUI counterpart to `fim run --name`.
+                Blank means "no name".
+            run_description: Likewise, the optional run description.
 
         Returns:
             `{"ok": True, "isBatch": ..., "equilibrium": ...,
@@ -1891,6 +1986,9 @@ class Api:
                 groups.get_study(study_id)
             except ValueError as error:
                 return {"ok": False, "message": str(error)}
+        run_details = RunDetails(
+            run_name.strip() or None, run_description.strip() or None
+        )
         if self._sweep_cancel_event is not None:
             return {
                 "ok": False,
@@ -1921,7 +2019,7 @@ class Api:
         run_id = deterministic_run_id(params)
         existing = groups.find_run_directories(run_id, software_version=fim_version)
         if existing:
-            _attach_finished_run_to_study(study_id, existing[0])
+            _attach_finished_run_to_study(study_id, existing[0], run_details)
             return {
                 "ok": True,
                 "reused": True,
@@ -1937,9 +2035,11 @@ class Api:
             return {"ok": False, "message": str(error)}
         is_batch = params.n_replicates > 1
         result = (
-            self._start_batch_run(params, output_directory, values, study_id)
+            self._start_batch_run(
+                params, output_directory, values, study_id, run_details
+            )
             if is_batch
-            else self._start_scalar_run(params, output_directory, study_id)
+            else self._start_scalar_run(params, output_directory, study_id, run_details)
         )
         # `n_replicates` is no longer a field Configure's own `<form>`
         # submits (moved to Settings) -- `run-view-controls.js`'s own
@@ -1955,6 +2055,7 @@ class Api:
         params: SimulationParams,
         output_directory: Path,
         study_id: str | None = None,
+        run_details: RunDetails | None = None,
     ) -> dict[str, Any]:
         """The `n_replicates == 1` half of `start_run` (`fim.gui.runner`, unchanged)."""
         # Checked before starting anything with a side effect (`_active_
@@ -2021,6 +2122,7 @@ class Api:
                 identity_recovery,
                 closed_form,
                 study_id,
+                run_details,
             ),
             daemon=True,
         ).start()
@@ -2058,6 +2160,7 @@ class Api:
         output_directory: Path,
         values: dict[str, str],
         study_id: str | None = None,
+        run_details: RunDetails | None = None,
     ) -> dict[str, Any]:
         """The `n_replicates > 1` half of `start_run`.
 
@@ -2111,6 +2214,7 @@ class Api:
                 self._on_message,
                 self._on_batch_progress,
                 study_id,
+                run_details,
             ),
             daemon=True,
         ).start()
@@ -3825,7 +3929,7 @@ class Api:
 
         Returns:
             One dict per Study: `{"studyId", "name", "description",
-            "runCount", "createdAt", "runDirectories",
+            "documentation", "runCount", "createdAt", "runDirectories",
             "sweepPointCount"}`. `runCount` is the number of member
             runs that still exist (the length of `runDirectories`),
             not the manifest's own count. `sweepPointCount` is the number of
@@ -3850,6 +3954,7 @@ class Api:
                     "studyId": study.study_id,
                     "name": study.name,
                     "description": study.description,
+                    "documentation": study.documentation,
                     # The runs that exist, not the manifest's own count: a run
                     # deleted out of band (or a throwaway one recorded from
                     # outside `results/`) stays in the manifest, and a header
@@ -3868,7 +3973,8 @@ class Api:
 
         Returns:
             One dict per Experiment: `{"experimentId", "name",
-            "description", "studyCount", "createdAt", "studyIds"}`.
+            "description", "documentation", "studyCount", "createdAt",
+            "studyIds"}`.
             `studyIds` lets the client find an Experiment's own member
             Studies directly from `list_studies`'s own already-fetched
             result — expanding an Experiment row needs no bridge call of
@@ -3883,6 +3989,7 @@ class Api:
                 "experimentId": experiment.experiment_id,
                 "name": experiment.name,
                 "description": experiment.description,
+                "documentation": experiment.documentation,
                 "studyCount": experiment.study_count,
                 "createdAt": experiment.created_at,
                 "studyIds": list(experiment.study_ids),
@@ -3928,8 +4035,11 @@ class Api:
         name: str,
         description: str = "",
         experiment_id: str | None = None,
+        documentation: str = "",
     ) -> dict[str, Any]:
         """Create a new, empty Study, inside an Experiment when one is given.
+
+        Blank `description`/`documentation` are stored as unset.
 
         Returns:
             `{"ok": True, "studyId": ...}` on success; `{"ok": False,
@@ -3937,7 +4047,11 @@ class Api:
             Experiment does not exist (nothing is created then).
         """
         try:
-            study = groups.create_study(name, description or None)
+            study = groups.create_study(
+                name,
+                description.strip() or None,
+                documentation=documentation.strip() or None,
+            )
             if experiment_id:
                 try:
                     groups.add_study_to_experiment(experiment_id, study.study_id)
@@ -3949,13 +4063,190 @@ class Api:
         return {"ok": True, "studyId": study.study_id}
 
     @_log_bridge_call
-    def create_experiment(self, name: str, description: str = "") -> dict[str, Any]:
+    def create_experiment(
+        self, name: str, description: str = "", documentation: str = ""
+    ) -> dict[str, Any]:
         """Create a new, empty Experiment. See `create_study`."""
         try:
-            experiment = groups.create_experiment(name, description or None)
+            experiment = groups.create_experiment(
+                name,
+                description.strip() or None,
+                documentation=documentation.strip() or None,
+            )
         except ValueError as error:
             return {"ok": False, "message": str(error)}
         return {"ok": True, "experimentId": experiment.experiment_id}
+
+    @_log_bridge_call
+    def get_details(self, kind: str, identifier: str) -> dict[str, Any]:
+        """Read one Experiment's, Study's or Run's current name and description.
+
+        What the details dialog opens with (`webui/screens/details.js`),
+        read fresh from disk each time.
+
+        Args:
+            kind: `"experiment"`, `"study"`, or `"run"`.
+            identifier: The Experiment or Study id, or the run's directory.
+
+        Returns:
+            `{"ok": True, "details": ...}`, in `_group_details_payload`'s
+            shape for a grouping and `_run_details_payload`'s for a run;
+            `{"ok": False, "message": ...}` if nothing of that kind and id
+            exists.
+        """
+        if kind == "run":
+            run_directory = Path(identifier)
+            if not (run_directory / "manifest.json").is_file():
+                return {"ok": False, "message": f"not a run directory: {identifier}"}
+            return {"ok": True, "details": _run_details_payload(run_directory)}
+        try:
+            if kind == "study":
+                return {
+                    "ok": True,
+                    "details": _group_details_payload(groups.get_study(identifier)),
+                }
+            if kind == "experiment":
+                return {
+                    "ok": True,
+                    "details": _group_details_payload(
+                        groups.get_experiment(identifier)
+                    ),
+                }
+        except (OSError, ValueError) as error:
+            return {"ok": False, "message": str(error)}
+        return {"ok": False, "message": f"unknown kind: {kind}"}
+
+    @_log_bridge_call
+    def update_study_details(
+        self, study_id: str, name: str, description: str, documentation: str
+    ) -> dict[str, Any]:
+        """Rename a Study and replace its description and documentation.
+
+        The details dialog's Save (`webui/screens/details.js`). Blank
+        `description`/`documentation` clear the field.
+
+        Returns:
+            `{"ok": True, "details": ...}` (`_group_details_payload`'s
+            shape) on success; `{"ok": False, "message": ...}` if the
+            Study does not exist or `name` is blank.
+        """
+        try:
+            study = groups.update_study_details(
+                study_id,
+                name=name,
+                description=description,
+                documentation=documentation,
+            )
+        except ValueError as error:
+            return {"ok": False, "message": str(error)}
+        return {"ok": True, "details": _group_details_payload(study)}
+
+    @_log_bridge_call
+    def update_experiment_details(
+        self, experiment_id: str, name: str, description: str, documentation: str
+    ) -> dict[str, Any]:
+        """Rename an Experiment and replace its description and documentation.
+
+        See `update_study_details`.
+        """
+        try:
+            experiment = groups.update_experiment_details(
+                experiment_id,
+                name=name,
+                description=description,
+                documentation=documentation,
+            )
+        except ValueError as error:
+            return {"ok": False, "message": str(error)}
+        return {"ok": True, "details": _group_details_payload(experiment)}
+
+    @_log_bridge_call
+    def update_run_details(
+        self, directory: str, name: str, description: str
+    ) -> dict[str, Any]:
+        """Replace a run's name and description (its `metadata.json` sidecar).
+
+        Blank text clears a field; a run may have neither. The run's own
+        `manifest.json` is never touched (`fim.persistence.run_metadata`).
+
+        Returns:
+            `{"ok": True, "details": ...}` (`_run_details_payload`) on
+            success; `{"ok": False, "message": ...}` if `directory` is not
+            a run directory or the sidecar cannot be written.
+        """
+        run_directory = Path(directory)
+        if not (run_directory / "manifest.json").is_file():
+            return {"ok": False, "message": f"not a run directory: {directory}"}
+        try:
+            metadata = replace_run_metadata(
+                run_directory,
+                name=name.strip() or None,
+                description=description.strip() or None,
+            )
+        except (OSError, ValueError) as error:
+            return {"ok": False, "message": str(error)}
+        logger.debug("renamed run %s: %s", run_directory, metadata.name)
+        return {"ok": True, "details": _run_details_payload(run_directory)}
+
+    @_log_bridge_call
+    def get_run_context(
+        self, directory: str | None = None, study_id: str | None = None
+    ) -> dict[str, Any]:
+        """Name the run the Run card shows, and the Study and Experiment it is in.
+
+        The Run card's title shows the Experiment's name in place of a
+        generic "FIM simulation", and every name in it carries its own
+        description (`webui/screens/details.js`).
+
+        Args:
+            directory: A finished run's directory, or `None` before a run
+                exists (Configure's initial conditions, a run in flight).
+            study_id: The Study Configure has selected, if any. With no
+                `directory`, the context is this Study's (the default
+                Study when `None`); with one, it is preferred among the
+                Studies that hold the run.
+
+        Returns:
+            `{"ok": True, "run": ... | None, "study": ... | None,
+            "experiment": ... | None}`, `run` in `_run_details_payload`'s
+            shape and the others in `_group_details_payload`'s. A grouping
+            that cannot be found is `None`, never an error: the title then
+            falls back to its generic text.
+        """
+        run: dict[str, Any] | None = None
+        study: groups.StudyManifest | None = None
+        if directory:
+            run_directory = Path(directory)
+            run = _run_details_payload(run_directory)
+            chosen = _prefer_non_default(
+                groups.studies_containing_run(run_directory), study_id
+            )
+            study = chosen if isinstance(chosen, groups.StudyManifest) else None
+        else:
+            # No Study chosen means the default one, which is where such a
+            # run will be filed (`_attach_finished_run_to_study`). Read
+            # only, never created here: a getter must not add a Study as a
+            # side effect, so before the default exists the title falls
+            # back to its generic text.
+            try:
+                study = groups.get_study(study_id or groups.DEFAULT_STUDY_ID)
+            except (OSError, ValueError):
+                study = None
+        experiment: groups.ExperimentManifest | None = None
+        if study is not None:
+            chosen_experiment = _prefer_non_default(
+                groups.experiments_containing_study(study.study_id), None
+            )
+            if isinstance(chosen_experiment, groups.ExperimentManifest):
+                experiment = chosen_experiment
+        return {
+            "ok": True,
+            "run": run,
+            "study": _group_details_payload(study) if study is not None else None,
+            "experiment": (
+                _group_details_payload(experiment) if experiment is not None else None
+            ),
+        }
 
     @_log_bridge_call
     def ensure_default_study(self) -> dict[str, Any]:
@@ -4971,7 +5262,8 @@ class Api:
             ),
             convergence_note=convergence_note,
         )
-        result = {"ok": True, **payload}
+        # Names the Study, not a folder, in the Run card's title.
+        result = {"ok": True, **payload, "studyId": study.study_id}
         mismatches = _study_parameter_mismatches(params_list)
         if mismatches:
             result["parameterMismatches"] = mismatches
@@ -5596,8 +5888,25 @@ def _push_sweep_error(window: _EvaluatesJs, message: str) -> None:
         logger.debug("could not push a sweep error", exc_info=True)
 
 
-def _attach_finished_run_to_study(study_id: str | None, output_directory: Path) -> None:
+class RunDetails(NamedTuple):
+    """The optional name and description Configure gives a run before it starts."""
+
+    name: str | None
+    description: str | None
+
+
+def _attach_finished_run_to_study(
+    study_id: str | None,
+    output_directory: Path,
+    run_details: RunDetails | None = None,
+) -> None:
     """Add a just-published run/batch to `study_id`, tolerating a since-deleted Study.
+
+    Also writes `run_details` (Configure's run name/description) to the
+    run's `metadata.json` first, so the `"done"` push that follows finds
+    the run already named. A field left blank keeps whatever the run
+    already had: a reused run someone named earlier keeps that name
+    unless a new one was typed.
 
     The shared body of `_drain_run_messages`/`_drain_batch_messages`'s
     own identical `"done"`-branch step (`Api.start_run`'s own `study_id`
@@ -5620,6 +5929,8 @@ def _attach_finished_run_to_study(study_id: str | None, output_directory: Path) 
     handling — the run itself already succeeded; this is a best-effort
     organizing step, not part of what "done" reports.
     """
+    if run_details is not None and (run_details.name or run_details.description):
+        _write_run_details(output_directory, run_details)
     resolved_study_id = (
         study_id if study_id is not None else groups.ensure_default_study().study_id
     )
@@ -5632,6 +5943,24 @@ def _attach_finished_run_to_study(study_id: str | None, output_directory: Path) 
             resolved_study_id,
             error,
         )
+
+
+def _write_run_details(output_directory: Path, run_details: RunDetails) -> None:
+    """Merge `run_details` into a run's metadata; best effort, never raised.
+
+    The run itself already succeeded, so a sidecar that cannot be
+    written is logged, the same way `_attach_finished_run_to_study`
+    treats a Study that cannot be found.
+    """
+    existing_name, existing_description = _run_name_and_description(output_directory)
+    try:
+        replace_run_metadata(
+            output_directory,
+            name=run_details.name or existing_name,
+            description=run_details.description or existing_description,
+        )
+    except (OSError, ValueError) as error:
+        logger.warning("could not name run %s: %s", output_directory, error)
 
 
 def _attach_live_pair(
@@ -5686,6 +6015,7 @@ def _drain_run_messages(
     identity_recovery: dict[str, float] | None = None,
     closed_form: dict[str, Any] | None = None,
     study_id: str | None = None,
+    run_details: RunDetails | None = None,
 ) -> None:
     """Push every `runner.RunMessage` to the page as it arrives, until the run ends.
 
@@ -5854,7 +6184,7 @@ def _drain_run_messages(
                 # The window and tolerance the trailing mean is computed with.
                 "convergence": _convergence_reference_payload(result.params),
             }
-            _attach_finished_run_to_study(study_id, output_directory)
+            _attach_finished_run_to_study(study_id, output_directory, run_details)
             logger.info("run done: %s", output_directory)
             window.evaluate_js(f"fim.onRunDone({json.dumps(payload)})")
             if on_message is not None:
@@ -6542,6 +6872,7 @@ def _drain_batch_messages(
     on_message: Callable[[batch_runner.BatchMessage], None] | None = None,
     on_progress: Callable[[dict[str, object]], None] | None = None,
     study_id: str | None = None,
+    run_details: RunDetails | None = None,
 ) -> None:
     """Push every `batch_runner.BatchMessage`, polling live progress between them.
 
@@ -6618,7 +6949,7 @@ def _drain_batch_messages(
             payload = _batch_done_payload(
                 params, run_id, output_directory, message[1], digits
             )
-            _attach_finished_run_to_study(study_id, output_directory)
+            _attach_finished_run_to_study(study_id, output_directory, run_details)
             logger.info("batch done: %s", output_directory)
             window.evaluate_js(f"fim.onBatchDone({json.dumps(payload)})")
         elif message[0] == "cancelled":

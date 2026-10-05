@@ -22,6 +22,14 @@ const runStudyNewNameInput = document.getElementById("run-study-new-name");
 const runStudyNewCreateButton = document.getElementById("run-study-new-create-button");
 const runStudyNewCancelButton = document.getElementById("run-study-new-cancel-button");
 const runStudyNewExperimentSelect = document.getElementById("run-study-new-experiment");
+const runStudyNewDescriptionInput = document.getElementById("run-study-new-description");
+const runDetailsRow = document.getElementById("run-details-row");
+const runNameInput = document.getElementById("run-name-input");
+const runDescriptionInput = document.getElementById("run-description-input");
+
+// Every Study `refreshRunStudySelectOptions` last listed, by id, so the
+// select's tooltip can show the chosen Study's description.
+let runStudiesById = new Map();
 
 function showRunBanner(message) {
     if (!message) {
@@ -124,7 +132,17 @@ async function onRunClicked() {
     // "attach nothing" case -- identical to a plain `fim run` with no
     // `--study` flag at the CLI layer.
     const studyId = runStudySelect.value || null;
-    const started = await window.pywebview.api.start_run(values, studyId);
+    // The run's own optional name and description: shown in the Run
+    // card's title while it runs, then stored with it once it finishes.
+    const runName = runNameInput.value.trim();
+    const runDescription = runDescriptionInput.value.trim();
+    window.fim.setRunCardTitle({ phase: "running", runName: runName || null });
+    const started = await window.pywebview.api.start_run(
+        values,
+        studyId,
+        runName,
+        runDescription
+    );
     if (!started.ok) {
         // Rare (an output-directory collision retry timing out, or a
         // validation edge case `revalidate` above did not catch) --
@@ -135,6 +153,9 @@ async function onRunClicked() {
         showRunBanner(started.message);
         return;
     }
+    // Started (or reused): the name belonged to this run, not the next.
+    runNameInput.value = "";
+    runDescriptionInput.value = "";
     if (started.reused) {
         // Already computed: nothing was started. Show the existing run the
         // way Home opens it, and say so.
@@ -280,11 +301,14 @@ async function refreshRunStudySelectOptions() {
         const option = document.createElement("option");
         option.value = study.studyId;
         option.textContent = study.name;
+        option.title = study.description ?? "";
         runStudySelect.appendChild(option);
     }
+    runStudiesById = new Map(studies.map((study) => [study.studyId, study]));
     if (studies.some((study) => study.studyId === previousValue)) {
         runStudySelect.value = previousValue;
     }
+    syncRunStudySelectTooltip();
     // A refresh mid-creation (rare -- Configure is only re-shown by
     // navigating to it, which the inline row itself never triggers) is
     // still handled correctly rather than left showing a stale row: the
@@ -295,6 +319,34 @@ async function refreshRunStudySelectOptions() {
 }
 
 window.fim.refreshRunStudySelectOptions = refreshRunStudySelectOptions;
+
+/**
+ * The Study `run-study-select` names, or `null` for none ("No study",
+ * or "New study…" not yet created) -- the Run card's title
+ * (`screens/run-title.js`) names that Study's Experiment.
+ * @returns {string|null}
+ */
+window.fim.getSelectedRunStudyId = function getSelectedRunStudyId() {
+    const value = runStudySelect.value;
+    return value && value !== "__new__" ? value : null;
+};
+
+/** Give `run-study-select` the chosen Study's description as its tooltip. */
+function syncRunStudySelectTooltip() {
+    const study = runStudiesById.get(runStudySelect.value);
+    runStudySelect.title = study
+        ? window.fim.detailsTooltipText({ kind: "study", ...study })
+        : "Add this run to a study";
+}
+
+/**
+ * Hide the run name/description while Configure's Sweep box is on: a
+ * sweep names each point's run after its Study instead.
+ */
+function syncRunDetailsRowVisibility() {
+    const sweepBox = document.getElementById("configure-sweep-checkbox");
+    runDetailsRow.hidden = sweepBox !== null && sweepBox.checked;
+}
 
 /** Show/hide `run-study-new-row` to match `run-study-select`'s own current value. */
 function syncRunStudyNewRowVisibility() {
@@ -329,6 +381,11 @@ async function populateRunStudyNewExperiments() {
 
 runStudySelect.addEventListener("change", () => {
     syncRunStudyNewRowVisibility();
+    syncRunStudySelectTooltip();
+    // The title names the chosen Study's Experiment until a run finishes.
+    if (window.fim.getRunViewState() !== "completed") {
+        window.fim.refreshRunCardTitle();
+    }
     if (!runStudyNewRow.hidden) {
         runStudyNewNameInput.focus();
     }
@@ -347,7 +404,7 @@ async function onRunStudyNewCreateClicked() {
     }
     const result = await window.pywebview.api.create_study(
         name,
-        "",
+        runStudyNewDescriptionInput.value.trim(),
         runStudyNewExperimentSelect.value || null
     );
     if (!result.ok) {
@@ -356,6 +413,7 @@ async function onRunStudyNewCreateClicked() {
     }
     showRunBanner("");
     runStudyNewNameInput.value = "";
+    runStudyNewDescriptionInput.value = "";
     await refreshRunStudySelectOptions();
     // Not covered by `refreshRunStudySelectOptions`'s own previous-value
     // preservation (that logic matches `"__new__"` against nothing,
@@ -367,6 +425,7 @@ async function onRunStudyNewCreateClicked() {
 
 function onRunStudyNewCancelClicked() {
     runStudyNewNameInput.value = "";
+    runStudyNewDescriptionInput.value = "";
     runStudySelect.value = "";
     syncRunStudyNewRowVisibility();
 }
@@ -401,14 +460,27 @@ window.fim.preselectNewStudy = function preselectNewStudy() {
 window.fim.selectStudyForNewRun = function selectStudyForNewRun(studyId) {
     runStudySelect.value = studyId;
     syncRunStudyNewRowVisibility();
+    syncRunStudySelectTooltip();
 };
 
 function wireRunViewControls() {
     runButton.addEventListener("click", onRunClicked);
     cancelButton.addEventListener("click", onCancelClicked);
     openFolderButton.addEventListener("click", onOpenFolderClicked);
+    const sweepBox = document.getElementById("configure-sweep-checkbox");
+    if (sweepBox !== null) {
+        sweepBox.addEventListener("change", syncRunDetailsRowVisibility);
+    }
+    syncRunDetailsRowVisibility();
     refreshRunStudySelectOptions();
 }
+
+// A Study renamed or redescribed elsewhere shows in the select at once.
+window.addEventListener("fim:details-saved", (event) => {
+    if (event.detail && event.detail.kind === "study") {
+        refreshRunStudySelectOptions();
+    }
+});
 
 window.fim.showRunBanner = showRunBanner;
 

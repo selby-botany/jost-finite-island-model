@@ -2302,6 +2302,64 @@ fieldset.composite > label {
     margin-bottom: 0.5rem;
 }
 
+/* The details dialog (`modal-details`, `screens/details.js`): wide
+ * enough for a paragraph of documentation, its fields filling the width
+ * rather than `.field`'s own 22rem cap. */
+#modal-details {
+    max-width: 36rem;
+}
+
+#modal-details .field {
+    max-width: none;
+}
+
+#modal-details textarea {
+    font: inherit;
+    color: inherit;
+    background: var(--fim-background);
+    border: 1px solid var(--fim-border);
+    border-radius: 4px;
+    padding: 0.35rem 0.5rem;
+    resize: vertical;
+    min-height: 8rem;
+}
+
+#modal-details .actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 0.5rem;
+}
+
+/* A displayed Experiment/Study/Run name that opens its details on
+ * click (`window.fim.attachDetails`): a dotted underline says "there is
+ * more here" without competing with the name itself. */
+.details-link {
+    cursor: pointer;
+    text-decoration: underline dotted var(--fim-muted);
+    text-underline-offset: 0.2em;
+}
+
+.details-link:hover {
+    color: var(--fim-action);
+}
+
+/* The "ⓘ" details button beside a name whose own click already means
+ * something else (a Home tree row's expand toggle). */
+.details-button {
+    font: inherit;
+    font-size: 0.9rem;
+    line-height: 1;
+    color: var(--fim-muted);
+    background: none;
+    border: none;
+    padding: 0 0.25rem;
+    cursor: pointer;
+}
+
+.details-button:hover {
+    color: var(--fim-action);
+}
+
 /* The migration-matrix grid editor (`m-matrix-fields`) -- a scrollable
  * table so a large `d` (the starter config's own default is 20) stays
  * usable rather than overflowing the whole dialog; cells are narrow and

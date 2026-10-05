@@ -8,6 +8,17 @@ project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- **Say what each Experiment, Study, and Run is, and why.** Experiments and
+  Studies gain longer free-form documentation beside their one-line
+  description; Runs gain a name and description in the desktop app
+  (Configure's Run name/Run description boxes, or later from Home). Hovering
+  any of these names shows its description, and clicking it opens a dialog
+  to read and edit all of it. The Run card's title now names the run's
+  Experiment instead of "FIM simulation", then the run. Each sweep point's
+  run is named after its study and its values, with a description placing it
+  in the sweep. `fim study create` and `fim experiment create` take
+  `--documentation`. See
+  [Names, descriptions, and documentation](doc/usage.md#names-descriptions-and-documentation).
 - **Nei's genetic distance, two ways, for a pair of demes and for all of
   them.** Every run now reports Nei's distance with Nei's own geometric-mean
   denominator and with the arithmetic-mean denominator (Jost, L. (2026)

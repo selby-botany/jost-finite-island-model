@@ -15,7 +15,6 @@
 // module docstring). `run-view-initial.js` loads first among the three
 // state files, so it is the natural, single owner.
 const runCanvas = document.getElementById("run-canvas");
-const runPlotTitle = document.getElementById("run-plot-title");
 const runProgress = document.getElementById("run-progress");
 const runCompleted = document.getElementById("run-completed");
 const batchResultsTable = document.getElementById("batch-results-table");
@@ -444,9 +443,8 @@ function enterInitialState(renderPreview = true) {
     runProgress.hidden = true;
     cancelButton.disabled = true;
     openFolderButton.hidden = true;
-    if (runPlotTitle) {
-        runPlotTitle.textContent = "FIM simulation — initial conditions (p₀)";
-    }
+    // "<Experiment> — initial conditions (p₀)" (`screens/run-title.js`).
+    window.fim.setRunCardTitle({ phase: "initial" });
     // `resultsBackButton`/`resultsStats`/`batchResultsTableEl` are all
     // declared in run-view-completed.js (loads after this file) but
     // always present by the time any user event or `whenApiReady`

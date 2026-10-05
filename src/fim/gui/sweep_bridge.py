@@ -119,12 +119,18 @@ def plan_payload(
 def status_payload(
     study: StudyManifest, *, results: Path | None = None
 ) -> dict[str, Any]:
-    """Describe a sweep Study and each planned point's derived state."""
+    """Describe a sweep Study and each planned point's derived state.
+
+    `description`/`documentation` are the Study's own, for the sweep
+    screen's name tooltip (`webui/screens/details.js`).
+    """
     spec = sweep_spec_of(study)
     return {
         "ok": True,
         "studyId": study.study_id,
         "name": study.name,
+        "description": study.description,
+        "documentation": study.documentation,
         "axes": [axis.to_dict() for axis in spec.axes],
         "points": [
             {

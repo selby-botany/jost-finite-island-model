@@ -3655,15 +3655,22 @@ window.fim.enterCompletedState = function enterCompletedState(payload, isBatch) 
     if (initialStats) {
         initialStats.hidden = true;
     }
-    if (runPlotTitle) {
-        // `directoryName`, not `runId` (a deterministic content hash of
-        // the configuration, unrelated to the directory name): the
-        // directory is what "Open output folder" reveals, and is what a
-        // botanist actually needs to find this run on disk.
-        runPlotTitle.textContent = payload.directoryName
-            ? `FIM simulation — ${payload.directoryName}`
-            : "FIM simulation — completed";
-    }
+    // "<Experiment> — <run name> (<folder>)" (`screens/run-title.js`).
+    // The folder (`directoryName`), not `runId` (a deterministic content
+    // hash of the configuration, unrelated to the directory name): the
+    // directory is what "Open output folder" reveals, and is what a
+    // botanist actually needs to find this run on disk. A whole Study
+    // reopened from Home (`Api.open_study`, `studyId` set) has no one
+    // folder; its title names the Study instead.
+    window.fim.setRunCardTitle(
+        payload.studyId
+            ? { phase: "study", studyId: payload.studyId }
+            : {
+                  phase: "completed",
+                  directory: payload.outputDirectory ?? null,
+                  directoryName: payload.directoryName ?? null,
+              }
+    );
     runCompleted.hidden = false;
     cancelButton.disabled = true;
     openFolderButton.hidden = false;

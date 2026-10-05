@@ -16,6 +16,7 @@ for that first. For parameter types and defaults, use the
 - [Re-analyze a trajectory](#re-analyze-a-trajectory)
 - [Check for updates](#check-for-updates)
 - [Desktop GUI (`fim-gui`)](#desktop-gui-fim-gui)
+- [Names, descriptions, and documentation](#names-descriptions-and-documentation)
 - [Global flags](#global-flags)
 - [Output schemas](#output-schemas)
 - [Reproduce a run](#reproduce-a-run)
@@ -762,6 +763,11 @@ fim sweep run sweep.yaml --points-at-once 4 --workers 2   # or --sequential
   finished points stay in the study.
 - Every point keeps its full trajectories. A sweep multiplies disk use by its
   number of points.
+- Each point's run is named after the study and its own values, for example
+  `Migration and number of demes sweep m=0.001, d=8`, and its description says
+  where it sits in the sweep (`Point 8 of 21 of the sweep "Migration and
+  number of demes": m=0.001 of m=[0.0001..0.1] (7 values); d=8 of
+  d=[4, 8, 16].`). A reused run keeps a name it already had.
 
 ## Re-analyze a trajectory
 
@@ -880,6 +886,43 @@ logging design](fim-logging-design.md) §5. The separate `fim-gui`
 console-script entry point additionally accepts real flags of its own
 — see [Where results, logs, and preferences are
 written](#where-results-logs-and-preferences-are-written), below.
+
+### Names, descriptions, and documentation
+
+Hundreds of runs are hard to tell apart later, so every Experiment, Study,
+and Run can say what it is and why it exists:
+
+| | Name | Description | Documentation |
+|---|---|---|---|
+| Experiment | Required | One line, optional | Longer notes, optional |
+| Study | Required | One line, optional | Longer notes, optional |
+| Run | Optional (the folder name stands in) | One line, optional | — |
+
+- **Description** is the short summary. Hover any Experiment, Study, or Run
+  name (in Home, in the Run card's title, in Configure's study choice, and on
+  a sweep's screen) to see it.
+- **Documentation** is free-form text for the longer story: the question, the
+  rationale, the setup, what was found.
+- **To read or change them**, click the name, or the **ⓘ** button beside it,
+  to open the details dialog. **Save** keeps the changes; **Cancel**, Escape,
+  or a click outside the dialog discards them. Leaving a field empty clears
+  it.
+- **When creating**: Home's "Create experiment…" and "Create study…", and
+  Configure's "New study…", each take an optional description beside the
+  name. Configure's **Run name** and **Run description** boxes name the next
+  run; they empty once it starts. A sweep names its runs itself (see
+  [Sweep a parameter](#sweep-a-parameter)), so the boxes are hidden while
+  **Sweep** is ticked.
+- **The Run card's title** names the Experiment first, then what is shown:
+  `Ring vs island — Baseline (run-20261005-101500-000000)` for a finished
+  run, `… — initial conditions (p₀)` before one, `… — in progress` while one
+  runs. The Experiment is the one holding the study chosen in Configure, or
+  the one holding the run once it finishes.
+
+From the terminal, `fim study create` and `fim experiment create` take
+`--description` and `--documentation`; `fim run` takes `--name` and
+`--description`. A run's name and description live in its own
+`metadata.json`, beside `manifest.json`, which they never change.
 
 ### If the window closes but `fim` keeps running
 

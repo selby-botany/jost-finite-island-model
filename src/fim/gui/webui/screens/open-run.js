@@ -242,6 +242,14 @@ function studyGroup(study) {
         label: study.name,
         kind: "study",
         studyId: study.studyId,
+        // What the tooltip and the details dialog show (`screens/details.js`).
+        details: {
+            kind: "study",
+            id: study.studyId,
+            name: study.name,
+            description: study.description ?? null,
+            documentation: study.documentation ?? null,
+        },
         runCount: study.runCount,
         countLabel: `${study.runCount} run${study.runCount === 1 ? "" : "s"}`,
         runDirectories: study.runDirectories,
@@ -278,6 +286,13 @@ function experimentGroup(experiment, studiesById) {
         label: experiment.name,
         kind: "experiment",
         experimentId: experiment.experimentId,
+        details: {
+            kind: "experiment",
+            id: experiment.experimentId,
+            name: experiment.name,
+            description: experiment.description ?? null,
+            documentation: experiment.documentation ?? null,
+        },
         runCount: subgroups.reduce((total, subgroup) => total + subgroup.runCount, 0),
         // The Studies that exist, not the manifest's own count: a stale
         // count claimed Studies the expanded list could not show.
@@ -738,6 +753,21 @@ function runDisplayLabel(run) {
 }
 
 /**
+ * One run's details in the shape `screens/details.js` reads.
+ * @param {object} run A `list_home_runs`/`get_study_run_summary` row.
+ * @returns {object}
+ */
+function runDetails(run) {
+    return {
+        kind: "run",
+        id: run.directory,
+        name: run.name ?? null,
+        description: run.description ?? null,
+        directoryName: run.directoryName,
+    };
+}
+
+/**
  * Build one run's own `<tr>` -- factored out of `refreshRecentRuns` so
  * `renderRecentRuns` can call it once per group member on every filter/
  * collapse re-render, not only on a fresh fetch. The first cell also
@@ -793,6 +823,7 @@ function buildRunRow(run, showRunId = true, nested = false) {
             if (value) {
                 cell.appendChild(document.createTextNode(` ${value}`));
             }
+            cell.title = window.fim.detailsTooltipText(runDetails(run));
         } else if (isLabelCell && run.isBatch) {
             // A batch row's own label cell gets an expand/collapse
             // toggle beside its text (design §9: "expandable to its
@@ -835,6 +866,7 @@ function buildRunRow(run, showRunId = true, nested = false) {
         row.appendChild(cell);
     }
     const actionsCell = document.createElement("td");
+    actionsCell.appendChild(window.fim.buildDetailsButton(runDetails(run)));
     actionsCell.appendChild(buildAddToStudySelect(run.directory));
     row.appendChild(actionsCell);
     row.addEventListener("click", () => {
@@ -927,12 +959,16 @@ function confirmThenRun(triggerButton, message, action) {
  * needs one short string rather than only a yes/no. Reused by `build
  * CreateStudyButton`'s own "Create study…", the row-level counterpart
  * to Home's own former "New study" card (`20260918-claude-sonnet-5-
- * home-tree-reorg-design.md`, `selby/restricted`, §4).
+ * home-tree-reorg-design.md`, `selby/restricted`, §4). A second,
+ * optional description input follows the name when
+ * `descriptionPlaceholder` is given; longer documentation is added
+ * afterward, in the details dialog.
  * @param {HTMLButtonElement} triggerButton
  * @param {string} placeholder
- * @param {(name: string) => Promise<void>} action
+ * @param {(name: string, description: string) => Promise<void>} action
+ * @param {string} [descriptionPlaceholder]
  */
-function promptForNameThenRun(triggerButton, placeholder, action) {
+function promptForNameThenRun(triggerButton, placeholder, action, descriptionPlaceholder) {
     if (triggerButton._fimPromptRow) {
         return;
     }
@@ -945,6 +981,14 @@ function promptForNameThenRun(triggerButton, placeholder, action) {
     input.setAttribute("aria-label", placeholder);
     input.addEventListener("click", (event) => event.stopPropagation());
     row.appendChild(input);
+    const descriptionInput = document.createElement("input");
+    if (descriptionPlaceholder) {
+        descriptionInput.type = "text";
+        descriptionInput.placeholder = descriptionPlaceholder;
+        descriptionInput.setAttribute("aria-label", descriptionPlaceholder);
+        descriptionInput.addEventListener("click", (event) => event.stopPropagation());
+        row.appendChild(descriptionInput);
+    }
     const createButton = document.createElement("button");
     createButton.type = "button";
     createButton.textContent = "Create";
@@ -958,7 +1002,7 @@ function promptForNameThenRun(triggerButton, placeholder, action) {
         row.remove();
         triggerButton._fimPromptRow = null;
         triggerButton.disabled = false;
-        await action(name);
+        await action(name, descriptionInput.value.trim());
     });
     row.appendChild(createButton);
     const cancelButton = document.createElement("button");
@@ -986,14 +1030,22 @@ function promptForNameThenRun(triggerButton, placeholder, action) {
 // who deliberately wants a second one.
 homeNewExperimentButton.addEventListener("click", (event) => {
     event.stopPropagation();
-    promptForNameThenRun(homeNewExperimentButton, "Experiment name", async (name) => {
-        const created = await window.pywebview.api.create_experiment(name);
-        if (!created.ok) {
-            showOpenRunBanner(created.message);
-            return;
-        }
-        await refreshRecentRuns();
-    });
+    promptForNameThenRun(
+        homeNewExperimentButton,
+        "Experiment name",
+        async (name, description) => {
+            const created = await window.pywebview.api.create_experiment(
+                name,
+                description
+            );
+            if (!created.ok) {
+                showOpenRunBanner(created.message);
+                return;
+            }
+            await refreshRecentRuns();
+        },
+        "Description (optional)"
+    );
 });
 
 /**
@@ -1013,22 +1065,30 @@ function buildCreateStudyButton(group) {
     button.textContent = "Create study…";
     button.addEventListener("click", (event) => {
         event.stopPropagation();
-        promptForNameThenRun(button, "Study name", async (name) => {
-            const created = await window.pywebview.api.create_study(name);
-            if (!created.ok) {
-                showOpenRunBanner(created.message);
-                return;
-            }
-            const added = await window.pywebview.api.add_study_to_experiment(
-                group.experimentId,
-                created.studyId
-            );
-            if (!added.ok) {
-                showOpenRunBanner(added.message);
-                return;
-            }
-            await refreshRecentRuns();
-        });
+        promptForNameThenRun(
+            button,
+            "Study name",
+            async (name, description) => {
+                const created = await window.pywebview.api.create_study(
+                    name,
+                    description
+                );
+                if (!created.ok) {
+                    showOpenRunBanner(created.message);
+                    return;
+                }
+                const added = await window.pywebview.api.add_study_to_experiment(
+                    group.experimentId,
+                    created.studyId
+                );
+                if (!added.ok) {
+                    showOpenRunBanner(added.message);
+                    return;
+                }
+                await refreshRecentRuns();
+            },
+            "Description (optional)"
+        );
     });
     return button;
 }
@@ -1284,6 +1344,9 @@ function buildGroupHeaderRow(group, nested = false) {
     const collapsed = collapsedGroupIds.has(group.id);
     toggle.setAttribute("aria-expanded", collapsed ? "false" : "true");
     toggle.textContent = `${collapsed ? "▸" : "▾"} ${group.label} (${group.countLabel})`;
+    if (group.details) {
+        toggle.title = window.fim.detailsTooltipText(group.details);
+    }
     toggle.addEventListener("click", async () => {
         const expanding = collapsedGroupIds.has(group.id);
         if (
@@ -1304,6 +1367,9 @@ function buildGroupHeaderRow(group, nested = false) {
         renderRecentRuns();
     });
     cellRow.appendChild(toggle);
+    if (group.details) {
+        cellRow.appendChild(window.fim.buildDetailsButton(group.details));
+    }
     if (group.kind === "study" || group.kind === "experiment") {
         cellRow.appendChild(buildGroupActionControls(group));
     }
@@ -1919,3 +1985,14 @@ window.fim.showOpenRunScreen = async function showOpenRunScreen() {
     // unless this function's own caller can wait for it).
     await refreshRecentRuns();
 };
+
+// A rename or new description saved anywhere (`screens/details.js`) shows
+// in the tree at once. Only while Home is showing: it refetches on every
+// visit anyway (`showOpenRunScreen`), and a hidden refresh would read
+// every run's results for nothing.
+window.addEventListener("fim:details-saved", () => {
+    const home = document.getElementById("screen-open-run");
+    if (home !== null && !home.hidden) {
+        refreshRecentRuns();
+    }
+});

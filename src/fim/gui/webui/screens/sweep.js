@@ -520,6 +520,23 @@ function sweepHeaderRow(labels) {
 }
 
 /**
+ * A sweep Study's details, in the shape `screens/details.js` reads.
+ * @param {{studyId: string, name: string, description: string|null,
+ *     documentation: string|null}} status `Api.get_sweep_status` or
+ *     `Api.get_sweep_results` payload.
+ * @returns {object}
+ */
+function sweepStudyDetails(status) {
+    return {
+        kind: "study",
+        id: status.studyId,
+        name: status.name,
+        description: status.description ?? null,
+        documentation: status.documentation ?? null,
+    };
+}
+
+/**
  * Switch to the progress view for a running (or resumed) sweep.
  * @param {string} studyId
  */
@@ -527,6 +544,8 @@ async function enterSweepProgress(studyId) {
     sweepLastStudyId = studyId;
     window.__fimSweepFinished = false;
     sweepTitle.textContent = "Sweep running";
+    // The title names no Study here; the spec line below does.
+    window.fim.attachDetails(sweepTitle, null);
     sweepProgressView.hidden = false;
     sweepCancelButton.hidden = false;
     sweepCancelButton.disabled = false;
@@ -543,6 +562,7 @@ async function enterSweepProgress(studyId) {
     sweepProgressSpec.textContent =
         `${status.name}: ${keys.join(" × ")}, ${status.points.length} points ` +
         `(${status.axes.map((axis) => `${axis.key} ${axis.values.length}`).join(" × ")}).`;
+    window.fim.attachDetails(sweepProgressSpec, sweepStudyDetails(status));
     sweepProgressHead.replaceChildren(sweepHeaderRow(["#", ...keys, "State"]));
     sweepProgressBody.replaceChildren();
     for (const point of status.points) {

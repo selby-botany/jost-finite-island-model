@@ -14,6 +14,7 @@ for that first. For parameter types and defaults, use the
 <li><a href="#re-analyze-a-trajectory">Re-analyze a trajectory</a></li>
 <li><a href="#check-for-updates">Check for updates</a></li>
 <li><a href="#desktop-gui-fim-gui">Desktop GUI (<code>fim-gui</code>)</a></li>
+<li><a href="#names-descriptions-and-documentation">Names, descriptions, and documentation</a></li>
 <li><a href="#global-flags">Global flags</a></li>
 <li><a href="#output-schemas">Output schemas</a></li>
 <li><a href="#reproduce-a-run">Reproduce a run</a></li>
@@ -630,6 +631,9 @@ Configure. That study then holds the sweep; a study holds at most one.</li>
 finished points stay in the study.</li>
 <li>Every point keeps its full trajectories. A sweep multiplies disk use by its
 number of points.</li>
+<li>Each point's run is named after the study and its own values, for example
+<code>Migration and number of demes sweep m=0.001, d=8</code>, and its description says
+where it sits in the sweep (<code>Point 8 of 21 of the sweep &quot;Migration and number of demes&quot;: m=0.001 of m=[0.0001..0.1] (7 values); d=8 of d=[4, 8, 16].</code>). A reused run keeps a name it already had.</li>
 </ul>
 <h2 id="re-analyze-a-trajectory">Re-analyze a trajectory</h2>
 <pre><code class="language-console">fim stats TRAJECTORY [--manifest PATH] [--generation N]
@@ -764,6 +768,65 @@ logging design</a> §5. The separate <code>fim-gui</code>
 console-script entry point additionally accepts real flags of its own
 — see <a href="#where-results-logs-and-preferences-are-written">Where results, logs, and preferences are
 written</a>, below.</p>
+<h3 id="names-descriptions-and-documentation">Names, descriptions, and documentation</h3>
+<p>Hundreds of runs are hard to tell apart later, so every Experiment, Study,
+and Run can say what it is and why it exists:</p>
+<table>
+<thead>
+<tr>
+<th></th>
+<th>Name</th>
+<th>Description</th>
+<th>Documentation</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Experiment</td>
+<td>Required</td>
+<td>One line, optional</td>
+<td>Longer notes, optional</td>
+</tr>
+<tr>
+<td>Study</td>
+<td>Required</td>
+<td>One line, optional</td>
+<td>Longer notes, optional</td>
+</tr>
+<tr>
+<td>Run</td>
+<td>Optional (the folder name stands in)</td>
+<td>One line, optional</td>
+<td>—</td>
+</tr>
+</tbody>
+</table>
+<ul>
+<li><strong>Description</strong> is the short summary. Hover any Experiment, Study, or Run
+name (in Home, in the Run card's title, in Configure's study choice, and on
+a sweep's screen) to see it.</li>
+<li><strong>Documentation</strong> is free-form text for the longer story: the question, the
+rationale, the setup, what was found.</li>
+<li><strong>To read or change them</strong>, click the name, or the <strong>ⓘ</strong> button beside it,
+to open the details dialog. <strong>Save</strong> keeps the changes; <strong>Cancel</strong>, Escape,
+or a click outside the dialog discards them. Leaving a field empty clears
+it.</li>
+<li><strong>When creating</strong>: Home's &quot;Create experiment…&quot; and &quot;Create study…&quot;, and
+Configure's &quot;New study…&quot;, each take an optional description beside the
+name. Configure's <strong>Run name</strong> and <strong>Run description</strong> boxes name the next
+run; they empty once it starts. A sweep names its runs itself (see
+<a href="#sweep-a-parameter">Sweep a parameter</a>), so the boxes are hidden while
+<strong>Sweep</strong> is ticked.</li>
+<li><strong>The Run card's title</strong> names the Experiment first, then what is shown:
+<code>Ring vs island — Baseline (run-20261005-101500-000000)</code> for a finished
+run, <code>… — initial conditions (p₀)</code> before one, <code>… — in progress</code> while one
+runs. The Experiment is the one holding the study chosen in Configure, or
+the one holding the run once it finishes.</li>
+</ul>
+<p>From the terminal, <code>fim study create</code> and <code>fim experiment create</code> take
+<code>--description</code> and <code>--documentation</code>; <code>fim run</code> takes <code>--name</code> and
+<code>--description</code>. A run's name and description live in its own
+<code>metadata.json</code>, beside <code>manifest.json</code>, which they never change.</p>
 <h3 id="if-the-window-closes-but-fim-keeps-running">If the window closes but <code>fim</code> keeps running</h3>
 <p>Closing the window should end the program immediately. If something
 inside it fails to stop, <code>fim</code> guards against being left running
