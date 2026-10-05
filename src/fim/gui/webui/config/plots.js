@@ -29,12 +29,12 @@ const DEFAULT_SCATTER_STYLE = "color-badge";
 /* Marker radius is `BASE + SCALE * sqrt(count)`, so the marker's area
  * grows roughly in step with the number of alleles it stands for.
  */
-const MARKER_BASE_RADIUS = 3;
-const MARKER_COUNT_SCALE = 1.6;
+const MARKER_BASE_RADIUS = 3.00;
+const MARKER_COUNT_SCALE = 1.25;
 
 // Fixed radius of the marks in the `color`, `color-badge` and `density`
 // styles, where color rather than size carries the count.
-const COLOR_MARKER_RADIUS = 4;
+const COLOR_MARKER_RADIUS = 2;
 
 // The `dots` style draws slightly smaller marks than the fixed ones.
 const SCATTER_DOTS_RADIUS_REDUCTION = 0.5;
@@ -60,7 +60,7 @@ const SCATTER_COUNT_LABEL_OFFSET = 2;
 
 // The pile of alleles at exactly (0, 0) is drawn as a labelled badge:
 // a dot on the origin, and a rounded label inset from the axes corner.
-const SCATTER_ORIGIN_DOT_RADIUS = 3;
+const SCATTER_ORIGIN_DOT_RADIUS = 2;
 const SCATTER_BADGE_INSET = 8;
 const SCATTER_BADGE_PADDING_X = 4;
 const SCATTER_BADGE_EXTRA_HEIGHT = 6;
@@ -69,12 +69,12 @@ const SCATTER_BADGE_CORNER_RADIUS = 4;
 /* ---- Scatter plot: density map and trail --------------------------- */
 
 // Square bins per axis for the `density` style, fewer on a compact plot.
-const DENSITY_BINS = 20;
-const COMPACT_DENSITY_BINS = 10;
+const DENSITY_BINS = 50;
+const COMPACT_DENSITY_BINS = 25;
 
 // Earlier scrubber frames faded in behind the current one (`trail`).
 const TRAIL_FRAMES = 4;
-const SCATTER_TRAIL_DOT_RADIUS = 2.5;
+const SCATTER_TRAIL_DOT_RADIUS = 0.75;
 
 // Trail frame opacity runs from `MIN` (oldest) up to `MIN + SPAN` just
 // below the current frame, so movement reads as a fading wake.
@@ -163,8 +163,8 @@ const HEATMAP_COLORBAR_TOP_LABEL_DROP = 10;
 const HEATMAP_COLORBAR_TITLE_RISE = 2;
 
 // Dot marking a planned point: radius and ring width.
-const HEATMAP_MARKER_RADIUS = 3.5;
-const HEATMAP_MARKER_LINE_WIDTH = 1.5;
+const HEATMAP_MARKER_RADIUS = 2;
+const HEATMAP_MARKER_LINE_WIDTH = 0.75;
 
 // Outline of the selected cell, drawn inside the cell by this inset.
 const HEATMAP_SELECTED_LINE_WIDTH = 2;
@@ -224,8 +224,8 @@ const TRAJECTORY_TICK_DECIMALS = 1;
 
 // A statistic's curve: normal width; widths and opacities when another
 // statistic is highlighted (the highlighted one thickens, the rest fade).
-const TRAJECTORY_LINE_WIDTH = 2;
-const TRAJECTORY_HIGHLIGHT_LINE_WIDTH = 4;
+const TRAJECTORY_LINE_WIDTH = 0.75;
+const TRAJECTORY_HIGHLIGHT_LINE_WIDTH = 1.00;
 const TRAJECTORY_FADED_ALPHA = 0.35;
 
 /* ---- Explore response curve ------------------------------------------ */
@@ -304,7 +304,7 @@ const SWEEP_X_TITLE_RISE = 10;
 const SWEEP_Y_TITLE_INSET = 14;
 
 // A point's marker radius, and how close the pointer must be to pick it.
-const SWEEP_POINT_RADIUS = 4;
+const SWEEP_POINT_RADIUS = 2;
 const SWEEP_HIT_RADIUS_PX = 14;
 
 /* ---- Explore surface and slices -------------------------------------- */
