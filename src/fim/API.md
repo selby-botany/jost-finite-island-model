@@ -96,6 +96,23 @@ Return to the [source-tree orientation](../README.md) or the [developer guide](.
   * [pair\_statistic\_values](#fim.engine.pair_statistic_values)
   * [history\_free\_statistic\_values](#fim.engine.history_free_statistic_values)
   * [report\_statistic](#fim.engine.report_statistic)
+* [fim.examples](#fim.examples)
+* [fim.examples.classes](#fim.examples.classes)
+  * [RunClass](#fim.examples.classes.RunClass)
+    * [to\_dict](#fim.examples.classes.RunClass.to_dict)
+  * [ClassTree](#fim.examples.classes.ClassTree)
+    * [\_\_contains\_\_](#fim.examples.classes.ClassTree.__contains__)
+    * [\_\_iter\_\_](#fim.examples.classes.ClassTree.__iter__)
+    * [get](#fim.examples.classes.ClassTree.get)
+    * [ids](#fim.examples.classes.ClassTree.ids)
+    * [parent\_of](#fim.examples.classes.ClassTree.parent_of)
+    * [to\_list](#fim.examples.classes.ClassTree.to_list)
+  * [default\_classes\_path](#fim.examples.classes.default_classes_path)
+  * [is\_valid\_class\_id](#fim.examples.classes.is_valid_class_id)
+  * [load\_default\_class\_tree](#fim.examples.classes.load_default_class_tree)
+  * [parse\_class\_tree](#fim.examples.classes.parse_class_tree)
+  * [read\_class\_tree](#fim.examples.classes.read_class_tree)
+  * [validate\_run\_class](#fim.examples.classes.validate_run_class)
 * [fim.gui](#fim.gui)
 * [fim.gui.animation](#fim.gui.animation)
   * [AnimationFrame](#fim.gui.animation.AnimationFrame)
@@ -3859,6 +3876,335 @@ The public form of the engine's own lookup, for callers that iterate
 **Raises**:
 
 - `ValueError` - If `statistic` is not a report statistic.
+
+<a id="fim.examples"></a>
+
+# fim.examples
+
+The shipped worked examples and the run classes that group them.
+
+`fim.examples.classes` reads and validates `doc/examples/classes.yaml`,
+the class tree the Examples dialog shows and a configuration's `class`
+label is checked against (design doc `20261005-claude-opus-5-5-read-
+only-examples-and-classes-design.md`, `selby/restricted`, section 2).
+Nothing is re-exported here, so importing one submodule never pays for
+another.
+
+<a id="fim.examples.classes"></a>
+
+# fim.examples.classes
+
+Read and validate the run-class tree, `doc/examples/classes.yaml`.
+
+A **class** is a group ID for runs: the worked examples use classes to
+build the Examples dialog's tree, and a user's own run may carry one
+too, as the configuration label `class` (`doc/configuration.md`). This
+module is the only reader of the class file (design doc
+`20261005-claude-opus-5-5-read-only-examples-and-classes-design.md`,
+`selby/restricted`, section 2).
+
+The file holds one top-level key, `classes`, a list of entries:
+
+```yaml
+classes:
+  - id: getting-started
+    title: Getting started
+    description: One-screen runs that show the core statistics settling.
+  - id: literature
+    title: Literature comparisons
+    children:
+      - id: literature-distances
+        title: Genetic distances
+```
+
+Rules, all enforced by `parse_class_tree`:
+
+- The tree is shallow: top-level classes plus at most one level of
+  `children`. A child with `children` of its own is rejected.
+- Order in the file is display order, and it is preserved.
+- Every `id` is lowercase kebab-case (`getting-started`) and unique
+  across the whole tree, parents and children together.
+- `title` is required; `description` is optional. Any other key is
+  rejected, so a typo is reported rather than ignored.
+
+The file lives in the source checkout, beside the examples. A packaged
+build carries no `doc/` directory, so `load_default_class_tree` returns
+`None` there, and `validate_run_class` then checks only the ID's format
+(see its docstring for why that is the safe choice).
+
+<a id="fim.examples.classes.RunClass"></a>
+
+## RunClass Objects
+
+```python
+@dataclass(frozen=True, slots=True)
+class RunClass()
+```
+
+One class in the tree: its ID, display text, and child classes.
+
+**Arguments**:
+
+- `class_id` - Lowercase kebab-case ID, unique across the whole tree.
+- `title` - Short display name.
+- `description` - Optional one-line summary, or `None`.
+- `children` - Child classes in display order; always empty for a
+  child class, since the tree is at most two levels deep.
+
+<a id="fim.examples.classes.RunClass.to_dict"></a>
+
+#### to\_dict
+
+```python
+def to_dict() -> dict[str, object]
+```
+
+Return a JSON-serializable mapping in the file's own key names.
+
+<a id="fim.examples.classes.ClassTree"></a>
+
+## ClassTree Objects
+
+```python
+@dataclass(frozen=True, slots=True)
+class ClassTree()
+```
+
+The whole validated class tree, top-level classes in display order.
+
+**Arguments**:
+
+- `classes` - The top-level classes, each with its own children.
+
+<a id="fim.examples.classes.ClassTree.__contains__"></a>
+
+#### \_\_contains\_\_
+
+```python
+def __contains__(class_id: object) -> bool
+```
+
+Return whether `class_id` names a class anywhere in the tree.
+
+<a id="fim.examples.classes.ClassTree.__iter__"></a>
+
+#### \_\_iter\_\_
+
+```python
+def __iter__() -> Iterator[RunClass]
+```
+
+Yield every class, depth first: each parent, then its children.
+
+<a id="fim.examples.classes.ClassTree.get"></a>
+
+#### get
+
+```python
+def get(class_id: str) -> RunClass | None
+```
+
+Return the class with this ID, or `None` when there is none.
+
+**Arguments**:
+
+- `class_id` - The ID to look up.
+
+
+**Returns**:
+
+  The matching class, parent or child, or `None`.
+
+<a id="fim.examples.classes.ClassTree.ids"></a>
+
+#### ids
+
+```python
+def ids() -> tuple[str, ...]
+```
+
+Return every class ID in display order (see `__iter__`).
+
+<a id="fim.examples.classes.ClassTree.parent_of"></a>
+
+#### parent\_of
+
+```python
+def parent_of(class_id: str) -> RunClass | None
+```
+
+Return the parent of a child class, or `None` for a top-level one.
+
+**Arguments**:
+
+- `class_id` - The ID of the class whose parent is wanted.
+
+
+**Returns**:
+
+  The parent class, or `None` when `class_id` is a top-level
+  class or names no class at all.
+
+<a id="fim.examples.classes.ClassTree.to_list"></a>
+
+#### to\_list
+
+```python
+def to_list() -> list[dict[str, object]]
+```
+
+Return the tree as JSON-serializable data, in the file's own shape.
+
+<a id="fim.examples.classes.default_classes_path"></a>
+
+#### default\_classes\_path
+
+```python
+def default_classes_path() -> Path
+```
+
+Return where the class file lives in a source checkout.
+
+Anchored on the `fim` package's own `__init__.py`, as
+`fim.paths.project_root` is, so the answer does not depend on the
+current directory: `src/fim/__init__.py` climbs two levels to the
+checkout root, then down to `doc/examples/classes.yaml`.
+
+**Returns**:
+
+  The path, whether or not a file exists there.
+
+<a id="fim.examples.classes.is_valid_class_id"></a>
+
+#### is\_valid\_class\_id
+
+```python
+def is_valid_class_id(text: object) -> TypeGuard[str]
+```
+
+Return whether `text` is a lowercase kebab-case class ID.
+
+**Arguments**:
+
+- `text` - The candidate value, of any type.
+
+
+**Returns**:
+
+  `True` for a string such as `getting-started` or `literature`,
+  `False` for anything else (upper case, spaces, underscores, a
+  leading or trailing hyphen, a doubled hyphen, or a non-string).
+
+<a id="fim.examples.classes.load_default_class_tree"></a>
+
+#### load\_default\_class\_tree
+
+```python
+def load_default_class_tree() -> ClassTree | None
+```
+
+Read the checkout's class file, or return `None` when it is absent.
+
+**Returns**:
+
+  The validated tree, or `None` when `default_classes_path` names
+  no file (a packaged build carries no `doc/` directory).
+
+
+**Raises**:
+
+- `OSError` - The file exists but cannot be read.
+- `ValueError` - The file exists but is not a valid class tree.
+
+<a id="fim.examples.classes.parse_class_tree"></a>
+
+#### parse\_class\_tree
+
+```python
+def parse_class_tree(payload: object) -> ClassTree
+```
+
+Validate a parsed class file and build its tree.
+
+**Arguments**:
+
+- `payload` - The parsed YAML document.
+
+
+**Returns**:
+
+  The validated tree, in the file's own order.
+
+
+**Raises**:
+
+- `ValueError` - The document breaks one of the rules in this
+  module's docstring; the message names the offending entry.
+
+<a id="fim.examples.classes.read_class_tree"></a>
+
+#### read\_class\_tree
+
+```python
+def read_class_tree(path: Path | str) -> ClassTree
+```
+
+Read and validate one class file.
+
+**Arguments**:
+
+- `path` - The YAML file to read.
+
+
+**Returns**:
+
+  The validated tree.
+
+
+**Raises**:
+
+- `OSError` - The file cannot be read.
+- `ValueError` - The file is not valid YAML or not a valid class tree.
+
+<a id="fim.examples.classes.validate_run_class"></a>
+
+#### validate\_run\_class
+
+```python
+def validate_run_class(class_id: object,
+                       *,
+                       path: Path | str | None = None) -> str
+```
+
+Check a configuration's `class` label and return it.
+
+With a class file available, `class_id` must name one of its
+classes. Without one (a packaged build has no `doc/` directory),
+only the ID's format is checked and a warning is logged. That is
+the safe choice: a class is a label, never part of the run's ID or
+its results, so refusing to run a valid example configuration only
+because the file listing the classes was not shipped would block a
+correct run to protect nothing. A malformed ID is still rejected in
+both cases.
+
+**Arguments**:
+
+- `class_id` - The value of the configuration's `class` key.
+- `path` - The class file to check against (default:
+  `default_classes_path`); a path naming no file means "no
+  class file available".
+
+
+**Returns**:
+
+  `class_id`, unchanged.
+
+
+**Raises**:
+
+- `ValueError` - `class_id` is not a kebab-case string, or names no
+  class in an available class file, or the class file itself
+  is malformed.
 
 <a id="fim.gui"></a>
 

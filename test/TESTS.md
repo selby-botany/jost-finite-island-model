@@ -110,6 +110,7 @@ Every test module, fixture, and test function documented here in full; `doc/fim-
   - [`test_manifest`](#persistence.test_manifest)
   - [`test_pairwise_file`](#persistence.test_pairwise_file)
   - [`test_report`](#persistence.test_report)
+  - [`test_run_classes`](#persistence.test_run_classes)
   - [`test_run_metadata`](#persistence.test_run_metadata)
   - [`test_store`](#persistence.test_store)
   - [`test_validation`](#persistence.test_validation)
@@ -25290,6 +25291,276 @@ def test_write_report_creates_parent_directories(tmp_path: Path) -> None
 ```
 
 A missing parent directory is created, matching every prior writer.
+
+<a id="persistence.test_run_classes"></a>
+
+# persistence.test\_run\_classes
+
+Unit tests for `fim.examples.classes`, the run-class tree reader.
+
+Kept beside the run-metadata tests because a run's `class` label is
+checked against this tree before it is written to `metadata.json`.
+
+<a id="persistence.test_run_classes.test_fixture_reads_as_the_documented_tree"></a>
+
+#### test\_fixture\_reads\_as\_the\_documented\_tree
+
+```python
+def test_fixture_reads_as_the_documented_tree() -> None
+```
+
+The design's example tree reads back whole, children included.
+
+<a id="persistence.test_run_classes.test_order_in_the_file_is_preserved"></a>
+
+#### test\_order\_in\_the\_file\_is\_preserved
+
+```python
+def test_order_in_the_file_is_preserved() -> None
+```
+
+Display order is file order, not sorted order, children after parents.
+
+<a id="persistence.test_run_classes.test_lookup_finds_parents_and_children"></a>
+
+#### test\_lookup\_finds\_parents\_and\_children
+
+```python
+def test_lookup_finds_parents_and_children() -> None
+```
+
+`in`, `get`, and `parent_of` see every level of the tree.
+
+<a id="persistence.test_run_classes.test_to_list_round_trips_through_the_parser"></a>
+
+#### test\_to\_list\_round\_trips\_through\_the\_parser
+
+```python
+def test_to_list_round_trips_through_the_parser() -> None
+```
+
+The bridge-ready list parses back to an identical tree.
+
+<a id="persistence.test_run_classes.test_duplicate_ids_are_rejected_across_the_whole_tree"></a>
+
+#### test\_duplicate\_ids\_are\_rejected\_across\_the\_whole\_tree
+
+```python
+@pytest.mark.parametrize(
+    "children",
+    [
+        [{
+            "id": "a",
+            "title": "A"
+        }, {
+            "id": "b",
+            "title": "B"
+        }],
+        [{
+            "id": "parent",
+            "title": "Parent again"
+        }],
+    ],
+    ids=["between-top-level-classes", "child-repeats-its-parent"],
+)
+def test_duplicate_ids_are_rejected_across_the_whole_tree(
+        children: list[dict[str, str]]) -> None
+```
+
+An ID may appear once, whether at the top level or as a child.
+
+<a id="persistence.test_run_classes.test_a_grandchild_is_rejected_as_too_deep"></a>
+
+#### test\_a\_grandchild\_is\_rejected\_as\_too\_deep
+
+```python
+def test_a_grandchild_is_rejected_as_too_deep() -> None
+```
+
+The tree holds top-level classes and one level of children only.
+
+<a id="persistence.test_run_classes.test_a_badly_formed_id_is_rejected"></a>
+
+#### test\_a\_badly\_formed\_id\_is\_rejected
+
+```python
+@pytest.mark.parametrize(
+    "class_id",
+    [
+        "Getting-started",
+        "getting_started",
+        "getting started",
+        "-leading",
+        "trailing-",
+        "double--hyphen",
+        "",
+        7,
+        None,
+    ],
+)
+def test_a_badly_formed_id_is_rejected(class_id: object) -> None
+```
+
+IDs are lowercase kebab-case strings, nothing else.
+
+<a id="persistence.test_run_classes.test_malformed_files_are_rejected_with_a_named_reason"></a>
+
+#### test\_malformed\_files\_are\_rejected\_with\_a\_named\_reason
+
+```python
+@pytest.mark.parametrize(
+    ("payload", "message"),
+    [
+        ([], "root must be a mapping"),
+        ({
+            "classes": []
+        }, "nonempty list"),
+        ({
+            "classes": "getting-started"
+        }, "nonempty list"),
+        ({
+            "classes": [{
+                "id": "a",
+                "title": "A"
+            }],
+            "extra": 1
+        }, "unknown class file"),
+        ({
+            "classes": ["a"]
+        }, r"classes\[0\] must be a mapping"),
+        ({
+            "classes": [{
+                "id": "a"
+            }]
+        }, "nonblank title"),
+        ({
+            "classes": [{
+                "id": "a",
+                "title": "  "
+            }]
+        }, "nonblank title"),
+        ({
+            "classes": [{
+                "id": "a",
+                "title": "A",
+                "description": ""
+            }]
+        }, "description"),
+        ({
+            "classes": [{
+                "id": "a",
+                "title": "A",
+                "colour": "red"
+            }]
+        }, "unknown"),
+        ({
+            "classes": [{
+                "id": "a",
+                "title": "A",
+                "children": []
+            }]
+        }, "nonempty list"),
+    ],
+)
+def test_malformed_files_are_rejected_with_a_named_reason(
+        payload: object, message: str) -> None
+```
+
+Every rule in the module docstring has its own clear error.
+
+<a id="persistence.test_run_classes.test_invalid_yaml_is_a_value_error"></a>
+
+#### test\_invalid\_yaml\_is\_a\_value\_error
+
+```python
+def test_invalid_yaml_is_a_value_error(tmp_path: Path) -> None
+```
+
+A file that is not YAML at all reports as a `ValueError`, not a crash.
+
+<a id="persistence.test_run_classes.test_is_valid_class_id_accepts_kebab_case"></a>
+
+#### test\_is\_valid\_class\_id\_accepts\_kebab\_case
+
+```python
+def test_is_valid_class_id_accepts_kebab_case() -> None
+```
+
+Single words, digits, and hyphen-joined words are all well formed.
+
+<a id="persistence.test_run_classes.test_validate_run_class_accepts_a_known_class"></a>
+
+#### test\_validate\_run\_class\_accepts\_a\_known\_class
+
+```python
+def test_validate_run_class_accepts_a_known_class() -> None
+```
+
+A class listed anywhere in the file is accepted and returned unchanged.
+
+<a id="persistence.test_run_classes.test_validate_run_class_rejects_an_unknown_class"></a>
+
+#### test\_validate\_run\_class\_rejects\_an\_unknown\_class
+
+```python
+def test_validate_run_class_rejects_an_unknown_class() -> None
+```
+
+A well-formed ID the file does not list is rejected, naming the choices.
+
+<a id="persistence.test_run_classes.test_validate_run_class_without_a_class_file_checks_format_only"></a>
+
+#### test\_validate\_run\_class\_without\_a\_class\_file\_checks\_format\_only
+
+```python
+def test_validate_run_class_without_a_class_file_checks_format_only(
+        tmp_path: Path, caplog: pytest.LogCaptureFixture) -> None
+```
+
+No class file (a packaged build) accepts any well-formed ID, with a warning.
+
+<a id="persistence.test_run_classes.test_validate_run_class_reports_a_malformed_class_file"></a>
+
+#### test\_validate\_run\_class\_reports\_a\_malformed\_class\_file
+
+```python
+def test_validate_run_class_reports_a_malformed_class_file(
+        tmp_path: Path) -> None
+```
+
+A broken class file is an error, not silently treated as absent.
+
+<a id="persistence.test_run_classes.test_load_default_class_tree_is_none_without_a_file"></a>
+
+#### test\_load\_default\_class\_tree\_is\_none\_without\_a\_file
+
+```python
+def test_load_default_class_tree_is_none_without_a_file(
+        tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None
+```
+
+The default loader returns `None` where no class file exists.
+
+<a id="persistence.test_run_classes.test_load_default_class_tree_reads_the_default_file"></a>
+
+#### test\_load\_default\_class\_tree\_reads\_the\_default\_file
+
+```python
+def test_load_default_class_tree_reads_the_default_file(
+        monkeypatch: pytest.MonkeyPatch) -> None
+```
+
+The default loader reads whatever `default_classes_path` names.
+
+<a id="persistence.test_run_classes.test_default_classes_path_points_into_the_checkout_examples"></a>
+
+#### test\_default\_classes\_path\_points\_into\_the\_checkout\_examples
+
+```python
+def test_default_classes_path_points_into_the_checkout_examples() -> None
+```
+
+The default path is `doc/examples/classes.yaml` under the checkout root.
 
 <a id="persistence.test_run_metadata"></a>
 

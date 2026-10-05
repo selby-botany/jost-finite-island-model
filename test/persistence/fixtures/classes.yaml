@@ -1,0 +1,19 @@
+# Test fixture: the class tree from the read-only examples design
+# (section 2). Not the shipped `doc/examples/classes.yaml`; tests read
+# this copy so they never depend on the examples' own content.
+classes:
+  - id: getting-started
+    title: Getting started
+    description: One-screen runs that show the core statistics settling.
+  - id: migration
+    title: Migration structure
+    description: Hubs, rings, stepping stones and random migrant counts.
+  - id: mutation-and-loci
+    title: Mutation and loci
+  - id: replicates-and-engines
+    title: Replicates and engines
+  - id: literature
+    title: Literature comparisons
+    children:
+      - id: literature-distances
+        title: Genetic distances
