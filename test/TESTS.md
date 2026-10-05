@@ -23412,13 +23412,14 @@ An explicit matrix beyond the eigenvalue route's size is refused.
 
 # model.test\_run\_identity
 
-What a run's ID covers: model keys yes, labels no.
+What a run's ID covers: model keys and internal attributes, not labels.
 
 Read-only examples design (2026-10-05), section 1. A run's ID is a hash
 of `SimulationParams.to_dict()` (`fim.engine.deterministic_run_id`), so
 anything kept out of `to_dict` is kept out of the ID. The label keys
 `name`, `description`, and `class` are accepted by `from_mapping` and
-dropped there.
+dropped there. The internal attribute `_read_only` is kept, and written
+by `to_dict` only when true, so it moves the ID only when set.
 
 <a id="model.test_run_identity.test_labels_leave_the_run_id_unchanged"></a>
 
@@ -23496,6 +23497,88 @@ def test_a_model_key_still_changes_the_run_id() -> None
 ```
 
 Control: the ID is not blind, a real model change still moves it.
+
+<a id="model.test_run_identity.test_a_configuration_without_read_only_keeps_its_golden_run_id"></a>
+
+#### test\_a\_configuration\_without\_read\_only\_keeps\_its\_golden\_run\_id
+
+```python
+def test_a_configuration_without_read_only_keeps_its_golden_run_id() -> None
+```
+
+A plain configuration hashes to the ID it had before `_read_only`.
+
+<a id="model.test_run_identity.test_read_only_false_is_the_same_run_as_no_read_only"></a>
+
+#### test\_read\_only\_false\_is\_the\_same\_run\_as\_no\_read\_only
+
+```python
+def test_read_only_false_is_the_same_run_as_no_read_only() -> None
+```
+
+An explicit `_read_only: false` is the default, so the ID is unchanged.
+
+<a id="model.test_run_identity.test_read_only_true_changes_the_run_id"></a>
+
+#### test\_read\_only\_true\_changes\_the\_run\_id
+
+```python
+def test_read_only_true_changes_the_run_id() -> None
+```
+
+`_read_only: true` is part of the run, so the run ID moves.
+
+<a id="model.test_run_identity.test_read_only_round_trips_through_to_dict"></a>
+
+#### test\_read\_only\_round\_trips\_through\_to\_dict
+
+```python
+def test_read_only_round_trips_through_to_dict() -> None
+```
+
+`from_mapping(to_dict())` keeps `read_only`, as it keeps every field.
+
+<a id="model.test_run_identity.test_labels_do_not_move_a_read_only_run_id"></a>
+
+#### test\_labels\_do\_not\_move\_a\_read\_only\_run\_id
+
+```python
+def test_labels_do_not_move_a_read_only_run_id() -> None
+```
+
+Labels stay out of the ID of a read-only run too.
+
+<a id="model.test_run_identity.test_an_unknown_internal_key_is_rejected"></a>
+
+#### test\_an\_unknown\_internal\_key\_is\_rejected
+
+```python
+@pytest.mark.parametrize("key", ["_readonly", "_read_only_", "_seed", "_"])
+def test_an_unknown_internal_key_is_rejected(key: str) -> None
+```
+
+Only documented `_` keys are accepted; a typo is rejected by name.
+
+<a id="model.test_run_identity.test_read_only_must_be_a_boolean"></a>
+
+#### test\_read\_only\_must\_be\_a\_boolean
+
+```python
+@pytest.mark.parametrize("value", ["yes", 1, None])
+def test_read_only_must_be_a_boolean(value: object) -> None
+```
+
+`_read_only` takes a real boolean, never a truthy stand-in.
+
+<a id="model.test_run_identity.test_read_only_constructed_directly_must_be_a_boolean"></a>
+
+#### test\_read\_only\_constructed\_directly\_must\_be\_a\_boolean
+
+```python
+def test_read_only_constructed_directly_must_be_a_boolean() -> None
+```
+
+`__post_init__` checks the field for direct construction too.
 
 <a id="model.test_state"></a>
 

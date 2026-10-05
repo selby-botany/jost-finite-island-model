@@ -13,6 +13,7 @@ the <a href="#" data-fim-external="https://github.com/selby-botany/jost-finite-i
 <li><a href="#analysis-and-execution">Analysis and execution</a></li>
 <li><a href="#engine-backend-and-jit">Engine backend and JIT</a></li>
 <li><a href="#run-labels">Run labels</a></li>
+<li><a href="#internal-attributes">Internal attributes</a></li>
 <li><a href="#validation-summary">Validation summary</a></li>
 </ul>
 <h2 id="complete-example">Complete example</h2>
@@ -922,6 +923,29 @@ lowercase words joined by hyphens. An ID that is not listed in that file is
 rejected. A packaged copy of <code>fim</code> does not include <code>doc/</code>, so there it
 checks only that the ID is lowercase words joined by hyphens, and logs a
 warning.</p>
+<h2 id="internal-attributes">Internal attributes</h2>
+<p>A top-level key that starts with an underscore (<code>_</code>) is an internal
+attribute. Internal attributes are written by <code>fim</code> itself for the runs it
+ships; you do not normally set one. Only the attributes documented here are
+accepted. Any other key that starts with <code>_</code> is rejected as an unknown key,
+so a typo is reported instead of ignored.</p>
+<p>Unlike a label, an internal attribute <strong>is</strong> part of the run's ID.</p>
+<h3 id="read_only"><code>_read_only</code></h3>
+<ul>
+<li><strong>Type:</strong> boolean</li>
+<li><strong>Default:</strong> <code>false</code></li>
+<li><strong>Meaning:</strong> the run is a shipped example that cannot be edited</li>
+</ul>
+<p>A read-only run cannot be renamed, described, given another class, deleted,
+or removed from a study. You can still open it, reanalyze it, and copy its
+configuration. Each worked example's <code>config.yaml</code> carries
+<code>_read_only: true</code>.</p>
+<p>Because <code>_read_only: true</code> is part of the run's ID, a shipped example and
+your own run of the same model are different runs. When you load an example
+into Configure, every <code>_</code> key is dropped, so the run you make from it is an
+ordinary run that you can edit. A configuration without <code>_read_only</code>, or
+with <code>_read_only: false</code>, has the same ID it had before this attribute
+existed.</p>
 <h2 id="validation-summary">Validation summary</h2>
 <table>
 <thead>
@@ -965,6 +989,14 @@ warning.</p>
 </tr>
 <tr>
 <td><code>class</code> not lowercase words joined by hyphens, or not listed in <code>doc/examples/classes.yaml</code></td>
+<td>rejected</td>
+</tr>
+<tr>
+<td>a key starting with <code>_</code> other than <code>_read_only</code></td>
+<td>rejected by name</td>
+</tr>
+<tr>
+<td><code>_read_only</code> not a boolean</td>
 <td>rejected</td>
 </tr>
 <tr>

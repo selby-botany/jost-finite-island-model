@@ -1,10 +1,11 @@
-"""What a run's ID covers: model keys yes, labels no.
+"""What a run's ID covers: model keys and internal attributes, not labels.
 
 Read-only examples design (2026-10-05), section 1. A run's ID is a hash
 of `SimulationParams.to_dict()` (`fim.engine.deterministic_run_id`), so
 anything kept out of `to_dict` is kept out of the ID. The label keys
 `name`, `description`, and `class` are accepted by `from_mapping` and
-dropped there.
+dropped there. The internal attribute `_read_only` is kept, and written
+by `to_dict` only when true, so it moves the ID only when set.
 """
 
 from __future__ import annotations
@@ -81,3 +82,74 @@ def test_a_label_that_is_not_text_is_rejected(key: str, value: object) -> None:
 def test_a_model_key_still_changes_the_run_id() -> None:
     """Control: the ID is not blind, a real model change still moves it."""
     assert _run_id(_config(seed=20261006)) != _run_id(_config())
+
+
+# `_config()`'s run ID, computed from the code before `_read_only`
+# existed (`dev` at `af9f7fc`, 2026-10-05). Pinned so that adding an
+# internal attribute can never silently re-key every existing run.
+GOLDEN_RUN_ID = "run-9b48f125d7f8c355"
+
+
+def test_a_configuration_without_read_only_keeps_its_golden_run_id() -> None:
+    """A plain configuration hashes to the ID it had before `_read_only`."""
+    assert _run_id(_config()) == GOLDEN_RUN_ID
+
+
+def test_read_only_false_is_the_same_run_as_no_read_only() -> None:
+    """An explicit `_read_only: false` is the default, so the ID is unchanged."""
+    params = SimulationParams.from_mapping(_config(_read_only=False))
+
+    assert not params.read_only
+    assert "_read_only" not in params.to_dict()
+    assert deterministic_run_id(params) == GOLDEN_RUN_ID
+
+
+def test_read_only_true_changes_the_run_id() -> None:
+    """`_read_only: true` is part of the run, so the run ID moves."""
+    params = SimulationParams.from_mapping(_config(_read_only=True))
+
+    assert params.read_only
+    assert params.to_dict()["_read_only"] is True
+    assert deterministic_run_id(params) != GOLDEN_RUN_ID
+
+
+def test_read_only_round_trips_through_to_dict() -> None:
+    """`from_mapping(to_dict())` keeps `read_only`, as it keeps every field."""
+    params = SimulationParams.from_mapping(_config(_read_only=True))
+
+    assert SimulationParams.from_mapping(params.to_dict()) == params
+
+
+def test_labels_do_not_move_a_read_only_run_id() -> None:
+    """Labels stay out of the ID of a read-only run too."""
+    plain = _config(_read_only=True)
+    labeled = _config(_read_only=True, name="Example", **{"class": "migration"})
+
+    assert _run_id(labeled) == _run_id(plain)
+
+
+@pytest.mark.parametrize("key", ["_readonly", "_read_only_", "_seed", "_"])
+def test_an_unknown_internal_key_is_rejected(key: str) -> None:
+    """Only documented `_` keys are accepted; a typo is rejected by name."""
+    with pytest.raises(ValueError, match=f"unknown configuration key\\(s\\): {key}"):
+        SimulationParams.from_mapping(_config(**{key: True}))
+
+
+@pytest.mark.parametrize("value", ["yes", 1, None])
+def test_read_only_must_be_a_boolean(value: object) -> None:
+    """`_read_only` takes a real boolean, never a truthy stand-in."""
+    with pytest.raises(ValueError, match="_read_only must be a boolean"):
+        SimulationParams.from_mapping(_config(_read_only=value))
+
+
+def test_read_only_constructed_directly_must_be_a_boolean() -> None:
+    """`__post_init__` checks the field for direct construction too."""
+    with pytest.raises(ValueError, match="read_only must be a boolean"):
+        SimulationParams(
+            gene_copies=10,
+            m=0.1,
+            mu=0.001,
+            d=2,
+            seed=1,
+            read_only="yes",  # type: ignore[arg-type]
+        )

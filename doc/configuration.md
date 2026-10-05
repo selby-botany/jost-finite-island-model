@@ -15,6 +15,7 @@ the [project overview](../README.md) for installation.
 - [Analysis and execution](#analysis-and-execution)
 - [Engine backend and JIT](#engine-backend-and-jit)
 - [Run labels](#run-labels)
+- [Internal attributes](#internal-attributes)
 - [Validation summary](#validation-summary)
 
 ## Complete example
@@ -1053,6 +1054,34 @@ rejected. A packaged copy of `fim` does not include `doc/`, so there it
 checks only that the ID is lowercase words joined by hyphens, and logs a
 warning.
 
+## Internal attributes
+
+A top-level key that starts with an underscore (`_`) is an internal
+attribute. Internal attributes are written by `fim` itself for the runs it
+ships; you do not normally set one. Only the attributes documented here are
+accepted. Any other key that starts with `_` is rejected as an unknown key,
+so a typo is reported instead of ignored.
+
+Unlike a label, an internal attribute **is** part of the run's ID.
+
+### `_read_only`
+
+- **Type:** boolean
+- **Default:** `false`
+- **Meaning:** the run is a shipped example that cannot be edited
+
+A read-only run cannot be renamed, described, given another class, deleted,
+or removed from a study. You can still open it, reanalyze it, and copy its
+configuration. Each worked example's `config.yaml` carries
+`_read_only: true`.
+
+Because `_read_only: true` is part of the run's ID, a shipped example and
+your own run of the same model are different runs. When you load an example
+into Configure, every `_` key is dropped, so the run you make from it is an
+ordinary run that you can edit. A configuration without `_read_only`, or
+with `_read_only: false`, has the same ID it had before this attribute
+existed.
+
 ## Validation summary
 
 | Condition | Result |
@@ -1066,6 +1095,8 @@ warning.
 | unknown key | rejected by name |
 | `name`, `description`, or `class` not text, or blank | rejected |
 | `class` not lowercase words joined by hyphens, or not listed in `doc/examples/classes.yaml` | rejected |
+| a key starting with `_` other than `_read_only` | rejected by name |
+| `_read_only` not a boolean | rejected |
 | matrix/list shape not matching `d` | rejected |
 | unrecognized or repeated convergence_statistic entry | rejected |
 | `m` sparse-map deme/neighbor id outside `[1..d]`, a self-loop, or weights summing past `1` | rejected |

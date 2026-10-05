@@ -352,6 +352,18 @@ run's `metadata.json` sidecar instead (read-only examples design,
 moving it to another class therefore never changes which run it is.
 """
 
+_INTERNAL_KEYS: Final = frozenset({"_read_only"})
+"""Documented internal attributes: top-level keys that start with `_`.
+
+An internal attribute is part of the run, so unlike a label it reaches
+`to_dict` and the run ID. Only the keys listed here are accepted; any
+other `_` key is rejected like any unknown key, which catches a typo
+(read-only examples design, 2026-10-05, section 1). `_read_only` marks
+a shipped example run that the persistence layer refuses to edit
+(`fim.persistence.groups.ReadOnlyError`); it is `SimulationParams.
+read_only` inside the program.
+"""
+
 _CONVERGENCE_STATISTICS: Final = frozenset(convergence_statistic_keys())
 """Every statistic name `convergence_statistic` may watch.
 
@@ -664,6 +676,15 @@ class SimulationParams:
             how `from_mapping` and `to_dict` convert between the
             configuration's `N` (individuals per deme) and `gene_copies`,
             so `gene_copies` must be a multiple of it.
+        read_only: Whether this is a shipped, read-only run (the
+            configuration's internal attribute `_read_only`,
+            `_INTERNAL_KEYS`). The dynamics never read it. It is part of
+            the run ID, so a read-only example and a user's editable run
+            of the same model are different runs; `to_dict` writes it
+            only when true, so every run made before it existed keeps its
+            ID. The persistence layer refuses to rename, describe,
+            re-class, or delete a read-only run
+            (`fim.persistence.groups.ReadOnlyError`).
     """
 
     gene_copies: PopulationSize
@@ -702,6 +723,7 @@ class SimulationParams:
     sigma_band_multiplier: float | None = None
     sigma_band_window: int | None = None
     ploidy: int = 1
+    read_only: bool = False
     auto_derived: frozenset[str] = field(
         default=frozenset(), init=False, compare=False, repr=False
     )
@@ -778,6 +800,7 @@ class SimulationParams:
         ):
             raise ValueError("convergence_tolerance must be non-negative")
         _require_bool("track_expensive_statistics", self.track_expensive_statistics)
+        _require_bool("read_only", self.read_only)
         _require_integer(
             "max_generations",
             self.max_generations,
@@ -1133,6 +1156,12 @@ class SimulationParams:
                 ]
                 for deme in self.initial_frequencies
             ]
+        if self.read_only:
+            # Written only when true: an absent key and `false` mean the
+            # same thing to `from_mapping`, and omitting `false` keeps the
+            # serialized form, and so the run ID, of every run made before
+            # `_read_only` existed byte-for-byte unchanged.
+            result["_read_only"] = True
         return result
 
     @classmethod
@@ -1157,6 +1186,9 @@ class SimulationParams:
         Returns:
             A validated immutable parameter object.
 
+        The internal attribute `_read_only` (`_INTERNAL_KEYS`) becomes
+        `read_only`; any other key starting with `_` is unknown.
+
         The label keys `name`, `description`, and `class`
         (`_LABEL_KEYS`) are accepted, type-checked, and dropped: they
         describe the run rather than define it, so they are kept out of
@@ -1167,7 +1199,7 @@ class SimulationParams:
         Raises:
             ValueError: If a key is unknown, required, malformed, or conflicting.
         """
-        unknown = set(config) - _CONFIG_KEYS - _LABEL_KEYS
+        unknown = set(config) - _CONFIG_KEYS - _LABEL_KEYS - _INTERNAL_KEYS
         if unknown:
             names = ", ".join(sorted(unknown))
             raise ValueError(f"unknown configuration key(s): {names}")
@@ -1376,6 +1408,7 @@ class SimulationParams:
                 ),
             ),
             ploidy=ploidy,
+            read_only=_parse_bool("_read_only", config.get("_read_only", False)),
         )
 
 

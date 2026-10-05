@@ -8,6 +8,7 @@ from fim.engine import deterministic_run_id
 from fim.model.locus import LocusSpec
 from fim.model.params import (
     _CONFIG_KEYS,
+    _INTERNAL_KEYS,
     _LABEL_KEYS,
     PARAMETER_DEFAULTS,
     SimulationParams,
@@ -1194,7 +1195,9 @@ def test_every_accepted_config_key_appears_in_configuration_md() -> None:
     # `name` and `class` are ordinary English words, so only their
     # code-formatted spelling counts as documenting them.
     undocumented += sorted(
-        key for key in _LABEL_KEYS if f"### `{key}`" not in documentation
+        key
+        for key in _LABEL_KEYS | _INTERNAL_KEYS
+        if f"### `{key}`" not in documentation
     )
 
     assert not undocumented, (

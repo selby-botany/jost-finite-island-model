@@ -12692,6 +12692,15 @@ functions that actually use each one.
   how `from_mapping` and `to_dict` convert between the
   configuration's `N` (individuals per deme) and `gene_copies`,
   so `gene_copies` must be a multiple of it.
+- `read_only` - Whether this is a shipped, read-only run (the
+  configuration's internal attribute `_read_only`,
+  `_INTERNAL_KEYS`). The dynamics never read it. It is part of
+  the run ID, so a read-only example and a user's editable run
+  of the same model are different runs; `to_dict` writes it
+  only when true, so every run made before it existed keeps its
+  ID. The persistence layer refuses to rename, describe,
+  re-class, or delete a read-only run
+  (`fim.persistence.groups.ReadOnlyError`).
 
 <a id="fim.model.params.SimulationParams.__post_init__"></a>
 
@@ -12826,6 +12835,9 @@ before construction, rather than inside `__post_init__`.
 **Returns**:
 
   A validated immutable parameter object.
+
+  The internal attribute `_read_only` (`_INTERNAL_KEYS`) becomes
+  `read_only`; any other key starting with `_` is unknown.
 
   The label keys `name`, `description`, and `class`
   (`_LABEL_KEYS`) are accepted, type-checked, and dropped: they
