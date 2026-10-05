@@ -88,6 +88,7 @@ Every test module, fixture, and test function documented here in full; `doc/fim-
   - [`test_sweep_api`](#gui.test_sweep_api)
   - [`test_sweep_results_screen`](#gui.test_sweep_results_screen)
   - [`test_sweep_screen`](#gui.test_sweep_screen)
+  - [`test_trailing_mean_screen`](#gui.test_trailing_mean_screen)
   - [`test_trajectory_history`](#gui.test_trajectory_history)
   - [`test_webui_global_scope`](#gui.test_webui_global_scope)
   - [`test_welcome_screen`](#gui.test_welcome_screen)
@@ -10300,6 +10301,17 @@ def test_open_run_carries_the_real_closed_form_trajectory(
 
 A reopened run's own `closedForm` is the solved recursion for its params.
 
+<a id="gui.test_app_api.test_open_run_carries_the_convergence_window_and_tolerance"></a>
+
+#### test\_open\_run\_carries\_the\_convergence\_window\_and\_tolerance
+
+```python
+def test_open_run_carries_the_convergence_window_and_tolerance(
+        tmp_path: Path) -> None
+```
+
+The trailing mean averages over the run's own window, judged by its tolerance.
+
 <a id="gui.test_app_api.test_open_run_choose_reanalyzes_an_earlier_generation_as_re_analysis"></a>
 
 #### test\_open\_run\_choose\_reanalyzes\_an\_earlier\_generation\_as\_re\_analysis
@@ -11807,6 +11819,16 @@ def test_the_table_names_every_shipped_configuration() -> None
 ```
 
 A configuration missing from `EXPECTED` (or stale in it) fails here.
+
+<a id="gui.test_closed_form_examples.test_each_preset_matches_its_example_directory"></a>
+
+#### test\_each\_preset\_matches\_its\_example\_directory
+
+```python
+def test_each_preset_matches_its_example_directory() -> None
+```
+
+A preset listed once stands for its example directory's identical config.
 
 <a id="gui.test_closed_form_examples.test_payload_shape_matches_the_model_for_every_configuration"></a>
 
@@ -16442,7 +16464,7 @@ def test_run_card_layout_round_trips_through_save_and_load(
         tmp_path: Path) -> None
 ```
 
-Chosen graphs, columns and scatter style survive a reload.
+Chosen graphs, columns, scatter style and trajectory display survive a reload.
 
 <a id="gui.test_preferences.test_with_run_card_layout_changes_only_what_it_is_given"></a>
 
@@ -16473,7 +16495,7 @@ A graph a later version removed does not invalidate the file.
 def test_malformed_run_card_values_are_quarantined(tmp_path: Path) -> None
 ```
 
-A bad column count or scatter style is rejected, not coerced.
+A bad column count, scatter style or trajectory display is rejected.
 
 <a id="gui.test_preferences.test_a_version_one_file_has_its_saved_window_and_cap_reset_to_auto"></a>
 
@@ -17990,7 +18012,7 @@ def test_completed_row_tooltip_shows_the_trailing_window_mean(
         _isolate_gui_preferences: Path) -> None
 ```
 
-A statistic row's own hover title carries its trailing-window mean.
+A statistic row's own hover title leads with its window mean and SE.
 
 Needs a window at least `MINIMUM_NOISE_CHECK_WINDOW` long -- shorter
 than that, `report_for_state` has nothing to report
@@ -19415,6 +19437,78 @@ Headless functional tests for the sweep screen (`webui/screens/sweep.js`).
 Each test is one driven session (`webview.start` runs once per window),
 so a test's `steps` function performs every action and returns what it
 saw.
+
+<a id="gui.test_trailing_mean_screen"></a>
+
+# gui.test\_trailing\_mean\_screen
+
+Headless functional tests for the window estimate and the trailing-mean display.
+
+A statistic's tooltip leads with its mean over the convergence window (or,
+at a finished run's end, over the monitor's grown evidence window), that
+mean's standard error, and how many standard errors it lies from the
+prediction. The trajectory graph can draw each statistic's trailing mean
+with a standard-error band instead of its value at every generation. The
+page computes both with its own copy of
+`fim.convergence.window_statistics`, held equal to the Python here.
+
+<a id="gui.test_trailing_mean_screen.test_the_page_estimator_matches_window_statistics"></a>
+
+#### test\_the\_page\_estimator\_matches\_window\_statistics
+
+```python
+def test_the_page_estimator_matches_window_statistics(
+        window: webview.Window, drive: Callable[..., Any]) -> None
+```
+
+Mean and standard error agree with Python's for every test window.
+
+<a id="gui.test_trailing_mean_screen.test_the_trailing_window_counts_generations_and_starts_with_enough_points"></a>
+
+#### test\_the\_trailing\_window\_counts\_generations\_and\_starts\_with\_enough\_points
+
+```python
+def test_the_trailing_window_counts_generations_and_starts_with_enough_points(
+        window: webview.Window, drive: Callable[..., Any]) -> None
+```
+
+The window spans generations; the curve begins at eight points.
+
+<a id="gui.test_trailing_mean_screen.test_the_estimate_note_text"></a>
+
+#### test\_the\_estimate\_note\_text
+
+```python
+def test_the_estimate_note_text(window: webview.Window,
+                                drive: Callable[..., Any]) -> None
+```
+
+Trailing, anchored, scrubbed, sparse and inadequate estimates read right.
+
+<a id="gui.test_trailing_mean_screen.estimable_run_settings"></a>
+
+#### estimable\_run\_settings
+
+```python
+@pytest.fixture
+def estimable_run_settings(_isolate_gui_preferences: Path) -> Path
+```
+
+Pre-seed Settings for a fast run long enough to estimate a window mean.
+
+`fast_scalar_run_settings`' window of 4 is shorter than the eight
+points an estimate needs, so this one uses a window of 8.
+
+<a id="gui.test_trailing_mean_screen.test_a_completed_run_leads_with_its_estimate_and_offers_the_trailing_mean"></a>
+
+#### test\_a\_completed\_run\_leads\_with\_its\_estimate\_and\_offers\_the\_trailing\_mean
+
+```python
+def test_a_completed_run_leads_with_its_estimate_and_offers_the_trailing_mean(
+        estimable_run_settings: Path, window: webview.Window) -> None
+```
+
+D's tooltip leads with its mean ± SE; the display choice redraws and persists.
 
 <a id="gui.test_trajectory_history"></a>
 

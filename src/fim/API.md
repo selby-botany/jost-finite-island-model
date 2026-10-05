@@ -121,6 +121,7 @@ Return to the [source-tree orientation](../README.md) or the [developer guide](.
     * [set\_run\_graphs](#fim.gui.app.Api.set_run_graphs)
     * [set\_run\_graph\_columns](#fim.gui.app.Api.set_run_graph_columns)
     * [set\_scatter\_style](#fim.gui.app.Api.set_scatter_style)
+    * [set\_trajectory\_display](#fim.gui.app.Api.set_trajectory_display)
     * [get\_default\_ploidy](#fim.gui.app.Api.get_default_ploidy)
     * [set\_default\_ploidy](#fim.gui.app.Api.set_default_ploidy)
     * [validate\_form](#fim.gui.app.Api.validate_form)
@@ -252,6 +253,7 @@ Return to the [source-tree orientation](../README.md) or the [developer guide](.
   * [RUN\_GRAPH\_KEYS](#fim.gui.preferences.RUN_GRAPH_KEYS)
   * [DEFAULT\_RUN\_GRAPHS](#fim.gui.preferences.DEFAULT_RUN_GRAPHS)
   * [SCATTER\_STYLES](#fim.gui.preferences.SCATTER_STYLES)
+  * [TRAJECTORY\_DISPLAYS](#fim.gui.preferences.TRAJECTORY_DISPLAYS)
   * [GuiPreferences](#fim.gui.preferences.GuiPreferences)
     * [to\_dict](#fim.gui.preferences.GuiPreferences.to_dict)
     * [from\_dict](#fim.gui.preferences.GuiPreferences.from_dict)
@@ -4482,10 +4484,11 @@ Return how the Run card shows its graphs.
 
 **Returns**:
 
-- ``{"graphs"` - [...], "columns": int, "scatterStyle": str}`: the
-  graph keys the user wants shown together (`DEFAULT_RUN_GRAPHS`
-  until they choose), how many columns they are laid out in, and
-  how the scatter plot draws its points.
+- ``{"graphs"` - [...], "columns": int, "scatterStyle": str,
+- `"trajectoryDisplay"` - str}`: the graph keys the user wants
+  shown together (`DEFAULT_RUN_GRAPHS` until they choose), how
+  many columns they are laid out in, how the scatter plot draws
+  its points, and how the trajectory graph draws each statistic.
 
 <a id="fim.gui.app.Api.set_run_graphs"></a>
 
@@ -4550,6 +4553,33 @@ Choose how the scatter plot draws its points.
 
 - ``{"ok"` - True, "style": style}`, or `{"ok": False, "message":
   ...}`.
+
+<a id="fim.gui.app.Api.set_trajectory_display"></a>
+
+#### set\_trajectory\_display
+
+```python
+@_log_bridge_call
+def set_trajectory_display(display: str) -> dict[str, Any]
+```
+
+Choose how the trajectory graph draws each statistic.
+
+Display only: the run, its files and its statistics are the same
+either way.
+
+**Arguments**:
+
+- `display` - One of `TRAJECTORY_DISPLAYS`: `"every_generation"`
+  (the value at every recorded generation) or
+  `"trailing_mean"` (the mean over the convergence window,
+  with a standard-error band).
+
+
+**Returns**:
+
+- ``{"ok"` - True, "display": display}`, or `{"ok": False,
+- `"message"` - ...}`.
 
 <a id="fim.gui.app.Api.get_default_ploidy"></a>
 
@@ -8392,6 +8422,15 @@ What a fresh install shows together: the scatter and the trajectories.
 How the scatter plot draws its points (`scatter.js`'s own `SCATTER_STYLES`).
 `circles` is the original encoding (radius grows with count).
 
+<a id="fim.gui.preferences.TRAJECTORY_DISPLAYS"></a>
+
+#### TRAJECTORY\_DISPLAYS
+
+How the trajectory graph draws each statistic: its value at every
+recorded generation (the noise drift leaves in it), or its trailing mean
+over the convergence window with a standard-error band
+(`run-view-completed.js`'s own `trailingMeanSeries`).
+
 <a id="fim.gui.preferences.GuiPreferences"></a>
 
 ## GuiPreferences Objects
@@ -8452,6 +8491,7 @@ One loaded (or default) snapshot of the GUI's own preferences.
 - `run_graph_columns` - How many columns the shown graphs are laid out
   in (rows follow); 1 to `MAX_RUN_GRAPH_COLUMNS`.
 - `scatter_style` - One of `SCATTER_STYLES`.
+- `trajectory_display` - One of `TRAJECTORY_DISPLAYS`.
 - `shown_statistics` - The statistics shown (Settings, "Statistics
   shown"), as catalog keys in catalog order, or `None` for the
   catalog's own defaults. Display only: every statistic is
@@ -8644,15 +8684,18 @@ rather than silently only ever growing.
 #### with\_run\_card\_layout
 
 ```python
-def with_run_card_layout(*,
-                         run_graphs: tuple[str, ...] | None = None,
-                         run_graph_columns: int | None = None,
-                         scatter_style: str | None = None) -> GuiPreferences
+def with_run_card_layout(
+        *,
+        run_graphs: tuple[str, ...] | None = None,
+        run_graph_columns: int | None = None,
+        scatter_style: str | None = None,
+        trajectory_display: str | None = None) -> GuiPreferences
 ```
 
 Return a copy with any of the Run card's display choices replaced.
 
-The `Api.set_run_*`/`set_scatter_style` bridge methods' own update:
+The `Api.set_run_*`/`set_scatter_style`/`set_trajectory_display`
+bridge methods' own update:
 each argument left `None` keeps the current value.
 
 <a id="fim.gui.preferences.GuiPreferences.with_shown_statistics"></a>

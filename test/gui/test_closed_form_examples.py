@@ -76,16 +76,29 @@ EXPECTED: dict[str, str | None] = {
 }
 
 
+def _example_configurations() -> dict[str, dict[str, Any]]:
+    """Return every `doc/examples/<name>/config.yaml`, by directory name."""
+    return {
+        path.parent.name: yaml.safe_load(path.read_text(encoding="utf-8"))
+        for path in sorted((ROOT / "doc" / "examples").glob("*/config.yaml"))
+    }
+
+
 def _configurations() -> dict[str, dict[str, Any]]:
-    """Return every shipped configuration as a mapping, by id."""
+    """Return every shipped configuration as a mapping, by id.
+
+    A worked example's preset and its `doc/examples/<id>/config.yaml` are
+    one configuration in two places (the directory is the preset's
+    source), so it is listed once, under the preset id;
+    `test_each_preset_matches_its_example_directory` holds the two equal.
+    """
     found: dict[str, dict[str, Any]] = {
         preset.preset_id: yaml.safe_load(preset.yaml_text)
         for preset in list_presets(WEBUI)
     }
-    for path in sorted((ROOT / "doc" / "examples").glob("*/config.yaml")):
-        found[f"doc/examples/{path.parent.name}"] = yaml.safe_load(
-            path.read_text(encoding="utf-8")
-        )
+    for name, configuration in _example_configurations().items():
+        if name not in found:
+            found[f"doc/examples/{name}"] = configuration
     found["starter"] = yaml.safe_load(cli.STARTER_CONFIG)
     return found
 
@@ -103,6 +116,16 @@ def _kind(payload: dict[str, Any] | None) -> str | None:
 def test_the_table_names_every_shipped_configuration() -> None:
     """A configuration missing from `EXPECTED` (or stale in it) fails here."""
     assert set(CONFIGURATIONS) == set(EXPECTED)
+
+
+def test_each_preset_matches_its_example_directory() -> None:
+    """A preset listed once stands for its example directory's identical config."""
+    examples = _example_configurations()
+    for preset in list_presets(WEBUI):
+        if preset.preset_id in examples:
+            assert examples[preset.preset_id] == CONFIGURATIONS[preset.preset_id], (
+                preset.preset_id
+            )
 
 
 @pytest.mark.parametrize("name", sorted(EXPECTED))
