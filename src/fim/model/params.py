@@ -340,6 +340,18 @@ _CONFIG_KEYS: Final = frozenset(
     }
 )
 
+_LABEL_KEYS: Final = frozenset({"name", "description", "class"})
+"""Configuration keys that label a run without being part of it.
+
+`from_mapping` accepts these and does not keep them, so they never
+reach `to_dict` and therefore never reach the run ID
+(`fim.engine.deterministic_run_id`). `fim.persistence.run_metadata.
+RunLabels.from_config` reads them, and `fim run` writes them to the
+run's `metadata.json` sidecar instead (read-only examples design,
+2026-10-05, section 1). Renaming a run, rewording its description, or
+moving it to another class therefore never changes which run it is.
+"""
+
 _CONVERGENCE_STATISTICS: Final = frozenset(convergence_statistic_keys())
 """Every statistic name `convergence_statistic` may watch.
 
@@ -1145,13 +1157,21 @@ class SimulationParams:
         Returns:
             A validated immutable parameter object.
 
+        The label keys `name`, `description`, and `class`
+        (`_LABEL_KEYS`) are accepted, type-checked, and dropped: they
+        describe the run rather than define it, so they are kept out of
+        the returned parameters and out of the run ID.
+        `fim.persistence.run_metadata.RunLabels.from_config` reads them
+        in full, including checking `class` against the class tree.
+
         Raises:
             ValueError: If a key is unknown, required, malformed, or conflicting.
         """
-        unknown = set(config) - _CONFIG_KEYS
+        unknown = set(config) - _CONFIG_KEYS - _LABEL_KEYS
         if unknown:
             names = ", ".join(sorted(unknown))
             raise ValueError(f"unknown configuration key(s): {names}")
+        _check_labels(config)
         if "mu" in config and "mu_b" in config:
             raise ValueError("mu cannot be combined with mu_b")
         missing = {"N", "d", "m", "seed"} - set(config)
@@ -1366,6 +1386,21 @@ class SimulationParams:
 # malformed with a specific error message. None of these are meant to
 # be called from outside this module — `from_mapping` is the public
 # entry point that calls all of them together.
+
+
+def _check_labels(config: Mapping[str, Any]) -> None:
+    """Reject a label key (`_LABEL_KEYS`) whose value is not text.
+
+    Only the type is checked here, so that every caller of
+    `from_mapping` (the GUI's validation, a sweep) reports a malformed
+    label as early as `fim run` does. Blank text and an unknown `class`
+    are `RunLabels.from_config`'s to reject, since only it knows the
+    class tree. `null` means "no label", as an absent key does.
+    """
+    for key in sorted(_LABEL_KEYS & set(config)):
+        value = config[key]
+        if value is not None and not isinstance(value, str):
+            raise ValueError(f"{key} must be text, not {type(value).__name__}")
 
 
 def _loci_from_config(config: Mapping[str, Any]) -> tuple[LocusSpec, ...]:

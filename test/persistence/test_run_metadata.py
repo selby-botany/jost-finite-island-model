@@ -8,6 +8,7 @@ from pathlib import Path
 import pytest
 
 from fim.persistence.run_metadata import (
+    RunLabels,
     RunMetadata,
     read_run_metadata,
     replace_run_metadata,
@@ -137,3 +138,122 @@ def test_replace_run_metadata_ignores_an_unreadable_prior_file(tmp_path: Path) -
 
     assert metadata.name == "Recovered"
     assert metadata.created_at == "2026-09-17T12:00:00Z"
+
+
+_CLASSES_FIXTURE = Path(__file__).resolve().parent / "fixtures" / "classes.yaml"
+
+
+def _fixed_clock() -> datetime:
+    """Return one fixed instant, so timestamps are a function of the test."""
+    return datetime(2026, 10, 5, 12, 0, 0, tzinfo=UTC)
+
+
+def test_run_labels_from_config_reads_all_three_labels() -> None:
+    """`name`, `description`, and `class` come back stripped, others ignored."""
+    config = {
+        "N": 20,
+        "seed": 1,
+        "name": "  Ring of four ",
+        "description": "Four demes.\n",
+        "class": "migration",
+    }
+
+    labels = RunLabels.from_config(config, classes_path=_CLASSES_FIXTURE)
+
+    assert labels == RunLabels(
+        name="Ring of four", description="Four demes.", run_class="migration"
+    )
+    assert not labels.is_empty
+
+
+def test_run_labels_from_config_without_labels_is_empty() -> None:
+    """A configuration without labels (or with `null` ones) has none."""
+    assert RunLabels.from_config({"N": 20}).is_empty
+    assert RunLabels.from_config(
+        {"name": None, "description": None, "class": None}
+    ).is_empty
+
+
+@pytest.mark.parametrize(
+    ("config", "message"),
+    [
+        ({"name": ""}, "name must not be blank"),
+        ({"description": "   "}, "description must not be blank"),
+        ({"name": 7}, "name must be text"),
+        ({"class": "galaxy"}, "unknown class 'galaxy'"),
+        ({"class": "Not Kebab"}, "kebab-case"),
+    ],
+)
+def test_run_labels_from_config_rejects_bad_labels(
+    config: dict[str, object], message: str
+) -> None:
+    """Blank text, non-text, and an unknown or malformed class are rejected."""
+    with pytest.raises(ValueError, match=message):
+        RunLabels.from_config(config, classes_path=_CLASSES_FIXTURE)
+
+
+def test_class_round_trips_under_the_json_key_class() -> None:
+    """`run_class` is written as `class`, and read back from it."""
+    metadata = _metadata(run_class="literature-distances")
+
+    payload = metadata.to_dict()
+
+    assert payload["class"] == "literature-distances"
+    assert RunMetadata.from_dict(payload) == metadata
+
+
+def test_to_dict_omits_class_when_unset() -> None:
+    """A sidecar without a class keeps the shape earlier versions wrote."""
+    assert "class" not in _metadata().to_dict()
+
+
+def test_from_dict_reads_a_sidecar_written_before_classes_existed() -> None:
+    """An old sidecar, without a `class` key, still reads, with no class."""
+    payload = {
+        "schema_version": 1,
+        "name": "Old run",
+        "description": None,
+        "created_at": "2026-09-17T14:03:11.204112Z",
+        "updated_at": "2026-09-17T14:03:11.204112Z",
+    }
+
+    assert RunMetadata.from_dict(payload).run_class is None
+
+
+def test_blank_class_is_rejected() -> None:
+    """A class, when present, must not be blank."""
+    with pytest.raises(ValueError, match="class must not be blank"):
+        _metadata(run_class=" ")
+
+
+def test_replace_run_metadata_keeps_the_class_unless_one_is_passed(
+    tmp_path: Path,
+) -> None:
+    """Renaming a run keeps its class; passing `run_class` changes or clears it."""
+    replace_run_metadata(
+        tmp_path,
+        name="One",
+        description=None,
+        run_class="migration",
+        clock=_fixed_clock,
+    )
+
+    renamed = replace_run_metadata(
+        tmp_path, name="Two", description=None, clock=_fixed_clock
+    )
+    assert renamed.run_class == "migration"
+
+    reclassed = replace_run_metadata(
+        tmp_path,
+        name="Two",
+        description=None,
+        run_class="literature",
+        clock=_fixed_clock,
+    )
+    assert reclassed.run_class == "literature"
+
+    cleared = replace_run_metadata(
+        tmp_path, name="Two", description=None, run_class=None, clock=_fixed_clock
+    )
+    assert cleared.run_class is None
+    assert read_run_metadata(run_metadata_path(tmp_path)).run_class is None

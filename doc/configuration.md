@@ -14,6 +14,7 @@ the [project overview](../README.md) for installation.
 - [Convergence](#convergence)
 - [Analysis and execution](#analysis-and-execution)
 - [Engine backend and JIT](#engine-backend-and-jit)
+- [Run labels](#run-labels)
 - [Validation summary](#validation-summary)
 
 ## Complete example
@@ -1007,6 +1008,51 @@ app:** a "max concurrent replicates (blank = unset)" field sits beside
 "max workers" in the Settings dialog, alongside this section's other
 execution-flavored defaults.
 
+## Run labels
+
+A label describes a run without being part of it. The three label keys,
+`name`, `description`, and `class`, are all optional. They are **not** part
+of the run's ID: the ID is a hash of the model keys only, so changing a
+run's name, description, or class never turns it into a different run.
+The labels are kept in the run's `metadata.json` file, beside
+`manifest.json`, never in the manifest's parameters.
+
+```yaml
+name: Ring of eight islands
+description: >
+  Eight demes in a ring, to see how far D falls below the
+  island-model value when migrants only reach their neighbors.
+class: migration
+```
+
+### `name`
+
+- **Type:** text, or `null`
+- **Required:** no
+- **Meaning:** a short name for the run, shown wherever the run is listed
+
+### `description`
+
+- **Type:** text, or `null`
+- **Required:** no
+- **Meaning:** a longer description, shown with the run's details
+
+Surrounding white space is removed, so a YAML block scalar (`>` or `|`)
+works. Blank text is rejected; leave the key out instead.
+
+### `class`
+
+- **Type:** a class ID, or `null`
+- **Required:** no
+- **Meaning:** the group the run belongs to, such as `getting-started`
+
+Classes are defined once, in `doc/examples/classes.yaml`; the worked
+examples use them to build the Examples dialog's tree. A class ID is
+lowercase words joined by hyphens. An ID that is not listed in that file is
+rejected. A packaged copy of `fim` does not include `doc/`, so there it
+checks only that the ID is lowercase words joined by hyphens, and logs a
+warning.
+
 ## Validation summary
 
 | Condition | Result |
@@ -1018,6 +1064,8 @@ execution-flavored defaults.
 | empty or duplicate loci | rejected |
 | frequency vector not summing to 1 | rejected |
 | unknown key | rejected by name |
+| `name`, `description`, or `class` not text, or blank | rejected |
+| `class` not lowercase words joined by hyphens, or not listed in `doc/examples/classes.yaml` | rejected |
 | matrix/list shape not matching `d` | rejected |
 | unrecognized or repeated convergence_statistic entry | rejected |
 | `m` sparse-map deme/neighbor id outside `[1..d]`, a self-loop, or weights summing past `1` | rejected |

@@ -12,6 +12,7 @@ the <a href="#" data-fim-external="https://github.com/selby-botany/jost-finite-i
 <li><a href="#convergence">Convergence</a></li>
 <li><a href="#analysis-and-execution">Analysis and execution</a></li>
 <li><a href="#engine-backend-and-jit">Engine backend and JIT</a></li>
+<li><a href="#run-labels">Run labels</a></li>
 <li><a href="#validation-summary">Validation summary</a></li>
 </ul>
 <h2 id="complete-example">Complete example</h2>
@@ -882,6 +883,45 @@ file — see <a href="#" data-fim-help="usage" data-fim-anchor="run-a-simulation
 app:</strong> a &quot;max concurrent replicates (blank = unset)&quot; field sits beside
 &quot;max workers&quot; in the Settings dialog, alongside this section's other
 execution-flavored defaults.</p>
+<h2 id="run-labels">Run labels</h2>
+<p>A label describes a run without being part of it. The three label keys,
+<code>name</code>, <code>description</code>, and <code>class</code>, are all optional. They are <strong>not</strong> part
+of the run's ID: the ID is a hash of the model keys only, so changing a
+run's name, description, or class never turns it into a different run.
+The labels are kept in the run's <code>metadata.json</code> file, beside
+<code>manifest.json</code>, never in the manifest's parameters.</p>
+<pre><code class="language-yaml">name: Ring of eight islands
+description: &gt;
+  Eight demes in a ring, to see how far D falls below the
+  island-model value when migrants only reach their neighbors.
+class: migration
+</code></pre>
+<h3 id="name"><code>name</code></h3>
+<ul>
+<li><strong>Type:</strong> text, or <code>null</code></li>
+<li><strong>Required:</strong> no</li>
+<li><strong>Meaning:</strong> a short name for the run, shown wherever the run is listed</li>
+</ul>
+<h3 id="description"><code>description</code></h3>
+<ul>
+<li><strong>Type:</strong> text, or <code>null</code></li>
+<li><strong>Required:</strong> no</li>
+<li><strong>Meaning:</strong> a longer description, shown with the run's details</li>
+</ul>
+<p>Surrounding white space is removed, so a YAML block scalar (<code>&gt;</code> or <code>|</code>)
+works. Blank text is rejected; leave the key out instead.</p>
+<h3 id="class"><code>class</code></h3>
+<ul>
+<li><strong>Type:</strong> a class ID, or <code>null</code></li>
+<li><strong>Required:</strong> no</li>
+<li><strong>Meaning:</strong> the group the run belongs to, such as <code>getting-started</code></li>
+</ul>
+<p>Classes are defined once, in <code>doc/examples/classes.yaml</code>; the worked
+examples use them to build the Examples dialog's tree. A class ID is
+lowercase words joined by hyphens. An ID that is not listed in that file is
+rejected. A packaged copy of <code>fim</code> does not include <code>doc/</code>, so there it
+checks only that the ID is lowercase words joined by hyphens, and logs a
+warning.</p>
 <h2 id="validation-summary">Validation summary</h2>
 <table>
 <thead>
@@ -918,6 +958,14 @@ execution-flavored defaults.</p>
 <tr>
 <td>unknown key</td>
 <td>rejected by name</td>
+</tr>
+<tr>
+<td><code>name</code>, <code>description</code>, or <code>class</code> not text, or blank</td>
+<td>rejected</td>
+</tr>
+<tr>
+<td><code>class</code> not lowercase words joined by hyphens, or not listed in <code>doc/examples/classes.yaml</code></td>
+<td>rejected</td>
 </tr>
 <tr>
 <td>matrix/list shape not matching <code>d</code></td>

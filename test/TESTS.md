@@ -101,6 +101,7 @@ Every test module, fixture, and test function documented here in full; `doc/fim-
   - [`test_locus`](#model.test_locus)
   - [`test_operators`](#model.test_operators)
   - [`test_params`](#model.test_params)
+  - [`test_run_identity`](#model.test_run_identity)
   - [`test_state`](#model.test_state)
   - [`test_state_validation`](#model.test_state_validation)
   - [`test_topology`](#model.test_topology)
@@ -23407,6 +23408,95 @@ def test_a_large_explicit_matrix_needs_explicit_values() -> None
 
 An explicit matrix beyond the eigenvalue route's size is refused.
 
+<a id="model.test_run_identity"></a>
+
+# model.test\_run\_identity
+
+What a run's ID covers: model keys yes, labels no.
+
+Read-only examples design (2026-10-05), section 1. A run's ID is a hash
+of `SimulationParams.to_dict()` (`fim.engine.deterministic_run_id`), so
+anything kept out of `to_dict` is kept out of the ID. The label keys
+`name`, `description`, and `class` are accepted by `from_mapping` and
+dropped there.
+
+<a id="model.test_run_identity.test_labels_leave_the_run_id_unchanged"></a>
+
+#### test\_labels\_leave\_the\_run\_id\_unchanged
+
+```python
+@pytest.mark.parametrize(
+    "labels",
+    [
+        {
+            "name": "Ring of four"
+        },
+        {
+            "description": "Four demes, one locus."
+        },
+        {
+            "class": "getting-started"
+        },
+        {
+            "name": "A",
+            "description": "B",
+            "class": "migration"
+        },
+        {
+            "name": None,
+            "description": None,
+            "class": None
+        },
+    ],
+    ids=["name", "description", "class", "all-three", "all-null"],
+)
+def test_labels_leave_the_run_id_unchanged(labels: dict[str, object]) -> None
+```
+
+Adding any label, or all of them, keeps the run ID.
+
+<a id="model.test_run_identity.test_changing_only_a_label_leaves_the_run_id_unchanged"></a>
+
+#### test\_changing\_only\_a\_label\_leaves\_the\_run\_id\_unchanged
+
+```python
+def test_changing_only_a_label_leaves_the_run_id_unchanged() -> None
+```
+
+Two configurations that differ only in their labels are the same run.
+
+<a id="model.test_run_identity.test_labels_are_absent_from_to_dict"></a>
+
+#### test\_labels\_are\_absent\_from\_to\_dict
+
+```python
+def test_labels_are_absent_from_to_dict() -> None
+```
+
+Labels never reach the parameters a manifest records.
+
+<a id="model.test_run_identity.test_a_label_that_is_not_text_is_rejected"></a>
+
+#### test\_a\_label\_that\_is\_not\_text\_is\_rejected
+
+```python
+@pytest.mark.parametrize("key", ["name", "description", "class"])
+@pytest.mark.parametrize("value", [3, ["a"], {"a": 1}, True])
+def test_a_label_that_is_not_text_is_rejected(key: str, value: object) -> None
+```
+
+`from_mapping` type-checks a label before dropping it.
+
+<a id="model.test_run_identity.test_a_model_key_still_changes_the_run_id"></a>
+
+#### test\_a\_model\_key\_still\_changes\_the\_run\_id
+
+```python
+def test_a_model_key_still_changes_the_run_id() -> None
+```
+
+Control: the ID is not blind, a real model change still moves it.
+
 <a id="model.test_state"></a>
 
 # model.test\_state
@@ -25679,6 +25769,108 @@ def test_replace_run_metadata_ignores_an_unreadable_prior_file(
 ```
 
 A corrupt existing `metadata.json` never blocks writing a fresh one.
+
+<a id="persistence.test_run_metadata.test_run_labels_from_config_reads_all_three_labels"></a>
+
+#### test\_run\_labels\_from\_config\_reads\_all\_three\_labels
+
+```python
+def test_run_labels_from_config_reads_all_three_labels() -> None
+```
+
+`name`, `description`, and `class` come back stripped, others ignored.
+
+<a id="persistence.test_run_metadata.test_run_labels_from_config_without_labels_is_empty"></a>
+
+#### test\_run\_labels\_from\_config\_without\_labels\_is\_empty
+
+```python
+def test_run_labels_from_config_without_labels_is_empty() -> None
+```
+
+A configuration without labels (or with `null` ones) has none.
+
+<a id="persistence.test_run_metadata.test_run_labels_from_config_rejects_bad_labels"></a>
+
+#### test\_run\_labels\_from\_config\_rejects\_bad\_labels
+
+```python
+@pytest.mark.parametrize(
+    ("config", "message"),
+    [
+        ({
+            "name": ""
+        }, "name must not be blank"),
+        ({
+            "description": "   "
+        }, "description must not be blank"),
+        ({
+            "name": 7
+        }, "name must be text"),
+        ({
+            "class": "galaxy"
+        }, "unknown class 'galaxy'"),
+        ({
+            "class": "Not Kebab"
+        }, "kebab-case"),
+    ],
+)
+def test_run_labels_from_config_rejects_bad_labels(config: dict[str, object],
+                                                   message: str) -> None
+```
+
+Blank text, non-text, and an unknown or malformed class are rejected.
+
+<a id="persistence.test_run_metadata.test_class_round_trips_under_the_json_key_class"></a>
+
+#### test\_class\_round\_trips\_under\_the\_json\_key\_class
+
+```python
+def test_class_round_trips_under_the_json_key_class() -> None
+```
+
+`run_class` is written as `class`, and read back from it.
+
+<a id="persistence.test_run_metadata.test_to_dict_omits_class_when_unset"></a>
+
+#### test\_to\_dict\_omits\_class\_when\_unset
+
+```python
+def test_to_dict_omits_class_when_unset() -> None
+```
+
+A sidecar without a class keeps the shape earlier versions wrote.
+
+<a id="persistence.test_run_metadata.test_from_dict_reads_a_sidecar_written_before_classes_existed"></a>
+
+#### test\_from\_dict\_reads\_a\_sidecar\_written\_before\_classes\_existed
+
+```python
+def test_from_dict_reads_a_sidecar_written_before_classes_existed() -> None
+```
+
+An old sidecar, without a `class` key, still reads, with no class.
+
+<a id="persistence.test_run_metadata.test_blank_class_is_rejected"></a>
+
+#### test\_blank\_class\_is\_rejected
+
+```python
+def test_blank_class_is_rejected() -> None
+```
+
+A class, when present, must not be blank.
+
+<a id="persistence.test_run_metadata.test_replace_run_metadata_keeps_the_class_unless_one_is_passed"></a>
+
+#### test\_replace\_run\_metadata\_keeps\_the\_class\_unless\_one\_is\_passed
+
+```python
+def test_replace_run_metadata_keeps_the_class_unless_one_is_passed(
+        tmp_path: Path) -> None
+```
+
+Renaming a run keeps its class; passing `run_class` changes or clears it.
 
 <a id="persistence.test_store"></a>
 

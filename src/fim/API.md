@@ -550,6 +550,12 @@ Return to the [source-tree orientation](../README.md) or the [developer guide](.
   * [write\_report](#fim.persistence.report.write_report)
   * [write\_jsonl\_rows](#fim.persistence.report.write_jsonl_rows)
 * [fim.persistence.run\_metadata](#fim.persistence.run_metadata)
+  * [\_KeepClass](#fim.persistence.run_metadata._KeepClass)
+    * [\_\_repr\_\_](#fim.persistence.run_metadata._KeepClass.__repr__)
+  * [KEEP\_CLASS](#fim.persistence.run_metadata.KEEP_CLASS)
+  * [RunLabels](#fim.persistence.run_metadata.RunLabels)
+    * [is\_empty](#fim.persistence.run_metadata.RunLabels.is_empty)
+    * [from\_config](#fim.persistence.run_metadata.RunLabels.from_config)
   * [RunMetadata](#fim.persistence.run_metadata.RunMetadata)
     * [\_\_post\_init\_\_](#fim.persistence.run_metadata.RunMetadata.__post_init__)
     * [to\_dict](#fim.persistence.run_metadata.RunMetadata.to_dict)
@@ -12821,6 +12827,13 @@ before construction, rather than inside `__post_init__`.
 
   A validated immutable parameter object.
 
+  The label keys `name`, `description`, and `class`
+  (`_LABEL_KEYS`) are accepted, type-checked, and dropped: they
+  describe the run rather than define it, so they are kept out of
+  the returned parameters and out of the run ID.
+  `fim.persistence.run_metadata.RunLabels.from_config` reads them
+  in full, including checking `class` against the class tree.
+
 
 **Raises**:
 
@@ -16150,6 +16163,114 @@ way `fim.gui.app._read_json_object` already reads `report.json`/
 `summary.json` — missing or malformed means "no name set," never an
 error for the run itself.
 
+A run's **labels** — `name`, `description`, and `class` — may also be
+written in its configuration file. They never reach the run's
+parameters or its ID (`fim.model.params._LABEL_KEYS`): `RunLabels.
+from_config` reads them, and `fim run` writes them here, unless the run
+already has a `metadata.json` (read-only examples design, 2026-10-05,
+section 1). The class is stored under the JSON key `class` and written
+only when set, so a sidecar without one keeps its earlier shape, and an
+older fim, which ignores keys it does not know, still reads it.
+
+<a id="fim.persistence.run_metadata._KeepClass"></a>
+
+## \_KeepClass Objects
+
+```python
+class _KeepClass()
+```
+
+Type of `KEEP_CLASS`, the "leave the class as it is" default.
+
+<a id="fim.persistence.run_metadata._KeepClass.__repr__"></a>
+
+#### \_\_repr\_\_
+
+```python
+def __repr__() -> str
+```
+
+Return the constant's own name, for readable signatures.
+
+<a id="fim.persistence.run_metadata.KEEP_CLASS"></a>
+
+#### KEEP\_CLASS
+
+`replace_run_metadata`'s default: keep the existing sidecar's class.
+
+<a id="fim.persistence.run_metadata.RunLabels"></a>
+
+## RunLabels Objects
+
+```python
+@dataclass(frozen=True, slots=True)
+class RunLabels()
+```
+
+A run's labels as written in its configuration file.
+
+The labels describe a run without being part of it, so they never
+reach `SimulationParams` or the run ID (`fim.model.params.
+_LABEL_KEYS`). All three are independently optional.
+
+**Arguments**:
+
+- `name` - Short human name, or `None`.
+- `description` - Longer description, or `None`.
+- `run_class` - A class ID from `doc/examples/classes.yaml`
+  (`fim.examples.classes`), or `None`. Written `class` in the
+  configuration and in `metadata.json`; `class` is a Python
+  keyword, hence the attribute's name.
+
+<a id="fim.persistence.run_metadata.RunLabels.is_empty"></a>
+
+#### is\_empty
+
+```python
+@property
+def is_empty() -> bool
+```
+
+Return whether no label is set at all.
+
+<a id="fim.persistence.run_metadata.RunLabels.from_config"></a>
+
+#### from\_config
+
+```python
+@classmethod
+def from_config(cls,
+                config: Mapping[str, Any],
+                *,
+                classes_path: Path | str | None = None) -> RunLabels
+```
+
+Read and validate the labels in a configuration mapping.
+
+Every other key is ignored, so the whole configuration can be
+passed as it was loaded. Text is stripped of surrounding white
+space (a YAML block scalar ends in a newline). `null` and an
+absent key both mean "no label".
+
+**Arguments**:
+
+- `config` - The parsed configuration file.
+- `classes_path` - The class file to check `class` against
+- `(default` - `fim.examples.classes.default_classes_path`).
+  See `fim.examples.classes.validate_run_class` for what
+  happens when no class file is available.
+
+
+**Returns**:
+
+  The labels found, possibly all `None`.
+
+
+**Raises**:
+
+- `ValueError` - A label is not text, is blank, or `class` names
+  no known class or is not a kebab-case ID.
+
 <a id="fim.persistence.run_metadata.RunMetadata"></a>
 
 ## RunMetadata Objects
@@ -16159,12 +16280,14 @@ error for the run itself.
 class RunMetadata()
 ```
 
-A run's optional, user-attached name and description.
+A run's optional, user-attached name, description, and class.
 
-`name`/`description` are independently optional — a user may set
-only one of the two (e.g. a description with no short name yet).
-`created_at` never changes once written; `updated_at` moves forward
-every time `replace_run_metadata` is called again for the same run.
+`name`/`description`/`run_class` are independently optional — a
+user may set only one of them (e.g. a description with no short
+name yet). `run_class` is a class ID (`RunLabels`), stored under the
+JSON key `class` and written only when set. `created_at` never
+changes once written; `updated_at` moves forward every time
+`replace_run_metadata` is called again for the same run.
 
 <a id="fim.persistence.run_metadata.RunMetadata.__post_init__"></a>
 
@@ -16186,6 +16309,9 @@ def to_dict() -> dict[str, object]
 
 Return a JSON-serializable run metadata mapping.
 
+`class` appears only when set, so a run without one keeps the
+sidecar shape every earlier version wrote.
+
 <a id="fim.persistence.run_metadata.RunMetadata.from_dict"></a>
 
 #### from\_dict
@@ -16196,6 +16322,10 @@ def from_dict(cls, value: Mapping[str, Any]) -> RunMetadata
 ```
 
 Validate and reconstruct run metadata from a parsed JSON mapping.
+
+The class is not checked against the class tree here: a sidecar
+is read back long after it was written, and a class since
+removed from the tree must not make the run's name unreadable.
 
 <a id="fim.persistence.run_metadata.run_metadata_path"></a>
 
@@ -16268,6 +16398,7 @@ def replace_run_metadata(run_directory: Path | str,
                          *,
                          name: str | None,
                          description: str | None,
+                         run_class: str | _KeepClass | None = KEEP_CLASS,
                          clock: Clock = _utc_now) -> RunMetadata
 ```
 
@@ -16281,12 +16412,20 @@ already exists (if any) only ever contributes its own `created_at`;
 given here, never merged field-by-field, so clearing a field is as
 simple as passing `None` for it.
 
+The class is the one exception: it is kept unless `run_class` is
+passed, so a caller that only renames a run (the GUI's run details
+dialog) never clears its class by accident.
+
 **Arguments**:
 
 - `run_directory` - The run's own output directory.
 - `name` - The new short name, or `None` to leave/set it unset.
 - `description` - The new longer description, or `None` to leave/set
   it unset.
+- `run_class` - The new class ID, `None` to clear it, or
+  `KEEP_CLASS` (the default) to keep whatever the existing
+  sidecar holds. Not checked against the class tree here;
+  `RunLabels.from_config` does that for a configuration.
 - `clock` - Injectable current-time source, for deterministic tests.
 
 
