@@ -1921,3 +1921,41 @@ def test_a_run_banner_states_individuals_and_ploidy_not_gene_copies(
     banner = capsys.readouterr().out.splitlines()[0]
     assert "225 diploid individuals per deme" in banner
     assert "N=450" not in banner
+
+
+def test_study_and_experiment_create_record_documentation(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """`--documentation` is stored beside the one-line `--description`."""
+    monkeypatch.setattr(paths, "results_directory", lambda: tmp_path / "results")
+    index = tmp_path / "results" / ".fim"
+
+    assert (
+        cli.main(
+            [
+                "study",
+                "create",
+                "--name",
+                "Ring sweep",
+                "--description",
+                "How D responds to m.",
+                "--documentation",
+                "Why: ring vs island.",
+            ]
+        )
+        == 0
+    )
+    assert (
+        cli.main(
+            ["experiment", "create", "--name", "Topology", "--documentation", "Goal."]
+        )
+        == 0
+    )
+
+    study = json.loads(next((index / "studies").glob("*.json")).read_text())
+    experiment = json.loads(next((index / "experiments").glob("*.json")).read_text())
+    assert (study["description"], study["documentation"]) == (
+        "How D responds to m.",
+        "Why: ring vs island.",
+    )
+    assert (experiment["description"], experiment["documentation"]) == (None, "Goal.")

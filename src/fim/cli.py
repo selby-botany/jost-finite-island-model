@@ -734,7 +734,11 @@ def _command_study(
     `fim study` before this function is ever reached.
     """
     if arguments.study_command == "create":
-        study = create_study(arguments.name, arguments.description)
+        study = create_study(
+            arguments.name,
+            arguments.description,
+            documentation=arguments.documentation,
+        )
         print(f"Created study {study.study_id}: {study.name}")
         return 0
     if arguments.study_command == "add-run":
@@ -789,7 +793,11 @@ def _command_experiment(
     identical shape, one level up (`fim.persistence.groups`).
     """
     if arguments.experiment_command == "create":
-        experiment = create_experiment(arguments.name, arguments.description)
+        experiment = create_experiment(
+            arguments.name,
+            arguments.description,
+            documentation=arguments.documentation,
+        )
         print(f"Created experiment {experiment.experiment_id}: {experiment.name}")
         return 0
     if arguments.experiment_command == "add-study":
@@ -1516,7 +1524,11 @@ def _add_study_subcommands(subcommands: argparse._SubParsersAction[Any]) -> None
         "--name", required=True, help="short human name for the study"
     )
     study_create_parser.add_argument(
-        "--description", help="optional longer description"
+        "--description", help="optional one-line description"
+    )
+    study_create_parser.add_argument(
+        "--documentation",
+        help="optional longer notes: the study's question, rationale, findings",
     )
     study_add_run_parser = study_subcommands.add_parser(
         "add-run",
@@ -1564,7 +1576,11 @@ def _add_experiment_subcommands(subcommands: argparse._SubParsersAction[Any]) ->
         "--name", required=True, help="short human name for the experiment"
     )
     experiment_create_parser.add_argument(
-        "--description", help="optional longer description"
+        "--description", help="optional one-line description"
+    )
+    experiment_create_parser.add_argument(
+        "--documentation",
+        help="optional longer notes: the experiment's goal, rationale, findings",
     )
     experiment_add_study_parser = experiment_subcommands.add_parser(
         "add-study",

@@ -29,6 +29,7 @@ from fim.persistence.groups import (
     ensure_default_experiment,
     ensure_default_study,
     experiment_manifest_path,
+    experiments_containing_study,
     get_experiment,
     get_study,
     list_experiments,
@@ -39,7 +40,10 @@ from fim.persistence.groups import (
     remove_run_references,
     resolve_run_directory,
     shared_run_directories,
+    studies_containing_run,
     study_manifest_path,
+    update_experiment_details,
+    update_study_details,
     write_experiment_manifest,
     write_study_manifest,
 )
@@ -639,3 +643,212 @@ def test_the_study_and_experiment_indexes_are_not_owner_only(tmp_path: Path) -> 
         experiment_manifest_path(experiment.experiment_id, results=tmp_path),
     ):
         assert stat.S_IMODE(path.stat().st_mode) == paths.default_file_mode()
+
+
+# -- Documentation and details ------------------------------------------------
+
+
+def _fixed_clock(stamp: str) -> datetime:
+    """Return one fixed UTC instant, for deterministic `updated_at` checks."""
+    return datetime.fromisoformat(stamp).replace(tzinfo=UTC)
+
+
+def test_study_documentation_round_trips_through_dict() -> None:
+    """A Study's documentation survives `to_dict`/`from_dict` unchanged."""
+    study = _study(documentation="Why: ring vs island.\n\nFound: D rises.")
+
+    assert StudyManifest.from_dict(study.to_dict()) == study
+    assert study.to_dict()["documentation"] == "Why: ring vs island.\n\nFound: D rises."
+
+
+def test_experiment_documentation_round_trips_through_dict() -> None:
+    """An Experiment's documentation survives `to_dict`/`from_dict` unchanged."""
+    experiment = _experiment(documentation="The long-running goal.")
+
+    assert ExperimentManifest.from_dict(experiment.to_dict()) == experiment
+
+
+def test_a_manifest_written_before_documentation_reads_back_without_it() -> None:
+    """An older manifest, with no `documentation` key at all, still reads."""
+    study_payload = _study().to_dict()
+    del study_payload["documentation"]
+    experiment_payload = _experiment().to_dict()
+    del experiment_payload["documentation"]
+
+    assert StudyManifest.from_dict(study_payload).documentation is None
+    assert ExperimentManifest.from_dict(experiment_payload).documentation is None
+
+
+def test_documentation_must_not_be_blank() -> None:
+    """Blank documentation is stored as unset (`None`), never as whitespace."""
+    with pytest.raises(ValueError, match="documentation must not be blank"):
+        _study(documentation="   ")
+    with pytest.raises(ValueError, match="documentation must not be blank"):
+        _experiment(documentation="")
+
+
+def test_create_study_and_experiment_store_documentation(tmp_path: Path) -> None:
+    """Documentation given at creation is written to disk."""
+    study = create_study(
+        "Ring sweep", "One line.", documentation="Long notes.", results=tmp_path
+    )
+    experiment = create_experiment(
+        "Topology", documentation="Goal notes.", results=tmp_path
+    )
+
+    assert get_study(study.study_id, results=tmp_path).documentation == "Long notes."
+    assert (
+        get_experiment(experiment.experiment_id, results=tmp_path).documentation
+        == "Goal notes."
+    )
+
+
+def test_copies_carry_documentation(tmp_path: Path) -> None:
+    """Copying a Study or Experiment copies its documentation too."""
+    study = create_study("S", documentation="Study notes.", results=tmp_path)
+    experiment = create_experiment("E", documentation="Notes.", results=tmp_path)
+
+    assert (
+        copy_study(study.study_id, name="S copy", results=tmp_path).documentation
+        == "Study notes."
+    )
+    assert (
+        copy_experiment(
+            experiment.experiment_id, name="E copy", results=tmp_path
+        ).documentation
+        == "Notes."
+    )
+
+
+def test_update_study_details_replaces_all_three_fields(tmp_path: Path) -> None:
+    """Name, description and documentation are replaced together; runs are kept."""
+    study = create_study("Old", "Old line.", results=tmp_path)
+    add_run_to_study(
+        study.study_id, _run_directory(tmp_path, "run-a"), results=tmp_path
+    )
+
+    updated = update_study_details(
+        study.study_id,
+        name="  New name  ",
+        description="New line.",
+        documentation="New notes.",
+        results=tmp_path,
+        clock=lambda: _fixed_clock("2030-01-02T03:04:05"),
+    )
+
+    assert updated.name == "New name"
+    assert updated.description == "New line."
+    assert updated.documentation == "New notes."
+    assert updated.run_directories == ("run-a",)
+    assert updated.updated_at == "2030-01-02T03:04:05Z"
+    assert get_study(study.study_id, results=tmp_path) == updated
+
+
+def test_update_study_details_clears_blank_fields(tmp_path: Path) -> None:
+    """Blank description or documentation clears that field."""
+    study = create_study("S", "Line.", documentation="Notes.", results=tmp_path)
+
+    updated = update_study_details(
+        study.study_id, name="S", description="  ", documentation="", results=tmp_path
+    )
+
+    assert updated.description is None
+    assert updated.documentation is None
+
+
+def test_update_study_details_rejects_a_blank_name(tmp_path: Path) -> None:
+    """A Study always has a name."""
+    study = create_study("S", results=tmp_path)
+
+    with pytest.raises(ValueError, match="study name must not be blank"):
+        update_study_details(
+            study.study_id,
+            name=" ",
+            description=None,
+            documentation=None,
+            results=tmp_path,
+        )
+
+
+def test_update_experiment_details_replaces_all_three_fields(tmp_path: Path) -> None:
+    """The Experiment-level counterpart keeps the member Studies."""
+    experiment = create_experiment("Old", results=tmp_path)
+    study = create_study("S", results=tmp_path)
+    add_study_to_experiment(experiment.experiment_id, study.study_id, results=tmp_path)
+
+    updated = update_experiment_details(
+        experiment.experiment_id,
+        name="New",
+        description="Line.",
+        documentation="Notes.",
+        results=tmp_path,
+    )
+
+    assert (updated.name, updated.description, updated.documentation) == (
+        "New",
+        "Line.",
+        "Notes.",
+    )
+    assert updated.study_ids == (study.study_id,)
+    assert get_experiment(experiment.experiment_id, results=tmp_path) == updated
+
+
+def test_update_details_raise_for_an_unknown_id(tmp_path: Path) -> None:
+    """Updating something that does not exist is an error, not a creation."""
+    with pytest.raises(ValueError, match="no such study"):
+        update_study_details(
+            "study-00000000",
+            name="S",
+            description=None,
+            documentation=None,
+            results=tmp_path,
+        )
+    with pytest.raises(ValueError, match="no such experiment"):
+        update_experiment_details(
+            "experiment-00000000",
+            name="E",
+            description=None,
+            documentation=None,
+            results=tmp_path,
+        )
+
+
+def test_studies_containing_run_matches_relative_and_absolute_entries(
+    tmp_path: Path,
+) -> None:
+    """A run is found whether its Study stores it by name or by absolute path."""
+    results = tmp_path / "results"
+    inside = _run_directory(results, "run-a")
+    outside = _run_directory(tmp_path / "elsewhere", "run-b")
+    # Distinct creation times: `list_studies` orders by them, and two
+    # studies created within the same microsecond would tie.
+    first = create_study(
+        "First", results=results, clock=lambda: _fixed_clock("2030-01-01T00:00:00")
+    )
+    second = create_study(
+        "Second", results=results, clock=lambda: _fixed_clock("2030-01-02T00:00:00")
+    )
+    add_run_to_study(first.study_id, inside, results=results)
+    add_run_to_study(second.study_id, inside, results=results)
+    add_run_to_study(second.study_id, outside, results=results)
+
+    assert [
+        study.study_id for study in studies_containing_run(inside, results=results)
+    ] == [first.study_id, second.study_id]
+    assert [
+        study.study_id for study in studies_containing_run(outside, results=results)
+    ] == [second.study_id]
+    assert studies_containing_run(results / "run-missing", results=results) == []
+
+
+def test_experiments_containing_study_lists_each_holder(tmp_path: Path) -> None:
+    """Every Experiment listing the Study is returned, and no other."""
+    study = create_study("S", results=tmp_path)
+    holder = create_experiment("Holder", results=tmp_path)
+    create_experiment("Other", results=tmp_path)
+    add_study_to_experiment(holder.experiment_id, study.study_id, results=tmp_path)
+
+    assert [
+        experiment.experiment_id
+        for experiment in experiments_containing_study(study.study_id, results=tmp_path)
+    ] == [holder.experiment_id]

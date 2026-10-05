@@ -143,6 +143,12 @@ class StudyManifest:
     `SweepSpec`-shaped tool may populate it purely for provenance —
     never required for reading a Study back, since `run_directories`
     alone is sufficient to show its contents (design doc §3.2/§8).
+
+    `description` is the one-line summary a tooltip shows wherever the
+    name appears; `documentation` is free-form, longer text recording
+    what the Study is for and why (its question, its rationale, what it
+    found), shown in the details dialog. Both are optional; a manifest
+    written before `documentation` existed reads back with it `None`.
     """
 
     schema_version: int
@@ -153,6 +159,7 @@ class StudyManifest:
     updated_at: str
     run_directories: tuple[str, ...]
     sweep_spec: Mapping[str, object] | None = None
+    documentation: str | None = None
 
     def __post_init__(self) -> None:
         """Validate schema version, identity, name, and timestamps."""
@@ -164,6 +171,8 @@ class StudyManifest:
             raise ValueError("study manifest name must not be blank")
         if self.description is not None and not self.description.strip():
             raise ValueError("study manifest description must not be blank")
+        if self.documentation is not None and not self.documentation.strip():
+            raise ValueError("study manifest documentation must not be blank")
         if not self.created_at or not self.updated_at:
             raise ValueError("study manifest timestamps must not be empty")
 
@@ -179,6 +188,7 @@ class StudyManifest:
             "study_id": self.study_id,
             "name": self.name,
             "description": self.description,
+            "documentation": self.documentation,
             "created_at": self.created_at,
             "updated_at": self.updated_at,
             "run_directories": list(self.run_directories),
@@ -221,6 +231,9 @@ class StudyManifest:
                 value, "run_directories", label="study manifest"
             ),
             sweep_spec=dict(sweep_spec) if sweep_spec is not None else None,
+            documentation=_optional_string(
+                value, "documentation", label="study manifest"
+            ),
         )
 
 
@@ -232,6 +245,7 @@ class ExperimentManifest:
     (`study_ids` in place of `run_directories`, no `sweep_spec`) — an
     Experiment is otherwise a thin container with no results of its own
     beyond what its Studies already show (design doc §1.3).
+    `description`/`documentation` mean what they mean on a Study.
     """
 
     schema_version: int
@@ -241,6 +255,7 @@ class ExperimentManifest:
     created_at: str
     updated_at: str
     study_ids: tuple[str, ...]
+    documentation: str | None = None
 
     def __post_init__(self) -> None:
         """Validate schema version, identity, name, and timestamps."""
@@ -252,6 +267,8 @@ class ExperimentManifest:
             raise ValueError("experiment manifest name must not be blank")
         if self.description is not None and not self.description.strip():
             raise ValueError("experiment manifest description must not be blank")
+        if self.documentation is not None and not self.documentation.strip():
+            raise ValueError("experiment manifest documentation must not be blank")
         if not self.created_at or not self.updated_at:
             raise ValueError("experiment manifest timestamps must not be empty")
 
@@ -267,6 +284,7 @@ class ExperimentManifest:
             "experiment_id": self.experiment_id,
             "name": self.name,
             "description": self.description,
+            "documentation": self.documentation,
             "created_at": self.created_at,
             "updated_at": self.updated_at,
             "study_ids": list(self.study_ids),
@@ -306,6 +324,9 @@ class ExperimentManifest:
                 value, "updated_at", label="experiment manifest"
             ),
             study_ids=_string_tuple(value, "study_ids", label="experiment manifest"),
+            documentation=_optional_string(
+                value, "documentation", label="experiment manifest"
+            ),
         )
 
 
@@ -386,17 +407,19 @@ def create_study(
     results: Path | None = None,
     clock: Clock = _utc_now,
     sweep_spec: Mapping[str, object] | None = None,
+    documentation: str | None = None,
 ) -> StudyManifest:
     """Create a new, empty Study and write its manifest.
 
     Args:
         name: Short human name; must not be blank.
-        description: Optional longer description.
+        description: Optional one-line description.
         results: Optional results-directory override.
         clock: Injectable current-time source, for deterministic tests.
         sweep_spec: The stored sweep specification and plan (`fim.
             sweep_run.create_sweep_study`), or `None` for a Study
             assembled by hand.
+        documentation: Optional longer notes on what the Study is for.
 
     Returns:
         The newly created, empty Study.
@@ -419,6 +442,7 @@ def create_study(
         updated_at=now,
         run_directories=(),
         sweep_spec=dict(sweep_spec) if sweep_spec is not None else None,
+        documentation=documentation,
     )
     write_study_manifest(study_manifest_path(study_id, results=root), manifest)
     return manifest
@@ -685,6 +709,51 @@ def _detach_study_from_experiments(
             )
 
 
+def update_study_details(
+    study_id: str,
+    *,
+    name: str,
+    description: str | None,
+    documentation: str | None,
+    results: Path | None = None,
+    clock: Clock = _utc_now,
+) -> StudyManifest:
+    """Replace a Study's name, description, and documentation.
+
+    The three fields are replaced together, never merged: `None` (or
+    blank text) clears `description`/`documentation`. Membership and the
+    sweep specification are untouched.
+
+    Args:
+        study_id: The Study to change.
+        name: The new name; must not be blank.
+        description: The new one-line description, or `None` to clear it.
+        documentation: The new longer notes, or `None` to clear them.
+        results: Optional results-directory override.
+        clock: Injectable current-time source, for deterministic tests.
+
+    Returns:
+        The updated Study.
+
+    Raises:
+        ValueError: No Study with this id exists, or `name` is blank.
+    """
+    root = results if results is not None else paths.results_directory()
+    manifest = get_study(study_id, results=root)
+    stripped_name = name.strip()
+    if not stripped_name:
+        raise ValueError("study name must not be blank")
+    updated = replace(
+        manifest,
+        name=stripped_name,
+        description=_blank_to_none(description),
+        documentation=_blank_to_none(documentation),
+        updated_at=_format_timestamp(clock()),
+    )
+    write_study_manifest(study_manifest_path(study_id, results=root), updated)
+    return updated
+
+
 def copy_study(
     study_id: str,
     *,
@@ -724,6 +793,7 @@ def copy_study(
         updated_at=now,
         run_directories=source.run_directories,
         sweep_spec=source.sweep_spec,
+        documentation=source.documentation,
     )
     write_study_manifest(study_manifest_path(new_id, results=root), copied)
     return copied
@@ -735,6 +805,7 @@ def create_experiment(
     *,
     results: Path | None = None,
     clock: Clock = _utc_now,
+    documentation: str | None = None,
 ) -> ExperimentManifest:
     """Create a new, empty Experiment and write its manifest."""
     root = results if results is not None else paths.results_directory()
@@ -754,6 +825,7 @@ def create_experiment(
         created_at=now,
         updated_at=now,
         study_ids=(),
+        documentation=documentation,
     )
     write_experiment_manifest(
         experiment_manifest_path(experiment_id, results=root), manifest
@@ -951,6 +1023,81 @@ def delete_experiment(
     return manifest
 
 
+def update_experiment_details(
+    experiment_id: str,
+    *,
+    name: str,
+    description: str | None,
+    documentation: str | None,
+    results: Path | None = None,
+    clock: Clock = _utc_now,
+) -> ExperimentManifest:
+    """Replace an Experiment's name, description, and documentation.
+
+    The Experiment-level counterpart to `update_study_details`.
+
+    Raises:
+        ValueError: No Experiment with this id exists, or `name` is blank.
+    """
+    root = results if results is not None else paths.results_directory()
+    manifest = get_experiment(experiment_id, results=root)
+    stripped_name = name.strip()
+    if not stripped_name:
+        raise ValueError("experiment name must not be blank")
+    updated = replace(
+        manifest,
+        name=stripped_name,
+        description=_blank_to_none(description),
+        documentation=_blank_to_none(documentation),
+        updated_at=_format_timestamp(clock()),
+    )
+    write_experiment_manifest(
+        experiment_manifest_path(experiment_id, results=root), updated
+    )
+    return updated
+
+
+def experiments_containing_study(
+    study_id: str, *, results: Path | None = None
+) -> list[ExperimentManifest]:
+    """Return every Experiment that lists `study_id`, oldest first.
+
+    Used to name the Experiment a Run belongs to (the Run card's title):
+    a Study normally belongs to one Experiment, but nothing forbids more.
+    """
+    return [
+        experiment
+        for experiment in list_experiments(results=results)
+        if study_id in experiment.study_ids
+    ]
+
+
+def studies_containing_run(
+    run_directory: Path | str, *, results: Path | None = None
+) -> list[StudyManifest]:
+    """Return every Study that lists `run_directory`, oldest first.
+
+    Compares resolved paths, so a Study entry stored as a bare directory
+    name and a caller holding an absolute path still match. Only the
+    results directory and absolute entries are resolved, not every
+    relative entry: a Study can hold thousands of runs.
+    """
+    root = (results if results is not None else paths.results_directory()).resolve()
+    target = Path(run_directory).resolve()
+
+    def matches(entry: str) -> bool:
+        candidate = Path(entry)
+        if candidate.is_absolute():
+            return candidate.resolve() == target
+        return root / candidate == target
+
+    return [
+        study
+        for study in list_studies(results=root)
+        if any(matches(entry) for entry in study.run_directories)
+    ]
+
+
 def copy_experiment(
     experiment_id: str,
     *,
@@ -984,6 +1131,7 @@ def copy_experiment(
         created_at=now,
         updated_at=now,
         study_ids=source.study_ids,
+        documentation=source.documentation,
     )
     write_experiment_manifest(experiment_manifest_path(new_id, results=root), copied)
     return copied
@@ -1197,6 +1345,14 @@ def _required_string(value: Mapping[str, Any], key: str, *, label: str) -> str:
     if not isinstance(raw_value, str) or not raw_value:
         raise ValueError(f"{label} field {key!r} must be a nonempty string")
     return raw_value
+
+
+def _blank_to_none(text: str | None) -> str | None:
+    """Return `text` stripped, or `None` when it is absent or blank."""
+    if text is None:
+        return None
+    stripped = text.strip()
+    return stripped or None
 
 
 def _optional_string(value: Mapping[str, Any], key: str, *, label: str) -> str | None:

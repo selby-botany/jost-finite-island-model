@@ -55,6 +55,7 @@ Every test module, fixture, and test function documented here in full; `doc/fim-
   - [`test_config_form`](#gui.test_config_form)
   - [`test_config_modal_dialogs`](#gui.test_config_modal_dialogs)
   - [`test_dark_mode_screen`](#gui.test_dark_mode_screen)
+  - [`test_details_screen`](#gui.test_details_screen)
   - [`test_explore_screen`](#gui.test_explore_screen)
   - [`test_explore_surface`](#gui.test_explore_surface)
   - [`test_explore_sweep`](#gui.test_explore_sweep)
@@ -2261,6 +2262,26 @@ def test_a_point_with_no_relaxation_time_is_invalid_not_fatal() -> None
 
 No migration and no mutation cannot derive a cap; only that point fails.
 
+<a id="test.test_sweep.test_a_point_run_name_is_the_study_name_and_its_coordinates"></a>
+
+#### test\_a\_point\_run\_name\_is\_the\_study\_name\_and\_its\_coordinates
+
+```python
+def test_a_point_run_name_is_the_study_name_and_its_coordinates() -> None
+```
+
+The name tells a point's run apart from its siblings.
+
+<a id="test.test_sweep.test_a_point_run_description_places_it_in_its_sweep"></a>
+
+#### test\_a\_point\_run\_description\_places\_it\_in\_its\_sweep
+
+```python
+def test_a_point_run_description_places_it_in_its_sweep() -> None
+```
+
+A long axis is summarized as a range; a short one is listed.
+
 <a id="test.test_sweep_run"></a>
 
 # test.test\_sweep\_run
@@ -2280,6 +2301,38 @@ def results(tmp_path: Path) -> Iterator[Path]
 ```
 
 Point the results directory at a temporary one for the test.
+
+<a id="test.test_sweep_run.test_each_point_run_is_named_after_its_study_and_coordinates"></a>
+
+#### test\_each\_point\_run\_is\_named\_after\_its\_study\_and\_coordinates
+
+```python
+def test_each_point_run_is_named_after_its_study_and_coordinates(
+        results: Path) -> None
+```
+
+A sweep's runs say which sweep and which point they are.
+
+<a id="test.test_sweep_run.test_a_reused_run_keeps_the_name_it_already_has"></a>
+
+#### test\_a\_reused\_run\_keeps\_the\_name\_it\_already\_has
+
+```python
+def test_a_reused_run_keeps_the_name_it_already_has(results: Path) -> None
+```
+
+A second sweep reusing a point does not rename the first sweep's run.
+
+<a id="test.test_sweep_run.test_a_reused_run_without_a_name_is_named_by_the_sweep"></a>
+
+#### test\_a\_reused\_run\_without\_a\_name\_is\_named\_by\_the\_sweep
+
+```python
+def test_a_reused_run_without_a_name_is_named_by_the_sweep(
+        results: Path) -> None
+```
+
+A reused run nobody named (an ordinary single run) gets the sweep's name.
 
 <a id="test.test_update"></a>
 
@@ -3505,6 +3558,17 @@ def test_a_run_banner_states_individuals_and_ploidy_not_gene_copies(
 ```
 
 A botanist who wrote 225 diploid individuals sees exactly that.
+
+<a id="cli.test_cli.test_study_and_experiment_create_record_documentation"></a>
+
+#### test\_study\_and\_experiment\_create\_record\_documentation
+
+```python
+def test_study_and_experiment_create_record_documentation(
+        tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None
+```
+
+`--documentation` is stored beside the one-line `--description`.
 
 <a id="cli.test_cli_sweep"></a>
 
@@ -10884,6 +10948,94 @@ def test_list_studies_counts_only_the_member_runs_that_exist(
 
 `runCount` is the length of `runDirectories`, not the manifest's own count.
 
+<a id="gui.test_app_api.test_create_study_and_experiment_store_documentation_and_list_it"></a>
+
+#### test\_create\_study\_and\_experiment\_store\_documentation\_and\_list\_it
+
+```python
+def test_create_study_and_experiment_store_documentation_and_list_it(
+        tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None
+```
+
+Documentation given at creation is listed; blank text is stored as unset.
+
+<a id="gui.test_app_api.test_update_study_and_experiment_details_round_trip"></a>
+
+#### test\_update\_study\_and\_experiment\_details\_round\_trip
+
+```python
+def test_update_study_and_experiment_details_round_trip(
+        tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None
+```
+
+The details dialog's Save replaces name, description and documentation.
+
+<a id="gui.test_app_api.test_update_details_reports_a_blank_name_or_unknown_id"></a>
+
+#### test\_update\_details\_reports\_a\_blank\_name\_or\_unknown\_id
+
+```python
+def test_update_details_reports_a_blank_name_or_unknown_id(
+        tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None
+```
+
+A failed save leaves a message for the dialog, and changes nothing.
+
+<a id="gui.test_app_api.test_update_run_details_writes_the_sidecar_and_home_lists_it"></a>
+
+#### test\_update\_run\_details\_writes\_the\_sidecar\_and\_home\_lists\_it
+
+```python
+def test_update_run_details_writes_the_sidecar_and_home_lists_it(
+        tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None
+```
+
+A run's name and description are saved and shown in its Home row.
+
+<a id="gui.test_app_api.test_update_run_details_clears_with_blank_text_and_rejects_a_non_run"></a>
+
+#### test\_update\_run\_details\_clears\_with\_blank\_text\_and\_rejects\_a\_non\_run
+
+```python
+def test_update_run_details_clears_with_blank_text_and_rejects_a_non_run(
+        tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None
+```
+
+Blank clears a field; a directory with no manifest is not a run.
+
+<a id="gui.test_app_api.test_get_run_context_names_a_runs_study_and_experiment"></a>
+
+#### test\_get\_run\_context\_names\_a\_runs\_study\_and\_experiment
+
+```python
+def test_get_run_context_names_a_runs_study_and_experiment(
+        tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None
+```
+
+A run filed in a chosen Study is shown under it, not under the default.
+
+<a id="gui.test_app_api.test_get_run_context_before_a_run_uses_the_selected_or_default_study"></a>
+
+#### test\_get\_run\_context\_before\_a\_run\_uses\_the\_selected\_or\_default\_study
+
+```python
+def test_get_run_context_before_a_run_uses_the_selected_or_default_study(
+        tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None
+```
+
+With no run yet, the title names the chosen Study's Experiment.
+
+<a id="gui.test_app_api.test_attach_finished_run_writes_configures_run_name_and_keeps_the_rest"></a>
+
+#### test\_attach\_finished\_run\_writes\_configures\_run\_name\_and\_keeps\_the\_rest
+
+```python
+def test_attach_finished_run_writes_configures_run_name_and_keeps_the_rest(
+        tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None
+```
+
+Configure's run name lands in the sidecar; a blank field keeps the old one.
+
 <a id="gui.test_batch_results_screen"></a>
 
 # gui.test\_batch\_results\_screen
@@ -13416,6 +13568,69 @@ first, or the two could resolve out of order and leave a stale
 theme applied -- `wireDarkModeOverrideField`'s own handler is
 `async`, so firing both events in one synchronous script (as an
 earlier version of this test did) races exactly that.
+
+<a id="gui.test_details_screen"></a>
+
+# gui.test\_details\_screen
+
+Headless functional tests for names, descriptions, and the details dialog.
+
+Real DOM-driven proof that `webui/screens/details.js` and
+`webui/screens/run-title.js` work end to end: every Experiment, Study,
+and Run name shown carries its description as a tooltip, its details
+open in ``modal`-details` and save through the bridge, and the Run card's
+title names the run's Experiment in place of a generic "FIM simulation".
+`test/gui/test_app_api.py` proves the bridge methods as plain Python
+calls; this file proves the page wires them together.
+
+<a id="gui.test_details_screen.test_home_shows_descriptions_and_saves_an_experiments_documentation"></a>
+
+#### test\_home\_shows\_descriptions\_and\_saves\_an\_experiments\_documentation
+
+```python
+def test_home_shows_descriptions_and_saves_an_experiments_documentation(
+        window: webview.Window, drive: Callable[..., Any]) -> None
+```
+
+A group's tooltip shows its description; the dialog edits all three fields.
+
+<a id="gui.test_details_screen.test_a_named_run_is_titled_with_its_experiment_and_its_name"></a>
+
+#### test\_a\_named\_run\_is\_titled\_with\_its\_experiment\_and\_its\_name
+
+```python
+def test_a_named_run_is_titled_with_its_experiment_and_its_name(
+        fast_scalar_run_settings: Path, window: webview.Window,
+        drive: Callable[..., Any]) -> None
+```
+
+The Run card names the Experiment, then the run; each carries its description.
+
+The run is started from Configure with a name and description typed
+in and a Study (inside an Experiment) chosen, the whole path a
+botanist takes.
+
+<a id="gui.test_details_screen.test_the_initial_title_names_the_chosen_studys_experiment"></a>
+
+#### test\_the\_initial\_title\_names\_the\_chosen\_studys\_experiment
+
+```python
+def test_the_initial_title_names_the_chosen_studys_experiment(
+        window: webview.Window, drive: Callable[..., Any]) -> None
+```
+
+Before any run, the title follows Configure's study choice.
+
+<a id="gui.test_details_screen.test_a_runs_details_dialog_names_it_without_documentation"></a>
+
+#### test\_a\_runs\_details\_dialog\_names\_it\_without\_documentation
+
+```python
+def test_a_runs_details_dialog_names_it_without_documentation(
+        window: webview.Window, drive: Callable[..., Any]) -> None
+```
+
+A run's dialog has no documentation field, and a typed name shows in Home.
 
 <a id="gui.test_explore_screen"></a>
 
@@ -24449,6 +24664,142 @@ def test_the_study_and_experiment_indexes_are_not_owner_only(
 ```
 
 The index files are readable like any other file the user creates.
+
+<a id="persistence.test_groups.test_study_documentation_round_trips_through_dict"></a>
+
+#### test\_study\_documentation\_round\_trips\_through\_dict
+
+```python
+def test_study_documentation_round_trips_through_dict() -> None
+```
+
+A Study's documentation survives `to_dict`/`from_dict` unchanged.
+
+<a id="persistence.test_groups.test_experiment_documentation_round_trips_through_dict"></a>
+
+#### test\_experiment\_documentation\_round\_trips\_through\_dict
+
+```python
+def test_experiment_documentation_round_trips_through_dict() -> None
+```
+
+An Experiment's documentation survives `to_dict`/`from_dict` unchanged.
+
+<a id="persistence.test_groups.test_a_manifest_written_before_documentation_reads_back_without_it"></a>
+
+#### test\_a\_manifest\_written\_before\_documentation\_reads\_back\_without\_it
+
+```python
+def test_a_manifest_written_before_documentation_reads_back_without_it(
+) -> None
+```
+
+An older manifest, with no `documentation` key at all, still reads.
+
+<a id="persistence.test_groups.test_documentation_must_not_be_blank"></a>
+
+#### test\_documentation\_must\_not\_be\_blank
+
+```python
+def test_documentation_must_not_be_blank() -> None
+```
+
+Blank documentation is stored as unset (`None`), never as whitespace.
+
+<a id="persistence.test_groups.test_create_study_and_experiment_store_documentation"></a>
+
+#### test\_create\_study\_and\_experiment\_store\_documentation
+
+```python
+def test_create_study_and_experiment_store_documentation(
+        tmp_path: Path) -> None
+```
+
+Documentation given at creation is written to disk.
+
+<a id="persistence.test_groups.test_copies_carry_documentation"></a>
+
+#### test\_copies\_carry\_documentation
+
+```python
+def test_copies_carry_documentation(tmp_path: Path) -> None
+```
+
+Copying a Study or Experiment copies its documentation too.
+
+<a id="persistence.test_groups.test_update_study_details_replaces_all_three_fields"></a>
+
+#### test\_update\_study\_details\_replaces\_all\_three\_fields
+
+```python
+def test_update_study_details_replaces_all_three_fields(
+        tmp_path: Path) -> None
+```
+
+Name, description and documentation are replaced together; runs are kept.
+
+<a id="persistence.test_groups.test_update_study_details_clears_blank_fields"></a>
+
+#### test\_update\_study\_details\_clears\_blank\_fields
+
+```python
+def test_update_study_details_clears_blank_fields(tmp_path: Path) -> None
+```
+
+Blank description or documentation clears that field.
+
+<a id="persistence.test_groups.test_update_study_details_rejects_a_blank_name"></a>
+
+#### test\_update\_study\_details\_rejects\_a\_blank\_name
+
+```python
+def test_update_study_details_rejects_a_blank_name(tmp_path: Path) -> None
+```
+
+A Study always has a name.
+
+<a id="persistence.test_groups.test_update_experiment_details_replaces_all_three_fields"></a>
+
+#### test\_update\_experiment\_details\_replaces\_all\_three\_fields
+
+```python
+def test_update_experiment_details_replaces_all_three_fields(
+        tmp_path: Path) -> None
+```
+
+The Experiment-level counterpart keeps the member Studies.
+
+<a id="persistence.test_groups.test_update_details_raise_for_an_unknown_id"></a>
+
+#### test\_update\_details\_raise\_for\_an\_unknown\_id
+
+```python
+def test_update_details_raise_for_an_unknown_id(tmp_path: Path) -> None
+```
+
+Updating something that does not exist is an error, not a creation.
+
+<a id="persistence.test_groups.test_studies_containing_run_matches_relative_and_absolute_entries"></a>
+
+#### test\_studies\_containing\_run\_matches\_relative\_and\_absolute\_entries
+
+```python
+def test_studies_containing_run_matches_relative_and_absolute_entries(
+        tmp_path: Path) -> None
+```
+
+A run is found whether its Study stores it by name or by absolute path.
+
+<a id="persistence.test_groups.test_experiments_containing_study_lists_each_holder"></a>
+
+#### test\_experiments\_containing\_study\_lists\_each\_holder
+
+```python
+def test_experiments_containing_study_lists_each_holder(
+        tmp_path: Path) -> None
+```
+
+Every Experiment listing the Study is returned, and no other.
 
 <a id="persistence.test_manifest"></a>
 

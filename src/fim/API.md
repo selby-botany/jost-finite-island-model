@@ -167,6 +167,11 @@ Return to the [source-tree orientation](../README.md) or the [developer guide](.
     * [get\_study\_run\_summary](#fim.gui.app.Api.get_study_run_summary)
     * [create\_study](#fim.gui.app.Api.create_study)
     * [create\_experiment](#fim.gui.app.Api.create_experiment)
+    * [get\_details](#fim.gui.app.Api.get_details)
+    * [update\_study\_details](#fim.gui.app.Api.update_study_details)
+    * [update\_experiment\_details](#fim.gui.app.Api.update_experiment_details)
+    * [update\_run\_details](#fim.gui.app.Api.update_run_details)
+    * [get\_run\_context](#fim.gui.app.Api.get_run_context)
     * [ensure\_default\_study](#fim.gui.app.Api.ensure_default_study)
     * [add\_run\_to\_study](#fim.gui.app.Api.add_run_to_study)
     * [add\_study\_to\_experiment](#fim.gui.app.Api.add_study_to_experiment)
@@ -201,6 +206,7 @@ Return to the [source-tree orientation](../README.md) or the [developer guide](.
     * [open\_external\_link](#fim.gui.app.Api.open_external_link)
     * [check\_for\_updates](#fim.gui.app.Api.check_for_updates)
     * [get\_about\_info](#fim.gui.app.Api.get_about_info)
+  * [RunDetails](#fim.gui.app.RunDetails)
   * [in\_flight\_bridge\_threads](#fim.gui.app.in_flight_bridge_threads)
   * [await\_bridge\_threads](#fim.gui.app.await_bridge_threads)
   * [initial\_window\_size](#fim.gui.app.initial_window_size)
@@ -460,6 +466,7 @@ Return to the [source-tree orientation](../README.md) or the [developer guide](.
   * [shared\_run\_directories](#fim.persistence.groups.shared_run_directories)
   * [remove\_run\_references](#fim.persistence.groups.remove_run_references)
   * [prune\_missing\_studies](#fim.persistence.groups.prune_missing_studies)
+  * [update\_study\_details](#fim.persistence.groups.update_study_details)
   * [copy\_study](#fim.persistence.groups.copy_study)
   * [create\_experiment](#fim.persistence.groups.create_experiment)
   * [get\_experiment](#fim.persistence.groups.get_experiment)
@@ -468,6 +475,9 @@ Return to the [source-tree orientation](../README.md) or the [developer guide](.
   * [ensure\_default\_experiment](#fim.persistence.groups.ensure_default_experiment)
   * [ensure\_default\_study](#fim.persistence.groups.ensure_default_study)
   * [delete\_experiment](#fim.persistence.groups.delete_experiment)
+  * [update\_experiment\_details](#fim.persistence.groups.update_experiment_details)
+  * [experiments\_containing\_study](#fim.persistence.groups.experiments_containing_study)
+  * [studies\_containing\_run](#fim.persistence.groups.studies_containing_run)
   * [copy\_experiment](#fim.persistence.groups.copy_experiment)
   * [resolve\_run\_directory](#fim.persistence.groups.resolve_run_directory)
   * [find\_run\_directories](#fim.persistence.groups.find_run_directories)
@@ -674,6 +684,8 @@ Return to the [source-tree orientation](../README.md) or the [developer guide](.
     * [needs\_confirmation](#fim.sweep.SweepPlan.needs_confirmation)
   * [enumerate\_points](#fim.sweep.enumerate_points)
   * [work\_estimate](#fim.sweep.work_estimate)
+  * [point\_run\_name](#fim.sweep.point_run_name)
+  * [point\_run\_description](#fim.sweep.point_run_description)
   * [expand\_axis](#fim.sweep.expand_axis)
   * [spec\_from\_config](#fim.sweep.spec_from_config)
   * [apply\_coordinates](#fim.sweep.apply_coordinates)
@@ -4243,7 +4255,9 @@ Start with no run in flight.
 ```python
 @_log_bridge_call
 def start_run(values: dict[str, str],
-              study_id: str | None = None) -> dict[str, Any]
+              study_id: str | None = None,
+              run_name: str = "",
+              run_description: str = "") -> dict[str, Any]
 ```
 
 Validate the form, then start a run pushing live progress to the page.
@@ -4277,6 +4291,11 @@ driver thread, before this method was written; see
   deleted moments ago in another window) fails the launch
   outright rather than silently producing an unattached
   run the botanist thought they had organized.
+- `run_name` - Configure's optional run name, written to the run's
+  `metadata.json` once it finishes (or at once, for a
+  reused run) — the GUI counterpart to `fim run --name`.
+  Blank means "no name".
+- `run_description` - Likewise, the optional run description.
 
 
 **Returns**:
@@ -5764,7 +5783,7 @@ List every Study, oldest first (matching `groups.list_studies`'s own order).
 **Returns**:
 
   One dict per Study: `{"studyId", "name", "description",
-  "runCount", "createdAt", "runDirectories",
+  "documentation", "runCount", "createdAt", "runDirectories",
   "sweepPointCount"}`. `runCount` is the number of member
   runs that still exist (the length of `runDirectories`),
   not the manifest's own count. `sweepPointCount` is the number of
@@ -5791,7 +5810,8 @@ List every Experiment, oldest first.
 **Returns**:
 
   One dict per Experiment: `{"experimentId", "name",
-  "description", "studyCount", "createdAt", "studyIds"}`.
+  "description", "documentation", "studyCount", "createdAt",
+  "studyIds"}`.
   `studyIds` lets the client find an Experiment's own member
   Studies directly from `list_studies`'s own already-fetched
   result — expanding an Experiment row needs no bridge call of
@@ -5833,10 +5853,13 @@ its own runs' config summaries and statistics.
 @_log_bridge_call
 def create_study(name: str,
                  description: str = "",
-                 experiment_id: str | None = None) -> dict[str, Any]
+                 experiment_id: str | None = None,
+                 documentation: str = "") -> dict[str, Any]
 ```
 
 Create a new, empty Study, inside an Experiment when one is given.
+
+Blank `description`/`documentation` are stored as unset.
 
 **Returns**:
 
@@ -5850,10 +5873,129 @@ Create a new, empty Study, inside an Experiment when one is given.
 
 ```python
 @_log_bridge_call
-def create_experiment(name: str, description: str = "") -> dict[str, Any]
+def create_experiment(name: str,
+                      description: str = "",
+                      documentation: str = "") -> dict[str, Any]
 ```
 
 Create a new, empty Experiment. See `create_study`.
+
+<a id="fim.gui.app.Api.get_details"></a>
+
+#### get\_details
+
+```python
+@_log_bridge_call
+def get_details(kind: str, identifier: str) -> dict[str, Any]
+```
+
+Read one Experiment's, Study's or Run's current name and description.
+
+What the details dialog opens with (`webui/screens/details.js`),
+read fresh from disk each time.
+
+**Arguments**:
+
+- `kind` - `"experiment"`, `"study"`, or `"run"`.
+- `identifier` - The Experiment or Study id, or the run's directory.
+
+
+**Returns**:
+
+- ``{"ok"` - True, "details": ...}`, in `_group_details_payload`'s
+  shape for a grouping and `_run_details_payload`'s for a run;
+- ``{"ok"` - False, "message": ...}` if nothing of that kind and id
+  exists.
+
+<a id="fim.gui.app.Api.update_study_details"></a>
+
+#### update\_study\_details
+
+```python
+@_log_bridge_call
+def update_study_details(study_id: str, name: str, description: str,
+                         documentation: str) -> dict[str, Any]
+```
+
+Rename a Study and replace its description and documentation.
+
+The details dialog's Save (`webui/screens/details.js`). Blank
+`description`/`documentation` clear the field.
+
+**Returns**:
+
+- ``{"ok"` - True, "details": ...}` (`_group_details_payload`'s
+  shape) on success; `{"ok": False, "message": ...}` if the
+  Study does not exist or `name` is blank.
+
+<a id="fim.gui.app.Api.update_experiment_details"></a>
+
+#### update\_experiment\_details
+
+```python
+@_log_bridge_call
+def update_experiment_details(experiment_id: str, name: str, description: str,
+                              documentation: str) -> dict[str, Any]
+```
+
+Rename an Experiment and replace its description and documentation.
+
+See `update_study_details`.
+
+<a id="fim.gui.app.Api.update_run_details"></a>
+
+#### update\_run\_details
+
+```python
+@_log_bridge_call
+def update_run_details(directory: str, name: str,
+                       description: str) -> dict[str, Any]
+```
+
+Replace a run's name and description (its `metadata.json` sidecar).
+
+Blank text clears a field; a run may have neither. The run's own
+`manifest.json` is never touched (`fim.persistence.run_metadata`).
+
+**Returns**:
+
+- ``{"ok"` - True, "details": ...}` (`_run_details_payload`) on
+  success; `{"ok": False, "message": ...}` if `directory` is not
+  a run directory or the sidecar cannot be written.
+
+<a id="fim.gui.app.Api.get_run_context"></a>
+
+#### get\_run\_context
+
+```python
+@_log_bridge_call
+def get_run_context(directory: str | None = None,
+                    study_id: str | None = None) -> dict[str, Any]
+```
+
+Name the run the Run card shows, and the Study and Experiment it is in.
+
+The Run card's title shows the Experiment's name in place of a
+generic "FIM simulation", and every name in it carries its own
+description (`webui/screens/details.js`).
+
+**Arguments**:
+
+- `directory` - A finished run's directory, or `None` before a run
+  exists (Configure's initial conditions, a run in flight).
+- `study_id` - The Study Configure has selected, if any. With no
+  `directory`, the context is this Study's (the default
+  Study when `None`); with one, it is preferred among the
+  Studies that hold the run.
+
+
+**Returns**:
+
+- ``{"ok"` - True, "run": ... | None, "study": ... | None,
+- `"experiment"` - ... | None}`, `run` in `_run_details_payload`'s
+  shape and the others in `_group_details_payload`'s. A grouping
+  that cannot be found is `None`, never an error: the title then
+  falls back to its generic text.
 
 <a id="fim.gui.app.Api.ensure_default_study"></a>
 
@@ -6873,6 +7015,16 @@ without perturbing `version` itself (kept as the plain
 compares against a GitHub release tag, and a commit suffix
 there would break `update.compare_versions`'s strict
 three-part parsing).
+
+<a id="fim.gui.app.RunDetails"></a>
+
+## RunDetails Objects
+
+```python
+class RunDetails(NamedTuple)
+```
+
+The optional name and description Configure gives a run before it starts.
 
 <a id="fim.gui.app.in_flight_bridge_threads"></a>
 
@@ -9592,6 +9744,9 @@ def status_payload(study: StudyManifest,
 ```
 
 Describe a sweep Study and each planned point's derived state.
+
+`description`/`documentation` are the Study's own, for the sweep
+screen's name tooltip (`webui/screens/details.js`).
 
 <a id="fim.gui.sweep_bridge.results_payload"></a>
 
@@ -13791,6 +13946,12 @@ precedent).
 never required for reading a Study back, since `run_directories`
 alone is sufficient to show its contents (design doc §3.2/§8).
 
+`description` is the one-line summary a tooltip shows wherever the
+name appears; `documentation` is free-form, longer text recording
+what the Study is for and why (its question, its rationale, what it
+found), shown in the details dialog. Both are optional; a manifest
+written before `documentation` existed reads back with it `None`.
+
 <a id="fim.persistence.groups.StudyManifest.__post_init__"></a>
 
 #### \_\_post\_init\_\_
@@ -13848,6 +14009,7 @@ Structurally identical in shape to `StudyManifest`, one level up
 (`study_ids` in place of `run_directories`, no `sweep_spec`) — an
 Experiment is otherwise a thin container with no results of its own
 beyond what its Studies already show (design doc §1.3).
+`description`/`documentation` mean what they mean on a Study.
 
 <a id="fim.persistence.groups.ExperimentManifest.__post_init__"></a>
 
@@ -13977,13 +14139,13 @@ Atomically write `manifest` to `path`, creating parent directories as needed.
 #### create\_study
 
 ```python
-def create_study(
-        name: str,
-        description: str | None = None,
-        *,
-        results: Path | None = None,
-        clock: Clock = _utc_now,
-        sweep_spec: Mapping[str, object] | None = None) -> StudyManifest
+def create_study(name: str,
+                 description: str | None = None,
+                 *,
+                 results: Path | None = None,
+                 clock: Clock = _utc_now,
+                 sweep_spec: Mapping[str, object] | None = None,
+                 documentation: str | None = None) -> StudyManifest
 ```
 
 Create a new, empty Study and write its manifest.
@@ -13991,12 +14153,13 @@ Create a new, empty Study and write its manifest.
 **Arguments**:
 
 - `name` - Short human name; must not be blank.
-- `description` - Optional longer description.
+- `description` - Optional one-line description.
 - `results` - Optional results-directory override.
 - `clock` - Injectable current-time source, for deterministic tests.
 - `sweep_spec` - The stored sweep specification and plan (`fim.
   sweep_run.create_sweep_study`), or `None` for a Study
   assembled by hand.
+- `documentation` - Optional longer notes on what the Study is for.
 
 
 **Returns**:
@@ -14187,6 +14350,45 @@ Studies it could not show.
 
   How many dangling Study ids were removed across all Experiments.
 
+<a id="fim.persistence.groups.update_study_details"></a>
+
+#### update\_study\_details
+
+```python
+def update_study_details(study_id: str,
+                         *,
+                         name: str,
+                         description: str | None,
+                         documentation: str | None,
+                         results: Path | None = None,
+                         clock: Clock = _utc_now) -> StudyManifest
+```
+
+Replace a Study's name, description, and documentation.
+
+The three fields are replaced together, never merged: `None` (or
+blank text) clears `description`/`documentation`. Membership and the
+sweep specification are untouched.
+
+**Arguments**:
+
+- `study_id` - The Study to change.
+- `name` - The new name; must not be blank.
+- `description` - The new one-line description, or `None` to clear it.
+- `documentation` - The new longer notes, or `None` to clear them.
+- `results` - Optional results-directory override.
+- `clock` - Injectable current-time source, for deterministic tests.
+
+
+**Returns**:
+
+  The updated Study.
+
+
+**Raises**:
+
+- `ValueError` - No Study with this id exists, or `name` is blank.
+
 <a id="fim.persistence.groups.copy_study"></a>
 
 #### copy\_study
@@ -14222,7 +14424,8 @@ def create_experiment(name: str,
                       description: str | None = None,
                       *,
                       results: Path | None = None,
-                      clock: Clock = _utc_now) -> ExperimentManifest
+                      clock: Clock = _utc_now,
+                      documentation: str | None = None) -> ExperimentManifest
 ```
 
 Create a new, empty Experiment and write its manifest.
@@ -14363,6 +14566,61 @@ describes, one level up.
 **Raises**:
 
 - `ValueError` - No Experiment with this id exists.
+
+<a id="fim.persistence.groups.update_experiment_details"></a>
+
+#### update\_experiment\_details
+
+```python
+def update_experiment_details(experiment_id: str,
+                              *,
+                              name: str,
+                              description: str | None,
+                              documentation: str | None,
+                              results: Path | None = None,
+                              clock: Clock = _utc_now) -> ExperimentManifest
+```
+
+Replace an Experiment's name, description, and documentation.
+
+The Experiment-level counterpart to `update_study_details`.
+
+**Raises**:
+
+- `ValueError` - No Experiment with this id exists, or `name` is blank.
+
+<a id="fim.persistence.groups.experiments_containing_study"></a>
+
+#### experiments\_containing\_study
+
+```python
+def experiments_containing_study(
+        study_id: str,
+        *,
+        results: Path | None = None) -> list[ExperimentManifest]
+```
+
+Return every Experiment that lists `study_id`, oldest first.
+
+Used to name the Experiment a Run belongs to (the Run card's title):
+a Study normally belongs to one Experiment, but nothing forbids more.
+
+<a id="fim.persistence.groups.studies_containing_run"></a>
+
+#### studies\_containing\_run
+
+```python
+def studies_containing_run(run_directory: Path | str,
+                           *,
+                           results: Path | None = None) -> list[StudyManifest]
+```
+
+Return every Study that lists `run_directory`, oldest first.
+
+Compares resolved paths, so a Study entry stored as a bare directory
+name and a caller holding an absolute path still match. Only the
+results directory and absolute entries are resolved, not every
+relative entry: a Study can hold thousands of runs.
 
 <a id="fim.persistence.groups.copy_experiment"></a>
 
@@ -19620,6 +19878,58 @@ migration, mutation and sizes.
 
   `points`, `replicates` per point, `max_generations` (the largest cap
   of any point), and `replicate_generations` (the sum described above).
+
+<a id="fim.sweep.point_run_name"></a>
+
+#### point\_run\_name
+
+```python
+def point_run_name(study_name: str, point: SweepPoint) -> str
+```
+
+Return the name a sweep point's run is given: Study name plus its values.
+
+For example `"Island size sweep N=50, m=0.01"`. The coordinates are
+what tells one point's run from its siblings in the same Study.
+
+**Arguments**:
+
+- `study_name` - The sweep Study's name.
+- `point` - The point the run computes.
+
+
+**Returns**:
+
+  The run name.
+
+<a id="fim.sweep.point_run_description"></a>
+
+#### point\_run\_description
+
+```python
+def point_run_description(study_name: str, spec: SweepSpec, point: SweepPoint,
+                          position: int, total: int) -> str
+```
+
+Return the description a sweep point's run is given.
+
+Says which sweep the run belongs to, where it sits in that sweep,
+and what every axis ranges over, so a run met on its own (in a
+Study it was copied into, say) still explains itself.
+
+**Arguments**:
+
+- `study_name` - The sweep Study's name.
+- `spec` - The sweep specification, for the axis ranges.
+- `point` - The point the run computes.
+- `position` - The point's 1-based place among the planned points.
+- `total` - How many points are planned.
+
+
+**Returns**:
+
+  One sentence, for example `'Point 3 of 8 of the sweep "Island
+- `size"` - N=50 of N=[5..2500] (4 values); m=0.01 of m=[0.01, 0.1].'`.
 
 <a id="fim.sweep.expand_axis"></a>
 
