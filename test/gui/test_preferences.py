@@ -596,19 +596,22 @@ def test_run_card_layout_defaults_write_nothing() -> None:
     assert preferences.run_graphs is None
     assert preferences.run_graph_columns == 2
     assert preferences.scatter_style == "color-badge"
+    assert preferences.trajectory_display == "every_generation"
     gui = preferences.to_dict()["gui"]
     assert "run_graphs" not in gui
     assert "run_graph_columns" not in gui
     assert "scatter_style" not in gui
+    assert "trajectory_display" not in gui
 
 
 def test_run_card_layout_round_trips_through_save_and_load(tmp_path: Path) -> None:
-    """Chosen graphs, columns and scatter style survive a reload."""
+    """Chosen graphs, columns, scatter style and trajectory display survive a reload."""
     path = tmp_path / "preferences.json"
     original = GuiPreferences().with_run_card_layout(
         run_graphs=("scatter", "trajectory", "alleleComposition"),
         run_graph_columns=3,
         scatter_style="density",
+        trajectory_display="trailing_mean",
     )
     save_preferences(path, original)
 
@@ -618,17 +621,21 @@ def test_run_card_layout_round_trips_through_save_and_load(tmp_path: Path) -> No
     assert loaded.run_graphs == ("scatter", "trajectory", "alleleComposition")
     assert loaded.run_graph_columns == 3
     assert loaded.scatter_style == "density"
+    assert loaded.trajectory_display == "trailing_mean"
 
 
 def test_with_run_card_layout_changes_only_what_it_is_given() -> None:
     """Arguments left out keep their current value."""
-    original = GuiPreferences(run_graph_columns=3, scatter_style="dots")
+    original = GuiPreferences(
+        run_graph_columns=3, scatter_style="dots", trajectory_display="trailing_mean"
+    )
 
     updated = original.with_run_card_layout(run_graphs=("scatter",))
 
     assert updated.run_graphs == ("scatter",)
     assert updated.run_graph_columns == 3
     assert updated.scatter_style == "dots"
+    assert updated.trajectory_display == "trailing_mean"
 
 
 def test_unknown_graph_keys_are_dropped_and_an_empty_list_means_default(
@@ -663,9 +670,14 @@ def test_unknown_graph_keys_are_dropped_and_an_empty_list_means_default(
 
 
 def test_malformed_run_card_values_are_quarantined(tmp_path: Path) -> None:
-    """A bad column count or scatter style is rejected, not coerced."""
+    """A bad column count, scatter style or trajectory display is rejected."""
     path = tmp_path / "preferences.json"
-    for gui in ({"run_graph_columns": 9}, {"scatter_style": "pie"}, {"run_graphs": 3}):
+    for gui in (
+        {"run_graph_columns": 9},
+        {"scatter_style": "pie"},
+        {"run_graphs": 3},
+        {"trajectory_display": "smoothed"},
+    ):
         path.write_text(
             json.dumps({"schema_version": CURRENT_SCHEMA_VERSION, "gui": gui}),
             encoding="utf-8",

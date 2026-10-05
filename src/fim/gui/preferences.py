@@ -166,6 +166,14 @@ SCATTER_STYLES: tuple[str, ...] = (
 
 DEFAULT_SCATTER_STYLE = "color-badge"
 
+TRAJECTORY_DISPLAYS: tuple[str, ...] = ("every_generation", "trailing_mean")
+"""How the trajectory graph draws each statistic: its value at every
+recorded generation (the noise drift leaves in it), or its trailing mean
+over the convergence window with a standard-error band
+(`run-view-completed.js`'s own `trailingMeanSeries`)."""
+
+DEFAULT_TRAJECTORY_DISPLAY = "every_generation"
+
 
 def _parse_shown_statistics(gui: Mapping[str, Any]) -> tuple[str, ...] | None:
     """Read `gui.shown_statistics`: catalog keys, or `None` for the default.
@@ -286,6 +294,7 @@ class GuiPreferences:
         run_graph_columns: How many columns the shown graphs are laid out
             in (rows follow); 1 to `MAX_RUN_GRAPH_COLUMNS`.
         scatter_style: One of `SCATTER_STYLES`.
+        trajectory_display: One of `TRAJECTORY_DISPLAYS`.
         shown_statistics: The statistics shown (Settings, "Statistics
             shown"), as catalog keys in catalog order, or `None` for the
             catalog's own defaults. Display only: every statistic is
@@ -316,6 +325,7 @@ class GuiPreferences:
     run_graphs: tuple[str, ...] | None = None
     run_graph_columns: int = DEFAULT_RUN_GRAPH_COLUMNS
     scatter_style: str = DEFAULT_SCATTER_STYLE
+    trajectory_display: str = DEFAULT_TRAJECTORY_DISPLAY
     shown_statistics: tuple[str, ...] | None = None
     pairwise_max_demes: int = DEFAULT_PAIRWISE_MAX_DEMES
 
@@ -328,6 +338,8 @@ class GuiPreferences:
             result["run_graph_columns"] = self.run_graph_columns
         if self.scatter_style != DEFAULT_SCATTER_STYLE:
             result["scatter_style"] = self.scatter_style
+        if self.trajectory_display != DEFAULT_TRAJECTORY_DISPLAY:
+            result["trajectory_display"] = self.trajectory_display
         if self.shown_statistics is not None:
             result["shown_statistics"] = list(self.shown_statistics)
         if self.pairwise_max_demes != DEFAULT_PAIRWISE_MAX_DEMES:
@@ -460,6 +472,12 @@ class GuiPreferences:
             scatter_style=_choice(
                 gui, "scatter_style", DEFAULT_SCATTER_STYLE, SCATTER_STYLES
             ),
+            trajectory_display=_choice(
+                gui,
+                "trajectory_display",
+                DEFAULT_TRAJECTORY_DISPLAY,
+                TRAJECTORY_DISPLAYS,
+            ),
             shown_statistics=_parse_shown_statistics(gui),
             pairwise_max_demes=_parse_pairwise_max_demes(gui),
         )
@@ -569,10 +587,12 @@ class GuiPreferences:
         run_graphs: tuple[str, ...] | None = None,
         run_graph_columns: int | None = None,
         scatter_style: str | None = None,
+        trajectory_display: str | None = None,
     ) -> GuiPreferences:
         """Return a copy with any of the Run card's display choices replaced.
 
-        The `Api.set_run_*`/`set_scatter_style` bridge methods' own update:
+        The `Api.set_run_*`/`set_scatter_style`/`set_trajectory_display`
+        bridge methods' own update:
         each argument left `None` keeps the current value.
         """
         return replace(
@@ -585,6 +605,11 @@ class GuiPreferences:
             ),
             scatter_style=(
                 self.scatter_style if scatter_style is None else scatter_style
+            ),
+            trajectory_display=(
+                self.trajectory_display
+                if trajectory_display is None
+                else trajectory_display
             ),
         )
 

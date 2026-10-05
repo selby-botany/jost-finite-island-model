@@ -142,6 +142,7 @@ def test_run_card_layout_defaults_and_persists(tmp_path: Path) -> None:
         "graphs": ["scatter", "trajectory"],
         "columns": 2,
         "scatterStyle": "color-badge",
+        "trajectoryDisplay": "every_generation",
     }
     assert api.set_run_graphs(["trajectory", "alleleComposition", "nope"]) == {
         "ok": True,
@@ -149,11 +150,16 @@ def test_run_card_layout_defaults_and_persists(tmp_path: Path) -> None:
     }
     assert api.set_run_graph_columns(3) == {"ok": True, "columns": 3}
     assert api.set_scatter_style("dots") == {"ok": True, "style": "dots"}
+    assert api.set_trajectory_display("trailing_mean") == {
+        "ok": True,
+        "display": "trailing_mean",
+    }
 
     assert Api(preferences_path=path).get_run_card_layout() == {
         "graphs": ["trajectory", "alleleComposition"],
         "columns": 3,
         "scatterStyle": "dots",
+        "trajectoryDisplay": "trailing_mean",
     }
 
 
@@ -166,7 +172,9 @@ def test_run_card_layout_rejects_bad_input_and_saves_nothing(tmp_path: Path) -> 
     assert api.set_run_graph_columns(0)["ok"] is False
     assert api.set_run_graph_columns(5)["ok"] is False
     assert api.set_scatter_style("pie")["ok"] is False
+    assert api.set_trajectory_display("smoothed")["ok"] is False
     assert api.get_run_card_layout()["graphs"] == ["scatter", "trajectory"]
+    assert api.get_run_card_layout()["trajectoryDisplay"] == "every_generation"
 
 
 def test_default_ploidy_seeds_a_fresh_form_and_makes_it_submittable(
@@ -3719,6 +3727,16 @@ def test_open_run_carries_the_real_closed_form_trajectory(tmp_path: Path) -> Non
     assert result["closedForm"]["fixedPoint"] == list(recursion.fixed_point)
     assert result["closedForm"]["eigenvalues"] == list(recursion.eigenvalues)
     assert result["closedForm"]["demes"] == 2
+
+
+def test_open_run_carries_the_convergence_window_and_tolerance(tmp_path: Path) -> None:
+    """The trailing mean averages over the run's own window, judged by its tolerance."""
+    output = _write_run(tmp_path, convergence_window=10, convergence_tolerance=0.02)
+
+    result = Api().open_run({"trajectoryPath": str(output / "trajectory.jsonl")})
+
+    assert result["ok"] is True
+    assert result["convergence"] == {"window": 10, "tolerance": 0.02}
 
 
 def test_open_run_choose_reanalyzes_an_earlier_generation_as_re_analysis(

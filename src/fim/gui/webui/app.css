@@ -1223,6 +1223,20 @@ fieldset.composite > label {
     background: var(--fim-background);
 }
 
+/* The trajectory display chooser, a small inline control under the
+ * card title. */
+.run-trajectory-display {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+    font-size: 0.8rem;
+    color: var(--fim-muted);
+}
+
+.run-trajectory-display[hidden] {
+    display: none;
+}
+
 .run-trajectory-legend {
     display: flex;
     flex-wrap: wrap;
@@ -1274,6 +1288,13 @@ fieldset.composite > label {
     border-top: 2px dashed var(--fim-muted);
     border-radius: 0;
     background: none;
+}
+
+/* The trailing-mean display's band: a translucent filled square, like
+ * the band itself. */
+.run-trajectory-legend .swatch-band {
+    background: var(--fim-muted);
+    opacity: 0.35;
 }
 
 .run-trajectory-legend .swatch-dotted {

@@ -51,3 +51,25 @@ const DEFAULT_SIGMA_BAND_WINDOW = "100";
 // Prefix of a user-saved preset's id, which distinguishes it from a
 // built-in one (`fim.gui.app._USER_PRESET_ID_PREFIX`).
 const USER_PRESET_ID_PREFIX = "user:";
+
+// The trailing-window mean estimator (`trailingWindowEstimate`) repeats
+// `fim.convergence.window_statistics` exactly, so the page's mean and
+// standard error match the monitor's. Fewer points than this give no
+// estimate (`MINIMUM_NOISE_CHECK_WINDOW`); a mean is noise-adequate once
+// its standard error is at most this fraction of the tolerance
+// (`NOISE_TOLERANCE_FRACTION`); and the lag-1 correlation is clamped
+// just below 1 so a window that has not decorrelated at all gets a very
+// large, finite standard error (`_MAXIMUM_LAG1_CORRELATION`).
+const MINIMUM_WINDOW_ESTIMATE_POINTS = 8;
+const NOISE_TOLERANCE_FRACTION = 0.5;
+const MAXIMUM_LAG1_CORRELATION = 1 - 1e-9;
+// The floor on the integrated autocorrelation time, so a perfectly
+// anticorrelated window (lag-1 correlation -1) does not divide by zero
+// (the `1e-9` in `window_statistics`'s own `tau_int`).
+const MINIMUM_INTEGRATED_AUTOCORRELATION_TIME = 1e-9;
+
+// How the trajectory graph can draw each statistic, and the one a fresh
+// install uses (`fim.gui.preferences.TRAJECTORY_DISPLAYS` and
+// `DEFAULT_TRAJECTORY_DISPLAY`).
+const TRAJECTORY_DISPLAYS = ["every_generation", "trailing_mean"];
+const DEFAULT_TRAJECTORY_DISPLAY = "every_generation";

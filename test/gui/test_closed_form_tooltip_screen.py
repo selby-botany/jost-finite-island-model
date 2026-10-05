@@ -55,7 +55,7 @@ _COMPARISON = """
         empty: Object.keys(closedFormComparisons(generations, histories, null)),
         fallbackNames: Object.keys(fallback),
         fallback: closedFormNote(fallback, "D"),
-        placed: withPredictionNote(closedFormNote(comparisons, "D"), "description"),
+        placed: withNotes(["", closedFormNote(comparisons, "D")], "description"),
     };
 })()
 """

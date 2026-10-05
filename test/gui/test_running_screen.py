@@ -748,7 +748,7 @@ def test_page_interpolation_of_a_sampled_closed_form_matches_numpy() -> None:
 def test_completed_row_tooltip_shows_the_trailing_window_mean(
     _isolate_gui_preferences: Path,
 ) -> None:
-    """A statistic row's own hover title carries its trailing-window mean.
+    """A statistic row's own hover title leads with its window mean and SE.
 
     Needs a window at least `MINIMUM_NOISE_CHECK_WINDOW` long -- shorter
     than that, `report_for_state` has nothing to report
@@ -795,7 +795,9 @@ def test_completed_row_tooltip_shows_the_trailing_window_mean(
     settled = outcome.get(timeout=_OUTCOME_TIMEOUT_SECONDS)
 
     assert settled is not None
-    assert "window mean" in settled
+    assert " — mean " in settled
+    assert " over generations " in settled
+    assert "; 1 SE" in settled
 
 
 def test_trajectory_panel_updates_live_while_a_run_is_still_going(

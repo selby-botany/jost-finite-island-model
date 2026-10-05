@@ -164,6 +164,15 @@ const CLOSED_FORM_COMPARISON_DIGITS = 3;
 // Decimal places of a window mean and its standard error in a statistic's
 // tooltip, and of a meter's value in the statistics table.
 const WINDOW_STATISTIC_DECIMALS = 4;
+
+// Decimal places of how many standard errors a window mean lies from its
+// prediction ("+1.2 SE"): one is enough to read "inside or outside two".
+const PREDICTION_DISTANCE_DECIMALS = 1;
+
+// Half-width of the band around the trajectory graph's trailing mean, in
+// standard errors of that mean: two, so a prediction outside the band is
+// worth a second look, while one inside it is consistent with the run.
+const TRAILING_MEAN_BAND_STANDARD_ERRORS = 2;
 const METER_VALUE_DECIMALS = 2;
 
 // Decimal places of a running sum in an input grid (a migration-matrix
@@ -175,6 +184,13 @@ const GRID_SUM_DECIMALS = 3;
 const EXPLORE_DEFAULT_SIGNIFICANT_DIGITS = 4;
 
 /* ---- Thresholds ------------------------------------------------------ */
+
+// A window whose spread is below this fraction of its sum of squares is
+// treated as flat (standard error 0). The page computes a window's spread
+// from running sums, which leaves rounding residue of about 1e-16 of the
+// sum of squares where Python's two-pass sum finds exactly 0; this keeps
+// that residue from being read as a real, if tiny, correlation.
+const FLAT_WINDOW_RELATIVE_SPREAD = 1e-12;
 
 // Choosing a pair of demes to compare needs at least two demes; with
 // fewer, the selector is hidden.

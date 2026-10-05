@@ -153,6 +153,12 @@ let liveIdentityRecoveryReference = null;
 // exactly like the two references above.
 let liveClosedForm = null;
 
+// The live run's convergence window and tolerance (`Api.start_run`'s own
+// `convergence` field, `_convergence_reference_payload`): what the
+// trailing mean in the tooltips and the trajectory graph averages over.
+// Cached and reset like the references above.
+let liveConvergence = null;
+
 /**
  * Apply just the run-kind-dependent parts of the running state.
  *
@@ -221,6 +227,7 @@ function enterRunningState(isBatch = false) {
     liveEquilibriumReference = null;
     liveIdentityRecoveryReference = null;
     liveClosedForm = null;
+    liveConvergence = null;
     // A genuinely new run starting is one of the two points the
     // trajectory legend's own display-only visibility toggle resets
     // (design §6.2's legend-toggle; `run-view-completed.js`'s own
@@ -326,6 +333,17 @@ window.fim.setLiveClosedForm = function setLiveClosedForm(closedForm) {
     liveClosedForm = closedForm ?? null;
 };
 
+/**
+ * Cache the live run's convergence window and tolerance — same calling
+ * convention as `setLiveClosedForm` immediately above (the `convergence`
+ * field of `Api.start_run`'s result; absent for a batch).
+ *
+ * @param {{window: number, tolerance: number}|null|undefined} convergence
+ */
+window.fim.setLiveConvergence = function setLiveConvergence(convergence) {
+    liveConvergence = convergence ?? null;
+};
+
 function drawProgressPanels(payload) {
     // `pairPanel` is only ever present once a live pair has been
     // selected (`Api._drain_run_messages`/`_push_batch_progress` only
@@ -393,7 +411,9 @@ function wireLiveDemePairSelector(demeCount) {
  * A statistic with a prediction (the closed-form trajectory, else the
  * predicted equilibrium) also gets, first in its tooltip, observed minus
  * predicted at this tick's generation and the trajectory-so-far's mean
- * squared error (`closedFormComparisons`, `run-view-completed.js`).
+ * squared error (`closedFormComparisons`, `run-view-completed.js`),
+ * after its mean over the convergence window ending at this tick and how
+ * far that mean lies from the prediction (`estimateNote`).
  *
  * @param {Record<string, string> | undefined} statistics
  * @param {number} [generation] the tick's generation; the latest when omitted.
@@ -410,6 +430,14 @@ function renderLiveStatistics(statistics, generation) {
     );
     const index =
         generation === undefined ? null : liveTrajectoryGenerations.indexOf(generation);
+    const estimateSource = {
+        generations: liveTrajectoryGenerations,
+        histories: liveTrajectoryHistories,
+        comparisons,
+        convergence: liveConvergence,
+        anchors: {},
+        sums: {},
+    };
     for (const name of STATISTIC_NAMES) {
         const element = document.getElementById(`stat-${name}`);
         applyStatRow(
@@ -417,8 +445,11 @@ function renderLiveStatistics(statistics, generation) {
             buildPointMeter(
                 name,
                 statistics[name],
-                withPredictionNote(
-                    closedFormNote(comparisons, name, index),
+                withNotes(
+                    [
+                        estimateNote(estimateSource, name, index),
+                        closedFormNote(comparisons, name, index),
+                    ],
                     statisticDescription(name)
                 )
             )
@@ -594,7 +625,8 @@ window.fim.onRunProgress = function onRunProgress(payload) {
                 liveEquilibriumReference,
                 liveIdentityRecoveryReference,
                 liveClosedForm,
-                isLiveHead ? null : f.generation
+                isLiveHead ? null : f.generation,
+                liveConvergence ? liveConvergence.window : null
             );
         }
         drawProgressPanels(f);

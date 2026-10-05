@@ -338,6 +338,10 @@ const resultsStats = document.getElementById("results-stats");
 const runPlotRow = document.getElementById("run-plot-row");
 const runTrajectoryCanvas = document.getElementById("run-trajectory-canvas");
 const runTrajectoryLegend = document.getElementById("run-trajectory-legend");
+const runTrajectoryDisplayControl = document.getElementById(
+    "run-trajectory-display-control"
+);
+const runTrajectoryDisplay = document.getElementById("run-trajectory-display");
 const runTrajectorySigmaBandCaption = document.getElementById(
     "run-trajectory-sigma-band-caption"
 );
@@ -569,23 +573,6 @@ function tagStatisticCells(tbody, offset) {
 }
 
 /**
- * Build a statistic row's own hover description, with a trailing-window
- * precision note appended when one is available.
- *
- * `completedWindowStatistics[name]` (design doc `20260927-claude-sonnet-5-
- * noise-aware-convergence-design.md`, `selby/restricted`) is a materially
- * better estimate than the single point value the table itself shows --
- * the mean of `window` generations, not one of them -- whether or not it
- * also happened to satisfy the noise-adequacy gate; this surfaces it in
- * the same place the CLI's own `_print_window_statistics` prints it,
- * without adding a second visible column to the table.
- *
- * @param {string} name
- * @returns {string} The base statistic description, unchanged, when
- *     `completedWindowStatistics` has no entry for `name`; otherwise that
- *     description plus a trailing-window mean/standard-error clause.
- */
-/**
  * Compare each statistic that has a prediction with the run's own
  * recorded trajectory.
  *
@@ -607,9 +594,11 @@ function tagStatisticCells(tbody, offset) {
  *     predicted equilibrium per statistic, as display strings.
  * @returns {Object<string, {generations: number[], observed: number[],
  *     predicted: number[], basis: string, squares: number[],
- *     counts: number[]}>} per statistic: the aligned series, what the
- *     prediction is, and running totals of squared error and of finite
- *     points, so the mean squared error up to any generation is O(1).
+ *     counts: number[], predictedSums: object|null}>} per statistic: the
+ *     aligned series, what the prediction is, running totals of squared
+ *     error and of finite points, so the mean squared error up to any
+ *     generation is O(1), and `windowSums` of the prediction, so its mean
+ *     over any window is too (`estimateNote`).
  */
 function closedFormComparisons(generations, histories, closedForm, equilibrium = null) {
     if (!generations || !histories || generations.length === 0) {
@@ -647,7 +636,15 @@ function closedFormComparisons(generations, histories, closedForm, equilibrium =
             counts.push(count);
         }
         if (count > 0) {
-            comparisons[name] = { generations, observed, predicted, basis, squares, counts };
+            comparisons[name] = {
+                generations,
+                observed,
+                predicted,
+                basis,
+                squares,
+                counts,
+                predictedSums: windowSums(predicted),
+            };
         }
     }
     return comparisons;
@@ -687,37 +684,359 @@ function closedFormNote(comparisons, name, index = null) {
     );
 }
 
-/**
- * Put a comparison clause right after the value in a row's tooltip, ahead
- * of the statistic's description.
- *
- * @param {string} note `closedFormNote`'s result (may be empty).
- * @param {string} description
- * @returns {string}
- */
-function withPredictionNote(note, description) {
-    if (!note) {
-        return description;
-    }
-    return description ? `${note} — ${description}` : note;
-}
-
 // The completed run's comparisons with its predictions, computed once per
 // completed entry and reused by every scrub tick.
 let completedClosedFormComparisons = {};
 
-function windowStatisticsDescription(name) {
-    const base = statisticDescription(name);
+// What `estimateNote` reads for the completed run (its histories, the
+// convergence window and tolerance, and where each grown evidence window
+// starts), or `null` for a batch or a run reopened without a history.
+let completedEstimateSource = null;
+
+// The completed run's convergence window, in generations: the span the
+// trajectory graph's trailing mean averages over.
+let completedConvergenceWindow = null;
+
+/**
+ * The completed run's tooltip clauses for one statistic: its window
+ * estimate, then its comparison with the prediction.
+ *
+ * @param {string} name
+ * @param {number|null} [index] the shown generation's index; the final
+ *     generation when omitted.
+ * @returns {string[]}
+ */
+function completedRowNotes(name, index = null) {
+    const estimate =
+        estimateNote(completedEstimateSource, name, index) ||
+        (index === null ? reportEstimateNote(name) : "");
+    return [estimate, closedFormNote(completedClosedFormComparisons, name, index)];
+}
+
+/**
+ * Running sums from which the mean, spread and lag-1 autocorrelation of
+ * any contiguous window of `values` follow in constant time.
+ *
+ * Entry `i` of each array covers `values[0]` through `values[i - 1]`;
+ * `products` sums neighboring pairs, `values[k] * values[k + 1]`.
+ *
+ * @param {number[]|null|undefined} values
+ * @returns {{values: number[], sum: Float64Array, squares: Float64Array,
+ *     products: Float64Array}|null} `null` when `values` is missing or
+ *     holds a value that is not finite.
+ */
+function windowSums(values) {
+    if (!values) {
+        return null;
+    }
+    const count = values.length;
+    const sum = new Float64Array(count + 1);
+    const squares = new Float64Array(count + 1);
+    const products = new Float64Array(count + 1);
+    for (let index = 0; index < count; index += 1) {
+        const value = values[index];
+        if (!Number.isFinite(value)) {
+            return null;
+        }
+        const next = index + 1 < count ? values[index + 1] : 0;
+        sum[index + 1] = sum[index] + value;
+        squares[index + 1] = squares[index] + value * value;
+        products[index + 1] = products[index] + value * next;
+    }
+    return { values, sum, squares, products };
+}
+
+/**
+ * The mean of `values[start..end]` and its standard error, allowing for
+ * the correlation between neighboring generations.
+ *
+ * The page-side copy of `fim.convergence.window_statistics` (a test holds
+ * the two equal): the window is treated as a first-order autoregressive
+ * process, whose integrated autocorrelation time is `(1 + rho) / (1 -
+ * rho)` for lag-1 correlation `rho`; the effective sample size is the
+ * window length divided by that, and the standard error is the sample
+ * standard deviation over its square root.
+ *
+ * @param {object|null} sums `windowSums`'s result.
+ * @param {number} start first index, inclusive.
+ * @param {number} end last index, inclusive.
+ * @returns {{mean: number, standardError: number, count: number}|null}
+ *     `null` for a window shorter than `MINIMUM_WINDOW_ESTIMATE_POINTS`.
+ */
+function trailingWindowEstimate(sums, start, end) {
+    const count = end - start + 1;
+    if (
+        !sums ||
+        start < 0 ||
+        end >= sums.values.length ||
+        count < MINIMUM_WINDOW_ESTIMATE_POINTS
+    ) {
+        return null;
+    }
+    const total = sums.sum[end + 1] - sums.sum[start];
+    const mean = total / count;
+    const rawSquares = sums.squares[end + 1] - sums.squares[start];
+    const sumSquares = rawSquares - count * mean * mean;
+    if (!(sumSquares > FLAT_WINDOW_RELATIVE_SPREAD * Math.max(rawSquares, 1))) {
+        // A flat window is known exactly, as in `window_statistics`.
+        return { mean, standardError: 0, count };
+    }
+    // The centered neighbor products, expanded so they come from the
+    // running sums: sum((x_k - m)(x_k+1 - m)) over the window's pairs.
+    const pairProducts = sums.products[end] - sums.products[start];
+    const pairEnds = 2 * total - sums.values[start] - sums.values[end];
+    const crossProducts = pairProducts - mean * pairEnds + (count - 1) * mean * mean;
+    const lag1 = Math.max(-1, Math.min(crossProducts / sumSquares, MAXIMUM_LAG1_CORRELATION));
+    const autocorrelationTime = Math.max(
+        (1 + lag1) / (1 - lag1),
+        MINIMUM_INTEGRATED_AUTOCORRELATION_TIME
+    );
+    const standardDeviation = Math.sqrt(sumSquares / (count - 1));
+    const effectiveSampleSize = count / autocorrelationTime;
+    return {
+        mean,
+        standardError: standardDeviation / Math.sqrt(effectiveSampleSize),
+        count,
+    };
+}
+
+/**
+ * The first index of the trailing window of `window` generations that
+ * ends at `index`: every recorded generation later than
+ * `generations[index] - window`.
+ *
+ * Counted in generations, not recorded points, so a live run's sparser
+ * ticks average over the same span of time as the finished run.
+ *
+ * @param {number[]} generations ascending.
+ * @param {number} index
+ * @param {number} window
+ * @returns {number}
+ */
+function trailingWindowStart(generations, index, window) {
+    const after = generations[index] - window;
+    let low = 0;
+    let high = index;
+    while (low < high) {
+        const middle = Math.floor((low + high) / 2);
+        if (generations[middle] > after) {
+            high = middle;
+        } else {
+            low = middle + 1;
+        }
+    }
+    return low;
+}
+
+/**
+ * Each generation's trailing mean over the convergence window, with a
+ * band of `TRAILING_MEAN_BAND_STANDARD_ERRORS` standard errors either
+ * side (`trailingWindowEstimate`).
+ *
+ * The trajectory graph's "trailing mean" display. Generations whose
+ * window holds fewer than `MINIMUM_WINDOW_ESTIMATE_POINTS` points are
+ * `NaN`, so the curve starts once there is enough to average.
+ *
+ * @param {number[]} generations ascending.
+ * @param {number[]} values aligned with `generations`.
+ * @param {number} window in generations.
+ * @returns {{mean: number[], low: number[], high: number[]}|null} `null`
+ *     when `values` holds a value that is not finite.
+ */
+function trailingMeanSeries(generations, values, window) {
+    const sums = windowSums(values);
+    if (!sums) {
+        return null;
+    }
+    const mean = [];
+    const low = [];
+    const high = [];
+    let start = 0;
+    for (let index = 0; index < values.length; index += 1) {
+        while (generations[index] - generations[start] >= window) {
+            start += 1;
+        }
+        const estimate = trailingWindowEstimate(sums, start, index);
+        if (estimate === null) {
+            mean.push(NaN);
+            low.push(NaN);
+            high.push(NaN);
+            continue;
+        }
+        const halfWidth = TRAILING_MEAN_BAND_STANDARD_ERRORS * estimate.standardError;
+        mean.push(estimate.mean);
+        low.push(estimate.mean - halfWidth);
+        high.push(estimate.mean + halfWidth);
+    }
+    return { mean, low, high };
+}
+
+// `trailingMeanSeries` results by the history array they came from, so a
+// scrub tick or a legend click does not recompute a 100,000-generation
+// curve. A live run's arrays grow in place, so the length is checked too.
+const trailingMeanCache = new WeakMap();
+
+/**
+ * `trailingMeanSeries`, memoized per history array, length and window.
+ *
+ * @param {number[]} generations
+ * @param {number[]} values
+ * @param {number} window
+ * @returns {{mean: number[], low: number[], high: number[]}|null}
+ */
+function cachedTrailingMeanSeries(generations, values, window) {
+    const cached = trailingMeanCache.get(values);
+    if (
+        cached &&
+        cached.length === values.length &&
+        cached.window === window &&
+        cached.generations === generations
+    ) {
+        return cached.series;
+    }
+    const series = trailingMeanSeries(generations, values, window);
+    trailingMeanCache.set(values, { length: values.length, window, generations, series });
+    return series;
+}
+
+/**
+ * Where each statistic's grown evidence window starts, from a finished
+ * run's report.
+ *
+ * The convergence monitor keeps widening a watched statistic's averaging
+ * window until its mean is noise-adequate (`ConvergenceMonitor.
+ * _gated_stable`); the report records how long that window became
+ * (`window_statistics[name].window`), and it always ends at the run's
+ * last generation. A window no longer than the convergence window is the
+ * ordinary trailing one and needs no anchor.
+ *
+ * @param {object|null|undefined} windowStatistics `report.window_statistics`.
+ * @param {number} recordedCount how many generations were recorded.
+ * @param {number|null|undefined} convergenceWindow
+ * @returns {Object<string, number>} the first index of each grown window.
+ */
+function evidenceWindowAnchors(windowStatistics, recordedCount, convergenceWindow) {
+    const anchors = {};
+    if (!windowStatistics || !Number.isFinite(convergenceWindow)) {
+        return anchors;
+    }
+    for (const [name, stats] of Object.entries(windowStatistics)) {
+        if (stats && stats.window > convergenceWindow && stats.window <= recordedCount) {
+            anchors[name] = recordedCount - stats.window;
+        }
+    }
+    return anchors;
+}
+
+/**
+ * How well a statistic's mean is known at the shown generation, and how
+ * far it lies from the prediction, as a tooltip clause.
+ *
+ * The mean covers the convergence window ending at the shown generation,
+ * except inside a finished run's grown evidence window
+ * (`evidenceWindowAnchors`), where it covers everything from that
+ * window's start: at the last generation that is exactly the estimate the
+ * monitor stopped on. The prediction is averaged over the same
+ * generations (`closedFormComparisons`), so a closed-form trajectory that
+ * is still moving is compared like with like.
+ *
+ * @param {{generations: number[], histories: Object<string, number[]>,
+ *     comparisons: object, convergence: {window: number, tolerance:
+ *     number}|null, anchors: Object<string, number>, sums: object}} source
+ *     the run's recorded histories and settings; `sums` caches
+ *     `windowSums` per statistic.
+ * @param {string} name
+ * @param {number|null} [index] the shown generation's index; the last
+ *     when omitted or negative.
+ * @returns {string} the clause, or `""` when there is too little to
+ *     average or no convergence window to average over.
+ */
+function estimateNote(source, name, index = null) {
+    if (
+        !source ||
+        !source.convergence ||
+        !Number.isFinite(source.convergence.window) ||
+        !source.generations ||
+        !source.histories
+    ) {
+        return "";
+    }
+    const { generations, histories, comparisons, convergence, anchors } = source;
+    const values = histories[name];
+    if (!values || values.length !== generations.length || generations.length === 0) {
+        return "";
+    }
+    const end = index === null || index < 0 ? generations.length - 1 : index;
+    const trailingStart = trailingWindowStart(generations, end, convergence.window);
+    const anchor = anchors ? anchors[name] : undefined;
+    const start = anchor !== undefined && anchor <= trailingStart ? anchor : trailingStart;
+    if (source.sums && !(name in source.sums)) {
+        source.sums[name] = windowSums(values);
+    }
+    const sums = source.sums ? source.sums[name] : windowSums(values);
+    const estimate = trailingWindowEstimate(sums, start, end);
+    if (estimate === null) {
+        return "";
+    }
+    const decimals = WINDOW_STATISTIC_DECIMALS;
+    const span = generations[end] - generations[start] + 1;
+    const recorded =
+        estimate.count === span ? "" : `, ${estimate.count.toLocaleString()} recorded`;
+    const adequate =
+        !Number.isFinite(convergence.tolerance) ||
+        estimate.standardError <= convergence.tolerance * NOISE_TOLERANCE_FRACTION;
+    let note =
+        `mean ${estimate.mean.toFixed(decimals)} ± ` +
+        `${estimate.standardError.toFixed(decimals)} over generations ` +
+        `${generations[start].toLocaleString()}–${generations[end].toLocaleString()} ` +
+        `(${span.toLocaleString()} generations${recorded}; 1 SE` +
+        `${adequate ? "" : ", not yet noise-adequate"})`;
+    const entry = comparisons && comparisons[name];
+    if (entry && entry.predictedSums) {
+        const predicted =
+            (entry.predictedSums.sum[end + 1] - entry.predictedSums.sum[start]) /
+            estimate.count;
+        note += `; predicted ${predicted.toFixed(decimals)}`;
+        if (estimate.standardError > 0) {
+            const distance = (estimate.mean - predicted) / estimate.standardError;
+            const sign = distance < 0 ? "−" : "+";
+            note += `, ${sign}${Math.abs(distance).toFixed(PREDICTION_DISTANCE_DECIMALS)} SE`;
+        }
+    }
+    return note;
+}
+
+/**
+ * The final report's own window estimate, as a tooltip clause, for a
+ * reopened run that has no recorded history to compute one from.
+ *
+ * @param {string} name
+ * @returns {string} the clause, or `""` when the report has none.
+ */
+function reportEstimateNote(name) {
     const stats = completedWindowStatistics && completedWindowStatistics[name];
     if (!stats) {
-        return base;
+        return "";
     }
     const precision = stats.noise_adequate ? "" : ", not yet noise-adequate";
-    const note =
-        ` — window mean ${stats.mean.toFixed(WINDOW_STATISTIC_DECIMALS)} ± ` +
-        `${stats.standard_error.toFixed(WINDOW_STATISTIC_DECIMALS)} (1σ, last ` +
-        `${stats.window.toLocaleString()} generations${precision})`;
-    return base + note;
+    return (
+        `mean ${stats.mean.toFixed(WINDOW_STATISTIC_DECIMALS)} ± ` +
+        `${stats.standard_error.toFixed(WINDOW_STATISTIC_DECIMALS)} over the last ` +
+        `${stats.window.toLocaleString()} generations (1 SE${precision})`
+    );
+}
+
+/**
+ * Join a row's tooltip clauses: the estimate, then the prediction
+ * comparison, then the statistic's description. Empty clauses are left
+ * out.
+ *
+ * @param {string[]} notes
+ * @param {string} description
+ * @returns {string}
+ */
+function withNotes(notes, description) {
+    return [...notes, description].filter((part) => part).join(" — ");
 }
 
 /**
@@ -805,6 +1124,55 @@ function repaintTrajectory() {
         renderBatchTrajectory(lastPooledConvergenceHistories, lastBatchScrubGeneration);
     }
 }
+
+// How the trajectory graph draws each statistic (`TRAJECTORY_DISPLAYS`):
+// its value at every recorded generation, or its trailing mean over the
+// convergence window with a standard-error band. Loaded from preferences
+// by `run-graph-stage.js`'s own `loadRunCardLayout`.
+let trajectoryDisplay = DEFAULT_TRAJECTORY_DISPLAY;
+
+/**
+ * Apply a trajectory display choice and repaint the graph with it.
+ *
+ * @param {string} display one of `TRAJECTORY_DISPLAYS`; anything else is
+ *     ignored.
+ * @returns {void}
+ */
+window.fim.setTrajectoryDisplay = function setTrajectoryDisplay(display) {
+    if (!TRAJECTORY_DISPLAYS.includes(display)) {
+        return;
+    }
+    trajectoryDisplay = display;
+    runTrajectoryDisplay.value = display;
+    repaintTrajectory();
+};
+
+/**
+ * The window the trajectory graph averages over, or `null` to draw every
+ * generation: the trailing-mean display needs a recorded curve and a
+ * convergence window to average over.
+ *
+ * @param {boolean} hasCurve
+ * @param {number|null|undefined} convergenceWindow
+ * @returns {number|null}
+ */
+function trailingDisplayWindow(hasCurve, convergenceWindow) {
+    return trajectoryDisplay === "trailing_mean" &&
+        hasCurve &&
+        Number.isFinite(convergenceWindow) &&
+        convergenceWindow > 0
+        ? convergenceWindow
+        : null;
+}
+
+runTrajectoryDisplay.options[1].textContent =
+    `Trailing mean ± ${TRAILING_MEAN_BAND_STANDARD_ERRORS} SE`;
+runTrajectoryDisplay.addEventListener("change", async () => {
+    const result = await window.pywebview.api.set_trajectory_display(
+        runTrajectoryDisplay.value
+    );
+    window.fim.setTrajectoryDisplay(result.ok ? result.display : trajectoryDisplay);
+});
 
 function toggleTrajectoryStatistic(name) {
     if (hiddenTrajectoryStatistics.has(name)) {
@@ -1164,6 +1532,82 @@ function closedFormTrajectories(closedForm, generations, histories) {
 }
 
 /**
+ * Stroke one series as a line, lifting the pen over any value that is not
+ * finite (the start of a trailing mean, before its window has enough
+ * points), rather than drawing to a bogus coordinate.
+ *
+ * @param {CanvasRenderingContext2D} context stroke style already set.
+ * @param {number[]} generations
+ * @param {number[]} values aligned with `generations`.
+ * @param {function(number): number} xToPixel
+ * @param {function(number): number} yToPixel
+ */
+function strokeSeries(context, generations, values, xToPixel, yToPixel) {
+    context.beginPath();
+    let penDown = false;
+    values.forEach((value, index) => {
+        if (!Number.isFinite(value)) {
+            penDown = false;
+            return;
+        }
+        const x = xToPixel(generations[index]);
+        const y = yToPixel(value);
+        if (penDown) {
+            context.lineTo(x, y);
+        } else {
+            context.moveTo(x, y);
+            penDown = true;
+        }
+    });
+    context.stroke();
+}
+
+/**
+ * Fill the region between two series, one polygon per run of generations
+ * where both are finite.
+ *
+ * @param {CanvasRenderingContext2D} context fill style already set.
+ * @param {number[]} generations
+ * @param {number[]} low aligned with `generations`.
+ * @param {number[]} high aligned with `generations`.
+ * @param {function(number): number} xToPixel
+ * @param {function(number): number} yToPixel
+ */
+function fillBetween(context, generations, low, high, xToPixel, yToPixel) {
+    let runStart = null;
+    const flush = (runEnd) => {
+        if (runStart === null) {
+            return;
+        }
+        context.beginPath();
+        for (let index = runStart; index <= runEnd; index += 1) {
+            const x = xToPixel(generations[index]);
+            if (index === runStart) {
+                context.moveTo(x, yToPixel(high[index]));
+            } else {
+                context.lineTo(x, yToPixel(high[index]));
+            }
+        }
+        for (let index = runEnd; index >= runStart; index -= 1) {
+            context.lineTo(xToPixel(generations[index]), yToPixel(low[index]));
+        }
+        context.closePath();
+        context.fill();
+        runStart = null;
+    };
+    for (let index = 0; index < generations.length; index += 1) {
+        if (Number.isFinite(low[index]) && Number.isFinite(high[index])) {
+            if (runStart === null) {
+                runStart = index;
+            }
+        } else {
+            flush(index - 1);
+        }
+    }
+    flush(generations.length - 1);
+}
+
+/**
  * Draw one or more named statistic-vs-generation curves on shared axes
  * (botanist GUI design doc §6.2's own "how it got here" trajectory
  * panel) — deliberately not a generalized version of `drawDifferentiation
@@ -1219,6 +1663,10 @@ function closedFormTrajectories(closedForm, generations, histories) {
  *     configuration's own current value" there; `null`/`undefined`
  *     (not currently scrubbing, or no scrubber at all) draws nothing
  *     extra.
+ * @param {Object<string, {low: number[], high: number[]}>|null} [bands]
+ *     the "trailing mean" display's standard-error band per statistic
+ *     (`trailingMeanSeries`), filled in that statistic's color behind its
+ *     curve; `null`/`undefined` for the "every generation" display.
  */
 function drawTrajectoryCurve(
     canvas,
@@ -1228,7 +1676,8 @@ function drawTrajectoryCurve(
     equilibrium,
     identityRecovery,
     closedFormSeries,
-    scrubGeneration
+    scrubGeneration,
+    bands
 ) {
     const context = canvas.getContext("2d");
     const width = canvas.width;
@@ -1257,6 +1706,11 @@ function drawTrajectoryCurve(
     if (closedFormSeries) {
         for (const values of Object.values(closedFormSeries)) {
             allValues.push(...values);
+        }
+    }
+    if (bands) {
+        for (const band of Object.values(bands)) {
+            allValues.push(...band.low, ...band.high);
         }
     }
     if (identityRecovery) {
@@ -1353,22 +1807,23 @@ function drawTrajectoryCurve(
         }
     }
 
+    // The trailing mean's standard-error bands, behind every curve like
+    // the sigma band above.
+    if (bands) {
+        for (const [name, band] of Object.entries(bands)) {
+            context.fillStyle = STATISTIC_TRAJECTORY_COLORS[name] || mutedColor;
+            context.globalAlpha = BAND_ALPHA;
+            fillBetween(context, generations, band.low, band.high, xToPixel, yToPixel);
+            context.globalAlpha = 1;
+        }
+    }
+
     for (const [name, values] of Object.entries(histories)) {
         const emphasis = trajectoryEmphasis(name);
         context.strokeStyle = STATISTIC_TRAJECTORY_COLORS[name] || mutedColor;
         context.lineWidth = emphasis.width;
         context.globalAlpha = emphasis.alpha;
-        context.beginPath();
-        values.forEach((value, index) => {
-            const x = xToPixel(generations[index]);
-            const y = yToPixel(value);
-            if (index === 0) {
-                context.moveTo(x, y);
-            } else {
-                context.lineTo(x, y);
-            }
-        });
-        context.stroke();
+        strokeSeries(context, generations, values, xToPixel, yToPixel);
         context.globalAlpha = 1;
     }
 
@@ -1404,17 +1859,7 @@ function drawTrajectoryCurve(
         context.setLineDash(DASH_CLOSED_FORM);
         for (const [name, values] of Object.entries(closedFormSeries)) {
             context.strokeStyle = STATISTIC_TRAJECTORY_COLORS[name] || mutedColor;
-            context.beginPath();
-            values.forEach((value, index) => {
-                const x = xToPixel(generations[index]);
-                const y = yToPixel(value);
-                if (index === 0) {
-                    context.moveTo(x, y);
-                } else {
-                    context.lineTo(x, y);
-                }
-            });
-            context.stroke();
+            strokeSeries(context, generations, values, xToPixel, yToPixel);
         }
         context.setLineDash([]);
     }
@@ -1608,6 +2053,11 @@ function setTrajectoryFrameHidden(hidden) {
  *     `undefined` for every existing caller (a live tick, a fresh
  *     completed entry) draws no marker at all, exactly as before this
  *     parameter existed.
+ * @param {number|null} [convergenceWindow] the run's convergence window
+ *     in generations (`_convergence_reference_payload`): the span the
+ *     "trailing mean" display averages each statistic, and its expected
+ *     trajectory, over. Without one, or without a recorded curve, the
+ *     graph draws every generation and offers no choice.
  */
 function renderTrajectory(
     generations,
@@ -1617,7 +2067,8 @@ function renderTrajectory(
     equilibrium,
     identityRecovery,
     closedForm,
-    scrubGeneration
+    scrubGeneration,
+    convergenceWindow
 ) {
     // Cached so a legend click (`buildTrajectoryLegendItem`, below) can
     // re-render with the identical underlying data and scrub position,
@@ -1632,8 +2083,14 @@ function renderTrajectory(
         identityRecovery,
         closedForm,
         scrubGeneration,
+        convergenceWindow,
     ];
     const hasCurve = generations && histories && generations.length > 0;
+    runTrajectoryDisplayControl.hidden = !(
+        hasCurve &&
+        Number.isFinite(convergenceWindow) &&
+        convergenceWindow > 0
+    );
     if (!hasCurve && !sigmaBand) {
         activeTrajectoryRenderMode = null;
         setTrajectoryFrameHidden(true);
@@ -1720,15 +2177,47 @@ function renderTrajectory(
               )
           )
         : {};
+    // The "trailing mean" display draws each statistic's mean over the
+    // convergence window with its standard-error band, and smooths the
+    // expected trajectory over the same window, so the two still compare
+    // like with like while the run is relaxing. The flat equilibrium
+    // line needs no smoothing.
+    const trailingWindow = trailingDisplayWindow(hasCurve, convergenceWindow);
+    let drawnHistories = visiblePlottable;
+    let drawnClosedForm = closedFormSeries;
+    let bands = null;
+    if (trailingWindow !== null) {
+        drawnHistories = {};
+        bands = {};
+        for (const [name, values] of Object.entries(visiblePlottable)) {
+            const series = cachedTrailingMeanSeries(
+                effectiveGenerations,
+                values,
+                trailingWindow
+            );
+            if (series) {
+                drawnHistories[name] = series.mean;
+                bands[name] = series;
+            }
+        }
+        drawnClosedForm = {};
+        for (const [name, values] of Object.entries(closedFormSeries)) {
+            const series = trailingMeanSeries(effectiveGenerations, values, trailingWindow);
+            if (series) {
+                drawnClosedForm[name] = series.mean;
+            }
+        }
+    }
     drawTrajectoryCurve(
         canvas,
         effectiveGenerations,
-        visiblePlottable,
+        drawnHistories,
         sigmaBand,
         visiblePlottableEquilibrium,
         identityRecovery,
-        closedFormSeries,
-        scrubGeneration
+        drawnClosedForm,
+        scrubGeneration,
+        bands
     );
     runTrajectorySigmaBandCaption.replaceChildren();
     if (sigmaBand) {
@@ -1744,6 +2233,20 @@ function renderTrajectory(
         runTrajectorySigmaBandCaption.children.length === 0;
     refreshTrajectoryStatisticRowStates();
     runTrajectoryLegend.replaceChildren();
+    if (trailingWindow !== null) {
+        const item = document.createElement("span");
+        item.className = "legend-item";
+        const swatch = document.createElement("span");
+        swatch.className = "swatch swatch-band";
+        item.appendChild(swatch);
+        item.appendChild(
+            document.createTextNode(
+                `trailing mean ± ${TRAILING_MEAN_BAND_STANDARD_ERRORS} SE ` +
+                    `(last ${trailingWindow.toLocaleString()} generations)`
+            )
+        );
+        runTrajectoryLegend.appendChild(item);
+    }
     if (Object.keys(closedFormSeries).length > 0) {
         const item = document.createElement("span");
         item.className = "legend-item";
@@ -2003,6 +2506,9 @@ function drawBatchTrajectoryCurve(canvas, visiblePooled, scrubGeneration) {
 function renderBatchTrajectory(pooledConvergenceHistories, scrubGeneration) {
     lastPooledConvergenceHistories = pooledConvergenceHistories;
     lastBatchScrubGeneration = scrubGeneration ?? null;
+    // A batch draws its own across-replicate band; the per-run display
+    // choice does not apply.
+    runTrajectoryDisplayControl.hidden = true;
     const names = pooledConvergenceHistories ? Object.keys(pooledConvergenceHistories) : [];
     if (names.length === 0) {
         activeTrajectoryRenderMode = null;
@@ -2417,10 +2923,7 @@ function updateScrubbedTrajectory(frameGeneration, isFinalFrame) {
                 buildPointMeter(
                     name,
                     completedFinalStatistics[name],
-                    withPredictionNote(
-                        closedFormNote(completedClosedFormComparisons, name),
-                        windowStatisticsDescription(name)
-                    )
+                    withNotes(completedRowNotes(name), statisticDescription(name))
                 )
             );
             decorateTrajectoryStatisticRow(element, name);
@@ -2437,7 +2940,8 @@ function updateScrubbedTrajectory(frameGeneration, isFinalFrame) {
             completedEquilibrium,
             completedIdentityRecovery,
             completedClosedForm,
-            null
+            null,
+            completedConvergenceWindow
         );
         return;
     }
@@ -2466,8 +2970,8 @@ function updateScrubbedTrajectory(frameGeneration, isFinalFrame) {
                 buildPointMeter(
                     name,
                     Number(value).toPrecision(REPORT_VALUE_SIGNIFICANT_DIGITS),
-                    withPredictionNote(
-                        closedFormNote(completedClosedFormComparisons, name, scrubIndex),
+                    withNotes(
+                        completedRowNotes(name, scrubIndex),
                         statisticDescription(name)
                     )
                 )
@@ -2514,7 +3018,8 @@ function updateScrubbedTrajectory(frameGeneration, isFinalFrame) {
         completedEquilibrium,
         completedIdentityRecovery,
         completedClosedForm,
-        scrubGeneration
+        scrubGeneration,
+        completedConvergenceWindow
     );
 }
 
@@ -2933,6 +3438,8 @@ window.fim.enterCompletedState = function enterCompletedState(payload, isBatch) 
         completedReportReason = null;
         completedConvergedOn = null;
         completedClosedFormComparisons = {};
+        completedEstimateSource = null;
+        completedConvergenceWindow = null;
         completedPair = [1, 2];
         completedFinalPairStatistics = null;
         completedPairFrameStatistics = null;
@@ -2988,6 +3495,22 @@ window.fim.enterCompletedState = function enterCompletedState(payload, isBatch) 
             payload.closedForm,
             payload.equilibrium
         );
+        completedConvergenceWindow = payload.convergence ? payload.convergence.window : null;
+        completedEstimateSource =
+            payload.convergenceGenerations && payload.convergenceHistories
+                ? {
+                      generations: payload.convergenceGenerations,
+                      histories: payload.convergenceHistories,
+                      comparisons: completedClosedFormComparisons,
+                      convergence: payload.convergence || null,
+                      anchors: evidenceWindowAnchors(
+                          report.window_statistics,
+                          payload.convergenceGenerations.length,
+                          completedConvergenceWindow
+                      ),
+                      sums: {},
+                  }
+                : null;
         for (const name of STATISTIC_NAMES) {
             const value = payload.statistics[name];
             const element = document.getElementById(`stat-${name}`);
@@ -2996,10 +3519,7 @@ window.fim.enterCompletedState = function enterCompletedState(payload, isBatch) 
                 buildPointMeter(
                     name,
                     value,
-                    withPredictionNote(
-                        closedFormNote(completedClosedFormComparisons, name),
-                        windowStatisticsDescription(name)
-                    )
+                    withNotes(completedRowNotes(name), statisticDescription(name))
                 )
             );
             decorateTrajectoryStatisticRow(element, name);
@@ -3035,7 +3555,9 @@ window.fim.enterCompletedState = function enterCompletedState(payload, isBatch) 
             payload.generationCount,
             payload.equilibrium,
             payload.identityRecovery,
-            payload.closedForm
+            payload.closedForm,
+            null,
+            completedConvergenceWindow
         );
         wireCompletedScrubber(payload.outputDirectory, payload.generationCount);
     }

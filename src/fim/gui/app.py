@@ -110,6 +110,7 @@ from fim.gui.preferences import (
     MAX_RUN_GRAPH_COLUMNS,
     RUN_GRAPH_KEYS,
     SCATTER_STYLES,
+    TRAJECTORY_DISPLAYS,
     GuiPreferences,
     load_preferences,
     preferences_file_path,
@@ -1000,6 +1001,29 @@ def _equilibrium_reference_payload(
     return _equilibrium_reference(
         params.gene_copies, params.m, params.mu, params.d, digits
     )
+
+
+def _convergence_reference_payload(params: SimulationParams) -> dict[str, Any]:
+    """Build the convergence settings the trajectory panel computes with.
+
+    The page's trailing mean and its standard error
+    (`run-view-completed.js`'s own `trailingMeanSeries`/`estimateNote`)
+    average over the same window the convergence monitor judges, and call
+    a mean noise-adequate by the monitor's own rule (standard error at
+    most half the tolerance).
+
+    Args:
+        params: A validated configuration, whose window is already
+            resolved (`SimulationParams.from_mapping` derives an automatic
+            one).
+
+    Returns:
+        `{"window": generations, "tolerance": tolerance}`.
+    """
+    return {
+        "window": params.convergence_window,
+        "tolerance": params.convergence_tolerance,
+    }
 
 
 def _identity_recovery_reference_payload(
@@ -2005,6 +2029,7 @@ class Api:
             "equilibrium": equilibrium,
             "identityRecovery": identity_recovery,
             "closedForm": closed_form,
+            "convergence": _convergence_reference_payload(params),
         }
 
     def _drain_then_release(self, drain: Callable[..., None], *arguments: Any) -> None:
@@ -2326,16 +2351,18 @@ class Api:
         """Return how the Run card shows its graphs.
 
         Returns:
-            `{"graphs": [...], "columns": int, "scatterStyle": str}`: the
-            graph keys the user wants shown together (`DEFAULT_RUN_GRAPHS`
-            until they choose), how many columns they are laid out in, and
-            how the scatter plot draws its points.
+            `{"graphs": [...], "columns": int, "scatterStyle": str,
+            "trajectoryDisplay": str}`: the graph keys the user wants
+            shown together (`DEFAULT_RUN_GRAPHS` until they choose), how
+            many columns they are laid out in, how the scatter plot draws
+            its points, and how the trajectory graph draws each statistic.
         """
         preferences = self._preferences
         return {
             "graphs": list(preferences.run_graphs or DEFAULT_RUN_GRAPHS),
             "columns": preferences.run_graph_columns,
             "scatterStyle": preferences.scatter_style,
+            "trajectoryDisplay": preferences.trajectory_display,
         }
 
     @_log_bridge_call
@@ -2399,6 +2426,31 @@ class Api:
         self._preferences = self._preferences.with_run_card_layout(scatter_style=style)
         save_preferences(self._preferences_path, self._preferences)
         return {"ok": True, "style": style}
+
+    @_log_bridge_call
+    def set_trajectory_display(self, display: str) -> dict[str, Any]:
+        """Choose how the trajectory graph draws each statistic.
+
+        Display only: the run, its files and its statistics are the same
+        either way.
+
+        Args:
+            display: One of `TRAJECTORY_DISPLAYS`: `"every_generation"`
+                (the value at every recorded generation) or
+                `"trailing_mean"` (the mean over the convergence window,
+                with a standard-error band).
+
+        Returns:
+            `{"ok": True, "display": display}`, or `{"ok": False,
+            "message": ...}`.
+        """
+        if display not in TRAJECTORY_DISPLAYS:
+            return {"ok": False, "message": f"unknown trajectory display: {display!r}"}
+        self._preferences = self._preferences.with_run_card_layout(
+            trajectory_display=display
+        )
+        save_preferences(self._preferences_path, self._preferences)
+        return {"ok": True, "display": display}
 
     @_log_bridge_call
     def get_default_ploidy(self) -> str:
@@ -4679,6 +4731,8 @@ class Api:
             # The closed-form D(t)/G_ST(t) curves (`_closed_form_trajectory_
             # payload`'s own docstring), fresh from the manifest's params.
             "closedForm": _closed_form_trajectory_payload(reanalyzed.params),
+            # The window and tolerance the trailing mean is computed with.
+            "convergence": _convergence_reference_payload(reanalyzed.params),
         }
 
     @_log_bridge_call
@@ -5796,6 +5850,8 @@ def _drain_run_messages(
                 "identityRecovery": identity_recovery,
                 # The closed-form D(t)/G_ST(t) curves — same reuse.
                 "closedForm": closed_form,
+                # The window and tolerance the trailing mean is computed with.
+                "convergence": _convergence_reference_payload(result.params),
             }
             _attach_finished_run_to_study(study_id, output_directory)
             logger.info("run done: %s", output_directory)

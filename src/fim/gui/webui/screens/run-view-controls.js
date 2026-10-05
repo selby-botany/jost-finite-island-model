@@ -168,6 +168,7 @@ async function onRunClicked() {
     // equilibrium` immediately above.
     window.fim.setLiveIdentityRecoveryReference(started.identityRecovery);
     window.fim.setLiveClosedForm(started.closedForm);
+    window.fim.setLiveConvergence(started.convergence);
 }
 
 async function onLoadYamlClicked() {

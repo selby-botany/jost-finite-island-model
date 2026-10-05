@@ -886,6 +886,9 @@ async function loadRunCardLayout() {
     if (typeof window.fim.setScatterStyle === "function") {
         window.fim.setScatterStyle(layout.scatterStyle);
     }
+    if (typeof window.fim.setTrajectoryDisplay === "function") {
+        window.fim.setTrajectoryDisplay(layout.trajectoryDisplay);
+    }
     syncRunGraphStage();
 }
 
