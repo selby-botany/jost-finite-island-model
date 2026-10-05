@@ -141,6 +141,7 @@ yamllint \
 markdownlint \
     "**/*.md" \
     "#.attic/**" \
+    "#.claude/worktrees/**" \
     "#.mypy_cache/**" \
     "#.pytest_cache/**" \
     "#.ruff_cache/**" \

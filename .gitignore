@@ -15,6 +15,7 @@
 *.bak
 *.log
 .attic/
+.claude/worktrees/
 .wip/
 .ignore*/
 

@@ -1,4 +1,5 @@
 .attic/
+.claude/worktrees/
 LICENSE.md
 src/fim/API.md
 test/TESTS.md
