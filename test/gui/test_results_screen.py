@@ -100,6 +100,54 @@ def _poll_until(
     return value
 
 
+def _wait_for_canvas_drawn_at_layout_size(
+    window: webview.Window, canvas_id: str
+) -> None:
+    """Poll until a canvas was last drawn at its settled layout size.
+
+    A completed run's first draw can happen before the page's layout
+    settles, and the completed scrubber's frame fetch reflows the page
+    again when it finishes. `run-graph-stage.js`'s per-pane
+    `ResizeObserver` repaints after each real size change, but
+    asynchronously, and in a hidden window it can lag well behind:
+    measured, `#run-canvas` sat at a stale 149x149 buffer while its box had
+    already settled to 142x142, so a snapshot taken then never matched a
+    later redraw of the very same panel.
+
+    Settled: no scrubber fetch in flight, the pixel buffer the same size
+    as the layout box, and the same reading twice in a row.
+
+    Args:
+        window: The test's window.
+        canvas_id: The canvas element's id.
+
+    Raises:
+        AssertionError: If the canvas never settles.
+    """
+    state_script = (
+        "(() => {"
+        f"var c = document.getElementById('{canvas_id}');"
+        "return [window.__fimScrubberPending || 0, c.width, c.height, "
+        "c.clientWidth, c.clientHeight];"
+        "})()"
+    )
+    previous = None
+    current = None
+    for _ in range(_POLL_ATTEMPTS):
+        current = window.evaluate_js(state_script)
+        pending, width, height, client_width, client_height = current
+        drawn_at_layout_size = (
+            pending == 0
+            and client_width > 0
+            and (width, height) == (client_width, client_height)
+        )
+        if drawn_at_layout_size and current == previous:
+            return
+        previous = current if drawn_at_layout_size else None
+        time.sleep(_POLL_INTERVAL_SECONDS)
+    raise AssertionError(f"{canvas_id} never settled: {current!r}")
+
+
 def test_a_completed_run_renders_the_run_view(
     fast_scalar_run_settings: Path, window: webview.Window, drive: Callable[..., Any]
 ) -> None:
@@ -904,6 +952,7 @@ def test_deme_pair_selector_switches_to_a_chosen_pair_and_back(
                 "window.__fimScrubberPending",
                 lambda value: value == 0,
             )
+            _wait_for_canvas_drawn_at_layout_size(window, "run-canvas")
             selector_state = window.evaluate_js(
                 "({"
                 "hidden: document.getElementById('run-deme-pair-selector').hidden, "

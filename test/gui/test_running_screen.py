@@ -200,42 +200,52 @@ def _wait_for_cancel_run_settled(window: webview.Window) -> None:
     )
 
 
-def _wait_for_trajectory_canvas_size_to_settle(window: webview.Window) -> None:
-    """Poll until `#run-trajectory-canvas`'s own pixel buffer stops changing size.
+def _wait_for_trajectory_canvas_to_settle(window: webview.Window) -> None:
+    """Poll until `#run-trajectory-canvas` was last drawn at its settled size.
 
     `renderTrajectory`'s first draw, inside `enterCompletedState`, reads
-    `clientWidth`/`clientHeight` before the surrounding page's own layout
-    has necessarily finished settling (`run-graph-stage.js`'s own comment
-    on its per-pane `ResizeObserver` names this exact "blurry right after
-    opening" class of defect and accepts one transient wrong paint,
-    self-corrected once the observer's own callback fires on the next
-    real size change) -- confirmed live: a pixel-counting test read the
-    canvas immediately after `done_event` and saw a real, reproducible
-    size change (312x234, then settling to 302x226) between that first
-    read and the very next redraw. Waiting here for two consecutive
-    `[width, height]` reads to agree is the same "wait for the thing to
-    actually settle" discipline `_wait_for_cancel_run_settled` above
-    already establishes for a different async gap, applied to this one.
+    `clientWidth`/`clientHeight` before the page's layout has necessarily
+    settled, and the completed scrubber's frame fetch, which finishes
+    later, unhides the results table and reflows the page again.
+    `run-graph-stage.js`'s per-pane `ResizeObserver` repaints after each
+    real size change -- one transient wrong paint, accepted there -- but
+    it fires asynchronously, and in a hidden window it can lag well
+    behind. A pixel count taken in between counts a buffer drawn at the
+    old size, and the next draw (any toggle) counts a different one.
+
+    Settled means three things at once, read twice in a row: no scrubber
+    fetch in flight (`window.__fimScrubberPending`), the pixel buffer the
+    same size as the canvas's layout box (the last draw used the current
+    size), and that size unchanged since the previous read. Two equal
+    buffer sizes alone are not enough: measured, a buffer can sit at a
+    stale 149x149 while its box has already settled to 142x142.
 
     Raises:
-        AssertionError: If the size never stops changing.
+        AssertionError: If the canvas never settles.
     """
-    dims_script = (
+    state_script = (
         "(() => {"
         "var c = document.getElementById('run-trajectory-canvas');"
-        "return [c.width, c.height];"
+        "return [window.__fimScrubberPending || 0, c.width, c.height, "
+        "c.clientWidth, c.clientHeight];"
         "})()"
     )
-    previous = window.evaluate_js(dims_script)
+    previous = None
     for _ in range(_READY_POLL_ATTEMPTS):
-        time.sleep(_READY_POLL_INTERVAL_SECONDS)
-        current = window.evaluate_js(dims_script)
-        if current == previous:
+        current = window.evaluate_js(state_script)
+        pending, width, height, client_width, client_height = current
+        drawn_at_layout_size = (
+            pending == 0
+            and client_width > 0
+            and (width, height) == (client_width, client_height)
+        )
+        if drawn_at_layout_size and current == previous:
             return
-        previous = current
+        previous = current if drawn_at_layout_size else None
+        time.sleep(_READY_POLL_INTERVAL_SECONDS)
     raise AssertionError(
-        "run-trajectory-canvas's own size never settled within "
-        f"{_READY_POLL_ATTEMPTS * _READY_POLL_INTERVAL_SECONDS}s"
+        "run-trajectory-canvas never settled within "
+        f"{_READY_POLL_ATTEMPTS * _READY_POLL_INTERVAL_SECONDS}s: {current!r}"
     )
 
 
@@ -536,7 +546,7 @@ def test_trajectory_row_toggle_hides_and_restores_a_curves_own_pixels(
             if not done_event.wait(timeout=_EVENT_WAIT_TIMEOUT_SECONDS):
                 outcome.put(None)
                 return
-            _wait_for_trajectory_canvas_size_to_settle(window)
+            _wait_for_trajectory_canvas_to_settle(window)
             before_pixels = window.evaluate_js(non_blank_pixel_count_script)
             row_before = window.evaluate_js(row_state_script)
             window.evaluate_js(
