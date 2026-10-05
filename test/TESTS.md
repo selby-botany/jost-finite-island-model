@@ -12,6 +12,7 @@ Every test module, fixture, and test function documented here in full; `doc/fim-
   - [`test_convergence_docs`](#test.test_convergence_docs)
   - [`test_doc_examples`](#test.test_doc_examples)
   - [`test_doc_snippets`](#test.test_doc_snippets)
+  - [`test_examples_catalog`](#test.test_examples_catalog)
   - [`test_hypothesis_profile`](#test.test_hypothesis_profile)
   - [`test_launcher`](#test.test_launcher)
   - [`test_logging_setup`](#test.test_logging_setup)
@@ -521,6 +522,171 @@ Every worked example lets `convergence_window` and `max_generations` be
 derived from the model, except the few that name a reason to pin them.
 Pinning `convergence_window: 10` was what made the hub example stop at
 generation 19 with a meaningless result.
+
+<a id="test.test_examples_catalog"></a>
+
+# test.test\_examples\_catalog
+
+The bundled examples catalog: its generator, and the committed bundle's freshness.
+
+`dev/bin/build-examples-catalog` turns `doc/examples/` into
+`src/fim/gui/webui/examples/` (design doc `20261005-claude-opus-5-5-
+read-only-examples-and-classes-design.md` §4.1, `selby/restricted`).
+These tests load the script as a module and drive it against small
+fixture trees, both before examples carry labels and a `classes.yaml`
+and after.
+
+<a id="test.test_examples_catalog.test_committed_bundle_is_current"></a>
+
+#### test\_committed\_bundle\_is\_current
+
+```python
+def test_committed_bundle_is_current() -> None
+```
+
+The committed bundle matches a fresh build; run the generator if this fails.
+
+The pre-commit hook rebuilds it whenever an example, the usage
+guide, or the generator is staged, so a failure here means a commit
+bypassed the hook.
+
+<a id="test.test_examples_catalog.test_committed_catalog_lists_every_example_directory"></a>
+
+#### test\_committed\_catalog\_lists\_every\_example\_directory
+
+```python
+def test_committed_catalog_lists_every_example_directory() -> None
+```
+
+Every `doc/examples/<id>/` with a README is in the committed catalog.
+
+<a id="test.test_examples_catalog.test_unlabelled_examples_derive_name_and_description_from_the_readme"></a>
+
+#### test\_unlabelled\_examples\_derive\_name\_and\_description\_from\_the\_readme
+
+```python
+def test_unlabelled_examples_derive_name_and_description_from_the_readme(
+        tmp_path: Path) -> None
+```
+
+Without labels: README heading, first prose paragraph, `unclassified`.
+
+<a id="test.test_examples_catalog.test_order_follows_the_usage_guide_then_the_id"></a>
+
+#### test\_order\_follows\_the\_usage\_guide\_then\_the\_id
+
+```python
+def test_order_follows_the_usage_guide_then_the_id(tmp_path: Path) -> None
+```
+
+Examples the guide marks come first, in its order; the rest by ID.
+
+<a id="test.test_examples_catalog.test_directory_without_readme_is_not_an_example"></a>
+
+#### test\_directory\_without\_readme\_is\_not\_an\_example
+
+```python
+def test_directory_without_readme_is_not_an_example(tmp_path: Path) -> None
+```
+
+An empty or scratch directory under `doc/examples/` is ignored.
+
+<a id="test.test_examples_catalog.test_example_without_a_configuration_is_listed_with_null_yaml"></a>
+
+#### test\_example\_without\_a\_configuration\_is\_listed\_with\_null\_yaml
+
+```python
+def test_example_without_a_configuration_is_listed_with_null_yaml(
+        tmp_path: Path) -> None
+```
+
+A script-reproduced example (no `config.yaml`) still gets an entry.
+
+<a id="test.test_examples_catalog.test_output_files_are_bundled_but_trajectories_are_not"></a>
+
+#### test\_output\_files\_are\_bundled\_but\_trajectories\_are\_not
+
+```python
+def test_output_files_are_bundled_but_trajectories_are_not(
+        tmp_path: Path) -> None
+```
+
+Top-level and per-replicate manifest/report/summary files are copied.
+
+<a id="test.test_examples_catalog.test_labels_and_class_tree_drive_names_and_order"></a>
+
+#### test\_labels\_and\_class\_tree\_drive\_names\_and\_order
+
+```python
+def test_labels_and_class_tree_drive_names_and_order(tmp_path: Path) -> None
+```
+
+With labels and `classes.yaml`: label text, class order, unclassified last.
+
+<a id="test.test_examples_catalog.test_rule_violations_are_reported"></a>
+
+#### test\_rule\_violations\_are\_reported
+
+```python
+@pytest.mark.parametrize(
+    ("classes_yaml", "config", "message"),
+    [
+        (None, "class: nowhere\n" + _CONFIG, "unknown class 'nowhere'"),
+        (
+            "classes:\n  - id: used\n    title: Used\n"
+            "  - id: empty\n    title: Empty\n",
+            "class: used\n" + _CONFIG,
+            "class empty has no examples",
+        ),
+        (
+            "classes:\n  - id: Bad_Id\n    title: Bad\n",
+            _CONFIG,
+            "kebab-case",
+        ),
+        (
+            "classes:\n  - id: twice\n    title: A\n"
+            "    children:\n      - id: twice\n        title: B\n",
+            _CONFIG,
+            "duplicate class id twice",
+        ),
+        (
+            "classes:\n  - id: top\n    title: Top\n    children:\n"
+            "      - id: kid\n        title: Kid\n        children:\n"
+            "          - id: grandkid\n            title: Grandkid\n",
+            _CONFIG,
+            "may not have children",
+        ),
+        (None, "name: ''\n" + _CONFIG, "name must be non-empty text"),
+    ],
+)
+def test_rule_violations_are_reported(tmp_path: Path, classes_yaml: str | None,
+                                      config: str, message: str) -> None
+```
+
+Unknown or empty classes, bad IDs, deep trees and empty labels fail.
+
+<a id="test.test_examples_catalog.test_write_bundle_replaces_stale_files_and_reports_current"></a>
+
+#### test\_write\_bundle\_replaces\_stale\_files\_and\_reports\_current
+
+```python
+def test_write_bundle_replaces_stale_files_and_reports_current(
+        tmp_path: Path) -> None
+```
+
+`write_bundle` leaves exactly the listed files; `stale_paths` then is empty.
+
+<a id="test.test_examples_catalog.test_check_mode_reports_a_stale_bundle_without_writing"></a>
+
+#### test\_check\_mode\_reports\_a\_stale\_bundle\_without\_writing
+
+```python
+def test_check_mode_reports_a_stale_bundle_without_writing(
+        tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+        capsys: pytest.CaptureFixture[str]) -> None
+```
+
+`--check` exits 1 on a stale bundle and changes nothing; a refresh fixes it.
 
 <a id="test.test_hypothesis_profile"></a>
 
@@ -28829,6 +28995,22 @@ def test_pre_commit_refreshes_test_docs_only_for_staged_test_files(
 `test/` -- unlike `src/fim/API.md`, refreshed for any staged Python
 change at all, `generate-test-docs` has nothing to regenerate for a
 `src/`-only change.
+
+<a id="validation.test_git_hooks.test_pre_commit_rebuilds_the_examples_catalog_only_for_example_changes"></a>
+
+#### test\_pre\_commit\_rebuilds\_the\_examples\_catalog\_only\_for\_example\_changes
+
+```python
+def test_pre_commit_rebuilds_the_examples_catalog_only_for_example_changes(
+        tmp_path: Path) -> None
+```
+
+The examples bundle is rebuilt and staged when an example changes.
+
+A stub generator stands in for `dev/bin/build-examples-catalog`: it
+rewrites the catalog and deletes a stale output file, so this also
+proves the hook stages deletions inside the bundle. A change outside
+`doc/examples/` leaves the bundle alone.
 
 <a id="validation.test_git_hooks.test_pre_commit_rejects_new_non_ascii_filename"></a>
 

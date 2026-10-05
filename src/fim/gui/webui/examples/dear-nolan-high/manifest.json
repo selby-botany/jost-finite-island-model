@@ -1,0 +1,13 @@
+{
+  "scenario": "dear_nolan_high",
+  "source": "test/validation/test_simulator_equilibrium.py",
+  "seed": 992000,
+  "replicates": 5,
+  "horizon": 30,
+  "population_size": 2000,
+  "demes": 100,
+  "migration_rate": 0.01,
+  "mutation_rate": 0.001,
+  "initial_state": "derived near-equilibrium (_dn2_equilibrium_start)",
+  "notes": "This reproduces the stationarity check used in the Dear-Nolan high-migration validation test."
+}

@@ -1,0 +1,537 @@
+#!/usr/bin/env python3
+"""Build the desktop app's bundled examples catalog from `doc/examples/`.
+
+Each `doc/examples/<id>/` directory with a `README.md` is one example.
+This script writes `src/fim/gui/webui/examples/`, the bundle the packaged
+app carries (`packaging/fim.spec` already bundles all of `webui/`):
+
+- `catalog.json`: the class tree, then one entry per example with its
+  ID, name, description, class, README text, a plain-text README
+  excerpt, the configuration's YAML text (or `null` when the example has
+  no `config.yaml`), and the list of bundled output files.
+- A copy of each example's committed output files: `manifest.json`,
+  `report.json`, and `summary.json` at the top of the example
+  directory, and `manifest.json`/`report.json` inside each replicate
+  subdirectory. Trajectories are never copied.
+
+Labels. An example's `config.yaml` may carry `name`, `description`, and
+`class`. When it does not, the name is the README's first heading, the
+description is the README's first prose paragraph, and the class is
+`unclassified`, which is listed last.
+
+Classes. `doc/examples/classes.yaml` defines the class tree (design doc
+`20261005-claude-opus-5-5-read-only-examples-and-classes-design.md`
+§2, `selby/restricted`). When the file is absent, every example must be
+unclassified. `read_class_tree` below is a small local reader with the
+same rules as `fim.examples.classes`; swap it for that module once it
+is importable here.
+
+Order. Classes appear in file order (parent, then its children).
+Within a class, examples follow the order of their
+`worked-example-config` markers in `doc/usage.md`; any other example
+follows, sorted by ID.
+
+Usage:
+    dev/bin/build-examples-catalog           # refresh the bundle
+    dev/bin/build-examples-catalog --check   # report a stale bundle
+
+The pre-commit hook runs this whenever `doc/examples/**`, `doc/usage.md`,
+or this script is staged. `test/test_examples_catalog.py` fails when the
+committed bundle is stale.
+"""
+
+from __future__ import annotations
+
+import argparse
+import html
+import json
+import re
+import sys
+from collections.abc import Mapping, Sequence
+from pathlib import Path
+from typing import Any
+
+import yaml
+
+ROOT = Path(__file__).resolve().parents[2]
+EXAMPLES_DIR = ROOT / "doc" / "examples"
+USAGE_PATH = ROOT / "doc" / "usage.md"
+BUNDLE_DIR = ROOT / "src" / "fim" / "gui" / "webui" / "examples"
+CATALOG_NAME = "catalog.json"
+CLASSES_NAME = "classes.yaml"
+SCHEMA_VERSION = 1
+
+# Configuration keys that label an example rather than configure the
+# model (design §1). They are read here and never reach the form.
+LABEL_KEYS = ("name", "description", "class")
+
+# The class every example without a `class` label belongs to. Listed
+# last, after every class the file defines.
+UNCLASSIFIED_CLASS = {
+    "id": "unclassified",
+    "title": "Unclassified",
+    "description": "Examples not yet assigned to a class.",
+    "children": [],
+}
+
+# Output files copied into the bundle (design §4.1). A batch has
+# `summary.json` at its top level and one subdirectory per replicate.
+TOP_LEVEL_OUTPUT_NAMES = ("manifest.json", "report.json", "summary.json")
+REPLICATE_OUTPUT_NAMES = ("manifest.json", "report.json")
+
+# How much README text the dialog shows beside an example.
+EXCERPT_MAX_CHARACTERS = 700
+EXCERPT_MAX_PARAGRAPHS = 3
+
+ID_PATTERN = re.compile(r"^[a-z0-9]+(?:-[a-z0-9]+)*$")
+USAGE_MARKER_PATTERN = re.compile(
+    r"<!-- worked-example-config: examples/(?P<id>[a-z0-9-]+)/config\.yaml -->"
+)
+MARKDOWN_LINK_PATTERN = re.compile(r"!?\[([^\]]*)\]\([^)]*\)")
+MARKDOWN_EMPHASIS_PATTERN = re.compile(r"(\*\*|__|\*|`)")
+HTML_TAG_PATTERN = re.compile(r"<[^>]+>")
+LIST_ITEM_PATTERN = re.compile(r"^(?:[-*+]|\d+\.)\s")
+
+
+class CatalogError(ValueError):
+    """Raised when the examples or the class file break a catalog rule."""
+
+
+def _class_entry(raw: Any, *, allow_children: bool, where: str) -> dict[str, Any]:
+    """Validate one class mapping and return its normalized form.
+
+    Args:
+        raw: One item of `classes` (or of a class's `children`).
+        allow_children: Whether this level may carry `children`; the
+            tree is shallow, so only the top level may.
+        where: A location prefix for error messages.
+
+    Returns:
+        `{"id", "title", "description", "children"}`, with an empty
+        description when the file gives none.
+
+    Raises:
+        CatalogError: If the entry is malformed.
+    """
+    if not isinstance(raw, Mapping):
+        raise CatalogError(f"{where}: each class must be a mapping")
+    unknown = set(raw) - {"id", "title", "description", "children"}
+    if unknown:
+        raise CatalogError(f"{where}: unknown key(s) {sorted(unknown)}")
+    class_id = raw.get("id")
+    if not isinstance(class_id, str) or not ID_PATTERN.match(class_id):
+        raise CatalogError(f"{where}: id must be lowercase kebab-case: {class_id!r}")
+    title = raw.get("title")
+    if not isinstance(title, str) or not title.strip():
+        raise CatalogError(f"{where}: class {class_id} needs a title")
+    description = raw.get("description", "")
+    if not isinstance(description, str):
+        raise CatalogError(f"{where}: class {class_id} description must be text")
+    children_raw = raw.get("children", [])
+    if children_raw and not allow_children:
+        raise CatalogError(
+            f"{where}: class {class_id} is a child and may not have children"
+        )
+    if not isinstance(children_raw, list):
+        raise CatalogError(f"{where}: class {class_id} children must be a list")
+    children = [
+        _class_entry(child, allow_children=False, where=f"{where} > {class_id}")
+        for child in children_raw
+    ]
+    return {
+        "id": class_id,
+        "title": title.strip(),
+        "description": description.strip(),
+        "children": children,
+    }
+
+
+def _flatten_classes(tree: Sequence[Mapping[str, Any]]) -> list[Mapping[str, Any]]:
+    """Return every class in display order: each parent, then its children."""
+    flattened: list[Mapping[str, Any]] = []
+    for entry in tree:
+        flattened.append(entry)
+        flattened.extend(entry["children"])
+    return flattened
+
+
+def _plain_text(markdown: str) -> str:
+    """Return `markdown` as one line of plain text for display.
+
+    Removes link targets, emphasis marks, backticks and HTML tags,
+    decodes entities (`&mu;`), and collapses whitespace.
+    """
+    text = MARKDOWN_LINK_PATTERN.sub(r"\1", markdown)
+    text = HTML_TAG_PATTERN.sub("", text)
+    text = MARKDOWN_EMPHASIS_PATTERN.sub("", text)
+    text = html.unescape(text)
+    return " ".join(text.split())
+
+
+def _usage_order(usage_path: Path) -> dict[str, int]:
+    """Return each example ID's position among `doc/usage.md`'s markers."""
+    try:
+        source = usage_path.read_text(encoding="utf-8")
+    except OSError:
+        return {}
+    order: dict[str, int] = {}
+    for match in USAGE_MARKER_PATTERN.finditer(source):
+        order.setdefault(match.group("id"), len(order))
+    return order
+
+
+def build_catalog(
+    examples_dir: Path, usage_path: Path
+) -> tuple[dict[str, Any], dict[str, bytes]]:
+    """Build the catalog and the output files it refers to.
+
+    Args:
+        examples_dir: The `doc/examples/` directory to read.
+        usage_path: `doc/usage.md`, read only for example order.
+
+    Returns:
+        The catalog as a JSON-ready mapping, and the bundled output
+        files as `{bundle-relative path: bytes}`.
+
+    Raises:
+        CatalogError: If an example or the class file breaks a rule.
+    """
+    classes_path = examples_dir / CLASSES_NAME
+    tree = read_class_tree(classes_path) if classes_path.is_file() else []
+
+    # Read every example directory: a directory without a README (an
+    # empty or scratch directory) is not an example.
+    examples: list[dict[str, Any]] = []
+    outputs: dict[str, bytes] = {}
+    for directory in sorted(path for path in examples_dir.iterdir() if path.is_dir()):
+        if not (directory / "README.md").is_file():
+            continue
+        example, files = read_example(directory)
+        examples.append(example)
+        for relative, content in files.items():
+            outputs[f"{example['id']}/{relative}"] = content
+
+    # Every class an example names must exist; unlabelled examples get
+    # the synthetic last class.
+    known = {entry["id"] for entry in _flatten_classes(tree)}
+    unclassified_used = any(
+        example["class"] == UNCLASSIFIED_CLASS["id"] for example in examples
+    )
+    if unclassified_used and UNCLASSIFIED_CLASS["id"] not in known:
+        tree = [*tree, dict(UNCLASSIFIED_CLASS)]
+        known.add(UNCLASSIFIED_CLASS["id"])
+    for example in examples:
+        if example["class"] not in known:
+            raise CatalogError(
+                f"example {example['id']} names unknown class {example['class']!r}"
+            )
+
+    # Every class must end up with at least one example, counting a
+    # parent's children as its own.
+    used = {example["class"] for example in examples}
+    for entry in tree:
+        family = {entry["id"], *(child["id"] for child in entry["children"])}
+        if not family & used:
+            raise CatalogError(f"class {entry['id']} has no examples")
+        for child in entry["children"]:
+            if child["id"] not in used:
+                raise CatalogError(f"class {child['id']} has no examples")
+
+    # Display order: class order first, then the usage guide's order.
+    class_rank = {
+        entry["id"]: index for index, entry in enumerate(_flatten_classes(tree))
+    }
+    usage_rank = _usage_order(usage_path)
+    examples.sort(
+        key=lambda example: (
+            class_rank[example["class"]],
+            usage_rank.get(example["id"], len(usage_rank)),
+            example["id"],
+        )
+    )
+
+    catalog = {
+        "schema_version": SCHEMA_VERSION,
+        "generator": "dev/bin/build-examples-catalog",
+        "classes": tree,
+        "examples": examples,
+    }
+    return catalog, outputs
+
+
+def bundle_files(examples_dir: Path, usage_path: Path) -> dict[str, bytes]:
+    """Return every file the bundle should hold, by bundle-relative path."""
+    catalog, outputs = build_catalog(examples_dir, usage_path)
+    rendered = json.dumps(catalog, indent=2, ensure_ascii=False) + "\n"
+    return {CATALOG_NAME: rendered.encode("utf-8"), **outputs}
+
+
+def _first_heading(readme: str) -> str:
+    """Return the README's first level-one heading, as plain text."""
+    for line in readme.splitlines():
+        if line.startswith("# "):
+            return _plain_text(line[2:])
+    return ""
+
+
+def _paragraphs(readme: str) -> list[str]:
+    """Return the README's prose paragraphs, in order, as plain text.
+
+    Headings, fenced code, tables, lists, block quotes and HTML comments
+    are skipped: an excerpt reads as running text.
+    """
+    paragraphs: list[str] = []
+    current: list[str] = []
+    in_fence = False
+    in_comment = False
+
+    def flush() -> None:
+        if current:
+            paragraphs.append(_plain_text(" ".join(current)))
+            current.clear()
+
+    for line in readme.splitlines():
+        stripped = line.strip()
+        if in_comment:
+            in_comment = "-->" not in stripped
+            continue
+        if stripped.startswith("```"):
+            flush()
+            in_fence = not in_fence
+            continue
+        if in_fence:
+            continue
+        if stripped.startswith("<!--"):
+            flush()
+            in_comment = "-->" not in stripped
+            continue
+        if (
+            not stripped
+            or stripped.startswith(("#", "|", ">"))
+            or LIST_ITEM_PATTERN.match(stripped)
+        ):
+            flush()
+            continue
+        current.append(stripped)
+    flush()
+    return [paragraph for paragraph in paragraphs if paragraph]
+
+
+def _excerpt(readme: str, description: str) -> str:
+    """Return a short plain-text excerpt of the README for the dialog.
+
+    Skips a paragraph identical to the description, so a derived
+    description is not shown twice, and stops at whole paragraphs.
+    """
+    chosen: list[str] = []
+    length = 0
+    for paragraph in _paragraphs(readme):
+        if paragraph == description:
+            continue
+        if chosen and length + len(paragraph) > EXCERPT_MAX_CHARACTERS:
+            break
+        chosen.append(paragraph)
+        length += len(paragraph)
+        if len(chosen) == EXCERPT_MAX_PARAGRAPHS:
+            break
+    return "\n\n".join(chosen)
+
+
+def _label(configuration: Mapping[str, Any], key: str, example_id: str) -> str | None:
+    """Return one label from a configuration, or `None` when absent."""
+    value = configuration.get(key)
+    if value is None:
+        return None
+    if not isinstance(value, str) or not value.strip():
+        raise CatalogError(f"example {example_id}: {key} must be non-empty text")
+    return value.strip()
+
+
+def _output_files(directory: Path) -> dict[str, bytes]:
+    """Return the example's committed output files, by relative path."""
+    files: dict[str, bytes] = {}
+    for name in TOP_LEVEL_OUTPUT_NAMES:
+        path = directory / name
+        if path.is_file():
+            files[name] = path.read_bytes()
+    for replicate in sorted(path for path in directory.iterdir() if path.is_dir()):
+        for name in REPLICATE_OUTPUT_NAMES:
+            path = replicate / name
+            if path.is_file():
+                files[f"{replicate.name}/{name}"] = path.read_bytes()
+    return files
+
+
+def read_class_tree(path: Path) -> list[dict[str, Any]]:
+    """Read and validate `classes.yaml` (design §2).
+
+    The local stand-in for `fim.examples.classes`: same file shape and
+    rules (a shallow tree, kebab-case IDs unique across the tree, file
+    order as display order).
+
+    Args:
+        path: The `classes.yaml` file.
+
+    Returns:
+        The normalized class tree.
+
+    Raises:
+        CatalogError: If the file breaks a rule.
+        OSError, yaml.YAMLError: If the file cannot be read or parsed.
+    """
+    data = yaml.safe_load(path.read_text(encoding="utf-8"))
+    if not isinstance(data, Mapping) or not isinstance(data.get("classes"), list):
+        raise CatalogError(f"{path.name}: expected a top-level 'classes' list")
+    tree = [
+        _class_entry(raw, allow_children=True, where=path.name)
+        for raw in data["classes"]
+    ]
+    seen: set[str] = set()
+    for entry in _flatten_classes(tree):
+        if entry["id"] in seen:
+            raise CatalogError(f"{path.name}: duplicate class id {entry['id']}")
+        seen.add(entry["id"])
+    return tree
+
+
+def read_example(directory: Path) -> tuple[dict[str, Any], dict[str, bytes]]:
+    """Read one example directory into a catalog entry and its outputs.
+
+    Args:
+        directory: `doc/examples/<id>/`, holding at least `README.md`.
+
+    Returns:
+        The catalog entry and its output files, by path relative to the
+        example directory.
+
+    Raises:
+        CatalogError: If the ID, configuration, or labels are invalid.
+    """
+    example_id = directory.name
+    if not ID_PATTERN.match(example_id):
+        raise CatalogError(f"example directory name must be kebab-case: {example_id}")
+    readme = (directory / "README.md").read_text(encoding="utf-8")
+
+    # The configuration is optional (an example reproduced by a script
+    # has none); its labels, when present, win over the README.
+    config_path = directory / "config.yaml"
+    config_text: str | None = None
+    configuration: Mapping[str, Any] = {}
+    if config_path.is_file():
+        config_text = config_path.read_text(encoding="utf-8")
+        parsed = yaml.safe_load(config_text)
+        if not isinstance(parsed, Mapping):
+            raise CatalogError(f"example {example_id}: config.yaml must be a mapping")
+        configuration = parsed
+
+    paragraphs = _paragraphs(readme)
+    name = _label(configuration, "name", example_id) or _first_heading(readme)
+    description = _label(configuration, "description", example_id) or (
+        paragraphs[0] if paragraphs else ""
+    )
+    class_id = _label(configuration, "class", example_id) or UNCLASSIFIED_CLASS["id"]
+    if not name:
+        raise CatalogError(f"example {example_id}: no name label and no README heading")
+
+    files = _output_files(directory)
+    entry = {
+        "id": example_id,
+        "name": name,
+        "description": description,
+        "class": class_id,
+        "readme": readme,
+        "readme_excerpt": _excerpt(readme, description),
+        "config_yaml": config_text,
+        "outputs": sorted(files),
+    }
+    return entry, files
+
+
+def stale_paths(bundle_dir: Path, files: Mapping[str, bytes]) -> list[str]:
+    """Return every bundle path that is missing, different, or extra.
+
+    Args:
+        bundle_dir: The committed bundle directory.
+        files: What the bundle should hold (`bundle_files`).
+
+    Returns:
+        Sorted bundle-relative paths; empty when the bundle is current.
+    """
+    stale = {
+        relative
+        for relative, content in files.items()
+        if not (bundle_dir / relative).is_file()
+        or (bundle_dir / relative).read_bytes() != content
+    }
+    if bundle_dir.is_dir():
+        for path in bundle_dir.rglob("*"):
+            relative = path.relative_to(bundle_dir).as_posix()
+            if path.is_file() and relative not in files:
+                stale.add(relative)
+    return sorted(stale)
+
+
+def write_bundle(bundle_dir: Path, files: Mapping[str, bytes]) -> None:
+    """Make `bundle_dir` hold exactly `files`, removing anything else.
+
+    The bundle directory is generated and owned by this script, so a
+    file it no longer lists (a removed example's output) is deleted.
+    """
+    bundle_dir.mkdir(parents=True, exist_ok=True)
+    for path in sorted(bundle_dir.rglob("*"), reverse=True):
+        relative = path.relative_to(bundle_dir).as_posix()
+        if path.is_file() and relative not in files:
+            path.unlink()
+        elif path.is_dir() and not any(path.iterdir()):
+            path.rmdir()
+    for relative, content in files.items():
+        target = bundle_dir / relative
+        target.parent.mkdir(parents=True, exist_ok=True)
+        if not target.is_file() or target.read_bytes() != content:
+            target.write_bytes(content)
+
+
+def main(argv: Sequence[str] | None = None) -> int:
+    """Refresh the bundle, or report whether it is current.
+
+    Args:
+        argv: Command-line arguments, excluding the program name.
+
+    Returns:
+        0 when the bundle is current or was refreshed, otherwise 1.
+    """
+    parser = argparse.ArgumentParser(
+        description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
+    )
+    parser.add_argument(
+        "--check",
+        action="store_true",
+        help="report a stale bundle without changing any file",
+    )
+    args = parser.parse_args(argv)
+
+    try:
+        files = bundle_files(EXAMPLES_DIR, USAGE_PATH)
+    except (OSError, CatalogError, yaml.YAMLError) as error:
+        print(f"build-examples-catalog: {error}", file=sys.stderr)
+        return 1
+
+    stale = stale_paths(BUNDLE_DIR, files)
+    if not stale:
+        print("build-examples-catalog: the examples bundle is current")
+        return 0
+    if args.check:
+        print(
+            "build-examples-catalog: stale bundle file(s): "
+            + ", ".join(stale)
+            + "; run dev/bin/build-examples-catalog",
+            file=sys.stderr,
+        )
+        return 1
+    write_bundle(BUNDLE_DIR, files)
+    print(f"build-examples-catalog: refreshed {len(stale)} bundle file(s)")
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

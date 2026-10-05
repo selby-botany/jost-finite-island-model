@@ -5,6 +5,7 @@
   - [At a glance](#at-a-glance)
   - [`benchmark-engines`](#benchmark-engines)
   - [`benchmark-queue`](#benchmark-queue)
+  - [`build-examples-catalog`](#build-examples-catalog)
   - [`calibrate-auto-threshold`](#calibrate-auto-threshold)
   - [`calibrate-statistical-bands`](#calibrate-statistical-bands)
   - [`check-doc-links`](#check-doc-links)
@@ -19,7 +20,7 @@
   - [`validate-repository`](#validate-repository)
   - [Related documents](#related-documents)
 
-These fourteen commands keep the project trustworthy: they make sure the
+These fifteen commands keep the project trustworthy: they make sure the
 documentation you read matches the code that actually runs, that a
 release's own history is recorded accurately, and that no credential or
 badly formed file ever gets committed. None of them run a simulation --
@@ -67,6 +68,7 @@ run by hand.
 |---|---|
 | [`benchmark-engines`](#benchmark-engines) | Times how long each `engine_backend` choice takes as one setting (deme count, population size, mutation/migration rate, locus length) sweeps across a range, so a choice between them can be made from evidence instead of a guess |
 | [`benchmark-queue`](#benchmark-queue) | Runs a list of `benchmark-engines` (or any other) commands one after another, each one waiting for the machine to be quiet first, so several sweeps can be queued up and left running for hours without their own timing numbers contaminating each other |
+| [`build-examples-catalog`](#build-examples-catalog) | Rebuilds the desktop app's bundled list of examples (`src/fim/gui/webui/examples/`) from `doc/examples/`, so the Examples dialog shows exactly the examples, classes, and explanations the repository holds |
 | [`calibrate-auto-threshold`](#calibrate-auto-threshold) | Measures, on your own machine, the deme count above which `engine_backend: auto` should switch engines — the shipped default was measured on a different machine and this project's own history has already found it can go stale |
 | [`calibrate-statistical-bands`](#calibrate-statistical-bands) | Re-measures how much random variation is normal for the three published-science validation scenarios, so the tests that check the simulator against them use an honest, evidence-based tolerance |
 | [`check-doc-links`](#check-doc-links) | Confirms every link between documentation pages actually goes somewhere, and that no page is orphaned with nothing linking to it |
@@ -270,6 +272,41 @@ seconds`, `--idle-max-wait-seconds`, `--default-timeout-seconds`,
 `--stop-on-failure`) always overrides whatever the queue file's own
 `settings` says, for the one time you want to override a shared file
 without editing it.
+
+## `build-examples-catalog`
+
+**What it does:** Reads every example directory under `doc/examples/`
+(one directory with a `README.md` is one example) and the class list in
+`doc/examples/classes.yaml`, and writes the desktop app's bundled copy:
+`src/fim/gui/webui/examples/catalog.json`, plus a copy of each example's
+committed output files (`manifest.json`, `report.json`, `summary.json`,
+and each replicate's `manifest.json`/`report.json`; never a trajectory).
+
+**Why it matters:** The packaged app carries only `src/fim/gui/webui/`,
+not `doc/`. The Examples dialog reads this catalog, so it must match the
+examples in the repository. An example's `config.yaml` may give its
+`name`, `description`, and `class`; when it does not, the name is the
+README's first heading, the description is the README's first paragraph,
+and the class is "Unclassified", listed last. When `classes.yaml` is
+absent, every example must be unclassified. An unknown class, a class
+with no examples, or a malformed class list stops the build with a
+message that names the problem.
+
+**When to run it:** You rarely need to. The pre-commit hook runs it
+whenever a file under `doc/examples/`, `doc/usage.md` (which sets the
+order of the examples), or the script itself is staged, and stages the
+result. `test/test_examples_catalog.py` fails if the committed bundle is
+stale.
+
+**Usage:**
+
+```console
+dev/bin/build-examples-catalog
+dev/bin/build-examples-catalog --check
+```
+
+The default command refreshes the bundle and removes files it no longer
+lists. `--check` reports stale bundle files without changing anything.
 
 ## `calibrate-auto-threshold`
 

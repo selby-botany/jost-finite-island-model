@@ -40,13 +40,13 @@ def test_calibration_script_is_not_wired_into_the_deterministic_gate() -> None:
     assert (
         "ruff check src test dev/lib \\\n"
         "        dev/bin/check-doc-links dev/bin/check-webui-assets \\\n"
-        "        dev/bin/extract-release-notes \\\n"
+        "        dev/bin/build-examples-catalog dev/bin/extract-release-notes \\\n"
         "        dev/bin/calibrate-statistical-bands dev/bin/generate-help-html\n"
     ) in build_script
     assert (
         "ruff format --check src test dev/lib \\\n"
         "        dev/bin/check-doc-links dev/bin/check-webui-assets \\\n"
-        "        dev/bin/extract-release-notes \\\n"
+        "        dev/bin/build-examples-catalog dev/bin/extract-release-notes \\\n"
         "        dev/bin/calibrate-statistical-bands dev/bin/generate-help-html\n"
     ) in build_script
     assert "run dev/bin/calibrate-statistical-bands" not in build_script

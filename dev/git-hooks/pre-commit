@@ -93,6 +93,27 @@ if "${help_sources_staged}"; then
     fi
 fi
 
+# Rebuild the desktop app's bundled examples catalog
+# (`src/fim/gui/webui/examples/`) whenever an example, the usage guide
+# (it sets the examples' order), or the generator itself is staged --
+# the same freshness discipline as the worked-example refresh above
+# (design doc
+# `20261005-claude-opus-5-5-read-only-examples-and-classes-design.md`
+# §4.1). `git add --all` also stages a removed example's deleted files.
+catalog_sources_staged=false
+while IFS= read -r -d '' path; do
+    case "${path}" in
+        doc/examples/* | doc/usage.md | dev/bin/build-examples-catalog)
+            catalog_sources_staged=true
+            ;;
+    esac
+done < <(git diff --cached --name-only --diff-filter=ACMRD -z)
+
+if "${catalog_sources_staged}"; then
+    dev/bin/build-examples-catalog
+    git add --all -- src/fim/gui/webui/examples
+fi
+
 # Reject newly added filenames that are not portable across supported systems.
 ascii_check='import sys; data = sys.stdin.buffer.read().split(b"\0"); raise SystemExit(any(name and not name.isascii() for name in data))'
 if ! git diff --cached --name-only --diff-filter=A -z \

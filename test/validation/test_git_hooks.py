@@ -251,6 +251,64 @@ def test_pre_commit_refreshes_test_docs_only_for_staged_test_files(
     assert _git(tmp_path, "show", ":test/TESTS.md").stdout == "generated\n"
 
 
+def test_pre_commit_rebuilds_the_examples_catalog_only_for_example_changes(
+    tmp_path: Path,
+) -> None:
+    """The examples bundle is rebuilt and staged when an example changes.
+
+    A stub generator stands in for `dev/bin/build-examples-catalog`: it
+    rewrites the catalog and deletes a stale output file, so this also
+    proves the hook stages deletions inside the bundle. A change outside
+    `doc/examples/` leaves the bundle alone.
+    """
+    _initialize_repo(tmp_path)
+    readme = tmp_path / "README.md"
+    readme.write_text("# Initial\n", encoding="utf-8")
+    example = tmp_path / "doc" / "examples" / "alpha" / "README.md"
+    example.parent.mkdir(parents=True)
+    example.write_text("# Alpha\n", encoding="utf-8")
+    bundle = tmp_path / "src" / "fim" / "gui" / "webui" / "examples"
+    (bundle / "gone").mkdir(parents=True)
+    (bundle / "catalog.json").write_text("old\n", encoding="utf-8")
+    (bundle / "gone" / "report.json").write_text("{}\n", encoding="utf-8")
+    generator = tmp_path / "dev" / "bin" / "build-examples-catalog"
+    generator.parent.mkdir(parents=True)
+    generator.write_text(
+        "#!/usr/bin/env bash\n"
+        "bundle=src/fim/gui/webui/examples\n"
+        "printf 'generated\\n' > \"${bundle}/catalog.json\"\n"
+        'rm -rf -- "${bundle}/gone"\n',
+        encoding="utf-8",
+    )
+    generator.chmod(0o755)
+    tools = tmp_path / "tools"
+    path = _tool_path(tools, "bash", "git", "grep", "python3", "rm")
+    env = {**os.environ, "PATH": path}
+
+    _git(tmp_path, "add", ".")
+    _git(tmp_path, "commit", "--quiet", "-m", "test: create fixture")
+
+    readme.write_text("# Documentation only\n", encoding="utf-8")
+    _git(tmp_path, "add", readme.name)
+    docs_result = _run_hook(tmp_path, "pre-commit", env=env)
+
+    assert docs_result.returncode == 0, docs_result.stderr
+    assert _git(tmp_path, "diff", "--cached", "--name-only").stdout == "README.md\n"
+
+    _git(tmp_path, "commit", "--quiet", "-m", "docs: unrelated change")
+    example.write_text("# Alpha, revised\n", encoding="utf-8")
+    _git(tmp_path, "add", "doc/examples/alpha/README.md")
+    example_result = _run_hook(tmp_path, "pre-commit", env=env)
+
+    assert example_result.returncode == 0, example_result.stderr
+    staged = _git(tmp_path, "diff", "--cached", "--name-status").stdout.splitlines()
+    assert sorted(staged) == [
+        "D\tsrc/fim/gui/webui/examples/gone/report.json",
+        "M\tdoc/examples/alpha/README.md",
+        "M\tsrc/fim/gui/webui/examples/catalog.json",
+    ]
+
+
 def test_pre_commit_rejects_new_non_ascii_filename(tmp_path: Path) -> None:
     """A newly added filename outside ASCII fails before commit."""
     _initialize_repo(tmp_path)

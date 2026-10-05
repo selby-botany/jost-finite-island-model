@@ -1,0 +1,199 @@
+{
+  "artifacts": {
+    "convergence": {
+      "bytes": 35000280,
+      "sha256": "92ca9687c6d15bc842ea7b9f6b908d3e16f8fa85a1446dd6107f838a47b3710f"
+    },
+    "pairwise": {
+      "bytes": 808,
+      "sha256": "e51a051104302f0d6219b295c83917fa5aeaa376c9e13d913d4df88b190d8214"
+    },
+    "report": {
+      "bytes": 2301,
+      "sha256": "629932ebd3d1f65e4d973c446a95a8f44566da6ce5921a52f20adc33e0a94e51"
+    },
+    "scatter": {
+      "bytes": 218060,
+      "sha256": "cb2f1fd3e1340fe9da97e165dfa871939f79b3ea0398be43c5dcadda010a0f07"
+    },
+    "trajectory": {
+      "bytes": 4804262406,
+      "sha256": "de8f95eed3925e37098c5639131c4b1c3dc08f3cc2ec6e2a185936f5890937ee"
+    }
+  },
+  "auto_derived": [
+    "convergence_window",
+    "max_generations"
+  ],
+  "convergence": {
+    "converged": false,
+    "generation": 295390,
+    "generation_count": 295391,
+    "reason": "hit the cap",
+    "statistic": "D"
+  },
+  "ended_at": "2026-10-03T23:39:27.171535Z",
+  "engine_backend": "lineal",
+  "equilibrium_final_heterozygosity": null,
+  "equilibrium_generation_count": null,
+  "initial_condition_mode": "dirichlet",
+  "jit": "off",
+  "parameters": {
+    "N": 100,
+    "auto_vector_max_capacity": 4096,
+    "auto_vector_min_d": 2,
+    "convergence_combinator": "all",
+    "convergence_statistic": "D",
+    "convergence_tolerance": 0.01,
+    "convergence_window": 59078,
+    "d": 5,
+    "deme_weighting": "size",
+    "engine_backend": "lineal",
+    "initial_allele_count": 2,
+    "initial_concentration": 1.0,
+    "jit": "off",
+    "loci": [
+      {
+        "length": 200,
+        "locus_id": 1
+      },
+      {
+        "length": 200,
+        "locus_id": 2
+      },
+      {
+        "length": 200,
+        "locus_id": 3
+      },
+      {
+        "length": 200,
+        "locus_id": 4
+      },
+      {
+        "length": 200,
+        "locus_id": 5
+      },
+      {
+        "length": 200,
+        "locus_id": 6
+      },
+      {
+        "length": 200,
+        "locus_id": 7
+      },
+      {
+        "length": 200,
+        "locus_id": 8
+      },
+      {
+        "length": 200,
+        "locus_id": 9
+      },
+      {
+        "length": 200,
+        "locus_id": 10
+      },
+      {
+        "length": 200,
+        "locus_id": 11
+      },
+      {
+        "length": 200,
+        "locus_id": 12
+      },
+      {
+        "length": 200,
+        "locus_id": 13
+      },
+      {
+        "length": 200,
+        "locus_id": 14
+      },
+      {
+        "length": 200,
+        "locus_id": 15
+      },
+      {
+        "length": 200,
+        "locus_id": 16
+      },
+      {
+        "length": 200,
+        "locus_id": 17
+      },
+      {
+        "length": 200,
+        "locus_id": 18
+      },
+      {
+        "length": 200,
+        "locus_id": 19
+      },
+      {
+        "length": 200,
+        "locus_id": 20
+      },
+      {
+        "length": 200,
+        "locus_id": 21
+      },
+      {
+        "length": 200,
+        "locus_id": 22
+      },
+      {
+        "length": 200,
+        "locus_id": 23
+      },
+      {
+        "length": 200,
+        "locus_id": 24
+      },
+      {
+        "length": 200,
+        "locus_id": 25
+      },
+      {
+        "length": 200,
+        "locus_id": 26
+      },
+      {
+        "length": 200,
+        "locus_id": 27
+      },
+      {
+        "length": 200,
+        "locus_id": 28
+      },
+      {
+        "length": 200,
+        "locus_id": 29
+      },
+      {
+        "length": 200,
+        "locus_id": 30
+      }
+    ],
+    "locus_aggregation": "ratio_of_means",
+    "m": 0.0001,
+    "max_generations": 295390,
+    "migrant_sampling": "continuous",
+    "mu": 1e-06,
+    "mutation_model": "infinite_alleles",
+    "n_replicates": 1,
+    "ploidy": "haploid",
+    "replicate_confidence": 0.95,
+    "replicate_minimum": 10,
+    "replicate_tolerance": 0.01,
+    "seed": 20260825,
+    "track_expensive_statistics": false
+  },
+  "relaxation_time": 19692.603266090297,
+  "run_id": "run-e7c2aea7e25397fe",
+  "schema_version": 3,
+  "sigma_band": null,
+  "sigma_band_multiplier": null,
+  "sigma_band_window": null,
+  "software_version": "1.2.0",
+  "started_at": "2026-10-03T23:16:42.266634Z"
+}

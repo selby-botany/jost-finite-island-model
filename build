@@ -146,11 +146,11 @@ fi
 if "${run_lint}"; then
     run "${python}" -m ruff check src test dev/lib \
         dev/bin/check-doc-links dev/bin/check-webui-assets \
-        dev/bin/extract-release-notes \
+        dev/bin/build-examples-catalog dev/bin/extract-release-notes \
         dev/bin/calibrate-statistical-bands dev/bin/generate-help-html
     run "${python}" -m ruff format --check src test dev/lib \
         dev/bin/check-doc-links dev/bin/check-webui-assets \
-        dev/bin/extract-release-notes \
+        dev/bin/build-examples-catalog dev/bin/extract-release-notes \
         dev/bin/calibrate-statistical-bands dev/bin/generate-help-html
 fi
 
