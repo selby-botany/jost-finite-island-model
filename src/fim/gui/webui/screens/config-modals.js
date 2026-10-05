@@ -178,6 +178,13 @@ function markTabError(tab, field) {
  * owns `runButton`/`runReason` themselves -- both classic scripts on
  * the same page share one global scope, so referencing them here by
  * bare name needs no import).
+ *
+ * `window.__fimValidationPending` counts these calls until each has
+ * applied its result, so anything that needs the button's settled state
+ * (a test, most concretely) waits for zero rather than for the parameter
+ * strip, which updates before the bridge call even starts. A counter,
+ * not a flag, for the same reason as `__fimScrubberPending`: edits in
+ * quick succession overlap.
  */
 async function revalidate() {
     clearTabErrorDots();
@@ -188,20 +195,26 @@ async function revalidate() {
     // while a user is mid-edit, exactly the "lost track of what I set"
     // complaint the strip exists to fix.
     window.fim.updateParameterStrip(values);
-    const result = await window.pywebview.api.validate_form(values);
-    if (result.ok) {
-        runButton.disabled = false;
-        // A valid form with a derived convergence window says how long the
-        // run is expected to take, so a run of tens of thousands of
-        // generations is never a surprise; empty when both were explicit.
-        runReason.textContent = result.note || "";
+    window.__fimValidationPending = (window.__fimValidationPending || 0) + 1;
+    try {
+        const result = await window.pywebview.api.validate_form(values);
+        if (result.ok) {
+            runButton.disabled = false;
+            // A valid form with a derived convergence window says how long
+            // the run is expected to take, so a run of tens of thousands of
+            // generations is never a surprise; empty when both were
+            // explicit.
+            runReason.textContent = result.note || "";
+            return result;
+        }
+        runButton.disabled = true;
+        const location = result.field ? ` (${result.field})` : "";
+        runReason.textContent = `${result.message}${location}`;
+        markTabError(result.tab, result.field);
         return result;
+    } finally {
+        window.__fimValidationPending -= 1;
     }
-    runButton.disabled = true;
-    const location = result.field ? ` (${result.field})` : "";
-    runReason.textContent = `${result.message}${location}`;
-    markTabError(result.tab, result.field);
-    return result;
 }
 
 /**

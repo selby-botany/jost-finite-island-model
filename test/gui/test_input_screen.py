@@ -169,13 +169,18 @@ def test_ask_me_each_time_blocks_run_until_a_ploidy_is_chosen(
         read=(
             "({before: window.__fimBefore, "
             "disabled: document.getElementById('run-button').disabled, "
-            "strip: document.getElementById('parameter-strip-N').textContent})"
+            "strip: document.getElementById('parameter-strip-N').textContent, "
+            "pending: window.__fimValidationPending || 0})"
         ),
         ready=_INPUT_SCREEN_READY,
+        # The strip changes before the validation that re-enables Run has
+        # even started, so it alone is not a settled state: under load the
+        # button was still read disabled. Wait for the validation too.
         is_ready=lambda value: (
             value is not None
             and value["before"] is not None
             and value["strip"] == "225 diploid"
+            and value["pending"] == 0
         ),
     )
 
