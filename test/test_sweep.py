@@ -13,6 +13,8 @@ from fim.sweep import (
     SweepSpec,
     enumerate_points,
     expand_axis,
+    point_run_description,
+    point_run_name,
     spec_from_config,
     work_estimate,
 )
@@ -351,3 +353,25 @@ def test_a_point_with_no_relaxation_time_is_invalid_not_fatal() -> None:
 
     assert len(plan.points) == 1
     assert "cannot derive convergence_window" in plan.invalid[0].reason
+
+
+def test_a_point_run_name_is_the_study_name_and_its_coordinates() -> None:
+    """The name tells a point's run apart from its siblings."""
+    spec = _spec(expand_axis("N", [10, 20]), expand_axis("m", [0.01, 0.1]))
+    point = enumerate_points(spec).points[3]
+
+    assert point_run_name("Island size", point) == "Island size sweep N=20, m=0.1"
+
+
+def test_a_point_run_description_places_it_in_its_sweep() -> None:
+    """A long axis is summarized as a range; a short one is listed."""
+    spec = _spec(
+        expand_axis("N", [10, 20, 40, 80]), expand_axis("topology", ["island", "ring"])
+    )
+    plan = enumerate_points(spec)
+    point = plan.points[5]
+
+    assert point_run_description("Size", spec, point, 6, len(plan.points)) == (
+        'Point 6 of 8 of the sweep "Size": N=40 of N=[10..80] (4 values); '
+        "topology=ring of topology=[island, ring]."
+    )

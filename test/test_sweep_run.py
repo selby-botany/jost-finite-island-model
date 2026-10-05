@@ -19,6 +19,7 @@ import pytest
 from fim import paths
 from fim.model.params import SimulationParams
 from fim.persistence import groups
+from fim.persistence.run_metadata import read_run_metadata, run_metadata_path
 from fim.reproducibility import compare_runs
 from fim.sweep import SweepSpec, enumerate_points, expand_axis
 from fim.sweep_run import (
@@ -604,3 +605,68 @@ def test_run_directories_are_reserved_so_two_points_never_share_a_name(
     assert first != second
     assert first_marker.is_dir() and second_marker.is_dir()
     assert first.parent == results
+
+
+def _names_by_coordinate(study_id: str) -> dict[int, tuple[str | None, str | None]]:
+    """Return each member run's metadata name and description, by its `d`."""
+    study = groups.get_study(study_id)
+    d_by_run_id = {
+        point["run_id"]: point["coordinates"]["d"] for point in stored_points(study)
+    }
+    found: dict[int, tuple[str | None, str | None]] = {}
+    for directory in groups.study_run_directories(study):
+        metadata = read_run_metadata(run_metadata_path(directory))
+        found[d_by_run_id[groups.run_id_of(directory)]] = (
+            metadata.name,
+            metadata.description,
+        )
+    return found
+
+
+def test_each_point_run_is_named_after_its_study_and_coordinates(
+    results: Path,
+) -> None:
+    """A sweep's runs say which sweep and which point they are."""
+    study_id = _study(results, 2, 3)
+
+    _run(study_id, points_at_once=1)
+
+    assert _names_by_coordinate(study_id) == {
+        2: (
+            "Test sweep sweep d=2",
+            'Point 1 of 2 of the sweep "Test sweep": d=2 of d=[2, 3].',
+        ),
+        3: (
+            "Test sweep sweep d=3",
+            'Point 2 of 2 of the sweep "Test sweep": d=3 of d=[2, 3].',
+        ),
+    }
+
+
+def test_a_reused_run_keeps_the_name_it_already_has(results: Path) -> None:
+    """A second sweep reusing a point does not rename the first sweep's run."""
+    first = _study(results, 2)
+    _run(first)
+    second = create_sweep_study(
+        SweepSpec(base=_BASE, axes=(expand_axis("d", [2]),)),
+        enumerate_points(SweepSpec(base=_BASE, axes=(expand_axis("d", [2]),))),
+        "Another sweep",
+    ).study_id
+
+    outcome, _ = _run(second)
+
+    assert outcome.reused == 1
+    assert _names_by_coordinate(second)[2][0] == "Test sweep sweep d=2"
+
+
+def test_a_reused_run_without_a_name_is_named_by_the_sweep(results: Path) -> None:
+    """A reused run nobody named (an ordinary single run) gets the sweep's name."""
+    first = _study(results, 2)
+    _run(first)
+    for directory in groups.study_run_directories(groups.get_study(first)):
+        run_metadata_path(directory).unlink()
+    second = _study(results, 2)
+
+    _run(second)
+
+    assert _names_by_coordinate(second)[2][0] == "Test sweep sweep d=2"

@@ -41,9 +41,21 @@ from fim import __version__, paths
 from fim.model.params import SimulationParams
 from fim.persistence import groups
 from fim.persistence.groups import StudyManifest
+from fim.persistence.run_metadata import (
+    read_run_metadata,
+    replace_run_metadata,
+    run_metadata_path,
+)
 from fim.reproducibility import compare_runs
 from fim.statistics.catalog import DEFAULT_PAIRWISE_MAX_DEMES
-from fim.sweep import SweepPlan, SweepPoint, SweepSpec, enumerate_points
+from fim.sweep import (
+    SweepPlan,
+    SweepPoint,
+    SweepSpec,
+    enumerate_points,
+    point_run_description,
+    point_run_name,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -573,6 +585,11 @@ class _Context:
     # each a read-modify-write that several points in flight would race on.
     lock: threading.Lock
     finished: int = 0
+    # Name each point's run after the Study (`_name_point_run`).
+    study_name: str = ""
+    spec: SweepSpec | None = None
+    # Each planned point's 1-based place in the plan, by `run_id`.
+    positions: Mapping[str, int] | None = None
 
     def emit(
         self, kind: EventKind, point: SweepPoint, detail: object = None, *, finish: bool
@@ -681,6 +698,9 @@ def run_sweep(
         concurrency.workers_per_point,
         threading.Lock(),
         finished=tally["already_present"] + tally["skipped"],
+        study_name=study.name,
+        spec=spec,
+        positions={point.run_id: place for place, point in enumerate(planned, 1)},
     )
     cancelled = False
 
@@ -826,6 +846,7 @@ def _run_one_point(
     with context.lock:
         groups.add_run_to_study(context.study_id, result, results=context.results)
         _clear_failure(context.study_id, point.run_id, context.results)
+    _name_point_run(context, point, result)
     older = stale_member or next(
         iter(
             groups.find_stale_run_directories(
@@ -838,6 +859,41 @@ def _run_one_point(
         return _compare_with_older(context, point, older, result)
     context.emit("point_reused" if reused else "point_done", point, finish=True)
     return "reused" if reused else "done"
+
+
+def _name_point_run(context: _Context, point: SweepPoint, directory: Path) -> None:
+    """Give a sweep point's run a name and description, unless it has a name.
+
+    A run without a name is unrecognizable among hundreds of siblings,
+    so each point's run is named after its Study and its coordinates
+    (`fim.sweep.point_run_name`). A reused run that someone already
+    named keeps that name. Naming is best effort: a failure is logged,
+    never fatal to the sweep, since the run itself succeeded.
+    """
+    if context.spec is None:
+        return
+    metadata_path = run_metadata_path(directory)
+    if metadata_path.is_file():
+        try:
+            if read_run_metadata(metadata_path).name is not None:
+                return
+        except (OSError, ValueError) as error:
+            logger.debug("replacing unreadable run metadata %s: %s", directory, error)
+    positions = context.positions or {}
+    try:
+        replace_run_metadata(
+            directory,
+            name=point_run_name(context.study_name, point),
+            description=point_run_description(
+                context.study_name,
+                context.spec,
+                point,
+                positions.get(point.run_id, point.index + 1),
+                context.total,
+            ),
+        )
+    except OSError as error:
+        logger.warning("could not name sweep run %s: %s", directory, error)
 
 
 def _compare_with_older(

@@ -359,6 +359,53 @@ def work_estimate(spec: SweepSpec, plan: SweepPlan) -> dict[str, int]:
     }
 
 
+def point_run_name(study_name: str, point: SweepPoint) -> str:
+    """Return the name a sweep point's run is given: Study name plus its values.
+
+    For example `"Island size sweep N=50, m=0.01"`. The coordinates are
+    what tells one point's run from its siblings in the same Study.
+
+    Args:
+        study_name: The sweep Study's name.
+        point: The point the run computes.
+
+    Returns:
+        The run name.
+    """
+    coordinates = ", ".join(
+        f"{key}={_format_coordinate(value)}" for key, value in point.coordinates.items()
+    )
+    return f"{study_name} sweep {coordinates}"
+
+
+def point_run_description(
+    study_name: str, spec: SweepSpec, point: SweepPoint, position: int, total: int
+) -> str:
+    """Return the description a sweep point's run is given.
+
+    Says which sweep the run belongs to, where it sits in that sweep,
+    and what every axis ranges over, so a run met on its own (in a
+    Study it was copied into, say) still explains itself.
+
+    Args:
+        study_name: The sweep Study's name.
+        spec: The sweep specification, for the axis ranges.
+        point: The point the run computes.
+        position: The point's 1-based place among the planned points.
+        total: How many points are planned.
+
+    Returns:
+        One sentence, for example `'Point 3 of 8 of the sweep "Island
+        size": N=50 of N=[5..2500] (4 values); m=0.01 of m=[0.01, 0.1].'`.
+    """
+    axes = "; ".join(
+        f"{axis.key}={_format_coordinate(point.coordinates[axis.key])} of "
+        f"{axis.key}={_format_axis_values(axis.values)}"
+        for axis in spec.axes
+    )
+    return f'Point {position} of {total} of the sweep "{study_name}": {axes}.'
+
+
 def expand_axis(key: str, definition: object) -> SweepAxis:
     """Build an axis from a list of values or a `{start, stop, count}` range.
 
@@ -513,6 +560,31 @@ def _check_bounds(sweepable: SweepKey, number: float) -> None:
         raise ValueError(f"{sweepable.key} must be at least {sweepable.minimum:g}")
     if sweepable.maximum is not None and number > sweepable.maximum:
         raise ValueError(f"{sweepable.key} must be at most {sweepable.maximum:g}")
+
+
+# An axis with at most this many values names them all in a run's
+# description; a longer one is summarized as a range.
+_AXIS_VALUES_LISTED: Final = 3
+
+
+def _format_axis_values(values: Sequence[CoordinateValue]) -> str:
+    """Return an axis's values compactly: all of them when few, else a range.
+
+    Up to three values are listed (`[0.01, 0.1]`); more are shown as
+    their first and last with a count (`[5..2500] (8 values)`).
+    """
+    if len(values) <= _AXIS_VALUES_LISTED:
+        return "[" + ", ".join(_format_coordinate(value) for value in values) + "]"
+    first = _format_coordinate(values[0])
+    last = _format_coordinate(values[-1])
+    return f"[{first}..{last}] ({len(values)} values)"
+
+
+def _format_coordinate(value: CoordinateValue) -> str:
+    """Return one coordinate value as short text (`0.01`, `50`, `ring`)."""
+    if isinstance(value, float):
+        return f"{value:g}"
+    return str(value)
 
 
 def _integer_setting(mapping: Mapping[str, Any], key: str) -> int:
