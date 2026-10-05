@@ -1191,6 +1191,21 @@ Uncommitted local changes get a `-dirty` marker on the label.
 So two windows on the same commit, one with in-progress edits, are
 still distinguishable — not just two windows on different commits.
 
+<a id="test.test_metadata.test_dirty_check_never_takes_the_index_lock"></a>
+
+#### test\_dirty\_check\_never\_takes\_the\_index\_lock
+
+```python
+def test_dirty_check_never_takes_the_index_lock(
+        tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None
+```
+
+`git status` runs with `--no-optional-locks`, so it only reads.
+
+It runs at every `import fim` under a short timeout; a plain `git
+status` killed by that timeout mid-refresh leaves `.git/index.lock`
+behind and blocks the next commit.
+
 <a id="test.test_metadata.test_dev_commit_suffix_is_none_without_a_git_directory"></a>
 
 #### test\_dev\_commit\_suffix\_is\_none\_without\_a\_git\_directory

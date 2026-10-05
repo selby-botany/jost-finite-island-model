@@ -90,7 +90,7 @@ def _stub_git_run(
     """
 
     def _run(command: list[str], **_kwargs: object) -> subprocess.CompletedProcess[str]:
-        subcommand = command[1]
+        subcommand = next(part for part in command[1:] if not part.startswith("-"))
         if subcommand == raise_on:
             raise FileNotFoundError("git not found")
         stdout = rev_parse_stdout if subcommand == "rev-parse" else status_stdout
@@ -127,6 +127,30 @@ def test_dev_commit_suffix_flags_an_uncommitted_working_tree(
     )
 
     assert fim._dev_commit_suffix(tmp_path) == "1fbfb4e-dirty"
+
+
+def test_dirty_check_never_takes_the_index_lock(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """`git status` runs with `--no-optional-locks`, so it only reads.
+
+    It runs at every `import fim` under a short timeout; a plain `git
+    status` killed by that timeout mid-refresh leaves `.git/index.lock`
+    behind and blocks the next commit.
+    """
+    commands: list[list[str]] = []
+
+    def _record(
+        command: list[str], **_kwargs: object
+    ) -> subprocess.CompletedProcess[str]:
+        commands.append(command)
+        return subprocess.CompletedProcess(command, 0, stdout="", stderr="")
+
+    monkeypatch.setattr(subprocess, "run", _record)
+
+    assert fim._dev_checkout_is_dirty(tmp_path) is False
+    assert commands == [["git", "--no-optional-locks", "status", "--porcelain"]]
 
 
 def test_dev_commit_suffix_is_none_without_a_git_directory(tmp_path: Path) -> None:

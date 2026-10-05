@@ -70,10 +70,19 @@ def _dev_checkout_is_dirty(repo_root: Path) -> bool:
     a hung/slow filesystem) is treated as "not dirty" rather than
     raised, since this is purely cosmetic disambiguation text and must
     never be allowed to break `fim`/`fim-gui` startup.
+
+    `--no-optional-locks`: a plain `git status` refreshes the index when
+    file timestamps have changed, holding `.git/index.lock` while it
+    does. This runs at every `import fim`, and the timeout below kills a
+    slow `git status` outright, which leaves that lock file behind and
+    makes the developer's next `git commit` fail with "index.lock: File
+    exists". It happened twice in one session while parallel test
+    workers imported `fim` together. Without the optional lock, `git
+    status` only reads.
     """
     try:
         result = subprocess.run(
-            ["git", "status", "--porcelain"],
+            ["git", "--no-optional-locks", "status", "--porcelain"],
             cwd=repo_root,
             capture_output=True,
             text=True,
