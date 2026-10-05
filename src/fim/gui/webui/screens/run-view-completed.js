@@ -698,6 +698,23 @@ let completedEstimateSource = null;
 let completedConvergenceWindow = null;
 
 /**
+ * The completed run's averaging settings for the trajectory graph
+ * (`renderTrajectory`'s `averaging`): its convergence window, and where
+ * its monitor began averaging each statistic it grew a window for.
+ *
+ * @returns {{window: number, anchors: Object<string, number>}|null}
+ */
+function completedAveraging() {
+    if (completedConvergenceWindow === null) {
+        return null;
+    }
+    return {
+        window: completedConvergenceWindow,
+        anchors: completedEstimateSource ? completedEstimateSource.anchors : {},
+    };
+}
+
+/**
  * The completed run's tooltip clauses for one statistic: its window
  * estimate, then its comparison with the prediction.
  *
@@ -829,21 +846,26 @@ function trailingWindowStart(generations, index, window) {
 }
 
 /**
- * Each generation's trailing mean over the convergence window, with a
- * band of `TRAILING_MEAN_BAND_STANDARD_ERRORS` standard errors either
- * side (`trailingWindowEstimate`).
+ * Each generation's mean over a window that ends there, with a band of
+ * `TRAILING_MEAN_BAND_STANDARD_ERRORS` standard errors either side
+ * (`trailingWindowEstimate`).
  *
- * The trajectory graph's "trailing mean" display. Generations whose
- * window holds fewer than `MINIMUM_WINDOW_ESTIMATE_POINTS` points are
- * `NaN`, so the curve starts once there is enough to average.
+ * Shared by the trajectory graph's two averaged displays, which differ
+ * only in where each generation's window starts (`startFor`).
+ * Generations with no window, or one holding fewer than
+ * `MINIMUM_WINDOW_ESTIMATE_POINTS` points, are `NaN`, so a curve starts
+ * once there is enough to average.
  *
- * @param {number[]} generations ascending.
- * @param {number[]} values aligned with `generations`.
- * @param {number} window in generations.
- * @returns {{mean: number[], low: number[], high: number[]}|null} `null`
- *     when `values` holds a value that is not finite.
+ * @param {number[]} values
+ * @param {function(number): (number|null)} startFor the first index of
+ *     the window ending at an index, or `null` for no window; called once
+ *     per index, in order.
+ * @returns {{mean: number[], low: number[], high: number[], count:
+ *     number[]}|null} per index, the mean, the band, and how many points
+ *     it averages (0 where `NaN`); `null` when `values` holds a value that
+ *     is not finite.
  */
-function trailingMeanSeries(generations, values, window) {
+function averagedSeries(values, startFor) {
     const sums = windowSums(values);
     if (!sums) {
         return null;
@@ -851,52 +873,177 @@ function trailingMeanSeries(generations, values, window) {
     const mean = [];
     const low = [];
     const high = [];
-    let start = 0;
+    const count = [];
     for (let index = 0; index < values.length; index += 1) {
-        while (generations[index] - generations[start] >= window) {
-            start += 1;
-        }
-        const estimate = trailingWindowEstimate(sums, start, index);
+        const start = startFor(index);
+        const estimate =
+            start === null || start > index
+                ? null
+                : trailingWindowEstimate(sums, start, index);
         if (estimate === null) {
             mean.push(NaN);
             low.push(NaN);
             high.push(NaN);
+            count.push(0);
             continue;
         }
         const halfWidth = TRAILING_MEAN_BAND_STANDARD_ERRORS * estimate.standardError;
         mean.push(estimate.mean);
         low.push(estimate.mean - halfWidth);
         high.push(estimate.mean + halfWidth);
+        count.push(estimate.count);
     }
-    return { mean, low, high };
+    return { mean, low, high, count };
 }
 
-// `trailingMeanSeries` results by the history array they came from, so a
-// scrub tick or a legend click does not recompute a 100,000-generation
-// curve. A live run's arrays grow in place, so the length is checked too.
-const trailingMeanCache = new WeakMap();
+/**
+ * Each generation's trailing mean over the convergence window
+ * (`averagedSeries`): the "trailing mean" display.
+ *
+ * @param {number[]} generations ascending.
+ * @param {number[]} values aligned with `generations`.
+ * @param {number} window in generations.
+ * @returns {{mean: number[], low: number[], high: number[], count:
+ *     number[]}|null}
+ */
+function trailingMeanSeries(generations, values, window) {
+    let start = 0;
+    return averagedSeries(values, (index) => {
+        while (generations[index] - generations[start] >= window) {
+            start += 1;
+        }
+        return start;
+    });
+}
 
 /**
- * `trailingMeanSeries`, memoized per history array, length and window.
+ * Each generation's mean over everything from `start` up to it
+ * (`averagedSeries`): the "cumulative mean" display, whose last point is
+ * the run's own estimate when `start` is where the monitor began
+ * averaging.
  *
+ * @param {number[]} values
+ * @param {number} start the first index averaged; earlier ones are `NaN`.
+ * @returns {{mean: number[], low: number[], high: number[], count:
+ *     number[]}|null}
+ */
+function cumulativeMeanSeries(values, start) {
+    return averagedSeries(values, () => start);
+}
+
+/**
+ * The first index whose generation is at least `generation`, or
+ * `generations.length` when there is none.
+ *
+ * @param {number[]} generations ascending.
+ * @param {number} generation
+ * @returns {number}
+ */
+function firstIndexAtOrAfter(generations, generation) {
+    let low = 0;
+    let high = generations.length;
+    while (low < high) {
+        const middle = Math.floor((low + high) / 2);
+        if (generations[middle] >= generation) {
+            high = middle;
+        } else {
+            low = middle + 1;
+        }
+    }
+    return low;
+}
+
+/**
+ * Where the "cumulative mean" display starts averaging one statistic.
+ *
+ * Where the convergence monitor began averaging it, when a finished
+ * run's report says so (`evidenceWindowAnchors`), so the curve ends on
+ * the run's own estimate; otherwise after a burn-in of one convergence
+ * window (three relaxation times by default), which is about where the
+ * monitor begins (its first check needs a full window).
+ *
+ * @param {number[]} generations ascending.
+ * @param {string} name
+ * @param {{window: number, anchors: Object<string, number>}} averaging
+ * @returns {number|null} the first index averaged, or `null` when the run
+ *     has not yet passed the burn-in.
+ */
+function cumulativeStart(generations, name, averaging) {
+    const anchor = averaging.anchors ? averaging.anchors[name] : undefined;
+    if (anchor !== undefined) {
+        return anchor;
+    }
+    const start = firstIndexAtOrAfter(generations, generations[0] + averaging.window);
+    return start < generations.length ? start : null;
+}
+
+// Averaged series by the history array they came from, then by display
+// and window, so a scrub tick or a legend click does not recompute a
+// 100,000-generation curve. A live run's arrays grow in place, so the
+// length is checked too.
+const averagedSeriesCache = new WeakMap();
+
+/**
+ * `compute()`, memoized per history array, its length, the generations
+ * it is plotted against, and `key`.
+ *
+ * @param {string} key the display and its window or start.
  * @param {number[]} generations
  * @param {number[]} values
- * @param {number} window
- * @returns {{mean: number[], low: number[], high: number[]}|null}
+ * @param {function(): (object|null)} compute
+ * @returns {object|null}
  */
-function cachedTrailingMeanSeries(generations, values, window) {
-    const cached = trailingMeanCache.get(values);
-    if (
-        cached &&
-        cached.length === values.length &&
-        cached.window === window &&
-        cached.generations === generations
-    ) {
+function cachedAveragedSeries(key, generations, values, compute) {
+    let byKey = averagedSeriesCache.get(values);
+    if (!byKey) {
+        byKey = new Map();
+        averagedSeriesCache.set(values, byKey);
+    }
+    const cached = byKey.get(key);
+    if (cached && cached.length === values.length && cached.generations === generations) {
         return cached.series;
     }
-    const series = trailingMeanSeries(generations, values, window);
-    trailingMeanCache.set(values, { length: values.length, window, generations, series });
+    const series = compute();
+    byKey.set(key, { length: values.length, generations, series });
     return series;
+}
+
+/**
+ * The window-start indicator for the averaged displays: where each drawn
+ * statistic's window begins, and the generation it ends at.
+ *
+ * @param {number[]} generations
+ * @param {Object<string, number>} starts the first index averaged, by
+ *     statistic.
+ * @param {number} shownIndex the generation shown (the scrub position,
+ *     or the latest).
+ * @returns {{end: number, starts: Array<{generation: number, name:
+ *     string|null}>}|null} one entry per distinct start at or before the
+ *     shown generation, in order; `name` is the one statistic starting
+ *     there (drawn in its color) when statistics start apart, else `null`
+ *     (drawn in the accent color): every statistic shares the start, or
+ *     several do. `null` when no window has begun by the shown generation.
+ */
+function averagingWindowMarker(generations, starts, shownIndex) {
+    const namesByIndex = new Map();
+    for (const [name, index] of Object.entries(starts)) {
+        if (index <= shownIndex) {
+            namesByIndex.set(index, [...(namesByIndex.get(index) || []), name]);
+        }
+    }
+    if (namesByIndex.size === 0) {
+        return null;
+    }
+    const apart = namesByIndex.size > 1;
+    return {
+        end: generations[shownIndex],
+        starts: [...namesByIndex.entries()]
+            .sort(([left], [right]) => left - right)
+            .map(([index, names]) => ({
+                generation: generations[index],
+                name: apart && names.length === 1 ? names[0] : null,
+            })),
+    };
 }
 
 /**
@@ -1126,8 +1273,9 @@ function repaintTrajectory() {
 }
 
 // How the trajectory graph draws each statistic (`TRAJECTORY_DISPLAYS`):
-// its value at every recorded generation, or its trailing mean over the
-// convergence window with a standard-error band. Loaded from preferences
+// its value at every recorded generation, its trailing mean over the
+// convergence window, or its cumulative mean from where averaging began,
+// the two averages with a standard-error band. Loaded from preferences
 // by `run-graph-stage.js`'s own `loadRunCardLayout`.
 let trajectoryDisplay = DEFAULT_TRAJECTORY_DISPLAY;
 
@@ -1148,25 +1296,55 @@ window.fim.setTrajectoryDisplay = function setTrajectoryDisplay(display) {
 };
 
 /**
- * The window the trajectory graph averages over, or `null` to draw every
- * generation: the trailing-mean display needs a recorded curve and a
+ * Whether the run can be drawn averaged: it needs a recorded curve and a
  * convergence window to average over.
  *
  * @param {boolean} hasCurve
- * @param {number|null|undefined} convergenceWindow
- * @returns {number|null}
+ * @param {{window: number}|null|undefined} averaging
+ * @returns {boolean}
  */
-function trailingDisplayWindow(hasCurve, convergenceWindow) {
-    return trajectoryDisplay === "trailing_mean" &&
-        hasCurve &&
-        Number.isFinite(convergenceWindow) &&
-        convergenceWindow > 0
-        ? convergenceWindow
+function canAverage(hasCurve, averaging) {
+    return Boolean(
+        hasCurve && averaging && Number.isFinite(averaging.window) && averaging.window > 0
+    );
+}
+
+/**
+ * The averaged display to draw, or `null` to draw every generation.
+ *
+ * @param {boolean} hasCurve
+ * @param {{window: number}|null|undefined} averaging
+ * @returns {string|null} `"trailing_mean"` or `"cumulative_mean"`.
+ */
+function averagedDisplayMode(hasCurve, averaging) {
+    return trajectoryDisplay !== "every_generation" && canAverage(hasCurve, averaging)
+        ? trajectoryDisplay
         : null;
 }
 
-runTrajectoryDisplay.options[1].textContent =
-    `Trailing mean ± ${TRAILING_MEAN_BAND_STANDARD_ERRORS} SE`;
+/**
+ * The index of the generation shown: the scrub position, else the latest.
+ *
+ * @param {number[]} generations
+ * @param {number|null|undefined} scrubGeneration
+ * @returns {number}
+ */
+function shownGenerationIndex(generations, scrubGeneration) {
+    const index =
+        scrubGeneration === null || scrubGeneration === undefined
+            ? -1
+            : generations.indexOf(scrubGeneration);
+    return index >= 0 ? index : generations.length - 1;
+}
+
+for (const option of runTrajectoryDisplay.options) {
+    if (option.value === "trailing_mean") {
+        option.textContent = `Trailing mean ± ${TRAILING_MEAN_BAND_STANDARD_ERRORS} SE`;
+    }
+    if (option.value === "cumulative_mean") {
+        option.textContent = `Cumulative mean ± ${TRAILING_MEAN_BAND_STANDARD_ERRORS} SE`;
+    }
+}
 runTrajectoryDisplay.addEventListener("change", async () => {
     const result = await window.pywebview.api.set_trajectory_display(
         runTrajectoryDisplay.value
@@ -1663,10 +1841,19 @@ function fillBetween(context, generations, low, high, xToPixel, yToPixel) {
  *     configuration's own current value" there; `null`/`undefined`
  *     (not currently scrubbing, or no scrubber at all) draws nothing
  *     extra.
- * @param {Object<string, {low: number[], high: number[]}>|null} [bands]
- *     the "trailing mean" display's standard-error band per statistic
- *     (`trailingMeanSeries`), filled in that statistic's color behind its
- *     curve; `null`/`undefined` for the "every generation" display.
+ * @param {Object<string, {low: number[], high: number[], count:
+ *     number[]}>|null} [bands] an averaged display's standard-error band
+ *     per statistic (`averagedSeries`), filled in that statistic's color
+ *     behind its curve and clipped to the plot; `null`/`undefined` for the
+ *     "every generation" display. A band point averaging fewer than
+ *     `BAND_DOMAIN_MINIMUM_POINTS` points does not stretch the axis.
+ * @param {{end: number, starts: Array<{generation: number, name:
+ *     string|null}>}|null} [windowMarker] the window-start indicator
+ *     (`averagingWindowMarker`): a faint shading from the earliest start
+ *     to `end`, and at each start a solid vertical line topped by a
+ *     right-pointing flag, in the accent color (or the statistic's color
+ *     when statistics start apart) -- solid and flagged so it is never
+ *     mistaken for the scrubber's dashed, muted marker.
  */
 function drawTrajectoryCurve(
     canvas,
@@ -1677,7 +1864,8 @@ function drawTrajectoryCurve(
     identityRecovery,
     closedFormSeries,
     scrubGeneration,
-    bands
+    bands,
+    windowMarker
 ) {
     const context = canvas.getContext("2d");
     const width = canvas.width;
@@ -1710,7 +1898,11 @@ function drawTrajectoryCurve(
     }
     if (bands) {
         for (const band of Object.values(bands)) {
-            allValues.push(...band.low, ...band.high);
+            band.count.forEach((count, index) => {
+                if (count >= BAND_DOMAIN_MINIMUM_POINTS) {
+                    allValues.push(band.low[index], band.high[index]);
+                }
+            });
         }
     }
     if (identityRecovery) {
@@ -1807,15 +1999,38 @@ function drawTrajectoryCurve(
         }
     }
 
-    // The trailing mean's standard-error bands, behind every curve like
-    // the sigma band above.
+    // The averaging window's extent, faintly shaded behind everything
+    // else, so the indicator's flag reads as "the window starts here and
+    // runs to the shown generation".
+    if (windowMarker) {
+        const spanLeft = xToPixel(windowMarker.starts[0].generation);
+        context.fillStyle = accentColor;
+        context.globalAlpha = WINDOW_SPAN_ALPHA;
+        context.fillRect(
+            spanLeft,
+            plotTop,
+            xToPixel(windowMarker.end) - spanLeft,
+            plotBottom - plotTop
+        );
+        context.globalAlpha = 1;
+    }
+
+    // An averaged display's standard-error bands, behind every curve like
+    // the sigma band above, and clipped to the plot: an early band
+    // averaging only a few points can be wider than the axis it was not
+    // allowed to stretch.
     if (bands) {
+        context.save();
+        context.beginPath();
+        context.rect(plotLeft, plotTop, plotRight - plotLeft, plotBottom - plotTop);
+        context.clip();
         for (const [name, band] of Object.entries(bands)) {
             context.fillStyle = STATISTIC_TRAJECTORY_COLORS[name] || mutedColor;
             context.globalAlpha = BAND_ALPHA;
             fillBetween(context, generations, band.low, band.high, xToPixel, yToPixel);
             context.globalAlpha = 1;
         }
+        context.restore();
     }
 
     for (const [name, values] of Object.entries(histories)) {
@@ -1894,6 +2109,34 @@ function drawTrajectoryCurve(
         });
         context.stroke();
         context.setLineDash([]);
+    }
+
+    // The window-start indicator: a solid line with a flag at the top
+    // pointing into the window, drawn before the scrubber's dashed marker
+    // so the two stay distinct where they meet (a trailing window's end
+    // is the scrub position).
+    if (windowMarker) {
+        context.setLineDash([]);
+        context.lineWidth = OVERLAY_LINE_WIDTH;
+        for (const start of windowMarker.starts) {
+            const color =
+                start.name === null
+                    ? accentColor
+                    : STATISTIC_TRAJECTORY_COLORS[start.name] || accentColor;
+            const x = xToPixel(start.generation);
+            context.strokeStyle = color;
+            context.fillStyle = color;
+            context.beginPath();
+            context.moveTo(x, plotTop);
+            context.lineTo(x, plotBottom);
+            context.stroke();
+            context.beginPath();
+            context.moveTo(x, plotTop);
+            context.lineTo(x + WINDOW_MARKER_FLAG_SIZE, plotTop + WINDOW_MARKER_FLAG_SIZE);
+            context.lineTo(x, plotTop + 2 * WINDOW_MARKER_FLAG_SIZE);
+            context.closePath();
+            context.fill();
+        }
     }
 
     // The completed-state scrubber's own current-position marker (this
@@ -1997,6 +2240,43 @@ function setTrajectoryFrameHidden(hidden) {
 }
 
 /**
+ * The legend entries for an averaged display: what the curves and bands
+ * are, and what the window-start indicator marks.
+ *
+ * @param {string} mode `"trailing_mean"` or `"cumulative_mean"`.
+ * @param {number} window the convergence window, in generations.
+ * @param {number[]} generations
+ * @param {Object<string, number>} starts each drawn statistic's first
+ *     averaged index (`cumulativeStart`), for the cumulative display.
+ * @param {object|null} windowMarker `averagingWindowMarker`'s result.
+ * @returns {Array<[string, string]>} `[swatch class, text]` pairs.
+ */
+function averagedLegendEntries(mode, window, generations, starts, windowMarker) {
+    const plusMinus = `± ${TRAILING_MEAN_BAND_STANDARD_ERRORS} SE`;
+    const entries = [];
+    if (mode === "trailing_mean") {
+        entries.push([
+            "swatch-band",
+            `trailing mean ${plusMinus} (last ${window.toLocaleString()} generations)`,
+        ]);
+    } else {
+        const firsts = [...new Set(Object.values(starts))];
+        const from =
+            firsts.length === 1
+                ? `from generation ${generations[firsts[0]].toLocaleString()}`
+                : "from where averaging began";
+        entries.push(["swatch-band", `cumulative mean ${plusMinus} (${from})`]);
+    }
+    if (windowMarker !== null) {
+        entries.push([
+            "swatch-window-start",
+            mode === "trailing_mean" ? "trailing window start" : "averaging start",
+        ]);
+    }
+    return entries;
+}
+
+/**
  * Show (or hide) the trajectory panel for the just-shown completed run.
  *
  * A live scalar run's own already-computed `RunResult.convergence_
@@ -2053,11 +2333,14 @@ function setTrajectoryFrameHidden(hidden) {
  *     `undefined` for every existing caller (a live tick, a fresh
  *     completed entry) draws no marker at all, exactly as before this
  *     parameter existed.
- * @param {number|null} [convergenceWindow] the run's convergence window
- *     in generations (`_convergence_reference_payload`): the span the
- *     "trailing mean" display averages each statistic, and its expected
- *     trajectory, over. Without one, or without a recorded curve, the
- *     graph draws every generation and offers no choice.
+ * @param {{window: number, anchors: Object<string, number>}|null} [averaging]
+ *     what the averaged displays need: the run's convergence window in
+ *     generations (`_convergence_reference_payload`), which the "trailing
+ *     mean" display averages over and the "cumulative mean" display uses
+ *     as its burn-in, and where a finished run's monitor began averaging
+ *     each statistic it grew a window for (`evidenceWindowAnchors`).
+ *     Without a window, or without a recorded curve, the graph draws
+ *     every generation and offers no choice.
  */
 function renderTrajectory(
     generations,
@@ -2068,7 +2351,7 @@ function renderTrajectory(
     identityRecovery,
     closedForm,
     scrubGeneration,
-    convergenceWindow
+    averaging
 ) {
     // Cached so a legend click (`buildTrajectoryLegendItem`, below) can
     // re-render with the identical underlying data and scrub position,
@@ -2083,14 +2366,10 @@ function renderTrajectory(
         identityRecovery,
         closedForm,
         scrubGeneration,
-        convergenceWindow,
+        averaging,
     ];
     const hasCurve = generations && histories && generations.length > 0;
-    runTrajectoryDisplayControl.hidden = !(
-        hasCurve &&
-        Number.isFinite(convergenceWindow) &&
-        convergenceWindow > 0
-    );
+    runTrajectoryDisplayControl.hidden = !canAverage(hasCurve, averaging);
     if (!hasCurve && !sigmaBand) {
         activeTrajectoryRenderMode = null;
         setTrajectoryFrameHidden(true);
@@ -2177,36 +2456,56 @@ function renderTrajectory(
               )
           )
         : {};
-    // The "trailing mean" display draws each statistic's mean over the
-    // convergence window with its standard-error band, and smooths the
-    // expected trajectory over the same window, so the two still compare
-    // like with like while the run is relaxing. The flat equilibrium
-    // line needs no smoothing.
-    const trailingWindow = trailingDisplayWindow(hasCurve, convergenceWindow);
+    // The averaged displays draw each statistic's mean, with its
+    // standard-error band, over a window ending at each generation: the
+    // last convergence window ("trailing mean"), or everything since
+    // averaging began ("cumulative mean"). The expected trajectory is
+    // averaged over the same windows, so the two still compare like with
+    // like while the run is relaxing; the flat equilibrium line needs no
+    // averaging. The window-start indicator marks where the window ending
+    // at the shown generation begins.
+    const averagedMode = averagedDisplayMode(hasCurve, averaging);
     let drawnHistories = visiblePlottable;
     let drawnClosedForm = closedFormSeries;
     let bands = null;
-    if (trailingWindow !== null) {
+    let windowMarker = null;
+    const averagedStarts = {};
+    if (averagedMode !== null) {
+        const window = averaging.window;
+        const shownIndex = shownGenerationIndex(effectiveGenerations, scrubGeneration);
         drawnHistories = {};
+        drawnClosedForm = {};
         bands = {};
         for (const [name, values] of Object.entries(visiblePlottable)) {
-            const series = cachedTrailingMeanSeries(
-                effectiveGenerations,
-                values,
-                trailingWindow
+            const cumulative = averagedMode === "cumulative_mean";
+            const start = cumulative
+                ? cumulativeStart(effectiveGenerations, name, averaging)
+                : trailingWindowStart(effectiveGenerations, shownIndex, window);
+            if (start === null) {
+                continue;
+            }
+            const average = (series) =>
+                cumulative
+                    ? cumulativeMeanSeries(series, start)
+                    : trailingMeanSeries(effectiveGenerations, series, window);
+            const key = cumulative ? `cumulative:${start}` : `trailing:${window}`;
+            const series = cachedAveragedSeries(key, effectiveGenerations, values, () =>
+                average(values)
             );
-            if (series) {
-                drawnHistories[name] = series.mean;
-                bands[name] = series;
+            if (!series) {
+                continue;
+            }
+            drawnHistories[name] = series.mean;
+            bands[name] = series;
+            averagedStarts[name] = start;
+            if (closedFormSeries[name]) {
+                const expected = average(closedFormSeries[name]);
+                if (expected) {
+                    drawnClosedForm[name] = expected.mean;
+                }
             }
         }
-        drawnClosedForm = {};
-        for (const [name, values] of Object.entries(closedFormSeries)) {
-            const series = trailingMeanSeries(effectiveGenerations, values, trailingWindow);
-            if (series) {
-                drawnClosedForm[name] = series.mean;
-            }
-        }
+        windowMarker = averagingWindowMarker(effectiveGenerations, averagedStarts, shownIndex);
     }
     drawTrajectoryCurve(
         canvas,
@@ -2217,7 +2516,8 @@ function renderTrajectory(
         identityRecovery,
         drawnClosedForm,
         scrubGeneration,
-        bands
+        bands,
+        windowMarker
     );
     runTrajectorySigmaBandCaption.replaceChildren();
     if (sigmaBand) {
@@ -2233,19 +2533,22 @@ function renderTrajectory(
         runTrajectorySigmaBandCaption.children.length === 0;
     refreshTrajectoryStatisticRowStates();
     runTrajectoryLegend.replaceChildren();
-    if (trailingWindow !== null) {
-        const item = document.createElement("span");
-        item.className = "legend-item";
-        const swatch = document.createElement("span");
-        swatch.className = "swatch swatch-band";
-        item.appendChild(swatch);
-        item.appendChild(
-            document.createTextNode(
-                `trailing mean ± ${TRAILING_MEAN_BAND_STANDARD_ERRORS} SE ` +
-                    `(last ${trailingWindow.toLocaleString()} generations)`
-            )
-        );
-        runTrajectoryLegend.appendChild(item);
+    if (averagedMode !== null) {
+        for (const [swatchClass, text] of averagedLegendEntries(
+            averagedMode,
+            averaging.window,
+            effectiveGenerations,
+            averagedStarts,
+            windowMarker
+        )) {
+            const item = document.createElement("span");
+            item.className = "legend-item";
+            const swatch = document.createElement("span");
+            swatch.className = `swatch ${swatchClass}`;
+            item.appendChild(swatch);
+            item.appendChild(document.createTextNode(text));
+            runTrajectoryLegend.appendChild(item);
+        }
     }
     if (Object.keys(closedFormSeries).length > 0) {
         const item = document.createElement("span");
@@ -2941,7 +3244,7 @@ function updateScrubbedTrajectory(frameGeneration, isFinalFrame) {
             completedIdentityRecovery,
             completedClosedForm,
             null,
-            completedConvergenceWindow
+            completedAveraging()
         );
         return;
     }
@@ -3019,7 +3322,7 @@ function updateScrubbedTrajectory(frameGeneration, isFinalFrame) {
         completedIdentityRecovery,
         completedClosedForm,
         scrubGeneration,
-        completedConvergenceWindow
+        completedAveraging()
     );
 }
 
@@ -3557,7 +3860,7 @@ window.fim.enterCompletedState = function enterCompletedState(payload, isBatch) 
             payload.identityRecovery,
             payload.closedForm,
             null,
-            completedConvergenceWindow
+            completedAveraging()
         );
         wireCompletedScrubber(payload.outputDirectory, payload.generationCount);
     }

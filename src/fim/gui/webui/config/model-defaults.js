@@ -71,5 +71,5 @@ const MINIMUM_INTEGRATED_AUTOCORRELATION_TIME = 1e-9;
 // How the trajectory graph can draw each statistic, and the one a fresh
 // install uses (`fim.gui.preferences.TRAJECTORY_DISPLAYS` and
 // `DEFAULT_TRAJECTORY_DISPLAY`).
-const TRAJECTORY_DISPLAYS = ["every_generation", "trailing_mean"];
+const TRAJECTORY_DISPLAYS = ["every_generation", "trailing_mean", "cumulative_mean"];
 const DEFAULT_TRAJECTORY_DISPLAY = "every_generation";

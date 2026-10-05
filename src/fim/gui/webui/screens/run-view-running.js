@@ -626,7 +626,7 @@ window.fim.onRunProgress = function onRunProgress(payload) {
                 liveIdentityRecoveryReference,
                 liveClosedForm,
                 isLiveHead ? null : f.generation,
-                liveConvergence ? liveConvergence.window : null
+                liveConvergence ? { window: liveConvergence.window, anchors: {} } : null
             );
         }
         drawProgressPanels(f);

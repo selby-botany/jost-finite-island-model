@@ -2436,9 +2436,10 @@ class Api:
 
         Args:
             display: One of `TRAJECTORY_DISPLAYS`: `"every_generation"`
-                (the value at every recorded generation) or
-                `"trailing_mean"` (the mean over the convergence window,
-                with a standard-error band).
+                (the value at every recorded generation),
+                `"trailing_mean"` (the mean over the convergence window)
+                or `"cumulative_mean"` (the mean since averaging began),
+                each mean with a standard-error band.
 
         Returns:
             `{"ok": True, "display": display}`, or `{"ok": False,

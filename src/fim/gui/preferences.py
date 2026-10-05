@@ -166,11 +166,17 @@ SCATTER_STYLES: tuple[str, ...] = (
 
 DEFAULT_SCATTER_STYLE = "color-badge"
 
-TRAJECTORY_DISPLAYS: tuple[str, ...] = ("every_generation", "trailing_mean")
+TRAJECTORY_DISPLAYS: tuple[str, ...] = (
+    "every_generation",
+    "trailing_mean",
+    "cumulative_mean",
+)
 """How the trajectory graph draws each statistic: its value at every
-recorded generation (the noise drift leaves in it), or its trailing mean
-over the convergence window with a standard-error band
-(`run-view-completed.js`'s own `trailingMeanSeries`)."""
+recorded generation (the noise drift leaves in it), its trailing mean over
+the convergence window, or its cumulative mean from where averaging began
+(the run's own estimate as it accumulates), both means with a
+standard-error band (`run-view-completed.js`'s own `trailingMeanSeries`
+and `cumulativeMeanSeries`)."""
 
 DEFAULT_TRAJECTORY_DISPLAY = "every_generation"
 

@@ -624,6 +624,18 @@ def test_run_card_layout_round_trips_through_save_and_load(tmp_path: Path) -> No
     assert loaded.trajectory_display == "trailing_mean"
 
 
+def test_every_trajectory_display_loads(tmp_path: Path) -> None:
+    """Each of the three trajectory displays is accepted from disk."""
+    path = tmp_path / "preferences.json"
+    for display in ("every_generation", "trailing_mean", "cumulative_mean"):
+        save_preferences(path, GuiPreferences(trajectory_display=display))
+
+        loaded, warning = load_preferences(path)
+
+        assert warning is None
+        assert loaded.trajectory_display == display
+
+
 def test_with_run_card_layout_changes_only_what_it_is_given() -> None:
     """Arguments left out keep their current value."""
     original = GuiPreferences(

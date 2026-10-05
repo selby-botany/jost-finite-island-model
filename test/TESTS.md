@@ -16466,6 +16466,16 @@ def test_run_card_layout_round_trips_through_save_and_load(
 
 Chosen graphs, columns, scatter style and trajectory display survive a reload.
 
+<a id="gui.test_preferences.test_every_trajectory_display_loads"></a>
+
+#### test\_every\_trajectory\_display\_loads
+
+```python
+def test_every_trajectory_display_loads(tmp_path: Path) -> None
+```
+
+Each of the three trajectory displays is accepted from disk.
+
 <a id="gui.test_preferences.test_with_run_card_layout_changes_only_what_it_is_given"></a>
 
 #### test\_with\_run\_card\_layout\_changes\_only\_what\_it\_is\_given
@@ -19474,6 +19484,17 @@ def test_the_trailing_window_counts_generations_and_starts_with_enough_points(
 
 The window spans generations; the curve begins at eight points.
 
+<a id="gui.test_trailing_mean_screen.test_the_cumulative_mean_its_start_and_the_window_marker"></a>
+
+#### test\_the\_cumulative\_mean\_its\_start\_and\_the\_window\_marker
+
+```python
+def test_the_cumulative_mean_its_start_and_the_window_marker(
+        window: webview.Window, drive: Callable[..., Any]) -> None
+```
+
+Cumulative averaging starts at the anchor or burn-in; the marker follows.
+
 <a id="gui.test_trailing_mean_screen.test_the_estimate_note_text"></a>
 
 #### test\_the\_estimate\_note\_text
@@ -19497,18 +19518,20 @@ def estimable_run_settings(_isolate_gui_preferences: Path) -> Path
 Pre-seed Settings for a fast run long enough to estimate a window mean.
 
 `fast_scalar_run_settings`' window of 4 is shorter than the eight
-points an estimate needs, so this one uses a window of 8.
+points an estimate needs, so this one uses a window of 8, and a
+tolerance no run meets, so the run goes to its 40-generation cap: long
+enough past the one-window burn-in for a cumulative mean.
 
-<a id="gui.test_trailing_mean_screen.test_a_completed_run_leads_with_its_estimate_and_offers_the_trailing_mean"></a>
+<a id="gui.test_trailing_mean_screen.test_a_completed_run_leads_with_its_estimate_and_offers_the_averages"></a>
 
-#### test\_a\_completed\_run\_leads\_with\_its\_estimate\_and\_offers\_the\_trailing\_mean
+#### test\_a\_completed\_run\_leads\_with\_its\_estimate\_and\_offers\_the\_averages
 
 ```python
-def test_a_completed_run_leads_with_its_estimate_and_offers_the_trailing_mean(
+def test_a_completed_run_leads_with_its_estimate_and_offers_the_averages(
         estimable_run_settings: Path, window: webview.Window) -> None
 ```
 
-D's tooltip leads with its mean ± SE; the display choice redraws and persists.
+D's tooltip leads with its mean ± SE; each display redraws and persists.
 
 <a id="gui.test_trajectory_history"></a>
 

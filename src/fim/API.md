@@ -4571,9 +4571,10 @@ either way.
 **Arguments**:
 
 - `display` - One of `TRAJECTORY_DISPLAYS`: `"every_generation"`
-  (the value at every recorded generation) or
-  `"trailing_mean"` (the mean over the convergence window,
-  with a standard-error band).
+  (the value at every recorded generation),
+  `"trailing_mean"` (the mean over the convergence window)
+  or `"cumulative_mean"` (the mean since averaging began),
+  each mean with a standard-error band.
 
 
 **Returns**:
@@ -8427,9 +8428,11 @@ How the scatter plot draws its points (`scatter.js`'s own `SCATTER_STYLES`).
 #### TRAJECTORY\_DISPLAYS
 
 How the trajectory graph draws each statistic: its value at every
-recorded generation (the noise drift leaves in it), or its trailing mean
-over the convergence window with a standard-error band
-(`run-view-completed.js`'s own `trailingMeanSeries`).
+recorded generation (the noise drift leaves in it), its trailing mean over
+the convergence window, or its cumulative mean from where averaging began
+(the run's own estimate as it accumulates), both means with a
+standard-error band (`run-view-completed.js`'s own `trailingMeanSeries`
+and `cumulativeMeanSeries`).
 
 <a id="fim.gui.preferences.GuiPreferences"></a>
 

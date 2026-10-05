@@ -118,6 +118,38 @@ _WINDOWING = """
 })()
 """
 
+_CUMULATIVE = """
+(() => {
+    const generations = Array.from({length: 20}, (_, index) => 5 * index);
+    const values = generations.map((_, index) => 0.1 * (index % 4));
+    const series = cumulativeMeanSeries(values, 3);
+    const sums = windowSums(values);
+    const averaging = {window: 30, anchors: {D: 2}};
+    return {
+        gaps: series.mean.slice(0, 10).every(Number.isNaN),
+        first: series.mean[10],
+        lastMatches:
+            series.mean[19] === trailingWindowEstimate(sums, 3, 19).mean,
+        counts: [series.count[9], series.count[10], series.count[19]],
+        anchored: cumulativeStart(generations, "D", averaging),
+        burnIn: cumulativeStart(generations, "G_ST", averaging),
+        tooShort: cumulativeStart(generations.slice(0, 5), "G_ST", averaging),
+        shared: averagingWindowMarker(generations, {D: 4, G_ST: 4}, 12),
+        apart: averagingWindowMarker(generations, {D: 6, G_ST: 2, H_S: 6}, 12),
+        notYet: averagingWindowMarker(generations, {D: 15}, 12),
+        trailingLegend: averagedLegendEntries(
+            "trailing_mean", 1356, generations, {D: 4}, {end: 60, starts: []}
+        ),
+        cumulativeLegend: averagedLegendEntries(
+            "cumulative_mean", 30, generations, {D: 6, G_ST: 6}, null
+        ),
+        mixedLegend: averagedLegendEntries(
+            "cumulative_mean", 30, generations, {D: 2, G_ST: 6}, {end: 60, starts: []}
+        ),
+    };
+})()
+"""
+
 
 def test_the_trailing_window_counts_generations_and_starts_with_enough_points(
     window: webview.Window, drive: Callable[..., Any]
@@ -136,6 +168,51 @@ def test_the_trailing_window_counts_generations_and_starts_with_enough_points(
     # Only a window that grew past the convergence window, and fits in
     # the recorded history, is anchored.
     assert settled["anchors"] == {"D": 10}
+
+
+def test_the_cumulative_mean_its_start_and_the_window_marker(
+    window: webview.Window, drive: Callable[..., Any]
+) -> None:
+    """Cumulative averaging starts at the anchor or burn-in; the marker follows."""
+    settled = drive(window, ready=_INPUT_SCREEN_READY, trigger="null", read=_CUMULATIVE)
+
+    # Averaging from index 3 needs eight points: the first mean is at 10.
+    assert settled["gaps"] is True
+    assert settled["first"] == pytest.approx(0.1 * sum([3, 0, 1, 2, 3, 0, 1, 2]) / 8)
+    assert settled["lastMatches"] is True
+    assert settled["counts"] == [0, 8, 17]
+    # A grown evidence window's anchor wins; otherwise one window of
+    # burn-in (generation 30 is index 6); none before the run passes it.
+    assert settled["anchored"] == 2
+    assert settled["burnIn"] == 6
+    assert settled["tooShort"] is None
+    # One shared start: drawn in the accent color (no statistic name).
+    assert settled["shared"] == {
+        "end": 60,
+        "starts": [{"generation": 20, "name": None}],
+    }
+    # Starts apart: one per distinct start, in order; a start only one
+    # statistic has takes its color, one several share the accent.
+    assert settled["apart"] == {
+        "end": 60,
+        "starts": [
+            {"generation": 10, "name": "G_ST"},
+            {"generation": 30, "name": None},
+        ],
+    }
+    # A window that begins after the shown generation draws no marker.
+    assert settled["notYet"] is None
+    assert settled["trailingLegend"] == [
+        ["swatch-band", "trailing mean ± 2 SE (last 1,356 generations)"],
+        ["swatch-window-start", "trailing window start"],
+    ]
+    assert settled["cumulativeLegend"] == [
+        ["swatch-band", "cumulative mean ± 2 SE (from generation 30)"],
+    ]
+    assert settled["mixedLegend"] == [
+        ["swatch-band", "cumulative mean ± 2 SE (from where averaging began)"],
+        ["swatch-window-start", "averaging start"],
+    ]
 
 
 _VALUES = [0.12, 0.31, 0.22, 0.45, 0.28, 0.37, 0.19, 0.41, 0.33, 0.26, 0.39, 0.30]
@@ -221,7 +298,9 @@ def estimable_run_settings(_isolate_gui_preferences: Path) -> Path:
     """Pre-seed Settings for a fast run long enough to estimate a window mean.
 
     `fast_scalar_run_settings`' window of 4 is shorter than the eight
-    points an estimate needs, so this one uses a window of 8.
+    points an estimate needs, so this one uses a window of 8, and a
+    tolerance no run meets, so the run goes to its 40-generation cap: long
+    enough past the one-window burn-in for a cumulative mean.
     """
     save_preferences(
         _isolate_gui_preferences,
@@ -232,7 +311,7 @@ def estimable_run_settings(_isolate_gui_preferences: Path) -> Path:
                 "n_replicates": "1",
                 "max_generations": "40",
                 "convergence_window": "8",
-                "convergence_tolerance": "1.0",
+                "convergence_tolerance": "1e-06",
             },
         ),
     )
@@ -250,10 +329,10 @@ def _poll(window: webview.Window, script: str, predicate: Callable[[Any], bool])
     return value
 
 
-def test_a_completed_run_leads_with_its_estimate_and_offers_the_trailing_mean(
+def test_a_completed_run_leads_with_its_estimate_and_offers_the_averages(
     estimable_run_settings: Path, window: webview.Window
 ) -> None:
-    """D's tooltip leads with its mean ± SE; the display choice redraws and persists."""
+    """D's tooltip leads with its mean ± SE; each display redraws and persists."""
     set_fields = (
         "function setField(name, value) {"
         "const field = document.getElementById(`field-${name}`);"
@@ -274,13 +353,16 @@ def test_a_completed_run_leads_with_its_estimate_and_offers_the_trailing_mean(
         "legend: document.getElementById('run-trajectory-legend').textContent"
         "})"
     )
-    choose = (
-        "(() => {"
-        "const select = document.getElementById('run-trajectory-display');"
-        "select.value = 'trailing_mean';"
-        "select.dispatchEvent(new Event('change', {bubbles: true}));"
-        "})()"
-    )
+
+    def choose(display: str) -> str:
+        return (
+            "(() => {"
+            "const select = document.getElementById('run-trajectory-display');"
+            f"select.value = '{display}';"
+            "select.dispatchEvent(new Event('change', {bubbles: true}));"
+            "})()"
+        )
+
     chosen = (
         "(() => {"
         "window.pywebview.api.get_run_card_layout()"
@@ -305,23 +387,28 @@ def test_a_completed_run_leads_with_its_estimate_and_offers_the_trailing_mean(
                 completed,
                 lambda value: value["state"] == "completed" and value["pending"] == 0,
             )
-            window.evaluate_js(choose)
-            after = _poll(
-                window,
-                chosen,
-                lambda value: (
-                    "trailing mean" in value["legend"]
-                    and value["saved"] == "trailing_mean"
-                ),
-            )
-            outcome.put({"before": before, "after": after})
+            chosen_displays = {}
+            for display, legend in (
+                ("trailing_mean", "trailing mean"),
+                ("cumulative_mean", "cumulative mean"),
+            ):
+                window.evaluate_js(choose(display))
+                chosen_displays[display] = _poll(
+                    window,
+                    chosen,
+                    lambda value, legend=legend, display=display: (
+                        legend in value["legend"] and value["saved"] == display
+                    ),
+                )
+            outcome.put({"before": before, **chosen_displays})
         finally:
             window.destroy()
 
     webview.start(_drive)
     settled = outcome.get(timeout=120)
     before = settled["before"]
-    after = settled["after"]
+    trailing = settled["trailing_mean"]
+    cumulative = settled["cumulative_mean"]
 
     title = before["D"]
     assert " — mean " in title
@@ -335,5 +422,11 @@ def test_a_completed_run_leads_with_its_estimate_and_offers_the_trailing_mean(
     )
     assert before["chooserHidden"] is False
     assert "trailing mean" not in before["legend"]
-    assert "trailing mean ± 2 SE (last 8 generations)" in after["legend"]
-    assert after["saved"] == "trailing_mean"
+    assert "trailing mean ± 2 SE (last 8 generations)" in trailing["legend"]
+    assert "trailing window start" in trailing["legend"]
+    assert trailing["saved"] == "trailing_mean"
+    # No grown evidence window here, so averaging starts after one
+    # window of burn-in, at generation 8.
+    assert "cumulative mean ± 2 SE (from generation 8)" in cumulative["legend"]
+    assert "averaging start" in cumulative["legend"]
+    assert cumulative["saved"] == "cumulative_mean"

@@ -60,6 +60,12 @@ const OVERLAY_LINE_WIDTH = 1.5;
 // behind the curves it surrounds.
 const BAND_ALPHA = 0.2;
 
+// The trajectory graph's window-start indicator: the faint shading of the
+// averaging window's extent, and the size of the flag atop its start line
+// (a right-pointing triangle this many pixels deep, twice as tall).
+const WINDOW_SPAN_ALPHA = 0.07;
+const WINDOW_MARKER_FLAG_SIZE = 5;
+
 /* ---- Numeric tick selection ---------------------------------------- */
 
 /* How `niceAxisTicks` rounds a raw tick step to 1, 2 or 5 times a power

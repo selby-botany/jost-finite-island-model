@@ -150,6 +150,10 @@ def test_run_card_layout_defaults_and_persists(tmp_path: Path) -> None:
     }
     assert api.set_run_graph_columns(3) == {"ok": True, "columns": 3}
     assert api.set_scatter_style("dots") == {"ok": True, "style": "dots"}
+    assert api.set_trajectory_display("cumulative_mean") == {
+        "ok": True,
+        "display": "cumulative_mean",
+    }
     assert api.set_trajectory_display("trailing_mean") == {
         "ok": True,
         "display": "trailing_mean",

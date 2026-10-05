@@ -430,8 +430,10 @@
             <div id="run-trajectory-frame" class="run-trajectory-frame" hidden>
               <h4 id="run-trajectory-title">Statistic trajectories</h4>
               <!-- How each statistic is drawn: its value at every
-                   recorded generation, or its trailing mean over the
-                   convergence window with a standard-error band.
+                   recorded generation, its trailing mean over the
+                   convergence window, or its cumulative mean from where
+                   averaging began, the two means with a standard-error
+                   band and a window-start indicator.
                    Remembered across sessions (`set_trajectory_display`);
                    hidden for a batch, which draws its own pooled band. -->
               <label id="run-trajectory-display-control" class="run-trajectory-display" hidden>
@@ -439,6 +441,7 @@
                 <select id="run-trajectory-display">
                   <option value="every_generation">Every generation</option>
                   <option value="trailing_mean">Trailing mean</option>
+                  <option value="cumulative_mean">Cumulative mean</option>
                 </select>
               </label>
               <canvas id="run-trajectory-canvas"></canvas>

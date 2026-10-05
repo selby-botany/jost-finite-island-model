@@ -173,6 +173,12 @@ const PREDICTION_DISTANCE_DECIMALS = 1;
 // standard errors of that mean: two, so a prediction outside the band is
 // worth a second look, while one inside it is consistent with the run.
 const TRAILING_MEAN_BAND_STANDARD_ERRORS = 2;
+
+// A trajectory band point averaging fewer points than this does not
+// stretch the graph's value axis: with so few points the standard error
+// is itself too uncertain to size the axis by (the band is still drawn,
+// clipped to the plot).
+const BAND_DOMAIN_MINIMUM_POINTS = 30;
 const METER_VALUE_DECIMALS = 2;
 
 // Decimal places of a running sum in an input grid (a migration-matrix

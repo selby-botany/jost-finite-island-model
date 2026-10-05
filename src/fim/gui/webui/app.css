@@ -1297,6 +1297,16 @@ fieldset.composite > label {
     opacity: 0.35;
 }
 
+/* The window-start indicator: a solid accent rule, standing upright like
+ * the line it labels. */
+.run-trajectory-legend .swatch-window-start {
+    width: 0;
+    height: 0.8rem;
+    border-left: 2px solid var(--fim-accent);
+    border-radius: 0;
+    background: none;
+}
+
 .run-trajectory-legend .swatch-dotted {
     width: 0.9rem;
     height: 0;
