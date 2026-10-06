@@ -2417,10 +2417,13 @@ and verifies all three required outcomes.
 
 Without these diagnostics this child would hang forever, which is
 precisely the observed CI symptom. A short `FIM_TEST_SHUTDOWN_TIMEOUT`
-keeps the test fast; `subprocess`'s own `timeout` is set well above it
-so a genuine regression fails as a timeout rather than hanging this
-suite in turn -- the one failure mode this whole file exists to make
-impossible.
+keeps the test fast; the budget below is set well above it so a
+genuine regression fails as a timeout rather than hanging this suite
+in turn -- the one failure mode this whole file exists to make
+impossible. That budget counts only from the child's "work finished"
+line: interpreter start-up and imports before it are waited for
+without a deadline, since their length depends on machine load (about
+13 seconds on a loaded machine), not on the commit.
 
 <a id="test.test_sweep"></a>
 
@@ -11874,15 +11877,25 @@ class _ConcurrentStartClock()
 
 Block each worker at its first timestamp until another worker arrives.
 
+The wait has no deadline. It used to give up after 10 seconds, which
+made the outcome depend on how quickly the operating system started
+the *second* worker process — under `-n auto` on a loaded machine
+that alone can take longer, and the gate then reported "not
+concurrent" for a batch that was. Sequential execution is instead
+rejected structurally, without a clock:
+
+- In-process execution (no worker pool at all) calls this clock in
+  the test's own process, which `__call__` detects by process ID and
+  rejects at once.
+- A pool that runs replicates one at a time can never release the
+  gate, so that regression hangs; CI's `timeout-minutes` bounds it.
+
 <a id="gui.test_batch_runner._ConcurrentStartClock.__init__"></a>
 
 #### \_\_init\_\_
 
 ```python
-def __init__(arrival_directory: Path,
-             *,
-             release_at: int,
-             timeout_seconds: float = 10.0) -> None
+def __init__(arrival_directory: Path, *, release_at: int) -> None
 ```
 
 Configure the filesystem gate shared by spawned worker processes.
@@ -11893,8 +11906,6 @@ Configure the filesystem gate shared by spawned worker processes.
   marker before waiting for other workers.
 - `release_at` - Number of distinct worker PIDs required to release
   the gate.
-- `timeout_seconds` - Bound for a genuinely sequential regression,
-  so the test fails instead of hanging.
 
 <a id="gui.test_batch_runner._ConcurrentStartClock.__call__"></a>
 
@@ -11905,6 +11916,11 @@ def __call__() -> datetime
 ```
 
 Return the current UTC time, gating once at worker start.
+
+**Raises**:
+
+- `RuntimeError` - If called in the test's own process, meaning the
+  batch ran in-process rather than in worker processes.
 
 <a id="gui.test_batch_runner.test_replicate_index_recovers_the_ordinal_from_the_run_id"></a>
 
@@ -12129,9 +12145,17 @@ the real `fim.engine.fim` and its real `ProcessPoolExecutor`; the only
 injected dependency is a picklable `clock`. Every worker calls that
 clock while building its replicate lane. The first worker writes its
 PID marker and blocks until a second worker reaches the same point.
-Sequential execution cannot satisfy that gate and fails with a
-bounded error; concurrent execution releases without depending on
-sampled wall-clock overlap.
+Concurrent execution releases without depending on sampled
+wall-clock overlap; in-process execution fails at once (see
+`_ConcurrentStartClock` for how each sequential regression is
+caught without a deadline).
+
+`max_workers=2` explicitly, rather than the default of one worker
+per core: the gate needs exactly two workers, so this keeps the test
+independent of the machine's core count (a one-core default would be
+a one-worker pool that can never release the gate). That the default
+is the core count is `test_start_batch_run_passes_a_real_worker_
+count_to_fim`'s subject.
 
 <a id="gui.test_batch_running"></a>
 
@@ -18326,6 +18350,31 @@ The scatter canvas is square, so equalizing heights takes width from
 
 A configuration already computed is reused, not computed again.
 
+<a id="gui.test_run_reuse._RecordingWindow"></a>
+
+## \_RecordingWindow Objects
+
+```python
+class _RecordingWindow(_RunWindow)
+```
+
+A run window that also keeps every script it was sent.
+
+<a id="gui.test_run_reuse._RecordingWindow.reproducibility_script"></a>
+
+#### reproducibility\_script
+
+```python
+def reproducibility_script() -> str | None
+```
+
+Return the reproducibility push, if the run sent one.
+
+Read only after `_wait_idle`: the comparison runs synchronously
+on the run's own drain thread before it clears the in-flight
+guard, so once idle, a push that was ever going to be sent has
+been.
+
 <a id="gui.test_runner"></a>
 
 # gui.test\_runner
@@ -19353,9 +19402,12 @@ deadman converts an app that "won't quit" into a bounded exit with a
 real explanation.
 
 Without the deadman this child runs forever, which is precisely what
-a user would experience. `subprocess`'s own generous `timeout` means
-a regression here fails as a timeout rather than hanging this suite
-in turn.
+a user would experience. A generous budget, counted from the moment
+the deadman is armed (`_run_child_until_exit`), means a regression
+here fails as a timeout rather than hanging this suite in turn. It
+used to be counted from process start, together with a separate
+`elapsed < 60` assertion, so interpreter start-up under load -- a
+fact about the machine, not the commit -- counted against both.
 
 <a id="gui.test_shutdown_deadman.test_in_flight_bridge_threads_identifies_a_bridge_thread"></a>
 
@@ -19468,9 +19520,9 @@ def test_forced_exit_writes_traceback_to_log_file(tmp_path: Path) -> None
 A real wedged child leaves its thread dump in the log file.
 
 The end-to-end proof of the windowed-launch case: stderr is
-deliberately discarded here, exactly as it is for a GUI started from a
-dock icon or shortcut, so anything asserted below reached the log file
-on its own merits. Without this, a recurrence would be recorded as
+deliberately ignored here, exactly as it is lost for a GUI started
+from a dock icon or shortcut, so anything asserted below reached the
+log file on its own merits. Without this, a recurrence would be recorded as
 "it hung" with no way to identify the thread responsible.
 
 <a id="gui.test_shutdown_deadman.test_the_window_close_hook_settles_an_in_flight_bridge_call_first"></a>
@@ -20044,6 +20096,15 @@ so this must not fail the batch.
 # gui.test\_sweep\_api
 
 Tests for the sweep bridge calls on `fim.gui.app.Api` (no real window).
+
+A sweep runs on a background thread. Tests wait for that thread's real
+end — the busy guard `start_sweep` sets before returning and the thread
+clears in its own `finally`, however the sweep ended — with no deadline,
+then assert how it ended (`_FakeWindow.finished`). These used to wait up
+to 60 seconds for the `sweep_done` push; how long a sweep takes depends
+on machine load, not on the commit, so a timed wait made the result
+depend on what else the machine was doing. CI's `timeout-minutes`
+bounds a genuine hang.
 
 <a id="gui.test_sweep_api.results"></a>
 

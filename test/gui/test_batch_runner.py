@@ -44,15 +44,23 @@ def batch_params(tiny_params: SimulationParams) -> SimulationParams:
 
 
 class _ConcurrentStartClock:
-    """Block each worker at its first timestamp until another worker arrives."""
+    """Block each worker at its first timestamp until another worker arrives.
 
-    def __init__(
-        self,
-        arrival_directory: Path,
-        *,
-        release_at: int,
-        timeout_seconds: float = 10.0,
-    ) -> None:
+    The wait has no deadline. It used to give up after 10 seconds, which
+    made the outcome depend on how quickly the operating system started
+    the *second* worker process — under `-n auto` on a loaded machine
+    that alone can take longer, and the gate then reported "not
+    concurrent" for a batch that was. Sequential execution is instead
+    rejected structurally, without a clock:
+
+    - In-process execution (no worker pool at all) calls this clock in
+      the test's own process, which `__call__` detects by process ID and
+      rejects at once.
+    - A pool that runs replicates one at a time can never release the
+      gate, so that regression hangs; CI's `timeout-minutes` bounds it.
+    """
+
+    def __init__(self, arrival_directory: Path, *, release_at: int) -> None:
         """Configure the filesystem gate shared by spawned worker processes.
 
         Args:
@@ -60,26 +68,32 @@ class _ConcurrentStartClock:
                 marker before waiting for other workers.
             release_at: Number of distinct worker PIDs required to release
                 the gate.
-            timeout_seconds: Bound for a genuinely sequential regression,
-                so the test fails instead of hanging.
         """
         self._arrival_directory = arrival_directory
         self._release_at = release_at
-        self._timeout_seconds = timeout_seconds
+        # Recorded here, in the test process, and pickled into every
+        # worker along with the rest of this object.
+        self._test_process_id = os.getpid()
         self._released = False
 
     def __call__(self) -> datetime:
-        """Return the current UTC time, gating once at worker start."""
+        """Return the current UTC time, gating once at worker start.
+
+        Raises:
+            RuntimeError: If called in the test's own process, meaning the
+                batch ran in-process rather than in worker processes.
+        """
         if self._released:
             return datetime.now(UTC)
+        if os.getpid() == self._test_process_id:
+            raise RuntimeError(
+                "batch replicate ran in the test process, not a worker process"
+            )
         self._arrival_directory.mkdir(parents=True, exist_ok=True)
         (self._arrival_directory / str(os.getpid())).touch()
-        deadline = time.monotonic() + self._timeout_seconds
+        # Polls a filesystem condition; the poll interval affects only
+        # how soon the gate notices, never whether it releases.
         while len(list(self._arrival_directory.iterdir())) < self._release_at:
-            if time.monotonic() >= deadline:
-                raise RuntimeError(
-                    "batch workers did not reach the concurrency gate together"
-                )
             time.sleep(0.01)
         self._released = True
         return datetime.now(UTC)
@@ -486,9 +500,17 @@ def test_batch_replicates_actually_run_concurrently(
     injected dependency is a picklable `clock`. Every worker calls that
     clock while building its replicate lane. The first worker writes its
     PID marker and blocks until a second worker reaches the same point.
-    Sequential execution cannot satisfy that gate and fails with a
-    bounded error; concurrent execution releases without depending on
-    sampled wall-clock overlap.
+    Concurrent execution releases without depending on sampled
+    wall-clock overlap; in-process execution fails at once (see
+    `_ConcurrentStartClock` for how each sequential regression is
+    caught without a deadline).
+
+    `max_workers=2` explicitly, rather than the default of one worker
+    per core: the gate needs exactly two workers, so this keeps the test
+    independent of the machine's core count (a one-core default would be
+    a one-worker pool that can never release the gate). That the default
+    is the core count is `test_start_batch_run_passes_a_real_worker_
+    count_to_fim`'s subject.
     """
     output_directory = tmp_path / "output"
     message_queue: queue.Queue[batch_runner.BatchMessage] = queue.Queue()
@@ -525,12 +547,17 @@ def test_batch_replicates_actually_run_concurrently(
     monkeypatch.setattr(batch_runner, "fim", _fim_with_concurrency_gate)
 
     thread = batch_runner.start_batch_run(
-        batch_params, output_directory, message_queue, threading.Event()
+        batch_params,
+        output_directory,
+        message_queue,
+        threading.Event(),
+        max_workers=2,
     )
     thread.join()
 
+    outcome = _drain(message_queue)[-1]
+    assert outcome[0] == "done", outcome
     assert len(list(arrival_directory.iterdir())) >= 2
-    assert _drain(message_queue)[-1][0] == "done"
 
 
 def _drain(
