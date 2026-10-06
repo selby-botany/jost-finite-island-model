@@ -219,6 +219,26 @@ def _poll_until(
     return value
 
 
+def _wait_until(window: webview.Window, script: str) -> Any:
+    """Evaluate `script` repeatedly, with no deadline, until it is truthy.
+
+    For a JavaScript-side completion signal that always arrives -- one
+    set at the end of an async bridge call -- where `_poll_until`'s fixed
+    attempt count would make the result depend on machine load rather
+    than on the commit. CI's `timeout-minutes` bounds a genuine hang.
+
+    Args:
+        window: The window to evaluate `script` in.
+        script: A plain, synchronous JavaScript expression.
+
+    Returns:
+        `script`'s first truthy value.
+    """
+    while not (value := window.evaluate_js(script)):
+        time.sleep(_POLL_INTERVAL_SECONDS)
+    return value
+
+
 def _expand_all_recent_run_groups(window: webview.Window) -> None:
     """Click every date-bucket group's own toggle so its rows render.
 
@@ -253,15 +273,10 @@ def _expand_all_recent_run_groups(window: webview.Window) -> None:
     waiting for `true` again here can only mean *this* fetch's own
     render, never a stale one.
     """
-    _poll_until(
+    _wait_until(
         window,
-        "({"
-        "loaded: window.__fimOpenRunRecentRunsLoaded === true, "
-        "toggleCount: document.querySelectorAll('.open-run-group-toggle').length"
-        "})",
-        lambda value: (
-            value is not None and value["loaded"] is True and value["toggleCount"] > 0
-        ),
+        "window.__fimOpenRunRecentRunsLoaded === true "
+        "&& document.querySelectorAll('.open-run-group-toggle').length > 0",
     )
     for _ in range(6):
         window.evaluate_js(
@@ -275,16 +290,19 @@ def _expand_all_recent_run_groups(window: webview.Window) -> None:
         # the DOM) -- every run now belongs to some real Study, the
         # always-present default one at worst (`20260918-claude-sonnet-5-
         # home-tree-reorg-design.md`, `selby/restricted`, §1/§2), so this
-        # function's own toggle-expansion loop hits that await on every
-        # single call now, not only for a test that happens to create a
-        # Study. Without this sleep, five successive `evaluate_js` round
-        # trips easily outrace one bridge call, leaving `remaining` non-
-        # zero forever and this loop's own 5-round budget exhausted before
-        # any run row ever renders -- confirmed live as the exact cause of
-        # a real `rowCount == 0` failure across most of this file's own
-        # tests when the "Unsorted" bucket (synchronous, no bridge call at
-        # all) was removed in favor of the default Study.
-        time.sleep(0.15)
+        # loop hits that await on every call. Wait, with no deadline, for
+        # every such fetch to land and re-render before the next round:
+        # `window.__fimGroupTogglesPending` is decremented in the
+        # handler's `finally`, so it always returns to zero. This used to
+        # sleep a fixed 0.15 seconds instead; on a loaded machine the
+        # fetch outlasted it, the next round clicked the same toggle
+        # again, and the extra fetch's late re-render wiped a batch row's
+        # replicate list a test had expanded in the meantime (".open-run-
+        # replicate-row" null). How long a bridge call takes depends on
+        # machine load, not on the commit; the rounds themselves are a
+        # bound on the tree's depth, not on time.
+        while window.evaluate_js("window.__fimGroupTogglesPending"):
+            time.sleep(_POLL_INTERVAL_SECONDS)
         remaining = window.evaluate_js(
             "document.querySelectorAll("
             "'.open-run-group-toggle[aria-expanded=\"false\"]').length"
@@ -881,10 +899,17 @@ def test_expanding_a_batch_row_shows_its_own_replicate_list(
             window.evaluate_js(
                 "document.querySelector('.open-run-replicate-toggle').click();"
             )
-            after_expand_count = _poll_until(
+            # `toggleBatchRow` sets `aria-expanded` only once its own
+            # `get_batch_replicate_summary` call has landed and the rows
+            # are in place; waited for with no deadline, not polled for a
+            # row count under a fixed attempt budget.
+            _wait_until(
                 window,
-                f"document.querySelectorAll({_REAL_ROW_SELECTOR}).length",
-                lambda value: value is not None and value > 1,
+                "document.querySelector('.open-run-replicate-toggle')"
+                ".getAttribute('aria-expanded') === 'true'",
+            )
+            after_expand_count = window.evaluate_js(
+                f"document.querySelectorAll({_REAL_ROW_SELECTOR}).length"
             )
             replicate_texts = window.evaluate_js(
                 "Array.from(document.querySelectorAll("
@@ -926,6 +951,81 @@ def test_expanding_a_batch_row_shows_its_own_replicate_list(
     assert settled["replicateTexts"] == ["#1", "#2", "#3"]
     assert settled["openButtonDisabled"] is False
     assert settled["afterCollapseCount"] == 1
+
+
+def test_a_second_click_on_a_loading_study_toggle_is_ignored(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Clicking a Study's toggle again while its run list loads starts nothing.
+
+    Expanding a Study awaits `get_study_run_summary` and then re-renders
+    the whole tree. Each click used to start its own fetch and its own
+    re-render, so a second click before the first fetch landed produced
+    a second, late re-render that rebuilt the table after the user had
+    moved on -- on a loaded machine, wiping a batch row's replicate list
+    expanded in between (`test_expanding_a_batch_row_shows_its_own_
+    replicate_list` failed that way). Both clicks are made in one
+    `evaluate_js` call, so the second always lands while the first fetch
+    is in flight; the count of real bridge calls then shows whether it
+    was ignored.
+    """
+    monkeypatch.setattr(paths_module, "results_directory", lambda: tmp_path / "results")
+    _write_batch_run(tmp_path)
+
+    window = create_window(hidden=True)
+    outcome: queue.Queue[dict[str, Any] | None] = queue.Queue(maxsize=1)
+    study_toggle = (
+        "Array.from(document.querySelectorAll('.open-run-group-toggle'))"
+        ".find((b) => b.textContent.includes('Default study'))"
+    )
+
+    def _drive() -> None:
+        try:
+            _poll_until(window, _INPUT_SCREEN_READY, lambda value: value is True)
+            window.evaluate_js("window.fim.menu.openRun();")
+            _wait_until(window, "window.__fimOpenRunRecentRunsLoaded === true")
+            # "Default experiment" expands synchronously, revealing the
+            # (collapsed, not yet fetched) "Default study" inside it.
+            window.evaluate_js(
+                "Array.from(document.querySelectorAll('.open-run-group-toggle'))"
+                ".find((b) => b.textContent.includes('Default experiment'))"
+                ".click();"
+            )
+            _wait_until(window, f"{study_toggle} !== undefined")
+            window.evaluate_js(
+                "(function () {"
+                "window.__fimStudySummaryCalls = 0;"
+                "const realSummary = window.pywebview.api.get_study_run_summary;"
+                "window.pywebview.api.get_study_run_summary = (...args) => {"
+                "    window.__fimStudySummaryCalls += 1;"
+                "    return realSummary(...args);"
+                "};"
+                f"const toggle = {study_toggle};"
+                "toggle.click();"
+                "toggle.click();"
+                "})();"
+            )
+            _wait_until(window, "window.__fimGroupTogglesPending === 0")
+            outcome.put(
+                window.evaluate_js(
+                    "({"
+                    "calls: window.__fimStudySummaryCalls, "
+                    f"expanded: {study_toggle}.getAttribute('aria-expanded'), "
+                    f"rowCount: document.querySelectorAll({_REAL_ROW_SELECTOR}).length"
+                    "})"
+                )
+            )
+        finally:
+            window.destroy()
+
+    webview.start(_drive)
+    settled = outcome.get(timeout=_DRIVE_TIMEOUT_SECONDS)
+
+    assert settled is not None
+    assert settled["calls"] == 1
+    assert settled["expanded"] == "true"
+    assert settled["rowCount"] == 1
 
 
 def test_opening_a_run_with_a_sigma_band_shows_it_alongside_the_curve(

@@ -86,6 +86,18 @@ const collapsedGroupIds = new Set();
 // by default without also silently re-collapsing a group the user
 // already explicitly opened on an earlier visit.
 const knownGroupIds = new Set();
+// Group ids whose expand click is still waiting on its Study run list
+// (`buildGroupHeaderRow`). A second click on the same toggle while that
+// fetch is in flight is ignored: before this, each click started its own
+// fetch and its own `renderRecentRuns()` when it landed, so a late one
+// rebuilt the table after the user had moved on -- collapsing a batch
+// row's replicate list they had just expanded, for example.
+const expandingGroupIds = new Set();
+// How many of those expand fetches are in flight, for tests to wait on
+// (the same settle-counter shape as `window.__fimScrubberPending`): a
+// Study toggle has no other observable "finished" state until its
+// fetch lands and the table re-renders.
+window.__fimGroupTogglesPending = 0;
 
 // One `{key, direction}` per Study id, read/written by the column
 // header row's own click handler (`buildColumnHeaderRow`) -- a Study's
@@ -1348,16 +1360,28 @@ function buildGroupHeaderRow(group, nested = false) {
         toggle.title = window.fim.detailsTooltipText(group.details);
     }
     toggle.addEventListener("click", async () => {
+        if (expandingGroupIds.has(group.id)) {
+            return;
+        }
         const expanding = collapsedGroupIds.has(group.id);
         if (
             expanding &&
             group.kind === "study" &&
             window.__fimStudyRunsCache[group.studyId] === undefined
         ) {
-            const result = await window.pywebview.api.get_study_run_summary(
-                group.studyId
-            );
-            window.__fimStudyRunsCache[group.studyId] = result.ok ? result.runs : [];
+            expandingGroupIds.add(group.id);
+            window.__fimGroupTogglesPending += 1;
+            try {
+                const result = await window.pywebview.api.get_study_run_summary(
+                    group.studyId
+                );
+                window.__fimStudyRunsCache[group.studyId] = result.ok
+                    ? result.runs
+                    : [];
+            } finally {
+                expandingGroupIds.delete(group.id);
+                window.__fimGroupTogglesPending -= 1;
+            }
         }
         if (expanding) {
             collapsedGroupIds.delete(group.id);
