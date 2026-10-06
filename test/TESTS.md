@@ -31714,7 +31714,12 @@ from the fresh run's own manifest, not predicted here:
   `lineal` bit for bit for the same seed (`GenerationalBackend`'s own
   docstring, checked by the golden-parity engine tests). So a committed
   `lineal` or `generational` output and a fresh `generational` run, or
-  two `generational-vector` runs, must agree exactly. This is stronger
+  two local `generational-vector` runs, must agree exactly. Archived
+  vector output is not bit-portable: BLAS reduction order can change
+  rounding across machines and flip a later discrete draw. Vector cases
+  therefore also run the configured backend locally for exact identity,
+  and use the existing statistical rule against the archived output.
+  Exact local identity is stronger
   than the design's statistical rule and implies it, so it is the rule
   used wherever it holds: a difference is a defect, never noise.
 - **Same random stream, adaptive batch: identical replicates, then
@@ -31825,6 +31830,19 @@ A new example must have its `auto` case timed, so its `slow` mark is
 decided from a measurement rather than left to default; a removed one
 must not leave a stale entry.
 
+<a id="validation.test_examples_auto_backend.test_vector_archive_uses_intervals_but_local_reference_requires_identity"></a>
+
+#### test\_vector\_archive\_uses\_intervals\_but\_local\_reference\_requires\_identity
+
+```python
+@pytest.mark.parametrize("local_difference", [False, True])
+def test_vector_archive_uses_intervals_but_local_reference_requires_identity(
+        tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+        local_difference: bool) -> None
+```
+
+Platform rounding is allowed only for the archive, never local parity.
+
 <a id="validation.test_examples_auto_backend.test_example_on_auto_agrees_with_its_committed_output"></a>
 
 #### test\_example\_on\_auto\_agrees\_with\_its\_committed\_output
@@ -31841,9 +31859,10 @@ The example's `auto` run agrees with its committed output.
 
 The comparison follows from the backend `auto` resolved to (the fresh
 manifest) against the backend the committed output ran on: identical
-reports on the same random stream (for an adaptive batch, identical
-shared replicates plus the half-width rule), otherwise the window-mean
-or half-width rule (module docstring).
+reports on the same portable random stream (for an adaptive batch,
+identical shared replicates plus the half-width rule), otherwise the
+window-mean or half-width rule. Vector archives use the statistical
+rule plus exact comparison with a same-host configured run.
 
 <a id="validation.test_git_hooks"></a>
 

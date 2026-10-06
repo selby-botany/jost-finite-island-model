@@ -16,7 +16,12 @@ from the fresh run's own manifest, not predicted here:
   `lineal` bit for bit for the same seed (`GenerationalBackend`'s own
   docstring, checked by the golden-parity engine tests). So a committed
   `lineal` or `generational` output and a fresh `generational` run, or
-  two `generational-vector` runs, must agree exactly. This is stronger
+  two local `generational-vector` runs, must agree exactly. Archived
+  vector output is not bit-portable: BLAS reduction order can change
+  rounding across machines and flip a later discrete draw. Vector cases
+  therefore also run the configured backend locally for exact identity,
+  and use the existing statistical rule against the archived output.
+  Exact local identity is stronger
   than the design's statistical rule and implies it, so it is the rule
   used wherever it holds: a difference is a defect, never noise.
 - **Same random stream, adaptive batch: identical replicates, then
@@ -325,12 +330,13 @@ def _resolved_backend(directory: Path) -> str:
     return str(backends.pop())
 
 
-def _run_auto(example: str, tmp_path: Path) -> Path:
-    """Run one example's configuration with `engine_backend: auto`.
+def _run_example(example: str, tmp_path: Path, *, backend: str = "auto") -> Path:
+    """Run one example's configuration with the requested backend.
 
     Args:
         example: The example directory name.
         tmp_path: A private temporary directory for this run.
+        backend: Backend override; defaults to `auto`.
 
     Returns:
         The fresh run's output directory.
@@ -340,7 +346,8 @@ def _run_auto(example: str, tmp_path: Path) -> Path:
         (EXAMPLES_DIR / example / "config.yaml").read_text(encoding="utf-8")
     )
     assert isinstance(configuration, dict)
-    configuration["engine_backend"] = "auto"
+    configuration["engine_backend"] = backend
+    tmp_path.mkdir(parents=True, exist_ok=True)
     config = tmp_path / "config.yaml"
     config.write_text(yaml.safe_dump(configuration, sort_keys=False), "utf-8")
 
@@ -502,6 +509,47 @@ def test_every_example_has_a_recorded_runtime() -> None:
     assert sorted(_RUNTIME_SECONDS) == _example_ids()
 
 
+@pytest.mark.parametrize("local_difference", [False, True])
+def test_vector_archive_uses_intervals_but_local_reference_requires_identity(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, local_difference: bool
+) -> None:
+    """Platform rounding is allowed only for the archive, never local parity."""
+    example = "vector-fixture"
+    examples = tmp_path / "examples"
+    committed = examples / example
+    fresh = tmp_path / "fresh"
+    reference = tmp_path / "reference"
+    for directory, mean in ((committed, 0.3), (fresh, 0.31), (reference, 0.31)):
+        _write(
+            directory / "manifest.json",
+            {"parameters": {"convergence_statistic": "D", "replicate_tolerance": None}},
+        )
+        _write(
+            directory / "summary.json",
+            {"D": {"mean": mean, "half_width": 0.02}},
+        )
+        _write(
+            directory / "replicate-001" / "manifest.json",
+            {"engine_backend": "generational-vector"},
+        )
+        _write(directory / "replicate-001" / "report.json", {"D": mean})
+    if local_difference:
+        _write(reference / "replicate-001" / "report.json", {"D": 0.32})
+
+    def run_example(example: str, tmp_path: Path, *, backend: str = "auto") -> Path:
+        """Return controlled fresh and configured outputs without a simulation."""
+        return fresh if backend == "auto" else reference
+
+    module = sys.modules[__name__]
+    monkeypatch.setattr(module, "EXAMPLES_DIR", examples)
+    monkeypatch.setattr(module, "_run_example", run_example)
+    if local_difference:
+        with pytest.raises(AssertionError, match="local configured backend"):
+            test_example_on_auto_agrees_with_its_committed_output(example, tmp_path)
+    else:
+        test_example_on_auto_agrees_with_its_committed_output(example, tmp_path)
+
+
 @pytest.mark.statistical
 @pytest.mark.parametrize("example", [_case(example) for example in _example_ids()])
 def test_example_on_auto_agrees_with_its_committed_output(
@@ -511,18 +559,27 @@ def test_example_on_auto_agrees_with_its_committed_output(
 
     The comparison follows from the backend `auto` resolved to (the fresh
     manifest) against the backend the committed output ran on: identical
-    reports on the same random stream (for an adaptive batch, identical
-    shared replicates plus the half-width rule), otherwise the window-mean
-    or half-width rule (module docstring).
+    reports on the same portable random stream (for an adaptive batch,
+    identical shared replicates plus the half-width rule), otherwise the
+    window-mean or half-width rule. Vector archives use the statistical
+    rule plus exact comparison with a same-host configured run.
     """
     committed = EXAMPLES_DIR / example
-    fresh = _run_auto(example, tmp_path)
+    fresh = _run_example(example, tmp_path)
     backend_l = _resolved_backend(committed)
     backend_a = _resolved_backend(fresh)
     same_stream = _STREAM[backend_l] == _STREAM[backend_a]
     batch = (committed / "summary.json").is_file()
     parameters = _load(committed / "manifest.json")["parameters"]
     adaptive = batch and parameters.get("replicate_tolerance") is not None
+
+    local_problems: list[str] = []
+    if backend_l == backend_a == "generational-vector":
+        reference = _run_example(example, tmp_path / "configured", backend=backend_l)
+        local_problems = _compare_identical(reference, fresh)
+        # Same-host identity is mandatory; archived BLAS results instead
+        # satisfy the statistical contract used for different streams.
+        same_stream = False
 
     if same_stream and not adaptive:
         problems = _compare_identical(committed, fresh)
@@ -532,6 +589,7 @@ def test_example_on_auto_agrees_with_its_committed_output(
             problems += _compare_kept_replicates(committed, fresh)
     else:
         problems = _compare_scalar_statistically(committed, fresh, _watched(committed))
+    problems += [f"local configured backend: {problem}" for problem in local_problems]
     assert not problems, (
         f"{example}: auto resolved to {backend_a}, committed ran on {backend_l}: "
         + "; ".join(problems)

@@ -23,6 +23,13 @@ vector backend. Its short run is not suitable for interpreting
 equilibrium statistics: the population is nowhere near equilibrium after
 100 generations.
 
+The committed results are a scientific reference, not a cross-platform
+bit-for-bit baseline. The vector engine uses BLAS floating-point reductions;
+their rounding order can differ between machines and change a later random
+draw's decision. Validation compares the archived batch using its confidence
+intervals and requires exact agreement between `auto` and an explicitly
+configured vector run on the same host.
+
 ## Run
 
 ```console
