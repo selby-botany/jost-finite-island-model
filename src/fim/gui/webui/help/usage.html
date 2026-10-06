@@ -654,9 +654,12 @@ example and the next are the deliberate exception: each names a specific
 engine backend and runs a real, moderately long batch (a few seconds, not
 instant) large enough for that backend's own advantage to actually show.
 They are also the exception to the derived convergence defaults: each pins a
-short run (<code>convergence_window: 10</code>, <code>max_generations: 100</code>) so a timing
-comparison finishes in seconds. The population is nowhere near equilibrium
-when it stops, so read these two as timing workloads, not as results.
+fixed amount of work, 16 replicates of exactly 100 generations
+(<code>max_generations: 100</code> with a <code>convergence_window: 101</code> that can never
+fill, and <code>replicate_tolerance: null</code> so no replicate is skipped), so a
+timing comparison always does the same work. The population is nowhere
+near equilibrium when it stops, so read these two as timing workloads, not
+as results.
 <code>generational-vector</code> keeps a dense, array-native representation of every
 active replicate at once, and is the fastest measured choice once <code>d</code>
 grows large enough — see <a href="#" data-fim-external="https://github.com/selby-botany/jost-finite-island-model/blob/main/doc/fim-simulator-design.md#46-choosing-an-engine-backend">choosing an engine
@@ -682,16 +685,19 @@ loci:
     length: 5
 engine_backend: generational-vector
 convergence_statistic: D
-convergence_window: 10
+# A fixed 100-generation horizon: a 101-generation window can never fill
+# within 100 generations, so every replicate runs exactly to the cap.
+convergence_window: 101
 convergence_tolerance: 0.02
 max_generations: 100
 n_replicates: 16
+replicate_tolerance: null   # always run all 16 replicates
 </code></pre>
 <pre><code class="language-console">fim run vector-showcase.yaml --output results/vector-showcase --quiet
 </code></pre>
-<p>Ran in about 10 seconds on ordinary development hardware. The adaptive
-<code>replicate_tolerance</code> default stopped at the 10-replicate minimum — <code>D</code>'s
-95% confidence interval was already <code>0.0493 +/- 0.0061</code>. In the desktop
+<p>Ran in about 20 seconds on ordinary development hardware, all 16 replicates
+to the 100-generation cap, with <code>D</code>'s 95% confidence interval at
+<code>0.0264 +/- 0.0021</code>. In the desktop
 app, loading this example as a preset also sets Settings' own execution
 engine to <code>generational-vector</code> (Settings holds this field now, not
 Configure — see the <a href="#desktop-gui-fim-gui">desktop GUI</a> section below), so
@@ -724,19 +730,22 @@ loci:
     length: 7
 engine_backend: generational
 convergence_statistic: D
-convergence_window: 10
+# A fixed 100-generation horizon: a 101-generation window can never fill
+# within 100 generations, so every replicate runs exactly to the cap.
+convergence_window: 101
 convergence_tolerance: 0.02
 max_generations: 100
 n_replicates: 16
+replicate_tolerance: null   # always run all 16 replicates
 </code></pre>
 <pre><code class="language-console">fim run generational-showcase.yaml --output results/generational-showcase --quiet
 </code></pre>
-<p>Ran in about 8 seconds on the same hardware — faster than the
-<code>generational-vector</code> example above despite a longer locus, illustrating
-that neither backend is universally faster; which one wins depends on
-where a configuration actually sits on the <code>d</code>/locus-length grid. Also
-stopped at the 10-replicate minimum, with <code>D</code>'s 95% confidence interval at
-<code>0.0524 +/- 0.0063</code>. Loading this example syncs Settings' own execution
+<p>Ran in about 25 seconds on the same hardware, with <code>D</code>'s 95% confidence
+interval at <code>0.0237 +/- 0.0020</code>. That is a little slower than the
+<code>generational-vector</code> example above, although an earlier measurement on a
+less loaded machine found it a little faster: neither backend is
+universally faster, and which one wins depends on where a configuration
+sits on the <code>d</code>/locus-length grid and on the machine itself. Loading this example syncs Settings' own execution
 engine to <code>generational</code> the same way the previous example syncs it to
 <code>generational-vector</code>.</p>
 <h2 id="sweep-a-parameter">Sweep a parameter</h2>

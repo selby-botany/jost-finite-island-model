@@ -17,7 +17,10 @@ loci:
     length: 7
 engine_backend: generational
 convergence_statistic: D
-convergence_window: 10
+# A fixed 100-generation horizon: a 101-generation window can never fill
+# within 100 generations, so every replicate runs exactly to the cap.
+convergence_window: 101
 convergence_tolerance: 0.02
 max_generations: 100
 n_replicates: 16
+replicate_tolerance: null   # always run all 16 replicates

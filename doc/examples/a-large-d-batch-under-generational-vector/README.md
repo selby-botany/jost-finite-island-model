@@ -3,13 +3,25 @@
 ## What this demonstrates
 
 This is a timing workload, not an equilibrium example. It runs 16
-replicates with 70 demes and the `generational-vector` engine, using a
-short, explicitly pinned 100-generation cap so the workload finishes
-quickly. The finite-alleles model uses a five-base locus.
+replicates with 70 demes and the `generational-vector` engine, each for
+exactly 100 generations, so the amount of work is the same every time.
+The finite-alleles model uses a five-base locus.
 
+Two settings fix the amount of work:
+
+- `convergence_window: 101` is one more generation than the 100-generation
+  cap can record, so no replicate can stop early by converging. Each one
+  ends "at the cap", which is expected here.
+- `replicate_tolerance: null` turns off the adaptive replicate stop, so all
+  16 replicates always run. Without it, the default tolerance of 0.01 stops
+  the batch at the 10-replicate minimum.
+
+The run takes about 20 seconds on ordinary development hardware. The
+across-replicate mean `D` is 0.0264 ± 0.0021 (95% confidence interval).
 The configuration is intended to exercise a larger deme count and the
 vector backend. Its short run is not suitable for interpreting
-equilibrium statistics.
+equilibrium statistics: the population is nowhere near equilibrium after
+100 generations.
 
 ## Run
 

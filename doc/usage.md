@@ -765,9 +765,12 @@ example and the next are the deliberate exception: each names a specific
 engine backend and runs a real, moderately long batch (a few seconds, not
 instant) large enough for that backend's own advantage to actually show.
 They are also the exception to the derived convergence defaults: each pins a
-short run (`convergence_window: 10`, `max_generations: 100`) so a timing
-comparison finishes in seconds. The population is nowhere near equilibrium
-when it stops, so read these two as timing workloads, not as results.
+fixed amount of work, 16 replicates of exactly 100 generations
+(`max_generations: 100` with a `convergence_window: 101` that can never
+fill, and `replicate_tolerance: null` so no replicate is skipped), so a
+timing comparison always does the same work. The population is nowhere
+near equilibrium when it stops, so read these two as timing workloads, not
+as results.
 `generational-vector` keeps a dense, array-native representation of every
 active replicate at once, and is the fastest measured choice once `d`
 grows large enough — see [choosing an engine
@@ -795,19 +798,22 @@ loci:
     length: 5
 engine_backend: generational-vector
 convergence_statistic: D
-convergence_window: 10
+# A fixed 100-generation horizon: a 101-generation window can never fill
+# within 100 generations, so every replicate runs exactly to the cap.
+convergence_window: 101
 convergence_tolerance: 0.02
 max_generations: 100
 n_replicates: 16
+replicate_tolerance: null   # always run all 16 replicates
 ```
 
 ```console
 fim run vector-showcase.yaml --output results/vector-showcase --quiet
 ```
 
-Ran in about 10 seconds on ordinary development hardware. The adaptive
-`replicate_tolerance` default stopped at the 10-replicate minimum — `D`'s
-95% confidence interval was already `0.0493 +/- 0.0061`. In the desktop
+Ran in about 20 seconds on ordinary development hardware, all 16 replicates
+to the 100-generation cap, with `D`'s 95% confidence interval at
+`0.0264 +/- 0.0021`. In the desktop
 app, loading this example as a preset also sets Settings' own execution
 engine to `generational-vector` (Settings holds this field now, not
 Configure — see the [desktop GUI](#desktop-gui-fim-gui) section below), so
@@ -844,22 +850,25 @@ loci:
     length: 7
 engine_backend: generational
 convergence_statistic: D
-convergence_window: 10
+# A fixed 100-generation horizon: a 101-generation window can never fill
+# within 100 generations, so every replicate runs exactly to the cap.
+convergence_window: 101
 convergence_tolerance: 0.02
 max_generations: 100
 n_replicates: 16
+replicate_tolerance: null   # always run all 16 replicates
 ```
 
 ```console
 fim run generational-showcase.yaml --output results/generational-showcase --quiet
 ```
 
-Ran in about 8 seconds on the same hardware — faster than the
-`generational-vector` example above despite a longer locus, illustrating
-that neither backend is universally faster; which one wins depends on
-where a configuration actually sits on the `d`/locus-length grid. Also
-stopped at the 10-replicate minimum, with `D`'s 95% confidence interval at
-`0.0524 +/- 0.0063`. Loading this example syncs Settings' own execution
+Ran in about 25 seconds on the same hardware, with `D`'s 95% confidence
+interval at `0.0237 +/- 0.0020`. That is a little slower than the
+`generational-vector` example above, although an earlier measurement on a
+less loaded machine found it a little faster: neither backend is
+universally faster, and which one wins depends on where a configuration
+sits on the `d`/locus-length grid and on the machine itself. Loading this example syncs Settings' own execution
 engine to `generational` the same way the previous example syncs it to
 `generational-vector`.
 
