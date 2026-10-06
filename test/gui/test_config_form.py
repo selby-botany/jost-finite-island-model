@@ -860,7 +860,7 @@ def test_form_values_to_payload_explicit_p0_round_trips() -> None:
     ("message", "expected_field", "expected_tab"),
     [
         (
-            "equilibrium_convergence_tolerance must be finite and non-negative",
+            "equilibrium_convergence_tolerance must be finite and greater than 0",
             "equilibrium_convergence_tolerance",
             "initial_conditions",
         ),

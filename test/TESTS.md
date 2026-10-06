@@ -4563,6 +4563,46 @@ def test_large_scalar_island_uses_the_closed_form() -> None
 
 A scalar `m` at any `d` never needs the eigenvalue route.
 
+<a id="convergence.test_defaults.test_panmictic_burn_in_for_the_equilibrium_split_example"></a>
+
+#### test\_panmictic\_burn\_in\_for\_the\_equilibrium\_split\_example
+
+```python
+def test_panmictic_burn_in_for_the_equilibrium_split_example() -> None
+```
+
+600 gene copies at `mu` 0.001: tau about 273, burn-in about 4.6 tau.
+
+The bundled equilibrium-split example (3 demes of 200, haploid). Its
+`tau` exceeds the one-deme recursion's by a relative `mu tau / N`
+(about 0.05% here), and its expected heterozygosity is close to
+`theta / (1 + theta)`, `theta = 2 N mu = 1.2`.
+
+<a id="convergence.test_defaults.test_panmictic_burn_in_bounds_the_identity_recursion_from_any_start"></a>
+
+#### test\_panmictic\_burn\_in\_bounds\_the\_identity\_recursion\_from\_any\_start
+
+```python
+def test_panmictic_burn_in_bounds_the_identity_recursion_from_any_start(
+) -> None
+```
+
+After the burn-in, the expected identity is within tolerance of F*.
+
+Iterates the expected recursion from both extremes (every copy
+identical, and none) and checks the departure at the burn-in.
+
+<a id="convergence.test_defaults.test_panmictic_burn_in_follows_the_slowest_locus_and_rejects_bad_input"></a>
+
+#### test\_panmictic\_burn\_in\_follows\_the\_slowest\_locus\_and\_rejects\_bad\_input
+
+```python
+def test_panmictic_burn_in_follows_the_slowest_locus_and_rejects_bad_input(
+) -> None
+```
+
+The smallest rate sets the burn-in; a zero tolerance is refused.
+
 <a id="convergence.test_defaults.test_derived_convergence_sentence_names_window_cap_and_time"></a>
 
 #### test\_derived\_convergence\_sentence\_names\_window\_cap\_and\_time
@@ -13977,7 +14017,7 @@ accepted without also having to override `d`/`loci` in `values`.
     ("message", "expected_field", "expected_tab"),
     [
         (
-            "equilibrium_convergence_tolerance must be finite and non-negative",
+            "equilibrium_convergence_tolerance must be finite and greater than 0",
             "equilibrium_convergence_tolerance",
             "initial_conditions",
         ),
@@ -22321,22 +22361,75 @@ def test_equilibrium_split_rejects_finite_alleles_mutation_model(
 Finite-alleles support needs a shared `_build_finite_allele_spaces`,
 not yet extracted from `fim.engine` (design doc's own noted scope limit).
 
-<a id="model.test_initial.test_equilibrium_split_raises_when_it_never_converges"></a>
+<a id="model.test_initial.test_equilibrium_split_raises_when_the_burn_in_exceeds_the_cap"></a>
 
-#### test\_equilibrium\_split\_raises\_when\_it\_never\_converges
+#### test\_equilibrium\_split\_raises\_when\_the\_burn\_in\_exceeds\_the\_cap
 
 ```python
-def test_equilibrium_split_raises_when_it_never_converges(
+def test_equilibrium_split_raises_when_the_burn_in_exceeds_the_cap(
         rng: Callable[[int], np.random.Generator]) -> None
 ```
 
-Hitting the cap without stabilizing is fatal (design doc's own decision 4) --
+A burn-in longer than the cap is fatal (design doc's own decision 4).
 
-unlike the main run's own benign generation-cap outcome, a `d`-deme
+Unlike the main run's own benign generation-cap outcome, a `d`-deme
 run must never be silently founded from a non-equilibrium ancestral
-population. `max_generations=1` can never satisfy a `window=2`
-criterion (it requires at least two recorded generations), so this
-is guaranteed to hit the cap without ever having a chance to converge.
+population. The burn-in is known before the phase starts, so the
+message says how many generations it needs.
+
+<a id="model.test_initial.test_equilibrium_split_runs_the_derived_burn_in_or_its_minimum"></a>
+
+#### test\_equilibrium\_split\_runs\_the\_derived\_burn\_in\_or\_its\_minimum
+
+```python
+def test_equilibrium_split_runs_the_derived_burn_in_or_its_minimum(
+        rng: Callable[[int], np.random.Generator]) -> None
+```
+
+The ancestral phase runs the model's burn-in, never fewer than its window.
+
+40 gene copies with `mu` 0.02 relax in about 16 generations, so a
+tolerance of 0.01 needs `ceil(ln 0.01 / ln rho)` generations,
+`rho = (1 - 1/40)((1 - 0.02)² + 0.02 (1 - 0.02)/40)`; a larger
+window is a floor.
+
+<a id="model.test_initial.test_equilibrium_split_uses_the_slowest_locus_for_its_burn_in"></a>
+
+#### test\_equilibrium\_split\_uses\_the\_slowest\_locus\_for\_its\_burn\_in
+
+```python
+def test_equilibrium_split_uses_the_slowest_locus_for_its_burn_in(
+        rng: Callable[[int], np.random.Generator]) -> None
+```
+
+With per-locus rates, the locus with the smallest `mu` sets the burn-in.
+
+<a id="model.test_initial.test_equilibrium_split_ends_near_the_expected_equilibrium_heterozygosity"></a>
+
+#### test\_equilibrium\_split\_ends\_near\_the\_expected\_equilibrium\_heterozygosity
+
+```python
+def test_equilibrium_split_ends_near_the_expected_equilibrium_heterozygosity(
+        rng: Callable[[int], np.random.Generator]) -> None
+```
+
+Averaged over many loci, the founded population sits at equilibrium.
+
+A single locus wanders around its expected heterozygosity by drift,
+but 200 independent loci average that out: the mean across loci ends
+within 0.05 (about four standard errors) of `1 - F*`, starting from
+a one-allele draw (heterozygosity 0) far from it. Seeded, so the
+outcome is fixed by the commit.
+
+<a id="model.test_initial.test_equilibrium_split_condition_rejects_a_zero_tolerance"></a>
+
+#### test\_equilibrium\_split\_condition\_rejects\_a\_zero\_tolerance
+
+```python
+def test_equilibrium_split_condition_rejects_a_zero_tolerance() -> None
+```
+
+A zero tolerance would need an endless burn-in, so it is refused.
 
 <a id="model.test_initial.test_equilibrium_split_condition_rejects_a_non_positive_max_generations"></a>
 
@@ -24480,19 +24573,30 @@ A run cannot both fix an explicit p_0 and derive one from equilibrium-split.
 def test_equilibrium_convergence_window_rejects_below_two() -> None
 ```
 
-`equilibrium_convergence_window` shares `TrailingWindowCriterion`'s minimum.
+`equilibrium_convergence_window` keeps its historical minimum of 2.
 
-<a id="model.test_params.test_equilibrium_convergence_window_cannot_exceed_max_generations_plus_one"></a>
+<a id="model.test_params.test_equilibrium_convergence_tolerance_rejects_zero_and_negative"></a>
 
-#### test\_equilibrium\_convergence\_window\_cannot\_exceed\_max\_generations\_plus\_one
+#### test\_equilibrium\_convergence\_tolerance\_rejects\_zero\_and\_negative
 
 ```python
-def test_equilibrium_convergence_window_cannot_exceed_max_generations_plus_one(
-) -> (None)
+@pytest.mark.parametrize("tolerance", [-0.1, 0.0])
+def test_equilibrium_convergence_tolerance_rejects_zero_and_negative(
+        tolerance: float) -> None
 ```
 
-The same structural-impossibility rule `convergence_window`/`max_generations`
-already enforce for the main run, applied to the ancestral phase's own pair.
+The tolerance sets the ancestral burn-in; zero would make it endless.
+
+<a id="model.test_params.test_equilibrium_convergence_window_cannot_exceed_max_generations"></a>
+
+#### test\_equilibrium\_convergence\_window\_cannot\_exceed\_max\_generations
+
+```python
+def test_equilibrium_convergence_window_cannot_exceed_max_generations(
+) -> None
+```
+
+The ancestral phase runs at least the window, so it must fit the cap.
 
 <a id="model.test_params.test_sigma_band_fields_default_to_none_and_round_trip"></a>
 

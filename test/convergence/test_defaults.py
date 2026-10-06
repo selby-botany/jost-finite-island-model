@@ -16,6 +16,7 @@ from fim.convergence.defaults import (
     derive_convergence_defaults,
     describe_derived_convergence,
     island_relaxation_time,
+    panmictic_equilibration,
     recursion_relaxation_time,
     relaxation_time,
 )
@@ -192,6 +193,74 @@ def test_large_scalar_island_uses_the_closed_form() -> None:
     """A scalar `m` at any `d` never needs the eigenvalue route."""
     tau = relaxation_time(deme_sizes=[100] * 200, migration=0.01, mutation_rates=[1e-6])
     assert tau > 0.0
+
+
+def test_panmictic_burn_in_for_the_equilibrium_split_example() -> None:
+    """600 gene copies at `mu` 0.001: tau about 273, burn-in about 4.6 tau.
+
+    The bundled equilibrium-split example (3 demes of 200, haploid). Its
+    `tau` exceeds the one-deme recursion's by a relative `mu tau / N`
+    (about 0.05% here), and its expected heterozygosity is close to
+    `theta / (1 + theta)`, `theta = 2 N mu = 1.2`.
+    """
+    result = panmictic_equilibration(
+        total_size=600, mutation_rates=[0.001], tolerance=0.01
+    )
+    one_deme = recursion_relaxation_time(
+        deme_sizes=[600], migration=[[1.0]], mutation=0.001
+    )
+
+    assert result.relaxation_time == pytest.approx(
+        one_deme * (1.0 + 0.001 * one_deme / 600), rel=1e-5
+    )
+    assert result.relaxation_time == pytest.approx(273.0, abs=0.5)
+    assert result.generations == math.ceil(
+        math.log(0.01) / math.log(1.0 - 1.0 / result.relaxation_time)
+    )
+    assert result.generations == pytest.approx(
+        result.relaxation_time * math.log(100.0), rel=0.01
+    )
+    assert result.expected_heterozygosity == pytest.approx(1.2 / 2.2, rel=0.01)
+
+
+def test_panmictic_burn_in_bounds_the_identity_recursion_from_any_start() -> None:
+    """After the burn-in, the expected identity is within tolerance of F*.
+
+    Iterates the expected recursion from both extremes (every copy
+    identical, and none) and checks the departure at the burn-in.
+    """
+    size, rate, tolerance = 40, 0.02, 0.01
+    result = panmictic_equilibration(
+        total_size=size, mutation_rates=[rate], tolerance=tolerance
+    )
+    survival = 1.0 - 1.0 / size
+    keep = (1.0 - rate) ** 2 + rate * (1.0 - rate) / size
+    equilibrium = 1.0 - result.expected_heterozygosity
+    for start in (0.0, 1.0):
+        identity = start
+        for _ in range(result.generations):
+            identity = 1.0 / size + survival * (keep * identity + rate / size)
+        assert abs(identity - equilibrium) <= tolerance
+
+
+def test_panmictic_burn_in_follows_the_slowest_locus_and_rejects_bad_input() -> None:
+    """The smallest rate sets the burn-in; a zero tolerance is refused."""
+    mixed = panmictic_equilibration(
+        total_size=100, mutation_rates=[0.05, 0.001], tolerance=0.01
+    )
+    slow = panmictic_equilibration(
+        total_size=100, mutation_rates=[0.001], tolerance=0.01
+    )
+
+    assert mixed.generations == slow.generations
+    assert (
+        panmictic_equilibration(
+            total_size=100, mutation_rates=[0.01], tolerance=1.0
+        ).generations
+        == 0
+    )
+    with pytest.raises(ValueError, match="greater than 0"):
+        panmictic_equilibration(total_size=100, mutation_rates=[0.01], tolerance=0.0)
 
 
 def test_derived_convergence_sentence_names_window_cap_and_time() -> None:

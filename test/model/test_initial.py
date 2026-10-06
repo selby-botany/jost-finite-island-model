@@ -1,10 +1,12 @@
 """Tests for deterministic initial-condition strategies."""
 
+import math
 from collections.abc import Callable
 
 import numpy as np
 import pytest
 
+from fim.convergence.defaults import panmictic_equilibration
 from fim.model.allele import AlleleId
 from fim.model.initial import (
     EquilibrationOutcome,
@@ -217,10 +219,10 @@ def test_founding_condition_rejects_invalid_inputs(
 def _equilibrium_condition(
     **changes: object,
 ) -> EquilibriumSplitInitialCondition:
-    """Build a fast-converging condition: window 2, tolerance 1.0 (H_S is bounded
-    in [0, 1), so any two values are within it) -- converges as soon as the
-    trailing window fills, exercising at least one real mutate/drift step
-    without a slow test."""
+    """Build a fast condition: tolerance 1.0 needs no derived burn-in (any
+    heterozygosity is within 1 of equilibrium), so the ancestral phase runs
+    exactly its minimum, `convergence_window` = 2 generations -- real
+    mutate/drift steps without a slow test."""
     values: dict[str, object] = {
         "convergence_window": 2,
         "convergence_tolerance": 1.0,
@@ -329,24 +331,108 @@ def test_equilibrium_split_rejects_finite_alleles_mutation_model(
         _equilibrium_condition().generate_with_outcome(params, rng(0))
 
 
-def test_equilibrium_split_raises_when_it_never_converges(
+def test_equilibrium_split_raises_when_the_burn_in_exceeds_the_cap(
     rng: Callable[[int], np.random.Generator],
 ) -> None:
-    """Hitting the cap without stabilizing is fatal (design doc's own decision 4) --
+    """A burn-in longer than the cap is fatal (design doc's own decision 4).
 
-    unlike the main run's own benign generation-cap outcome, a `d`-deme
+    Unlike the main run's own benign generation-cap outcome, a `d`-deme
     run must never be silently founded from a non-equilibrium ancestral
-    population. `max_generations=1` can never satisfy a `window=2`
-    criterion (it requires at least two recorded generations), so this
-    is guaranteed to hit the cap without ever having a chance to converge.
+    population. The burn-in is known before the phase starts, so the
+    message says how many generations it needs.
     """
     params = _params(gene_copies=20, d=2, mu=0.02)
+    needed = panmictic_equilibration(
+        total_size=40, mutation_rates=[0.02], tolerance=0.01
+    ).generations
     condition = _equilibrium_condition(
-        convergence_window=2, convergence_tolerance=0.0, max_generations=1
+        convergence_tolerance=0.01, max_generations=needed - 1
     )
 
-    with pytest.raises(ValueError, match="did not reach equilibrium"):
+    with pytest.raises(ValueError, match=f"at least {needed:,}"):
         condition.generate_with_outcome(params, rng(0))
+
+
+def test_equilibrium_split_runs_the_derived_burn_in_or_its_minimum(
+    rng: Callable[[int], np.random.Generator],
+) -> None:
+    """The ancestral phase runs the model's burn-in, never fewer than its window.
+
+    40 gene copies with `mu` 0.02 relax in about 16 generations, so a
+    tolerance of 0.01 needs `ceil(ln 0.01 / ln rho)` generations,
+    `rho = (1 - 1/40)((1 - 0.02)² + 0.02 (1 - 0.02)/40)`; a larger
+    window is a floor.
+    """
+    params = _params(gene_copies=20, d=2, mu=0.02)
+    rho = (1.0 - 1.0 / 40) * ((1.0 - 0.02) ** 2 + 0.02 * (1.0 - 0.02) / 40)
+    derived = math.ceil(math.log(0.01) / math.log(rho))
+
+    _state, outcome = _equilibrium_condition(
+        convergence_tolerance=0.01, max_generations=derived
+    ).generate_with_outcome(params, rng(0))
+    _state, floored = _equilibrium_condition(
+        convergence_window=derived + 30,
+        convergence_tolerance=0.01,
+        max_generations=derived + 30,
+    ).generate_with_outcome(params, rng(0))
+
+    assert outcome.generation_count == derived
+    assert len(outcome.history) == derived + 1
+    assert floored.generation_count == derived + 30
+
+
+def test_equilibrium_split_uses_the_slowest_locus_for_its_burn_in(
+    rng: Callable[[int], np.random.Generator],
+) -> None:
+    """With per-locus rates, the locus with the smallest `mu` sets the burn-in."""
+    params = _params(
+        gene_copies=20,
+        d=2,
+        mu=(0.05, 0.005),
+        loci=(LocusSpec(1, 100), LocusSpec(2, 100)),
+    )
+    slowest = panmictic_equilibration(
+        total_size=40, mutation_rates=[0.005], tolerance=0.01
+    ).generations
+
+    _state, outcome = _equilibrium_condition(
+        convergence_tolerance=0.01, max_generations=slowest
+    ).generate_with_outcome(params, rng(0))
+
+    assert outcome.generation_count == slowest
+
+
+def test_equilibrium_split_ends_near_the_expected_equilibrium_heterozygosity(
+    rng: Callable[[int], np.random.Generator],
+) -> None:
+    """Averaged over many loci, the founded population sits at equilibrium.
+
+    A single locus wanders around its expected heterozygosity by drift,
+    but 200 independent loci average that out: the mean across loci ends
+    within 0.05 (about four standard errors) of `1 - F*`, starting from
+    a one-allele draw (heterozygosity 0) far from it. Seeded, so the
+    outcome is fixed by the commit.
+    """
+    loci = tuple(LocusSpec(index, 100) for index in range(1, 201))
+    params = _params(gene_copies=25, d=2, mu=0.01, loci=loci, initial_allele_count=1)
+    expected = panmictic_equilibration(
+        total_size=50, mutation_rates=[0.01], tolerance=0.01
+    ).expected_heterozygosity
+
+    _state, outcome = _equilibrium_condition(
+        convergence_tolerance=0.01, max_generations=1_000
+    ).generate_with_outcome(params, rng(0))
+
+    assert outcome.history[0] == pytest.approx(0.0, abs=1e-12)
+    assert abs(outcome.final_heterozygosity - expected) < 0.05
+
+
+def test_equilibrium_split_condition_rejects_a_zero_tolerance() -> None:
+    """A zero tolerance would need an endless burn-in, so it is refused."""
+    with pytest.raises(ValueError, match="greater than 0"):
+        EquilibriumSplitInitialCondition(
+            convergence_window=2, convergence_tolerance=0.0, max_generations=10
+        )
 
 
 def test_equilibrium_split_condition_rejects_a_non_positive_max_generations() -> None:

@@ -1241,6 +1241,21 @@ project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   so a run from the form has the same parameters as one from the file. Rates
   that no single `mu_b` produces are still refused, with a message that says
   so.
+- **Equilibrium-split founding reaches equilibrium, and can finish.** The
+  ancestral phase waited for one population's diversity to stop changing,
+  which at equilibrium it never does: drift keeps it wandering. Since the
+  noise-adequacy check it could not finish at any cap (the bundled example
+  failed at 100,000 generations); before that check it stopped on a chance
+  lull after 20 generations, far from equilibrium. It now runs for a burn-in
+  worked out from the model: about ln(1 / equilibrium_convergence_tolerance)
+  relaxation times, 1/(2μ + 1/N) generations each, so that the population's
+  expected diversity is within the tolerance of its equilibrium value from any
+  start. equilibrium_convergence_window is now the fewest generations the
+  phase runs, equilibrium_convergence_tolerance must be greater than 0, and a
+  phase needing more than equilibrium_max_generations stops the run before it
+  starts, saying how many generations it needs. See
+  [equilibrium_convergence_window, equilibrium_convergence_tolerance,
+  equilibrium_max_generations](doc/configuration.md#equilibrium_convergence_window-equilibrium_convergence_tolerance-equilibrium_max_generations).
 - **The sweep dialog no longer throws away edits.** Only Done saved the
   dialog; closing it any other way (Escape) kept the earlier settings, so a
   sweep could run with fewer axes than the dialog had shown. Now every way of

@@ -357,7 +357,7 @@ ID, so they cannot collide with explicit labels.</p>
 </code></pre>
 <h3 id="equilibrium_convergence_window-equilibrium_convergence_tolerance-equilibrium_max_generations">equilibrium_convergence_window, equilibrium_convergence_tolerance, equilibrium_max_generations</h3>
 <ul>
-<li><strong>Type:</strong> integer of at least 2; non-negative number; positive integer</li>
+<li><strong>Type:</strong> integer of at least 2; number greater than 0; positive integer</li>
 <li><strong>Default:</strong> absent (all three)</li>
 </ul>
 <p>Together these select the <strong>equilibrium-split</strong> starting condition instead
@@ -368,28 +368,47 @@ than from a prior. It runs in two phases. First it simulates <em>one</em> popula
 holding the same total number of gene copies your whole run will have (the sum
 of every deme's <code>N</code>, all in one deme), applying mutation and drift generation
 after generation — there is nothing to migrate between with only one deme —
-until that population's own diversity (H<sub>S</sub>, which equals H<sub>T</sub> when there is
-only one deme) stops changing. Then it splits that finished population into
+until that population has reached mutation-drift equilibrium. Then it splits
+that finished population into
 your <code>d</code> demes, each drawing its own <code>N</code> gene copies from the shared pool
 without replacement, so every deme gets a different sample. That sampling is a
 genuine founder effect: your demes already differ a little at generation 0,
 from the chance of which copies each one happened to receive.</p>
+<p>How long the first phase lasts is worked out from the model, not watched for.
+A single population at equilibrium does not sit still: its diversity
+(H<sub>S</sub>, which equals H<sub>T</sub> when there is only one deme) keeps
+wandering around its expected value by drift, so waiting for it to stop
+changing would never end. What the model does say is how fast the population
+forgets where it started. The ancestral population holds N gene copies (the
+sum of your demes' <code>N</code>) and mutates at rate μ, so it forgets its start on a
+time scale of about 1/(2μ + 1/N) generations, its relaxation time (the same
+idea as <a href="#" data-fim-external="https://github.com/selby-botany/jost-finite-island-model/blob/main/doc/convergence.md">Convergence defaults</a>, for one deme). The first phase
+runs until the population's expected diversity, from any starting frequencies,
+is within your tolerance of its equilibrium value, which is close to
+θ/(1 + θ) with θ = 2Nμ: about ln(1 / tolerance) relaxation times. With
+several loci, the locus with the smallest μ decides.</p>
 <p>The three keys control only the first phase:</p>
 <ul>
-<li><strong>equilibrium_convergence_window</strong> — how many recent generations to compare
-when deciding that the ancestral population's diversity has settled. It is
-deliberately separate from convergence_window, because this phase runs at a
-different population size than your real run and has no reason to share a
-threshold with it.</li>
-<li><strong>equilibrium_convergence_tolerance</strong> — how close those generations must be
-to count as settled, in H<sub>S</sub>'s own units.</li>
+<li><strong>equilibrium_convergence_tolerance</strong> — how close to equilibrium the
+ancestral population must be, in H<sub>S</sub>'s own units: the largest
+expected difference between its diversity and the equilibrium value. It
+sets how long the first phase runs; 0.01 means about 4.6 relaxation times,
+0.05 about 3. It must be greater than 0.</li>
+<li><strong>equilibrium_convergence_window</strong> — the fewest generations the first phase
+runs, however quickly the model says it equilibrates. It is deliberately
+separate from convergence_window, because this phase runs at a different
+population size than your real run. It cannot exceed
+equilibrium_max_generations.</li>
 <li><strong>equilibrium_max_generations</strong> — the safety limit on the first phase.</li>
 </ul>
-<p>One important difference from max_generations: reaching
-equilibrium_max_generations without settling is an <strong>error</strong>, not an ordinary
-result. A run founded from a population that never reached equilibrium would
-defeat the only thing this mode exists to provide, so it stops with a message
-instead of continuing.</p>
+<p>One important difference from max_generations: a first phase that needs more
+than equilibrium_max_generations is an <strong>error</strong>, not an ordinary result. A
+run founded from a population that had not reached equilibrium would defeat
+the only thing this mode exists to provide, so <code>fim</code> stops before the first
+phase starts, with a message saying how many generations it needs.</p>
+<p>For example, three demes of 200 haploid individuals (N = 600) with μ = 0.001
+relax in about 273 generations, so a tolerance of 0.01 needs 1,256
+generations, and the example below (tolerance 0.005) needs 1,445.</p>
 <p>Equilibrium-split cannot be combined with an explicit p<sub>0</sub> — a run cannot both
 fix its starting frequencies and derive them — and it uses its own random
 number stream, derived from <code>seed</code>, so the same <code>seed</code> always reproduces the
@@ -1146,7 +1165,7 @@ existed.</p>
 <td>rejected</td>
 </tr>
 <tr>
-<td>equilibrium_convergence_tolerance negative or non-finite</td>
+<td>equilibrium_convergence_tolerance zero, negative or non-finite</td>
 <td>rejected</td>
 </tr>
 <tr>
@@ -1154,12 +1173,12 @@ existed.</p>
 <td>rejected</td>
 </tr>
 <tr>
-<td>equilibrium_convergence_window greater than equilibrium_max_generations + 1</td>
+<td>equilibrium_convergence_window greater than equilibrium_max_generations</td>
 <td>rejected</td>
 </tr>
 <tr>
-<td>equilibrium_max_generations reached without the ancestral phase settling</td>
-<td>run fails (not a benign outcome)</td>
+<td>the ancestral phase needs more than equilibrium_max_generations generations</td>
+<td>run fails before the phase starts (not a benign outcome)</td>
 </tr>
 </tbody>
 </table>

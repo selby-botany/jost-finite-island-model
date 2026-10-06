@@ -87,15 +87,15 @@ const FIELD_HELP = {
         "minus 1) the Dirichlet draw starts from.",
     initial_concentration: "Concentration parameter of the Dirichlet draw " +
         "— smaller values produce more uneven starting frequencies.",
-    equilibrium_convergence_window: "Trailing window, in generations of " +
-        "the ancestral population's own pre-run simulation, whose first " +
-        "and second halves are compared for stability.",
-    equilibrium_convergence_tolerance: "The ancestral population is " +
-        "considered stable once its trailing window's two half-means " +
-        "differ by at most this much.",
+    equilibrium_convergence_window: "The fewest generations the ancestral " +
+        "population's own pre-run simulation runs, however quickly it " +
+        "reaches equilibrium.",
+    equilibrium_convergence_tolerance: "How close to equilibrium the " +
+        "ancestral population must be, in H_S units. Sets how long its " +
+        "pre-run simulation lasts: about ln(1/tolerance) relaxation times.",
     equilibrium_max_generations: "Safety cap on the ancestral " +
         "population's own pre-run simulation, independent of the main " +
-        "run's own max generations.",
+        "run's own max generations. A run needing more stops with an error.",
     cs_group: "Which statistic(s) to watch for convergence. Checking more " +
         "than one reveals the combinator below.",
     convergence_combinator: "Only meaningful with more than one watched " +

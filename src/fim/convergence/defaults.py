@@ -303,6 +303,106 @@ def relaxation_time(
     )
 
 
+@dataclass(frozen=True, slots=True)
+class PanmicticEquilibration:
+    """How long one panmictic population takes to reach mutation-drift equilibrium.
+
+    Args:
+        generations: The burn-in, in generations: the first generation at
+            which the expected identity (so the expected heterozygosity)
+            of every locus is within the requested tolerance of its
+            equilibrium, whatever the starting frequencies were.
+        relaxation_time: `tau` of the slowest-relaxing locus, in
+            generations.
+        expected_heterozygosity: The mean, across loci, of each locus's
+            equilibrium expected heterozygosity (`1 - F*`, close to
+            `theta / (1 + theta)` with `theta = 2 N mu`).
+    """
+
+    generations: int
+    relaxation_time: float
+    expected_heterozygosity: float
+
+
+def panmictic_equilibration(
+    *, total_size: int, mutation_rates: Sequence[float], tolerance: float
+) -> PanmicticEquilibration:
+    """Return the burn-in one panmictic population needs to reach equilibrium.
+
+    The single-deme case of the identity recursion behind
+    `recursion_relaxation_time`, written exactly for this project's own
+    operators: with `N` gene copies, `fim.model.operators.mutate` (a
+    `Binomial(N, mu)` number `k` of fresh alleles of frequency `1/N`
+    each, every existing allele's mass scaled by `1 - k/N`) and then
+    `drift` (`N` copies drawn with replacement), the probability `F`
+    that two gene copies drawn with replacement are identical obeys, in
+    expectation, `F' = 1/N + (1 - 1/N)(a F + mu/N)` with
+    `a = (1 - mu)² + mu (1 - mu)/N`. Writing `rho = (1 - 1/N) a`, it
+    settles at `F* = (1/N + (1 - 1/N) mu/N) / (1 - rho)` and its
+    departure from `F*` shrinks by exactly `rho` every generation. `F`
+    lies in `[0, 1]`, so after `t` generations the expected departure is
+    at most `rho^t` whatever the starting draw was; the burn-in is the
+    first `t` with `rho^t <= tolerance`, about `tau ln(1 / tolerance)`
+    with `tau = 1 / (1 - rho)`, longer by a relative `mu tau / N` than
+    `recursion_relaxation_time` with one deme (about
+    `1 / (2 mu + 1/N)`), whose mutation step omits the `a` correction.
+    `tau` is also the time scale on which the population's whole
+    genealogy forgets its starting state (two
+    ancestral lineages merge or one mutates at rate about `1/N + 2 mu`),
+    so the burn-in mixes more than the first moment.
+
+    A run of one population cannot be told apart from equilibrium by
+    watching its own heterozygosity: at equilibrium that still wanders
+    around `1 - F*` by drift, with a spread comparable to its mean for a
+    single locus, so no trailing-window rule of a useful length settles.
+    The burn-in needs no such rule.
+
+    Args:
+        total_size: The population's gene-copy count `N`.
+        mutation_rates: Per-locus mutation probabilities; the slowest
+            locus (the smallest rate) sets the burn-in.
+        tolerance: The largest expected departure from equilibrium
+            allowed, in heterozygosity's units; greater than zero.
+
+    Returns:
+        The burn-in, the slowest locus's `tau`, and the expected
+        equilibrium heterozygosity.
+
+    Raises:
+        ValueError: If `total_size` is not positive, `mutation_rates` is
+            empty, or `tolerance` is not greater than zero.
+    """
+    if total_size < 1:
+        raise ValueError("total_size must be at least 1")
+    if not mutation_rates:
+        raise ValueError("mutation_rates must not be empty")
+    if not (math.isfinite(tolerance) and tolerance > 0.0):
+        raise ValueError("tolerance must be greater than 0")
+    inverse_size = 1.0 / total_size
+    drift_survival = 1.0 - inverse_size
+    decays = [
+        drift_survival * ((1.0 - rate) ** 2 + rate * (1.0 - rate) * inverse_size)
+        for rate in mutation_rates
+    ]
+    slowest = max(decays)
+    # `slowest` is 0 only for a one-copy population, which is at
+    # equilibrium from its first generation.
+    generations = (
+        0
+        if slowest == 0.0 or tolerance >= 1.0
+        else math.ceil(math.log(tolerance) / math.log(slowest))
+    )
+    expected = math.fsum(
+        1.0 - (inverse_size + drift_survival * rate * inverse_size) / (1.0 - decay)
+        for rate, decay in zip(mutation_rates, decays, strict=True)
+    ) / len(decays)
+    return PanmicticEquilibration(
+        generations=generations,
+        relaxation_time=1.0 / (1.0 - slowest),
+        expected_heterozygosity=expected,
+    )
+
+
 def island_migration_matrix(
     sizes: Sequence[int], migration: float
 ) -> list[list[float]]:

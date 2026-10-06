@@ -42,6 +42,8 @@ Return to the [source-tree orientation](../README.md) or the [developer guide](.
   * [island\_relaxation\_time](#fim.convergence.defaults.island_relaxation_time)
   * [recursion\_relaxation\_time](#fim.convergence.defaults.recursion_relaxation_time)
   * [relaxation\_time](#fim.convergence.defaults.relaxation_time)
+  * [PanmicticEquilibration](#fim.convergence.defaults.PanmicticEquilibration)
+  * [panmictic\_equilibration](#fim.convergence.defaults.panmictic_equilibration)
   * [island\_migration\_matrix](#fim.convergence.defaults.island_migration_matrix)
 * [fim.convergence.monitor](#fim.convergence.monitor)
   * [StopReason](#fim.convergence.monitor.StopReason)
@@ -1594,6 +1596,89 @@ size-weighted migrant pool) uses the recursion's eigenvalue.
 
 - `ValueError` - If the model has no relaxation time, or the eigenvalue
   route is needed but `d` is too large.
+
+<a id="fim.convergence.defaults.PanmicticEquilibration"></a>
+
+## PanmicticEquilibration Objects
+
+```python
+@dataclass(frozen=True, slots=True)
+class PanmicticEquilibration()
+```
+
+How long one panmictic population takes to reach mutation-drift equilibrium.
+
+**Arguments**:
+
+- `generations` - The burn-in, in generations: the first generation at
+  which the expected identity (so the expected heterozygosity)
+  of every locus is within the requested tolerance of its
+  equilibrium, whatever the starting frequencies were.
+- `relaxation_time` - `tau` of the slowest-relaxing locus, in
+  generations.
+- `expected_heterozygosity` - The mean, across loci, of each locus's
+  equilibrium expected heterozygosity (`1 - F*`, close to
+  `theta / (1 + theta)` with `theta = 2 N mu`).
+
+<a id="fim.convergence.defaults.panmictic_equilibration"></a>
+
+#### panmictic\_equilibration
+
+```python
+def panmictic_equilibration(*, total_size: int,
+                            mutation_rates: Sequence[float],
+                            tolerance: float) -> PanmicticEquilibration
+```
+
+Return the burn-in one panmictic population needs to reach equilibrium.
+
+The single-deme case of the identity recursion behind
+`recursion_relaxation_time`, written exactly for this project's own
+operators: with `N` gene copies, `fim.model.operators.mutate` (a
+`Binomial(N, mu)` number `k` of fresh alleles of frequency `1/N`
+each, every existing allele's mass scaled by `1 - k/N`) and then
+`drift` (`N` copies drawn with replacement), the probability `F`
+that two gene copies drawn with replacement are identical obeys, in
+expectation, `F' = 1/N + (1 - 1/N)(a F + mu/N)` with
+`a = (1 - mu)² + mu (1 - mu)/N`. Writing `rho = (1 - 1/N) a`, it
+settles at `F* = (1/N + (1 - 1/N) mu/N) / (1 - rho)` and its
+departure from `F*` shrinks by exactly `rho` every generation. `F`
+lies in `[0, 1]`, so after `t` generations the expected departure is
+at most `rho^t` whatever the starting draw was; the burn-in is the
+first `t` with `rho^t <= tolerance`, about `tau ln(1 / tolerance)`
+with `tau = 1 / (1 - rho)`, longer by a relative `mu tau / N` than
+`recursion_relaxation_time` with one deme (about
+`1 / (2 mu + 1/N)`), whose mutation step omits the `a` correction.
+`tau` is also the time scale on which the population's whole
+genealogy forgets its starting state (two
+ancestral lineages merge or one mutates at rate about `1/N + 2 mu`),
+so the burn-in mixes more than the first moment.
+
+A run of one population cannot be told apart from equilibrium by
+watching its own heterozygosity: at equilibrium that still wanders
+around `1 - F*` by drift, with a spread comparable to its mean for a
+single locus, so no trailing-window rule of a useful length settles.
+The burn-in needs no such rule.
+
+**Arguments**:
+
+- `total_size` - The population's gene-copy count `N`.
+- `mutation_rates` - Per-locus mutation probabilities; the slowest
+  locus (the smallest rate) sets the burn-in.
+- `tolerance` - The largest expected departure from equilibrium
+  allowed, in heterozygosity's units; greater than zero.
+
+
+**Returns**:
+
+  The burn-in, the slowest locus's `tau`, and the expected
+  equilibrium heterozygosity.
+
+
+**Raises**:
+
+- `ValueError` - If `total_size` is not positive, `mutation_rates` is
+  empty, or `tolerance` is not greater than zero.
 
 <a id="fim.convergence.defaults.island_migration_matrix"></a>
 
@@ -12023,15 +12108,14 @@ final_heterozygosity` fields and persists `history` in full as the
 
 **Arguments**:
 
-- `generation_count` - The generation at which the ancestral phase's
-  own `H_S` trailing window stabilized —
-  `ConvergenceMonitor.outcome().generation`.
+- `generation_count` - The generation at which the ancestral phase
+- `stopped` - its burn-in (`EquilibriumSplitInitialCondition`).
 - `final_heterozygosity` - The ancestral population's own `H_S` at
   that generation — the actual value split into `d` demes,
   not a value the caller chose.
-- `history` - `H_S` at every recorded generation of the ancestral
-  phase, oldest first, generation zero (the pre-drift
-  Dirichlet draw) included — `ConvergenceMonitor.history`.
+- `history` - `H_S` at every generation of the ancestral phase,
+  oldest first, generation zero (the pre-drift Dirichlet draw)
+  included.
 
 <a id="fim.model.initial.EquilibriumSplitInitialCondition"></a>
 
@@ -12056,15 +12140,30 @@ into d demes." Two real simulation phases, not one:
    `DirichletInitialCondition` uses (`_dirichlet_locus_maps`,
    above), then repeatedly apply `fim.model.operators.mutate`/
    `drift` (no `migrate` — there is nothing to migrate between with
-   one deme) until this ancestral population's own mean `H_S`
-   (identical to `H_T` at one deme; every *differentiation*
-   statistic is undefined there) stabilizes under a
-   `TrailingWindowCriterion`, or raise if it never does within
-   `max_generations` (the design doc's own decision 4: unlike the
-   main run's own benign generation-cap outcome, this cap is fatal
-   — a `d`-deme run silently founded from a non-equilibrium ancestral
-   population would defeat the one thing this mode exists to
-   guarantee).
+   one deme) for a burn-in derived from the model itself
+   (`fim.convergence.defaults.panmictic_equilibration`): the first
+   generation by which the expected identity, so the expected `H_S`
+   (identical to `H_T` at one deme), of every locus is within
+   `convergence_tolerance` of its mutation-drift equilibrium
+   whatever the starting draw, about `ln(1 / tolerance)` relaxation
+   times `1 / (2 mu + 1/N)`; never fewer than `convergence_window`
+   generations. A burn-in longer than `max_generations` raises,
+   before any generation is simulated (the design doc's own
+   decision 4: unlike the main run's own benign generation-cap
+   outcome, this cap is fatal — a `d`-deme run silently founded
+   from a non-equilibrium ancestral population would defeat the one
+   thing this mode exists to guarantee).
+
+   Watching the population's own `H_S` settle, as this phase first
+   did, cannot work: at equilibrium a single population's `H_S`
+   keeps wandering around its expectation by drift, so a trailing
+   window never settles to a useful tolerance (with the noise gate
+   of `fim.convergence.monitor` it never passed within 100,000
+   generations for the bundled example; before that gate it
+   "settled" on a chance lull, 20 generations in). Nor can the
+   realized `H_S` be checked against the expectation, for the same
+   reason. The burn-in is the model's own answer instead: how long
+   the population takes to forget where it started.
 2. **Split.** By the time equilibration stops, the ancestral
    population is already a real, finite, `drift`-realized
    population — not the continuous "belief" every other strategy's
@@ -12118,26 +12217,25 @@ Configure one ancestral-equilibration phase.
 
 **Arguments**:
 
-- `convergence_window` - Trailing-window size for the ancestral
-  phase's own `H_S` stability check
-  (`TrailingWindowCriterion`) — independent of the real
-  run's own `convergence_window`, since the two phases run
-  at different population scales with no principled reason
-  to share a threshold.
-- `convergence_tolerance` - Trailing-window tolerance for the
-  same check.
+- `convergence_window` - The fewest generations the ancestral
+  phase runs, however quickly the model says it
+  equilibrates (`equilibrium_convergence_window`) —
+  independent of the real run's own `convergence_window`.
+- `convergence_tolerance` - The largest expected departure of the
+  ancestral population's heterozygosity from its
+  equilibrium, in `H_S`'s units; sets the derived burn-in
+  (`equilibrium_convergence_tolerance`). Greater than zero.
 - `max_generations` - Hard cap on the ancestral phase's own
-  generation count. Reaching it without the trailing
-  window stabilizing is fatal (`generate_with_outcome`
-  raises `ValueError`), not the main run's own benign
-  cap outcome.
+  generation count. A burn-in longer than this is fatal
+  (`generate_with_outcome` raises `ValueError`), not the
+  main run's own benign cap outcome.
 
 
 **Raises**:
 
-- `ValueError` - If `convergence_window`/`convergence_tolerance`
-  is invalid (`TrailingWindowCriterion`'s own validation),
-  or `max_generations` is not a positive integer.
+- `ValueError` - If `convergence_window` or `max_generations` is
+  not a positive integer, or `convergence_tolerance` is
+  not a finite number greater than zero.
 
 <a id="fim.model.initial.EquilibriumSplitInitialCondition.generate"></a>
 
@@ -12196,8 +12294,8 @@ Equilibrate one ancestral population, then split it into `params.d` demes.
 **Raises**:
 
 - `ValueError` - If `params.mutation_model != "infinite_alleles"`,
-  or the ancestral phase does not converge within
-  `max_generations`.
+  or the burn-in the ancestral population needs exceeds
+  `max_generations` (raised before simulating anything).
 
 <a id="fim.model.initial.generate_initial_state"></a>
 
@@ -13245,12 +13343,16 @@ functions that actually use each one.
   `run_batch` at all (see `fim.engine.LinealBackend`'s own
   docstring).
 - `initial_frequencies` - Optional explicit deme/locus frequency table.
-- `equilibrium_convergence_window` - Trailing stability-window length
-  for the equilibrium-split ancestral phase's own `H_S` check
-  — independent of `convergence_window` above, since that
-  phase runs at a different population scale
-  (`sum(population_sizes)` in one deme) with no principled
-  reason to share a threshold with the real `d`-deme run.
+- `equilibrium_convergence_window` - The fewest generations the
+  equilibrium-split ancestral phase runs, however quickly the
+  model says that population equilibrates — independent of
+  `convergence_window` above, since that phase runs at a
+  different population scale (`sum(population_sizes)` in one
+  deme) with no principled reason to share a threshold with
+  the real `d`-deme run. Called a window for the trailing-
+  window check it once configured (`fim.model.initial.
+  EquilibriumSplitInitialCondition` has why that check was
+  replaced by a derived burn-in).
   `None` (the default) selects the ordinary Dirichlet-prior
   initial condition instead. Set together with `equilibrium_
   convergence_tolerance`/`equilibrium_max_generations`, or not
@@ -13259,12 +13361,17 @@ functions that actually use each one.
   `initial_frequencies` is rejected as ambiguous (a run cannot
   both fix an explicit `p_0` and derive one from equilibrium-
   split).
-- `equilibrium_convergence_tolerance` - Trailing-window tolerance for
-  the same check.
+- `equilibrium_convergence_tolerance` - The largest expected departure
+  of the ancestral population's heterozygosity from its
+  mutation-drift equilibrium, in `H_S`'s units; greater than
+  zero. Sets the ancestral burn-in, about `ln(1 / tolerance)`
+  relaxation times (`fim.convergence.defaults.
+  panmictic_equilibration`).
 - `equilibrium_max_generations` - Hard cap on the ancestral phase's
-  own generation count. Unlike `max_generations` above,
-  reaching this cap without the trailing window stabilizing
-  is fatal, not a benign non-convergence outcome — see
+  own generation count. Unlike `max_generations` above, a
+  burn-in longer than this cap is fatal, reported before the
+  ancestral phase starts, not a benign non-convergence
+  outcome — see
   `fim.model.initial.EquilibriumSplitInitialCondition`'s own
   docstring for why.
 - `sigma_band_multiplier` - Sigma multiplier (`2.0` or `3.0` — a

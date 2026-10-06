@@ -628,12 +628,16 @@ class SimulationParams:
             `run_batch` at all (see `fim.engine.LinealBackend`'s own
             docstring).
         initial_frequencies: Optional explicit deme/locus frequency table.
-        equilibrium_convergence_window: Trailing stability-window length
-            for the equilibrium-split ancestral phase's own `H_S` check
-            — independent of `convergence_window` above, since that
-            phase runs at a different population scale
-            (`sum(population_sizes)` in one deme) with no principled
-            reason to share a threshold with the real `d`-deme run.
+        equilibrium_convergence_window: The fewest generations the
+            equilibrium-split ancestral phase runs, however quickly the
+            model says that population equilibrates — independent of
+            `convergence_window` above, since that phase runs at a
+            different population scale (`sum(population_sizes)` in one
+            deme) with no principled reason to share a threshold with
+            the real `d`-deme run. Called a window for the trailing-
+            window check it once configured (`fim.model.initial.
+            EquilibriumSplitInitialCondition` has why that check was
+            replaced by a derived burn-in).
             `None` (the default) selects the ordinary Dirichlet-prior
             initial condition instead. Set together with `equilibrium_
             convergence_tolerance`/`equilibrium_max_generations`, or not
@@ -642,12 +646,17 @@ class SimulationParams:
             `initial_frequencies` is rejected as ambiguous (a run cannot
             both fix an explicit `p_0` and derive one from equilibrium-
             split).
-        equilibrium_convergence_tolerance: Trailing-window tolerance for
-            the same check.
+        equilibrium_convergence_tolerance: The largest expected departure
+            of the ancestral population's heterozygosity from its
+            mutation-drift equilibrium, in `H_S`'s units; greater than
+            zero. Sets the ancestral burn-in, about `ln(1 / tolerance)`
+            relaxation times (`fim.convergence.defaults.
+            panmictic_equilibration`).
         equilibrium_max_generations: Hard cap on the ancestral phase's
-            own generation count. Unlike `max_generations` above,
-            reaching this cap without the trailing window stabilizing
-            is fatal, not a benign non-convergence outcome — see
+            own generation count. Unlike `max_generations` above, a
+            burn-in longer than this cap is fatal, reported before the
+            ancestral phase starts, not a benign non-convergence
+            outcome — see
             `fim.model.initial.EquilibriumSplitInitialCondition`'s own
             docstring for why.
         sigma_band_multiplier: Sigma multiplier (`2.0` or `3.0` — a
@@ -2467,12 +2476,15 @@ def _validate_equilibrium_split_config(
             equilibrium_convergence_window,
             minimum=2,
         )
+    # The tolerance sets the ancestral burn-in, about `ln(1 / tolerance)`
+    # relaxation times (`fim.convergence.defaults.panmictic_equilibration`),
+    # so zero would mean an endless burn-in.
     if equilibrium_convergence_tolerance is not None and (
         not math.isfinite(equilibrium_convergence_tolerance)
-        or equilibrium_convergence_tolerance < 0.0
+        or equilibrium_convergence_tolerance <= 0.0
     ):
         raise ValueError(
-            "equilibrium_convergence_tolerance must be finite and non-negative"
+            "equilibrium_convergence_tolerance must be finite and greater than 0"
         )
     if equilibrium_max_generations is not None:
         _require_integer(
@@ -2481,13 +2493,13 @@ def _validate_equilibrium_split_config(
     if (
         equilibrium_convergence_window is not None
         and equilibrium_max_generations is not None
-        and equilibrium_convergence_window > equilibrium_max_generations + 1
+        and equilibrium_convergence_window > equilibrium_max_generations
     ):
         raise ValueError(
             "equilibrium_convergence_window cannot exceed "
-            "equilibrium_max_generations + 1 (a window this large can never "
-            "fill before the generation cap stops the ancestral phase, so "
-            "convergence could never be detected)"
+            "equilibrium_max_generations (the ancestral phase always runs at "
+            "least equilibrium_convergence_window generations, so it could "
+            "never finish within the cap)"
         )
 
 

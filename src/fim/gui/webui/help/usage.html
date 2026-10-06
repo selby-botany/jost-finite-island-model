@@ -253,8 +253,9 @@ shared alleles.</p>
 <p>The example above hand-picks generation-0 frequencies directly. This one
 derives them instead: your demes are founded from a single shared ancestral
 population rather than an independent Dirichlet draw per deme — the
-ancestral population simulates alone until its own diversity settles, then
-splits into your demes by sampling without replacement, so the demes
+ancestral population simulates alone until it reaches mutation-drift
+equilibrium, then splits into your demes by sampling without replacement,
+so the demes
 already differ a little at generation 0 purely from which copies each one
 happened to receive, a genuine founder effect rather than an assumption:</p>
 <!-- worked-example-config: examples/equilibrium-split-founding/config.yaml -->
@@ -277,11 +278,14 @@ n_replicates: 1   # a single scalar run; the default (200) would batch
 </code></pre>
 <p>Converges at generation 1,091 with D \sim 0.191 — real differentiation the
 ancestral-population founder effect produced, with no explicit <code>p_0</code>
-anywhere in the file. Loosen equilibrium_convergence_tolerance to let the
-ancestral phase settle sooner (a less stable shared history to found from),
-or tighten it to require a longer, more stable ancestral run first; either
-way, reaching equilibrium_max_generations without settling is a hard error,
-not an ordinary result — see
+anywhere in the file. How long the ancestral phase runs is worked out from
+the model: about ln(1 / equilibrium_convergence_tolerance) times the time the
+ancestral population takes to forget its starting state, 1/(2μ + 1/N)
+generations for its N gene copies. Loosen the tolerance for a shorter
+ancestral phase (founded from a population a little further from
+equilibrium), or tighten it for a longer one; either way, a phase needing
+more than equilibrium_max_generations is a hard error, reported before the
+phase starts, not an ordinary result — see
 <a href="#" data-fim-help="configuration" data-fim-anchor="equilibrium_convergence_window-equilibrium_convergence_tolerance-equilibrium_max_generations">equilibrium_convergence_window, equilibrium_convergence_tolerance,
 equilibrium_max_generations</a>.</p>
 <h3 id="stochastic-migrant-counts">Stochastic migrant counts</h3>

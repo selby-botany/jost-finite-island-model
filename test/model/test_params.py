@@ -1037,7 +1037,7 @@ def test_equilibrium_split_fields_reject_an_explicit_p_0() -> None:
 
 
 def test_equilibrium_convergence_window_rejects_below_two() -> None:
-    """`equilibrium_convergence_window` shares `TrailingWindowCriterion`'s minimum."""
+    """`equilibrium_convergence_window` keeps its historical minimum of 2."""
     config = _equilibrium_config(equilibrium_convergence_window=1)
     with pytest.raises(
         ValueError, match="equilibrium_convergence_window must be at least 2"
@@ -1045,10 +1045,15 @@ def test_equilibrium_convergence_window_rejects_below_two() -> None:
         SimulationParams.from_mapping(config)
 
 
-def test_equilibrium_convergence_tolerance_rejects_negative() -> None:
-    config = _equilibrium_config(equilibrium_convergence_tolerance=-0.1)
+@pytest.mark.parametrize("tolerance", [-0.1, 0.0])
+def test_equilibrium_convergence_tolerance_rejects_zero_and_negative(
+    tolerance: float,
+) -> None:
+    """The tolerance sets the ancestral burn-in; zero would make it endless."""
+    config = _equilibrium_config(equilibrium_convergence_tolerance=tolerance)
     with pytest.raises(
-        ValueError, match="equilibrium_convergence_tolerance must be finite"
+        ValueError,
+        match="equilibrium_convergence_tolerance must be finite and greater than 0",
     ):
         SimulationParams.from_mapping(config)
 
@@ -1061,19 +1066,23 @@ def test_equilibrium_max_generations_rejects_non_positive() -> None:
         SimulationParams.from_mapping(config)
 
 
-def test_equilibrium_convergence_window_cannot_exceed_max_generations_plus_one() -> (
-    None
-):
-    """The same structural-impossibility rule `convergence_window`/`max_generations`
-    already enforce for the main run, applied to the ancestral phase's own pair.
-    """
+def test_equilibrium_convergence_window_cannot_exceed_max_generations() -> None:
+    """The ancestral phase runs at least the window, so it must fit the cap."""
     config = _equilibrium_config(
-        equilibrium_convergence_window=10, equilibrium_max_generations=5
+        equilibrium_convergence_window=6, equilibrium_max_generations=5
     )
     with pytest.raises(
         ValueError, match="equilibrium_convergence_window cannot exceed"
     ):
         SimulationParams.from_mapping(config)
+    assert (
+        SimulationParams.from_mapping(
+            _equilibrium_config(
+                equilibrium_convergence_window=5, equilibrium_max_generations=5
+            )
+        ).equilibrium_convergence_window
+        == 5
+    )
 
 
 def _sigma_band_config(**changes: object) -> dict[str, object]:

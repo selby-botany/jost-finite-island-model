@@ -300,8 +300,9 @@ shared alleles.
 The example above hand-picks generation-0 frequencies directly. This one
 derives them instead: your demes are founded from a single shared ancestral
 population rather than an independent Dirichlet draw per deme — the
-ancestral population simulates alone until its own diversity settles, then
-splits into your demes by sampling without replacement, so the demes
+ancestral population simulates alone until it reaches mutation-drift
+equilibrium, then splits into your demes by sampling without replacement,
+so the demes
 already differ a little at generation 0 purely from which copies each one
 happened to receive, a genuine founder effect rather than an assumption:
 
@@ -329,11 +330,14 @@ fim run equilibrium-split.yaml --output results/equilibrium-split --quiet
 
 Converges at generation 1,091 with D \sim 0.191 — real differentiation the
 ancestral-population founder effect produced, with no explicit `p_0`
-anywhere in the file. Loosen equilibrium_convergence_tolerance to let the
-ancestral phase settle sooner (a less stable shared history to found from),
-or tighten it to require a longer, more stable ancestral run first; either
-way, reaching equilibrium_max_generations without settling is a hard error,
-not an ordinary result — see
+anywhere in the file. How long the ancestral phase runs is worked out from
+the model: about ln(1 / equilibrium_convergence_tolerance) times the time the
+ancestral population takes to forget its starting state, 1/(2μ + 1/N)
+generations for its N gene copies. Loosen the tolerance for a shorter
+ancestral phase (founded from a population a little further from
+equilibrium), or tighten it for a longer one; either way, a phase needing
+more than equilibrium_max_generations is a hard error, reported before the
+phase starts, not an ordinary result — see
 [equilibrium_convergence_window, equilibrium_convergence_tolerance,
 equilibrium_max_generations](configuration.md#equilibrium_convergence_window-equilibrium_convergence_tolerance-equilibrium_max_generations).
 

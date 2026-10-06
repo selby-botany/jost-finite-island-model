@@ -27,6 +27,7 @@ returned.
 
 from __future__ import annotations
 
+import logging
 import math
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
@@ -34,8 +35,7 @@ from typing import Protocol
 
 import numpy as np
 
-from fim.convergence.criteria import TrailingWindowCriterion
-from fim.convergence.monitor import ConvergenceMonitor
+from fim.convergence.defaults import panmictic_equilibration
 from fim.model.allele import (
     MINTED_ID_START,
     AlleleId,
@@ -47,6 +47,26 @@ from fim.model.operators import drift, mutate
 from fim.model.params import InitialFrequencies, SimulationParams
 from fim.model.state import ModelState
 from fim.statistics.differentiation import h_s
+
+logger = logging.getLogger(__name__)
+
+
+def _mean_h_s(state: ModelState) -> float:
+    """Return a one-deme state's `H_S`, averaged across its loci.
+
+    Args:
+        state: A state with one deme (the ancestral population).
+
+    Returns:
+        The mean within-deme heterozygosity.
+    """
+    return (
+        math.fsum(
+            h_s([state.frequency_map(0, locus_index)])
+            for locus_index in range(state.locus_count)
+        )
+        / state.locus_count
+    )
 
 
 class InitialConditionGenerator(Protocol):
@@ -199,15 +219,14 @@ class EquilibrationOutcome:
     (`20260907-claude-sonnet-5-equilibrium-split-design.md` §5).
 
     Args:
-        generation_count: The generation at which the ancestral phase's
-            own `H_S` trailing window stabilized —
-            `ConvergenceMonitor.outcome().generation`.
+        generation_count: The generation at which the ancestral phase
+            stopped: its burn-in (`EquilibriumSplitInitialCondition`).
         final_heterozygosity: The ancestral population's own `H_S` at
             that generation — the actual value split into `d` demes,
             not a value the caller chose.
-        history: `H_S` at every recorded generation of the ancestral
-            phase, oldest first, generation zero (the pre-drift
-            Dirichlet draw) included — `ConvergenceMonitor.history`.
+        history: `H_S` at every generation of the ancestral phase,
+            oldest first, generation zero (the pre-drift Dirichlet draw)
+            included.
     """
 
     generation_count: int
@@ -231,15 +250,30 @@ class EquilibriumSplitInitialCondition:
        `DirichletInitialCondition` uses (`_dirichlet_locus_maps`,
        above), then repeatedly apply `fim.model.operators.mutate`/
        `drift` (no `migrate` — there is nothing to migrate between with
-       one deme) until this ancestral population's own mean `H_S`
-       (identical to `H_T` at one deme; every *differentiation*
-       statistic is undefined there) stabilizes under a
-       `TrailingWindowCriterion`, or raise if it never does within
-       `max_generations` (the design doc's own decision 4: unlike the
-       main run's own benign generation-cap outcome, this cap is fatal
-       — a `d`-deme run silently founded from a non-equilibrium ancestral
-       population would defeat the one thing this mode exists to
-       guarantee).
+       one deme) for a burn-in derived from the model itself
+       (`fim.convergence.defaults.panmictic_equilibration`): the first
+       generation by which the expected identity, so the expected `H_S`
+       (identical to `H_T` at one deme), of every locus is within
+       `convergence_tolerance` of its mutation-drift equilibrium
+       whatever the starting draw, about `ln(1 / tolerance)` relaxation
+       times `1 / (2 mu + 1/N)`; never fewer than `convergence_window`
+       generations. A burn-in longer than `max_generations` raises,
+       before any generation is simulated (the design doc's own
+       decision 4: unlike the main run's own benign generation-cap
+       outcome, this cap is fatal — a `d`-deme run silently founded
+       from a non-equilibrium ancestral population would defeat the one
+       thing this mode exists to guarantee).
+
+       Watching the population's own `H_S` settle, as this phase first
+       did, cannot work: at equilibrium a single population's `H_S`
+       keeps wandering around its expectation by drift, so a trailing
+       window never settles to a useful tolerance (with the noise gate
+       of `fim.convergence.monitor` it never passed within 100,000
+       generations for the bundled example; before that gate it
+       "settled" on a chance lull, 20 generations in). Nor can the
+       realized `H_S` be checked against the expectation, for the same
+       reason. The burn-in is the model's own answer instead: how long
+       the population takes to forget where it started.
     2. **Split.** By the time equilibration stops, the ancestral
        population is already a real, finite, `drift`-realized
        population — not the continuous "belief" every other strategy's
@@ -291,32 +325,34 @@ class EquilibriumSplitInitialCondition:
         """Configure one ancestral-equilibration phase.
 
         Args:
-            convergence_window: Trailing-window size for the ancestral
-                phase's own `H_S` stability check
-                (`TrailingWindowCriterion`) — independent of the real
-                run's own `convergence_window`, since the two phases run
-                at different population scales with no principled reason
-                to share a threshold.
-            convergence_tolerance: Trailing-window tolerance for the
-                same check.
+            convergence_window: The fewest generations the ancestral
+                phase runs, however quickly the model says it
+                equilibrates (`equilibrium_convergence_window`) —
+                independent of the real run's own `convergence_window`.
+            convergence_tolerance: The largest expected departure of the
+                ancestral population's heterozygosity from its
+                equilibrium, in `H_S`'s units; sets the derived burn-in
+                (`equilibrium_convergence_tolerance`). Greater than zero.
             max_generations: Hard cap on the ancestral phase's own
-                generation count. Reaching it without the trailing
-                window stabilizing is fatal (`generate_with_outcome`
-                raises `ValueError`), not the main run's own benign
-                cap outcome.
+                generation count. A burn-in longer than this is fatal
+                (`generate_with_outcome` raises `ValueError`), not the
+                main run's own benign cap outcome.
 
         Raises:
-            ValueError: If `convergence_window`/`convergence_tolerance`
-                is invalid (`TrailingWindowCriterion`'s own validation),
-                or `max_generations` is not a positive integer.
+            ValueError: If `convergence_window` or `max_generations` is
+                not a positive integer, or `convergence_tolerance` is
+                not a finite number greater than zero.
         """
-        self._criterion = TrailingWindowCriterion(
-            convergence_window, convergence_tolerance
-        )
-        if isinstance(max_generations, bool) or not isinstance(max_generations, int):
-            raise ValueError("max_generations must be a positive integer")
-        if max_generations < 1:
-            raise ValueError("max_generations must be a positive integer")
+        for name, value in (
+            ("convergence_window", convergence_window),
+            ("max_generations", max_generations),
+        ):
+            if isinstance(value, bool) or not isinstance(value, int) or value < 1:
+                raise ValueError(f"{name} must be a positive integer")
+        if not (math.isfinite(convergence_tolerance) and convergence_tolerance > 0.0):
+            raise ValueError("convergence_tolerance must be greater than 0")
+        self._minimum_generations = convergence_window
+        self._tolerance = convergence_tolerance
         self._max_generations = max_generations
 
     def generate(
@@ -366,8 +402,8 @@ class EquilibriumSplitInitialCondition:
 
         Raises:
             ValueError: If `params.mutation_model != "infinite_alleles"`,
-                or the ancestral phase does not converge within
-                `max_generations`.
+                or the burn-in the ancestral population needs exceeds
+                `max_generations` (raised before simulating anything).
         """
         del rng
         if params.mutation_model != "infinite_alleles":
@@ -375,10 +411,30 @@ class EquilibriumSplitInitialCondition:
                 "equilibrium-split initial conditions currently support "
                 "only mutation_model='infinite_alleles'"
             )
+        total_population = sum(params.population_sizes)
+        mutation_rates = (
+            (params.mu,) if isinstance(params.mu, float) else tuple(params.mu)
+        )
+        equilibration = panmictic_equilibration(
+            total_size=total_population,
+            mutation_rates=mutation_rates,
+            tolerance=self._tolerance,
+        )
+        burn_in = max(equilibration.generations, self._minimum_generations)
+        if burn_in > self._max_generations:
+            raise ValueError(
+                f"the ancestral population needs {burn_in:,} generations to "
+                "come within equilibrium_convergence_tolerance="
+                f"{self._tolerance:g} of mutation-drift equilibrium (about "
+                f"{equilibration.relaxation_time:,.0f} generations to forget "
+                "its starting state), more than equilibrium_max_generations="
+                f"{self._max_generations:,}; raise equilibrium_max_generations "
+                f"to at least {burn_in:,}, or loosen "
+                "equilibrium_convergence_tolerance"
+            )
         equilibrium_rng = np.random.Generator(
             np.random.PCG64(np.random.SeedSequence(params.seed).spawn(1)[0])
         )
-        total_population = sum(params.population_sizes)
 
         allele_ids = founding_allele_ids(params.initial_allele_count)
         concentration = np.full(
@@ -401,41 +457,31 @@ class EquilibriumSplitInitialCondition:
             default=MINTED_ID_START - 1,
         )
         registry = AlleleRegistry(start=max(MINTED_ID_START, highest_initial_id + 1))
-        monitor = ConvergenceMonitor(
-            self._criterion, max_generations=self._max_generations
-        )
 
-        def _mean_h_s(candidate: ModelState) -> float:
-            return (
-                math.fsum(
-                    h_s([candidate.frequency_map(0, locus_index)])
-                    for locus_index in range(candidate.locus_count)
-                )
-                / candidate.locus_count
-            )
-
-        monitor.record(state.generation, _mean_h_s(state))
-        while not monitor.should_stop():
+        # The burn-in itself: mutation then drift, `burn_in` times, with
+        # `H_S` recorded every generation for `EquilibrationOutcome.
+        # history` (it decides nothing; see this class's docstring).
+        history = [_mean_h_s(state)]
+        while state.generation < burn_in:
             state = mutate(
                 state, params.mu, total_population, registry, equilibrium_rng
             )
             state = drift(state, total_population, equilibrium_rng)
-            monitor.record(state.generation, _mean_h_s(state))
-
-        outcome = monitor.outcome()
-        if not outcome.converged or outcome.generation is None:
-            raise ValueError(
-                "ancestral population did not reach equilibrium within "
-                f"max_generations={self._max_generations} generations "
-                f"(H_S trailing history: {monitor.history[-5:]!r}); raise "
-                "equilibrium_max_generations and retry"
-            )
+            history.append(_mean_h_s(state))
+        logger.info(
+            "ancestral phase: %d generations (relaxation time %.0f); H_S %.4g, "
+            "expected at equilibrium %.4g",
+            burn_in,
+            equilibration.relaxation_time,
+            history[-1],
+            equilibration.expected_heterozygosity,
+        )
 
         split_state = self._split(state, params, equilibrium_rng)
         equilibration_outcome = EquilibrationOutcome(
-            generation_count=outcome.generation,
-            final_heterozygosity=monitor.history[-1],
-            history=monitor.history,
+            generation_count=state.generation,
+            final_heterozygosity=history[-1],
+            history=tuple(history),
         )
         return split_state, equilibration_outcome
 
