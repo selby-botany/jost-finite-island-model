@@ -805,6 +805,30 @@ def _isolate_gui_results(
     return root
 
 
+@pytest.fixture(autouse=True)
+def _isolate_examples_bundle(
+    monkeypatch: pytest.MonkeyPatch, tmp_path_factory: pytest.TempPathFactory
+) -> Path:
+    """Seed no bundled examples unless a test asks for them.
+
+    Home seeds the read-only Examples experiment whenever a visit finds
+    it missing (`Api.ensure_examples`, read-only examples design §4.2),
+    from the bundle `fim.gui.app._examples_bundle_directory` names. Left
+    pointing at the real bundle, every window test that opens Home would
+    gain example Studies and runs, changing the tree, the run count, and
+    "Select all" in tests that are about none of that, and changing them
+    again whenever the shipped examples change. An empty directory has no
+    `catalog.json`, so seeding is a no-op. A test about examples patches
+    the function again (to the real bundle or a fixture one); its own
+    patch wins, as `_isolate_gui_results`'s docstring describes.
+
+    Returns the empty directory, for a test that wants to fill it.
+    """
+    bundle = tmp_path_factory.mktemp("gui-test-examples-bundle")
+    monkeypatch.setattr(app_module, "_examples_bundle_directory", lambda: bundle)
+    return bundle
+
+
 @pytest.fixture
 def fast_scalar_run_settings(_isolate_gui_preferences: Path) -> Path:
     """Pre-seed Settings' own defaults for one small, fast, scalar run.

@@ -82,6 +82,7 @@ from fim.engine import (
     report_for_state,
     reports_summary,
 )
+from fim.examples import seed
 from fim.gui import batch_runner, presets, recent_runs, runner, sweep_bridge
 from fim.gui.animation import (
     AnimationFrame,
@@ -4490,6 +4491,30 @@ class Api:
         return {"ok": True, "studyId": study.study_id}
 
     @_log_bridge_call
+    def ensure_examples(self) -> dict[str, Any]:
+        """Seed the bundled examples when the Examples experiment is missing.
+
+        Read-only examples design §4.2: Home's `refreshRecentRuns` calls
+        this when a visit's `list_experiments` has no
+        `experiment-examples` (deleted out of band, or a results
+        location chosen after launch). When the Experiment exists this
+        does nothing at all; the app-start seeding (`main`) already
+        brought it up to date.
+
+        Returns:
+            `{"ok": True, "changed": bool}`, `changed` saying whether
+            anything was written or removed (so Home refetches only
+            then); `{"ok": False, "message": ...}` when seeding failed.
+        """
+        experiment_path = groups.experiment_manifest_path(seed.EXAMPLES_EXPERIMENT_ID)
+        if experiment_path.is_file():
+            return {"ok": True, "changed": False}
+        report = _seed_bundled_examples()
+        if report is None:
+            return {"ok": False, "message": "the bundled examples could not be seeded"}
+        return {"ok": True, "changed": report.changed}
+
+    @_log_bridge_call
     def add_run_to_study(self, study_id: str, directory: str) -> dict[str, Any]:
         """Add one existing Run directory to a Study; idempotent.
 
@@ -8190,6 +8215,9 @@ def main(argv: Sequence[str] | None = None) -> int:
         return 2
     _apply_saved_results_location_override()
     logger.info("starting fim %s", _version_display())
+    # After the results location is final, before the window opens: the
+    # Home card then finds the Examples experiment already in place.
+    _seed_bundled_examples()
     api = Api()
     window = create_window(api=api)
     # Before `webview.start()`, not after: a signal delivered while the
@@ -8282,6 +8310,44 @@ def _webui_directory() -> Path:
     if bundle_root is not None:
         return Path(bundle_root) / "fim" / "gui" / "webui"
     return Path(__file__).resolve().parent / "webui"
+
+
+def _examples_bundle_directory() -> Path:
+    """Return the bundled worked examples, `webui/examples/`, frozen or not.
+
+    Its own function, not an inline `_webui_directory() / "examples"`,
+    so the GUI test suite can point it at an empty directory and keep
+    every window test that never asks for examples free of them
+    (`test/gui/conftest.py`'s `_isolate_examples_bundle`).
+    """
+    return _webui_directory() / "examples"
+
+
+def _seed_bundled_examples() -> seed.SeedReport | None:
+    """Seed the bundled examples into the results folder; best effort.
+
+    Read-only examples design (`20261005-claude-opus-5-5-read-only-
+    examples-and-classes-design.md`, `selby/restricted`), section 4.2:
+    run at app start (`main`) and from `Api.ensure_examples`. A failure
+    (an unwritable results folder, a damaged bundle) is logged and the
+    app carries on without its examples, never refusing to start.
+
+    Returns:
+        What was seeded, or `None` when seeding failed.
+    """
+    try:
+        report = seed.seed_examples(bundle=_examples_bundle_directory())
+    except (OSError, ValueError) as error:
+        logger.warning("could not seed the bundled examples: %s", error)
+        return None
+    if report.changed:
+        logger.info(
+            "seeded %d example(s); %d file(s) written, %d removed",
+            len(report.seeded),
+            len(report.written),
+            len(report.removed),
+        )
+    return report
 
 
 if __name__ == "__main__":

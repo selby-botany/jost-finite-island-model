@@ -113,6 +113,17 @@ Return to the [source-tree orientation](../README.md) or the [developer guide](.
   * [parse\_class\_tree](#fim.examples.classes.parse_class_tree)
   * [read\_class\_tree](#fim.examples.classes.read_class_tree)
   * [validate\_run\_class](#fim.examples.classes.validate_run_class)
+* [fim.examples.seed](#fim.examples.seed)
+  * [BundledClass](#fim.examples.seed.BundledClass)
+  * [BundledExample](#fim.examples.seed.BundledExample)
+    * [has\_saved\_result](#fim.examples.seed.BundledExample.has_saved_result)
+  * [ExamplesBundle](#fim.examples.seed.ExamplesBundle)
+  * [SeedReport](#fim.examples.seed.SeedReport)
+    * [changed](#fim.examples.seed.SeedReport.changed)
+  * [example\_run\_directory](#fim.examples.seed.example_run_directory)
+  * [example\_study\_id](#fim.examples.seed.example_study_id)
+  * [read\_bundle](#fim.examples.seed.read_bundle)
+  * [seed\_examples](#fim.examples.seed.seed_examples)
 * [fim.gui](#fim.gui)
 * [fim.gui.animation](#fim.gui.animation)
   * [AnimationFrame](#fim.gui.animation.AnimationFrame)
@@ -192,6 +203,7 @@ Return to the [source-tree orientation](../README.md) or the [developer guide](.
     * [update\_run\_details](#fim.gui.app.Api.update_run_details)
     * [get\_run\_context](#fim.gui.app.Api.get_run_context)
     * [ensure\_default\_study](#fim.gui.app.Api.ensure_default_study)
+    * [ensure\_examples](#fim.gui.app.Api.ensure_examples)
     * [add\_run\_to\_study](#fim.gui.app.Api.add_run_to_study)
     * [add\_study\_to\_experiment](#fim.gui.app.Api.add_study_to_experiment)
     * [delete\_study](#fim.gui.app.Api.delete_study)
@@ -3909,7 +3921,9 @@ The shipped worked examples and the run classes that group them.
 the class tree the Examples dialog shows and a configuration's `class`
 label is checked against (design doc `20261005-claude-opus-5-5-read-
 only-examples-and-classes-design.md`, `selby/restricted`, section 2).
-Nothing is re-exported here, so importing one submodule never pays for
+`fim.examples.seed` writes the desktop app's bundled examples into the
+results folder as read-only runs, Studies, and the Examples Experiment
+(section 4.2). Nothing is re-exported here, so importing one submodule never pays for
 another.
 
 <a id="fim.examples.classes"></a>
@@ -4227,6 +4241,241 @@ both cases.
 - `ValueError` - `class_id` is not a kebab-case string, or names no
   class in an available class file, or the class file itself
   is malformed.
+
+<a id="fim.examples.seed"></a>
+
+# fim.examples.seed
+
+Seed the bundled worked examples into the results folder as read-only runs.
+
+Read-only examples design (`20261005-claude-opus-5-5-read-only-examples-
+and-classes-design.md`, `selby/restricted`), section 4.2. The desktop app
+carries every worked example in `webui/examples/` (`dev/bin/build-
+examples-catalog` writes it): a `catalog.json` naming each example's
+labels, class, and configuration, and a copy of each example's saved
+output files. `seed_examples` turns that bundle into ordinary results the
+Home card can list:
+
+- **Run directories.** An example with a saved result (a `manifest.json`
+  in the bundle) gets `results/examples/<id>/`, holding its
+  `config.yaml`, its saved output files, and a `metadata.json` with its
+  name, description, and class. Every file there is app-owned: a newer
+  bundle replaces a file whose content differs, and removes one it no
+  longer ships.
+- **Studies.** One read-only Study per class that has at least one
+  seeded example, with the fixed id `study-examples-<class-id>` and the
+  class title as its name; a child class is its own Study, named
+  "Parent — Child".
+- **Experiment.** One read-only Experiment, `experiment-examples`, named
+  "Examples", holding those Studies in class order.
+
+An example with no saved result yet (its outputs were never committed)
+gets **no** run directory and appears in no Study. Home lists a Study's
+members only when each has a readable `manifest.json` (`fim.gui.app.
+_recent_run_at_directory`), and `groups.is_run_read_only` reads that
+same manifest, so a directory without one would be invisible in the tree
+yet editable and deletable on disk: the least surprising choice is to
+seed nothing until there is something to show. The Examples dialog still
+lists such an example, and can load it into Configure.
+
+Seeding is idempotent: a second call with the same bundle writes nothing.
+It never touches anything outside its own items: the `results/examples/`
+directories it creates (a directory there holding any file seeding did
+not write is left alone), the `study-examples-*` Studies, and
+`experiment-examples`. The Study and Experiment manifests are written
+through `groups.write_read_only_study`/`write_read_only_experiment`, the
+one write path that may create read-only groupings.
+
+<a id="fim.examples.seed.BundledClass"></a>
+
+## BundledClass Objects
+
+```python
+@dataclass(frozen=True, slots=True)
+class BundledClass()
+```
+
+One class in the bundle's tree.
+
+**Arguments**:
+
+- `class_id` - The class ID.
+- `title` - Display title.
+- `description` - One line about the class, or `None`.
+- `children` - Child classes, in display order.
+
+<a id="fim.examples.seed.BundledExample"></a>
+
+## BundledExample Objects
+
+```python
+@dataclass(frozen=True, slots=True)
+class BundledExample()
+```
+
+One example in the bundle.
+
+**Arguments**:
+
+- `example_id` - The example's ID (its `doc/examples/` directory name).
+- `name` - Display name.
+- `description` - One-line description, or `None`.
+- `class_id` - The catalog class, `UNCLASSIFIED_CLASS_ID` when unlabeled.
+- `config_yaml` - The configuration text, or `None` for an example
+  reproduced by a script instead.
+- `outputs` - The saved output files, relative to the example's own
+  bundle directory.
+
+<a id="fim.examples.seed.BundledExample.has_saved_result"></a>
+
+#### has\_saved\_result
+
+```python
+@property
+def has_saved_result() -> bool
+```
+
+Return whether the bundle carries this example's saved run.
+
+<a id="fim.examples.seed.ExamplesBundle"></a>
+
+## ExamplesBundle Objects
+
+```python
+@dataclass(frozen=True, slots=True)
+class ExamplesBundle()
+```
+
+A parsed examples bundle.
+
+**Arguments**:
+
+- `directory` - The bundle directory (`webui/examples/`).
+- `classes` - The class tree, in display order.
+- `examples` - Every example, in display order.
+
+<a id="fim.examples.seed.SeedReport"></a>
+
+## SeedReport Objects
+
+```python
+@dataclass(frozen=True, slots=True)
+class SeedReport()
+```
+
+What one `seed_examples` call found and did.
+
+**Arguments**:
+
+- `seeded` - The examples that have a run directory, in display order.
+- `without_saved_result` - The examples with no saved result yet,
+  which have none.
+- `written` - Every file this call created or replaced (run files,
+  run metadata, and Study and Experiment manifests).
+- `removed` - Every file or directory this call removed.
+
+<a id="fim.examples.seed.SeedReport.changed"></a>
+
+#### changed
+
+```python
+@property
+def changed() -> bool
+```
+
+Return whether anything on disk changed.
+
+<a id="fim.examples.seed.example_run_directory"></a>
+
+#### example\_run\_directory
+
+```python
+def example_run_directory(example_id: str,
+                          *,
+                          results: Path | None = None) -> Path
+```
+
+Return where a seeded example's run lives.
+
+**Arguments**:
+
+- `example_id` - The example's ID.
+- `results` - Optional results-directory override.
+
+
+**Returns**:
+
+  `results / "examples" / example_id`.
+
+<a id="fim.examples.seed.example_study_id"></a>
+
+#### example\_study\_id
+
+```python
+def example_study_id(class_id: str) -> str
+```
+
+Return the fixed id of the read-only Study for one class.
+
+<a id="fim.examples.seed.read_bundle"></a>
+
+#### read\_bundle
+
+```python
+def read_bundle(bundle: Path) -> ExamplesBundle | None
+```
+
+Read an examples bundle's `catalog.json`.
+
+**Arguments**:
+
+- `bundle` - The bundle directory.
+
+
+**Returns**:
+
+  The parsed bundle, or `None` when the directory holds no catalog
+  (nothing to seed).
+
+
+**Raises**:
+
+- `OSError` - The catalog exists but cannot be read.
+- `ValueError` - The catalog is not valid JSON or lacks a required key.
+
+<a id="fim.examples.seed.seed_examples"></a>
+
+#### seed\_examples
+
+```python
+def seed_examples(results: Path | None = None,
+                  *,
+                  bundle: Path,
+                  clock: Clock = _utc_now) -> SeedReport
+```
+
+Make the results folder hold the bundle's examples as read-only items.
+
+See this module's docstring for what is written and why. Idempotent,
+and confined to its own items.
+
+**Arguments**:
+
+- `results` - Optional results-directory override.
+- `bundle` - The examples bundle directory (`webui/examples/`).
+- `clock` - Injectable current-time source, for deterministic tests.
+
+
+**Returns**:
+
+  What was seeded, skipped, written, and removed. A bundle with no
+  catalog seeds nothing and changes nothing.
+
+
+**Raises**:
+
+- `OSError` - A file cannot be read or written.
+- `ValueError` - The catalog is malformed.
 
 <a id="fim.gui"></a>
 
@@ -6468,6 +6717,30 @@ own `refreshRecentRuns` only when a visit's own `list_studies`/
 `list_experiments` both come back empty, never eagerly at
 launch, so a checkout that already has any Study/Experiment
 never gains this call at all.
+
+<a id="fim.gui.app.Api.ensure_examples"></a>
+
+#### ensure\_examples
+
+```python
+@_log_bridge_call
+def ensure_examples() -> dict[str, Any]
+```
+
+Seed the bundled examples when the Examples experiment is missing.
+
+Read-only examples design §4.2: Home's `refreshRecentRuns` calls
+this when a visit's `list_experiments` has no
+`experiment-examples` (deleted out of band, or a results
+location chosen after launch). When the Experiment exists this
+does nothing at all; the app-start seeding (`main`) already
+brought it up to date.
+
+**Returns**:
+
+- ``{"ok"` - True, "changed": bool}`, `changed` saying whether
+  anything was written or removed (so Home refetches only
+  then); `{"ok": False, "message": ...}` when seeding failed.
 
 <a id="fim.gui.app.Api.add_run_to_study"></a>
 

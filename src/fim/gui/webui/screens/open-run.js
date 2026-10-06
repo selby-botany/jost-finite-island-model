@@ -396,8 +396,20 @@ function buildHomeGroups(studies, experiments, filterText) {
                 nameMatchesFilter(study.name, filterText)
         )
         .map(studyGroup);
-    return [...experimentGroups, ...standaloneStudyGroups];
+    // The read-only Examples experiment (read-only examples design §4.2)
+    // is always listed last, whatever its creation time: a botanist's own
+    // work comes first, and the shipped examples never push it down.
+    const isExamples = (group) => group.experimentId === EXAMPLES_EXPERIMENT_ID;
+    return [
+        ...experimentGroups.filter((group) => !isExamples(group)),
+        ...standaloneStudyGroups,
+        ...experimentGroups.filter(isExamples),
+    ];
 }
+
+// The seeded examples' fixed Experiment id (`fim.examples.seed.
+// EXAMPLES_EXPERIMENT_ID`).
+const EXAMPLES_EXPERIMENT_ID = "experiment-examples";
 
 function showOpenRunBanner(message) {
     if (!message) {
@@ -1589,15 +1601,36 @@ async function refreshRecentRuns() {
         window.pywebview.api.list_studies(),
         window.pywebview.api.list_experiments(),
     ]);
+    // The read-only Examples experiment is seeded at app start; if it is
+    // missing now (deleted out of band, or a results location chosen
+    // since launch), seed it again (read-only examples design §4.2) and
+    // refetch only when that changed anything.
+    const examplesListed = allExperiments.some(
+        (experiment) => experiment.experimentId === EXAMPLES_EXPERIMENT_ID
+    );
+    if (!examplesListed) {
+        const seeded = await window.pywebview.api.ensure_examples();
+        if (seeded.ok && seeded.changed) {
+            [allStudies, allExperiments] = await Promise.all([
+                window.pywebview.api.list_studies(),
+                window.pywebview.api.list_experiments(),
+            ]);
+        }
+    }
     // A checkout that has never run anything, and never created a
     // Study/Experiment by hand, has nothing to click "Create run…" on
     // yet -- `ensure_default_study` is lazy on the Python side (design
     // doc §1: never called eagerly at launch), so this is the one place
     // that materializes it for real, exactly when the tree would
-    // otherwise render completely empty. Sequential, not folded into
-    // the `Promise.all` above, so this never races the initial fetch:
-    // both lists are already known empty before creating anything.
-    if (allStudies.length === 0 && allExperiments.length === 0) {
+    // otherwise render with nothing editable in it. The read-only
+    // examples do not count: a run cannot be filed in them. Sequential,
+    // not folded into the `Promise.all` above, so this never races the
+    // initial fetch: both lists are already known before creating
+    // anything.
+    const hasEditable =
+        allStudies.some((study) => !study.readOnly) ||
+        allExperiments.some((experiment) => !experiment.readOnly);
+    if (!hasEditable) {
         await window.pywebview.api.ensure_default_study();
         [allStudies, allExperiments] = await Promise.all([
             window.pywebview.api.list_studies(),

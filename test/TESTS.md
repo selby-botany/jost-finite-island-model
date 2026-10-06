@@ -13,6 +13,7 @@ Every test module, fixture, and test function documented here in full; `doc/fim-
   - [`test_doc_examples`](#test.test_doc_examples)
   - [`test_doc_snippets`](#test.test_doc_snippets)
   - [`test_examples_catalog`](#test.test_examples_catalog)
+  - [`test_examples_seed`](#test.test_examples_seed)
   - [`test_hypothesis_profile`](#test.test_hypothesis_profile)
   - [`test_launcher`](#test.test_launcher)
   - [`test_logging_setup`](#test.test_logging_setup)
@@ -58,7 +59,9 @@ Every test module, fixture, and test function documented here in full; `doc/fim-
   - [`test_config_modal_dialogs`](#gui.test_config_modal_dialogs)
   - [`test_dark_mode_screen`](#gui.test_dark_mode_screen)
   - [`test_details_screen`](#gui.test_details_screen)
+  - [`test_examples_bridge`](#gui.test_examples_bridge)
   - [`test_examples_dialog_screen`](#gui.test_examples_dialog_screen)
+  - [`test_examples_screen`](#gui.test_examples_screen)
   - [`test_explore_screen`](#gui.test_explore_screen)
   - [`test_explore_surface`](#gui.test_explore_surface)
   - [`test_explore_sweep`](#gui.test_explore_sweep)
@@ -876,6 +879,162 @@ def test_check_mode_reports_a_stale_bundle_without_writing(
 ```
 
 `--check` exits 1 on a stale bundle and changes nothing; a refresh fixes it.
+
+<a id="test.test_examples_seed"></a>
+
+# test.test\_examples\_seed
+
+Seeding the bundled worked examples into the results folder.
+
+Read-only examples design (`20261005-claude-opus-5-5-read-only-examples-
+and-classes-design.md`, `selby/restricted`), section 4.2:
+`fim.examples.seed.seed_examples` writes each example with a saved
+result as a read-only run under `results/examples/<id>/`, one read-only
+Study per class, and the read-only Examples Experiment. These tests drive
+it against small fixture bundles shaped like `dev/bin/build-examples-
+catalog`'s output, with a fixed clock, so every run of them sees the same
+files and the same timestamps.
+
+<a id="test.test_examples_seed.results"></a>
+
+#### results
+
+```python
+@pytest.fixture
+def results(tmp_path: Path) -> Path
+```
+
+An empty results directory.
+
+<a id="test.test_examples_seed.test_seeding_writes_runs_studies_and_the_examples_experiment"></a>
+
+#### test\_seeding\_writes\_runs\_studies\_and\_the\_examples\_experiment
+
+```python
+def test_seeding_writes_runs_studies_and_the_examples_experiment(
+        tmp_path: Path, results: Path) -> None
+```
+
+Every part of section 4.2, from one standard bundle.
+
+<a id="test.test_examples_seed.test_seeding_twice_changes_nothing"></a>
+
+#### test\_seeding\_twice\_changes\_nothing
+
+```python
+def test_seeding_twice_changes_nothing(tmp_path: Path, results: Path) -> None
+```
+
+Idempotent: the same bundle again writes no file, not even a timestamp.
+
+<a id="test.test_examples_seed.test_a_changed_bundle_file_replaces_only_that_file"></a>
+
+#### test\_a\_changed\_bundle\_file\_replaces\_only\_that\_file
+
+```python
+def test_a_changed_bundle_file_replaces_only_that_file(tmp_path: Path,
+                                                       results: Path) -> None
+```
+
+A newer bundle rewrites the files whose content differs, nothing else.
+
+<a id="test.test_examples_seed.test_changed_labels_rewrite_the_metadata_and_keep_its_creation_time"></a>
+
+#### test\_changed\_labels\_rewrite\_the\_metadata\_and\_keep\_its\_creation\_time
+
+```python
+def test_changed_labels_rewrite_the_metadata_and_keep_its_creation_time(
+        tmp_path: Path, results: Path) -> None
+```
+
+A renamed example gets its new name; `created_at` survives.
+
+<a id="test.test_examples_seed.test_an_owned_file_the_bundle_stops_shipping_is_removed"></a>
+
+#### test\_an\_owned\_file\_the\_bundle\_stops\_shipping\_is\_removed
+
+```python
+def test_an_owned_file_the_bundle_stops_shipping_is_removed(
+        tmp_path: Path, results: Path) -> None
+```
+
+A batch example that became a single run loses its batch files.
+
+<a id="test.test_examples_seed.test_seeding_never_touches_a_users_own_runs_studies_or_experiments"></a>
+
+#### test\_seeding\_never\_touches\_a\_users\_own\_runs\_studies\_or\_experiments
+
+```python
+def test_seeding_never_touches_a_users_own_runs_studies_or_experiments(
+        tmp_path: Path, results: Path) -> None
+```
+
+Everything outside the examples' own items is byte-for-byte unchanged.
+
+<a id="test.test_examples_seed.test_an_example_dropped_from_the_bundle_is_removed_with_its_study"></a>
+
+#### test\_an\_example\_dropped\_from\_the\_bundle\_is\_removed\_with\_its\_study
+
+```python
+def test_an_example_dropped_from_the_bundle_is_removed_with_its_study(
+        tmp_path: Path, results: Path) -> None
+```
+
+Stale example items go; a directory holding a user's file stays.
+
+<a id="test.test_examples_seed.test_reseeding_restores_a_read_only_flag_an_older_version_dropped"></a>
+
+#### test\_reseeding\_restores\_a\_read\_only\_flag\_an\_older\_version\_dropped
+
+```python
+def test_reseeding_restores_a_read_only_flag_an_older_version_dropped(
+        tmp_path: Path, results: Path) -> None
+```
+
+An older fim that rewrote a manifest drops `read_only`; seeding repairs it.
+
+<a id="test.test_examples_seed.test_a_bundle_without_a_catalog_seeds_nothing"></a>
+
+#### test\_a\_bundle\_without\_a\_catalog\_seeds\_nothing
+
+```python
+def test_a_bundle_without_a_catalog_seeds_nothing(tmp_path: Path,
+                                                  results: Path) -> None
+```
+
+No `catalog.json` (an unbundled build): nothing is created.
+
+<a id="test.test_examples_seed.test_a_bundle_with_no_saved_results_removes_a_stale_examples_experiment"></a>
+
+#### test\_a\_bundle\_with\_no\_saved\_results\_removes\_a\_stale\_examples\_experiment
+
+```python
+def test_a_bundle_with_no_saved_results_removes_a_stale_examples_experiment(
+        tmp_path: Path, results: Path) -> None
+```
+
+With nothing to show, the Examples Experiment is not kept around empty.
+
+<a id="test.test_examples_seed.test_a_malformed_catalog_is_reported"></a>
+
+#### test\_a\_malformed\_catalog\_is\_reported
+
+```python
+def test_a_malformed_catalog_is_reported(tmp_path: Path,
+                                         results: Path) -> None
+```
+
+A catalog missing its keys raises `ValueError` naming the file.
+
+<a id="test.test_examples_seed.test_the_committed_bundle_seeds_cleanly"></a>
+
+#### test\_the\_committed\_bundle\_seeds\_cleanly
+
+```python
+def test_the_committed_bundle_seeds_cleanly(results: Path) -> None
+```
+
+The app's own `webui/examples/` bundle reads and seeds without error.
 
 <a id="test.test_hypothesis_profile"></a>
 
@@ -14353,6 +14512,114 @@ def test_a_runs_details_dialog_names_it_without_documentation(
 
 A run's dialog has no documentation field, and a typed name shows in Home.
 
+<a id="gui.test_examples_bridge"></a>
+
+# gui.test\_examples\_bridge
+
+The seeded Examples experiment through `fim.gui.app.Api`'s bridge.
+
+Read-only examples design (`20261005-claude-opus-5-5-read-only-examples-
+and-classes-design.md`, `selby/restricted`), section 4.2: Home seeds the
+bundled examples whenever it finds the Examples experiment missing
+(`Api.ensure_examples`). Window-free, like `test_app_api.py`.
+
+The bundle here is a fixture built from one real, tiny `fim run` of a
+configuration carrying `_read_only: true`, laid out exactly as
+`dev/bin/build-examples-catalog` lays out `webui/examples/`, so the
+tests do not change whenever the shipped examples do.
+
+<a id="gui.test_examples_bridge.build_bundle"></a>
+
+#### build\_bundle
+
+```python
+def build_bundle(root: Path) -> Path
+```
+
+Write a fixture examples bundle under `root` and return its directory.
+
+Two examples in one class: `tiny-example`, with a saved result from a
+real run (its `manifest.json` and `report.json`, never its
+trajectory), and `not-run-yet`, with a configuration only.
+
+<a id="gui.test_examples_bridge.results"></a>
+
+#### results
+
+```python
+@pytest.fixture
+def results(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path
+```
+
+Point `paths.results_directory()` at an isolated directory.
+
+<a id="gui.test_examples_bridge.bundle"></a>
+
+#### bundle
+
+```python
+@pytest.fixture
+def bundle(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path
+```
+
+Build the fixture bundle and make it the app's bundled examples.
+
+<a id="gui.test_examples_bridge.test_ensure_examples_seeds_a_missing_examples_experiment"></a>
+
+#### test\_ensure\_examples\_seeds\_a\_missing\_examples\_experiment
+
+```python
+def test_ensure_examples_seeds_a_missing_examples_experiment(
+        results: Path, bundle: Path) -> None
+```
+
+Missing: seeded, and reported as changed so Home refetches.
+
+<a id="gui.test_examples_bridge.test_ensure_examples_does_nothing_while_the_experiment_exists"></a>
+
+#### test\_ensure\_examples\_does\_nothing\_while\_the\_experiment\_exists
+
+```python
+def test_ensure_examples_does_nothing_while_the_experiment_exists(
+        results: Path, bundle: Path) -> None
+```
+
+Present: no seeding at all, even if the bundle has changed since.
+
+<a id="gui.test_examples_bridge.test_ensure_examples_reports_a_damaged_bundle"></a>
+
+#### test\_ensure\_examples\_reports\_a\_damaged\_bundle
+
+```python
+def test_ensure_examples_reports_a_damaged_bundle(
+        results: Path, tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch) -> None
+```
+
+A malformed catalog is a refusal with a message, never an exception.
+
+<a id="gui.test_examples_bridge.test_app_start_seeds_the_examples_before_the_window_opens"></a>
+
+#### test\_app\_start\_seeds\_the\_examples\_before\_the\_window\_opens
+
+```python
+def test_app_start_seeds_the_examples_before_the_window_opens(
+        results: Path, bundle: Path, monkeypatch: pytest.MonkeyPatch) -> None
+```
+
+`main` seeds once the results location is final.
+
+<a id="gui.test_examples_bridge.test_the_seeded_study_holds_only_examples_with_a_saved_result"></a>
+
+#### test\_the\_seeded\_study\_holds\_only\_examples\_with\_a\_saved\_result
+
+```python
+def test_the_seeded_study_holds_only_examples_with_a_saved_result(
+        results: Path, bundle: Path) -> None
+```
+
+`not-run-yet` has no saved result, so no run directory and no row.
+
 <a id="gui.test_examples_dialog_screen"></a>
 
 # gui.test\_examples\_dialog\_screen
@@ -14407,6 +14674,59 @@ def test_dialog_fits_the_default_window_and_labels_every_control(
 ```
 
 At 900x700 the dialog fits with no horizontal overflow; controls are labelled.
+
+<a id="gui.test_examples_screen"></a>
+
+# gui.test\_examples\_screen
+
+Headless functional tests for the seeded Examples experiment.
+
+Read-only examples design (`20261005-claude-opus-5-5-read-only-examples-
+and-classes-design.md`, `selby/restricted`), sections 4.2 and 4.3: Home
+seeds the bundled examples when the Examples experiment is missing and
+always lists it last.
+
+The bundle is a fixture built from one real, tiny `fim run` (laid out
+as `dev/bin/build-examples-catalog` lays out `webui/examples/`), so these
+tests do not change whenever the shipped examples do. Every wait polls a
+real completion signal (a ready flag, a pending-call counter, or the DOM
+state the step produces), never a fixed sleep.
+
+<a id="gui.test_examples_screen.results"></a>
+
+#### results
+
+```python
+@pytest.fixture
+def results(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path
+```
+
+An isolated results directory, with a fixture examples bundle installed.
+
+The bundle's own `fim run` happens first, while the results folder
+is still a different, throwaway one, so it files nothing here.
+
+<a id="gui.test_examples_screen.test_home_seeds_a_missing_examples_experiment_and_lists_it_last"></a>
+
+#### test\_home\_seeds\_a\_missing\_examples\_experiment\_and\_lists\_it\_last
+
+```python
+def test_home_seeds_a_missing_examples_experiment_and_lists_it_last(
+        results: Path) -> None
+```
+
+A fresh results folder: the examples appear, after the default Study.
+
+<a id="gui.test_examples_screen.test_the_examples_experiment_is_last_even_when_it_is_the_oldest"></a>
+
+#### test\_the\_examples\_experiment\_is\_last\_even\_when\_it\_is\_the\_oldest
+
+```python
+def test_the_examples_experiment_is_last_even_when_it_is_the_oldest(
+        results: Path) -> None
+```
+
+Listed last whatever its creation time; a standalone Study comes before.
 
 <a id="gui.test_explore_screen"></a>
 
