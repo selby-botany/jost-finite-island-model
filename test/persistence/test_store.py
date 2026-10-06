@@ -3,6 +3,8 @@
 import threading
 from pathlib import Path
 
+from conftest import COMPLETION_BACKSTOP_SECONDS, join_or_fail
+
 from fim.model.allele import AlleleId
 from fim.model.locus import LocusSpec
 from fim.model.params import SimulationParams
@@ -123,7 +125,9 @@ def _write_concurrently(
     shared store at once), stress-tested directly here rather than only
     exercised incidentally through a full engine run.
     """
-    barrier = threading.Barrier(generation_count)
+    # Bounded like every completion wait (`COMPLETION_BACKSTOP_SECONDS`): a
+    # writer that never reaches the barrier breaks it instead of hanging.
+    barrier = threading.Barrier(generation_count, timeout=COMPLETION_BACKSTOP_SECONDS)
 
     def _write(generation: int) -> None:
         barrier.wait()
@@ -136,7 +140,7 @@ def _write_concurrently(
     for thread in threads:
         thread.start()
     for thread in threads:
-        thread.join()
+        join_or_fail(thread, "concurrent trajectory writer")
 
 
 def test_in_memory_store_write_generation_is_thread_safe() -> None:
@@ -286,7 +290,7 @@ def test_replicate_fanout_store_is_thread_safe_across_concurrent_run_ids() -> No
         return store
 
     fanout = ReplicateFanoutStore(factory)
-    barrier = threading.Barrier(run_count)
+    barrier = threading.Barrier(run_count, timeout=COMPLETION_BACKSTOP_SECONDS)
 
     def _write(index: int) -> None:
         run_id = f"run-{index}"
@@ -299,7 +303,7 @@ def test_replicate_fanout_store_is_thread_safe_across_concurrent_run_ids() -> No
     for thread in threads:
         thread.start()
     for thread in threads:
-        thread.join()
+        join_or_fail(thread, "fan-out store writer")
 
     assert len(built) == run_count
     for index in range(run_count):
