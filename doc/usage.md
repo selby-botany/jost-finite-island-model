@@ -193,8 +193,24 @@ m:
   - [0.01, 0.01, 0.01, 0.97]
 mu: 0.001
 seed: 20260819
+# Eight independent loci, pooled: one locus alone swings too widely for its
+# D to settle honestly (see the README).
 loci:
   - locus_id: 1
+    length: 100
+  - locus_id: 2
+    length: 100
+  - locus_id: 3
+    length: 100
+  - locus_id: 4
+    length: 100
+  - locus_id: 5
+    length: 100
+  - locus_id: 6
+    length: 100
+  - locus_id: 7
+    length: 100
+  - locus_id: 8
     length: 100
 convergence_statistic: D
 n_replicates: 1   # a single scalar run; the default (200) would batch
@@ -204,15 +220,19 @@ n_replicates: 1   # a single scalar run; the default (200) would batch
 fim run hub-island.yaml --output results/hub-island --quiet
 ```
 
-Converges at generation 1,006 with D \sim 0.0551. `manifest.json`'s `parameters.N`
+Converges at generation 1,136, after about 10 seconds, with D = 0.0498 and a
+trailing-window mean D of 0.0540 ± 0.0016. The example pools eight loci: one
+locus alone swings too widely for its D to settle honestly (see the
+[example's README](examples/unequal-island-sizes-with-a-migration-hub/README.md)).
+`manifest.json`'s `parameters.N`
 and `parameters.m` record the exact per-deme sizes and matrix rows used —
 compare them against a run with one shared `N/m` to see the effect of
 unequal size and asymmetric connectivity on differentiation.
 
 deme_weighting only affects E<sub>ST</sub> — D and K<sub>ST</sub> weight demes equally by
 definition, regardless of this setting. With the unequal per-deme `N` above,
-the default `equal` weighting gives E<sub>ST</sub> \sim 0.0671; adding
-`deme_weighting: size` to the same configuration gives E<sub>ST</sub> \sim 0.0644
+the default `equal` weighting gives E<sub>ST</sub> = 0.0676; adding
+`deme_weighting: size` to the same configuration gives E<sub>ST</sub> = 0.0618
 instead — deme 4's own 800-gene-copy weight pulls the size-weighted value
 down, since it is both the largest deme and the best-connected one.
 

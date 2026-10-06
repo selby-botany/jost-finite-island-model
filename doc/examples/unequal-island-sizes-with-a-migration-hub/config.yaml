@@ -14,8 +14,24 @@ m:
   - [0.01, 0.01, 0.01, 0.97]
 mu: 0.001
 seed: 20260819
+# Eight independent loci, pooled: one locus alone swings too widely for its
+# D to settle honestly (see the README).
 loci:
   - locus_id: 1
+    length: 100
+  - locus_id: 2
+    length: 100
+  - locus_id: 3
+    length: 100
+  - locus_id: 4
+    length: 100
+  - locus_id: 5
+    length: 100
+  - locus_id: 6
+    length: 100
+  - locus_id: 7
+    length: 100
+  - locus_id: 8
     length: 100
 convergence_statistic: D
 n_replicates: 1   # a single scalar run; the default (200) would batch
