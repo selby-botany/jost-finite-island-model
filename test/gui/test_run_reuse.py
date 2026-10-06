@@ -15,7 +15,7 @@ from fim.gui.app import Api
 from fim.persistence import groups
 from fim.reproducibility import Comparison, Difference
 
-from .test_sweep_api import _WAIT_SECONDS, _form, api, results  # noqa: F401
+from .test_sweep_api import _IDLE_POLL_SECONDS, _form, api, results  # noqa: F401
 
 
 class _RunWindow:
@@ -42,7 +42,8 @@ def test_running_the_same_configuration_twice_computes_it_once(
     first = api.start_run(_form(), study.study_id)
     assert first["ok"] is True
     assert "reused" not in first
-    assert window.done.wait(_WAIT_SECONDS)
+    _wait_idle(api)
+    assert window.done.is_set()
     directories = list(results.glob("*/manifest.json"))
     assert len(directories) == 1
 
@@ -65,7 +66,8 @@ def test_a_reused_run_is_attached_to_the_study_chosen_the_second_time(
     first_study = groups.create_study("First")
     second_study = groups.create_study("Second")
     api.start_run(_form(), first_study.study_id)
-    assert window.done.wait(_WAIT_SECONDS)
+    _wait_idle(api)
+    assert window.done.is_set()
 
     reused = api.start_run(_form(), second_study.study_id)
 
@@ -127,20 +129,34 @@ class _RecordingWindow(_RunWindow):
         self.scripts.append(script)
         return super().evaluate_js(script)
 
-    def wait_for_reproducibility(self) -> str | None:
-        for _ in range(_WAIT_SECONDS * 20):
-            for script in self.scripts:
-                if script.startswith("fim.onReproducibilityChecked("):
-                    return script
-            threading.Event().wait(0.05)
+    def reproducibility_script(self) -> str | None:
+        """Return the reproducibility push, if the run sent one.
+
+        Read only after `_wait_idle`: the comparison runs synchronously
+        on the run's own drain thread before it clears the in-flight
+        guard, so once idle, a push that was ever going to be sent has
+        been.
+        """
+        for script in self.scripts:
+            if script.startswith("fim.onReproducibilityChecked("):
+                return script
         return None
 
 
 def _wait_idle(instance: Api) -> None:
-    for _ in range(_WAIT_SECONDS * 20):
-        if not instance._run_in_flight:
-            return
-        threading.Event().wait(0.05)
+    """Wait for the run's drain thread to clear the in-flight guard.
+
+    `start_run` sets `_run_in_flight` before returning and the drain
+    thread clears it in its own `finally`, after its terminal push and
+    any reproducibility check, so this returns once the run has ended
+    however it ended. This used to give up silently after 60 seconds and
+    let the test read a run still in progress; it now has no deadline,
+    since how long a run takes depends on machine load, not on the
+    commit. The poll interval affects only how soon this notices; CI's
+    `timeout-minutes` bounds a genuine hang.
+    """
+    while instance._run_in_flight:
+        threading.Event().wait(_IDLE_POLL_SECONDS)
 
 
 def test_a_new_software_version_recomputes_and_a_matching_result_replaces_the_old(
@@ -152,8 +168,8 @@ def test_a_new_software_version_recomputes_and_a_matching_result_replaces_the_ol
     monkeypatch.setattr(app_module, "_active_window", lambda: window)
     study = groups.create_study("Runs")
     api.start_run(_form(), study.study_id)
-    assert window.done.wait(_WAIT_SECONDS)
     _wait_idle(api)
+    assert window.done.is_set()
     (old,) = [path.parent for path in results.glob("*/manifest.json")]
     window.done.clear()
     window.scripts.clear()
@@ -163,11 +179,11 @@ def test_a_new_software_version_recomputes_and_a_matching_result_replaces_the_ol
 
     assert second["ok"] is True
     assert "reused" not in second
-    assert window.done.wait(_WAIT_SECONDS)
-    script = window.wait_for_reproducibility()
+    _wait_idle(api)
+    assert window.done.is_set()
+    script = window.reproducibility_script()
     assert script is not None
     assert '"identical": true' in script
-    _wait_idle(api)
     remaining = [path.parent for path in results.glob("*/manifest.json")]
     assert len(remaining) == 1
     assert remaining[0] != old
@@ -185,8 +201,8 @@ def test_a_recomputed_result_that_differs_is_reported_and_both_runs_are_kept(
     monkeypatch.setattr(app_module, "_active_window", lambda: window)
     study = groups.create_study("Runs")
     api.start_run(_form(), study.study_id)
-    assert window.done.wait(_WAIT_SECONDS)
     _wait_idle(api)
+    assert window.done.is_set()
     window.done.clear()
     window.scripts.clear()
 
@@ -201,9 +217,9 @@ def test_a_recomputed_result_that_differs_is_reported_and_both_runs_are_kept(
     monkeypatch.setattr(app_module, "fim_version", "9.9.9")
     monkeypatch.setattr(app_module, "compare_runs", differing)
     api.start_run(_form(), study.study_id)
-    assert window.done.wait(_WAIT_SECONDS)
-    script = window.wait_for_reproducibility()
     _wait_idle(api)
+    assert window.done.is_set()
+    script = window.reproducibility_script()
 
     assert script is not None
     assert '"identical": false' in script

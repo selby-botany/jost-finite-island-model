@@ -1,4 +1,14 @@
-"""Tests for the sweep bridge calls on `fim.gui.app.Api` (no real window)."""
+"""Tests for the sweep bridge calls on `fim.gui.app.Api` (no real window).
+
+A sweep runs on a background thread. Tests wait for that thread's real
+end — the busy guard `start_sweep` sets before returning and the thread
+clears in its own `finally`, however the sweep ended — with no deadline,
+then assert how it ended (`_FakeWindow.finished`). These used to wait up
+to 60 seconds for the `sweep_done` push; how long a sweep takes depends
+on machine load, not on the commit, so a timed wait made the result
+depend on what else the machine was doing. CI's `timeout-minutes`
+bounds a genuine hang.
+"""
 
 from __future__ import annotations
 
@@ -17,11 +27,11 @@ from fim.gui.config_form import DEFAULT_RUN_SETTING_FIELD_NAMES, starter_form_va
 from fim.persistence import groups
 from fim.sweep_run import LocalPointRunner
 
-_WAIT_SECONDS = 60
+_IDLE_POLL_SECONDS = 0.05
 
 
 class _FakeWindow:
-    """Records `evaluate_js` pushes and signals when a sweep ends."""
+    """Records `evaluate_js` pushes and notes when a sweep ends."""
 
     def __init__(self) -> None:
         self.pushed: list[str] = []
@@ -148,7 +158,8 @@ def test_start_sweep_runs_every_point_and_pushes_events(
 
     assert started["ok"] is True
     assert started["total"] == 2
-    assert window.finished.wait(_WAIT_SECONDS)
+    _wait_until_idle(api)
+    assert window.finished.is_set()
     events = window.events()
     assert [e["kind"] for e in events if e["kind"] != "point_progress"] == [
         "point_started",
@@ -166,7 +177,8 @@ def test_start_sweep_runs_every_point_and_pushes_events(
 
 def test_a_finished_sweep_reports_its_results(api: Api, window: _FakeWindow) -> None:
     started = api.start_sweep(_form(), _request(_D_AXIS))
-    assert window.finished.wait(_WAIT_SECONDS)
+    _wait_until_idle(api)
+    assert window.finished.is_set()
 
     payload = api.get_sweep_results(started["studyId"])
 
@@ -235,12 +247,12 @@ def test_cancelling_stops_the_sweep_and_resume_finishes_it(
     monkeypatch.setattr(LocalPointRunner, "run_point", cancel_after_first)
     try:
         started = api.start_sweep(_form(), _request(_D_AXIS, pointsAtOnce="1"))
-        assert window.finished.wait(_WAIT_SECONDS)
+        _wait_until_idle(api)
+        assert window.finished.is_set()
     finally:
         monkeypatch.undo()
     assert window.events()[-1]["kind"] == "sweep_cancelled"
     study_id = started["studyId"]
-    assert _wait_until_idle(api)
     assert groups.get_study(study_id).run_count == 1
 
     window.finished.clear()
@@ -248,18 +260,21 @@ def test_cancelling_stops_the_sweep_and_resume_finishes_it(
     resumed = api.resume_sweep(study_id)
 
     assert resumed["ok"] is True
-    assert window.finished.wait(_WAIT_SECONDS)
-    assert _wait_until_idle(api)
+    _wait_until_idle(api)
+    assert window.finished.is_set()
     assert groups.get_study(study_id).run_count == 2
 
 
-def _wait_until_idle(api: Api) -> bool:
-    """Wait for the sweep thread to release the busy guard."""
-    for _ in range(_WAIT_SECONDS * 20):
-        if api._sweep_cancel_event is None:
-            return True
-        threading.Event().wait(0.05)
-    return False
+def _wait_until_idle(api: Api) -> None:
+    """Wait for the sweep thread to release the busy guard.
+
+    `start_sweep`/`resume_sweep` set the guard before returning and the
+    sweep thread clears it in its own `finally`, after its last push, so
+    this returns once the sweep has ended however it ended. Polling has
+    no deadline; the interval affects only how soon this notices.
+    """
+    while api._sweep_cancel_event is not None:
+        threading.Event().wait(_IDLE_POLL_SECONDS)
 
 
 def test_resuming_something_that_is_not_a_sweep_is_refused(
@@ -289,7 +304,8 @@ def test_sweep_theory_evaluates_the_closed_form_at_sweep_coordinates(
     api: Api, window: _FakeWindow
 ) -> None:
     started = api.start_sweep(_form(), _request({"key": "m", "values": [0.01, 0.1]}))
-    assert window.finished.wait(_WAIT_SECONDS)
+    _wait_until_idle(api)
+    assert window.finished.is_set()
 
     theory = api.get_sweep_theory(
         started["studyId"], [{"m": 0.01}, {"m": 0.1}, {"m": 0.1, "topology": "ring"}]
@@ -320,7 +336,8 @@ def test_list_studies_reports_the_planned_point_count_of_a_sweep_only(
     api: Api, window: _FakeWindow
 ) -> None:
     started = api.start_sweep(_form(), _request(_D_AXIS))
-    assert window.finished.wait(_WAIT_SECONDS)
+    _wait_until_idle(api)
+    assert window.finished.is_set()
     api.create_study("By hand")
 
     counts = {study["name"]: study["sweepPointCount"] for study in api.list_studies()}
@@ -398,7 +415,8 @@ def test_a_sweep_runs_into_the_study_chosen_and_keeps_its_runs(
     started = api.start_sweep(_form(), _request(_D_AXIS), study_id)
 
     assert started == {"ok": True, "studyId": study_id, "total": 2}
-    assert window.finished.wait(_WAIT_SECONDS)
+    _wait_until_idle(api)
+    assert window.finished.is_set()
     (study,) = api.list_studies()
     assert (study["name"], study["runCount"], study["sweepPointCount"]) == (
         "Mine",
@@ -412,8 +430,8 @@ def test_a_study_that_already_holds_a_sweep_is_refused(
 ) -> None:
     study_id = api.create_study("Mine")["studyId"]
     api.start_sweep(_form(), _request(_D_AXIS), study_id)
-    assert window.finished.wait(_WAIT_SECONDS)
-    assert _wait_until_idle(api)
+    _wait_until_idle(api)
+    assert window.finished.is_set()
 
     again = api.start_sweep(_form(), _request({"key": "d", "values": [4]}), study_id)
 
@@ -474,7 +492,8 @@ def test_a_sweep_passes_its_points_at_once_and_the_worker_count_to_each_point(
     started = api.start_sweep(_form(), _request(_D_AXIS, pointsAtOnce="1"))
 
     assert started["ok"] is True
-    assert window.finished.wait(_WAIT_SECONDS)
+    _wait_until_idle(api)
+    assert window.finished.is_set()
     # A two-replicate lineal batch gets at most two workers, never the whole
     # machine by default.
     assert len(seen) == 2
