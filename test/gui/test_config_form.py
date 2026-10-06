@@ -9,6 +9,7 @@ equivalent `SimulationParams`.
 from __future__ import annotations
 
 import json
+import math
 from dataclasses import replace
 
 import pytest
@@ -902,14 +903,66 @@ def test_equilibrium_split_errors_route_to_the_initial_conditions_tab(
 
 
 def test_mu_from_params_rejects_a_genuinely_per_locus_mu() -> None:
-    """A per-locus `mu` (unequal rates across loci) has no form representation."""
+    """Per-locus rates no single `mu_b` produces have no form representation."""
     params = _params(
         mu=(0.001, 0.05),
         loci=(LocusSpec(1, 50), LocusSpec(2, 8000)),
     )
 
-    with pytest.raises(ValueError, match="per-locus mu"):
+    with pytest.raises(ValueError, match="different mu for each locus"):
         config_form.mu_from_params(params)
+
+
+def test_mu_from_params_rejects_unequal_rates_on_equal_length_loci() -> None:
+    """Equal-length loci share any `mu_b`'s rate, so unequal rates are not one."""
+    params = _params(
+        mu=(0.001, 0.002),
+        loci=(LocusSpec(1, 100), LocusSpec(2, 100)),
+    )
+
+    with pytest.raises(ValueError, match=r"no single per-base rate \(mu_b\)"):
+        config_form.mu_from_params(params)
+
+
+@pytest.mark.parametrize("mu_b", [0.00002, 1e-7, 0.0123, 0.5])
+def test_mu_from_params_recovers_mu_b_from_unequal_loci_exactly(mu_b: float) -> None:
+    """A `mu_b` expanded over unequal loci renders as that `mu_b`, round-trip exact."""
+    config: dict[str, object] = {
+        "N": 20,
+        "ploidy": "haploid",
+        "d": 2,
+        "m": 0.1,
+        "seed": 7,
+        "loci": [
+            {"locus_id": 1, "length": 50},
+            {"locus_id": 2, "length": 500},
+            {"locus_id": 3, "length": 7},
+        ],
+    }
+    params = SimulationParams.from_mapping({**config, "mu_b": mu_b})
+    assert isinstance(params.mu, tuple)
+
+    values = config_form.mu_from_params(params)
+
+    assert values == {"mu_mode": "mu_b", "mu_value": "", "mu_b_value": str(mu_b)}
+    restored = SimulationParams.from_mapping(
+        {**config, **config_form.mu_to_payload(values)}
+    )
+    assert restored.mu == params.mu
+
+
+def test_per_base_mutation_rate_accepts_a_rate_within_tolerance_only() -> None:
+    """Rates a hair off a `mu_b`'s expansion are accepted; a real difference is not."""
+    lengths = [50, 500]
+    exact = [1.0 - (1.0 - 2e-5) ** length for length in lengths]
+    nudged = [exact[0], exact[1] * (1.0 + 1e-12)]
+    different = [exact[0], exact[1] * 1.001]
+
+    assert config_form.per_base_mutation_rate(exact, lengths) == 2e-5
+    recovered = config_form.per_base_mutation_rate(nudged, lengths)
+    assert recovered is not None
+    assert math.isclose(recovered, 2e-5, rel_tol=1e-9)
+    assert config_form.per_base_mutation_rate(different, lengths) is None
 
 
 def test_m_from_params_matrix_renders_matrix_mode_with_the_real_values() -> None:

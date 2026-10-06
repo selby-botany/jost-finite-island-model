@@ -9158,9 +9158,9 @@ def test_list_examples_mirrors_the_bundled_catalog() -> None
 
 Classes and examples come from the catalog, in its order, with loadability.
 
-`loadable` is computed, not assumed: the per-locus-`mu` example has
-no form representation and the Dear-Nolan high example has no
-configuration at all, and each says why in `message`.
+`loadable` is computed, not assumed: the Dear-Nolan high example has
+no configuration at all and says why in `message`; the per-base `mu_b`
+example, once refused for its per-locus rates, now loads.
 
 <a id="gui.test_app_api.test_load_example_returns_form_values_and_run_labels"></a>
 
@@ -9383,20 +9383,20 @@ def test_get_preset_form_values_rejects_an_unknown_id() -> None
 
 An unknown preset id is a clear error, not a silent empty form.
 
-<a id="gui.test_app_api.test_get_preset_form_values_surfaces_the_per_locus_mu_limitation"></a>
+<a id="gui.test_app_api.test_the_per_base_mu_example_loads_as_mu_b_and_runs_as_its_yaml"></a>
 
-#### test\_get\_preset\_form\_values\_surfaces\_the\_per\_locus\_mu\_limitation
+#### test\_the\_per\_base\_mu\_example\_loads\_as\_mu\_b\_and\_runs\_as\_its\_yaml
 
 ```python
-def test_get_preset_form_values_surfaces_the_per_locus_mu_limitation() -> None
+def test_the_per_base_mu_example_loads_as_mu_b_and_runs_as_its_yaml() -> None
 ```
 
-The preset with a genuinely per-locus `mu` fails exactly like `load_yaml` would.
+The `mu_b` example loads in `mu_b` mode and gives the YAML's own parameters.
 
-`mu_from_params`'s own docstring already documents this as a form
-limitation ("edit the YAML file directly"), not specific to presets
-— this proves `get_preset_form_values` surfaces that same message
-rather than crashing or silently loading a wrong value.
+`SimulationParams` keeps only the per-locus rates `mu_b` expands to
+across the example's unequal loci; the form once refused that as "a
+per-locus mu". The recovered `mu_b` must reproduce the rates exactly,
+so a run from the form has the same parameters as one from the file.
 
 <a id="gui.test_app_api.test_load_preset_syncs_settings_execution_defaults"></a>
 
@@ -9452,25 +9452,21 @@ instead, opening the picker at all would silently clobber whatever
 Settings held with the *last* preset checked, whether or not the
 user ever chose it.
 
-<a id="gui.test_app_api.test_every_other_builtin_preset_loads_into_form_values"></a>
+<a id="gui.test_app_api.test_every_builtin_preset_loads_into_form_values"></a>
 
-#### test\_every\_other\_builtin\_preset\_loads\_into\_form\_values
+#### test\_every\_builtin\_preset\_loads\_into\_form\_values
 
 ```python
 @pytest.mark.parametrize(
     "preset",
-    [
-        preset
-        for preset in presets_module.list_presets(app_module._webui_directory(
-        )) if preset.preset_id != _KNOWN_UNREPRESENTABLE_PRESET_ID
-    ],
+    presets_module.list_presets(app_module._webui_directory()),
     ids=lambda preset: preset.preset_id,
 )
-def test_every_other_builtin_preset_loads_into_form_values(
+def test_every_builtin_preset_loads_into_form_values(
         preset: presets_module.Preset) -> None
 ```
 
-Every built-in preset but the one documented exception loads successfully.
+Every built-in preset loads successfully.
 
 A full-coverage regression test `test_get_preset_form_values_loads_a_
 representable_preset` (above) never was: that test covers exactly one
@@ -9481,8 +9477,8 @@ useful" report (design doc `20260913-claude-sonnet-5-gui-worked-
 example-loadability-design.md`, `selby/restricted`), which needed a
 live check of every one to even answer "how many actually work
 today," a question this suite could not otherwise answer on its own.
-Parametrized dynamically over `presets_module.list_presets()` itself
-(minus the one known exception), rather than a hand-maintained name
+Parametrized dynamically over `presets_module.list_presets()` itself,
+rather than a hand-maintained name
 list, so a future preset added to `doc/usage.md` is covered
 automatically — and fails here immediately, by name, if it happens
 to trip a different, new form limitation, rather than only being
@@ -14014,7 +14010,39 @@ errors already draw.
 def test_mu_from_params_rejects_a_genuinely_per_locus_mu() -> None
 ```
 
-A per-locus `mu` (unequal rates across loci) has no form representation.
+Per-locus rates no single `mu_b` produces have no form representation.
+
+<a id="gui.test_config_form.test_mu_from_params_rejects_unequal_rates_on_equal_length_loci"></a>
+
+#### test\_mu\_from\_params\_rejects\_unequal\_rates\_on\_equal\_length\_loci
+
+```python
+def test_mu_from_params_rejects_unequal_rates_on_equal_length_loci() -> None
+```
+
+Equal-length loci share any `mu_b`'s rate, so unequal rates are not one.
+
+<a id="gui.test_config_form.test_mu_from_params_recovers_mu_b_from_unequal_loci_exactly"></a>
+
+#### test\_mu\_from\_params\_recovers\_mu\_b\_from\_unequal\_loci\_exactly
+
+```python
+@pytest.mark.parametrize("mu_b", [0.00002, 1e-7, 0.0123, 0.5])
+def test_mu_from_params_recovers_mu_b_from_unequal_loci_exactly(
+        mu_b: float) -> None
+```
+
+A `mu_b` expanded over unequal loci renders as that `mu_b`, round-trip exact.
+
+<a id="gui.test_config_form.test_per_base_mutation_rate_accepts_a_rate_within_tolerance_only"></a>
+
+#### test\_per\_base\_mutation\_rate\_accepts\_a\_rate\_within\_tolerance\_only
+
+```python
+def test_per_base_mutation_rate_accepts_a_rate_within_tolerance_only() -> None
+```
+
+Rates a hair off a `mu_b`'s expansion are accepted; a real difference is not.
 
 <a id="gui.test_config_form.test_m_from_params_matrix_renders_matrix_mode_with_the_real_values"></a>
 
@@ -14968,10 +14996,10 @@ Arrow keys reach the example, Return loads it, and the Run boxes are filled.
 
 ```python
 def test_unloadable_example_explains_itself_and_offers_its_yaml(
-        window: webview.Window) -> None
+        window: webview.Window, monkeypatch: pytest.MonkeyPatch) -> None
 ```
 
-The per-locus-`mu` example cannot load; the dialog says why up front.
+An example the form cannot show cannot load; the dialog says why up front.
 
 Selected by clicking, the other way into the list. "View YAML" still
 opens its configuration, on top of the Examples dialog.

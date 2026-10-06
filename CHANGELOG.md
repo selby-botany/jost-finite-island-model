@@ -1234,6 +1234,13 @@ project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   settled when the run stopped, and is `null` for a run that reached its cap.
   The trailing-window lines `fim run` prints are unchanged: every watched
   statistic, converged or not.
+- **The per-base mutation-rate example loads in the desktop app.** A
+  configuration with `mu_b` and loci of unequal length was refused as "a
+  per-locus mu", because only the per-locus rates `mu_b` expands to were
+  kept. The form now recovers the one `mu_b` that produces them and shows it,
+  so a run from the form has the same parameters as one from the file. Rates
+  that no single `mu_b` produces are still refused, with a message that says
+  so.
 - **The sweep dialog no longer throws away edits.** Only Done saved the
   dialog; closing it any other way (Escape) kept the earlier settings, so a
   sweep could run with fewer axes than the dialog had shown. Now every way of

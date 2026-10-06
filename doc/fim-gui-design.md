@@ -276,7 +276,11 @@ widget-unfriendly construct:
 - **A genuinely per-locus `mu`** raises a clear `ValueError` from
   `params_to_form_values` instead — the same "edit the YAML file
   directly" pattern this form has always used for a construct it
-  cannot represent at all.
+  cannot represent at all. Per-locus rates that one per-base rate
+  generates (`mu_b` over loci of unequal length, which
+  `SimulationParams` keeps only in expanded form) are not "genuinely
+  per-locus": `mu_from_params` recovers the `mu_b` and renders it in
+  the selector's `mu_b` mode.
 
 ### 6.3 The execution-engine selector
 

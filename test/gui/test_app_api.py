@@ -702,9 +702,9 @@ def _labelled_example_catalog(webui: Path) -> None:
 def test_list_examples_mirrors_the_bundled_catalog() -> None:
     """Classes and examples come from the catalog, in its order, with loadability.
 
-    `loadable` is computed, not assumed: the per-locus-`mu` example has
-    no form representation and the Dear-Nolan high example has no
-    configuration at all, and each says why in `message`.
+    `loadable` is computed, not assumed: the Dear-Nolan high example has
+    no configuration at all and says why in `message`; the per-base `mu_b`
+    example, once refused for its per-locus rates, now loads.
     """
     catalog = presets_module.load_catalog(app_module._webui_directory())
 
@@ -721,10 +721,9 @@ def test_list_examples_mirrors_the_bundled_catalog() -> None:
     assert stepping_stone["has_configuration"] is True
     assert stepping_stone["message"] == ""
     assert stepping_stone["excerpt"] != ""
-    per_locus = by_id[_KNOWN_UNREPRESENTABLE_PRESET_ID]
-    assert per_locus["loadable"] is False
-    assert per_locus["has_configuration"] is True
-    assert "per-locus mu" in per_locus["message"]
+    per_base = by_id["per-base-mutation-rate-across-unequal-locus-lengths"]
+    assert per_base["loadable"] is True
+    assert per_base["message"] == ""
     scripted = by_id["dear-nolan-high"]
     assert scripted["loadable"] is False
     assert scripted["has_configuration"] is False
@@ -1034,20 +1033,30 @@ def test_get_preset_form_values_rejects_an_unknown_id() -> None:
     assert "not-a-real-preset" in result["message"]
 
 
-def test_get_preset_form_values_surfaces_the_per_locus_mu_limitation() -> None:
-    """The preset with a genuinely per-locus `mu` fails exactly like `load_yaml` would.
+def test_the_per_base_mu_example_loads_as_mu_b_and_runs_as_its_yaml() -> None:
+    """The `mu_b` example loads in `mu_b` mode and gives the YAML's own parameters.
 
-    `mu_from_params`'s own docstring already documents this as a form
-    limitation ("edit the YAML file directly"), not specific to presets
-    — this proves `get_preset_form_values` surfaces that same message
-    rather than crashing or silently loading a wrong value.
+    `SimulationParams` keeps only the per-locus rates `mu_b` expands to
+    across the example's unequal loci; the form once refused that as "a
+    per-locus mu". The recovered `mu_b` must reproduce the rates exactly,
+    so a run from the form has the same parameters as one from the file.
     """
-    result = Api().get_preset_form_values(
-        "per-base-mutation-rate-across-unequal-locus-lengths"
+    example_id = "per-base-mutation-rate-across-unequal-locus-lengths"
+    example = presets_module.get_example(app_module._webui_directory(), example_id)
+    assert example is not None and example.yaml_text is not None
+    model, _labels = presets_module.split_configuration(
+        yaml.safe_load(example.yaml_text)
     )
+    expected = SimulationParams.from_mapping(model)
 
-    assert result["ok"] is False
-    assert "per-locus mu" in result["message"]
+    result = Api().get_preset_form_values(example_id)
+
+    assert result["ok"] is True, result.get("message")
+    assert result["values"]["mu_mode"] == "mu_b"
+    assert float(result["values"]["mu_b_value"]) == model["mu_b"]
+    restored = SimulationParams.from_mapping(form_values_to_payload(result["values"]))
+    assert restored.mu == expected.mu
+    assert restored.to_dict() == expected.to_dict()
 
 
 def test_load_preset_syncs_settings_execution_defaults() -> None:
@@ -1117,31 +1126,20 @@ def test_list_presets_does_not_sync_settings_execution_defaults() -> None:
     assert api.get_default_run_settings() == before
 
 
-# The one built-in preset `get_preset_form_values` cannot represent today
-# (`test_get_preset_form_values_surfaces_the_per_locus_mu_limitation`,
-# above) — a genuinely per-locus `mu`, the one construct `mu_from_params`
-# has no form representation for (design doc `20260913-claude-sonnet-5-
-# gui-worked-example-loadability-design.md`, `selby/restricted`). Named
-# explicitly here, not inferred from a failing result, so a *different*,
-# new preset that trips some other, future form limitation fails the
-# parametrized test below by name instead of silently joining an
-# ever-growing "expected failures" set.
-_KNOWN_UNREPRESENTABLE_PRESET_ID = "per-base-mutation-rate-across-unequal-locus-lengths"
-
-
+# No built-in preset is exempt: the per-base `mu_b` example, once the one
+# exception (a per-locus `mu` the form could not show), now loads as
+# `mu_b` (`test_the_per_base_mu_example_loads_as_mu_b_and_runs_as_its_yaml`,
+# above). A new preset that trips some future form limitation fails the
+# parametrized test below by name.
 @pytest.mark.parametrize(
     "preset",
-    [
-        preset
-        for preset in presets_module.list_presets(app_module._webui_directory())
-        if preset.preset_id != _KNOWN_UNREPRESENTABLE_PRESET_ID
-    ],
+    presets_module.list_presets(app_module._webui_directory()),
     ids=lambda preset: preset.preset_id,
 )
-def test_every_other_builtin_preset_loads_into_form_values(
+def test_every_builtin_preset_loads_into_form_values(
     preset: presets_module.Preset,
 ) -> None:
-    """Every built-in preset but the one documented exception loads successfully.
+    """Every built-in preset loads successfully.
 
     A full-coverage regression test `test_get_preset_form_values_loads_a_
     representable_preset` (above) never was: that test covers exactly one
@@ -1152,8 +1150,8 @@ def test_every_other_builtin_preset_loads_into_form_values(
     example-loadability-design.md`, `selby/restricted`), which needed a
     live check of every one to even answer "how many actually work
     today," a question this suite could not otherwise answer on its own.
-    Parametrized dynamically over `presets_module.list_presets()` itself
-    (minus the one known exception), rather than a hand-maintained name
+    Parametrized dynamically over `presets_module.list_presets()` itself,
+    rather than a hand-maintained name
     list, so a future preset added to `doc/usage.md` is covered
     automatically — and fails here immediately, by name, if it happens
     to trip a different, new form limitation, rather than only being

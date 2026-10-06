@@ -161,8 +161,9 @@ choose one, then press Return or click **Load into Configure**. The
 example's values fill the form, and its name and description fill the
 "Run name" and "Run description" boxes, which you can change before you
 run it. **View YAML** shows the example's configuration file, ready to
-copy. An example that the form cannot represent (a per-locus `mu`, for
-example) or that has no configuration file says so in the dialog, and
+copy. An example that the form cannot represent (a different `mu` for each
+locus that no single per-base rate `mu_b` produces, for example) or that has
+no configuration file says so in the dialog, and
 **Load into Configure** stays unavailable for it. **Open saved result**
 shows the example's own result, as shipped with the app, without running
 anything (see [Opening a saved example](#opening-a-saved-example)); it is

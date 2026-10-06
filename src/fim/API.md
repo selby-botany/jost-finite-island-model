@@ -269,6 +269,7 @@ Return to the [source-tree orientation](../README.md) or the [developer guide](.
   * [m\_from\_params](#fim.gui.config_form.m_from_params)
   * [mu\_to\_payload](#fim.gui.config_form.mu_to_payload)
   * [mu\_from\_params](#fim.gui.config_form.mu_from_params)
+  * [per\_base\_mutation\_rate](#fim.gui.config_form.per_base_mutation_rate)
   * [initial\_conditions\_to\_payload](#fim.gui.config_form.initial_conditions_to_payload)
   * [initial\_conditions\_from\_params](#fim.gui.config_form.initial_conditions_from_params)
   * [loci\_to\_payload](#fim.gui.config_form.loci_to_payload)
@@ -8724,18 +8725,55 @@ Render `params.mu` back into the mu/mu_b selector's form-value keys.
   `mu_b` with equal-length loci — so a scalar `params.mu` is
   always representable here as `mu_mode="mu"`, exactly
   reproducing the value actually used regardless of how the
-  loaded config originally spelled it.
+  loaded config originally spelled it. `SimulationParams` keeps
+  only the expanded per-locus rates, not `mu_b` itself, so a
+  per-locus `params.mu` that one per-base rate generates
+  (`per_base_mutation_rate`) is rendered as `mu_mode="mu_b"`.
 
 
 **Raises**:
 
-- `ValueError` - If `params.mu` is a genuinely per-locus tuple
-  (unequal rates across loci) — narrower than the design
-  doc's own worked "loaded" badge examples (m, p_0); this
-  form has no per-locus mu editor, load-only or otherwise,
-  so the message says to edit the YAML file directly, the
-  same pattern this form already uses for every other
-  construct it cannot represent at all.
+- `ValueError` - If `params.mu` is a genuinely per-locus tuple that
+  no single per-base rate generates — narrower than the
+  design doc's own worked "loaded" badge examples (m, p_0);
+  this form has no per-locus mu editor, load-only or
+  otherwise, so the message says to edit the YAML file
+  directly, the same pattern this form already uses for
+  every other construct it cannot represent at all.
+
+<a id="fim.gui.config_form.per_base_mutation_rate"></a>
+
+#### per\_base\_mutation\_rate
+
+```python
+def per_base_mutation_rate(rates: Sequence[float],
+                           lengths: Sequence[int]) -> float | None
+```
+
+Return the one per-base rate `mu_b` that generates every locus's rate.
+
+`SimulationParams.from_mapping` expands `mu_b` into one rate per
+locus, `mu[i] = 1 - (1 - mu_b) ** length[i]`, and keeps only the
+expansion. This inverts it, so the form can show the `mu_b` the
+configuration was written with. Each locus gives its own candidate,
+`1 - (1 - mu[i]) ** (1 / length[i])`; the shortest decimal near a
+candidate that reproduces every rate *exactly* through the same
+expression is preferred (it is almost always the configured value,
+such as `2e-05`, so a run from the form has the same parameters, and
+run ID, as one from the file). Failing that, a candidate is accepted
+if it reproduces every rate within `_PER_BASE_RATE_RELATIVE_TOLERANCE`.
+
+**Arguments**:
+
+- `rates` - The per-locus mutation probabilities.
+- `lengths` - Each locus's length, in the same order.
+
+
+**Returns**:
+
+  The per-base rate, or `None` when the rates are not one per-base
+  rate's expansion (two loci of equal length with different rates,
+  say).
 
 <a id="fim.gui.config_form.initial_conditions_to_payload"></a>
 

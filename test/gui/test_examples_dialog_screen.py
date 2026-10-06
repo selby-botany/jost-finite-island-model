@@ -35,7 +35,15 @@ _POLL_INTERVAL_SECONDS = 0.1
 _INPUT_SCREEN_READY = "window.__fimRunViewReady === true"
 _DIALOG_READY = "window.__fimExamplesDialogReady === true"
 _TARGET_EXAMPLE_ID = "stepping-stone-spatial-migration"
+# Every bundled example with a configuration now loads, so the unloadable
+# case is made by refusing this one (`_refuse_example`), with the form's
+# own wording for a construct it cannot show.
 _UNLOADABLE_EXAMPLE_ID = "per-base-mutation-rate-across-unequal-locus-lengths"
+_REFUSAL = (
+    "this configuration uses a different mu for each locus that no single "
+    "per-base rate (mu_b) produces; edit the YAML file directly — the form "
+    "only edits a single shared mu or mu_b"
+)
 
 _OPEN_DIALOG = (
     "window.fim.showConfigureScreen().then(() => "
@@ -190,14 +198,34 @@ def test_keyboard_navigation_loads_an_example_into_configure(
     assert result["runDisabled"] is False
 
 
+def _refuse_example(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Make `_UNLOADABLE_EXAMPLE_ID` unloadable, as a form limitation would.
+
+    Patches the one function every example takes into the form
+    (`app_module._example_form_values`), so `list_examples` marks it
+    unloadable and `load_example` refuses it, with `_REFUSAL` as the
+    reason; every other example is unaffected.
+    """
+    original = app_module._example_form_values
+
+    def refuse(example: presets_module.Example) -> dict[str, Any]:
+        """Refuse the chosen example; pass every other one through."""
+        if example.example_id == _UNLOADABLE_EXAMPLE_ID:
+            return {"ok": False, "message": _REFUSAL}
+        return original(example)
+
+    monkeypatch.setattr(app_module, "_example_form_values", refuse)
+
+
 def test_unloadable_example_explains_itself_and_offers_its_yaml(
-    window: webview.Window,
+    window: webview.Window, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """The per-locus-`mu` example cannot load; the dialog says why up front.
+    """An example the form cannot show cannot load; the dialog says why up front.
 
     Selected by clicking, the other way into the list. "View YAML" still
     opens its configuration, on top of the Examples dialog.
     """
+    _refuse_example(monkeypatch)
     tree_index, list_index, example = _route_to(_UNLOADABLE_EXAMPLE_ID)
 
     def steps(poll_until: Callable[[str, Callable[[Any], bool]], Any]) -> Any:
@@ -237,7 +265,7 @@ def test_unloadable_example_explains_itself_and_offers_its_yaml(
 
     assert result["loadDisabled"] is True
     assert result["errorHidden"] is False
-    assert "per-locus mu" in result["errorText"]
+    assert _REFUSAL in result["errorText"]
     assert result["itemText"].startswith(f"{example.name} (view YAML only)")
     assert "mu_b" in result["yaml"]
     assert result["bothOpen"] is True
