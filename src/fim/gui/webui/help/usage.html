@@ -207,11 +207,16 @@ loci:
   - locus_id: 1
     length: 100
 convergence_statistic: D
+convergence_tolerance: 0.02   # looser than the 0.01 default: about a minute
 n_replicates: 1   # a single scalar run; the default (200) would batch
 </code></pre>
 <pre><code class="language-console">fim run stepping-stone.yaml --output results/stepping-stone --quiet
 </code></pre>
-<p>Converges at generation 1,748 with D \sim 0.0287. Swap <code>topology: ring</code> for
+<p>Converges at generation 16,516, after about a minute, with a trailing-window
+mean D of 0.132 ± 0.006. <code>convergence_tolerance: 0.02</code> keeps the run to a
+minute; at the default 0.01 one locus needs about 32,000 generations (see
+the <a href="#" data-fim-external="https://github.com/selby-botany/jost-finite-island-model/blob/main/doc/examples/stepping-stone-spatial-migration/README.md">example's README</a>).
+Swap <code>topology: ring</code> for
 <code>linear</code> to remove the wrap-around edge between deme 1 and deme 6. In
 the GUI, the completed-run Literature visualizations panel includes an
 isolation-by-distance plot whenever the migration graph has at least two
@@ -370,11 +375,16 @@ loci:
   - locus_id: 1
     length: 3
 convergence_statistic: D
+convergence_tolerance: 0.02   # looser than the 0.01 default: under a minute
 n_replicates: 1   # a single scalar run; the default (200) would batch
 </code></pre>
 <pre><code class="language-console">fim run finite-alleles.yaml --output results/finite-alleles --quiet
 </code></pre>
-<p>Converges at generation 113 with D \sim 0.706. This is the Kimura-Crow
+<p>Converges at generation 4,521, after about 20 seconds, with a trailing-window
+mean D of 0.609 ± 0.010 (<code>convergence_tolerance: 0.02</code> halves the run's
+precision target to keep it short; see the
+<a href="#" data-fim-external="https://github.com/selby-botany/jost-finite-island-model/blob/main/doc/examples/finite-length-alleles-the-k-allele-model/README.md">example's README</a>).
+This is the Kimura-Crow
 finite-allele setting in miniature: <code>length: 3</code> gives 64 possible allele
 states, so recurrent mutation is visible enough for the completed-run
 frequency spectrum to be useful. See
@@ -403,13 +413,17 @@ loci:
   - locus_id: 1
     length: 100
 convergence_statistic: G_ST
+convergence_tolerance: 0.02   # looser than the 0.01 default: under a minute
 n_replicates: 1   # a single scalar run; the default (200) would batch
 </code></pre>
 <pre><code class="language-console">fim run finite-deme-correction.yaml \
   --output results/finite-deme-correction --quiet
 </code></pre>
-<p>Converges (on G<sub>ST</sub>) at generation 5,152 with G<sub>ST</sub> \sim 0.222 and
-D \sim 0.646. The closed-form finite-deme prediction for these parameters
+<p>Converges (on G<sub>ST</sub>) at generation 10,109, after under a minute, with
+a trailing-window mean G<sub>ST</sub> of 0.205 ± 0.008
+(<code>convergence_tolerance: 0.02</code> keeps the run short; see the
+<a href="#" data-fim-external="https://github.com/selby-botany/jost-finite-island-model/blob/main/doc/examples/wright-takahata-finite-deme-correction/README.md">example's README</a>).
+The closed-form finite-deme prediction for these parameters
 is about 0.141, below the corresponding infinite-island approximation of
 about 0.238 because the <code>d / (d - 1)</code> correction is retained. A single locus
 scatters widely around that expectation (the exact expectation for this
@@ -438,12 +452,17 @@ loci:
   - locus_id: 1
     length: 100
 convergence_statistic: D
+convergence_tolerance: 0.05   # looser than the 0.01 default: seconds, not hours
 n_replicates: 1   # a single scalar run; the default (200) would batch
 </code></pre>
 <pre><code class="language-console">fim run kimura-weiss-isolation-by-distance.yaml \
   --output results/kimura-weiss-isolation-by-distance --quiet
 </code></pre>
-<p>Converges at generation 2,754 with D \sim 0.615 and G<sub>ST</sub> \sim 0.132.
+<p>Converges at generation 2,532, after about 25 seconds, with D = 0.614 and
+G<sub>ST</sub> = 0.140. <code>convergence_tolerance: 0.05</code> is deliberately loose:
+at the default 0.01 this one-locus ring needs about 175,000 generations,
+well over an hour (see the
+<a href="#" data-fim-external="https://github.com/selby-botany/jost-finite-island-model/blob/main/doc/examples/kimura-weiss-isolation-by-distance/README.md">example's README</a>).
 Open the result in <code>fim-gui</code> and inspect the Literature visualizations panel:
 the identity-decay plot groups deme pairs by shortest-path distance over the
 non-zero migration edges and overlays a log-linear fit.</p>
@@ -471,11 +490,16 @@ loci:
   - locus_id: 2
     length: 500
 convergence_statistic: D
+convergence_tolerance: 0.03   # looser than the 0.01 default: under a minute
 n_replicates: 1   # a single scalar run; the default (200) would batch
 </code></pre>
 <pre><code class="language-console">fim run mu-b.yaml --output results/mu-b --quiet
 </code></pre>
-<p>Converges at generation 301 with D \sim 0.180. <code>results/mu-b/manifest.json</code>'s
+<p>Converges at generation 7,481, after about 30 seconds, with a trailing-window
+mean D of 0.220 ± 0.011 (<code>convergence_tolerance: 0.03</code> keeps the run short;
+see the
+<a href="#" data-fim-external="https://github.com/selby-botany/jost-finite-island-model/blob/main/doc/examples/per-base-mutation-rate-across-unequal-locus-lengths/README.md">example's README</a>).
+<code>results/mu-b/manifest.json</code>'s
 <code>parameters.mu</code> records the two derived rates — <code>0.0009995</code> for the
 50-base locus and <code>0.0099503</code> for the 500-base one — the expanded,
 canonical form μ<sub>b</sub> is sugar for; μ<sub>b</sub> itself is never stored.</p>

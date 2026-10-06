@@ -16,4 +16,5 @@ loci:
   - locus_id: 1
     length: 100
 convergence_statistic: D
+convergence_tolerance: 0.05   # looser than the 0.01 default: seconds, not hours
 n_replicates: 1   # a single scalar run; the default (200) would batch

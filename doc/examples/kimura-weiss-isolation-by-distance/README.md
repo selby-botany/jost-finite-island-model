@@ -7,9 +7,22 @@ Migration is restricted to neighboring demes, and the completed-run GUI
 can group deme-pair genetic correlations by distance to show spatial
 decay.
 
-The run converges at generation 2,754 with `D` near 0.615 and `G_ST`
-near 0.132. These are values from one locus and one seeded run, not
-ensemble estimates.
+The run converges at generation 2,532, after about 25 seconds on ordinary
+development hardware, with `D` = 0.614 and `G_ST` = 0.140 (trailing-window
+means 0.568 ± 0.023 and 0.140 ± 0.006). These are values from one locus
+and one seeded run, not ensemble estimates.
+
+## Why the tolerance is 0.05
+
+The configuration sets `convergence_tolerance: 0.05`, five times the
+default. Twenty demes on a ring mix slowly, so a single locus's `D`
+wanders for a long time, and at the default 0.01 the run needs about
+175,000 generations: well over an hour, with a trajectory file of
+several gigabytes. At 0.03 it still takes about two minutes. The point of
+this example is the isolation-by-distance pattern, which appears at any
+of these tolerances, so it trades precision in `D` (known to about
+±0.025 rather than ±0.005) for a run that finishes in seconds. Lower the
+tolerance in your own copy when you need the more precise value.
 
 ## Related literature
 

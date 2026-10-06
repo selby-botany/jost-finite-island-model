@@ -12,6 +12,21 @@ approximation. The correction depends on finite deme count and is not a
 claim that this stochastic single-locus result must equal the
 expectation.
 
+The run converges on `G_ST` at generation 10,109, after under a minute on
+ordinary development hardware. Its trailing-window mean `G_ST` is
+0.205 ± 0.008 (one standard error), close to the model's exact
+expectation of 0.195; the final generation's own value, 0.148, is one
+noisy draw.
+
+## Why the tolerance is 0.02
+
+The configuration sets `convergence_tolerance: 0.02`, twice the default.
+A run stops only once the watched statistic's trailing-window mean is
+known to half the tolerance. At the default 0.01 this single locus needs
+about 40,000 generations and several minutes; at 0.02 the mean is known
+to about ±0.01, which still separates the finite-deme expectation from
+the infinite-island one.
+
 ## Related literature
 
 - Wright S (1931). Evolution in Mendelian populations. *Genetics*

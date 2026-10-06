@@ -8,9 +8,19 @@ configuration selects `finite_alleles` and a length-3 locus, which has
 mutation rate, mutations can recur to states already present in the
 population during an interactive run.
 
-The run converges at generation 113 with `D` near 0.706. This is a small
-illustration of recurrent mutation in a finite state space, not a
+The run converges at generation 4,521, after about 20 seconds on ordinary
+development hardware. Its trailing-window mean `D` is 0.609 ± 0.010 (one
+standard error); the final generation's own value is 0.758. This is a
+small illustration of recurrent mutation in a finite state space, not a
 distance-based stepwise mutation model.
+
+## Why the tolerance is 0.02
+
+The configuration sets `convergence_tolerance: 0.02`, twice the default.
+A run stops only once its trailing-window mean is known to half the
+tolerance. At the default 0.01 this single locus needs about 18,000
+generations and a few minutes; at 0.02 the mean is known to about ±0.01,
+which is plenty for a demonstration of recurrent mutation.
 
 ## Related literature
 
