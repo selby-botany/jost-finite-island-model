@@ -237,16 +237,27 @@ def test_ping_from_worker_round_trip(
     logic (`fim.gui.store.LiveProgressStore`, `fim.gui.batch_runner`,
     both already built and tested independently) is ever reached through
     it.
+
+    Waits with no attempt limit (`poll_attempts=None`): the call starts a
+    real worker process, and how long that takes depends on machine load
+    -- under a loaded parallel run it outlasted the default 250 polls and
+    the test read `None`. The trigger writes the error on a rejected
+    call, so the wait always ends on the call's own outcome.
     """
     result = drive(
         window,
         trigger=(
             "(async () => { "
+            "try { "
             "window.__fimTestResult = "
             "await window.pywebview.api.ping_from_worker(); "
+            "} catch (error) { "
+            "window.__fimTestResult = `error: ${error}`; "
+            "} "
             "})()"
         ),
         read="window.__fimTestResult",
+        poll_attempts=None,
     )
 
     assert result == "pong from worker"

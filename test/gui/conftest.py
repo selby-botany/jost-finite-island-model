@@ -150,6 +150,7 @@ decide which of the two investigations above it continues.
 
 from __future__ import annotations
 
+import itertools
 import os
 import queue
 import signal
@@ -358,7 +359,7 @@ def drive_and_read(
     *,
     ready: str | None = None,
     is_ready: Callable[[Any], bool] = lambda value: value not in (None, "", {}),
-    poll_attempts: int = 250,
+    poll_attempts: int | None = 250,
     timeout: float = 10.0,
 ) -> Any:
     """Fire `trigger`, poll `read` until it settles, and return its final value.
@@ -416,7 +417,14 @@ def drive_and_read(
             one of those (e.g. an empty string is itself meaningful).
         poll_attempts: How many times to re-evaluate `read` (and, if
             given, `ready`), each `_POLL_INTERVAL_SECONDS` apart, before
-            giving up.
+            giving up. `None` polls until `is_ready` accepts, with no
+            deadline -- for a `trigger` whose work takes as long as the
+            machine's load makes it (a worker process, a simulation),
+            where a fixed attempt count would make the result depend on
+            that load rather than on the commit. Such a `trigger` must
+            write *something* `is_ready` accepts on failure too (catch a
+            rejected bridge call and write its error), so the wait always
+            ends; CI's `timeout-minutes` bounds a genuine hang.
         timeout: Seconds to wait for `webview.start` itself to return
             after the drive callback finishes, before failing loudly
             rather than hanging the test session.
@@ -434,16 +442,20 @@ def drive_and_read(
     """
     outcome: queue.Queue[Any] = queue.Queue(maxsize=1)
 
+    def attempts() -> Iterable[int]:
+        # A fresh iterable per polling loop; unbounded for `None`.
+        return itertools.count() if poll_attempts is None else range(poll_attempts)
+
     def _drive() -> None:
         try:
             if ready is not None:
-                for _ in range(poll_attempts):
+                for _ in attempts():
                     if target_window.evaluate_js(ready):
                         break
                     time.sleep(_POLL_INTERVAL_SECONDS)
             target_window.evaluate_js(trigger)
             value: Any = None
-            for _ in range(poll_attempts):
+            for _ in attempts():
                 value = target_window.evaluate_js(read)
                 if is_ready(value):
                     break

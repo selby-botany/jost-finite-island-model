@@ -7472,7 +7472,7 @@ def drive_and_read(target_window: webview.Window,
                    ready: str | None = None,
                    is_ready: Callable[[Any], bool] = lambda value: value not in
                    (None, "", {}),
-                   poll_attempts: int = 250,
+                   poll_attempts: int | None = 250,
                    timeout: float = 10.0) -> Any
 ```
 
@@ -7532,7 +7532,14 @@ own JS.
   one of those (e.g. an empty string is itself meaningful).
 - `poll_attempts` - How many times to re-evaluate `read` (and, if
   given, `ready`), each `_POLL_INTERVAL_SECONDS` apart, before
-  giving up.
+  giving up. `None` polls until `is_ready` accepts, with no
+- `deadline` - for a `trigger` whose work takes as long as the
+  machine's load makes it (a worker process, a simulation),
+  where a fixed attempt count would make the result depend on
+  that load rather than on the commit. Such a `trigger` must
+  write *something* `is_ready` accepts on failure too (catch a
+  rejected bridge call and write its error), so the wait always
+  ends; CI's `timeout-minutes` bounds a genuine hang.
 - `timeout` - Seconds to wait for `webview.start` itself to return
   after the drive callback finishes, before failing loudly
   rather than hanging the test session.
