@@ -33,14 +33,18 @@ this form has always used for a construct it cannot represent at all)
 from __future__ import annotations
 
 import json
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from typing import Final, Literal
 
 import yaml
 
 from fim.cli import STARTER_CONFIG
-from fim.model.params import PLOIDY_WORDS, SimulationParams
+from fim.model.params import (
+    PLOIDY_WORDS,
+    SimulationParams,
+    validate_execution_settings,
+)
 from fim.statistics.catalog import convergence_statistic_keys
 
 FieldKind = Literal[
@@ -487,29 +491,10 @@ def form_values_to_payload(values: Mapping[str, str]) -> dict[str, object]:
             at the source).
     """
     try:
-        payload: dict[str, object] = {}
-        for field in all_fields():
-            text = values[field.name].strip()
-            if field.kind == "int":
-                payload[field.name] = _parse_int_named(field.name, text)
-            elif field.kind in ("float", "float_choice"):
-                payload[field.name] = _parse_float_named(field.name, text)
-            elif field.kind == "optional_float":
-                payload[field.name] = (
-                    None if not text else _parse_float_named(field.name, text)
-                )
-            elif field.kind == "auto_int":
-                payload[field.name] = _parse_auto_int_named(field.name, text)
-            elif field.kind == "optional_int":
-                payload[field.name] = (
-                    None if not text else _parse_int_named(field.name, text)
-                )
-            elif field.kind == "int_list":
-                payload[field.name] = _parse_int_list_named(field.name, text)
-            elif field.kind == "bool":
-                payload[field.name] = text == "true"
-            else:
-                payload[field.name] = text
+        payload: dict[str, object] = {
+            field.name: _parse_field(field, values[field.name])
+            for field in all_fields()
+        }
         _ploidy_to_word(payload)
         payload["m"] = m_to_payload(values)
         payload.update(mu_to_payload(values))
@@ -520,6 +505,93 @@ def form_values_to_payload(values: Mapping[str, str]) -> dict[str, object]:
     except KeyError as error:
         raise ValueError(f"missing field: {error}") from error
     return payload
+
+
+def _parse_field(field: FormField, text: str) -> object:
+    """Coerce one plain field's text into its configuration value.
+
+    Args:
+        field: The field, whose `kind` decides the parse.
+        text: The field's text, trimmed here.
+
+    Returns:
+        The value `SimulationParams.from_mapping` expects for this key.
+
+    Raises:
+        ValueError: If the text does not parse as `field.kind`, worded
+            with the field's own name first (see `form_values_to_payload`).
+    """
+    text = text.strip()
+    # An optional kind is blank for "unset", else parsed as its base kind.
+    if field.kind in ("optional_float", "optional_int") and not text:
+        return None
+    parsers: dict[str, Callable[[str, str], object]] = {
+        "int": _parse_int_named,
+        "optional_int": _parse_int_named,
+        "float": _parse_float_named,
+        "float_choice": _parse_float_named,
+        "optional_float": _parse_float_named,
+        "auto_int": _parse_auto_int_named,
+        "int_list": _parse_int_list_named,
+        "bool": lambda _name, value: value == "true",
+    }
+    parser = parsers.get(field.kind)
+    return text if parser is None else parser(field.name, text)
+
+
+def run_setting_error(name: str, text: str) -> str | None:
+    """Say what is wrong with one Settings run default, judged on its own.
+
+    The per-field half of `validate_run_settings`: the field's own type
+    and range only, never another field, so a caller can keep every
+    valid saved default and name exactly the one that is not.
+
+    Args:
+        name: One of `DEFAULT_RUN_SETTING_FIELD_NAMES`.
+        text: The field's saved or entered text.
+
+    Returns:
+        `None` if the value is valid, else the validation message, worded
+        as `SimulationParams` words it.
+    """
+    try:
+        value = _parse_field(_RUN_SETTING_FIELDS[name], text)
+        validate_execution_settings({name: value})
+    except ValueError as error:
+        return str(error)
+    return None
+
+
+def validate_run_settings(values: Mapping[str, str]) -> None:
+    """Validate Settings' run defaults on their own, without a model.
+
+    Each of `DEFAULT_RUN_SETTING_FIELD_NAMES` present in `values` is
+    checked for its own type and range, then the present fields are
+    checked against each other (`jit` against the backend, the window
+    against the cap). Deliberately *not* checked against any scientific
+    field: these are defaults for whatever model is run next, so whether
+    they suit a particular model (`generational-vector` needs
+    `mutation_model: finite_alleles`, for one) is decided when that
+    complete configuration is validated, at run time, where the message
+    can name the real conflict. Overlaying them on the starter
+    configuration instead, as this module once did, rejected every
+    default the starter model itself cannot use.
+
+    Args:
+        values: Form-value strings, keyed by field name; keys outside
+            `DEFAULT_RUN_SETTING_FIELD_NAMES` (`max_workers`, say) are
+            ignored.
+
+    Raises:
+        ValueError: For the first invalid field or contradiction, worded
+            as `SimulationParams` words it.
+    """
+    settings = {
+        name: _parse_field(_RUN_SETTING_FIELDS[name], values[name])
+        for name in DEFAULT_RUN_SETTING_FIELD_NAMES
+        if name in values
+    }
+    validate_execution_settings(settings)
 
 
 def _ploidy_to_word(payload: dict[str, object]) -> None:
@@ -1364,6 +1436,14 @@ representation at all (`BATCH_FIELDS`'s own comment on the three).
 enabled`/`sigma_band_multiplier`/`sigma_band_window`) stay Configure-
 only throughout, judged scientific/per-run choices rather than
 administrative defaults — never a member of this tuple."""
+
+# Each run default's own `FormField`, so `validate_run_settings` parses a
+# saved value exactly as a submitted form would.
+_RUN_SETTING_FIELDS: Final[Mapping[str, FormField]] = {
+    field.name: field
+    for field in all_fields()
+    if field.name in DEFAULT_RUN_SETTING_FIELD_NAMES
+}
 
 
 def starter_form_values(overrides: Mapping[str, str] | None = None) -> dict[str, str]:

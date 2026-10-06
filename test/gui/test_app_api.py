@@ -261,16 +261,86 @@ def test_explore_handoff_without_a_ploidy_leaves_it_to_be_chosen(
 def test_get_starter_form_falls_back_when_saved_default_run_settings_is_invalid(
     tmp_path: Path,
 ) -> None:
-    """A saved overlay that no longer validates is discarded wholesale."""
+    """An invalid saved run default falls back to the starter's value for that field.
+
+    The saved default ploidy still applies: one invalid run default is
+    no reason to discard an unrelated saved choice.
+    """
     preferences_path = tmp_path / "preferences.json"
-    save_preferences(
-        preferences_path,
-        GuiPreferences(default_run_settings={"n_replicates": "not a number"}),
-    )
+    preferences = GuiPreferences(default_run_settings={"n_replicates": "not a number"})
+    save_preferences(preferences_path, preferences)
 
     result = Api(preferences_path=preferences_path).get_starter_form()
 
-    assert result == starter_form_values()
+    assert result == starter_form_values(
+        overrides={"ploidy": preferences.default_ploidy}
+    )
+
+
+def test_an_invalid_saved_run_default_is_reported_and_only_that_field_replaced(
+    tmp_path: Path,
+) -> None:
+    """A saved default that no longer validates is named at launch, not dropped unseen.
+
+    The other saved defaults stay in force: one bad field is not a reason
+    to throw away the rest of the user's choices.
+    """
+    preferences_path = tmp_path / "preferences.json"
+    save_preferences(
+        preferences_path,
+        GuiPreferences(
+            default_run_settings={
+                "n_replicates": "not a number",
+                "engine_backend": "generational",
+            }
+        ),
+    )
+    api = Api(preferences_path=preferences_path)
+
+    defaults = api.get_default_run_settings()
+    warnings = api.get_startup_warnings()
+
+    assert defaults["n_replicates"] == starter_form_values()["n_replicates"]
+    assert defaults["engine_backend"] == "generational"
+    assert len(warnings) == 1
+    assert "n_replicates" in warnings[0]
+    assert "'not a number'" in warnings[0]
+
+
+def test_a_vector_run_default_survives_a_fresh_form_and_is_reported_at_validation(
+    tmp_path: Path,
+) -> None:
+    """A default the starter model cannot use is kept, and the conflict is reported.
+
+    `generational-vector` needs finite alleles; the starter model uses
+    infinite alleles. The default is the user's own valid choice, so a
+    fresh form keeps it (and the saved ploidy) rather than silently
+    reverting to the starter's run settings, and validating the form
+    names the real conflict.
+    """
+    preferences_path = tmp_path / "preferences.json"
+    save_preferences(
+        preferences_path,
+        GuiPreferences(
+            default_run_settings={"engine_backend": "generational-vector"},
+            default_ploidy="1",
+        ),
+    )
+    api = Api(preferences_path=preferences_path)
+
+    form = api.get_starter_form()
+    form_fields = {
+        key: value
+        for key, value in form.items()
+        if key not in DEFAULT_RUN_SETTING_FIELD_NAMES
+    }
+    validation = api.validate_form(form_fields)
+
+    assert form["engine_backend"] == "generational-vector"
+    assert form["ploidy"] == "1"
+    assert validation["ok"] is False
+    assert "finite_alleles" in validation["message"]
+    assert api.get_startup_warnings() == []
 
 
 def test_get_starter_form_with_overrides_applies_the_given_values() -> None:
@@ -362,6 +432,37 @@ def test_set_default_run_settings_rejects_an_invalid_value() -> None:
 
     assert result["ok"] is False
     assert "n_replicates" in result["message"]
+
+
+def test_set_default_run_settings_accepts_generational_vector() -> None:
+    """Settings offers `generational-vector`, so saving it must work.
+
+    Validated on its own, not against the starter model (which uses
+    infinite alleles and so cannot run it).
+    """
+    api = Api()
+
+    result = api.set_default_run_settings({"engine_backend": "generational-vector"})
+
+    assert result == {"ok": True}
+    assert api.get_default_run_settings()["engine_backend"] == "generational-vector"
+
+
+def test_set_default_run_settings_rejects_contradicting_run_settings() -> None:
+    """Two run settings that contradict each other are refused, not saved."""
+    api = Api()
+    before = api.get_default_run_settings()
+
+    jit = api.set_default_run_settings({"engine_backend": "lineal", "jit": "numba"})
+    window = api.set_default_run_settings(
+        {"convergence_window": "50", "max_generations": "10"}
+    )
+
+    assert jit["ok"] is False
+    assert "jit" in jit["message"]
+    assert window["ok"] is False
+    assert "convergence_window" in window["message"]
+    assert api.get_default_run_settings() == before
 
 
 def test_set_default_run_settings_persists_across_a_second_api(tmp_path: Path) -> None:
@@ -725,6 +826,44 @@ def test_load_example_syncs_settings_execution_defaults() -> None:
     defaults = api.get_default_run_settings()
     assert defaults["engine_backend"] == "generational"
     assert defaults["n_replicates"] == "16"
+
+
+def test_loading_the_vector_example_runs_with_its_own_run_settings() -> None:
+    """The run started from a loaded example uses that example's YAML, field for field.
+
+    The reported defect: `a-large-d-batch-under-generational-vector`
+    names `generational-vector`, which the starter model cannot use, so
+    the saved run settings were judged invalid against the starter and
+    silently replaced by the starter's (200 replicates, derived window
+    and cap, tolerance 0.01). Configure's form does not submit the run
+    settings at all; they come from Settings at submission
+    (`Api._merge_default_run_settings`), exactly as here.
+    """
+    example_id = "a-large-d-batch-under-generational-vector"
+    example = presets_module.get_example(app_module._webui_directory(), example_id)
+    assert example is not None and example.yaml_text is not None
+    model, _labels = presets_module.split_configuration(
+        yaml.safe_load(example.yaml_text)
+    )
+    expected = SimulationParams.from_mapping(model)
+    api = Api()
+
+    loaded = api.load_example(example_id)
+    assert loaded["ok"] is True, loaded.get("message")
+    submitted = {
+        key: value
+        for key, value in loaded["values"].items()
+        if key not in DEFAULT_RUN_SETTING_FIELD_NAMES
+    }
+    assert api.validate_form(submitted)["ok"] is True
+    effective = SimulationParams.from_mapping(
+        form_values_to_payload(api._merge_default_run_settings(submitted))
+    )
+
+    assert expected.engine_backend == "generational-vector"
+    for name in DEFAULT_RUN_SETTING_FIELD_NAMES:
+        assert getattr(effective, name) == getattr(expected, name), name
+    assert effective.to_dict() == expected.to_dict()
 
 
 def test_list_examples_does_not_sync_settings_execution_defaults() -> None:

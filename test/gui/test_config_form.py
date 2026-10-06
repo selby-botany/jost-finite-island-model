@@ -1445,3 +1445,40 @@ def test_a_form_showing_auto_round_trips_through_the_params() -> None:
     params = SimulationParams.from_mapping(config_form.form_values_to_payload(values))
 
     assert config_form.params_to_form_values(params)["convergence_window"] == "auto"
+
+
+def test_validate_run_settings_accepts_every_engine_backend_the_form_offers() -> None:
+    """Run defaults are judged on their own, not against the starter model.
+
+    The starter uses infinite alleles, which `generational-vector` cannot
+    run; judging defaults against it once rejected that backend outright.
+    """
+    for backend in ("lineal", "auto", "generational", "generational-vector"):
+        config_form.validate_run_settings({"engine_backend": backend, "jit": "off"})
+
+
+def test_validate_run_settings_parses_text_as_a_submitted_form_would() -> None:
+    """Blank or `auto` window and cap, and blank concurrency, are valid text."""
+    config_form.validate_run_settings(
+        {
+            "max_generations": "",
+            "convergence_window": "auto",
+            "max_concurrent_replicates": "",
+            "replicate_confidence": "0.99",
+            "max_workers": "not validated here",
+        }
+    )
+
+
+def test_run_setting_error_names_the_problem_of_one_field_only() -> None:
+    """One field's own check, worded as `SimulationParams` words it."""
+    assert config_form.run_setting_error("n_replicates", "16") is None
+    assert config_form.run_setting_error("n_replicates", "0") == (
+        "n_replicates must be at least 1"
+    )
+    assert config_form.run_setting_error("jit", "fast") == (
+        "jit must be 'off' or 'numba'"
+    )
+    # A field valid alone is valid here even if another field it could
+    # contradict is not given.
+    assert config_form.run_setting_error("convergence_window", "500") is None

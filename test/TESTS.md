@@ -8787,7 +8787,41 @@ def test_get_starter_form_falls_back_when_saved_default_run_settings_is_invalid(
         tmp_path: Path) -> None
 ```
 
-A saved overlay that no longer validates is discarded wholesale.
+An invalid saved run default falls back to the starter's value for that field.
+
+The saved default ploidy still applies: one invalid run default is
+no reason to discard an unrelated saved choice.
+
+<a id="gui.test_app_api.test_an_invalid_saved_run_default_is_reported_and_only_that_field_replaced"></a>
+
+#### test\_an\_invalid\_saved\_run\_default\_is\_reported\_and\_only\_that\_field\_replaced
+
+```python
+def test_an_invalid_saved_run_default_is_reported_and_only_that_field_replaced(
+        tmp_path: Path) -> None
+```
+
+A saved default that no longer validates is named at launch, not dropped unseen.
+
+The other saved defaults stay in force: one bad field is not a reason
+to throw away the rest of the user's choices.
+
+<a id="gui.test_app_api.test_a_vector_run_default_survives_a_fresh_form_and_is_reported_at_validation"></a>
+
+#### test\_a\_vector\_run\_default\_survives\_a\_fresh\_form\_and\_is\_reported\_at\_validation
+
+```python
+def test_a_vector_run_default_survives_a_fresh_form_and_is_reported_at_validation(
+        tmp_path: Path) -> None
+```
+
+A default the starter model cannot use is kept, and the conflict is reported.
+
+`generational-vector` needs finite alleles; the starter model uses
+infinite alleles. The default is the user's own valid choice, so a
+fresh form keeps it (and the saved ploidy) rather than silently
+reverting to the starter's run settings, and validating the form
+names the real conflict.
 
 <a id="gui.test_app_api.test_get_starter_form_with_overrides_applies_the_given_values"></a>
 
@@ -8862,6 +8896,29 @@ def test_set_default_run_settings_rejects_an_invalid_value() -> None
 ```
 
 An unparseable value is rejected, not silently coerced or saved.
+
+<a id="gui.test_app_api.test_set_default_run_settings_accepts_generational_vector"></a>
+
+#### test\_set\_default\_run\_settings\_accepts\_generational\_vector
+
+```python
+def test_set_default_run_settings_accepts_generational_vector() -> None
+```
+
+Settings offers `generational-vector`, so saving it must work.
+
+Validated on its own, not against the starter model (which uses
+infinite alleles and so cannot run it).
+
+<a id="gui.test_app_api.test_set_default_run_settings_rejects_contradicting_run_settings"></a>
+
+#### test\_set\_default\_run\_settings\_rejects\_contradicting\_run\_settings
+
+```python
+def test_set_default_run_settings_rejects_contradicting_run_settings() -> None
+```
+
+Two run settings that contradict each other are refused, not saved.
 
 <a id="gui.test_app_api.test_set_default_run_settings_persists_across_a_second_api"></a>
 
@@ -9095,6 +9152,24 @@ def test_load_example_syncs_settings_execution_defaults() -> None
 ```
 
 Loading an example makes its execution fields Settings' defaults.
+
+<a id="gui.test_app_api.test_loading_the_vector_example_runs_with_its_own_run_settings"></a>
+
+#### test\_loading\_the\_vector\_example\_runs\_with\_its\_own\_run\_settings
+
+```python
+def test_loading_the_vector_example_runs_with_its_own_run_settings() -> None
+```
+
+The run started from a loaded example uses that example's YAML, field for field.
+
+The reported defect: `a-large-d-batch-under-generational-vector`
+names `generational-vector`, which the starter model cannot use, so
+the saved run settings were judged invalid against the starter and
+silently replaced by the starter's (200 replicates, derived window
+and cap, tolerance 0.01). Configure's form does not submit the run
+settings at all; they come from Settings at submission
+(`Api._merge_default_run_settings`), exactly as here.
 
 <a id="gui.test_app_api.test_list_examples_does_not_sync_settings_execution_defaults"></a>
 
@@ -14352,6 +14427,40 @@ def test_a_form_showing_auto_round_trips_through_the_params() -> None
 ```
 
 auto in the form derives on validation and shows as auto again.
+
+<a id="gui.test_config_form.test_validate_run_settings_accepts_every_engine_backend_the_form_offers"></a>
+
+#### test\_validate\_run\_settings\_accepts\_every\_engine\_backend\_the\_form\_offers
+
+```python
+def test_validate_run_settings_accepts_every_engine_backend_the_form_offers(
+) -> None
+```
+
+Run defaults are judged on their own, not against the starter model.
+
+The starter uses infinite alleles, which `generational-vector` cannot
+run; judging defaults against it once rejected that backend outright.
+
+<a id="gui.test_config_form.test_validate_run_settings_parses_text_as_a_submitted_form_would"></a>
+
+#### test\_validate\_run\_settings\_parses\_text\_as\_a\_submitted\_form\_would
+
+```python
+def test_validate_run_settings_parses_text_as_a_submitted_form_would() -> None
+```
+
+Blank or `auto` window and cap, and blank concurrency, are valid text.
+
+<a id="gui.test_config_form.test_run_setting_error_names_the_problem_of_one_field_only"></a>
+
+#### test\_run\_setting\_error\_names\_the\_problem\_of\_one\_field\_only
+
+```python
+def test_run_setting_error_names_the_problem_of_one_field_only() -> None
+```
+
+One field's own check, worded as `SimulationParams` words it.
 
 <a id="gui.test_config_modal_dialogs"></a>
 
@@ -24625,6 +24734,85 @@ def test_a_large_explicit_matrix_needs_explicit_values() -> None
 ```
 
 An explicit matrix beyond the eigenvalue route's size is refused.
+
+<a id="model.test_params.test_validate_execution_settings_accepts_a_vector_backend_without_a_model"></a>
+
+#### test\_validate\_execution\_settings\_accepts\_a\_vector\_backend\_without\_a\_model
+
+```python
+def test_validate_execution_settings_accepts_a_vector_backend_without_a_model(
+) -> None
+```
+
+`generational-vector` is a valid execution default on its own.
+
+Whether a particular model can use it (finite alleles, continuous
+migrants) is decided when that complete configuration is validated.
+
+<a id="model.test_params.test_validate_execution_settings_rejects_with_simulation_params_wording"></a>
+
+#### test\_validate\_execution\_settings\_rejects\_with\_simulation\_params\_wording
+
+```python
+@pytest.mark.parametrize(
+    ("settings", "message"),
+    [
+        ({
+            "n_replicates": 0
+        }, "n_replicates must be at least 1"),
+        ({
+            "max_generations": 0
+        }, "max_generations must be at least 1"),
+        ({
+            "convergence_window": 1
+        }, "convergence_window must be at least 2"),
+        ({
+            "convergence_tolerance": -0.1
+        }, "convergence_tolerance must be non-negative"),
+        ({
+            "replicate_confidence": 0.5
+        }, "replicate_confidence must be 0.90"),
+        ({
+            "engine_backend": "fast"
+        }, "engine_backend must be"),
+        ({
+            "jit": "yes"
+        }, "jit must be 'off' or 'numba'"),
+        ({
+            "auto_vector_min_d": 0
+        }, "auto_vector_min_d must be at least 1"),
+        ({
+            "max_concurrent_replicates": 0
+        }, "max_concurrent_replicates must be"),
+        ({
+            "engine_backend": "lineal",
+            "jit": "numba"
+        }, "only accepts jit='off'"),
+        (
+            {
+                "convergence_window": 50,
+                "max_generations": 10
+            },
+            "convergence_window cannot exceed max_generations",
+        ),
+    ],
+)
+def test_validate_execution_settings_rejects_with_simulation_params_wording(
+        settings: dict[str, object], message: str) -> None
+```
+
+Each check uses the message `SimulationParams` itself raises.
+
+<a id="model.test_params.test_validate_execution_settings_matches_simulation_params_on_the_same_values"></a>
+
+#### test\_validate\_execution\_settings\_matches\_simulation\_params\_on\_the\_same\_values
+
+```python
+def test_validate_execution_settings_matches_simulation_params_on_the_same_values(
+) -> (None)
+```
+
+A value `validate_execution_settings` refuses, `SimulationParams` refuses too.
 
 <a id="model.test_run_identity"></a>
 

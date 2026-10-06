@@ -1214,6 +1214,18 @@ project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+- **A loaded example keeps its own run settings.** Settings judged its run
+  defaults (engine, replicates, window, cap, tolerance and the rest) by
+  applying them to the starter configuration, which cannot use the
+  `generational-vector` engine. Loading
+  `a-large-d-batch-under-generational-vector` therefore threw its run
+  settings away without saying so and ran 200 replicates with derived window
+  and cap instead of its own 16 replicates, window 10 and cap 100, and
+  Settings refused to save `generational-vector` at all. Run defaults are now
+  checked on their own; whether a model can use them is checked when that
+  model is run, with a message naming the conflict. A saved default that is
+  itself invalid is reported when the app starts, and only that one field
+  falls back to its starter value.
 - **The sweep dialog no longer throws away edits.** Only Done saved the
   dialog; closing it any other way (Escape) kept the earlier settings, so a
   sweep could run with fewer axes than the dialog had shown. Now every way of

@@ -262,6 +262,8 @@ Return to the [source-tree orientation](../README.md) or the [developer guide](.
   * [tab\_for\_error](#fim.gui.config_form.tab_for_error)
   * [field\_for\_error](#fim.gui.config_form.field_for_error)
   * [form\_values\_to\_payload](#fim.gui.config_form.form_values_to_payload)
+  * [run\_setting\_error](#fim.gui.config_form.run_setting_error)
+  * [validate\_run\_settings](#fim.gui.config_form.validate_run_settings)
   * [m\_to\_payload](#fim.gui.config_form.m_to_payload)
   * [m\_from\_params](#fim.gui.config_form.m_from_params)
   * [mu\_to\_payload](#fim.gui.config_form.mu_to_payload)
@@ -431,6 +433,8 @@ Return to the [source-tree orientation](../README.md) or the [developer guide](.
     * [to\_dict](#fim.model.params.SimulationParams.to_dict)
     * [from\_mapping](#fim.model.params.SimulationParams.from_mapping)
   * [describe\_population](#fim.model.params.describe_population)
+  * [EXECUTION\_SETTING\_NAMES](#fim.model.params.EXECUTION_SETTING_NAMES)
+  * [validate\_execution\_settings](#fim.model.params.validate_execution_settings)
 * [fim.model.state](#fim.model.state)
   * [ModelState](#fim.model.state.ModelState)
     * [\_\_post\_init\_\_](#fim.model.state.ModelState.__post_init__)
@@ -6146,18 +6150,17 @@ fallback is the empty string (`webui`'s own "auto" placeholder),
 the identical default `_parse_max_workers("")` already treats
 as "let the batch runner choose."
 
-A saved `default_run_settings` is re-overlaid onto the starter
-values, exactly like `_starter_form_values_for_this_session`,
-rather than returned as-is: a dict saved under an earlier
-version of this field set (missing a key this version added, or
-carrying one a later revision dropped — `DEFAULT_RUN_SETTING_
-FIELD_NAMES`'s own docstring records one real, reported such
-revision already) must not silently propagate an incomplete or
-stale projection forward. A saved value that no longer overlays
-cleanly at all falls back to the full, un-overlaid starter
-subset, the same "discarded wholesale, never applied partially"
-policy every other stale-saved-value path in this module
-already follows.
+A saved `default_run_settings` is judged field by field, on its
+own (`_effective_default_run_settings`), never by overlaying it
+on the starter configuration: these are defaults for whatever
+model runs next, and the starter model cannot use some valid
+ones (`generational-vector` needs `mutation_model:
+finite_alleles`), so an overlay once threw away a loaded
+preset's whole run setup and ran the starter's instead. A key
+missing from an older saved dict takes the starter's value; a
+saved value that is itself invalid is replaced by the starter's
+value for that one field and reported at launch
+(`get_startup_warnings`).
 
 <a id="fim.gui.app.Api.set_default_run_settings"></a>
 
@@ -6191,15 +6194,18 @@ form no longer submits at all.
 
 **Returns**:
 
-  An object with `ok` set to `True` on success. If `values`,
-  overlaid on the starter config, does not validate, `ok` is
-  `False` and `message` contains the validation error. The
-  wording matches any other invalid form submission because
-  this uses the same `starter_form_values`/
-  `form_values_to_payload`/`SimulationParams.from_mapping`
-  path. `max_workers` is not part of that validation
-  (`_parse_max_workers` treats any text as "auto") and is
-  saved verbatim alongside the validated subset.
+  An object with `ok` set to `True` on success. If a value is
+  invalid on its own, or two contradict each other (`jit`
+  against the backend, the window against the cap), `ok` is
+  `False` and `message` contains the validation error, worded
+  as `SimulationParams` words it (`config_form.validate_run_
+  settings`). Values are deliberately not checked against any
+  model — the starter's or another — since they are defaults
+  for whatever model runs next; a default a particular model
+  cannot use is reported when that model is run. A key
+  `values` omits takes the starter's value. `max_workers` is
+  not validated (`_parse_max_workers` treats any text as
+  "auto") and is saved verbatim alongside the validated subset.
 
 <a id="fim.gui.app.Api.get_results_location"></a>
 
@@ -8492,6 +8498,65 @@ Coerce the form's string values into a `from_mapping`-ready payload.
   as nothing happening at all (`ISSUES.md` would be the right
   place for this if it were only mitigated rather than fixed
   at the source).
+
+<a id="fim.gui.config_form.run_setting_error"></a>
+
+#### run\_setting\_error
+
+```python
+def run_setting_error(name: str, text: str) -> str | None
+```
+
+Say what is wrong with one Settings run default, judged on its own.
+
+The per-field half of `validate_run_settings`: the field's own type
+and range only, never another field, so a caller can keep every
+valid saved default and name exactly the one that is not.
+
+**Arguments**:
+
+- `name` - One of `DEFAULT_RUN_SETTING_FIELD_NAMES`.
+- `text` - The field's saved or entered text.
+
+
+**Returns**:
+
+  `None` if the value is valid, else the validation message, worded
+  as `SimulationParams` words it.
+
+<a id="fim.gui.config_form.validate_run_settings"></a>
+
+#### validate\_run\_settings
+
+```python
+def validate_run_settings(values: Mapping[str, str]) -> None
+```
+
+Validate Settings' run defaults on their own, without a model.
+
+Each of `DEFAULT_RUN_SETTING_FIELD_NAMES` present in `values` is
+checked for its own type and range, then the present fields are
+checked against each other (`jit` against the backend, the window
+against the cap). Deliberately *not* checked against any scientific
+field: these are defaults for whatever model is run next, so whether
+they suit a particular model (`generational-vector` needs
+`mutation_model: finite_alleles`, for one) is decided when that
+complete configuration is validated, at run time, where the message
+can name the real conflict. Overlaying them on the starter
+configuration instead, as this module once did, rejected every
+default the starter model itself cannot use.
+
+**Arguments**:
+
+- `values` - Form-value strings, keyed by field name; keys outside
+  `DEFAULT_RUN_SETTING_FIELD_NAMES` (`max_workers`, say) are
+  ignored.
+
+
+**Raises**:
+
+- `ValueError` - For the first invalid field or contradiction, worded
+  as `SimulationParams` words it.
 
 <a id="fim.gui.config_form.m_to_payload"></a>
 
@@ -13329,6 +13394,57 @@ Return the population size the way a botanist reads it.
 
   For example "225 diploid individuals per deme", or "200, 300, 150
   diploid individuals per deme" for unequal demes.
+
+<a id="fim.model.params.EXECUTION_SETTING_NAMES"></a>
+
+#### EXECUTION\_SETTING\_NAMES
+
+The configuration keys `validate_execution_settings` checks on their own.
+
+How a computation runs and how long it may run, as opposed to what it
+models: the desktop app keeps these as Settings defaults
+(`fim.gui.config_form.DEFAULT_RUN_SETTING_FIELD_NAMES` names the same
+set).
+
+<a id="fim.model.params.validate_execution_settings"></a>
+
+#### validate\_execution\_settings
+
+```python
+def validate_execution_settings(settings: Mapping[str, object]) -> None
+```
+
+Validate execution settings on their own, without a model to run them.
+
+`SimulationParams` can only judge a complete configuration. The
+desktop app also stores these fields apart from any configuration, as
+defaults applied to whatever model is run next, so it needs to know
+whether the defaults themselves are valid without inventing a model
+to test them against. Judging them against a stand-in model would
+reject a valid default merely because the stand-in cannot use it
+(`generational-vector` against an infinite-alleles stand-in, for
+one). Every check here is one `SimulationParams.__post_init__` also
+makes, with the same wording; only the checks that need a model
+field (`generational-vector`'s mutation model, an `auto` window or
+cap's derivation) are left to validating the complete configuration.
+
+**Arguments**:
+
+- `settings` - Any subset of `EXECUTION_SETTING_NAMES`, typed as a
+  configuration file types them: whole numbers as `int`,
+  `convergence_tolerance`/`replicate_confidence` as `float`,
+  `max_generations`/`convergence_window` as an `int` or the
+  string `"auto"`, and `max_concurrent_replicates` as an `int`
+  or `None`. A key outside `EXECUTION_SETTING_NAMES` is
+  ignored.
+
+
+**Raises**:
+
+- `ValueError` - For the first invalid setting, or for two present
+  settings that contradict each other (`jit` with a backend
+  that refuses it, or a window that could never fill before
+  the cap).
 
 <a id="fim.model.state"></a>
 

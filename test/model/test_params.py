@@ -13,6 +13,7 @@ from fim.model.params import (
     PARAMETER_DEFAULTS,
     SimulationParams,
     describe_population,
+    validate_execution_settings,
 )
 
 
@@ -1476,3 +1477,66 @@ def test_a_large_explicit_matrix_needs_explicit_values() -> None:
         ).convergence_window
         == 60
     )
+
+
+def test_validate_execution_settings_accepts_a_vector_backend_without_a_model() -> None:
+    """`generational-vector` is a valid execution default on its own.
+
+    Whether a particular model can use it (finite alleles, continuous
+    migrants) is decided when that complete configuration is validated.
+    """
+    validate_execution_settings(
+        {
+            "engine_backend": "generational-vector",
+            "jit": "off",
+            "n_replicates": 16,
+            "max_generations": 100,
+            "convergence_window": 10,
+            "convergence_tolerance": 0.02,
+            "replicate_confidence": 0.95,
+            "auto_vector_min_d": 2,
+            "auto_vector_max_capacity": 4096,
+            "max_concurrent_replicates": None,
+        }
+    )
+    validate_execution_settings(
+        {"max_generations": "auto", "convergence_window": "auto"}
+    )
+
+
+@pytest.mark.parametrize(
+    ("settings", "message"),
+    [
+        ({"n_replicates": 0}, "n_replicates must be at least 1"),
+        ({"max_generations": 0}, "max_generations must be at least 1"),
+        ({"convergence_window": 1}, "convergence_window must be at least 2"),
+        ({"convergence_tolerance": -0.1}, "convergence_tolerance must be non-negative"),
+        ({"replicate_confidence": 0.5}, "replicate_confidence must be 0.90"),
+        ({"engine_backend": "fast"}, "engine_backend must be"),
+        ({"jit": "yes"}, "jit must be 'off' or 'numba'"),
+        ({"auto_vector_min_d": 0}, "auto_vector_min_d must be at least 1"),
+        ({"max_concurrent_replicates": 0}, "max_concurrent_replicates must be"),
+        ({"engine_backend": "lineal", "jit": "numba"}, "only accepts jit='off'"),
+        (
+            {"convergence_window": 50, "max_generations": 10},
+            "convergence_window cannot exceed max_generations",
+        ),
+    ],
+)
+def test_validate_execution_settings_rejects_with_simulation_params_wording(
+    settings: dict[str, object], message: str
+) -> None:
+    """Each check uses the message `SimulationParams` itself raises."""
+    with pytest.raises(ValueError, match=message):
+        validate_execution_settings(settings)
+
+
+def test_validate_execution_settings_matches_simulation_params_on_the_same_values() -> (
+    None
+):
+    """A value `validate_execution_settings` refuses, `SimulationParams` refuses too."""
+    with pytest.raises(ValueError, match="replicate_confidence") as from_params:
+        SimulationParams.from_mapping({**_valid_config(), "replicate_confidence": 0.5})
+    with pytest.raises(ValueError, match="replicate_confidence") as from_settings:
+        validate_execution_settings({"replicate_confidence": 0.5})
+    assert str(from_params.value) == str(from_settings.value)

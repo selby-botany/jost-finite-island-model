@@ -794,11 +794,7 @@ class SimulationParams:
             self.convergence_window,
             minimum=2,
         )
-        if (
-            not math.isfinite(self.convergence_tolerance)
-            or self.convergence_tolerance < 0.0
-        ):
-            raise ValueError("convergence_tolerance must be non-negative")
+        _validate_convergence_tolerance(self.convergence_tolerance)
         _require_bool("track_expensive_statistics", self.track_expensive_statistics)
         _require_bool("read_only", self.read_only)
         _require_integer(
@@ -822,8 +818,7 @@ class SimulationParams:
             "replicate_minimum",
             _clamp_replicate_minimum(self.replicate_minimum, self.n_replicates),
         )
-        if self.replicate_confidence not in {0.90, 0.95, 0.99}:
-            raise ValueError("replicate_confidence must be 0.90, 0.95, or 0.99")
+        _validate_replicate_confidence(self.replicate_confidence)
         if self.migrant_sampling not in {"continuous", "stochastic"}:
             raise ValueError("migrant_sampling must be 'continuous' or 'stochastic'")
         if self.mutation_model not in {"infinite_alleles", "finite_alleles"}:
@@ -2075,7 +2070,7 @@ def _require_bool(name: str, value: bool) -> None:
         raise ValueError(f"{name} must be a boolean")
 
 
-def _require_integer(name: str, value: int, minimum: int | None = None) -> None:
+def _require_integer(name: str, value: object, minimum: int | None = None) -> None:
     """Validate an integer parameter."""
     if isinstance(value, bool) or not isinstance(value, int):
         raise ValueError(f"{name} must be an integer")
@@ -2181,6 +2176,51 @@ def _validate_engine_backend(
     own job, at resolution time, not a construction-time rejection at
     all (an out-of-range `auto_vector_min_d`/`auto_vector_max_capacity`
     changes what `"auto"` picks, it never makes construction fail).
+
+    Split in two: `_validate_engine_settings` checks the four execution
+    fields against each other alone, which is all `validate_execution_
+    settings` (the desktop app's Settings defaults) can know; the
+    `mutation_model`/`migrant_sampling` check below needs the scientific
+    half of a configuration and so is made only here.
+    """
+    _validate_engine_settings(
+        engine_backend=engine_backend,
+        jit=jit,
+        auto_vector_min_d=auto_vector_min_d,
+        auto_vector_max_capacity=auto_vector_max_capacity,
+    )
+    if engine_backend == "generational-vector" and not (
+        mutation_model == "finite_alleles" and migrant_sampling == "continuous"
+    ):
+        raise ValueError(
+            "engine_backend 'generational-vector' requires "
+            "mutation_model='finite_alleles' and migrant_sampling='continuous'"
+        )
+
+
+def _validate_engine_settings(
+    *,
+    engine_backend: object,
+    jit: object,
+    auto_vector_min_d: object,
+    auto_vector_max_capacity: object,
+) -> None:
+    """Reject engine fields that are invalid whatever model they run.
+
+    The model-independent half of `_validate_engine_backend`: each
+    field's own legal values, plus the two `jit` combinations a backend
+    refuses outright. Nothing here reads a scientific field.
+
+    Args:
+        engine_backend: Candidate `SimulationParams.engine_backend`.
+        jit: Candidate `SimulationParams.jit`.
+        auto_vector_min_d: Candidate `SimulationParams.auto_vector_min_d`.
+        auto_vector_max_capacity: Candidate
+            `SimulationParams.auto_vector_max_capacity`.
+
+    Raises:
+        ValueError: With `SimulationParams`' own wording, for the first
+            problem found.
     """
     if engine_backend not in {"lineal", "generational", "generational-vector", "auto"}:
         raise ValueError(
@@ -2198,13 +2238,118 @@ def _validate_engine_backend(
             "engine_backend 'generational-vector' only accepts jit='off' "
             "(it requires numba unconditionally, regardless of jit)"
         )
-    if engine_backend == "generational-vector" and not (
-        mutation_model == "finite_alleles" and migrant_sampling == "continuous"
-    ):
-        raise ValueError(
-            "engine_backend 'generational-vector' requires "
-            "mutation_model='finite_alleles' and migrant_sampling='continuous'"
+
+
+EXECUTION_SETTING_NAMES: Final[tuple[str, ...]] = (
+    "engine_backend",
+    "n_replicates",
+    "max_generations",
+    "convergence_window",
+    "convergence_tolerance",
+    "replicate_confidence",
+    "jit",
+    "auto_vector_min_d",
+    "auto_vector_max_capacity",
+    "max_concurrent_replicates",
+)
+"""The configuration keys `validate_execution_settings` checks on their own.
+
+How a computation runs and how long it may run, as opposed to what it
+models: the desktop app keeps these as Settings defaults
+(`fim.gui.config_form.DEFAULT_RUN_SETTING_FIELD_NAMES` names the same
+set)."""
+
+
+def validate_execution_settings(settings: Mapping[str, object]) -> None:
+    """Validate execution settings on their own, without a model to run them.
+
+    `SimulationParams` can only judge a complete configuration. The
+    desktop app also stores these fields apart from any configuration, as
+    defaults applied to whatever model is run next, so it needs to know
+    whether the defaults themselves are valid without inventing a model
+    to test them against. Judging them against a stand-in model would
+    reject a valid default merely because the stand-in cannot use it
+    (`generational-vector` against an infinite-alleles stand-in, for
+    one). Every check here is one `SimulationParams.__post_init__` also
+    makes, with the same wording; only the checks that need a model
+    field (`generational-vector`'s mutation model, an `auto` window or
+    cap's derivation) are left to validating the complete configuration.
+
+    Args:
+        settings: Any subset of `EXECUTION_SETTING_NAMES`, typed as a
+            configuration file types them: whole numbers as `int`,
+            `convergence_tolerance`/`replicate_confidence` as `float`,
+            `max_generations`/`convergence_window` as an `int` or the
+            string `"auto"`, and `max_concurrent_replicates` as an `int`
+            or `None`. A key outside `EXECUTION_SETTING_NAMES` is
+            ignored.
+
+    Raises:
+        ValueError: For the first invalid setting, or for two present
+            settings that contradict each other (`jit` with a backend
+            that refuses it, or a window that could never fill before
+            the cap).
+    """
+    # Each field on its own.
+    for name in ("n_replicates", "auto_vector_min_d", "auto_vector_max_capacity"):
+        if name in settings:
+            _require_integer(name, settings[name], minimum=1)
+    for name, minimum in (("max_generations", 1), ("convergence_window", 2)):
+        if name in settings and settings[name] != "auto":
+            _require_integer(name, settings[name], minimum=minimum)
+    if "convergence_tolerance" in settings:
+        _validate_convergence_tolerance(settings["convergence_tolerance"])
+    if "replicate_confidence" in settings:
+        _validate_replicate_confidence(settings["replicate_confidence"])
+    if settings.get("max_concurrent_replicates") is not None:
+        _require_integer(
+            "max_concurrent_replicates",
+            settings["max_concurrent_replicates"],
+            minimum=1,
         )
+
+    # Execution settings judged against each other, never against a model.
+    _validate_engine_settings(
+        engine_backend=settings.get("engine_backend", "auto"),
+        jit=settings.get("jit", "off"),
+        auto_vector_min_d=settings.get("auto_vector_min_d", 1),
+        auto_vector_max_capacity=settings.get("auto_vector_max_capacity", 1),
+    )
+    window = settings.get("convergence_window")
+    cap = settings.get("max_generations")
+    if isinstance(window, int) and isinstance(cap, int):
+        _validate_stopping_rules(convergence_window=window, max_generations=cap)
+
+
+def _validate_convergence_tolerance(tolerance: object) -> None:
+    """Reject a `convergence_tolerance` that is not a finite, non-negative number.
+
+    Args:
+        tolerance: The candidate value.
+
+    Raises:
+        ValueError: If it is not a finite real number of at least zero.
+    """
+    if (
+        isinstance(tolerance, bool)
+        or not isinstance(tolerance, int | float)
+        or not math.isfinite(tolerance)
+        or tolerance < 0.0
+    ):
+        raise ValueError("convergence_tolerance must be non-negative")
+
+
+def _validate_replicate_confidence(confidence: object) -> None:
+    """Reject a `replicate_confidence` other than the three supported levels.
+
+    Args:
+        confidence: The candidate value.
+
+    Raises:
+        ValueError: If it is not 0.90, 0.95, or 0.99.
+    """
+    if isinstance(confidence, bool) or confidence not in {0.90, 0.95, 0.99}:
+        raise ValueError("replicate_confidence must be 0.90, 0.95, or 0.99")
 
 
 def _validate_stopping_rules(

@@ -99,8 +99,10 @@ from fim.gui.config_form import (
     mu_from_params,
     params_to_form_values,
     payload_to_yaml_text,
+    run_setting_error,
     starter_form_values,
     tab_for_error,
+    validate_run_settings,
 )
 from fim.gui.literature_visuals import (
     literature_visual_payload,
@@ -2016,6 +2018,14 @@ class Api:
         preferences, warning = load_preferences(self._preferences_path)
         self._preferences: GuiPreferences = preferences
         self._startup_warnings: list[str] = [warning] if warning is not None else []
+        # A saved Settings run default that no longer validates (a range
+        # tightened since it was saved, or a hand-edited file) is not
+        # used, but it is reported here rather than dropped unseen
+        # (`_effective_default_run_settings`).
+        _values, problems = self._effective_default_run_settings()
+        for problem in problems:
+            logger.warning("%s", problem)
+        self._startup_warnings.extend(problems)
         # The View menu's own "Significant digits" submenu (`set_
         # significant_digits`) mutates this directly; every real
         # `format_statistic` call site below reads it fresh at the
@@ -2387,33 +2397,53 @@ class Api:
     def _starter_form_values_for_this_session(self) -> dict[str, str]:
         """`starter_form_values`, overlaid with any saved Settings defaults.
 
-        Falls back to the true, un-overlaid starter values if the saved
-        overlay no longer validates (a range this project tightened
-        since it was saved, say) — the same "a stale saved value is
-        discarded wholesale, never applied partially" policy `get_
-        initial_form` already applies to a stale `form_values` restore,
-        below.
+        The default ploidy is validated with the starter model (falling
+        back to the true starter values if it no longer validates, the
+        same policy `get_initial_form` applies to a stale `form_values`
+        restore, below). The run defaults are then laid over the result
+        as `get_default_run_settings` returns them — each already valid
+        on its own — and are *not* re-validated against the starter
+        model: a default that model cannot use (`generational-vector`
+        with the starter's infinite-alleles model) is the user's real
+        choice, reported when the form is validated or run, and
+        discarding it here would silently drop the ploidy too.
         """
-        overrides = self._starter_overrides()
-        if not overrides:
-            return starter_form_values()
         try:
-            return starter_form_values(overrides=overrides)
+            values = starter_form_values(overrides=self._starter_overrides())
         except ValueError:
-            return starter_form_values()
+            values = starter_form_values()
+        return self._with_default_run_settings(values)
 
     def _starter_overrides(self) -> dict[str, str]:
-        """Saved Settings that seed a *fresh* form: run defaults and default ploidy.
+        """Saved Settings that seed a *fresh* form's model fields: the default ploidy.
 
         The ploidy is kept out of `default_run_settings` on purpose (see
         `GuiPreferences.default_ploidy`): those are merged into every
         submission, which would overwrite a ploidy chosen for one run.
+        The run defaults themselves are laid over separately
+        (`_with_default_run_settings`), since they are validated on
+        their own rather than with the starter model.
         """
-        overrides = dict(self._preferences.default_run_settings or {})
         # Always applied, blank included: a blank default is the botanist's
         # own "Ask me each time" choice and must blank the starter's ploidy.
-        overrides["ploidy"] = self._preferences.default_ploidy
-        return overrides
+        return {"ploidy": self._preferences.default_ploidy}
+
+    def _with_default_run_settings(self, values: Mapping[str, str]) -> dict[str, str]:
+        """Return form values with every run-default field set from Settings.
+
+        Args:
+            values: Complete form values.
+
+        Returns:
+            A copy of `values` whose `DEFAULT_RUN_SETTING_FIELD_NAMES`
+            entries are the run defaults in force
+            (`get_default_run_settings`).
+        """
+        defaults = self.get_default_run_settings()
+        return {
+            **values,
+            **{key: defaults[key] for key in DEFAULT_RUN_SETTING_FIELD_NAMES},
+        }
 
     def _merge_default_run_settings(self, values: dict[str, str]) -> dict[str, str]:
         """Fill in Configure-absent execution-default fields before using a submission.
@@ -2529,6 +2559,9 @@ class Api:
             values = starter_form_values(overrides=merged_overrides)
         except ValueError as error:
             return {"ok": False, "message": str(error)}
+        # Run defaults first, then any run field Explore named itself, so
+        # an explicit override still wins over a Settings default.
+        values = {**self._with_default_run_settings(values), **overrides}
         return {"ok": True, "values": values}
 
     @_log_bridge_call
@@ -3864,33 +3897,58 @@ class Api:
         the identical default `_parse_max_workers("")` already treats
         as "let the batch runner choose."
 
-        A saved `default_run_settings` is re-overlaid onto the starter
-        values, exactly like `_starter_form_values_for_this_session`,
-        rather than returned as-is: a dict saved under an earlier
-        version of this field set (missing a key this version added, or
-        carrying one a later revision dropped — `DEFAULT_RUN_SETTING_
-        FIELD_NAMES`'s own docstring records one real, reported such
-        revision already) must not silently propagate an incomplete or
-        stale projection forward. A saved value that no longer overlays
-        cleanly at all falls back to the full, un-overlaid starter
-        subset, the same "discarded wholesale, never applied partially"
-        policy every other stale-saved-value path in this module
-        already follows.
+        A saved `default_run_settings` is judged field by field, on its
+        own (`_effective_default_run_settings`), never by overlaying it
+        on the starter configuration: these are defaults for whatever
+        model runs next, and the starter model cannot use some valid
+        ones (`generational-vector` needs `mutation_model:
+        finite_alleles`), so an overlay once threw away a loaded
+        preset's whole run setup and ran the starter's instead. A key
+        missing from an older saved dict takes the starter's value; a
+        saved value that is itself invalid is replaced by the starter's
+        value for that one field and reported at launch
+        (`get_startup_warnings`).
         """
-        saved = self._preferences.default_run_settings
-        if saved is not None:
-            try:
-                merged = starter_form_values(overrides=saved)
-                values = {key: merged[key] for key in DEFAULT_RUN_SETTING_FIELD_NAMES}
-            except ValueError:
-                starter = starter_form_values()
-                values = {key: starter[key] for key in DEFAULT_RUN_SETTING_FIELD_NAMES}
-            values["max_workers"] = saved.get("max_workers", "")
-            return values
-        starter = starter_form_values()
-        values = {key: starter[key] for key in DEFAULT_RUN_SETTING_FIELD_NAMES}
-        values["max_workers"] = ""
+        values, _problems = self._effective_default_run_settings()
         return values
+
+    def _effective_default_run_settings(self) -> tuple[dict[str, str], list[str]]:
+        """Return the run defaults in force, and what was wrong with the saved ones.
+
+        Each of `DEFAULT_RUN_SETTING_FIELD_NAMES` is the saved value when
+        one is saved and valid on its own (`config_form.run_setting_
+        error`), else the starter's value. Nothing is checked against a
+        model: whether a default suits the configuration being run is
+        decided when that configuration is validated, so the message can
+        name the actual conflict.
+
+        Returns:
+            The values, plus `max_workers` (saved verbatim; blank means
+            automatic), and one plain-language sentence per saved value
+            that was invalid and so not used. A saved dict merely
+            missing a key (one saved by an older version) is not a
+            problem worth reporting.
+        """
+        saved = self._preferences.default_run_settings or {}
+        starter = starter_form_values()
+        values: dict[str, str] = {}
+        problems: list[str] = []
+        for key in DEFAULT_RUN_SETTING_FIELD_NAMES:
+            if key not in saved:
+                values[key] = starter[key]
+                continue
+            error = run_setting_error(key, saved[key])
+            if error is None:
+                values[key] = saved[key]
+                continue
+            values[key] = starter[key]
+            problems.append(
+                f"Your saved Settings default for {key} ({saved[key]!r}) is "
+                f"not valid ({error}), so {starter[key]!r} is used instead. "
+                "Open Settings and save to choose a value."
+            )
+        values["max_workers"] = saved.get("max_workers", "")
+        return values, problems
 
     @_log_bridge_call
     def set_default_run_settings(self, values: dict[str, str]) -> dict[str, Any]:
@@ -3914,21 +3972,28 @@ class Api:
                 fields, collected by `settings.js`.
 
         Returns:
-            An object with `ok` set to `True` on success. If `values`,
-            overlaid on the starter config, does not validate, `ok` is
-            `False` and `message` contains the validation error. The
-            wording matches any other invalid form submission because
-            this uses the same `starter_form_values`/
-            `form_values_to_payload`/`SimulationParams.from_mapping`
-            path. `max_workers` is not part of that validation
-            (`_parse_max_workers` treats any text as "auto") and is
-            saved verbatim alongside the validated subset.
+            An object with `ok` set to `True` on success. If a value is
+            invalid on its own, or two contradict each other (`jit`
+            against the backend, the window against the cap), `ok` is
+            `False` and `message` contains the validation error, worded
+            as `SimulationParams` words it (`config_form.validate_run_
+            settings`). Values are deliberately not checked against any
+            model — the starter's or another — since they are defaults
+            for whatever model runs next; a default a particular model
+            cannot use is reported when that model is run. A key
+            `values` omits takes the starter's value. `max_workers` is
+            not validated (`_parse_max_workers` treats any text as
+            "auto") and is saved verbatim alongside the validated subset.
         """
+        starter = starter_form_values()
+        subset = {
+            key: values.get(key, starter[key])
+            for key in DEFAULT_RUN_SETTING_FIELD_NAMES
+        }
         try:
-            merged = starter_form_values(overrides=values)
+            validate_run_settings(subset)
         except ValueError as error:
             return {"ok": False, "message": str(error)}
-        subset = {key: merged[key] for key in DEFAULT_RUN_SETTING_FIELD_NAMES}
         subset["max_workers"] = values.get("max_workers", "")
         self._preferences = self._preferences.with_default_run_settings(subset)
         save_preferences(self._preferences_path, self._preferences)
