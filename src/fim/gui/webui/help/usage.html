@@ -399,7 +399,8 @@ n_replicates: 1   # a single scalar run; the default (200) would batch
 </code></pre>
 <pre><code class="language-console">fim run stochastic-migrants.yaml --output results/stochastic-migrants --quiet
 </code></pre>
-<p>Converges at generation 701 with D \sim 0.0089. Re-run with migrant_sampling
+<p>Converges at generation 5,559, after about 20 seconds, with D = 0.127 and a
+trailing-window mean D of 0.060 ± 0.005. Re-run with migrant_sampling
 removed (or set to <code>continuous</code>, the default) at the same seed to compare
 against the deterministic-migration baseline directly.</p>
 <h3 id="finite-length-alleles-the-k-allele-model">Finite-length alleles (the K-allele model)</h3>
@@ -587,9 +588,11 @@ n_replicates: 1   # a single scalar run; the default (200) would batch
 </code></pre>
 <pre><code class="language-console">fim run multi-statistic.yaml --output results/multi-statistic --quiet
 </code></pre>
-<p>Converges at generation 770. <code>report.json</code>'s converged_on lists the watched
-statistics that had actually settled when the run stopped: with <code>any</code>, that can
-be just one of them ([&quot;G<sub>ST</sub>&quot;], say), and a run that reaches its cap
+<p>Converges at generation 3,033, after about 10 seconds. <code>report.json</code>'s
+converged_on lists the watched statistics that had actually settled when the
+run stopped: here [&quot;G<sub>ST</sub>&quot;] alone, because G<sub>ST</sub>'s
+trailing-window mean was already known precisely (0.0636 ± 0.0042) while D's
+was not (0.097 ± 0.025), and <code>any</code> needs only one. A run that reaches its cap
 records <code>null</code>, since it converged on nothing.</p>
 <h3 id="within-run-sigma-band">Within-run sigma band</h3>
 <p>Once a run genuinely converges, keep going for a further window and report

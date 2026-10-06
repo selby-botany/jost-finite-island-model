@@ -2,34 +2,34 @@
 
 Runnable demonstrations and reproducible simulation scenarios drawn from
 the `fim` validation suite. Every example has its own directory with a
-`README.md`; runnable YAML examples also provide a `config.yaml`.
+`README.md`, a `config.yaml`, and the committed output of its own run:
+`manifest.json` and `report.json` for a single run, or `manifest.json`,
+`summary.json`, and one `replicate-NNN/` directory per replicate for a
+batch. Trajectories are not committed; they can be gigabytes.
 
-The [Configure card examples](#configure-card-examples) are canonical YAML
-configs with explanations mirrored inline in `doc/usage.md`. The
-Dear-Nolan high example instead uses a Python-generated near-equilibrium
-initial state, because its stationary condition is not representable as a
-simple YAML `p_0` table.
+The desktop app ships every example as a read-only run in its Examples
+experiment, grouped by the classes in [`classes.yaml`](classes.yaml)
+(see [The Examples experiment](../usage.md#the-examples-experiment)).
+The [Configure card examples](#configure-card-examples) are also
+mirrored inline in `doc/usage.md`.
 
 ## Running an example
-
-For the YAML examples:
 
 ```console
 fim run doc/examples/<example>/config.yaml \
     --output results/<example> --quiet
 ```
 
-For the Dear-Nolan high example, run the reproduction script directly:
+The `report.json` (or `summary.json`) you get matches the one in the
+example's directory exactly. Most examples finish in about a second to
+about a minute on ordinary development hardware. The calibration
+examples take longer: Dear-Nolan low about 20 to 25 minutes, Golden Part VI
+about ten minutes, and Dear-Nolan high about two minutes.
 
-```console
-python3 doc/examples/dear-nolan-high/reproduce.py
-```
-
-Dear-Nolan low takes about 25 minutes; Golden Part VI takes a little over
-two minutes; Dear-Nolan high finishes in seconds on a laptop. The
-high-migration scenario's direct write-up is deliberately a lightweight
-5-replicate reproduction of the test case rather than the full Monte
-Carlo sweep used in calibration.
+For maintainers: `dev/bin/regenerate-example-outputs` reruns the examples
+and replaces their committed outputs, and `test/test_doc_examples.py`
+(slow) fails when a fresh run no longer matches them (see
+[Maintainer scripts](../../dev/bin/README.md#regenerate-example-outputs)).
 
 ## Examples
 
@@ -50,23 +50,25 @@ calibrated multi-locus/multi-replicate agreement lives.
 
 **Dear-Nolan low-migration botanical scenario** — five isolated plant
 patches, N = 100, very low migration (m = 0.0001) and negligible mutation
-(mu = 0.000001). Runs the full derived cap, 295,390 generations (about 25
+(mu = 0.000001). Runs the full derived cap, 295,390 generations (20 to 25
 minutes): almost all demes fixed for the same allele. D — the statistic
 this example watches — is the harder of the two to pin down here, ending
-honestly at the cap with a trailing-window mean of 0.053 (published
-D ≈ 0.038); G_ST, computed the same way but not gated on, is already
-precise at 0.969 (published G_ST ≈ 0.970) — D and G_ST are not equally
-noisy for this scenario, see its own README for why.
+honestly at the cap (`converged_on: null`) with a trailing-window mean of
+0.053 (published D ≈ 0.038); G_ST, computed the same way but not gated
+on, is already precise at 0.969 (published G_ST ≈ 0.970) — D and G_ST are
+not equally noisy for this scenario, see its own README for why.
 
 ### [dear-nolan-high](dear-nolan-high/README.md)
 
 **Dear-Nolan high-migration botanical scenario** — the exact equilibrium
 validation case from `test/validation/test_simulator_equilibrium.py`.
-This is not a YAML-only config: the test derives a near-equilibrium
-initial state (`_dn2_equilibrium_start`) so the engine is started at the
-fixed point rather than slowly integrating from an undifferentiated state.
-The reproduced 5-replicate sample lands at mean G_ST ≈ 0.0219 and
-mean D ≈ 0.9079, in line with the published G_ST ≈ 0.02 and D ≈ 0.90.
+The test derives a near-equilibrium initial state
+(`_dn2_equilibrium_start`) so the engine is started at the fixed point
+rather than slowly integrating from an undifferentiated state;
+`reproduce.py` writes that state into `config.yaml` as an explicit `p_0`.
+Five replicates of 30 generations land at mean G_ST 0.0220 ± 0.0004 and
+mean D 0.911 ± 0.003, matching the predicted equilibrium (G_ST 0.0220,
+D 0.909) and the published G_ST ≈ 0.02 and D ≈ 0.90.
 
 ## Configure card examples
 

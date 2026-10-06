@@ -84,8 +84,9 @@ fim run doc/examples/golden-part-vi/config.yaml \
     --output results/golden-part-vi --quiet
 ```
 
-Takes a little over two minutes (130,194 generations, each one written to
-the trajectory file). `results/golden-part-vi/report.json` will match
+Takes about ten minutes on ordinary development hardware (130,194
+generations, each one written to a trajectory file of about 480 MB), and
+longer on a busy machine. `results/golden-part-vi/report.json` will match
 `report.json` in this directory exactly.
 
 ## Expected output

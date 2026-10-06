@@ -458,7 +458,8 @@ n_replicates: 1   # a single scalar run; the default (200) would batch
 fim run stochastic-migrants.yaml --output results/stochastic-migrants --quiet
 ```
 
-Converges at generation 701 with D \sim 0.0089. Re-run with migrant_sampling
+Converges at generation 5,559, after about 20 seconds, with D = 0.127 and a
+trailing-window mean D of 0.060 ± 0.005. Re-run with migrant_sampling
 removed (or set to `continuous`, the default) at the same seed to compare
 against the deterministic-migration baseline directly.
 
@@ -681,9 +682,11 @@ n_replicates: 1   # a single scalar run; the default (200) would batch
 fim run multi-statistic.yaml --output results/multi-statistic --quiet
 ```
 
-Converges at generation 770. `report.json`'s converged_on lists the watched
-statistics that had actually settled when the run stopped: with `any`, that can
-be just one of them (["G<sub>ST</sub>"], say), and a run that reaches its cap
+Converges at generation 3,033, after about 10 seconds. `report.json`'s
+converged_on lists the watched statistics that had actually settled when the
+run stopped: here ["G<sub>ST</sub>"] alone, because G<sub>ST</sub>'s
+trailing-window mean was already known precisely (0.0636 ± 0.0042) while D's
+was not (0.097 ± 0.025), and `any` needs only one. A run that reaches its cap
 records `null`, since it converged on nothing.
 
 ### Within-run sigma band

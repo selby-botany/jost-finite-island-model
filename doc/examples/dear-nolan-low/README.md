@@ -72,8 +72,9 @@ fim run doc/examples/dear-nolan-low/config.yaml \
     --output results/dear-nolan-low --quiet
 ```
 
-Takes about 25 minutes (295,390 generations — the derived cap — of 30
-loci) and writes a large `trajectory.jsonl`. `results/dear-nolan-low/
+Takes about 20 to 25 minutes on ordinary development hardware, and longer on a
+busy machine (295,390 generations — the derived cap — of 30 loci), and
+writes a large `trajectory.jsonl`. `results/dear-nolan-low/
 report.json` will match `report.json` in this directory exactly.
 
 ## Expected output
@@ -81,7 +82,7 @@ report.json` will match `report.json` in this directory exactly.
 ```json
 {
   "converged": false,
-  "converged_on": "D",
+  "converged_on": null,
   "generation": 295390,
   "G_ST": 0.9487036088409319,
   "D": 0.06748576189094388,
@@ -107,7 +108,8 @@ report.json` will match `report.json` in this directory exactly.
 in this directory has every field, every recorded statistic's own
 `window_statistics` entry, and full floating-point precision.)
 
-The run ends at the cap, generation 295,390, because **D** — the statistic
+The run ends at the cap, generation 295,390, so `converged_on` is `null`:
+it converged on nothing. That is because **D** — the statistic
 this example actually watches — is the more stubborn of the two to pin
 down: its own evidence window grew to 236,312 generations, and its
 standard error, 0.0107, is still a little over twice the 0.005 the
