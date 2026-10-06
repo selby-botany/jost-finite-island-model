@@ -197,3 +197,128 @@ def test_the_examples_experiment_is_last_even_when_it_is_the_oldest(
         "Loose study (0 runs)",
         "Examples (1 study)",
     ]
+
+
+def _expand_group(window: webview.Window, label: str) -> None:
+    """Expand the Home group whose toggle names `label`, and wait until it is open."""
+    toggle = (
+        "Array.from(document.querySelectorAll('.open-run-group-toggle'))"
+        f".find((button) => button.textContent.includes({label!r}))"
+    )
+    window.evaluate_js(
+        f"(function () {{ const t = {toggle};"
+        " if (t && t.getAttribute('aria-expanded') === 'false') { t.click(); }"
+        " })()"
+    )
+    expanded = _poll_until(
+        window,
+        f"(function () {{ const t = {toggle};"
+        " return t ? t.getAttribute('aria-expanded') : null; })()",
+        lambda value: value == "true",
+    )
+    assert expanded == "true", f"Home group {label!r} never expanded"
+
+
+_SNAPSHOT_SAVED_RESULT = """
+JSON.stringify({
+    state: window.fim.getRunViewState(),
+    noteHidden: document.getElementById('run-saved-result-note').hidden,
+    noteText: document.getElementById('run-saved-result-text').textContent,
+    graphsHidden: document.getElementById('run-graph-body').hidden,
+    scrubberHidden: document.getElementById('scrubber-controls').hidden,
+    statsHidden: document.getElementById('results-stats').hidden,
+    statD: document.getElementById('stat-D').textContent,
+    messages: document.getElementById('run-messages').textContent,
+})
+"""
+
+_SNAPSHOT_CONFIGURE = """
+JSON.stringify({
+    configureHidden: document.getElementById('screen-configure').hidden,
+    runName: document.getElementById('run-name-input').value,
+    runDescription: document.getElementById('run-description-input').value,
+    seed: document.getElementById('field-seed').value,
+    noteHiddenAfterInitial: null,
+})
+"""
+
+
+def test_a_seeded_example_opens_from_its_saved_results_and_run_it_loads_it(
+    results: Path,
+) -> None:
+    """Report-only open (design §4.3): statistics, a note, and "Run it"."""
+    window = create_window(hidden=True)
+    outcome: queue.Queue[dict[str, Any]] = queue.Queue(maxsize=1)
+    example_row = (
+        "Array.from(document.querySelectorAll('.open-run-run-row'))"
+        ".find((row) => row.textContent.includes('Shipped example'))"
+    )
+
+    def _drive() -> None:
+        try:
+            _open_home(window)
+            _expand_group(window, "Examples (")
+            _expand_group(window, "Getting started (")
+            _poll_until(
+                window, f"{example_row} !== undefined", lambda value: value is True
+            )
+            window.evaluate_js(
+                f"{example_row}.dispatchEvent(new MouseEvent('dblclick',"
+                " {bubbles: true}));"
+            )
+            _poll_until(
+                window,
+                "window.fim.getRunViewState() === 'completed'"
+                " && !document.getElementById('run-saved-result-note').hidden",
+                lambda value: value is True,
+            )
+            saved = json.loads(window.evaluate_js(_SNAPSHOT_SAVED_RESULT))
+            window.evaluate_js(
+                "window.__fimSavedRunLoadSettled = false;"
+                "document.getElementById('run-saved-result-run-button').click();"
+            )
+            _poll_until(
+                window, "window.__fimSavedRunLoadSettled === true", lambda value: value
+            )
+            _poll_until(
+                window,
+                "(window.__fimValidationPending || 0) === 0",
+                lambda value: value is True,
+            )
+            configure = json.loads(window.evaluate_js(_SNAPSHOT_CONFIGURE))
+            # Leaving `completed` brings the graphs back.
+            window.evaluate_js("window.fim.returnToInitialState();")
+            configure["noteHiddenAfterInitial"] = _poll_until(
+                window,
+                "document.getElementById('run-saved-result-note').hidden",
+                lambda value: value is True,
+            )
+            _poll_until(
+                window,
+                "(window.__fimScrubberPending || 0) === 0"
+                " && (window.__fimValidationPending || 0) === 0",
+                lambda value: value is True,
+            )
+            outcome.put({"saved": saved, "configure": configure})
+        finally:
+            window.destroy()
+
+    webview.start(_drive)
+    result = outcome.get(timeout=_DRIVE_TIMEOUT_SECONDS)
+
+    saved = result["saved"]
+    assert saved["state"] == "completed"
+    assert saved["noteHidden"] is False
+    assert saved["noteText"] == "Run this example to see its trajectories"
+    assert saved["graphsHidden"] is True
+    assert saved["scrubberHidden"] is True
+    # The statistics and the messages come from the saved report.
+    assert saved["statsHidden"] is False
+    assert saved["statD"].strip() != ""
+    assert "generation" in saved["messages"]
+    configure = result["configure"]
+    assert configure["configureHidden"] is False
+    assert configure["runName"] == "Shipped example"
+    assert configure["runDescription"] == "A tiny example run."
+    assert configure["seed"] == "5"
+    assert configure["noteHiddenAfterInitial"] is True

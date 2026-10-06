@@ -2493,6 +2493,26 @@ fieldset.composite > label {
     margin-right: 0;
 }
 
+/* In place of the graphs, for a run opened from its saved results only
+ * (read-only examples design §4.3): what is missing, and "Run it". */
+.run-saved-result-note {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 0.75rem;
+    min-height: 12rem;
+    padding: 1.5rem;
+    text-align: center;
+    color: var(--fim-muted);
+    border: 1px dashed var(--fim-muted);
+    border-radius: 6px;
+}
+
+.run-saved-result-note[hidden] {
+    display: none;
+}
+
 /* Under the details dialog's fields: why they cannot be edited. */
 .details-read-only-note {
     color: var(--fim-muted);

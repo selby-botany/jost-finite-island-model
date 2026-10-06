@@ -14620,6 +14620,72 @@ def test_the_seeded_study_holds_only_examples_with_a_saved_result(
 
 `not-run-yet` has no saved result, so no run directory and no row.
 
+<a id="gui.test_examples_bridge.test_open_run_shows_a_seeded_example_from_its_saved_report"></a>
+
+#### test\_open\_run\_shows\_a\_seeded\_example\_from\_its\_saved\_report
+
+```python
+def test_open_run_shows_a_seeded_example_from_its_saved_report(
+        results: Path, bundle: Path) -> None
+```
+
+No trajectory, a saved report: the report-only payload (design §4.3).
+
+<a id="gui.test_examples_bridge.test_open_run_without_a_trajectory_or_a_report_still_fails"></a>
+
+#### test\_open\_run\_without\_a\_trajectory\_or\_a\_report\_still\_fails
+
+```python
+def test_open_run_without_a_trajectory_or_a_report_still_fails(
+        results: Path, bundle: Path) -> None
+```
+
+Only a saved report enables the report-only path.
+
+<a id="gui.test_examples_bridge.test_open_batch_shows_a_batch_from_its_saved_summary"></a>
+
+#### test\_open\_batch\_shows\_a\_batch\_from\_its\_saved\_summary
+
+```python
+def test_open_batch_shows_a_batch_from_its_saved_summary(
+        tmp_path: Path, results: Path) -> None
+```
+
+A batch without replicate trajectories opens from `summary.json`.
+
+<a id="gui.test_examples_bridge.test_load_run_configuration_gives_an_editable_copy_of_a_seeded_example"></a>
+
+#### test\_load\_run\_configuration\_gives\_an\_editable\_copy\_of\_a\_seeded\_example
+
+```python
+def test_load_run_configuration_gives_an_editable_copy_of_a_seeded_example(
+        results: Path, bundle: Path) -> None
+```
+
+"Run it": labels to the boxes, `_` keys dropped, Settings synced.
+
+<a id="gui.test_examples_bridge.test_load_run_configuration_falls_back_to_the_manifest"></a>
+
+#### test\_load\_run\_configuration\_falls\_back\_to\_the\_manifest
+
+```python
+def test_load_run_configuration_falls_back_to_the_manifest(
+        results: Path, bundle: Path) -> None
+```
+
+Without `config.yaml`, the manifest's parameters and the metadata serve.
+
+<a id="gui.test_examples_bridge.test_load_run_configuration_refuses_a_directory_that_is_not_a_run"></a>
+
+#### test\_load\_run\_configuration\_refuses\_a\_directory\_that\_is\_not\_a\_run
+
+```python
+def test_load_run_configuration_refuses_a_directory_that_is_not_a_run(
+        tmp_path: Path, results: Path) -> None
+```
+
+Nothing to load: a message, not an exception.
+
 <a id="gui.test_examples_dialog_screen"></a>
 
 # gui.test\_examples\_dialog\_screen
@@ -14727,6 +14793,17 @@ def test_the_examples_experiment_is_last_even_when_it_is_the_oldest(
 ```
 
 Listed last whatever its creation time; a standalone Study comes before.
+
+<a id="gui.test_examples_screen.test_a_seeded_example_opens_from_its_saved_results_and_run_it_loads_it"></a>
+
+#### test\_a\_seeded\_example\_opens\_from\_its\_saved\_results\_and\_run\_it\_loads\_it
+
+```python
+def test_a_seeded_example_opens_from_its_saved_results_and_run_it_loads_it(
+        results: Path) -> None
+```
+
+Report-only open (design §4.3): statistics, a note, and "Run it".
 
 <a id="gui.test_explore_screen"></a>
 

@@ -121,6 +121,11 @@ const fim = {
     /** @param {"initial"|"running"|"completed"} state */
     setRunViewState(state) {
         runViewState = state;
+        // A saved-result note describes one completed run; any other
+        // state brings the graphs back (`run-view-completed.js`).
+        if (state !== "completed" && window.fim.showSavedResultNote) {
+            window.fim.showSavedResultNote(null);
+        }
     },
 
     /** @returns {string|null} */

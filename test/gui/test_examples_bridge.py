@@ -201,3 +201,115 @@ def test_the_seeded_study_holds_only_examples_with_a_saved_result(
 
     assert study.run_directories == ("examples/tiny-example",)
     assert not seed.example_run_directory("not-run-yet", results=results).exists()
+
+
+def test_open_run_shows_a_seeded_example_from_its_saved_report(
+    results: Path, bundle: Path
+) -> None:
+    """No trajectory, a saved report: the report-only payload (design §4.3)."""
+    api = Api()
+    api.ensure_examples()
+    directory = seed.example_run_directory("tiny-example", results=results)
+    saved_report = json.loads((directory / "report.json").read_text("utf-8"))
+
+    result = api.open_run({"trajectoryPath": str(directory / "trajectory.jsonl")})
+
+    assert result["ok"] is True
+    assert result["reportOnly"] is True
+    assert result["readOnly"] is True
+    assert result["report"] == saved_report
+    assert result["panels"] is None
+    assert result["trajectoryPath"] is None
+    assert result["convergenceGenerations"] is None
+    assert result["outputDirectory"] == str(directory)
+    assert result["directoryName"] == "tiny-example"
+    assert result["statistics"]["D"] == app_module.format_report_statistic(
+        saved_report, "D", api.get_significant_digits()
+    )
+    assert result["configSummary"]["N"].startswith("20")
+
+
+def test_open_run_without_a_trajectory_or_a_report_still_fails(
+    results: Path, bundle: Path
+) -> None:
+    """Only a saved report enables the report-only path."""
+    api = Api()
+    api.ensure_examples()
+    directory = seed.example_run_directory("tiny-example", results=results)
+    (directory / "report.json").unlink()
+
+    result = api.open_run({"trajectoryPath": str(directory / "trajectory.jsonl")})
+
+    assert result["ok"] is False
+
+
+def test_open_batch_shows_a_batch_from_its_saved_summary(
+    tmp_path: Path, results: Path
+) -> None:
+    """A batch without replicate trajectories opens from `summary.json`."""
+    config = {**_CONFIG, "n_replicates": 2, "seed": 9}
+    config_path = tmp_path / "batch.yaml"
+    config_path.write_text(yaml.safe_dump(config, sort_keys=False), "utf-8")
+    source = tmp_path / "batch-run"
+    assert cli.main(["run", str(config_path), "-o", str(source), "--quiet"]) == 0
+    saved = results / "saved-batch"
+    saved.mkdir()
+    for path in source.rglob("*.json"):
+        if path.name in {"manifest.json", "report.json", "summary.json"}:
+            target = saved / path.relative_to(source)
+            target.parent.mkdir(parents=True, exist_ok=True)
+            target.write_bytes(path.read_bytes())
+    summary = json.loads((saved / "summary.json").read_text("utf-8"))
+
+    result = Api().open_batch(str(saved))
+
+    assert result["ok"] is True
+    assert result["reportOnly"] is True
+    assert result["readOnly"] is True
+    assert len(result["replicates"]) == 2
+    assert set(result["summary"]) == {
+        name for name, value in summary.items() if isinstance(value, dict)
+    }
+    assert result["pooledConvergenceHistories"] == {}
+
+
+def test_load_run_configuration_gives_an_editable_copy_of_a_seeded_example(
+    results: Path, bundle: Path
+) -> None:
+    """ "Run it": labels to the boxes, `_` keys dropped, Settings synced."""
+    api = Api()
+    api.ensure_examples()
+    directory = seed.example_run_directory("tiny-example", results=results)
+
+    result = api.load_run_configuration(str(directory))
+
+    assert result["ok"] is True
+    assert (result["name"], result["description"]) == (
+        "Shipped example",
+        "A tiny example run.",
+    )
+    assert not any(key.startswith("_") for key in result["values"])
+    assert api.validate_form(result["values"])["ok"] is True
+
+
+def test_load_run_configuration_falls_back_to_the_manifest(
+    results: Path, bundle: Path
+) -> None:
+    """Without `config.yaml`, the manifest's parameters and the metadata serve."""
+    api = Api()
+    api.ensure_examples()
+    directory = seed.example_run_directory("tiny-example", results=results)
+    (directory / "config.yaml").unlink()
+
+    result = api.load_run_configuration(str(directory))
+
+    assert result["ok"] is True
+    assert result["name"] == "Shipped example"
+    assert api.validate_form(result["values"])["ok"] is True
+
+
+def test_load_run_configuration_refuses_a_directory_that_is_not_a_run(
+    tmp_path: Path, results: Path
+) -> None:
+    """Nothing to load: a message, not an exception."""
+    assert Api().load_run_configuration(str(tmp_path / "nowhere"))["ok"] is False

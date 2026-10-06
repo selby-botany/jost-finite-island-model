@@ -370,6 +370,15 @@ const runResultsTableBody = document.getElementById("run-results-table-body");
 // toggles (`wireResultsTableHeaders`), wired once the catalog has built
 // them (`onStatisticCatalogReady`, above).
 const resultsBackButton = document.getElementById("results-back-button");
+// A run opened from its saved results alone (`Api.open_run`'s
+// `reportOnly`, read-only examples design §4.3) shows this note, with
+// "Run it", in place of the graph toolbar and panes.
+const runSavedResultNote = document.getElementById("run-saved-result-note");
+const runSavedResultText = document.getElementById("run-saved-result-text");
+const runSavedResultRunButton = document.getElementById("run-saved-result-run-button");
+const runSavedResultError = document.getElementById("run-saved-result-error");
+const runGraphToolbar = document.getElementById("run-graph-toolbar");
+const runGraphBody = document.getElementById("run-graph-body");
 const resultsHistoryBackButton = document.getElementById("results-history-back-button");
 const resultsHistoryForwardButton = document.getElementById(
     "results-history-forward-button"
@@ -3611,6 +3620,60 @@ async function wireCompletedBatchScrubber(outputDirectory) {
  *     the statistics/table fields this function reads conditionally.
  * @param {boolean} isBatch
  */
+// The directory "Run it" loads, while the saved-result note is showing.
+let savedResultDirectory = null;
+
+// Set once "Run it" has finished (loaded or refused) -- the ready-flag
+// precedent `__fimExampleLoadSettled` (`screens/examples.js`) follows.
+window.__fimSavedRunLoadSettled = false;
+
+/**
+ * Show the saved-result note in place of the graphs for a report-only
+ * payload, or (given `null`) hide it and bring the graphs back. Every
+ * state change away from `completed` hides it too (`app.js`'s
+ * `setRunViewState`), so it never outlives the run it describes.
+ * @param {{outputDirectory: string, readOnly?: boolean}|null} payload
+ */
+window.fim.showSavedResultNote = function showSavedResultNote(payload) {
+    const show = payload !== null && payload !== undefined;
+    runSavedResultNote.hidden = !show;
+    runGraphToolbar.hidden = show;
+    runGraphBody.hidden = show;
+    runSavedResultError.hidden = true;
+    runSavedResultError.textContent = "";
+    savedResultDirectory = show ? payload.outputDirectory : null;
+    if (show) {
+        runSavedResultText.textContent = payload.readOnly
+            ? "Run this example to see its trajectories"
+            : "This run's trajectory is not saved. Run it again to see its trajectories";
+    }
+};
+
+// "Run it": load the run into Configure as an editable copy, the same
+// way the Examples dialog's "Load into Configure" does.
+runSavedResultRunButton.addEventListener("click", async () => {
+    if (savedResultDirectory === null) {
+        return;
+    }
+    window.__fimSavedRunLoadSettled = false;
+    runSavedResultRunButton.disabled = true;
+    try {
+        const result = await window.pywebview.api.load_run_configuration(
+            savedResultDirectory
+        );
+        if (!result.ok) {
+            runSavedResultError.textContent =
+                `This run could not be loaded into Configure: ${result.message}`;
+            runSavedResultError.hidden = false;
+            return;
+        }
+        await window.fim.applyLoadedExample(result, "Saved run");
+    } finally {
+        runSavedResultRunButton.disabled = false;
+        window.__fimSavedRunLoadSettled = true;
+    }
+});
+
 window.fim.enterCompletedState = function enterCompletedState(payload, isBatch) {
     window.fim.setRunViewState("completed");
     if (window.fim.resetGraphStage) {
@@ -3643,6 +3706,10 @@ window.fim.enterCompletedState = function enterCompletedState(payload, isBatch) 
     // `string|null`, matching `completedOutputDirectory`'s identical
     // shape immediately above.
     window.fim.setCompletedTrajectoryPath(payload.trajectoryPath ?? null);
+    // A run opened from its saved results alone has nothing to draw:
+    // say so, and offer "Run it", in place of the graphs.
+    const reportOnly = Boolean(payload.reportOnly);
+    window.fim.showSavedResultNote(reportOnly ? payload : null);
     // Whatever Configure-time note or "Saved to <path>" confirmation
     // `run-reason` last showed is retired the moment a run's own
     // completed messages take over that same page position -- otherwise
@@ -3729,7 +3796,13 @@ window.fim.enterCompletedState = function enterCompletedState(payload, isBatch) 
         // alongside the trajectory panel below, both parts of the same
         // batch trajectory panel design `20260912-claude-sonnet-5-
         // batch-trajectory-panel-design.md` (`selby/restricted`).
-        wireCompletedBatchScrubber(payload.outputDirectory);
+        // No trajectories means no frames to scrub through.
+        if (reportOnly) {
+            setScrubberControlsHidden(true);
+            window.fim.resetScrubber();
+        } else {
+            wireCompletedBatchScrubber(payload.outputDirectory);
+        }
         // `renderBatchTrajectory` (not `renderTrajectory`, which
         // assumes one shared generation list every statistic's own
         // history aligns against -- an assumption `payload.
@@ -3754,8 +3827,8 @@ window.fim.enterCompletedState = function enterCompletedState(payload, isBatch) 
         completedPair = [1, 2];
         completedFinalPairStatistics = null;
         completedPairFrameStatistics = null;
-        renderPairStatistics(null, "loading…");
-        if (payload.demeCount >= DEMES_NEEDED_FOR_PAIR) {
+        renderPairStatistics(null, reportOnly ? "not saved with this run" : "loading…");
+        if (!reportOnly && payload.demeCount >= DEMES_NEEDED_FOR_PAIR) {
             // Counted with the scrubber's own fetches, so anything waiting
             // for "settled" (`window.__fimScrubberPending`) waits for this
             // bridge call too instead of tearing the page down under it.
@@ -3793,7 +3866,10 @@ window.fim.enterCompletedState = function enterCompletedState(payload, isBatch) 
         completedPair = [1, 2];
         completedFinalPairStatistics = payload.pairStatistics || null;
         completedPairFrameStatistics = null;
-        renderPairStatistics(completedFinalPairStatistics, "no second deme to compare");
+        renderPairStatistics(
+            completedFinalPairStatistics,
+            reportOnly ? "not saved with this run" : "no second deme to compare"
+        );
         // Set before the row loop just below reads it (`windowStatistics
         // Description`), not after -- the two used to run in the other
         // order, which meant every row's own tooltip always showed the
@@ -3870,7 +3946,13 @@ window.fim.enterCompletedState = function enterCompletedState(payload, isBatch) 
             null,
             completedAveraging()
         );
-        wireCompletedScrubber(payload.outputDirectory, payload.generationCount);
+        if (reportOnly) {
+            setScrubberControlsHidden(true);
+            runResultsTableEl.hidden = true;
+            window.fim.resetScrubber();
+        } else {
+            wireCompletedScrubber(payload.outputDirectory, payload.generationCount);
+        }
     }
 
     renderSupplementalPanels(payload.literatureVisuals);

@@ -149,6 +149,35 @@ function examplesHandleListKey(event, container, select) {
 }
 
 /**
+ * Put a loaded example into Configure as an editable copy: its values in
+ * the form, its name and description in the "Run name" and "Run
+ * description" boxes, and Configure showing. Shared by "Load into
+ * Configure" here and "Run it" on a run opened from its saved results
+ * (`run-view-completed.js`), which both receive `Api.load_example`'s
+ * result shape.
+ * @param {{values: object, name: string|null, description: string|null}} result
+ * @param {string} fallbackName What to call the loaded configuration when
+ *     it has no name of its own.
+ */
+window.fim.applyLoadedExample = async function applyLoadedExample(result, fallbackName) {
+    applyFormValues(result.values);
+    examplesRunNameInput.value = result.name || "";
+    examplesRunDescriptionInput.value = result.description || "";
+    window.fim.rememberLoadedPreset(result.name || fallbackName);
+    // "Into Configure": show it when the load started elsewhere (the
+    // Welcome panel, the Run card). Showing it revalidates the form; when
+    // it is already showing, revalidate here instead.
+    if (document.getElementById("screen-configure").hidden) {
+        await window.fim.showConfigureScreen();
+    } else {
+        await revalidate();
+    }
+    if (window.fim.getRunViewState() === "initial") {
+        window.fim.renderInitialPreview();
+    }
+};
+
+/**
  * Load the selected example into Configure, then close the dialog. A
  * refusal (no configuration, or one the form cannot represent) is shown
  * inside the dialog, which stays open.
@@ -166,22 +195,8 @@ async function examplesLoadSelected() {
             examplesShowError(`This example could not be loaded: ${result.message}`);
             return;
         }
-        applyFormValues(result.values);
-        examplesRunNameInput.value = result.name || "";
-        examplesRunDescriptionInput.value = result.description || "";
         examplesDialog.close();
-        window.fim.rememberLoadedPreset(result.name || example.name);
-        // "Into Configure": show it when the dialog was opened elsewhere
-        // (the Welcome panel). Showing it revalidates the form; when it
-        // is already showing, revalidate here instead.
-        if (document.getElementById("screen-configure").hidden) {
-            await window.fim.showConfigureScreen();
-        } else {
-            await revalidate();
-        }
-        if (window.fim.getRunViewState() === "initial") {
-            window.fim.renderInitialPreview();
-        }
+        await window.fim.applyLoadedExample(result, example.name);
     } finally {
         examplesLoadButton.disabled = !example.loadable;
         window.__fimExampleLoadSettled = true;

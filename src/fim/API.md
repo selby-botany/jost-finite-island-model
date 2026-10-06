@@ -162,6 +162,7 @@ Return to the [source-tree orientation](../README.md) or the [developer guide](.
     * [load\_yaml](#fim.gui.app.Api.load_yaml)
     * [list\_examples](#fim.gui.app.Api.list_examples)
     * [load\_example](#fim.gui.app.Api.load_example)
+    * [load\_run\_configuration](#fim.gui.app.Api.load_run_configuration)
     * [list\_presets](#fim.gui.app.Api.list_presets)
     * [get\_preset\_form\_values](#fim.gui.app.Api.get_preset_form_values)
     * [load\_preset](#fim.gui.app.Api.load_preset)
@@ -5624,6 +5625,44 @@ loaded configuration, as for `load_preset`.
   such example exists or its configuration cannot be loaded
   into the form.
 
+<a id="fim.gui.app.Api.load_run_configuration"></a>
+
+#### load\_run\_configuration
+
+```python
+@_log_bridge_call
+def load_run_configuration(directory: str) -> dict[str, Any]
+```
+
+Return a saved run's configuration as form values, syncing Settings.
+
+The "Run it" button on a run opened from its saved results only
+(read-only examples design §4.3): it loads the run into
+Configure as an editable copy, exactly as the Examples dialog's
+"Load into Configure" does (`load_example`, the same
+`_configuration_form_values` path): labels go to the "Run name"
+and "Run description" boxes and internal `_` keys are dropped,
+so the new run is an ordinary, editable one with its own ID.
+
+The configuration is the run's own `config.yaml` (every seeded
+example has one when its source does); without one, the
+manifest's recorded parameters stand in, with `_read_only`
+cleared, and the name and description come from the run's
+`metadata.json`.
+
+**Arguments**:
+
+- `directory` - The run's own directory.
+
+
+**Returns**:
+
+- ``{"ok"` - True, "values": {...}, "name": ..., "description":
+  ...}` (`load_example`'s shape); `{"ok": False, "message":
+  ...}` when the directory holds neither a usable configuration
+  nor a readable manifest, or its configuration cannot be
+  represented in the form.
+
 <a id="fim.gui.app.Api.list_presets"></a>
 
 #### list\_presets
@@ -7247,6 +7286,12 @@ reuse, not a second rendering path.
   exist) — `message` is shown verbatim, matching `fim
   stats`'s own wording.
 
+  When the trajectory file is absent but the run's
+  `report.json` is present (a seeded example, read-only
+  examples design §4.3), the result is
+  `_report_only_run_payload`'s instead: the same shape with
+- ``reportOnly` - True`, the saved statistics, and no curves.
+
 <a id="fim.gui.app.Api.open_batch"></a>
 
 #### open\_batch
@@ -7302,7 +7347,10 @@ Home screen's own reopen spinner (`open-run.js`'s own
   any one replicate's own trajectory fails its integrity
   check (`reanalyze_trajectory`'s own `ValueError`/`OSError`
 - `cases)` - the identical failure shape `open_run` already
-  uses for the same class of problem, one level up.
+  uses for the same class of problem, one level up. A batch
+  whose replicate trajectories are absent but whose
+  `summary.json` is present (a seeded example) gets
+  `_report_only_batch_payload`'s result instead.
 
 <a id="fim.gui.app.Api.open_study"></a>
 

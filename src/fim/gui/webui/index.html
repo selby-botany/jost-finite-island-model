@@ -319,14 +319,30 @@
                <details> keeps it keyboard-reachable with no popover
                code; the choice is remembered (`set_run_graphs`) and
                how many columns they lay out in is a Settings choice. -->
-          <div class="run-graph-toolbar">
+          <!-- Shown instead of the graphs for a run opened from its saved
+               results alone (`Api.open_run`'s `reportOnly`, read-only
+               examples design §4.3): a seeded example ships its
+               statistics but not its trajectory, so there is nothing to
+               draw until it is run. "Run it" loads it into Configure as
+               an editable copy (`run-view-completed.js`). -->
+          <div class="run-saved-result-note" id="run-saved-result-note" hidden>
+            <p id="run-saved-result-text"></p>
+            <button
+              type="button"
+              id="run-saved-result-run-button"
+              class="primary-action"
+              aria-label="Run it: load this run into Configure as an editable copy"
+            >Run it</button>
+            <p class="hint" id="run-saved-result-error" hidden></p>
+          </div>
+          <div class="run-graph-toolbar" id="run-graph-toolbar">
             <details class="graph-menu" id="run-graph-menu">
               <summary id="run-graph-menu-summary">Graphs</summary>
               <div class="graph-menu-list" id="run-graph-menu-list" role="group"
                    aria-label="Graphs to show"></div>
             </details>
           </div>
-            <div class="run-graph-body">
+            <div class="run-graph-body" id="run-graph-body">
               <!-- `completed`-only this phase (design §3.2.4: no
                    separate "Animate" button anywhere -- the scrubber is
                    simply part of `completed`'s own view). Runs down the

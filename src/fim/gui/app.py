@@ -51,6 +51,7 @@ import time
 import webbrowser
 from collections.abc import Callable, Iterable, Mapping, Sequence
 from concurrent.futures import ProcessPoolExecutor
+from dataclasses import replace
 from math import exp, isfinite
 from pathlib import Path
 from socketserver import ThreadingMixIn
@@ -124,7 +125,12 @@ from fim.model.params import ALLOWED_PLOIDIES, SimulationParams
 from fim.model.state import ModelState
 from fim.model.topology import MINIMUM_DEMES
 from fim.persistence import groups
-from fim.persistence.manifest import RunManifest, read_batch_manifest, read_manifest
+from fim.persistence.manifest import (
+    BatchManifest,
+    RunManifest,
+    read_batch_manifest,
+    read_manifest,
+)
 from fim.persistence.pairwise import pair_value, read_pairwise
 from fim.persistence.run_metadata import replace_run_metadata, run_metadata_path
 from fim.reanalyze import (
@@ -3264,6 +3270,64 @@ class Api:
         }
 
     @_log_bridge_call
+    def load_run_configuration(self, directory: str) -> dict[str, Any]:
+        """Return a saved run's configuration as form values, syncing Settings.
+
+        The "Run it" button on a run opened from its saved results only
+        (read-only examples design §4.3): it loads the run into
+        Configure as an editable copy, exactly as the Examples dialog's
+        "Load into Configure" does (`load_example`, the same
+        `_configuration_form_values` path): labels go to the "Run name"
+        and "Run description" boxes and internal `_` keys are dropped,
+        so the new run is an ordinary, editable one with its own ID.
+
+        The configuration is the run's own `config.yaml` (every seeded
+        example has one when its source does); without one, the
+        manifest's recorded parameters stand in, with `_read_only`
+        cleared, and the name and description come from the run's
+        `metadata.json`.
+
+        Args:
+            directory: The run's own directory.
+
+        Returns:
+            `{"ok": True, "values": {...}, "name": ..., "description":
+            ...}` (`load_example`'s shape); `{"ok": False, "message":
+            ...}` when the directory holds neither a usable configuration
+            nor a readable manifest, or its configuration cannot be
+            represented in the form.
+        """
+        run_directory = Path(directory)
+        config_path = run_directory / "config.yaml"
+        if config_path.is_file():
+            try:
+                text = config_path.read_text(encoding="utf-8")
+            except OSError as error:
+                return {"ok": False, "message": str(error)}
+            result = _configuration_form_values(text)
+            labels = _configuration_labels(text)
+        else:
+            try:
+                params = read_manifest(run_directory / "manifest.json").params()
+            except (OSError, ValueError, KeyError) as error:
+                return {"ok": False, "message": str(error)}
+            result = {
+                "ok": True,
+                "values": params_to_form_values(replace(params, read_only=False)),
+            }
+            labels = {}
+        if not result["ok"]:
+            return result
+        name, description = _run_name_and_description(run_directory)
+        self._sync_default_run_settings_from_loaded_config(result["values"])
+        return {
+            "ok": True,
+            "values": result["values"],
+            "name": labels.get("name") or name,
+            "description": labels.get("description") or description,
+        }
+
+    @_log_bridge_call
     def list_presets(self) -> dict[str, Any]:
         """Return every preset's own id, title, and origin — built-in or user-saved.
 
@@ -5209,6 +5273,12 @@ class Api:
             failure, an edited file, or a generation that does not
             exist) — `message` is shown verbatim, matching `fim
             stats`'s own wording.
+
+            When the trajectory file is absent but the run's
+            `report.json` is present (a seeded example, read-only
+            examples design §4.3), the result is
+            `_report_only_run_payload`'s instead: the same shape with
+            `reportOnly: True`, the saved statistics, and no curves.
         """
         trajectory_path_text = values.get("trajectoryPath", "")
         if not trajectory_path_text:
@@ -5223,6 +5293,16 @@ class Api:
         except ValueError as error:
             return {"ok": False, "message": str(error)}
         trajectory_path = Path(trajectory_path_text)
+        # A seeded example ships its saved results without the (often
+        # gigabytes-large) trajectory: show what was saved (read-only
+        # examples design §4.3) rather than failing to re-analyze.
+        if (
+            not trajectory_path.exists()
+            and (trajectory_path.parent / "report.json").is_file()
+        ):
+            return _report_only_run_payload(
+                trajectory_path.parent, self._significant_digits
+            )
         try:
             reanalyzed = reanalyze_trajectory(
                 trajectory_path,
@@ -5370,7 +5450,10 @@ class Api:
             any one replicate's own trajectory fails its integrity
             check (`reanalyze_trajectory`'s own `ValueError`/`OSError`
             cases) -- the identical failure shape `open_run` already
-            uses for the same class of problem, one level up.
+            uses for the same class of problem, one level up. A batch
+            whose replicate trajectories are absent but whose
+            `summary.json` is present (a seeded example) gets
+            `_report_only_batch_payload`'s result instead.
         """
         batch_directory = Path(directory)
         try:
@@ -5378,6 +5461,20 @@ class Api:
         except (OSError, ValueError) as error:
             return {"ok": False, "message": str(error)}
         params = manifest.params()
+        # A seeded batch example ships its saved summary without the
+        # replicates' trajectories (read-only examples design §4.3).
+        if (batch_directory / "summary.json").is_file() and not all(
+            (
+                batch_runner.replicate_output_directory(
+                    batch_directory, manifest.run_id, replicate_run_id
+                )
+                / "trajectory.jsonl"
+            ).exists()
+            for replicate_run_id in manifest.replicate_run_ids
+        ):
+            return _report_only_batch_payload(
+                batch_directory, manifest, self._significant_digits
+            )
         reports: list[FinalReport] = []
         final_states: list[ModelState] = []
         trajectory_paths: list[Path] = []
@@ -7149,6 +7246,11 @@ def _pooled_batch_payload(
     except ValueError:
         panels = pooled_scatter_panels((), params.d)
     try:
+        # No final states at all (a batch reopened from its saved
+        # summary alone, `_report_only_batch_payload`) has nothing to
+        # pool; the pooling functions index the first state.
+        if not final_states:
+            raise ValueError("no final states to pool")
         literature_visuals = pooled_literature_visual_payload(final_states, params)
     except ValueError:
         literature_visuals = {
@@ -8263,8 +8365,26 @@ def _example_form_values(example: presets.Example) -> dict[str, Any]:
                 "explains how to reproduce it"
             ),
         }
+    return _configuration_form_values(example.yaml_text)
+
+
+def _configuration_form_values(yaml_text: str) -> dict[str, Any]:
+    """Return a configuration's model keys as form values.
+
+    Shared by a bundled example (`_example_form_values`) and a saved
+    run's own `config.yaml` (`Api.load_run_configuration`): labels and
+    internal `_` keys are removed first (`presets.split_configuration`).
+
+    Args:
+        yaml_text: The configuration text.
+
+    Returns:
+        `{"ok": True, "values": {...}}`, or `{"ok": False, "message":
+        ...}` when it does not parse, does not validate, or has no form
+        representation.
+    """
     try:
-        payload = yaml.safe_load(example.yaml_text)
+        payload = yaml.safe_load(yaml_text)
         if not isinstance(payload, Mapping):
             return {"ok": False, "message": "the configuration is not a mapping"}
         model, _labels = presets.split_configuration(payload)
@@ -8272,6 +8392,158 @@ def _example_form_values(example: presets.Example) -> dict[str, Any]:
     except (ValueError, yaml.YAMLError) as error:
         return {"ok": False, "message": str(error)}
     return {"ok": True, "values": values}
+
+
+def _configuration_labels(yaml_text: str) -> dict[str, str]:
+    """Return a configuration's `name` and `description` labels that are text.
+
+    Anything unparsable or non-text yields no label; the caller falls
+    back to the run's `metadata.json`.
+    """
+    try:
+        payload = yaml.safe_load(yaml_text)
+    except yaml.YAMLError:
+        return {}
+    if not isinstance(payload, Mapping):
+        return {}
+    _model, labels = presets.split_configuration(payload)
+    return {
+        key: value.strip()
+        for key, value in labels.items()
+        if key in {"name", "description"} and isinstance(value, str) and value.strip()
+    }
+
+
+def _report_only_run_payload(directory: Path, digits: int) -> dict[str, Any]:
+    """Build `Api.open_run`'s result from a run's saved files, without a trajectory.
+
+    Read-only examples design §4.3: a seeded example ships its
+    `manifest.json` and `report.json` but not `trajectory.jsonl`, so it
+    cannot be re-analyzed. The statistics panel and the messages come
+    from the saved report; everything that needs the trajectory (the
+    scatter, the curves, the scrubber, the deme-pair rows) is absent,
+    and `reportOnly` tells the page to say so and offer "Run it".
+
+    Args:
+        directory: The run's own directory.
+        digits: Significant digits for every formatted value.
+
+    Returns:
+        `open_run`'s success shape with `reportOnly: True`,
+        `readOnly`, no `panels`, and no `trajectoryPath`; or
+        `{"ok": False, "message": ...}` when the manifest or the report
+        cannot be read.
+    """
+    try:
+        manifest = read_manifest(directory / "manifest.json")
+        params = manifest.params()
+    except (OSError, ValueError, KeyError) as error:
+        return {"ok": False, "message": str(error)}
+    report = _read_json_object(directory / "report.json")
+    if report is None or "reason" not in report or "generation" not in report:
+        return {
+            "ok": False,
+            "message": f"no trajectory and no readable report.json in {directory}",
+        }
+    return {
+        "ok": True,
+        "reportOnly": True,
+        "readOnly": groups.is_run_read_only(directory),
+        "runId": manifest.run_id,
+        "directoryName": directory.name,
+        "configSummary": _run_config_summary(params),
+        "convergenceNote": _derived_convergence_note_from_manifest(manifest, params),
+        "report": report,
+        "panels": None,
+        "statistics": {
+            name: format_report_statistic(report, name, digits)
+            for name in _RESULT_STATISTIC_NAMES
+        },
+        "pairStatistics": None,
+        "effectiveAlleles": _effective_allele_summary(report, digits),
+        "literatureVisuals": None,
+        "outputDirectory": str(directory),
+        "trajectoryPath": None,
+        "generationCount": manifest.generation_count,
+        "demeCount": params.d,
+        "sigmaBand": _sigma_band_payload(manifest, digits),
+        "convergenceGenerations": None,
+        "convergenceHistories": None,
+        "equilibrium": _equilibrium_reference_payload(params, FULL_PRECISION_DIGITS),
+        "identityRecovery": _identity_recovery_reference_payload(params),
+        "closedForm": _closed_form_trajectory_payload(params),
+        "convergence": _convergence_reference_payload(params),
+    }
+
+
+def _report_only_batch_payload(
+    directory: Path, manifest: BatchManifest, digits: int
+) -> dict[str, Any]:
+    """Build `Api.open_batch`'s result from a batch's saved files only.
+
+    The batch counterpart of `_report_only_run_payload`: the replicate
+    table comes from each replicate's saved `report.json` (a replicate
+    without one is left out), and the statistics panel from the batch's
+    saved `summary.json`. Nothing needs a trajectory: no pooled curve,
+    no scatter.
+
+    Args:
+        directory: The batch's own directory.
+        manifest: Its batch manifest, already read.
+        digits: Significant digits for every formatted value.
+
+    Returns:
+        `open_batch`'s success shape with `reportOnly: True` and
+        `readOnly`.
+    """
+    params = manifest.params()
+    replicate_ids: list[str] = []
+    reports: list[FinalReport] = []
+    trajectory_paths: list[Path] = []
+    for replicate_run_id in manifest.replicate_run_ids:
+        replicate_directory = batch_runner.replicate_output_directory(
+            directory, manifest.run_id, replicate_run_id
+        )
+        report = _read_json_object(replicate_directory / "report.json")
+        if report is None:
+            continue
+        replicate_ids.append(replicate_run_id)
+        reports.append(cast("FinalReport", report))
+        trajectory_paths.append(replicate_directory / "trajectory.jsonl")
+    payload = _pooled_batch_payload(
+        params,
+        manifest.run_id,
+        directory,
+        replicate_ids=replicate_ids,
+        reports=reports,
+        final_states=[],
+        trajectory_paths=trajectory_paths,
+        digits=digits,
+        pooled_convergence_histories_payload={},
+        convergence_note=_derived_convergence_note(params),
+    )
+    # The saved summary is what the run reported; it wins over one
+    # recomputed from whichever replicate reports happen to be saved.
+    raw_summary = _read_json_object(directory / "summary.json") or {}
+    intervals = {
+        name: interval
+        for name, interval in raw_summary.items()
+        if isinstance(interval, Mapping) and "mean" in interval
+    }
+    if intervals:
+        payload["summary"] = {
+            name: _interval_payload(interval, digits)
+            for name, interval in intervals.items()
+        }
+        payload["effectiveAlleles"] = _effective_allele_interval_summary(
+            intervals, digits
+        )
+    return {
+        "ok": True,
+        **payload,
+        "reportOnly": True,
+        "readOnly": groups.is_run_read_only(directory),
+    }
 
 
 def _branding_directory() -> Path:
