@@ -15,6 +15,9 @@ for that first. For parameter types and defaults, use the
 <li><a href="#check-for-updates">Check for updates</a></li>
 <li><a href="#desktop-gui-fim-gui">Desktop GUI (<code>fim-gui</code>)</a></li>
 <li><a href="#names-descriptions-and-documentation">Names, descriptions, and documentation</a></li>
+<li><a href="#the-examples-experiment">The Examples experiment</a></li>
+<li><a href="#read-only-items">Read-only items</a></li>
+<li><a href="#opening-a-saved-example">Opening a saved example</a></li>
 <li><a href="#global-flags">Global flags</a></li>
 <li><a href="#output-schemas">Output schemas</a></li>
 <li><a href="#reproduce-a-run">Reproduce a run</a></li>
@@ -137,7 +140,10 @@ example's values fill the form, and its name and description fill the
 run it. <strong>View YAML</strong> shows the example's configuration file, ready to
 copy. An example that the form cannot represent (a per-locus <code>mu</code>, for
 example) or that has no configuration file says so in the dialog, and
-<strong>Load into Configure</strong> stays unavailable for it.</p>
+<strong>Load into Configure</strong> stays unavailable for it. <strong>Open saved result</strong>
+shows the example's own result, as shipped with the app, without running
+anything (see <a href="#opening-a-saved-example">Opening a saved example</a>); it is
+unavailable for an example whose result has not been saved yet.</p>
 <h3 id="unequal-island-sizes-with-a-migration-hub">Unequal island sizes with a migration hub</h3>
 <p>Four demes of very different size, connected by an explicit <code>d x d</code>
 migration matrix rather than one shared rate — a small &quot;hub&quot; topology
@@ -729,7 +735,7 @@ action the matching on-screen control already performs.</p>
 <tbody>
 <tr>
 <td>Home</td>
-<td>An Experiment/Study/Run tree: every Experiment expands to its own Studies, each expanding to its own Runs, each row carrying a config-summary and a final-statistics/outcome column read from that run's own <code>report.json</code>/<code>summary.json</code> — a batch row's outcome is its own confidence interval, and is expandable to its individual replicates, each independently reachable for re-analysis. Selecting a scalar or batch row and clicking &quot;Open&quot; (or double-clicking it directly) opens the identical Results card either way — a batch's own pooled statistics, table, and scatter, rebuilt fresh from its own persisted replicates, not only what a live batch's own completion shows. A Study row's own &quot;Open…&quot; goes one level up: every member run, and every replicate of every member batch, pooled together the same way — a mismatched parameter across members (say, two different <code>d</code> values) is never refused, only named in a &quot;varies across members&quot; note, since intentionally pooling runs in the same parameter neighborhood is a legitimate choice a botanist is free to make. A run always belongs to a Study; a botanist who never organizes anything still has one to start from — a default Study, inside a default Experiment, created automatically the first time it's needed. An Experiment row's own &quot;Create study…&quot; and a Study row's own &quot;Create run…&quot; (which opens Configure with that Study already selected) put creation on the row that receives it, rather than a separate step elsewhere; &quot;Create experiment…&quot; beside the filter bar is the one page-level exception, since a new Experiment has no row of its own yet to hang the action off of. Deletion is Select/Select all/Delete: every row (Run, Study, Experiment) gets a checkbox, hidden until &quot;Select&quot; is toggled on, and &quot;Delete selected&quot; removes exactly what was checked — deleting a Study or Experiment cascades to its own Runs, named explicitly in the confirmation so a botanist never underestimates what is about to disappear. A recent-runs row, or browsing for a <code>trajectory.jsonl</code> directly, re-renders its summary and scatter (and, for a multi-generation run, its own scrubber) at any persisted generation, with the same optional differentiation-<code>q</code> sweep. Reachable from the rail's own Home button, or the File menu's &quot;Open run…&quot;, from any screen</td>
+<td>An Experiment/Study/Run tree: every Experiment expands to its own Studies, each expanding to its own Runs, each row carrying a config-summary and a final-statistics/outcome column read from that run's own <code>report.json</code>/<code>summary.json</code> — a batch row's outcome is its own confidence interval, and is expandable to its individual replicates, each independently reachable for re-analysis. Selecting a scalar or batch row and clicking &quot;Open&quot; (or double-clicking it directly) opens the identical Results card either way — a batch's own pooled statistics, table, and scatter, rebuilt fresh from its own persisted replicates, not only what a live batch's own completion shows. A Study row's own &quot;Open…&quot; goes one level up: every member run, and every replicate of every member batch, pooled together the same way — a mismatched parameter across members (say, two different <code>d</code> values) is never refused, only named in a &quot;varies across members&quot; note, since intentionally pooling runs in the same parameter neighborhood is a legitimate choice a botanist is free to make. A run always belongs to a Study; a botanist who never organizes anything still has one to start from — a default Study, inside a default Experiment, created automatically the first time it's needed. An Experiment row's own &quot;Create study…&quot; and a Study row's own &quot;Create run…&quot; (which opens Configure with that Study already selected) put creation on the row that receives it, rather than a separate step elsewhere; &quot;Create experiment…&quot; beside the filter bar is the one page-level exception, since a new Experiment has no row of its own yet to hang the action off of. The read-only <a href="#the-examples-experiment">Examples experiment</a>, holding the shipped worked examples, is always listed last; its rows carry a lock and offer no edits (<a href="#read-only-items">Read-only items</a>). Deletion is Select/Select all/Delete: every row (Run, Study, Experiment) gets a checkbox, hidden until &quot;Select&quot; is toggled on, and &quot;Delete selected&quot; removes exactly what was checked — deleting a Study or Experiment cascades to its own Runs, named explicitly in the confirmation so a botanist never underestimates what is about to disappear. A recent-runs row, or browsing for a <code>trajectory.jsonl</code> directly, re-renders its summary and scatter (and, for a multi-generation run, its own scrubber) at any persisted generation, with the same optional differentiation-<code>q</code> sweep. Reachable from the rail's own Home button, or the File menu's &quot;Open run…&quot;, from any screen</td>
 <td><a href="#re-analyze-a-trajectory">Re-analyze a trajectory</a></td>
 </tr>
 <tr>
@@ -838,9 +844,58 @@ runs. The Experiment is the one holding the study chosen in Configure, or
 the one holding the run once it finishes.</li>
 </ul>
 <p>From the terminal, <code>fim study create</code> and <code>fim experiment create</code> take
-<code>--description</code> and <code>--documentation</code>; <code>fim run</code> takes <code>--name</code> and
-<code>--description</code>. A run's name and description live in its own
-<code>metadata.json</code>, beside <code>manifest.json</code>, which they never change.</p>
+<code>--description</code> and <code>--documentation</code>. A run gets its name and
+description either from <code>fim run --name</code> and <code>--description</code>, or from the
+<code>name</code> and <code>description</code> <a href="#" data-fim-help="configuration" data-fim-anchor="run-labels">run labels</a> in its
+configuration file (with an optional <code>class</code>); the options win over the
+labels. A run's name, description, and class live in its own
+<code>metadata.json</code>, beside <code>manifest.json</code>, which they never change, and are
+never part of the run's ID: renaming a configuration does not make it a
+different run. The labels are written only when the run has no
+<code>metadata.json</code> yet, so they never overwrite a name you changed later.</p>
+<h3 id="the-examples-experiment">The Examples experiment</h3>
+<p>Home always lists one more Experiment, <strong>Examples</strong>, last, after your own
+work. It holds the worked examples that ship with the app, one Study per
+example class (a class inside another is named &quot;Parent — Child&quot;), each
+holding that class's examples as runs with their saved results. The app
+writes these when it starts, into an <code>examples</code> folder inside your results
+folder, and writes them again if you remove them; a newer version of the
+app replaces them with its own. An example whose result has not been saved
+yet is not listed here, but is still in the Examples dialog, ready to load
+into Configure.</p>
+<h3 id="read-only-items">Read-only items</h3>
+<p>The Examples experiment, its Studies, and their runs are <strong>read-only</strong>. A
+lock beside the name marks them in Home, in the details dialog, and in the
+Run card's title. You can open, view, compare, and copy them, but not
+rename, describe, document, or delete them, or add or remove members:
+those controls are unavailable, and hovering one says why. To work with
+one:</p>
+<ul>
+<li><strong>A run:</strong> open it and click <strong>Run it</strong>, or use <strong>Load into Configure</strong>
+in the Examples dialog. Configure receives an ordinary, editable copy,
+with the example's name and description in the Run name and Run
+description boxes; running it makes a new run of your own.</li>
+<li><strong>A Study or the Experiment:</strong> click <strong>Copy</strong> on its row. The copy is an
+ordinary, editable grouping that refers to the same runs.</li>
+</ul>
+<p>You can add an example run to one of your own Studies (&quot;Add to study…&quot;);
+deleting that Study later keeps the example. &quot;Select all&quot; never selects a
+read-only item, and a deletion that names one is refused as a whole:
+nothing at all is deleted. From the terminal, the same edits stop with an
+error naming the read-only item. A configuration marks its run read-only
+with <a href="#" data-fim-help="configuration" data-fim-anchor="_read_only"><code>_read_only</code></a>; only the shipped examples
+should use it.</p>
+<h3 id="opening-a-saved-example">Opening a saved example</h3>
+<p>An example's run ships without its trajectory, which can be very large,
+so it opens from its saved results alone: open it from Home (double-click
+its row) or with <strong>Open saved result</strong> in the Examples dialog. The
+statistics panel and the messages under it show the saved result, exactly
+as the example produced it. The graph area says <strong>Run this example to see
+its trajectories</strong>, with a <strong>Run it</strong> button: it loads the example into
+Configure as an editable copy, and running that copy produces the full
+scatter plot, trajectories, and scrubber. The copy is your own run, with
+its own ID, so it never replaces the example. A batch example opens the
+same way, from its saved <code>summary.json</code> and each replicate's <code>report.json</code>.</p>
 <h3 id="if-the-window-closes-but-fim-keeps-running">If the window closes but <code>fim</code> keeps running</h3>
 <p>Closing the window should end the program immediately. If something
 inside it fails to stop, <code>fim</code> guards against being left running
