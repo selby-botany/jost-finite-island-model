@@ -1,3 +1,8 @@
+name: Jost (2008) Part VI
+description: >-
+  The four-island parameter set that anchors the simulator's calibration.
+class: calibration-jost
+_read_only: true  # marks the shipped copy read-only; delete it in your own copy
 N: 100
 ploidy: haploid
 d: 4

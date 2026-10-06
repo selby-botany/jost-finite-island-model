@@ -1,3 +1,9 @@
+name: Distance statistics from a founder split
+description: >-
+  Three islands fixed for different alleles: a one-generation check of the
+  literature statistics.
+class: statistics-and-convergence
+_read_only: true  # marks the shipped copy read-only; delete it in your own copy
 N: 200
 ploidy: haploid
 d: 3

@@ -1,3 +1,9 @@
+name: Per-base mutation rate
+description: >-
+  One per-base mutation rate gives a 50-base and a 500-base locus different
+  mutation rates.
+class: mutation-and-founding
+_read_only: true  # marks the shipped copy read-only; delete it in your own copy
 N: 150
 ploidy: haploid
 d: 3

@@ -1,3 +1,9 @@
+name: Large-d batch, vector engine
+description: >-
+  A short 16-replicate timing workload with 70 islands under the
+  generational-vector engine.
+class: replicates-and-engines
+_read_only: true  # marks the shipped copy read-only; delete it in your own copy
 N: 500
 ploidy: haploid
 d: 70

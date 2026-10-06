@@ -150,7 +150,13 @@ unavailable for an example whose result has not been saved yet.</p>
 migration matrix rather than one shared rate — a small &quot;hub&quot; topology
 where deme 4 is both the largest and the best-connected:</p>
 <!-- worked-example-config: examples/unequal-island-sizes-with-a-migration-hub/config.yaml -->
-<pre><code class="language-yaml">N: [200, 200, 200, 800]
+<pre><code class="language-yaml">name: Unequal islands with a hub
+description: &gt;-
+  Three small islands and one large, well-connected hub island, joined by an
+  explicit migration matrix.
+class: migration
+_read_only: true  # marks the shipped copy read-only; delete it in your own copy
+N: [200, 200, 200, 800]
 ploidy: haploid
 d: 4
 m:
@@ -183,7 +189,13 @@ down, since it is both the largest deme and the best-connected one.</p>
 <code>fim.model.topology</code>'s compact sugar for a sparse migration matrix, instead
 of hand-writing all 36 matrix entries:</p>
 <!-- worked-example-config: examples/stepping-stone-spatial-migration/config.yaml -->
-<pre><code class="language-yaml">N: 150
+<pre><code class="language-yaml">name: Stepping-stone migration
+description: &gt;-
+  Six islands on a ring, each exchanging migrants only with its two
+  neighbors.
+class: migration
+_read_only: true  # marks the shipped copy read-only; delete it in your own copy
+N: 150
 ploidy: haploid
 d: 6
 m:
@@ -219,7 +231,13 @@ computes every statistic at the converged generation regardless of this
 setting; the flag only changes what is available generation by generation
 before that point.</p>
 <!-- worked-example-config: examples/literature-distance-statistics-from-an-explicit-founder-split/config.yaml -->
-<pre><code class="language-yaml">N: 200
+<pre><code class="language-yaml">name: Distance statistics from a founder split
+description: &gt;-
+  Three islands fixed for different alleles: a one-generation check of the
+  literature statistics.
+class: statistics-and-convergence
+_read_only: true  # marks the shipped copy read-only; delete it in your own copy
+N: 200
 ploidy: haploid
 d: 3
 m: 0.0
@@ -259,7 +277,13 @@ so the demes
 already differ a little at generation 0 purely from which copies each one
 happened to receive, a genuine founder effect rather than an assumption:</p>
 <!-- worked-example-config: examples/equilibrium-split-founding/config.yaml -->
-<pre><code class="language-yaml">N: 200
+<pre><code class="language-yaml">name: Equilibrium-split founding
+description: &gt;-
+  Islands founded by splitting one ancestral population that has already
+  settled.
+class: mutation-and-founding
+_read_only: true  # marks the shipped copy read-only; delete it in your own copy
+N: 200
 ploidy: haploid
 d: 3
 m: 0.005
@@ -295,7 +319,13 @@ generation's frequencies. migrant_sampling: stochastic instead draws the
 migrant <em>count</em> from <code>Binomial(N, rate)</code>, adding a genuine, explicit source
 of randomness some studies want counted:</p>
 <!-- worked-example-config: examples/stochastic-migrant-counts/config.yaml -->
-<pre><code class="language-yaml">N: 100
+<pre><code class="language-yaml">name: Stochastic migrant counts
+description: &gt;-
+  Draws each generation's number of migrants at random instead of using a
+  fixed fraction.
+class: migration
+_read_only: true  # marks the shipped copy read-only; delete it in your own copy
+N: 100
 ploidy: haploid
 d: 4
 m: 0.05
@@ -323,7 +353,12 @@ elsewhere in the run — deliberately exercised here with a very short
 3-base locus (only 4<sup>3</sup> = 64 states) and a high <code>mu</code> so recurrence is
 actually likely within the run, not just theoretically possible:</p>
 <!-- worked-example-config: examples/finite-length-alleles-the-k-allele-model/config.yaml -->
-<pre><code class="language-yaml">N: 100
+<pre><code class="language-yaml">name: Finite-length alleles
+description: &gt;-
+  A three-base locus with only 64 possible alleles, so mutations can recur.
+class: mutation-and-founding
+_read_only: true  # marks the shipped copy read-only; delete it in your own copy
+N: 100
 ploidy: haploid
 d: 3
 m: 0.02
@@ -352,7 +387,13 @@ carry an explicit finite-<code>d</code> correction. This example keeps <code>d</
 that the correction matters; increasing <code>d</code> while holding <code>N</code>, <code>m</code>, and <code>mu</code>
 fixed moves G<sub>ST</sub> toward the infinite-island approximation.</p>
 <!-- worked-example-config: examples/wright-takahata-finite-deme-correction/config.yaml -->
-<pre><code class="language-yaml">N: 500
+<pre><code class="language-yaml">name: Wright-Takahata finite-island correction
+description: &gt;-
+  Eight islands, few enough that the finite-island correction to G_ST
+  matters.
+class: statistics-and-convergence
+_read_only: true  # marks the shipped copy read-only; delete it in your own copy
+N: 500
 ploidy: haploid
 d: 8
 m: 0.003
@@ -379,7 +420,13 @@ isolation-by-distance panel to show the short-distance decay pattern from
 Kimura and Weiss. The run is still small enough for an interactive example,
 but large enough that distances 1 through 10 exist on the ring.</p>
 <!-- worked-example-config: examples/kimura-weiss-isolation-by-distance/config.yaml -->
-<pre><code class="language-yaml">N: 200
+<pre><code class="language-yaml">name: Kimura-Weiss isolation by distance
+description: &gt;-
+  Twenty islands on a ring, where near neighbors are more alike than distant
+  islands.
+class: migration
+_read_only: true  # marks the shipped copy read-only; delete it in your own copy
+N: 200
 ploidy: haploid
 d: 20
 m:
@@ -406,7 +453,13 @@ probability; each locus derives its own <code>mu</code> from μ<sub>b</sub> and 
 <code>length</code> via mu = 1 - (1 - μ<sub>b</sub>)<sup>length</sup> — so two loci of very
 different lengths do not silently mutate at the same rate:</p>
 <!-- worked-example-config: examples/per-base-mutation-rate-across-unequal-locus-lengths/config.yaml -->
-<pre><code class="language-yaml">N: 150
+<pre><code class="language-yaml">name: Per-base mutation rate
+description: &gt;-
+  One per-base mutation rate gives a 50-base and a 500-base locus different
+  mutation rates.
+class: mutation-and-founding
+_read_only: true  # marks the shipped copy read-only; delete it in your own copy
+N: 150
 ploidy: haploid
 d: 3
 m: 0.02
@@ -431,7 +484,12 @@ canonical form μ<sub>b</sub> is sugar for; μ<sub>b</sub> itself is never store
 of them stable (convergence_combinator: all, the default) or just one
 (<code>any</code>):</p>
 <!-- worked-example-config: examples/several-convergence-statistics/config.yaml -->
-<pre><code class="language-yaml">N: 150
+<pre><code class="language-yaml">name: Several convergence statistics
+description: &gt;-
+  Watches D and G_ST together and stops when either one settles.
+class: statistics-and-convergence
+_read_only: true  # marks the shipped copy read-only; delete it in your own copy
+N: 150
 ploidy: haploid
 d: 3
 m: 0.02
@@ -458,7 +516,13 @@ across-replicate confidence interval in the next example, which asks how
 much independent replicates disagree with each other, not how noisy any one
 of them still is:</p>
 <!-- worked-example-config: examples/within-run-sigma-band/config.yaml -->
-<pre><code class="language-yaml">N: 150
+<pre><code class="language-yaml">name: Within-run sigma band
+description: &gt;-
+  Keeps running after convergence to show how much D still varies from one
+  generation to the next.
+class: statistics-and-convergence
+_read_only: true  # marks the shipped copy read-only; delete it in your own copy
+N: 150
 ploidy: haploid
 d: 4
 m: 0.02
@@ -488,7 +552,13 @@ set n<sub>replicates</sub> well above the plausible requirement and let
 <a href="#" data-fim-help="configuration" data-fim-anchor="replicate_tolerance">replicate_tolerance</a> decide when
 enough have run:</p>
 <!-- worked-example-config: examples/an-adaptive-replicate-batch-with-a-confidence-interval/config.yaml -->
-<pre><code class="language-yaml">N: 100
+<pre><code class="language-yaml">name: Adaptive replicate batch
+description: &gt;-
+  Runs replicates, up to 50, until the confidence interval for D is narrow
+  enough.
+class: replicates-and-engines
+_read_only: true  # marks the shipped copy read-only; delete it in your own copy
+N: 100
 ploidy: haploid
 d: 5
 m: 0.01
@@ -530,7 +600,13 @@ grows large enough — see <a href="#" data-fim-external="https://github.com/sel
 backend</a> for the
 full measured comparison this example's own shape is drawn from:</p>
 <!-- worked-example-config: examples/a-large-d-batch-under-generational-vector/config.yaml -->
-<pre><code class="language-yaml">N: 500
+<pre><code class="language-yaml">name: Large-d batch, vector engine
+description: &gt;-
+  A short 16-replicate timing workload with 70 islands under the
+  generational-vector engine.
+class: replicates-and-engines
+_read_only: true  # marks the shipped copy read-only; delete it in your own copy
+N: 500
 ploidy: haploid
 d: 70
 m: 0.05
@@ -566,7 +642,13 @@ and the plain <code>generational</code> engine, which this project's own measure
 benchmarks find winning over <code>generational-vector</code> in exactly this kind of
 region (moderate <code>d</code>, a longer locus):</p>
 <!-- worked-example-config: examples/a-long-locus-batch-under-the-generational-engine/config.yaml -->
-<pre><code class="language-yaml">N: 500
+<pre><code class="language-yaml">name: Long-locus batch, generational engine
+description: &gt;-
+  A short 16-replicate timing workload with 35 islands and a seven-base
+  locus under the generational engine.
+class: replicates-and-engines
+_read_only: true  # marks the shipped copy read-only; delete it in your own copy
+N: 500
 ploidy: haploid
 d: 35
 m: 0.05

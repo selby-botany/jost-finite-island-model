@@ -1,3 +1,9 @@
+name: Within-run sigma band
+description: >-
+  Keeps running after convergence to show how much D still varies from one
+  generation to the next.
+class: statistics-and-convergence
+_read_only: true  # marks the shipped copy read-only; delete it in your own copy
 N: 150
 ploidy: haploid
 d: 4

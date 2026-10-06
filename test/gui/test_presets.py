@@ -17,7 +17,6 @@ import yaml
 
 from fim.gui.presets import (
     Preset,
-    get_example,
     get_preset,
     list_presets,
     load_catalog,
@@ -33,22 +32,28 @@ _REAL_WEBUI_DIRECTORY = _ROOT / "src" / "fim" / "gui" / "webui"
 # assigning classes, which regroups them) is meant to need this list
 # updated right alongside it, so a human notices.
 _EXPECTED_PRESET_IDS = (
+    # Migration structure.
     "unequal-island-sizes-with-a-migration-hub",
     "stepping-stone-spatial-migration",
-    "literature-distance-statistics-from-an-explicit-founder-split",
-    "equilibrium-split-founding",
     "stochastic-migrant-counts",
-    "finite-length-alleles-the-k-allele-model",
-    "wright-takahata-finite-deme-correction",
     "kimura-weiss-isolation-by-distance",
+    # Mutation and founding.
+    "equilibrium-split-founding",
+    "finite-length-alleles-the-k-allele-model",
     "per-base-mutation-rate-across-unequal-locus-lengths",
+    # Statistics and convergence.
+    "literature-distance-statistics-from-an-explicit-founder-split",
+    "wright-takahata-finite-deme-correction",
     "several-convergence-statistics",
     "within-run-sigma-band",
+    # Replicates and engines.
     "an-adaptive-replicate-batch-with-a-confidence-interval",
     "a-large-d-batch-under-generational-vector",
     "a-long-locus-batch-under-the-generational-engine",
-    "dear-nolan-low",
+    # Published calibrations: Jost (2008), then the Dear-Nolan scenarios.
     "golden-part-vi",
+    "dear-nolan-high",
+    "dear-nolan-low",
 )
 
 _REAL_PRESETS = list_presets(_REAL_WEBUI_DIRECTORY)
@@ -81,14 +86,13 @@ def test_presets_use_the_canonical_example_configs() -> None:
     assert {preset.preset_id: preset.yaml_text for preset in _REAL_PRESETS} == configs
 
 
-def test_catalog_includes_the_script_reproduced_example_without_yaml() -> None:
-    """`dear-nolan-high` has no `config.yaml`: listed, but not as a preset."""
-    example = get_example(_REAL_WEBUI_DIRECTORY, "dear-nolan-high")
+def test_the_script_derived_example_is_a_preset_with_an_explicit_start() -> None:
+    """`dear-nolan-high`'s `config.yaml` carries its derived start as `p_0`."""
+    preset = get_preset(_REAL_WEBUI_DIRECTORY, "dear-nolan-high")
 
-    assert example is not None
-    assert example.yaml_text is None
-    assert example.readme.startswith("# ")
-    assert get_preset(_REAL_WEBUI_DIRECTORY, "dear-nolan-high") is None
+    assert preset is not None
+    configuration = yaml.safe_load(preset.yaml_text)
+    assert len(configuration["p_0"]) == configuration["d"]
 
 
 def test_every_catalog_example_names_a_class_in_the_tree() -> None:
@@ -109,7 +113,7 @@ def test_get_preset_returns_the_matching_preset() -> None:
     preset = get_preset(_REAL_WEBUI_DIRECTORY, "stepping-stone-spatial-migration")
 
     assert preset is not None
-    assert preset.title == "Stepping-stone (spatial) migration"
+    assert preset.title == "Stepping-stone migration"
     assert "topology: ring" in preset.yaml_text
 
 

@@ -1,0 +1,43 @@
+# Run classes: the groups the Examples dialog shows, in display order.
+#
+# Read and validated by `fim.examples.classes` (its only reader). The
+# tree is shallow: top-level classes plus at most one level of
+# `children`. Every ID is lowercase kebab-case and unique across the
+# whole tree, and every class must hold at least one example (a
+# parent's children count as its own). See `doc/configuration.md`,
+# "Run labels", for the `class` key that names one of these IDs.
+classes:
+  - id: migration
+    title: Migration structure
+    description: >-
+      Unequal islands, migration hubs, rings of neighbors, and random
+      migrant counts.
+  - id: mutation-and-founding
+    title: Mutation and founding
+    description: >-
+      How new alleles arise, and how the islands are stocked at the
+      start of a run.
+  - id: statistics-and-convergence
+    title: Statistics and convergence
+    description: >-
+      Which statistics a run reports, and how it decides that they have
+      settled.
+  - id: replicates-and-engines
+    title: Replicates and engines
+    description: >-
+      Batches of independent runs, confidence intervals, and the faster
+      simulation engines.
+  - id: calibration
+    title: Published calibrations
+    description: >-
+      Longer runs that compare the simulator with published equilibrium
+      values.
+    children:
+      - id: calibration-jost
+        title: Jost (2008)
+        description: The four-island parameter set from Part VI of Jost (2008).
+      - id: calibration-dear-nolan
+        title: Dear-Nolan scenarios
+        description: >-
+          Low- and high-migration plant-population scenarios from the
+          Dear-Nolan simulations.

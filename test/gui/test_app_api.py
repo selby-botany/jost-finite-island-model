@@ -702,9 +702,11 @@ def _labelled_example_catalog(webui: Path) -> None:
 def test_list_examples_mirrors_the_bundled_catalog() -> None:
     """Classes and examples come from the catalog, in its order, with loadability.
 
-    `loadable` is computed, not assumed: the Dear-Nolan high example has
-    no configuration at all and says why in `message`; the per-base `mu_b`
-    example, once refused for its per-locus rates, now loads.
+    `loadable` is computed, not assumed: the per-base `mu_b` example,
+    once refused for its per-locus rates, now loads, and so does the
+    Dear-Nolan high example, whose explicit `p_0` is derived by a
+    script. The path for an example without a configuration is tested
+    with a fixture catalog below.
     """
     catalog = presets_module.load_catalog(app_module._webui_directory())
 
@@ -725,9 +727,8 @@ def test_list_examples_mirrors_the_bundled_catalog() -> None:
     assert per_base["loadable"] is True
     assert per_base["message"] == ""
     scripted = by_id["dear-nolan-high"]
-    assert scripted["loadable"] is False
-    assert scripted["has_configuration"] is False
-    assert "no configuration file" in scripted["message"]
+    assert scripted["loadable"] is True
+    assert scripted["has_configuration"] is True
 
 
 def test_load_example_returns_form_values_and_run_labels() -> None:
@@ -801,13 +802,37 @@ def test_load_example_rejects_an_unknown_id() -> None:
     assert result == {"ok": False, "message": "no such example: not-a-real-example"}
 
 
-def test_load_example_without_a_configuration_does_not_touch_settings() -> None:
-    """The script-reproduced example cannot load, and Settings stay as they were."""
+def test_load_example_without_a_configuration_does_not_touch_settings(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """An example with no configuration cannot load, and Settings stay as they were.
+
+    No shipped example lacks a configuration any more, so a fixture
+    catalog supplies one (`config_yaml: null`, as the catalog generator
+    writes for a directory without `config.yaml`).
+    """
+    _labelled_example_catalog(tmp_path)
+    catalog_path = tmp_path / "examples" / "catalog.json"
+    catalog = json.loads(catalog_path.read_text(encoding="utf-8"))
+    catalog["examples"].append(
+        {
+            **catalog["examples"][0],
+            "id": "scripted",
+            "name": "Scripted example",
+            "config_yaml": None,
+        }
+    )
+    catalog_path.write_text(json.dumps(catalog), encoding="utf-8")
+    monkeypatch.setattr(app_module, "_webui_directory", lambda: tmp_path)
     api = Api()
     before = api.get_default_run_settings()
 
-    result = api.load_example("dear-nolan-high")
+    listed = {example["id"]: example for example in api.list_examples()["examples"]}
+    result = api.load_example("scripted")
 
+    assert listed["scripted"]["loadable"] is False
+    assert listed["scripted"]["has_configuration"] is False
+    assert "no configuration file" in listed["scripted"]["message"]
     assert result["ok"] is False
     assert "no configuration file" in result["message"]
     assert api.get_default_run_settings() == before

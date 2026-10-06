@@ -1,3 +1,9 @@
+name: Stepping-stone migration
+description: >-
+  Six islands on a ring, each exchanging migrants only with its two
+  neighbors.
+class: migration
+_read_only: true  # marks the shipped copy read-only; delete it in your own copy
 N: 150
 ploidy: haploid
 d: 6

@@ -1,3 +1,9 @@
+name: Stochastic migrant counts
+description: >-
+  Draws each generation's number of migrants at random instead of using a
+  fixed fraction.
+class: migration
+_read_only: true  # marks the shipped copy read-only; delete it in your own copy
 N: 100
 ploidy: haploid
 d: 4

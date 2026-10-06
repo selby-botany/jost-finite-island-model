@@ -1,3 +1,9 @@
+name: Wright-Takahata finite-island correction
+description: >-
+  Eight islands, few enough that the finite-island correction to G_ST
+  matters.
+class: statistics-and-convergence
+_read_only: true  # marks the shipped copy read-only; delete it in your own copy
 N: 500
 ploidy: haploid
 d: 8

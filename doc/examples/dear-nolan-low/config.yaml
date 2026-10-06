@@ -1,3 +1,9 @@
+name: Dear-Nolan low migration
+description: >-
+  Five nearly isolated islands run from a random start all the way to
+  equilibrium.
+class: calibration-dear-nolan
+_read_only: true  # marks the shipped copy read-only; delete it in your own copy
 N: 100
 ploidy: haploid
 d: 5

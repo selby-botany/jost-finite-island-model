@@ -1,10 +1,11 @@
 # Dear-Nolan high-migration example
 
-This example is not a normal `fim run` YAML tutorial. It is a worked
-explanation of the exact high-migration botanical scenario used in the
-validation suite, and it shows how to move from a configuration a person
-would naturally write to the final, research-grade initialization used by the
-model.
+This example is a worked explanation of the exact high-migration botanical
+scenario used in the validation suite. It shows how to move from a
+configuration a person would naturally write to the final, research-grade
+initialization used by the model. Like every other example, it runs with
+`fim run` from its `config.yaml`; what is unusual is that a script derives the
+file's starting state (section 6).
 
 The target audience is a botanist or ecological researcher, not a software
 engineer. The goal is clarity: what the model is trying to represent, why the
@@ -151,99 +152,61 @@ Then it builds the initial state with a helper called
 The function is intentionally long and explicit because this is a scientific
 initial condition, not an everyday parameter file.
 
-## 6. The final program, written for a user rather than a software engineer
+## 6. From the derivation to `config.yaml`
 
-The script in this directory keeps the derivation explicit and readable. It
-starts from the natural configuration a user would write, then makes the
-transition to the equilibrium-based initialization in a clear sequence.
+The near-equilibrium state is too long to type by hand: 100 patches, each
+with 63 allele frequencies. The script in this directory, `reproduce.py`,
+derives it and writes it into `config.yaml` as an explicit `p_0` table (see
+[p_0](../../configuration.md#p0) in the configuration reference). The
+derivation is the same code the validation test uses:
 
 ```python
-"""Reproduce the high-migration Dear-Nolan equilibrium case.
-
-This example is intentionally explicit. The natural YAML configuration for
-this case is not sufficient because the published state is a fixed-point
-condition, not a simple random-start simulation.
-"""
-
-from __future__ import annotations
-
-import importlib.util
-import json
-from pathlib import Path
-
-ROOT = Path(__file__).resolve().parents[3]
-TEST_PATH = ROOT / "test" / "validation" / "test_simulator_equilibrium.py"
-
-spec = importlib.util.spec_from_file_location("equilibrium_validation", TEST_PATH)
-module = importlib.util.module_from_spec(spec)
-assert spec is not None and spec.loader is not None
-spec.loader.exec_module(module)
-
-# Step 1: compute the fixed-point identities for this biological scenario.
 within_star, between_star = module._identity_fixed_point(
-    population_size=2000,
-    m=0.01,
-    mu=0.001,
-    d=100,
+    population_size=2000, m=0.01, mu=0.001, d=100
 )
-
-# Step 2: build a near-equilibrium founding state instead of a random start.
-initial_frequencies = module._dn2_equilibrium_start(
+start = module._dn2_equilibrium_start(
     within_fixed_point=within_star,
     between_fixed_point=between_star,
     d=100,
     shared_count=41,
 )
-
-# Step 3: run the simulation for a short horizon to verify stationarity.
-g_values, d_values = module._run_engine_pooled(
-    population_size=2000,
-    m=0.01,
-    mu=0.001,
-    d=100,
-    n_loci=1,
-    horizon=30,
-    replicates=5,
-    seed=992000,
-    initial_frequencies=initial_frequencies,
-)
-
-# Step 4: compare the sample mean with the theoretical equilibrium.
-oracle_g_st, oracle_d = module._identities_to_statistics(within_star, between_star, 100)
-report = {
-    "scenario": "dear_nolan_high",
-    "seed": 992000,
-    "replicates": 5,
-    "N": 2000,
-    "d": 100,
-    "m": 0.01,
-    "mu": 0.001,
-    "horizon": 30,
-    "mean_G_ST": sum(g_values) / len(g_values),
-    "mean_D": sum(d_values) / len(d_values),
-    "oracle_G_ST": oracle_g_st,
-    "oracle_D": oracle_d,
-}
-
-out_path = Path(__file__).with_name("report.json")
-out_path.write_text(json.dumps(report, indent=2) + "\n", encoding="utf-8")
-print(json.dumps(report, indent=2))
 ```
 
-The point is not that the code is clever. The point is that each step has a
-clear biological interpretation.
+The result is 41 alleles shared by every patch, each at frequency 0.00736,
+and 22 alleles private to each patch, each at frequency 0.0317.
+
+The rest of `config.yaml` sets up the validation experiment itself: five
+independently seeded replicates (`n_replicates: 5`, with
+`replicate_tolerance: null` so all five always run), each run for exactly 30
+generations. A 30-generation cap with a 31-generation convergence window
+makes that horizon fixed: the window can never fill, so no replicate stops
+early, and each one ends "at the cap" by design. That is the right reading
+here, because the question is whether the state *stays* at equilibrium, not
+whether it settles.
+
+The script never changes anything unless you ask it to:
+
+```console
+python3 doc/examples/dear-nolan-high/reproduce.py           # print the file
+python3 doc/examples/dear-nolan-high/reproduce.py --check   # is it current?
+python3 doc/examples/dear-nolan-high/reproduce.py --write   # rewrite it
+```
 
 ## 7. What the output means biologically
 
-Running the script produces a mean around:
+The run writes `summary.json`, the mean of each statistic over the five
+replicates with a 95% confidence interval:
 
-- G_ST ≈ 0.0219
-- D ≈ 0.908
+| Statistic | Five-replicate mean | Predicted equilibrium |
+|---|---|---|
+| G<sub>ST</sub> | 0.02203 ± 0.00035 | 0.02196 |
+| D | 0.9109 ± 0.0029 | 0.9088 |
 
-This is the published high-migration equilibrium: low differentiation between
-patches, but still enough structure that Jost's D remains high. The fixed-point
-configuration is therefore a realistic scientific test of the model's
-stationarity, not a random drift measurement.
+Both predictions lie inside their intervals. This is the published
+high-migration equilibrium: low differentiation between patches, but still
+enough structure that Jost's D remains high. The fixed-point configuration
+is therefore a realistic scientific test of the model's stationarity, not a
+random drift measurement.
 
 In more botanical terms, the high-migration scenario describes many patches
 connected strongly by dispersal, where species-level differentiation is low,
@@ -253,14 +216,15 @@ to examine.
 
 ## 8. The shortest, clearest summary
 
-If someone asks, "why is this example different from a normal YAML run?" the
+If someone asks, "why is this example different from the other examples?" the
 answer is:
 
 - the literature scenario is an equilibrium calculation, not a generic random
   initialization
 - the validation case constructs a starting population already sitting at the
-  fixed point of the recursion
-- the script therefore checks whether `fim` preserves that equilibrium under
+  fixed point of the recursion, and `config.yaml` carries that population as
+  an explicit `p_0`
+- the run therefore checks whether `fim` preserves that equilibrium under
   the model dynamics rather than waiting for the system to find it by chance
 
 That is why the example is longer and more explanatory than the other worked
@@ -272,7 +236,22 @@ reasonably specialized.
 From the repository root:
 
 ```console
-python3 doc/examples/dear-nolan-high/reproduce.py
+fim run doc/examples/dear-nolan-high/config.yaml \
+    --output results/dear-nolan-high --quiet
 ```
 
-This writes `doc/examples/dear-nolan-high/report.json`.
+The five replicates run in parallel, one worker process per processor, and
+take about two minutes on ordinary development hardware.
+`results/dear-nolan-high/summary.json` matches `summary.json` in this
+directory exactly, and each `replicate-NNN/report.json` matches its
+committed copy.
+
+## Files in this directory
+
+| File | Description |
+|---|---|
+| `config.yaml` | Complete simulation configuration, written by `reproduce.py` |
+| `reproduce.py` | Derives the near-equilibrium `p_0` and writes `config.yaml` |
+| `manifest.json`, `summary.json` | The batch's metadata and five-replicate summary |
+| `replicate-NNN/` | Each replicate's own `manifest.json` and `report.json` |
+| `README.md` | This document |

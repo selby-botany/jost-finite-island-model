@@ -1,3 +1,9 @@
+name: Equilibrium-split founding
+description: >-
+  Islands founded by splitting one ancestral population that has already
+  settled.
+class: mutation-and-founding
+_read_only: true  # marks the shipped copy read-only; delete it in your own copy
 N: 200
 ploidy: haploid
 d: 3

@@ -71,6 +71,8 @@ EXPECTED: dict[str, str | None] = {
     "a-large-d-batch-under-generational-vector": NONE,
     "a-long-locus-batch-under-the-generational-engine": NONE,
     "dear-nolan-low": ISLAND,
+    # Equal sizes, scalar m, and an explicit derived start (`p_0`).
+    "dear-nolan-high": ISLAND,
     "golden-part-vi": ISLAND,
     "starter": ISLAND,
 }
@@ -223,11 +225,23 @@ LOCI = 12
 STANDARD_ERRORS = 5.0
 MINIMUM_HORIZON = 60
 
+# Examples the engine comparison below cannot run the way it runs the others.
+# `dear-nolan-high`'s explicit `p_0` holds one locus, so raising the locus
+# count to `LOCI` would make it invalid, and its 100 demes of 2,000 gene
+# copies would make eight 1,500-generation runs take hours. Its curve is
+# still checked for shape and range above.
+ENGINE_CHECK_EXCLUDED = frozenset({"dear-nolan-high"})
+
 
 @pytest.mark.slow
 @pytest.mark.statistical
 @pytest.mark.parametrize(
-    "name", [name for name, kind in sorted(EXPECTED.items()) if kind is not NONE]
+    "name",
+    [
+        name
+        for name, kind in sorted(EXPECTED.items())
+        if kind is not NONE and name not in ENGINE_CHECK_EXCLUDED
+    ],
 )
 def test_engine_agrees_with_the_payload_for_every_example(
     name: str, tmp_path: Path, monkeypatch: pytest.MonkeyPatch

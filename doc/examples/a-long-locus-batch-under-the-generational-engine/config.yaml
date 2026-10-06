@@ -1,3 +1,9 @@
+name: Long-locus batch, generational engine
+description: >-
+  A short 16-replicate timing workload with 35 islands and a seven-base
+  locus under the generational engine.
+class: replicates-and-engines
+_read_only: true  # marks the shipped copy read-only; delete it in your own copy
 N: 500
 ploidy: haploid
 d: 35

@@ -1,3 +1,8 @@
+name: Finite-length alleles
+description: >-
+  A three-base locus with only 64 possible alleles, so mutations can recur.
+class: mutation-and-founding
+_read_only: true  # marks the shipped copy read-only; delete it in your own copy
 N: 100
 ploidy: haploid
 d: 3

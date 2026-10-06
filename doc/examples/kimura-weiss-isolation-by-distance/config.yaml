@@ -1,3 +1,9 @@
+name: Kimura-Weiss isolation by distance
+description: >-
+  Twenty islands on a ring, where near neighbors are more alike than distant
+  islands.
+class: migration
+_read_only: true  # marks the shipped copy read-only; delete it in your own copy
 N: 200
 ploidy: haploid
 d: 20

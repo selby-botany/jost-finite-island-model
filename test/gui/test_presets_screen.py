@@ -59,8 +59,8 @@ def test_load_example_populates_the_list_and_applies_the_chosen_preset(
                 "document.getElementById('presets-list').children.length",
                 lambda value: value is not None and value > 0,
             )
-            # Click the second preset ("Stepping-stone (spatial)
-            # migration", per `fim.gui.presets`' own document order) --
+            # Click the second preset ("Stepping-stone migration", per
+            # `fim.gui.presets`' own catalog order) --
             # distinct from the starter form's own default N/d/m, so a
             # changed field afterward is real proof the click did
             # something, not a coincidental match with what was already

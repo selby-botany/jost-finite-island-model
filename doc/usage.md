@@ -177,6 +177,12 @@ where deme 4 is both the largest and the best-connected:
 
 <!-- worked-example-config: examples/unequal-island-sizes-with-a-migration-hub/config.yaml -->
 ```yaml
+name: Unequal islands with a hub
+description: >-
+  Three small islands and one large, well-connected hub island, joined by an
+  explicit migration matrix.
+class: migration
+_read_only: true  # marks the shipped copy read-only; delete it in your own copy
 N: [200, 200, 200, 800]
 ploidy: haploid
 d: 4
@@ -218,6 +224,12 @@ of hand-writing all 36 matrix entries:
 
 <!-- worked-example-config: examples/stepping-stone-spatial-migration/config.yaml -->
 ```yaml
+name: Stepping-stone migration
+description: >-
+  Six islands on a ring, each exchanging migrants only with its two
+  neighbors.
+class: migration
+_read_only: true  # marks the shipped copy read-only; delete it in your own copy
 N: 150
 ploidy: haploid
 d: 6
@@ -261,6 +273,12 @@ before that point.
 
 <!-- worked-example-config: examples/literature-distance-statistics-from-an-explicit-founder-split/config.yaml -->
 ```yaml
+name: Distance statistics from a founder split
+description: >-
+  Three islands fixed for different alleles: a one-generation check of the
+  literature statistics.
+class: statistics-and-convergence
+_read_only: true  # marks the shipped copy read-only; delete it in your own copy
 N: 200
 ploidy: haploid
 d: 3
@@ -308,6 +326,12 @@ happened to receive, a genuine founder effect rather than an assumption:
 
 <!-- worked-example-config: examples/equilibrium-split-founding/config.yaml -->
 ```yaml
+name: Equilibrium-split founding
+description: >-
+  Islands founded by splitting one ancestral population that has already
+  settled.
+class: mutation-and-founding
+_read_only: true  # marks the shipped copy read-only; delete it in your own copy
 N: 200
 ploidy: haploid
 d: 3
@@ -351,6 +375,12 @@ of randomness some studies want counted:
 
 <!-- worked-example-config: examples/stochastic-migrant-counts/config.yaml -->
 ```yaml
+name: Stochastic migrant counts
+description: >-
+  Draws each generation's number of migrants at random instead of using a
+  fixed fraction.
+class: migration
+_read_only: true  # marks the shipped copy read-only; delete it in your own copy
 N: 100
 ploidy: haploid
 d: 4
@@ -386,6 +416,11 @@ actually likely within the run, not just theoretically possible:
 
 <!-- worked-example-config: examples/finite-length-alleles-the-k-allele-model/config.yaml -->
 ```yaml
+name: Finite-length alleles
+description: >-
+  A three-base locus with only 64 possible alleles, so mutations can recur.
+class: mutation-and-founding
+_read_only: true  # marks the shipped copy read-only; delete it in your own copy
 N: 100
 ploidy: haploid
 d: 3
@@ -422,6 +457,12 @@ fixed moves G<sub>ST</sub> toward the infinite-island approximation.
 
 <!-- worked-example-config: examples/wright-takahata-finite-deme-correction/config.yaml -->
 ```yaml
+name: Wright-Takahata finite-island correction
+description: >-
+  Eight islands, few enough that the finite-island correction to G_ST
+  matters.
+class: statistics-and-convergence
+_read_only: true  # marks the shipped copy read-only; delete it in your own copy
 N: 500
 ploidy: haploid
 d: 8
@@ -456,6 +497,12 @@ but large enough that distances 1 through 10 exist on the ring.
 
 <!-- worked-example-config: examples/kimura-weiss-isolation-by-distance/config.yaml -->
 ```yaml
+name: Kimura-Weiss isolation by distance
+description: >-
+  Twenty islands on a ring, where near neighbors are more alike than distant
+  islands.
+class: migration
+_read_only: true  # marks the shipped copy read-only; delete it in your own copy
 N: 200
 ploidy: haploid
 d: 20
@@ -490,6 +537,12 @@ different lengths do not silently mutate at the same rate:
 
 <!-- worked-example-config: examples/per-base-mutation-rate-across-unequal-locus-lengths/config.yaml -->
 ```yaml
+name: Per-base mutation rate
+description: >-
+  One per-base mutation rate gives a 50-base and a 500-base locus different
+  mutation rates.
+class: mutation-and-founding
+_read_only: true  # marks the shipped copy read-only; delete it in your own copy
 N: 150
 ploidy: haploid
 d: 3
@@ -522,6 +575,11 @@ of them stable (convergence_combinator: all, the default) or just one
 
 <!-- worked-example-config: examples/several-convergence-statistics/config.yaml -->
 ```yaml
+name: Several convergence statistics
+description: >-
+  Watches D and G_ST together and stops when either one settles.
+class: statistics-and-convergence
+_read_only: true  # marks the shipped copy read-only; delete it in your own copy
 N: 150
 ploidy: haploid
 d: 3
@@ -556,6 +614,12 @@ of them still is:
 
 <!-- worked-example-config: examples/within-run-sigma-band/config.yaml -->
 ```yaml
+name: Within-run sigma band
+description: >-
+  Keeps running after convergence to show how much D still varies from one
+  generation to the next.
+class: statistics-and-convergence
+_read_only: true  # marks the shipped copy read-only; delete it in your own copy
 N: 150
 ploidy: haploid
 d: 4
@@ -593,6 +657,12 @@ enough have run:
 
 <!-- worked-example-config: examples/an-adaptive-replicate-batch-with-a-confidence-interval/config.yaml -->
 ```yaml
+name: Adaptive replicate batch
+description: >-
+  Runs replicates, up to 50, until the confidence interval for D is narrow
+  enough.
+class: replicates-and-engines
+_read_only: true  # marks the shipped copy read-only; delete it in your own copy
 N: 100
 ploidy: haploid
 d: 5
@@ -643,6 +713,12 @@ full measured comparison this example's own shape is drawn from:
 
 <!-- worked-example-config: examples/a-large-d-batch-under-generational-vector/config.yaml -->
 ```yaml
+name: Large-d batch, vector engine
+description: >-
+  A short 16-replicate timing workload with 70 islands under the
+  generational-vector engine.
+class: replicates-and-engines
+_read_only: true  # marks the shipped copy read-only; delete it in your own copy
 N: 500
 ploidy: haploid
 d: 70
@@ -686,6 +762,12 @@ region (moderate `d`, a longer locus):
 
 <!-- worked-example-config: examples/a-long-locus-batch-under-the-generational-engine/config.yaml -->
 ```yaml
+name: Long-locus batch, generational engine
+description: >-
+  A short 16-replicate timing workload with 35 islands and a seven-base
+  locus under the generational engine.
+class: replicates-and-engines
+_read_only: true  # marks the shipped copy read-only; delete it in your own copy
 N: 500
 ploidy: haploid
 d: 35

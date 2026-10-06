@@ -24,6 +24,24 @@ EXAMPLES = (
 )
 
 
+def test_dear_nolan_high_configuration_matches_its_derivation() -> None:
+    """`dear-nolan-high/config.yaml` is exactly what `reproduce.py` derives.
+
+    The example's `p_0` is the validation suite's near-equilibrium start
+    (`_dn2_equilibrium_start`), written into the file by the script; a
+    change to that derivation fails here until the file is rewritten.
+    """
+    script = ROOT / "doc" / "examples" / "dear-nolan-high" / "reproduce.py"
+    completed = subprocess.run(
+        [sys.executable, str(script), "--check"],
+        cwd=ROOT,
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    assert completed.returncode == 0, completed.stderr
+
+
 @pytest.mark.parametrize("example", EXAMPLES)
 def test_example_report_matches_a_fresh_run(example: str, tmp_path: Path) -> None:
     """The documented `report.json` is the run's exact output.

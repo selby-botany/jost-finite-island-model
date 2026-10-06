@@ -650,6 +650,20 @@ The formulas in the docs match `fim.convergence.defaults`.
 
 Guard: committed worked-example reports match a fresh `fim run`.
 
+<a id="test.test_doc_examples.test_dear_nolan_high_configuration_matches_its_derivation"></a>
+
+#### test\_dear\_nolan\_high\_configuration\_matches\_its\_derivation
+
+```python
+def test_dear_nolan_high_configuration_matches_its_derivation() -> None
+```
+
+`dear-nolan-high/config.yaml` is exactly what `reproduce.py` derives.
+
+The example's `p_0` is the validation suite's near-equilibrium start
+(`_dn2_equilibrium_start`), written into the file by the script; a
+change to that derivation fails here until the file is rewritten.
+
 <a id="test.test_doc_examples.test_example_report_matches_a_fresh_run"></a>
 
 #### test\_example\_report\_matches\_a\_fresh\_run
@@ -9209,9 +9223,11 @@ def test_list_examples_mirrors_the_bundled_catalog() -> None
 
 Classes and examples come from the catalog, in its order, with loadability.
 
-`loadable` is computed, not assumed: the Dear-Nolan high example has
-no configuration at all and says why in `message`; the per-base `mu_b`
-example, once refused for its per-locus rates, now loads.
+`loadable` is computed, not assumed: the per-base `mu_b` example,
+once refused for its per-locus rates, now loads, and so does the
+Dear-Nolan high example, whose explicit `p_0` is derived by a
+script. The path for an example without a configuration is tested
+with a fixture catalog below.
 
 <a id="gui.test_app_api.test_load_example_returns_form_values_and_run_labels"></a>
 
@@ -9272,10 +9288,14 @@ An unknown example id is a clear error.
 
 ```python
 def test_load_example_without_a_configuration_does_not_touch_settings(
-) -> None
+        tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None
 ```
 
-The script-reproduced example cannot load, and Settings stay as they were.
+An example with no configuration cannot load, and Settings stay as they were.
+
+No shipped example lacks a configuration any more, so a fixture
+catalog supplies one (`config_yaml: null`, as the catalog generator
+writes for a directory without `config.yaml`).
 
 <a id="gui.test_app_api.test_load_example_syncs_settings_execution_defaults"></a>
 
@@ -13132,7 +13152,11 @@ Every offered curve is finite, in range, and ends at the recursion's limit.
 @pytest.mark.statistical
 @pytest.mark.parametrize(
     "name",
-    [name for name, kind in sorted(EXPECTED.items()) if kind is not NONE])
+    [
+        name for name, kind in sorted(EXPECTED.items())
+        if kind is not NONE and name not in ENGINE_CHECK_EXCLUDED
+    ],
+)
 def test_engine_agrees_with_the_payload_for_every_example(
         name: str, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None
 ```
@@ -18334,15 +18358,16 @@ def test_presets_use_the_canonical_example_configs() -> None
 
 Each preset's text is its `doc/examples/<id>/config.yaml`, unmodified.
 
-<a id="gui.test_presets.test_catalog_includes_the_script_reproduced_example_without_yaml"></a>
+<a id="gui.test_presets.test_the_script_derived_example_is_a_preset_with_an_explicit_start"></a>
 
-#### test\_catalog\_includes\_the\_script\_reproduced\_example\_without\_yaml
+#### test\_the\_script\_derived\_example\_is\_a\_preset\_with\_an\_explicit\_start
 
 ```python
-def test_catalog_includes_the_script_reproduced_example_without_yaml() -> None
+def test_the_script_derived_example_is_a_preset_with_an_explicit_start(
+) -> None
 ```
 
-`dear-nolan-high` has no `config.yaml`: listed, but not as a preset.
+`dear-nolan-high`'s `config.yaml` carries its derived start as `p_0`.
 
 <a id="gui.test_presets.test_every_catalog_example_names_a_class_in_the_tree"></a>
 

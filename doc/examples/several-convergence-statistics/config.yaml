@@ -1,3 +1,8 @@
+name: Several convergence statistics
+description: >-
+  Watches D and G_ST together and stops when either one settles.
+class: statistics-and-convergence
+_read_only: true  # marks the shipped copy read-only; delete it in your own copy
 N: 150
 ploidy: haploid
 d: 3
