@@ -10,10 +10,28 @@ d: 5
 m: 0.01
 mu: 0.001
 seed: 20260819
+# Eight independent loci, pooled, and a loose per-replicate tolerance: each
+# replicate settles in about a thousand generations instead of about 15,000
+# (see the README).
 loci:
   - locus_id: 1
     length: 100
+  - locus_id: 2
+    length: 100
+  - locus_id: 3
+    length: 100
+  - locus_id: 4
+    length: 100
+  - locus_id: 5
+    length: 100
+  - locus_id: 6
+    length: 100
+  - locus_id: 7
+    length: 100
+  - locus_id: 8
+    length: 100
 convergence_statistic: D
+convergence_tolerance: 0.05
 n_replicates: 50
 replicate_minimum: 10
-replicate_tolerance: 0.08
+replicate_tolerance: 0.03

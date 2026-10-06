@@ -140,12 +140,20 @@ because the same seed, parameters, and version always give the same
 `report.json` (see [Reproduce a run](#reproduce-a-run)). Each example uses
 a small `N` and `d`, and lets [convergence_window and
 max_generations](convergence.md) be derived from the model (the default), so
-each run goes on for as many generations as that model needs to forget its
-starting state — from a few hundred to a few thousand here, and a fraction of a
-minute to about a minute of wall-clock time. Every example uses one locus, so
-a single run's numbers scatter widely around the model's expectation; use a
-batch (`n_replicates`) when you want a stable value. Each uses a
+each run goes on until its statistic has stopped trending *and* its
+trailing-window mean is known to half of convergence_tolerance. With one
+locus that second condition can take tens of thousands of generations, so
+several examples set a looser convergence_tolerance (0.02 to 0.05) or pool
+eight loci, and each one's README says what that costs. Every example
+here finishes in about a second to about a minute of wall-clock time on
+ordinary development hardware. Most use one locus, so a single run's
+numbers scatter widely around the model's expectation; use a batch
+(`n_replicates`) when you want a stable value. Each uses a
 seed distinct from [`fim init`](#create-a-configuration)'s starter config.
+Each configuration starts with its labels (`name`, `description`,
+`class`) and `_read_only: true`, which marks the copy shipped with the app
+as read-only; delete that line in your own copy (see
+[Run labels](configuration.md#run-labels)).
 Each demonstrates one option, or one natural pair of options, from the
 [configuration reference](configuration.md); a real study combines them
 freely.
@@ -732,25 +740,47 @@ d: 5
 m: 0.01
 mu: 0.001
 seed: 20260819
+# Eight independent loci, pooled, and a loose per-replicate tolerance: each
+# replicate settles in about a thousand generations instead of about 15,000
+# (see the README).
 loci:
   - locus_id: 1
     length: 100
+  - locus_id: 2
+    length: 100
+  - locus_id: 3
+    length: 100
+  - locus_id: 4
+    length: 100
+  - locus_id: 5
+    length: 100
+  - locus_id: 6
+    length: 100
+  - locus_id: 7
+    length: 100
+  - locus_id: 8
+    length: 100
 convergence_statistic: D
+convergence_tolerance: 0.05
 n_replicates: 50
 replicate_minimum: 10
-replicate_tolerance: 0.08
+replicate_tolerance: 0.03
 ```
 
 ```console
 fim run adaptive-batch.yaml --output results/adaptive-batch --sequential --quiet
 ```
 
-Stops at 16 replicates — `D`'s 95% confidence interval has just tightened to
-`0.287 +/- 0.0782`, inside the requested `0.08` half-width, so the
-remaining 34 possible replicates were never needed.
+Stops at 22 replicates — `D`'s 95% confidence interval has just tightened to
+`0.280 +/- 0.030`, inside the requested `0.03` half-width, so the
+remaining 28 possible replicates were never needed. Each replicate pools
+eight loci with `convergence_tolerance: 0.05`, so it settles in about a
+thousand generations; one-locus replicates at the default tolerance would
+take hours for the whole batch (see the
+[example's README](examples/an-adaptive-replicate-batch-with-a-confidence-interval/README.md)).
 `results/adaptive-batch/summary.json` reports every statistic's own
 interval; `results/adaptive-batch/replicate-001/` through
-`replicate-016/` each hold the ordinary four-file scalar-run contract for
+`replicate-022/` each hold the ordinary four-file scalar-run contract for
 that one replicate. Drop `--sequential` to run the same batch across a
 worker process per CPU instead — the computed numbers are identical
 either way (see [Batches](#batches-nreplicates-greater-than-one)); only

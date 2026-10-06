@@ -118,12 +118,20 @@ because the same seed, parameters, and version always give the same
 <code>report.json</code> (see <a href="#reproduce-a-run">Reproduce a run</a>). Each example uses
 a small <code>N</code> and <code>d</code>, and lets <a href="#" data-fim-external="https://github.com/selby-botany/jost-finite-island-model/blob/main/doc/convergence.md">convergence_window and
 max_generations</a> be derived from the model (the default), so
-each run goes on for as many generations as that model needs to forget its
-starting state — from a few hundred to a few thousand here, and a fraction of a
-minute to about a minute of wall-clock time. Every example uses one locus, so
-a single run's numbers scatter widely around the model's expectation; use a
-batch (<code>n_replicates</code>) when you want a stable value. Each uses a
+each run goes on until its statistic has stopped trending <em>and</em> its
+trailing-window mean is known to half of convergence_tolerance. With one
+locus that second condition can take tens of thousands of generations, so
+several examples set a looser convergence_tolerance (0.02 to 0.05) or pool
+eight loci, and each one's README says what that costs. Every example
+here finishes in about a second to about a minute of wall-clock time on
+ordinary development hardware. Most use one locus, so a single run's
+numbers scatter widely around the model's expectation; use a batch
+(<code>n_replicates</code>) when you want a stable value. Each uses a
 seed distinct from <a href="#create-a-configuration"><code>fim init</code></a>'s starter config.
+Each configuration starts with its labels (<code>name</code>, <code>description</code>,
+<code>class</code>) and <code>_read_only: true</code>, which marks the copy shipped with the app
+as read-only; delete that line in your own copy (see
+<a href="#" data-fim-help="configuration" data-fim-anchor="run-labels">Run labels</a>).
 Each demonstrates one option, or one natural pair of options, from the
 <a href="#" data-fim-help="configuration" data-fim-anchor="">configuration reference</a>; a real study combines them
 freely.</p>
@@ -627,22 +635,44 @@ d: 5
 m: 0.01
 mu: 0.001
 seed: 20260819
+# Eight independent loci, pooled, and a loose per-replicate tolerance: each
+# replicate settles in about a thousand generations instead of about 15,000
+# (see the README).
 loci:
   - locus_id: 1
     length: 100
+  - locus_id: 2
+    length: 100
+  - locus_id: 3
+    length: 100
+  - locus_id: 4
+    length: 100
+  - locus_id: 5
+    length: 100
+  - locus_id: 6
+    length: 100
+  - locus_id: 7
+    length: 100
+  - locus_id: 8
+    length: 100
 convergence_statistic: D
+convergence_tolerance: 0.05
 n_replicates: 50
 replicate_minimum: 10
-replicate_tolerance: 0.08
+replicate_tolerance: 0.03
 </code></pre>
 <pre><code class="language-console">fim run adaptive-batch.yaml --output results/adaptive-batch --sequential --quiet
 </code></pre>
-<p>Stops at 16 replicates — <code>D</code>'s 95% confidence interval has just tightened to
-<code>0.287 +/- 0.0782</code>, inside the requested <code>0.08</code> half-width, so the
-remaining 34 possible replicates were never needed.
+<p>Stops at 22 replicates — <code>D</code>'s 95% confidence interval has just tightened to
+<code>0.280 +/- 0.030</code>, inside the requested <code>0.03</code> half-width, so the
+remaining 28 possible replicates were never needed. Each replicate pools
+eight loci with <code>convergence_tolerance: 0.05</code>, so it settles in about a
+thousand generations; one-locus replicates at the default tolerance would
+take hours for the whole batch (see the
+<a href="#" data-fim-external="https://github.com/selby-botany/jost-finite-island-model/blob/main/doc/examples/an-adaptive-replicate-batch-with-a-confidence-interval/README.md">example's README</a>).
 <code>results/adaptive-batch/summary.json</code> reports every statistic's own
 interval; <code>results/adaptive-batch/replicate-001/</code> through
-<code>replicate-016/</code> each hold the ordinary four-file scalar-run contract for
+<code>replicate-022/</code> each hold the ordinary four-file scalar-run contract for
 that one replicate. Drop <code>--sequential</code> to run the same batch across a
 worker process per CPU instead — the computed numbers are identical
 either way (see <a href="#batches-nreplicates-greater-than-one">Batches</a>); only
