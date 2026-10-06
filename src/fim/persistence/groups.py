@@ -39,7 +39,8 @@ a `ValueError` reports this one too):
 
 - a read-only Study or Experiment cannot be renamed, described,
   documented, deleted, emptied, or gain or lose members;
-- a read-only Run is never deleted and never unlinked from a Study. A
+- a read-only Run is never deleted; its link can be removed from an
+  editable Study, but never from a read-only Study. A
   Study or Experiment being deleted or emptied skips its read-only
   members rather than failing, so a user's own grouping that happens to
   hold an example stays fully manageable, and the example survives.
@@ -763,6 +764,43 @@ def shared_run_directories(study_id: str, *, results: Path | None = None) -> lis
         if (directory := _resolve_stored_run_reference(entry, results=root)).resolve()
         in others
     ]
+
+
+def remove_run_from_study(
+    study_id: str,
+    run_directory: Path | str,
+    *,
+    results: Path | None = None,
+    clock: Clock = _utc_now,
+) -> StudyManifest:
+    """Remove one Study membership without changing or deleting the Run.
+
+    Read-only Runs may be unlinked from editable Studies. Read-only
+    Studies remain protected. An already-absent link is an idempotent no-op.
+
+    Returns:
+        The updated Study, or its unchanged manifest if the link is absent.
+
+    Raises:
+        ValueError: No Study with this id exists.
+        ReadOnlyError: The Study is read-only.
+    """
+    root = results if results is not None else paths.results_directory()
+    manifest = get_study(study_id, results=root)
+    _refuse_read_only(manifest, "given fewer runs")
+    directory = Path(run_directory).resolve()
+    kept = tuple(
+        entry
+        for entry in manifest.run_directories
+        if _resolve_stored_run_reference(entry, results=root).resolve() != directory
+    )
+    if kept == manifest.run_directories:
+        return manifest
+    updated = replace(
+        manifest, run_directories=kept, updated_at=_format_timestamp(clock())
+    )
+    write_study_manifest(study_manifest_path(study_id, results=root), updated)
+    return updated
 
 
 def remove_run_references(

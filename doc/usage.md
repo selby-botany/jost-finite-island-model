@@ -1227,6 +1227,12 @@ error naming the read-only item. A configuration marks its run read-only
 with [`_read_only`](configuration.md#_read_only); only the shipped examples
 should use it.
 
+An example linked into an editable Study is different: its checkbox
+selects only that Study's link. **Delete selected** removes the link,
+not the example or its saved results. The confirmation states that the
+example is kept. Its row in the Examples experiment remains protected,
+and links in other Studies are unchanged.
+
 ### Opening a saved example
 
 Open an example from Home (double-click its row) or with **Open saved

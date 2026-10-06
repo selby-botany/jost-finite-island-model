@@ -103,6 +103,90 @@ def test_delete_runs_without_read_only_runs_still_deletes(results: Path) -> None
     assert not second.exists()
 
 
+def test_delete_selected_unlinks_only_the_selected_example_membership(
+    results: Path,
+) -> None:
+    """Removing an editable Study's example row preserves all other links and data."""
+    example = _run(results, "run-example", read_only=True)
+    before = (example / "manifest.json").read_bytes()
+    protected_id = _read_only_study(results, "study-examples-a", [example])
+    first = groups.create_study("First", results=results)
+    second = groups.create_study("Second", results=results)
+    for study in (first, second):
+        groups.add_run_to_study(study.study_id, example, results=results)
+
+    item = {
+        "kind": "run-link",
+        "studyId": first.study_id,
+        "directory": str(example),
+    }
+    assert Api().delete_selected([item])["ok"] is True
+    assert groups.get_study(first.study_id).run_count == 0
+    assert groups.get_study(second.study_id).run_count == 1
+    assert groups.get_study(protected_id).run_count == 1
+    assert (example / "manifest.json").read_bytes() == before
+    # An already-removed membership is harmless and does not rewrite the Study.
+    manifest_before = groups.study_manifest_path(first.study_id).read_bytes()
+    assert Api().delete_selected([item])["ok"] is True
+    assert groups.study_manifest_path(first.study_id).read_bytes() == manifest_before
+
+
+@pytest.mark.parametrize(
+    "invalid", ["protected-study", "ordinary-run", "missing-study"]
+)
+def test_delete_selected_validates_all_links_before_changing_anything(
+    results: Path, invalid: str
+) -> None:
+    """Invalid unlink selections fail before any membership or result is removed."""
+    example = _run(results, "run-example", read_only=True)
+    ordinary = _run(results, "run-ordinary")
+    study = groups.create_study("Mine", results=results)
+    groups.add_run_to_study(study.study_id, example)
+    protected = _read_only_study(results, "study-examples-a", [example])
+    valid = {"kind": "run-link", "studyId": study.study_id, "directory": str(example)}
+    bad = dict(valid)
+    if invalid == "protected-study":
+        bad["studyId"] = protected
+    elif invalid == "missing-study":
+        bad["studyId"] = "study-missing"
+    else:
+        bad["directory"] = str(ordinary)
+
+    result = Api().delete_selected(
+        [valid, bad, {"kind": "run", "directory": str(ordinary)}]
+    )
+
+    assert result["ok"] is False
+    assert result["message"]
+    assert groups.get_study(study.study_id).run_count == 1
+    assert groups.get_study(protected).run_count == 1
+    assert ordinary.exists()
+    assert example.exists()
+
+
+def test_unlink_and_group_selection_keep_the_implied_example_protected(
+    results: Path,
+) -> None:
+    """Overlapping row/group selections never pass the example to file deletion."""
+    example = _run(results, "run-example", read_only=True)
+    own = _run(results, "run-own")
+    study = groups.create_study("Mine", results=results)
+    groups.add_run_to_study(study.study_id, example)
+    groups.add_run_to_study(study.study_id, own)
+    result = Api().delete_selected(
+        [
+            {"kind": "run-link", "studyId": study.study_id, "directory": str(example)},
+            {"kind": "study", "studyId": study.study_id},
+            {"kind": "run", "directory": str(example)},
+            {"kind": "run", "directory": str(own)},
+        ]
+    )
+    assert result["ok"] is True
+    assert result["deletedStudyCount"] == 1
+    assert example.exists()
+    assert not own.exists()
+
+
 @pytest.mark.parametrize("kind", ["run", "study", "experiment"])
 def test_delete_selected_refuses_a_selection_holding_a_read_only_item(
     results: Path, kind: str

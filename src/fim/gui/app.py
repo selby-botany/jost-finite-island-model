@@ -1599,6 +1599,7 @@ def _read_only_selection_message(items: Sequence[Mapping[str, str]]) -> str | No
         none. An Experiment or Study that does not exist is not
         read-only; deleting it is already a tolerated no-op.
     """
+    # Capture the cascade before unlinking changes group memberships.
     implied = _runs_in_selected_groups(items)
     names: list[str] = []
     for item in items:
@@ -1625,6 +1626,29 @@ def _read_only_selection_message(items: Sequence[Mapping[str, str]]) -> str | No
     return (
         f"read-only examples cannot be deleted: {', '.join(names)}; nothing was deleted"
     )
+
+
+def _remove_selected_run_links(items: Sequence[Mapping[str, str]]) -> None:
+    """Validate every selected example link, then unlink from editable Studies.
+
+    Args:
+        items: Home deletion items; only `run-link` items are processed.
+
+    Raises:
+        ValueError: A target Study is missing or protected, or a Run is editable.
+        KeyError: A link lacks a required field.
+        OSError: A Study manifest cannot be read or written.
+    """
+    links = [item for item in items if item.get("kind") == "run-link"]
+    # Validate the full selection before changing any memberships.
+    for item in links:
+        study = groups.get_study(item["studyId"])
+        if study.read_only:
+            raise ValueError("read-only example Study links cannot be removed")
+        if not groups.is_run_read_only(item["directory"]):
+            raise ValueError("only read-only Run links use unlink selection")
+    for item in links:
+        groups.remove_run_from_study(item["studyId"], item["directory"])
 
 
 def _prefer_non_default(
@@ -5158,7 +5182,7 @@ class Api:
 
     @_log_bridge_call
     def delete_selected(self, items: list[dict[str, str]]) -> dict[str, Any]:
-        """Delete every selected Run/Study/Experiment in one round trip.
+        """Delete selected results/groupings or unlink selected example rows.
 
         Home's own universal Select/Select all/Delete idiom (`20260918-
         claude-sonnet-5-home-tree-reorg-design.md`, `selby/restricted`,
@@ -5177,7 +5201,13 @@ class Api:
         Args:
             items: One `{"kind": "run", "directory": ...}`/`{"kind":
                 "study", "studyId": ...}`/`{"kind": "experiment",
-                "experimentId": ...}` per selected row.
+                "experimentId": ...}` per selected row. A read-only Run
+                linked into an editable Study uses `{"kind": "run-link",
+                "studyId": ..., "directory": ...}` to remove only that link.
+
+        A `run-link` selection removes only the named editable Study's
+        membership, keeping the example's files and other memberships.
+        All link targets are validated before any changes.
 
         Read-only items are refused up front, all or nothing: if any
         selected Experiment, Study, or Run is read-only, nothing at all
@@ -5197,10 +5227,13 @@ class Api:
         refusal = _read_only_selection_message(items)
         if refusal is not None:
             return {"ok": False, "message": refusal}
-        # Computed before anything is deleted: a read-only Run a selected
-        # Study holds arrives as a Run item too (the selection cascades),
-        # and is kept, not refused (`_runs_in_selected_groups`).
         implied = _runs_in_selected_groups(items)
+        # Validate every unlink before any deletion. A forged or stale
+        # selection must not alter an example Study or delete example data.
+        try:
+            _remove_selected_run_links(items)
+        except (OSError, ValueError, KeyError) as error:
+            return {"ok": False, "message": str(error)}
         deleted_experiment_count = 0
         for item in items:
             if item.get("kind") != "experiment":

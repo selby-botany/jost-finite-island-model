@@ -69,6 +69,8 @@ let allExperiments = [];
 // a mixed collection by kind (`20260918-claude-sonnet-5-home-tree-
 // reorg-design.md`, `selby/restricted`, §5).
 const selectedRunDirectories = new Set();
+// Read-only example links are selected per editable Study, never globally.
+const selectedRunLinks = new Map();
 const selectedStudyIds = new Set();
 const selectedExperimentIds = new Set();
 // Group ids the user has explicitly collapsed -- persists across visits
@@ -803,9 +805,10 @@ function runDetails(run) {
  *     identical `runDisplayLabel` in the same Study's own sorted list --
  *     see `renderGroup`).
  * @param {boolean} nested See `buildGroupHeaderRow`.
+ * @param {object | null} study The owning Study, for unlinking example rows.
  * @returns {HTMLTableRowElement}
  */
-function buildRunRow(run, showRunId = true, nested = false) {
+function buildRunRow(run, showRunId = true, nested = false, study = null) {
     const row = document.createElement("tr");
     row.className = "open-run-run-row";
     if (nested) {
@@ -831,19 +834,38 @@ function buildRunRow(run, showRunId = true, nested = false) {
                 "aria-label",
                 `Select ${run.directoryName} for deletion`
             );
-            checkbox.checked = selectedRunDirectories.has(run.directory);
+            const unlink = run.readOnly && study && !study.readOnly;
+            const linkKey = JSON.stringify([study?.studyId, run.directory]);
+            checkbox.checked = unlink
+                ? selectedRunLinks.has(linkKey) || selectedRunDirectories.has(run.directory)
+                : selectedRunDirectories.has(run.directory);
+            if (unlink) {
+                checkbox.title = "Remove this link from the study; keep the example";
+                checkbox.setAttribute(
+                    "aria-label",
+                    `Select ${run.directoryName} link for removal`
+                );
+            }
             checkbox.addEventListener("click", (event) => event.stopPropagation());
             checkbox.addEventListener("change", () => {
-                if (checkbox.checked) {
+                if (unlink && checkbox.checked) {
+                    selectedRunLinks.set(linkKey, {
+                        kind: "run-link",
+                        studyId: study.studyId,
+                        directory: run.directory,
+                    });
+                } else if (unlink) {
+                    selectedRunLinks.delete(linkKey);
+                    selectedRunDirectories.delete(run.directory);
+                } else if (checkbox.checked) {
                     selectedRunDirectories.add(run.directory);
                 } else {
                     selectedRunDirectories.delete(run.directory);
                 }
                 updateSelectionToolbar();
             });
-            // A read-only example run is never deleted: its checkbox is
-            // off, and the lock beside its name says why.
-            if (run.readOnly) {
+            // The example itself stays protected in its read-only Study.
+            if (run.readOnly && !unlink) {
                 checkbox.checked = false;
                 window.fim.disableForReadOnly(checkbox, "run");
             }
@@ -1151,6 +1173,15 @@ function cascadeGroupSelection(group, selected) {
             }
         }
     };
+    if (!selected) {
+        const studyIds = group.kind === "study"
+            ? [group.studyId] : group.subgroups.map((study) => study.studyId);
+        for (const [key, link] of selectedRunLinks) {
+            if (studyIds.includes(link.studyId)) {
+                selectedRunLinks.delete(key);
+            }
+        }
+    }
     if (group.kind === "study") {
         applyRunDirectories(group.runDirectories);
         return;
@@ -1356,7 +1387,7 @@ function renderGroup(group, nested = false) {
         for (const run of group.runs) {
             const label = runDisplayLabel(run);
             const showRunId = label !== previousLabel;
-            recentRunsBody.appendChild(buildRunRow(run, showRunId, nested));
+            recentRunsBody.appendChild(buildRunRow(run, showRunId, nested, group));
             previousLabel = label;
         }
     }
@@ -1447,6 +1478,7 @@ async function refreshRecentRuns() {
     // for the same reason: nothing selected means no reason to keep
     // showing the checkboxes a fresh visit never asked for.
     selectedRunDirectories.clear();
+    selectedRunLinks.clear();
     selectedStudyIds.clear();
     selectedExperimentIds.clear();
     setSelectMode(false);
@@ -1534,7 +1566,8 @@ recentRunsFilterInput.addEventListener("input", () => {
  */
 function totalSelectedCount() {
     return (
-        selectedRunDirectories.size + selectedStudyIds.size + selectedExperimentIds.size
+        selectedRunDirectories.size + selectedRunLinks.size +
+        selectedStudyIds.size + selectedExperimentIds.size
     );
 }
 
@@ -1582,11 +1615,16 @@ function buildDeleteSelectedMessage() {
     if (selectedRunDirectories.size > 0) {
         parts.push(`${selectedRunDirectories.size} individual run(s)`);
     }
+    if (selectedRunLinks.size > 0) {
+        parts.push(`${selectedRunLinks.size} example link(s) from editable studies`);
+    }
+    const keptExamples = selectedRunLinks.size > 0
+        ? " Linked examples and their saved results will be kept." : "";
     const builtIn =
         selectedStudyIds.has("study-default") || selectedExperimentIds.has("experiment-default")
             ? " The built-in default study and experiment are emptied, not removed."
             : "";
-    return `Delete ${parts.join(", ")}?${builtIn}`;
+    return `Delete ${parts.join(", ")}?${builtIn}${keptExamples}`;
 }
 
 // Bulk "Select/Delete/Delete all" idiom (design doc §10, resolved
@@ -1648,6 +1686,7 @@ selectAllButton.addEventListener("click", () => {
 
 clearSelectionButton.addEventListener("click", () => {
     selectedRunDirectories.clear();
+    selectedRunLinks.clear();
     selectedStudyIds.clear();
     selectedExperimentIds.clear();
     renderRecentRuns();
@@ -1668,6 +1707,7 @@ deleteSelectedButton.addEventListener("click", () => {
                 kind: "run",
                 directory,
             })),
+            ...selectedRunLinks.values(),
         ];
         const result = await window.pywebview.api.delete_selected(items);
         if (!result.ok) {

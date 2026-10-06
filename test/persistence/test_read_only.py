@@ -34,6 +34,7 @@ from fim.persistence.groups import (
     is_run_read_only,
     prune_missing_studies,
     read_study_manifest,
+    remove_run_from_study,
     remove_run_references,
     study_manifest_path,
     supersede_run,
@@ -68,6 +69,48 @@ def _make_run(directory: Path, *, read_only: bool) -> Path:
         json.dumps({"parameters": parameters}), encoding="utf-8"
     )
     return directory
+
+
+@pytest.mark.parametrize("read_only", [False, True])
+def test_remove_run_from_editable_study_preserves_data_and_other_memberships(
+    tmp_path: Path, read_only: bool
+) -> None:
+    """Unlink only the named Study, preserving Run bytes and idempotence."""
+    run = _make_run(tmp_path / "run", read_only=read_only)
+    before = (run / "manifest.json").read_bytes()
+    first = create_study("First", results=tmp_path, clock=lambda: _clock(1))
+    second = create_study("Second", results=tmp_path, clock=lambda: _clock(1))
+    for study in (first, second):
+        add_run_to_study(study.study_id, run, results=tmp_path, clock=lambda: _clock(1))
+    updated = remove_run_from_study(
+        first.study_id, run, results=tmp_path, clock=lambda: _clock(2)
+    )
+    assert updated.run_count == 0
+    assert updated.updated_at != first.updated_at
+    assert get_study(second.study_id, results=tmp_path).run_count == 1
+    assert (run / "manifest.json").read_bytes() == before
+    assert (
+        remove_run_from_study(
+            first.study_id, run, results=tmp_path, clock=lambda: _clock(3)
+        )
+        == updated
+    )
+
+
+def test_remove_run_from_read_only_study_is_refused(tmp_path: Path) -> None:
+    """Even an explicit unlink cannot change the shipped Study."""
+    run = _make_run(tmp_path / "run", read_only=True)
+    study = write_read_only_study(
+        "study-examples",
+        name="Examples",
+        run_directories=[run],
+        results=tmp_path,
+        clock=lambda: _clock(1),
+    )
+    with pytest.raises(ReadOnlyError):
+        remove_run_from_study(study.study_id, run, results=tmp_path)
+    assert get_study(study.study_id, results=tmp_path) == study
+    assert run.exists()
 
 
 def _seed(results: Path) -> tuple[StudyManifest, ExperimentManifest, Path]:

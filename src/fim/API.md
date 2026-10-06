@@ -531,6 +531,7 @@ Return to the [source-tree orientation](../README.md) or the [developer guide](.
   * [delete\_study](#fim.persistence.groups.delete_study)
   * [clear\_study\_runs](#fim.persistence.groups.clear_study_runs)
   * [shared\_run\_directories](#fim.persistence.groups.shared_run_directories)
+  * [remove\_run\_from\_study](#fim.persistence.groups.remove_run_from_study)
   * [remove\_run\_references](#fim.persistence.groups.remove_run_references)
   * [delete\_runs](#fim.persistence.groups.delete_runs)
   * [prune\_missing\_studies](#fim.persistence.groups.prune_missing_studies)
@@ -7403,7 +7404,7 @@ nothing at all is deleted and the refusal is reported.
 def delete_selected(items: list[dict[str, str]]) -> dict[str, Any]
 ```
 
-Delete every selected Run/Study/Experiment in one round trip.
+Delete selected results/groupings or unlink selected example rows.
 
 Home's own universal Select/Select all/Delete idiom (`20260918-
 claude-sonnet-5-home-tree-reorg-design.md`, `selby/restricted`,
@@ -7423,7 +7424,13 @@ policy) rather than double-counted or treated as a failure.
 
 - `items` - One `{"kind": "run", "directory": ...}`/`{"kind":
   "study", "studyId": ...}`/`{"kind": "experiment",
-- `"experimentId"` - ...}` per selected row.
+- `"experimentId"` - ...}` per selected row. A read-only Run
+  linked into an editable Study uses `{"kind": "run-link",
+- `"studyId"` - ..., "directory": ...}` to remove only that link.
+
+  A `run-link` selection removes only the named editable Study's
+  membership, keeping the example's files and other memberships.
+  All link targets are validated before any changes.
 
   Read-only items are refused up front, all or nothing: if any
   selected Experiment, Study, or Run is read-only, nothing at all
@@ -15393,7 +15400,8 @@ a `ValueError` reports this one too):
 
 - a read-only Study or Experiment cannot be renamed, described,
   documented, deleted, emptied, or gain or lose members;
-- a read-only Run is never deleted and never unlinked from a Study. A
+- a read-only Run is never deleted; its link can be removed from an
+  editable Study, but never from a read-only Study. A
   Study or Experiment being deleted or emptied skips its read-only
   members rather than failing, so a user's own grouping that happens to
   hold an example stays fully manageable, and the example survives.
@@ -15913,6 +15921,33 @@ A Run is a link from a Study to a directory (a computed configuration),
 and one Run may be linked from several Studies. Deleting a Study, or
 emptying it, removes its links and deletes only the Runs nothing else
 links to, so it can never delete a Run out from under another Study.
+
+<a id="fim.persistence.groups.remove_run_from_study"></a>
+
+#### remove\_run\_from\_study
+
+```python
+def remove_run_from_study(study_id: str,
+                          run_directory: Path | str,
+                          *,
+                          results: Path | None = None,
+                          clock: Clock = _utc_now) -> StudyManifest
+```
+
+Remove one Study membership without changing or deleting the Run.
+
+Read-only Runs may be unlinked from editable Studies. Read-only
+Studies remain protected. An already-absent link is an idempotent no-op.
+
+**Returns**:
+
+  The updated Study, or its unchanged manifest if the link is absent.
+
+
+**Raises**:
+
+- `ValueError` - No Study with this id exists.
+- `ReadOnlyError` - The Study is read-only.
 
 <a id="fim.persistence.groups.remove_run_references"></a>
 

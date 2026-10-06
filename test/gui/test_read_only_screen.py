@@ -54,7 +54,8 @@ _SNAPSHOT_HOME = """
         }])),
     });
     const exampleRow = Array.from(document.querySelectorAll('.open-run-run-row'))
-        .find((row) => row.textContent.includes('Shipped example'));
+        .find((row) => row.textContent.includes('Shipped example')
+            && row.querySelector('.open-run-select-checkbox').disabled);
     return JSON.stringify({
         experiment: describe(header('Examples (')),
         study: describe(header('Getting started (')),
@@ -245,6 +246,100 @@ def test_home_locks_read_only_items_and_disables_their_edit_controls(
     # (a bare `fim run` files every run there); deleting that Study keeps
     # it, which `test_read_only_bridge.py` proves.
     assert snapshot["deleteSelected"] == "Delete selected (4)"
+
+
+def test_home_deletes_an_example_link_without_deleting_the_example(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """An example in Default study is selectable only for unlinking that row."""
+    results = tmp_path / "results"
+    results.mkdir()
+    monkeypatch.setattr(paths_module, "results_directory", lambda: results)
+    example = _seed_read_only_examples(results)
+    before = {
+        file.relative_to(example): file.read_bytes()
+        for file in example.rglob("*")
+        if file.is_file()
+    }
+    protected = groups.get_study("study-examples-getting-started")
+    window = create_window(hidden=True)
+    outcome: queue.Queue[dict[str, Any]] = queue.Queue(maxsize=1)
+
+    def _drive() -> None:
+        try:
+            _open_home(window)
+            _expand_group(window, "Default experiment (")
+            _expand_group(window, "Default study (")
+            _expand_group(window, "Examples (")
+            _expand_group(window, "Getting started (")
+            clicked = window.evaluate_js(
+                "(function () {"
+                "const rows = Array.from(document.querySelectorAll("
+                "'.open-run-run-row'))"
+                ".filter((row) => row.textContent.includes('Shipped example'));"
+                "const row = rows.find((item) => !item.querySelector("
+                "'.open-run-select-checkbox').disabled);"
+                "if (!row || rows.length !== 2) return false;"
+                "row.querySelector('.open-run-select-checkbox').click();"
+                "return true;})()"
+            )
+            assert clicked is True, "editable Study's example link cannot be selected"
+            window.evaluate_js(
+                "document.getElementById('open-run-delete-selected-button').click();"
+            )
+            confirmation = window.evaluate_js(
+                "document.querySelector('.open-run-inline-confirm').textContent"
+            )
+            window.evaluate_js(
+                "Array.from(document.querySelectorAll("
+                "'.open-run-inline-confirm button'))"
+                ".find((button) => button.textContent === 'Confirm').click();"
+            )
+            remaining = _poll_until(
+                window,
+                "document.querySelectorAll("
+                "'.open-run-run-row .read-only-badge').length",
+                lambda value: value == 1,
+            )
+            settled = _poll_until(
+                window,
+                "window.__fimOpenRunRecentRunsLoaded === true",
+                lambda value: value is True,
+            )
+            outcome.put(
+                {
+                    "confirmation": confirmation,
+                    "remaining": remaining,
+                    "settled": settled,
+                    "disabled": window.evaluate_js(
+                        "Array.from(document.querySelectorAll('.open-run-run-row'))"
+                        ".find((row) => row.textContent.includes('Shipped example'))"
+                        ".querySelector('.open-run-select-checkbox').disabled"
+                    ),
+                }
+            )
+        finally:
+            window.destroy()
+
+    webview.start(_drive)
+    snapshot = outcome.get(timeout=_DRIVE_TIMEOUT_SECONDS)
+    assert "example link" in snapshot["confirmation"]
+    assert "saved results will be kept" in snapshot["confirmation"]
+    assert snapshot["settled"] is True
+    assert snapshot["remaining"] == 1
+    assert snapshot["disabled"] is True
+    assert example.resolve() not in {
+        directory.resolve()
+        for directory in groups.study_run_directories(
+            groups.get_study(groups.DEFAULT_STUDY_ID)
+        )
+    }
+    assert groups.get_study(protected.study_id) == protected
+    assert {
+        file.relative_to(example): file.read_bytes()
+        for file in example.rglob("*")
+        if file.is_file()
+    } == before
 
 
 def test_details_dialog_and_run_title_show_a_read_only_run_as_locked(

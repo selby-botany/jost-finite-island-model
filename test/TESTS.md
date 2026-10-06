@@ -18814,6 +18814,41 @@ def test_delete_runs_without_read_only_runs_still_deletes(
 
 The ordinary path is unchanged: every existing directory goes.
 
+<a id="gui.test_read_only_bridge.test_delete_selected_unlinks_only_the_selected_example_membership"></a>
+
+#### test\_delete\_selected\_unlinks\_only\_the\_selected\_example\_membership
+
+```python
+def test_delete_selected_unlinks_only_the_selected_example_membership(
+        results: Path) -> None
+```
+
+Removing an editable Study's example row preserves all other links and data.
+
+<a id="gui.test_read_only_bridge.test_delete_selected_validates_all_links_before_changing_anything"></a>
+
+#### test\_delete\_selected\_validates\_all\_links\_before\_changing\_anything
+
+```python
+@pytest.mark.parametrize("invalid",
+                         ["protected-study", "ordinary-run", "missing-study"])
+def test_delete_selected_validates_all_links_before_changing_anything(
+        results: Path, invalid: str) -> None
+```
+
+Invalid unlink selections fail before any membership or result is removed.
+
+<a id="gui.test_read_only_bridge.test_unlink_and_group_selection_keep_the_implied_example_protected"></a>
+
+#### test\_unlink\_and\_group\_selection\_keep\_the\_implied\_example\_protected
+
+```python
+def test_unlink_and_group_selection_keep_the_implied_example_protected(
+        results: Path) -> None
+```
+
+Overlapping row/group selections never pass the example to file deletion.
+
 <a id="gui.test_read_only_bridge.test_delete_selected_refuses_a_selection_holding_a_read_only_item"></a>
 
 #### test\_delete\_selected\_refuses\_a\_selection\_holding\_a\_read\_only\_item
@@ -19006,6 +19041,17 @@ def test_home_locks_read_only_items_and_disables_their_edit_controls(
 ```
 
 Examples retain locks and Clone without the removed hierarchy actions.
+
+<a id="gui.test_read_only_screen.test_home_deletes_an_example_link_without_deleting_the_example"></a>
+
+#### test\_home\_deletes\_an\_example\_link\_without\_deleting\_the\_example
+
+```python
+def test_home_deletes_an_example_link_without_deleting_the_example(
+        tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None
+```
+
+An example in Default study is selectable only for unlinking that row.
 
 <a id="gui.test_read_only_screen.test_details_dialog_and_run_title_show_a_read_only_run_as_locked"></a>
 
@@ -27292,6 +27338,28 @@ Read-only examples design (2026-10-05), section 3: every edit to a
 read-only item is refused with `ReadOnlyError`, viewing and copying stay
 allowed, and only the seeding write path (`write_read_only_study`/
 `write_read_only_experiment`) bypasses the checks.
+
+<a id="persistence.test_read_only.test_remove_run_from_editable_study_preserves_data_and_other_memberships"></a>
+
+#### test\_remove\_run\_from\_editable\_study\_preserves\_data\_and\_other\_memberships
+
+```python
+@pytest.mark.parametrize("read_only", [False, True])
+def test_remove_run_from_editable_study_preserves_data_and_other_memberships(
+        tmp_path: Path, read_only: bool) -> None
+```
+
+Unlink only the named Study, preserving Run bytes and idempotence.
+
+<a id="persistence.test_read_only.test_remove_run_from_read_only_study_is_refused"></a>
+
+#### test\_remove\_run\_from\_read\_only\_study\_is\_refused
+
+```python
+def test_remove_run_from_read_only_study_is_refused(tmp_path: Path) -> None
+```
+
+Even an explicit unlink cannot change the shipped Study.
 
 <a id="persistence.test_read_only.test_is_run_read_only_reads_the_manifest_parameters"></a>
 
