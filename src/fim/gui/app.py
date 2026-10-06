@@ -1305,8 +1305,9 @@ def _run_config_summary(params: SimulationParams) -> dict[str, str]:
         doc `20260909-claude-sonnet-5-home-enrichment-design.md`,
         `selby/restricted`). `m`/`mu` collapse their own
         composite modes to one representative string each (a scalar
-        rate, a `"<topology> @ <rate>"` pair, `"matrix"`, or
-        `"mu_b=<rate>"`) rather than every sub-field, so a `d`-by-`d`
+        rate, a `"<topology> @ <rate>"` pair, `"matrix"`,
+        `"mu_b=<rate>"`, or a comma-separated rate per locus for a
+        `mu` the form cannot show) rather than every sub-field, so a `d`-by-`d`
         matrix or a `mu_b`-derived rate compares as a single field like
         every other, not several.
     """
@@ -1322,12 +1323,18 @@ def _run_config_summary(params: SimulationParams) -> dict[str, str]:
         m_text = f"{m_values['m_topology']} @ {m_values['m_topology_rate']}"
     else:
         m_text = "matrix"
-    mu_values = mu_from_params(params)
-    mu_text = (
-        mu_values["mu_value"]
-        if mu_values["mu_mode"] == "mu"
-        else f"mu_b={mu_values['mu_b_value']}"
-    )
+    try:
+        mu_values = mu_from_params(params)
+    except ValueError:
+        # Per-locus rates no single `mu_b` produces: the form cannot show
+        # them, but a summary can still name them, one rate per locus.
+        mu_text = ",".join(str(rate) for rate in cast("tuple[float, ...]", params.mu))
+    else:
+        mu_text = (
+            mu_values["mu_value"]
+            if mu_values["mu_mode"] == "mu"
+            else f"mu_b={mu_values['mu_b_value']}"
+        )
     return {
         "N": n_text,
         "d": str(params.d),

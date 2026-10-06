@@ -11415,6 +11415,20 @@ A real regression: `reanalyze_trajectory`'s own manifest read raises
 `FileNotFoundError` (an `OSError`), not the `ValueError` this bridge
 method's exception handling originally caught alone.
 
+<a id="gui.test_app_api.test_compare_runs_summarizes_a_genuinely_per_locus_mu"></a>
+
+#### test\_compare\_runs\_summarizes\_a\_genuinely\_per\_locus\_mu
+
+```python
+def test_compare_runs_summarizes_a_genuinely_per_locus_mu(
+        tmp_path: Path) -> None
+```
+
+A run whose loci have unrelated rates compares; its `mu` lists them.
+
+The Configure form cannot show such a `mu` (`mu_from_params` refuses
+it), but a run summary only needs to name it.
+
 <a id="gui.test_app_api.test_compare_runs_rejects_fewer_than_two_paths"></a>
 
 #### test\_compare\_runs\_rejects\_fewer\_than\_two\_paths

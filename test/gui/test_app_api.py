@@ -4153,6 +4153,27 @@ def test_open_run_reports_a_missing_trajectory_without_raising(tmp_path: Path) -
     assert "message" in result
 
 
+def test_compare_runs_summarizes_a_genuinely_per_locus_mu(tmp_path: Path) -> None:
+    """A run whose loci have unrelated rates compares; its `mu` lists them.
+
+    The Configure form cannot show such a `mu` (`mu_from_params` refuses
+    it), but a run summary only needs to name it.
+    """
+    (tmp_path / "first").mkdir()
+    (tmp_path / "second").mkdir()
+    loci = [{"locus_id": 1, "length": 200}, {"locus_id": 2, "length": 200}]
+    first = _write_run(tmp_path / "first", loci=loci, mu=[0.001, 0.05])
+    second = _write_run(tmp_path / "second", seed=2, loci=loci, mu=[0.001, 0.05])
+
+    result = Api().compare_runs(
+        [str(first / "trajectory.jsonl"), str(second / "trajectory.jsonl")]
+    )
+
+    assert result["ok"] is True, result.get("message")
+    assert result["differingFields"] == ["seed"]
+    assert result["runs"][0]["configSummary"]["mu"] == "0.001,0.05"
+
+
 def test_compare_runs_rejects_fewer_than_two_paths() -> None:
     """A single run has nothing to overlay against."""
     assert Api().compare_runs(["only-one.jsonl"]) == {
