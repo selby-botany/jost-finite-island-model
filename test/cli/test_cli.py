@@ -281,6 +281,27 @@ def test_a_capped_run_reports_converged_on_none_and_still_prints_its_window(
     assert "D trailing-window mean:" in capsys.readouterr().out
 
 
+def test_run_lists_only_the_artifacts_it_wrote(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """No sigma-band line for a run without a sigma band; every listed file exists."""
+    config = tmp_path / "run.yaml"
+    output = tmp_path / "output"
+    _write_config(config)
+
+    status = cli.main(["run", str(config), "--output", str(output)])
+
+    assert status == 0
+    listed = [
+        line.split(" -> ", 1)[1]
+        for line in capsys.readouterr().out.splitlines()
+        if " -> " in line
+    ]
+    assert listed
+    assert all(Path(path).exists() for path in listed)
+    assert not any(path.endswith("sigma_band_trajectory.jsonl") for path in listed)
+
+
 def test_run_accepts_stepping_stone_topology_sugar_for_m(tmp_path: Path) -> None:
     """A config with a compact ring topology for `m` runs end to end."""
     config = tmp_path / "run.yaml"

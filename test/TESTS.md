@@ -3146,6 +3146,17 @@ A run that hit its cap converged on nothing, but its window mean still prints.
 The watched statistic's trailing-window line comes from the
 configuration, not from `converged_on`, which is `null` here.
 
+<a id="cli.test_cli.test_run_lists_only_the_artifacts_it_wrote"></a>
+
+#### test\_run\_lists\_only\_the\_artifacts\_it\_wrote
+
+```python
+def test_run_lists_only_the_artifacts_it_wrote(
+        tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None
+```
+
+No sigma-band line for a run without a sigma band; every listed file exists.
+
 <a id="cli.test_cli.test_run_accepts_stepping_stone_topology_sugar_for_m"></a>
 
 #### test\_run\_accepts\_stepping\_stone\_topology\_sugar\_for\_m

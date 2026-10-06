@@ -622,8 +622,12 @@ def _command_run_scalar(
         _print_window_statistics(params, output.report)
         if not output.report["converged"]:
             _print_cap_note(params, output.report)
+        # Only what this run wrote: `_run_artifact_targets` names every
+        # artifact a run *can* have (the sigma-band trajectory exists only
+        # for a converged run that asked for one).
         for label, path in _run_artifact_targets(output_directory).items():
-            print(f"{label.capitalize():10} -> {path}")
+            if path.exists():
+                print(f"{label.capitalize():10} -> {path}")
     return 0
 
 
