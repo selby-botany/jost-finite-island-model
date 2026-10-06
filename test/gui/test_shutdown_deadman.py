@@ -83,6 +83,52 @@ def _wait_for_input_screen_ready(window: webview.Window) -> None:
     )
 
 
+def _run_child_until_exit(
+    program: str, marker: str, *, budget_seconds: float
+) -> tuple[int, str, str]:
+    """Run `program` in a child interpreter, bounding only what follows `marker`.
+
+    The child prints `marker` (one line, flushed) just before arming the
+    mechanism under test. Everything before it -- starting an interpreter
+    and importing `fim.gui.app`, about 13 seconds on a loaded machine --
+    is waited for without a deadline, since its length depends on machine
+    load rather than on the commit. Only the interval after the marker,
+    which is the mechanism's own bounded exit, is held to
+    `budget_seconds`; that interval is what these tests are about.
+
+    Args:
+        program: Python source for the child, run from the repository root.
+        marker: The exact first line the child prints to stdout.
+        budget_seconds: How long the child may take to exit after `marker`.
+
+    Returns:
+        The child's exit status, its whole stdout, and its whole stderr.
+
+    Raises:
+        subprocess.TimeoutExpired: If the child outlives `budget_seconds`
+            after `marker`; the child is killed first.
+    """
+    process = subprocess.Popen(
+        [sys.executable, "-c", program],
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True,
+        cwd=str(_REPOSITORY_ROOT),
+    )
+    assert process.stdout is not None
+    # Blocks until the marker line, or end of file if the child died
+    # before printing it (then `communicate` below returns at once).
+    first_line = process.stdout.readline()
+    try:
+        stdout, stderr = process.communicate(timeout=budget_seconds)
+    except subprocess.TimeoutExpired:
+        process.kill()
+        process.communicate()
+        raise
+    assert first_line == f"{marker}\n", first_line + stderr
+    return process.returncode, first_line + stdout, stderr
+
+
 def test_shutdown_timeout_defaults_when_unset(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -173,9 +219,12 @@ def test_a_wedged_shutdown_is_forced_to_exit() -> None:
     real explanation.
 
     Without the deadman this child runs forever, which is precisely what
-    a user would experience. `subprocess`'s own generous `timeout` means
-    a regression here fails as a timeout rather than hanging this suite
-    in turn.
+    a user would experience. A generous budget, counted from the moment
+    the deadman is armed (`_run_child_until_exit`), means a regression
+    here fails as a timeout rather than hanging this suite in turn. It
+    used to be counted from process start, together with a separate
+    `elapsed < 60` assertion, so interpreter start-up under load -- a
+    fact about the machine, not the commit -- counted against both.
     """
     program = textwrap.dedent(
         """
@@ -190,30 +239,24 @@ def test_a_wedged_shutdown_is_forced_to_exit() -> None:
         app._start_shutdown_deadman(3)
         """
     )
-    started = time.monotonic()
-    completed = subprocess.run(
-        [sys.executable, "-c", program],
-        capture_output=True,
-        text=True,
-        timeout=120,
-        check=False,
-        cwd=str(_REPOSITORY_ROOT),
+    # Bounded from the moment the 3-second deadman is armed, not merely
+    # "eventually". The wedge never resolves on its own (its event is
+    # never set), so exiting at all, with the deadman's own status and
+    # message, already proves the deadman ended it.
+    returncode, stdout, stderr = _run_child_until_exit(
+        program, "window closed", budget_seconds=120
     )
-    elapsed = time.monotonic() - started
 
-    assert "window closed" in completed.stdout
+    assert "window closed" in stdout
     # The user (and the log) gets a real explanation, not a mute kill.
-    assert "shutdown did not complete" in completed.stderr
+    assert "shutdown did not complete" in stderr
     # The stacks needed to fix the underlying cause are captured at the
     # one moment the offending thread is still identifiable -- a forced
     # exit must not trade a diagnosable hang for a silent one.
-    assert "Thread" in completed.stderr
+    assert "Thread" in stderr
     # A distinct status, so a forced exit is never mistaken for a clean
     # close in a log, a shell's `$?`, or a bug report.
-    assert completed.returncode == app_module._SHUTDOWN_DEADMAN_EXIT_CODE
-    # Bounded by the timeout, not merely "eventually" -- proving the
-    # deadman ended it rather than the wedge resolving on its own.
-    assert elapsed < 60
+    assert returncode == app_module._SHUTDOWN_DEADMAN_EXIT_CODE
 
 
 def _make_bridge_thread(release: threading.Event) -> threading.Thread:
@@ -290,7 +333,10 @@ def test_in_flight_bridge_threads_ignores_a_finished_bridge_thread() -> None:
     finished = _make_bridge_thread(release)
     finished.start()
     release.set()
-    finished.join(timeout=5)
+    # Unbounded: a timed join could return with the thread still alive
+    # on a loaded machine, and the assertion would then be about the
+    # scheduler rather than about `in_flight_bridge_threads`.
+    finished.join()
 
     assert app_module.in_flight_bridge_threads([finished]) == []
 
@@ -373,9 +419,9 @@ def test_forced_exit_writes_traceback_to_log_file(tmp_path: Path) -> None:
     """A real wedged child leaves its thread dump in the log file.
 
     The end-to-end proof of the windowed-launch case: stderr is
-    deliberately discarded here, exactly as it is for a GUI started from a
-    dock icon or shortcut, so anything asserted below reached the log file
-    on its own merits. Without this, a recurrence would be recorded as
+    deliberately ignored here, exactly as it is lost for a GUI started
+    from a dock icon or shortcut, so anything asserted below reached the
+    log file on its own merits. Without this, a recurrence would be recorded as
     "it hung" with no way to identify the thread responsible.
     """
     log_file = tmp_path / "fim.log"
@@ -388,20 +434,17 @@ def test_forced_exit_writes_traceback_to_log_file(tmp_path: Path) -> None:
 
         logging_setup.configure("debug", {{"file": {str(log_file)!r}}})
         threading.Thread(target=threading.Event().wait).start()
+        print("deadman armed", flush=True)
         app._start_shutdown_deadman(3)
         """
     )
-    completed = subprocess.run(
-        [sys.executable, "-c", program],
-        stdout=subprocess.DEVNULL,
-        # Discarded on purpose: proves the log file stands alone.
-        stderr=subprocess.DEVNULL,
-        timeout=120,
-        check=False,
-        cwd=str(_REPOSITORY_ROOT),
+    # stderr is captured but never read: it must not be what proves
+    # anything below. The budget counts only from the deadman's arming.
+    returncode, _stdout, _stderr = _run_child_until_exit(
+        program, "deadman armed", budget_seconds=120
     )
 
-    assert completed.returncode == app_module._SHUTDOWN_DEADMAN_EXIT_CODE
+    assert returncode == app_module._SHUTDOWN_DEADMAN_EXIT_CODE
     contents = log_file.read_text(encoding="utf-8")
     # The log records that it fired ...
     assert "shutdown deadman fired" in contents

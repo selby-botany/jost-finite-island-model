@@ -78,7 +78,10 @@ def test_live_non_daemon_threads_finds_a_thread_that_blocks_shutdown() -> None:
         assert blocker in conftest.report_live_non_daemon_threads()
     finally:
         release.set()
-        blocker.join(timeout=10)
+        # Unbounded: a timed join could return with the thread still
+        # alive on a loaded machine, failing the assertions below for a
+        # reason that is about the scheduler, not the code.
+        blocker.join()
     assert not blocker.is_alive()
     assert blocker not in conftest.live_non_daemon_threads()
 
@@ -133,10 +136,13 @@ def test_a_real_hung_interpreter_is_reported_and_bounded() -> None:
 
     Without these diagnostics this child would hang forever, which is
     precisely the observed CI symptom. A short `FIM_TEST_SHUTDOWN_TIMEOUT`
-    keeps the test fast; `subprocess`'s own `timeout` is set well above it
-    so a genuine regression fails as a timeout rather than hanging this
-    suite in turn -- the one failure mode this whole file exists to make
-    impossible.
+    keeps the test fast; the budget below is set well above it so a
+    genuine regression fails as a timeout rather than hanging this suite
+    in turn -- the one failure mode this whole file exists to make
+    impossible. That budget counts only from the child's "work finished"
+    line: interpreter start-up and imports before it are waited for
+    without a deadline, since their length depends on machine load (about
+    13 seconds on a loaded machine), not on the commit.
     """
     program = textwrap.dedent(
         """
@@ -153,26 +159,34 @@ def test_a_real_hung_interpreter_is_reported_and_bounded() -> None:
         conftest.pytest_unconfigure(None)
         """
     )
-    completed = subprocess.run(
+    process = subprocess.Popen(
         [sys.executable, "-c", program],
-        capture_output=True,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
         text=True,
-        timeout=120,
         env={"FIM_TEST_SHUTDOWN_TIMEOUT": "5", "PATH": "/usr/bin:/bin"},
-        check=False,
         cwd=str(_REPOSITORY_ROOT),
     )
+    assert process.stdout is not None
+    # Start-up: no deadline. Returns "" instead if the child died first.
+    first_line = process.stdout.readline()
+    try:
+        _stdout, stderr = process.communicate(timeout=120)
+    except subprocess.TimeoutExpired:
+        process.kill()
+        process.communicate()
+        raise
 
-    assert "work finished" in completed.stdout
+    assert first_line == "work finished\n", first_line + stderr
     # 1. The readable report named the offending thread, while ordinary
     #    Python could still run.
-    assert "non-daemon thread(s) alive at interpreter shutdown" in completed.stderr
-    assert "fim-wedged-thread" in completed.stderr
+    assert "non-daemon thread(s) alive at interpreter shutdown" in stderr
+    assert "fim-wedged-thread" in stderr
     # 2. The watchdog fired *during* finalization, when Python-level code
     #    no longer could, and dumped the stacks `sample <pid>` used to be
     #    needed for.
-    assert "Timeout" in completed.stderr
-    assert "Thread" in completed.stderr
+    assert "Timeout" in stderr
+    assert "Thread" in stderr
     # 3. The hang became a bounded, non-zero-exit failure rather than an
     #    unbounded stall that gives CI no result at all.
-    assert completed.returncode != 0
+    assert process.returncode != 0

@@ -190,11 +190,14 @@ def test_a_real_sigterm_is_handled_instead_of_killing_the_process(
         print("cancel_event set:", api._cancel_event.is_set(), flush=True)
         """
     )
+    # No `timeout`: nothing here is about how long the child takes, and
+    # most of that time is starting an interpreter and importing
+    # `fim.gui.app` -- about 13 seconds on a loaded machine, against the
+    # 30 this used to allow. CI's `timeout-minutes` bounds a real hang.
     completed = subprocess.run(
         [sys.executable, "-c", program],
         capture_output=True,
         text=True,
-        timeout=30,
         check=False,
         cwd=str(_REPOSITORY_ROOT),
     )
