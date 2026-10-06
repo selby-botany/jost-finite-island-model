@@ -1018,6 +1018,13 @@ run's name, description, or class never turns it into a different run.
 The labels are kept in the run's `metadata.json` file, beside
 `manifest.json`, never in the manifest's parameters.
 
+`fim run` checks the labels before the run starts, and writes them to
+`metadata.json` when the run finishes. If the run directory already has a
+`metadata.json`, that file is kept as it is: a name given to the run later
+wins over the one in the configuration. `fim run --name` and
+`--description` override the configuration's `name` and `description` for
+that one run.
+
 ```yaml
 name: Ring of eight islands
 description: >

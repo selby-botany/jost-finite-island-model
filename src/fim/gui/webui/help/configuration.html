@@ -891,6 +891,12 @@ of the run's ID: the ID is a hash of the model keys only, so changing a
 run's name, description, or class never turns it into a different run.
 The labels are kept in the run's <code>metadata.json</code> file, beside
 <code>manifest.json</code>, never in the manifest's parameters.</p>
+<p><code>fim run</code> checks the labels before the run starts, and writes them to
+<code>metadata.json</code> when the run finishes. If the run directory already has a
+<code>metadata.json</code>, that file is kept as it is: a name given to the run later
+wins over the one in the configuration. <code>fim run --name</code> and
+<code>--description</code> override the configuration's <code>name</code> and <code>description</code> for
+that one run.</p>
 <pre><code class="language-yaml">name: Ring of eight islands
 description: &gt;
   Eight demes in a ring, to see how far D falls below the

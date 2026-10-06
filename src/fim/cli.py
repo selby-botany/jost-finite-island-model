@@ -15,9 +15,10 @@ each its own subsection below:
   a single simulation (`_command_run_scalar`) or a whole batch of
   independent, differently seeded repeats of the same configuration
   (`_command_run_batch`) — see `fim.engine`'s own docstring for why
-  running several repeats matters at all. `--name`/`--description`
-  attach optional metadata to the completed run; `--study` adds it to
-  an existing Study once it finishes (`_record_run_organization`).
+  running several repeats matters at all. The configuration's labels
+  (`name`, `description`, `class`) and `--name`/`--description` attach
+  optional metadata to the completed run; `--study` adds it to an
+  existing Study once it finishes (`_record_run_organization`).
 - `fim study create/add-run/list/delete/copy` — organize completed runs
   into a named Study, a purely local bookkeeping operation with no
   engine involved (`_command_study`; `fim.persistence.groups`). See
@@ -108,7 +109,12 @@ from fim.persistence.report import write_jsonl_rows
 # boundary, so it must resolve as this module's own attribute under
 # mypy strict, not merely an unexported transitive import.
 from fim.persistence.report import write_report as write_report  # noqa: PLC0414
-from fim.persistence.run_metadata import replace_run_metadata
+from fim.persistence.run_metadata import (
+    RunLabels,
+    replace_run_metadata,
+    run_metadata_path,
+    write_run_labels,
+)
 from fim.statistics.catalog import DEFAULT_PAIRWISE_MAX_DEMES
 from fim.viz.scatter import plot_frequency_scatter
 
@@ -194,12 +200,31 @@ def load_config(path: Path | str) -> SimulationParams:
     Returns:
         Validated immutable parameters.
     """
+    return SimulationParams.from_mapping(_read_config_mapping(path))
+
+
+def _read_config_mapping(path: Path | str) -> Mapping[str, Any]:
+    """Read one YAML config file into its raw, unvalidated mapping.
+
+    Shared by `load_config` and `fim run`, which also needs the
+    configuration's labels (`name`, `description`, `class`) that
+    `SimulationParams.from_mapping` deliberately drops.
+
+    Args:
+        path: YAML file path.
+
+    Returns:
+        The parsed top-level mapping.
+
+    Raises:
+        ValueError: The document's root is not a mapping.
+    """
     config_path = Path(path)
     with config_path.open("r", encoding="utf-8") as handle:
         payload = yaml.safe_load(handle)
     if not isinstance(payload, Mapping):
         raise ValueError("configuration root must be a mapping")
-    return SimulationParams.from_mapping(payload)
+    return payload
 
 
 def main(argv: Sequence[str] | None = None) -> int:
@@ -371,11 +396,16 @@ def _command_run(arguments: argparse.Namespace, parser: argparse.ArgumentParser)
     command-line flag or in the loaded config's own data.
 
     Once the run itself succeeds, `_record_run_organization` attaches
-    any `--name`/`--description`/`--study` given — entirely optional,
-    entirely after the fact, and never able to affect the run itself.
+    any `--name`/`--description`/`--study` given, and the
+    configuration's own labels — entirely optional, entirely after the
+    fact, and never able to affect the run itself. The labels are read
+    and checked (an unknown `class` is an error) before the run starts,
+    so a typo costs nothing.
     """
     logger.debug("loading config: %s", arguments.config)
-    params = load_config(arguments.config)
+    config = _read_config_mapping(arguments.config)
+    params = SimulationParams.from_mapping(config)
+    labels = RunLabels.from_config(config)
     if arguments.max_concurrent_replicates is not None:
         # The one CLI flag that overrides a real `SimulationParams` field
         # rather than pure execution mechanics (`--workers`/`--sequential`
@@ -424,14 +454,16 @@ def _command_run(arguments: argparse.Namespace, parser: argparse.ArgumentParser)
     else:
         status = _command_run_batch(params, output_directory, arguments, parser)
     if status == 0:
-        _record_run_organization(output_directory, arguments)
+        _record_run_organization(output_directory, arguments, labels)
     return status
 
 
 def _record_run_organization(
-    output_directory: Path, arguments: argparse.Namespace
+    output_directory: Path,
+    arguments: argparse.Namespace,
+    labels: RunLabels | None = None,
 ) -> None:
-    """Attach optional `--name`/`--description` metadata; always attach a Study.
+    """Attach the run's labels and `--name`/`--description`; always attach a Study.
 
     Reached only once `output_directory` has actually been published by
     `_command_run_scalar`/`_command_run_batch` (`status == 0`) — a run
@@ -455,10 +487,34 @@ def _record_run_organization(
     explicitly-named `--study` prints a confirmation; the implicit
     default attachment stays silent, matching a plain `fim run`'s own
     existing quiet behavior.
+
+    The configuration's labels (`labels`, from `RunLabels.from_config`)
+    are written to `metadata.json` unless the run already has one
+    (read-only examples design, 2026-10-05, section 1), with `--name`/
+    `--description` overriding the matching label for this one run.
+    Writing a new sidecar is creation, not an edit, so it works for a
+    read-only run too (`write_run_labels`). Only if a sidecar already
+    exists do explicit flags fall back to `replace_run_metadata`, the
+    edit path, which refuses a read-only run; the configuration's
+    labels never overwrite an existing sidecar.
+
+    Args:
+        output_directory: The just-published run directory.
+        arguments: The parsed `fim run` arguments.
+        labels: The configuration's labels, or `None` for none.
     """
     name = arguments.name
     description = arguments.description
-    if name is not None or description is not None:
+    flags_given = name is not None or description is not None
+    base = labels if labels is not None else RunLabels()
+    merged = RunLabels(
+        name=name if name is not None else base.name,
+        description=description if description is not None else base.description,
+        run_class=base.run_class,
+    )
+    if not run_metadata_path(output_directory).exists():
+        write_run_labels(output_directory, merged)
+    elif flags_given:
         replace_run_metadata(output_directory, name=name, description=description)
     if arguments.study is not None:
         study = add_run_to_study(arguments.study, output_directory)
@@ -1447,12 +1503,18 @@ def _parser() -> argparse.ArgumentParser:
     run_parser.add_argument(
         "--name",
         metavar="NAME",
-        help="short name recorded for this run, once it completes",
+        help=(
+            "short name recorded for this run, once it completes; "
+            "overrides the configuration's own name"
+        ),
     )
     run_parser.add_argument(
         "--description",
         metavar="TEXT",
-        help="longer description recorded for this run, once it completes",
+        help=(
+            "longer description recorded for this run, once it completes; "
+            "overrides the configuration's own description"
+        ),
     )
     run_parser.add_argument(
         "--study",

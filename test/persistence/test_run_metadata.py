@@ -13,6 +13,7 @@ from fim.persistence.run_metadata import (
     read_run_metadata,
     replace_run_metadata,
     run_metadata_path,
+    write_run_labels,
     write_run_metadata,
 )
 
@@ -257,3 +258,51 @@ def test_replace_run_metadata_keeps_the_class_unless_one_is_passed(
     )
     assert cleared.run_class is None
     assert read_run_metadata(run_metadata_path(tmp_path)).run_class is None
+
+
+def test_write_run_labels_creates_a_sidecar_from_the_labels(tmp_path: Path) -> None:
+    """A new run's labels become its `metadata.json`."""
+    labels = RunLabels(name="Ring", description="Four demes.", run_class="migration")
+
+    written = write_run_labels(tmp_path, labels, clock=_fixed_clock)
+
+    assert written is not None
+    assert read_run_metadata(run_metadata_path(tmp_path)) == written
+    assert written.run_class == "migration"
+    assert written.created_at == written.updated_at == "2026-10-05T12:00:00Z"
+
+
+@pytest.mark.parametrize("prior", ["valid", "unreadable"])
+def test_write_run_labels_never_overwrites_an_existing_sidecar(
+    tmp_path: Path, prior: str
+) -> None:
+    """Any existing `metadata.json`, readable or not, is kept byte for byte."""
+    path = run_metadata_path(tmp_path)
+    if prior == "valid":
+        write_run_metadata(path, _metadata(name="Renamed later"))
+    else:
+        path.write_text("not json", encoding="utf-8")
+    before = path.read_bytes()
+
+    written = write_run_labels(tmp_path, RunLabels(name="From config"))
+
+    assert written is None
+    assert path.read_bytes() == before
+
+
+def test_write_run_labels_writes_nothing_for_empty_labels(tmp_path: Path) -> None:
+    """A configuration without labels leaves the run without a sidecar."""
+    assert write_run_labels(tmp_path, RunLabels()) is None
+    assert not run_metadata_path(tmp_path).exists()
+
+
+def test_write_run_labels_works_for_a_read_only_run(tmp_path: Path) -> None:
+    """Creating a sidecar is not an edit, so a read-only run gets its labels."""
+    (tmp_path / "manifest.json").write_text(
+        '{"parameters": {"_read_only": true}}', encoding="utf-8"
+    )
+
+    written = write_run_labels(tmp_path, RunLabels(name="Example"))
+
+    assert written is not None
+    assert written.name == "Example"

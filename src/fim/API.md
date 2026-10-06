@@ -570,6 +570,7 @@ Return to the [source-tree orientation](../README.md) or the [developer guide](.
   * [read\_run\_metadata](#fim.persistence.run_metadata.read_run_metadata)
   * [write\_run\_metadata](#fim.persistence.run_metadata.write_run_metadata)
   * [replace\_run\_metadata](#fim.persistence.run_metadata.replace_run_metadata)
+  * [write\_run\_labels](#fim.persistence.run_metadata.write_run_labels)
 * [fim.persistence.store](#fim.persistence.store)
   * [TrajectoryRow](#fim.persistence.store.TrajectoryRow)
   * [TrajectoryStore](#fim.persistence.store.TrajectoryStore)
@@ -807,9 +808,10 @@ each its own subsection below:
   a single simulation (`_command_run_scalar`) or a whole batch of
   independent, differently seeded repeats of the same configuration
   (`_command_run_batch`) — see `fim.engine`'s own docstring for why
-  running several repeats matters at all. `--name`/`--description`
-  attach optional metadata to the completed run; `--study` adds it to
-  an existing Study once it finishes (`_record_run_organization`).
+  running several repeats matters at all. The configuration's labels
+  (`name`, `description`, `class`) and `--name`/`--description` attach
+  optional metadata to the completed run; `--study` adds it to an
+  existing Study once it finishes (`_record_run_organization`).
 - `fim study create/add-run/list/delete/copy` — organize completed runs
   into a named Study, a purely local bookkeeping operation with no
   engine involved (`_command_study`; `fim.persistence.groups`). See
@@ -16721,6 +16723,42 @@ dialog) never clears its class by accident.
 
 - `ReadOnlyError` - The run is read-only (its manifest parameters
   carry `_read_only: true`); nothing is written.
+
+<a id="fim.persistence.run_metadata.write_run_labels"></a>
+
+#### write\_run\_labels
+
+```python
+def write_run_labels(run_directory: Path | str,
+                     labels: RunLabels,
+                     *,
+                     clock: Clock = _utc_now) -> RunMetadata | None
+```
+
+Write a new run's configuration labels, unless it already has metadata.
+
+How `fim run` records the `name`, `description`, and `class` in a
+configuration (read-only examples design, 2026-10-05, section 1).
+An existing `metadata.json` always wins, readable or not: it holds
+a later edit (or app-owned seeded labels), and a configuration's
+labels must never overwrite it. Nothing is written for empty labels,
+so a run without any keeps having no sidecar at all.
+
+This only ever creates a sidecar, never edits one, so it is allowed
+for a read-only run too: a read-only example run made with `fim run`
+gets its labels the same way an ordinary run does.
+
+**Arguments**:
+
+- `run_directory` - The run's own output directory.
+- `labels` - The labels to record (`RunLabels.from_config`).
+- `clock` - Injectable current-time source, for deterministic tests.
+
+
+**Returns**:
+
+  The metadata written, or `None` when nothing was written (the
+  labels were empty, or a sidecar already existed).
 
 <a id="fim.persistence.store"></a>
 

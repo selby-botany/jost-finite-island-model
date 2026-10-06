@@ -28,6 +28,7 @@ Every test module, fixture, and test function documented here in full; `doc/fim-
 - [`test/cli/`](#group-cli)
   - [`conftest`](#cli.conftest)
   - [`test_cli`](#cli.test_cli)
+  - [`test_cli_labels`](#cli.test_cli_labels)
   - [`test_cli_sweep`](#cli.test_cli_sweep)
 - [`test/convergence/`](#group-convergence)
   - [`test_criteria_validation`](#convergence.test_criteria_validation)
@@ -3754,6 +3755,118 @@ def test_study_and_experiment_create_record_documentation(
 ```
 
 `--documentation` is stored beside the one-line `--description`.
+
+<a id="cli.test_cli_labels"></a>
+
+# cli.test\_cli\_labels
+
+`fim run` and configuration labels; CLI reporting of read-only items.
+
+Read-only examples design (2026-10-05), sections 1 and 3: `fim run`
+writes a configuration's `name`, `description`, and `class` to the new
+run's `metadata.json` unless one already exists, and every CLI command
+that edits a read-only Study or Experiment reports `ReadOnlyError` as an
+ordinary one-line error.
+
+<a id="cli.test_cli_labels.test_run_writes_the_configuration_labels_to_metadata"></a>
+
+#### test\_run\_writes\_the\_configuration\_labels\_to\_metadata
+
+```python
+def test_run_writes_the_configuration_labels_to_metadata(
+        tmp_path: Path) -> None
+```
+
+`name`, `description`, and `class` land in the new run's sidecar.
+
+<a id="cli.test_cli_labels.test_run_flags_override_the_configuration_labels"></a>
+
+#### test\_run\_flags\_override\_the\_configuration\_labels
+
+```python
+def test_run_flags_override_the_configuration_labels(tmp_path: Path) -> None
+```
+
+`--name`/`--description` win, field by field; the class is kept.
+
+<a id="cli.test_cli_labels.test_run_rejects_an_unknown_class_before_running"></a>
+
+#### test\_run\_rejects\_an\_unknown\_class\_before\_running
+
+```python
+def test_run_rejects_an_unknown_class_before_running(
+        tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None
+```
+
+A typo in `class` is reported before any output exists.
+
+<a id="cli.test_cli_labels.test_run_of_a_read_only_configuration_still_records_its_labels"></a>
+
+#### test\_run\_of\_a\_read\_only\_configuration\_still\_records\_its\_labels
+
+```python
+def test_run_of_a_read_only_configuration_still_records_its_labels(
+        tmp_path: Path) -> None
+```
+
+Writing a new sidecar is creation, so a read-only run gets its labels.
+
+<a id="cli.test_cli_labels.test_configuration_labels_never_overwrite_an_existing_sidecar"></a>
+
+#### test\_configuration\_labels\_never\_overwrite\_an\_existing\_sidecar
+
+```python
+def test_configuration_labels_never_overwrite_an_existing_sidecar(
+        tmp_path: Path) -> None
+```
+
+An existing `metadata.json` wins over the configuration's labels.
+
+<a id="cli.test_cli_labels.test_explicit_flags_still_edit_an_existing_sidecar"></a>
+
+#### test\_explicit\_flags\_still\_edit\_an\_existing\_sidecar
+
+```python
+def test_explicit_flags_still_edit_an_existing_sidecar(tmp_path: Path) -> None
+```
+
+With a sidecar present, `--name` is an edit, as it always was.
+
+<a id="cli.test_cli_labels.test_cli_reports_a_read_only_refusal_as_a_one_line_error"></a>
+
+#### test\_cli\_reports\_a\_read\_only\_refusal\_as\_a\_one\_line\_error
+
+```python
+@pytest.mark.parametrize(
+    "argv",
+    [
+        ["study", "delete", "study-examples-migration"],
+        ["study", "add-run", "study-examples-migration", "mine"],
+        ["experiment", "delete", "experiment-examples"],
+        ["experiment", "add-study", "experiment-examples", "STUDY"],
+    ],
+    ids=[
+        "study-delete", "study-add-run", "experiment-delete",
+        "experiment-add-study"
+    ],
+)
+def test_cli_reports_a_read_only_refusal_as_a_one_line_error(
+        tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+        capsys: pytest.CaptureFixture[str], argv: list[str]) -> None
+```
+
+Every editing command refuses a read-only item cleanly, changing nothing.
+
+<a id="cli.test_cli_labels.test_cli_copies_a_read_only_study_into_an_editable_one"></a>
+
+#### test\_cli\_copies\_a\_read\_only\_study\_into\_an\_editable\_one
+
+```python
+def test_cli_copies_a_read_only_study_into_an_editable_one(
+        tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None
+```
+
+Copying stays allowed from the terminal too.
 
 <a id="cli.test_cli_sweep"></a>
 
@@ -26313,6 +26426,50 @@ def test_replace_run_metadata_keeps_the_class_unless_one_is_passed(
 ```
 
 Renaming a run keeps its class; passing `run_class` changes or clears it.
+
+<a id="persistence.test_run_metadata.test_write_run_labels_creates_a_sidecar_from_the_labels"></a>
+
+#### test\_write\_run\_labels\_creates\_a\_sidecar\_from\_the\_labels
+
+```python
+def test_write_run_labels_creates_a_sidecar_from_the_labels(
+        tmp_path: Path) -> None
+```
+
+A new run's labels become its `metadata.json`.
+
+<a id="persistence.test_run_metadata.test_write_run_labels_never_overwrites_an_existing_sidecar"></a>
+
+#### test\_write\_run\_labels\_never\_overwrites\_an\_existing\_sidecar
+
+```python
+@pytest.mark.parametrize("prior", ["valid", "unreadable"])
+def test_write_run_labels_never_overwrites_an_existing_sidecar(
+        tmp_path: Path, prior: str) -> None
+```
+
+Any existing `metadata.json`, readable or not, is kept byte for byte.
+
+<a id="persistence.test_run_metadata.test_write_run_labels_writes_nothing_for_empty_labels"></a>
+
+#### test\_write\_run\_labels\_writes\_nothing\_for\_empty\_labels
+
+```python
+def test_write_run_labels_writes_nothing_for_empty_labels(
+        tmp_path: Path) -> None
+```
+
+A configuration without labels leaves the run without a sidecar.
+
+<a id="persistence.test_run_metadata.test_write_run_labels_works_for_a_read_only_run"></a>
+
+#### test\_write\_run\_labels\_works\_for\_a\_read\_only\_run
+
+```python
+def test_write_run_labels_works_for_a_read_only_run(tmp_path: Path) -> None
+```
+
+Creating a sidecar is not an edit, so a read-only run gets its labels.
 
 <a id="persistence.test_store"></a>
 

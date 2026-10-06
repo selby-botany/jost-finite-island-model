@@ -330,6 +330,50 @@ def replace_run_metadata(
     return metadata
 
 
+def write_run_labels(
+    run_directory: Path | str, labels: RunLabels, *, clock: Clock = _utc_now
+) -> RunMetadata | None:
+    """Write a new run's configuration labels, unless it already has metadata.
+
+    How `fim run` records the `name`, `description`, and `class` in a
+    configuration (read-only examples design, 2026-10-05, section 1).
+    An existing `metadata.json` always wins, readable or not: it holds
+    a later edit (or app-owned seeded labels), and a configuration's
+    labels must never overwrite it. Nothing is written for empty labels,
+    so a run without any keeps having no sidecar at all.
+
+    This only ever creates a sidecar, never edits one, so it is allowed
+    for a read-only run too: a read-only example run made with `fim run`
+    gets its labels the same way an ordinary run does.
+
+    Args:
+        run_directory: The run's own output directory.
+        labels: The labels to record (`RunLabels.from_config`).
+        clock: Injectable current-time source, for deterministic tests.
+
+    Returns:
+        The metadata written, or `None` when nothing was written (the
+        labels were empty, or a sidecar already existed).
+    """
+    path = run_metadata_path(run_directory)
+    if labels.is_empty:
+        return None
+    if path.exists():
+        logger.debug("keeping existing run metadata %s", path)
+        return None
+    now = _format_timestamp(clock())
+    metadata = RunMetadata(
+        schema_version=CURRENT_RUN_METADATA_SCHEMA_VERSION,
+        name=labels.name,
+        description=labels.description,
+        created_at=now,
+        updated_at=now,
+        run_class=labels.run_class,
+    )
+    write_run_metadata(path, metadata)
+    return metadata
+
+
 def _config_label(config: Mapping[str, Any], key: str) -> str | None:
     """Read one optional label from a configuration, stripped, or `None`."""
     raw_value = config.get(key)
