@@ -110,6 +110,7 @@ Every test module, fixture, and test function documented here in full; `doc/fim-
   - [`test_groups`](#persistence.test_groups)
   - [`test_manifest`](#persistence.test_manifest)
   - [`test_pairwise_file`](#persistence.test_pairwise_file)
+  - [`test_read_only`](#persistence.test_read_only)
   - [`test_report`](#persistence.test_report)
   - [`test_run_classes`](#persistence.test_run_classes)
   - [`test_run_metadata`](#persistence.test_run_metadata)
@@ -25433,6 +25434,364 @@ def test_pairwise_f_st_is_null_where_undefined(tmp_path: Path) -> None
 ```
 
 Two demes fixed for the same allele: F_ST undefined, saved as null.
+
+<a id="persistence.test_read_only"></a>
+
+# persistence.test\_read\_only
+
+Read-only Studies, Experiments, and Runs (`fim.persistence.groups`).
+
+Read-only examples design (2026-10-05), section 3: every edit to a
+read-only item is refused with `ReadOnlyError`, viewing and copying stay
+allowed, and only the seeding write path (`write_read_only_study`/
+`write_read_only_experiment`) bypasses the checks.
+
+<a id="persistence.test_read_only.test_is_run_read_only_reads_the_manifest_parameters"></a>
+
+#### test\_is\_run\_read\_only\_reads\_the\_manifest\_parameters
+
+```python
+def test_is_run_read_only_reads_the_manifest_parameters(
+        tmp_path: Path) -> None
+```
+
+Only a JSON `true` under `parameters._read_only` makes a run read-only.
+
+<a id="persistence.test_read_only.test_read_only_error_is_a_value_error"></a>
+
+#### test\_read\_only\_error\_is\_a\_value\_error
+
+```python
+def test_read_only_error_is_a_value_error() -> None
+```
+
+Existing `except ValueError` handlers report it without changes.
+
+<a id="persistence.test_read_only.test_read_only_is_written_only_when_true"></a>
+
+#### test\_read\_only\_is\_written\_only\_when\_true
+
+```python
+def test_read_only_is_written_only_when_true(tmp_path: Path) -> None
+```
+
+An editable manifest keeps its JSON shape; a read-only one adds the key.
+
+<a id="persistence.test_read_only.test_old_manifests_without_read_only_still_load"></a>
+
+#### test\_old\_manifests\_without\_read\_only\_still\_load
+
+```python
+def test_old_manifests_without_read_only_still_load() -> None
+```
+
+A manifest written before `read_only` existed reads back editable.
+
+<a id="persistence.test_read_only.test_a_non_boolean_read_only_is_rejected"></a>
+
+#### test\_a\_non\_boolean\_read\_only\_is\_rejected
+
+```python
+def test_a_non_boolean_read_only_is_rejected() -> None
+```
+
+`read_only` must be a real boolean when present.
+
+<a id="persistence.test_read_only.test_a_read_only_study_cannot_be_renamed_or_described"></a>
+
+#### test\_a\_read\_only\_study\_cannot\_be\_renamed\_or\_described
+
+```python
+def test_a_read_only_study_cannot_be_renamed_or_described(
+        tmp_path: Path) -> None
+```
+
+`update_study_details` refuses, and the manifest is unchanged.
+
+<a id="persistence.test_read_only.test_a_read_only_study_cannot_be_deleted"></a>
+
+#### test\_a\_read\_only\_study\_cannot\_be\_deleted
+
+```python
+@pytest.mark.parametrize("delete_runs_too", [True, False])
+def test_a_read_only_study_cannot_be_deleted(tmp_path: Path,
+                                             delete_runs_too: bool) -> None
+```
+
+`delete_study` refuses, with or without its Runs, and deletes nothing.
+
+<a id="persistence.test_read_only.test_a_read_only_study_cannot_be_emptied"></a>
+
+#### test\_a\_read\_only\_study\_cannot\_be\_emptied
+
+```python
+def test_a_read_only_study_cannot_be_emptied(tmp_path: Path) -> None
+```
+
+`clear_study_runs` refuses, and every Run stays.
+
+<a id="persistence.test_read_only.test_a_read_only_study_cannot_gain_runs"></a>
+
+#### test\_a\_read\_only\_study\_cannot\_gain\_runs
+
+```python
+def test_a_read_only_study_cannot_gain_runs(tmp_path: Path) -> None
+```
+
+`add_run_to_study` refuses a read-only Study.
+
+<a id="persistence.test_read_only.test_remove_run_references_leaves_a_read_only_study_alone"></a>
+
+#### test\_remove\_run\_references\_leaves\_a\_read\_only\_study\_alone
+
+```python
+def test_remove_run_references_leaves_a_read_only_study_alone(
+        tmp_path: Path) -> None
+```
+
+A dangling link in a read-only Study is left for re-seeding to repair.
+
+<a id="persistence.test_read_only.test_copying_a_read_only_study_gives_an_editable_copy"></a>
+
+#### test\_copying\_a\_read\_only\_study\_gives\_an\_editable\_copy
+
+```python
+def test_copying_a_read_only_study_gives_an_editable_copy(
+        tmp_path: Path) -> None
+```
+
+Copying stays allowed, and the copy can be edited.
+
+<a id="persistence.test_read_only.test_a_read_only_experiment_cannot_be_renamed_or_described"></a>
+
+#### test\_a\_read\_only\_experiment\_cannot\_be\_renamed\_or\_described
+
+```python
+def test_a_read_only_experiment_cannot_be_renamed_or_described(
+        tmp_path: Path) -> None
+```
+
+`update_experiment_details` refuses, and the manifest is unchanged.
+
+<a id="persistence.test_read_only.test_a_read_only_experiment_cannot_be_deleted"></a>
+
+#### test\_a\_read\_only\_experiment\_cannot\_be\_deleted
+
+```python
+@pytest.mark.parametrize("delete_studies_too", [True, False])
+def test_a_read_only_experiment_cannot_be_deleted(
+        tmp_path: Path, delete_studies_too: bool) -> None
+```
+
+`delete_experiment` refuses, and its Studies and Runs stay.
+
+<a id="persistence.test_read_only.test_a_read_only_experiment_cannot_gain_studies"></a>
+
+#### test\_a\_read\_only\_experiment\_cannot\_gain\_studies
+
+```python
+def test_a_read_only_experiment_cannot_gain_studies(tmp_path: Path) -> None
+```
+
+`add_study_to_experiment` refuses a read-only Experiment.
+
+<a id="persistence.test_read_only.test_prune_missing_studies_leaves_a_read_only_experiment_alone"></a>
+
+#### test\_prune\_missing\_studies\_leaves\_a\_read\_only\_experiment\_alone
+
+```python
+def test_prune_missing_studies_leaves_a_read_only_experiment_alone(
+        tmp_path: Path) -> None
+```
+
+A dangling Study id in a read-only Experiment is left for re-seeding.
+
+<a id="persistence.test_read_only.test_a_read_only_run_cannot_be_renamed_described_or_reclassed"></a>
+
+#### test\_a\_read\_only\_run\_cannot\_be\_renamed\_described\_or\_reclassed
+
+```python
+def test_a_read_only_run_cannot_be_renamed_described_or_reclassed(
+        tmp_path: Path) -> None
+```
+
+`replace_run_metadata` refuses a read-only run and writes nothing.
+
+<a id="persistence.test_read_only.test_an_editable_run_can_still_be_renamed"></a>
+
+#### test\_an\_editable\_run\_can\_still\_be\_renamed
+
+```python
+def test_an_editable_run_can_still_be_renamed(tmp_path: Path) -> None
+```
+
+Control: the check refuses only read-only runs.
+
+<a id="persistence.test_read_only.test_delete_runs_refuses_a_read_only_run_and_deletes_nothing"></a>
+
+#### test\_delete\_runs\_refuses\_a\_read\_only\_run\_and\_deletes\_nothing
+
+```python
+def test_delete_runs_refuses_a_read_only_run_and_deletes_nothing(
+        tmp_path: Path) -> None
+```
+
+A selection holding a read-only run is refused whole.
+
+<a id="persistence.test_read_only.test_delete_runs_deletes_editable_runs_and_unlinks_them"></a>
+
+#### test\_delete\_runs\_deletes\_editable\_runs\_and\_unlinks\_them
+
+```python
+def test_delete_runs_deletes_editable_runs_and_unlinks_them(
+        tmp_path: Path) -> None
+```
+
+Control: ordinary runs are deleted, unlinked, and a gone one is tolerated.
+
+<a id="persistence.test_read_only.test_supersede_run_refuses_to_replace_a_read_only_run"></a>
+
+#### test\_supersede\_run\_refuses\_to\_replace\_a\_read\_only\_run
+
+```python
+def test_supersede_run_refuses_to_replace_a_read_only_run(
+        tmp_path: Path) -> None
+```
+
+A read-only run is never deleted, even as an exact duplicate.
+
+<a id="persistence.test_read_only.test_deleting_an_editable_study_keeps_its_read_only_runs"></a>
+
+#### test\_deleting\_an\_editable\_study\_keeps\_its\_read\_only\_runs
+
+```python
+def test_deleting_an_editable_study_keeps_its_read_only_runs(
+        tmp_path: Path) -> None
+```
+
+A user's Study holding an example can be deleted; the example survives.
+
+<a id="persistence.test_read_only.test_emptying_an_editable_study_keeps_its_read_only_runs_linked"></a>
+
+#### test\_emptying\_an\_editable\_study\_keeps\_its\_read\_only\_runs\_linked
+
+```python
+def test_emptying_an_editable_study_keeps_its_read_only_runs_linked(
+        tmp_path: Path) -> None
+```
+
+`clear_study_runs` deletes ordinary runs; a read-only one stays, linked.
+
+<a id="persistence.test_read_only.test_deleting_an_editable_experiment_keeps_its_read_only_studies"></a>
+
+#### test\_deleting\_an\_editable\_experiment\_keeps\_its\_read\_only\_studies
+
+```python
+def test_deleting_an_editable_experiment_keeps_its_read_only_studies(
+        tmp_path: Path) -> None
+```
+
+A user's Experiment holding an example Study can be deleted; the Study stays.
+
+<a id="persistence.test_read_only.test_deleting_an_editable_study_leaves_read_only_experiments_untouched"></a>
+
+#### test\_deleting\_an\_editable\_study\_leaves\_read\_only\_experiments\_untouched
+
+```python
+def test_deleting_an_editable_study_leaves_read_only_experiments_untouched(
+        tmp_path: Path) -> None
+```
+
+Detaching a deleted Study never edits a read-only Experiment.
+
+<a id="persistence.test_read_only.test_write_read_only_study_creates_a_fixed_id_read_only_study"></a>
+
+#### test\_write\_read\_only\_study\_creates\_a\_fixed\_id\_read\_only\_study
+
+```python
+def test_write_read_only_study_creates_a_fixed_id_read_only_study(
+        tmp_path: Path) -> None
+```
+
+The seeding path writes a read-only Study at exactly the id given.
+
+<a id="persistence.test_read_only.test_write_read_only_study_bypasses_the_read_only_check"></a>
+
+#### test\_write\_read\_only\_study\_bypasses\_the\_read\_only\_check
+
+```python
+def test_write_read_only_study_bypasses_the_read_only_check(
+        tmp_path: Path) -> None
+```
+
+Re-seeding replaces a read-only Study, keeping `created_at`.
+
+<a id="persistence.test_read_only.test_write_read_only_study_is_idempotent"></a>
+
+#### test\_write\_read\_only\_study\_is\_idempotent
+
+```python
+def test_write_read_only_study_is_idempotent(tmp_path: Path) -> None
+```
+
+Seeding the same content again writes nothing and keeps `updated_at`.
+
+<a id="persistence.test_read_only.test_write_read_only_study_replaces_an_editable_study_at_its_id"></a>
+
+#### test\_write\_read\_only\_study\_replaces\_an\_editable\_study\_at\_its\_id
+
+```python
+def test_write_read_only_study_replaces_an_editable_study_at_its_id(
+        tmp_path: Path) -> None
+```
+
+A fixed seeding id is app-owned, so an editable manifest there is replaced.
+
+<a id="persistence.test_read_only.test_write_read_only_study_requires_the_study_prefix"></a>
+
+#### test\_write\_read\_only\_study\_requires\_the\_study\_prefix
+
+```python
+@pytest.mark.parametrize("study_id",
+                         ["examples-migration", "study-", "experiment-x"])
+def test_write_read_only_study_requires_the_study_prefix(
+        tmp_path: Path, study_id: str) -> None
+```
+
+A seeded Study id must look like every other Study id.
+
+<a id="persistence.test_read_only.test_write_read_only_experiment_bypasses_and_is_idempotent"></a>
+
+#### test\_write\_read\_only\_experiment\_bypasses\_and\_is\_idempotent
+
+```python
+def test_write_read_only_experiment_bypasses_and_is_idempotent(
+        tmp_path: Path) -> None
+```
+
+Re-seeding the Experiment replaces it when changed, and not otherwise.
+
+<a id="persistence.test_read_only.test_write_read_only_experiment_requires_existing_studies"></a>
+
+#### test\_write\_read\_only\_experiment\_requires\_existing\_studies
+
+```python
+def test_write_read_only_experiment_requires_existing_studies(
+        tmp_path: Path) -> None
+```
+
+Studies are seeded first; an unknown member Study is an error.
+
+<a id="persistence.test_read_only.test_write_read_only_experiment_requires_the_experiment_prefix"></a>
+
+#### test\_write\_read\_only\_experiment\_requires\_the\_experiment\_prefix
+
+```python
+def test_write_read_only_experiment_requires_the_experiment_prefix(
+        tmp_path: Path) -> None
+```
+
+A seeded Experiment id must look like every other Experiment id.
 
 <a id="persistence.test_report"></a>
 

@@ -29,6 +29,28 @@ data-destroying operation"), confirmed directly by the project owner
 when this module was implemented. `delete_study`/`delete_experiment`
 both accept an escape hatch (`delete_runs=False`/`delete_studies=False`)
 for a caller that genuinely only wants the grouping gone.
+
+**Read-only items** (read-only examples design, 2026-10-05, section 3).
+A Study or Experiment whose manifest has `read_only: true`, and a Run
+whose manifest parameters have `_read_only: true` (`is_run_read_only`),
+are shipped examples that every function here refuses to edit, raising
+`ReadOnlyError` (a `ValueError`, so every existing caller that reports
+a `ValueError` reports this one too):
+
+- a read-only Study or Experiment cannot be renamed, described,
+  documented, deleted, emptied, or gain or lose members;
+- a read-only Run is never deleted and never unlinked from a Study. A
+  Study or Experiment being deleted or emptied skips its read-only
+  members rather than failing, so a user's own grouping that happens to
+  hold an example stays fully manageable, and the example survives.
+
+Viewing and copying stay allowed; a copy (`copy_study`/
+`copy_experiment`) is always an ordinary, editable grouping. Only the
+examples seeding code writes read-only manifests, through
+`write_read_only_study`/`write_read_only_experiment`, which bypass the
+checks. `read_only` is written to JSON only when true, with no schema
+bump: an older fim ignores the key when reading, but an older fim that
+rewrites such a manifest drops it, so re-seeding restores it.
 """
 
 from __future__ import annotations
@@ -74,6 +96,61 @@ DEFAULT_STUDY_NAME: Final = "Default study"
 DEFAULT_EXPERIMENT_NAME: Final = "Default experiment"
 
 Clock = Callable[[], datetime]
+
+
+class ReadOnlyError(ValueError):
+    """Refuse an edit to a read-only Study, Experiment, or Run.
+
+    A `ValueError` subclass, so the GUI bridge's and the CLI's existing
+    `except ValueError` handlers already report it as an ordinary
+    `{"ok": False, "message": ...}` or `fim: error: ...`; a caller that
+    wants to tell it apart (to show a lock rather than an error, say)
+    can catch it first.
+    """
+
+
+def is_run_read_only(run_directory: Path | str) -> bool:
+    """Return whether a Run is read-only: its manifest has `_read_only: true`.
+
+    Reads the raw JSON rather than `read_manifest`/`read_batch_manifest`,
+    so one check covers both scalar and batch runs. A directory with no
+    readable manifest is not read-only: nothing here is protecting it.
+
+    Args:
+        run_directory: The Run's own directory.
+
+    Returns:
+        `True` only when `manifest.json`'s `parameters` object holds
+        `_read_only` set to the JSON value `true`.
+    """
+    manifest_path = Path(run_directory) / "manifest.json"
+    try:
+        payload = json.loads(manifest_path.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return False
+    parameters = payload.get("parameters") if isinstance(payload, dict) else None
+    return isinstance(parameters, dict) and parameters.get("_read_only") is True
+
+
+def refuse_read_only_run(run_directory: Path | str, action: str) -> None:
+    """Raise `ReadOnlyError` when `run_directory` is a read-only Run.
+
+    Shared by every function that edits a Run, here and in
+    `fim.persistence.run_metadata`.
+
+    Args:
+        run_directory: The Run about to be changed.
+        action: What was asked, as a past participle completing "cannot
+            be ..." (`"deleted"`, `"renamed or described"`).
+
+    Raises:
+        ReadOnlyError: The Run is read-only.
+    """
+    if is_run_read_only(run_directory):
+        raise ReadOnlyError(
+            f"run {Path(run_directory).name} is a read-only example and cannot "
+            f"be {action}; make an editable copy of it instead"
+        )
 
 
 def _utc_now() -> datetime:
@@ -149,6 +226,10 @@ class StudyManifest:
     what the Study is for and why (its question, its rationale, what it
     found), shown in the details dialog. Both are optional; a manifest
     written before `documentation` existed reads back with it `None`.
+
+    `read_only` marks a shipped example Study that this module refuses
+    to edit (module docstring); it is written to JSON only when true,
+    so a manifest written before it existed reads back `False`.
     """
 
     schema_version: int
@@ -160,6 +241,7 @@ class StudyManifest:
     run_directories: tuple[str, ...]
     sweep_spec: Mapping[str, object] | None = None
     documentation: str | None = None
+    read_only: bool = False
 
     def __post_init__(self) -> None:
         """Validate schema version, identity, name, and timestamps."""
@@ -182,8 +264,11 @@ class StudyManifest:
         return len(self.run_directories)
 
     def to_dict(self) -> dict[str, object]:
-        """Return a JSON-serializable study manifest mapping."""
-        return {
+        """Return a JSON-serializable study manifest mapping.
+
+        `read_only` appears only when true (see the class docstring).
+        """
+        result: dict[str, object] = {
             "schema_version": self.schema_version,
             "study_id": self.study_id,
             "name": self.name,
@@ -197,6 +282,9 @@ class StudyManifest:
                 dict(self.sweep_spec) if self.sweep_spec is not None else None
             ),
         }
+        if self.read_only:
+            result["read_only"] = True
+        return result
 
     @classmethod
     def from_dict(cls, value: Mapping[str, Any]) -> StudyManifest:
@@ -234,6 +322,7 @@ class StudyManifest:
             documentation=_optional_string(
                 value, "documentation", label="study manifest"
             ),
+            read_only=_optional_bool(value, "read_only", label="study manifest"),
         )
 
 
@@ -245,7 +334,8 @@ class ExperimentManifest:
     (`study_ids` in place of `run_directories`, no `sweep_spec`) — an
     Experiment is otherwise a thin container with no results of its own
     beyond what its Studies already show (design doc §1.3).
-    `description`/`documentation` mean what they mean on a Study.
+    `description`/`documentation`/`read_only` mean what they mean on a
+    Study.
     """
 
     schema_version: int
@@ -256,6 +346,7 @@ class ExperimentManifest:
     updated_at: str
     study_ids: tuple[str, ...]
     documentation: str | None = None
+    read_only: bool = False
 
     def __post_init__(self) -> None:
         """Validate schema version, identity, name, and timestamps."""
@@ -278,8 +369,11 @@ class ExperimentManifest:
         return len(self.study_ids)
 
     def to_dict(self) -> dict[str, object]:
-        """Return a JSON-serializable experiment manifest mapping."""
-        return {
+        """Return a JSON-serializable experiment manifest mapping.
+
+        `read_only` appears only when true, as on a Study.
+        """
+        result: dict[str, object] = {
             "schema_version": self.schema_version,
             "experiment_id": self.experiment_id,
             "name": self.name,
@@ -290,6 +384,9 @@ class ExperimentManifest:
             "study_ids": list(self.study_ids),
             "study_count": self.study_count,
         }
+        if self.read_only:
+            result["read_only"] = True
+        return result
 
     @classmethod
     def from_dict(cls, value: Mapping[str, Any]) -> ExperimentManifest:
@@ -327,7 +424,32 @@ class ExperimentManifest:
             documentation=_optional_string(
                 value, "documentation", label="experiment manifest"
             ),
+            read_only=_optional_bool(value, "read_only", label="experiment manifest"),
         )
+
+
+def _refuse_read_only(
+    manifest: StudyManifest | ExperimentManifest, action: str
+) -> None:
+    """Raise `ReadOnlyError` when `manifest` is a read-only Study or Experiment.
+
+    Args:
+        manifest: The Study or Experiment about to be changed.
+        action: What was asked, completing "cannot be ..." (`"deleted"`).
+
+    Raises:
+        ReadOnlyError: The manifest is read-only.
+    """
+    if not manifest.read_only:
+        return
+    if isinstance(manifest, StudyManifest):
+        kind, identifier = "study", manifest.study_id
+    else:
+        kind, identifier = "experiment", manifest.experiment_id
+    raise ReadOnlyError(
+        f"{kind} {manifest.name!r} ({identifier}) is read-only and cannot be "
+        f"{action}; copy it to make an editable version"
+    )
 
 
 def study_manifest_path(study_id: str, *, results: Path | None = None) -> Path:
@@ -521,11 +643,16 @@ def add_run_to_study(
     Study unchanged (design doc §5) — `updated_at` only moves forward
     on a genuine membership change.
 
+    Adding a read-only Run to an editable Study is allowed: it links the
+    Run, it does not change it.
+
     Raises:
         ValueError: No Study with this id exists.
+        ReadOnlyError: The Study is read-only.
     """
     root = results if results is not None else paths.results_directory()
     manifest = get_study(study_id, results=root)
+    _refuse_read_only(manifest, "given more runs")
     reference = _run_reference_string(Path(run_directory), results=root)
     if reference in manifest.run_directories:
         return manifest
@@ -555,14 +682,19 @@ def delete_study(
             the `StudyManifest` itself is removed and its Runs become
             unattached again ("Unsorted").
 
+    A read-only Run the Study holds is never deleted (module
+    docstring); it simply loses this Study's link with the Study itself.
+
     Returns:
         The manifest as it existed immediately before deletion.
 
     Raises:
         ValueError: No Study with this id exists.
+        ReadOnlyError: The Study is read-only.
     """
     root = results if results is not None else paths.results_directory()
     manifest = get_study(study_id, results=root)
+    _refuse_read_only(manifest, "deleted")
     if delete_runs:
         _delete_unshared_runs(manifest, results=root)
     study_manifest_path(study_id, results=root).unlink(missing_ok=True)
@@ -586,19 +718,30 @@ def clear_study_runs(
     the Study too, and there was no other way to remove all of its Runs
     at once. A directory already gone is tolerated, as in `delete_study`.
 
+    A read-only Run is neither deleted nor unlinked: it stays in the
+    Study, which therefore keeps only its read-only Runs (module
+    docstring).
+
     Returns:
         The Study as it was before its Runs were removed (so a caller can
         report how many there were).
 
     Raises:
         ValueError: No Study with this id exists.
+        ReadOnlyError: The Study is read-only.
     """
     root = results if results is not None else paths.results_directory()
     manifest = get_study(study_id, results=root)
+    _refuse_read_only(manifest, "emptied")
     _delete_unshared_runs(manifest, results=root)
+    kept = tuple(
+        entry
+        for entry in manifest.run_directories
+        if is_run_read_only(_resolve_stored_run_reference(entry, results=root))
+    )
     write_study_manifest(
         study_manifest_path(study_id, results=root),
-        replace(manifest, run_directories=(), updated_at=_format_timestamp(clock())),
+        replace(manifest, run_directories=kept, updated_at=_format_timestamp(clock())),
     )
     return manifest
 
@@ -628,11 +771,16 @@ def remove_run_references(
     """Drop every link, in every Study, to the given (deleted) Run directories.
 
     Called after a Run is deleted itself, so no Study keeps counting a Run
-    that is gone.
+    that is gone. A read-only Study is left as it is: its Runs are
+    read-only and cannot be deleted through this module, so a link there
+    to a missing directory came from outside it, and re-seeding repairs
+    it (readers already skip a missing directory).
     """
     root = results if results is not None else paths.results_directory()
     gone = {Path(directory).resolve() for directory in directories}
     for study in list_studies(results=root):
+        if study.read_only:
+            continue
         kept = tuple(
             entry
             for entry in study.run_directories
@@ -643,6 +791,52 @@ def remove_run_references(
                 study_manifest_path(study.study_id, results=root),
                 replace(study, run_directories=kept),
             )
+
+
+def delete_runs(
+    directories: Sequence[Path | str], *, results: Path | None = None
+) -> int:
+    """Delete Run directories outright and drop every Study's link to them.
+
+    The persistence-layer counterpart of the GUI's bulk "Delete" of Run
+    rows: a directory already gone is not an error, and every Study
+    stops listing the deleted Runs (`remove_run_references`).
+
+    All-or-nothing with respect to read-only Runs: every directory is
+    checked first, and if any is read-only nothing at all is deleted.
+    A selection that mixes an example into ordinary Runs is reported,
+    rather than half carried out.
+
+    Args:
+        directories: The Run directories to delete.
+        results: Optional results-directory override.
+
+    Returns:
+        How many of `directories` existed and were removed.
+
+    Raises:
+        ReadOnlyError: At least one directory is a read-only Run; the
+            message names every one of them.
+    """
+    root = results if results is not None else paths.results_directory()
+
+    # Refuse up front, before anything is removed.
+    protected = [Path(entry) for entry in directories if is_run_read_only(entry)]
+    if protected:
+        names = ", ".join(path.name for path in protected)
+        raise ReadOnlyError(
+            f"read-only example run(s) cannot be deleted: {names}; nothing was deleted"
+        )
+
+    # Delete, then unlink everywhere.
+    deleted_count = 0
+    for entry in directories:
+        path = Path(entry)
+        if path.is_dir():
+            shutil.rmtree(path)
+            deleted_count += 1
+    remove_run_references(directories, results=root)
+    return deleted_count
 
 
 def _directories_referenced_by_others(study_id: str, *, results: Path) -> set[Path]:
@@ -656,10 +850,16 @@ def _directories_referenced_by_others(study_id: str, *, results: Path) -> set[Pa
 
 
 def _delete_unshared_runs(manifest: StudyManifest, *, results: Path) -> None:
-    """Delete the Study's Run directories that no other Study links."""
+    """Delete the Study's Run directories that no other Study links.
+
+    A read-only Run is skipped, never deleted (module docstring).
+    """
     others = _directories_referenced_by_others(manifest.study_id, results=results)
     for entry in manifest.run_directories:
         directory = _resolve_stored_run_reference(entry, results=results)
+        if is_run_read_only(directory):
+            logger.debug("keeping read-only run %s", directory)
+            continue
         if directory.resolve() not in others:
             shutil.rmtree(directory, ignore_errors=True)
 
@@ -671,12 +871,16 @@ def prune_missing_studies(*, results: Path | None = None) -> int:
     Study but not its listing in an Experiment), so an Experiment claimed
     Studies it could not show.
 
+    A read-only Experiment is left as it is; re-seeding repairs it.
+
     Returns:
         How many dangling Study ids were removed across all Experiments.
     """
     root = results if results is not None else paths.results_directory()
     removed = 0
     for experiment in list_experiments(results=root):
+        if experiment.read_only:
+            continue
         kept = tuple(
             study_id
             for study_id in experiment.study_ids
@@ -694,9 +898,13 @@ def prune_missing_studies(*, results: Path | None = None) -> int:
 def _detach_study_from_experiments(
     study_id: str, *, results: Path, clock: Clock = _utc_now
 ) -> None:
-    """Drop `study_id` from every Experiment that lists it."""
+    """Drop `study_id` from every editable Experiment that lists it.
+
+    A read-only Experiment lists only read-only Studies, which cannot be
+    deleted, so it is skipped rather than edited.
+    """
     for experiment in list_experiments(results=results):
-        if study_id in experiment.study_ids:
+        if study_id in experiment.study_ids and not experiment.read_only:
             write_experiment_manifest(
                 experiment_manifest_path(experiment.experiment_id, results=results),
                 replace(
@@ -737,9 +945,11 @@ def update_study_details(
 
     Raises:
         ValueError: No Study with this id exists, or `name` is blank.
+        ReadOnlyError: The Study is read-only.
     """
     root = results if results is not None else paths.results_directory()
     manifest = get_study(study_id, results=root)
+    _refuse_read_only(manifest, "renamed, described, or documented")
     stripped_name = name.strip()
     if not stripped_name:
         raise ValueError("study name must not be blank")
@@ -875,12 +1085,17 @@ def add_study_to_experiment(
 ) -> ExperimentManifest:
     """Add one Study to an existing Experiment; idempotent.
 
+    Adding a read-only Study to an editable Experiment is allowed: it
+    links the Study, it does not change it.
+
     Raises:
         ValueError: No Experiment or Study with the given id exists.
+        ReadOnlyError: The Experiment is read-only.
     """
     root = results if results is not None else paths.results_directory()
     get_study(study_id, results=root)  # raises ValueError if unknown
     manifest = get_experiment(experiment_id, results=root)
+    _refuse_read_only(manifest, "given more studies")
     if study_id in manifest.study_ids:
         return manifest
     updated = replace(
@@ -979,6 +1194,167 @@ def ensure_default_study(
     return manifest
 
 
+def write_read_only_study(
+    study_id: str,
+    *,
+    name: str,
+    run_directories: Sequence[Path | str],
+    description: str | None = None,
+    documentation: str | None = None,
+    results: Path | None = None,
+    clock: Clock = _utc_now,
+) -> StudyManifest:
+    """Create or replace a read-only Study with a fixed id.
+
+    **Reserved for the examples seeding code** (`fim.examples`, read-only
+    examples design section 4.2). It is the one write path that bypasses
+    the read-only checks every other function here applies, so nothing
+    else may call it: an ordinary caller wanting a Study uses
+    `create_study`.
+
+    Idempotent: when a manifest with the same content already exists,
+    it is returned unchanged and nothing is written. Otherwise the
+    manifest is written with `read_only` set, keeping an existing
+    `created_at` and moving `updated_at` forward. Overwrites an existing
+    editable Study with the same id too, since a fixed seeding id names
+    an app-owned item.
+
+    Args:
+        study_id: The fixed id, starting with `study-`.
+        name: The Study's name; must not be blank.
+        run_directories: The member Run directories, as paths or as
+            references relative to `results`; stored the way
+            `add_run_to_study` stores them.
+        description: Optional one-line description.
+        documentation: Optional longer notes.
+        results: Optional results-directory override.
+        clock: Injectable current-time source, for deterministic tests.
+
+    Returns:
+        The read-only Study as it now exists on disk.
+
+    Raises:
+        ValueError: `study_id` lacks the `study-` prefix, or `name` is
+            blank.
+    """
+    root = results if results is not None else paths.results_directory()
+    if not study_id.startswith(_STUDY_ID_PREFIX) or study_id == _STUDY_ID_PREFIX:
+        raise ValueError(f"study id must start with {_STUDY_ID_PREFIX!r}: {study_id}")
+    stripped_name = name.strip()
+    if not stripped_name:
+        raise ValueError("study name must not be blank")
+    references = tuple(
+        dict.fromkeys(
+            _run_reference_string(
+                _resolve_stored_run_reference(str(entry), results=root), results=root
+            )
+            for entry in run_directories
+        )
+    )
+    path = study_manifest_path(study_id, results=root)
+    existing = _read_existing(path, read_study_manifest)
+    now = _format_timestamp(clock())
+    manifest = StudyManifest(
+        schema_version=CURRENT_STUDY_SCHEMA_VERSION,
+        study_id=study_id,
+        name=stripped_name,
+        description=_blank_to_none(description),
+        created_at=existing.created_at if existing is not None else now,
+        updated_at=now,
+        run_directories=references,
+        sweep_spec=None,
+        documentation=_blank_to_none(documentation),
+        read_only=True,
+    )
+    if existing is not None and replace(existing, updated_at=now) == manifest:
+        return existing
+    write_study_manifest(path, manifest)
+    return manifest
+
+
+def write_read_only_experiment(
+    experiment_id: str,
+    *,
+    name: str,
+    study_ids: Sequence[str],
+    description: str | None = None,
+    documentation: str | None = None,
+    results: Path | None = None,
+    clock: Clock = _utc_now,
+) -> ExperimentManifest:
+    """Create or replace a read-only Experiment with a fixed id.
+
+    The Experiment-level counterpart of `write_read_only_study`, with the
+    same reservation: **only the examples seeding code may call it**,
+    since it bypasses the read-only checks. Idempotent in the same way.
+
+    Args:
+        experiment_id: The fixed id, starting with `experiment-`.
+        name: The Experiment's name; must not be blank.
+        study_ids: The member Study ids, in display order; each must
+            already exist (write the Studies first).
+        description: Optional one-line description.
+        documentation: Optional longer notes.
+        results: Optional results-directory override.
+        clock: Injectable current-time source, for deterministic tests.
+
+    Returns:
+        The read-only Experiment as it now exists on disk.
+
+    Raises:
+        ValueError: `experiment_id` lacks the `experiment-` prefix,
+            `name` is blank, or a listed Study does not exist.
+    """
+    root = results if results is not None else paths.results_directory()
+    if (
+        not experiment_id.startswith(_EXPERIMENT_ID_PREFIX)
+        or experiment_id == _EXPERIMENT_ID_PREFIX
+    ):
+        raise ValueError(
+            f"experiment id must start with {_EXPERIMENT_ID_PREFIX!r}: {experiment_id}"
+        )
+    stripped_name = name.strip()
+    if not stripped_name:
+        raise ValueError("experiment name must not be blank")
+    for study_id in study_ids:
+        get_study(study_id, results=root)  # raises ValueError if unknown
+    path = experiment_manifest_path(experiment_id, results=root)
+    existing = _read_existing(path, read_experiment_manifest)
+    now = _format_timestamp(clock())
+    manifest = ExperimentManifest(
+        schema_version=CURRENT_EXPERIMENT_SCHEMA_VERSION,
+        experiment_id=experiment_id,
+        name=stripped_name,
+        description=_blank_to_none(description),
+        created_at=existing.created_at if existing is not None else now,
+        updated_at=now,
+        study_ids=tuple(dict.fromkeys(study_ids)),
+        documentation=_blank_to_none(documentation),
+        read_only=True,
+    )
+    if existing is not None and replace(existing, updated_at=now) == manifest:
+        return existing
+    write_experiment_manifest(path, manifest)
+    return manifest
+
+
+def _read_existing[ManifestT](
+    path: Path, reader: Callable[[Path], ManifestT]
+) -> ManifestT | None:
+    """Return the manifest at `path`, or `None` if absent or unreadable.
+
+    An unreadable manifest is treated as absent by the seeding writers,
+    which then replace it whole.
+    """
+    if not path.is_file():
+        return None
+    try:
+        return reader(path)
+    except (OSError, ValueError) as error:
+        logger.debug("replacing unreadable manifest %s: %s", path, error)
+        return None
+
+
 def delete_experiment(
     experiment_id: str,
     *,
@@ -1000,17 +1376,25 @@ def delete_experiment(
             too. When false, only the `ExperimentManifest` itself is
             removed and its Studies become unattached again.
 
+    A read-only Study the Experiment holds is skipped, never deleted
+    (module docstring).
+
     Returns:
         The manifest as it existed immediately before deletion.
 
     Raises:
         ValueError: No Experiment with this id exists.
+        ReadOnlyError: The Experiment is read-only.
     """
     root = results if results is not None else paths.results_directory()
     manifest = get_experiment(experiment_id, results=root)
+    _refuse_read_only(manifest, "deleted")
     if delete_studies:
         for study_id in manifest.study_ids:
             try:
+                if get_study(study_id, results=root).read_only:
+                    logger.debug("keeping read-only study %s", study_id)
+                    continue
                 delete_study(study_id, results=root, delete_runs=True)
             except ValueError as error:
                 logger.debug(
@@ -1038,9 +1422,11 @@ def update_experiment_details(
 
     Raises:
         ValueError: No Experiment with this id exists, or `name` is blank.
+        ReadOnlyError: The Experiment is read-only.
     """
     root = results if results is not None else paths.results_directory()
     manifest = get_experiment(experiment_id, results=root)
+    _refuse_read_only(manifest, "renamed, described, or documented")
     stripped_name = name.strip()
     if not stripped_name:
         raise ValueError("experiment name must not be blank")
@@ -1244,11 +1630,18 @@ def supersede_run(
     For a run recomputed under a newer software version whose result matched
     the old one bit for bit: the old directory is an exact duplicate, so
     every Study that held it now holds the new one.
+
+    Raises:
+        ReadOnlyError: `old` is a read-only Run, which is never deleted;
+            nothing is changed.
     """
     root = results if results is not None else paths.results_directory()
+    refuse_read_only_run(old, "replaced by a recomputed run")
     old_path = Path(old).resolve()
     new_reference = _run_reference_string(Path(new), results=root)
     for study in list_studies(results=root):
+        if study.read_only:
+            continue
         entries = [
             new_reference
             if _resolve_stored_run_reference(entry, results=root).resolve() == old_path
@@ -1353,6 +1746,16 @@ def _blank_to_none(text: str | None) -> str | None:
         return None
     stripped = text.strip()
     return stripped or None
+
+
+def _optional_bool(value: Mapping[str, Any], key: str, *, label: str) -> bool:
+    """Read one optional boolean field, `False` when absent or null."""
+    raw_value = value.get(key)
+    if raw_value is None:
+        return False
+    if not isinstance(raw_value, bool):
+        raise ValueError(f"{label} field {key!r} must be a boolean")
+    return raw_value
 
 
 def _optional_string(value: Mapping[str, Any], key: str, *, label: str) -> str | None:

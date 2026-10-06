@@ -465,6 +465,9 @@ Return to the [source-tree orientation](../README.md) or the [developer guide](.
   * [experiments\_directory](#fim.paths.experiments_directory)
 * [fim.persistence](#fim.persistence)
 * [fim.persistence.groups](#fim.persistence.groups)
+  * [ReadOnlyError](#fim.persistence.groups.ReadOnlyError)
+  * [is\_run\_read\_only](#fim.persistence.groups.is_run_read_only)
+  * [refuse\_read\_only\_run](#fim.persistence.groups.refuse_read_only_run)
   * [generate\_study\_id](#fim.persistence.groups.generate_study_id)
   * [generate\_experiment\_id](#fim.persistence.groups.generate_experiment_id)
   * [StudyManifest](#fim.persistence.groups.StudyManifest)
@@ -492,6 +495,7 @@ Return to the [source-tree orientation](../README.md) or the [developer guide](.
   * [clear\_study\_runs](#fim.persistence.groups.clear_study_runs)
   * [shared\_run\_directories](#fim.persistence.groups.shared_run_directories)
   * [remove\_run\_references](#fim.persistence.groups.remove_run_references)
+  * [delete\_runs](#fim.persistence.groups.delete_runs)
   * [prune\_missing\_studies](#fim.persistence.groups.prune_missing_studies)
   * [update\_study\_details](#fim.persistence.groups.update_study_details)
   * [copy\_study](#fim.persistence.groups.copy_study)
@@ -501,6 +505,8 @@ Return to the [source-tree orientation](../README.md) or the [developer guide](.
   * [add\_study\_to\_experiment](#fim.persistence.groups.add_study_to_experiment)
   * [ensure\_default\_experiment](#fim.persistence.groups.ensure_default_experiment)
   * [ensure\_default\_study](#fim.persistence.groups.ensure_default_study)
+  * [write\_read\_only\_study](#fim.persistence.groups.write_read_only_study)
+  * [write\_read\_only\_experiment](#fim.persistence.groups.write_read_only_experiment)
   * [delete\_experiment](#fim.persistence.groups.delete_experiment)
   * [update\_experiment\_details](#fim.persistence.groups.update_experiment_details)
   * [experiments\_containing\_study](#fim.persistence.groups.experiments_containing_study)
@@ -14489,6 +14495,92 @@ when this module was implemented. `delete_study`/`delete_experiment`
 both accept an escape hatch (`delete_runs=False`/`delete_studies=False`)
 for a caller that genuinely only wants the grouping gone.
 
+**Read-only items** (read-only examples design, 2026-10-05, section 3).
+A Study or Experiment whose manifest has `read_only: true`, and a Run
+whose manifest parameters have `_read_only: true` (`is_run_read_only`),
+are shipped examples that every function here refuses to edit, raising
+`ReadOnlyError` (a `ValueError`, so every existing caller that reports
+a `ValueError` reports this one too):
+
+- a read-only Study or Experiment cannot be renamed, described,
+  documented, deleted, emptied, or gain or lose members;
+- a read-only Run is never deleted and never unlinked from a Study. A
+  Study or Experiment being deleted or emptied skips its read-only
+  members rather than failing, so a user's own grouping that happens to
+  hold an example stays fully manageable, and the example survives.
+
+Viewing and copying stay allowed; a copy (`copy_study`/
+`copy_experiment`) is always an ordinary, editable grouping. Only the
+examples seeding code writes read-only manifests, through
+`write_read_only_study`/`write_read_only_experiment`, which bypass the
+checks. `read_only` is written to JSON only when true, with no schema
+bump: an older fim ignores the key when reading, but an older fim that
+rewrites such a manifest drops it, so re-seeding restores it.
+
+<a id="fim.persistence.groups.ReadOnlyError"></a>
+
+## ReadOnlyError Objects
+
+```python
+class ReadOnlyError(ValueError)
+```
+
+Refuse an edit to a read-only Study, Experiment, or Run.
+
+A `ValueError` subclass, so the GUI bridge's and the CLI's existing
+`except ValueError` handlers already report it as an ordinary
+`{"ok": False, "message": ...}` or `fim: error: ...`; a caller that
+wants to tell it apart (to show a lock rather than an error, say)
+can catch it first.
+
+<a id="fim.persistence.groups.is_run_read_only"></a>
+
+#### is\_run\_read\_only
+
+```python
+def is_run_read_only(run_directory: Path | str) -> bool
+```
+
+Return whether a Run is read-only: its manifest has `_read_only: true`.
+
+Reads the raw JSON rather than `read_manifest`/`read_batch_manifest`,
+so one check covers both scalar and batch runs. A directory with no
+readable manifest is not read-only: nothing here is protecting it.
+
+**Arguments**:
+
+- `run_directory` - The Run's own directory.
+
+
+**Returns**:
+
+  `True` only when `manifest.json`'s `parameters` object holds
+  `_read_only` set to the JSON value `true`.
+
+<a id="fim.persistence.groups.refuse_read_only_run"></a>
+
+#### refuse\_read\_only\_run
+
+```python
+def refuse_read_only_run(run_directory: Path | str, action: str) -> None
+```
+
+Raise `ReadOnlyError` when `run_directory` is a read-only Run.
+
+Shared by every function that edits a Run, here and in
+`fim.persistence.run_metadata`.
+
+**Arguments**:
+
+- `run_directory` - The Run about to be changed.
+- `action` - What was asked, as a past participle completing "cannot
+  be ..." (`"deleted"`, `"renamed or described"`).
+
+
+**Raises**:
+
+- `ReadOnlyError` - The Run is read-only.
+
 <a id="fim.persistence.groups.generate_study_id"></a>
 
 #### generate\_study\_id
@@ -14546,6 +14638,10 @@ what the Study is for and why (its question, its rationale, what it
 found), shown in the details dialog. Both are optional; a manifest
 written before `documentation` existed reads back with it `None`.
 
+`read_only` marks a shipped example Study that this module refuses
+to edit (module docstring); it is written to JSON only when true,
+so a manifest written before it existed reads back `False`.
+
 <a id="fim.persistence.groups.StudyManifest.__post_init__"></a>
 
 #### \_\_post\_init\_\_
@@ -14577,6 +14673,8 @@ def to_dict() -> dict[str, object]
 
 Return a JSON-serializable study manifest mapping.
 
+`read_only` appears only when true (see the class docstring).
+
 <a id="fim.persistence.groups.StudyManifest.from_dict"></a>
 
 #### from\_dict
@@ -14603,7 +14701,8 @@ Structurally identical in shape to `StudyManifest`, one level up
 (`study_ids` in place of `run_directories`, no `sweep_spec`) — an
 Experiment is otherwise a thin container with no results of its own
 beyond what its Studies already show (design doc §1.3).
-`description`/`documentation` mean what they mean on a Study.
+`description`/`documentation`/`read_only` mean what they mean on a
+Study.
 
 <a id="fim.persistence.groups.ExperimentManifest.__post_init__"></a>
 
@@ -14635,6 +14734,8 @@ def to_dict() -> dict[str, object]
 ```
 
 Return a JSON-serializable experiment manifest mapping.
+
+`read_only` appears only when true, as on a Study.
 
 <a id="fim.persistence.groups.ExperimentManifest.from_dict"></a>
 
@@ -14829,9 +14930,13 @@ Adding a directory already present is a no-op that returns the
 Study unchanged (design doc §5) — `updated_at` only moves forward
 on a genuine membership change.
 
+Adding a read-only Run to an editable Study is allowed: it links the
+Run, it does not change it.
+
 **Raises**:
 
 - `ValueError` - No Study with this id exists.
+- `ReadOnlyError` - The Study is read-only.
 
 <a id="fim.persistence.groups.delete_study"></a>
 
@@ -14856,6 +14961,9 @@ Delete a Study's own manifest and, by default, every Run it references.
   the `StudyManifest` itself is removed and its Runs become
   unattached again ("Unsorted").
 
+  A read-only Run the Study holds is never deleted (module
+  docstring); it simply loses this Study's link with the Study itself.
+
 
 **Returns**:
 
@@ -14865,6 +14973,7 @@ Delete a Study's own manifest and, by default, every Run it references.
 **Raises**:
 
 - `ValueError` - No Study with this id exists.
+- `ReadOnlyError` - The Study is read-only.
 
 <a id="fim.persistence.groups.clear_study_runs"></a>
 
@@ -14884,6 +14993,10 @@ removing the Study itself: selecting a Study row for deletion removes
 the Study too, and there was no other way to remove all of its Runs
 at once. A directory already gone is tolerated, as in `delete_study`.
 
+A read-only Run is neither deleted nor unlinked: it stays in the
+Study, which therefore keeps only its read-only Runs (module
+docstring).
+
 **Returns**:
 
   The Study as it was before its Runs were removed (so a caller can
@@ -14893,6 +15006,7 @@ at once. A directory already gone is tolerated, as in `delete_study`.
 **Raises**:
 
 - `ValueError` - No Study with this id exists.
+- `ReadOnlyError` - The Study is read-only.
 
 <a id="fim.persistence.groups.shared_run_directories"></a>
 
@@ -14924,7 +15038,47 @@ def remove_run_references(directories: Sequence[Path | str],
 Drop every link, in every Study, to the given (deleted) Run directories.
 
 Called after a Run is deleted itself, so no Study keeps counting a Run
-that is gone.
+that is gone. A read-only Study is left as it is: its Runs are
+read-only and cannot be deleted through this module, so a link there
+to a missing directory came from outside it, and re-seeding repairs
+it (readers already skip a missing directory).
+
+<a id="fim.persistence.groups.delete_runs"></a>
+
+#### delete\_runs
+
+```python
+def delete_runs(directories: Sequence[Path | str],
+                *,
+                results: Path | None = None) -> int
+```
+
+Delete Run directories outright and drop every Study's link to them.
+
+The persistence-layer counterpart of the GUI's bulk "Delete" of Run
+rows: a directory already gone is not an error, and every Study
+stops listing the deleted Runs (`remove_run_references`).
+
+All-or-nothing with respect to read-only Runs: every directory is
+checked first, and if any is read-only nothing at all is deleted.
+A selection that mixes an example into ordinary Runs is reported,
+rather than half carried out.
+
+**Arguments**:
+
+- `directories` - The Run directories to delete.
+- `results` - Optional results-directory override.
+
+
+**Returns**:
+
+  How many of `directories` existed and were removed.
+
+
+**Raises**:
+
+- `ReadOnlyError` - At least one directory is a read-only Run; the
+  message names every one of them.
 
 <a id="fim.persistence.groups.prune_missing_studies"></a>
 
@@ -14939,6 +15093,8 @@ Remove from every Experiment any Study id that has no manifest.
 Repairs the state an older `delete_study` left behind (it removed the
 Study but not its listing in an Experiment), so an Experiment claimed
 Studies it could not show.
+
+A read-only Experiment is left as it is; re-seeding repairs it.
 
 **Returns**:
 
@@ -14982,6 +15138,7 @@ sweep specification are untouched.
 **Raises**:
 
 - `ValueError` - No Study with this id exists, or `name` is blank.
+- `ReadOnlyError` - The Study is read-only.
 
 <a id="fim.persistence.groups.copy_study"></a>
 
@@ -15065,9 +15222,13 @@ def add_study_to_experiment(experiment_id: str,
 
 Add one Study to an existing Experiment; idempotent.
 
+Adding a read-only Study to an editable Experiment is allowed: it
+links the Study, it does not change it.
+
 **Raises**:
 
 - `ValueError` - No Experiment or Study with the given id exists.
+- `ReadOnlyError` - The Experiment is read-only.
 
 <a id="fim.persistence.groups.ensure_default_experiment"></a>
 
@@ -15124,6 +15285,102 @@ anything asks for it, rather than staying silently orphaned.
   disk; otherwise a newly created, empty one at `DEFAULT_STUDY_
   ID`, nested inside the default Experiment either way.
 
+<a id="fim.persistence.groups.write_read_only_study"></a>
+
+#### write\_read\_only\_study
+
+```python
+def write_read_only_study(study_id: str,
+                          *,
+                          name: str,
+                          run_directories: Sequence[Path | str],
+                          description: str | None = None,
+                          documentation: str | None = None,
+                          results: Path | None = None,
+                          clock: Clock = _utc_now) -> StudyManifest
+```
+
+Create or replace a read-only Study with a fixed id.
+
+**Reserved for the examples seeding code** (`fim.examples`, read-only
+examples design section 4.2). It is the one write path that bypasses
+the read-only checks every other function here applies, so nothing
+else may call it: an ordinary caller wanting a Study uses
+`create_study`.
+
+Idempotent: when a manifest with the same content already exists,
+it is returned unchanged and nothing is written. Otherwise the
+manifest is written with `read_only` set, keeping an existing
+`created_at` and moving `updated_at` forward. Overwrites an existing
+editable Study with the same id too, since a fixed seeding id names
+an app-owned item.
+
+**Arguments**:
+
+- `study_id` - The fixed id, starting with `study-`.
+- `name` - The Study's name; must not be blank.
+- `run_directories` - The member Run directories, as paths or as
+  references relative to `results`; stored the way
+  `add_run_to_study` stores them.
+- `description` - Optional one-line description.
+- `documentation` - Optional longer notes.
+- `results` - Optional results-directory override.
+- `clock` - Injectable current-time source, for deterministic tests.
+
+
+**Returns**:
+
+  The read-only Study as it now exists on disk.
+
+
+**Raises**:
+
+- `ValueError` - `study_id` lacks the `study-` prefix, or `name` is
+  blank.
+
+<a id="fim.persistence.groups.write_read_only_experiment"></a>
+
+#### write\_read\_only\_experiment
+
+```python
+def write_read_only_experiment(experiment_id: str,
+                               *,
+                               name: str,
+                               study_ids: Sequence[str],
+                               description: str | None = None,
+                               documentation: str | None = None,
+                               results: Path | None = None,
+                               clock: Clock = _utc_now) -> ExperimentManifest
+```
+
+Create or replace a read-only Experiment with a fixed id.
+
+The Experiment-level counterpart of `write_read_only_study`, with the
+same reservation: **only the examples seeding code may call it**,
+since it bypasses the read-only checks. Idempotent in the same way.
+
+**Arguments**:
+
+- `experiment_id` - The fixed id, starting with `experiment-`.
+- `name` - The Experiment's name; must not be blank.
+- `study_ids` - The member Study ids, in display order; each must
+  already exist (write the Studies first).
+- `description` - Optional one-line description.
+- `documentation` - Optional longer notes.
+- `results` - Optional results-directory override.
+- `clock` - Injectable current-time source, for deterministic tests.
+
+
+**Returns**:
+
+  The read-only Experiment as it now exists on disk.
+
+
+**Raises**:
+
+- `ValueError` - `experiment_id` lacks the `experiment-` prefix,
+  `name` is blank, or a listed Study does not exist.
+
 <a id="fim.persistence.groups.delete_experiment"></a>
 
 #### delete\_experiment
@@ -15151,6 +15408,9 @@ describes, one level up.
   too. When false, only the `ExperimentManifest` itself is
   removed and its Studies become unattached again.
 
+  A read-only Study the Experiment holds is skipped, never deleted
+  (module docstring).
+
 
 **Returns**:
 
@@ -15160,6 +15420,7 @@ describes, one level up.
 **Raises**:
 
 - `ValueError` - No Experiment with this id exists.
+- `ReadOnlyError` - The Experiment is read-only.
 
 <a id="fim.persistence.groups.update_experiment_details"></a>
 
@@ -15182,6 +15443,7 @@ The Experiment-level counterpart to `update_study_details`.
 **Raises**:
 
 - `ValueError` - No Experiment with this id exists, or `name` is blank.
+- `ReadOnlyError` - The Experiment is read-only.
 
 <a id="fim.persistence.groups.experiments_containing_study"></a>
 
@@ -15347,6 +15609,11 @@ Replace every link to `old` with a link to `new`, then delete `old`.
 For a run recomputed under a newer software version whose result matched
 the old one bit for bit: the old directory is an exact duplicate, so
 every Study that held it now holds the new one.
+
+**Raises**:
+
+- `ReadOnlyError` - `old` is a read-only Run, which is never deleted;
+  nothing is changed.
 
 <a id="fim.persistence.jsonl_store"></a>
 
@@ -16184,6 +16451,10 @@ section 1). The class is stored under the JSON key `class` and written
 only when set, so a sidecar without one keeps its earlier shape, and an
 older fim, which ignores keys it does not know, still reads it.
 
+A read-only run (`fim.persistence.groups.is_run_read_only`) cannot be
+renamed, described, or re-classed: `replace_run_metadata` raises
+`fim.persistence.groups.ReadOnlyError` for it.
+
 <a id="fim.persistence.run_metadata._KeepClass"></a>
 
 ## \_KeepClass Objects
@@ -16444,6 +16715,12 @@ dialog) never clears its class by accident.
 **Returns**:
 
   The metadata just written.
+
+
+**Raises**:
+
+- `ReadOnlyError` - The run is read-only (its manifest parameters
+  carry `_read_only: true`); nothing is written.
 
 <a id="fim.persistence.store"></a>
 

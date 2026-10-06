@@ -24,6 +24,10 @@ already has a `metadata.json` (read-only examples design, 2026-10-05,
 section 1). The class is stored under the JSON key `class` and written
 only when set, so a sidecar without one keeps its earlier shape, and an
 older fim, which ignores keys it does not know, still reads it.
+
+A read-only run (`fim.persistence.groups.is_run_read_only`) cannot be
+renamed, described, or re-classed: `replace_run_metadata` raises
+`fim.persistence.groups.ReadOnlyError` for it.
 """
 
 from __future__ import annotations
@@ -38,6 +42,7 @@ from typing import Any, Final
 
 from fim.examples.classes import validate_run_class
 from fim.paths import write_text_atomically
+from fim.persistence.groups import refuse_read_only_run
 
 logger = logging.getLogger(__name__)
 
@@ -298,7 +303,12 @@ def replace_run_metadata(
 
     Returns:
         The metadata just written.
+
+    Raises:
+        ReadOnlyError: The run is read-only (its manifest parameters
+            carry `_read_only: true`); nothing is written.
     """
+    refuse_read_only_run(run_directory, "renamed, described, or re-classed")
     path = run_metadata_path(run_directory)
     prior: RunMetadata | None = None
     if path.is_file():
