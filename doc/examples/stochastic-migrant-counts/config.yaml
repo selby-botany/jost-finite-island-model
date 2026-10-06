@@ -14,5 +14,6 @@ migrant_sampling: stochastic
 loci:
   - locus_id: 1
     length: 100
+engine_backend: lineal
 convergence_statistic: D
 n_replicates: 1   # a single scalar run; the default (200) would batch

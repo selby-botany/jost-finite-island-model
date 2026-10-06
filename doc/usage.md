@@ -220,6 +220,7 @@ loci:
     length: 100
   - locus_id: 8
     length: 100
+engine_backend: lineal
 convergence_statistic: D
 n_replicates: 1   # a single scalar run; the default (200) would batch
 ```
@@ -269,6 +270,7 @@ seed: 20260819
 loci:
   - locus_id: 1
     length: 100
+engine_backend: lineal
 convergence_statistic: D
 convergence_tolerance: 0.02   # looser than the 0.01 default: about a minute
 n_replicates: 1   # a single scalar run; the default (200) would batch
@@ -325,6 +327,7 @@ p_0:
   - - 0: 1.0
   - - 1: 1.0
   - - 2: 1.0
+engine_backend: lineal
 convergence_statistic: D
 convergence_window: 2
 convergence_tolerance: 0.000001
@@ -377,6 +380,7 @@ loci:
 equilibrium_convergence_window: 20
 equilibrium_convergence_tolerance: 0.01
 equilibrium_max_generations: 500
+engine_backend: lineal
 convergence_statistic: D
 n_replicates: 1   # a single scalar run; the default (200) would batch
 ```
@@ -424,6 +428,7 @@ migrant_sampling: stochastic
 loci:
   - locus_id: 1
     length: 100
+engine_backend: lineal
 convergence_statistic: D
 n_replicates: 1   # a single scalar run; the default (200) would batch
 ```
@@ -465,6 +470,7 @@ initial_allele_count: 2
 loci:
   - locus_id: 1
     length: 3
+engine_backend: lineal
 convergence_statistic: D
 convergence_tolerance: 0.02   # looser than the 0.01 default: under a minute
 n_replicates: 1   # a single scalar run; the default (200) would batch
@@ -510,6 +516,7 @@ seed: 20260914
 loci:
   - locus_id: 1
     length: 100
+engine_backend: lineal
 convergence_statistic: G_ST
 convergence_tolerance: 0.02   # looser than the 0.01 default: under a minute
 n_replicates: 1   # a single scalar run; the default (200) would batch
@@ -556,6 +563,7 @@ seed: 20260914
 loci:
   - locus_id: 1
     length: 100
+engine_backend: lineal
 convergence_statistic: D
 convergence_tolerance: 0.05   # looser than the 0.01 default: seconds, not hours
 n_replicates: 1   # a single scalar run; the default (200) would batch
@@ -601,6 +609,7 @@ loci:
     length: 50
   - locus_id: 2
     length: 500
+engine_backend: lineal
 convergence_statistic: D
 convergence_tolerance: 0.03   # looser than the 0.01 default: under a minute
 n_replicates: 1   # a single scalar run; the default (200) would batch
@@ -641,6 +650,7 @@ seed: 20260819
 loci:
   - locus_id: 1
     length: 100
+engine_backend: lineal
 convergence_statistic: [D, G_ST]
 convergence_combinator: any
 n_replicates: 1   # a single scalar run; the default (200) would batch
@@ -697,6 +707,7 @@ loci:
     length: 100
   - locus_id: 8
     length: 100
+engine_backend: lineal
 convergence_statistic: D
 sigma_band_multiplier: 2.0
 sigma_band_window: 30
@@ -760,6 +771,7 @@ loci:
     length: 100
   - locus_id: 8
     length: 100
+engine_backend: lineal
 convergence_statistic: D
 convergence_tolerance: 0.05
 n_replicates: 50
@@ -788,10 +800,13 @@ the wall-clock time differs.
 
 ### A large-`d` batch under generational-vector
 
-Every example above uses derived convergence defaults and `engine_
-backend`'s own default, `auto` — which, at this small a scale, always
-resolves to `lineal`, the single-threaded reference implementation. This
-example and the next are the deliberate exception: each names a specific
+Every example above names `engine_backend: lineal`, the single-threaded
+reference implementation and `fim run`'s own default. The configuration
+states it explicitly because the desktop app's own starting value for a
+fresh form is `auto`, and `auto` never resolves to `lineal`: it always picks
+`generational` or `generational-vector` (see
+[engine_backend](configuration.md#engine_backend)). This
+example and the next are the deliberate exception: each names a different
 engine backend and runs a real, moderately long batch (a few seconds, not
 instant) large enough for that backend's own advantage to actually show.
 They are also the exception to the derived convergence defaults: each pins a

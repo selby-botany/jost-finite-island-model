@@ -15,6 +15,7 @@ loci:
     length: 50
   - locus_id: 2
     length: 500
+engine_backend: lineal
 convergence_statistic: D
 convergence_tolerance: 0.03   # looser than the 0.01 default: under a minute
 n_replicates: 1   # a single scalar run; the default (200) would batch

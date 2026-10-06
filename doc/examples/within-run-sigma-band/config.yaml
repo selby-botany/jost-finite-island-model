@@ -29,6 +29,7 @@ loci:
     length: 100
   - locus_id: 8
     length: 100
+engine_backend: lineal
 convergence_statistic: D
 sigma_band_multiplier: 2.0
 sigma_band_window: 30

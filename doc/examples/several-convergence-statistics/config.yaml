@@ -12,6 +12,7 @@ seed: 20260819
 loci:
   - locus_id: 1
     length: 100
+engine_backend: lineal
 convergence_statistic: [D, G_ST]
 convergence_combinator: any
 n_replicates: 1   # a single scalar run; the default (200) would batch

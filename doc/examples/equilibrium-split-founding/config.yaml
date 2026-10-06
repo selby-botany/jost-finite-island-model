@@ -16,5 +16,6 @@ loci:
 equilibrium_convergence_window: 20
 equilibrium_convergence_tolerance: 0.01
 equilibrium_max_generations: 500
+engine_backend: lineal
 convergence_statistic: D
 n_replicates: 1   # a single scalar run; the default (200) would batch

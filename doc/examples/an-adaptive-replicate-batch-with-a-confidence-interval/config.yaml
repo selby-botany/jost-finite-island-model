@@ -30,6 +30,7 @@ loci:
     length: 100
   - locus_id: 8
     length: 100
+engine_backend: lineal
 convergence_statistic: D
 convergence_tolerance: 0.05
 n_replicates: 50
