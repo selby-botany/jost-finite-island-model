@@ -1,0 +1,74 @@
+{
+  "A_CGD": 10.703726708074534,
+  "D": 0.023539686021604864,
+  "D_m": 0.010001046790890564,
+  "Delta": 0.13194534161490687,
+  "E_ST": 0.05910431325112254,
+  "F_ST": 0.017091655534594664,
+  "G_ST": 0.016851603624162548,
+  "G_ST_HEDRICK": 0.039994608187494084,
+  "G_ST_NEI_LOG": 0.02669415975655883,
+  "Gd": 0.41485792463768084,
+  "Gs": 0.42485897142857143,
+  "H_S": 0.5751410285714286,
+  "H_ST": 0.023203404792724796,
+  "H_T": 0.5849992032653064,
+  "K_ST": 0.2054322489105097,
+  "MI": 0.251104393631989,
+  "NEI_D_ALL_ARITH": 0.023821170578427486,
+  "NEI_D_ALL_ARITH_LOCUS_MEAN": 0.023821170578427486,
+  "NEI_D_ALL_GEO": 0.019638597348687167,
+  "NEI_D_ALL_GEO_LOCUS_MEAN": 0.019638597348687167,
+  "NEI_I_ALL_ARITH": 0.9764603139783954,
+  "NEI_I_ALL_ARITH_LOCUS_MEAN": 0.9764603139783954,
+  "NEI_I_ALL_GEO": 0.9805529837266078,
+  "NEI_I_ALL_GEO_LOCUS_MEAN": 0.9805529837266078,
+  "R_ST": 0.01738885993880804,
+  "converged": false,
+  "converged_on": null,
+  "generation": 100,
+  "reason": "hit the cap",
+  "run_id": "run-3478a6fbc40cd1ed-r016",
+  "window_statistics": {
+    "D": {
+      "effective_sample_size": 4.58204895631799,
+      "mean": 0.04965509360746528,
+      "noise_adequate": false,
+      "standard_deviation": 0.048122140167003356,
+      "standard_error": 0.022480971302766675,
+      "window": 101
+    },
+    "G_ST": {
+      "effective_sample_size": 5.439378328577089,
+      "mean": 0.049800948671596644,
+      "noise_adequate": false,
+      "standard_deviation": 0.061452024825353425,
+      "standard_error": 0.026348843866658304,
+      "window": 101
+    },
+    "H_S": {
+      "effective_sample_size": 3.535918360419476,
+      "mean": 0.5164365254582715,
+      "noise_adequate": false,
+      "standard_deviation": 0.05170787385225954,
+      "standard_error": 0.02749828229179525,
+      "window": 101
+    },
+    "H_ST": {
+      "effective_sample_size": 4.58204895631799,
+      "mean": 0.04894573512735863,
+      "noise_adequate": false,
+      "standard_deviation": 0.04743468102176046,
+      "standard_error": 0.022159814569870012,
+      "window": 101
+    },
+    "H_T": {
+      "effective_sample_size": 1.5100077278668285,
+      "mean": 0.5423679768534663,
+      "noise_adequate": false,
+      "standard_deviation": 0.026083387409505335,
+      "standard_error": 0.021226305323667736,
+      "window": 101
+    }
+  }
+}

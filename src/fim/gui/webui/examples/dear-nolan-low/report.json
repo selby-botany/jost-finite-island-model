@@ -25,10 +25,10 @@
   "NEI_I_ALL_GEO_LOCUS_MEAN": 0.9037075231780014,
   "R_ST": 23.118185982592745,
   "converged": false,
-  "converged_on": "D",
+  "converged_on": null,
   "generation": 295390,
   "reason": "hit the cap",
-  "run_id": "run-e7c2aea7e25397fe",
+  "run_id": "run-7800375626b685c7",
   "window_statistics": {
     "D": {
       "effective_sample_size": 8.546466033630356,

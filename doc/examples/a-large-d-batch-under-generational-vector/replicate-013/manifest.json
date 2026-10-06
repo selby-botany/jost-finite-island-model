@@ -1,0 +1,81 @@
+{
+  "artifacts": {
+    "convergence": {
+      "bytes": 14791,
+      "sha256": "4f2b61509685a5fdcf1a777102fd8809719cc44f3d15fbb199260fdf993ec66c"
+    },
+    "pairwise": {
+      "bytes": 232869,
+      "sha256": "7f468b21b8f3f42343744bea1aac8be99121fadc8ed1f5ad8dae33195a91c84b"
+    },
+    "report": {
+      "bytes": 2322,
+      "sha256": "a446d6ce109673bad648a0a089a32f69d62489a8a1f2c5bf28bff063dab69605"
+    },
+    "scatter": {
+      "bytes": 49828,
+      "sha256": "b342107077e2ea02f2213bb540128158bb840fbe8fe79e600073616f8704bd4c"
+    },
+    "trajectory": {
+      "bytes": 6828955,
+      "sha256": "289b5cb3618d3e8cac57422a9ff8b049790287860ab32a7385e7459097c2c4fd"
+    }
+  },
+  "auto_derived": [],
+  "convergence": {
+    "converged": false,
+    "generation": 100,
+    "generation_count": 101,
+    "reason": "hit the cap",
+    "statistic": "D"
+  },
+  "ended_at": "2026-10-06T12:03:28.177252Z",
+  "engine_backend": "generational-vector",
+  "equilibrium_final_heterozygosity": null,
+  "equilibrium_generation_count": null,
+  "initial_condition_mode": "dirichlet",
+  "jit": "off",
+  "parameters": {
+    "N": 500,
+    "_read_only": true,
+    "auto_vector_max_capacity": 4096,
+    "auto_vector_min_d": 2,
+    "convergence_combinator": "all",
+    "convergence_statistic": "D",
+    "convergence_tolerance": 0.02,
+    "convergence_window": 101,
+    "d": 70,
+    "deme_weighting": "equal",
+    "engine_backend": "generational-vector",
+    "initial_allele_count": 2,
+    "initial_concentration": 1.0,
+    "jit": "off",
+    "loci": [
+      {
+        "length": 5,
+        "locus_id": 1
+      }
+    ],
+    "locus_aggregation": "ratio_of_means",
+    "m": 0.05,
+    "max_generations": 100,
+    "migrant_sampling": "continuous",
+    "mu": 0.001,
+    "mutation_model": "finite_alleles",
+    "n_replicates": 1,
+    "ploidy": "haploid",
+    "replicate_confidence": 0.95,
+    "replicate_minimum": 10,
+    "replicate_tolerance": null,
+    "seed": 20260928,
+    "track_expensive_statistics": false
+  },
+  "relaxation_time": null,
+  "run_id": "run-3478a6fbc40cd1ed-r013",
+  "schema_version": 3,
+  "sigma_band": null,
+  "sigma_band_multiplier": null,
+  "sigma_band_window": null,
+  "software_version": "1.2.0",
+  "started_at": "2026-10-06T12:03:12.513989Z"
+}

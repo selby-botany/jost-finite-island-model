@@ -1,0 +1,131 @@
+{
+  "artifacts": {
+    "replicate-001": {
+      "bytes": 2220,
+      "sha256": "eb3fd767959eeaf46ee606e5ead371b705c5459ec47ef96596ab707d78ada141"
+    },
+    "replicate-002": {
+      "bytes": 2220,
+      "sha256": "4c8aa232a6accef188032a6bd94b71a9d66230fb4a181c89921316d8f0a7c761"
+    },
+    "replicate-003": {
+      "bytes": 2220,
+      "sha256": "5f550499efde400c383ece2eb1e1a8d5488ebd1a84320df47a4ca63db6c8987c"
+    },
+    "replicate-004": {
+      "bytes": 2220,
+      "sha256": "d7c0c8b7a225e44121d46165d93d6eda6cc53b21fde06574969e763d565d8fad"
+    },
+    "replicate-005": {
+      "bytes": 2220,
+      "sha256": "36d9cb39c2799311349c3d3de4c6f0d292e00d0520d8e3972c78ee742e8ebd80"
+    },
+    "replicate-006": {
+      "bytes": 2220,
+      "sha256": "382d38fb2c504a4ae0589621a22c3ce50dc2a8dae457a3b8a1a3d5effd0d6d9d"
+    },
+    "replicate-007": {
+      "bytes": 2220,
+      "sha256": "5008c28656151d044b2286e440220561ea1c2cf01e9b820882e19c8530f774e6"
+    },
+    "replicate-008": {
+      "bytes": 2220,
+      "sha256": "d403e3cfa7ec6f1ec279ebe84d13f0f202c1c883bf37ed565f6a5ce2bea37fc7"
+    },
+    "replicate-009": {
+      "bytes": 2220,
+      "sha256": "3624722f9dadede6abba1ac8794aca9944329d200ce2a9e9bde4e08e8eb100c0"
+    },
+    "replicate-010": {
+      "bytes": 2220,
+      "sha256": "b3536bf2a1d56a2613ff54d645535c99d5a9236ec5d4431edc96d4c715e20389"
+    },
+    "replicate-011": {
+      "bytes": 2220,
+      "sha256": "b6e1a53225027dcfb76ab14af644d6de0f448e92cd903dd902c2de8e025567d7"
+    },
+    "replicate-012": {
+      "bytes": 2220,
+      "sha256": "930739e6c201ccb0965e8e96f278608358c86af3b2e6ffcc021b2ffaa70a668a"
+    },
+    "replicate-013": {
+      "bytes": 2220,
+      "sha256": "f80cb17dd6647034d342a2a4c900a7a4159766a5587015e3eb424d2372083183"
+    },
+    "replicate-014": {
+      "bytes": 2220,
+      "sha256": "94d1560ebc423a416a1a2f4b31fb1de6b9ad8377bbde3d87502f014a29b9fd41"
+    },
+    "replicate-015": {
+      "bytes": 2220,
+      "sha256": "18227e03f2fe6a2808aa7b1027f6b80ba08f67c46f16f0975c7a400084d95bfa"
+    },
+    "replicate-016": {
+      "bytes": 2220,
+      "sha256": "e98dccb730dfa3b79f2859a8ed698c7ebcd7ab676069eece1e10e009d99719ed"
+    },
+    "summary": {
+      "bytes": 6172,
+      "sha256": "125df3014a444a10e8fcb88743124fcce7f26cba83438eb32c469d9e98e3d2e9"
+    }
+  },
+  "ended_at": "2026-10-06T12:03:36.000576Z",
+  "parameters": {
+    "N": 500,
+    "_read_only": true,
+    "auto_vector_max_capacity": 4096,
+    "auto_vector_min_d": 2,
+    "convergence_combinator": "all",
+    "convergence_statistic": "D",
+    "convergence_tolerance": 0.02,
+    "convergence_window": 101,
+    "d": 35,
+    "deme_weighting": "equal",
+    "engine_backend": "generational",
+    "initial_allele_count": 2,
+    "initial_concentration": 1.0,
+    "jit": "off",
+    "loci": [
+      {
+        "length": 7,
+        "locus_id": 1
+      }
+    ],
+    "locus_aggregation": "ratio_of_means",
+    "m": 0.05,
+    "max_generations": 100,
+    "migrant_sampling": "continuous",
+    "mu": 0.001,
+    "mutation_model": "finite_alleles",
+    "n_replicates": 16,
+    "ploidy": "haploid",
+    "replicate_confidence": 0.95,
+    "replicate_minimum": 10,
+    "replicate_tolerance": null,
+    "seed": 20260916,
+    "track_expensive_statistics": false
+  },
+  "replicate_count": 16,
+  "replicate_run_ids": [
+    "run-5b8be03b9d84478b-r001",
+    "run-5b8be03b9d84478b-r002",
+    "run-5b8be03b9d84478b-r003",
+    "run-5b8be03b9d84478b-r004",
+    "run-5b8be03b9d84478b-r005",
+    "run-5b8be03b9d84478b-r006",
+    "run-5b8be03b9d84478b-r007",
+    "run-5b8be03b9d84478b-r008",
+    "run-5b8be03b9d84478b-r009",
+    "run-5b8be03b9d84478b-r010",
+    "run-5b8be03b9d84478b-r011",
+    "run-5b8be03b9d84478b-r012",
+    "run-5b8be03b9d84478b-r013",
+    "run-5b8be03b9d84478b-r014",
+    "run-5b8be03b9d84478b-r015",
+    "run-5b8be03b9d84478b-r016"
+  ],
+  "run_id": "run-5b8be03b9d84478b",
+  "schema_version": 1,
+  "software_version": "1.2.0",
+  "started_at": "2026-10-06T12:03:12.458444Z"
+}

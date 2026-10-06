@@ -15,12 +15,13 @@
   - [`generate-api-docs`](#generate-api-docs)
   - [`generate-heatmap-queue`](#generate-heatmap-queue)
   - [`generate-help-html`](#generate-help-html)
+  - [`regenerate-example-outputs`](#regenerate-example-outputs)
   - [`render-heatmap`](#render-heatmap)
   - [`update-worked-examples`](#update-worked-examples)
   - [`validate-repository`](#validate-repository)
   - [Related documents](#related-documents)
 
-These fifteen commands keep the project trustworthy: they make sure the
+These sixteen commands keep the project trustworthy: they make sure the
 documentation you read matches the code that actually runs, that a
 release's own history is recorded accurately, and that no credential or
 badly formed file ever gets committed. None of them run a simulation --
@@ -78,6 +79,7 @@ run by hand.
 | [`generate-api-docs`](#generate-api-docs) | Rebuilds the generated API reference (`src/fim/API.md`) from the code's own docstrings |
 | [`generate-heatmap-queue`](#generate-heatmap-queue) | Writes a `benchmark-queue` file that measures every combination of deme count and locus length at once, to check whether the engines' own speed crossover is really a simple rectangle in that two-setting space |
 | [`generate-help-html`](#generate-help-html) | Rebuilds the desktop app's in-app Help screen content from `doc/usage.md`/`doc/configuration.md` |
+| [`regenerate-example-outputs`](#regenerate-example-outputs) | Reruns the worked examples under `doc/examples/` and replaces their committed result files, so the results the desktop app ships with are exactly what the current code produces |
 | [`render-heatmap`](#render-heatmap) | Turns `generate-heatmap-queue`'s own results into two readable grids: which engine won at each combination, and by how much |
 | [`update-worked-examples`](#update-worked-examples) | Keeps the usage guide's inline worked-example YAML synchronized with canonical configs under `doc/examples/<example>/config.yaml` |
 | [`validate-repository`](#validate-repository) | Runs every repository-hygiene checker (shell scripts, YAML, Markdown, JavaScript, CSS, HTML, leaked secrets) over the whole checkout |
@@ -743,6 +745,47 @@ With no arguments, overwrites the real, committed HTML files under
 `src/fim/gui/webui/help/`. `--output-dir PATH` writes to a scratch
 directory of your choosing instead, without touching the committed
 files -- used by the freshness check described above.
+
+## `regenerate-example-outputs`
+
+**What it does:** For each example under `doc/examples/` that has a
+`config.yaml` (or only the ones you name), runs exactly
+`python -m fim.launcher run doc/examples/<id>/config.yaml --output <temporary
+directory> --quiet`, with the results directory pointed at a temporary
+directory, and then replaces the example's committed output files with
+the fresh ones: `manifest.json` and `report.json` for a single run, or
+`manifest.json`, `summary.json`, and each replicate's
+`manifest.json`/`report.json` for a batch. Trajectories, convergence
+histories, pairwise matrices, and scatter plots are never copied. A
+failed run leaves the example's files as they were.
+
+**Why it matters:** The desktop app ships these files as read-only
+example runs, and `test/test_doc_examples.py` (slow) fails when a fresh
+run no longer matches them. The command line carries nothing except the
+configuration, so every setting a configuration leaves out takes
+`fim run`'s own default, the same value the desktop app submits.
+
+**When to run it:** After a change to an example's configuration, or to
+the engine, statistics, or report format, once the slow test reports a
+mismatch. Some examples take a long time: Dear-Nolan low runs for the
+better part of an hour, and Jost (2008) Part VI for several minutes. On
+a shared machine, `--jobs` and `--workers` keep the load bounded;
+neither changes any result.
+
+**Usage:**
+
+```console
+dev/bin/regenerate-example-outputs                      # every example
+dev/bin/regenerate-example-outputs golden-part-vi       # just one
+dev/bin/regenerate-example-outputs --list               # list examples
+dev/bin/regenerate-example-outputs --dry-run            # show commands
+dev/bin/regenerate-example-outputs --jobs 3 --workers 2
+```
+
+`--jobs N` runs up to `N` examples at once. `--workers N` sets the
+process count of a `lineal` batch and is not passed to any other engine.
+Commit the changed files together with the rebuilt examples bundle that
+the pre-commit hook stages.
 
 ## `update-worked-examples`
 

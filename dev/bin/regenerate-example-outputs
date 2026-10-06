@@ -1,0 +1,357 @@
+#!/usr/bin/env python3
+"""Regenerate the committed output files of the worked examples.
+
+Each `doc/examples/<id>/` directory with a `config.yaml` is one example.
+For every example named on the command line (default: all of them), this
+script runs exactly
+
+    python -m fim.launcher run doc/examples/<id>/config.yaml \\
+        --output <temporary directory> --quiet
+
+with `FIM_RESULTS_DIRECTORY` pointed at a temporary directory, as
+`test/test_doc_examples.py` does, so the run's Study index never touches
+your real `results/`. It then replaces the example's committed outputs
+with the fresh ones (design doc
+`20261005-claude-opus-5-5-read-only-examples-and-classes-design.md`,
+`selby/restricted`, sections 4.1 and 6):
+
+- a single run: `manifest.json` and `report.json`;
+- a batch (`n_replicates` greater than one): `manifest.json`,
+  `summary.json`, and each kept replicate's `replicate-NNN/manifest.json`
+  and `replicate-NNN/report.json`.
+
+Trajectories, convergence histories, pairwise matrices, and scatter plots
+are never copied: they can be gigabytes, and the desktop app can rebuild
+them by running the example again.
+
+Out-of-the-box defaults. The command line carries nothing but the
+configuration, the output directory, and `--quiet`, so every setting the
+configuration leaves out takes `fim run`'s own default. The desktop app
+submits the same values for every example: the example survey
+(2026-10-05) found the command-line and GUI defaults identical for all of
+them once the GUI's Settings fallback for a preset's engine was fixed.
+
+Determinism. A run is a pure function of its configuration (the seed is
+in the file), so running this script twice writes identical files except
+for each manifest's `started_at` and `ended_at` time stamps and the
+digests that cover them. `--workers N` sets the process count of a
+`lineal` batch for speed only; it never changes a result, and it is not
+passed to any other engine, which has no process pool.
+
+Usage:
+    dev/bin/regenerate-example-outputs                    # every example
+    dev/bin/regenerate-example-outputs golden-part-vi     # just one
+    dev/bin/regenerate-example-outputs --list             # show examples
+    dev/bin/regenerate-example-outputs --dry-run          # show commands
+    dev/bin/regenerate-example-outputs --jobs 3 --workers 2
+
+Some examples take a long time: Dear-Nolan low runs about 295,000
+generations of 30 loci, and Jost (2008) Part VI about 130,000
+generations. Each example's README states its own running time.
+"""
+
+from __future__ import annotations
+
+import argparse
+import importlib.util
+import os
+import shutil
+import subprocess
+import sys
+import tempfile
+import time
+from collections.abc import Sequence
+from concurrent.futures import ThreadPoolExecutor
+from dataclasses import dataclass
+from pathlib import Path
+
+ROOT = Path(__file__).resolve().parents[2]
+EXAMPLES_DIR = ROOT / "doc" / "examples"
+_REEXEC_SENTINEL = "FIM_REGENERATE_EXAMPLE_OUTPUTS_REEXECED"
+
+# The committed outputs (design §4.1). A batch keeps `summary.json` at its
+# top level and one `replicate-NNN/` subdirectory per kept replicate.
+TOP_LEVEL_OUTPUT_NAMES = ("manifest.json", "report.json", "summary.json")
+REPLICATE_OUTPUT_NAMES = ("manifest.json", "report.json")
+REPLICATE_PREFIX = "replicate-"
+
+
+def _ensure_project_interpreter() -> None:
+    """Re-exec under the repository's own Python when PyYAML is missing.
+
+    The `#!/usr/bin/env python3` shebang finds whichever `python3` is
+    first on `PATH`, which need not have this project's dependencies
+    (`dev/bin/build-examples-catalog` documents the same hazard and the
+    same fix). The sentinel stops a second re-exec.
+    """
+    if importlib.util.find_spec("yaml") is not None:
+        return
+    if os.environ.get(_REEXEC_SENTINEL) == "1":
+        sys.stderr.write(
+            f"regenerate-example-outputs: PyYAML is not installed under "
+            f"{sys.executable}\n"
+        )
+        raise SystemExit(1)
+    project_python = ROOT / "bin" / "python3"
+    env = {**os.environ, _REEXEC_SENTINEL: "1"}
+    script = str(Path(__file__).resolve())
+    os.execve(str(project_python), [str(project_python), script, *sys.argv[1:]], env)
+
+
+_ensure_project_interpreter()
+
+import yaml  # noqa: E402 -- must follow the interpreter bootstrap above
+
+
+@dataclass(frozen=True)
+class Example:
+    """One example directory and the facts about it this script needs.
+
+    Args:
+        example_id: The directory name, such as `golden-part-vi`.
+        directory: The example directory.
+        engine_backend: The configuration's `engine_backend`, or `lineal`
+            when it names none (`fim run`'s own default).
+    """
+
+    example_id: str
+    directory: Path
+    engine_backend: str
+
+    @property
+    def config(self) -> Path:
+        """Return the path of the example's configuration file."""
+        return self.directory / "config.yaml"
+
+
+def clear_outputs(directory: Path) -> None:
+    """Delete an example's committed output files, and nothing else.
+
+    Args:
+        directory: The example directory.
+    """
+    # Top-level outputs.
+    for name in TOP_LEVEL_OUTPUT_NAMES:
+        (directory / name).unlink(missing_ok=True)
+
+    # Replicate subdirectories hold only outputs; remove their output
+    # files, then the directory once it is empty.
+    for replicate in sorted(directory.glob(f"{REPLICATE_PREFIX}*")):
+        if not replicate.is_dir():
+            continue
+        for name in REPLICATE_OUTPUT_NAMES:
+            (replicate / name).unlink(missing_ok=True)
+        if not any(replicate.iterdir()):
+            replicate.rmdir()
+
+
+def command_for(example: Example, output: Path, workers: int | None) -> list[str]:
+    """Return the exact `fim run` command line for one example.
+
+    Args:
+        example: The example to run.
+        output: The temporary output directory.
+        workers: The `--workers` count for a `lineal` batch, or `None`.
+
+    Returns:
+        The argument vector, starting with this interpreter.
+    """
+    command = [
+        sys.executable,
+        "-m",
+        "fim.launcher",
+        "run",
+        str(example.config),
+        "--output",
+        str(output),
+        "--quiet",
+    ]
+    if workers is not None and example.engine_backend == "lineal":
+        command += ["--workers", str(workers)]
+    return command
+
+
+def copy_outputs(source: Path, directory: Path) -> list[str]:
+    """Copy a fresh run's committed outputs into an example directory.
+
+    Args:
+        source: The fresh run's output directory.
+        directory: The example directory, already cleared.
+
+    Returns:
+        The copied paths, relative to the example directory, sorted.
+    """
+    copied: list[str] = []
+
+    # Top-level outputs: whichever of the three the run wrote.
+    for name in TOP_LEVEL_OUTPUT_NAMES:
+        path = source / name
+        if path.is_file():
+            shutil.copyfile(path, directory / name)
+            copied.append(name)
+
+    # Each kept replicate's own manifest and report.
+    for replicate in sorted(source.glob(f"{REPLICATE_PREFIX}*")):
+        if not replicate.is_dir():
+            continue
+        target = directory / replicate.name
+        target.mkdir(exist_ok=True)
+        for name in REPLICATE_OUTPUT_NAMES:
+            path = replicate / name
+            if path.is_file():
+                shutil.copyfile(path, target / name)
+                copied.append(f"{replicate.name}/{name}")
+    return sorted(copied)
+
+
+def discover_examples() -> list[Example]:
+    """Return every example that has a configuration, sorted by ID.
+
+    Returns:
+        One `Example` per `doc/examples/<id>/config.yaml`.
+
+    Raises:
+        ValueError: A configuration is not a YAML mapping.
+    """
+    examples: list[Example] = []
+    for config in sorted(EXAMPLES_DIR.glob("*/config.yaml")):
+        data = yaml.safe_load(config.read_text(encoding="utf-8"))
+        if not isinstance(data, dict):
+            raise ValueError(f"{config} is not a YAML mapping")
+        examples.append(
+            Example(
+                example_id=config.parent.name,
+                directory=config.parent,
+                engine_backend=str(data.get("engine_backend", "lineal")),
+            )
+        )
+    return examples
+
+
+def main(argv: Sequence[str] | None = None) -> int:
+    """Regenerate the selected examples' outputs.
+
+    Args:
+        argv: Command-line arguments, excluding the program name.
+
+    Returns:
+        0 when every selected example ran and was copied, otherwise 1.
+    """
+    parser = argparse.ArgumentParser(
+        description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
+    )
+    parser.add_argument(
+        "examples",
+        nargs="*",
+        metavar="ID",
+        help="example directory names (default: every example)",
+    )
+    parser.add_argument(
+        "--list", action="store_true", help="list the examples and exit"
+    )
+    parser.add_argument(
+        "--dry-run", action="store_true", help="print each command without running it"
+    )
+    parser.add_argument(
+        "--jobs",
+        type=int,
+        default=1,
+        metavar="N",
+        help="run up to N examples at once (default 1)",
+    )
+    parser.add_argument(
+        "--workers",
+        type=int,
+        default=None,
+        metavar="N",
+        help="worker processes for a lineal batch (speed only)",
+    )
+    args = parser.parse_args(argv)
+
+    # Select the examples, rejecting an unknown name before running any.
+    available = {example.example_id: example for example in discover_examples()}
+    if args.list:
+        for example_id, example in available.items():
+            print(f"{example_id}\t{example.engine_backend}")
+        return 0
+    unknown = sorted(set(args.examples) - set(available))
+    if unknown:
+        print(
+            f"regenerate-example-outputs: unknown example(s): {', '.join(unknown)}",
+            file=sys.stderr,
+        )
+        return 1
+    selected = [available[name] for name in args.examples] or list(available.values())
+
+    with tempfile.TemporaryDirectory(prefix="fim-example-outputs-") as scratch:
+        scratch_dir = Path(scratch)
+        if args.dry_run:
+            for example in selected:
+                print(
+                    " ".join(
+                        command_for(
+                            example, scratch_dir / example.example_id, args.workers
+                        )
+                    )
+                )
+            return 0
+        with ThreadPoolExecutor(max_workers=max(1, args.jobs)) as pool:
+            outcomes = list(
+                pool.map(
+                    lambda example: regenerate(example, scratch_dir, args.workers),
+                    selected,
+                )
+            )
+    return 0 if all(outcomes) else 1
+
+
+def regenerate(example: Example, scratch: Path, workers: int | None) -> bool:
+    """Run one example and replace its committed outputs.
+
+    The committed files are replaced only after the run succeeds, so a
+    failed or interrupted run leaves the example as it was.
+
+    Args:
+        example: The example to run.
+        scratch: A temporary directory this run may write under.
+        workers: The `--workers` count for a `lineal` batch, or `None`.
+
+    Returns:
+        `True` when the run succeeded and its outputs were copied.
+    """
+    # Run in a private output and results directory.
+    output = scratch / example.example_id
+    environment = {
+        **os.environ,
+        "FIM_RESULTS_DIRECTORY": str(scratch / f"{example.example_id}-results"),
+        "PYTHONPATH": os.pathsep.join(
+            filter(None, [str(ROOT / "src"), os.environ.get("PYTHONPATH")])
+        ),
+    }
+    command = command_for(example, output, workers)
+    print(f"regenerate-example-outputs: {example.example_id}: running", flush=True)
+    started = time.monotonic()
+    completed = subprocess.run(command, cwd=ROOT, env=environment, check=False)
+    elapsed = time.monotonic() - started
+    if completed.returncode != 0:
+        print(
+            f"regenerate-example-outputs: {example.example_id}: fim run failed "
+            f"with status {completed.returncode}",
+            file=sys.stderr,
+        )
+        return False
+
+    # Replace the committed outputs, then drop the large files.
+    clear_outputs(example.directory)
+    copied = copy_outputs(output, example.directory)
+    shutil.rmtree(output, ignore_errors=True)
+    print(
+        f"regenerate-example-outputs: {example.example_id}: {len(copied)} file(s) "
+        f"in {elapsed:.0f} s",
+        flush=True,
+    )
+    return True
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

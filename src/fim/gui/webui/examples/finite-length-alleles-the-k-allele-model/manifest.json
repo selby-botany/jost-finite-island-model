@@ -1,0 +1,84 @@
+{
+  "artifacts": {
+    "convergence": {
+      "bytes": 646147,
+      "sha256": "3b9d2d1005731405e242b2c445d406d3b091255936a2797b5ccd37356ec84051"
+    },
+    "pairwise": {
+      "bytes": 530,
+      "sha256": "14e59e7b6c6eb7565b915bdaebeb90d40c5108dec3f9e891d4fc0efa2f5b5813"
+    },
+    "report": {
+      "bytes": 2288,
+      "sha256": "6bf328ad7a1b92dffea5ac6a72963a724ef5acbb39e59bc7ffd6f6ab1090455d"
+    },
+    "scatter": {
+      "bytes": 127719,
+      "sha256": "beafc5950bff2de8eb440f513504049d4dc49a8d9b41ecc61ba653f81a167398"
+    },
+    "trajectory": {
+      "bytes": 21911338,
+      "sha256": "4a089963193c1995fdc409bbed3e6692eaf929d2c9dd90c53e09ed2964938f8f"
+    }
+  },
+  "auto_derived": [
+    "convergence_window",
+    "max_generations"
+  ],
+  "convergence": {
+    "converged": true,
+    "generation": 4521,
+    "generation_count": 4522,
+    "reason": "statistic converged",
+    "statistic": "D"
+  },
+  "ended_at": "2026-10-06T12:06:56.449892Z",
+  "engine_backend": "lineal",
+  "equilibrium_final_heterozygosity": null,
+  "equilibrium_generation_count": null,
+  "initial_condition_mode": "dirichlet",
+  "jit": "off",
+  "parameters": {
+    "N": 100,
+    "_read_only": true,
+    "auto_vector_max_capacity": 4096,
+    "auto_vector_min_d": 2,
+    "convergence_combinator": "all",
+    "convergence_statistic": "D",
+    "convergence_tolerance": 0.02,
+    "convergence_window": 70,
+    "d": 3,
+    "deme_weighting": "equal",
+    "engine_backend": "lineal",
+    "initial_allele_count": 2,
+    "initial_concentration": 1.0,
+    "jit": "off",
+    "loci": [
+      {
+        "length": 3,
+        "locus_id": 1
+      }
+    ],
+    "locus_aggregation": "ratio_of_means",
+    "m": 0.02,
+    "max_generations": 200000,
+    "migrant_sampling": "continuous",
+    "mu": 0.02,
+    "mutation_model": "finite_alleles",
+    "n_replicates": 1,
+    "ploidy": "haploid",
+    "replicate_confidence": 0.95,
+    "replicate_minimum": 10,
+    "replicate_tolerance": 0.01,
+    "seed": 20260819,
+    "track_expensive_statistics": false
+  },
+  "relaxation_time": 23.333333333333332,
+  "run_id": "run-adb7af62bee45fa3",
+  "schema_version": 3,
+  "sigma_band": null,
+  "sigma_band_multiplier": null,
+  "sigma_band_window": null,
+  "software_version": "1.2.0",
+  "started_at": "2026-10-06T12:06:38.259247Z"
+}

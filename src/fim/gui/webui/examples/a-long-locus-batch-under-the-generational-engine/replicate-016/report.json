@@ -1,0 +1,74 @@
+{
+  "A_CGD": 9.44873949579832,
+  "D": 0.027711146606460537,
+  "D_m": 0.01156768403361358,
+  "Delta": 0.13435126050420165,
+  "E_ST": 0.060705748575711954,
+  "F_ST": 0.019469962925450824,
+  "G_ST": 0.018924205515574572,
+  "G_ST_HEDRICK": 0.046110940688582236,
+  "G_ST_NEI_LOG": 0.030289852900124942,
+  "Gd": 0.4058702588235293,
+  "Gs": 0.41743794285714286,
+  "H_S": 0.5825620571428571,
+  "H_ST": 0.026919399560561663,
+  "H_T": 0.5937992359183675,
+  "K_ST": 0.2369247493658655,
+  "MI": 0.21583006551992123,
+  "NEI_D_ALL_ARITH": 0.02810234439603689,
+  "NEI_D_ALL_ARITH_LOCUS_MEAN": 0.02810234439603689,
+  "NEI_D_ALL_GEO": 0.024007041029944717,
+  "NEI_D_ALL_GEO_LOCUS_MEAN": 0.024007041029944717,
+  "NEI_I_ALL_ARITH": 0.97228885339354,
+  "NEI_I_ALL_ARITH_LOCUS_MEAN": 0.97228885339354,
+  "NEI_I_ALL_GEO": 0.9762788357251925,
+  "NEI_I_ALL_GEO_LOCUS_MEAN": 0.9762788357251925,
+  "R_ST": 0.019856569599377337,
+  "converged": false,
+  "converged_on": null,
+  "generation": 100,
+  "reason": "hit the cap",
+  "run_id": "run-5b8be03b9d84478b-r016",
+  "window_statistics": {
+    "D": {
+      "effective_sample_size": 4.551856639802374,
+      "mean": 0.04404096005412334,
+      "noise_adequate": false,
+      "standard_deviation": 0.03964984437048203,
+      "standard_error": 0.01858434243760181,
+      "window": 101
+    },
+    "G_ST": {
+      "effective_sample_size": 5.211481903433937,
+      "mean": 0.04233566655601957,
+      "noise_adequate": false,
+      "standard_deviation": 0.04885201785601611,
+      "standard_error": 0.021399414459339978,
+      "window": 101
+    },
+    "H_S": {
+      "effective_sample_size": 2.9622173563568963,
+      "mean": 0.5242552185216119,
+      "noise_adequate": false,
+      "standard_deviation": 0.049969819039563816,
+      "standard_error": 0.02903349479950866,
+      "window": 101
+    },
+    "H_ST": {
+      "effective_sample_size": 4.551856639802381,
+      "mean": 0.04278264690971982,
+      "noise_adequate": false,
+      "standard_deviation": 0.03851699167418255,
+      "standard_error": 0.018053361225098888,
+      "window": 101
+    },
+    "H_T": {
+      "effective_sample_size": 1.532484183979156,
+      "mean": 0.5463450092908243,
+      "noise_adequate": false,
+      "standard_deviation": 0.030032890083909247,
+      "standard_error": 0.024260465300443703,
+      "window": 101
+    }
+  }
+}

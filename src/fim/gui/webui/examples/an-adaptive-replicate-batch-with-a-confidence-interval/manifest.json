@@ -1,0 +1,189 @@
+{
+  "artifacts": {
+    "replicate-001": {
+      "bytes": 2657,
+      "sha256": "1ed2d244843cff394bd9d310b3616d0dcb96c92c302940e21673e1ec021bae24"
+    },
+    "replicate-002": {
+      "bytes": 2657,
+      "sha256": "0885e39866087e82a33c15aa505e4c643ed32b9f023bb55c6536fd9b52e395ce"
+    },
+    "replicate-003": {
+      "bytes": 2657,
+      "sha256": "624f2613c6177d1a3455ab3f95e5e2398a6b730d7b89bc3794a8389ab32d2a2a"
+    },
+    "replicate-004": {
+      "bytes": 2659,
+      "sha256": "84bd24e380d0b87c6c5459c7d7633272ddc8ffc44e91ef8e5599fe58a4a4af85"
+    },
+    "replicate-005": {
+      "bytes": 2657,
+      "sha256": "93a75162d72032da220c28a896e186612f9d7ea20b023ab104e02c9c1ed883a1"
+    },
+    "replicate-006": {
+      "bytes": 2659,
+      "sha256": "fb4eb29a8ddfc412ad06cab630eda1682b8c8a39024d840b43c2618b537d9e8f"
+    },
+    "replicate-007": {
+      "bytes": 2659,
+      "sha256": "8c329b03e48e6803bfeadac0f29f8c4486633c9ad9e208e9ed2085be272d31fb"
+    },
+    "replicate-008": {
+      "bytes": 2659,
+      "sha256": "a4286820d87d339afd46ea56a09195323395a589a5bb379142f4739afab15768"
+    },
+    "replicate-009": {
+      "bytes": 2657,
+      "sha256": "b602ccd003e2451cdc7b529d2fbd5f67ecbba9f3cb6157dd215d4287b974b4c7"
+    },
+    "replicate-010": {
+      "bytes": 2659,
+      "sha256": "c30776b0e05b1057a23aa175dac6b5598d3ebe6a11ed738b415351396b33aaf9"
+    },
+    "replicate-011": {
+      "bytes": 2657,
+      "sha256": "112c0f6202e5211edd15f8ae272b2966545cea21bf5a6210bf2997376e3c034b"
+    },
+    "replicate-012": {
+      "bytes": 2659,
+      "sha256": "8ee4f7c210e3e441442feda05ba441b3ff98e5a7363706bad84200893677fbeb"
+    },
+    "replicate-013": {
+      "bytes": 2659,
+      "sha256": "0cc82c95782e1a64039e67d66b94ff67f4be14c9b7ed650bc5ec028a8f483889"
+    },
+    "replicate-014": {
+      "bytes": 2657,
+      "sha256": "1281c4750957d8c941dc6a14268074d86cedd6921634dec4b38697095e35e15e"
+    },
+    "replicate-015": {
+      "bytes": 2659,
+      "sha256": "3bd1cd9a3a408382a4c0b8fd9035aa430859b28a679413b01fc8d189ad14baa4"
+    },
+    "replicate-016": {
+      "bytes": 2659,
+      "sha256": "5066de563d15dd565dc475382a33c9747b12f08415d89df327e74074f9036e07"
+    },
+    "replicate-017": {
+      "bytes": 2657,
+      "sha256": "f66e207192bba3356320e9d3ab34bdedcc83f61b319502ec23793a4e337b4f7f"
+    },
+    "replicate-018": {
+      "bytes": 2657,
+      "sha256": "d1d91bd13105d8b73af2b6cef6635e52b050f1c4028c6689be74e6b97aa50ffa"
+    },
+    "replicate-019": {
+      "bytes": 2659,
+      "sha256": "51b7887487a590b8d505ca2b34fb7d2fb617ee11f536ac730f75ebdf14bf0c19"
+    },
+    "replicate-020": {
+      "bytes": 2657,
+      "sha256": "716d6cd2d0f6ce6d73c46fe71dacabb7865f5f1586c6694ca32b1c74b9207dcf"
+    },
+    "replicate-021": {
+      "bytes": 2657,
+      "sha256": "08d3a0322bc6a688d5f88b88ad20e64869c26cbda0f18ee9184c8d9fa641ae2e"
+    },
+    "replicate-022": {
+      "bytes": 2657,
+      "sha256": "7192a822697232c3f974ad3db20aa7bff2233958e174a51745eb3a9dc7d89dc4"
+    },
+    "summary": {
+      "bytes": 6091,
+      "sha256": "2acac10816bcd16fa88ec1ee568a80e6ef1adcb63e6f2914e2b4cc6fb87cbfd2"
+    }
+  },
+  "ended_at": "2026-10-06T12:06:32.573634Z",
+  "parameters": {
+    "N": 100,
+    "_read_only": true,
+    "auto_vector_max_capacity": 4096,
+    "auto_vector_min_d": 2,
+    "convergence_combinator": "all",
+    "convergence_statistic": "D",
+    "convergence_tolerance": 0.05,
+    "convergence_window": 875,
+    "d": 5,
+    "deme_weighting": "equal",
+    "engine_backend": "lineal",
+    "initial_allele_count": 2,
+    "initial_concentration": 1.0,
+    "jit": "off",
+    "loci": [
+      {
+        "length": 100,
+        "locus_id": 1
+      },
+      {
+        "length": 100,
+        "locus_id": 2
+      },
+      {
+        "length": 100,
+        "locus_id": 3
+      },
+      {
+        "length": 100,
+        "locus_id": 4
+      },
+      {
+        "length": 100,
+        "locus_id": 5
+      },
+      {
+        "length": 100,
+        "locus_id": 6
+      },
+      {
+        "length": 100,
+        "locus_id": 7
+      },
+      {
+        "length": 100,
+        "locus_id": 8
+      }
+    ],
+    "locus_aggregation": "ratio_of_means",
+    "m": 0.01,
+    "max_generations": 200000,
+    "migrant_sampling": "continuous",
+    "mu": 0.001,
+    "mutation_model": "infinite_alleles",
+    "n_replicates": 50,
+    "ploidy": "haploid",
+    "replicate_confidence": 0.95,
+    "replicate_minimum": 10,
+    "replicate_tolerance": 0.03,
+    "seed": 20260819,
+    "track_expensive_statistics": false
+  },
+  "replicate_count": 22,
+  "replicate_run_ids": [
+    "run-23f55cf2c98e7afd-r001",
+    "run-23f55cf2c98e7afd-r002",
+    "run-23f55cf2c98e7afd-r003",
+    "run-23f55cf2c98e7afd-r004",
+    "run-23f55cf2c98e7afd-r005",
+    "run-23f55cf2c98e7afd-r006",
+    "run-23f55cf2c98e7afd-r007",
+    "run-23f55cf2c98e7afd-r008",
+    "run-23f55cf2c98e7afd-r009",
+    "run-23f55cf2c98e7afd-r010",
+    "run-23f55cf2c98e7afd-r011",
+    "run-23f55cf2c98e7afd-r012",
+    "run-23f55cf2c98e7afd-r013",
+    "run-23f55cf2c98e7afd-r014",
+    "run-23f55cf2c98e7afd-r015",
+    "run-23f55cf2c98e7afd-r016",
+    "run-23f55cf2c98e7afd-r017",
+    "run-23f55cf2c98e7afd-r018",
+    "run-23f55cf2c98e7afd-r019",
+    "run-23f55cf2c98e7afd-r020",
+    "run-23f55cf2c98e7afd-r021",
+    "run-23f55cf2c98e7afd-r022"
+  ],
+  "run_id": "run-23f55cf2c98e7afd",
+  "schema_version": 1,
+  "software_version": "1.2.0",
+  "started_at": "2026-10-06T12:03:12.459654Z"
+}
