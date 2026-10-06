@@ -20,6 +20,7 @@ from .test_sweep_screen import (
     Poll,
     _drive,
     _plan_ready,
+    _wait_for_sweep_finished,
 )
 
 pytestmark = pytest.mark.gui
@@ -70,7 +71,7 @@ def _run_and_view_results(window: webview.Window, poll_until: Poll, axes: str) -
     window.evaluate_js(axes)
     poll_until(_SCREEN_STATE, lambda s: s["planReady"] is True and s["tableRows"] >= 2)
     window.evaluate_js(_START)
-    poll_until("window.__fimSweepFinished", lambda finished: finished is True)
+    _wait_for_sweep_finished(window)
     window.evaluate_js("document.getElementById('sweep-view-results-button').click();")
     return poll_until(
         _RESULTS_STATE,
@@ -128,7 +129,7 @@ def test_a_two_axis_sweep_draws_a_heat_map_in_all_three_modes(
             _SCREEN_STATE, lambda s: s["planReady"] is True and s["tableRows"] == 4
         )
         window.evaluate_js(_START)
-        poll_until("window.__fimSweepFinished", lambda finished: finished is True)
+        _wait_for_sweep_finished(window)
         window.evaluate_js(
             "document.getElementById('sweep-view-results-button').click();"
         )
@@ -171,7 +172,7 @@ def test_clicking_a_cell_opens_that_runs_results_card(
             _SCREEN_STATE, lambda s: s["planReady"] is True and s["tableRows"] == 2
         )
         window.evaluate_js(_START)
-        poll_until("window.__fimSweepFinished", lambda finished: finished is True)
+        _wait_for_sweep_finished(window)
         window.evaluate_js(
             "document.getElementById('sweep-view-results-button').click();"
         )

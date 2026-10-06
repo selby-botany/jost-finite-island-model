@@ -102,6 +102,28 @@ def _drive(window: webview.Window, steps: Callable[[Poll], Any]) -> Any:
     return outcome.get(timeout=10.0)
 
 
+def _wait_for_sweep_finished(window: webview.Window) -> None:
+    """Poll until the sweep screen says its sweep has ended, with no deadline.
+
+    `window.__fimSweepFinished` turns true on the sweep's `sweep_done`,
+    `sweep_cancelled` or error push (`sweep.js`'s `finishSweep`), so this
+    ends however the sweep ends. It used to share `_drive`'s 400-attempt
+    poll, which a sweep of real runs outlasted on a loaded machine: the
+    test then went on while points were still running ("0 of 2 points
+    finished ... not run yet", a Study with no runs yet). How long a
+    sweep takes depends on machine load, not on the commit; CI's
+    `timeout-minutes` bounds a genuine hang.
+
+    Args:
+        window: The window whose sweep screen is running a sweep.
+
+    Returns:
+        None
+    """
+    while window.evaluate_js("window.__fimSweepFinished") is not True:
+        time.sleep(_POLL_INTERVAL_SECONDS)
+
+
 def _plan_ready(state: Any) -> bool:
     return (
         state is not None and state["planReady"] is True and state["dialogOpen"] is True
@@ -188,6 +210,7 @@ def test_running_a_sweep_shows_progress_and_creates_the_study(
             _SCREEN_STATE, lambda s: s["planReady"] is True and s["tableRows"] == 2
         )
         window.evaluate_js(_START)
+        _wait_for_sweep_finished(window)
         return poll_until(finished_state, lambda s: s["finished"] is True)
 
     settled = _drive(window, steps)
@@ -307,9 +330,7 @@ def test_the_sweep_runs_into_the_study_chosen_on_configure(
             lambda value: value == study.study_id,
         )
         window.evaluate_js(_START)
-        return poll_until(
-            "window.__fimSweepFinished", lambda finished: finished is True
-        )
+        _wait_for_sweep_finished(window)
 
     _drive(window, steps)
 
