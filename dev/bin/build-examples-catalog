@@ -22,9 +22,8 @@ description is the README's first prose paragraph, and the class is
 Classes. `doc/examples/classes.yaml` defines the class tree (design doc
 `20261005-claude-opus-5-5-read-only-examples-and-classes-design.md`
 §2, `selby/restricted`). When the file is absent, every example must be
-unclassified. `read_class_tree` below is a small local reader with the
-same rules as `fim.examples.classes`; swap it for that module once it
-is importable here.
+unclassified. The file is read by `fim.examples.classes`, its only
+reader, imported from this checkout's `src/`.
 
 Order. Classes appear in file order (parent, then its children).
 Within a class, examples follow the order of their
@@ -44,16 +43,54 @@ from __future__ import annotations
 
 import argparse
 import html
+import importlib.util
 import json
+import os
 import re
 import sys
 from collections.abc import Mapping, Sequence
 from pathlib import Path
 from typing import Any
 
-import yaml
-
 ROOT = Path(__file__).resolve().parents[2]
+_REEXEC_SENTINEL = "FIM_BUILD_EXAMPLES_CATALOG_REEXECED"
+
+
+def _ensure_project_interpreter() -> None:
+    """Re-exec under the repository's own Python when PyYAML is missing.
+
+    The `#!/usr/bin/env python3` shebang finds whichever `python3` is
+    first on `PATH`, which need not have this project's dependencies
+    (`dev/bin/generate-help-html` documents the same hazard and the same
+    fix). `bin/python3` finds the project's virtual environment from the
+    repository's own path. The sentinel stops a second re-exec, so an
+    interpreter that still lacks PyYAML reports a plain error instead.
+    """
+    if importlib.util.find_spec("yaml") is not None:
+        return
+    if os.environ.get(_REEXEC_SENTINEL) == "1":
+        sys.stderr.write(
+            f"build-examples-catalog: PyYAML is not installed under {sys.executable}\n"
+        )
+        raise SystemExit(1)
+    project_python = ROOT / "bin" / "python3"
+    env = {**os.environ, _REEXEC_SENTINEL: "1"}
+    script = str(Path(__file__).resolve())
+    os.execve(str(project_python), [str(project_python), script, *sys.argv[1:]], env)
+
+
+_ensure_project_interpreter()
+
+import yaml  # noqa: E402 -- must follow the interpreter bootstrap above
+
+# The class file has exactly one reader, `fim.examples.classes`; import it
+# from this checkout's own source tree, so the script works whether or
+# not fim is installed in the interpreter running it (the pre-commit hook
+# runs it with plain `python3`).
+sys.path.insert(0, str(ROOT / "src"))
+from fim.examples.classes import RunClass  # noqa: E402 -- after the sys.path insert
+from fim.examples.classes import read_class_tree as read_classes_file  # noqa: E402
+
 EXAMPLES_DIR = ROOT / "doc" / "examples"
 USAGE_PATH = ROOT / "doc" / "usage.md"
 BUNDLE_DIR = ROOT / "src" / "fim" / "gui" / "webui" / "examples"
@@ -95,55 +132,6 @@ LIST_ITEM_PATTERN = re.compile(r"^(?:[-*+]|\d+\.)\s")
 
 class CatalogError(ValueError):
     """Raised when the examples or the class file break a catalog rule."""
-
-
-def _class_entry(raw: Any, *, allow_children: bool, where: str) -> dict[str, Any]:
-    """Validate one class mapping and return its normalized form.
-
-    Args:
-        raw: One item of `classes` (or of a class's `children`).
-        allow_children: Whether this level may carry `children`; the
-            tree is shallow, so only the top level may.
-        where: A location prefix for error messages.
-
-    Returns:
-        `{"id", "title", "description", "children"}`, with an empty
-        description when the file gives none.
-
-    Raises:
-        CatalogError: If the entry is malformed.
-    """
-    if not isinstance(raw, Mapping):
-        raise CatalogError(f"{where}: each class must be a mapping")
-    unknown = set(raw) - {"id", "title", "description", "children"}
-    if unknown:
-        raise CatalogError(f"{where}: unknown key(s) {sorted(unknown)}")
-    class_id = raw.get("id")
-    if not isinstance(class_id, str) or not ID_PATTERN.match(class_id):
-        raise CatalogError(f"{where}: id must be lowercase kebab-case: {class_id!r}")
-    title = raw.get("title")
-    if not isinstance(title, str) or not title.strip():
-        raise CatalogError(f"{where}: class {class_id} needs a title")
-    description = raw.get("description", "")
-    if not isinstance(description, str):
-        raise CatalogError(f"{where}: class {class_id} description must be text")
-    children_raw = raw.get("children", [])
-    if children_raw and not allow_children:
-        raise CatalogError(
-            f"{where}: class {class_id} is a child and may not have children"
-        )
-    if not isinstance(children_raw, list):
-        raise CatalogError(f"{where}: class {class_id} children must be a list")
-    children = [
-        _class_entry(child, allow_children=False, where=f"{where} > {class_id}")
-        for child in children_raw
-    ]
-    return {
-        "id": class_id,
-        "title": title.strip(),
-        "description": description.strip(),
-        "children": children,
-    }
 
 
 def _flatten_classes(tree: Sequence[Mapping[str, Any]]) -> list[Mapping[str, Any]]:
@@ -363,11 +351,14 @@ def _output_files(directory: Path) -> dict[str, bytes]:
 
 
 def read_class_tree(path: Path) -> list[dict[str, Any]]:
-    """Read and validate `classes.yaml` (design §2).
+    """Read and validate `classes.yaml` (design §2) through `fim.examples.classes`.
 
-    The local stand-in for `fim.examples.classes`: same file shape and
-    rules (a shallow tree, kebab-case IDs unique across the tree, file
-    order as display order).
+    That module is the class file's only reader, so the catalog and
+    `fim run`'s own `class` check can never disagree about what the file
+    allows (a shallow tree, kebab-case IDs unique across the tree, file
+    order as display order). Its tree is then written in the catalog's
+    own shape: every class carries a `description` (empty when the file
+    gives none) and a `children` list (empty for a leaf).
 
     Args:
         path: The `classes.yaml` file.
@@ -377,21 +368,23 @@ def read_class_tree(path: Path) -> list[dict[str, Any]]:
 
     Raises:
         CatalogError: If the file breaks a rule.
-        OSError, yaml.YAMLError: If the file cannot be read or parsed.
+        OSError: If the file cannot be read.
     """
-    data = yaml.safe_load(path.read_text(encoding="utf-8"))
-    if not isinstance(data, Mapping) or not isinstance(data.get("classes"), list):
-        raise CatalogError(f"{path.name}: expected a top-level 'classes' list")
-    tree = [
-        _class_entry(raw, allow_children=True, where=path.name)
-        for raw in data["classes"]
-    ]
-    seen: set[str] = set()
-    for entry in _flatten_classes(tree):
-        if entry["id"] in seen:
-            raise CatalogError(f"{path.name}: duplicate class id {entry['id']}")
-        seen.add(entry["id"])
-    return tree
+    try:
+        tree = read_classes_file(path)
+    except ValueError as error:
+        raise CatalogError(f"{path.name}: {error}") from error
+    return [_catalog_class(entry) for entry in tree.classes]
+
+
+def _catalog_class(entry: RunClass) -> dict[str, Any]:
+    """Return one validated class (and its children) in the catalog's shape."""
+    return {
+        "id": entry.class_id,
+        "title": entry.title,
+        "description": entry.description or "",
+        "children": [_catalog_class(child) for child in entry.children],
+    }
 
 
 def read_example(directory: Path) -> tuple[dict[str, Any], dict[str, bytes]]:

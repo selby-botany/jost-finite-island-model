@@ -284,14 +284,14 @@ def test_labels_and_class_tree_drive_names_and_order(tmp_path: Path) -> None:
             "classes:\n  - id: twice\n    title: A\n"
             "    children:\n      - id: twice\n        title: B\n",
             _CONFIG,
-            "duplicate class id twice",
+            "is used more than once",
         ),
         (
             "classes:\n  - id: top\n    title: Top\n    children:\n"
             "      - id: kid\n        title: Kid\n        children:\n"
             "          - id: grandkid\n            title: Grandkid\n",
             _CONFIG,
-            "may not have children",
+            "at most 2 levels deep",
         ),
         (None, "name: ''\n" + _CONFIG, "name must be non-empty text"),
     ],
