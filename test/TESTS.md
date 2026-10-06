@@ -648,7 +648,20 @@ The formulas in the docs match `fim.convergence.defaults`.
 
 # test.test\_doc\_examples
 
-Guard: committed worked-example reports match a fresh `fim run`.
+Guard: every worked example's committed output matches a fresh `fim run`.
+
+Each `doc/examples/<id>/` directory with a `config.yaml` commits the
+output files of its own run (`dev/bin/regenerate-example-outputs`, design
+doc `20261005-claude-opus-5-5-read-only-examples-and-classes-design.md`,
+`selby/restricted`, sections 4.1 and 6): `manifest.json` and
+`report.json` for a single run, or `manifest.json`, `summary.json`, and
+each replicate's `manifest.json`/`report.json` for a batch. The slow test
+below reruns every example exactly as that script does and compares.
+
+A run is a pure function of its configuration, so the comparison is
+exact, except for the few manifest fields that record the moment or the
+machine rather than the model (`VOLATILE_MANIFEST_KEYS`, and the
+artifact digests listed in `_comparable_manifest`).
 
 <a id="test.test_doc_examples.test_dear_nolan_high_configuration_matches_its_derivation"></a>
 
@@ -664,21 +677,51 @@ The example's `p_0` is the validation suite's near-equilibrium start
 (`_dn2_equilibrium_start`), written into the file by the script; a
 change to that derivation fails here until the file is rewritten.
 
-<a id="test.test_doc_examples.test_example_report_matches_a_fresh_run"></a>
+<a id="test.test_doc_examples.test_every_example_commits_its_output_files"></a>
 
-#### test\_example\_report\_matches\_a\_fresh\_run
+#### test\_every\_example\_commits\_its\_output\_files
 
 ```python
-@pytest.mark.parametrize("example", EXAMPLES)
-def test_example_report_matches_a_fresh_run(example: str,
-                                            tmp_path: Path) -> None
+@pytest.mark.parametrize("example", EXAMPLE_IDS)
+def test_every_example_commits_its_output_files(example: str) -> None
 ```
 
-The documented `report.json` is the run's exact output.
+Each example directory holds a complete set of committed outputs.
 
-Adding a statistic or changing the engine changes the report; this
-fails until the example directory is regenerated, so the docs cannot
-silently drift from the code.
+A single run has `manifest.json` and `report.json`; a batch has
+`manifest.json`, `summary.json`, and one replicate directory per kept
+replicate, each with both files. Trajectories are never committed.
+
+<a id="test.test_doc_examples.test_regeneration_uses_only_the_configuration"></a>
+
+#### test\_regeneration\_uses\_only\_the\_configuration
+
+```python
+def test_regeneration_uses_only_the_configuration(tmp_path: Path) -> None
+```
+
+The regeneration command overrides nothing: out-of-the-box defaults.
+
+Every example is run as `fim run CONFIG --output DIR --quiet`, so each
+setting its configuration leaves out takes `fim run`'s own default,
+and the committed outputs are what a user gets from the same file.
+
+<a id="test.test_doc_examples.test_example_outputs_match_a_fresh_run"></a>
+
+#### test\_example\_outputs\_match\_a\_fresh\_run
+
+```python
+@pytest.mark.slow
+@pytest.mark.parametrize("example", EXAMPLE_IDS)
+def test_example_outputs_match_a_fresh_run(example: str,
+                                           tmp_path: Path) -> None
+```
+
+The committed output files are the example's exact `fim run` output.
+
+Adding a statistic or changing the engine changes the output; this
+fails until `dev/bin/regenerate-example-outputs` is rerun, so the
+shipped results cannot silently drift from the code.
 
 <a id="test.test_doc_snippets"></a>
 
