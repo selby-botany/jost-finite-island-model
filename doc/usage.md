@@ -650,8 +650,24 @@ d: 4
 m: 0.02
 mu: 0.001
 seed: 20260916
+# Eight independent loci, pooled: one locus alone drifts close to fixation
+# for long stretches, where D looks deceptively steady (see the README).
 loci:
   - locus_id: 1
+    length: 100
+  - locus_id: 2
+    length: 100
+  - locus_id: 3
+    length: 100
+  - locus_id: 4
+    length: 100
+  - locus_id: 5
+    length: 100
+  - locus_id: 6
+    length: 100
+  - locus_id: 7
+    length: 100
+  - locus_id: 8
     length: 100
 convergence_statistic: D
 sigma_band_multiplier: 2.0
@@ -663,8 +679,11 @@ n_replicates: 1   # a single scalar run; the default (200) would batch
 fim run sigma-band.yaml --output results/sigma-band --quiet
 ```
 
-Converges at generation 1,429 with D = 0.126; the following 30-generation
-extension reports D = 0.106 ± 0.090 (mean ± 2σ). The band's own mean
+Converges at generation 7,460, after about 45 seconds, with D = 0.158; the
+following 30-generation extension reports D = 0.134 ± 0.041 (mean ± 2σ).
+The example pools eight loci: with one locus, a stretch near fixation can
+look steady for the wrong reason (see the
+[example's README](examples/within-run-sigma-band/README.md)). The band's own mean
 differs from the converged value itself — it is computed over the
 *extension* window, not the generations that triggered convergence — and
 is an honest report of how much a single statistic can still wobble over

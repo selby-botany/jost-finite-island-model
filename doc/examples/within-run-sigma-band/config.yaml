@@ -10,8 +10,24 @@ d: 4
 m: 0.02
 mu: 0.001
 seed: 20260916
+# Eight independent loci, pooled: one locus alone drifts close to fixation
+# for long stretches, where D looks deceptively steady (see the README).
 loci:
   - locus_id: 1
+    length: 100
+  - locus_id: 2
+    length: 100
+  - locus_id: 3
+    length: 100
+  - locus_id: 4
+    length: 100
+  - locus_id: 5
+    length: 100
+  - locus_id: 6
+    length: 100
+  - locus_id: 7
+    length: 100
+  - locus_id: 8
     length: 100
 convergence_statistic: D
 sigma_band_multiplier: 2.0
