@@ -8164,6 +8164,12 @@ logic (`fim.gui.store.LiveProgressStore`, `fim.gui.batch_runner`,
 both already built and tested independently) is ever reached through
 it.
 
+Waits with no attempt limit (`poll_attempts=None`): the call starts a
+real worker process, and how long that takes depends on machine load
+-- under a loaded parallel run it outlasted the default 250 polls and
+the test read `None`. The trigger writes the error on a rejected
+call, so the wait always ends on the call's own outcome.
+
 <a id="gui.test_app.test_export_active_graph_image_writes_a_real_png"></a>
 
 #### test\_export\_active\_graph\_image\_writes\_a\_real\_png
@@ -16226,6 +16232,28 @@ plain Python call in `test_app_api.py`); clicking it again removes
 them. Clicking a replicate row selects its own trajectory for
 "Open ▶", the same selection mechanism a scalar row's own click
 already uses.
+
+<a id="gui.test_open_run_screen.test_a_second_click_on_a_loading_study_toggle_is_ignored"></a>
+
+#### test\_a\_second\_click\_on\_a\_loading\_study\_toggle\_is\_ignored
+
+```python
+def test_a_second_click_on_a_loading_study_toggle_is_ignored(
+        tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None
+```
+
+Clicking a Study's toggle again while its run list loads starts nothing.
+
+Expanding a Study awaits `get_study_run_summary` and then re-renders
+the whole tree. Each click used to start its own fetch and its own
+re-render, so a second click before the first fetch landed produced
+a second, late re-render that rebuilt the table after the user had
+moved on -- on a loaded machine, wiping a batch row's replicate list
+expanded in between (`test_expanding_a_batch_row_shows_its_own_
+replicate_list` failed that way). Both clicks are made in one
+`evaluate_js` call, so the second always lands while the first fetch
+is in flight; the count of real bridge calls then shows whether it
+was ignored.
 
 <a id="gui.test_open_run_screen.test_opening_a_run_with_a_sigma_band_shows_it_alongside_the_curve"></a>
 

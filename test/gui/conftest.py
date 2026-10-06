@@ -155,7 +155,7 @@ import queue
 import signal
 import sys
 import time
-from collections.abc import Callable, Iterator
+from collections.abc import Callable, Iterable, Iterator
 from pathlib import Path
 from typing import Any
 
@@ -523,6 +523,54 @@ def _reap_leaked_webkit_helpers() -> Iterator[None]:
     _reap_leaked_webkit_processes(_last_known_webkit_pids)
     _last_known_webkit_pids.clear()
     _last_known_webkit_pids.update(_webkit_process_pids())
+
+
+@pytest.fixture(autouse=True)
+def _drive_only_once_windows_have_loaded(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Start every test's drive function only after its windows have loaded.
+
+    pywebview gates `Window.evaluate_js` on the page's own ready event and
+    `Window.destroy` on the window's `shown` event, each with a fixed
+    20-second wait that raises `WebViewException("Main window failed to
+    start")` when it expires (`webview/window.py`'s `_api_call`). How long
+    a page takes to load depends on machine load -- under a parallel GUI
+    run on a busy machine it can pass 20 seconds -- so that bound made a
+    test's outcome depend on what else the machine was doing: the drive
+    function raised before doing anything, and the test failed with an
+    empty result queue.
+
+    This wraps `webview.start` so the drive function first waits, with
+    no deadline, for every window that already exists to be shown and
+    loaded; pywebview's own 20-second waits then return at once. `loaded`
+    rather than the private ready event: pywebview sets `loaded` on its
+    error path too, so a page that fails to load still ends this wait and
+    fails at the next call instead of hanging. CI's `timeout-minutes`
+    bounds a genuine hang. A test that patches `webview.start` itself
+    still wins, since its patch is applied after this one.
+    """
+    real_start = webview.start
+
+    def start(
+        func: Callable[..., None] | None = None,
+        args: Iterable[Any] | None = None,
+        *rest: Any,
+        **kwargs: Any,
+    ) -> None:
+        if func is None:
+            real_start(func, args, *rest, **kwargs)
+            return
+        windows = list(webview.windows)
+        drive_function = func
+
+        def after_load(*drive_args: Any) -> None:
+            for target in windows:
+                target.events.shown.wait()
+                target.events.loaded.wait()
+            drive_function(*drive_args)
+
+        real_start(after_load, args, *rest, **kwargs)
+
+    monkeypatch.setattr(webview, "start", start)
 
 
 @pytest.fixture(autouse=True)
