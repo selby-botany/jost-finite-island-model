@@ -69,13 +69,13 @@ setField('locus_lengths', '200');
 
 def _write_run(
     results: Path,
-    name: str,
+    folder: str,
     seed: int,
     *,
     study_id: str | None = None,
     **overrides: object,
 ) -> Path:
-    """Write a small, real completed run under `results / name`.
+    """Write a small, real completed run under `results / folder`.
 
     `study_id`, when given, attaches the run to that Study directly at
     creation time via `fim run --study` — the CLI's own bare `fim run`
@@ -101,14 +101,115 @@ def _write_run(
         "replicate_tolerance": None,
     }
     config.update(overrides)
-    config_path = results / f"{name}.yaml"
+    config_path = results / f"{folder}.yaml"
     config_path.write_text(yaml.safe_dump(config, sort_keys=False), encoding="utf-8")
-    output_directory = results / name
+    output_directory = results / folder
     arguments = ["run", str(config_path), "-o", str(output_directory), "--quiet"]
     if study_id is not None:
         arguments += ["--study", study_id]
     assert cli.main(arguments) == 0
     return output_directory
+
+
+@pytest.mark.parametrize("read_only", [False, True])
+@pytest.mark.parametrize("replicates", [1, 2])
+def test_home_loads_a_runs_editable_configuration_without_linking_it(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    read_only: bool,
+    replicates: int,
+) -> None:
+    """Home loads regular/example scalar/batch runs without changing the source."""
+    results = tmp_path / "results"
+    results.mkdir()
+    monkeypatch.setattr(paths_module, "results_directory", lambda: results)
+    source = _write_run(
+        results,
+        "source-run",
+        42,
+        _read_only=read_only,
+        name="Source parameters",
+        description="Editable configuration from Home",
+        n_replicates=replicates,
+    )
+    before = {
+        path.relative_to(source): path.read_bytes()
+        for path in source.rglob("*")
+        if path.is_file()
+    }
+    memberships = groups.get_study(groups.DEFAULT_STUDY_ID).run_directories
+    window = create_window(hidden=True)
+    outcome: queue.Queue[dict[str, Any]] = queue.Queue(maxsize=1)
+
+    def _drive() -> None:
+        try:
+            _poll_until(window, _INPUT_SCREEN_READY, lambda value: value is True)
+            window.evaluate_js("window.fim.menu.openRun();")
+            _poll_until(
+                window,
+                "window.__fimOpenRunRecentRunsLoaded === true",
+                lambda value: value is True,
+            )
+            _expand_every_group(window)
+            clicked = window.evaluate_js(
+                "(function () {"
+                "const row = Array.from(document.querySelectorAll('.open-run-run-row'))"
+                ".find((item) => item.textContent.includes('Source parameters'));"
+                "const button = row?.querySelector('.open-run-load-config-button');"
+                "if (!button || button.textContent !== 'Clone') return false;"
+                "window.__fimHomeRunLoadSettled = false;"
+                "button.click(); return true;"
+                "})()"
+            )
+            assert clicked, "Home run has no Clone action"
+            settled = _poll_until(
+                window,
+                "window.__fimHomeRunLoadSettled === true",
+                lambda value: value is True,
+            )
+            assert settled, "Home configuration loading never settled"
+            snapshot = window.evaluate_js(
+                "({configureVisible:"
+                " !document.getElementById('screen-configure').hidden,"
+                " name: document.getElementById('run-name-input').value,"
+                " description: document.getElementById('run-description-input').value,"
+                " values: collectFormValues(),"
+                " studyLabels: Array.from(document.getElementById('run-study-select')"
+                ".options).map((option) => option.textContent),"
+                " selectedStudy: document.getElementById('run-study-select')"
+                ".selectedOptions[0].textContent,"
+                " buttonOrder: Array.from(document.querySelectorAll("
+                "'#screen-configure .actions > button'))"
+                ".map((button) => button.id).filter((id) => "
+                "['configure-load-button', 'configure-save-button',"
+                "'configure-examples-button'].includes(id))})"
+            )
+            outcome.put(snapshot)
+        finally:
+            window.destroy()
+
+    webview.start(_drive)
+    loaded = outcome.get(timeout=_DRIVE_TIMEOUT_SECONDS)
+    assert loaded["configureVisible"] is True
+    assert loaded["name"] == "Source parameters"
+    assert loaded["description"] == "Editable configuration from Home"
+    assert loaded["values"]["seed"] == "42"
+    assert Api().validate_form(loaded["values"])["ok"] is True
+    assert not any(key.startswith("_") for key in loaded["values"])
+    assert loaded["selectedStudy"] == "Default study"
+    assert loaded["studyLabels"].count("Default study") == 1
+    assert "No study" not in loaded["studyLabels"]
+    assert loaded["buttonOrder"] == [
+        "configure-load-button",
+        "configure-save-button",
+        "configure-examples-button",
+    ]
+    assert groups.get_study(groups.DEFAULT_STUDY_ID).run_directories == memberships
+    assert {
+        path.relative_to(source): path.read_bytes()
+        for path in source.rglob("*")
+        if path.is_file()
+    } == before
 
 
 def _poll_until(
@@ -145,31 +246,6 @@ def _expand_every_group(window: webview.Window) -> None:
         time.sleep(0.15)
 
 
-def _click_group_button(
-    window: webview.Window, group_label: str, button_text: str
-) -> None:
-    """Click the action button reading `button_text` on the group header
-    whose toggle names `group_label`."""
-    clicked = window.evaluate_js(
-        "(function(label, text) {"
-        "var headers = document.querySelectorAll('.open-run-group-header');"
-        "for (var header of headers) {"
-        "  var toggle = header.querySelector('.open-run-group-toggle');"
-        "  if (toggle && toggle.textContent.includes(label)) {"
-        "    var buttons = header.querySelectorAll('.open-run-group-action-button');"
-        "    for (var button of buttons) {"
-        "      if (button.textContent === text) { button.click(); return true; }"
-        "    }"
-        "  }"
-        "}"
-        "return false; })"
-        f"({group_label!r}, {button_text!r})"
-    )
-    assert clicked is True, (
-        f"no group header named {group_label!r} had a {button_text!r} button"
-    )
-
-
 def _submit_inline_prompt(window: webview.Window, name: str) -> None:
     """Fill and submit the currently-showing `promptForNameThenRun` inline row."""
     window.evaluate_js(
@@ -189,15 +265,6 @@ def _submit_inline_prompt(window: webview.Window, name: str) -> None:
 def _create_experiment(window: webview.Window, name: str) -> None:
     """Submit Home's own page-level "Create experiment…" button with `name`."""
     window.evaluate_js("document.getElementById('home-new-experiment-button').click();")
-    _submit_inline_prompt(window, name)
-    _poll_until(window, _TREE_TEXT, lambda value: value is not None and name in value)
-
-
-def _create_study_on_experiment(
-    window: webview.Window, experiment_label: str, name: str
-) -> None:
-    """Submit an Experiment row's own "Create study…" button with `name`."""
-    _click_group_button(window, experiment_label, "Create study…")
     _submit_inline_prompt(window, name)
     _poll_until(window, _TREE_TEXT, lambda value: value is not None and name in value)
 
@@ -331,14 +398,13 @@ def test_home_run_count_label_does_not_double_count_a_run_in_two_studies(
 def test_home_materializes_the_default_study_on_a_truly_empty_checkout(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """A checkout with nothing yet still shows a clickable default Study row.
+    """A checkout with nothing yet still shows an expandable default Study row.
 
     §1's own amendment: `ensure_default_study` stays lazy (never called
     at app launch), but Home's own `refreshRecentRuns` calls it once,
     exactly when a visit's own `list_studies`/`list_experiments` both
-    come back empty -- otherwise a botanist with nothing yet has no row
-    at all to click "Create run…" on, contradicting the whole point of
-    this reorg.
+    come back empty, so the default destination is visible before the
+    first run.
     """
     results = tmp_path / "results"
     results.mkdir()
@@ -372,19 +438,10 @@ def test_home_materializes_the_default_study_on_a_truly_empty_checkout(
     )
 
 
-def test_creating_an_experiment_and_a_study_on_its_row_nests_it(
+def test_creating_an_experiment_from_the_home_toolbar(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """Row-level "Create experiment…"/"Create study…" nest one action, not two.
-
-    `20260918-claude-sonnet-5-home-tree-reorg-design.md` (`selby/
-    restricted`) §4: creating a Study on an Experiment's own row calls
-    `create_study` immediately followed by `add_study_to_experiment`,
-    already nested -- no separate "Add to experiment…" step needed for
-    a Study created this way (that picker still exists, `test_moving_
-    an_existing_study_into_an_experiment_via_the_picker`, just below,
-    for a Study that already exists elsewhere).
-    """
+    """The page-level Create experiment action remains available."""
     results = tmp_path / "results"
     results.mkdir()
     monkeypatch.setattr(paths_module, "results_directory", lambda: results)
@@ -402,7 +459,6 @@ def test_creating_an_experiment_and_a_study_on_its_row_nests_it(
                 lambda value: value is True,
             )
             _create_experiment(window, "Topology")
-            _create_study_on_experiment(window, "Topology", "Ring sweep")
             _expand_every_group(window)
             outcome.put(window.evaluate_js(_TREE_TEXT))
         finally:
@@ -412,8 +468,7 @@ def test_creating_an_experiment_and_a_study_on_its_row_nests_it(
     tree_text = outcome.get(timeout=_DRIVE_TIMEOUT_SECONDS)
 
     assert tree_text is not None
-    assert "Topology (1 study)" in tree_text
-    assert "Ring sweep (0 runs)" in tree_text
+    assert "Topology (0 studies)" in tree_text
 
 
 def test_deleting_a_study_cascades_to_its_own_runs(
@@ -477,15 +532,19 @@ def test_deleting_a_study_cascades_to_its_own_runs(
     assert kept.exists()
 
 
-def test_copying_a_study_creates_an_independent_copy_with_no_prompt(
+def test_home_hierarchy_omits_removed_row_actions(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """Copy needs no name entry -- it derives "<name> copy" and acts immediately."""
+    """Experiment, Study, and Run rows omit removed actions and retain Clone."""
     results = tmp_path / "results"
     results.mkdir()
     monkeypatch.setattr(paths_module, "results_directory", lambda: results)
     study = groups.create_study("Ring sweep", results=results)
     _write_run(results, "run-a", seed=1, study_id=study.study_id)
+    experiment = groups.create_experiment("Topology", results=results)
+    groups.add_study_to_experiment(
+        experiment.experiment_id, study.study_id, results=results
+    )
 
     window = create_window(hidden=True)
     outcome: queue.Queue[dict[str, Any] | None] = queue.Queue(maxsize=1)
@@ -505,30 +564,31 @@ def test_copying_a_study_creates_an_independent_copy_with_no_prompt(
                 _TREE_TEXT,
                 lambda value: value is not None and "Ring sweep (1 run)" in value,
             )
-            window.evaluate_js(
-                "(function(){"
-                "var buttons = document.querySelectorAll("
-                "'.open-run-group-action-button');"
-                "for (var button of buttons) {"
-                "  if (button.textContent === 'Copy') { button.click(); return; }"
-                "}"
-                "})()"
+            snapshot = window.evaluate_js(
+                "({actions: Array.from(document.querySelectorAll("
+                "'.open-run-group-header button, .open-run-run-row button'))"
+                ".map((button) => button.textContent.trim()),"
+                "cloneCount: document.querySelectorAll("
+                "'.open-run-load-config-button').length})"
             )
-            tree_text = _poll_until(
-                window,
-                _TREE_TEXT,
-                lambda value: value is not None and "Ring sweep copy" in value,
-            )
-            outcome.put(tree_text)
+            outcome.put(snapshot)
         finally:
             window.destroy()
 
     webview.start(_drive)
-    tree_text = outcome.get(timeout=_DRIVE_TIMEOUT_SECONDS)
+    snapshot = outcome.get(timeout=_DRIVE_TIMEOUT_SECONDS)
 
-    assert tree_text is not None
-    assert "Ring sweep (1 run)" in tree_text
-    assert "Ring sweep copy (1 run)" in tree_text
+    assert snapshot is not None
+    assert snapshot["cloneCount"] == 1
+    assert "Clone" in snapshot["actions"]
+    assert not {
+        "Create study…",
+        "Create run…",
+        "Open…",
+        "Delete runs…",
+        "Copy",
+        "Load into Configure",
+    }.intersection(snapshot["actions"])
 
 
 def test_bulk_select_all_and_delete_selected_removes_every_run(
@@ -1100,11 +1160,10 @@ def test_home_selection_toolbar_sits_on_the_filter_line(
     assert nested is True
 
 
-def test_opening_a_study_row_pools_its_own_member_runs(
+def test_rendering_a_pooled_study_shows_its_member_runs(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """A Study row's own "Open…" pools every member run into the batch
-    Results card.
+    """The Study bridge payload still renders every member on the Results card.
 
     `20260919-claude-sonnet-5-unified-batch-and-study-results-reopen-
     design.md` (`selby/restricted`), §2/§3.
@@ -1128,7 +1187,12 @@ def test_opening_a_study_row_pools_its_own_member_runs(
                 "window.__fimOpenRunRecentRunsLoaded === true",
                 lambda value: value is True,
             )
-            _click_group_button(window, "Ring sweep", "Open…")
+            window.evaluate_js(
+                "window.pywebview.api.open_study("
+                f"{study.study_id!r}).then((result) => {{"
+                "window.fim.resetTrajectoryLegendVisibility();"
+                "window.fim.enterCompletedState(result, true);})"
+            )
             settled = _poll_until(
                 window,
                 "({"
@@ -1156,7 +1220,7 @@ def test_opening_a_study_row_pools_its_own_member_runs(
     assert settled["replicateRowCount"] == 3
 
 
-def test_opening_a_study_with_a_mismatched_parameter_shows_a_note_but_still_pools(
+def test_rendering_a_pooled_study_with_a_mismatched_parameter_shows_a_note(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """A mismatched `d` across a Study's own members still pools, with a
@@ -1180,7 +1244,12 @@ def test_opening_a_study_with_a_mismatched_parameter_shows_a_note_but_still_pool
                 "window.__fimOpenRunRecentRunsLoaded === true",
                 lambda value: value is True,
             )
-            _click_group_button(window, "Ring sweep", "Open…")
+            window.evaluate_js(
+                "window.pywebview.api.open_study("
+                f"{study.study_id!r}).then((result) => {{"
+                "window.fim.resetTrajectoryLegendVisibility();"
+                "window.fim.enterCompletedState(result, true);})"
+            )
             settled = _poll_until(
                 window,
                 "({"

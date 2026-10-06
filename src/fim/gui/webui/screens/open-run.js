@@ -601,44 +601,35 @@ async function toggleBatchRow(batchRow, toggleButton, directory) {
 }
 
 /**
- * An immediately-acting "Add to study…" pulldown for one Run row: picking
- * a Study adds the run to it (a link, the run itself is not copied) and
- * the control resets to its placeholder, so it always reads as an action.
+ * Load a saved run's parameters into Configure as an editable copy.
+ * The source run and its Study memberships are never modified.
  * @param {string} directory
- * @returns {HTMLSelectElement}
+ * @returns {HTMLButtonElement}
  */
-function buildAddToStudySelect(directory) {
-    const select = document.createElement("select");
-    select.className = "open-run-add-to-select";
-    select.setAttribute("aria-label", "Add this run to a study");
-    const placeholder = document.createElement("option");
-    placeholder.value = "";
-    placeholder.textContent = "Add to study…";
-    placeholder.selected = true;
-    select.appendChild(placeholder);
-    // A read-only example Study cannot gain runs, so it is not offered.
-    for (const study of allStudies.filter((candidate) => !candidate.readOnly)) {
-        const option = document.createElement("option");
-        option.value = study.studyId;
-        option.textContent = study.name;
-        select.appendChild(option);
-    }
-    select.addEventListener("click", (event) => event.stopPropagation());
-    select.addEventListener("change", async () => {
-        const studyId = select.value;
-        if (!studyId) {
-            return;
+function buildLoadIntoConfigureButton(directory) {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "open-run-load-config-button";
+    button.textContent = "Clone";
+    button.title = "Load an editable copy of this run's configuration into Configure";
+    button.addEventListener("click", async (event) => {
+        event.stopPropagation();
+        button.disabled = true;
+        window.__fimHomeRunLoadSettled = false;
+        showOpenRunBanner("");
+        try {
+            const result = await window.pywebview.api.load_run_configuration(directory);
+            if (!result.ok) {
+                showOpenRunBanner(result.message);
+                return;
+            }
+            await window.fim.applyLoadedExample(result, "Saved run");
+        } finally {
+            button.disabled = false;
+            window.__fimHomeRunLoadSettled = true;
         }
-        const result = await window.pywebview.api.add_run_to_study(
-            studyId,
-            directory
-        );
-        if (!result.ok) {
-            showOpenRunBanner(result.message);
-        }
-        await refreshRecentRuns();
     });
-    return select;
+    return button;
 }
 
 /**
@@ -804,9 +795,8 @@ function runDetails(run) {
  * `renderRecentRuns` can call it once per group member on every filter/
  * collapse re-render, not only on a fresh fetch. The first cell also
  * carries a bulk-selection checkbox, and a trailing "Actions" cell
- * carries an "Add to study…" pulldown -- both part of the Run/Study/
- * Experiment hierarchy design's own §10 bulk-delete idiom and §6 "Add to
- * study…" affordance.
+ * carries "Clone" to start an editable configuration copy, not a link
+ * to the original read-only or completed run.
  * @param {object} run
  * @param {boolean} showRunId Whether to render this run's own label text
  *     (`false` for a run immediately following another with the
@@ -908,7 +898,7 @@ function buildRunRow(run, showRunId = true, nested = false) {
     }
     const actionsCell = document.createElement("td");
     actionsCell.appendChild(window.fim.buildDetailsButton(runDetails(run)));
-    actionsCell.appendChild(buildAddToStudySelect(run.directory));
+    actionsCell.appendChild(buildLoadIntoConfigureButton(run.directory));
     row.appendChild(actionsCell);
     row.addEventListener("click", () => {
         for (const sibling of recentRunsBody.querySelectorAll("tr")) {
@@ -997,10 +987,8 @@ function confirmThenRun(triggerButton, message, action) {
 /**
  * Show an inline name-prompt right after `triggerButton` -- the input-
  * taking counterpart to `confirmThenRun`, above, for an action that
- * needs one short string rather than only a yes/no. Reused by `build
- * CreateStudyButton`'s own "Create study…", the row-level counterpart
- * to Home's own former "New study" card (`20260918-claude-sonnet-5-
- * home-tree-reorg-design.md`, `selby/restricted`, §4). A second,
+ * needs one short string rather than only a yes/no, for Home's
+ * "Create experiment…" action. A second,
  * optional description input follows the name when
  * `descriptionPlaceholder` is given; longer documentation is added
  * afterward, in the details dialog.
@@ -1090,97 +1078,8 @@ homeNewExperimentButton.addEventListener("click", (event) => {
 });
 
 /**
- * "Create study…" on an Experiment row -- one user action instead of
- * today's two disconnected ones (create a Study anywhere, then a
- * separate "Add to experiment…" picker): `Api.create_study` followed
- * immediately by `Api.add_study_to_experiment`, both against this
- * row's own Experiment (`20260918-claude-sonnet-5-home-tree-reorg-
- * design.md`, `selby/restricted`, §4).
- * @param {{experimentId: string}} group
- * @returns {HTMLButtonElement}
- */
-function buildCreateStudyButton(group) {
-    const button = document.createElement("button");
-    button.type = "button";
-    button.className = "open-run-group-action-button";
-    button.textContent = "Create study…";
-    button.addEventListener("click", (event) => {
-        event.stopPropagation();
-        promptForNameThenRun(
-            button,
-            "Study name",
-            async (name, description) => {
-                const created = await window.pywebview.api.create_study(
-                    name,
-                    description
-                );
-                if (!created.ok) {
-                    showOpenRunBanner(created.message);
-                    return;
-                }
-                const added = await window.pywebview.api.add_study_to_experiment(
-                    group.experimentId,
-                    created.studyId
-                );
-                if (!added.ok) {
-                    showOpenRunBanner(added.message);
-                    return;
-                }
-                await refreshRecentRuns();
-            },
-            "Description (optional)"
-        );
-    });
-    return button;
-}
-
-/**
- * "Create run…" on a Study row -- navigates to Configure with this
- * Study hard-selected on `run-study-select` (`20260918-claude-sonnet-
- * 5-home-tree-reorg-design.md`, `selby/restricted`, §4): unlike the
- * Explore handoff's own "New study…" soft nudge, a botanist reaching
- * Configure this way has already explicitly chosen this Study by
- * clicking its own row, so the selection is set outright, not merely
- * pre-selected -- still fully changeable afterward, never locking the
- * botanist in.
- * @param {{studyId: string}} group
- * @returns {HTMLButtonElement}
- */
-function buildCreateRunButton(group) {
-    const button = document.createElement("button");
-    button.type = "button";
-    button.className = "open-run-group-action-button primary-action";
-    button.textContent = "Create run…";
-    button.addEventListener("click", async (event) => {
-        event.stopPropagation();
-        await window.fim.showConfigureScreen();
-        window.fim.selectStudyForNewRun(group.studyId);
-    });
-    return button;
-}
-
-/**
- * Build a Study/Experiment group header's own extra action controls
- * (`20260918-claude-sonnet-5-home-tree-reorg-design.md`, `selby/
- * restricted`, §4/§5): a Study row leads with "Create run…" (navigates
- * to Configure, this Study hard-selected); an Experiment row leads
- * with "Create study…" (inline name prompt, nests the new Study in
- * this Experiment immediately) -- each the primary, first-reached-for
- * action for its own row. Then Copy, "Re-run all…" (Study only), and
- * (Study only) "Add to experiment…". No standalone "Delete…" button
- * for either kind anymore -- deletion is the header row's own
- * checkbox (`buildGroupSelectCheckbox`, `buildGroupHeaderRow`) plus the
- * one shared "Delete selected" toolbar action, reviewed as a whole
- * before anything is actually removed, the same idiom a Run row's own
- * checkbox already established (§5: "deletion... should not... happen
- * accidentally"). A plain date-bucket group gets none of this at all
- * (`buildGroupHeaderRow` only calls this for `kind === "study"` or
- * `"experiment"`).
- *
- * "Copy" needs no name prompt (see `confirmThenRun`'s own docstring for
- * why this codebase has no dialogs at all): it derives `"<name> copy"`
- * outright, non-destructive and instantly renamable/deletable again if
- * unwanted, unlike deletion.
+ * Build sweep-specific controls for a Study header. Ordinary Studies
+ * and Experiments have no row actions; selection and details remain.
  * @param {object} group
  * @returns {HTMLSpanElement}
  */
@@ -1188,56 +1087,12 @@ function buildGroupActionControls(group) {
     const container = document.createElement("span");
     container.className = "open-run-group-actions";
 
-    // A read-only example (read-only examples design §3) keeps every
-    // control, so the row reads the same as any other, but each one that
-    // would change it is disabled with the reason on hover. Open and Copy
-    // stay: viewing and copying are allowed.
-    const lockIfReadOnly = (button) => {
-        if (group.readOnly) {
-            window.fim.disableForReadOnly(button, group.kind);
-        }
-        return button;
-    };
-    if (group.kind === "study") {
-        container.appendChild(lockIfReadOnly(buildCreateRunButton(group)));
-    }
-    if (group.kind === "experiment") {
-        container.appendChild(lockIfReadOnly(buildCreateStudyButton(group)));
-    }
-    if (group.kind === "study") {
-        container.appendChild(buildOpenStudyButton(group));
-    }
-    if (group.kind === "study") {
-        container.appendChild(lockIfReadOnly(buildDeleteStudyRunsButton(group)));
-    }
     if (group.kind === "study" && group.sweepPointCount !== null) {
         container.appendChild(buildSweepResultsButton(group));
         if (group.runCount < group.sweepPointCount) {
             container.appendChild(buildContinueSweepButton(group));
         }
     }
-
-    const copyButton = document.createElement("button");
-    copyButton.type = "button";
-    copyButton.className = "open-run-group-action-button";
-    copyButton.textContent = "Copy";
-    copyButton.addEventListener("click", async (event) => {
-        event.stopPropagation();
-        const newName = `${group.label} copy`;
-        const result =
-            group.kind === "study"
-                ? await window.pywebview.api.copy_study(group.studyId, newName)
-                : await window.pywebview.api.copy_experiment(
-                      group.experimentId,
-                      newName
-                  );
-        if (!result.ok) {
-            showOpenRunBanner(result.message);
-            return;
-        }
-        await refreshRecentRuns();
-    });
-    container.appendChild(copyButton);
 
     return container;
 }
@@ -1618,7 +1473,7 @@ async function refreshRecentRuns() {
         }
     }
     // A checkout that has never run anything, and never created a
-    // Study/Experiment by hand, has nothing to click "Create run…" on
+    // Study/Experiment by hand, has no editable destination in the tree
     // yet -- `ensure_default_study` is lazy on the Python side (design
     // doc §1: never called eagerly at launch), so this is the one place
     // that materializes it for real, exactly when the tree would
@@ -1921,91 +1776,8 @@ async function openBatch(directory) {
 }
 
 /**
- * `openBatch`'s own Study counterpart -- `Api.open_study` pools every
- * member run/replicate one level up (`20260919-claude-sonnet-5-
- * unified-batch-and-study-results-reopen-design.md`, `selby/
- * restricted`, §2), returning the identical shape `enterCompletedState`
- * already renders for a batch. A `parameterMismatches` key, when
- * present, is shown once the completed view itself is up
- * (`run-view-completed.js`'s own `resultsOutcome`), not as a banner
- * here -- this screen is about to be hidden by `enterCompletedState`,
- * so a banner set on it first would never actually be seen.
- * @param {string} studyId
- */
-async function openStudy(studyId) {
-    await withOpenRunBusy("Opening study\u2026", async () => {
-        const result = await window.pywebview.api.open_study(studyId);
-        if (!result.ok) {
-            showOpenRunBanner(result.message);
-            return;
-        }
-        showOpenRunBanner("");
-        window.fim.resetTrajectoryLegendVisibility();
-        window.fim.enterCompletedState(result, true);
-    });
-}
-
-/**
- * Explain which runs "Delete runs…" kept, and why: a run another study
- * also holds is only removed from this one, and a read-only example is
- * never deleted (`Api.delete_study_runs`'s `keptRunCount` and
- * `readOnlyRunCount`).
- * @param {{keptRunCount: number, readOnlyRunCount?: number}} result
- * @returns {string}
- */
-function keptRunsMessage(result) {
-    const readOnly = result.readOnlyRunCount ?? 0;
-    const shared = result.keptRunCount - readOnly;
-    const parts = [];
-    if (shared > 0) {
-        parts.push(
-            `${shared} run(s) are also in another study, so they were removed ` +
-                "from this study but not deleted."
-        );
-    }
-    if (readOnly > 0) {
-        parts.push(`${readOnly} read-only example run(s) were kept.`);
-    }
-    return parts.join(" ");
-}
-
-/**
- * "Delete runs…" on a Study row: removes every run in the Study and
- * keeps the Study. Selecting the Study row for deletion removes the
- * Study too, and selecting each run does not scale to a Study with
- * thousands.
- * @param {{studyId: string, label: string, runCount: number}} group
- * @returns {HTMLButtonElement}
- */
-function buildDeleteStudyRunsButton(group) {
-    const button = document.createElement("button");
-    button.type = "button";
-    button.className = "open-run-group-action-button";
-    button.textContent = "Delete runs…";
-    button.disabled = group.runCount === 0;
-    button.addEventListener("click", (event) => {
-        event.stopPropagation();
-        confirmThenRun(
-            button,
-            `Delete all ${group.runCount} run(s) in "${group.label}" and keep the study?`,
-            async () => {
-                const result = await window.pywebview.api.delete_study_runs(group.studyId);
-                if (!result.ok) {
-                    showOpenRunBanner(result.message);
-                } else if (result.keptRunCount > 0) {
-                    showOpenRunBanner(keptRunsMessage(result));
-                }
-                await refreshRecentRuns();
-            }
-        );
-    });
-    return button;
-}
-
-/**
  * "Sweep results…" on a sweep Study's row: the statistic across its
- * points (`screens/sweep-results.js`), beside "Open…", which pools every
- * member run into one Results card.
+ * points (`screens/sweep-results.js`).
  * @param {{studyId: string}} group
  * @returns {HTMLButtonElement}
  */
@@ -2042,28 +1814,6 @@ function buildContinueSweepButton(group) {
         }
         window.fim.showScreen("screen-sweep");
         await window.fim.showSweepProgress(group.studyId);
-    });
-    return button;
-}
-
-/**
- * "Open…" on a Study row -- pools every member run/replicate and opens
- * the identical Results card a batch already uses (§3, above). No
- * select-then-"Open"-button step the way a Run/batch row has: a Study
- * row's own toggle is already the row's primary click target (expand/
- * collapse), so this lives beside "Create run…"/"Copy" instead of
- * needing a second interaction.
- * @param {{studyId: string}} group
- * @returns {HTMLButtonElement}
- */
-function buildOpenStudyButton(group) {
-    const button = document.createElement("button");
-    button.type = "button";
-    button.className = "open-run-group-action-button";
-    button.textContent = "Open…";
-    button.addEventListener("click", async (event) => {
-        event.stopPropagation();
-        await openStudy(group.studyId);
     });
     return button;
 }

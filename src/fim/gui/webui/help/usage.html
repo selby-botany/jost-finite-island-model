@@ -1061,8 +1061,8 @@ rationale, the setup, what was found.</li>
 to open the details dialog. <strong>Save</strong> keeps the changes; <strong>Cancel</strong>, Escape,
 or a click outside the dialog discards them. Leaving a field empty clears
 it.</li>
-<li><strong>When creating</strong>: Home's &quot;Create experiment…&quot; and &quot;Create study…&quot;, and
-Configure's &quot;New study…&quot;, each take an optional description beside the
+<li><strong>When creating</strong>: Home's &quot;Create experiment…&quot; and Configure's
+&quot;New study…&quot; each take an optional description beside the
 name. Configure's <strong>Run name</strong> and <strong>Run description</strong> boxes name the next
 run; they empty once it starts. A sweep names its runs itself (see
 <a href="#sweep-a-parameter">Sweep a parameter</a>), so the boxes are hidden while
@@ -1096,20 +1096,30 @@ into Configure.</p>
 <h3 id="read-only-items">Read-only items</h3>
 <p>The Examples experiment, its Studies, and their runs are <strong>read-only</strong>. A
 lock beside the name marks them in Home, in the details dialog, and in the
-Run card's title. You can open, view, compare, and copy them, but not
+Run card's title. You can open, view, compare, and clone their run
+configurations, but not
 rename, describe, document, or delete them, or add or remove members:
 those controls are unavailable, and hovering one says why. To work with
 one:</p>
 <ul>
-<li><strong>A run:</strong> open it and click <strong>Run it</strong>, or use <strong>Load into Configure</strong>
-in the Examples dialog. Configure receives an ordinary, editable copy,
+<li><strong>A run:</strong> click <strong>Clone</strong> on its Home row, or load its configuration
+from the Examples dialog. Configure receives an editable copy,
 with the example's name and description in the Run name and Run
-description boxes; running it makes a new run of your own.</li>
-<li><strong>A Study or the Experiment:</strong> click <strong>Copy</strong> on its row. The copy is an
-ordinary, editable grouping that refers to the same runs.</li>
+description boxes; running it makes a new run of your own.
+Home's <strong>Clone</strong> action is available for regular runs too.
+It fills the parameters, Run name, and Run description without changing
+the source run or adding it to another Study. Modify the configuration
+and run it to create your own result. Configure's Study selector starts
+at <strong>Default study</strong>, where runs go unless you choose another destination.
+Its configuration buttons are ordered <strong>Load configuration…</strong>,
+<strong>Save configuration…</strong>, then <strong>Examples…</strong>.</li>
 </ul>
-<p>You can add an example run to one of your own Studies (&quot;Add to study…&quot;);
-deleting that Study later keeps the example. &quot;Select all&quot; never selects a
+<p>Home's Experiment, Study, and Run rows do not offer <strong>Create study…</strong>,
+<strong>Create run…</strong>, <strong>Open…</strong>, <strong>Delete runs…</strong>, or <strong>Copy</strong> actions.
+Expand a group to see its runs, double-click a run to open its saved
+result, or use <strong>Clone</strong> to prepare an editable configuration. Details
+buttons, selection controls, and sweep-specific actions remain available.</p>
+<p>&quot;Select all&quot; never selects a
 read-only item, and a deletion that names one is refused as a whole:
 nothing at all is deleted. From the terminal, the same edits stop with an
 error naming the read-only item. A configuration marks its run read-only

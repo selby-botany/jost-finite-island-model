@@ -2048,7 +2048,7 @@ fieldset.composite > label {
     display: none;
 }
 
-.open-run-add-to-select {
+.open-run-load-config-button {
     font-size: 0.85rem;
     max-width: 10rem;
 }

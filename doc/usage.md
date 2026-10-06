@@ -1157,8 +1157,8 @@ and Run can say what it is and why it exists:
   to open the details dialog. **Save** keeps the changes; **Cancel**, Escape,
   or a click outside the dialog discards them. Leaving a field empty clears
   it.
-- **When creating**: Home's "Create experiment…" and "Create study…", and
-  Configure's "New study…", each take an optional description beside the
+- **When creating**: Home's "Create experiment…" and Configure's
+  "New study…" each take an optional description beside the
   name. Configure's **Run name** and **Run description** boxes name the next
   run; they empty once it starts. A sweep names its runs itself (see
   [Sweep a parameter](#sweep-a-parameter)), so the boxes are hidden while
@@ -1196,20 +1196,31 @@ into Configure.
 
 The Examples experiment, its Studies, and their runs are **read-only**. A
 lock beside the name marks them in Home, in the details dialog, and in the
-Run card's title. You can open, view, compare, and copy them, but not
+Run card's title. You can open, view, compare, and clone their run
+configurations, but not
 rename, describe, document, or delete them, or add or remove members:
 those controls are unavailable, and hovering one says why. To work with
 one:
 
-- **A run:** open it and click **Run it**, or use **Load into Configure**
-  in the Examples dialog. Configure receives an ordinary, editable copy,
+- **A run:** click **Clone** on its Home row, or load its configuration
+  from the Examples dialog. Configure receives an editable copy,
   with the example's name and description in the Run name and Run
   description boxes; running it makes a new run of your own.
-- **A Study or the Experiment:** click **Copy** on its row. The copy is an
-  ordinary, editable grouping that refers to the same runs.
+Home's **Clone** action is available for regular runs too.
+It fills the parameters, Run name, and Run description without changing
+the source run or adding it to another Study. Modify the configuration
+and run it to create your own result. Configure's Study selector starts
+at **Default study**, where runs go unless you choose another destination.
+Its configuration buttons are ordered **Load configuration…**,
+**Save configuration…**, then **Examples…**.
 
-You can add an example run to one of your own Studies ("Add to study…");
-deleting that Study later keeps the example. "Select all" never selects a
+Home's Experiment, Study, and Run rows do not offer **Create study…**,
+**Create run…**, **Open…**, **Delete runs…**, or **Copy** actions.
+Expand a group to see its runs, double-click a run to open its saved
+result, or use **Clone** to prepare an editable configuration. Details
+buttons, selection controls, and sweep-specific actions remain available.
+
+"Select all" never selects a
 read-only item, and a deletion that names one is refused as a whole:
 nothing at all is deleted. From the terminal, the same edits stop with an
 error naming the read-only item. A configuration marks its run read-only

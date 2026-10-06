@@ -850,7 +850,7 @@ exploreBackButton.addEventListener("click", () => {
  * seeds Configure from this screen's own current N/d/m/mu, navigates
  * there, and pre-selects "New study…" on Configure's own `run-study-
  * select` -- a soft nudge (§2), never forced; one extra click abandons
- * it back to "No study," identical to any other visit.
+ * it back to "Default study," identical to any other visit.
  */
 exploreRunForRealButton.addEventListener("click", async () => {
     const values = collectExploreValues();

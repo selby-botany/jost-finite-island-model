@@ -3363,8 +3363,8 @@ class Api:
     def load_run_configuration(self, directory: str) -> dict[str, Any]:
         """Return a saved run's configuration as form values, syncing Settings.
 
-        The "Run it" button on a run opened from its saved results only
-        (read-only examples design §4.3): it loads the run into
+        Home's "Load into Configure" action and the legacy report-only
+        "Run it" button load the run into
         Configure as an editable copy, exactly as the Examples dialog's
         "Load into Configure" does (`load_example`, the same
         `_configuration_form_values` path): labels go to the "Run name"
@@ -3398,7 +3398,12 @@ class Api:
             labels = _configuration_labels(text)
         else:
             try:
-                params = read_manifest(run_directory / "manifest.json").params()
+                manifest_path = run_directory / "manifest.json"
+                params = (
+                    read_batch_manifest(manifest_path).params()
+                    if (run_directory / "summary.json").is_file()
+                    else read_manifest(manifest_path).params()
+                )
             except (OSError, ValueError, KeyError) as error:
                 return {"ok": False, "message": str(error)}
             result = {

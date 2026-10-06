@@ -310,6 +310,21 @@ def test_load_run_configuration_falls_back_to_the_manifest(
     assert api.validate_form(result["values"])["ok"] is True
 
 
+def test_load_run_configuration_reads_a_regular_batch_manifest(results: Path) -> None:
+    """A regular batch without config.yaml also loads editable parameters."""
+    config = results / "batch.yaml"
+    config.write_text(yaml.safe_dump({**_CONFIG, "n_replicates": 2}), encoding="utf-8")
+    directory = results / "batch"
+    assert cli.main(["run", str(config), "-o", str(directory), "--quiet"]) == 0
+    assert not (directory / "config.yaml").exists()
+    api = Api()
+    result = api.load_run_configuration(str(directory))
+    assert result["ok"], result
+    assert api.validate_form(result["values"])["ok"] is True
+    assert result["values"]["n_replicates"] == "2"
+    assert not any(key.startswith("_") for key in result["values"])
+
+
 def test_list_examples_says_which_examples_have_a_saved_result(
     results: Path, bundle: Path
 ) -> None:

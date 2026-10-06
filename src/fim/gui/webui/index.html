@@ -1640,26 +1640,25 @@
          to `#screen-run` and clicks its own `run-button` before that
          handler ever runs), the same way `collectFormValues()` already
          reads every other Configure field after that same navigation.
-         Optional, defaulting to "No study" -- Option A of that design
-         document: nothing about starting a run requires organizing it,
-         only offers to. Populated from `Api.list_studies()`
+         Defaults to "Default study", the destination for every run
+         without an explicitly chosen Study. Populated from `Api.list_studies()`
          (`refreshRunStudySelectOptions`, `run-view-controls.js`),
          re-fetched every time Configure is shown so a Study created
          since app launch appears with no restart needed. -->
     <div class="actions">
       <button type="button" id="configure-load-button">Load configuration…</button>
+      <button type="button" id="configure-save-button">Save configuration…</button>
       <button
         type="button"
         id="configure-examples-button"
         aria-haspopup="dialog"
         aria-label="Browse the bundled examples"
       >Examples…</button>
-      <button type="button" id="configure-save-button">Save configuration…</button>
       <button type="button" id="configure-duplicate-preset-button" disabled>
         Duplicate current configuration
       </button>
       <select id="run-study-select" aria-label="Add this run to a study">
-        <option value="" selected>No study</option>
+        <option value="" selected>Default study</option>
         <option value="__new__">New study…</option>
       </select>
       <!-- Shown only while "New study…" is selected above -- inline,

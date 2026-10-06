@@ -241,18 +241,14 @@ def test_home_offers_sweep_results_and_continue_only_for_a_sweep_study(
     seen = _drive(window, steps)
 
     sweep = next(names for names in seen if "Sweep results…" in names)
-    by_hand = next(
-        names
-        for names in seen
-        if "Sweep results…" not in names and "Delete runs…" in names
-    )
+    by_hand = next(names for names in seen if not names)
     assert "Continue sweep" in sweep
     assert "Re-run all…" not in sweep and "Re-run all…" not in by_hand
     assert "Sweep results…" not in by_hand
     assert "Continue sweep" not in by_hand
 
 
-def test_home_shows_only_studies_that_exist_and_offers_delete_runs(
+def test_home_shows_only_studies_that_exist_without_removed_actions(
     fast_scalar_run_settings: Path, window: webview.Window
 ) -> None:
     study = groups.create_study("Ring")
@@ -279,4 +275,10 @@ def test_home_shows_only_studies_that_exist_and_offers_delete_runs(
     migration = next(h for h in seen["headers"] if "Migration" in h)
     assert "1 study" in migration
     assert "2 studies" not in migration
-    assert "Delete runs…" in seen["buttons"]
+    assert not {
+        "Create study…",
+        "Create run…",
+        "Open…",
+        "Delete runs…",
+        "Copy",
+    }.intersection(seen["buttons"])

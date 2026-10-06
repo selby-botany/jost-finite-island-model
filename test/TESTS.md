@@ -15139,6 +15139,17 @@ def test_load_run_configuration_falls_back_to_the_manifest(
 
 Without `config.yaml`, the manifest's parameters and the metadata serve.
 
+<a id="gui.test_examples_bridge.test_load_run_configuration_reads_a_regular_batch_manifest"></a>
+
+#### test\_load\_run\_configuration\_reads\_a\_regular\_batch\_manifest
+
+```python
+def test_load_run_configuration_reads_a_regular_batch_manifest(
+        results: Path) -> None
+```
+
+A regular batch without config.yaml also loads editable parameters.
+
 <a id="gui.test_examples_bridge.test_list_examples_says_which_examples_have_a_saved_result"></a>
 
 #### test\_list\_examples\_says\_which\_examples\_have\_a\_saved\_result
@@ -15483,7 +15494,7 @@ seeds Configure's own `N` field from Explore's current value,
 navigates there, and pre-selects `run-study-select`'s own "New
 study…" entry with its inline creation row revealed -- a soft
 nudge, not a forced requirement (`run-study-select` still starts
-editable at "No study" otherwise).
+editable at "Default study" otherwise).
 
 <a id="gui.test_explore_screen.test_explore_opens_on_individuals_and_evaluates_at_the_forms_ploidy"></a>
 
@@ -15892,6 +15903,20 @@ pywebview window (`screens/open-run.js`'s own `confirmThenRun`
 docstring) -- every interaction here is therefore a plain DOM click/
 input against always-visible controls, never a native dialog.
 
+<a id="gui.test_home_hierarchy_screen.test_home_loads_a_runs_editable_configuration_without_linking_it"></a>
+
+#### test\_home\_loads\_a\_runs\_editable\_configuration\_without\_linking\_it
+
+```python
+@pytest.mark.parametrize("read_only", [False, True])
+@pytest.mark.parametrize("replicates", [1, 2])
+def test_home_loads_a_runs_editable_configuration_without_linking_it(
+        tmp_path: Path, monkeypatch: pytest.MonkeyPatch, read_only: bool,
+        replicates: int) -> None
+```
+
+Home loads regular/example scalar/batch runs without changing the source.
+
 <a id="gui.test_home_hierarchy_screen.test_a_bare_cli_run_appears_under_the_default_study"></a>
 
 #### test\_a\_bare\_cli\_run\_appears\_under\_the\_default\_study
@@ -15943,33 +15968,24 @@ def test_home_materializes_the_default_study_on_a_truly_empty_checkout(
         tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None
 ```
 
-A checkout with nothing yet still shows a clickable default Study row.
+A checkout with nothing yet still shows an expandable default Study row.
 
 §1's own amendment: `ensure_default_study` stays lazy (never called
 at app launch), but Home's own `refreshRecentRuns` calls it once,
 exactly when a visit's own `list_studies`/`list_experiments` both
-come back empty -- otherwise a botanist with nothing yet has no row
-at all to click "Create run…" on, contradicting the whole point of
-this reorg.
+come back empty, so the default destination is visible before the
+first run.
 
-<a id="gui.test_home_hierarchy_screen.test_creating_an_experiment_and_a_study_on_its_row_nests_it"></a>
+<a id="gui.test_home_hierarchy_screen.test_creating_an_experiment_from_the_home_toolbar"></a>
 
-#### test\_creating\_an\_experiment\_and\_a\_study\_on\_its\_row\_nests\_it
+#### test\_creating\_an\_experiment\_from\_the\_home\_toolbar
 
 ```python
-def test_creating_an_experiment_and_a_study_on_its_row_nests_it(
+def test_creating_an_experiment_from_the_home_toolbar(
         tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None
 ```
 
-Row-level "Create experiment…"/"Create study…" nest one action, not two.
-
-`20260918-claude-sonnet-5-home-tree-reorg-design.md` (`selby/
-restricted`) §4: creating a Study on an Experiment's own row calls
-`create_study` immediately followed by `add_study_to_experiment`,
-already nested -- no separate "Add to experiment…" step needed for
-a Study created this way (that picker still exists, `test_moving_
-an_existing_study_into_an_experiment_via_the_picker`, just below,
-for a Study that already exists elsewhere).
+The page-level Create experiment action remains available.
 
 <a id="gui.test_home_hierarchy_screen.test_deleting_a_study_cascades_to_its_own_runs"></a>
 
@@ -15992,16 +16008,16 @@ only against `Api.delete_study` as a plain Python call
 (`20260918-claude-sonnet-5-home-tree-reorg-design.md`, `selby/
 restricted`, §5).
 
-<a id="gui.test_home_hierarchy_screen.test_copying_a_study_creates_an_independent_copy_with_no_prompt"></a>
+<a id="gui.test_home_hierarchy_screen.test_home_hierarchy_omits_removed_row_actions"></a>
 
-#### test\_copying\_a\_study\_creates\_an\_independent\_copy\_with\_no\_prompt
+#### test\_home\_hierarchy\_omits\_removed\_row\_actions
 
 ```python
-def test_copying_a_study_creates_an_independent_copy_with_no_prompt(
+def test_home_hierarchy_omits_removed_row_actions(
         tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None
 ```
 
-Copy needs no name entry -- it derives "<name> copy" and acts immediately.
+Experiment, Study, and Run rows omit removed actions and retain Clone.
 
 <a id="gui.test_home_hierarchy_screen.test_bulk_select_all_and_delete_selected_removes_every_run"></a>
 
@@ -16156,27 +16172,26 @@ The Select/Select all/Clear selection/Delete selected group nests
 inside the same row as the filter input, not a separate line below
 it.
 
-<a id="gui.test_home_hierarchy_screen.test_opening_a_study_row_pools_its_own_member_runs"></a>
+<a id="gui.test_home_hierarchy_screen.test_rendering_a_pooled_study_shows_its_member_runs"></a>
 
-#### test\_opening\_a\_study\_row\_pools\_its\_own\_member\_runs
+#### test\_rendering\_a\_pooled\_study\_shows\_its\_member\_runs
 
 ```python
-def test_opening_a_study_row_pools_its_own_member_runs(
+def test_rendering_a_pooled_study_shows_its_member_runs(
         tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None
 ```
 
-A Study row's own "Open…" pools every member run into the batch
-Results card.
+The Study bridge payload still renders every member on the Results card.
 
 `20260919-claude-sonnet-5-unified-batch-and-study-results-reopen-
 design.md` (`selby/restricted`), §2/§3.
 
-<a id="gui.test_home_hierarchy_screen.test_opening_a_study_with_a_mismatched_parameter_shows_a_note_but_still_pools"></a>
+<a id="gui.test_home_hierarchy_screen.test_rendering_a_pooled_study_with_a_mismatched_parameter_shows_a_note"></a>
 
-#### test\_opening\_a\_study\_with\_a\_mismatched\_parameter\_shows\_a\_note\_but\_still\_pools
+#### test\_rendering\_a\_pooled\_study\_with\_a\_mismatched\_parameter\_shows\_a\_note
 
 ```python
-def test_opening_a_study_with_a_mismatched_parameter_shows_a_note_but_still_pools(
+def test_rendering_a_pooled_study_with_a_mismatched_parameter_shows_a_note(
         tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None
 ```
 
@@ -18990,7 +19005,7 @@ def test_home_locks_read_only_items_and_disables_their_edit_controls(
         tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None
 ```
 
-Lock badges on the example Experiment, Study, and Run; edits disabled.
+Examples retain locks and Clone without the removed hierarchy actions.
 
 <a id="gui.test_read_only_screen.test_details_dialog_and_run_title_show_a_read_only_run_as_locked"></a>
 

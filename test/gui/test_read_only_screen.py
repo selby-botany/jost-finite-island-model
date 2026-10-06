@@ -63,9 +63,10 @@ _SNAPSHOT_HOME = """
             badgeTitle: exampleRow.querySelector('.read-only-badge').title,
             checkboxDisabled:
                 exampleRow.querySelector('.open-run-select-checkbox').disabled,
-            addToStudyOptions: Array.from(
-                exampleRow.querySelectorAll('.open-run-add-to-select option')
-            ).map((option) => option.textContent),
+            loadButtonText: exampleRow.querySelector(
+                '.open-run-load-config-button').textContent,
+            loadButtonDisabled: exampleRow.querySelector(
+                '.open-run-load-config-button').disabled,
         },
     });
 })()
@@ -188,7 +189,7 @@ def _open_home(window: webview.Window) -> None:
 def test_home_locks_read_only_items_and_disables_their_edit_controls(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """Lock badges on the example Experiment, Study, and Run; edits disabled."""
+    """Examples retain locks and Clone without the removed hierarchy actions."""
     results = tmp_path / "results"
     results.mkdir()
     monkeypatch.setattr(paths_module, "results_directory", lambda: results)
@@ -227,25 +228,17 @@ def test_home_locks_read_only_items_and_disables_their_edit_controls(
     experiment = snapshot["experiment"]
     assert experiment["badge"] is True
     assert experiment["checkboxDisabled"] is True
-    assert experiment["buttons"]["Create study…"]["disabled"] is True
-    assert "read-only" in experiment["buttons"]["Create study…"]["title"]
-    assert experiment["buttons"]["Copy"]["disabled"] is False
+    assert experiment["buttons"] == {}
     study = snapshot["study"]
     assert study["badge"] is True
     assert study["checkboxDisabled"] is True
-    assert study["buttons"]["Create run…"]["disabled"] is True
-    assert study["buttons"]["Delete runs…"]["disabled"] is True
-    assert "read-only" in study["buttons"]["Delete runs…"]["title"]
-    assert study["buttons"]["Open…"]["disabled"] is False
-    assert study["buttons"]["Copy"]["disabled"] is False
+    assert study["buttons"] == {}
     run = snapshot["run"]
     assert run["badge"] is True
     assert "read-only example" in run["badgeTitle"]
     assert run["checkboxDisabled"] is True
-    # Adding the example to an editable Study is allowed; the read-only
-    # Study is never offered as a destination.
-    assert "Getting started" not in run["addToStudyOptions"]
-    assert "Default study" in run["addToStudyOptions"]
+    assert run["loadButtonText"] == "Clone"
+    assert run["loadButtonDisabled"] is False
     # "Select all": the default Experiment, the default Study, and the two
     # runs it holds, never the example's own Study or Experiment. The
     # example run is counted because the editable default Study holds it

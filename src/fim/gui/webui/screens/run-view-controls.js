@@ -276,7 +276,7 @@ let runStudyRefreshToken = 0;
  * the same "never trust a stale fetch across visits" precedent `screens/
  * open-run.js`'s own `refreshHomeExampleOptions` already established.
  * Preserves the currently selected study, if it still exists after the
- * refetch, rather than silently resetting to "No study" underneath a
+ * refetch, rather than silently resetting to "Default study" underneath a
  * choice the botanist already made this session.
  */
 async function refreshRunStudySelectOptions() {
@@ -289,7 +289,7 @@ async function refreshRunStudySelectOptions() {
     runStudySelect.replaceChildren();
     const placeholder = document.createElement("option");
     placeholder.value = "";
-    placeholder.textContent = "No study";
+    placeholder.textContent = "Default study";
     runStudySelect.appendChild(placeholder);
     // Re-added on every rebuild -- `replaceChildren()` just above wipes
     // `index.html`'s own static copy along with every real Study option.
@@ -300,7 +300,7 @@ async function refreshRunStudySelectOptions() {
     // A read-only example Study cannot take a new run (read-only examples
     // design §3), so it is never offered here.
     const editable = studies.filter((study) => !study.readOnly);
-    for (const study of editable) {
+    for (const study of editable.filter((study) => study.studyId !== "study-default")) {
         const option = document.createElement("option");
         option.value = study.studyId;
         option.textContent = study.name;
@@ -308,7 +308,9 @@ async function refreshRunStudySelectOptions() {
         runStudySelect.appendChild(option);
     }
     runStudiesById = new Map(editable.map((study) => [study.studyId, study]));
-    if (editable.some((study) => study.studyId === previousValue)) {
+    if (previousValue === "study-default") {
+        runStudySelect.value = "";
+    } else if (editable.some((study) => study.studyId === previousValue)) {
         runStudySelect.value = previousValue;
     }
     syncRunStudySelectTooltip();
@@ -317,15 +319,15 @@ async function refreshRunStudySelectOptions() {
     // still handled correctly rather than left showing a stale row: the
     // preservation check above never matches `"__new__"` (no real Study
     // ever has that id), so the select falls back to its own first
-    // option ("No study") on any refresh that does not restore it.
+    // option ("Default study") on any refresh that does not restore it.
     syncRunStudyNewRowVisibility();
 }
 
 window.fim.refreshRunStudySelectOptions = refreshRunStudySelectOptions;
 
 /**
- * The Study `run-study-select` names, or `null` for none ("No study",
- * or "New study…" not yet created) -- the Run card's title
+ * The selected Study, or `null` for the implicit default destination
+ * (or "New study…" not yet created) -- the Run card's title
  * (`screens/run-title.js`) names that Study's Experiment.
  * @returns {string|null}
  */
@@ -336,10 +338,10 @@ window.fim.getSelectedRunStudyId = function getSelectedRunStudyId() {
 
 /** Give `run-study-select` the chosen Study's description as its tooltip. */
 function syncRunStudySelectTooltip() {
-    const study = runStudiesById.get(runStudySelect.value);
+    const study = runStudiesById.get(runStudySelect.value || "study-default");
     runStudySelect.title = study
         ? window.fim.detailsTooltipText({ kind: "study", ...study })
-        : "Add this run to a study";
+        : "New runs are saved in the Default study";
 }
 
 /**
@@ -461,7 +463,7 @@ window.fim.preselectNewStudy = function preselectNewStudy() {
  * @param {string} studyId
  */
 window.fim.selectStudyForNewRun = function selectStudyForNewRun(studyId) {
-    runStudySelect.value = studyId;
+    runStudySelect.value = studyId === "study-default" ? "" : studyId;
     syncRunStudyNewRowVisibility();
     syncRunStudySelectTooltip();
 };

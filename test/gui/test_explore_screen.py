@@ -470,7 +470,7 @@ def test_run_this_for_real_seeds_configure_and_preselects_new_study(
     navigates there, and pre-selects `run-study-select`'s own "New
     study…" entry with its inline creation row revealed -- a soft
     nudge, not a forced requirement (`run-study-select` still starts
-    editable at "No study" otherwise).
+    editable at "Default study" otherwise).
     """
     outcome: queue.Queue[dict[str, Any]] = queue.Queue(maxsize=1)
 
