@@ -139,6 +139,7 @@ Every test module, fixture, and test function documented here in full; `doc/fim-
   - [`test_convergence_defaults`](#validation.test_convergence_defaults)
   - [`test_doc_links`](#validation.test_doc_links)
   - [`test_equilibrium`](#validation.test_equilibrium)
+  - [`test_examples_auto_backend`](#validation.test_examples_auto_backend)
   - [`test_git_hooks`](#validation.test_git_hooks)
   - [`test_identity_recursion_trajectory`](#validation.test_identity_recursion_trajectory)
   - [`test_install_sh`](#validation.test_install_sh)
@@ -31690,6 +31691,159 @@ def test_equilibrium_shannon_entropy_subpopulation_rejects_zero_mutation(
 ```
 
 A FIM subpopulation with `mu=0` never reaches a polymorphic equilibrium.
+
+<a id="validation.test_examples_auto_backend"></a>
+
+# validation.test\_examples\_auto\_backend
+
+Every worked example agrees with its committed output under `auto`.
+
+Read-only examples design (2026-10-05, `selby/restricted`), section 7:
+each `doc/examples/<id>/config.yaml` is run again through the real
+`fim run` command with only `engine_backend` changed to `auto`, and the
+result is compared with the output committed beside the configuration
+(produced by `dev/bin/regenerate-example-outputs` on the backend the
+configuration names, `lineal` unless it names another).
+
+Which comparison applies depends on the backend `auto` resolves to, read
+from the fresh run's own manifest, not predicted here:
+
+- **Same random stream: identical reports.** `auto` never resolves to
+  `lineal` (`fim.engine._resolve_auto_engine_backend`), but
+  `generational` with its default sequential advancer reproduces
+  `lineal` bit for bit for the same seed (`GenerationalBackend`'s own
+  docstring, checked by the golden-parity engine tests). So a committed
+  `lineal` or `generational` output and a fresh `generational` run, or
+  two `generational-vector` runs, must agree exactly. This is stronger
+  than the design's statistical rule and implies it, so it is the rule
+  used wherever it holds: a difference is a defect, never noise.
+- **Same random stream, adaptive batch: identical replicates, then
+  half-widths.** The guarantee above is per replicate. Which replicates
+  an adaptive batch (`replicate_tolerance` set) keeps is not: `lineal`
+  checks its stopping rule in replicate order, while `generational`
+  checks it in the order lanes stop (`fim.engine.run_batch`'s own
+  docstring), so the two keep different sets by design. Every replicate
+  kept by both must be identical, at least one must be, and the
+  summaries are compared with the batch half-width rule below. (This
+  ordering makes a `generational` adaptive batch keep the replicates
+  that converge first; the worked example shows that this biases its
+  mean D low, a defect reported separately rather than accepted here.)
+- **Different random stream, single run: window means.**
+  `generational-vector` matches `lineal` only statistically
+  (`fim.model.vectorized`'s module docstring). For every watched
+  statistic (the configuration's `convergence_statistic`), the two
+  `report.json` `window_statistics` means must agree within
+  `3 * sqrt(se_L**2 + se_auto**2)`.
+- **Different random stream, batch: interval half-widths.** For every
+  watched statistic, the two `summary.json` across-replicate means must
+  agree within the sum of the two confidence-interval half-widths.
+
+Fields excluded from "identical": only `run_id`, in each report. A run ID
+is a digest of the configuration (`fim.model.params`), and the two
+configurations legitimately differ in `engine_backend` (`auto` against
+the committed name). A batch `summary.json` holds no run ID and is
+compared whole, as is the list of kept replicate directories.
+
+Missing data, in the statistical rules:
+
+- A watched statistic with no window statistics (or a null standard
+  error) in *both* reports means the run was too short to estimate its
+  own noise, as in a one-generation run. The only evidence left is the
+  final value, so the two final values must agree to rounding
+  (`abs=1e-12`): such a run is meaningful to compare only when it is
+  deterministic, and a stochastic one fails here loudly rather than
+  passing on no evidence.
+- Window statistics present in only one report is a structural
+  disagreement between the runs and fails.
+- A batch watched statistic without a mean and half-width in either
+  `summary.json` fails: there is nothing to compare.
+
+Every case runs a fixed seed from its configuration, so its outcome is a
+pure function of the commit; a failure is investigated, never retried or
+widened. Each case's measured wall time is recorded in
+`_RUNTIME_SECONDS`, and cases over about a minute are also marked `slow`.
+
+<a id="validation.test_examples_auto_backend.test_batch_rule_uses_the_sum_of_half_widths"></a>
+
+#### test\_batch\_rule\_uses\_the\_sum\_of\_half\_widths
+
+```python
+def test_batch_rule_uses_the_sum_of_half_widths(tmp_path: Path) -> None
+```
+
+A batch disagreement is a mean difference beyond both half-widths.
+
+No example's `auto` run currently lands on a different random stream
+as a batch, so the rule is checked here on synthetic summaries.
+
+<a id="validation.test_examples_auto_backend.test_identity_rule_ignores_only_the_run_id"></a>
+
+#### test\_identity\_rule\_ignores\_only\_the\_run\_id
+
+```python
+def test_identity_rule_ignores_only_the_run_id(tmp_path: Path) -> None
+```
+
+Identical reports may differ in `run_id` and in nothing else.
+
+<a id="validation.test_examples_auto_backend.test_kept_replicates_rule_compares_only_shared_replicates"></a>
+
+#### test\_kept\_replicates\_rule\_compares\_only\_shared\_replicates
+
+```python
+def test_kept_replicates_rule_compares_only_shared_replicates(
+        tmp_path: Path) -> None
+```
+
+An adaptive batch's shared replicates must be identical, and exist.
+
+<a id="validation.test_examples_auto_backend.test_scalar_rule_uses_three_combined_standard_errors"></a>
+
+#### test\_scalar\_rule\_uses\_three\_combined\_standard\_errors
+
+```python
+def test_scalar_rule_uses_three_combined_standard_errors(
+        tmp_path: Path) -> None
+```
+
+A single-run disagreement is beyond `3 * sqrt(se_L**2 + se_auto**2)`.
+
+Combined standard error 0.05 here, so the bound is 0.15. With no
+window statistics in either report, final values must agree exactly.
+
+<a id="validation.test_examples_auto_backend.test_every_example_has_a_recorded_runtime"></a>
+
+#### test\_every\_example\_has\_a\_recorded\_runtime
+
+```python
+def test_every_example_has_a_recorded_runtime() -> None
+```
+
+`_RUNTIME_SECONDS` names exactly the examples with a configuration.
+
+A new example must have its `auto` case timed, so its `slow` mark is
+decided from a measurement rather than left to default; a removed one
+must not leave a stale entry.
+
+<a id="validation.test_examples_auto_backend.test_example_on_auto_agrees_with_its_committed_output"></a>
+
+#### test\_example\_on\_auto\_agrees\_with\_its\_committed\_output
+
+```python
+@pytest.mark.statistical
+@pytest.mark.parametrize("example",
+                         [_case(example) for example in _example_ids()])
+def test_example_on_auto_agrees_with_its_committed_output(
+        example: str, tmp_path: Path) -> None
+```
+
+The example's `auto` run agrees with its committed output.
+
+The comparison follows from the backend `auto` resolved to (the fresh
+manifest) against the backend the committed output ran on: identical
+reports on the same random stream (for an adaptive batch, identical
+shared replicates plus the half-width rule), otherwise the window-mean
+or half-width rule (module docstring).
 
 <a id="validation.test_git_hooks"></a>
 

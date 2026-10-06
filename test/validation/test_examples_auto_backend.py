@@ -1,0 +1,538 @@
+"""Every worked example agrees with its committed output under `auto`.
+
+Read-only examples design (2026-10-05, `selby/restricted`), section 7:
+each `doc/examples/<id>/config.yaml` is run again through the real
+`fim run` command with only `engine_backend` changed to `auto`, and the
+result is compared with the output committed beside the configuration
+(produced by `dev/bin/regenerate-example-outputs` on the backend the
+configuration names, `lineal` unless it names another).
+
+Which comparison applies depends on the backend `auto` resolves to, read
+from the fresh run's own manifest, not predicted here:
+
+- **Same random stream: identical reports.** `auto` never resolves to
+  `lineal` (`fim.engine._resolve_auto_engine_backend`), but
+  `generational` with its default sequential advancer reproduces
+  `lineal` bit for bit for the same seed (`GenerationalBackend`'s own
+  docstring, checked by the golden-parity engine tests). So a committed
+  `lineal` or `generational` output and a fresh `generational` run, or
+  two `generational-vector` runs, must agree exactly. This is stronger
+  than the design's statistical rule and implies it, so it is the rule
+  used wherever it holds: a difference is a defect, never noise.
+- **Same random stream, adaptive batch: identical replicates, then
+  half-widths.** The guarantee above is per replicate. Which replicates
+  an adaptive batch (`replicate_tolerance` set) keeps is not: `lineal`
+  checks its stopping rule in replicate order, while `generational`
+  checks it in the order lanes stop (`fim.engine.run_batch`'s own
+  docstring), so the two keep different sets by design. Every replicate
+  kept by both must be identical, at least one must be, and the
+  summaries are compared with the batch half-width rule below. (This
+  ordering makes a `generational` adaptive batch keep the replicates
+  that converge first; the worked example shows that this biases its
+  mean D low, a defect reported separately rather than accepted here.)
+- **Different random stream, single run: window means.**
+  `generational-vector` matches `lineal` only statistically
+  (`fim.model.vectorized`'s module docstring). For every watched
+  statistic (the configuration's `convergence_statistic`), the two
+  `report.json` `window_statistics` means must agree within
+  `3 * sqrt(se_L**2 + se_auto**2)`.
+- **Different random stream, batch: interval half-widths.** For every
+  watched statistic, the two `summary.json` across-replicate means must
+  agree within the sum of the two confidence-interval half-widths.
+
+Fields excluded from "identical": only `run_id`, in each report. A run ID
+is a digest of the configuration (`fim.model.params`), and the two
+configurations legitimately differ in `engine_backend` (`auto` against
+the committed name). A batch `summary.json` holds no run ID and is
+compared whole, as is the list of kept replicate directories.
+
+Missing data, in the statistical rules:
+
+- A watched statistic with no window statistics (or a null standard
+  error) in *both* reports means the run was too short to estimate its
+  own noise, as in a one-generation run. The only evidence left is the
+  final value, so the two final values must agree to rounding
+  (`abs=1e-12`): such a run is meaningful to compare only when it is
+  deterministic, and a stochastic one fails here loudly rather than
+  passing on no evidence.
+- Window statistics present in only one report is a structural
+  disagreement between the runs and fails.
+- A batch watched statistic without a mean and half-width in either
+  `summary.json` fails: there is nothing to compare.
+
+Every case runs a fixed seed from its configuration, so its outcome is a
+pure function of the commit; a failure is investigated, never retried or
+widened. Each case's measured wall time is recorded in
+`_RUNTIME_SECONDS`, and cases over about a minute are also marked `slow`.
+"""
+
+from __future__ import annotations
+
+import json
+import math
+import os
+import subprocess
+import sys
+from pathlib import Path
+from typing import Any
+
+import pytest
+import yaml
+
+ROOT = Path(__file__).resolve().parents[2]
+EXAMPLES_DIR = ROOT / "doc" / "examples"
+
+# Measured wall time of each case on the development machine (2026-10-06,
+# Apple Silicon, at most three cases at once), in whole seconds. Recorded
+# so a reader can budget a run; over `_SLOW_SECONDS` also marks `slow`.
+_RUNTIME_SECONDS: dict[str, int] = {
+    "a-large-d-batch-under-generational-vector": 40,
+    "a-long-locus-batch-under-the-generational-engine": 58,
+    "an-adaptive-replicate-batch-with-a-confidence-interval": 278,
+    "dear-nolan-high": 305,
+    "dear-nolan-low": 1803,
+    "equilibrium-split-founding": 34,
+    "finite-length-alleles-the-k-allele-model": 32,
+    "golden-part-vi": 717,
+    "kimura-weiss-isolation-by-distance": 32,
+    "literature-distance-statistics-from-an-explicit-founder-split": 2,
+    "per-base-mutation-rate-across-unequal-locus-lengths": 44,
+    "several-convergence-statistics": 14,
+    "stepping-stone-spatial-migration": 88,
+    "stochastic-migrant-counts": 26,
+    "unequal-island-sizes-with-a-migration-hub": 18,
+    "within-run-sigma-band": 66,
+    "wright-takahata-finite-deme-correction": 70,
+}
+_SLOW_SECONDS = 60
+
+# Backends whose runs draw the same random stream for the same seed, so
+# their outputs are identical (see the module docstring).
+_STREAM: dict[str, str] = {
+    "lineal": "lineal",
+    "generational": "lineal",
+    "generational-vector": "generational-vector",
+}
+
+# A run ID digests the configuration, which differs in `engine_backend`.
+_IDENTITY_EXCLUDED_FIELDS = frozenset({"run_id"})
+
+
+def _case(example: str) -> Any:
+    """Return one example's parameter, marked `slow` when it is long.
+
+    Args:
+        example: The example directory name.
+
+    Returns:
+        A `pytest.param` for `example`.
+    """
+    slow = _RUNTIME_SECONDS.get(example, 0) > _SLOW_SECONDS
+    return pytest.param(example, marks=[pytest.mark.slow] if slow else [])
+
+
+def _compare_batch_statistically(
+    committed: Path, fresh: Path, watched: list[str]
+) -> list[str]:
+    """Compare two batches' across-replicate means of watched statistics.
+
+    Args:
+        committed: The committed example directory.
+        fresh: The fresh run's output directory.
+        watched: The watched statistic names.
+
+    Returns:
+        One message per disagreement; empty when they agree.
+    """
+    summary_l = _load(committed / "summary.json")
+    summary_a = _load(fresh / "summary.json")
+    problems: list[str] = []
+    for name in watched:
+        interval_l = _interval(summary_l, name)
+        interval_a = _interval(summary_a, name)
+        if interval_l is None or interval_a is None:
+            problems.append(f"{name}: no mean and half-width to compare")
+            continue
+        difference = abs(interval_l[0] - interval_a[0])
+        bound = interval_l[1] + interval_a[1]
+        if difference > bound:
+            problems.append(
+                f"{name}: means {interval_l[0]:.6g} and {interval_a[0]:.6g} "
+                f"differ by {difference:.3g} > half-width sum {bound:.3g}"
+            )
+    return problems
+
+
+def _compare_identical(committed: Path, fresh: Path) -> list[str]:
+    """Require identical reports, and for a batch an identical summary.
+
+    Args:
+        committed: The committed example directory.
+        fresh: The fresh run's output directory.
+
+    Returns:
+        One message per differing file; empty when all agree.
+    """
+    problems: list[str] = []
+    if (committed / "summary.json").is_file():
+        # A batch: the same summary and the same kept replicates.
+        if _load(committed / "summary.json") != _load(fresh / "summary.json"):
+            problems.append("summary.json differs")
+        names_l = sorted(p.name for p in committed.glob("replicate-*"))
+        names_a = sorted(p.name for p in fresh.glob("replicate-*"))
+        if names_l != names_a:
+            problems.append(f"replicates {names_l} != {names_a}")
+        reports = [f"{name}/report.json" for name in names_l if name in names_a]
+    else:
+        reports = ["report.json"]
+    for report in reports:
+        expected = _without_excluded(_load(committed / report))
+        actual = _without_excluded(_load(fresh / report))
+        if expected != actual:
+            keys = sorted(
+                key
+                for key in expected.keys() | actual.keys()
+                if expected.get(key) != actual.get(key)
+            )
+            problems.append(f"{report} differs in {keys}")
+    return problems
+
+
+def _compare_kept_replicates(committed: Path, fresh: Path) -> list[str]:
+    """Require identical reports for every replicate both batches kept.
+
+    Args:
+        committed: The committed adaptive batch directory.
+        fresh: The fresh adaptive batch's output directory.
+
+    Returns:
+        One message per differing report, or one if none is shared.
+    """
+    names_l = {p.name for p in committed.glob("replicate-*")}
+    names_a = {p.name for p in fresh.glob("replicate-*")}
+    common = sorted(names_l & names_a)
+    if not common:
+        return ["the two batches kept no replicate in common"]
+    problems: list[str] = []
+    for name in common:
+        expected = _without_excluded(_load(committed / name / "report.json"))
+        actual = _without_excluded(_load(fresh / name / "report.json"))
+        if expected != actual:
+            problems.append(f"{name}/report.json differs")
+    return problems
+
+
+def _compare_scalar_statistically(
+    committed: Path, fresh: Path, watched: list[str]
+) -> list[str]:
+    """Compare two single runs' window means of watched statistics.
+
+    Args:
+        committed: The committed example directory.
+        fresh: The fresh run's output directory.
+        watched: The watched statistic names.
+
+    Returns:
+        One message per disagreement; empty when they agree.
+    """
+    report_l = _load(committed / "report.json")
+    report_a = _load(fresh / "report.json")
+    problems: list[str] = []
+    for name in watched:
+        window_l = _window(report_l, name)
+        window_a = _window(report_a, name)
+
+        # Too short a run for a noise estimate: only exact agreement of
+        # the final values is evidence (see the module docstring).
+        if window_l is None and window_a is None:
+            if report_l.get(name) != pytest.approx(report_a.get(name), abs=1e-12):
+                problems.append(
+                    f"{name}: no window statistics, and final values "
+                    f"{report_l.get(name)!r} != {report_a.get(name)!r}"
+                )
+            continue
+        if window_l is None or window_a is None:
+            problems.append(f"{name}: window statistics in only one report")
+            continue
+
+        # Both windows present: the 3-sigma rule on the window means.
+        difference = abs(window_l[0] - window_a[0])
+        bound = 3 * math.sqrt(window_l[1] ** 2 + window_a[1] ** 2)
+        if difference > bound:
+            problems.append(
+                f"{name}: window means {window_l[0]:.6g} and {window_a[0]:.6g} "
+                f"differ by {difference:.3g} > 3 * combined se {bound:.3g}"
+            )
+    return problems
+
+
+def _example_ids() -> list[str]:
+    """Return every example with a runnable configuration, sorted.
+
+    Returns:
+        The names of the `doc/examples/*` directories with a `config.yaml`.
+    """
+    return sorted(path.parent.name for path in EXAMPLES_DIR.glob("*/config.yaml"))
+
+
+def _interval(summary: dict[str, Any], name: str) -> tuple[float, float] | None:
+    """Return a statistic's across-replicate mean and half-width, if both exist.
+
+    Args:
+        summary: A decoded batch `summary.json`.
+        name: The statistic name.
+
+    Returns:
+        `(mean, half_width)`, or `None` when either is missing.
+    """
+    entry = summary.get(name) or {}
+    mean, half_width = entry.get("mean"), entry.get("half_width")
+    if mean is None or half_width is None:
+        return None
+    return float(mean), float(half_width)
+
+
+def _load(path: Path) -> dict[str, Any]:
+    """Return a JSON object read from `path`.
+
+    Args:
+        path: A JSON file holding an object.
+
+    Returns:
+        The decoded object.
+    """
+    data = json.loads(path.read_text(encoding="utf-8"))
+    assert isinstance(data, dict), f"{path} is not a JSON object"
+    return data
+
+
+def _resolved_backend(directory: Path) -> str:
+    """Return the backend a run actually ran on, as its manifests record.
+
+    Args:
+        directory: A committed example directory or fresh output directory.
+
+    Returns:
+        The resolved `engine_backend`, the same for every replicate.
+    """
+    manifests = [directory / "manifest.json"]
+    if (directory / "summary.json").is_file():
+        # A batch manifest records only the configured name; each
+        # replicate's own manifest records the backend it resolved to.
+        manifests = sorted(directory.glob("replicate-*/manifest.json"))
+    backends = {_load(path)["engine_backend"] for path in manifests}
+    assert len(backends) == 1, f"{directory}: replicates disagree: {backends}"
+    return str(backends.pop())
+
+
+def _run_auto(example: str, tmp_path: Path) -> Path:
+    """Run one example's configuration with `engine_backend: auto`.
+
+    Args:
+        example: The example directory name.
+        tmp_path: A private temporary directory for this run.
+
+    Returns:
+        The fresh run's output directory.
+    """
+    # Copy the configuration, changing only the backend.
+    configuration = yaml.safe_load(
+        (EXAMPLES_DIR / example / "config.yaml").read_text(encoding="utf-8")
+    )
+    assert isinstance(configuration, dict)
+    configuration["engine_backend"] = "auto"
+    config = tmp_path / "config.yaml"
+    config.write_text(yaml.safe_dump(configuration, sort_keys=False), "utf-8")
+
+    # Run it exactly as `dev/bin/regenerate-example-outputs` ran the
+    # committed one, with the Study index kept out of the real `results/`.
+    output = tmp_path / "output"
+    subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "fim.launcher",
+            "run",
+            str(config),
+            "--output",
+            str(output),
+            "--quiet",
+        ],
+        check=True,
+        cwd=ROOT,
+        env={**os.environ, "FIM_RESULTS_DIRECTORY": str(tmp_path / "results")},
+    )
+    return output
+
+
+def _watched(directory: Path) -> list[str]:
+    """Return the committed run's watched statistic names.
+
+    Args:
+        directory: The committed example directory.
+
+    Returns:
+        The configuration's `convergence_statistic`, as a list.
+    """
+    manifest = _load(directory / "manifest.json")
+    watched = manifest["parameters"]["convergence_statistic"]
+    return [watched] if isinstance(watched, str) else list(watched)
+
+
+def _window(report: dict[str, Any], name: str) -> tuple[float, float] | None:
+    """Return a statistic's window mean and standard error, if both exist.
+
+    Args:
+        report: A decoded `report.json`.
+        name: The statistic name.
+
+    Returns:
+        `(mean, standard_error)`, or `None` when either is missing.
+    """
+    entry = (report.get("window_statistics") or {}).get(name) or {}
+    mean, error = entry.get("mean"), entry.get("standard_error")
+    if mean is None or error is None:
+        return None
+    return float(mean), float(error)
+
+
+def _without_excluded(report: dict[str, Any]) -> dict[str, Any]:
+    """Return `report` without the fields excluded from identity.
+
+    Args:
+        report: A decoded `report.json`.
+
+    Returns:
+        A copy without `_IDENTITY_EXCLUDED_FIELDS`.
+    """
+    return {k: v for k, v in report.items() if k not in _IDENTITY_EXCLUDED_FIELDS}
+
+
+def _write(path: Path, data: dict[str, Any]) -> None:
+    """Write `data` as JSON to `path`, creating its directory.
+
+    Args:
+        path: The file to write.
+        data: The object to encode.
+    """
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(data), encoding="utf-8")
+
+
+def test_batch_rule_uses_the_sum_of_half_widths(tmp_path: Path) -> None:
+    """A batch disagreement is a mean difference beyond both half-widths.
+
+    No example's `auto` run currently lands on a different random stream
+    as a batch, so the rule is checked here on synthetic summaries.
+    """
+    committed, fresh = tmp_path / "l", tmp_path / "a"
+    _write(committed / "summary.json", {"D": {"mean": 0.30, "half_width": 0.02}})
+    _write(fresh / "summary.json", {"D": {"mean": 0.34, "half_width": 0.03}})
+    assert _compare_batch_statistically(committed, fresh, ["D"]) == []
+    _write(fresh / "summary.json", {"D": {"mean": 0.36, "half_width": 0.03}})
+    assert _compare_batch_statistically(committed, fresh, ["D"])
+    assert _compare_batch_statistically(committed, fresh, ["G_ST"])
+
+
+def test_identity_rule_ignores_only_the_run_id(tmp_path: Path) -> None:
+    """Identical reports may differ in `run_id` and in nothing else."""
+    committed, fresh = tmp_path / "l", tmp_path / "a"
+    _write(committed / "report.json", {"run_id": "run-1", "D": 0.5})
+    _write(fresh / "report.json", {"run_id": "run-2", "D": 0.5})
+    assert _compare_identical(committed, fresh) == []
+    _write(fresh / "report.json", {"run_id": "run-2", "D": 0.5000001})
+    assert _compare_identical(committed, fresh) == ["report.json differs in ['D']"]
+
+
+def test_kept_replicates_rule_compares_only_shared_replicates(
+    tmp_path: Path,
+) -> None:
+    """An adaptive batch's shared replicates must be identical, and exist."""
+    committed, fresh = tmp_path / "l", tmp_path / "a"
+    _write(committed / "replicate-001" / "report.json", {"run_id": "1", "D": 0.2})
+    _write(committed / "replicate-002" / "report.json", {"run_id": "1", "D": 0.3})
+    _write(fresh / "replicate-001" / "report.json", {"run_id": "2", "D": 0.2})
+    _write(fresh / "replicate-003" / "report.json", {"run_id": "2", "D": 0.4})
+    assert _compare_kept_replicates(committed, fresh) == []
+    _write(fresh / "replicate-001" / "report.json", {"run_id": "2", "D": 0.25})
+    assert _compare_kept_replicates(committed, fresh) == [
+        "replicate-001/report.json differs"
+    ]
+    assert _compare_kept_replicates(committed, tmp_path / "empty")
+
+
+def test_scalar_rule_uses_three_combined_standard_errors(tmp_path: Path) -> None:
+    """A single-run disagreement is beyond `3 * sqrt(se_L**2 + se_auto**2)`.
+
+    Combined standard error 0.05 here, so the bound is 0.15. With no
+    window statistics in either report, final values must agree exactly.
+    """
+    committed, fresh = tmp_path / "l", tmp_path / "a"
+
+    def report(mean: float, error: float) -> dict[str, Any]:
+        """Return a report with one D window."""
+        window = {"D": {"mean": mean, "standard_error": error}}
+        return {"D": mean, "window_statistics": window}
+
+    _write(committed / "report.json", report(0.50, 0.03))
+    _write(fresh / "report.json", report(0.64, 0.04))
+    assert _compare_scalar_statistically(committed, fresh, ["D"]) == []
+    _write(fresh / "report.json", report(0.66, 0.04))
+    assert _compare_scalar_statistically(committed, fresh, ["D"])
+
+    # One report without the window is a structural disagreement.
+    _write(fresh / "report.json", {"D": 0.5, "window_statistics": {}})
+    assert _compare_scalar_statistically(committed, fresh, ["D"])
+
+    # Neither has one: only the final values count.
+    _write(committed / "report.json", {"D": 1.0, "window_statistics": {}})
+    _write(fresh / "report.json", {"D": 1.0, "window_statistics": {}})
+    assert _compare_scalar_statistically(committed, fresh, ["D"]) == []
+    _write(fresh / "report.json", {"D": 0.9, "window_statistics": {}})
+    assert _compare_scalar_statistically(committed, fresh, ["D"])
+
+
+def test_every_example_has_a_recorded_runtime() -> None:
+    """`_RUNTIME_SECONDS` names exactly the examples with a configuration.
+
+    A new example must have its `auto` case timed, so its `slow` mark is
+    decided from a measurement rather than left to default; a removed one
+    must not leave a stale entry.
+    """
+    assert sorted(_RUNTIME_SECONDS) == _example_ids()
+
+
+@pytest.mark.statistical
+@pytest.mark.parametrize("example", [_case(example) for example in _example_ids()])
+def test_example_on_auto_agrees_with_its_committed_output(
+    example: str, tmp_path: Path
+) -> None:
+    """The example's `auto` run agrees with its committed output.
+
+    The comparison follows from the backend `auto` resolved to (the fresh
+    manifest) against the backend the committed output ran on: identical
+    reports on the same random stream (for an adaptive batch, identical
+    shared replicates plus the half-width rule), otherwise the window-mean
+    or half-width rule (module docstring).
+    """
+    committed = EXAMPLES_DIR / example
+    fresh = _run_auto(example, tmp_path)
+    backend_l = _resolved_backend(committed)
+    backend_a = _resolved_backend(fresh)
+    same_stream = _STREAM[backend_l] == _STREAM[backend_a]
+    batch = (committed / "summary.json").is_file()
+    parameters = _load(committed / "manifest.json")["parameters"]
+    adaptive = batch and parameters.get("replicate_tolerance") is not None
+
+    if same_stream and not adaptive:
+        problems = _compare_identical(committed, fresh)
+    elif batch:
+        problems = _compare_batch_statistically(committed, fresh, _watched(committed))
+        if same_stream:
+            problems += _compare_kept_replicates(committed, fresh)
+    else:
+        problems = _compare_scalar_statistically(committed, fresh, _watched(committed))
+    assert not problems, (
+        f"{example}: auto resolved to {backend_a}, committed ran on {backend_l}: "
+        + "; ".join(problems)
+    )
