@@ -84,6 +84,7 @@ from fim.engine import (
     reports_summary,
 )
 from fim.examples import seed
+from fim.examples.artifacts import materialize_outputs
 from fim.gui import batch_runner, presets, recent_runs, runner, sweep_bridge
 from fim.gui.animation import (
     AnimationFrame,
@@ -5421,9 +5422,12 @@ class Api:
         except ValueError as error:
             return {"ok": False, "message": str(error)}
         trajectory_path = Path(trajectory_path_text)
-        # A seeded example ships its saved results without the (often
-        # gigabytes-large) trajectory: show what was saved (read-only
-        # examples design §4.3) rather than failing to re-analyze.
+        try:
+            materialize_outputs(trajectory_path.parent)
+        except (OSError, ValueError) as error:
+            return {"ok": False, "message": str(error)}
+        # Legacy report-only runs still open without a trajectory.
+        # Current examples restore their complete archived data above.
         if (
             not trajectory_path.exists()
             and (trajectory_path.parent / "report.json").is_file()
@@ -5585,12 +5589,12 @@ class Api:
         """
         batch_directory = Path(directory)
         try:
+            materialize_outputs(batch_directory)
             manifest = read_batch_manifest(batch_directory / "manifest.json")
         except (OSError, ValueError) as error:
             return {"ok": False, "message": str(error)}
         params = manifest.params()
-        # A seeded batch example ships its saved summary without the
-        # replicates' trajectories (read-only examples design §4.3).
+        # Keep the legacy report-only fallback for older saved batches.
         if (batch_directory / "summary.json").is_file() and not all(
             (
                 batch_runner.replicate_output_directory(

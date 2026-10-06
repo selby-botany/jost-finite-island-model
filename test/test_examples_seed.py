@@ -260,6 +260,37 @@ def test_a_changed_bundle_file_replaces_only_that_file(
     assert changed == {"examples/first-steps/report.json"}
 
 
+@pytest.mark.parametrize("remove_part", [False, True])
+def test_reseeding_keeps_decoded_data_until_an_archive_changes(
+    tmp_path: Path, results: Path, remove_part: bool
+) -> None:
+    """Cached raw data survives identical seeding, not changed or removed parts."""
+    files = {
+        "manifest.json": _manifest("archived"),
+        "report.json": b'{"D": 0.1}\n',
+        "trajectory.jsonl.gz.part-0001": b"first",
+        "trajectory.jsonl.gz.part-0002": b"second",
+    }
+    bundle = _write_bundle(
+        tmp_path / "bundle", [_entry("archived", "getting-started", files)]
+    )
+    _seed(results, bundle)
+    run = results / "examples" / "archived"
+    restored = run / "trajectory.jsonl"
+    restored.write_bytes(b"decoded")
+    assert not _seed(results, bundle).changed
+    assert restored.read_bytes() == b"decoded"
+    (run / "notes.txt").write_bytes(b"keep")
+    if remove_part:
+        del files["trajectory.jsonl.gz.part-0002"]
+    else:
+        files["trajectory.jsonl.gz.part-0001"] = b"new first"
+    _write_bundle(bundle, [_entry("archived", "getting-started", files)])
+    _seed(results, bundle)
+    assert not restored.exists()
+    assert (run / "notes.txt").read_bytes() == b"keep"
+
+
 def test_changed_labels_rewrite_the_metadata_and_keep_its_creation_time(
     tmp_path: Path, results: Path
 ) -> None:

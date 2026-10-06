@@ -53,6 +53,11 @@ from pathlib import Path
 from typing import Any, Final
 
 from fim import paths
+from fim.examples.artifacts import (
+    RUN_OUTPUT_NAMES,
+    TOP_LEVEL_OUTPUT_NAMES,
+    archive_target,
+)
 from fim.persistence import groups
 from fim.persistence.run_metadata import (
     CURRENT_RUN_METADATA_SCHEMA_VERSION,
@@ -89,9 +94,9 @@ CHILD_STUDY_SEPARATOR: Final = " — "
 # the only ones it may replace or remove: the top-level outputs and
 # configuration, and each batch replicate's outputs one level down.
 _OWNED_TOP_LEVEL_FILES: Final = frozenset(
-    {"config.yaml", "manifest.json", "report.json", "summary.json", "metadata.json"}
+    {"config.yaml", "metadata.json", *TOP_LEVEL_OUTPUT_NAMES}
 )
-_OWNED_REPLICATE_FILES: Final = frozenset({"manifest.json", "report.json"})
+_OWNED_REPLICATE_FILES: Final = frozenset(RUN_OUTPUT_NAMES)
 
 Clock = Callable[[], datetime]
 
@@ -357,12 +362,30 @@ def _class_studies(
     return studies
 
 
+def _invalidate_decoded_archive(path: Path) -> list[Path]:
+    """Remove a cached raw artifact when one of its archive parts changes."""
+    name = archive_target(path.name)
+    if name is None:
+        return []
+    restored = path.with_name(name)
+    if not restored.exists():
+        return []
+    restored.unlink()
+    return [restored]
+
+
 def _is_owned(relative: Path) -> bool:
     """Return whether a path inside an example's run directory is seeding's own."""
     parts = relative.parts
     if len(parts) == 1:
-        return parts[0] in _OWNED_TOP_LEVEL_FILES
-    return len(parts) == 2 and parts[1] in _OWNED_REPLICATE_FILES  # noqa: PLR2004
+        return (
+            parts[0] in _OWNED_TOP_LEVEL_FILES or archive_target(parts[0]) is not None
+        )
+    return (
+        len(parts) == 2  # noqa: PLR2004
+        and parts[0].startswith("replicate-")
+        and (parts[1] in _OWNED_REPLICATE_FILES or archive_target(parts[1]) is not None)
+    )
 
 
 def _read_bytes(path: Path) -> bytes | None:
@@ -434,6 +457,17 @@ def _seed_run_directory(
         wanted[Path(output)] = (source / output).read_bytes()
 
     changed = []
+    archived_targets = {
+        path.with_name(name)
+        for path in wanted
+        if (name := archive_target(path.name)) is not None
+    }
+    # A new archive invalidates its previously restored raw artifact.
+    # Unchanged archives keep the decoded file, avoiding repeated work.
+    for wanted_path, content in wanted.items():
+        name = archive_target(wanted_path.name)
+        if name is not None and _read_bytes(directory / wanted_path) != content:
+            changed.extend(_invalidate_decoded_archive(directory / wanted_path))
     for wanted_path, content in wanted.items():
         target = directory / wanted_path
         if _read_bytes(target) != content:
@@ -449,8 +483,10 @@ def _seed_run_directory(
                 path.is_file()
                 and _is_owned(relative)
                 and relative not in wanted
+                and relative not in archived_targets
                 and relative != Path(run_metadata_path(directory).name)
             ):
+                changed.extend(_invalidate_decoded_archive(path))
                 path.unlink()
                 changed.append(path)
 

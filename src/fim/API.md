@@ -100,6 +100,18 @@ Return to the [source-tree orientation](../README.md) or the [developer guide](.
   * [history\_free\_statistic\_values](#fim.engine.history_free_statistic_values)
   * [report\_statistic](#fim.engine.report_statistic)
 * [fim.examples](#fim.examples)
+* [fim.examples.artifacts](#fim.examples.artifacts)
+  * [archive\_target](#fim.examples.artifacts.archive_target)
+  * [output\_files](#fim.examples.artifacts.output_files)
+  * [\_PartWriter](#fim.examples.artifacts._PartWriter)
+    * [write](#fim.examples.artifacts._PartWriter.write)
+    * [close](#fim.examples.artifacts._PartWriter.close)
+  * [\_PartReader](#fim.examples.artifacts._PartReader)
+    * [readable](#fim.examples.artifacts._PartReader.readable)
+    * [readinto](#fim.examples.artifacts._PartReader.readinto)
+    * [close](#fim.examples.artifacts._PartReader.close)
+  * [copy\_outputs](#fim.examples.artifacts.copy_outputs)
+  * [materialize\_outputs](#fim.examples.artifacts.materialize_outputs)
 * [fim.examples.classes](#fim.examples.classes)
   * [RunClass](#fim.examples.classes.RunClass)
     * [to\_dict](#fim.examples.classes.RunClass.to_dict)
@@ -621,6 +633,7 @@ Return to the [source-tree orientation](../README.md) or the [developer guide](.
   * [ReanalyzedGeneration](#fim.reanalyze.ReanalyzedGeneration)
   * [differentiation\_q\_for\_state](#fim.reanalyze.differentiation_q_for_state)
   * [group\_rows\_by\_generation](#fim.reanalyze.group_rows_by_generation)
+  * [trajectory\_generations](#fim.reanalyze.trajectory_generations)
   * [read\_persisted\_convergence\_history](#fim.reanalyze.read_persisted_convergence_history)
   * [reanalyze\_trajectory](#fim.reanalyze.reanalyze_trajectory)
   * [replicate\_convergence\_history](#fim.reanalyze.replicate_convergence_history)
@@ -4059,6 +4072,129 @@ only-examples-and-classes-design.md`, `selby/restricted`, section 2).
 results folder as read-only runs, Studies, and the Examples Experiment
 (section 4.2). Nothing is re-exported here, so importing one submodule never pays for
 another.
+
+<a id="fim.examples.artifacts"></a>
+
+# fim.examples.artifacts
+
+Lossless, bounded-size storage of complete worked-example run artifacts.
+
+<a id="fim.examples.artifacts.archive_target"></a>
+
+#### archive\_target
+
+```python
+def archive_target(name: str) -> str | None
+```
+
+Return the raw artifact name for a recognized gzip part, or None.
+
+<a id="fim.examples.artifacts.output_files"></a>
+
+#### output\_files
+
+```python
+def output_files(directory: Path, *, batch: bool = True) -> list[Path]
+```
+
+List recognized raw artifacts and archive parts, including replicates.
+
+<a id="fim.examples.artifacts._PartWriter"></a>
+
+## \_PartWriter Objects
+
+```python
+class _PartWriter(io.RawIOBase)
+```
+
+Split one gzip stream into files no larger than the requested limit.
+
+<a id="fim.examples.artifacts._PartWriter.write"></a>
+
+#### write
+
+```python
+def write(data: Buffer) -> int
+```
+
+Write compressed bytes, rotating files at the exact size limit.
+
+<a id="fim.examples.artifacts._PartWriter.close"></a>
+
+#### close
+
+```python
+def close() -> None
+```
+
+Close the current part, including when compression fails.
+
+<a id="fim.examples.artifacts._PartReader"></a>
+
+## \_PartReader Objects
+
+```python
+class _PartReader(io.RawIOBase)
+```
+
+Read ordered parts as one stream without joining them in memory.
+
+<a id="fim.examples.artifacts._PartReader.readable"></a>
+
+#### readable
+
+```python
+def readable() -> bool
+```
+
+Tell BufferedReader that this stream supports reads.
+
+<a id="fim.examples.artifacts._PartReader.readinto"></a>
+
+#### readinto
+
+```python
+def readinto(buffer: Buffer) -> int
+```
+
+Read from the current part, advancing only at its end.
+
+<a id="fim.examples.artifacts._PartReader.close"></a>
+
+#### close
+
+```python
+def close() -> None
+```
+
+Close the current part if decoding stops before the end.
+
+<a id="fim.examples.artifacts.copy_outputs"></a>
+
+#### copy\_outputs
+
+```python
+def copy_outputs(source: Path,
+                 target: Path,
+                 *,
+                 part_bytes: int = PART_BYTES) -> list[str]
+```
+
+Copy all results, compressing JSONL losslessly into Git-sized parts.
+
+<a id="fim.examples.artifacts.materialize_outputs"></a>
+
+#### materialize\_outputs
+
+```python
+def materialize_outputs(directory: Path) -> list[Path]
+```
+
+Restore archived JSONL files atomically, checking original manifest hashes.
+
+Existing raw files are left for the normal run-integrity checks. Seeding
+removes them when an archive changes. This avoids decoding on every open.
+Missing, reordered, corrupt, or truncated parts fail explicitly.
 
 <a id="fim.examples.classes"></a>
 
@@ -18007,8 +18143,12 @@ silently disagreeing whenever `deme_weighting` is `"size"`.
 #### group\_rows\_by\_generation
 
 ```python
-def group_rows_by_generation(trajectory_path: Path,
-                             run_id: str) -> dict[int, list[TrajectoryRow]]
+def group_rows_by_generation(
+    trajectory_path: Path,
+    run_id: str,
+    *,
+    generations: Sequence[int] | None = None
+) -> dict[int, list[TrajectoryRow]]
 ```
 
 Group every persisted row by its generation number, in stored order.
@@ -18026,19 +18166,29 @@ Shared by `reanalyze_trajectory` — which instead filters `rows` to
 just the one selected generation, matching `cli._command_stats`'s
 own exact algorithm — and the animation screen's frame sampler
 (`doc/fim-gui-design.md` §8: several, evenly spaced generations), which needs
-every persisted generation's rows available at once; only how many
-of the resulting generations each caller turns into a `ModelState`
-differs.
+only the sampled generations' rows. Supplying `generations` bounds
+memory to that selection even for gigabyte-scale example data.
 
 **Arguments**:
 
 - `trajectory_path` - The `trajectory.jsonl` to read.
 - `run_id` - The run identity every row must belong to.
+- `generations` - Only these generations are retained, when specified.
 
 
 **Returns**:
 
   Every persisted generation's rows, keyed by generation number.
+
+<a id="fim.reanalyze.trajectory_generations"></a>
+
+#### trajectory\_generations
+
+```python
+def trajectory_generations(trajectory_path: Path, run_id: str) -> list[int]
+```
+
+List persisted generations without retaining their population rows.
 
 <a id="fim.reanalyze.read_persisted_convergence_history"></a>
 

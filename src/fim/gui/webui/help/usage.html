@@ -1116,16 +1116,17 @@ error naming the read-only item. A configuration marks its run read-only
 with <a href="#" data-fim-help="configuration" data-fim-anchor="_read_only"><code>_read_only</code></a>; only the shipped examples
 should use it.</p>
 <h3 id="opening-a-saved-example">Opening a saved example</h3>
-<p>An example's run ships without its trajectory, which can be very large,
-so it opens from its saved results alone: open it from Home (double-click
-its row) or with <strong>Open saved result</strong> in the Examples dialog. The
-statistics panel and the messages under it show the saved result, exactly
-as the example produced it. The graph area says <strong>Run this example to see
-its trajectories</strong>, with a <strong>Run it</strong> button: it loads the example into
-Configure as an editable copy, and running that copy produces the full
-scatter plot, trajectories, and scrubber. The copy is your own run, with
-its own ID, so it never replaces the example. A batch example opens the
-same way, from its saved <code>summary.json</code> and each replicate's <code>report.json</code>.</p>
+<p>Open an example from Home (double-click its row) or with <strong>Open saved
+result</strong> in the Examples dialog. It includes the complete finished run:
+statistics, messages, scatter plot, statistic trajectories, other graphs,
+and a scrubber for reviewing earlier generations. No simulation is needed.
+Large examples may take longer to open while their saved data is prepared.</p>
+<p>Every result is retained. To keep the download manageable, trajectory
+files are stored losslessly compressed; the app reconstructs them
+automatically. You do not need to unpack files or manage archive parts.</p>
+<p>Use <strong>Load into Configure</strong> to run an editable copy. The copy is your own
+run and never replaces the read-only example. Batch examples include every
+kept replicate's full results and the shared batch summary.</p>
 <h3 id="if-the-window-closes-but-fim-keeps-running">If the window closes but <code>fim</code> keeps running</h3>
 <p>Closing the window should end the program immediately. If something
 inside it fails to stop, <code>fim</code> guards against being left running

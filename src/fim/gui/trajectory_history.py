@@ -28,6 +28,7 @@ from pathlib import Path
 from typing import Final, cast
 
 from fim.engine import report_for_state
+from fim.examples.artifacts import materialize_outputs
 from fim.gui.animation import GUI_ANIMATION_MAX_FRAMES, select_sample_generations
 from fim.model.params import SimulationParams
 from fim.model.state import ModelState
@@ -36,7 +37,7 @@ from fim.persistence.manifest import (
     read_manifest,
     verify_trajectory_integrity,
 )
-from fim.reanalyze import group_rows_by_generation
+from fim.reanalyze import group_rows_by_generation, trajectory_generations
 from fim.statistics.catalog import report_keys
 
 # Every global statistic `report_for_state` computes, from
@@ -101,6 +102,7 @@ def sampled_statistic_history(
             identical failure modes to `reanalyze_trajectory`, checked
             the same way.
     """
+    materialize_outputs(trajectory_path.parent)
     manifest = read_manifest(
         manifest_path
         if manifest_path is not None
@@ -108,10 +110,13 @@ def sampled_statistic_history(
     )
     verify_trajectory_integrity(trajectory_path, manifest)
     params = manifest.params()
-    grouped = group_rows_by_generation(trajectory_path, manifest.run_id)
-    if not grouped:
+    available = trajectory_generations(trajectory_path, manifest.run_id)
+    if not available:
         raise ValueError(f"trajectory has no rows for {manifest.run_id}")
-    sampled = select_sample_generations(sorted(grouped), max_samples)
+    sampled = select_sample_generations(available, max_samples)
+    grouped = group_rows_by_generation(
+        trajectory_path, manifest.run_id, generations=sampled
+    )
     histories: dict[str, list[float | None]] = {name: [] for name in STATISTIC_NAMES}
     for generation in sampled:
         state = ModelState.from_rows(grouped[generation], params.loci)

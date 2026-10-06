@@ -5,7 +5,8 @@ output files of its own run (`dev/bin/regenerate-example-outputs`, design
 doc `20261005-claude-opus-5-5-read-only-examples-and-classes-design.md`,
 `selby/restricted`, sections 4.1 and 6): `manifest.json` and
 `report.json` for a single run, or `manifest.json`, `summary.json`, and
-each replicate's `manifest.json`/`report.json` for a batch. The slow test
+each replicate's complete artifacts for a batch. JSONL artifacts are
+losslessly archived; the app restores them on opening. The slow test
 below reruns every example exactly as that script does and compares.
 
 A run is a pure function of its configuration, so the comparison is
@@ -25,11 +26,14 @@ from typing import Any
 
 import pytest
 
+from fim.examples.artifacts import archive_target, output_files
+
 ROOT = Path(__file__).resolve().parents[1]
 EXAMPLES_DIRECTORY = ROOT / "doc" / "examples"
 REGENERATE_SCRIPT = ROOT / "dev" / "bin" / "regenerate-example-outputs"
 
-# The committed outputs, as `dev/bin/regenerate-example-outputs` copies them.
+# The JSON receipts compared with a rerun; complete artifact presence is
+# checked separately, with trajectory bytes covered by manifest digests.
 TOP_LEVEL_OUTPUT_NAMES = ("manifest.json", "report.json", "summary.json")
 REPLICATE_OUTPUT_NAMES = ("manifest.json", "report.json")
 
@@ -123,9 +127,8 @@ def test_dear_nolan_high_configuration_matches_its_derivation() -> None:
 def test_every_example_commits_its_output_files(example: str) -> None:
     """Each example directory holds a complete set of committed outputs.
 
-    A single run has `manifest.json` and `report.json`; a batch has
-    `manifest.json`, `summary.json`, and one replicate directory per kept
-    replicate, each with both files. Trajectories are never committed.
+    Every manifest-referenced artifact is present, with JSONL data
+    losslessly archived and each part bounded to the Git-safe size limit.
     """
     directory = EXAMPLES_DIRECTORY / example
     files = _output_files(directory)
@@ -139,6 +142,34 @@ def test_every_example_commits_its_output_files(example: str) -> None:
         assert files == ["manifest.json", "report.json"]
     assert not list(directory.rglob("trajectory.jsonl"))
     assert not list(directory.rglob("convergence.jsonl"))
+    for manifest_path in directory.rglob("manifest.json"):
+        manifest = _read_json(manifest_path)
+        names = {path.name for path in output_files(manifest_path.parent, batch=False)}
+        for key in manifest["artifacts"]:
+            if key.startswith("replicate-"):
+                continue
+            target = (
+                f"{key}.png"
+                if key == "scatter"
+                else f"{key}.jsonl"
+                if key in {"trajectory", "convergence", "sigma_band_trajectory"}
+                else f"{key}.json"
+            )
+            if target.endswith(".jsonl"):
+                parts = sorted(name for name in names if archive_target(name) == target)
+                assert parts, f"{example}: missing {target}"
+                assert parts == [
+                    f"{target}.gz.part-{index:04d}"
+                    for index in range(1, len(parts) + 1)
+                ]
+                assert all(
+                    (manifest_path.parent / part).stat().st_size <= 50 * 1024 * 1024
+                    for part in parts
+                )
+            else:
+                assert (manifest_path.parent / target).is_file(), (
+                    f"{example}: missing {target}"
+                )
 
 
 def test_regeneration_uses_only_the_configuration(tmp_path: Path) -> None:

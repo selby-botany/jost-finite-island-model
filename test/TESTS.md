@@ -12,6 +12,7 @@ Every test module, fixture, and test function documented here in full; `doc/fim-
   - [`test_convergence_docs`](#test.test_convergence_docs)
   - [`test_doc_examples`](#test.test_doc_examples)
   - [`test_doc_snippets`](#test.test_doc_snippets)
+  - [`test_example_artifacts`](#test.test_example_artifacts)
   - [`test_examples_catalog`](#test.test_examples_catalog)
   - [`test_examples_seed`](#test.test_examples_seed)
   - [`test_hypothesis_profile`](#test.test_hypothesis_profile)
@@ -656,7 +657,8 @@ output files of its own run (`dev/bin/regenerate-example-outputs`, design
 doc `20261005-claude-opus-5-5-read-only-examples-and-classes-design.md`,
 `selby/restricted`, sections 4.1 and 6): `manifest.json` and
 `report.json` for a single run, or `manifest.json`, `summary.json`, and
-each replicate's `manifest.json`/`report.json` for a batch. The slow test
+each replicate's complete artifacts for a batch. JSONL artifacts are
+losslessly archived; the app restores them on opening. The slow test
 below reruns every example exactly as that script does and compares.
 
 A run is a pure function of its configuration, so the comparison is
@@ -689,9 +691,8 @@ def test_every_example_commits_its_output_files(example: str) -> None
 
 Each example directory holds a complete set of committed outputs.
 
-A single run has `manifest.json` and `report.json`; a batch has
-`manifest.json`, `summary.json`, and one replicate directory per kept
-replicate, each with both files. Trajectories are never committed.
+Every manifest-referenced artifact is present, with JSONL data
+losslessly archived and each part bounded to the Git-safe size limit.
 
 <a id="test.test_doc_examples.test_regeneration_uses_only_the_configuration"></a>
 
@@ -773,6 +774,76 @@ derived from the model, except the few that name a reason to pin them.
 Pinning `convergence_window: 10` was what made the hub example stop at
 generation 19 with a meaningless result.
 
+<a id="test.test_example_artifacts"></a>
+
+# test.test\_example\_artifacts
+
+Complete example artifacts survive lossless archiving and automatic opening.
+
+<a id="test.test_example_artifacts.test_full_outputs_round_trip_and_open_with_graphs"></a>
+
+#### test\_full\_outputs\_round\_trip\_and\_open\_with\_graphs
+
+```python
+@pytest.mark.parametrize("replicates", [1, 2])
+def test_full_outputs_round_trip_and_open_with_graphs(tmp_path: Path,
+                                                      replicates: int) -> None
+```
+
+Scalar and batch opens reconstruct every byte, with frames and histories.
+
+<a id="test.test_example_artifacts.test_archive_is_deterministic_and_rejects_missing_or_corrupt_parts"></a>
+
+#### test\_archive\_is\_deterministic\_and\_rejects\_missing\_or\_corrupt\_parts
+
+```python
+def test_archive_is_deterministic_and_rejects_missing_or_corrupt_parts(
+        tmp_path: Path) -> None
+```
+
+Fixed gzip headers, bounded parts, and explicit corruption failures.
+
+<a id="test.test_example_artifacts.test_archive_digest_is_verified_before_publishing"></a>
+
+#### test\_archive\_digest\_is\_verified\_before\_publishing
+
+```python
+def test_archive_digest_is_verified_before_publishing(tmp_path: Path) -> None
+```
+
+A valid gzip stream with wrong contents cannot become a completed run.
+
+<a id="test.test_example_artifacts.test_truncated_gzip_does_not_publish_a_partial_trajectory"></a>
+
+#### test\_truncated\_gzip\_does\_not\_publish\_a\_partial\_trajectory
+
+```python
+def test_truncated_gzip_does_not_publish_a_partial_trajectory(
+        tmp_path: Path) -> None
+```
+
+A missing gzip footer is an explicit failure and leaves no raw output.
+
+<a id="test.test_example_artifacts.test_artifact_inventory_matches_the_run_producer"></a>
+
+#### test\_artifact\_inventory\_matches\_the\_run\_producer
+
+```python
+def test_artifact_inventory_matches_the_run_producer(tmp_path: Path) -> None
+```
+
+Adding a CLI artifact requires adding it to the example inventory too.
+
+<a id="test.test_example_artifacts.test_opening_a_study_restores_its_archived_members"></a>
+
+#### test\_opening\_a\_study\_restores\_its\_archived\_members
+
+```python
+def test_opening_a_study_restores_its_archived_members(tmp_path: Path) -> None
+```
+
+Opening a Study directly must not require opening its example runs first.
+
 <a id="test.test_examples_catalog"></a>
 
 # test.test\_examples\_catalog
@@ -852,16 +923,16 @@ def test_example_without_a_configuration_is_listed_with_null_yaml(
 
 A script-reproduced example (no `config.yaml`) still gets an entry.
 
-<a id="test.test_examples_catalog.test_output_files_are_bundled_but_trajectories_are_not"></a>
+<a id="test.test_examples_catalog.test_all_output_files_and_compressed_trajectories_are_bundled"></a>
 
-#### test\_output\_files\_are\_bundled\_but\_trajectories\_are\_not
+#### test\_all\_output\_files\_and\_compressed\_trajectories\_are\_bundled
 
 ```python
-def test_output_files_are_bundled_but_trajectories_are_not(
+def test_all_output_files_and_compressed_trajectories_are_bundled(
         tmp_path: Path) -> None
 ```
 
-Top-level and per-replicate manifest/report/summary files are copied.
+Every result artifact survives bundling, including compressed JSONL parts.
 
 <a id="test.test_examples_catalog.test_labels_and_class_tree_drive_names_and_order"></a>
 
@@ -995,6 +1066,18 @@ def test_a_changed_bundle_file_replaces_only_that_file(tmp_path: Path,
 ```
 
 A newer bundle rewrites the files whose content differs, nothing else.
+
+<a id="test.test_examples_seed.test_reseeding_keeps_decoded_data_until_an_archive_changes"></a>
+
+#### test\_reseeding\_keeps\_decoded\_data\_until\_an\_archive\_changes
+
+```python
+@pytest.mark.parametrize("remove_part", [False, True])
+def test_reseeding_keeps_decoded_data_until_an_archive_changes(
+        tmp_path: Path, results: Path, remove_part: bool) -> None
+```
+
+Cached raw data survives identical seeding, not changed or removed parts.
 
 <a id="test.test_examples_seed.test_changed_labels_rewrite_the_metadata_and_keep_its_creation_time"></a>
 
@@ -8478,6 +8561,17 @@ def test_pre_render_frames_matches_select_sample_generations(
 
 The frame count and generation numbers match sampling alone would compute.
 
+<a id="gui.test_animation.test_frame_sampling_retains_only_selected_generations"></a>
+
+#### test\_frame\_sampling\_retains\_only\_selected\_generations
+
+```python
+def test_frame_sampling_retains_only_selected_generations(
+        tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None
+```
+
+Opening long examples keeps sampled states, not every trajectory row.
+
 <a id="gui.test_animation.test_pre_render_frames_are_sorted_ascending_by_generation"></a>
 
 #### test\_pre\_render\_frames\_are\_sorted\_ascending\_by\_generation
@@ -15224,6 +15318,17 @@ def test_open_saved_result_opens_the_seeded_run_from_the_examples_dialog(
 
 The dialog's second action opens the saved result; disabled without one.
 
+<a id="gui.test_examples_screen.test_a_complete_example_opens_with_graphs_and_a_working_scrubber"></a>
+
+#### test\_a\_complete\_example\_opens\_with\_graphs\_and\_a\_working\_scrubber
+
+```python
+def test_a_complete_example_opens_with_graphs_and_a_working_scrubber(
+        results: Path) -> None
+```
+
+A compressed example opens like a completed user run, without a rerun.
+
 <a id="gui.test_explore_screen"></a>
 
 # gui.test\_explore\_screen
@@ -19986,6 +20091,19 @@ fast-converging run for exactly that reason. `progress-generation-
 label` starts empty in the markup and is set only by `onRunProgress`,
 so it stays a direct, generation-number-independent proof a push
 landed.
+
+<a id="gui.test_running_screen.test_live_scatter_returns_after_the_graph_stage_is_reset"></a>
+
+#### test\_live\_scatter\_returns\_after\_the\_graph\_stage\_is\_reset
+
+```python
+@pytest.mark.parametrize("is_batch", [False, True])
+@pytest.mark.parametrize("selected_pair", [False, True])
+def test_live_scatter_returns_after_the_graph_stage_is_reset(
+        is_batch: bool, selected_pair: bool) -> None
+```
+
+Scalar and batch progress restore scatter availability, for either pair.
 
 <a id="gui.test_running_screen.test_a_live_runs_own_done_payload_sets_its_trajectory_path"></a>
 

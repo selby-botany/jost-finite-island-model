@@ -29,6 +29,7 @@ import yaml
 from fim import cli
 from fim import paths as paths_module
 from fim.examples import seed
+from fim.examples.artifacts import copy_outputs
 from fim.gui import app as app_module
 from fim.gui.app import create_window
 from fim.persistence import groups
@@ -410,3 +411,68 @@ def test_open_saved_result_opens_the_seeded_run_from_the_examples_dialog(
     assert opened["directory"] == str(
         seed.example_run_directory("tiny-example", results=results)
     )
+
+
+def test_a_complete_example_opens_with_graphs_and_a_working_scrubber(
+    results: Path,
+) -> None:
+    """A compressed example opens like a completed user run, without a rerun."""
+    bundle = app_module._examples_bundle_directory()
+    outputs = copy_outputs(results.parent / "tiny-run", bundle / "tiny-example")
+    catalog_path = bundle / "catalog.json"
+    catalog = json.loads(catalog_path.read_text("utf-8"))
+    catalog["examples"][0]["outputs"] = outputs
+    catalog_path.write_text(json.dumps(catalog), "utf-8")
+    window = create_window(hidden=True)
+    outcome: queue.Queue[dict[str, Any]] = queue.Queue(maxsize=1)
+
+    def _drive() -> None:
+        try:
+            _open_home(window)
+            _expand_group(window, "Examples (")
+            _expand_group(window, "Getting started (")
+            window.evaluate_js(
+                "Array.from(document.querySelectorAll('.open-run-run-row'))"
+                ".find((row) => row.textContent.includes('Shipped example'))"
+                ".dispatchEvent(new MouseEvent('dblclick', {bubbles: true}));"
+            )
+            ready = _poll_until(
+                window,
+                "window.fim.getRunViewState() === 'completed'"
+                " && (window.__fimScrubberPending || 0) === 0"
+                " && !document.getElementById('scrubber-controls').hidden",
+                lambda value: value is True,
+            )
+            assert ready, "completed example never showed its scrubber"
+            snapshot = json.loads(window.evaluate_js(_SNAPSHOT_SAVED_RESULT))
+            snapshot["graphs"] = window.evaluate_js("availableGraphKeys()")
+            snapshot["finalGeneration"] = window.evaluate_js(
+                "document.getElementById('scrubber-range').value"
+            )
+            window.evaluate_js(
+                "const slider = document.getElementById('scrubber-range');"
+                "slider.value = '0';"
+                "slider.dispatchEvent(new Event('input', {bubbles: true}));"
+            )
+            _poll_until(
+                window,
+                "(window.__fimScrubberPending || 0) === 0",
+                lambda value: value is True,
+            )
+            snapshot["firstGeneration"] = window.evaluate_js(
+                "document.getElementById('scrubber-range').value"
+            )
+            outcome.put(snapshot)
+        finally:
+            window.destroy()
+
+    webview.start(_drive)
+    opened = outcome.get(timeout=_DRIVE_TIMEOUT_SECONDS)
+    assert opened["noteHidden"] is True
+    assert opened["graphsHidden"] is False
+    assert opened["scrubberHidden"] is False
+    assert {"scatter", "trajectory", "alleleComposition", "frequencySpectrum"} <= set(
+        opened["graphs"]
+    )
+    assert int(opened["finalGeneration"]) > 0
+    assert opened["firstGeneration"] == "0"

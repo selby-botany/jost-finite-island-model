@@ -32,6 +32,7 @@ from pathlib import Path
 from typing import cast
 
 from fim.engine import report_for_state, tracked_statistic_values
+from fim.examples.artifacts import materialize_outputs
 from fim.model.params import SimulationParams
 from fim.model.state import ModelState
 from fim.persistence.jsonl_store import JSONLTrajectoryStore
@@ -129,6 +130,8 @@ def differentiation_q_for_state(
 def group_rows_by_generation(
     trajectory_path: Path,
     run_id: str,
+    *,
+    generations: Sequence[int] | None = None,
 ) -> dict[int, list[TrajectoryRow]]:
     """Group every persisted row by its generation number, in stored order.
 
@@ -145,21 +148,34 @@ def group_rows_by_generation(
     just the one selected generation, matching `cli._command_stats`'s
     own exact algorithm — and the animation screen's frame sampler
     (`doc/fim-gui-design.md` §8: several, evenly spaced generations), which needs
-    every persisted generation's rows available at once; only how many
-    of the resulting generations each caller turns into a `ModelState`
-    differs.
+    only the sampled generations' rows. Supplying `generations` bounds
+    memory to that selection even for gigabyte-scale example data.
 
     Args:
         trajectory_path: The `trajectory.jsonl` to read.
         run_id: The run identity every row must belong to.
+        generations: Only these generations are retained, when specified.
 
     Returns:
         Every persisted generation's rows, keyed by generation number.
     """
     grouped: dict[int, list[TrajectoryRow]] = {}
+    selected = set(generations) if generations is not None else None
     for row in JSONLTrajectoryStore(trajectory_path).read(run_id):
-        grouped.setdefault(row["generation"], []).append(row)
+        if selected is None or row["generation"] in selected:
+            grouped.setdefault(row["generation"], []).append(row)
     return grouped
+
+
+def trajectory_generations(trajectory_path: Path, run_id: str) -> list[int]:
+    """List persisted generations without retaining their population rows."""
+    materialize_outputs(trajectory_path.parent)
+    return sorted(
+        {
+            row["generation"]
+            for row in JSONLTrajectoryStore(trajectory_path).read(run_id)
+        }
+    )
 
 
 def _cached_final_report(
@@ -352,6 +368,7 @@ def reanalyze_trajectory(
         trajectory_path,
         generation if generation is not None else "final",
     )
+    materialize_outputs(trajectory_path.parent)
     manifest = read_manifest(
         manifest_path
         if manifest_path is not None

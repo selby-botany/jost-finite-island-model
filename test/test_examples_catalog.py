@@ -179,12 +179,17 @@ def test_example_without_a_configuration_is_listed_with_null_yaml(
     assert catalog["examples"][0]["config_yaml"] is None
 
 
-def test_output_files_are_bundled_but_trajectories_are_not(tmp_path: Path) -> None:
-    """Top-level and per-replicate manifest/report/summary files are copied."""
+def test_all_output_files_and_compressed_trajectories_are_bundled(
+    tmp_path: Path,
+) -> None:
+    """Every result artifact survives bundling, including compressed JSONL parts."""
     examples = tmp_path / "examples"
     directory = _example(examples, "batch")
     (directory / "summary.json").write_text("{}\n", encoding="utf-8")
     (directory / "trajectory.jsonl").write_text("{}\n", encoding="utf-8")
+    (directory / "trajectory.jsonl.gz.part-0001").write_bytes(b"archive")
+    (directory / "pairwise.json").write_text("{}\n", encoding="utf-8")
+    (directory / "scatter.png").write_bytes(b"image")
     replicate = directory / "replicate-001"
     replicate.mkdir()
     (replicate / "manifest.json").write_text('{"r": 1}\n', encoding="utf-8")
@@ -194,14 +199,24 @@ def test_output_files_are_bundled_but_trajectories_are_not(tmp_path: Path) -> No
     catalog, outputs = catalog_generator.build_catalog(examples, _usage(tmp_path))
 
     assert catalog["examples"][0]["outputs"] == [
+        "pairwise.json",
+        "replicate-001/convergence.jsonl",
         "replicate-001/manifest.json",
         "replicate-001/report.json",
+        "scatter.png",
         "summary.json",
+        "trajectory.jsonl",
+        "trajectory.jsonl.gz.part-0001",
     ]
     assert outputs == {
         "batch/summary.json": b"{}\n",
         "batch/replicate-001/manifest.json": b'{"r": 1}\n',
         "batch/replicate-001/report.json": b'{"r": 2}\n',
+        "batch/replicate-001/convergence.jsonl": b"{}\n",
+        "batch/pairwise.json": b"{}\n",
+        "batch/scatter.png": b"image",
+        "batch/trajectory.jsonl": b"{}\n",
+        "batch/trajectory.jsonl.gz.part-0001": b"archive",
     }
 
 

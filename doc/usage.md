@@ -1218,16 +1218,19 @@ should use it.
 
 ### Opening a saved example
 
-An example's run ships without its trajectory, which can be very large,
-so it opens from its saved results alone: open it from Home (double-click
-its row) or with **Open saved result** in the Examples dialog. The
-statistics panel and the messages under it show the saved result, exactly
-as the example produced it. The graph area says **Run this example to see
-its trajectories**, with a **Run it** button: it loads the example into
-Configure as an editable copy, and running that copy produces the full
-scatter plot, trajectories, and scrubber. The copy is your own run, with
-its own ID, so it never replaces the example. A batch example opens the
-same way, from its saved `summary.json` and each replicate's `report.json`.
+Open an example from Home (double-click its row) or with **Open saved
+result** in the Examples dialog. It includes the complete finished run:
+statistics, messages, scatter plot, statistic trajectories, other graphs,
+and a scrubber for reviewing earlier generations. No simulation is needed.
+Large examples may take longer to open while their saved data is prepared.
+
+Every result is retained. To keep the download manageable, trajectory
+files are stored losslessly compressed; the app reconstructs them
+automatically. You do not need to unpack files or manage archive parts.
+
+Use **Load into Configure** to run an editable copy. The copy is your own
+run and never replaces the read-only example. Batch examples include every
+kept replicate's full results and the shared batch summary.
 
 ### If the window closes but `fim` keeps running
 

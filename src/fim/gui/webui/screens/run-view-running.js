@@ -350,15 +350,14 @@ function drawProgressPanels(payload) {
     // draw from it, since the very first push after "Show pair" is
     // clicked can still land before the *next* one carries a fresh
     // `pairPanel` for it.
-    if (showingLiveDemePair && payload.pairPanel) {
-        drawScatter(runCanvas, payload.pairPanel);
+    const panel = showingLiveDemePair && payload.pairPanel
+        ? payload.pairPanel
+        : payload.panels?.[0];
+    if (!panel) {
         return;
     }
-    const panels = payload.panels;
-    if (!panels || panels.length === 0) {
-        return;
-    }
-    drawScatter(runCanvas, panels[0]);
+    window.fim.setGraphAvailable("scatter", true);
+    drawScatter(runCanvas, panel);
 }
 
 /**

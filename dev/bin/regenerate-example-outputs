@@ -15,14 +15,11 @@ with the fresh ones (design doc
 `20261005-claude-opus-5-5-read-only-examples-and-classes-design.md`,
 `selby/restricted`, sections 4.1 and 6):
 
-- a single run: `manifest.json` and `report.json`;
-- a batch (`n_replicates` greater than one): `manifest.json`,
-  `summary.json`, and each kept replicate's `replicate-NNN/manifest.json`
-  and `replicate-NNN/report.json`.
-
-Trajectories, convergence histories, pairwise matrices, and scatter plots
-are never copied: they can be gigabytes, and the desktop app can rebuild
-them by running the example again.
+Every result artifact is retained, including trajectories, convergence
+histories, pairwise matrices, and scatter plots, for each kept replicate
+of a batch too. JSONL files are losslessly gzip-compressed and split into
+parts of at most 50 MiB. The desktop app restores them automatically
+when opening the completed example; no rerun is required.
 
 Out-of-the-box defaults. The command line carries nothing but the
 configuration, the output directory, and `--quiet`, so every setting the
@@ -71,8 +68,6 @@ _REEXEC_SENTINEL = "FIM_REGENERATE_EXAMPLE_OUTPUTS_REEXECED"
 
 # The committed outputs (design §4.1). A batch keeps `summary.json` at its
 # top level and one `replicate-NNN/` subdirectory per kept replicate.
-TOP_LEVEL_OUTPUT_NAMES = ("manifest.json", "report.json", "summary.json")
-REPLICATE_OUTPUT_NAMES = ("manifest.json", "report.json")
 REPLICATE_PREFIX = "replicate-"
 
 
@@ -102,6 +97,9 @@ _ensure_project_interpreter()
 
 import yaml  # noqa: E402 -- must follow the interpreter bootstrap above
 
+sys.path.insert(0, str(ROOT / "src"))
+from fim.examples.artifacts import copy_outputs, output_files  # noqa: E402
+
 
 @dataclass(frozen=True)
 class Example:
@@ -130,17 +128,14 @@ def clear_outputs(directory: Path) -> None:
     Args:
         directory: The example directory.
     """
-    # Top-level outputs.
-    for name in TOP_LEVEL_OUTPUT_NAMES:
-        (directory / name).unlink(missing_ok=True)
+    for path in output_files(directory):
+        path.unlink()
 
     # Replicate subdirectories hold only outputs; remove their output
     # files, then the directory once it is empty.
     for replicate in sorted(directory.glob(f"{REPLICATE_PREFIX}*")):
         if not replicate.is_dir():
             continue
-        for name in REPLICATE_OUTPUT_NAMES:
-            (replicate / name).unlink(missing_ok=True)
         if not any(replicate.iterdir()):
             replicate.rmdir()
 
@@ -169,39 +164,6 @@ def command_for(example: Example, output: Path, workers: int | None) -> list[str
     if workers is not None and example.engine_backend == "lineal":
         command += ["--workers", str(workers)]
     return command
-
-
-def copy_outputs(source: Path, directory: Path) -> list[str]:
-    """Copy a fresh run's committed outputs into an example directory.
-
-    Args:
-        source: The fresh run's output directory.
-        directory: The example directory, already cleared.
-
-    Returns:
-        The copied paths, relative to the example directory, sorted.
-    """
-    copied: list[str] = []
-
-    # Top-level outputs: whichever of the three the run wrote.
-    for name in TOP_LEVEL_OUTPUT_NAMES:
-        path = source / name
-        if path.is_file():
-            shutil.copyfile(path, directory / name)
-            copied.append(name)
-
-    # Each kept replicate's own manifest and report.
-    for replicate in sorted(source.glob(f"{REPLICATE_PREFIX}*")):
-        if not replicate.is_dir():
-            continue
-        target = directory / replicate.name
-        target.mkdir(exist_ok=True)
-        for name in REPLICATE_OUTPUT_NAMES:
-            path = replicate / name
-            if path.is_file():
-                shutil.copyfile(path, target / name)
-                copied.append(f"{replicate.name}/{name}")
-    return sorted(copied)
 
 
 def discover_examples() -> list[Example]:
@@ -341,10 +303,13 @@ def regenerate(example: Example, scratch: Path, workers: int | None) -> bool:
         )
         return False
 
-    # Replace the committed outputs, then drop the large files.
+    # Finish compression before replacing any committed files.
+    archived = scratch / f"{example.example_id}-archived"
+    copy_outputs(output, archived)
     clear_outputs(example.directory)
-    copied = copy_outputs(output, example.directory)
-    shutil.rmtree(output, ignore_errors=True)
+    copied = copy_outputs(archived, example.directory)
+    shutil.rmtree(output)
+    shutil.rmtree(archived)
     print(
         f"regenerate-example-outputs: {example.example_id}: {len(copied)} file(s) "
         f"in {elapsed:.0f} s",

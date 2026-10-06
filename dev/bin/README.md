@@ -281,8 +281,8 @@ without editing it.
 (one directory with a `README.md` is one example) and the class list in
 `doc/examples/classes.yaml`, and writes the desktop app's bundled copy:
 `src/fim/gui/webui/examples/catalog.json`, plus a copy of each example's
-committed output files (`manifest.json`, `report.json`, `summary.json`,
-and each replicate's `manifest.json`/`report.json`; never a trajectory).
+complete committed result artifacts, including every kept replicate's
+outputs and the compressed JSONL archive parts.
 
 **Why it matters:** The packaged app carries only `src/fim/gui/webui/`,
 not `doc/`. The Examples dialog reads this catalog, so it must match the
@@ -753,11 +753,14 @@ files -- used by the freshness check described above.
 `python -m fim.launcher run doc/examples/<id>/config.yaml --output <temporary
 directory> --quiet`, with the results directory pointed at a temporary
 directory, and then replaces the example's committed output files with
-the fresh ones: `manifest.json` and `report.json` for a single run, or
-`manifest.json`, `summary.json`, and each replicate's
-`manifest.json`/`report.json` for a batch. Trajectories, convergence
-histories, pairwise matrices, and scatter plots are never copied. A
-failed run leaves the example's files as they were.
+the fresh ones: every artifact of a single run, or the batch manifest,
+summary, and every kept replicate's complete artifacts. Trajectories,
+convergence histories, and sigma-band JSONL data are losslessly
+gzip-compressed into parts no larger than 50 MiB. Pairwise matrices and
+scatter plots are retained too. Opening the example restores JSONL data
+automatically and verifies its original manifest digests; no rerun or
+manual unpacking is needed. A failed run leaves the example's files as
+they were.
 
 **Why it matters:** The desktop app ships these files as read-only
 example runs, and `test/test_doc_examples.py` (slow) fails when a fresh

@@ -7,9 +7,11 @@ returns plain coordinate data (`doc/fim-gui-design.md` §8), not rendered
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from pathlib import Path
 
 import numpy as np
+import pytest
 import yaml
 
 from fim import cli
@@ -17,6 +19,7 @@ from fim.gui import animation, batch_runner
 from fim.model.params import SimulationParams
 from fim.model.state import ModelState
 from fim.persistence.manifest import read_batch_manifest, read_manifest
+from fim.persistence.store import TrajectoryRow
 from fim.reanalyze import group_rows_by_generation
 from fim.viz.scatter import frequency_points
 
@@ -157,6 +160,39 @@ def test_pre_render_frames_matches_select_sample_generations(tmp_path: Path) -> 
         assert frame.frequency_spectrum is not None
         assert frame.frequency_spectrum["title"] == "Allele-frequency spectrum"
         assert len(frame.frequency_spectrum["bins"]) == 20
+
+
+def test_frame_sampling_retains_only_selected_generations(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Opening long examples keeps sampled states, not every trajectory row."""
+    output = _write_run(tmp_path)
+    manifest = read_manifest(output / "manifest.json")
+    retained: list[int] = []
+
+    def selected_rows(
+        trajectory_path: Path,
+        run_id: str,
+        *,
+        generations: Sequence[int] | None = None,
+    ) -> dict[int, list[TrajectoryRow]]:
+        """Require the sampler to supply its bounded set before reading rows."""
+        assert generations is not None
+        assert len(set(generations)) <= 3
+        grouped = group_rows_by_generation(
+            trajectory_path, run_id, generations=generations
+        )
+        retained.extend(grouped)
+        return grouped
+
+    monkeypatch.setattr(animation, "group_rows_by_generation", selected_rows)
+    frames = animation.pre_render_frames(
+        output / "trajectory.jsonl", manifest.params(), manifest.run_id, max_frames=3
+    )
+    assert retained == [frame.generation for frame in frames]
+    assert len(frames) == 3
+    assert frames[0].generation == 0
+    assert frames[-1].generation == manifest.generation
 
 
 def test_pre_render_frames_are_sorted_ascending_by_generation(tmp_path: Path) -> None:

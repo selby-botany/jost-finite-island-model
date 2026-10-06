@@ -332,6 +332,62 @@ def test_run_button_starts_a_real_run_that_pushes_live_progress(
     assert settled["neSText"] != ""
 
 
+@pytest.mark.parametrize("is_batch", [False, True])
+@pytest.mark.parametrize("selected_pair", [False, True])
+def test_live_scatter_returns_after_the_graph_stage_is_reset(
+    is_batch: bool, selected_pair: bool
+) -> None:
+    """Scalar and batch progress restore scatter availability, for either pair."""
+    window = create_window(hidden=True)
+    outcome: queue.Queue[dict[str, Any]] = queue.Queue(maxsize=1)
+    statistics = (
+        {"D": {"mean": "0.2", "low": "0.1", "high": "0.3", "sampleCount": 2}}
+        if is_batch
+        else {"D": "0.2"}
+    )
+
+    def _drive() -> None:
+        try:
+            _wait_for_input_screen_ready(window)
+            outcome.put(
+                window.evaluate_js(
+                    "(function () {"
+                    f" window.fim.enterRunningState({json.dumps(is_batch)});"
+                    " window.fim.resetGraphStage();"
+                    f" showingLiveDemePair = {json.dumps(selected_pair)};"
+                    " const panel = {kind: 'frequency', title: 'Demes 1 and 2',"
+                    "   x_label: 'Deme 1', y_label: 'Deme 2',"
+                    "   points: [{x: 0.2, y: 0.4, count: 1, common: true}]};"
+                    " const payload = {generation: 1, meanReportedGeneration: 1,"
+                    "   maxGenerations: 10, demeCount: 2, statistics: {},"
+                    "   panels: [panel], pairPanel: panel};"
+                    f" payload.statistics = {json.dumps(statistics)};"
+                    f" window.fim.{'onBatchProgress' if is_batch else 'onRunProgress'}"
+                    "(payload);"
+                    " payload.generation = 2; payload.meanReportedGeneration = 2;"
+                    f" window.fim.{'onBatchProgress' if is_batch else 'onRunProgress'}"
+                    "(payload);"
+                    " return {available: availableGraphKeys().includes('scatter'),"
+                    "   hidden: document.getElementById('run-scatter-card').hidden,"
+                    "   disabled: document.querySelector("
+                    "     '#run-graph-menu-list input[value=scatter]').disabled,"
+                    "   chosen: document.querySelector("
+                    "     '#run-graph-menu-list input[value=scatter]').checked};"
+                    "})()"
+                )
+            )
+        finally:
+            window.destroy()
+
+    webview.start(_drive)
+    assert outcome.get(timeout=_OUTCOME_TIMEOUT_SECONDS) == {
+        "available": True,
+        "hidden": False,
+        "disabled": False,
+        "chosen": True,
+    }
+
+
 def test_a_live_runs_own_done_payload_sets_its_trajectory_path(
     fast_scalar_run_settings: Path,
 ) -> None:

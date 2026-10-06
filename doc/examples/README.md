@@ -5,7 +5,10 @@ the `fim` validation suite. Every example has its own directory with a
 `README.md`, a `config.yaml`, and the committed output of its own run:
 `manifest.json` and `report.json` for a single run, or `manifest.json`,
 `summary.json`, and one `replicate-NNN/` directory per replicate for a
-batch. Trajectories are not committed; they can be gigabytes.
+batch. Every result artifact is retained, including scatter plots, pairwise
+matrices, convergence histories, and full trajectories. JSONL files are
+losslessly compressed and split into parts no larger than 50 MiB for Git.
+The desktop app restores them automatically when you open an example.
 
 The desktop app ships every example as a read-only run in its Examples
 experiment, grouped by the classes in [`classes.yaml`](classes.yaml)
@@ -20,8 +23,11 @@ fim run doc/examples/<example>/config.yaml \
     --output results/<example> --quiet
 ```
 
-The `report.json` (or `summary.json`) you get matches the one in the
-example's directory exactly. Most examples finish in about a second to
+The `report.json` (or `summary.json`) you get matches the reference for
+the same backend and numerical environment. Vector results can differ
+across platforms because of BLAS reduction rounding; their statistical
+comparison is described in the vector example's README.
+Most examples finish in about a second to
 about a minute on ordinary development hardware. The calibration
 examples take longer: Dear-Nolan low about 20 to 25 minutes, Golden Part VI
 about ten minutes, and Dear-Nolan high about two minutes.

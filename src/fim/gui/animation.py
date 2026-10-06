@@ -44,7 +44,7 @@ from fim.gui.literature_visuals import (
 from fim.model.params import SimulationParams
 from fim.model.state import ModelState
 from fim.persistence.store import TrajectoryRow
-from fim.reanalyze import group_rows_by_generation
+from fim.reanalyze import group_rows_by_generation, trajectory_generations
 from fim.viz.scatter import FloatArray, frequency_points, pooled_frequency_points
 
 GUI_ANIMATION_MAX_FRAMES: Final = 100
@@ -109,8 +109,9 @@ def pre_render_frames(
         directly from the persisted rows, nothing written to disk and
         nothing for the caller to close.
     """
-    grouped = group_rows_by_generation(trajectory_path, run_id)
-    sampled = select_sample_generations(sorted(grouped), max_frames)
+    available = trajectory_generations(trajectory_path, run_id)
+    sampled = select_sample_generations(available, max_frames)
+    grouped = group_rows_by_generation(trajectory_path, run_id, generations=sampled)
     frames: list[AnimationFrame] = []
     for generation in sampled:
         state = ModelState.from_rows(grouped[generation], params.loci)
@@ -127,7 +128,7 @@ def pre_render_frames(
     logger.debug(
         "pre-rendered %d animation frame(s) from %d persisted generation(s) in %s",
         len(frames),
-        len(grouped),
+        len(available),
         trajectory_path,
     )
     return frames
@@ -177,15 +178,25 @@ def pre_render_batch_frames(
         already uses, no batch-specific client shape needed. Empty if
         no replicate has persisted anything yet.
     """
-    per_replicate: list[tuple[list[int], dict[int, list[TrajectoryRow]]]] = []
+    available_replicates: list[tuple[str, Path, list[int]]] = []
     for run_id, trajectory_path in replicates:
-        grouped = group_rows_by_generation(trajectory_path, run_id)
-        if grouped:
-            per_replicate.append((sorted(grouped), grouped))
-    if not per_replicate:
+        generations = trajectory_generations(trajectory_path, run_id)
+        if generations:
+            available_replicates.append((run_id, trajectory_path, generations))
+    if not available_replicates:
         return []
-    max_generation = max(generations[-1] for generations, _ in per_replicate)
+    max_generation = max(generations[-1] for _, _, generations in available_replicates)
     sampled = select_sample_generations(range(max_generation + 1), max_frames)
+    per_replicate: list[tuple[list[int], dict[int, list[TrajectoryRow]]]] = []
+    for run_id, trajectory_path, generations in available_replicates:
+        selected = [
+            generations[bisect.bisect_right(generations, generation) - 1]
+            for generation in sampled
+        ]
+        grouped = group_rows_by_generation(
+            trajectory_path, run_id, generations=selected
+        )
+        per_replicate.append((generations, grouped))
     frames: list[AnimationFrame] = []
     for generation in sampled:
         states = []

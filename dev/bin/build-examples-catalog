@@ -9,10 +9,9 @@ app carries (`packaging/fim.spec` already bundles all of `webui/`):
   ID, name, description, class, README text, a plain-text README
   excerpt, the configuration's YAML text (or `null` when the example has
   no `config.yaml`), and the list of bundled output files.
-- A copy of each example's committed output files: `manifest.json`,
-  `report.json`, and `summary.json` at the top of the example
-  directory, and `manifest.json`/`report.json` inside each replicate
-  subdirectory. Trajectories are never copied.
+- A copy of every committed run artifact, including each replicate's
+  outputs and the losslessly compressed, split JSONL archives. Opening
+  an example restores these archives automatically.
 
 Labels. An example's `config.yaml` may carry `name`, `description`, and
 `class`. When it does not, the name is the README's first heading, the
@@ -88,6 +87,7 @@ import yaml  # noqa: E402 -- must follow the interpreter bootstrap above
 # not fim is installed in the interpreter running it (the pre-commit hook
 # runs it with plain `python3`).
 sys.path.insert(0, str(ROOT / "src"))
+from fim.examples.artifacts import output_files  # noqa: E402
 from fim.examples.classes import RunClass  # noqa: E402 -- after the sys.path insert
 from fim.examples.classes import read_class_tree as read_classes_file  # noqa: E402
 
@@ -110,11 +110,6 @@ UNCLASSIFIED_CLASS = {
     "description": "Examples not yet assigned to a class.",
     "children": [],
 }
-
-# Output files copied into the bundle (design §4.1). A batch has
-# `summary.json` at its top level and one subdirectory per replicate.
-TOP_LEVEL_OUTPUT_NAMES = ("manifest.json", "report.json", "summary.json")
-REPLICATE_OUTPUT_NAMES = ("manifest.json", "report.json")
 
 # How much README text the dialog shows beside an example.
 EXCERPT_MAX_CHARACTERS = 700
@@ -337,17 +332,10 @@ def _label(configuration: Mapping[str, Any], key: str, example_id: str) -> str |
 
 def _output_files(directory: Path) -> dict[str, bytes]:
     """Return the example's committed output files, by relative path."""
-    files: dict[str, bytes] = {}
-    for name in TOP_LEVEL_OUTPUT_NAMES:
-        path = directory / name
-        if path.is_file():
-            files[name] = path.read_bytes()
-    for replicate in sorted(path for path in directory.iterdir() if path.is_dir()):
-        for name in REPLICATE_OUTPUT_NAMES:
-            path = replicate / name
-            if path.is_file():
-                files[f"{replicate.name}/{name}"] = path.read_bytes()
-    return files
+    return {
+        path.relative_to(directory).as_posix(): path.read_bytes()
+        for path in output_files(directory)
+    }
 
 
 def read_class_tree(path: Path) -> list[dict[str, Any]]:

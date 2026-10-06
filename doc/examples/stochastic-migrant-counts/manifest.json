@@ -32,7 +32,7 @@
     "reason": "statistic converged",
     "statistic": "D"
   },
-  "ended_at": "2026-10-06T12:09:42.076596Z",
+  "ended_at": "2026-10-06T17:51:13.462739Z",
   "engine_backend": "lineal",
   "equilibrium_final_heterozygosity": null,
   "equilibrium_generation_count": null,
@@ -80,5 +80,5 @@
   "sigma_band_multiplier": null,
   "sigma_band_window": null,
   "software_version": "1.2.0",
-  "started_at": "2026-10-06T12:09:19.232477Z"
+  "started_at": "2026-10-06T17:50:08.440849Z"
 }
