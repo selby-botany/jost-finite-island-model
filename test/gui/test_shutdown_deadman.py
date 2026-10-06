@@ -42,6 +42,7 @@ from pathlib import Path
 
 import pytest
 import webview
+from conftest import join_or_fail, readline_or_fail
 from webview.menu import MenuAction
 
 from fim import logging_setup
@@ -91,8 +92,10 @@ def _run_child_until_exit(
     The child prints `marker` (one line, flushed) just before arming the
     mechanism under test. Everything before it -- starting an interpreter
     and importing `fim.gui.app`, about 13 seconds on a loaded machine --
-    is waited for without a deadline, since its length depends on machine
-    load rather than on the commit. Only the interval after the marker,
+    is waited for without a timing budget, since its length depends on
+    machine load rather than on the commit; only the completion-signal
+    backstop (`conftest.readline_or_fail`) bounds it, so a child that
+    never starts fails instead of hanging. Only the interval after the marker,
     which is the mechanism's own bounded exit, is held to
     `budget_seconds`; that interval is what these tests are about.
 
@@ -105,6 +108,8 @@ def _run_child_until_exit(
         The child's exit status, its whole stdout, and its whole stderr.
 
     Raises:
+        AssertionError: If the child neither prints a line nor exits
+            before the completion-signal backstop; it is killed first.
         subprocess.TimeoutExpired: If the child outlives `budget_seconds`
             after `marker`; the child is killed first.
     """
@@ -115,10 +120,9 @@ def _run_child_until_exit(
         text=True,
         cwd=str(_REPOSITORY_ROOT),
     )
-    assert process.stdout is not None
-    # Blocks until the marker line, or end of file if the child died
+    # Waits for the marker line, or end of file if the child died
     # before printing it (then `communicate` below returns at once).
-    first_line = process.stdout.readline()
+    first_line = readline_or_fail(process, f"child start-up (marker {marker!r})")
     try:
         stdout, stderr = process.communicate(timeout=budget_seconds)
     except subprocess.TimeoutExpired:
@@ -333,10 +337,11 @@ def test_in_flight_bridge_threads_ignores_a_finished_bridge_thread() -> None:
     finished = _make_bridge_thread(release)
     finished.start()
     release.set()
-    # Unbounded: a timed join could return with the thread still alive
-    # on a loaded machine, and the assertion would then be about the
-    # scheduler rather than about `in_flight_bridge_threads`.
-    finished.join()
+    # No timing budget: a timed join could return with the thread still
+    # alive on a loaded machine, and the assertion would then be about
+    # the scheduler rather than about `in_flight_bridge_threads`. Only the
+    # completion-signal backstop bounds it.
+    join_or_fail(finished, "released bridge thread")
 
     assert app_module.in_flight_bridge_threads([finished]) == []
 

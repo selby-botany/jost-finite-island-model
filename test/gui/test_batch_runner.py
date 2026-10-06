@@ -5,14 +5,15 @@ background threads, real `fim.engine.fim` batch calls (in parallel, real
 OS processes, `doc/fim-gui-design.md` §7.2), and the real filesystem, the
 same technical shape as `test/gui/test_runner.py`.
 
-Every test waits for the batch's worker thread with an unbounded
-`thread.join()` — the real completion signal — never `join(timeout=...)`.
-A batch spawns real worker processes, and how long those take to start
-depends on how busy the machine is, not on the commit: under `-n auto`
-on a loaded machine, a 30-second join returned while the batch was still
-running, and the assertions that followed read a half-built tree. A
-hang is bounded by CI's own `timeout-minutes`, the project's documented
-place for wall-clock budgets (`.github/workflows/ci.yml`).
+Every test waits for the batch's worker thread to end — the real
+completion signal — never for a timing budget. A batch spawns real
+worker processes, and how long those take to start depends on how busy
+the machine is, not on the commit: under `-n auto` on a loaded machine,
+a 30-second join returned while the batch was still running, and the
+assertions that followed read a half-built tree. The join is bounded
+only by `conftest.COMPLETION_BACKSTOP_SECONDS` (`join_or_fail`), a hang
+backstop far above any load-dependent duration, so a broken batch fails
+naming the thread instead of hanging the suite.
 """
 
 from __future__ import annotations
@@ -21,13 +22,13 @@ import json
 import os
 import queue
 import threading
-import time
 from collections.abc import Callable
 from dataclasses import replace
 from datetime import UTC, datetime
 from pathlib import Path
 
 import pytest
+from conftest import join_or_fail, poll_or_fail
 
 from fim.engine import Clock, SimulationOutput, replicate_summary
 from fim.engine import fim as engine_fim
@@ -46,10 +47,10 @@ def batch_params(tiny_params: SimulationParams) -> SimulationParams:
 class _ConcurrentStartClock:
     """Block each worker at its first timestamp until another worker arrives.
 
-    The wait has no deadline. It used to give up after 10 seconds, which
-    made the outcome depend on how quickly the operating system started
-    the *second* worker process — under `-n auto` on a loaded machine
-    that alone can take longer, and the gate then reported "not
+    The wait has no timing budget. It used to give up after 10 seconds,
+    which made the outcome depend on how quickly the operating system
+    started the *second* worker process — under `-n auto` on a loaded
+    machine that alone can take longer, and the gate then reported "not
     concurrent" for a batch that was. Sequential execution is instead
     rejected structurally, without a clock:
 
@@ -57,7 +58,9 @@ class _ConcurrentStartClock:
       the test's own process, which `__call__` detects by process ID and
       rejects at once.
     - A pool that runs replicates one at a time can never release the
-      gate, so that regression hangs; CI's `timeout-minutes` bounds it.
+      gate. Only `conftest.COMPLETION_BACKSTOP_SECONDS`, a hang backstop
+      far above any load-dependent start-up time, ends that wait, with
+      a failure naming the gate.
     """
 
     def __init__(self, arrival_directory: Path, *, release_at: int) -> None:
@@ -82,6 +85,8 @@ class _ConcurrentStartClock:
         Raises:
             RuntimeError: If called in the test's own process, meaning the
                 batch ran in-process rather than in worker processes.
+            AssertionError: If the other workers never arrive before the
+                completion-signal backstop.
         """
         if self._released:
             return datetime.now(UTC)
@@ -93,8 +98,12 @@ class _ConcurrentStartClock:
         (self._arrival_directory / str(os.getpid())).touch()
         # Polls a filesystem condition; the poll interval affects only
         # how soon the gate notices, never whether it releases.
-        while len(list(self._arrival_directory.iterdir())) < self._release_at:
-            time.sleep(0.01)
+        poll_or_fail(
+            lambda: len(list(self._arrival_directory.iterdir())),
+            lambda arrived: arrived >= self._release_at,
+            "concurrency gate (other batch workers arriving)",
+            interval=0.01,
+        )
         self._released = True
         return datetime.now(UTC)
 
@@ -157,7 +166,7 @@ def test_start_batch_run_succeeds_for_a_non_lineal_engine_backend(
     thread = batch_runner.start_batch_run(
         params, output_directory, message_queue, threading.Event()
     )
-    thread.join()
+    join_or_fail(thread, "batch thread")
 
     assert {path.name for path in output_directory.iterdir()} == {
         "replicate-001",
@@ -181,7 +190,7 @@ def test_start_batch_run_writes_every_replicate_and_batch_artifact_on_success(
     thread = batch_runner.start_batch_run(
         batch_params, output_directory, message_queue, threading.Event()
     )
-    thread.join()
+    join_or_fail(thread, "batch thread")
 
     assert {path.name for path in output_directory.iterdir()} == {
         "replicate-001",
@@ -235,7 +244,7 @@ def test_start_batch_run_records_matching_digests_in_the_published_manifest(
     thread = batch_runner.start_batch_run(
         batch_params, output_directory, message_queue, threading.Event()
     )
-    thread.join()
+    join_or_fail(thread, "batch thread")
 
     manifest = read_batch_manifest(output_directory / "manifest.json")
     assert manifest.artifacts is not None
@@ -258,7 +267,7 @@ def test_start_batch_run_summary_matches_replicate_summary(
     thread = batch_runner.start_batch_run(
         batch_params, output_directory, message_queue, threading.Event()
     )
-    thread.join()
+    join_or_fail(thread, "batch thread")
 
     done = _drain(message_queue)[-1]
     assert done[0] == "done"
@@ -303,7 +312,7 @@ def test_start_batch_run_prunes_orphan_replicate_directories(
     thread = batch_runner.start_batch_run(
         batch_params, output_directory, message_queue, threading.Event(), max_workers=4
     )
-    thread.join()
+    join_or_fail(thread, "batch thread")
 
     manifest = read_batch_manifest(output_directory / "manifest.json")
     expected_directories = {
@@ -332,7 +341,7 @@ def test_start_batch_run_leaves_no_temporary_sibling_after_a_successful_publish(
     thread = batch_runner.start_batch_run(
         batch_params, output_directory, message_queue, threading.Event()
     )
-    thread.join()
+    join_or_fail(thread, "batch thread")
 
     assert {path.name for path in tmp_path.iterdir()} == {"output"}
 
@@ -366,7 +375,7 @@ def test_cancel_during_batch_leaves_no_output_directory(
     thread = batch_runner.start_batch_run(
         batch_params, output_directory, message_queue, cancel_event
     )
-    thread.join()
+    join_or_fail(thread, "batch thread")
 
     assert not output_directory.exists()
     assert {path.name for path in tmp_path.iterdir()} == set()
@@ -455,7 +464,7 @@ def test_start_batch_run_passes_a_real_worker_count_to_fim(
     thread = batch_runner.start_batch_run(
         batch_params, output_directory, queue.Queue(), threading.Event()
     )
-    thread.join()
+    join_or_fail(thread, "batch thread")
 
     assert captured["max_workers"] == batch_runner.default_max_workers()
 
@@ -477,7 +486,7 @@ def test_start_batch_run_respects_an_explicit_max_workers_override(
         threading.Event(),
         max_workers=2,
     )
-    thread.join()
+    join_or_fail(thread, "batch thread")
 
     assert captured["max_workers"] == 2
 
@@ -503,7 +512,7 @@ def test_batch_replicates_actually_run_concurrently(
     Concurrent execution releases without depending on sampled
     wall-clock overlap; in-process execution fails at once (see
     `_ConcurrentStartClock` for how each sequential regression is
-    caught without a deadline).
+    caught without a timing budget).
 
     `max_workers=2` explicitly, rather than the default of one worker
     per core: the gate needs exactly two workers, so this keeps the test
@@ -553,7 +562,7 @@ def test_batch_replicates_actually_run_concurrently(
         threading.Event(),
         max_workers=2,
     )
-    thread.join()
+    join_or_fail(thread, "batch thread")
 
     outcome = _drain(message_queue)[-1]
     assert outcome[0] == "done", outcome

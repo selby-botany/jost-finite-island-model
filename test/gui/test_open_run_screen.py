@@ -38,6 +38,7 @@ from typing import Any
 import pytest
 import webview
 import yaml
+from conftest import poll_or_fail
 
 from fim import cli
 from fim import paths as paths_module
@@ -220,12 +221,13 @@ def _poll_until(
 
 
 def _wait_until(window: webview.Window, script: str) -> Any:
-    """Evaluate `script` repeatedly, with no deadline, until it is truthy.
+    """Evaluate `script` repeatedly, with no timing budget, until it is truthy.
 
     For a JavaScript-side completion signal that always arrives -- one
     set at the end of an async bridge call -- where `_poll_until`'s fixed
     attempt count would make the result depend on machine load rather
-    than on the commit. CI's `timeout-minutes` bounds a genuine hang.
+    than on the commit. Only the completion-signal backstop
+    (`conftest.poll_or_fail`) bounds it.
 
     Args:
         window: The window to evaluate `script` in.
@@ -233,10 +235,16 @@ def _wait_until(window: webview.Window, script: str) -> Any:
 
     Returns:
         `script`'s first truthy value.
+
+    Raises:
+        AssertionError: If `script` is still falsy at the backstop.
     """
-    while not (value := window.evaluate_js(script)):
-        time.sleep(_POLL_INTERVAL_SECONDS)
-    return value
+    return poll_or_fail(
+        lambda: window.evaluate_js(script),
+        bool,
+        f"JavaScript condition {script!r}",
+        interval=_POLL_INTERVAL_SECONDS,
+    )
 
 
 def _expand_all_recent_run_groups(window: webview.Window) -> None:
@@ -290,8 +298,9 @@ def _expand_all_recent_run_groups(window: webview.Window) -> None:
         # the DOM) -- every run now belongs to some real Study, the
         # always-present default one at worst (`20260918-claude-sonnet-5-
         # home-tree-reorg-design.md`, `selby/restricted`, §1/§2), so this
-        # loop hits that await on every call. Wait, with no deadline, for
-        # every such fetch to land and re-render before the next round:
+        # loop hits that await on every call. Wait, with no timing budget
+        # (only the completion-signal backstop), for every such fetch to
+        # land and re-render before the next round:
         # `window.__fimGroupTogglesPending` is decremented in the
         # handler's `finally`, so it always returns to zero. This used to
         # sleep a fixed 0.15 seconds instead; on a loaded machine the
@@ -301,8 +310,12 @@ def _expand_all_recent_run_groups(window: webview.Window) -> None:
         # replicate-row" null). How long a bridge call takes depends on
         # machine load, not on the commit; the rounds themselves are a
         # bound on the tree's depth, not on time.
-        while window.evaluate_js("window.__fimGroupTogglesPending"):
-            time.sleep(_POLL_INTERVAL_SECONDS)
+        poll_or_fail(
+            lambda: window.evaluate_js("window.__fimGroupTogglesPending"),
+            lambda pending: not pending,
+            "Study toggle fetches (window.__fimGroupTogglesPending)",
+            interval=_POLL_INTERVAL_SECONDS,
+        )
         remaining = window.evaluate_js(
             "document.querySelectorAll("
             "'.open-run-group-toggle[aria-expanded=\"false\"]').length"
@@ -901,7 +914,7 @@ def test_expanding_a_batch_row_shows_its_own_replicate_list(
             )
             # `toggleBatchRow` sets `aria-expanded` only once its own
             # `get_batch_replicate_summary` call has landed and the rows
-            # are in place; waited for with no deadline, not polled for a
+            # are in place; waited for with no timing budget, not polled for a
             # row count under a fixed attempt budget.
             _wait_until(
                 window,

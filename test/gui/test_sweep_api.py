@@ -2,12 +2,13 @@
 
 A sweep runs on a background thread. Tests wait for that thread's real
 end — the busy guard `start_sweep` sets before returning and the thread
-clears in its own `finally`, however the sweep ended — with no deadline,
-then assert how it ended (`_FakeWindow.finished`). These used to wait up
-to 60 seconds for the `sweep_done` push; how long a sweep takes depends
-on machine load, not on the commit, so a timed wait made the result
-depend on what else the machine was doing. CI's `timeout-minutes`
-bounds a genuine hang.
+clears in its own `finally`, however the sweep ended — with no timing
+budget, then assert how it ended (`_FakeWindow.finished`). These used to
+wait up to 60 seconds for the `sweep_done` push; how long a sweep takes
+depends on machine load, not on the commit, so a timed wait made the
+result depend on what else the machine was doing. Only
+`conftest.COMPLETION_BACKSTOP_SECONDS`, a hang backstop far above any
+load-dependent duration, bounds the wait, failing with a named message.
 """
 
 from __future__ import annotations
@@ -19,6 +20,7 @@ from pathlib import Path
 from typing import Any
 
 import pytest
+from conftest import poll_or_fail
 
 from fim import paths
 from fim.gui import app as app_module
@@ -270,11 +272,16 @@ def _wait_until_idle(api: Api) -> None:
 
     `start_sweep`/`resume_sweep` set the guard before returning and the
     sweep thread clears it in its own `finally`, after its last push, so
-    this returns once the sweep has ended however it ended. Polling has
-    no deadline; the interval affects only how soon this notices.
+    this returns once the sweep has ended however it ended. The interval
+    affects only how soon this notices; the completion-signal backstop
+    (`conftest.poll_or_fail`) fails a sweep that never ends.
     """
-    while api._sweep_cancel_event is not None:
-        threading.Event().wait(_IDLE_POLL_SECONDS)
+    poll_or_fail(
+        lambda: api._sweep_cancel_event,
+        lambda guard: guard is None,
+        "sweep thread (busy guard release)",
+        interval=_IDLE_POLL_SECONDS,
+    )
 
 
 def test_resuming_something_that_is_not_a_sweep_is_refused(

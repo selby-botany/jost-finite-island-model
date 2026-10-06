@@ -7,8 +7,10 @@ filesystem directly — the `gui` pytest marker (this project's own,
 "constructs real Tk widgets; needs a display") does not apply to any of it.
 Nothing here sleeps or races on wall-clock timing (the determinism
 contract, `doc/fim-gui-design.md` §7.1): each test waits for the worker
-thread with an unbounded `thread.join()`, never `join(timeout=...)`,
-whose result would depend on machine load rather than on the commit.
+thread to end, never for a timing budget whose result would depend on
+machine load rather than on the commit. The join is bounded only by
+`conftest.COMPLETION_BACKSTOP_SECONDS` (`join_or_fail`), a hang backstop
+far above any load-dependent duration.
 
 `test_cancel_during_run_leaves_no_output_directory`, a dedicated
 integration test, lives in its own commit and is not part of this file.
@@ -21,6 +23,7 @@ import threading
 from pathlib import Path
 
 import pytest
+from conftest import join_or_fail
 
 from fim.engine import RunResult
 from fim.gui import runner
@@ -93,7 +96,7 @@ def test_start_run_writes_the_six_documented_artifacts_on_success(
     thread = runner.start_run(
         tiny_params, output_directory, message_queue, threading.Event()
     )
-    thread.join()
+    join_or_fail(thread, "run thread")
 
     assert {path.name for path in output_directory.iterdir()} == {
         "trajectory.jsonl",
@@ -158,7 +161,7 @@ def test_start_run_records_matching_digests_in_the_published_manifest(
     thread = runner.start_run(
         tiny_params, output_directory, message_queue, threading.Event()
     )
-    thread.join()
+    join_or_fail(thread, "run thread")
 
     manifest = read_manifest(output_directory / "manifest.json")
     assert manifest.artifacts is not None
@@ -181,7 +184,7 @@ def test_start_run_leaves_no_temporary_sibling_after_a_successful_publish(
     thread = runner.start_run(
         tiny_params, output_directory, message_queue, threading.Event()
     )
-    thread.join()
+    join_or_fail(thread, "run thread")
 
     assert {path.name for path in tmp_path.iterdir()} == {"output"}
 
@@ -219,7 +222,7 @@ def test_cancel_during_run_leaves_no_output_directory(
     thread = runner.start_run(
         tiny_params, output_directory, message_queue, cancel_event
     )
-    thread.join()
+    join_or_fail(thread, "run thread")
 
     assert not output_directory.exists()
     assert {path.name for path in tmp_path.iterdir()} == set()

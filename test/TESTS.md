@@ -181,6 +181,188 @@ interpreter with completely empty stderr. `pytest_unconfigure` runs at
 the end of the session while the interpreter is still fully alive, which
 is the last moment ordinary Python code is guaranteed to run.
 
+Also holds `COMPLETION_BACKSTOP_SECONDS` and its helpers (`join_or_fail`,
+`wait_or_fail`, `poll_or_fail`, `readline_or_fail`): the one bound, shared
+by every test that waits for a real completion signal, that turns a hang
+into a failure naming what never finished. Test modules import them with
+`from conftest import ...`, as `test/test_shutdown_diagnostics.py`
+already imports this module.
+
+<a id="test.conftest.COMPLETION_BACKSTOP_SECONDS"></a>
+
+#### COMPLETION\_BACKSTOP\_SECONDS
+
+The one bound on every wait for a real completion signal in this suite.
+
+A hang backstop, not a timing budget. Tests that wait for work whose
+duration depends on machine load -- a batch's worker processes, a sweep,
+a window's page load -- wait on the work's own completion signal (a
+thread's end, an event, a flag the code clears in a `finally`), never on
+a guess at how long it takes. Unbounded, though, a genuinely broken run
+hangs the test, its xdist worker and a local pre-commit run instead of
+failing. This bound turns that hang into a failure that names what never
+finished (`backstop_message`).
+
+It must stay far above anything a loaded machine needs: the slowest
+waits observed under a heavily loaded `-n auto` run were tens of
+seconds. A test that trips it on a healthy commit has found a real
+defect or a missing completion signal, not a reason to raise it.
+
+`FIM_TEST_COMPLETION_BACKSTOP` (seconds) overrides it, for a machine or
+CI runner slow enough to need more, or a tiny value to watch the
+backstop fire.
+
+<a id="test.conftest.Waitable"></a>
+
+## Waitable Objects
+
+```python
+class Waitable(Protocol)
+```
+
+An event-like completion signal: `threading.Event`, pywebview's own.
+
+<a id="test.conftest.Waitable.wait"></a>
+
+#### wait
+
+```python
+def wait(timeout: float | None = None) -> bool
+```
+
+Block until set or `timeout` passes; return whether it is set.
+
+<a id="test.conftest.backstop_message"></a>
+
+#### backstop\_message
+
+```python
+def backstop_message(what: str) -> str
+```
+
+Name what did not finish within `COMPLETION_BACKSTOP_SECONDS`.
+
+**Arguments**:
+
+- `what` - The thing waited for, e.g. "batch thread".
+  
+
+**Returns**:
+
+  The failure message every completion-signal backstop raises.
+
+<a id="test.conftest.join_or_fail"></a>
+
+#### join\_or\_fail
+
+```python
+def join_or_fail(thread: threading.Thread, what: str) -> None
+```
+
+Join `thread`, failing if it outlives `COMPLETION_BACKSTOP_SECONDS`.
+
+**Arguments**:
+
+- `thread` - A started thread whose end is the completion signal.
+- `what` - The thing waited for, named in the failure.
+  
+
+**Returns**:
+
+  None
+  
+
+**Raises**:
+
+- `AssertionError` - If `thread` is still alive at the backstop.
+
+<a id="test.conftest.poll_or_fail"></a>
+
+#### poll\_or\_fail
+
+```python
+def poll_or_fail(read: Callable[[], T], is_done: Callable[[T], bool],
+                 what: str, *, interval: float) -> T
+```
+
+Call `read` every `interval` seconds until `is_done` accepts its value.
+
+The interval affects only how soon the end is noticed; the deadline
+is `COMPLETION_BACKSTOP_SECONDS`, a hang backstop.
+
+**Arguments**:
+
+- `read` - Reads the completion signal's current value.
+- `is_done` - Whether a value read means the work has finished.
+- `what` - The thing waited for, named in the failure.
+- `interval` - Seconds to sleep between reads.
+  
+
+**Returns**:
+
+  The first value `is_done` accepts.
+  
+
+**Raises**:
+
+- `AssertionError` - If no accepted value is read before the backstop;
+  the message includes the last value observed.
+
+<a id="test.conftest.readline_or_fail"></a>
+
+#### readline\_or\_fail
+
+```python
+def readline_or_fail(process: subprocess.Popen[str], what: str) -> str
+```
+
+Read `process`'s first stdout line, failing at the backstop.
+
+For a child interpreter whose start-up (interpreter launch, imports)
+is waited for without a timing budget: it prints one flushed line
+once it is up. A child that never prints it and never exits is
+killed, and the wait fails instead of hanging.
+
+**Arguments**:
+
+- `process` - A child started with `stdout=subprocess.PIPE, text=True`.
+- `what` - The thing waited for, named in the failure.
+  
+
+**Returns**:
+
+  The line, with its newline, or "" if the child exited first.
+  
+
+**Raises**:
+
+- `AssertionError` - If neither happens before the backstop.
+
+<a id="test.conftest.wait_or_fail"></a>
+
+#### wait\_or\_fail
+
+```python
+def wait_or_fail(event: Waitable, what: str) -> None
+```
+
+Wait for `event`, failing if it is not set by the backstop.
+
+**Arguments**:
+
+- `event` - The completion signal.
+- `what` - The thing waited for, named in the failure.
+  
+
+**Returns**:
+
+  None
+  
+
+**Raises**:
+
+- `AssertionError` - If `event` is still unset at the backstop.
+
 <a id="test.conftest.pytest_collection_modifyitems"></a>
 
 #### pytest\_collection\_modifyitems
@@ -2422,8 +2604,9 @@ genuine regression fails as a timeout rather than hanging this suite
 in turn -- the one failure mode this whole file exists to make
 impossible. That budget counts only from the child's "work finished"
 line: interpreter start-up and imports before it are waited for
-without a deadline, since their length depends on machine load (about
-13 seconds on a loaded machine), not on the commit.
+without a timing budget, since their length depends on machine load
+(about 13 seconds on a loaded machine), not on the commit; only the
+completion-signal backstop (`conftest.readline_or_fail`) bounds them.
 
 <a id="test.test_sweep"></a>
 
@@ -7593,13 +7776,15 @@ own JS.
 - `poll_attempts` - How many times to re-evaluate `read` (and, if
   given, `ready`), each `_POLL_INTERVAL_SECONDS` apart, before
   giving up. `None` polls until `is_ready` accepts, with no
-- `deadline` - for a `trigger` whose work takes as long as the
-  machine's load makes it (a worker process, a simulation),
+  timing budget -- for a `trigger` whose work takes as long as
+  the machine's load makes it (a worker process, a simulation),
   where a fixed attempt count would make the result depend on
   that load rather than on the commit. Such a `trigger` must
   write *something* `is_ready` accepts on failure too (catch a
   rejected bridge call and write its error), so the wait always
-  ends; CI's `timeout-minutes` bounds a genuine hang.
+  ends; only the completion-signal backstop
+  (`conftest.COMPLETION_BACKSTOP_SECONDS`) bounds it, raising
+  instead of hanging.
 - `timeout` - Seconds to wait for `webview.start` itself to return
   after the drive callback finishes, before failing loudly
   rather than hanging the test session.
@@ -7617,7 +7802,9 @@ own JS.
 **Raises**:
 
 - `AssertionError` - If `webview.start` did not return within
-  `timeout` after the drive callback finished.
+  `timeout` after the drive callback finished, or, with
+  `poll_attempts=None`, if `ready` or `read` never settled
+  before the completion-signal backstop.
 
 <a id="gui.conftest.drive"></a>
 
@@ -11920,14 +12107,15 @@ background threads, real `fim.engine.fim` batch calls (in parallel, real
 OS processes, `doc/fim-gui-design.md` §7.2), and the real filesystem, the
 same technical shape as `test/gui/test_runner.py`.
 
-Every test waits for the batch's worker thread with an unbounded
-`thread.join()` — the real completion signal — never `join(timeout=...)`.
-A batch spawns real worker processes, and how long those take to start
-depends on how busy the machine is, not on the commit: under `-n auto`
-on a loaded machine, a 30-second join returned while the batch was still
-running, and the assertions that followed read a half-built tree. A
-hang is bounded by CI's own `timeout-minutes`, the project's documented
-place for wall-clock budgets (`.github/workflows/ci.yml`).
+Every test waits for the batch's worker thread to end — the real
+completion signal — never for a timing budget. A batch spawns real
+worker processes, and how long those take to start depends on how busy
+the machine is, not on the commit: under `-n auto` on a loaded machine,
+a 30-second join returned while the batch was still running, and the
+assertions that followed read a half-built tree. The join is bounded
+only by `conftest.COMPLETION_BACKSTOP_SECONDS` (`join_or_fail`), a hang
+backstop far above any load-dependent duration, so a broken batch fails
+naming the thread instead of hanging the suite.
 
 <a id="gui.test_batch_runner.batch_params"></a>
 
@@ -11950,10 +12138,10 @@ class _ConcurrentStartClock()
 
 Block each worker at its first timestamp until another worker arrives.
 
-The wait has no deadline. It used to give up after 10 seconds, which
-made the outcome depend on how quickly the operating system started
-the *second* worker process — under `-n auto` on a loaded machine
-that alone can take longer, and the gate then reported "not
+The wait has no timing budget. It used to give up after 10 seconds,
+which made the outcome depend on how quickly the operating system
+started the *second* worker process — under `-n auto` on a loaded
+machine that alone can take longer, and the gate then reported "not
 concurrent" for a batch that was. Sequential execution is instead
 rejected structurally, without a clock:
 
@@ -11961,7 +12149,9 @@ rejected structurally, without a clock:
   the test's own process, which `__call__` detects by process ID and
   rejects at once.
 - A pool that runs replicates one at a time can never release the
-  gate, so that regression hangs; CI's `timeout-minutes` bounds it.
+  gate. Only `conftest.COMPLETION_BACKSTOP_SECONDS`, a hang backstop
+  far above any load-dependent start-up time, ends that wait, with
+  a failure naming the gate.
 
 <a id="gui.test_batch_runner._ConcurrentStartClock.__init__"></a>
 
@@ -11994,6 +12184,8 @@ Return the current UTC time, gating once at worker start.
 
 - `RuntimeError` - If called in the test's own process, meaning the
   batch ran in-process rather than in worker processes.
+- `AssertionError` - If the other workers never arrive before the
+  completion-signal backstop.
 
 <a id="gui.test_batch_runner.test_replicate_index_recovers_the_ordinal_from_the_run_id"></a>
 
@@ -12221,7 +12413,7 @@ PID marker and blocks until a second worker reaches the same point.
 Concurrent execution releases without depending on sampled
 wall-clock overlap; in-process execution fails at once (see
 `_ConcurrentStartClock` for how each sequential regression is
-caught without a deadline).
+caught without a timing budget).
 
 `max_workers=2` explicitly, rather than the default of one worker
 per core: the gate needs exactly two workers, so this keeps the test
@@ -18483,8 +18675,10 @@ filesystem directly — the `gui` pytest marker (this project's own,
 "constructs real Tk widgets; needs a display") does not apply to any of it.
 Nothing here sleeps or races on wall-clock timing (the determinism
 contract, `doc/fim-gui-design.md` §7.1): each test waits for the worker
-thread with an unbounded `thread.join()`, never `join(timeout=...)`,
-whose result would depend on machine load rather than on the commit.
+thread to end, never for a timing budget whose result would depend on
+machine load rather than on the commit. The join is bounded only by
+`conftest.COMPLETION_BACKSTOP_SECONDS` (`join_or_fail`), a hang backstop
+far above any load-dependent duration.
 
 `test_cancel_during_run_leaves_no_output_directory`, a dedicated
 integration test, lives in its own commit and is not part of this file.
@@ -20194,12 +20388,13 @@ Tests for the sweep bridge calls on `fim.gui.app.Api` (no real window).
 
 A sweep runs on a background thread. Tests wait for that thread's real
 end — the busy guard `start_sweep` sets before returning and the thread
-clears in its own `finally`, however the sweep ended — with no deadline,
-then assert how it ended (`_FakeWindow.finished`). These used to wait up
-to 60 seconds for the `sweep_done` push; how long a sweep takes depends
-on machine load, not on the commit, so a timed wait made the result
-depend on what else the machine was doing. CI's `timeout-minutes`
-bounds a genuine hang.
+clears in its own `finally`, however the sweep ended — with no timing
+budget, then assert how it ended (`_FakeWindow.finished`). These used to
+wait up to 60 seconds for the `sweep_done` push; how long a sweep takes
+depends on machine load, not on the commit, so a timed wait made the
+result depend on what else the machine was doing. Only
+`conftest.COMPLETION_BACKSTOP_SECONDS`, a hang backstop far above any
+load-dependent duration, bounds the wait, failing with a named message.
 
 <a id="gui.test_sweep_api.results"></a>
 

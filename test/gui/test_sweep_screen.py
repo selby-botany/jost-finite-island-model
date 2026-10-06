@@ -15,6 +15,7 @@ from typing import Any
 
 import pytest
 import webview
+from conftest import poll_or_fail
 
 from fim.gui.app import await_bridge_threads
 from fim.persistence import groups
@@ -94,16 +95,24 @@ def _drive(window: webview.Window, steps: Callable[[Poll], Any]) -> Any:
         try:
             poll_until(_READY, lambda value: value is True)
             outcome.put(steps(poll_until))
+        except AssertionError as error:
+            # A completion-signal backstop failure (`_wait_for_sweep_
+            # finished`) is raised on the test's own thread, not lost on
+            # pywebview's.
+            outcome.put(error)
         finally:
             await_bridge_threads()
             window.destroy()
 
     webview.start(run)
-    return outcome.get(timeout=10.0)
+    result = outcome.get(timeout=10.0)
+    if isinstance(result, AssertionError):
+        raise result
+    return result
 
 
 def _wait_for_sweep_finished(window: webview.Window) -> None:
-    """Poll until the sweep screen says its sweep has ended, with no deadline.
+    """Poll until the sweep screen says its sweep has ended, with no budget.
 
     `window.__fimSweepFinished` turns true on the sweep's `sweep_done`,
     `sweep_cancelled` or error push (`sweep.js`'s `finishSweep`), so this
@@ -111,17 +120,24 @@ def _wait_for_sweep_finished(window: webview.Window) -> None:
     poll, which a sweep of real runs outlasted on a loaded machine: the
     test then went on while points were still running ("0 of 2 points
     finished ... not run yet", a Study with no runs yet). How long a
-    sweep takes depends on machine load, not on the commit; CI's
-    `timeout-minutes` bounds a genuine hang.
+    sweep takes depends on machine load, not on the commit; only the
+    completion-signal backstop (`conftest.poll_or_fail`) bounds the wait.
 
     Args:
         window: The window whose sweep screen is running a sweep.
 
     Returns:
         None
+
+    Raises:
+        AssertionError: If the sweep has not ended at the backstop.
     """
-    while window.evaluate_js("window.__fimSweepFinished") is not True:
-        time.sleep(_POLL_INTERVAL_SECONDS)
+    poll_or_fail(
+        lambda: window.evaluate_js("window.__fimSweepFinished"),
+        lambda finished: finished is True,
+        "sweep (window.__fimSweepFinished)",
+        interval=_POLL_INTERVAL_SECONDS,
+    )
 
 
 def _plan_ready(state: Any) -> bool:

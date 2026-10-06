@@ -30,6 +30,7 @@ from pathlib import Path
 from types import FrameType
 
 import pytest
+from conftest import COMPLETION_BACKSTOP_SECONDS, backstop_message
 
 from fim.gui import app as app_module
 
@@ -190,17 +191,22 @@ def test_a_real_sigterm_is_handled_instead_of_killing_the_process(
         print("cancel_event set:", api._cancel_event.is_set(), flush=True)
         """
     )
-    # No `timeout`: nothing here is about how long the child takes, and
-    # most of that time is starting an interpreter and importing
+    # No timing budget: nothing here is about how long the child takes,
+    # and most of that time is starting an interpreter and importing
     # `fim.gui.app` -- about 13 seconds on a loaded machine, against the
-    # 30 this used to allow. CI's `timeout-minutes` bounds a real hang.
-    completed = subprocess.run(
-        [sys.executable, "-c", program],
-        capture_output=True,
-        text=True,
-        check=False,
-        cwd=str(_REPOSITORY_ROOT),
-    )
+    # 30 this used to allow. Only the completion-signal backstop bounds
+    # it, so a child that hangs fails instead of hanging this suite.
+    try:
+        completed = subprocess.run(
+            [sys.executable, "-c", program],
+            capture_output=True,
+            text=True,
+            check=False,
+            cwd=str(_REPOSITORY_ROOT),
+            timeout=COMPLETION_BACKSTOP_SECONDS,
+        )
+    except subprocess.TimeoutExpired as error:
+        raise AssertionError(backstop_message("SIGTERM child interpreter")) from error
 
     assert "ready" in completed.stdout
     assert "survived SIGTERM" in completed.stdout

@@ -15,6 +15,7 @@ from pathlib import Path
 from typing import Any
 
 import pytest
+from conftest import COMPLETION_BACKSTOP_SECONDS, backstop_message
 
 from fim import paths
 from fim.model.params import SimulationParams
@@ -468,14 +469,16 @@ def test_concurrency_respects_a_worker_limit_and_a_request() -> None:
 class _Barrier:
     """A runner that only finishes once `parties` points are in flight together.
 
-    The barrier has no timeout: a 30-second one made "not concurrent" a
-    statement about how quickly a loaded machine scheduled the point
-    threads. A sweep that runs points one at a time never fills the
-    barrier and hangs instead, which CI's `timeout-minutes` bounds.
+    The barrier has no timing budget: a 30-second one made "not
+    concurrent" a statement about how quickly a loaded machine scheduled
+    the point threads. A sweep that runs points one at a time never fills
+    the barrier; only `conftest.COMPLETION_BACKSTOP_SECONDS`, a hang
+    backstop far above any scheduling delay, ends that wait, and the
+    point fails naming the barrier (`run_sweep` re-raises it).
     """
 
     def __init__(self, parties: int) -> None:
-        self.barrier = threading.Barrier(parties)
+        self.barrier = threading.Barrier(parties, timeout=COMPLETION_BACKSTOP_SECONDS)
         self.local = LocalPointRunner()
         self.workers: list[int | None] = []
 
@@ -487,7 +490,12 @@ class _Barrier:
         max_workers: int | None = None,
     ) -> Path | PointFailure:
         self.workers.append(max_workers)
-        self.barrier.wait()
+        try:
+            self.barrier.wait()
+        except threading.BrokenBarrierError as error:
+            raise AssertionError(
+                backstop_message("concurrency barrier (points in flight together)")
+            ) from error
         return self.local.run_point(params, cancel_event, on_message, max_workers)
 
 
@@ -497,7 +505,7 @@ def test_points_really_run_at_the_same_time(results: Path) -> None:
 
     outcome, events = _run(study_id, runner, points_at_once=3)
 
-    # All three reached the barrier together, or `wait` would never return.
+    # All three reached the barrier together, or `wait` would have failed.
     assert (outcome.done, outcome.failed) == (3, 0)
     finished = [e.position for e in events if e.kind == "point_done"]
     assert sorted(finished) == [1, 2, 3]

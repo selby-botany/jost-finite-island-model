@@ -28,6 +28,7 @@ import threading
 from pathlib import Path
 
 import conftest
+from conftest import join_or_fail, readline_or_fail
 
 _REPOSITORY_ROOT = Path(__file__).resolve().parent.parent
 
@@ -78,10 +79,11 @@ def test_live_non_daemon_threads_finds_a_thread_that_blocks_shutdown() -> None:
         assert blocker in conftest.report_live_non_daemon_threads()
     finally:
         release.set()
-        # Unbounded: a timed join could return with the thread still
-        # alive on a loaded machine, failing the assertions below for a
-        # reason that is about the scheduler, not the code.
-        blocker.join()
+        # No timing budget: a timed join could return with the thread
+        # still alive on a loaded machine, failing the assertions below
+        # for a reason that is about the scheduler, not the code. Only
+        # the completion-signal backstop bounds it.
+        join_or_fail(blocker, "released blocker thread")
     assert not blocker.is_alive()
     assert blocker not in conftest.live_non_daemon_threads()
 
@@ -141,8 +143,9 @@ def test_a_real_hung_interpreter_is_reported_and_bounded() -> None:
     in turn -- the one failure mode this whole file exists to make
     impossible. That budget counts only from the child's "work finished"
     line: interpreter start-up and imports before it are waited for
-    without a deadline, since their length depends on machine load (about
-    13 seconds on a loaded machine), not on the commit.
+    without a timing budget, since their length depends on machine load
+    (about 13 seconds on a loaded machine), not on the commit; only the
+    completion-signal backstop (`conftest.readline_or_fail`) bounds them.
     """
     program = textwrap.dedent(
         """
@@ -167,9 +170,9 @@ def test_a_real_hung_interpreter_is_reported_and_bounded() -> None:
         env={"FIM_TEST_SHUTDOWN_TIMEOUT": "5", "PATH": "/usr/bin:/bin"},
         cwd=str(_REPOSITORY_ROOT),
     )
-    assert process.stdout is not None
-    # Start-up: no deadline. Returns "" instead if the child died first.
-    first_line = process.stdout.readline()
+    # Start-up: no timing budget, only the completion-signal backstop.
+    # Returns "" instead if the child died first.
+    first_line = readline_or_fail(process, "child start-up ('work finished')")
     try:
         _stdout, stderr = process.communicate(timeout=120)
     except subprocess.TimeoutExpired:

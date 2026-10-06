@@ -22,6 +22,13 @@ never reached at all -- the first version of this file hung a child
 interpreter with completely empty stderr. `pytest_unconfigure` runs at
 the end of the session while the interpreter is still fully alive, which
 is the last moment ordinary Python code is guaranteed to run.
+
+Also holds `COMPLETION_BACKSTOP_SECONDS` and its helpers (`join_or_fail`,
+`wait_or_fail`, `poll_or_fail`, `readline_or_fail`): the one bound, shared
+by every test that waits for a real completion signal, that turns a hang
+into a failure naming what never finished. Test modules import them with
+`from conftest import ...`, as `test/test_shutdown_diagnostics.py`
+already imports this module.
 """
 
 from __future__ import annotations
@@ -30,10 +37,13 @@ import faulthandler
 import json
 import logging
 import os
+import subprocess
 import sys
 import threading
+import time
 from collections.abc import Callable, Iterator
 from pathlib import Path
+from typing import Protocol
 
 import numpy as np
 import pytest
@@ -57,6 +67,160 @@ settings.load_profile("deterministic")
 # only has to be longer than a legitimately slow teardown (flushing
 # coverage data, joining a briefly-busy worker) to avoid a false kill.
 _SHUTDOWN_TIMEOUT_SECONDS = float(os.environ.get("FIM_TEST_SHUTDOWN_TIMEOUT", "120"))
+
+COMPLETION_BACKSTOP_SECONDS = float(
+    os.environ.get("FIM_TEST_COMPLETION_BACKSTOP", "120")
+)
+"""The one bound on every wait for a real completion signal in this suite.
+
+A hang backstop, not a timing budget. Tests that wait for work whose
+duration depends on machine load -- a batch's worker processes, a sweep,
+a window's page load -- wait on the work's own completion signal (a
+thread's end, an event, a flag the code clears in a `finally`), never on
+a guess at how long it takes. Unbounded, though, a genuinely broken run
+hangs the test, its xdist worker and a local pre-commit run instead of
+failing. This bound turns that hang into a failure that names what never
+finished (`backstop_message`).
+
+It must stay far above anything a loaded machine needs: the slowest
+waits observed under a heavily loaded `-n auto` run were tens of
+seconds. A test that trips it on a healthy commit has found a real
+defect or a missing completion signal, not a reason to raise it.
+
+`FIM_TEST_COMPLETION_BACKSTOP` (seconds) overrides it, for a machine or
+CI runner slow enough to need more, or a tiny value to watch the
+backstop fire.
+"""
+
+
+class Waitable(Protocol):
+    """An event-like completion signal: `threading.Event`, pywebview's own."""
+
+    def wait(self, timeout: float | None = None) -> bool:
+        """Block until set or `timeout` passes; return whether it is set."""
+        ...
+
+
+def backstop_message(what: str) -> str:
+    """Name what did not finish within `COMPLETION_BACKSTOP_SECONDS`.
+
+    Args:
+        what: The thing waited for, e.g. "batch thread".
+
+    Returns:
+        The failure message every completion-signal backstop raises.
+    """
+    return (
+        f"{what} did not finish within {COMPLETION_BACKSTOP_SECONDS:g} s "
+        "(completion-signal backstop)"
+    )
+
+
+def join_or_fail(thread: threading.Thread, what: str) -> None:
+    """Join `thread`, failing if it outlives `COMPLETION_BACKSTOP_SECONDS`.
+
+    Args:
+        thread: A started thread whose end is the completion signal.
+        what: The thing waited for, named in the failure.
+
+    Returns:
+        None
+
+    Raises:
+        AssertionError: If `thread` is still alive at the backstop.
+    """
+    thread.join(COMPLETION_BACKSTOP_SECONDS)
+    if thread.is_alive():
+        raise AssertionError(backstop_message(what))
+
+
+def poll_or_fail[T](
+    read: Callable[[], T],
+    is_done: Callable[[T], bool],
+    what: str,
+    *,
+    interval: float,
+) -> T:
+    """Call `read` every `interval` seconds until `is_done` accepts its value.
+
+    The interval affects only how soon the end is noticed; the deadline
+    is `COMPLETION_BACKSTOP_SECONDS`, a hang backstop.
+
+    Args:
+        read: Reads the completion signal's current value.
+        is_done: Whether a value read means the work has finished.
+        what: The thing waited for, named in the failure.
+        interval: Seconds to sleep between reads.
+
+    Returns:
+        The first value `is_done` accepts.
+
+    Raises:
+        AssertionError: If no accepted value is read before the backstop;
+            the message includes the last value observed.
+    """
+    deadline = time.monotonic() + COMPLETION_BACKSTOP_SECONDS
+    while True:
+        value = read()
+        if is_done(value):
+            return value
+        if time.monotonic() >= deadline:
+            raise AssertionError(
+                f"{backstop_message(what)}; last observed value: {value!r}"
+            )
+        time.sleep(interval)
+
+
+def readline_or_fail(process: subprocess.Popen[str], what: str) -> str:
+    """Read `process`'s first stdout line, failing at the backstop.
+
+    For a child interpreter whose start-up (interpreter launch, imports)
+    is waited for without a timing budget: it prints one flushed line
+    once it is up. A child that never prints it and never exits is
+    killed, and the wait fails instead of hanging.
+
+    Args:
+        process: A child started with `stdout=subprocess.PIPE, text=True`.
+        what: The thing waited for, named in the failure.
+
+    Returns:
+        The line, with its newline, or "" if the child exited first.
+
+    Raises:
+        AssertionError: If neither happens before the backstop.
+    """
+    assert process.stdout is not None
+    stdout = process.stdout
+    lines: list[str] = []
+    # `readline` on a pipe cannot time out, so it runs on a daemon thread
+    # whose end is the signal; killing the child closes the pipe and ends
+    # that thread too.
+    reader = threading.Thread(target=lambda: lines.append(stdout.readline()))
+    reader.daemon = True
+    reader.start()
+    reader.join(COMPLETION_BACKSTOP_SECONDS)
+    if reader.is_alive():
+        process.kill()
+        process.communicate()
+        raise AssertionError(backstop_message(what))
+    return lines[0]
+
+
+def wait_or_fail(event: Waitable, what: str) -> None:
+    """Wait for `event`, failing if it is not set by the backstop.
+
+    Args:
+        event: The completion signal.
+        what: The thing waited for, named in the failure.
+
+    Returns:
+        None
+
+    Raises:
+        AssertionError: If `event` is still unset at the backstop.
+    """
+    if not event.wait(COMPLETION_BACKSTOP_SECONDS):
+        raise AssertionError(backstop_message(what))
 
 
 def pytest_collection_modifyitems(items: list[pytest.Item]) -> None:

@@ -8,6 +8,7 @@ from typing import Any
 
 import pytest
 import webview
+from conftest import poll_or_fail
 
 from fim import paths
 from fim.gui import app as app_module
@@ -150,13 +151,18 @@ def _wait_idle(instance: Api) -> None:
     thread clears it in its own `finally`, after its terminal push and
     any reproducibility check, so this returns once the run has ended
     however it ended. This used to give up silently after 60 seconds and
-    let the test read a run still in progress; it now has no deadline,
-    since how long a run takes depends on machine load, not on the
-    commit. The poll interval affects only how soon this notices; CI's
-    `timeout-minutes` bounds a genuine hang.
+    let the test read a run still in progress; it now has no timing
+    budget, since how long a run takes depends on machine load, not on
+    the commit. The poll interval affects only how soon this notices;
+    the completion-signal backstop (`conftest.poll_or_fail`) fails a run
+    that never ends, rather than hanging.
     """
-    while instance._run_in_flight:
-        threading.Event().wait(_IDLE_POLL_SECONDS)
+    poll_or_fail(
+        lambda: instance._run_in_flight,
+        lambda in_flight: not in_flight,
+        "run drain thread (in-flight guard release)",
+        interval=_IDLE_POLL_SECONDS,
+    )
 
 
 def test_a_new_software_version_recomputes_and_a_matching_result_replaces_the_old(

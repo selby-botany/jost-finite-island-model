@@ -150,7 +150,7 @@ decide which of the two investigations above it continues.
 
 from __future__ import annotations
 
-import itertools
+import contextlib
 import os
 import queue
 import signal
@@ -162,6 +162,7 @@ from typing import Any
 
 import pytest
 import webview
+from conftest import poll_or_fail, wait_or_fail
 
 from fim import paths as paths_module
 from fim.gui import app as app_module
@@ -418,13 +419,15 @@ def drive_and_read(
         poll_attempts: How many times to re-evaluate `read` (and, if
             given, `ready`), each `_POLL_INTERVAL_SECONDS` apart, before
             giving up. `None` polls until `is_ready` accepts, with no
-            deadline -- for a `trigger` whose work takes as long as the
-            machine's load makes it (a worker process, a simulation),
+            timing budget -- for a `trigger` whose work takes as long as
+            the machine's load makes it (a worker process, a simulation),
             where a fixed attempt count would make the result depend on
             that load rather than on the commit. Such a `trigger` must
             write *something* `is_ready` accepts on failure too (catch a
             rejected bridge call and write its error), so the wait always
-            ends; CI's `timeout-minutes` bounds a genuine hang.
+            ends; only the completion-signal backstop
+            (`conftest.COMPLETION_BACKSTOP_SECONDS`) bounds it, raising
+            instead of hanging.
         timeout: Seconds to wait for `webview.start` itself to return
             after the drive callback finishes, before failing loudly
             rather than hanging the test session.
@@ -438,29 +441,40 @@ def drive_and_read(
 
     Raises:
         AssertionError: If `webview.start` did not return within
-            `timeout` after the drive callback finished.
+            `timeout` after the drive callback finished, or, with
+            `poll_attempts=None`, if `ready` or `read` never settled
+            before the completion-signal backstop.
     """
     outcome: queue.Queue[Any] = queue.Queue(maxsize=1)
 
-    def attempts() -> Iterable[int]:
-        # A fresh iterable per polling loop; unbounded for `None`.
-        return itertools.count() if poll_attempts is None else range(poll_attempts)
+    def poll(script: str, accept: Callable[[Any], bool], what: str) -> Any:
+        # `poll_attempts=None` waits on the completion signal itself,
+        # bounded only by the backstop, which raises naming `what`.
+        if poll_attempts is None:
+            return poll_or_fail(
+                lambda: target_window.evaluate_js(script),
+                accept,
+                what,
+                interval=_POLL_INTERVAL_SECONDS,
+            )
+        value: Any = None
+        for _ in range(poll_attempts):
+            value = target_window.evaluate_js(script)
+            if accept(value):
+                break
+            time.sleep(_POLL_INTERVAL_SECONDS)
+        return value
 
     def _drive() -> None:
         try:
             if ready is not None:
-                for _ in attempts():
-                    if target_window.evaluate_js(ready):
-                        break
-                    time.sleep(_POLL_INTERVAL_SECONDS)
+                poll(ready, bool, f"ready condition {ready!r}")
             target_window.evaluate_js(trigger)
-            value: Any = None
-            for _ in attempts():
-                value = target_window.evaluate_js(read)
-                if is_ready(value):
-                    break
-                time.sleep(_POLL_INTERVAL_SECONDS)
-            outcome.put(value)
+            outcome.put(poll(read, is_ready, f"result {read!r} of {trigger!r}"))
+        except AssertionError as error:
+            # A backstop failure is handed to the test's own thread and
+            # raised there, rather than lost on pywebview's thread.
+            outcome.put(error)
         finally:
             # Same ordering rule as the `window` fixture's own teardown:
             # settle in-flight bridge calls before destroying the window,
@@ -470,12 +484,15 @@ def drive_and_read(
 
     webview.start(_drive)
     try:
-        return outcome.get(timeout=timeout)
+        result = outcome.get(timeout=timeout)
     except queue.Empty as error:
         raise AssertionError(
             f"webview.start's driver thread never returned a result within "
             f"{timeout}s for trigger={trigger!r}"
         ) from error
+    if isinstance(result, AssertionError):
+        raise result
+    return result
 
 
 @pytest.fixture
@@ -552,13 +569,17 @@ def _drive_only_once_windows_have_loaded(monkeypatch: pytest.MonkeyPatch) -> Non
     empty result queue.
 
     This wraps `webview.start` so the drive function first waits, with
-    no deadline, for every window that already exists to be shown and
-    loaded; pywebview's own 20-second waits then return at once. `loaded`
-    rather than the private ready event: pywebview sets `loaded` on its
-    error path too, so a page that fails to load still ends this wait and
-    fails at the next call instead of hanging. CI's `timeout-minutes`
-    bounds a genuine hang. A test that patches `webview.start` itself
-    still wins, since its patch is applied after this one.
+    no timing budget, for every window that already exists to be shown
+    and loaded; pywebview's own 20-second waits then return at once.
+    `loaded` rather than the private ready event: pywebview sets `loaded`
+    on its error path too, so a page that fails to load still ends this
+    wait and fails at the next call instead of hanging. Only the
+    completion-signal backstop (`conftest.COMPLETION_BACKSTOP_SECONDS`)
+    bounds each wait: a window that never loads skips the drive function,
+    is destroyed so `webview.start` returns, and the test fails from
+    `webview.start` naming the event that never fired. A test that
+    patches `webview.start` itself still wins, since its patch is applied
+    after this one.
     """
     real_start = webview.start
 
@@ -573,14 +594,32 @@ def _drive_only_once_windows_have_loaded(monkeypatch: pytest.MonkeyPatch) -> Non
             return
         windows = list(webview.windows)
         drive_function = func
+        failures: list[AssertionError] = []
 
         def after_load(*drive_args: Any) -> None:
-            for target in windows:
-                target.events.shown.wait()
-                target.events.loaded.wait()
+            try:
+                for target in windows:
+                    wait_or_fail(
+                        target.events.shown, f"window {target.uid} 'shown' event"
+                    )
+                    wait_or_fail(
+                        target.events.loaded, f"window {target.uid} 'loaded' event"
+                    )
+            except AssertionError as error:
+                # The drive function, which normally destroys its windows,
+                # never runs; destroy them here so `webview.start` returns
+                # and the failure is raised below. pywebview refuses to
+                # destroy a window that was never shown -- best effort.
+                failures.append(error)
+                for target in windows:
+                    with contextlib.suppress(webview.WebViewException):
+                        target.destroy()
+                return
             drive_function(*drive_args)
 
         real_start(after_load, args, *rest, **kwargs)
+        if failures:
+            raise failures[0]
 
     monkeypatch.setattr(webview, "start", start)
 

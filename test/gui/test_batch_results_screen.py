@@ -44,6 +44,7 @@ from typing import Any
 
 import pytest
 import webview
+from conftest import poll_or_fail, wait_or_fail
 
 from fim.gui.app import Api, create_window
 from fim.gui.batch_runner import BatchMessage
@@ -119,7 +120,7 @@ def _wait_for_input_screen_ready(window: webview.Window) -> None:
 
 
 def _wait_until_scrubber_settled(window: webview.Window) -> None:
-    """Poll, with no deadline, until no scrubber frame fetch is in flight.
+    """Poll, with no timing budget, until no scrubber frame fetch is in flight.
 
     `window.__fimScrubberPending` counts the completed view's own
     fire-and-forget frame fetches and is decremented in each one's
@@ -128,22 +129,31 @@ def _wait_until_scrubber_settled(window: webview.Window) -> None:
     reading a half-wired view whenever a loaded machine made the fetch
     slower than that.
 
-    Each test's batch wait is likewise `done_event.wait()` with no
-    timeout: `on_message` sets it on the batch's `done`, `cancelled` or
+    Each test's batch wait is likewise on `done_event` with no timing
+    budget: `on_message` sets it on the batch's `done`, `cancelled` or
     `error` message, so it ends however the batch ends. It used to give
     up after 30 seconds, which a batch of real worker processes outlasted
     under load ("batch never reached done within the wait budget"). How
-    long either takes depends on machine load, not on the commit; CI's
-    `timeout-minutes` bounds a genuine hang.
+    long either takes depends on machine load, not on the commit; only
+    the completion-signal backstop (`conftest.wait_or_fail`,
+    `conftest.poll_or_fail`) bounds either wait, failing with a named
+    message instead of hanging.
 
     Args:
         window: The window showing a completed run.
 
     Returns:
         None
+
+    Raises:
+        AssertionError: If a fetch is still in flight at the backstop.
     """
-    while window.evaluate_js("window.__fimScrubberPending"):
-        time.sleep(_READY_POLL_INTERVAL_SECONDS)
+    poll_or_fail(
+        lambda: window.evaluate_js("window.__fimScrubberPending"),
+        lambda pending: not pending,
+        "scrubber frame fetches (window.__fimScrubberPending)",
+        interval=_READY_POLL_INTERVAL_SECONDS,
+    )
 
 
 def test_batch_trajectory_domain_excludes_a_thin_samples_own_band(
@@ -267,7 +277,7 @@ def test_a_completed_batch_renders_the_run_view(fast_batch_run_settings: Path) -
                 + "document.getElementById('run-button').click();"
             )
             settled = None
-            done_event.wait()
+            wait_or_fail(done_event, "batch (done, cancelled or error message)")
             settled = window.evaluate_js(
                 "({"
                 "runViewState: window.fim.getRunViewState(), "
@@ -371,7 +381,7 @@ def test_a_completed_batchs_own_supplemental_panels_render(
                 + "document.getElementById('run-button').click();"
             )
             settled = None
-            done_event.wait()
+            wait_or_fail(done_event, "batch (done, cancelled or error message)")
             settled = window.evaluate_js(
                 "({"
                 "runViewState: window.fim.getRunViewState(), "
@@ -471,7 +481,7 @@ def test_a_completed_batchs_own_effective_allele_rows_render(
                 + "document.getElementById('run-button').click();"
             )
             settled = None
-            done_event.wait()
+            wait_or_fail(done_event, "batch (done, cancelled or error message)")
             settled = window.evaluate_js(
                 "(function() {"
                 # Shown rows only: statistics left out of the
@@ -538,7 +548,7 @@ def test_a_completed_batchs_own_trajectory_path_stays_unset(
                 + "document.getElementById('run-button').click();"
             )
             settled = None
-            done_event.wait()
+            wait_or_fail(done_event, "batch (done, cancelled or error message)")
             settled = window.evaluate_js(
                 "({"
                 "runViewState: window.fim.getRunViewState(), "
@@ -594,7 +604,7 @@ def test_a_completed_batchs_own_pooled_trajectory_renders(
                 + "document.getElementById('run-button').click();"
             )
             settled = None
-            done_event.wait()
+            wait_or_fail(done_event, "batch (done, cancelled or error message)")
             settled = window.evaluate_js(
                 "({"
                 "runViewState: window.fim.getRunViewState(), "
@@ -676,7 +686,7 @@ def test_a_completed_batchs_own_scrubber_replays_the_pooled_scatter(
                 + "document.getElementById('run-button').click();"
             )
             settled = None
-            done_event.wait()
+            wait_or_fail(done_event, "batch (done, cancelled or error message)")
             _wait_until_scrubber_settled(window)
             before = window.evaluate_js(
                 "({"
@@ -756,7 +766,7 @@ def test_scrubbing_a_completed_batch_moves_every_panel_not_just_the_scatter(
                 + "document.getElementById('run-button').click();"
             )
             settled = None
-            done_event.wait()
+            wait_or_fail(done_event, "batch (done, cancelled or error message)")
             _wait_until_scrubber_settled(window)
             final = {
                 "composition": _snapshot(
@@ -840,7 +850,7 @@ def test_the_ci_meter_names_the_replicate_count_in_its_own_tooltip(
                 + "document.getElementById('run-button').click();"
             )
             tooltip = None
-            done_event.wait()
+            wait_or_fail(done_event, "batch (done, cancelled or error message)")
             tooltip = window.evaluate_js(
                 "document.querySelector('#batch-results-summary-body tr').title"
             )
@@ -911,7 +921,7 @@ def test_batch_deme_pair_selector_switches_to_a_chosen_pair_and_back(
                 set_fields + "document.getElementById('run-button').click();"
             )
             settled = None
-            done_event.wait()
+            wait_or_fail(done_event, "batch (done, cancelled or error message)")
             selector_state = window.evaluate_js(
                 "({"
                 "hidden: document.getElementById("
@@ -1009,7 +1019,7 @@ def test_running_a_batch_again_from_completed_starts_a_new_batch(
                 + "document.getElementById('run-button').click();"
             )
             settled = None
-            first_done.wait()
+            wait_or_fail(first_done, "first batch (done message)")
             first_output_directory = window.evaluate_js(
                 "window.fim.getCompletedOutputDirectory()"
             )
@@ -1022,7 +1032,7 @@ def test_running_a_batch_again_from_completed_starts_a_new_batch(
                 "seed.dispatchEvent(new Event('input', {bubbles: true})); "
                 "document.getElementById('run-button').click();"
             )
-            second_done.wait()
+            wait_or_fail(second_done, "second batch (done message)")
             second_output_directory = window.evaluate_js(
                 "window.fim.getCompletedOutputDirectory()"
             )
@@ -1079,7 +1089,7 @@ def test_open_folder_button_reaches_the_injected_opener_and_settles(
                 + "document.getElementById('run-button').click();"
             )
             settled = False
-            done_event.wait()
+            wait_or_fail(done_event, "batch (done, cancelled or error message)")
             window.evaluate_js("document.getElementById('open-folder-button').click();")
             for _ in range(_READY_POLL_ATTEMPTS):
                 settled = window.evaluate_js("window.__fimOpenFolderSettled === true")
@@ -1143,7 +1153,7 @@ def test_scrubbing_a_completed_batch_moves_the_statistics_panel(
                 + "document.getElementById('run-button').click();"
             )
             settled = None
-            done_event.wait()
+            wait_or_fail(done_event, "batch (done, cancelled or error message)")
             _wait_until_scrubber_settled(window)
             final = window.evaluate_js(read_panel)
             # Frame 0 is the run's own first generation, as far from
@@ -1225,7 +1235,7 @@ def test_a_batch_repaint_keeps_the_scrub_position_marker(
                 + "document.getElementById('run-button').click();"
             )
             settled = None
-            done_event.wait()
+            wait_or_fail(done_event, "batch (done, cancelled or error message)")
             _wait_until_scrubber_settled(window)
             window.evaluate_js(
                 "(function(){"
