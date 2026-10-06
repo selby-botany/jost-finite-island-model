@@ -53,7 +53,6 @@ pytestmark = pytest.mark.gui
 
 _READY_POLL_INTERVAL_SECONDS = 0.05
 _READY_POLL_ATTEMPTS = 200
-_EVENT_WAIT_TIMEOUT_SECONDS = 30.0
 _OUTCOME_TIMEOUT_SECONDS = 40.0
 
 _INPUT_SCREEN_READY = "window.__fimRunViewReady === true"
@@ -117,6 +116,34 @@ def _wait_for_input_screen_ready(window: webview.Window) -> None:
         f"the run view was not ready within "
         f"{_READY_POLL_ATTEMPTS * _READY_POLL_INTERVAL_SECONDS}s"
     )
+
+
+def _wait_until_scrubber_settled(window: webview.Window) -> None:
+    """Poll, with no deadline, until no scrubber frame fetch is in flight.
+
+    `window.__fimScrubberPending` counts the completed view's own
+    fire-and-forget frame fetches and is decremented in each one's
+    `finally` (`run-view-completed.js`), so it always returns to zero.
+    This used to stop polling after 200 attempts and carry on regardless,
+    reading a half-wired view whenever a loaded machine made the fetch
+    slower than that.
+
+    Each test's batch wait is likewise `done_event.wait()` with no
+    timeout: `on_message` sets it on the batch's `done`, `cancelled` or
+    `error` message, so it ends however the batch ends. It used to give
+    up after 30 seconds, which a batch of real worker processes outlasted
+    under load ("batch never reached done within the wait budget"). How
+    long either takes depends on machine load, not on the commit; CI's
+    `timeout-minutes` bounds a genuine hang.
+
+    Args:
+        window: The window showing a completed run.
+
+    Returns:
+        None
+    """
+    while window.evaluate_js("window.__fimScrubberPending"):
+        time.sleep(_READY_POLL_INTERVAL_SECONDS)
 
 
 def test_batch_trajectory_domain_excludes_a_thin_samples_own_band(
@@ -240,38 +267,38 @@ def test_a_completed_batch_renders_the_run_view(fast_batch_run_settings: Path) -
                 + "document.getElementById('run-button').click();"
             )
             settled = None
-            if done_event.wait(timeout=_EVENT_WAIT_TIMEOUT_SECONDS):
-                settled = window.evaluate_js(
-                    "({"
-                    "runViewState: window.fim.getRunViewState(), "
-                    "runId: "
-                    "document.getElementById('results-run-id').textContent, "
-                    "rowCount: "
-                    "document.getElementById('batch-results-table-body')"
-                    ".children.length, "
-                    # Rows actually shown: a statistic left out of the
-                    # "Statistics shown" choice has a hidden row.
-                    "ciBarCount: document.querySelectorAll("
-                    "'#batch-results-summary-body > tr:not([hidden])').length, "
-                    "firstRowCells: Array.from("
-                    "document.getElementById('batch-results-table-body')"
-                    ".children[0].children"
-                    ").map((cell) => cell.textContent), "
-                    "firstRowClass: document.getElementById("
-                    "'batch-results-table-body').children[0].className, "
-                    "taggedCells: document.querySelectorAll("
-                    "'#batch-results-table-body tr:nth-child(2) "
-                    "td[data-statistic]').length, "
-                    "secondRowClass: document.getElementById("
-                    "'batch-results-table-body').children[1].className, "
-                    "secondRowCells: Array.from("
-                    "document.getElementById('batch-results-table-body')"
-                    ".children[1].children"
-                    ").map((cell) => cell.textContent), "
-                    "trajectoryFrameHidden: "
-                    "document.getElementById('run-trajectory-frame').hidden"
-                    "})"
-                )
+            done_event.wait()
+            settled = window.evaluate_js(
+                "({"
+                "runViewState: window.fim.getRunViewState(), "
+                "runId: "
+                "document.getElementById('results-run-id').textContent, "
+                "rowCount: "
+                "document.getElementById('batch-results-table-body')"
+                ".children.length, "
+                # Rows actually shown: a statistic left out of the
+                # "Statistics shown" choice has a hidden row.
+                "ciBarCount: document.querySelectorAll("
+                "'#batch-results-summary-body > tr:not([hidden])').length, "
+                "firstRowCells: Array.from("
+                "document.getElementById('batch-results-table-body')"
+                ".children[0].children"
+                ").map((cell) => cell.textContent), "
+                "firstRowClass: document.getElementById("
+                "'batch-results-table-body').children[0].className, "
+                "taggedCells: document.querySelectorAll("
+                "'#batch-results-table-body tr:nth-child(2) "
+                "td[data-statistic]').length, "
+                "secondRowClass: document.getElementById("
+                "'batch-results-table-body').children[1].className, "
+                "secondRowCells: Array.from("
+                "document.getElementById('batch-results-table-body')"
+                ".children[1].children"
+                ").map((cell) => cell.textContent), "
+                "trajectoryFrameHidden: "
+                "document.getElementById('run-trajectory-frame').hidden"
+                "})"
+            )
             outcome.put(settled)
         finally:
             window.destroy()
@@ -280,8 +307,7 @@ def test_a_completed_batch_renders_the_run_view(fast_batch_run_settings: Path) -
     settled = outcome.get(timeout=_OUTCOME_TIMEOUT_SECONDS)
 
     assert settled is not None, (
-        f"done_event was never set within {_EVENT_WAIT_TIMEOUT_SECONDS}s "
-        f"(messages received: {messages!r})"
+        f"the drive produced no result (messages received: {messages!r})"
     )
     assert settled["runViewState"] == "completed"
     assert settled["runId"].startswith("run-")
@@ -345,46 +371,46 @@ def test_a_completed_batchs_own_supplemental_panels_render(
                 + "document.getElementById('run-button').click();"
             )
             settled = None
-            if done_event.wait(timeout=_EVENT_WAIT_TIMEOUT_SECONDS):
-                settled = window.evaluate_js(
-                    "({"
-                    "runViewState: window.fim.getRunViewState(), "
-                    "compositionHidden: "
-                    "document.getElementById('allele-composition-card').hidden, "
-                    "spectrumHidden: "
-                    "document.getElementById('frequency-spectrum-card').hidden, "
-                    "compositionTitle: "
-                    "document.getElementById('allele-composition-title')"
-                    ".textContent, "
-                    "spectrumTitle: "
-                    "document.getElementById('frequency-spectrum-title')"
-                    ".textContent, "
-                    "ibdHidden: document.getElementById('ibd-card').hidden, "
-                    "layout: (() => {"
-                    "const rect = (selector) => {"
-                    "const el = document.querySelector(selector);"
-                    "const box = el.getBoundingClientRect();"
-                    "const style = getComputedStyle(el);"
-                    "return {"
-                    "left: box.left, top: box.top, right: box.right, "
-                    "bottom: box.bottom, width: box.width, height: box.height, "
-                    "gridColumnStart: style.gridColumnStart, "
-                    "gridRowStart: style.gridRowStart, "
-                    "gridRowEnd: style.gridRowEnd"
-                    "};"
-                    "};"
-                    "return {"
-                    "rowDisplay: getComputedStyle("
-                    "document.getElementById('run-plot-row')).display, "
-                    "scatter: rect('.run-canvas-frame'), "
-                    "trajectory: rect('#run-trajectory-frame'), "
-                    "composition: rect('#allele-composition-card'), "
-                    "spectrum: rect('#frequency-spectrum-card'), "
-                    "stats: rect('#batch-results-summary')"
-                    "};"
-                    "})()"
-                    "})"
-                )
+            done_event.wait()
+            settled = window.evaluate_js(
+                "({"
+                "runViewState: window.fim.getRunViewState(), "
+                "compositionHidden: "
+                "document.getElementById('allele-composition-card').hidden, "
+                "spectrumHidden: "
+                "document.getElementById('frequency-spectrum-card').hidden, "
+                "compositionTitle: "
+                "document.getElementById('allele-composition-title')"
+                ".textContent, "
+                "spectrumTitle: "
+                "document.getElementById('frequency-spectrum-title')"
+                ".textContent, "
+                "ibdHidden: document.getElementById('ibd-card').hidden, "
+                "layout: (() => {"
+                "const rect = (selector) => {"
+                "const el = document.querySelector(selector);"
+                "const box = el.getBoundingClientRect();"
+                "const style = getComputedStyle(el);"
+                "return {"
+                "left: box.left, top: box.top, right: box.right, "
+                "bottom: box.bottom, width: box.width, height: box.height, "
+                "gridColumnStart: style.gridColumnStart, "
+                "gridRowStart: style.gridRowStart, "
+                "gridRowEnd: style.gridRowEnd"
+                "};"
+                "};"
+                "return {"
+                "rowDisplay: getComputedStyle("
+                "document.getElementById('run-plot-row')).display, "
+                "scatter: rect('.run-canvas-frame'), "
+                "trajectory: rect('#run-trajectory-frame'), "
+                "composition: rect('#allele-composition-card'), "
+                "spectrum: rect('#frequency-spectrum-card'), "
+                "stats: rect('#batch-results-summary')"
+                "};"
+                "})()"
+                "})"
+            )
             outcome.put(settled)
         finally:
             window.destroy()
@@ -393,8 +419,7 @@ def test_a_completed_batchs_own_supplemental_panels_render(
     settled = outcome.get(timeout=_OUTCOME_TIMEOUT_SECONDS)
 
     assert settled is not None, (
-        f"done_event was never set within {_EVENT_WAIT_TIMEOUT_SECONDS}s "
-        f"(messages received: {messages!r})"
+        f"the drive produced no result (messages received: {messages!r})"
     )
     assert settled["runViewState"] == "completed"
     assert settled["compositionHidden"] is True
@@ -446,23 +471,23 @@ def test_a_completed_batchs_own_effective_allele_rows_render(
                 + "document.getElementById('run-button').click();"
             )
             settled = None
-            if done_event.wait(timeout=_EVENT_WAIT_TIMEOUT_SECONDS):
-                settled = window.evaluate_js(
-                    "(function() {"
-                    # Shown rows only: statistics left out of the
-                    # "Statistics shown" choice have hidden rows.
-                    "var rows = document.querySelectorAll("
-                    "'#batch-results-summary-body tr:not([hidden])');"
-                    "var within = rows[rows.length - 2];"
-                    "var total = rows[rows.length - 1];"
-                    "return {"
-                    "rowCount: rows.length, "
-                    "withinHtml: within.innerHTML, "
-                    "withinTooltip: within.title, "
-                    "totalHtml: total.innerHTML"
-                    "};"
-                    "})()"
-                )
+            done_event.wait()
+            settled = window.evaluate_js(
+                "(function() {"
+                # Shown rows only: statistics left out of the
+                # "Statistics shown" choice have hidden rows.
+                "var rows = document.querySelectorAll("
+                "'#batch-results-summary-body tr:not([hidden])');"
+                "var within = rows[rows.length - 2];"
+                "var total = rows[rows.length - 1];"
+                "return {"
+                "rowCount: rows.length, "
+                "withinHtml: within.innerHTML, "
+                "withinTooltip: within.title, "
+                "totalHtml: total.innerHTML"
+                "};"
+                "})()"
+            )
             outcome.put(settled)
         finally:
             window.destroy()
@@ -470,9 +495,7 @@ def test_a_completed_batchs_own_effective_allele_rows_render(
     webview.start(_drive)
     settled = outcome.get(timeout=_OUTCOME_TIMEOUT_SECONDS)
 
-    assert settled is not None, (
-        f"done_event was never set within {_EVENT_WAIT_TIMEOUT_SECONDS}s"
-    )
+    assert settled is not None, "the drive produced no result"
     assert settled["rowCount"] == 12
     assert "<sup>H</sup>D<sub>S</sub>" in settled["withinHtml"]
     assert "<sup>H</sup>D<sub>T</sub>" in settled["totalHtml"]
@@ -515,13 +538,13 @@ def test_a_completed_batchs_own_trajectory_path_stays_unset(
                 + "document.getElementById('run-button').click();"
             )
             settled = None
-            if done_event.wait(timeout=_EVENT_WAIT_TIMEOUT_SECONDS):
-                settled = window.evaluate_js(
-                    "({"
-                    "runViewState: window.fim.getRunViewState(), "
-                    "trajectoryPath: window.fim.getCompletedTrajectoryPath()"
-                    "})"
-                )
+            done_event.wait()
+            settled = window.evaluate_js(
+                "({"
+                "runViewState: window.fim.getRunViewState(), "
+                "trajectoryPath: window.fim.getCompletedTrajectoryPath()"
+                "})"
+            )
             outcome.put(settled)
         finally:
             window.destroy()
@@ -571,27 +594,27 @@ def test_a_completed_batchs_own_pooled_trajectory_renders(
                 + "document.getElementById('run-button').click();"
             )
             settled = None
-            if done_event.wait(timeout=_EVENT_WAIT_TIMEOUT_SECONDS):
-                settled = window.evaluate_js(
-                    "({"
-                    "runViewState: window.fim.getRunViewState(), "
-                    "frameHidden: "
-                    "document.getElementById('run-trajectory-frame').hidden, "
-                    "statisticRows: Array.from(document.querySelectorAll("
-                    "'#batch-results-summary tr[data-trajectory-statistic]'"
-                    ")).map((row) => row.dataset.trajectoryStatistic), "
-                    "canvasNonBlank: (function() {"
-                    "  var c = document.getElementById('run-trajectory-canvas');"
-                    "  var ctx = c.getContext('2d');"
-                    "  var data = ctx.getImageData(0, 0, c.width, c.height).data;"
-                    "  var count = 0;"
-                    "  for (var i = 3; i < data.length; i += 4) {"
-                    "    if (data[i] > 0) { count += 1; }"
-                    "  }"
-                    "  return count;"
-                    "})()"
-                    "})"
-                )
+            done_event.wait()
+            settled = window.evaluate_js(
+                "({"
+                "runViewState: window.fim.getRunViewState(), "
+                "frameHidden: "
+                "document.getElementById('run-trajectory-frame').hidden, "
+                "statisticRows: Array.from(document.querySelectorAll("
+                "'#batch-results-summary tr[data-trajectory-statistic]'"
+                ")).map((row) => row.dataset.trajectoryStatistic), "
+                "canvasNonBlank: (function() {"
+                "  var c = document.getElementById('run-trajectory-canvas');"
+                "  var ctx = c.getContext('2d');"
+                "  var data = ctx.getImageData(0, 0, c.width, c.height).data;"
+                "  var count = 0;"
+                "  for (var i = 3; i < data.length; i += 4) {"
+                "    if (data[i] > 0) { count += 1; }"
+                "  }"
+                "  return count;"
+                "})()"
+                "})"
+            )
             outcome.put(settled)
         finally:
             window.destroy()
@@ -599,7 +622,7 @@ def test_a_completed_batchs_own_pooled_trajectory_renders(
     webview.start(_drive)
     settled = outcome.get(timeout=_OUTCOME_TIMEOUT_SECONDS)
 
-    assert settled is not None, "batch never reached done within the wait budget"
+    assert settled is not None, "the drive produced no result"
     assert settled["runViewState"] == "completed"
     assert settled["frameHidden"] is False
     assert sorted(settled["statisticRows"]) == [
@@ -653,30 +676,27 @@ def test_a_completed_batchs_own_scrubber_replays_the_pooled_scatter(
                 + "document.getElementById('run-button').click();"
             )
             settled = None
-            if done_event.wait(timeout=_EVENT_WAIT_TIMEOUT_SECONDS):
-                for _ in range(_READY_POLL_ATTEMPTS):
-                    if not window.evaluate_js("window.__fimScrubberPending"):
-                        break
-                    time.sleep(_READY_POLL_INTERVAL_SECONDS)
-                before = window.evaluate_js(
-                    "({"
-                    "scrubberHidden: "
-                    "document.getElementById('scrubber-controls').hidden, "
-                    "scrubberMax: "
-                    "document.getElementById('scrubber-range').max"
-                    "})"
-                )
-                window.evaluate_js(
-                    "(function(){"
-                    "var range = document.getElementById('scrubber-range');"
-                    "range.value = Math.floor(Number(range.max) / 2);"
-                    "range.dispatchEvent(new Event('input', {bubbles: true}));"
-                    "})();"
-                )
-                after_scrub_label = window.evaluate_js(
-                    "document.getElementById('scrubber-label').textContent"
-                )
-                settled = {"before": before, "afterScrubLabel": after_scrub_label}
+            done_event.wait()
+            _wait_until_scrubber_settled(window)
+            before = window.evaluate_js(
+                "({"
+                "scrubberHidden: "
+                "document.getElementById('scrubber-controls').hidden, "
+                "scrubberMax: "
+                "document.getElementById('scrubber-range').max"
+                "})"
+            )
+            window.evaluate_js(
+                "(function(){"
+                "var range = document.getElementById('scrubber-range');"
+                "range.value = Math.floor(Number(range.max) / 2);"
+                "range.dispatchEvent(new Event('input', {bubbles: true}));"
+                "})();"
+            )
+            after_scrub_label = window.evaluate_js(
+                "document.getElementById('scrubber-label').textContent"
+            )
+            settled = {"before": before, "afterScrubLabel": after_scrub_label}
             outcome.put(settled)
         finally:
             window.destroy()
@@ -684,7 +704,7 @@ def test_a_completed_batchs_own_scrubber_replays_the_pooled_scatter(
     webview.start(_drive)
     settled = outcome.get(timeout=_OUTCOME_TIMEOUT_SECONDS)
 
-    assert settled is not None, "batch never reached done within the wait budget"
+    assert settled is not None, "the drive produced no result"
     assert settled["before"]["scrubberHidden"] is False
     assert int(settled["before"]["scrubberMax"]) > 0
     assert "Generation" in settled["afterScrubLabel"]
@@ -736,40 +756,33 @@ def test_scrubbing_a_completed_batch_moves_every_panel_not_just_the_scatter(
                 + "document.getElementById('run-button').click();"
             )
             settled = None
-            if done_event.wait(timeout=_EVENT_WAIT_TIMEOUT_SECONDS):
-                for _ in range(_READY_POLL_ATTEMPTS):
-                    if not window.evaluate_js("window.__fimScrubberPending"):
-                        break
-                    time.sleep(_READY_POLL_INTERVAL_SECONDS)
-                final = {
-                    "composition": _snapshot(
-                        "alleleComposition", "allele-composition-canvas"
-                    ),
-                    "spectrum": _snapshot(
-                        "frequencySpectrum", "frequency-spectrum-canvas"
-                    ),
-                }
-                # Frame 0 is the run's own first generation, as far from
-                # the final state as this run's history goes.
-                window.evaluate_js(
-                    "(function(){"
-                    "var range = document.getElementById('scrubber-range');"
-                    "range.value = '0';"
-                    "range.dispatchEvent(new Event('input', {bubbles: true}));"
-                    "})();"
-                )
-                scrubbed = {
-                    "composition": _snapshot(
-                        "alleleComposition", "allele-composition-canvas"
-                    ),
-                    "spectrum": _snapshot(
-                        "frequencySpectrum", "frequency-spectrum-canvas"
-                    ),
-                    "label": window.evaluate_js(
-                        "document.getElementById('scrubber-label').textContent"
-                    ),
-                }
-                settled = {"final": final, "scrubbed": scrubbed}
+            done_event.wait()
+            _wait_until_scrubber_settled(window)
+            final = {
+                "composition": _snapshot(
+                    "alleleComposition", "allele-composition-canvas"
+                ),
+                "spectrum": _snapshot("frequencySpectrum", "frequency-spectrum-canvas"),
+            }
+            # Frame 0 is the run's own first generation, as far from
+            # the final state as this run's history goes.
+            window.evaluate_js(
+                "(function(){"
+                "var range = document.getElementById('scrubber-range');"
+                "range.value = '0';"
+                "range.dispatchEvent(new Event('input', {bubbles: true}));"
+                "})();"
+            )
+            scrubbed = {
+                "composition": _snapshot(
+                    "alleleComposition", "allele-composition-canvas"
+                ),
+                "spectrum": _snapshot("frequencySpectrum", "frequency-spectrum-canvas"),
+                "label": window.evaluate_js(
+                    "document.getElementById('scrubber-label').textContent"
+                ),
+            }
+            settled = {"final": final, "scrubbed": scrubbed}
             outcome.put(settled)
         finally:
             window.destroy()
@@ -777,7 +790,7 @@ def test_scrubbing_a_completed_batch_moves_every_panel_not_just_the_scatter(
     webview.start(_drive)
     settled = outcome.get(timeout=_OUTCOME_TIMEOUT_SECONDS)
 
-    assert settled is not None, "batch never reached done within the wait budget"
+    assert settled is not None, "the drive produced no result"
     # The scrub really moved to the run's first generation, so the
     # comparisons below are between two genuinely different moments.
     assert settled["scrubbed"]["label"] == "Generation 0"
@@ -827,10 +840,10 @@ def test_the_ci_meter_names_the_replicate_count_in_its_own_tooltip(
                 + "document.getElementById('run-button').click();"
             )
             tooltip = None
-            if done_event.wait(timeout=_EVENT_WAIT_TIMEOUT_SECONDS):
-                tooltip = window.evaluate_js(
-                    "document.querySelector('#batch-results-summary-body tr').title"
-                )
+            done_event.wait()
+            tooltip = window.evaluate_js(
+                "document.querySelector('#batch-results-summary-body tr').title"
+            )
             outcome.put(tooltip)
         finally:
             window.destroy()
@@ -839,8 +852,7 @@ def test_the_ci_meter_names_the_replicate_count_in_its_own_tooltip(
     tooltip = outcome.get(timeout=_OUTCOME_TIMEOUT_SECONDS)
 
     assert tooltip is not None, (
-        f"done_event was never set within {_EVENT_WAIT_TIMEOUT_SECONDS}s "
-        f"(messages received: {messages!r})"
+        f"the drive produced no result (messages received: {messages!r})"
     )
     # `_SET_TINY_BATCH_FIELDS` requests 2 replicates.
     assert "uncertainty across 2 independent replicates" in tooltip
@@ -899,47 +911,47 @@ def test_batch_deme_pair_selector_switches_to_a_chosen_pair_and_back(
                 set_fields + "document.getElementById('run-button').click();"
             )
             settled = None
-            if done_event.wait(timeout=_EVENT_WAIT_TIMEOUT_SECONDS):
-                selector_state = window.evaluate_js(
-                    "({"
-                    "hidden: document.getElementById("
-                    "'run-deme-pair-selector').hidden, "
-                    "optionCount: document.getElementById("
-                    "'run-x-deme').options.length"
-                    "})"
-                )
-                # Match the scalar selector test: the scrubber frame
-                # fetch is intentionally fire-and-forget and must settle
-                # before this test compares canvas snapshots.
-                _poll_until("window.__fimScrubberPending", lambda value: value == 0)
-                default_snapshot = window.evaluate_js(
-                    "document.getElementById('run-canvas').toDataURL()"
-                )
-                window.evaluate_js(
-                    "document.getElementById('run-x-deme').value = '1';"
-                    "document.getElementById('run-y-deme').value = '3';"
-                    "document.getElementById('run-y-deme').dispatchEvent("
-                    "new Event('change'));"
-                )
-                pair_snapshot = _poll_until(
-                    "document.getElementById('run-canvas').toDataURL()",
-                    lambda value: value != default_snapshot,
-                )
-                window.evaluate_js(
-                    "document.getElementById('run-y-deme').value = '2';"
-                    "document.getElementById('run-y-deme').dispatchEvent("
-                    "new Event('change'));"
-                )
-                reverted_snapshot = _poll_until(
-                    "document.getElementById('run-canvas').toDataURL()",
-                    lambda value: value == default_snapshot,
-                )
-                settled = {
-                    "selectorHidden": selector_state["hidden"],
-                    "optionCount": selector_state["optionCount"],
-                    "pairDiffersFromDefault": pair_snapshot != default_snapshot,
-                    "revertedMatchesDefault": reverted_snapshot == default_snapshot,
-                }
+            done_event.wait()
+            selector_state = window.evaluate_js(
+                "({"
+                "hidden: document.getElementById("
+                "'run-deme-pair-selector').hidden, "
+                "optionCount: document.getElementById("
+                "'run-x-deme').options.length"
+                "})"
+            )
+            # Match the scalar selector test: the scrubber frame
+            # fetch is intentionally fire-and-forget and must settle
+            # before this test compares canvas snapshots.
+            _wait_until_scrubber_settled(window)
+            default_snapshot = window.evaluate_js(
+                "document.getElementById('run-canvas').toDataURL()"
+            )
+            window.evaluate_js(
+                "document.getElementById('run-x-deme').value = '1';"
+                "document.getElementById('run-y-deme').value = '3';"
+                "document.getElementById('run-y-deme').dispatchEvent("
+                "new Event('change'));"
+            )
+            pair_snapshot = _poll_until(
+                "document.getElementById('run-canvas').toDataURL()",
+                lambda value: value != default_snapshot,
+            )
+            window.evaluate_js(
+                "document.getElementById('run-y-deme').value = '2';"
+                "document.getElementById('run-y-deme').dispatchEvent("
+                "new Event('change'));"
+            )
+            reverted_snapshot = _poll_until(
+                "document.getElementById('run-canvas').toDataURL()",
+                lambda value: value == default_snapshot,
+            )
+            settled = {
+                "selectorHidden": selector_state["hidden"],
+                "optionCount": selector_state["optionCount"],
+                "pairDiffersFromDefault": pair_snapshot != default_snapshot,
+                "revertedMatchesDefault": reverted_snapshot == default_snapshot,
+            }
             outcome.put(settled)
         finally:
             window.destroy()
@@ -947,9 +959,7 @@ def test_batch_deme_pair_selector_switches_to_a_chosen_pair_and_back(
     webview.start(_drive)
     settled = outcome.get(timeout=_OUTCOME_TIMEOUT_SECONDS)
 
-    assert settled is not None, (
-        f"done_event was never set within {_EVENT_WAIT_TIMEOUT_SECONDS}s"
-    )
+    assert settled is not None, "the drive produced no result"
     assert settled["selectorHidden"] is False
     assert settled["optionCount"] == 3
     assert settled["pairDiffersFromDefault"] is True
@@ -999,27 +1009,27 @@ def test_running_a_batch_again_from_completed_starts_a_new_batch(
                 + "document.getElementById('run-button').click();"
             )
             settled = None
-            if first_done.wait(timeout=_EVENT_WAIT_TIMEOUT_SECONDS):
-                first_output_directory = window.evaluate_js(
-                    "window.fim.getCompletedOutputDirectory()"
-                )
-                # A fresh click reuses whatever the form already has --
-                # no field needs re-setting, and no "New run"/reset step
-                # comes first.
-                window.evaluate_js(
-                    "const seed = document.getElementById('field-seed'); "
-                    "seed.value = '20260815'; "
-                    "seed.dispatchEvent(new Event('input', {bubbles: true})); "
-                    "document.getElementById('run-button').click();"
-                )
-                if second_done.wait(timeout=_EVENT_WAIT_TIMEOUT_SECONDS):
-                    second_output_directory = window.evaluate_js(
-                        "window.fim.getCompletedOutputDirectory()"
-                    )
-                    settled = {
-                        "firstOutputDirectory": first_output_directory,
-                        "secondOutputDirectory": second_output_directory,
-                    }
+            first_done.wait()
+            first_output_directory = window.evaluate_js(
+                "window.fim.getCompletedOutputDirectory()"
+            )
+            # A fresh click reuses whatever the form already has --
+            # no field needs re-setting, and no "New run"/reset step
+            # comes first.
+            window.evaluate_js(
+                "const seed = document.getElementById('field-seed'); "
+                "seed.value = '20260815'; "
+                "seed.dispatchEvent(new Event('input', {bubbles: true})); "
+                "document.getElementById('run-button').click();"
+            )
+            second_done.wait()
+            second_output_directory = window.evaluate_js(
+                "window.fim.getCompletedOutputDirectory()"
+            )
+            settled = {
+                "firstOutputDirectory": first_output_directory,
+                "secondOutputDirectory": second_output_directory,
+            }
             outcome.put(settled)
         finally:
             window.destroy()
@@ -1027,10 +1037,7 @@ def test_running_a_batch_again_from_completed_starts_a_new_batch(
     webview.start(_drive)
     settled = outcome.get(timeout=_OUTCOME_TIMEOUT_SECONDS)
 
-    assert settled is not None, (
-        f"both batches did not complete within "
-        f"{2 * _EVENT_WAIT_TIMEOUT_SECONDS}s combined"
-    )
+    assert settled is not None, "the drive produced no result"
     assert settled["firstOutputDirectory"]
     assert settled["secondOutputDirectory"]
     assert settled["secondOutputDirectory"] != settled["firstOutputDirectory"]
@@ -1072,17 +1079,13 @@ def test_open_folder_button_reaches_the_injected_opener_and_settles(
                 + "document.getElementById('run-button').click();"
             )
             settled = False
-            if done_event.wait(timeout=_EVENT_WAIT_TIMEOUT_SECONDS):
-                window.evaluate_js(
-                    "document.getElementById('open-folder-button').click();"
-                )
-                for _ in range(_READY_POLL_ATTEMPTS):
-                    settled = window.evaluate_js(
-                        "window.__fimOpenFolderSettled === true"
-                    )
-                    if settled:
-                        break
-                    time.sleep(_READY_POLL_INTERVAL_SECONDS)
+            done_event.wait()
+            window.evaluate_js("document.getElementById('open-folder-button').click();")
+            for _ in range(_READY_POLL_ATTEMPTS):
+                settled = window.evaluate_js("window.__fimOpenFolderSettled === true")
+                if settled:
+                    break
+                time.sleep(_READY_POLL_INTERVAL_SECONDS)
             outcome.put(settled)
         finally:
             window.destroy()
@@ -1140,33 +1143,30 @@ def test_scrubbing_a_completed_batch_moves_the_statistics_panel(
                 + "document.getElementById('run-button').click();"
             )
             settled = None
-            if done_event.wait(timeout=_EVENT_WAIT_TIMEOUT_SECONDS):
-                for _ in range(_READY_POLL_ATTEMPTS):
-                    if not window.evaluate_js("window.__fimScrubberPending"):
-                        break
-                    time.sleep(_READY_POLL_INTERVAL_SECONDS)
-                final = window.evaluate_js(read_panel)
-                # Frame 0 is the run's own first generation, as far from
-                # the final state as this run's history goes.
-                window.evaluate_js(
-                    "(function(){"
-                    "var range = document.getElementById('scrubber-range');"
-                    "range.value = '0';"
-                    "range.dispatchEvent(new Event('input', {bubbles: true}));"
-                    "})();"
-                )
-                scrubbed = window.evaluate_js(read_panel)
-                # And back to the final frame, to prove the
-                # authoritative restore rather than a one-way drift.
-                window.evaluate_js(
-                    "(function(){"
-                    "var range = document.getElementById('scrubber-range');"
-                    "range.value = range.max;"
-                    "range.dispatchEvent(new Event('input', {bubbles: true}));"
-                    "})();"
-                )
-                restored = window.evaluate_js(read_panel)
-                settled = {"final": final, "scrubbed": scrubbed, "restored": restored}
+            done_event.wait()
+            _wait_until_scrubber_settled(window)
+            final = window.evaluate_js(read_panel)
+            # Frame 0 is the run's own first generation, as far from
+            # the final state as this run's history goes.
+            window.evaluate_js(
+                "(function(){"
+                "var range = document.getElementById('scrubber-range');"
+                "range.value = '0';"
+                "range.dispatchEvent(new Event('input', {bubbles: true}));"
+                "})();"
+            )
+            scrubbed = window.evaluate_js(read_panel)
+            # And back to the final frame, to prove the
+            # authoritative restore rather than a one-way drift.
+            window.evaluate_js(
+                "(function(){"
+                "var range = document.getElementById('scrubber-range');"
+                "range.value = range.max;"
+                "range.dispatchEvent(new Event('input', {bubbles: true}));"
+                "})();"
+            )
+            restored = window.evaluate_js(read_panel)
+            settled = {"final": final, "scrubbed": scrubbed, "restored": restored}
             outcome.put(settled)
         finally:
             window.destroy()
@@ -1174,7 +1174,7 @@ def test_scrubbing_a_completed_batch_moves_the_statistics_panel(
     webview.start(_drive)
     settled = outcome.get(timeout=_OUTCOME_TIMEOUT_SECONDS)
 
-    assert settled is not None, "batch never reached done within the wait budget"
+    assert settled is not None, "the drive produced no result"
     # The scrub really moved to the run's own first generation.
     assert settled["scrubbed"]["label"] == "Generation 0"
     # Every row is present in every state (omitted rows included).
@@ -1225,28 +1225,25 @@ def test_a_batch_repaint_keeps_the_scrub_position_marker(
                 + "document.getElementById('run-button').click();"
             )
             settled = None
-            if done_event.wait(timeout=_EVENT_WAIT_TIMEOUT_SECONDS):
-                for _ in range(_READY_POLL_ATTEMPTS):
-                    if not window.evaluate_js("window.__fimScrubberPending"):
-                        break
-                    time.sleep(_READY_POLL_INTERVAL_SECONDS)
-                window.evaluate_js(
-                    "(function(){"
-                    "var range = document.getElementById('scrubber-range');"
-                    "range.value = '0';"
-                    "range.dispatchEvent(new Event('input', {bubbles: true}));"
-                    "})();"
-                )
-                settled = window.evaluate_js(
-                    "({"
-                    "expected: window.fim.getScrubberGenerations()[0], "
-                    "cached: lastBatchScrubGeneration, "
-                    "afterRepaint: (() => {"
-                    "repaintTrajectory();"
-                    "return lastBatchScrubGeneration;"
-                    "})()"
-                    "})"
-                )
+            done_event.wait()
+            _wait_until_scrubber_settled(window)
+            window.evaluate_js(
+                "(function(){"
+                "var range = document.getElementById('scrubber-range');"
+                "range.value = '0';"
+                "range.dispatchEvent(new Event('input', {bubbles: true}));"
+                "})();"
+            )
+            settled = window.evaluate_js(
+                "({"
+                "expected: window.fim.getScrubberGenerations()[0], "
+                "cached: lastBatchScrubGeneration, "
+                "afterRepaint: (() => {"
+                "repaintTrajectory();"
+                "return lastBatchScrubGeneration;"
+                "})()"
+                "})"
+            )
             outcome.put(settled)
         finally:
             window.destroy()
@@ -1254,6 +1251,6 @@ def test_a_batch_repaint_keeps_the_scrub_position_marker(
     webview.start(_drive)
     settled = outcome.get(timeout=_OUTCOME_TIMEOUT_SECONDS)
 
-    assert settled is not None, "batch never reached done within the wait budget"
+    assert settled is not None, "the drive produced no result"
     assert settled["cached"] == settled["expected"]
     assert settled["afterRepaint"] == settled["expected"]
