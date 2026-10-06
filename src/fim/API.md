@@ -162,6 +162,7 @@ Return to the [source-tree orientation](../README.md) or the [developer guide](.
     * [load\_yaml](#fim.gui.app.Api.load_yaml)
     * [list\_examples](#fim.gui.app.Api.list_examples)
     * [load\_example](#fim.gui.app.Api.load_example)
+    * [open\_saved\_example](#fim.gui.app.Api.open_saved_example)
     * [load\_run\_configuration](#fim.gui.app.Api.load_run_configuration)
     * [list\_presets](#fim.gui.app.Api.list_presets)
     * [get\_preset\_form\_values](#fim.gui.app.Api.get_preset_form_values)
@@ -323,6 +324,9 @@ Return to the [source-tree orientation](../README.md) or the [developer guide](.
   * [get\_preset](#fim.gui.presets.get_preset)
   * [list\_presets](#fim.gui.presets.list_presets)
   * [load\_catalog](#fim.gui.presets.load_catalog)
+  * [find\_example](#fim.gui.presets.find_example)
+  * [catalog\_presets](#fim.gui.presets.catalog_presets)
+  * [load\_bundle\_catalog](#fim.gui.presets.load_bundle_catalog)
   * [split\_configuration](#fim.gui.presets.split_configuration)
   * [strip\_internal\_yaml\_keys](#fim.gui.presets.strip_internal_yaml_keys)
 * [fim.gui.recent\_runs](#fim.gui.recent_runs)
@@ -5586,8 +5590,12 @@ example's form values once the user loads it.
   class is `{"id", "title", "description", "children"}`, in
   display order. Each example is `{"id", "name",
   "description", "class", "excerpt", "has_configuration",
+  "has_saved_result",
   "loadable", "message"}`, in display order;
-  `has_configuration` is `False` for an example reproduced by
+  `has_saved_result` says whether the bundle carries the
+  example's saved run, which "Open saved result" opens
+  (`open_saved_example`); `has_configuration` is `False` for
+  an example reproduced by
   a script instead of a `config.yaml`; `loadable` is `False` when
   `load_example(id)` would fail (no configuration, or one this
   form cannot represent), and `message` then says why, so the
@@ -5624,6 +5632,35 @@ loaded configuration, as for `load_preset`.
   description" boxes; `{"ok": False, "message": ...}` if no
   such example exists or its configuration cannot be loaded
   into the form.
+
+<a id="fim.gui.app.Api.open_saved_example"></a>
+
+#### open\_saved\_example
+
+```python
+@_log_bridge_call
+def open_saved_example(example_id: str) -> dict[str, Any]
+```
+
+Find an example's seeded, read-only run, for "Open saved result".
+
+The Examples dialog's second action (read-only examples design
+§5). The run is the one `fim.examples.seed` wrote under
+`results/examples/<id>/`; if it is missing (deleted out of band,
+or a results location chosen since launch), the bundle is seeded
+again first. The page then opens it like any run, which takes
+`open_run`'s report-only path (§4.3).
+
+**Arguments**:
+
+- `example_id` - An example `id` from `list_examples`.
+
+
+**Returns**:
+
+- ``{"ok"` - True, "directory": ..., "isBatch": bool}`; `{"ok":
+  False, "message": ...}` when there is no such example, it has
+  no saved result yet, or its run could not be seeded.
 
 <a id="fim.gui.app.Api.load_run_configuration"></a>
 
@@ -9991,6 +10028,59 @@ Return the bundled examples catalog.
   missing or malformed. Callers treat that as "no examples
   available" (a stale or hand-modified install), not a reason to
   fail the Configure screen.
+
+<a id="fim.gui.presets.find_example"></a>
+
+#### find\_example
+
+```python
+def find_example(catalog: Catalog, example_id: str) -> Example | None
+```
+
+Return one example of an already-loaded catalog, or `None`.
+
+**Arguments**:
+
+- `catalog` - A `load_catalog`/`load_bundle_catalog` result.
+- `example_id` - An `Example.example_id`.
+
+<a id="fim.gui.presets.catalog_presets"></a>
+
+#### catalog\_presets
+
+```python
+def catalog_presets(catalog: Catalog) -> list[Preset]
+```
+
+Return an already-loaded catalog's examples as the flat preset list.
+
+`list_presets`'s own rule: one `Preset` per example with a
+configuration, in catalog order.
+
+<a id="fim.gui.presets.load_bundle_catalog"></a>
+
+#### load\_bundle\_catalog
+
+```python
+def load_bundle_catalog(bundle_directory: Path) -> Catalog
+```
+
+Return the catalog in an examples bundle directory itself.
+
+`load_catalog` takes the `webui/` directory; this takes the bundle
+(`webui/examples/`), the directory `fim.examples.seed` also reads,
+so the Examples dialog and the seeded runs always describe the same
+bundle.
+
+**Arguments**:
+
+- `bundle_directory` - The directory holding `catalog.json`.
+
+
+**Returns**:
+
+  The catalog, or an empty `Catalog` when it is missing or
+  malformed (see `load_catalog`).
 
 <a id="fim.gui.presets.split_configuration"></a>
 

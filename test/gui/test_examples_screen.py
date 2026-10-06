@@ -102,7 +102,17 @@ def _build_bundle(root: Path) -> Path:
                 "readme_excerpt": "A tiny example run.",
                 "config_yaml": config_text,
                 "outputs": ["manifest.json", "report.json"],
-            }
+            },
+            {
+                "id": "not-run-yet",
+                "name": "Not run yet",
+                "description": "No saved result.",
+                "class": "getting-started",
+                "readme": "# Not run yet\n",
+                "readme_excerpt": "",
+                "config_yaml": config_text.replace("seed: 5", "seed: 6"),
+                "outputs": [],
+            },
         ],
     }
     (bundle / "catalog.json").write_text(json.dumps(catalog, indent=2), "utf-8")
@@ -110,7 +120,9 @@ def _build_bundle(root: Path) -> Path:
 
 
 @pytest.fixture
-def results(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
+def results(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, examples_seeding: None
+) -> Path:
     """An isolated results directory, with a fixture examples bundle installed.
 
     The bundle's own `fim run` happens first, while the results folder
@@ -322,3 +334,79 @@ def test_a_seeded_example_opens_from_its_saved_results_and_run_it_loads_it(
     assert configure["runDescription"] == "A tiny example run."
     assert configure["seed"] == "5"
     assert configure["noteHiddenAfterInitial"] is True
+
+
+_SELECT_EXAMPLE = """
+(function (id) {
+    const item = document.querySelector(`#examples-list [data-example-id='${id}']`);
+    item.click();
+    const button = document.getElementById('examples-open-saved-button');
+    return JSON.stringify({disabled: button.disabled, title: button.title});
+})
+"""
+
+
+def test_open_saved_result_opens_the_seeded_run_from_the_examples_dialog(
+    results: Path,
+) -> None:
+    """The dialog's second action opens the saved result; disabled without one."""
+    window = create_window(hidden=True)
+    outcome: queue.Queue[dict[str, Any]] = queue.Queue(maxsize=1)
+
+    def _drive() -> None:
+        try:
+            _poll_until(
+                window, "window.__fimRunViewReady === true", lambda value: value
+            )
+            window.evaluate_js("window.fim.showExamplesDialog();")
+            _poll_until(
+                window, "window.__fimExamplesDialogReady === true", lambda value: value
+            )
+            without = json.loads(
+                window.evaluate_js(f"{_SELECT_EXAMPLE}('not-run-yet')")
+            )
+            with_saved = json.loads(
+                window.evaluate_js(f"{_SELECT_EXAMPLE}('tiny-example')")
+            )
+            window.evaluate_js(
+                "window.__fimExampleOpenSettled = false;"
+                "document.getElementById('examples-open-saved-button').click();"
+            )
+            _poll_until(
+                window, "window.__fimExampleOpenSettled === true", lambda value: value
+            )
+            opened = json.loads(
+                _poll_until(
+                    window,
+                    "JSON.stringify({"
+                    " state: window.fim.getRunViewState(),"
+                    " dialogOpen: document.getElementById('modal-examples').open,"
+                    " noteHidden:"
+                    "  document.getElementById('run-saved-result-note').hidden,"
+                    " directory: window.fim.getCompletedOutputDirectory(),"
+                    "})",
+                    lambda value: value is not None and '"completed"' in value,
+                )
+            )
+            _poll_until(
+                window,
+                "(window.__fimScrubberPending || 0) === 0",
+                lambda value: value is True,
+            )
+            outcome.put({"without": without, "with": with_saved, "opened": opened})
+        finally:
+            window.destroy()
+
+    webview.start(_drive)
+    result = outcome.get(timeout=_DRIVE_TIMEOUT_SECONDS)
+
+    assert result["without"]["disabled"] is True
+    assert "no saved result yet" in result["without"]["title"]
+    assert result["with"]["disabled"] is False
+    opened = result["opened"]
+    assert opened["state"] == "completed"
+    assert opened["dialogOpen"] is False
+    assert opened["noteHidden"] is False
+    assert opened["directory"] == str(
+        seed.example_run_directory("tiny-example", results=results)
+    )

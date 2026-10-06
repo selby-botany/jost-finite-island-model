@@ -8000,6 +8000,22 @@ def drive() -> Callable[..., Any]
 
 Bind `drive_and_read` as a fixture, for tests that prefer the fixture style.
 
+<a id="gui.conftest.examples_seeding"></a>
+
+#### examples\_seeding
+
+```python
+@pytest.fixture
+def examples_seeding(monkeypatch: pytest.MonkeyPatch) -> None
+```
+
+Turn seeding back on, for a test about the seeded examples.
+
+Requested fixtures run after autouse ones, so this restores the real
+`_seed_bundled_examples` over `_isolate_examples_seeding`'s no-op. A
+test usually also installs a fixture bundle by patching
+`fim.gui.app._examples_bundle_directory`.
+
 <a id="gui.conftest.fast_scalar_run_settings"></a>
 
 #### fast\_scalar\_run\_settings
@@ -14548,7 +14564,8 @@ trajectory), and `not-run-yet`, with a configuration only.
 
 ```python
 @pytest.fixture
-def results(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path
+def results(tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+            examples_seeding: None) -> Path
 ```
 
 Point `paths.results_directory()` at an isolated directory.
@@ -14675,6 +14692,43 @@ def test_load_run_configuration_falls_back_to_the_manifest(
 
 Without `config.yaml`, the manifest's parameters and the metadata serve.
 
+<a id="gui.test_examples_bridge.test_list_examples_says_which_examples_have_a_saved_result"></a>
+
+#### test\_list\_examples\_says\_which\_examples\_have\_a\_saved\_result
+
+```python
+def test_list_examples_says_which_examples_have_a_saved_result(
+        results: Path, bundle: Path) -> None
+```
+
+The dialog reads the same bundle seeding does.
+
+<a id="gui.test_examples_bridge.test_open_saved_example_seeds_when_needed_and_names_the_run"></a>
+
+#### test\_open\_saved\_example\_seeds\_when\_needed\_and\_names\_the\_run
+
+```python
+def test_open_saved_example_seeds_when_needed_and_names_the_run(
+        results: Path, bundle: Path) -> None
+```
+
+"Open saved result": the seeded run's directory, seeding it if missing.
+
+<a id="gui.test_examples_bridge.test_open_saved_example_refuses_without_a_saved_result"></a>
+
+#### test\_open\_saved\_example\_refuses\_without\_a\_saved\_result
+
+```python
+@pytest.mark.parametrize(
+    ("example_id", "message"),
+    [("not-run-yet", "no saved result yet"), ("nowhere", "no such example")],
+)
+def test_open_saved_example_refuses_without_a_saved_result(
+        results: Path, bundle: Path, example_id: str, message: str) -> None
+```
+
+No saved result, or no such example: a message for the dialog.
+
 <a id="gui.test_examples_bridge.test_load_run_configuration_refuses_a_directory_that_is_not_a_run"></a>
 
 #### test\_load\_run\_configuration\_refuses\_a\_directory\_that\_is\_not\_a\_run
@@ -14764,7 +14818,8 @@ state the step produces), never a fixed sleep.
 
 ```python
 @pytest.fixture
-def results(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path
+def results(tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+            examples_seeding: None) -> Path
 ```
 
 An isolated results directory, with a fixture examples bundle installed.
@@ -14804,6 +14859,17 @@ def test_a_seeded_example_opens_from_its_saved_results_and_run_it_loads_it(
 ```
 
 Report-only open (design §4.3): statistics, a note, and "Run it".
+
+<a id="gui.test_examples_screen.test_open_saved_result_opens_the_seeded_run_from_the_examples_dialog"></a>
+
+#### test\_open\_saved\_result\_opens\_the\_seeded\_run\_from\_the\_examples\_dialog
+
+```python
+def test_open_saved_result_opens_the_seeded_run_from_the_examples_dialog(
+        results: Path) -> None
+```
+
+The dialog's second action opens the saved result; disabled without one.
 
 <a id="gui.test_explore_screen"></a>
 

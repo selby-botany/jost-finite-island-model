@@ -100,7 +100,9 @@ def build_bundle(root: Path) -> Path:
 
 
 @pytest.fixture
-def results(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
+def results(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, examples_seeding: None
+) -> Path:
     """Point `paths.results_directory()` at an isolated directory."""
     root = tmp_path / "results"
     root.mkdir()
@@ -306,6 +308,45 @@ def test_load_run_configuration_falls_back_to_the_manifest(
     assert result["ok"] is True
     assert result["name"] == "Shipped example"
     assert api.validate_form(result["values"])["ok"] is True
+
+
+def test_list_examples_says_which_examples_have_a_saved_result(
+    results: Path, bundle: Path
+) -> None:
+    """The dialog reads the same bundle seeding does."""
+    examples = {row["id"]: row for row in Api().list_examples()["examples"]}
+
+    assert examples["tiny-example"]["has_saved_result"] is True
+    assert examples["not-run-yet"]["has_saved_result"] is False
+
+
+def test_open_saved_example_seeds_when_needed_and_names_the_run(
+    results: Path, bundle: Path
+) -> None:
+    """ "Open saved result": the seeded run's directory, seeding it if missing."""
+    api = Api()
+
+    result = api.open_saved_example("tiny-example")
+
+    directory = seed.example_run_directory("tiny-example", results=results)
+    assert result == {"ok": True, "directory": str(directory), "isBatch": False}
+    assert (directory / "manifest.json").is_file()
+    opened = api.open_run({"trajectoryPath": str(directory / "trajectory.jsonl")})
+    assert opened["reportOnly"] is True
+
+
+@pytest.mark.parametrize(
+    ("example_id", "message"),
+    [("not-run-yet", "no saved result yet"), ("nowhere", "no such example")],
+)
+def test_open_saved_example_refuses_without_a_saved_result(
+    results: Path, bundle: Path, example_id: str, message: str
+) -> None:
+    """No saved result, or no such example: a message for the dialog."""
+    result = Api().open_saved_example(example_id)
+
+    assert result["ok"] is False
+    assert message in result["message"]
 
 
 def test_load_run_configuration_refuses_a_directory_that_is_not_a_run(

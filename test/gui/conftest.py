@@ -165,6 +165,7 @@ import webview
 from conftest import poll_or_fail, wait_or_fail
 
 from fim import paths as paths_module
+from fim.examples import seed as seed_module
 from fim.gui import app as app_module
 from fim.gui import preferences as preferences_module
 from fim.gui.app import await_bridge_threads, create_window
@@ -805,28 +806,37 @@ def _isolate_gui_results(
     return root
 
 
+_REAL_SEED_BUNDLED_EXAMPLES = app_module._seed_bundled_examples
+
+
 @pytest.fixture(autouse=True)
-def _isolate_examples_bundle(
-    monkeypatch: pytest.MonkeyPatch, tmp_path_factory: pytest.TempPathFactory
-) -> Path:
-    """Seed no bundled examples unless a test asks for them.
+def _isolate_examples_seeding(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Seed no bundled examples unless a test asks for it (`examples_seeding`).
 
     Home seeds the read-only Examples experiment whenever a visit finds
     it missing (`Api.ensure_examples`, read-only examples design §4.2),
-    from the bundle `fim.gui.app._examples_bundle_directory` names. Left
-    pointing at the real bundle, every window test that opens Home would
-    gain example Studies and runs, changing the tree, the run count, and
-    "Select all" in tests that are about none of that, and changing them
-    again whenever the shipped examples change. An empty directory has no
-    `catalog.json`, so seeding is a no-op. A test about examples patches
-    the function again (to the real bundle or a fixture one); its own
-    patch wins, as `_isolate_gui_results`'s docstring describes.
-
-    Returns the empty directory, for a test that wants to fill it.
+    and `main` seeds at start. Left on, every window test that opens
+    Home would gain example Studies and runs, changing the tree, the run
+    count, and "Select all" in tests that are about none of that, and
+    changing them again whenever the shipped examples change. Only the
+    seeding is switched off: the Examples dialog still reads the real
+    bundle, as its own tests expect.
     """
-    bundle = tmp_path_factory.mktemp("gui-test-examples-bundle")
-    monkeypatch.setattr(app_module, "_examples_bundle_directory", lambda: bundle)
-    return bundle
+    monkeypatch.setattr(app_module, "_seed_bundled_examples", seed_module.SeedReport)
+
+
+@pytest.fixture
+def examples_seeding(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Turn seeding back on, for a test about the seeded examples.
+
+    Requested fixtures run after autouse ones, so this restores the real
+    `_seed_bundled_examples` over `_isolate_examples_seeding`'s no-op. A
+    test usually also installs a fixture bundle by patching
+    `fim.gui.app._examples_bundle_directory`.
+    """
+    monkeypatch.setattr(
+        app_module, "_seed_bundled_examples", _REAL_SEED_BUNDLED_EXAMPLES
+    )
 
 
 @pytest.fixture

@@ -12,9 +12,10 @@
  * `applyFormValues`) and puts the example's name and description into
  * Configure's "Run name" and "Run description" boxes.
  *
- * "Open saved result" (design §5) is not offered yet. It opens the
- * seeded read-only run, which needs the seeding and the report-only open
- * of design §4.2 and §4.3. TODO: add it with §4.3.
+ * "Open saved result" (design §5) opens the example's seeded, read-only
+ * run (`Api.open_saved_example`, then the same open a Home row uses,
+ * which shows the saved statistics: design §4.3). It is disabled, with
+ * the reason as its tooltip, for an example with no saved result yet.
  *
  * Keyboard: Up/Down (and Home/End) move within the tree or the list,
  * Right moves from the tree to the list, Left moves back (or from a
@@ -38,6 +39,7 @@ const examplesDetailExcerpt = document.getElementById("examples-detail-excerpt")
 const examplesLoadError = document.getElementById("examples-load-error");
 const examplesLoadButton = document.getElementById("examples-load-button");
 const examplesViewYamlButton = document.getElementById("examples-view-yaml-button");
+const examplesOpenSavedButton = document.getElementById("examples-open-saved-button");
 const examplesCancelButton = document.getElementById("examples-cancel-button");
 const examplesRunNameInput = document.getElementById("run-name-input");
 const examplesRunDescriptionInput = document.getElementById("run-description-input");
@@ -54,6 +56,11 @@ let examplesSelectedExampleId = null;
 // otherwise read it before the async bridge call has settled.
 window.__fimExamplesDialogReady = false;
 window.__fimExampleLoadSettled = false;
+window.__fimExampleOpenSettled = false;
+
+// Why "Open saved result" is disabled for an example without one.
+const EXAMPLES_NO_SAVED_RESULT_TEXT =
+    "This example has no saved result yet. Load it into Configure and run it.";
 
 /**
  * Every class in display order, each parent followed by its children.
@@ -204,6 +211,31 @@ async function examplesLoadSelected() {
 }
 
 /**
+ * Open the selected example's saved result on the Results card, closing
+ * the dialog. A refusal is shown inside the dialog, which stays open.
+ */
+async function examplesOpenSaved() {
+    const example = examplesSelectedExample();
+    if (!example || !example.has_saved_result) {
+        return;
+    }
+    window.__fimExampleOpenSettled = false;
+    examplesOpenSavedButton.disabled = true;
+    try {
+        const result = await window.pywebview.api.open_saved_example(example.id);
+        if (!result.ok) {
+            examplesShowError(`This example's saved result could not be opened: ${result.message}`);
+            return;
+        }
+        examplesDialog.close();
+        await window.fim.openComputedRun(result.directory, result.isBatch);
+    } finally {
+        examplesOpenSavedButton.disabled = !example.has_saved_result;
+        window.__fimExampleOpenSettled = true;
+    }
+}
+
+/**
  * Show the selected example's README excerpt, and say up front why it
  * cannot be loaded if it cannot.
  */
@@ -213,6 +245,9 @@ function examplesRenderDetail() {
     examplesDetailExcerpt.textContent = example ? example.excerpt : "";
     examplesLoadButton.disabled = !example || !example.loadable;
     examplesViewYamlButton.disabled = !example || !example.has_configuration;
+    const hasSaved = Boolean(example && example.has_saved_result);
+    examplesOpenSavedButton.disabled = !hasSaved;
+    examplesOpenSavedButton.title = example && !hasSaved ? EXAMPLES_NO_SAVED_RESULT_TEXT : "";
     if (example && !example.loadable) {
         examplesShowError(`This example cannot be loaded into the form: ${example.message}`);
     } else {
@@ -397,6 +432,7 @@ examplesDialog.addEventListener("click", (event) => {
 
 examplesCancelButton.addEventListener("click", () => examplesDialog.close());
 examplesLoadButton.addEventListener("click", () => examplesLoadSelected());
+examplesOpenSavedButton.addEventListener("click", () => examplesOpenSaved());
 examplesViewYamlButton.addEventListener("click", () => {
     const example = examplesSelectedExample();
     if (example) {

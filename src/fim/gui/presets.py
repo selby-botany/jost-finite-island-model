@@ -211,9 +211,57 @@ def load_catalog(webui_directory: Path) -> Catalog:
         available" (a stale or hand-modified install), not a reason to
         fail the Configure screen.
     """
+    return load_bundle_catalog(webui_directory / CATALOG_RELATIVE_PATH.parent)
+
+
+def find_example(catalog: Catalog, example_id: str) -> Example | None:
+    """Return one example of an already-loaded catalog, or `None`.
+
+    Args:
+        catalog: A `load_catalog`/`load_bundle_catalog` result.
+        example_id: An `Example.example_id`.
+    """
+    return next(
+        (example for example in catalog.examples if example.example_id == example_id),
+        None,
+    )
+
+
+def catalog_presets(catalog: Catalog) -> list[Preset]:
+    """Return an already-loaded catalog's examples as the flat preset list.
+
+    `list_presets`'s own rule: one `Preset` per example with a
+    configuration, in catalog order.
+    """
+    return [
+        Preset(
+            preset_id=example.example_id,
+            title=example.name,
+            yaml_text=example.yaml_text,
+        )
+        for example in catalog.examples
+        if example.yaml_text is not None
+    ]
+
+
+def load_bundle_catalog(bundle_directory: Path) -> Catalog:
+    """Return the catalog in an examples bundle directory itself.
+
+    `load_catalog` takes the `webui/` directory; this takes the bundle
+    (`webui/examples/`), the directory `fim.examples.seed` also reads,
+    so the Examples dialog and the seeded runs always describe the same
+    bundle.
+
+    Args:
+        bundle_directory: The directory holding `catalog.json`.
+
+    Returns:
+        The catalog, or an empty `Catalog` when it is missing or
+        malformed (see `load_catalog`).
+    """
     try:
         data = json.loads(
-            (webui_directory / CATALOG_RELATIVE_PATH).read_text(encoding="utf-8")
+            (bundle_directory / CATALOG_RELATIVE_PATH.name).read_text(encoding="utf-8")
         )
         return Catalog(
             classes=tuple(_example_class(raw) for raw in data["classes"]),

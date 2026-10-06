@@ -3203,14 +3203,18 @@ class Api:
             class is `{"id", "title", "description", "children"}`, in
             display order. Each example is `{"id", "name",
             "description", "class", "excerpt", "has_configuration",
+            "has_saved_result",
             "loadable", "message"}`, in display order;
-            `has_configuration` is `False` for an example reproduced by
+            `has_saved_result` says whether the bundle carries the
+            example's saved run, which "Open saved result" opens
+            (`open_saved_example`); `has_configuration` is `False` for
+            an example reproduced by
             a script instead of a `config.yaml`; `loadable` is `False` when
             `load_example(id)` would fail (no configuration, or one this
             form cannot represent), and `message` then says why, so the
             dialog can explain it before the user tries.
         """
-        catalog = presets.load_catalog(_webui_directory())
+        catalog = _examples_catalog()
         examples = []
         for example in catalog.examples:
             probe = _example_form_values(example)
@@ -3222,6 +3226,7 @@ class Api:
                     "class": example.class_id,
                     "excerpt": example.readme_excerpt,
                     "has_configuration": example.yaml_text is not None,
+                    "has_saved_result": "manifest.json" in example.outputs,
                     "loadable": probe["ok"],
                     "message": "" if probe["ok"] else probe["message"],
                 }
@@ -3254,7 +3259,7 @@ class Api:
             such example exists or its configuration cannot be loaded
             into the form.
         """
-        example = presets.get_example(_webui_directory(), example_id)
+        example = presets.find_example(_examples_catalog(), example_id)
         if example is None:
             return {"ok": False, "message": f"no such example: {example_id}"}
         result = _example_form_values(example)
@@ -3267,6 +3272,50 @@ class Api:
             "name": example.name,
             "description": example.description,
             "class": example.class_id,
+        }
+
+    @_log_bridge_call
+    def open_saved_example(self, example_id: str) -> dict[str, Any]:
+        """Find an example's seeded, read-only run, for "Open saved result".
+
+        The Examples dialog's second action (read-only examples design
+        §5). The run is the one `fim.examples.seed` wrote under
+        `results/examples/<id>/`; if it is missing (deleted out of band,
+        or a results location chosen since launch), the bundle is seeded
+        again first. The page then opens it like any run, which takes
+        `open_run`'s report-only path (§4.3).
+
+        Args:
+            example_id: An example `id` from `list_examples`.
+
+        Returns:
+            `{"ok": True, "directory": ..., "isBatch": bool}`; `{"ok":
+            False, "message": ...}` when there is no such example, it has
+            no saved result yet, or its run could not be seeded.
+        """
+        example = presets.find_example(_examples_catalog(), example_id)
+        if example is None:
+            return {"ok": False, "message": f"no such example: {example_id}"}
+        if "manifest.json" not in example.outputs:
+            return {
+                "ok": False,
+                "message": (
+                    "this example has no saved result yet; load it into "
+                    "Configure and run it to see its results"
+                ),
+            }
+        directory = seed.example_run_directory(example_id)
+        if not (directory / "manifest.json").is_file():
+            _seed_bundled_examples()
+        if not (directory / "manifest.json").is_file():
+            return {
+                "ok": False,
+                "message": "the example's saved result could not be prepared",
+            }
+        return {
+            "ok": True,
+            "directory": str(directory),
+            "isBatch": "summary.json" in example.outputs,
         }
 
     @_log_bridge_call
@@ -3368,7 +3417,7 @@ class Api:
             than caching a result that could go stale if a preferences
             range constraint changes.
         """
-        found = presets.list_presets(_webui_directory())
+        found = presets.catalog_presets(_examples_catalog())
         result = [
             {
                 "id": preset.preset_id,
@@ -3429,7 +3478,7 @@ class Api:
             except ValueError as error:
                 return {"ok": False, "message": str(error)}
             return {"ok": True, "values": values}
-        example = presets.get_example(_webui_directory(), preset_id)
+        example = presets.find_example(_examples_catalog(), preset_id)
         if example is None or example.yaml_text is None:
             return {"ok": False, "message": f"no such preset: {preset_id}"}
         return _example_form_values(example)
@@ -3510,7 +3559,14 @@ class Api:
             except ValueError as error:
                 return {"ok": False, "message": str(error)}
             return {"ok": True, "title": name, "yaml": payload_to_yaml_text(payload)}
-        preset = presets.get_preset(_webui_directory(), preset_id)
+        preset = next(
+            (
+                candidate
+                for candidate in presets.catalog_presets(_examples_catalog())
+                if candidate.preset_id == preset_id
+            ),
+            None,
+        )
         if preset is None:
             return {"ok": False, "message": f"no such preset: {preset_id}"}
         return {
@@ -8587,12 +8643,17 @@ def _webui_directory() -> Path:
 def _examples_bundle_directory() -> Path:
     """Return the bundled worked examples, `webui/examples/`, frozen or not.
 
-    Its own function, not an inline `_webui_directory() / "examples"`,
-    so the GUI test suite can point it at an empty directory and keep
-    every window test that never asks for examples free of them
-    (`test/gui/conftest.py`'s `_isolate_examples_bundle`).
+    The one source of both the Examples dialog's catalog
+    (`_examples_catalog`) and the seeded example runs
+    (`_seed_bundled_examples`), so the two always describe the same
+    examples; its own function so a test can install a fixture bundle.
     """
     return _webui_directory() / "examples"
+
+
+def _examples_catalog() -> presets.Catalog:
+    """Return the bundled examples catalog (`_examples_bundle_directory`)."""
+    return presets.load_bundle_catalog(_examples_bundle_directory())
 
 
 def _seed_bundled_examples() -> seed.SeedReport | None:
