@@ -10,12 +10,29 @@ d: 3
 m: 0.005
 mu: 0.001
 seed: 20260916
+# Eight independent loci, pooled, and a looser tolerance for the main run:
+# one locus here needs about 30,000 generations to settle (see the README).
 loci:
   - locus_id: 1
     length: 100
+  - locus_id: 2
+    length: 100
+  - locus_id: 3
+    length: 100
+  - locus_id: 4
+    length: 100
+  - locus_id: 5
+    length: 100
+  - locus_id: 6
+    length: 100
+  - locus_id: 7
+    length: 100
+  - locus_id: 8
+    length: 100
 equilibrium_convergence_window: 20
 equilibrium_convergence_tolerance: 0.01
-equilibrium_max_generations: 500
+equilibrium_max_generations: 2000   # the derived burn-in is 1,256 generations
 engine_backend: lineal
 convergence_statistic: D
+convergence_tolerance: 0.03
 n_replicates: 1   # a single scalar run; the default (200) would batch

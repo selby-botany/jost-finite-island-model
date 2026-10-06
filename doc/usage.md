@@ -374,14 +374,31 @@ d: 3
 m: 0.005
 mu: 0.001
 seed: 20260916
+# Eight independent loci, pooled, and a looser tolerance for the main run:
+# one locus here needs about 30,000 generations to settle (see the README).
 loci:
   - locus_id: 1
     length: 100
+  - locus_id: 2
+    length: 100
+  - locus_id: 3
+    length: 100
+  - locus_id: 4
+    length: 100
+  - locus_id: 5
+    length: 100
+  - locus_id: 6
+    length: 100
+  - locus_id: 7
+    length: 100
+  - locus_id: 8
+    length: 100
 equilibrium_convergence_window: 20
 equilibrium_convergence_tolerance: 0.01
-equilibrium_max_generations: 500
+equilibrium_max_generations: 2000   # the derived burn-in is 1,256 generations
 engine_backend: lineal
 convergence_statistic: D
+convergence_tolerance: 0.03
 n_replicates: 1   # a single scalar run; the default (200) would batch
 ```
 
@@ -389,9 +406,13 @@ n_replicates: 1   # a single scalar run; the default (200) would batch
 fim run equilibrium-split.yaml --output results/equilibrium-split --quiet
 ```
 
-Converges at generation 1,091 with D \sim 0.191 — real differentiation the
-ancestral-population founder effect produced, with no explicit `p_0`
-anywhere in the file. How long the ancestral phase runs is worked out from
+The ancestral phase runs 1,256 generations; the main run then converges at
+generation 4,238, after about 35 seconds, with a trailing-window mean D of
+0.279 ± 0.014 — real differentiation that grew from the ancestral-population
+founder effect, with no explicit `p_0` anywhere in the file. The example pools
+eight loci and sets `convergence_tolerance: 0.03`, because one locus here
+needs about 30,000 generations to settle (see the
+[example's README](examples/equilibrium-split-founding/README.md)). How long the ancestral phase runs is worked out from
 the model: about ln(1 / equilibrium_convergence_tolerance) times the time the
 ancestral population takes to forget its starting state, 1/(2μ + 1/N)
 generations for its N gene copies. Loosen the tolerance for a shorter

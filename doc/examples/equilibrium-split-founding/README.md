@@ -2,17 +2,35 @@
 
 ## What this demonstrates
 
-The simulator first evolves one ancestral population until it satisfies
-the configured equilibrium criteria, then samples its gene copies
-without replacement to found three demes. This creates small,
-reproducible differences among demes at generation zero from a shared
-ancestry rather than assigning an independent initial frequency
-distribution to each deme.
+The simulator first evolves one ancestral population until it has
+forgotten its starting draw, then samples its gene copies without
+replacement to found three demes. This creates small, reproducible
+differences among demes at generation zero from a shared ancestry rather
+than assigning an independent initial frequency distribution to each
+deme.
 
-The ancestral phase allows at most 500 generations here. It must meet its
-own equilibrium criteria before the main run begins; reaching that cap
-without settling is an error. The main run converges at generation 1,091
-with `D` near 0.191.
+The ancestral phase runs for a burn-in derived from the model: with
+`equilibrium_convergence_tolerance: 0.01`, the 600 ancestral gene copies
+need 1,256 generations. The configuration allows at most 2,000
+(`equilibrium_max_generations`); a burn-in longer than that cap is an
+error, reported before anything is simulated. The main run then
+converges at generation 4,238, after about 35 seconds on ordinary
+development hardware, with a trailing-window mean `D` of 0.279 ± 0.014
+(one standard error), close to the 0.286 that the island model's
+identity recursion predicts for these parameters.
+
+## Why eight loci and a tolerance of 0.03
+
+The configuration pools eight loci and sets `convergence_tolerance: 0.03`
+for the main run. With one locus, the main run's `D` swings slowly
+between the three demes, and a run stops only once its trailing-window
+mean is known to half the tolerance: at the default 0.01 it reached the
+200,000-generation cap without getting there, and even at 0.05 it needed
+about 30,000 generations and two minutes. Eight pooled loci average those
+swings, and 0.03 keeps the run under a minute while its window still
+starts well after the founding generation. The founder effect this
+example shows is unchanged: it comes from the split, not from the
+number of loci.
 
 ## Related literature
 
