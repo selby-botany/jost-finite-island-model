@@ -11844,6 +11844,15 @@ background threads, real `fim.engine.fim` batch calls (in parallel, real
 OS processes, `doc/fim-gui-design.md` §7.2), and the real filesystem, the
 same technical shape as `test/gui/test_runner.py`.
 
+Every test waits for the batch's worker thread with an unbounded
+`thread.join()` — the real completion signal — never `join(timeout=...)`.
+A batch spawns real worker processes, and how long those take to start
+depends on how busy the machine is, not on the commit: under `-n auto`
+on a loaded machine, a 30-second join returned while the batch was still
+running, and the assertions that followed read a half-built tree. A
+hang is bounded by CI's own `timeout-minutes`, the project's documented
+place for wall-clock budgets (`.github/workflows/ci.yml`).
+
 <a id="gui.test_batch_runner.batch_params"></a>
 
 #### batch\_params
@@ -18329,7 +18338,9 @@ real background thread, a real `fim.engine.fim` call, and the real
 filesystem directly — the `gui` pytest marker (this project's own,
 "constructs real Tk widgets; needs a display") does not apply to any of it.
 Nothing here sleeps or races on wall-clock timing (the determinism
-contract, `doc/fim-gui-design.md` §7.1).
+contract, `doc/fim-gui-design.md` §7.1): each test waits for the worker
+thread with an unbounded `thread.join()`, never `join(timeout=...)`,
+whose result would depend on machine load rather than on the commit.
 
 `test_cancel_during_run_leaves_no_output_directory`, a dedicated
 integration test, lives in its own commit and is not part of this file.

@@ -4,6 +4,15 @@ No Tk import and no display needed anywhere in this file — real
 background threads, real `fim.engine.fim` batch calls (in parallel, real
 OS processes, `doc/fim-gui-design.md` §7.2), and the real filesystem, the
 same technical shape as `test/gui/test_runner.py`.
+
+Every test waits for the batch's worker thread with an unbounded
+`thread.join()` — the real completion signal — never `join(timeout=...)`.
+A batch spawns real worker processes, and how long those take to start
+depends on how busy the machine is, not on the commit: under `-n auto`
+on a loaded machine, a 30-second join returned while the batch was still
+running, and the assertions that followed read a half-built tree. A
+hang is bounded by CI's own `timeout-minutes`, the project's documented
+place for wall-clock budgets (`.github/workflows/ci.yml`).
 """
 
 from __future__ import annotations
@@ -134,9 +143,8 @@ def test_start_batch_run_succeeds_for_a_non_lineal_engine_backend(
     thread = batch_runner.start_batch_run(
         params, output_directory, message_queue, threading.Event()
     )
-    thread.join(timeout=30)
+    thread.join()
 
-    assert not thread.is_alive()
     assert {path.name for path in output_directory.iterdir()} == {
         "replicate-001",
         "replicate-002",
@@ -159,9 +167,8 @@ def test_start_batch_run_writes_every_replicate_and_batch_artifact_on_success(
     thread = batch_runner.start_batch_run(
         batch_params, output_directory, message_queue, threading.Event()
     )
-    thread.join(timeout=30)
+    thread.join()
 
-    assert not thread.is_alive()
     assert {path.name for path in output_directory.iterdir()} == {
         "replicate-001",
         "replicate-002",
@@ -214,7 +221,7 @@ def test_start_batch_run_records_matching_digests_in_the_published_manifest(
     thread = batch_runner.start_batch_run(
         batch_params, output_directory, message_queue, threading.Event()
     )
-    thread.join(timeout=30)
+    thread.join()
 
     manifest = read_batch_manifest(output_directory / "manifest.json")
     assert manifest.artifacts is not None
@@ -237,7 +244,7 @@ def test_start_batch_run_summary_matches_replicate_summary(
     thread = batch_runner.start_batch_run(
         batch_params, output_directory, message_queue, threading.Event()
     )
-    thread.join(timeout=30)
+    thread.join()
 
     done = _drain(message_queue)[-1]
     assert done[0] == "done"
@@ -282,7 +289,7 @@ def test_start_batch_run_prunes_orphan_replicate_directories(
     thread = batch_runner.start_batch_run(
         batch_params, output_directory, message_queue, threading.Event(), max_workers=4
     )
-    thread.join(timeout=30)
+    thread.join()
 
     manifest = read_batch_manifest(output_directory / "manifest.json")
     expected_directories = {
@@ -311,7 +318,7 @@ def test_start_batch_run_leaves_no_temporary_sibling_after_a_successful_publish(
     thread = batch_runner.start_batch_run(
         batch_params, output_directory, message_queue, threading.Event()
     )
-    thread.join(timeout=30)
+    thread.join()
 
     assert {path.name for path in tmp_path.iterdir()} == {"output"}
 
@@ -345,9 +352,8 @@ def test_cancel_during_batch_leaves_no_output_directory(
     thread = batch_runner.start_batch_run(
         batch_params, output_directory, message_queue, cancel_event
     )
-    thread.join(timeout=30)
+    thread.join()
 
-    assert not thread.is_alive()
     assert not output_directory.exists()
     assert {path.name for path in tmp_path.iterdir()} == set()
     started = message_queue.get_nowait()
@@ -435,7 +441,7 @@ def test_start_batch_run_passes_a_real_worker_count_to_fim(
     thread = batch_runner.start_batch_run(
         batch_params, output_directory, queue.Queue(), threading.Event()
     )
-    thread.join(timeout=30)
+    thread.join()
 
     assert captured["max_workers"] == batch_runner.default_max_workers()
 
@@ -457,7 +463,7 @@ def test_start_batch_run_respects_an_explicit_max_workers_override(
         threading.Event(),
         max_workers=2,
     )
-    thread.join(timeout=30)
+    thread.join()
 
     assert captured["max_workers"] == 2
 
@@ -521,9 +527,8 @@ def test_batch_replicates_actually_run_concurrently(
     thread = batch_runner.start_batch_run(
         batch_params, output_directory, message_queue, threading.Event()
     )
-    thread.join(timeout=30)
+    thread.join()
 
-    assert not thread.is_alive()
     assert len(list(arrival_directory.iterdir())) >= 2
     assert _drain(message_queue)[-1][0] == "done"
 

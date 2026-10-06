@@ -6,7 +6,9 @@ real background thread, a real `fim.engine.fim` call, and the real
 filesystem directly — the `gui` pytest marker (this project's own,
 "constructs real Tk widgets; needs a display") does not apply to any of it.
 Nothing here sleeps or races on wall-clock timing (the determinism
-contract, `doc/fim-gui-design.md` §7.1).
+contract, `doc/fim-gui-design.md` §7.1): each test waits for the worker
+thread with an unbounded `thread.join()`, never `join(timeout=...)`,
+whose result would depend on machine load rather than on the commit.
 
 `test_cancel_during_run_leaves_no_output_directory`, a dedicated
 integration test, lives in its own commit and is not part of this file.
@@ -91,9 +93,8 @@ def test_start_run_writes_the_six_documented_artifacts_on_success(
     thread = runner.start_run(
         tiny_params, output_directory, message_queue, threading.Event()
     )
-    thread.join(timeout=30)
+    thread.join()
 
-    assert not thread.is_alive()
     assert {path.name for path in output_directory.iterdir()} == {
         "trajectory.jsonl",
         "manifest.json",
@@ -157,7 +158,7 @@ def test_start_run_records_matching_digests_in_the_published_manifest(
     thread = runner.start_run(
         tiny_params, output_directory, message_queue, threading.Event()
     )
-    thread.join(timeout=30)
+    thread.join()
 
     manifest = read_manifest(output_directory / "manifest.json")
     assert manifest.artifacts is not None
@@ -180,7 +181,7 @@ def test_start_run_leaves_no_temporary_sibling_after_a_successful_publish(
     thread = runner.start_run(
         tiny_params, output_directory, message_queue, threading.Event()
     )
-    thread.join(timeout=30)
+    thread.join()
 
     assert {path.name for path in tmp_path.iterdir()} == {"output"}
 
@@ -218,9 +219,8 @@ def test_cancel_during_run_leaves_no_output_directory(
     thread = runner.start_run(
         tiny_params, output_directory, message_queue, cancel_event
     )
-    thread.join(timeout=30)
+    thread.join()
 
-    assert not thread.is_alive()
     assert not output_directory.exists()
     assert {path.name for path in tmp_path.iterdir()} == set()
     message = message_queue.get_nowait()
