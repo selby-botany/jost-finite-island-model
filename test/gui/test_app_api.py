@@ -3470,7 +3470,12 @@ def test_delete_study_removes_it_and_its_runs(
 
     deleted = api.delete_study(study_id)
 
-    assert deleted == {"ok": True, "deletedRunCount": 1, "keptRunCount": 0}
+    assert deleted == {
+        "ok": True,
+        "deletedRunCount": 1,
+        "keptRunCount": 0,
+        "readOnlyRunCount": 0,
+    }
     assert not output.exists()
     assert api.list_studies() == []
 
@@ -5023,7 +5028,12 @@ def test_delete_study_runs_empties_a_study_and_keeps_it(
 
     result = api.delete_study_runs(study_id)
 
-    assert result == {"ok": True, "deletedRunCount": 1, "keptRunCount": 0}
+    assert result == {
+        "ok": True,
+        "deletedRunCount": 1,
+        "keptRunCount": 0,
+        "readOnlyRunCount": 0,
+    }
     assert not output.exists()
     (study,) = api.list_studies()
     assert study["runCount"] == 0
@@ -5093,7 +5103,12 @@ def test_delete_study_reports_the_runs_it_kept_because_another_study_links_them(
 
     result = api.delete_study(first)
 
-    assert result == {"ok": True, "deletedRunCount": 1, "keptRunCount": 1}
+    assert result == {
+        "ok": True,
+        "deletedRunCount": 1,
+        "keptRunCount": 1,
+        "readOnlyRunCount": 0,
+    }
     assert shared.exists()
     assert not own.exists()
 

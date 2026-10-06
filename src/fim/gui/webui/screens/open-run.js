@@ -1873,6 +1873,30 @@ async function openStudy(studyId) {
 }
 
 /**
+ * Explain which runs "Delete runs…" kept, and why: a run another study
+ * also holds is only removed from this one, and a read-only example is
+ * never deleted (`Api.delete_study_runs`'s `keptRunCount` and
+ * `readOnlyRunCount`).
+ * @param {{keptRunCount: number, readOnlyRunCount?: number}} result
+ * @returns {string}
+ */
+function keptRunsMessage(result) {
+    const readOnly = result.readOnlyRunCount ?? 0;
+    const shared = result.keptRunCount - readOnly;
+    const parts = [];
+    if (shared > 0) {
+        parts.push(
+            `${shared} run(s) are also in another study, so they were removed ` +
+                "from this study but not deleted."
+        );
+    }
+    if (readOnly > 0) {
+        parts.push(`${readOnly} read-only example run(s) were kept.`);
+    }
+    return parts.join(" ");
+}
+
+/**
  * "Delete runs…" on a Study row: removes every run in the Study and
  * keeps the Study. Selecting the Study row for deletion removes the
  * Study too, and selecting each run does not scale to a Study with
@@ -1896,10 +1920,7 @@ function buildDeleteStudyRunsButton(group) {
                 if (!result.ok) {
                     showOpenRunBanner(result.message);
                 } else if (result.keptRunCount > 0) {
-                    showOpenRunBanner(
-                        `${result.keptRunCount} run(s) are also in another study, so ` +
-                            "they were removed from this study but not deleted."
-                    );
+                    showOpenRunBanner(keptRunsMessage(result));
                 }
                 await refreshRecentRuns();
             }

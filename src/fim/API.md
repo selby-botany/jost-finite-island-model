@@ -6515,11 +6515,16 @@ several Studies; a Run another Study also links is kept (only this
 Study's link goes), so deleting one Study never deletes a Run out
 from under another.
 
+A read-only example Run the Study holds is kept too
+(`groups.delete_study`), and counted as kept.
+
 **Returns**:
 
-- ``{"ok"` - True, "deletedRunCount": N, "keptRunCount": K}` on
-  success; `{"ok": False, "message": ...}` if `study_id` does
-  not exist.
+- ``{"ok"` - True, "deletedRunCount": N, "keptRunCount": K,
+- `"readOnlyRunCount"` - R}` on success, `K` counting every kept
+  Run (shared or read-only) and `R` the read-only ones among
+  them; `{"ok": False, "message": ...}` if `study_id` does not
+  exist or the Study itself is read-only.
 
 <a id="fim.gui.app.Api.delete_study_runs"></a>
 
@@ -6537,10 +6542,14 @@ selecting each Run one at a time does not scale to a Study with
 thousands; this empties a Study in one step. A Run another Study
 also links is unlinked, not deleted.
 
+A read-only example Run stays in the Study and counts as kept.
+
 **Returns**:
 
-- ``{"ok"` - True, "deletedRunCount": N, "keptRunCount": K}`, or
-- ``{"ok"` - False, "message": ...}` if the Study does not exist.
+- ``{"ok"` - True, "deletedRunCount": N, "keptRunCount": K,
+- `"readOnlyRunCount"` - R}` (see `delete_study`), or `{"ok":
+  False, "message": ...}` if the Study does not exist or is
+  read-only.
 
 <a id="fim.gui.app.Api.delete_experiment"></a>
 
@@ -6553,10 +6562,14 @@ def delete_experiment(experiment_id: str) -> dict[str, Any]
 
 Delete an Experiment, its Studies, and their Runs. See `delete_study`.
 
+A read-only Study the Experiment holds is kept
+(`groups.delete_experiment`) and not counted as deleted.
+
 **Returns**:
 
 - ``{"ok"` - True, "deletedStudyCount": N}` on success; `{"ok":
-  False, "message": ...}` if `experiment_id` does not exist.
+  False, "message": ...}` if `experiment_id` does not exist or
+  is read-only.
 
 <a id="fim.gui.app.Api.copy_study"></a>
 
@@ -6749,12 +6762,18 @@ GUI) — one round trip for the whole selection, rather than one
 per directory, matters once a selection reaches into the
 thousands.
 
+All-or-nothing with respect to read-only example runs
+(`groups.delete_runs`): if any of `directories` is read-only,
+nothing at all is deleted and the refusal is reported.
+
 **Returns**:
 
 - ``{"ok"` - True, "deletedCount": N}` — `N` is how many of
   `directories` actually existed and were removed; a
   directory already gone (deleted out of band, or a stale
   selection from before a refresh) is not an error.
+- ``{"ok"` - False, "message": ...}` if any directory is a
+  read-only run; the message names every one.
 
 <a id="fim.gui.app.Api.delete_selected"></a>
 
@@ -6787,12 +6806,20 @@ policy) rather than double-counted or treated as a failure.
   "study", "studyId": ...}`/`{"kind": "experiment",
 - `"experimentId"` - ...}` per selected row.
 
+  Read-only items are refused up front, all or nothing: if any
+  selected Experiment, Study, or Run is read-only, nothing at all
+  is deleted (the same rule `delete_runs` applies to runs). A
+  read-only Run merely *inside* a selected editable Study is not a
+- `refusal` - deleting that Study keeps it (`groups.delete_study`).
+
 
 **Returns**:
 
 - ``{"ok"` - True, "deletedRunCount": N, "deletedStudyCount": M,
 - `"deletedExperimentCount"` - K}` — each count is how many of
   that kind actually still existed and were removed.
+- ``{"ok"` - False, "message": ...}` when the selection holds a
+  read-only item; the message names them.
 
 <a id="fim.gui.app.Api.get_batch_replicate_summary"></a>
 

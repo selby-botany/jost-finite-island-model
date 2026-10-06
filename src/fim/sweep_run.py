@@ -869,6 +869,11 @@ def _name_point_run(context: _Context, point: SweepPoint, directory: Path) -> No
     (`fim.sweep.point_run_name`). A reused run that someone already
     named keeps that name. Naming is best effort: a failure is logged,
     never fatal to the sweep, since the run itself succeeded.
+
+    A read-only example run (one linked into the sweep Study by hand)
+    keeps its shipped name: `replace_run_metadata` refuses it with
+    `ReadOnlyError`, which is expected, so it is logged at debug level
+    rather than as a warning.
     """
     if context.spec is None:
         return
@@ -892,6 +897,8 @@ def _name_point_run(context: _Context, point: SweepPoint, directory: Path) -> No
                 context.total,
             ),
         )
+    except groups.ReadOnlyError as error:
+        logger.debug("keeping the read-only run's own name %s: %s", directory, error)
     except OSError as error:
         logger.warning("could not name sweep run %s: %s", directory, error)
 
@@ -908,7 +915,12 @@ def _compare_with_older(
     comparison = compare_runs(older, recomputed)
     if comparison.identical:
         with context.lock:
-            groups.supersede_run(older, recomputed, results=context.results)
+            try:
+                groups.supersede_run(older, recomputed, results=context.results)
+            except groups.ReadOnlyError as error:
+                # A read-only example is never deleted or relinked; the
+                # matching recomputed run simply lives beside it.
+                logger.info("kept read-only run %s: %s", older, error)
         context.emit("point_recomputed", point, comparison.to_dict(), finish=True)
         return "recomputed"
     write_reproducibility_note(recomputed, comparison.to_dict())

@@ -78,6 +78,7 @@ Every test module, fixture, and test function documented here in full; `doc/fim-
   - [`test_preferences`](#gui.test_preferences)
   - [`test_presets`](#gui.test_presets)
   - [`test_presets_screen`](#gui.test_presets_screen)
+  - [`test_read_only_bridge`](#gui.test_read_only_bridge)
   - [`test_recent_runs`](#gui.test_recent_runs)
   - [`test_results_screen`](#gui.test_results_screen)
   - [`test_run_reuse`](#gui.test_run_reuse)
@@ -2705,6 +2706,28 @@ def test_a_reused_run_without_a_name_is_named_by_the_sweep(
 ```
 
 A reused run nobody named (an ordinary single run) gets the sweep's name.
+
+<a id="test.test_sweep_run.test_a_read_only_point_run_keeps_its_own_labels_and_the_sweep_succeeds"></a>
+
+#### test\_a\_read\_only\_point\_run\_keeps\_its\_own\_labels\_and\_the\_sweep\_succeeds
+
+```python
+def test_a_read_only_point_run_keeps_its_own_labels_and_the_sweep_succeeds(
+        results: Path) -> None
+```
+
+Naming a read-only run is refused; the sweep logs that and carries on.
+
+<a id="test.test_sweep_run.test_a_matching_recompute_of_a_read_only_run_keeps_the_old_run"></a>
+
+#### test\_a\_matching\_recompute\_of\_a\_read\_only\_run\_keeps\_the\_old\_run
+
+```python
+def test_a_matching_recompute_of_a_read_only_run_keeps_the_old_run(
+        results: Path) -> None
+```
+
+A read-only run is never superseded: both runs stay, the sweep succeeds.
 
 <a id="test.test_update"></a>
 
@@ -17801,6 +17824,200 @@ An explicit reset to starter values has nothing left to fork.
 `screens/presets.js`'s own `lastLoadedPresetTitle` docstring: an
 explicit "New configuration" is not "the loaded preset, plus edits"
 any more.
+
+<a id="gui.test_read_only_bridge"></a>
+
+# gui.test\_read\_only\_bridge
+
+Read-only examples through `fim.gui.app.Api`'s bridge methods.
+
+Read-only examples design (`20261005-claude-opus-5-5-read-only-examples-
+and-classes-design.md`, `selby/restricted`), section 3: every bridge
+method that edits a Study, an Experiment, or a Run reports a refusal as
+`{"ok": False, "message": ...}` rather than raising, and deleting is all
+or nothing with respect to read-only items. Window-free, like
+`test_app_api.py`: these are plain Python calls.
+
+A read-only Run here is a directory whose `manifest.json` parameters
+carry `_read_only: true`, which is all `groups.is_run_read_only` reads;
+read-only Studies and Experiments are written through the seeding
+writers (`groups.write_read_only_study`/`write_read_only_experiment`).
+
+<a id="gui.test_read_only_bridge.results"></a>
+
+#### results
+
+```python
+@pytest.fixture
+def results(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path
+```
+
+Point `paths.results_directory()` at an isolated directory.
+
+<a id="gui.test_read_only_bridge.test_delete_runs_is_all_or_nothing_when_one_run_is_read_only"></a>
+
+#### test\_delete\_runs\_is\_all\_or\_nothing\_when\_one\_run\_is\_read\_only
+
+```python
+def test_delete_runs_is_all_or_nothing_when_one_run_is_read_only(
+        results: Path) -> None
+```
+
+One read-only run in the selection means nothing is deleted.
+
+<a id="gui.test_read_only_bridge.test_delete_runs_without_read_only_runs_still_deletes"></a>
+
+#### test\_delete\_runs\_without\_read\_only\_runs\_still\_deletes
+
+```python
+def test_delete_runs_without_read_only_runs_still_deletes(
+        results: Path) -> None
+```
+
+The ordinary path is unchanged: every existing directory goes.
+
+<a id="gui.test_read_only_bridge.test_delete_selected_refuses_a_selection_holding_a_read_only_item"></a>
+
+#### test\_delete\_selected\_refuses\_a\_selection\_holding\_a\_read\_only\_item
+
+```python
+@pytest.mark.parametrize("kind", ["run", "study", "experiment"])
+def test_delete_selected_refuses_a_selection_holding_a_read_only_item(
+        results: Path, kind: str) -> None
+```
+
+A read-only item anywhere in the selection: nothing at all is deleted.
+
+<a id="gui.test_read_only_bridge.test_delete_study_counts_a_read_only_member_as_kept"></a>
+
+#### test\_delete\_study\_counts\_a\_read\_only\_member\_as\_kept
+
+```python
+def test_delete_study_counts_a_read_only_member_as_kept(results: Path) -> None
+```
+
+An editable Study's example member survives and is reported as kept.
+
+<a id="gui.test_read_only_bridge.test_delete_study_runs_counts_a_read_only_member_as_kept"></a>
+
+#### test\_delete\_study\_runs\_counts\_a\_read\_only\_member\_as\_kept
+
+```python
+def test_delete_study_runs_counts_a_read_only_member_as_kept(
+        results: Path) -> None
+```
+
+Emptying a Study keeps its example member, in the Study and on disk.
+
+<a id="gui.test_read_only_bridge.test_a_run_both_shared_and_read_only_is_counted_once"></a>
+
+#### test\_a\_run\_both\_shared\_and\_read\_only\_is\_counted\_once
+
+```python
+def test_a_run_both_shared_and_read_only_is_counted_once(
+        results: Path) -> None
+```
+
+Kept is a set of runs, not a sum of reasons.
+
+<a id="gui.test_read_only_bridge.test_delete_experiment_does_not_count_a_kept_read_only_study"></a>
+
+#### test\_delete\_experiment\_does\_not\_count\_a\_kept\_read\_only\_study
+
+```python
+def test_delete_experiment_does_not_count_a_kept_read_only_study(
+        results: Path) -> None
+```
+
+An editable Experiment holding an example Study keeps and skips it.
+
+<a id="gui.test_read_only_bridge.test_every_group_edit_refuses_a_read_only_item_with_a_message"></a>
+
+#### test\_every\_group\_edit\_refuses\_a\_read\_only\_item\_with\_a\_message
+
+```python
+@pytest.mark.parametrize(
+    ("method", "arguments"),
+    [
+        ("delete_study", ("study-examples-a", )),
+        ("delete_study_runs", ("study-examples-a", )),
+        ("delete_experiment", ("experiment-examples", )),
+        ("update_study_details", ("study-examples-a", "New", "", "")),
+        ("update_experiment_details", ("experiment-examples", "New", "", "")),
+        ("add_study_to_experiment", ("experiment-examples", "study-mine")),
+        ("add_run_to_study", ("study-examples-a", "RUN-MINE")),
+    ],
+)
+def test_every_group_edit_refuses_a_read_only_item_with_a_message(
+        results: Path, method: str, arguments: tuple[str, ...]) -> None
+```
+
+Each guarded bridge method answers `ok: False` with the refusal.
+
+<a id="gui.test_read_only_bridge.test_update_run_details_refuses_a_read_only_run"></a>
+
+#### test\_update\_run\_details\_refuses\_a\_read\_only\_run
+
+```python
+def test_update_run_details_refuses_a_read_only_run(results: Path) -> None
+```
+
+Renaming an example run is refused and its metadata is untouched.
+
+<a id="gui.test_read_only_bridge.test_create_study_inside_a_read_only_experiment_leaves_nothing_behind"></a>
+
+#### test\_create\_study\_inside\_a\_read\_only\_experiment\_leaves\_nothing\_behind
+
+```python
+def test_create_study_inside_a_read_only_experiment_leaves_nothing_behind(
+        results: Path) -> None
+```
+
+The new Study is removed again when the Experiment refuses it.
+
+<a id="gui.test_read_only_bridge.test_copying_a_read_only_study_makes_an_editable_one"></a>
+
+#### test\_copying\_a\_read\_only\_study\_makes\_an\_editable\_one
+
+```python
+def test_copying_a_read_only_study_makes_an_editable_one(
+        results: Path) -> None
+```
+
+Copy stays allowed, and the copy can be renamed.
+
+<a id="gui.test_read_only_bridge.test_a_matching_recompute_of_a_read_only_run_keeps_it_and_tells_the_page"></a>
+
+#### test\_a\_matching\_recompute\_of\_a\_read\_only\_run\_keeps\_it\_and\_tells\_the\_page
+
+```python
+def test_a_matching_recompute_of_a_read_only_run_keeps_it_and_tells_the_page(
+        results: Path, monkeypatch: pytest.MonkeyPatch) -> None
+```
+
+`_check_reproducibility` no longer raises for a read-only previous run.
+
+<a id="gui.test_read_only_bridge.test_a_finished_run_aimed_at_a_read_only_study_is_filed_in_the_default_one"></a>
+
+#### test\_a\_finished\_run\_aimed\_at\_a\_read\_only\_study\_is\_filed\_in\_the\_default\_one
+
+```python
+def test_a_finished_run_aimed_at_a_read_only_study_is_filed_in_the_default_one(
+        results: Path) -> None
+```
+
+A read-only Study cannot take a new run; the default Study does.
+
+<a id="gui.test_read_only_bridge.test_a_read_only_runs_metadata_is_not_rewritten_by_run_details"></a>
+
+#### test\_a\_read\_only\_runs\_metadata\_is\_not\_rewritten\_by\_run\_details
+
+```python
+def test_a_read_only_runs_metadata_is_not_rewritten_by_run_details(
+        results: Path) -> None
+```
+
+Configure's run name on a reused example run is refused, best effort.
 
 <a id="gui.test_recent_runs"></a>
 

@@ -684,3 +684,41 @@ def test_a_reused_run_without_a_name_is_named_by_the_sweep(results: Path) -> Non
     _run(second)
 
     assert _names_by_coordinate(second)[2][0] == "Test sweep sweep d=2"
+
+
+def _read_only_study(results: Path, *values: int) -> str:
+    """Create a sweep Study whose every point is a read-only run."""
+    spec = SweepSpec(
+        base={**_BASE, "_read_only": True}, axes=(expand_axis("d", list(values)),)
+    )
+    return create_sweep_study(spec, enumerate_points(spec), "Read-only sweep").study_id
+
+
+def test_a_read_only_point_run_keeps_its_own_labels_and_the_sweep_succeeds(
+    results: Path,
+) -> None:
+    """Naming a read-only run is refused; the sweep logs that and carries on."""
+    study_id = _read_only_study(results, 2)
+
+    outcome, _ = _run(study_id)
+
+    assert (outcome.done, outcome.failed) == (1, 0)
+    (directory,) = groups.study_run_directories(groups.get_study(study_id))
+    assert groups.is_run_read_only(directory)
+    assert not run_metadata_path(directory).exists()
+
+
+def test_a_matching_recompute_of_a_read_only_run_keeps_the_old_run(
+    results: Path,
+) -> None:
+    """A read-only run is never superseded: both runs stay, the sweep succeeds."""
+    study_id = _read_only_study(results, 2)
+    _run(study_id)
+    (old,) = groups.study_run_directories(groups.get_study(study_id))
+
+    outcome, events = _run(study_id, software_version=_OTHER_VERSION)
+
+    assert (outcome.recomputed, outcome.failed) == (1, 0)
+    assert any(e.kind == "point_recomputed" for e in events)
+    assert old.is_dir()
+    assert old in groups.study_run_directories(groups.get_study(study_id))

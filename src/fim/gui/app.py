@@ -43,7 +43,6 @@ import math
 import multiprocessing
 import os
 import queue
-import shutil
 import signal
 import subprocess
 import sys
@@ -1476,6 +1475,83 @@ def _group_details_payload(
         "description": manifest.description,
         "documentation": manifest.documentation,
     }
+
+
+def _kept_run_counts(study_id: str) -> tuple[int, int]:
+    """Count the Runs that deleting or emptying a Study would keep.
+
+    A Run is kept when another Study also links it
+    (`groups.shared_run_directories`) or when it is a read-only example
+    (`groups.is_run_read_only`); a Run that is both counts once.
+
+    Args:
+        study_id: The Study about to be deleted or emptied.
+
+    Returns:
+        `(kept, read_only)`: every kept Run, and the read-only ones
+        among them.
+
+    Raises:
+        ValueError: No Study with this id exists.
+    """
+    study = groups.get_study(study_id)
+    shared = {path.resolve() for path in groups.shared_run_directories(study_id)}
+    read_only = {
+        directory.resolve()
+        for directory in groups.study_run_directories(study)
+        if groups.is_run_read_only(directory)
+    }
+    return len(shared | read_only), len(read_only)
+
+
+def _read_only_study_count(experiment_id: str) -> int:
+    """Count an Experiment's member Studies that are read-only (and so kept).
+
+    A member id with no readable manifest is not counted: it is already
+    gone, and `groups.delete_experiment` tolerates it.
+    """
+    count = 0
+    for study_id in groups.get_experiment(experiment_id).study_ids:
+        try:
+            count += groups.get_study(study_id).read_only
+        except (OSError, ValueError):
+            continue
+    return count
+
+
+def _read_only_selection_message(items: Sequence[Mapping[str, str]]) -> str | None:
+    """Name the read-only items in a Home delete selection, or return `None`.
+
+    Args:
+        items: `Api.delete_selected`'s own items.
+
+    Returns:
+        A message naming every read-only Experiment, Study, and Run in
+        `items`, ending "nothing was deleted", or `None` when there is
+        none. An Experiment or Study that does not exist is not
+        read-only; deleting it is already a tolerated no-op.
+    """
+    names: list[str] = []
+    for item in items:
+        kind = item.get("kind")
+        try:
+            if kind == "experiment":
+                experiment = groups.get_experiment(item["experimentId"])
+                if experiment.read_only:
+                    names.append(f"experiment {experiment.name!r}")
+            elif kind == "study":
+                study = groups.get_study(item["studyId"])
+                if study.read_only:
+                    names.append(f"study {study.name!r}")
+            elif kind == "run" and groups.is_run_read_only(item["directory"]):
+                names.append(f"run {Path(item['directory']).name}")
+        except (OSError, ValueError, KeyError):
+            continue
+    if not names:
+        return None
+    return (
+        f"read-only examples cannot be deleted: {', '.join(names)}; nothing was deleted"
+    )
 
 
 def _prefer_non_default(
@@ -4391,13 +4467,18 @@ class Api:
         Study's link goes), so deleting one Study never deletes a Run out
         from under another.
 
+        A read-only example Run the Study holds is kept too
+        (`groups.delete_study`), and counted as kept.
+
         Returns:
-            `{"ok": True, "deletedRunCount": N, "keptRunCount": K}` on
-            success; `{"ok": False, "message": ...}` if `study_id` does
-            not exist.
+            `{"ok": True, "deletedRunCount": N, "keptRunCount": K,
+            "readOnlyRunCount": R}` on success, `K` counting every kept
+            Run (shared or read-only) and `R` the read-only ones among
+            them; `{"ok": False, "message": ...}` if `study_id` does not
+            exist or the Study itself is read-only.
         """
         try:
-            kept = len(groups.shared_run_directories(study_id))
+            kept, read_only = _kept_run_counts(study_id)
             if study_id == groups.DEFAULT_STUDY_ID:
                 # Built in and always present: "deleting" it empties it, so
                 # the next run has somewhere to land and Home never shows
@@ -4411,6 +4492,7 @@ class Api:
             "ok": True,
             "deletedRunCount": deleted.run_count - kept,
             "keptRunCount": kept,
+            "readOnlyRunCount": read_only,
         }
 
     @_log_bridge_call
@@ -4422,12 +4504,16 @@ class Api:
         thousands; this empties a Study in one step. A Run another Study
         also links is unlinked, not deleted.
 
+        A read-only example Run stays in the Study and counts as kept.
+
         Returns:
-            `{"ok": True, "deletedRunCount": N, "keptRunCount": K}`, or
-            `{"ok": False, "message": ...}` if the Study does not exist.
+            `{"ok": True, "deletedRunCount": N, "keptRunCount": K,
+            "readOnlyRunCount": R}` (see `delete_study`), or `{"ok":
+            False, "message": ...}` if the Study does not exist or is
+            read-only.
         """
         try:
-            kept = len(groups.shared_run_directories(study_id))
+            kept, read_only = _kept_run_counts(study_id)
             cleared = groups.clear_study_runs(study_id)
         except ValueError as error:
             return {"ok": False, "message": str(error)}
@@ -4435,15 +4521,20 @@ class Api:
             "ok": True,
             "deletedRunCount": cleared.run_count - kept,
             "keptRunCount": kept,
+            "readOnlyRunCount": read_only,
         }
 
     @_log_bridge_call
     def delete_experiment(self, experiment_id: str) -> dict[str, Any]:
         """Delete an Experiment, its Studies, and their Runs. See `delete_study`.
 
+        A read-only Study the Experiment holds is kept
+        (`groups.delete_experiment`) and not counted as deleted.
+
         Returns:
             `{"ok": True, "deletedStudyCount": N}` on success; `{"ok":
-            False, "message": ...}` if `experiment_id` does not exist.
+            False, "message": ...}` if `experiment_id` does not exist or
+            is read-only.
         """
         try:
             if experiment_id == groups.DEFAULT_EXPERIMENT_ID:
@@ -4451,13 +4542,18 @@ class Api:
                 # other Studies are deleted and the default Study emptied,
                 # but the two containers stay.
                 deleted = groups.get_experiment(experiment_id)
-                for study_id in deleted.study_ids:
-                    self.delete_study(study_id)
+                deleted_count = sum(
+                    1
+                    for study_id in deleted.study_ids
+                    if self.delete_study(study_id)["ok"]
+                )
             else:
+                read_only_count = _read_only_study_count(experiment_id)
                 deleted = groups.delete_experiment(experiment_id)
+                deleted_count = deleted.study_count - read_only_count
         except ValueError as error:
             return {"ok": False, "message": str(error)}
-        return {"ok": True, "deletedStudyCount": deleted.study_count}
+        return {"ok": True, "deletedStudyCount": deleted_count}
 
     @_log_bridge_call
     def copy_study(self, study_id: str, name: str) -> dict[str, Any]:
@@ -4758,19 +4854,22 @@ class Api:
         per directory, matters once a selection reaches into the
         thousands.
 
+        All-or-nothing with respect to read-only example runs
+        (`groups.delete_runs`): if any of `directories` is read-only,
+        nothing at all is deleted and the refusal is reported.
+
         Returns:
             `{"ok": True, "deletedCount": N}` — `N` is how many of
             `directories` actually existed and were removed; a
             directory already gone (deleted out of band, or a stale
             selection from before a refresh) is not an error.
+            `{"ok": False, "message": ...}` if any directory is a
+            read-only run; the message names every one.
         """
-        deleted_count = 0
-        for directory in directories:
-            path = Path(directory)
-            if path.is_dir():
-                shutil.rmtree(path)
-                deleted_count += 1
-        groups.remove_run_references(directories)
+        try:
+            deleted_count = groups.delete_runs(directories)
+        except groups.ReadOnlyError as error:
+            return {"ok": False, "message": str(error)}
         return {"ok": True, "deletedCount": deleted_count}
 
     @_log_bridge_call
@@ -4796,11 +4895,22 @@ class Api:
                 "study", "studyId": ...}`/`{"kind": "experiment",
                 "experimentId": ...}` per selected row.
 
+        Read-only items are refused up front, all or nothing: if any
+        selected Experiment, Study, or Run is read-only, nothing at all
+        is deleted (the same rule `delete_runs` applies to runs). A
+        read-only Run merely *inside* a selected editable Study is not a
+        refusal: deleting that Study keeps it (`groups.delete_study`).
+
         Returns:
             `{"ok": True, "deletedRunCount": N, "deletedStudyCount": M,
             "deletedExperimentCount": K}` — each count is how many of
             that kind actually still existed and were removed.
+            `{"ok": False, "message": ...}` when the selection holds a
+            read-only item; the message names them.
         """
+        refusal = _read_only_selection_message(items)
+        if refusal is not None:
+            return {"ok": False, "message": refusal}
         deleted_experiment_count = 0
         for item in items:
             if item.get("kind") != "experiment":
@@ -4816,7 +4926,12 @@ class Api:
         run_directories = [
             item["directory"] for item in items if item.get("kind") == "run"
         ]
-        deleted_run_count = self.delete_runs(run_directories)["deletedCount"]
+        deleted_runs = self.delete_runs(run_directories)
+        if not deleted_runs["ok"]:
+            # Checked up front already; reached only if a run became
+            # read-only in between (a re-seed from another window).
+            return deleted_runs
+        deleted_run_count = deleted_runs["deletedCount"]
         return {
             "ok": True,
             "deletedRunCount": deleted_run_count,
@@ -5886,7 +6001,12 @@ def _check_reproducibility(
         return
     payload = comparison.to_dict()
     if comparison.identical:
-        groups.supersede_run(previous, recomputed)
+        try:
+            groups.supersede_run(previous, recomputed)
+        except groups.ReadOnlyError as error:
+            # A read-only example is never deleted or relinked; the
+            # matching recomputed run simply lives beside it.
+            logger.info("kept read-only run %s: %s", previous, error)
     else:
         logger.warning(
             "recomputed run %s differs from %s (version %s vs %s): %s",
@@ -6013,6 +6133,10 @@ def _attach_finished_run_to_study(
     logged and swallowed, never raised into the caller's own `"done"`
     handling — the run itself already succeeded; this is a best-effort
     organizing step, not part of what "done" reports.
+
+    A read-only Study (a seeded example Study, chosen by another window
+    or a stale selection) cannot take the run; it goes to the default
+    Study instead, so it is never left without one.
     """
     if run_details is not None and (run_details.name or run_details.description):
         _write_run_details(output_directory, run_details)
@@ -6021,6 +6145,11 @@ def _attach_finished_run_to_study(
     )
     try:
         groups.add_run_to_study(resolved_study_id, output_directory)
+    except groups.ReadOnlyError as error:
+        logger.warning("filing %s in the default study: %s", output_directory, error)
+        groups.add_run_to_study(
+            groups.ensure_default_study().study_id, output_directory
+        )
     except ValueError as error:
         logger.warning(
             "could not add %s to study %s: %s",
