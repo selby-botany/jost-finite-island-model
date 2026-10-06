@@ -5258,6 +5258,7 @@ def test_update_study_and_experiment_details_round_trip(
             "name": "New",
             "description": "Line.",
             "documentation": "Notes.",
+            "readOnly": False,
         },
     }
     assert saved_experiment["details"]["description"] is None
@@ -5307,6 +5308,7 @@ def test_update_run_details_writes_the_sidecar_and_home_lists_it(
             "name": "Baseline",
             "description": "Low m control.",
             "directoryName": output.name,
+            "readOnly": False,
         },
     }
     assert api.get_details("run", str(output)) == saved
@@ -5355,6 +5357,7 @@ def test_get_run_context_names_a_runs_study_and_experiment(
         "name": "Topology",
         "description": "Ring vs island.",
         "documentation": None,
+        "readOnly": False,
     }
 
 

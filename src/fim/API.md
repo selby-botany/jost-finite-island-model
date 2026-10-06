@@ -6230,7 +6230,9 @@ List every Study, oldest first (matching `groups.list_studies`'s own order).
 
   One dict per Study: `{"studyId", "name", "description",
   "documentation", "runCount", "createdAt", "runDirectories",
-  "sweepPointCount"}`. `runCount` is the number of member
+  "sweepPointCount", "readOnly"}`. `readOnly` marks a
+  read-only example Study (read-only examples design §3).
+  `runCount` is the number of member
   runs that still exist (the length of `runDirectories`),
   not the manifest's own count. `sweepPointCount` is the number of
   planned points for a sweep Study and `None` for one
@@ -6257,7 +6259,8 @@ List every Experiment, oldest first.
 
   One dict per Experiment: `{"experimentId", "name",
   "description", "documentation", "studyCount", "createdAt",
-  "studyIds"}`.
+  "studyIds", "readOnly"}`, `readOnly` marking a read-only
+  example Experiment.
   `studyIds` lets the client find an Experiment's own member
   Studies directly from `list_studies`'s own already-fetched
   result — expanding an Experiment row needs no bridge call of
@@ -6809,8 +6812,10 @@ policy) rather than double-counted or treated as a failure.
   Read-only items are refused up front, all or nothing: if any
   selected Experiment, Study, or Run is read-only, nothing at all
   is deleted (the same rule `delete_runs` applies to runs). A
-  read-only Run merely *inside* a selected editable Study is not a
-- `refusal` - deleting that Study keeps it (`groups.delete_study`).
+  read-only Run merely *inside* a selected editable Study (sent as
+  a Run item too, since Home's selection cascades) is not a
+- `refusal` - it is skipped, and deleting that Study keeps it
+  (`groups.delete_study`).
 
 
 **Returns**:

@@ -53,4 +53,8 @@
     <path d="M4.2 19.8l2.1-2.1"/>
     <path d="M17.7 6.3l2.1-2.1"/>
   </symbol>
+  <symbol id="icon-lock" viewBox="0 0 24 24">
+    <rect x="5" y="11" width="14" height="10" rx="2"/>
+    <path d="M8 11V7.5a4 4 0 0 1 8 0V11"/>
+  </symbol>
 </svg>

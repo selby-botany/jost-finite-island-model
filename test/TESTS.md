@@ -79,6 +79,7 @@ Every test module, fixture, and test function documented here in full; `doc/fim-
   - [`test_presets`](#gui.test_presets)
   - [`test_presets_screen`](#gui.test_presets_screen)
   - [`test_read_only_bridge`](#gui.test_read_only_bridge)
+  - [`test_read_only_screen`](#gui.test_read_only_screen)
   - [`test_recent_runs`](#gui.test_recent_runs)
   - [`test_results_screen`](#gui.test_results_screen)
   - [`test_run_reuse`](#gui.test_run_reuse)
@@ -17888,6 +17889,28 @@ def test_delete_selected_refuses_a_selection_holding_a_read_only_item(
 
 A read-only item anywhere in the selection: nothing at all is deleted.
 
+<a id="gui.test_read_only_bridge.test_delete_selected_skips_a_read_only_run_its_selected_study_implies"></a>
+
+#### test\_delete\_selected\_skips\_a\_read\_only\_run\_its\_selected\_study\_implies
+
+```python
+def test_delete_selected_skips_a_read_only_run_its_selected_study_implies(
+        results: Path) -> None
+```
+
+Home's cascade sends a selected Study's example run too; it is kept.
+
+<a id="gui.test_read_only_bridge.test_every_listing_and_details_payload_says_what_is_read_only"></a>
+
+#### test\_every\_listing\_and\_details\_payload\_says\_what\_is\_read\_only
+
+```python
+def test_every_listing_and_details_payload_says_what_is_read_only(
+        results: Path) -> None
+```
+
+`readOnly` rides on studies, experiments, details, and run context.
+
 <a id="gui.test_read_only_bridge.test_delete_study_counts_a_read_only_member_as_kept"></a>
 
 #### test\_delete\_study\_counts\_a\_read\_only\_member\_as\_kept
@@ -18018,6 +18041,45 @@ def test_a_read_only_runs_metadata_is_not_rewritten_by_run_details(
 ```
 
 Configure's run name on a reused example run is refused, best effort.
+
+<a id="gui.test_read_only_screen"></a>
+
+# gui.test\_read\_only\_screen
+
+Headless functional tests for read-only examples in the GUI.
+
+Read-only examples design (`20261005-claude-opus-5-5-read-only-examples-
+and-classes-design.md`, `selby/restricted`), section 3: a read-only
+Experiment, Study, or Run shows a lock badge wherever its name appears
+(Home's tree, the details dialog, the Run card's title), and every edit
+control on it is disabled with a tooltip saying why, while viewing and
+copying stay available. `test_read_only_bridge.py` proves the bridge
+refuses the edits; this file proves the page never offers them.
+
+Every wait polls a real completion signal (a ready flag, a pending-call
+counter, or the DOM state the step produces), never a fixed sleep.
+
+<a id="gui.test_read_only_screen.test_home_locks_read_only_items_and_disables_their_edit_controls"></a>
+
+#### test\_home\_locks\_read\_only\_items\_and\_disables\_their\_edit\_controls
+
+```python
+def test_home_locks_read_only_items_and_disables_their_edit_controls(
+        tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None
+```
+
+Lock badges on the example Experiment, Study, and Run; edits disabled.
+
+<a id="gui.test_read_only_screen.test_details_dialog_and_run_title_show_a_read_only_run_as_locked"></a>
+
+#### test\_details\_dialog\_and\_run\_title\_show\_a\_read\_only\_run\_as\_locked
+
+```python
+def test_details_dialog_and_run_title_show_a_read_only_run_as_locked(
+        tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None
+```
+
+The details dialog cannot save, and the opened run's title has the lock.
 
 <a id="gui.test_recent_runs"></a>
 

@@ -254,6 +254,9 @@ function studyGroup(study) {
         label: study.name,
         kind: "study",
         studyId: study.studyId,
+        // A read-only example Study (read-only examples design §3): shown
+        // with a lock, every edit control disabled.
+        readOnly: Boolean(study.readOnly),
         // What the tooltip and the details dialog show (`screens/details.js`).
         details: {
             kind: "study",
@@ -261,6 +264,7 @@ function studyGroup(study) {
             name: study.name,
             description: study.description ?? null,
             documentation: study.documentation ?? null,
+            readOnly: Boolean(study.readOnly),
         },
         runCount: study.runCount,
         countLabel: `${study.runCount} run${study.runCount === 1 ? "" : "s"}`,
@@ -298,12 +302,14 @@ function experimentGroup(experiment, studiesById) {
         label: experiment.name,
         kind: "experiment",
         experimentId: experiment.experimentId,
+        readOnly: Boolean(experiment.readOnly),
         details: {
             kind: "experiment",
             id: experiment.experimentId,
             name: experiment.name,
             description: experiment.description ?? null,
             documentation: experiment.documentation ?? null,
+            readOnly: Boolean(experiment.readOnly),
         },
         runCount: subgroups.reduce((total, subgroup) => total + subgroup.runCount, 0),
         // The Studies that exist, not the manifest's own count: a stale
@@ -598,7 +604,8 @@ function buildAddToStudySelect(directory) {
     placeholder.textContent = "Add to study…";
     placeholder.selected = true;
     select.appendChild(placeholder);
-    for (const study of allStudies) {
+    // A read-only example Study cannot gain runs, so it is not offered.
+    for (const study of allStudies.filter((candidate) => !candidate.readOnly)) {
         const option = document.createElement("option");
         option.value = study.studyId;
         option.textContent = study.name;
@@ -776,6 +783,7 @@ function runDetails(run) {
         name: run.name ?? null,
         description: run.description ?? null,
         directoryName: run.directoryName,
+        readOnly: Boolean(run.readOnly),
     };
 }
 
@@ -831,9 +839,18 @@ function buildRunRow(run, showRunId = true, nested = false) {
                 }
                 updateSelectionToolbar();
             });
+            // A read-only example run is never deleted: its checkbox is
+            // off, and the lock beside its name says why.
+            if (run.readOnly) {
+                checkbox.checked = false;
+                window.fim.disableForReadOnly(checkbox, "run");
+            }
             cell.appendChild(checkbox);
             if (value) {
                 cell.appendChild(document.createTextNode(` ${value}`));
+            }
+            if (run.readOnly) {
+                cell.appendChild(window.fim.buildReadOnlyBadge("run"));
             }
             cell.title = window.fim.detailsTooltipText(runDetails(run));
         } else if (isLabelCell && run.isBatch) {
@@ -1159,17 +1176,27 @@ function buildGroupActionControls(group) {
     const container = document.createElement("span");
     container.className = "open-run-group-actions";
 
+    // A read-only example (read-only examples design §3) keeps every
+    // control, so the row reads the same as any other, but each one that
+    // would change it is disabled with the reason on hover. Open and Copy
+    // stay: viewing and copying are allowed.
+    const lockIfReadOnly = (button) => {
+        if (group.readOnly) {
+            window.fim.disableForReadOnly(button, group.kind);
+        }
+        return button;
+    };
     if (group.kind === "study") {
-        container.appendChild(buildCreateRunButton(group));
+        container.appendChild(lockIfReadOnly(buildCreateRunButton(group)));
     }
     if (group.kind === "experiment") {
-        container.appendChild(buildCreateStudyButton(group));
+        container.appendChild(lockIfReadOnly(buildCreateStudyButton(group)));
     }
     if (group.kind === "study") {
         container.appendChild(buildOpenStudyButton(group));
     }
     if (group.kind === "study") {
-        container.appendChild(buildDeleteStudyRunsButton(group));
+        container.appendChild(lockIfReadOnly(buildDeleteStudyRunsButton(group)));
     }
     if (group.kind === "study" && group.sweepPointCount !== null) {
         container.appendChild(buildSweepResultsButton(group));
@@ -1261,7 +1288,9 @@ function cascadeGroupSelection(group, selected) {
         applyRunDirectories(group.runDirectories);
         return;
     }
-    for (const subgroup of group.subgroups) {
+    // A read-only example Study inside an editable Experiment is kept
+    // when the Experiment is deleted, so it is never selected with it.
+    for (const subgroup of group.subgroups.filter((candidate) => !candidate.readOnly)) {
         if (selected) {
             selectedStudyIds.add(subgroup.studyId);
         } else {
@@ -1306,6 +1335,10 @@ function buildGroupSelectCheckbox(group) {
         updateSelectionToolbar();
         renderRecentRuns();
     });
+    if (group.readOnly) {
+        checkbox.checked = false;
+        window.fim.disableForReadOnly(checkbox, group.kind);
+    }
     return checkbox;
 }
 
@@ -1391,6 +1424,9 @@ function buildGroupHeaderRow(group, nested = false) {
         renderRecentRuns();
     });
     cellRow.appendChild(toggle);
+    if (group.readOnly) {
+        cellRow.appendChild(window.fim.buildReadOnlyBadge(group.kind));
+    }
     if (group.details) {
         cellRow.appendChild(window.fim.buildDetailsButton(group.details));
     }
@@ -1695,22 +1731,26 @@ toggleSelectButton.addEventListener("click", () => {
 // while the checkboxes stay hidden would otherwise look like nothing
 // happened at all.
 selectAllButton.addEventListener("click", () => {
-    for (const run of allRecentRuns) {
+    // Read-only examples are never selected: they cannot be deleted
+    // (read-only examples design §3), and selecting one would make the
+    // whole deletion refuse.
+    for (const run of allRecentRuns.filter((candidate) => !candidate.readOnly)) {
         selectedRunDirectories.add(run.directory);
     }
+    const editableStudies = allStudies.filter((study) => !study.readOnly);
     // Every run a Study holds is a row in the tree, including one recorded
     // from a folder outside `results/`, which the scan behind
     // `allRecentRuns` never sees. Selecting only the scanned runs left the
     // others' checkboxes empty under a "select all".
-    for (const study of allStudies) {
+    for (const study of editableStudies) {
         for (const directory of study.runDirectories) {
             selectedRunDirectories.add(directory);
         }
     }
-    for (const study of allStudies) {
+    for (const study of editableStudies) {
         selectedStudyIds.add(study.studyId);
     }
-    for (const experiment of allExperiments) {
+    for (const experiment of allExperiments.filter((candidate) => !candidate.readOnly)) {
         selectedExperimentIds.add(experiment.experimentId);
     }
     setSelectMode(true);

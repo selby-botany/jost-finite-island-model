@@ -136,6 +136,61 @@ def test_delete_selected_refuses_a_selection_holding_a_read_only_item(
     assert example.is_dir()
 
 
+def test_delete_selected_skips_a_read_only_run_its_selected_study_implies(
+    results: Path,
+) -> None:
+    """Home's cascade sends a selected Study's example run too; it is kept."""
+    api = Api()
+    study_id = api.create_study("Mine")["studyId"]
+    own = _run(results, "run-own")
+    example = _run(results, "run-example", read_only=True)
+    groups.add_run_to_study(study_id, own)
+    groups.add_run_to_study(study_id, example)
+
+    result = api.delete_selected(
+        [
+            {"kind": "study", "studyId": study_id},
+            {"kind": "run", "directory": str(own)},
+            {"kind": "run", "directory": str(example)},
+        ]
+    )
+
+    assert result == {
+        "ok": True,
+        "deletedRunCount": 0,
+        "deletedStudyCount": 1,
+        "deletedExperimentCount": 0,
+    }
+    assert not own.exists()
+    assert example.is_dir()
+
+
+def test_every_listing_and_details_payload_says_what_is_read_only(
+    results: Path,
+) -> None:
+    """`readOnly` rides on studies, experiments, details, and run context."""
+    api = Api()
+    example = _run(results, "run-example", read_only=True)
+    study_id = _read_only_study(results, "study-examples-a", [example])
+    _read_only_experiment(results, [study_id])
+    own_study = api.create_study("Mine")["studyId"]
+
+    studies = {row["studyId"]: row["readOnly"] for row in api.list_studies()}
+    experiments = {
+        row["experimentId"]: row["readOnly"] for row in api.list_experiments()
+    }
+    context = api.get_run_context(str(example))
+
+    assert studies == {study_id: True, own_study: False}
+    assert experiments == {"experiment-examples": True}
+    assert api.get_details("run", str(example))["details"]["readOnly"] is True
+    assert api.get_details("study", study_id)["details"]["readOnly"] is True
+    assert api.get_details("study", own_study)["details"]["readOnly"] is False
+    assert context["run"]["readOnly"] is True
+    assert context["study"]["readOnly"] is True
+    assert context["experiment"]["readOnly"] is True
+
+
 def test_delete_study_counts_a_read_only_member_as_kept(results: Path) -> None:
     """An editable Study's example member survives and is reported as kept."""
     api = Api()

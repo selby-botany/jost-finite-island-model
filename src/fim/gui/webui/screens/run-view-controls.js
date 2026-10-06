@@ -297,15 +297,18 @@ async function refreshRunStudySelectOptions() {
     newStudyOption.value = "__new__";
     newStudyOption.textContent = "New study…";
     runStudySelect.appendChild(newStudyOption);
-    for (const study of studies) {
+    // A read-only example Study cannot take a new run (read-only examples
+    // design §3), so it is never offered here.
+    const editable = studies.filter((study) => !study.readOnly);
+    for (const study of editable) {
         const option = document.createElement("option");
         option.value = study.studyId;
         option.textContent = study.name;
         option.title = study.description ?? "";
         runStudySelect.appendChild(option);
     }
-    runStudiesById = new Map(studies.map((study) => [study.studyId, study]));
-    if (studies.some((study) => study.studyId === previousValue)) {
+    runStudiesById = new Map(editable.map((study) => [study.studyId, study]));
+    if (editable.some((study) => study.studyId === previousValue)) {
         runStudySelect.value = previousValue;
     }
     syncRunStudySelectTooltip();

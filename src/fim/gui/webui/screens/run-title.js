@@ -143,7 +143,17 @@ function renderRunTitle() {
     if (subject.details) {
         window.fim.attachDetails(subjectPart, subject.details);
     }
-    runTitleElement.replaceChildren(experimentPart, " — ", subjectPart);
+    const parts = [experimentPart];
+    // A read-only example Experiment, and a read-only Run or Study shown
+    // after it, each carry the lock (read-only examples design §3).
+    if (experiment && experiment.readOnly) {
+        parts.push(window.fim.buildReadOnlyBadge("experiment"));
+    }
+    parts.push(" — ", subjectPart);
+    if (subject.details && subject.details.readOnly) {
+        parts.push(window.fim.buildReadOnlyBadge(subject.details.kind));
+    }
+    runTitleElement.replaceChildren(...parts);
 }
 
 // A rename anywhere (Home, this title, a sweep) shows here at once.

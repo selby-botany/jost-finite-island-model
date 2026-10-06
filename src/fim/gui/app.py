@@ -1372,7 +1372,10 @@ def _home_run_row(run: recent_runs.RecentRun, *, digits: int) -> dict[str, Any]:
         `summary.json` could not be read; otherwise one entry per
         `_RESULT_STATISTIC_NAMES` name. `name` is the run's own
         `metadata.json` name (`fim.persistence.run_metadata`), or
-        `None` if it was never set; `description` likewise.
+        `None` if it was never set; `description` likewise. `readOnly`
+        is whether the run is a read-only example (its manifest
+        parameters carry `_read_only: true`, read from the manifest
+        already in hand rather than a second file read).
     """
     config_summary: dict[str, str] | None = None
     if run.manifest is not None:
@@ -1418,6 +1421,10 @@ def _home_run_row(run: recent_runs.RecentRun, *, digits: int) -> dict[str, Any]:
         "statistics": statistics,
         "name": run_name,
         "description": run_description,
+        "readOnly": (
+            run.manifest is not None
+            and run.manifest.parameters.get("_read_only") is True
+        ),
     }
 
 
@@ -1441,9 +1448,10 @@ def _run_name_and_description(directory: Path) -> tuple[str | None, str | None]:
 def _run_details_payload(directory: Path) -> dict[str, Any]:
     """Return a run's details in the shape the details dialog reads.
 
-    `{"kind": "run", "id", "name", "description", "directoryName"}`:
-    `id` is the run directory (what `Api.update_run_details` takes) and
-    `directoryName` stands in for a run with no name.
+    `{"kind": "run", "id", "name", "description", "directoryName",
+    "readOnly"}`: `id` is the run directory (what `Api.update_run_
+    details` takes), `directoryName` stands in for a run with no name,
+    and `readOnly` marks a read-only example run.
     """
     name, description = _run_name_and_description(directory)
     return {
@@ -1452,6 +1460,7 @@ def _run_details_payload(directory: Path) -> dict[str, Any]:
         "name": name,
         "description": description,
         "directoryName": directory.name,
+        "readOnly": groups.is_run_read_only(directory),
     }
 
 
@@ -1462,7 +1471,8 @@ def _group_details_payload(
 
     The shape the details dialog and every name tooltip read
     (`webui/screens/details.js`): `{"kind", "id", "name", "description",
-    "documentation"}`, `kind` being `"study"` or `"experiment"`.
+    "documentation", "readOnly"}`, `kind` being `"study"` or
+    `"experiment"` and `readOnly` marking a read-only example.
     """
     if isinstance(manifest, groups.StudyManifest):
         kind, identifier = "study", manifest.study_id
@@ -1474,6 +1484,7 @@ def _group_details_payload(
         "name": manifest.name,
         "description": manifest.description,
         "documentation": manifest.documentation,
+        "readOnly": manifest.read_only,
     }
 
 
@@ -1519,8 +1530,48 @@ def _read_only_study_count(experiment_id: str) -> int:
     return count
 
 
+def _runs_in_selected_groups(items: Sequence[Mapping[str, str]]) -> set[Path]:
+    """Return every Run a selected Study, or a selected Experiment's Study, holds.
+
+    Home's selection cascades: checking a Study also checks each of its
+    Runs, so a read-only example Run inside a user's own Study arrives
+    as a Run item too. Deleting that Study keeps the example
+    (`groups.delete_study`), so such a Run is implied by its Study rather
+    than asked for on its own, and is skipped rather than refused.
+
+    Args:
+        items: `Api.delete_selected`'s own items.
+
+    Returns:
+        The resolved Run directories; a Study or Experiment that does not
+        exist contributes nothing.
+    """
+    study_ids = {item["studyId"] for item in items if item.get("kind") == "study"}
+    for item in items:
+        if item.get("kind") != "experiment":
+            continue
+        try:
+            study_ids.update(groups.get_experiment(item["experimentId"]).study_ids)
+        except (OSError, ValueError):
+            continue
+    implied: set[Path] = set()
+    for study_id in study_ids:
+        try:
+            study = groups.get_study(study_id)
+        except (OSError, ValueError):
+            continue
+        implied.update(
+            directory.resolve() for directory in groups.study_run_directories(study)
+        )
+    return implied
+
+
 def _read_only_selection_message(items: Sequence[Mapping[str, str]]) -> str | None:
     """Name the read-only items in a Home delete selection, or return `None`.
+
+    A read-only Run inside a selected Study is not named: it is implied
+    by its Study (`_runs_in_selected_groups`) and kept when that Study
+    is deleted.
 
     Args:
         items: `Api.delete_selected`'s own items.
@@ -1531,6 +1582,7 @@ def _read_only_selection_message(items: Sequence[Mapping[str, str]]) -> str | No
         none. An Experiment or Study that does not exist is not
         read-only; deleting it is already a tolerated no-op.
     """
+    implied = _runs_in_selected_groups(items)
     names: list[str] = []
     for item in items:
         kind = item.get("kind")
@@ -1543,7 +1595,11 @@ def _read_only_selection_message(items: Sequence[Mapping[str, str]]) -> str | No
                 study = groups.get_study(item["studyId"])
                 if study.read_only:
                     names.append(f"study {study.name!r}")
-            elif kind == "run" and groups.is_run_read_only(item["directory"]):
+            elif (
+                kind == "run"
+                and groups.is_run_read_only(item["directory"])
+                and Path(item["directory"]).resolve() not in implied
+            ):
                 names.append(f"run {Path(item['directory']).name}")
         except (OSError, ValueError, KeyError):
             continue
@@ -4091,7 +4147,9 @@ class Api:
         Returns:
             One dict per Study: `{"studyId", "name", "description",
             "documentation", "runCount", "createdAt", "runDirectories",
-            "sweepPointCount"}`. `runCount` is the number of member
+            "sweepPointCount", "readOnly"}`. `readOnly` marks a
+            read-only example Study (read-only examples design §3).
+            `runCount` is the number of member
             runs that still exist (the length of `runDirectories`),
             not the manifest's own count. `sweepPointCount` is the number of
             planned points for a sweep Study and `None` for one
@@ -4124,6 +4182,7 @@ class Api:
                     "createdAt": study.created_at,
                     "runDirectories": directories,
                     "sweepPointCount": _sweep_point_count(study),
+                    "readOnly": study.read_only,
                 }
             )
         return rows
@@ -4135,7 +4194,8 @@ class Api:
         Returns:
             One dict per Experiment: `{"experimentId", "name",
             "description", "documentation", "studyCount", "createdAt",
-            "studyIds"}`.
+            "studyIds", "readOnly"}`, `readOnly` marking a read-only
+            example Experiment.
             `studyIds` lets the client find an Experiment's own member
             Studies directly from `list_studies`'s own already-fetched
             result — expanding an Experiment row needs no bridge call of
@@ -4154,6 +4214,7 @@ class Api:
                 "studyCount": experiment.study_count,
                 "createdAt": experiment.created_at,
                 "studyIds": list(experiment.study_ids),
+                "readOnly": experiment.read_only,
             }
             for experiment in groups.list_experiments(results=results)
         ]
@@ -4898,8 +4959,10 @@ class Api:
         Read-only items are refused up front, all or nothing: if any
         selected Experiment, Study, or Run is read-only, nothing at all
         is deleted (the same rule `delete_runs` applies to runs). A
-        read-only Run merely *inside* a selected editable Study is not a
-        refusal: deleting that Study keeps it (`groups.delete_study`).
+        read-only Run merely *inside* a selected editable Study (sent as
+        a Run item too, since Home's selection cascades) is not a
+        refusal: it is skipped, and deleting that Study keeps it
+        (`groups.delete_study`).
 
         Returns:
             `{"ok": True, "deletedRunCount": N, "deletedStudyCount": M,
@@ -4911,6 +4974,10 @@ class Api:
         refusal = _read_only_selection_message(items)
         if refusal is not None:
             return {"ok": False, "message": refusal}
+        # Computed before anything is deleted: a read-only Run a selected
+        # Study holds arrives as a Run item too (the selection cascades),
+        # and is kept, not refused (`_runs_in_selected_groups`).
+        implied = _runs_in_selected_groups(items)
         deleted_experiment_count = 0
         for item in items:
             if item.get("kind") != "experiment":
@@ -4924,7 +4991,13 @@ class Api:
             if self.delete_study(item["studyId"])["ok"]:
                 deleted_study_count += 1
         run_directories = [
-            item["directory"] for item in items if item.get("kind") == "run"
+            item["directory"]
+            for item in items
+            if item.get("kind") == "run"
+            and not (
+                Path(item["directory"]).resolve() in implied
+                and groups.is_run_read_only(item["directory"])
+            )
         ]
         deleted_runs = self.delete_runs(run_directories)
         if not deleted_runs["ok"]:

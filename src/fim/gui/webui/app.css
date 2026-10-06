@@ -2477,6 +2477,28 @@ fieldset.composite > label {
     color: var(--fim-action);
 }
 
+/* The lock on a read-only example Experiment, Study, or Run (read-only
+ * examples design §3), beside its name wherever the name is shown:
+ * Home's tree, the details dialog's title, the Run card's title. The
+ * icon is the sprite's `icon-lock`, drawn like every other icon here. */
+.read-only-badge {
+    display: inline-flex;
+    align-items: center;
+    color: var(--fim-muted);
+    margin: 0 0.25rem;
+    vertical-align: middle;
+}
+
+.read-only-badge .button-icon {
+    margin-right: 0;
+}
+
+/* Under the details dialog's fields: why they cannot be edited. */
+.details-read-only-note {
+    color: var(--fim-muted);
+    margin: 0.5rem 0 0;
+}
+
 /* The migration-matrix grid editor (`m-matrix-fields`) -- a scrollable
  * table so a large `d` (the starter config's own default is 20) stays
  * usable rather than overflowing the whole dialog; cells are narrow and
