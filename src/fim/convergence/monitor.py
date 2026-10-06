@@ -238,6 +238,11 @@ class ConvergenceMonitor:
         self._noise_next_check_length: dict[str, int] = {}
         self._noise_adequate: set[str] = set()
         self._last_window_statistics: dict[str, WindowStatistics] = {}
+        # Each watched statistic's own (gated) stability verdict from the
+        # most recent `record` call, in `_statistics` order, so the
+        # statistics that actually passed on the stopping round can be
+        # named afterward (`stable_statistics`).
+        self._last_verdicts: tuple[bool, ...] = tuple(False for _ in statistic_names)
         self._outcome = ConvergenceOutcome(False, False, None, None)
 
     @property
@@ -393,6 +398,7 @@ class ConvergenceMonitor:
             )
             for name in self._statistics
         ]
+        self._last_verdicts = tuple(per_statistic_stable)
         is_stable = (
             all(per_statistic_stable)
             if self._combinator == "all"
@@ -433,6 +439,29 @@ class ConvergenceMonitor:
                 generation=generation,
             )
         return self._outcome
+
+    def stable_statistics(self) -> tuple[str, ...]:
+        """Return the watched statistics that passed on the most recent round.
+
+        Every watched statistic is judged every round (`record`), so this
+        is complete: under ``combinator="all"`` a converged run names
+        every watched statistic; under ``"any"`` it names only the ones
+        that had actually passed when the run stopped — one or more. A
+        statistic that passed on an earlier round and is cached as
+        noise-adequate (`_gated_stable`) still counts. Before any
+        `record` call, or on a round where nothing passed (every round of
+        a run that hit its cap), it is empty. `extra_statistics` are never
+        judged and so never appear.
+
+        Returns:
+            The passing statistic names, in configured (``statistics``)
+            order.
+        """
+        return tuple(
+            name
+            for name, stable in zip(self._statistics, self._last_verdicts, strict=True)
+            if stable
+        )
 
     def should_stop(self) -> bool:
         """Return whether statistical convergence or the hard cap fired.

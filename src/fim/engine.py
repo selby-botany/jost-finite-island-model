@@ -218,12 +218,16 @@ class FinalReport(TypedDict):
             it hit the hard generation cap without ever settling
             (`False`) — see this module's own docstring, above, for
             what "settled down" (convergence) means here.
-        converged_on: Which statistic name (or names, for the multi-
-            statistic case) the convergence check was actually watching
-            for this run — a record of what "settled down" was judged
-            against, since a different choice here can legitimately stop
-            a run at a different generation for the identical
-            trajectory.
+        converged_on: Which watched statistic(s) had actually settled
+            when the run stopped — not merely which were watched (that
+            is `SimulationParams.convergence_statistic`, recorded in the
+            manifest). The configured statistic's own name when a single
+            statistic is watched; a list when several are, holding every
+            one under `convergence_combinator: all` but only the ones
+            that had passed under `any`. `None` whenever `converged` is
+            `False`: a run that hit its cap converged on nothing, and a
+            state with no run behind it (a preview, a progress tick, an
+            earlier generation re-analyzed) has no stop to describe.
         reason: A short, human-readable phrase naming the specific
             reason the run stopped (e.g. "statistic converged" or "hit
             the cap") — meant to be read directly by a person looking at
@@ -306,7 +310,7 @@ class FinalReport(TypedDict):
     run_id: str
     generation: int
     converged: bool
-    converged_on: str | list[str]
+    converged_on: str | list[str] | None
     reason: str
     G_ST: float | None
     D: float
@@ -1220,6 +1224,7 @@ def _finalize_replica_lane(
         converged=outcome.converged,
         reason=outcome.reason.value,
         window_statistics=_window_statistics_payload(lane.monitor, lane.params),
+        converged_statistics=lane.monitor.stable_statistics(),
     )
     ended_at = _format_timestamp(clock())
     logger.info(
@@ -2339,6 +2344,7 @@ def report_for_state(
     converged: bool,
     reason: str,
     window_statistics: Mapping[str, dict[str, float | int | bool]] | None = None,
+    converged_statistics: Sequence[str] | None = None,
 ) -> FinalReport:
     """Compute the final report independently of the run loop.
 
@@ -2358,10 +2364,10 @@ def report_for_state(
     Args:
         state: The population state to summarize.
         params: The run's own parameters — read here only for which
-            statistic(s) were being watched (`converged_on`, in the
-            result) and how demes should be weighted when averaging
-            (`SimulationParams.deme_weighting`; see
-            `_statistics_for_locus`).
+            statistic(s) were being watched (the shape of
+            `converged_on`, in the result) and how demes should be
+            weighted when averaging (`SimulationParams.deme_weighting`;
+            see `_statistics_for_locus`).
         run_id: This run's own identifier, copied into the report
             verbatim so the report is self-describing on its own,
             without needing to be paired with anything else to know
@@ -2380,6 +2386,15 @@ def report_for_state(
             of this function's own tests) — `FinalReport.window_statistics`
             is then `{}`, not absent, so every caller can iterate it
             unconditionally rather than checking for `None` twice.
+        converged_statistics: The watched statistics that had passed
+            when the run stopped (`ConvergenceMonitor.
+            stable_statistics`), for a caller with the run's own monitor.
+            `None` for a caller without one (a re-analysis of a saved
+            run's final generation): a converged state is then reported
+            as having converged on every watched statistic, which is
+            exact for one statistic or `convergence_combinator: all`.
+            Ignored when `converged` is `False` (`converged_on` is then
+            `None`).
 
     Returns:
         A `FinalReport`: the run's own bookkeeping (id, generation,
@@ -2405,10 +2420,8 @@ def report_for_state(
         "run_id": run_id,
         "generation": state.generation,
         "converged": converged,
-        "converged_on": (
-            params.convergence_statistic
-            if isinstance(params.convergence_statistic, str)
-            else list(params.convergence_statistic)
+        "converged_on": _converged_on(
+            params, converged=converged, passed=converged_statistics
         ),
         "reason": reason,
         "G_ST": g_st,
@@ -2427,6 +2440,40 @@ def report_for_state(
         **_nei_all_demes_fields(state),
         "window_statistics": dict(window_statistics) if window_statistics else {},
     }
+
+
+def _converged_on(
+    params: SimulationParams,
+    *,
+    converged: bool,
+    passed: Sequence[str] | None,
+) -> str | list[str] | None:
+    """Return `FinalReport.converged_on`: what the run actually converged on.
+
+    Args:
+        params: The run's parameters; a bare-string
+            `convergence_statistic` gives a bare-string result, a list
+            gives a list.
+        converged: Whether the run stopped by converging.
+        passed: The watched statistics that had passed at the stop
+            (`ConvergenceMonitor.stable_statistics`), or `None` when the
+            caller has no monitor, which counts every watched statistic.
+
+    Returns:
+        `None` when the run did not converge; otherwise the passing
+        statistic(s), shaped like `params.convergence_statistic`.
+    """
+    if not converged:
+        return None
+    watched = (
+        (params.convergence_statistic,)
+        if isinstance(params.convergence_statistic, str)
+        else tuple(params.convergence_statistic)
+    )
+    names = watched if passed is None else tuple(passed)
+    if isinstance(params.convergence_statistic, str):
+        return names[0] if names else None
+    return list(names)
 
 
 class _DerivedFields(TypedDict):
@@ -3501,6 +3548,7 @@ def _run_one(
         converged=outcome.converged,
         reason=outcome.reason.value,
         window_statistics=_window_statistics_payload(monitor, params),
+        converged_statistics=monitor.stable_statistics(),
     )
     # The within-run sigma band (`20260907-claude-sonnet-5-within-run-
     # sigma-band-backend-design.md`): once the main run has genuinely

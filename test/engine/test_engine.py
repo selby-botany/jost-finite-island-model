@@ -41,9 +41,10 @@ from fim.engine import (
     run_batch,
 )
 from fim.model.allele import MINTED_ID_START, AlleleId
+from fim.model.initial import generate_initial_state
 from fim.model.locus import LocusSpec, finite_allele_capacity
 from fim.model.operators import _population_sizes
-from fim.model.params import ConvergenceCombinator, SimulationParams
+from fim.model.params import ConvergenceCombinator, EngineBackend, SimulationParams
 from fim.model.state import ModelState
 from fim.model.vectorized import (
     build_vectorized_state,
@@ -2234,6 +2235,102 @@ def test_any_combinator_can_stop_earlier_than_all() -> None:
     # the expected value.
     assert all_result.report["generation"] == 20
     assert any_result.report["generation"] < all_result.report["generation"]
+
+
+def _monomorphic_any_params(engine_backend: EngineBackend) -> SimulationParams:
+    """Return a run where, under `any`, D settles and G_ST never can.
+
+    One founding allele and no mutation keep every deme fixed for it: D is
+    exactly 0 every generation, while G_ST is undefined (0/0) every
+    generation and so never accumulates a history to be stable on.
+    """
+    return SimulationParams(
+        gene_copies=20,
+        m=0.1,
+        mu=0.0,
+        d=3,
+        seed=7,
+        loci=(LocusSpec(1, 5),),
+        initial_allele_count=1,
+        mutation_model="finite_alleles",
+        convergence_statistic=("D", "G_ST"),
+        convergence_combinator="any",
+        convergence_window=4,
+        convergence_tolerance=0.0,
+        max_generations=50,
+        n_replicates=2,
+        replicate_tolerance=None,
+        engine_backend=engine_backend,
+    )
+
+
+@pytest.mark.parametrize("engine_backend", ["lineal", "generational"])
+def test_converged_on_names_only_the_statistics_that_passed(
+    engine_backend: EngineBackend,
+) -> None:
+    """Under `any`, `converged_on` is what passed, not every watched statistic.
+
+    Both report paths: the lineal backend's own run loop (`_run_one`) and
+    a generational lane (`_finish_lane`).
+    """
+    output = fim(
+        20,
+        0.1,
+        0.0,
+        3,
+        params=_monomorphic_any_params(engine_backend),
+        clock=_clock,
+    )
+
+    assert isinstance(output, tuple)
+    for result in output:
+        assert result.report["converged"] is True
+        assert result.report["converged_on"] == ["D"]
+
+
+def test_converged_on_is_none_for_a_run_that_hit_the_cap() -> None:
+    """A capped run converged on nothing; `converged_on` says so."""
+    params = SimulationParams(
+        gene_copies=20,
+        m=0.1,
+        mu=0.01,
+        d=3,
+        seed=7,
+        loci=(LocusSpec(1, 100),),
+        convergence_window=40,
+        convergence_tolerance=0.0,
+        max_generations=60,
+        n_replicates=1,
+        replicate_tolerance=None,
+    )
+
+    result = _run(params)
+
+    assert result.report["converged"] is False
+    assert result.report["reason"] == "hit the cap"
+    assert result.report["converged_on"] is None
+
+
+def test_report_for_state_without_a_monitor_counts_every_watched_statistic(
+    tiny_params: SimulationParams,
+) -> None:
+    """A caller with no monitor (a re-analysis) reports every watched statistic.
+
+    Exact for one statistic or `all`; a state that did not converge
+    (a preview, a progress tick) reports `None`.
+    """
+    state = generate_initial_state(tiny_params)
+    multi = replace(tiny_params, convergence_statistic=("D", "G_ST"))
+
+    def converged_on(params: SimulationParams, *, converged: bool) -> object:
+        return report_for_state(
+            state, params, run_id="r", converged=converged, reason="x"
+        )["converged_on"]
+
+    assert converged_on(tiny_params, converged=True) == "D"
+    assert converged_on(multi, converged=True) == ["D", "G_ST"]
+    assert converged_on(tiny_params, converged=False) is None
+    assert converged_on(multi, converged=False) is None
 
 
 def test_mutation_ids_follow_high_explicit_initial_id() -> None:

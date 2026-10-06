@@ -54,6 +54,7 @@ Return to the [source-tree orientation](../README.md) or the [developer guide](.
     * [outcome](#fim.convergence.monitor.ConvergenceMonitor.outcome)
     * [reason](#fim.convergence.monitor.ConvergenceMonitor.reason)
     * [record](#fim.convergence.monitor.ConvergenceMonitor.record)
+    * [stable\_statistics](#fim.convergence.monitor.ConvergenceMonitor.stable_statistics)
     * [should\_stop](#fim.convergence.monitor.ConvergenceMonitor.should_stop)
     * [window\_statistics](#fim.convergence.monitor.ConvergenceMonitor.window_statistics)
 * [fim.convergence.window\_statistics](#fim.convergence.window_statistics)
@@ -1912,6 +1913,31 @@ Record one ordered observation and update the stop decision.
 - `RuntimeError` - If called after the monitor already stopped.
 - `ValueError` - If ``generation`` or ``value`` is invalid.
 
+<a id="fim.convergence.monitor.ConvergenceMonitor.stable_statistics"></a>
+
+#### stable\_statistics
+
+```python
+def stable_statistics() -> tuple[str, ...]
+```
+
+Return the watched statistics that passed on the most recent round.
+
+Every watched statistic is judged every round (`record`), so this
+is complete: under ``combinator="all"`` a converged run names
+every watched statistic; under ``"any"`` it names only the ones
+that had actually passed when the run stopped — one or more. A
+statistic that passed on an earlier round and is cached as
+noise-adequate (`_gated_stable`) still counts. Before any
+`record` call, or on a round where nothing passed (every round of
+a run that hit its cap), it is empty. `extra_statistics` are never
+judged and so never appear.
+
+**Returns**:
+
+  The passing statistic names, in configured (``statistics``)
+  order.
+
 <a id="fim.convergence.monitor.ConvergenceMonitor.should_stop"></a>
 
 #### should\_stop
@@ -2226,12 +2252,16 @@ Fields:
         it hit the hard generation cap without ever settling
         (`False`) — see this module's own docstring, above, for
         what "settled down" (convergence) means here.
-    converged_on: Which statistic name (or names, for the multi-
-        statistic case) the convergence check was actually watching
-        for this run — a record of what "settled down" was judged
-        against, since a different choice here can legitimately stop
-        a run at a different generation for the identical
-        trajectory.
+    converged_on: Which watched statistic(s) had actually settled
+        when the run stopped — not merely which were watched (that
+        is `SimulationParams.convergence_statistic`, recorded in the
+        manifest). The configured statistic's own name when a single
+        statistic is watched; a list when several are, holding every
+        one under `convergence_combinator: all` but only the ones
+        that had passed under `any`. `None` whenever `converged` is
+        `False`: a run that hit its cap converged on nothing, and a
+        state with no run behind it (a preview, a progress tick, an
+        earlier generation re-analyzed) has no stop to describe.
     reason: A short, human-readable phrase naming the specific
         reason the run stopped (e.g. "statistic converged" or "hit
         the cap") — meant to be read directly by a person looking at
@@ -3391,15 +3421,15 @@ rather than something engineered for its own sake.
 
 ```python
 def report_for_state(
-    state: ModelState,
-    params: SimulationParams,
-    *,
-    run_id: str,
-    converged: bool,
-    reason: str,
-    window_statistics: Mapping[str, dict[str, float | int | bool]]
-    | None = None
-) -> FinalReport
+        state: ModelState,
+        params: SimulationParams,
+        *,
+        run_id: str,
+        converged: bool,
+        reason: str,
+        window_statistics: Mapping[str, dict[str, float | int | bool]]
+    | None = None,
+        converged_statistics: Sequence[str] | None = None) -> FinalReport
 ```
 
 Compute the final report independently of the run loop.
@@ -3421,10 +3451,10 @@ that produced it, not a whole run in progress.
 
 - `state` - The population state to summarize.
 - `params` - The run's own parameters — read here only for which
-  statistic(s) were being watched (`converged_on`, in the
-  result) and how demes should be weighted when averaging
-  (`SimulationParams.deme_weighting`; see
-  `_statistics_for_locus`).
+  statistic(s) were being watched (the shape of
+  `converged_on`, in the result) and how demes should be
+  weighted when averaging (`SimulationParams.deme_weighting`;
+  see `_statistics_for_locus`).
 - `run_id` - This run's own identifier, copied into the report
   verbatim so the report is self-describing on its own,
   without needing to be paired with anything else to know
@@ -3443,6 +3473,15 @@ that produced it, not a whole run in progress.
   of this function's own tests) — `FinalReport.window_statistics`
   is then `{}`, not absent, so every caller can iterate it
   unconditionally rather than checking for `None` twice.
+- `converged_statistics` - The watched statistics that had passed
+  when the run stopped (`ConvergenceMonitor.
+  stable_statistics`), for a caller with the run's own monitor.
+  `None` for a caller without one (a re-analysis of a saved
+  run's final generation): a converged state is then reported
+  as having converged on every watched statistic, which is
+  exact for one statistic or `convergence_combinator: all`.
+  Ignored when `converged` is `False` (`converged_on` is then
+  `None`).
 
 
 **Returns**:

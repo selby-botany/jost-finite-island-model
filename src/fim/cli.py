@@ -619,7 +619,7 @@ def _command_run_scalar(
             f"{output.report['generation']}, D={output.report['D']:.6g}, "
             f"G_ST={_format_optional(output.report['G_ST'])}"
         )
-        _print_window_statistics(output.report)
+        _print_window_statistics(params, output.report)
         if not output.report["converged"]:
             _print_cap_note(params, output.report)
         for label, path in _run_artifact_targets(output_directory).items():
@@ -964,7 +964,7 @@ def _command_update(
     return 0
 
 
-def _print_window_statistics(report: FinalReport) -> None:
+def _print_window_statistics(params: SimulationParams, report: FinalReport) -> None:
     """Print the watched statistic(s)' own trailing-window mean and precision.
 
     `report["D"]` (or whichever statistic was watched) is a single
@@ -974,9 +974,12 @@ def _print_window_statistics(report: FinalReport) -> None:
     of the model's own long-run value (see `doc/convergence.md`), whether
     or not it happened to also satisfy the noise-adequacy gate. Printed
     for every watched statistic, converged or capped alike — a capped run
-    still has a real, if imprecise, window mean worth reading.
+    still has a real, if imprecise, window mean worth reading. The
+    watched statistics come from `params`, not `report["converged_on"]`,
+    which names only those that passed and is `None` for a capped run.
 
     Args:
+        params: The run's parameters (`convergence_statistic`).
         report: The run's own final report.
 
     Returns:
@@ -988,9 +991,9 @@ def _print_window_statistics(report: FinalReport) -> None:
         already documents as sometimes empty).
     """
     names = (
-        [report["converged_on"]]
-        if isinstance(report["converged_on"], str)
-        else report["converged_on"]
+        [params.convergence_statistic]
+        if isinstance(params.convergence_statistic, str)
+        else list(params.convergence_statistic)
     )
     for name in names:
         stats = report["window_statistics"].get(name)

@@ -1226,6 +1226,14 @@ project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   model is run, with a message naming the conflict. A saved default that is
   itself invalid is reported when the app starts, and only that one field
   falls back to its starter value.
+- **`converged_on` says what the run actually converged on.** `report.json`'s
+  `converged_on` repeated the configured statistics, so a run watching D and
+  G<sub>ST</sub> with `convergence_combinator: any` that stopped on
+  G<sub>ST</sub> alone claimed both, and a run that hit its cap claimed to have
+  converged on its statistic. It now lists only the statistics that had
+  settled when the run stopped, and is `null` for a run that reached its cap.
+  The trailing-window lines `fim run` prints are unchanged: every watched
+  statistic, converged or not.
 - **The sweep dialog no longer throws away edits.** Only Done saved the
   dialog; closing it any other way (Escape) kept the earlier settings, so a
   sweep could run with fewer axes than the dialog had shown. Now every way of

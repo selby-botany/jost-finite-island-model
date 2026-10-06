@@ -79,7 +79,8 @@ let baseRunMessages = [];
 
 // The statistic(s) a completed scalar run stopped on (`report.
 // converged_on`), so a run that stopped on a statistic the researcher has
-// hidden can say so; `null` when no such run is shown.
+// hidden can say so; `null` when no such run is shown, or when the run hit
+// its cap (it then stopped on no statistic).
 let completedConvergedOn = null;
 
 // The deme pair the completed view's scatter shows (`[x, y]`, 1-based),

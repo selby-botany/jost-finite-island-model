@@ -179,7 +179,9 @@ The one entry point everything else in this project ultimately calls.
   multi-locus case).
 - **`FinalReport`** (a `TypedDict`) — the scalar numbers a finished
   run reports, averaged across every tracked locus: `run_id`,
-  `generation`, `converged`, `converged_on`, `reason`, and the six
+  `generation`, `converged`, `converged_on` (the watched statistic(s)
+  that had settled when the run stopped; `None` for a run that hit its
+  cap), `reason`, and the six
   differentiation/heterozygosity measures `G_ST` (`None` when every
   tracked locus has fixed, since the statistic is undefined with no
   variation left), `D`, `E_ST`, `K_ST`, `H_S`, `H_T`, `H_ST`, plus the
@@ -198,10 +200,13 @@ The one entry point everything else in this project ultimately calls.
 - **`deterministic_run_id(params) -> str`** — the same configuration
   always produces the same id; used when a caller does not supply its
   own `run_id`.
-- **`report_for_state(state, params, *, generation, converged, converged_on, reason) -> FinalReport`**
+- **`report_for_state(state, params, *, run_id, converged, reason, ...) -> FinalReport`**
   Builds a `FinalReport` from any `ModelState`, not only a state `fim()`
   itself just finished producing — the same function `fim.reanalyze`
-  uses to recompute a report at an earlier saved generation.
+  uses to recompute a report at an earlier saved generation. Optional
+  `window_statistics` and `converged_statistics` (the statistics a run's
+  own monitor saw pass, `ConvergenceMonitor.stable_statistics`) carry
+  what only the run itself knows.
 - **`reports_summary(reports) -> Mapping[str, float | None]`** and
   **`replicate_summary(reports) -> Mapping[str, tuple[float, ConfidenceInterval]]`**
   Aggregate several replicates' own `FinalReport`s into means (and, for

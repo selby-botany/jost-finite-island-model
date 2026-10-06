@@ -258,6 +258,29 @@ def test_run_accepts_several_convergence_statistics(tmp_path: Path) -> None:
     assert (output / "scatter.png").exists()
 
 
+def test_a_capped_run_reports_converged_on_none_and_still_prints_its_window(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """A run that hit its cap converged on nothing, but its window mean still prints.
+
+    The watched statistic's trailing-window line comes from the
+    configuration, not from `converged_on`, which is `null` here.
+    """
+    config = tmp_path / "run.yaml"
+    output = tmp_path / "output"
+    _write_config(
+        config, convergence_window=10, convergence_tolerance=0.0, max_generations=12
+    )
+
+    status = cli.main(["run", str(config), "--output", str(output)])
+
+    assert status == 0
+    report = json.loads((output / "report.json").read_text(encoding="utf-8"))
+    assert report["converged"] is False
+    assert report["converged_on"] is None
+    assert "D trailing-window mean:" in capsys.readouterr().out
+
+
 def test_run_accepts_stepping_stone_topology_sugar_for_m(tmp_path: Path) -> None:
     """A config with a compact ring topology for `m` runs end to end."""
     config = tmp_path / "run.yaml"

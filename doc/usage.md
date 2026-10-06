@@ -535,9 +535,10 @@ n_replicates: 1   # a single scalar run; the default (200) would batch
 fim run multi-statistic.yaml --output results/multi-statistic --quiet
 ```
 
-Converges at generation 770, with `report.json`'s converged_on recording
-["D", "G<sub>ST</sub>"] — both were watched, and `any` means only one needed to
-stabilize first.
+Converges at generation 770. `report.json`'s converged_on lists the watched
+statistics that had actually settled when the run stopped: with `any`, that can
+be just one of them (["G<sub>ST</sub>"], say), and a run that reaches its cap
+records `null`, since it converged on nothing.
 
 ### Within-run sigma band
 

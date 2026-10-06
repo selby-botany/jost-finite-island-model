@@ -441,9 +441,10 @@ n_replicates: 1   # a single scalar run; the default (200) would batch
 </code></pre>
 <pre><code class="language-console">fim run multi-statistic.yaml --output results/multi-statistic --quiet
 </code></pre>
-<p>Converges at generation 770, with <code>report.json</code>'s converged_on recording
-[&quot;D&quot;, &quot;G<sub>ST</sub>&quot;] — both were watched, and <code>any</code> means only one needed to
-stabilize first.</p>
+<p>Converges at generation 770. <code>report.json</code>'s converged_on lists the watched
+statistics that had actually settled when the run stopped: with <code>any</code>, that can
+be just one of them ([&quot;G<sub>ST</sub>&quot;], say), and a run that reaches its cap
+records <code>null</code>, since it converged on nothing.</p>
 <h3 id="within-run-sigma-band">Within-run sigma band</h3>
 <p>Once a run genuinely converges, keep going for a further window and report
 how much the watched statistic still wobbles, generation to generation,

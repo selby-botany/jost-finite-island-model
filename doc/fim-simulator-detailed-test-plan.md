@@ -564,7 +564,10 @@ without the engine:
   statistics is itself reproducible and reports every statistic's
   convergence history; the `"any"` combinator is shown, on an identical
   seed and parameters differing only in convergence_combinator, to stop
-  strictly earlier than `"all"`.
+  strictly earlier than `"all"`. converged_on names only the statistics
+  that had settled at the stop (under `"any"`, a run where one statistic
+  is undefined throughout reports only the other), and is `None` for a
+  run that hit its cap.
 - Mutation IDs never collide with allele labels already supplied through
   an explicit p<sub>0</sub>, even when that label sits above the registry's own
   starting point.

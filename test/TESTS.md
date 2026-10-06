@@ -3132,6 +3132,20 @@ def test_run_accepts_several_convergence_statistics(tmp_path: Path) -> None
 
 A config watching several statistics with a combinator runs end to end.
 
+<a id="cli.test_cli.test_a_capped_run_reports_converged_on_none_and_still_prints_its_window"></a>
+
+#### test\_a\_capped\_run\_reports\_converged\_on\_none\_and\_still\_prints\_its\_window
+
+```python
+def test_a_capped_run_reports_converged_on_none_and_still_prints_its_window(
+        tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None
+```
+
+A run that hit its cap converged on nothing, but its window mean still prints.
+
+The watched statistic's trailing-window line comes from the
+configuration, not from `converged_on`, which is `null` here.
+
 <a id="cli.test_cli.test_run_accepts_stepping_stone_topology_sugar_for_m"></a>
 
 #### test\_run\_accepts\_stepping\_stone\_topology\_sugar\_for\_m
@@ -4692,6 +4706,36 @@ def test_any_combinator_stops_as_soon_as_one_statistic_is_stable() -> None
 ```
 
 The any combinator stops as soon as one statistic's history is stable.
+
+<a id="convergence.test_monitor.test_stable_statistics_names_only_the_statistics_that_passed"></a>
+
+#### test\_stable\_statistics\_names\_only\_the\_statistics\_that\_passed
+
+```python
+def test_stable_statistics_names_only_the_statistics_that_passed() -> None
+```
+
+Under `any`, the stop names the statistic that passed, not every one watched.
+
+<a id="convergence.test_monitor.test_stable_statistics_names_every_statistic_under_all"></a>
+
+#### test\_stable\_statistics\_names\_every\_statistic\_under\_all
+
+```python
+def test_stable_statistics_names_every_statistic_under_all() -> None
+```
+
+Under `all`, a converged run passed on every watched statistic, in order.
+
+<a id="convergence.test_monitor.test_stable_statistics_is_empty_for_a_run_that_hit_the_cap"></a>
+
+#### test\_stable\_statistics\_is\_empty\_for\_a\_run\_that\_hit\_the\_cap
+
+```python
+def test_stable_statistics_is_empty_for_a_run_that_hit_the_cap() -> None
+```
+
+A capped run converged on nothing, even if one statistic had settled.
 
 <a id="convergence.test_monitor.test_monitor_constructor_validates_statistics_and_combinator"></a>
 
@@ -6263,6 +6307,45 @@ The any combinator stops as soon as one statistic settles; all waits for both.
 Same seed and parameters, differing only in ``convergence_combinator`` —
 an exact, deterministic demonstration that the combinator changes when a
 real run stops, not just an isolated monitor unit's Boolean logic.
+
+<a id="engine.test_engine.test_converged_on_names_only_the_statistics_that_passed"></a>
+
+#### test\_converged\_on\_names\_only\_the\_statistics\_that\_passed
+
+```python
+@pytest.mark.parametrize("engine_backend", ["lineal", "generational"])
+def test_converged_on_names_only_the_statistics_that_passed(
+        engine_backend: EngineBackend) -> None
+```
+
+Under `any`, `converged_on` is what passed, not every watched statistic.
+
+Both report paths: the lineal backend's own run loop (`_run_one`) and
+a generational lane (`_finish_lane`).
+
+<a id="engine.test_engine.test_converged_on_is_none_for_a_run_that_hit_the_cap"></a>
+
+#### test\_converged\_on\_is\_none\_for\_a\_run\_that\_hit\_the\_cap
+
+```python
+def test_converged_on_is_none_for_a_run_that_hit_the_cap() -> None
+```
+
+A capped run converged on nothing; `converged_on` says so.
+
+<a id="engine.test_engine.test_report_for_state_without_a_monitor_counts_every_watched_statistic"></a>
+
+#### test\_report\_for\_state\_without\_a\_monitor\_counts\_every\_watched\_statistic
+
+```python
+def test_report_for_state_without_a_monitor_counts_every_watched_statistic(
+        tiny_params: SimulationParams) -> None
+```
+
+A caller with no monitor (a re-analysis) reports every watched statistic.
+
+Exact for one statistic or `all`; a state that did not converge
+(a preview, a progress tick) reports `None`.
 
 <a id="engine.test_engine.test_mutation_ids_follow_high_explicit_initial_id"></a>
 

@@ -163,6 +163,57 @@ def test_any_combinator_stops_as_soon_as_one_statistic_is_stable() -> None:
     assert monitor.histories == {"D": (0.5, 0.5), "G_ST": (0.0, 0.1)}
 
 
+def test_stable_statistics_names_only_the_statistics_that_passed() -> None:
+    """Under `any`, the stop names the statistic that passed, not every one watched."""
+    monitor = ConvergenceMonitor(
+        TrailingWindowCriterion(2, 0.0),
+        max_generations=10,
+        statistics=("D", "G_ST"),
+        combinator="any",
+    )
+    assert monitor.stable_statistics() == ()
+
+    monitor.record(0, {"D": 0.5, "G_ST": 0.0})
+    monitor.record(1, {"D": 0.5, "G_ST": 0.1})
+
+    assert monitor.outcome().converged
+    assert monitor.stable_statistics() == ("D",)
+
+
+def test_stable_statistics_names_every_statistic_under_all() -> None:
+    """Under `all`, a converged run passed on every watched statistic, in order."""
+    monitor = ConvergenceMonitor(
+        TrailingWindowCriterion(2, 0.0),
+        max_generations=10,
+        statistics=("G_ST", "D"),
+        combinator="all",
+        extra_statistics=("H_S",),
+    )
+
+    monitor.record(0, {"D": 0.5, "G_ST": 0.2, "H_S": 0.1})
+    monitor.record(1, {"D": 0.5, "G_ST": 0.2, "H_S": 0.1})
+
+    assert monitor.outcome().converged
+    assert monitor.stable_statistics() == ("G_ST", "D")
+
+
+def test_stable_statistics_is_empty_for_a_run_that_hit_the_cap() -> None:
+    """A capped run converged on nothing, even if one statistic had settled."""
+    monitor = ConvergenceMonitor(
+        TrailingWindowCriterion(2, 0.0),
+        max_generations=2,
+        statistics=("D", "G_ST"),
+        combinator="all",
+    )
+
+    monitor.record(0, {"D": 0.5, "G_ST": 0.0})
+    monitor.record(1, {"D": 0.5, "G_ST": 0.1})
+    monitor.record(2, {"D": 0.6, "G_ST": 0.2})
+
+    assert monitor.outcome().reason is StopReason.MAX_GENERATIONS
+    assert monitor.stable_statistics() == ()
+
+
 def test_monitor_constructor_validates_statistics_and_combinator() -> None:
     """Statistic names and the combinator are validated at construction."""
     with pytest.raises(ValueError, match="statistics must not be empty"):
