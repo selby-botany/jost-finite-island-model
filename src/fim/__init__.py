@@ -108,11 +108,15 @@ def _dev_commit_suffix(repo_root: Path) -> str | None:
     function even if `git` happens to be on the machine's `PATH`.
 
     Deliberately does not raise: a missing `git` binary, a checkout
-    without a `.git` directory (e.g. a source tarball), or any other
-    `git` failure all just mean "no commit label available," not a
-    startup error.
+    without `.git` (e.g. a source tarball), or any other `git` failure
+    all just mean "no commit label available," not a startup error.
+
+    `.git` may be a directory (an ordinary clone) or a file (a linked
+    `git worktree`, whose `.git` file points at the shared repository);
+    `git` resolves both from `repo_root`, so either counts. Requiring a
+    directory silently dropped the label in every worktree.
     """
-    if not (repo_root / ".git").is_dir():
+    if not (repo_root / ".git").exists():
         return None
     try:
         result = subprocess.run(

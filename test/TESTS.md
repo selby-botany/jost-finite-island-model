@@ -1861,6 +1861,17 @@ It runs at every `import fim` under a short timeout; a plain `git
 status` killed by that timeout mid-refresh leaves `.git/index.lock`
 behind and blocks the next commit.
 
+<a id="test.test_metadata.test_dev_commit_suffix_reads_a_linked_worktree"></a>
+
+#### test\_dev\_commit\_suffix\_reads\_a\_linked\_worktree
+
+```python
+def test_dev_commit_suffix_reads_a_linked_worktree(
+        tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None
+```
+
+A `git worktree`, whose `.git` is a file, still gets its label.
+
 <a id="test.test_metadata.test_dev_commit_suffix_is_none_without_a_git_directory"></a>
 
 #### test\_dev\_commit\_suffix\_is\_none\_without\_a\_git\_directory

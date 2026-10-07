@@ -153,6 +153,17 @@ def test_dirty_check_never_takes_the_index_lock(
     assert commands == [["git", "--no-optional-locks", "status", "--porcelain"]]
 
 
+def test_dev_commit_suffix_reads_a_linked_worktree(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A `git worktree`, whose `.git` is a file, still gets its label."""
+    (tmp_path / ".git").write_text("gitdir: /elsewhere/.git/worktrees/x\n")
+    monkeypatch.setattr(subprocess, "run", _stub_git_run())
+
+    assert fim._dev_commit_suffix(tmp_path) == "1fbfb4e"
+
+
 def test_dev_commit_suffix_is_none_without_a_git_directory(tmp_path: Path) -> None:
     """A source tarball (no `.git`) gets no commit label, not an error."""
     assert fim._dev_commit_suffix(tmp_path) is None
