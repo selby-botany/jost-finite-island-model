@@ -1272,6 +1272,22 @@ project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+- **Mutation follows the textbook Wright-Fisher model.** Each generation now
+  runs migration, then drift (drawing the `N` new gene copies), then
+  mutation, with every new gene copy mutating independently with
+  probability `mu` — under infinite alleles to a brand-new allele, under
+  finite alleles to one of the other `K - 1` states. Mutation used to come
+  before drift, drawing one event count per deme and scaling every allele's
+  frequency down in proportion, which added a small excess of identity each
+  generation (`O(mu / N)`): with 20 gene copies and `mu` 0.025, the long-run
+  heterozygosity was 0.466 instead of the textbook 0.484. The closed-form
+  `D`/`G_ST`/`H` trajectories, the equilibrium-split burn-in and its
+  expected heterozygosity use the textbook recursion
+  `F' = (1 - mu)^2 [1/N + (1 - 1/N) F]` too, and now agree with the
+  simulation and with Ryman & Leimar (2008) to floating-point precision.
+  Every seeded run draws a different trajectory than before; the bundled
+  examples' committed outputs predate this and will be regenerated. See
+  [the generation-update pipeline](doc/fim-simulator-design.md#34-the-generation-update-pipeline).
 - **An adaptive batch on the `generational` engines no longer keeps the
   fastest replicates.** With `replicate_tolerance` set, `generational`,
   `generational-vector` and `auto` counted replicates toward the stopping

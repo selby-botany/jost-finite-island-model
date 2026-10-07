@@ -91,14 +91,27 @@ and smoke-tested by the tag-driven GitHub Actions release workflow.
 
 1. **Migration:** deterministic all-other-deme blending, or a supplied
    row-stochastic matrix.
-2. **Mutation:** a binomial number of gene copies mutate at each locus's
-   own rate (`mu`: a shared scalar, an explicit per-locus list, or one
-   derived per locus from a per-base rate, μ<sub>b</sub>). By default
-   (mutation_model: infinite_alleles) each mutating copy receives a
-   globally novel ID; under the opt-in finite_alleles model, its target
-   is drawn from its own locus's bounded state space and can recur.
-3. **Drift:** each deme/locus is multinomially resampled to exactly `N` gene
-   copies.
+2. **Drift:** each deme/locus is multinomially resampled to exactly `N` gene
+   copies from its post-migration frequencies.
+3. **Mutation:** each of those `N` new gene copies mutates independently
+   with its locus's own probability (`mu`: a shared scalar, an explicit
+   per-locus list, or one derived per locus from a per-base rate,
+   μ<sub>b</sub>), so an allele carried by `n` copies loses
+   `Binomial(n, mu)` of them. By default (mutation_model:
+   infinite_alleles) each mutant copy receives a globally novel ID; under
+   the opt-in finite_alleles model, its target is drawn uniformly from the
+   other states of its own locus's bounded state space and can recur.
+
+This is the textbook Wright-Fisher island model: two gene copies of the
+next generation are identical only if their parental copies were and
+neither mutated, so the identity recursions behind the closed-form
+trajectories (`fim.statistics.identity_recursion`) and the
+equilibrium-split burn-in (`fim.convergence.defaults.
+panmictic_equilibration`) carry the factor `(1 − μ)²`. Releases before
+this order was adopted ran Migrate → Mutate → Drift with a mutation step
+that scaled every allele's frequency down in proportion to a deme-wide
+event count; that added an `O(μ/N)` excess identity each generation and
+was not the textbook model.
 
 Every operator receives all changing inputs explicitly and returns a new
 `ModelState`. `ModelState` enforces one normalized sparse frequency map per
@@ -106,7 +119,7 @@ deme/locus.
 
 ## Engine backends
 
-The pipeline above (Migrate → Mutate → Drift) is what gets computed;
+The pipeline above (Migrate → Drift → Mutate) is what gets computed;
 `fim.engine` offers three implementations of *how* it gets driven,
 behind one shared `EngineBackend` protocol (`run(params, store, run_id,
 clock) -> RunResult | tuple[RunResult, ...]`), selected via `fim()`'s

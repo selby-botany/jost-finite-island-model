@@ -2023,7 +2023,7 @@ def fim(
     (the command line, the desktop app, every test) ultimately calls to
     actually run a simulation. Given a validated configuration
     (`params`), it simulates one population's generations one at a time
-    — migration, then mutation, then drift, each generation, following
+    — migration, then drift, then mutation, each generation, following
     `fim.model.operators.step` — until either its watched statistic(s)
     settle down (convergence) or the hard generation cap is reached,
     then returns everything about the finished run. If
@@ -3542,7 +3542,7 @@ def _run_one(
        here).
     3. Repeats, once per generation: advance the population by one
        generation (`fim.model.operators.step` — migration, then
-       mutation, then drift), persist that generation's own state to
+       drift, then mutation), persist that generation's own state to
        `store` (so it can be replayed, plotted, or animated later), and
        feed that generation's statistics to the convergence monitor —
        until the monitor says to stop, either because the watched

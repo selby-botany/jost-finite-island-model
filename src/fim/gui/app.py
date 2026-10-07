@@ -1125,7 +1125,7 @@ def _closed_form_trajectory_payload(
 
     The third theoretical reference on the panel, and the only one that is
     the same quantity as the simulated curve at every generation:
-    `fim.statistics` solves the engine's own migrate-mutate-drift identity
+    `fim.statistics` solves the engine's own migrate-drift-mutate identity
     recursion, and `D`, `G_ST`, `H_S`, `H_T` and `H_ST` are functions of the
     identities alone. `E_ST`, `K_ST` and the effective-allele family are
     not, so they get no curve.

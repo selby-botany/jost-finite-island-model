@@ -30,9 +30,9 @@ questions a first-time reader usually has:
   islands' current frequencies, a deterministic step given that generation's
   frequencies. The randomness is downstream, in drift: each island's next
   generation is formed by resampling its gene copies at random from its own
-  post-migration frequencies. An optional third step, mutation, can also
-  replace a small, randomly sampled number of gene copies with genuinely
-  novel alleles. An opt-in `migrant_sampling: stochastic` setting adds a
+  post-migration frequencies. An optional third step, mutation, then lets
+  each of those newly drawn gene copies, independently, become a different
+  allele with probability μ (a genuinely novel one, by default). An opt-in `migrant_sampling: stochastic` setting adds a
   fourth random process — how many gene copies migrate, not just how many
   drift or mutate — for studies that want that source of variation counted
   explicitly; see the [configuration reference](doc/configuration.md#migrant_sampling).
@@ -171,7 +171,9 @@ its own `manifest.json`. See [output schemas](doc/usage.md#output-schemas).
 - `N` is the **gene-copy count per deme**, not an individual count. For a
   diploid autosomal locus, pass twice the census number of individuals.
 - Every run uses one explicitly seeded NumPy `PCG64` generator.
-- A generation applies migration, mutation, then drift.
+- A generation applies migration, then drift (drawing the new gene copies),
+  then mutation (each new copy mutates independently with probability `mu`):
+  the textbook Wright-Fisher island model.
 - Generation 0 is a continuous Dirichlet prior (or an explicit `p_0`),
   not a state the model's `N` gene copies could themselves produce.
   Generation 1, the first `drift` application, is the first generation

@@ -284,9 +284,10 @@ many times over, once per location.
 
 ### 3.3 Variations found in the literature
 
-- **Mutation.** With some small probability μ each generation, a
-  mutation step can be added between migration and drift, changing an
-  allele's identity outright. This matters for studies of long-run
+- **Mutation.** With some small probability μ each generation, each
+  newly drawn gene copy can change its allele's identity outright,
+  independently of every other copy (the textbook Wright-Fisher model;
+  `fim` applies it after drift, to the copies drift has just drawn). This matters for studies of long-run
   equilibrium between mutation, migration, and drift; it usually is not
   needed for simulations covering only a few dozen or a few hundred
   generations from a defined starting point, where migration and drift

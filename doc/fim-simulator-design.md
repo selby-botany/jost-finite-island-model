@@ -288,20 +288,31 @@ allocated from disjoint ranges so the two can never collide.
 
 Per the finite-island-model introduction (§3.2), one generation is two
 composed operators — migration (weighted blend) then drift (random
-resampling) — with mutation as a documented optional third step inserted
-between them (introduction, §3.3):
+resampling) — with mutation as a documented optional third step
+(introduction, §3.3), applied to the gene copies drift has just drawn:
+each copy mutates independently with probability μ, the textbook
+Wright-Fisher model.
 
 ```math
-p_{t+1} = \mathrm{Drift}\bigl(\mathrm{Mutate}_\mu\bigl(\mathrm{Migrate}_{m}(p_t)\bigr)\bigr)
+p_{t+1} = \mathrm{Mutate}_\mu\bigl(\mathrm{Drift}_N\bigl(\mathrm{Migrate}_{m}(p_t)\bigr)\bigr)
 ```
 
 ```mermaid
 flowchart LR
     A["ψ_k,t\n(current state)"] --> B["Migrate(m)\nweighted blend with\nmigrant pool"]
-    B --> C["Mutate(μ)\nintroduce novel alleles\n(infinite-alleles model)"]
-    C --> D["Drift(N)\nmultinomial resample,\nN gene copies per deme"]
+    B --> C["Drift(N)\nmultinomial resample,\nN gene copies per deme"]
+    C --> D["Mutate(μ)\neach new copy mutates\nindependently"]
     D --> E["ψ_k,t+1\n(next state)"]
 ```
+
+Mutation acts on the sampled copies, not on the frequencies before
+sampling, so two copies of the next generation are identical only if
+their parental copies were and neither mutated: the identity recursion
+is `F' = (1 − μ)² [1/N + (1 − 1/N) F]` for two distinct copies of one
+deme. (Releases before this order was adopted ran Migrate → Mutate →
+Drift with a mutation step that scaled every allele's frequency down in
+proportion to a deme-wide event count; that is not the textbook model
+and left an `O(μ/N)` excess identity each generation.)
 
 Each stage is implemented as a pure function of state to state — no
 stage reads or mutates global state, and each is independently
@@ -342,7 +353,7 @@ flowchart TB
     end
     subgraph Engine
         INIT["initial-condition\ngenerator"]
-        OPS["update operators\nMigrate / Mutate / Drift"]
+        OPS["update operators\nMigrate / Drift / Mutate"]
         MON["ConvergenceMonitor"]
         ENG["engine.fim()\nrun loop"]
     end
@@ -547,7 +558,7 @@ engineering and release reference covers both in full.
 to reproduce someone else's exact numbers — otherwise safe to skip.*
 
 **What.** Everything in §3–§4.5 above describes *what gets computed*: a
-generation-update pipeline (Migrate → Mutate → Drift) driven by a
+generation-update pipeline (Migrate → Drift → Mutate) driven by a
 `SimulationParams` config. That computation can be *carried out* three
 different ways, all producing the same science, differing only in how
 fast they run and how strictly they guarantee to match each other bit
@@ -691,9 +702,9 @@ and a real bias would not.
 or more genetic loci, migration on or off.** A different mechanism
 entirely from the floating-point one above, not a second instance of
 it: `"generational-vector"` advances one whole locus's own table of
-demes through migrate, mutate, *and* drift before moving to the next
+demes through migrate, drift, *and* mutate before moving to the next
 locus, while `"lineal"`/`"generational"` instead run migrate across
-every locus, then mutate across every locus, then drift across every
+every locus, then drift across every locus, then mutate across every
 locus. Both orderings compute the identical science — nothing about
 *which* locus's random draw happens *when* changes what either engine
 converges to — but they draw from the shared stream of random numbers

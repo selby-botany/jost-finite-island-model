@@ -756,7 +756,7 @@ other before either is trusted against the engine:
 1. The closed-form diffusion equilibria equilibrium_g_st/equilibrium_d
    (differentiation guide Part VI Eq. 2/Eq. 4) — `O(1/N)` approximations.
 2. An exact per-generation identity recursion for the engine's own
-   Migrate → Mutate → Drift pipeline, built from first principles rather
+   Migrate → Drift → Mutate pipeline, built from first principles rather
    than fitted to the simulator. This is the finite-`N` expectation of the
    very quantities the engine samples, so it is the correct center for a
    seeded many-replicate band, and it also supplies the fixed point used to

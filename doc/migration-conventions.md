@@ -45,7 +45,8 @@ different, equally valid ways to formalize the same biology.
    Leimar's own `J`) define identity as the probability two *distinct*
    copies match, sampling without replacement.
 4. **Operator order.** `fim` composes one generation as
-   Migrate → Mutate → Drift (`doc/fim-simulator-design.md#34-the-generation-update-pipeline`).
+   Migrate → Drift → Mutate (`doc/fim-simulator-design.md#34-the-generation-update-pipeline`),
+   mutation acting independently on each newly drawn gene copy.
    A paper's own recursion may be written in a different order.
 
 ## 2. Per-paper mappings
@@ -64,17 +65,15 @@ order does not, once identity sampling is mapped — see the third row):
 |---|---|---|
 | Migration source: other `d − 1` demes | Migration source: pool including self | `m_fim = m_paper · (d − 1) / d`; `m_paper = m_fim · d / (d − 1)` |
 | Identity: with replacement, `Σ p²` | Identity: distinct pairs only | `Gs_paper = (N · Gs_fim − 1) / (N − 1)`; `Gd` needs no conversion (two copies from different demes are always distinct) |
-| Migrate → Mutate → Drift | Drift → Migrate → Mutate (as written) | No lag needed — the with-replacement-to-distinct conversion above already accounts for the phase difference exactly (verified: no generation offset improves agreement) |
+| Migrate → Drift → Mutate | Drift → Migrate → Mutate (as written) | No lag needed — the same cycle read from a different starting point; the with-replacement-to-distinct conversion above accounts for the phase difference exactly |
 
-`fim`'s own mutation factor, `(1 − u)² + u(1 − u)/N` (the exact second
-moment of its own binomial-count mutation operator), differs from
-Ryman & Leimar's `(1 − u)²` (per-lineage infinite-alleles mutation) by
-`u(1 − u)/N` — a real difference between two different, both correct,
-mutation models, not a convention gap to close. Documented and
-tolerated, not corrected: at most 0.11% residual on `G_ST` and 0.45% on
-`D` across the full grid, negligible next to the migration and identity
-corrections above (which resolve an *uncorrected* discrepancy of up to
-58% down to about 0.1%).
+`fim`'s mutation factor is Ryman & Leimar's own `(1 − u)²` (per-copy
+infinite-alleles mutation, the textbook model), so with the migration and
+identity mappings above the two recursions are the same recursion,
+agreeing to floating-point noise (the mappings resolve an *uncorrected*
+discrepancy of up to 58%). Releases before `fim` adopted the textbook
+mutation step used `(1 − u)² + u(1 − u)/N` instead, which left a residual
+of up to 0.11% on `G_ST` and 0.45% on `D` across the same grid.
 
 Migration source's own correction is largest at small `d` — 11% at
 `d = 10`, a factor of 2 at `d = 2` — which is why an unmapped

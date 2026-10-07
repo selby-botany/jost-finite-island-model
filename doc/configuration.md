@@ -230,7 +230,9 @@ case.)
 - **Required:** yes, unless μ<sub>b</sub> (`μ<sub>b</sub>`) is given instead (the
   two are mutually
   exclusive)
-- **Meaning:** per-gene-copy mutation probability per generation
+- **Meaning:** per-gene-copy mutation probability per generation: after
+  drift draws a deme's `N` new gene copies, each one, independently,
+  mutates with this probability (the textbook Wright-Fisher model)
 
 A scalar applies identically to every locus, regardless of `length`, and
 is the right choice whenever every locus should mutate at the same rate.
@@ -427,7 +429,7 @@ configuration is rejected rather than guessed at.
 Equilibrium-split founds your demes from a real ancestral population rather
 than from a prior. It runs in two phases. First it simulates *one* population
 holding the same total number of gene copies your whole run will have (the sum
-of every deme's `N`, all in one deme), applying mutation and drift generation
+of every deme's `N`, all in one deme), applying drift and mutation generation
 after generation — there is nothing to migrate between with only one deme —
 until that population has reached mutation-drift equilibrium. Then it splits
 that finished population into
