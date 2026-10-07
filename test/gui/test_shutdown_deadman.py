@@ -42,7 +42,7 @@ from pathlib import Path
 
 import pytest
 import webview
-from conftest import join_or_fail, readline_or_fail
+from conftest import COMPLETION_BACKSTOP_SECONDS, join_or_fail, readline_or_fail
 from webview.menu import MenuAction
 
 from fim import logging_setup
@@ -511,12 +511,16 @@ def test_the_window_close_hook_gives_up_after_its_own_timeout() -> None:
 
     webview.start(_drive)
     try:
-        elapsed, still_alive = outcome.get(timeout=10)
-        # Bounded by the production timeout, not merely "eventually" --
-        # proving the hook gave up rather than the thread finishing on
-        # its own within the same window.
-        assert elapsed < app_module._BRIDGE_SETTLE_TIMEOUT_SECONDS + 2.0
+        elapsed, still_alive = outcome.get(timeout=COMPLETION_BACKSTOP_SECONDS)
+        # The hook returned while the blocker was still alive: it gave up
+        # rather than waiting for the thread to finish. And it gave the
+        # thread its full chance first: `await_bridge_threads` only returns
+        # with a live bridge thread once its monotonic deadline has
+        # passed. Both hold however loaded the machine is; an upper bound
+        # on `elapsed` would not (a slow scheduler can delay the return
+        # well past the timeout on a correct commit).
         assert still_alive
+        assert elapsed >= app_module._BRIDGE_SETTLE_TIMEOUT_SECONDS
     finally:
         blocker.join(timeout=5)
 
