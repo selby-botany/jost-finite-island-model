@@ -97,6 +97,11 @@ function collectFormValues() {
     // fills each in server-side, from whatever Settings currently holds,
     // before any bridge call that needs an `all_fields()`-complete
     // values dict actually uses `values`.
+    //
+    // Except after a configuration is loaded: its own run settings then
+    // apply to this run, so they are submitted here and the server keeps
+    // them (`screens/run-settings-notice.js`).
+    Object.assign(values, perRunSettingValues());
     return values;
 }
 
@@ -238,6 +243,9 @@ async function revalidate() {
  */
 async function resetInputForm() {
     const values = await window.pywebview.api.get_starter_form();
+    // A new configuration uses Settings' run settings again, never a
+    // previously loaded configuration's.
+    window.fim.clearLoadedRunSettings();
     applyFormValues(values);
     await revalidate();
 }

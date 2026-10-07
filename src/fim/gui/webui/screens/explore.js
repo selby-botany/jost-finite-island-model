@@ -869,6 +869,9 @@ exploreRunForRealButton.addEventListener("click", async () => {
         return;
     }
     await window.fim.showConfigureScreen();
+    // A fresh configuration from Explore's fields: Settings' run
+    // settings apply, not a previously loaded configuration's.
+    window.fim.clearLoadedRunSettings();
     applyFormValues(result.values);
     await revalidate();
     window.fim.preselectNewStudy();

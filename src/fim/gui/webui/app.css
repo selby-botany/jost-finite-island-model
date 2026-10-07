@@ -660,6 +660,38 @@ fieldset.composite > label {
     }
 }
 
+/* A loaded configuration's own run settings, where they differ from the
+ * user's Settings (`screens/run-settings-notice.js`): information, not an
+ * error, so it uses the soft accent rather than `.banner`'s red. */
+.run-settings-notice {
+    background: var(--fim-accent-soft);
+    color: var(--fim-foreground);
+    border: 1px solid var(--fim-accent);
+    border-radius: 4px;
+    padding: 0.5rem 0.75rem;
+    margin-bottom: 1rem;
+}
+
+.run-settings-notice-summary {
+    margin: 0 0 0.5rem;
+}
+
+.run-settings-notice-table {
+    border-collapse: collapse;
+    margin-bottom: 0.5rem;
+}
+
+.run-settings-notice-table th,
+.run-settings-notice-table td {
+    text-align: left;
+    padding: 0.15rem 1rem 0.15rem 0;
+}
+
+.run-settings-notice-table thead th {
+    color: var(--fim-muted);
+    font-weight: normal;
+}
+
 #startup-warning-banner {
     display: flex;
     align-items: center;

@@ -126,6 +126,11 @@ const fim = {
         if (state !== "completed" && window.fim.showSavedResultNote) {
             window.fim.showSavedResultNote(null);
         }
+        // The Run card shows the run-settings notice before a run only
+        // (`screens/run-settings-notice.js`).
+        if (window.fim.renderRunSettingsNotice) {
+            window.fim.renderRunSettingsNotice();
+        }
     },
 
     /** @returns {string|null} */

@@ -192,6 +192,8 @@ async function applyPreset(presetId, presetTitle) {
         return false;
     }
     applyFormValues(result.values);
+    // Its run settings apply to this run only (`run-settings-notice.js`).
+    window.fim.applyLoadedRunSettings(result);
     await revalidate();
     presetsDialog.close();
     if (window.fim.getRunViewState() === "initial") {

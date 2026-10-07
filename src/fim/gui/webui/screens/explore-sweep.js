@@ -287,6 +287,8 @@ exploreSweepButton.addEventListener("click", async () => {
     // Explore fields. The sweep is then set on Configure (its Sweep box on,
     // the axes saved), and the botanist presses Run there.
     await window.fim.showConfigureScreen();
+    // A fresh configuration, as for "Run this for real" (`explore.js`).
+    window.fim.clearLoadedRunSettings();
     applyFormValues(seeded.values);
     await revalidate();
     const set = await window.fim.setSweepConfiguration({ axes });

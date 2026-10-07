@@ -162,12 +162,16 @@ function examplesHandleListKey(event, container, select) {
  * Configure" here and "Run it" on a run opened from its saved results
  * (`run-view-completed.js`), which both receive `Api.load_example`'s
  * result shape.
- * @param {{values: object, name: string|null, description: string|null}} result
+ * @param {{values: object, name: string|null, description: string|null,
+ *     runSettings: object, runSettingDifferences: Array<object>}} result
  * @param {string} fallbackName What to call the loaded configuration when
  *     it has no name of its own.
  */
 window.fim.applyLoadedExample = async function applyLoadedExample(result, fallbackName) {
     applyFormValues(result.values);
+    // Its run settings apply to this run only (`run-settings-notice.js`);
+    // set before the revalidation below so validation uses them.
+    window.fim.applyLoadedRunSettings(result);
     examplesRunNameInput.value = result.name || "";
     examplesRunDescriptionInput.value = result.description || "";
     window.fim.rememberLoadedPreset(result.name || fallbackName);

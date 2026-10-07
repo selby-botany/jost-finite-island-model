@@ -363,6 +363,9 @@ settingsSaveButton.addEventListener("click", async () => {
     }
     showSettingsBanner("");
     settingsDialog.close();
+    // A loaded configuration's run settings stay with its run; say again
+    // how they differ from the Settings just saved.
+    await window.fim.refreshRunSettingDifferences();
 });
 
 /**

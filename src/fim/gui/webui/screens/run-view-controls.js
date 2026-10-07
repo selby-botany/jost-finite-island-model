@@ -202,6 +202,9 @@ async function onLoadYamlClicked() {
     }
     showRunBanner("");
     applyFormValues(result.values);
+    // The file's run settings apply to this run only
+    // (`run-settings-notice.js`).
+    window.fim.applyLoadedRunSettings(result);
     await revalidate();
 }
 

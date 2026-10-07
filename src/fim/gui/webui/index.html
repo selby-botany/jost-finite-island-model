@@ -129,6 +129,19 @@
         <span class="parameter-strip-label">μ</span>
         <span class="parameter-strip-value" id="parameter-strip-mu"></span>
       </button>
+      <!-- Shown only while a loaded configuration's own run settings
+           differ from Settings (`screens/run-settings-notice.js`). -->
+      <button
+        type="button"
+        class="parameter-strip-item"
+        id="parameter-strip-run-settings"
+        data-param="run-settings"
+        title="This run uses its own run settings, not your Settings. Click to see the differences."
+        hidden
+      >
+        <span class="parameter-strip-label">run settings</span>
+        <span class="parameter-strip-value" id="parameter-strip-run-settings-value"></span>
+      </button>
       <div class="parameter-strip-actions" aria-label="Navigation and settings">
         <button
           type="button"
@@ -195,6 +208,22 @@
        below, unchanged) are not state-conditional. -->
   <section id="screen-run" class="screen" hidden>
     <div id="run-banner" class="banner" hidden></div>
+    <!-- A loaded configuration's run settings that differ from Settings
+         (`screens/run-settings-notice.js`); Configure has the same
+         notice. Shown here before a run starts only. -->
+    <div class="run-settings-notice" id="run-run-settings-notice" data-run-settings-notice role="status" hidden>
+      <p class="run-settings-notice-summary"></p>
+      <table class="run-settings-notice-table">
+        <thead>
+          <tr><th scope="col">Setting</th><th scope="col">This run</th><th scope="col">Your Settings</th></tr>
+        </thead>
+        <tbody></tbody>
+      </table>
+      <div class="actions">
+        <button type="button" class="primary-action" data-run-settings-adopt>Make these my Settings</button>
+        <button type="button" data-run-settings-dismiss>Dismiss</button>
+      </div>
+    </div>
 
     <!-- Error dots (design §3.1's own six modals) -- no longer inside
          a tab bar (fully retired this phase, along with the six radio
@@ -1247,6 +1276,20 @@
        scientific/batch-tuning choices, not administrative defaults. -->
   <section id="screen-configure" class="screen" hidden>
     <div id="configure-banner" class="banner" hidden></div>
+    <!-- See the Run card's identical notice (`#run-run-settings-notice`). -->
+    <div class="run-settings-notice" id="configure-run-settings-notice" data-run-settings-notice role="status" hidden>
+      <p class="run-settings-notice-summary"></p>
+      <table class="run-settings-notice-table">
+        <thead>
+          <tr><th scope="col">Setting</th><th scope="col">This run</th><th scope="col">Your Settings</th></tr>
+        </thead>
+        <tbody></tbody>
+      </table>
+      <div class="actions">
+        <button type="button" class="primary-action" data-run-settings-adopt>Make these my Settings</button>
+        <button type="button" data-run-settings-dismiss>Dismiss</button>
+      </div>
+    </div>
     <!-- Back uses the shared screen-history controls, not a fixed
          destination. Configure is reachable from nearly everywhere
          (the rail, the parameter strip, Home's own "Configure a new
@@ -2454,6 +2497,7 @@
 <script src="screens/presets.js"></script>
 <script src="screens/examples.js"></script>
 <script src="screens/settings.js"></script>
+<script src="screens/run-settings-notice.js"></script>
 <script src="screens/welcome.js"></script>
 <script src="screens/nav-rail.js"></script>
 <script src="field-help.js"></script>
