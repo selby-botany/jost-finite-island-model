@@ -657,7 +657,15 @@ canonical form μ<sub>b</sub> is sugar for; μ<sub>b</sub> itself is never store
 
 Watch more than one statistic and decide whether stopping needs every one
 of them stable (convergence_combinator: all, the default) or just one
-(`any`):
+(`any`). In the desktop app this is the "stop the run when" pair of
+radio buttons at the foot of Configure's "convergence statistic(s)"
+panel, shown once two or more statistics are checked.
+
+Choose `any` with care. The run stops as soon as one watched statistic is
+stable and precise, so the others may still be trending or imprecise at
+that moment: their reported values and trailing-window means are then
+not converged estimates, only snapshots. `all` waits for every watched
+statistic. With one watched statistic the two are the same.
 
 <!-- worked-example-config: examples/several-convergence-statistics/config.yaml -->
 ```yaml

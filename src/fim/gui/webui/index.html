@@ -1561,16 +1561,26 @@
         <fieldset class="composite" id="cs-selector">
           <legend data-field-help="cs_group">convergence statistic(s)</legend>
           <!-- One checkbox per convergence-eligible statistic, built from
-               the catalog (`statistics-catalog.js`). Only measures the
-               convergence monitor was designed for are eligible. -->
+               the catalog (`statistics-catalog.js`) and inserted before
+               the combinator below, so the combinator stays last. Only
+               measures the convergence monitor was designed for are
+               eligible. -->
+          <!-- `convergence_combinator` as two radio buttons, shown once two
+               or more statistics are watched (`syncConditionalVisibility`).
+               `all` is the default everywhere (`PARAMETER_DEFAULTS`); the
+               submitted value and the YAML key are unchanged. -->
+          <fieldset class="field combinator-choice" id="combinator-field" hidden>
+            <legend data-field-help="convergence_combinator">stop the run when</legend>
+            <label>
+              <input type="radio" id="field-convergence_combinator-all" name="convergence_combinator" value="all" form="input-form" checked>
+              all watched statistics have settled
+            </label>
+            <label>
+              <input type="radio" id="field-convergence_combinator-any" name="convergence_combinator" value="any" form="input-form">
+              any one watched statistic has settled
+            </label>
+          </fieldset>
         </fieldset>
-        <div class="field" id="combinator-field" hidden>
-          <label for="field-convergence_combinator">combinator</label>
-          <select id="field-convergence_combinator" name="convergence_combinator" form="input-form">
-            <option value="any">any</option>
-            <option value="all">all</option>
-          </select>
-        </div>
         <div class="field">
           <label for="field-track_expensive_statistics">track E<sub>ST</sub>/K<sub>ST</sub>/A<sub>CGD</sub>/&delta;<sub>G</sub>/I for display</label>
           <input type="checkbox" id="field-track_expensive_statistics" name="track_expensive_statistics" form="input-form">

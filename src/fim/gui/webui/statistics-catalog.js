@@ -271,6 +271,9 @@ function _buildStatisticSlots() {
 
     const selector = document.getElementById("cs-selector");
     if (selector) {
+        // Before the combinator radios, which stay at the panel's foot;
+        // `null` (no combinator) appends.
+        const combinator = document.getElementById("combinator-field");
         for (const key of CONVERGENCE_STATISTIC_KEYS) {
             const label = document.createElement("label");
             const input = document.createElement("input");
@@ -282,7 +285,7 @@ function _buildStatisticSlots() {
             input.checked = key === "D";
             label.append(input, " ");
             label.insertAdjacentHTML("beforeend", formatStatisticLabel(key));
-            selector.appendChild(label);
+            selector.insertBefore(label, combinator);
         }
     }
 }

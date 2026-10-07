@@ -97,10 +97,14 @@ const FIELD_HELP = {
         "population's own pre-run simulation, independent of the main " +
         "run's own max generations. A run needing more stops with an error.",
     cs_group: "Which statistic(s) to watch for convergence. Checking more " +
-        "than one reveals the combinator below.",
-    convergence_combinator: "Only meaningful with more than one watched " +
-        "statistic: all requires every one to be stable; any stops once " +
-        "one is.",
+        "than one reveals the choice of when to stop, at the foot of this " +
+        "panel.",
+    convergence_combinator: "With several watched statistics: all (the " +
+        "default) keeps the run going until every one is stable and " +
+        "precise. any stops as soon as one of them is, so the others may " +
+        "still be trending or imprecise when the run ends: their reported " +
+        "values and window means are not converged estimates. With one " +
+        "watched statistic the two are the same.",
     convergence_window: "Trailing window, in generations, whose first and " +
         "second halves are compared for stability. Leave it as auto and " +
         "the app sets it from how slowly this population forgets its " +

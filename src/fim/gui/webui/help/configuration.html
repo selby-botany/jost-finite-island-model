@@ -442,6 +442,11 @@ watched statistic to be simultaneously stable before stopping (a strict
 reading of &quot;several statistics need to agree&quot;); <code>any</code> stops as soon as one
 of them is. With a single statistic — the default — the two are the same
 value by construction, so this key has no effect and needs no attention.</p>
+<p>Under <code>any</code>, the statistics that did not trigger the stop may still be
+trending or imprecise when the run ends: their reported values and
+trailing-window means are not converged estimates. <code>report.json</code>'s
+<code>converged_on</code> names the statistics that had settled. Use <code>all</code> when
+every watched statistic's value matters.</p>
 <h3 id="convergence_window">convergence_window</h3>
 <ul>
 <li><strong>Type:</strong> integer at least 2, or <code>auto</code></li>

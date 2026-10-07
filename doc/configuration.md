@@ -515,6 +515,12 @@ reading of "several statistics need to agree"); `any` stops as soon as one
 of them is. With a single statistic — the default — the two are the same
 value by construction, so this key has no effect and needs no attention.
 
+Under `any`, the statistics that did not trigger the stop may still be
+trending or imprecise when the run ends: their reported values and
+trailing-window means are not converged estimates. `report.json`'s
+`converged_on` names the statistics that had settled. Use `all` when
+every watched statistic's value matters.
+
 ### convergence_window
 
 - **Type:** integer at least 2, or `auto`

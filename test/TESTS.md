@@ -16769,6 +16769,39 @@ menu's own `toggleConvergenceStatistic` quick-toggle no longer
 exists — every field is reachable the same way regardless of how
 quick a toggle it used to be (design §3.3).
 
+<a id="gui.test_input_screen.test_combinator_is_two_radio_buttons_at_the_foot_of_the_statistics_panel"></a>
+
+#### test\_combinator\_is\_two\_radio\_buttons\_at\_the\_foot\_of\_the\_statistics\_panel
+
+```python
+def test_combinator_is_two_radio_buttons_at_the_foot_of_the_statistics_panel(
+        window: webview.Window, drive: Callable[..., Any]) -> None
+```
+
+The combinator is an `all`/`any` radio pair, last in ``cs`-selector`.
+
+Checkboxes are built from the catalog after the page loads
+(`statistics-catalog.js`) and inserted before the combinator, so it
+stays at the panel's foot. A fresh form starts on `all`.
+
+<a id="gui.test_input_screen.test_submitting_each_combinator_radio_yields_that_configuration"></a>
+
+#### test\_submitting\_each\_combinator\_radio\_yields\_that\_configuration
+
+```python
+@pytest.mark.parametrize("choice", ["any", "all"])
+def test_submitting_each_combinator_radio_yields_that_configuration(
+        window: webview.Window, drive: Callable[..., Any],
+        choice: str) -> None
+```
+
+Choosing a radio submits its value under the unchanged key.
+
+The page's own `collectFormValues` is read back and run through the
+same `form_values_to_payload`/`SimulationParams.from_mapping` path a
+real run takes, with the Settings-owned fields filled in from the
+starter values (as `Api._merge_default_run_settings` does).
+
 <a id="gui.test_input_screen.test_choosing_the_torus_topology_reveals_rows_and_columns"></a>
 
 #### test\_choosing\_the\_torus\_topology\_reveals\_rows\_and\_columns

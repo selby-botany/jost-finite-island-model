@@ -23,8 +23,9 @@ import pytest
 import webview
 
 from fim.gui.app import Api, create_window
-from fim.gui.config_form import starter_form_values
+from fim.gui.config_form import form_values_to_payload, starter_form_values
 from fim.gui.preferences import GuiPreferences, save_preferences
+from fim.model.params import SimulationParams
 
 pytestmark = pytest.mark.gui
 
@@ -507,6 +508,73 @@ def test_checking_a_second_convergence_statistic_reveals_the_combinator(
     assert settled["d"] is True
     assert settled["gSt"] is True
     assert settled["combinatorHidden"] is False
+
+
+def test_combinator_is_two_radio_buttons_at_the_foot_of_the_statistics_panel(
+    window: webview.Window, drive: Callable[..., Any]
+) -> None:
+    """The combinator is an `all`/`any` radio pair, last in `#cs-selector`.
+
+    Checkboxes are built from the catalog after the page loads
+    (`statistics-catalog.js`) and inserted before the combinator, so it
+    stays at the panel's foot. A fresh form starts on `all`.
+    """
+    settled = drive(
+        window,
+        ready=_INPUT_SCREEN_READY,
+        trigger="null",
+        read=(
+            "({"
+            "radios: Array.from(document.querySelectorAll("
+            "'#cs-selector input[name=\"convergence_combinator\"]'"
+            ")).map((radio) => [radio.type, radio.value, radio.checked]), "
+            "last: document.getElementById('cs-selector').lastElementChild.id, "
+            "selects: document.querySelectorAll("
+            "'select[name=\"convergence_combinator\"]').length, "
+            "submitted: collectFormValues().convergence_combinator"
+            "})"
+        ),
+    )
+
+    assert settled["radios"] == [["radio", "all", True], ["radio", "any", False]]
+    assert settled["last"] == "combinator-field"
+    assert settled["selects"] == 0
+    assert settled["submitted"] == "all"
+
+
+@pytest.mark.parametrize("choice", ["any", "all"])
+def test_submitting_each_combinator_radio_yields_that_configuration(
+    window: webview.Window, drive: Callable[..., Any], choice: str
+) -> None:
+    """Choosing a radio submits its value under the unchanged key.
+
+    The page's own `collectFormValues` is read back and run through the
+    same `form_values_to_payload`/`SimulationParams.from_mapping` path a
+    real run takes, with the Settings-owned fields filled in from the
+    starter values (as `Api._merge_default_run_settings` does).
+    """
+    values = drive(
+        window,
+        ready=_INPUT_SCREEN_READY,
+        trigger=(
+            "document.querySelector('input[name=\"cs_G_ST\"]').click();"
+            f"document.getElementById('field-convergence_combinator-{choice}')"
+            ".click();"
+        ),
+        read=(
+            "document.getElementById("
+            f"'field-convergence_combinator-{choice}').checked "
+            "? collectFormValues() : null"
+        ),
+    )
+
+    params = SimulationParams.from_mapping(
+        form_values_to_payload({**starter_form_values(), **values})
+    )
+
+    assert values["convergence_combinator"] == choice
+    assert params.convergence_combinator == choice
+    assert params.convergence_statistics == ("D", "G_ST")
 
 
 def test_choosing_the_torus_topology_reveals_rows_and_columns(
