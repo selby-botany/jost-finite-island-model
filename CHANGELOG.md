@@ -881,6 +881,20 @@ project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Changed
 
+- **Loading a configuration no longer changes your Settings.** In the
+  desktop app, loading an example, a preset, a YAML file, or a saved run
+  (Home's Clone, or Run it) used to copy its execution engine,
+  n<sub>replicates</sub>, generation cap, convergence timing and the other
+  run settings into Settings for good, so one lineal, one-replicate example
+  left every later New configuration on lineal with one replicate. The
+  loaded values now apply to that run only, and New configuration starts
+  from your Settings again. When they differ from your Settings, a notice
+  on Configure and on the Run card lists each difference (this run's value
+  beside your Settings value) with a **Make these my Settings** button and
+  a Dismiss button; a "run settings" item in the parameter strip stays
+  while they differ. Max workers, a machine setting no configuration
+  names, is unchanged. See
+  [Loading a configuration does not change your Settings](doc/usage.md#loading-a-configuration-does-not-change-your-settings).
 - **Every worked example runs to completion, in about a minute or less.**
   Since runs stop only once their trailing-window mean is precise
   (2026-09), several examples took tens of thousands of generations, and

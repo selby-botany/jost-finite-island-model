@@ -145,7 +145,10 @@ holds the longer calibration examples from
 choose one, then press Return or click <strong>Load into Configure</strong>. The
 example's values fill the form, and its name and description fill the
 &quot;Run name&quot; and &quot;Run description&quot; boxes, which you can change before you
-run it. <strong>View YAML</strong> shows the example's configuration file, ready to
+run it. Its run settings (engine, replicates and so on) are used for this
+run only; your Settings do not change, and a notice lists any that differ
+(see <a href="#loading-a-configuration-does-not-change-your-settings">Loading a configuration does not change your Settings</a>).
+<strong>View YAML</strong> shows the example's configuration file, ready to
 copy. An example that the form cannot represent (a different <code>mu</code> for each
 locus that no single per-base rate <code>mu_b</code> produces, for example) or that has
 no configuration file says so in the dialog, and
@@ -768,11 +771,11 @@ replicate_tolerance: null   # always run all 16 replicates
 <p>Ran in about 20 seconds on ordinary development hardware, all 16 replicates
 to the 100-generation cap, with <code>D</code>'s 95% confidence interval at
 <code>0.0264 +/- 0.0021</code>. In the desktop
-app, loading this example as a preset also sets Settings' own execution
-engine to <code>generational-vector</code> (Settings holds this field now, not
-Configure — see the <a href="#desktop-gui-fim-gui">desktop GUI</a> section below), so
-clicking &quot;Run simulation&quot; afterward actually uses it, not whatever engine
-Settings held before.</p>
+app, loading this example runs it with its own <code>generational-vector</code>
+engine and 16 replicates, whatever your Settings hold, and leaves your
+Settings unchanged; a notice lists the differences and offers to make
+them your Settings (see
+<a href="#loading-a-configuration-does-not-change-your-settings">Loading a configuration does not change your Settings</a>).</p>
 <h3 id="a-long-locus-batch-under-the-generational-engine">A long-locus batch under the generational engine</h3>
 <p>The same batch shape as the example above, but favoring locus length over
 deme count instead — <code>d: 35</code> with a 7-base locus (16384 possible allele
@@ -815,9 +818,10 @@ interval at <code>0.0237 +/- 0.0020</code>. That is a little slower than the
 <code>generational-vector</code> example above, although an earlier measurement on a
 less loaded machine found it a little faster: neither backend is
 universally faster, and which one wins depends on where a configuration
-sits on the <code>d</code>/locus-length grid and on the machine itself. Loading this example syncs Settings' own execution
-engine to <code>generational</code> the same way the previous example syncs it to
-<code>generational-vector</code>.</p>
+sits on the <code>d</code>/locus-length grid and on the machine itself. In the desktop
+app, loading this example runs it with its own <code>generational</code> engine, the
+same way the previous example runs with <code>generational-vector</code>, without
+changing your Settings.</p>
 <h2 id="sweep-a-parameter">Sweep a parameter</h2>
 <p>A sweep runs one configuration over a range of one or more parameters and
 keeps every point as an ordinary run inside one study. A sweep file is a normal
@@ -970,7 +974,7 @@ action the matching on-screen control already performs.</p>
 </tr>
 <tr>
 <td>Configure</td>
-<td>Two always-visible, independently scrollable panels: FIM parameters (ploidy — chosen first and never guessed, starting on diploid unless Settings' default ploidy says otherwise (&quot;Ask me each time&quot; leaves it blank, and a blank ploidy blocks the run) — then N, the number of <em>individuals</em> per deme, scalar or a per-deme table, then d, m, mu, seed: the values that together are &quot;the finite island model&quot;; the app multiplies individuals by ploidy into the gene-copy <code>N</code> the simulator and the YAML format use) and Structure (initial conditions, migrant sampling, mutation model, deme weighting, loci, which convergence statistic(s) to watch, replicate tolerance/minimum, and the within-run σ band) — one per <a href="#" data-fim-help="configuration" data-fim-anchor="">configuration reference</a> section, no dialog to open for any of them; every field and mode-selector group has a hover/focus tooltip. Default ploidy, the Run card's graph columns and scatter-plot style, execution engine, n<sub>replicates</sub>, max_generations, convergence window/tolerance, replicate confidence, and the batch-execution tuning fields (JIT, the <code>auto</code> engine's own two thresholds, parallel workers, max concurrent replicates) live in Settings instead, as defaults every fresh configuration starts from — loading a saved configuration or a worked example updates them to match what was loaded. &quot;Load configuration…&quot;/&quot;Save configuration…&quot; read and write the exact YAML file format above, &quot;Examples…&quot; opens the Examples dialog (example classes on the left, the selected class's examples on the right with an excerpt of each one's explanation; &quot;Load into Configure&quot;, or Return, fills the form and the Run name and description boxes — see <a href="#worked-examples">Worked examples</a>), the File menu's &quot;Load example…&quot; opens the Presets picker (each preset also viewable as plain YAML, with a copy-to-clipboard action, and a loaded preset can be duplicated under a new name), and &quot;▶ Run&quot;/&quot;🔮 Explore&quot; jump to those destinations with the configuration exactly as shown. An invalid field on &quot;Run simulation&quot; (from anywhere) navigates here and marks the specific field, not only the section it lives in</td>
+<td>Two always-visible, independently scrollable panels: FIM parameters (ploidy — chosen first and never guessed, starting on diploid unless Settings' default ploidy says otherwise (&quot;Ask me each time&quot; leaves it blank, and a blank ploidy blocks the run) — then N, the number of <em>individuals</em> per deme, scalar or a per-deme table, then d, m, mu, seed: the values that together are &quot;the finite island model&quot;; the app multiplies individuals by ploidy into the gene-copy <code>N</code> the simulator and the YAML format use) and Structure (initial conditions, migrant sampling, mutation model, deme weighting, loci, which convergence statistic(s) to watch, replicate tolerance/minimum, and the within-run σ band) — one per <a href="#" data-fim-help="configuration" data-fim-anchor="">configuration reference</a> section, no dialog to open for any of them; every field and mode-selector group has a hover/focus tooltip. Default ploidy, the Run card's graph columns and scatter-plot style, execution engine, n<sub>replicates</sub>, max_generations, convergence window/tolerance, replicate confidence, and the batch-execution tuning fields (JIT, the <code>auto</code> engine's own two thresholds, parallel workers, max concurrent replicates) live in Settings instead, as defaults every fresh configuration starts from — loading a saved configuration or a worked example uses its own values for that run only and leaves Settings unchanged, with a notice listing any differences and a &quot;Make these my Settings&quot; button (see <a href="#loading-a-configuration-does-not-change-your-settings">Loading a configuration does not change your Settings</a>). &quot;Load configuration…&quot;/&quot;Save configuration…&quot; read and write the exact YAML file format above, &quot;Examples…&quot; opens the Examples dialog (example classes on the left, the selected class's examples on the right with an excerpt of each one's explanation; &quot;Load into Configure&quot;, or Return, fills the form and the Run name and description boxes — see <a href="#worked-examples">Worked examples</a>), the File menu's &quot;Load example…&quot; opens the Presets picker (each preset also viewable as plain YAML, with a copy-to-clipboard action, and a loaded preset can be duplicated under a new name), and &quot;▶ Run&quot;/&quot;🔮 Explore&quot; jump to those destinations with the configuration exactly as shown. An invalid field on &quot;Run simulation&quot; (from anywhere) navigates here and marks the specific field, not only the section it lives in</td>
 <td><a href="#create-a-configuration">Create a configuration</a></td>
 </tr>
 <tr>
@@ -1165,6 +1169,44 @@ stay alive rather than be terminated, set <code>FIM_GUI_SHUTDOWN_TIMEOUT</code> 
 the number of seconds to allow, or to <code>0</code> to wait indefinitely:</p>
 <pre><code class="language-console">FIM_GUI_SHUTDOWN_TIMEOUT=0 fim --graphical
 </code></pre>
+<h3 id="loading-a-configuration-does-not-change-your-settings">Loading a configuration does not change your Settings</h3>
+<p>The run settings — execution engine, n<sub>replicates</sub>,
+max_generations, convergence window and tolerance, replicate confidence,
+JIT, the <code>auto</code> engine's two thresholds, and max concurrent replicates —
+live in Settings, not on the Configure form. A configuration you load can
+name its own values for them. Every way of loading one works the same:</p>
+<ul>
+<li><strong>Examples…</strong> → <strong>Load into Configure</strong>, and <strong>Run it</strong> on a saved example</li>
+<li>File menu → <strong>Load example…</strong> (the presets picker), built-in or your own</li>
+<li><strong>Load configuration…</strong> (a YAML file)</li>
+<li><strong>Clone</strong> on a run listed on Home</li>
+</ul>
+<p>The loaded values are used <strong>for this run only</strong>. Your Settings stay
+exactly as they were, so the next <strong>New configuration</strong> starts from your
+Settings again. A value the loaded file does not name takes the
+simulator's own default, the same value <code>fim run</code> would use for that
+file.</p>
+<p>When any loaded run setting differs from your Settings, a notice appears
+on Configure and on the Run card before you run. It lists each setting
+that differs, with this run's value and your Settings value side by side.
+For example, if your Settings use the <code>auto</code> engine with 200 replicates
+and you load an example that uses the <code>lineal</code> engine with 1 replicate,
+the notice lists both settings.</p>
+<ul>
+<li><strong>Make these my Settings</strong> saves the loaded values as your Settings, so
+new configurations use them too. Max workers is not changed: it
+describes your computer, and no configuration names it.</li>
+<li><strong>Dismiss</strong> hides the notice. The run still uses the loaded values. A
+&quot;run settings&quot; item in the parameter strip at the top of the window
+stays while they differ; click it to see the notice again.</li>
+</ul>
+<p>If you change Settings after loading, the notice is updated to compare
+against your new Settings; the loaded configuration still keeps its own
+values. To return to your Settings for the run, choose File menu →
+<strong>New configuration</strong>, or load a configuration whose run settings match
+yours. Explore's <strong>Run this for real</strong> also starts from your Settings.</p>
+<p>When the app restores the last submitted configuration at launch, the run
+settings come from your Settings, not from that configuration.</p>
 <h3 id="saved-preferences">Saved preferences</h3>
 <p>The GUI remembers these things between launches: Settings' own Significant
 digits setting, which statistics are shown (&quot;Statistics shown&quot;), the
@@ -1185,10 +1227,9 @@ first launch (welcome not yet dismissed) shows the welcome panel offering
 configuration&quot; always resets to the built-in starter values (execution
 defaults included) regardless of what is saved as the last submitted
 configuration; it is the one action that ignores that saved configuration on
-purpose. Loading a saved configuration file or a worked example, on the
-other hand, updates the saved execution defaults themselves to match what
-was loaded — the next fresh configuration starts from there too, not only
-the one you just opened.</p>
+purpose. Loading a saved configuration file, a preset, a worked example or
+a saved run never changes the saved execution defaults: see
+<a href="#loading-a-configuration-does-not-change-your-settings">Loading a configuration does not change your Settings</a>.</p>
 <p>Nothing scientific is stored here: a run's own configuration, seed, and
 results always live in that run's own <code>manifest.json</code>/<code>trajectory.jsonl</code>
 under <code>results/</code>, exactly as described throughout this guide. This file
