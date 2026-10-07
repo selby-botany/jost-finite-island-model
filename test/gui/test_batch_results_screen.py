@@ -49,6 +49,7 @@ from conftest import poll_or_fail, wait_or_fail
 from fim.gui.app import Api, create_window
 from fim.gui.batch_runner import BatchMessage
 from fim.gui.runner import RunMessage
+from fim.statistics.catalog import default_shown_keys
 
 pytestmark = pytest.mark.gui
 
@@ -323,7 +324,9 @@ def test_a_completed_batch_renders_the_run_view(fast_batch_run_settings: Path) -
     assert settled["runId"].startswith("run-")
     # Row 0 is the p_0 baseline; rows 1 and 2 are the two replicates.
     assert settled["rowCount"] == 3
-    assert settled["ciBarCount"] == 12
+    # One bar per shown statistic (a fresh install's defaults) plus the
+    # two effective-allele rows.
+    assert settled["ciBarCount"] == len(default_shown_keys()) + 2
     # p_0 row: generation=0, styled italic as an input, not an output.
     first_row = settled["firstRowCells"]
     assert first_row[0] == "0"
@@ -506,7 +509,9 @@ def test_a_completed_batchs_own_effective_allele_rows_render(
     settled = outcome.get(timeout=_OUTCOME_TIMEOUT_SECONDS)
 
     assert settled is not None, "the drive produced no result"
-    assert settled["rowCount"] == 12
+    # Every shown statistic (a fresh install's defaults), then the two
+    # effective-allele rows.
+    assert settled["rowCount"] == len(default_shown_keys()) + 2
     assert "<sup>H</sup>D<sub>S</sub>" in settled["withinHtml"]
     assert "<sup>H</sup>D<sub>T</sub>" in settled["totalHtml"]
     # The same cross-replicate-uncertainty caption every other batch

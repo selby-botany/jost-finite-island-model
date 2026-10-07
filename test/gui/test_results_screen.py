@@ -39,6 +39,7 @@ import pytest
 import webview
 
 from fim.gui.app import Api, create_window
+from fim.statistics.catalog import default_shown_keys
 
 pytestmark = pytest.mark.gui
 
@@ -668,10 +669,11 @@ def test_a_single_replicate_run_gets_a_per_generation_results_table(
     assert settled["batchTableHidden"] is True
     assert settled["headers"][:2] == ["Generation", "D"]
     assert "Outcome" not in settled["headers"]
-    # Ten statistics, no "Replicate" column and no "Open" column: a
-    # single run has neither a sibling replicate to name nor a separate
-    # trajectory to open, since this card is already showing it.
-    assert len(settled["headers"]) == 11
+    # The shown statistics (a fresh install's defaults), no "Replicate"
+    # column and no "Open" column: a single run has neither a sibling
+    # replicate to name nor a separate trajectory to open, since this card
+    # is already showing it.
+    assert len(settled["headers"]) == 1 + len(default_shown_keys())
     # One row per scrubber frame, exactly -- the alignment that lets a
     # row and a scrub position mean the same generation.
     assert settled["rowCount"] == settled["frameCount"]
