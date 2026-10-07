@@ -37,15 +37,23 @@ const welcomeStorageLocationChangeButton = document.getElementById(
 
 let welcomeStorageLocationChanged = false;
 
-welcomeDialog.addEventListener("close", () => {
-    // Fire-and-forget: nothing on screen depends on either call's own
-    // return value, and the panel is already gone by the time either
-    // resolves.
-    window.pywebview.api.dismiss_welcome();
-    if (welcomeStorageLocationChanged) {
-        window.pywebview.api.set_results_location(
-            welcomeStorageLocationPath.textContent
-        );
+welcomeDialog.addEventListener("close", async () => {
+    // Nothing on screen depends on either call's own return value, and
+    // the panel is already gone by the time either resolves. Still
+    // awaited, with a settle flag (`window.__fimOpenFolderSettled`'s
+    // shape): a call left in flight when a window is destroyed can hang
+    // interpreter shutdown, and a test reading the saved dismissal back
+    // needs to know the save has landed.
+    window.__fimWelcomeDismissSettled = false;
+    try {
+        await window.pywebview.api.dismiss_welcome();
+        if (welcomeStorageLocationChanged) {
+            await window.pywebview.api.set_results_location(
+                welcomeStorageLocationPath.textContent
+            );
+        }
+    } finally {
+        window.__fimWelcomeDismissSettled = true;
     }
 });
 

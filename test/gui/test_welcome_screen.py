@@ -28,7 +28,6 @@ file_path` reflectively.
 from __future__ import annotations
 
 import queue
-import time
 from collections.abc import Callable
 from pathlib import Path
 from typing import Any
@@ -38,6 +37,8 @@ import webview
 
 from fim.gui.app import create_window
 from fim.gui.preferences import GuiPreferences, save_preferences
+
+from .conftest import poll_page, wait_for_run_view_ready
 
 pytestmark = pytest.mark.gui
 
@@ -164,12 +165,13 @@ def test_dismissing_the_welcome_panel_persists_through_the_bridge(
     """Either button's own `close` event reaches `Api.dismiss_welcome()` for real.
 
     Driven manually, not via the `drive` fixture: `welcomeDialog`'s own
-    `close` listener fires `Api.dismiss_welcome()` fire-and-forget (no
-    DOM-visible effect of its own to poll for -- the dialog is already
-    closed by the time it resolves either way), so this polls the
-    bridge's own `get_welcome_dismissed()` back through a second `Api`
-    call on the same window, the identical shape `test_input_screen.py`'s
-    own significant-digits persistence test uses for the same reason.
+    `close` listener has no DOM-visible effect of its own to poll for --
+    the dialog is already closed by the time `Api.dismiss_welcome()`
+    resolves -- so this waits for that call's settle flag
+    (`window.__fimWelcomeDismissSettled`) and then reads the bridge's own
+    `get_welcome_dismissed()` back through a second `Api` call on the
+    same window. It used to wait a fixed 50 ms instead, which let the
+    read race the save it was meant to observe.
     """
     own_window = _build_window_with_welcome_not_dismissed(_isolate_gui_preferences)
 
@@ -177,29 +179,31 @@ def test_dismissing_the_welcome_panel_persists_through_the_bridge(
 
     def _drive() -> None:
         try:
-            for _ in range(200):
-                if own_window.evaluate_js(_INPUT_SCREEN_READY):
-                    break
-                time.sleep(0.1)
+            wait_for_run_view_ready(own_window)
             own_window.evaluate_js(
                 f"document.getElementById({button_id!r})"
                 ".dispatchEvent(new Event('click'));"
             )
+            poll_page(
+                own_window,
+                "window.__fimWelcomeDismissSettled === true",
+                what="dismiss_welcome() (window.__fimWelcomeDismissSettled)",
+            )
             own_window.evaluate_js(
                 "window.__fimWelcomeDismissedResult = null; "
                 "(async () => { "
-                "await new Promise((resolve) => setTimeout(resolve, 50)); "
                 "window.__fimWelcomeDismissedResult = "
                 "await window.pywebview.api.get_welcome_dismissed(); "
                 "})();"
             )
-            value = None
-            for _ in range(200):
-                value = own_window.evaluate_js("window.__fimWelcomeDismissedResult")
-                if value is not None:
-                    break
-                time.sleep(0.1)
-            outcome.put(value)
+            outcome.put(
+                poll_page(
+                    own_window,
+                    "window.__fimWelcomeDismissedResult",
+                    lambda value: value is not None,
+                    what="get_welcome_dismissed() bridge call",
+                )
+            )
         finally:
             own_window.destroy()
 
