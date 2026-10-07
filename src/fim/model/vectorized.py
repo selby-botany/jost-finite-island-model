@@ -104,10 +104,10 @@ With that fixed, a full **single-locus** run *is* bit-identical to
 (`test_generational_vector_backend_matches_lineal_exactly_without_
 migration`, `test/engine/test_engine.py`) — but not in general with
 migration active, and not at all with **two or more loci**, migration
-on or off: `step_vectorized` fuses `migrate`/`mutate`/`drift` per
+on or off: `step_vectorized` fuses `migrate`/`drift`/`mutate` per
 locus, one whole locus's own dense `(deme, capacity)` array per call,
 while `operators.step` runs each stage across every tracked locus
-first — `mutate`/`drift`'s own dict-based loops are deme-major,
+first — `drift`/`mutate`'s own dict-based loops are deme-major,
 locus-minor, so the two draw from the shared RNG stream in a genuinely
 different order the instant a run tracks more than one locus, migration
 active or not. Reconciling the two would mean flattening deme and
@@ -155,7 +155,10 @@ import numpy as np
 
 from fim.model.allele import AlleleId
 from fim.model.locus import LocusSpec, finite_allele_capacity
-from fim.model.operators import _inversion_binomial
+from fim.model.operators import (
+    _GRID_TOLERANCE,
+    _jit_mutate_event_counts_batched,
+)
 from fim.model.state import ModelState
 
 _JIT_MUTATE_TARGETS_BATCHED: (
@@ -367,8 +370,8 @@ def vectorized_state_to_model_state(state: VectorizedState) -> ModelState:
     Python — `vectorized_state_to_rows`, below, already used this same
     shortcut; this function did not, until caught by a sweep for the
     same "dense array walked element-by-element in Python" mismatch
-    `mutate_vectorized`'s own renormalization step had (that function's
-    own inline comment has the measured cost). Even though this
+    an earlier `mutate_vectorized` renormalization step had (about 19%
+    of a step at `d=60`, `capacity=4096`). Even though this
     function is only called once per lane rather than once per
     generation, walking every one of `capacity` slots in a Python loop
     to test `if frequency` on each is the identical waste at a smaller
@@ -431,7 +434,7 @@ def vectorized_state_to_rows(
 
 
 def _present_only_row_sums(probabilities: np.ndarray) -> np.ndarray:
-    """Return each row's own present-only sum, matching dict's own `mutate`/`drift`.
+    """Return each row's own present-only sum, matching dict's own `drift`.
 
     **Corrected 2026-09-05** (this project's own multi-model engine
     review, 2026-09-04, `FIM-12`/Kimi's own finding of that number,
@@ -460,8 +463,8 @@ def _present_only_row_sums(probabilities: np.ndarray) -> np.ndarray:
     8 present alleles.
 
     The only way to reproduce NumPy's own pairwise result exactly is to
-    build the identical short, present-only array dict's own `mutate`/
-    `drift` build (via `sorted(frequency_map)`, ascending allele-id
+    build the identical short, present-only array dict's own
+    `drift` builds (via `sorted(frequency_map)`, ascending allele-id
     order — the same order boolean indexing below preserves) and call
     real `ndarray.sum()` on it, outside the JIT boundary: `numba`'s own
     `.sum()`, even called from inside a JIT-compiled function, reduces
@@ -664,7 +667,7 @@ def _multinomial_rows_batched(
         # trailing zeros individually contribute nothing -- confirmed
         # directly (`probs16.sum() != probs16[:6].sum()` for six equal
         # 1/6 entries padded to a 16-wide row, one ULP apart). The dict-
-        # based `LinealBackend` decomposition (`operators.mutate`'s own
+        # based `LinealBackend` decomposition (`operators.drift`'s own
         # `probabilities /= probabilities.sum()`) does this in two
         # separate steps: divide the whole array by its own sum once,
         # THEN run the draw loop with `remaining_p` starting at a clean
@@ -678,7 +681,7 @@ def _multinomial_rows_batched(
         # first attempt. Replicating the dict-based path's own two-step
         # shape exactly -- normalize each column against `present_sum`
         # once, then track `remaining_p` from a clean `1.0` the same way
-        # `operators.mutate` does -- closed that first gap. A second,
+        # `operators.drift` does -- closed that first gap. A second,
         # deeper one remained even so: `present_sum` itself, accumulated
         # here by a hand-rolled sequential loop, silently stopped
         # matching dict's own `probabilities.sum()` the moment 8 or more
@@ -934,90 +937,55 @@ def mutate_vectorized(
     rate: float,
     rng: np.random.Generator,
 ) -> VectorizedLocusState:
-    """Replace a binomially sampled number of copies with new-or-recurring alleles.
+    """Mutate every gene copy independently with probability `rate`.
 
     The array-native counterpart to `fim.model.operators.mutate`'s own
-    finite-alleles branch — same three steps (event count, source
-    attribution, target selection), same underlying distributions, and,
-    as of Stage F8
-    (`20260901-claude-sonnet-5-fim-engine-backend-factory-design.md`
-    §5.4), the identical primitive and the identical *interleaving*.
+    finite-alleles branch — the textbook per-copy mutation step, applied
+    to the gene copies `drift_vectorized` has just drawn: each deme's
+    row is whole copies out of `sizes[deme]`; for each allele present,
+    `Binomial(n, rate)` of its `n` copies mutate; each mutant copy moves
+    to one of the other `capacity - 1` states of the locus, uniformly
+    (`_mutate_targets_batched`, the array form of
+    `FiniteAlleleSpace.mutate_target`).
 
-    **Interleaved per deme, deliberately, not batched by step across
-    every deme first.** An earlier version of this function drew every
-    deme's own event count first, then every deme's own source
-    attribution, then every event's own target, in three separate
-    passes — each pass individually using the unified primitive and a
-    plausible-looking canonical order (ascending deme, then ascending
-    allele id), but *as a whole* still consuming this lane's own `rng`
-    in a different sequence than `mutate`'s own dict-based path does,
-    which interleaves all three steps *within* each deme before moving
-    to the next (draw deme 0's own event count, then its own source
-    attribution, then all of deme 0's own targets, only then deme 1's
-    own event count, and so on). Found by a direct cross-backend test,
-    not caught by reasoning about each step in isolation — the
-    single-deme case matched exactly from the very first attempt (both
-    orderings agree trivially when there is only one deme to interleave
-    with), which is what let the batched-by-step version pass every
-    test written against it up to that point; a multi-deme test caught
-    the real divergence. Fixed by looping over demes explicitly, in
-    ascending order, running all three of one deme's own steps before
-    moving to the next — the real cost this pays, not minimized: each
-    of `_jit_multinomial_rows_batched`/`_jit_mutate_targets_batched` is
-    now called once per deme with active mutation events rather than
-    once per generation across every deme at once, reintroducing some
-    of the per-call overhead Stage F5's own investigation found
-    dominant for a structurally similar case (`fim.model.operators.
-    _drift_counts_batched`'s own docstring) — accepted here because
-    `mutate`'s own event counts are typically far smaller than
-    `drift`'s own full per-deme resampling (`mu` is a small
-    probability), so this operator's own share of a generation's total
-    cost is small enough that the correctness this buys is judged
-    worth it; not separately re-benchmarked end to end as part of this
-    change.
-
-    Target selection specifically preserves `FiniteAlleleSpace.
-    mutate_target`'s own real, load-bearing choice — a recurrence
-    probability that grows as more of the bounded state space fills up,
-    which is what lets the finite-alleles model recover infinite-alleles
-    behavior as capacity grows (its own docstring), and, as of the same
-    Stage F8 pass, the identical single-fixed-draw mechanism
-    `FiniteAlleleSpace.mutate_target`'s own recurrence branch uses
-    (`_mutate_targets_batched`'s own inline comment has the full
-    argument for why an earlier, statistically-equivalent-but-not-
-    same-draw-count rejection-sampling version needed replacing too).
-
-    Two more, independent divergence sources remained even after both
-    of the above were fixed, neither one to do with the random draw
-    itself: a rare (roughly 1-in-150 demes, at this project's own
-    reference scale), floating-point-boundary-triggered mismatch traced
-    to source attribution's own probability normalization
-    (`_multinomial_rows_batched`'s own inline comment in this module has
-    the full argument), and a small, systematic ULP-level drift from
-    `mutate`'s own final `_normalize` rescaling step, which this
-    function did not originally replicate at all (this function's own
-    inline comment right after the `np.add.at` call has that argument).
-    Closing both is what makes this function's own output agree with
-    `mutate`'s dict-based path *exactly* now, not merely "almost
-    always" — checked directly
+    **The same draws, in the same order, as the dict-based path** —
+    checked directly
     (`test_mutate_vectorized_matches_dict_based_mutate_exactly`,
-    `test/model/test_vectorized.py`), across 30 seeds and a deliberately
-    non-saturated capacity, not assumed from the first two fixes alone.
+    `test/model/test_vectorized.py`): demes in ascending order, and
+    within one deme every allele's own mutant count first (ascending
+    allele id — this row's own column order; absent alleles have
+    `n = 0` and consume no draw), then every mutant copy's own target
+    (ascending source), before moving to the next deme. Interleaving
+    per deme, not batching each step across every deme, is what the
+    dict-based loop does; a per-step-batched order would consume the
+    shared stream differently once there is more than one deme.
+
+    The result stays on the `1 / N` grid (`counts / size`, the same
+    division `drift_vectorized` uses), so no renormalization is needed.
+
+    Raises:
+        ValueError: If a row is not whole gene copies out of its own
+            `sizes` entry — the same precondition `operators.mutate`
+            enforces.
     """
     if rate == 0.0:
-        # `_inversion_binomial` already returns `0` at `p <= 0.0` with no
-        # draw consumed, so the per-deme loop below already always
-        # `continue`s immediately for every deme at `rate = 0.0` -- but
-        # only *after* three full-array copies (`frequencies`, `minted_
-        # mask`, `minted_list`) had already been paid for, unconditionally,
-        # above it. `mutate`'s own dict-based path pays no such cost for
-        # `mu = 0` (nothing to copy there in the first place). Safe to
-        # return `locus_state` unchanged, not a copy: see `migrate_
-        # vectorized_symmetric`'s own identical fast path, just above,
-        # for the shared "nothing downstream mutates in place without
-        # copying first" contract this relies on (this project's own
-        # multi-model engine review, 2026-09-04, `FIM-53`).
+        # No draw at all at `rate = 0` (`_inversion_binomial` returns `0`
+        # with no draw consumed at `p <= 0.0`), so skip the array copies
+        # too. Safe to return `locus_state` unchanged, not a copy: see
+        # `migrate_vectorized_symmetric`'s own identical fast path, just
+        # above, for the shared "nothing downstream mutates in place
+        # without copying first" contract this relies on (this project's
+        # own multi-model engine review, 2026-09-04, `FIM-53`).
         return locus_state
+    scaled = locus_state.frequencies * sizes[:, None]
+    counts = np.rint(scaled).astype(np.int64)
+    if np.any(np.abs(scaled - counts) > _GRID_TOLERANCE) or np.any(
+        counts.sum(axis=1) != sizes
+    ):
+        raise ValueError(
+            "mutate_vectorized needs whole gene copies: every frequency must "
+            "be a multiple of 1/N (a state produced by drift_vectorized)"
+        )
     new_frequencies = locus_state.frequencies.copy()
     minted_mask = locus_state.minted_mask.copy()
     minted_list = locus_state.minted_list.copy()
@@ -1025,47 +993,16 @@ def mutate_vectorized(
     next_unminted = locus_state.next_unminted
     capacity = locus_state.capacity
 
-    # Hoisted out of the deme loop below, not rebuilt once per active-
-    # mutating deme: `capacity` (hence `allele_ids`'s own range) and the
-    # one-element `event_count_buffer` `_jit_multinomial_rows_batched`
-    # reads from are both loop-invariant across every deme this
-    # generation, at this locus — neither depends on `deme`, `rng`, or
-    # anything computed inside the loop. `event_count_buffer` is
-    # overwritten in place each iteration rather than replaced with a
-    # freshly allocated one-element array; `_jit_multinomial_rows_
-    # batched` only ever reads it, never keeps a reference past its own
-    # call, so reuse here changes no output, only how many small
-    # allocations a generation with many active-mutating demes pays for
-    # (this project's own multi-model engine review, 2026-09-04,
-    # `FIM-27`/`FIM-28`).
-    allele_ids = np.arange(capacity, dtype=np.int64)
-    event_count_buffer = np.empty(1, dtype=np.int64)
-
     for deme in range(sizes.shape[0]):
         size = int(sizes[deme])
-        event_count = _inversion_binomial(rng, size, rate)
-        if event_count == 0:
+        present = np.flatnonzero(counts[deme])
+        present_counts = counts[deme, present]
+        mutant_counts = _jit_mutate_event_counts_batched(
+            rng, present_counts, np.full(present.shape[0], rate, dtype=np.float64)
+        )
+        if not mutant_counts.any():
             continue
-        retained_mass = 1.0 - event_count / size
-        new_frequencies[deme] *= retained_mass
-
-        # No explicit re-normalization needed here: `_multinomial_rows_
-        # batched`/`_jit_multinomial_rows_batched` normalize internally
-        # over each row's own present (nonzero) prefix -- see that
-        # function's own inline comment for why summing over the full,
-        # zero-padded `capacity` width first (an earlier version of
-        # this call site did exactly that) is not equivalent, down to
-        # the last bit.
-        source_row = locus_state.frequencies[deme : deme + 1]
-        event_count_buffer[0] = event_count
-        source_counts = _jit_multinomial_rows_batched(
-            rng,
-            event_count_buffer,
-            source_row,
-            _present_only_row_sums(source_row),
-        )[0]
-        event_sources = np.repeat(allele_ids, source_counts)
-
+        event_sources = np.repeat(present.astype(np.int64), mutant_counts)
         targets, minted_mask, minted_list, minted_count, next_unminted = (
             _jit_mutate_targets_batched(
                 rng,
@@ -1077,44 +1014,10 @@ def mutate_vectorized(
                 next_unminted,
             )
         )
-        event_frequency = 1.0 / size
-        np.add.at(new_frequencies[deme], targets, event_frequency)
-
-        # `operators.mutate`'s own dict-based path renormalizes each
-        # locus's frequency map with `_normalize` (`math.fsum`-based,
-        # correctly rounded) after applying every mutation event,
-        # guarding against floating-point total-mass drift accumulating
-        # across many generations of repeated multiplicative scaling.
-        # `drift`/`drift_vectorized`'s own clean integer-count-over-
-        # `size` grid never needs this (dividing the same integer by
-        # the same `size` lands on the same bits on both backends), but
-        # `mutate`'s own output is not on a clean grid -- without this
-        # step, this function's own final values can differ from
-        # `mutate`'s by a few ULPs, found directly via a 30-seed exact-
-        # match test (`test_mutate_vectorized_matches_dict_based_mutate_
-        # exactly`), not assumed. `math.fsum`, not `.sum()`, matches
-        # `_normalize`'s own choice of summation algorithm exactly --
-        # confirmed directly that trailing zero-padding is inert under
-        # `math.fsum` even though it is *not* inert under NumPy's own
-        # pairwise `.sum()` (`_multinomial_rows_batched`'s own inline
-        # comment has that separate finding). `_normalize` itself only
-        # ever sees a dict's present (non-zero) keys in the first
-        # place, so restrict this call to the row's own nonzero entries
-        # too rather than converting the full, mostly-zero `capacity`-
-        # wide row: `fsum`'s own running sum is bit-for-bit unaffected
-        # by omitting exact `0.0` terms (adding one is a no-op at any
-        # partial sum), so this is not an approximation -- confirmed
-        # directly by `test_mutate_vectorized_renormalization_fsum_
-        # ignores_zero_padding` (`test/model/test_vectorized.py`), not
-        # assumed from the argument alone. `.tolist()` over the full
-        # zero-padded row measured as a genuinely large cost at
-        # realistic capacity (profiling at `d=60`, `capacity=4096`:
-        # ~19% of a whole step+convergence loop, comparable to the
-        # JIT-compiled multinomial kernel itself), almost all of it
-        # wasted on zeros this restriction skips entirely.
-        row = new_frequencies[deme]
-        total = math.fsum(row[np.flatnonzero(row)].tolist())
-        new_frequencies[deme] /= total
+        row = counts[deme].copy()
+        row[present] -= mutant_counts
+        np.add.at(row, targets, 1)
+        new_frequencies[deme] = row / size
 
     return VectorizedLocusState(
         frequencies=new_frequencies,
@@ -1322,7 +1225,7 @@ def step_vectorized(
     *,
     symmetric_rate: float | None = None,
 ) -> VectorizedState:
-    """Advance one generation: migrate, then mutate, then drift, fused.
+    """Advance one generation: migrate, then drift, then mutate, fused.
 
     The array-native counterpart to `fim.model.operators.step` — every
     locus stays a dense array from this call's own start to its own end,
@@ -1392,9 +1295,8 @@ def step_vectorized(
             if symmetric_rate is not None
             else migrate_vectorized(locus_state, weights)  # type: ignore[arg-type]
         )
-        mutated = mutate_vectorized(migrated, sizes, rate, rng)
-        drifted = drift_vectorized(mutated, sizes, rng)
-        new_locus_states.append(drifted)
+        drifted = drift_vectorized(migrated, sizes, rng)
+        new_locus_states.append(mutate_vectorized(drifted, sizes, rate, rng))
     return VectorizedState(
         loci=state.loci,
         locus_states=tuple(new_locus_states),

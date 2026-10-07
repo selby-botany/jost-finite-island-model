@@ -16,10 +16,8 @@ variance), which use a normal-approximation band matching this project's
 own existing precedent (`test_drift_variance_matches_binomial_theory`).
 """
 
-import math
 from collections.abc import Callable
 from dataclasses import replace
-from typing import Any
 
 import numpy as np
 import pytest
@@ -311,7 +309,9 @@ def test_mutate_vectorized_zero_rate_returns_the_same_object(
     one, is what actually proves this.
     """
     state = _finite_alleles_state(deme_count=4)
-    sizes = np.array([25, 25, 25, 25], dtype=np.int64)
+    # 24 copies of 4 equally frequent alleles: whole gene copies (6 each),
+    # which `mutate_vectorized` requires.
+    sizes = np.array([24, 24, 24, 24], dtype=np.int64)
     vectorized = build_vectorized_state(state)
     locus_state = vectorized.locus_states[0]
 
@@ -322,43 +322,21 @@ def test_mutate_vectorized_zero_rate_returns_the_same_object(
     assert mutated_nonzero is not locus_state
 
 
-def test_mutate_vectorized_builds_allele_ids_once_per_call_not_per_deme(
-    monkeypatch: pytest.MonkeyPatch,
+def test_mutate_vectorized_rejects_a_state_that_is_not_whole_gene_copies(
     rng: Callable[[int], np.random.Generator],
 ) -> None:
-    """`np.arange(capacity)` is loop-invariant, so it is built once per call.
+    """A continuous row (here `1/4` of 25 copies) has no gene copies to mutate.
 
-    Regression test for FIM-27: `event_sources = np.repeat(np.arange(
-    capacity, dtype=np.int64), source_counts)` used to rebuild the same
-    `capacity`-length array once per *active-mutating* deme — every one
-    of them identical, since neither `capacity` nor anything else the
-    array depends on changes across demes within one call. A high `rate`
-    (`0.5`) across several demes makes it near-certain more than one
-    deme actually mutates, so a fast path that still rebuilt this per
-    deme would make this test's own call count come out above `1`.
-    `np.arange` is patched globally for the duration of this call —
-    safe here specifically because the JIT-compiled kernels this
-    function also calls do not invoke NumPy's own Python-level `arange`
-    symbol from inside compiled code.
+    The same precondition `fim.model.operators.mutate` enforces: the
+    textbook mutation step acts on the copies `drift_vectorized` has
+    just drawn, never on pre-drift frequencies.
     """
-    state = _finite_alleles_state(deme_count=6)
-    sizes = np.array([500, 500, 500, 500, 500, 500], dtype=np.int64)
-    vectorized = build_vectorized_state(state)
-    locus_state = vectorized.locus_states[0]
+    state = _finite_alleles_state(deme_count=2)
+    sizes = np.array([25, 25], dtype=np.int64)
+    locus_state = build_vectorized_state(state).locus_states[0]
 
-    call_count = 0
-    real_arange = np.arange
-
-    def _counting_arange(*args: Any, **kwargs: Any) -> Any:
-        nonlocal call_count
-        call_count += 1
-        return real_arange(*args, **kwargs)
-
-    monkeypatch.setattr(np, "arange", _counting_arange)
-
-    mutate_vectorized(locus_state, sizes, 0.5, rng(1))
-
-    assert call_count == 1
+    with pytest.raises(ValueError, match="whole gene copies"):
+        mutate_vectorized(locus_state, sizes, 0.1, rng(1))
 
 
 def test_drift_vectorized_matches_dict_based_drift_exactly(
@@ -527,24 +505,17 @@ def test_mutate_vectorized_matches_dict_based_mutate_exactly(
 ) -> None:
     """`mutate`'s own version of the `drift` exact-agreement proof.
 
-    `fim.model.operators.mutate` and `mutate_vectorized` now draw via
-    the identical event-count, source-attribution, *and* target-
-    selection mechanism, in the identical per-deme order (`mutate_
-    vectorized`'s own module/function docstrings) —
-    `20260901-claude-sonnet-5-fim-engine-backend-factory-design.md`
-    §5.4's "one RNG scheme for every backend" reaching `mutate`, not
-    just `drift`. Four separate divergence sources had to be found and
-    fixed to get here, none of them visible from a single-deme test
-    alone: a per-step-batched vs. per-deme-interleaved draw order once
-    more than one deme was involved; a rejection-sampling vs. fixed-
-    draw mismatch in the recurrence branch; this same partial-capacity
-    normalization bug `drift_vectorized`'s own analogous test above
-    exists to catch; and a missing final `fsum`-based renormalization
-    step `mutate_vectorized` never replicated from `operators.mutate`'s
-    own `_normalize` (`mutate_vectorized`'s own docstring has the full
-    argument for the last one). Uses `_partial_finite_alleles_state` for
-    the same reason the drift test above does — a saturated capacity
-    cannot exercise the normalization bug at all.
+    `fim.model.operators.mutate` and `mutate_vectorized` draw the same
+    per-allele mutant counts (`Binomial(n, mu)`, ascending allele id)
+    and the same targets, in the same per-deme order (`mutate_
+    vectorized`'s own docstring) — `20260901-claude-sonnet-5-fim-
+    engine-backend-factory-design.md` §5.4's "one RNG scheme for every
+    backend" reaching `mutate`, not just `drift`. Multi-deme
+    deliberately: a per-step-batched (rather than per-deme-interleaved)
+    order agrees with the dict-based loop for one deme and diverges
+    from the second on. Starts from a drifted `_partial_finite_alleles_
+    state`, so absent capacity slots (zero counts, no draw) sit between
+    present ones.
     """
     pytest.importorskip("numba")
     capacity_length = 2
@@ -555,8 +526,14 @@ def test_mutate_vectorized_matches_dict_based_mutate_exactly(
     mu = 0.1
 
     for seed in range(30):
-        state = _partial_finite_alleles_state(
-            deme_count=deme_count, capacity_length=capacity_length, minted_count=6
+        # Drawn by the dict-based `drift` first: `mutate` acts on whole
+        # gene copies, the state `drift` leaves.
+        state = drift_dict(
+            _partial_finite_alleles_state(
+                deme_count=deme_count, capacity_length=capacity_length, minted_count=6
+            ),
+            tuple(int(s) for s in sizes),
+            rng(1000 + seed),
         )
         finite_alleles = FiniteAlleleRegistry(
             {1: FiniteAlleleSpace(capacity, initial_minted)}
@@ -584,45 +561,6 @@ def test_mutate_vectorized_matches_dict_based_mutate_exactly(
             assert set(expected_map) == set(observed_map), (seed, deme)
             for allele_id, value in expected_map.items():
                 assert observed_map[allele_id] == value, (seed, deme, allele_id)
-
-
-def test_mutate_vectorized_renormalization_fsum_ignores_zero_padding() -> None:
-    """The claim `mutate_vectorized`'s own renormalization comment relies on, isolated.
-
-    `mutate_vectorized`'s per-deme renormalization restricts its
-    `math.fsum` call to a row's own nonzero entries rather than
-    converting the full, mostly-zero `capacity`-wide row (large
-    `capacity` values make the full conversion genuinely expensive —
-    profiling at `d=60`, `capacity=4096` found `.tolist()` alone
-    costing about as much as the JIT-compiled multinomial kernel
-    itself). That restriction is safe only because `fsum`'s own
-    running sum is bit-for-bit unaffected by omitting exact `0.0`
-    terms — proven here directly, in isolation from the rest of
-    `mutate_vectorized`'s own machinery, rather than relying on the
-    broader `test_mutate_vectorized_matches_dict_based_mutate_exactly`
-    to catch a regression only indirectly. Covers realistic shapes:
-    a large, mostly-zero row (the actual motivating case), an already-
-    dense row (zero padding contributes nothing to check), and a row
-    with values spanning several orders of magnitude (the case
-    `fsum`'s own correctly-rounded algorithm exists for in the first
-    place, so any subtle divergence from reordering terms would show
-    up here).
-    """
-    rng = np.random.default_rng(20260903)
-    capacity = 4096
-    cases = [
-        rng.random(12),  # sparse: only 12 of 4096 slots populated
-        rng.random(capacity),  # dense: every slot populated
-        np.array([1e-300, 1e150, 1e-10, 3.7, 1e300, 1e-200]),
-    ]
-    for dense_values in cases:
-        sparse_row = np.zeros(capacity, dtype=np.float64)
-        sparse_row[: dense_values.shape[0]] = dense_values
-
-        full_width = math.fsum(sparse_row.tolist())
-        nonzero_only = math.fsum(sparse_row[np.flatnonzero(sparse_row)].tolist())
-
-        assert nonzero_only == full_width
 
 
 def test_symmetric_migration_weights_rows_are_stochastic() -> None:
@@ -779,7 +717,7 @@ def test_mutate_vectorized_preserves_frequency_invariants(
     capacity_length = 2  # capacity 16
     state = _finite_alleles_state(deme_count=10, capacity_length=capacity_length)
     vectorized = build_vectorized_state(state)
-    sizes = np.full(10, 500, dtype=np.int64)
+    sizes = np.full(10, 480, dtype=np.int64)  # 30 copies of each of 16
 
     locus_state = vectorized.locus_states[0]
     generator = rng(1)
