@@ -15032,12 +15032,20 @@ else looking at the filesystem, that rename either has not happened
 yet (nothing at `target`) or has completely finished (everything at
 `target`); there is no in-between moment where `target` exists but
 only holds some of the files. If the code inside the `with` block
-raises anything at all — an ordinary exception, `^C` from the
-keyboard, or the process being killed outright — the temporary
-folder is discarded and `target` is left completely untouched, never
-created in a broken state. `target` therefore either does not exist
-yet or exists fully complete; there is no third, partial state ever
-observable from outside this function.
+raises anything at all — an ordinary exception, or `^C` from the
+keyboard — the temporary folder is discarded and `target` is left
+completely untouched, never created in a broken state. `target`
+therefore either does not exist yet or exists fully complete; there
+is no third, partial state ever observable from outside this
+function.
+
+A process that is *killed* is different: SIGKILL, or a SIGTERM with no
+handler installed (the CLI installs none), ends Python without running
+the cleanup below. `target` is still never half-written, but the
+hidden temporary sibling is left behind. Reclaiming those orphans is
+part of the run lifecycle design
+(`20261006-gpt-6.1-sol-run-lifecycle-and-checkpoint-design.md`,
+`selby/restricted`, sections 2, 5 and 11).
 
 This guarantee is about the *rename* being all-or-nothing, not about
 surviving a total loss of power (a separate, harder guarantee this
