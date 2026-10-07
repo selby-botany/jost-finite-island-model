@@ -474,6 +474,13 @@ For example, three demes of 200 haploid individuals (N = 600) with μ = 0.001
 relax in about 273 generations, so a tolerance of 0.01 needs 1,256
 generations, and the example below (tolerance 0.005) needs 1,445.
 
+The run saves every generation of the first phase in its own
+[`equilibrium_trajectory.jsonl`](usage.md#equilibrium_trajectoryjsonl),
+beside `trajectory.jsonl`. Its generations are numbered from 0 within the
+first phase, separately from the main run's, and the manifest records how
+many there were (`equilibrium_generation_count`) and the diversity at the
+split (`equilibrium_final_heterozygosity`).
+
 Equilibrium-split cannot be combined with an explicit p<sub>0</sub> — a run cannot both
 fix its starting frequencies and derive them — and it uses its own random
 number stream, derived from `seed`, so the same `seed` always reproduces the

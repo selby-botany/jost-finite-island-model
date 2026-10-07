@@ -180,6 +180,102 @@ def test_run_with_sigma_band_writes_the_fifth_trajectory_artifact(
     )
 
 
+# A tiny equilibrium-split configuration: the derived burn-in at this
+# loose tolerance is a few dozen generations at most.
+_EQUILIBRIUM_SPLIT = {
+    "equilibrium_convergence_window": 2,
+    "equilibrium_convergence_tolerance": 0.5,
+    "equilibrium_max_generations": 200,
+}
+
+
+def _assert_equilibrium_trajectory(directory: Path) -> None:
+    """Check one run directory's ancestral trajectory against its manifest.
+
+    Every ancestral generation from `0` through the manifest's
+    `equilibrium_generation_count` is present, in order, in the one
+    ancestral deme, under the run's own `run_id`; and the file is
+    digested in the manifest, with a digest that verifies.
+    """
+    manifest = json.loads((directory / "manifest.json").read_text(encoding="utf-8"))
+    path = directory / "equilibrium_trajectory.jsonl"
+    rows = list(JSONLTrajectoryStore(path).read(manifest["run_id"]))
+    generations = list(dict.fromkeys(row["generation"] for row in rows))
+    assert generations == list(range(manifest["equilibrium_generation_count"] + 1))
+    assert {row["deme"] for row in rows} == {1}
+    assert manifest["artifacts"]["equilibrium_trajectory"] == hash_file(path)
+
+
+def test_equilibrium_split_run_writes_and_digests_its_ancestral_trajectory(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """An equilibrium-split run adds `equilibrium_trajectory.jsonl`, and lists it.
+
+    The main trajectory and its re-analysis are unaffected: `fim stats`
+    still reads `trajectory.jsonl`, whose own digest still verifies.
+    """
+    config = tmp_path / "run.yaml"
+    output = tmp_path / "output"
+    _write_config(config, **_EQUILIBRIUM_SPLIT)
+
+    status = cli.main(["run", str(config), "--output", str(output)])
+
+    assert status == 0
+    listed = [
+        line.split(" -> ", 1)[1]
+        for line in capsys.readouterr().out.splitlines()
+        if " -> " in line
+    ]
+    assert str(output / "equilibrium_trajectory.jsonl") in listed
+    assert {path.name for path in output.iterdir()} == {
+        "trajectory.jsonl",
+        "equilibrium_trajectory.jsonl",
+        "manifest.json",
+        "report.json",
+        "scatter.png",
+        "convergence.jsonl",
+        "pairwise.json",
+    }
+    _assert_equilibrium_trajectory(output)
+    manifest = json.loads((output / "manifest.json").read_text(encoding="utf-8"))
+    main_rows = list(
+        JSONLTrajectoryStore(output / "trajectory.jsonl").read(manifest["run_id"])
+    )
+    assert {row["deme"] for row in main_rows} == {1, 2}
+    assert cli.main(["stats", str(output / "trajectory.jsonl")]) == 0
+    live = json.loads((output / "report.json").read_text(encoding="utf-8"))
+    printed = json.loads(capsys.readouterr().out)
+    assert printed["D"] == live["D"]
+
+
+@pytest.mark.parametrize(
+    ("backend", "flags"),
+    [
+        ("lineal", ["--sequential"]),
+        ("lineal", ["--workers", "2"]),
+        ("generational", []),
+    ],
+)
+def test_equilibrium_split_batch_writes_each_replicates_ancestral_trajectory(
+    tmp_path: Path, backend: str, flags: list[str]
+) -> None:
+    """Every replicate of a batch gets its own digested ancestral trajectory.
+
+    One per supported engine path: `LinealBackend` one replicate after
+    another and across worker processes, and `GenerationalBackend`'s
+    per-replicate stores (`ReplicateFanoutStore`).
+    """
+    config = tmp_path / "run.yaml"
+    output = tmp_path / "output"
+    _write_config(config, n_replicates=2, engine_backend=backend, **_EQUILIBRIUM_SPLIT)
+
+    status = cli.main(["run", str(config), "-o", str(output), "--quiet", *flags])
+
+    assert status == 0
+    for replicate in ("replicate-001", "replicate-002"):
+        _assert_equilibrium_trajectory(output / replicate)
+
+
 def test_run_accepts_per_deme_population_sizes(tmp_path: Path) -> None:
     """A config with a per-deme N list runs end to end through the CLI."""
     config = tmp_path / "run.yaml"

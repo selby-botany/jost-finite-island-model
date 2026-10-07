@@ -166,6 +166,7 @@ from fim.persistence.store import (
     InMemoryTrajectoryStore,
     ReplicateFanoutStore,
     TrajectoryStore,
+    equilibrium_store_for,
 )
 from fim.statistics.catalog import history_keys, nei_key, report_keys
 from fim.statistics.catalog import spec as catalog_spec
@@ -427,6 +428,18 @@ class RunResult:
             A caller that persists this run's own files (`fim.cli.
             _write_run_artifacts`) writes this as the `sigma_band_
             trajectory.jsonl` sibling artifact when present.
+        equilibrium_store: Where an equilibrium-split run streamed its
+            ancestral phase (`fim.model.initial.
+            EquilibriumSplitInitialCondition`): every generation of the
+            one-deme ancestral population, in `store`'s own row schema,
+            read back with `equilibrium_store.read(run_id)`. Numbered by
+            the ancestral phase's own counter, `0` through
+            `manifest.equilibrium_generation_count`; the split demes'
+            generation zero follows its last generation. Beside
+            `trajectory.jsonl` as `equilibrium_trajectory.jsonl` when
+            `store` is a file (`fim.persistence.store.
+            equilibrium_store_for`). `None` for every other initial
+            condition.
     """
 
     run_id: str
@@ -439,6 +452,7 @@ class RunResult:
     manifest: RunManifest
     store: TrajectoryStore
     sigma_band_trajectory: tuple[dict[str, object], ...] | None = None
+    equilibrium_store: TrajectoryStore | None = None
 
 
 SimulationOutput: TypeAlias = RunResult | tuple[RunResult, ...]
@@ -690,8 +704,11 @@ class ReplicaLane:
     (`_generate_initial_state_with_outcome`'s own return value), and
     only when this lane's own `params` configured equilibrium-split —
     `None` for every other initial-condition mode. `_finalize_replica_
-    lane` reads it to populate this lane's own manifest fields and
-    `equilibrium_trajectory.jsonl` artifact.
+    lane` reads it to populate this lane's own manifest fields.
+    `equilibrium_store` is set alongside it: where `_build_replica_lane`
+    already streamed the ancestral phase's own trajectory (the
+    `equilibrium_trajectory.jsonl` artifact), handed on to
+    `RunResult.equilibrium_store`.
     """
 
     replica_index: int
@@ -708,6 +725,7 @@ class ReplicaLane:
     migration_weights: tuple[np.ndarray, ...] | None = None
     vectorized_state: VectorizedState | None = None
     equilibration_outcome: EquilibrationOutcome | None = None
+    equilibrium_store: TrajectoryStore | None = None
 
 
 class Advancer(Protocol):
@@ -1140,8 +1158,8 @@ def _build_replica_lane(
         combinator=lane_params.convergence_combinator,
         extra_statistics=_extra_tracked_statistics(lane_params),
     )
-    state, equilibration_outcome = _generate_initial_state_with_outcome(
-        lane_params, rng
+    state, equilibration_outcome, equilibrium_store = (
+        _generate_initial_state_with_outcome(lane_params, rng, store, lane_run_id)
     )
     highest_initial_id = max(
         (
@@ -1173,6 +1191,7 @@ def _build_replica_lane(
         monitor=monitor,
         started_at=started_at,
         equilibration_outcome=equilibration_outcome,
+        equilibrium_store=equilibrium_store,
     )
 
 
@@ -1279,6 +1298,7 @@ def _finalize_replica_lane(
         convergence_histories=lane.monitor.histories,
         manifest=manifest,
         store=store,
+        equilibrium_store=lane.equilibrium_store,
     )
 
 
@@ -1582,6 +1602,9 @@ def _finish_adaptive_stop(
     accepted = lanes[:accepted_count]
     for discarded in lanes[accepted_count:]:
         store.discard(discarded.run_id)
+        # Its ancestral phase (an equilibrium-split founding) goes too.
+        if discarded.equilibrium_store is not None:
+            discarded.equilibrium_store.discard(discarded.run_id)
         discarded.active = False
         discarded.result = None
         discarded.vectorized_state = None
@@ -3117,16 +3140,29 @@ def bootstrap_replicate_summary(
 def _generate_initial_state_with_outcome(
     params: SimulationParams,
     rng: np.random.Generator,
-) -> tuple[ModelState, EquilibrationOutcome | None]:
+    store: TrajectoryStore,
+    run_id: str,
+) -> tuple[ModelState, EquilibrationOutcome | None, TrajectoryStore | None]:
     """Generate generation zero, capturing the equilibration outcome when relevant.
 
     `generate_initial_state` itself always discards `EquilibriumSplit
     InitialCondition`'s own richer `EquilibrationOutcome` (see that
     function's own docstring) — `_build_replica_lane`/`_run_one`, this
     function's own two callers, are the ones that actually need it, to
-    persist it into this run's own manifest and `equilibrium_
-    trajectory.jsonl` (`20260907-claude-sonnet-5-equilibrium-split-
-    design.md`, decision 5). The dispatch condition below intentionally
+    persist it into this run's own manifest (`20260907-claude-sonnet-5-
+    equilibrium-split-design.md`, decision 5). Every engine path —
+    `LinealBackend` through `_run_one`, `GenerationalBackend` through
+    `_build_replica_lane` — reaches the ancestral phase here
+    (`generational-vector` never completes one: it supports only the
+    finite-alleles model, equilibrium-split only infinite alleles), so
+    this is also the one place its trajectory is persisted: each
+    ancestral generation is written, as it is
+    simulated, to `store`'s ancestral-phase companion
+    (`fim.persistence.store.equilibrium_store_for`; beside a JSONL
+    `trajectory.jsonl`, that is `equilibrium_trajectory.jsonl`), keyed
+    by `run_id` and numbered by the ancestral phase's own counter. That
+    companion is returned third, `None` when there was no ancestral
+    phase. The dispatch condition below intentionally
     mirrors `generate_initial_state`'s own: `SimulationParams.
     __post_init__` guarantees all three `equilibrium_*` fields are set
     together or not at all, so checking all three here (rather than
@@ -3144,8 +3180,23 @@ def _generate_initial_state_with_outcome(
             convergence_tolerance=params.equilibrium_convergence_tolerance,
             max_generations=params.equilibrium_max_generations,
         )
-        return generator.generate_with_outcome(params, rng)
-    return generate_initial_state(params, rng), None
+        equilibrium_store = equilibrium_store_for(store, run_id)
+
+        def write_ancestral_generation(ancestral: ModelState) -> None:
+            # Rows built by `ModelState.to_rows` from a valid state need
+            # no re-validation (`fim.persistence.store`'s top docstring).
+            equilibrium_store.write_generation(
+                run_id,
+                ancestral.generation,
+                ancestral.to_rows(run_id),
+                validate=False,
+            )
+
+        state, outcome = generator.generate_with_outcome(
+            params, rng, on_generation=write_ancestral_generation
+        )
+        return state, outcome, equilibrium_store
+    return generate_initial_state(params, rng), None, None
 
 
 def _initial_condition_mode(params: SimulationParams) -> str:
@@ -3421,7 +3472,13 @@ def _discard_overshoot_replicates(
                 exc_info=True,
             )
         if store_factory is not None:
-            store_factory(run_ids[index]).discard(run_ids[index])
+            overshoot_store = store_factory(run_ids[index])
+            overshoot_store.discard(run_ids[index])
+            # An equilibrium-split replicate's ancestral phase too; a
+            # no-op for any other run, which never wrote one.
+            equilibrium_store_for(overshoot_store, run_ids[index]).discard(
+                run_ids[index]
+            )
 
 
 def _run_replicate_worker(
@@ -3540,7 +3597,9 @@ def _run_one(
     # numbering has to start strictly after the highest id already in
     # use, or a freshly minted mutation could collide with (and be
     # mistaken for) an allele that was already present at the start.
-    state, equilibration_outcome = _generate_initial_state_with_outcome(params, rng)
+    state, equilibration_outcome, equilibrium_store = (
+        _generate_initial_state_with_outcome(params, rng, store, run_id)
+    )
     highest_initial_id = max(
         (
             int(allele_id)
@@ -3723,6 +3782,7 @@ def _run_one(
         manifest=manifest,
         store=store,
         sigma_band_trajectory=sigma_band_trajectory,
+        equilibrium_store=equilibrium_store,
     )
 
 

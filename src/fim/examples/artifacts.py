@@ -18,6 +18,7 @@ RUN_OUTPUT_NAMES: Final = (
     "manifest.json",
     "report.json",
     "trajectory.jsonl",
+    "equilibrium_trajectory.jsonl",
     "convergence.jsonl",
     "sigma_band_trajectory.jsonl",
     "pairwise.json",

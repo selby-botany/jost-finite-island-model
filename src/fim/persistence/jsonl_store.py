@@ -20,11 +20,19 @@ import logging
 import threading
 from collections.abc import Iterable, Iterator, Mapping
 from pathlib import Path
-from typing import Any, cast
+from typing import Any, Final, cast
 
 from fim.persistence.store import TrajectoryRow, normalize_row
 
 logger = logging.getLogger(__name__)
+
+EQUILIBRIUM_TRAJECTORY_FILENAME: Final = "equilibrium_trajectory.jsonl"
+"""The ancestral-phase trajectory of an equilibrium-split run.
+
+Written beside the run's own `trajectory.jsonl` (`JSONLTrajectoryStore.
+equilibrium_store`), in the same row schema, numbered by the ancestral
+phase's own generation counter.
+"""
 
 
 class JSONLTrajectoryStore:
@@ -51,6 +59,7 @@ class JSONLTrajectoryStore:
         # `ThreadedAdvancer`) could interleave their own `handle.write()`
         # calls on the same underlying file descriptor, garbling lines.
         self._lock = threading.Lock()
+        self._equilibrium: JSONLTrajectoryStore | None = None
 
     def __getstate__(self) -> dict[str, Any]:
         """Drop `_lock` before pickling.
@@ -176,6 +185,25 @@ class JSONLTrajectoryStore:
                 self.path.unlink()
         if logger.isEnabledFor(logging.DEBUG):
             logger.debug("discarded run %s from %s", run_id, self.path)
+
+    def equilibrium_store(self, run_id: str) -> JSONLTrajectoryStore:
+        """Return the store for this run's ancestral phase, beside this file.
+
+        `EQUILIBRIUM_TRAJECTORY_FILENAME` in this file's own directory,
+        so it is staged and published with the rest of the run's
+        artifacts (`fim.paths.atomic_directory`). Like this file, it can
+        hold several runs' rows, told apart by `run_id`
+        (`fim.persistence.store.EquilibriumStoreProvider`). One instance
+        per store, built on first use, so every writer of that file
+        shares its one lock.
+        """
+        del run_id
+        with self._lock:
+            if self._equilibrium is None:
+                self._equilibrium = JSONLTrajectoryStore(
+                    self.path.with_name(EQUILIBRIUM_TRAJECTORY_FILENAME)
+                )
+            return self._equilibrium
 
     def read(self, run_id: str) -> Iterator[TrajectoryRow]:
         """Yield complete rows matching ``run_id``, oldest first.

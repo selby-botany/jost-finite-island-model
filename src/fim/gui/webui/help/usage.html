@@ -373,7 +373,10 @@ generations for its N gene copies. Loosen the tolerance for a shorter
 ancestral phase (founded from a population a little further from
 equilibrium), or tighten it for a longer one; either way, a phase needing
 more than equilibrium_max_generations is a hard error, reported before the
-phase starts, not an ordinary result — see
+phase starts, not an ordinary result. The ancestral phase is saved, every
+generation of it, in
+<a href="#equilibrium_trajectoryjsonl"><code>equilibrium_trajectory.jsonl</code></a> beside the
+run's <code>trajectory.jsonl</code> — see
 <a href="#" data-fim-help="configuration" data-fim-anchor="equilibrium_convergence_window-equilibrium_convergence_tolerance-equilibrium_max_generations">equilibrium_convergence_window, equilibrium_convergence_tolerance,
 equilibrium_max_generations</a>.</p>
 <h3 id="stochastic-migrant-counts">Stochastic migrant counts</h3>
@@ -1398,6 +1401,25 @@ results — see the in-app Help screen.</p>
 </tr>
 </tbody>
 </table>
+<h3 id="equilibrium_trajectoryjsonl"><code>equilibrium_trajectory.jsonl</code></h3>
+<p>Written only by an <a href="#equilibrium-split-founding">equilibrium-split</a> run: the
+ancestral population's own trajectory, simulated before it is split into
+your demes. Every generation of that ancestral phase is kept. The rows have
+exactly the <code>trajectory.jsonl</code> fields above, so anything that reads
+<code>trajectory.jsonl</code> reads this file too, with two differences:</p>
+<ul>
+<li><code>deme</code> is always 1: the ancestral population is one deme holding all of
+your demes' gene copies.</li>
+<li><code>generation</code> counts the ancestral phase on its own, from 0 (the starting
+draw) to the manifest's <code>equilibrium_generation_count</code>. Its last
+generation is the population that was split. The main run's own
+generation 0 in <code>trajectory.jsonl</code> is the moment just after that split,
+so ancestral generation <code>g</code> happened
+<code>equilibrium_generation_count - g</code> generations before it.</li>
+</ul>
+<p>The file has the same <code>run_id</code> as the main trajectory, and the manifest
+records its digest as <code>equilibrium_trajectory</code>. Runs with any other
+starting condition do not have this file.</p>
 <h3 id="manifestjson"><code>manifest.json</code></h3>
 <p>The manifest records the complete parameter mapping, seed, software version,
 UTC start/end timestamps, generation, watched statistic, and whether
@@ -1409,8 +1431,9 @@ actually wrote to <code>trajectory.jsonl</code> (<code>convergence.generation + 
 every run, since no generation is ever skipped — recorded explicitly
 rather than left implicit).</li>
 <li><code>artifacts</code>: the SHA-256 digest and byte count of <code>trajectory.jsonl</code>,
-<code>report.json</code>, and <code>scatter.png</code> as they existed at the moment the run
-finished writing and flushing them. <code>fim stats</code> recomputes and checks the
+<code>report.json</code>, <code>scatter.png</code>, and every other file the run wrote (for
+example <code>equilibrium_trajectory.jsonl</code>) as they existed at the moment
+the run finished writing and flushing them. <code>fim stats</code> recomputes and checks the
 trajectory's digest (and its generation count) before reading a single
 row, so a trajectory edited, truncated, or replaced after the run
 completed is refused with a clear error rather than re-analyzed

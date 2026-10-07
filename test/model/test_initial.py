@@ -17,6 +17,7 @@ from fim.model.initial import (
 )
 from fim.model.locus import LocusSpec
 from fim.model.params import SimulationParams
+from fim.model.state import ModelState
 from fim.statistics import gd, gs, h_s
 
 
@@ -304,6 +305,39 @@ def test_generate_matches_generate_with_outcome_state(
     )
 
     assert via_generate == via_generate_with_outcome
+
+
+def test_on_generation_observes_every_ancestral_generation_without_changing_anything(
+    rng: Callable[[int], np.random.Generator],
+) -> None:
+    """The observer sees generations `0..generation_count`, one deme each.
+
+    Its states are the ones the outcome summarizes (`history`), and
+    observing changes neither the split state nor the outcome — the
+    contract `fim.engine` relies on to stream `equilibrium_trajectory.
+    jsonl` without perturbing the run.
+    """
+    params = _params(gene_copies=20, d=2, mu=0.02)
+    condition = _equilibrium_condition(convergence_window=5)
+    observed: list[ModelState] = []
+
+    observed_state, observed_outcome = condition.generate_with_outcome(
+        params, rng(0), on_generation=observed.append
+    )
+    plain_state, plain_outcome = condition.generate_with_outcome(params, rng(0))
+
+    assert (observed_state, observed_outcome) == (plain_state, plain_outcome)
+    assert [state.generation for state in observed] == list(
+        range(observed_outcome.generation_count + 1)
+    )
+    assert {state.deme_count for state in observed} == {1}
+    assert [
+        math.fsum(
+            h_s([state.frequency_map(0, locus)]) for locus in range(state.locus_count)
+        )
+        / state.locus_count
+        for state in observed
+    ] == list(observed_outcome.history)
 
 
 def test_equilibration_outcome_history_ends_at_the_final_heterozygosity(

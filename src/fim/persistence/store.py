@@ -29,8 +29,10 @@ already enforced those same invariants. Re-running `normalize_row` on
 such a row cannot find a defect `ModelState`'s/`VectorizedState`'s own
 construction did not already rule out — it can only re-confirm what is
 already known, on every single row, every single generation. `fim.
-engine`'s own five internal call sites pass `validate=False`
-specifically because each one is provably in this position; no other
+engine`'s own internal call sites (including the equilibrium-split
+ancestral phase's, which writes `ModelState.to_rows` rows too) pass
+`validate=False` specifically because each one is provably in this
+position; no other
 caller in this codebase does, and a new one should not either without
 the same proof.
 """
@@ -39,7 +41,7 @@ from __future__ import annotations
 
 import threading
 from collections.abc import Callable, Iterable, Iterator, Mapping
-from typing import Any, Protocol, TypedDict, cast
+from typing import Any, Protocol, TypedDict, cast, runtime_checkable
 
 from fim.model.identifiers import parse_bounded_frequency
 
@@ -127,6 +129,49 @@ class TrajectoryStore(Protocol):
         ...
 
 
+@runtime_checkable
+class EquilibriumStoreProvider(Protocol):
+    """A trajectory store that knows where its run's ancestral phase goes.
+
+    An equilibrium-split run (`fim.model.initial.
+    EquilibriumSplitInitialCondition`) simulates one panmictic ancestral
+    population before founding its demes. That phase's own trajectory
+    is persisted separately from the main one — the
+    `equilibrium_trajectory.jsonl` artifact — in the identical
+    `TrajectoryRow` schema, with its own generation counter starting at
+    zero, so it can never be mistaken for the main run's own
+    generations. A store implementing this method names the companion
+    store those rows belong in: a sibling file for
+    `fim.persistence.jsonl_store.JSONLTrajectoryStore`, a second
+    in-memory store for `InMemoryTrajectoryStore`. Optional — `fim.
+    engine` falls back to a fresh `InMemoryTrajectoryStore` for a store
+    without it (`equilibrium_store_for`).
+    """
+
+    def equilibrium_store(self, run_id: str) -> TrajectoryStore:
+        """Return the store `run_id`'s ancestral-phase rows are written to."""
+        ...
+
+
+def equilibrium_store_for(store: TrajectoryStore, run_id: str) -> TrajectoryStore:
+    """Return the ancestral-phase companion of `store` for one run.
+
+    Args:
+        store: The run's own main trajectory store.
+        run_id: The run whose ancestral phase is being persisted.
+
+    Returns:
+        `store.equilibrium_store(run_id)` when `store` provides one
+        (`EquilibriumStoreProvider`); otherwise a fresh
+        `InMemoryTrajectoryStore`, so a custom store still gets a
+        readable ancestral trajectory on `fim.engine.RunResult.
+        equilibrium_store`, just not a file.
+    """
+    if isinstance(store, EquilibriumStoreProvider):
+        return store.equilibrium_store(run_id)
+    return InMemoryTrajectoryStore()
+
+
 class InMemoryTrajectoryStore:
     """Store trajectories in memory for library calls and focused tests.
 
@@ -153,6 +198,7 @@ class InMemoryTrajectoryStore:
         """Initialize an empty store."""
         self._rows: list[TrajectoryRow] = []
         self._lock = threading.Lock()
+        self._equilibrium: InMemoryTrajectoryStore | None = None
 
     def __getstate__(self) -> dict[str, Any]:
         """Drop `_lock` before pickling.
@@ -221,6 +267,20 @@ class InMemoryTrajectoryStore:
         """
         with self._lock:
             self._rows = [row for row in self._rows if row["run_id"] != run_id]
+
+    def equilibrium_store(self, run_id: str) -> TrajectoryStore:
+        """Return this store's one in-memory ancestral-phase companion.
+
+        Built on first use and shared by every run this store holds,
+        the same way this store's own rows are: each run's ancestral
+        rows are told apart by `run_id`, exactly like its main rows
+        (`EquilibriumStoreProvider`).
+        """
+        del run_id
+        with self._lock:
+            if self._equilibrium is None:
+                self._equilibrium = InMemoryTrajectoryStore()
+            return self._equilibrium
 
 
 class ReplicateFanoutStore:
@@ -313,6 +373,15 @@ class ReplicateFanoutStore:
         store = self._stores.get(run_id)
         if store is not None:
             store.discard(run_id)
+
+    def equilibrium_store(self, run_id: str) -> TrajectoryStore:
+        """Return the ancestral-phase companion of `run_id`'s own child store.
+
+        So a replicate's `equilibrium_trajectory.jsonl` lands beside its
+        own `trajectory.jsonl`, in its own directory
+        (`EquilibriumStoreProvider`).
+        """
+        return equilibrium_store_for(self._store_for(run_id), run_id)
 
 
 def normalize_row(

@@ -44,7 +44,11 @@ from typing import Any
 from fim.model.locus import LocusSpec
 from fim.model.state import ModelState
 from fim.paths import write_text_atomically
-from fim.persistence.store import TrajectoryRow, TrajectoryStore
+from fim.persistence.store import (
+    TrajectoryRow,
+    TrajectoryStore,
+    equilibrium_store_for,
+)
 from fim.reanalyze import group_rows_by_generation
 
 logger = logging.getLogger(__name__)
@@ -148,6 +152,16 @@ class GuiProgressStore:
         """Delegate straight to the wrapped store; nothing to decorate here."""
         self._inner.discard(run_id)
 
+    def equilibrium_store(self, run_id: str) -> TrajectoryStore:
+        """Return the wrapped store's own ancestral-phase companion, undecorated.
+
+        The ancestral phase of an equilibrium-split run is not the
+        run's live progress: its generations are not pushed to the live
+        scatter, which shows the split demes from their own generation
+        zero (`fim.persistence.store.EquilibriumStoreProvider`).
+        """
+        return equilibrium_store_for(self._inner, run_id)
+
 
 class LiveProgressStore:
     """Decorate a `TrajectoryStore` with file-mediated progress and cancellation.
@@ -214,6 +228,15 @@ class LiveProgressStore:
     def discard(self, run_id: str) -> None:
         """Delegate straight to the wrapped store; nothing to decorate here."""
         self._inner.discard(run_id)
+
+    def equilibrium_store(self, run_id: str) -> TrajectoryStore:
+        """Return the wrapped store's own ancestral-phase companion, undecorated.
+
+        Its generations are not the replicate's progress, so they never
+        touch the `.progress` sidecar (`GuiProgressStore.
+        equilibrium_store`).
+        """
+        return equilibrium_store_for(self._inner, run_id)
 
 
 def write_progress_sidecar(progress_path: Path, generation: int) -> None:

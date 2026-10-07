@@ -369,11 +369,13 @@ Return to the [source-tree orientation](../README.md) or the [developer guide](.
     * [write\_generation](#fim.gui.store.GuiProgressStore.write_generation)
     * [read](#fim.gui.store.GuiProgressStore.read)
     * [discard](#fim.gui.store.GuiProgressStore.discard)
+    * [equilibrium\_store](#fim.gui.store.GuiProgressStore.equilibrium_store)
   * [LiveProgressStore](#fim.gui.store.LiveProgressStore)
     * [\_\_init\_\_](#fim.gui.store.LiveProgressStore.__init__)
     * [write\_generation](#fim.gui.store.LiveProgressStore.write_generation)
     * [read](#fim.gui.store.LiveProgressStore.read)
     * [discard](#fim.gui.store.LiveProgressStore.discard)
+    * [equilibrium\_store](#fim.gui.store.LiveProgressStore.equilibrium_store)
   * [write\_progress\_sidecar](#fim.gui.store.write_progress_sidecar)
   * [read\_progress\_sidecar](#fim.gui.store.read_progress_sidecar)
   * [read\_live\_state](#fim.gui.store.read_live_state)
@@ -561,12 +563,14 @@ Return to the [source-tree orientation](../README.md) or the [developer guide](.
   * [run\_identity\_of](#fim.persistence.groups.run_identity_of)
   * [supersede\_run](#fim.persistence.groups.supersede_run)
 * [fim.persistence.jsonl\_store](#fim.persistence.jsonl_store)
+  * [EQUILIBRIUM\_TRAJECTORY\_FILENAME](#fim.persistence.jsonl_store.EQUILIBRIUM_TRAJECTORY_FILENAME)
   * [JSONLTrajectoryStore](#fim.persistence.jsonl_store.JSONLTrajectoryStore)
     * [\_\_init\_\_](#fim.persistence.jsonl_store.JSONLTrajectoryStore.__init__)
     * [\_\_getstate\_\_](#fim.persistence.jsonl_store.JSONLTrajectoryStore.__getstate__)
     * [\_\_setstate\_\_](#fim.persistence.jsonl_store.JSONLTrajectoryStore.__setstate__)
     * [write\_generation](#fim.persistence.jsonl_store.JSONLTrajectoryStore.write_generation)
     * [discard](#fim.persistence.jsonl_store.JSONLTrajectoryStore.discard)
+    * [equilibrium\_store](#fim.persistence.jsonl_store.JSONLTrajectoryStore.equilibrium_store)
     * [read](#fim.persistence.jsonl_store.JSONLTrajectoryStore.read)
 * [fim.persistence.manifest](#fim.persistence.manifest)
   * [ArtifactDigest](#fim.persistence.manifest.ArtifactDigest)
@@ -619,6 +623,9 @@ Return to the [source-tree orientation](../README.md) or the [developer guide](.
     * [write\_generation](#fim.persistence.store.TrajectoryStore.write_generation)
     * [read](#fim.persistence.store.TrajectoryStore.read)
     * [discard](#fim.persistence.store.TrajectoryStore.discard)
+  * [EquilibriumStoreProvider](#fim.persistence.store.EquilibriumStoreProvider)
+    * [equilibrium\_store](#fim.persistence.store.EquilibriumStoreProvider.equilibrium_store)
+  * [equilibrium\_store\_for](#fim.persistence.store.equilibrium_store_for)
   * [InMemoryTrajectoryStore](#fim.persistence.store.InMemoryTrajectoryStore)
     * [\_\_init\_\_](#fim.persistence.store.InMemoryTrajectoryStore.__init__)
     * [\_\_getstate\_\_](#fim.persistence.store.InMemoryTrajectoryStore.__getstate__)
@@ -626,6 +633,7 @@ Return to the [source-tree orientation](../README.md) or the [developer guide](.
     * [write\_generation](#fim.persistence.store.InMemoryTrajectoryStore.write_generation)
     * [read](#fim.persistence.store.InMemoryTrajectoryStore.read)
     * [discard](#fim.persistence.store.InMemoryTrajectoryStore.discard)
+    * [equilibrium\_store](#fim.persistence.store.InMemoryTrajectoryStore.equilibrium_store)
   * [ReplicateFanoutStore](#fim.persistence.store.ReplicateFanoutStore)
     * [\_\_init\_\_](#fim.persistence.store.ReplicateFanoutStore.__init__)
     * [\_\_getstate\_\_](#fim.persistence.store.ReplicateFanoutStore.__getstate__)
@@ -633,6 +641,7 @@ Return to the [source-tree orientation](../README.md) or the [developer guide](.
     * [write\_generation](#fim.persistence.store.ReplicateFanoutStore.write_generation)
     * [read](#fim.persistence.store.ReplicateFanoutStore.read)
     * [discard](#fim.persistence.store.ReplicateFanoutStore.discard)
+    * [equilibrium\_store](#fim.persistence.store.ReplicateFanoutStore.equilibrium_store)
   * [normalize\_row](#fim.persistence.store.normalize_row)
 * [fim.reanalyze](#fim.reanalyze)
   * [ReanalyzedGeneration](#fim.reanalyze.ReanalyzedGeneration)
@@ -2539,6 +2548,18 @@ Fields:
         A caller that persists this run's own files (`fim.cli.
         _write_run_artifacts`) writes this as the `sigma_band_
         trajectory.jsonl` sibling artifact when present.
+    equilibrium_store: Where an equilibrium-split run streamed its
+        ancestral phase (`fim.model.initial.
+        EquilibriumSplitInitialCondition`): every generation of the
+        one-deme ancestral population, in `store`'s own row schema,
+        read back with `equilibrium_store.read(run_id)`. Numbered by
+        the ancestral phase's own counter, `0` through
+        `manifest.equilibrium_generation_count`; the split demes'
+        generation zero follows its last generation. Beside
+        `trajectory.jsonl` as `equilibrium_trajectory.jsonl` when
+        `store` is a file (`fim.persistence.store.
+        equilibrium_store_for`). `None` for every other initial
+        condition.
 
 <a id="fim.engine.EngineBackend"></a>
 
@@ -2699,8 +2720,11 @@ docstring (`FIM-48`).
 (`_generate_initial_state_with_outcome`'s own return value), and
 only when this lane's own `params` configured equilibrium-split —
 `None` for every other initial-condition mode. `_finalize_replica_
-lane` reads it to populate this lane's own manifest fields and
-`equilibrium_trajectory.jsonl` artifact.
+lane` reads it to populate this lane's own manifest fields.
+`equilibrium_store` is set alongside it: where `_build_replica_lane`
+already streamed the ancestral phase's own trajectory (the
+`equilibrium_trajectory.jsonl` artifact), handed on to
+`RunResult.equilibrium_store`.
 
 <a id="fim.engine.Advancer"></a>
 
@@ -10804,7 +10828,8 @@ Deliberately the same names `cli._run_artifact_targets` uses for a
 scalar run (it also names the optional sigma-band file) — same
 target filenames, same directory — a direct parallel, not a shared import, since
 `cli._run_artifact_targets` is a private module-level function of
-the CLI's own front end.
+the CLI's own front end. `equilibrium_trajectory` exists only for
+an equilibrium-split run, streamed by the engine itself.
 
 <a id="fim.gui.runner.pairwise_status_text"></a>
 
@@ -11050,6 +11075,21 @@ def discard(run_id: str) -> None
 
 Delegate straight to the wrapped store; nothing to decorate here.
 
+<a id="fim.gui.store.GuiProgressStore.equilibrium_store"></a>
+
+#### equilibrium\_store
+
+```python
+def equilibrium_store(run_id: str) -> TrajectoryStore
+```
+
+Return the wrapped store's own ancestral-phase companion, undecorated.
+
+The ancestral phase of an equilibrium-split run is not the
+run's live progress: its generations are not pushed to the live
+scatter, which shows the split demes from their own generation
+zero (`fim.persistence.store.EquilibriumStoreProvider`).
+
 <a id="fim.gui.store.LiveProgressStore"></a>
 
 ## LiveProgressStore Objects
@@ -11131,6 +11171,20 @@ def discard(run_id: str) -> None
 ```
 
 Delegate straight to the wrapped store; nothing to decorate here.
+
+<a id="fim.gui.store.LiveProgressStore.equilibrium_store"></a>
+
+#### equilibrium\_store
+
+```python
+def equilibrium_store(run_id: str) -> TrajectoryStore
+```
+
+Return the wrapped store's own ancestral-phase companion, undecorated.
+
+Its generations are not the replicate's progress, so they never
+touch the `.progress` sidecar (`GuiProgressStore.
+equilibrium_store`).
 
 <a id="fim.gui.store.write_progress_sidecar"></a>
 
@@ -12373,11 +12427,15 @@ Returned alongside the split generation-zero state by
 the bare `generate` (the `InitialConditionGenerator` Protocol
 method), which every other strategy also satisfies and which has no
 return-shape room for this. `fim.engine`'s own run orchestration is
-the one caller that needs this: it threads these three values into
-`RunManifest`'s own `equilibrium_generation_count`/`equilibrium_
-final_heterozygosity` fields and persists `history` in full as the
-`equilibrium_trajectory.jsonl` sibling artifact
-(`20260907-claude-sonnet-5-equilibrium-split-design.md` §5).
+the one caller that needs this: it threads `generation_count` and
+`final_heterozygosity` into `RunManifest`'s own
+`equilibrium_generation_count`/`equilibrium_final_heterozygosity`
+fields (`20260907-claude-sonnet-5-equilibrium-split-design.md` §5).
+The ancestral phase's full trajectory — every generation's own
+allele frequencies, not only this `H_S` summary — is not held here:
+`generate_with_outcome` streams it, one generation at a time, to its
+`on_generation` observer, which `fim.engine` writes as the run's
+`equilibrium_trajectory.jsonl` artifact.
 
 **Arguments**:
 
@@ -12533,8 +12591,11 @@ this method throws away.
 
 ```python
 def generate_with_outcome(
-        params: SimulationParams,
-        rng: np.random.Generator) -> tuple[ModelState, EquilibrationOutcome]
+    params: SimulationParams,
+    rng: np.random.Generator,
+    *,
+    on_generation: Callable[[ModelState], None] | None = None
+) -> tuple[ModelState, EquilibrationOutcome]
 ```
 
 Equilibrate one ancestral population, then split it into `params.d` demes.
@@ -12556,6 +12617,18 @@ Equilibrate one ancestral population, then split it into `params.d` demes.
   method's signature matches every other strategy's
   `generate`, and so a future caller cannot accidentally
   assume it is unused by inspecting the signature alone.
+- `on_generation` - Called with the one-deme ancestral state at
+  every generation of the ancestral phase, oldest first:
+  generation zero (the Dirichlet draw), then each
+  generation through the burn-in, before the split. The
+  ancestral phase keeps its own generation counter, so
+  these states are numbered `0` through
+  `EquilibrationOutcome.generation_count`, independently
+  of the split run's own generation zero. Observing draws
+  nothing from any random stream, so the result is the
+  same with or without an observer. `fim.engine` uses it
+  to stream `equilibrium_trajectory.jsonl`; `None` (the
+  default) observes nothing.
 
 
 **Returns**:
@@ -16695,6 +16768,16 @@ survives on disk even if the run is later interrupted, and a very long
 run's trajectory file never needs to be held entirely in memory at
 once, either to write it or to read it back.
 
+<a id="fim.persistence.jsonl_store.EQUILIBRIUM_TRAJECTORY_FILENAME"></a>
+
+#### EQUILIBRIUM\_TRAJECTORY\_FILENAME
+
+The ancestral-phase trajectory of an equilibrium-split run.
+
+Written beside the run's own `trajectory.jsonl` (`JSONLTrajectoryStore.
+equilibrium_store`), in the same row schema, numbered by the ancestral
+phase's own generation counter.
+
 <a id="fim.persistence.jsonl_store.JSONLTrajectoryStore"></a>
 
 ## JSONLTrajectoryStore Objects
@@ -16810,6 +16893,24 @@ applied here to one file instead of one directory.
 A missing file, or a file that already has none of ``run_id``'s
 own rows, is a no-op either way — this is "make sure this run's
 data is gone," not "assert it was there first."
+
+<a id="fim.persistence.jsonl_store.JSONLTrajectoryStore.equilibrium_store"></a>
+
+#### equilibrium\_store
+
+```python
+def equilibrium_store(run_id: str) -> JSONLTrajectoryStore
+```
+
+Return the store for this run's ancestral phase, beside this file.
+
+`EQUILIBRIUM_TRAJECTORY_FILENAME` in this file's own directory,
+so it is staged and published with the rest of the run's
+artifacts (`fim.paths.atomic_directory`). Like this file, it can
+hold several runs' rows, told apart by `run_id`
+(`fim.persistence.store.EquilibriumStoreProvider`). One instance
+per store, built on first use, so every writer of that file
+shares its one lock.
 
 <a id="fim.persistence.jsonl_store.JSONLTrajectoryStore.read"></a>
 
@@ -17855,8 +17956,10 @@ already enforced those same invariants. Re-running `normalize_row` on
 such a row cannot find a defect `ModelState`'s/`VectorizedState`'s own
 construction did not already rule out — it can only re-confirm what is
 already known, on every single row, every single generation. `fim.
-engine`'s own five internal call sites pass `validate=False`
-specifically because each one is provably in this position; no other
+engine`'s own internal call sites (including the equilibrium-split
+ancestral phase's, which writes `ModelState.to_rows` rows too) pass
+`validate=False` specifically because each one is provably in this
+position; no other
 caller in this codebase does, and a new one should not either without
 the same proof.
 
@@ -17960,6 +18063,66 @@ explain it.
 
 - `run_id` - The run whose rows should no longer exist in this
   store, whether they were ever written or not.
+
+<a id="fim.persistence.store.EquilibriumStoreProvider"></a>
+
+## EquilibriumStoreProvider Objects
+
+```python
+@runtime_checkable
+class EquilibriumStoreProvider(Protocol)
+```
+
+A trajectory store that knows where its run's ancestral phase goes.
+
+An equilibrium-split run (`fim.model.initial.
+EquilibriumSplitInitialCondition`) simulates one panmictic ancestral
+population before founding its demes. That phase's own trajectory
+is persisted separately from the main one — the
+`equilibrium_trajectory.jsonl` artifact — in the identical
+`TrajectoryRow` schema, with its own generation counter starting at
+zero, so it can never be mistaken for the main run's own
+generations. A store implementing this method names the companion
+store those rows belong in: a sibling file for
+`fim.persistence.jsonl_store.JSONLTrajectoryStore`, a second
+in-memory store for `InMemoryTrajectoryStore`. Optional — `fim.
+engine` falls back to a fresh `InMemoryTrajectoryStore` for a store
+without it (`equilibrium_store_for`).
+
+<a id="fim.persistence.store.EquilibriumStoreProvider.equilibrium_store"></a>
+
+#### equilibrium\_store
+
+```python
+def equilibrium_store(run_id: str) -> TrajectoryStore
+```
+
+Return the store `run_id`'s ancestral-phase rows are written to.
+
+<a id="fim.persistence.store.equilibrium_store_for"></a>
+
+#### equilibrium\_store\_for
+
+```python
+def equilibrium_store_for(store: TrajectoryStore,
+                          run_id: str) -> TrajectoryStore
+```
+
+Return the ancestral-phase companion of `store` for one run.
+
+**Arguments**:
+
+- `store` - The run's own main trajectory store.
+- `run_id` - The run whose ancestral phase is being persisted.
+
+
+**Returns**:
+
+  `store.equilibrium_store(run_id)` when `store` provides one
+  (`EquilibriumStoreProvider`); otherwise a fresh
+  `InMemoryTrajectoryStore`, so a custom store still gets a
+  readable ancestral trajectory on `fim.engine.RunResult.
+  equilibrium_store`, just not a file.
 
 <a id="fim.persistence.store.InMemoryTrajectoryStore"></a>
 
@@ -18075,6 +18238,21 @@ exists at all. Held under `_lock`, the same guard `write_
 generation`/`read` already use, so a concurrent write from
 another thread can never interleave with this rebuild of `_rows`.
 
+<a id="fim.persistence.store.InMemoryTrajectoryStore.equilibrium_store"></a>
+
+#### equilibrium\_store
+
+```python
+def equilibrium_store(run_id: str) -> TrajectoryStore
+```
+
+Return this store's one in-memory ancestral-phase companion.
+
+Built on first use and shared by every run this store holds,
+the same way this store's own rows are: each run's ancestral
+rows are told apart by `run_id`, exactly like its main rows
+(`EquilibriumStoreProvider`).
+
 <a id="fim.persistence.store.ReplicateFanoutStore"></a>
 
 ## ReplicateFanoutStore Objects
@@ -18185,6 +18363,20 @@ Matches `TrajectoryStore.discard`'s own "no rows, no error"
 contract exactly: a `run_id` this store never saw (an adaptive
 stop's own abandoned lane, `run_batch`'s own docstring) has no
 child store to create just to immediately discard from.
+
+<a id="fim.persistence.store.ReplicateFanoutStore.equilibrium_store"></a>
+
+#### equilibrium\_store
+
+```python
+def equilibrium_store(run_id: str) -> TrajectoryStore
+```
+
+Return the ancestral-phase companion of `run_id`'s own child store.
+
+So a replicate's `equilibrium_trajectory.jsonl` lands beside its
+own `trajectory.jsonl`, in its own directory
+(`EquilibriumStoreProvider`).
 
 <a id="fim.persistence.store.normalize_row"></a>
 

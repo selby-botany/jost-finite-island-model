@@ -794,6 +794,21 @@ def test_full_outputs_round_trip_and_open_with_graphs(tmp_path: Path,
 
 Scalar and batch opens reconstruct every byte, with frames and histories.
 
+<a id="test.test_example_artifacts.test_equilibrium_trajectory_is_archived_and_restored_on_opening"></a>
+
+#### test\_equilibrium\_trajectory\_is\_archived\_and\_restored\_on\_opening
+
+```python
+def test_equilibrium_trajectory_is_archived_and_restored_on_opening(
+        tmp_path: Path) -> None
+```
+
+An equilibrium-split run's ancestral trajectory survives bundling.
+
+It is archived as gzip parts like every other JSONL artifact, and
+opening the example restores it byte for byte, checked against its
+own manifest digest; the main trajectory still opens with its frames.
+
 <a id="test.test_example_artifacts.test_archive_is_deterministic_and_rejects_missing_or_corrupt_parts"></a>
 
 #### test\_archive\_is\_deterministic\_and\_rejects\_missing\_or\_corrupt\_parts
@@ -3245,6 +3260,43 @@ A real seeded run with the sigma band enabled writes and digests it too.
 `20260907-claude-sonnet-5-within-run-sigma-band-backend-design.md`,
 v1 step 5 — mirrors `test_run_writes_exactly_four_documented_
 artifacts`, with the sigma band requested this time.
+
+<a id="cli.test_cli.test_equilibrium_split_run_writes_and_digests_its_ancestral_trajectory"></a>
+
+#### test\_equilibrium\_split\_run\_writes\_and\_digests\_its\_ancestral\_trajectory
+
+```python
+def test_equilibrium_split_run_writes_and_digests_its_ancestral_trajectory(
+        tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None
+```
+
+An equilibrium-split run adds `equilibrium_trajectory.jsonl`, and lists it.
+
+The main trajectory and its re-analysis are unaffected: `fim stats`
+still reads `trajectory.jsonl`, whose own digest still verifies.
+
+<a id="cli.test_cli.test_equilibrium_split_batch_writes_each_replicates_ancestral_trajectory"></a>
+
+#### test\_equilibrium\_split\_batch\_writes\_each\_replicates\_ancestral\_trajectory
+
+```python
+@pytest.mark.parametrize(
+    ("backend", "flags"),
+    [
+        ("lineal", ["--sequential"]),
+        ("lineal", ["--workers", "2"]),
+        ("generational", []),
+    ],
+)
+def test_equilibrium_split_batch_writes_each_replicates_ancestral_trajectory(
+        tmp_path: Path, backend: str, flags: list[str]) -> None
+```
+
+Every replicate of a batch gets its own digested ancestral trajectory.
+
+One per supported engine path: `LinealBackend` one replicate after
+another and across worker processes, and `GenerationalBackend`'s
+per-replicate stores (`ReplicateFanoutStore`).
 
 <a id="cli.test_cli.test_run_accepts_per_deme_population_sizes"></a>
 
@@ -7553,6 +7605,58 @@ The Generational backend's own separate manifest-construction path
 (`_finalize_replica_lane`, not `_run_one`) records the identical
 provenance -- both code paths call `_generate_initial_state_with_
 outcome` independently, so both need their own coverage.
+
+<a id="engine.test_engine.test_fim_streams_the_ancestral_phase_beside_the_trajectory"></a>
+
+#### test\_fim\_streams\_the\_ancestral\_phase\_beside\_the\_trajectory
+
+```python
+@pytest.mark.parametrize("backend", ["lineal", "generational"])
+def test_fim_streams_the_ancestral_phase_beside_the_trajectory(
+        tiny_params: SimulationParams, tmp_path: Path,
+        backend: EngineBackend) -> None
+```
+
+An equilibrium-split run writes `equilibrium_trajectory.jsonl`.
+
+Both engine paths that support equilibrium-split (`_run_one` and
+`_build_replica_lane`) write it, beside `trajectory.jsonl`, in the
+same row schema: the one ancestral deme at every generation of its
+own counter, `0` through `equilibrium_generation_count`, ending on
+exactly the heterozygosity the manifest records for the split.
+
+<a id="engine.test_engine.test_fim_equilibrium_trajectory_is_identical_across_backends"></a>
+
+#### test\_fim\_equilibrium\_trajectory\_is\_identical\_across\_backends
+
+```python
+def test_fim_equilibrium_trajectory_is_identical_across_backends(
+        tiny_params: SimulationParams, tmp_path: Path) -> None
+```
+
+The ancestral phase draws only from its own stream: same bytes either way.
+
+<a id="engine.test_engine.test_fim_keeps_an_in_memory_ancestral_trajectory_for_a_library_call"></a>
+
+#### test\_fim\_keeps\_an\_in\_memory\_ancestral\_trajectory\_for\_a\_library\_call
+
+```python
+def test_fim_keeps_an_in_memory_ancestral_trajectory_for_a_library_call(
+        tiny_params: SimulationParams) -> None
+```
+
+With no store given, the ancestral rows stay readable on the result.
+
+<a id="engine.test_engine.test_fim_dirichlet_run_writes_no_ancestral_trajectory"></a>
+
+#### test\_fim\_dirichlet\_run\_writes\_no\_ancestral\_trajectory
+
+```python
+def test_fim_dirichlet_run_writes_no_ancestral_trajectory(
+        tiny_params: SimulationParams, tmp_path: Path) -> None
+```
+
+Every other initial condition has no ancestral phase and no file.
 
 <a id="engine.test_engine.test_fim_dirichlet_run_leaves_equilibrium_manifest_fields_none"></a>
 
@@ -20397,16 +20501,16 @@ def test_progress_throttle_reports_again_once_the_interval_elapses() -> None
 
 A call past the interval reports again, driven by an injected fake clock.
 
-<a id="gui.test_runner.test_run_artifact_targets_matches_the_documented_six_filenames"></a>
+<a id="gui.test_runner.test_run_artifact_targets_matches_the_documented_filenames"></a>
 
-#### test\_run\_artifact\_targets\_matches\_the\_documented\_six\_filenames
+#### test\_run\_artifact\_targets\_matches\_the\_documented\_filenames
 
 ```python
-def test_run_artifact_targets_matches_the_documented_six_filenames(
+def test_run_artifact_targets_matches_the_documented_filenames(
         tmp_path: Path) -> None
 ```
 
-The six target names match `cli._run_artifact_targets`'s own scalar set.
+The target names match `cli._run_artifact_targets`'s own scalar set.
 
 <a id="gui.test_runner.test_start_run_raises_when_output_directory_already_exists"></a>
 
@@ -20445,6 +20549,21 @@ The same guarantee `cli._write_run_artifacts` gives `fim run`'s own
 output (`test/cli/test_cli.py`'s manifest-digest assertions) — the
 record `fim.persistence.manifest.verify_trajectory_integrity` later
 checks against.
+
+<a id="gui.test_runner.test_start_run_writes_and_digests_an_equilibrium_split_ancestral_trajectory"></a>
+
+#### test\_start\_run\_writes\_and\_digests\_an\_equilibrium\_split\_ancestral\_trajectory
+
+```python
+def test_start_run_writes_and_digests_an_equilibrium_split_ancestral_trajectory(
+        tmp_path: Path, tiny_params: SimulationParams) -> None
+```
+
+A GUI equilibrium-split run publishes `equilibrium_trajectory.jsonl` too.
+
+Digested in the manifest like every other artifact, exactly as
+`cli._write_run_artifacts` does; its rows are the ancestral phase's
+own generations, `0` through `equilibrium_generation_count`.
 
 <a id="gui.test_runner.test_start_run_leaves_no_temporary_sibling_after_a_successful_publish"></a>
 
@@ -22009,6 +22128,22 @@ def test_live_progress_store_discard_delegates_to_the_inner_store(
 
 `discard` is a pure passthrough — nothing about it needs decorating.
 
+<a id="gui.test_store.test_progress_stores_hand_out_the_inner_ancestral_store_undecorated"></a>
+
+#### test\_progress\_stores\_hand\_out\_the\_inner\_ancestral\_store\_undecorated
+
+```python
+def test_progress_stores_hand_out_the_inner_ancestral_store_undecorated(
+        tmp_path: Path) -> None
+```
+
+The ancestral phase is not progress: no callback, sidecar, or cancel check.
+
+Both decorators return the wrapped store's own companion, so an
+equilibrium-split run's `equilibrium_trajectory.jsonl` lands beside
+its `trajectory.jsonl` while live progress reports only the split
+run's own generations.
+
 <a id="gui.test_store.test_live_progress_store_is_picklable"></a>
 
 #### test\_live\_progress\_store\_is\_picklable
@@ -23060,6 +23195,22 @@ def test_generate_matches_generate_with_outcome_state(
 ```
 
 `generate` returns exactly `generate_with_outcome`'s own state.
+
+<a id="model.test_initial.test_on_generation_observes_every_ancestral_generation_without_changing_anything"></a>
+
+#### test\_on\_generation\_observes\_every\_ancestral\_generation\_without\_changing\_anything
+
+```python
+def test_on_generation_observes_every_ancestral_generation_without_changing_anything(
+        rng: Callable[[int], np.random.Generator]) -> None
+```
+
+The observer sees generations `0..generation_count`, one deme each.
+
+Its states are the ones the outcome summarizes (`history`), and
+observing changes neither the split state nor the outcome — the
+contract `fim.engine` relies on to stream `equilibrium_trajectory.
+jsonl` without perturbing the run.
 
 <a id="model.test_initial.test_equilibration_outcome_history_ends_at_the_final_heterozygosity"></a>
 
@@ -28939,6 +29090,51 @@ def test_jsonl_store_appends_generations_and_ignores_partial_tail(
 ```
 
 Every complete flushed row remains readable after interruption.
+
+<a id="persistence.test_store.test_jsonl_store_equilibrium_store_is_one_sibling_file"></a>
+
+#### test\_jsonl\_store\_equilibrium\_store\_is\_one\_sibling\_file
+
+```python
+def test_jsonl_store_equilibrium_store_is_one_sibling_file(
+        tmp_path: Path) -> None
+```
+
+The ancestral-phase companion is `equilibrium_trajectory.jsonl` beside it.
+
+One instance per store, whichever run asks, so every writer of that
+file shares one lock; a reader of the main file never sees its rows.
+
+<a id="persistence.test_store.test_in_memory_store_equilibrium_store_is_a_separate_store"></a>
+
+#### test\_in\_memory\_store\_equilibrium\_store\_is\_a\_separate\_store
+
+```python
+def test_in_memory_store_equilibrium_store_is_a_separate_store() -> None
+```
+
+In memory, the companion is a second store, shared across runs.
+
+<a id="persistence.test_store.test_replicate_fanout_store_equilibrium_store_follows_each_run"></a>
+
+#### test\_replicate\_fanout\_store\_equilibrium\_store\_follows\_each\_run
+
+```python
+def test_replicate_fanout_store_equilibrium_store_follows_each_run(
+        tmp_path: Path) -> None
+```
+
+Each replicate's ancestral rows land beside that replicate's own file.
+
+<a id="persistence.test_store.test_equilibrium_store_for_falls_back_to_memory_for_other_stores"></a>
+
+#### test\_equilibrium\_store\_for\_falls\_back\_to\_memory\_for\_other\_stores
+
+```python
+def test_equilibrium_store_for_falls_back_to_memory_for_other_stores() -> None
+```
+
+A store without a companion of its own still gets a readable one.
 
 <a id="persistence.test_store.test_manifest_round_trip_reconstructs_parameters"></a>
 

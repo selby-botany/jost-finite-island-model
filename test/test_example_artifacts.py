@@ -29,28 +29,38 @@ def _isolated_results(
     monkeypatch.setattr(paths_module, "results_directory", lambda: tmp_path / "results")
 
 
-def _saved_run(root: Path, *, replicates: int = 1) -> Path:
-    """Produce real artifacts through the same CLI used by the generator."""
+def _saved_run(
+    root: Path, *, replicates: int = 1, equilibrium_split: bool = False
+) -> Path:
+    """Produce real artifacts through the same CLI used by the generator.
+
+    `equilibrium_split` founds the demes from a short ancestral phase
+    instead (infinite alleles, which that mode requires), so the run
+    also writes `equilibrium_trajectory.jsonl`.
+    """
     config = root / "config.yaml"
-    config.write_text(
-        yaml.safe_dump(
-            {
-                "N": 20,
-                "d": 4,
-                "ploidy": "haploid",
-                "m": 0.1,
-                "mu": 0.01,
-                "seed": 42,
-                "loci": [{"locus_id": 1, "length": 5}],
-                "mutation_model": "finite_alleles",
-                "convergence_window": 11,
-                "max_generations": 10,
-                "n_replicates": replicates,
-                "replicate_tolerance": None,
-            }
-        ),
-        encoding="utf-8",
-    )
+    settings: dict[str, object] = {
+        "N": 20,
+        "d": 4,
+        "ploidy": "haploid",
+        "m": 0.1,
+        "mu": 0.01,
+        "seed": 42,
+        "loci": [{"locus_id": 1, "length": 5}],
+        "mutation_model": "finite_alleles",
+        "convergence_window": 11,
+        "max_generations": 10,
+        "n_replicates": replicates,
+        "replicate_tolerance": None,
+    }
+    if equilibrium_split:
+        settings.update(
+            mutation_model="infinite_alleles",
+            equilibrium_convergence_window=2,
+            equilibrium_convergence_tolerance=0.5,
+            equilibrium_max_generations=200,
+        )
+    config.write_text(yaml.safe_dump(settings), encoding="utf-8")
     output = root / "run"
     assert cli.main(["run", str(config), "--output", str(output), "--quiet"]) == 0
     return output
@@ -86,6 +96,33 @@ def test_full_outputs_round_trip_and_open_with_graphs(
         restored = target / path.relative_to(original)
         assert restored.read_bytes() == path.read_bytes()
     assert materialize_outputs(target) == []
+
+
+def test_equilibrium_trajectory_is_archived_and_restored_on_opening(
+    tmp_path: Path,
+) -> None:
+    """An equilibrium-split run's ancestral trajectory survives bundling.
+
+    It is archived as gzip parts like every other JSONL artifact, and
+    opening the example restores it byte for byte, checked against its
+    own manifest digest; the main trajectory still opens with its frames.
+    """
+    original = _saved_run(tmp_path, equilibrium_split=True)
+    target = tmp_path / "example"
+
+    copied = copy_outputs(original, target, part_bytes=200)
+    api = Api()
+    opened = api.open_run({"trajectoryPath": str(target / "trajectory.jsonl")})
+
+    assert "equilibrium_trajectory.jsonl.gz.part-0002" in copied
+    assert opened["ok"], opened
+    restored = target / "equilibrium_trajectory.jsonl"
+    assert (
+        restored.read_bytes()
+        == (original / "equilibrium_trajectory.jsonl").read_bytes()
+    )
+    manifest = json.loads((target / "manifest.json").read_text(encoding="utf-8"))
+    assert manifest["artifacts"]["equilibrium_trajectory"] == hash_file(restored)
 
 
 def test_archive_is_deterministic_and_rejects_missing_or_corrupt_parts(

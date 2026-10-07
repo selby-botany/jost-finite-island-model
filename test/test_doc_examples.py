@@ -152,7 +152,13 @@ def test_every_example_commits_its_output_files(example: str) -> None:
                 f"{key}.png"
                 if key == "scatter"
                 else f"{key}.jsonl"
-                if key in {"trajectory", "convergence", "sigma_band_trajectory"}
+                if key
+                in {
+                    "trajectory",
+                    "equilibrium_trajectory",
+                    "convergence",
+                    "sigma_band_trajectory",
+                }
                 else f"{key}.json"
             )
             if target.endswith(".jsonl"):

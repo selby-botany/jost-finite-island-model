@@ -29,7 +29,7 @@ from __future__ import annotations
 
 import logging
 import math
-from collections.abc import Mapping, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
 from typing import Protocol
 
@@ -212,11 +212,15 @@ class EquilibrationOutcome:
     the bare `generate` (the `InitialConditionGenerator` Protocol
     method), which every other strategy also satisfies and which has no
     return-shape room for this. `fim.engine`'s own run orchestration is
-    the one caller that needs this: it threads these three values into
-    `RunManifest`'s own `equilibrium_generation_count`/`equilibrium_
-    final_heterozygosity` fields and persists `history` in full as the
-    `equilibrium_trajectory.jsonl` sibling artifact
-    (`20260907-claude-sonnet-5-equilibrium-split-design.md` §5).
+    the one caller that needs this: it threads `generation_count` and
+    `final_heterozygosity` into `RunManifest`'s own
+    `equilibrium_generation_count`/`equilibrium_final_heterozygosity`
+    fields (`20260907-claude-sonnet-5-equilibrium-split-design.md` §5).
+    The ancestral phase's full trajectory — every generation's own
+    allele frequencies, not only this `H_S` summary — is not held here:
+    `generate_with_outcome` streams it, one generation at a time, to its
+    `on_generation` observer, which `fim.engine` writes as the run's
+    `equilibrium_trajectory.jsonl` artifact.
 
     Args:
         generation_count: The generation at which the ancestral phase
@@ -376,6 +380,8 @@ class EquilibriumSplitInitialCondition:
         self,
         params: SimulationParams,
         rng: np.random.Generator,
+        *,
+        on_generation: Callable[[ModelState], None] | None = None,
     ) -> tuple[ModelState, EquilibrationOutcome]:
         """Equilibrate one ancestral population, then split it into `params.d` demes.
 
@@ -395,6 +401,18 @@ class EquilibriumSplitInitialCondition:
                 method's signature matches every other strategy's
                 `generate`, and so a future caller cannot accidentally
                 assume it is unused by inspecting the signature alone.
+            on_generation: Called with the one-deme ancestral state at
+                every generation of the ancestral phase, oldest first:
+                generation zero (the Dirichlet draw), then each
+                generation through the burn-in, before the split. The
+                ancestral phase keeps its own generation counter, so
+                these states are numbered `0` through
+                `EquilibrationOutcome.generation_count`, independently
+                of the split run's own generation zero. Observing draws
+                nothing from any random stream, so the result is the
+                same with or without an observer. `fim.engine` uses it
+                to stream `equilibrium_trajectory.jsonl`; `None` (the
+                default) observes nothing.
 
         Returns:
             The split, `params.d`-deme generation-zero state, and the
@@ -462,12 +480,16 @@ class EquilibriumSplitInitialCondition:
         # `H_S` recorded every generation for `EquilibrationOutcome.
         # history` (it decides nothing; see this class's docstring).
         history = [_mean_h_s(state)]
+        if on_generation is not None:
+            on_generation(state)
         while state.generation < burn_in:
             state = mutate(
                 state, params.mu, total_population, registry, equilibrium_rng
             )
             state = drift(state, total_population, equilibrium_rng)
             history.append(_mean_h_s(state))
+            if on_generation is not None:
+                on_generation(state)
         logger.info(
             "ancestral phase: %d generations (relaxation time %.0f); H_S %.4g, "
             "expected at equilibrium %.4g",

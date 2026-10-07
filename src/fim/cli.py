@@ -92,7 +92,10 @@ from fim.persistence.groups import (
     list_studies,
     resolve_run_directory,
 )
-from fim.persistence.jsonl_store import JSONLTrajectoryStore
+from fim.persistence.jsonl_store import (
+    EQUILIBRIUM_TRAJECTORY_FILENAME,
+    JSONLTrajectoryStore,
+)
 from fim.persistence.manifest import (
     CURRENT_BATCH_SCHEMA_VERSION,
     ArtifactDigest,
@@ -624,7 +627,8 @@ def _command_run_scalar(
             _print_cap_note(params, output.report)
         # Only what this run wrote: `_run_artifact_targets` names every
         # artifact a run *can* have (the sigma-band trajectory exists only
-        # for a converged run that asked for one).
+        # for a converged run that asked for one, the equilibrium
+        # trajectory only for an equilibrium-split run).
         for label, path in _run_artifact_targets(output_directory).items():
             if path.exists():
                 print(f"{label.capitalize():10} -> {path}")
@@ -1215,9 +1219,13 @@ def _run_artifact_targets(directory: Path) -> dict[str, Path]:
     produced one — this dict names *where a thing would live*, not
     which artifacts a particular run happens to have; a caller checks
     on-disk existence (or `manifest.artifacts` membership) for that.
+    `equilibrium_trajectory` is likewise present only for an
+    equilibrium-split run, streamed by the engine itself beside
+    `trajectory.jsonl` (`fim.engine.RunResult.equilibrium_store`).
     """
     return {
         "trajectory": directory / "trajectory.jsonl",
+        "equilibrium_trajectory": directory / EQUILIBRIUM_TRAJECTORY_FILENAME,
         "manifest": directory / "manifest.json",
         "report": directory / "report.json",
         "scatter": directory / "scatter.png",
@@ -1328,6 +1336,11 @@ def _write_run_artifacts(
         # exactly like `manifest.sigma_band` itself stays `None`.
         write_jsonl_rows(targets["sigma_band_trajectory"], result.sigma_band_trajectory)
         digested_names.append("sigma_band_trajectory")
+    if targets["equilibrium_trajectory"].is_file():
+        # Streamed, like `trajectory.jsonl`, by the engine itself during
+        # an equilibrium-split run's ancestral phase
+        # (`RunResult.equilibrium_store`); no other run writes one.
+        digested_names.append("equilibrium_trajectory")
     manifest = replace(
         result.manifest,
         artifacts={name: hash_file(targets[name]) for name in digested_names},

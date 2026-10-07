@@ -56,7 +56,10 @@ from fim.gui.literature_visuals import (
 from fim.gui.store import GuiProgressStore, RunCancelledError
 from fim.model.params import SimulationParams
 from fim.model.state import ModelState
-from fim.persistence.jsonl_store import JSONLTrajectoryStore
+from fim.persistence.jsonl_store import (
+    EQUILIBRIUM_TRAJECTORY_FILENAME,
+    JSONLTrajectoryStore,
+)
 from fim.persistence.manifest import hash_file, write_manifest
 from fim.persistence.pairwise import (
     SLOW_PAIRWISE_DEMES,
@@ -162,10 +165,12 @@ def run_artifact_targets(directory: Path) -> dict[str, Path]:
     scalar run (it also names the optional sigma-band file) — same
     target filenames, same directory — a direct parallel, not a shared import, since
     `cli._run_artifact_targets` is a private module-level function of
-    the CLI's own front end.
+    the CLI's own front end. `equilibrium_trajectory` exists only for
+    an equilibrium-split run, streamed by the engine itself.
     """
     return {
         "trajectory": directory / "trajectory.jsonl",
+        "equilibrium_trajectory": directory / EQUILIBRIUM_TRAJECTORY_FILENAME,
         "manifest": directory / "manifest.json",
         "report": directory / "report.json",
         "scatter": directory / "scatter.png",
@@ -394,11 +399,14 @@ def write_run_artifacts(
         targets["pairwise"],
         pairwise_payload(result.final_state, max_demes=pairwise_max_demes),
     )
+    digested_names = ["trajectory", "report", "scatter", "convergence", "pairwise"]
+    # See `cli._write_run_artifacts`: streamed by the engine for an
+    # equilibrium-split run only.
+    equilibrium_trajectory = targets.get("equilibrium_trajectory")
+    if equilibrium_trajectory is not None and equilibrium_trajectory.is_file():
+        digested_names.append("equilibrium_trajectory")
     manifest = replace(
         result.manifest,
-        artifacts={
-            name: hash_file(targets[name])
-            for name in ("trajectory", "report", "scatter", "convergence", "pairwise")
-        },
+        artifacts={name: hash_file(targets[name]) for name in digested_names},
     )
     write_manifest(targets["manifest"], manifest)

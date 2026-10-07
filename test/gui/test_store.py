@@ -286,6 +286,38 @@ def test_live_progress_store_discard_delegates_to_the_inner_store(
     assert not list(inner.read("run-1"))
 
 
+def test_progress_stores_hand_out_the_inner_ancestral_store_undecorated(
+    tmp_path: Path,
+) -> None:
+    """The ancestral phase is not progress: no callback, sidecar, or cancel check.
+
+    Both decorators return the wrapped store's own companion, so an
+    equilibrium-split run's `equilibrium_trajectory.jsonl` lands beside
+    its `trajectory.jsonl` while live progress reports only the split
+    run's own generations.
+    """
+    inner = JSONLTrajectoryStore(tmp_path / "trajectory.jsonl")
+    calls: list[int] = []
+    cancel_event = threading.Event()
+    cancel_event.set()
+    gui = GuiProgressStore(
+        inner,
+        on_generation=lambda generation, _rows: calls.append(generation),
+        cancel_event=cancel_event,
+    )
+    live = LiveProgressStore(
+        inner, progress_path=tmp_path / ".progress", cancel_path=tmp_path / "cancel"
+    )
+
+    gui.equilibrium_store("run-1").write_generation("run-1", 0, _rows(0))
+
+    assert gui.equilibrium_store("run-1") is inner.equilibrium_store("run-1")
+    assert live.equilibrium_store("run-1") is inner.equilibrium_store("run-1")
+    assert calls == []
+    assert not (tmp_path / ".progress").exists()
+    assert (tmp_path / "equilibrium_trajectory.jsonl").is_file()
+
+
 def test_live_progress_store_is_picklable(tmp_path: Path) -> None:
     """`LiveProgressStore` survives a real pickle round trip.
 

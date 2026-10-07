@@ -1,6 +1,7 @@
 """Tests for incremental trajectory and manifest persistence."""
 
 import threading
+from collections.abc import Iterator
 from pathlib import Path
 
 from conftest import COMPLETION_BACKSTOP_SECONDS, join_or_fail
@@ -9,9 +10,18 @@ from fim.model.allele import AlleleId
 from fim.model.locus import LocusSpec
 from fim.model.params import SimulationParams
 from fim.model.state import ModelState
-from fim.persistence.jsonl_store import JSONLTrajectoryStore
+from fim.persistence.jsonl_store import (
+    EQUILIBRIUM_TRAJECTORY_FILENAME,
+    JSONLTrajectoryStore,
+)
 from fim.persistence.manifest import RunManifest, read_manifest, write_manifest
-from fim.persistence.store import InMemoryTrajectoryStore, ReplicateFanoutStore
+from fim.persistence.store import (
+    EquilibriumStoreProvider,
+    InMemoryTrajectoryStore,
+    ReplicateFanoutStore,
+    TrajectoryRow,
+    equilibrium_store_for,
+)
 
 
 def _state(generation: int) -> ModelState:
@@ -327,6 +337,73 @@ def test_jsonl_store_appends_generations_and_ignores_partial_tail(
 
     assert {row["generation"] for row in rows} == {0, 1}
     assert len(rows) == 6
+
+
+def test_jsonl_store_equilibrium_store_is_one_sibling_file(tmp_path: Path) -> None:
+    """The ancestral-phase companion is `equilibrium_trajectory.jsonl` beside it.
+
+    One instance per store, whichever run asks, so every writer of that
+    file shares one lock; a reader of the main file never sees its rows.
+    """
+    store = JSONLTrajectoryStore(tmp_path / "trajectory.jsonl")
+
+    companion = store.equilibrium_store("run-a")
+    companion.write_generation("run-a", 0, _state(0).to_rows("run-a"))
+
+    assert isinstance(companion, JSONLTrajectoryStore)
+    assert companion.path == tmp_path / EQUILIBRIUM_TRAJECTORY_FILENAME
+    assert store.equilibrium_store("run-b") is companion
+    assert not store.path.exists()
+    assert len(list(companion.read("run-a"))) == 3
+
+
+def test_in_memory_store_equilibrium_store_is_a_separate_store() -> None:
+    """In memory, the companion is a second store, shared across runs."""
+    store = InMemoryTrajectoryStore()
+
+    companion = store.equilibrium_store("run-a")
+    companion.write_generation("run-a", 0, _state(0).to_rows("run-a"))
+
+    assert store.equilibrium_store("run-b") is companion
+    assert list(store.read("run-a")) == []
+    assert len(list(companion.read("run-a"))) == 3
+
+
+def test_replicate_fanout_store_equilibrium_store_follows_each_run(
+    tmp_path: Path,
+) -> None:
+    """Each replicate's ancestral rows land beside that replicate's own file."""
+    fanout = ReplicateFanoutStore(
+        lambda run_id: JSONLTrajectoryStore(tmp_path / run_id / "trajectory.jsonl")
+    )
+
+    companion = fanout.equilibrium_store("run-b")
+
+    assert isinstance(companion, JSONLTrajectoryStore)
+    assert companion.path == tmp_path / "run-b" / EQUILIBRIUM_TRAJECTORY_FILENAME
+
+
+def test_equilibrium_store_for_falls_back_to_memory_for_other_stores() -> None:
+    """A store without a companion of its own still gets a readable one."""
+
+    class _BareStore:
+        """A `TrajectoryStore` with no `equilibrium_store` method."""
+
+        def write_generation(self, *args: object, **kwargs: object) -> None:
+            """Accept and drop one generation."""
+
+        def read(self, run_id: str) -> Iterator[TrajectoryRow]:
+            """Yield nothing."""
+            del run_id
+            return iter(())
+
+        def discard(self, run_id: str) -> None:
+            """Discard nothing."""
+            del run_id
+
+    bare = _BareStore()
+    assert not isinstance(bare, EquilibriumStoreProvider)
+    assert isinstance(equilibrium_store_for(bare, "run-a"), InMemoryTrajectoryStore)
 
 
 def test_manifest_round_trip_reconstructs_parameters(tmp_path: Path) -> None:

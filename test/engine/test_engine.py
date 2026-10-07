@@ -41,7 +41,7 @@ from fim.engine import (
     run_batch,
 )
 from fim.model.allele import MINTED_ID_START, AlleleId
-from fim.model.initial import generate_initial_state
+from fim.model.initial import _mean_h_s, generate_initial_state
 from fim.model.locus import LocusSpec, finite_allele_capacity
 from fim.model.operators import _population_sizes
 from fim.model.params import ConvergenceCombinator, EngineBackend, SimulationParams
@@ -52,7 +52,11 @@ from fim.model.vectorized import (
     vectorized_state_to_model_state,
 )
 from fim.persistence.jsonl_store import JSONLTrajectoryStore
-from fim.persistence.store import InMemoryTrajectoryStore, TrajectoryStore
+from fim.persistence.store import (
+    InMemoryTrajectoryStore,
+    TrajectoryRow,
+    TrajectoryStore,
+)
 from fim.statistics import differentiation
 from fim.statistics.catalog import report_keys
 from fim.statistics.differentiation import derived_differentiation
@@ -4434,6 +4438,130 @@ def test_fim_records_equilibrium_split_provenance_under_the_generational_backend
     assert manifest.initial_condition_mode == "equilibrium_split"
     assert manifest.equilibrium_generation_count is not None
     assert manifest.equilibrium_final_heterozygosity is not None
+
+
+def _equilibrium_split(params: SimulationParams) -> SimulationParams:
+    """Return `params` founded by a short, real equilibrium-split ancestral phase."""
+    return replace(
+        params,
+        equilibrium_convergence_window=2,
+        equilibrium_convergence_tolerance=0.5,
+        equilibrium_max_generations=200,
+    )
+
+
+@pytest.mark.parametrize("backend", ["lineal", "generational"])
+def test_fim_streams_the_ancestral_phase_beside_the_trajectory(
+    tiny_params: SimulationParams, tmp_path: Path, backend: EngineBackend
+) -> None:
+    """An equilibrium-split run writes `equilibrium_trajectory.jsonl`.
+
+    Both engine paths that support equilibrium-split (`_run_one` and
+    `_build_replica_lane`) write it, beside `trajectory.jsonl`, in the
+    same row schema: the one ancestral deme at every generation of its
+    own counter, `0` through `equilibrium_generation_count`, ending on
+    exactly the heterozygosity the manifest records for the split.
+    """
+    params = _equilibrium_split(tiny_params)
+    store = JSONLTrajectoryStore(tmp_path / "trajectory.jsonl")
+
+    result = fim(
+        params.gene_copies,
+        params.m,
+        params.mu,
+        params.d,
+        params=params,
+        store=store,
+        clock=_clock,
+        engine_backend=backend,
+    )
+
+    assert isinstance(result, RunResult)
+    path = tmp_path / "equilibrium_trajectory.jsonl"
+    assert isinstance(result.equilibrium_store, JSONLTrajectoryStore)
+    assert result.equilibrium_store.path == path
+    rows = list(JSONLTrajectoryStore(path).read(result.run_id))
+    count = result.manifest.equilibrium_generation_count
+    assert count is not None
+    assert count > 2
+    by_generation: dict[int, list[TrajectoryRow]] = {}
+    for row in rows:
+        by_generation.setdefault(row["generation"], []).append(row)
+    assert list(by_generation) == list(range(count + 1))
+    assert {row["deme"] for row in rows} == {1}
+    final = ModelState.from_rows(by_generation[count], loci=params.loci)
+    assert final.deme_count == 1
+    assert _mean_h_s(final) == pytest.approx(
+        result.manifest.equilibrium_final_heterozygosity
+    )
+
+
+def test_fim_equilibrium_trajectory_is_identical_across_backends(
+    tiny_params: SimulationParams, tmp_path: Path
+) -> None:
+    """The ancestral phase draws only from its own stream: same bytes either way."""
+    params = _equilibrium_split(tiny_params)
+    paths = {}
+    for backend in ("lineal", "generational"):
+        directory = tmp_path / backend
+        fim(
+            params.gene_copies,
+            params.m,
+            params.mu,
+            params.d,
+            params=params,
+            store=JSONLTrajectoryStore(directory / "trajectory.jsonl"),
+            run_id="run-same",
+            clock=_clock,
+            engine_backend=backend,
+        )
+        paths[backend] = directory / "equilibrium_trajectory.jsonl"
+    assert paths["lineal"].read_bytes() == paths["generational"].read_bytes()
+
+
+def test_fim_keeps_an_in_memory_ancestral_trajectory_for_a_library_call(
+    tiny_params: SimulationParams,
+) -> None:
+    """With no store given, the ancestral rows stay readable on the result."""
+    params = _equilibrium_split(tiny_params)
+
+    result = fim(
+        params.gene_copies,
+        params.m,
+        params.mu,
+        params.d,
+        params=params,
+        clock=_clock,
+    )
+
+    assert isinstance(result, RunResult)
+    assert result.equilibrium_store is not None
+    ancestral_rows = result.equilibrium_store.read(result.run_id)
+    generations = {row["generation"] for row in ancestral_rows}
+    count = result.manifest.equilibrium_generation_count
+    assert count is not None
+    assert generations == set(range(count + 1))
+    main_generations = {row["generation"] for row in result.store.read(result.run_id)}
+    assert main_generations == set(range(result.manifest.generation_count))
+
+
+def test_fim_dirichlet_run_writes_no_ancestral_trajectory(
+    tiny_params: SimulationParams, tmp_path: Path
+) -> None:
+    """Every other initial condition has no ancestral phase and no file."""
+    result = fim(
+        tiny_params.gene_copies,
+        tiny_params.m,
+        tiny_params.mu,
+        tiny_params.d,
+        params=tiny_params,
+        store=JSONLTrajectoryStore(tmp_path / "trajectory.jsonl"),
+        clock=_clock,
+    )
+
+    assert isinstance(result, RunResult)
+    assert result.equilibrium_store is None
+    assert not (tmp_path / "equilibrium_trajectory.jsonl").exists()
 
 
 def test_fim_dirichlet_run_leaves_equilibrium_manifest_fields_none(

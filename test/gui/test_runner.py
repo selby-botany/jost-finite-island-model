@@ -20,6 +20,7 @@ from __future__ import annotations
 
 import queue
 import threading
+from dataclasses import replace
 from pathlib import Path
 
 import pytest
@@ -28,6 +29,7 @@ from conftest import join_or_fail
 from fim.engine import RunResult
 from fim.gui import runner
 from fim.model.params import SimulationParams
+from fim.persistence.jsonl_store import JSONLTrajectoryStore
 from fim.persistence.manifest import hash_file, read_manifest
 
 
@@ -55,14 +57,15 @@ def test_progress_throttle_reports_again_once_the_interval_elapses() -> None:
     assert throttle.should_report(2, 10) is True
 
 
-def test_run_artifact_targets_matches_the_documented_six_filenames(
+def test_run_artifact_targets_matches_the_documented_filenames(
     tmp_path: Path,
 ) -> None:
-    """The six target names match `cli._run_artifact_targets`'s own scalar set."""
+    """The target names match `cli._run_artifact_targets`'s own scalar set."""
     targets = runner.run_artifact_targets(tmp_path)
 
     assert {path.name for path in targets.values()} == {
         "trajectory.jsonl",
+        "equilibrium_trajectory.jsonl",
         "manifest.json",
         "report.json",
         "scatter.png",
@@ -171,6 +174,40 @@ def test_start_run_records_matching_digests_in_the_published_manifest(
         ("scatter", "scatter.png"),
     ):
         assert manifest.artifacts[name] == hash_file(output_directory / filename)
+
+
+def test_start_run_writes_and_digests_an_equilibrium_split_ancestral_trajectory(
+    tmp_path: Path,
+    tiny_params: SimulationParams,
+) -> None:
+    """A GUI equilibrium-split run publishes `equilibrium_trajectory.jsonl` too.
+
+    Digested in the manifest like every other artifact, exactly as
+    `cli._write_run_artifacts` does; its rows are the ancestral phase's
+    own generations, `0` through `equilibrium_generation_count`.
+    """
+    params = replace(
+        tiny_params,
+        equilibrium_convergence_window=2,
+        equilibrium_convergence_tolerance=0.5,
+        equilibrium_max_generations=200,
+    )
+    output_directory = tmp_path / "output"
+
+    thread = runner.start_run(
+        params, output_directory, queue.Queue(), threading.Event()
+    )
+    join_or_fail(thread, "run thread")
+
+    path = output_directory / "equilibrium_trajectory.jsonl"
+    manifest = read_manifest(output_directory / "manifest.json")
+    assert manifest.artifacts is not None
+    assert manifest.artifacts["equilibrium_trajectory"] == hash_file(path)
+    assert manifest.equilibrium_generation_count is not None
+    generations = {
+        row["generation"] for row in JSONLTrajectoryStore(path).read(manifest.run_id)
+    }
+    assert generations == set(range(manifest.equilibrium_generation_count + 1))
 
 
 def test_start_run_leaves_no_temporary_sibling_after_a_successful_publish(
