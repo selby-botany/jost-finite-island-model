@@ -37,9 +37,11 @@ project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - **Choose which statistics are shown.** Settings, "Statistics shown" (or
   "Choose…" in the statistics panel's caption) picks the statistics the
   panel, results tables, trajectory chart and sweep charts show, with
-  presets and a filter. Hidden statistics are still computed and saved. A
-  fresh install shows what it showed before; the new measures start
-  hidden.
+  presets and a filter. Hidden statistics are still saved with every
+  run's results. The new measures start hidden, and so do the five
+  expensive ones (E<sub>ST</sub>, K<sub>ST</sub>, A<sub>CGD</sub>,
+  δ<sub>G</sub>, I): showing any of them makes new runs compute all five
+  every generation, which takes longer, and the chooser says so.
 - **`pairwise.json`: every deme pair's statistics.** Each run, and each batch
   replicate, saves every pair's Nei identities and pairwise F<sub>ST</sub> at
   the final generation, up to a deme-count limit (default 1024, about 52 MB
@@ -895,6 +897,22 @@ project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   while they differ. Max workers, a machine setting no configuration
   names, is unchanged. See
   [Loading a configuration does not change your Settings](doc/usage.md#loading-a-configuration-does-not-change-your-settings).
+- **Settings decides whether the expensive statistics are tracked.**
+  Configure's "track E<sub>ST</sub>/K<sub>ST</sub>/A<sub>CGD</sub>/δ<sub>G</sub>/I
+  for display" checkbox is gone. The desktop app now sets
+  `track_expensive_statistics` on every run, batch, sweep and saved file
+  from Settings, "Statistics shown": on while any of the five is shown,
+  off once all are hidden. `fim run` and `fim sweep` still use the key as
+  written in the file. See
+  [track_expensive_statistics](doc/configuration.md#track_expensive_statistics).
+- **The convergence combinator is a pair of radio buttons.** "Stop the run
+  when all watched statistics have settled" (the default) or "any one
+  has", at the foot of Configure's "convergence statistic(s)" panel. The
+  help now explains that under `any` the other watched statistics may
+  still be trending or imprecise when the run stops.
+- **Settings sections are easier to read.** Each section's explanatory
+  text is now separated from its first field the way the top section's
+  fields are, and "Convergence timing" is now "Convergence".
 - **Every worked example runs to completion, in about a minute or less.**
   Since runs stop only once their trailing-window mean is precise
   (2026-09), several examples took tens of thousands of generations, and
