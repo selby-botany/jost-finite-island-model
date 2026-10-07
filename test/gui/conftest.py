@@ -35,10 +35,9 @@ pushing `fim.onRunProgress`/`onRunDone` from its own thread as a run
 proceeds) both calling `evaluate_js` on the same window at once — a
 20ms poll cadence, hammering `AppHelper.callAfter` continuously for the
 lifetime of a whole test, measurably raised the odds of landing on
-whichever thread the collision hit. `poll_attempts` in each test
-controls the real wall-clock ceiling this trades against; a slower
-cadence here only costs time in a genuine failure path, not in the
-common (fast, already-converged) case.
+whichever thread the collision hit. A slower cadence costs at most one
+interval per wait; every wait (`poll_page`) ends on the settled value
+or fails at the completion-signal backstop, never on an attempt count.
 
 A second, distinct hazard, found investigating an intermittent
 multi-minute stall in the *whole* `pytest test/gui/ -m gui` process
@@ -155,7 +154,6 @@ import os
 import queue
 import signal
 import sys
-import time
 from collections.abc import Callable, Iterable, Iterator
 from pathlib import Path
 from typing import Any
@@ -173,6 +171,185 @@ from fim.gui.preferences import GuiPreferences, save_preferences
 
 _POLL_INTERVAL_SECONDS = 0.1
 _IS_LINUX = sys.platform.startswith("linux")
+
+RUN_VIEW_READY = "window.__fimRunViewReady === true"
+"""True once the run view's async start-up has wired every listener."""
+
+AWAIT_SETTINGS_SAVES = (
+    "while (window.__fimSettingsSavesPending > 0) {"
+    "await new Promise((resolve) => setTimeout(resolve, 20));"
+    "}"
+)
+"""JS, for inside an `async` trigger: wait until no Settings save is in flight.
+
+`settings.js` counts each save's bridge call in
+`window.__fimSettingsSavesPending`, incremented synchronously by the
+`change`/`click` that starts it, so a read-back after this sees the
+saved value -- never a guessed delay's worth of it. It ends on that
+condition alone; the Python-side read of its result is what the
+completion-signal backstop bounds.
+"""
+
+
+def _describe_script(script: str) -> str:
+    """Name a polled JS expression in a failure, shortened to one line."""
+    flat = " ".join(script.split())
+    return f"page condition {flat[:160]!r}" + ("..." if len(flat) > 160 else "")
+
+
+def poll_page(
+    target_window: Any,
+    script: str,
+    is_done: Callable[[Any], bool] = bool,
+    *,
+    what: str | None = None,
+    interval: float = _POLL_INTERVAL_SECONDS,
+) -> Any:
+    """Evaluate `script` until `is_done` accepts its value; fail at the backstop.
+
+    The one page-polling wait in this package. It never returns a value
+    `is_done` rejected: a wait that runs out raises, naming what never
+    happened and the last value it read, instead of letting a test go on
+    against a page that never settled. Only the completion-signal
+    backstop (`conftest.COMPLETION_BACKSTOP_SECONDS`) bounds it, so how
+    long the page takes under load never decides the result.
+
+    `script` must be a plain, synchronous expression -- never one that
+    waits inside JavaScript (see `drive_and_read`).
+
+    Args:
+        target_window: The window to evaluate `script` in.
+        script: The JS expression read on every attempt.
+        is_done: Whether a value read means the page has settled.
+            Defaults to truthiness, for a ready flag or a predicate
+            written in JS.
+        what: What is waited for, named in the failure. Defaults to the
+            script itself.
+        interval: Seconds between reads; affects only how soon the end
+            is noticed.
+
+    Returns:
+        The first value `is_done` accepts.
+
+    Raises:
+        AssertionError: If no accepted value is read before the backstop.
+    """
+    return poll_or_fail(
+        lambda: target_window.evaluate_js(script),
+        is_done,
+        what or _describe_script(script),
+        interval=interval,
+    )
+
+
+def wait_for_run_view_ready(target_window: Any) -> None:
+    """Wait until the run view's start-up has finished (`RUN_VIEW_READY`).
+
+    Args:
+        target_window: The window whose page is starting.
+
+    Raises:
+        AssertionError: If the run view is not ready by the backstop.
+    """
+    poll_page(target_window, RUN_VIEW_READY, what="run view start-up")
+
+
+_GROUP_TREE_DEPTH = 6
+"""Rounds of toggle clicks `expand_every_group` allows: a tree-depth bound."""
+
+
+def expand_every_group(target_window: Any) -> None:
+    """Expand every collapsed Home group toggle, however deeply nested.
+
+    Clicks in rounds, not once: expanding an outer group (Experiment,
+    Study, "Unsorted", "Earlier") can reveal further collapsed toggles
+    inside it. A Study toggle's handler awaits a bridge call
+    (`get_study_run_summary`) before its rows render, so each round
+    waits for `window.__fimGroupTogglesPending` -- decremented in that
+    handler's `finally` -- to return to zero before looking again. A
+    fixed sleep here used to let a slow fetch outlast it; the next round
+    then clicked the same toggle again and the extra fetch's late
+    re-render wiped rows a test had already expanded.
+
+    Args:
+        target_window: The window showing Home.
+
+    Raises:
+        AssertionError: If a fetch never settles, or toggles are still
+            collapsed after `_GROUP_TREE_DEPTH` rounds.
+    """
+    collapsed = (
+        "document.querySelectorAll('.open-run-group-toggle[aria-expanded=\"false\"]')"
+    )
+    remaining: Any = None
+    for _ in range(_GROUP_TREE_DEPTH):
+        target_window.evaluate_js(f"Array.from({collapsed}).forEach((b) => b.click());")
+        poll_page(
+            target_window,
+            "window.__fimGroupTogglesPending",
+            lambda pending: not pending,
+            what="Study toggle fetches (window.__fimGroupTogglesPending)",
+        )
+        remaining = target_window.evaluate_js(f"{collapsed}.length")
+        if remaining == 0:
+            return
+    raise AssertionError(
+        f"{remaining} group toggle(s) still collapsed after "
+        f"{_GROUP_TREE_DEPTH} rounds of expanding"
+    )
+
+
+def wait_for_canvas_settled(target_window: Any, canvas_id: str) -> None:
+    """Wait until a canvas was last drawn at its settled layout size.
+
+    A completed run's first draw can come before the page's layout
+    settles, and the completed scrubber's frame fetch reflows the page
+    again when it finishes. `run-graph-stage.js`'s per-pane
+    `ResizeObserver` repaints after each real size change, but
+    asynchronously, and in a hidden window it can lag well behind:
+    measured, a buffer sat at a stale 149x149 while its box had already
+    settled to 142x142, so a snapshot taken then never matched a later
+    redraw of the very same panel.
+
+    Settled means three things at once, read twice in a row: no scrubber
+    fetch in flight (`window.__fimScrubberPending`), the pixel buffer the
+    same size as the layout box, and that reading unchanged since the
+    previous one.
+
+    Args:
+        target_window: The window holding the canvas.
+        canvas_id: The canvas element's id.
+
+    Raises:
+        AssertionError: If the canvas never settles before the backstop.
+    """
+    state_script = (
+        "(() => {"
+        f"var c = document.getElementById('{canvas_id}');"
+        "return [window.__fimScrubberPending || 0, c.width, c.height, "
+        "c.clientWidth, c.clientHeight];"
+        "})()"
+    )
+    previous: list[Any] = [None]
+
+    def settled(current: Any) -> bool:
+        pending, width, height, client_width, client_height = current
+        drawn_at_layout_size = (
+            pending == 0
+            and client_width > 0
+            and (width, height) == (client_width, client_height)
+        )
+        done = drawn_at_layout_size and current == previous[0]
+        previous[0] = current if drawn_at_layout_size else None
+        return done
+
+    poll_page(
+        target_window,
+        state_script,
+        settled,
+        what=f"{canvas_id} drawn at its settled layout size",
+    )
+
 
 # `window.destroy()` never terminates the `WebKitWebProcess`/
 # `WebKitNetworkProcess` helper subprocesses WebKitGTK spawned for that
@@ -361,7 +538,6 @@ def drive_and_read(
     *,
     ready: str | None = None,
     is_ready: Callable[[Any], bool] = lambda value: value not in (None, "", {}),
-    poll_attempts: int | None = 250,
     timeout: float = 10.0,
 ) -> Any:
     """Fire `trigger`, poll `read` until it settles, and return its final value.
@@ -417,61 +593,46 @@ def drive_and_read(
             object" — right for most DOM-text or plain-value reads;
             override for a call whose real result can legitimately be
             one of those (e.g. an empty string is itself meaningful).
-        poll_attempts: How many times to re-evaluate `read` (and, if
-            given, `ready`), each `_POLL_INTERVAL_SECONDS` apart, before
-            giving up. `None` polls until `is_ready` accepts, with no
-            timing budget -- for a `trigger` whose work takes as long as
-            the machine's load makes it (a worker process, a simulation),
-            where a fixed attempt count would make the result depend on
-            that load rather than on the commit. Such a `trigger` must
-            write *something* `is_ready` accepts on failure too (catch a
-            rejected bridge call and write its error), so the wait always
-            ends; only the completion-signal backstop
-            (`conftest.COMPLETION_BACKSTOP_SECONDS`) bounds it, raising
-            instead of hanging.
+            It must accept the settled state, not merely a non-empty
+            one: a `read` that is non-empty before `trigger`'s work has
+            finished needs a predicate (or a completion flag in `read`)
+            that tells the two apart.
         timeout: Seconds to wait for `webview.start` itself to return
             after the drive callback finishes, before failing loudly
             rather than hanging the test session.
 
     Returns:
-        `read`'s value once `is_ready` accepts it, or its last observed
-        value if `poll_attempts` is exhausted first — the caller's own
-        assertion is expected to fail clearly on a value that never
-        became ready, rather than this helper raising an opaque timeout
-        for what might be a legitimately slow but still-succeeding call.
+        `read`'s first value `is_ready` accepts.
 
     Raises:
-        AssertionError: If `webview.start` did not return within
-            `timeout` after the drive callback finished, or, with
-            `poll_attempts=None`, if `ready` or `read` never settled
-            before the completion-signal backstop.
+        AssertionError: If `ready` or `read` never settled before the
+            completion-signal backstop (`conftest.COMPLETION_BACKSTOP_
+            SECONDS`) -- naming the expression and the last value read
+            -- or if `webview.start` did not return within `timeout`
+            after the drive callback finished. There is no attempt
+            budget: how long the page takes depends on machine load,
+            not on the commit, so a wait that used to give up and hand
+            back an unsettled value now either sees the settled one or
+            fails. A `trigger` whose work can fail must write *something*
+            `is_ready` accepts on failure too (catch a rejected bridge
+            call and write its error), so the test fails on that error
+            at once rather than at the backstop.
     """
     outcome: queue.Queue[Any] = queue.Queue(maxsize=1)
-
-    def poll(script: str, accept: Callable[[Any], bool], what: str) -> Any:
-        # `poll_attempts=None` waits on the completion signal itself,
-        # bounded only by the backstop, which raises naming `what`.
-        if poll_attempts is None:
-            return poll_or_fail(
-                lambda: target_window.evaluate_js(script),
-                accept,
-                what,
-                interval=_POLL_INTERVAL_SECONDS,
-            )
-        value: Any = None
-        for _ in range(poll_attempts):
-            value = target_window.evaluate_js(script)
-            if accept(value):
-                break
-            time.sleep(_POLL_INTERVAL_SECONDS)
-        return value
 
     def _drive() -> None:
         try:
             if ready is not None:
-                poll(ready, bool, f"ready condition {ready!r}")
+                poll_page(target_window, ready, what=f"ready {_describe_script(ready)}")
             target_window.evaluate_js(trigger)
-            outcome.put(poll(read, is_ready, f"result {read!r} of {trigger!r}"))
+            outcome.put(
+                poll_page(
+                    target_window,
+                    read,
+                    is_ready,
+                    what=f"result {_describe_script(read)}",
+                )
+            )
         except AssertionError as error:
             # A backstop failure is handed to the test's own thread and
             # raised there, rather than lost on pywebview's thread.

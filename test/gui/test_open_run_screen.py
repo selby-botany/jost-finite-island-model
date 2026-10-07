@@ -29,7 +29,6 @@ from __future__ import annotations
 
 import json
 import queue
-import time
 from collections.abc import Callable
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
@@ -38,21 +37,21 @@ from typing import Any
 import pytest
 import webview
 import yaml
-from conftest import poll_or_fail
 
 from fim import cli
 from fim import paths as paths_module
 from fim.gui.app import create_window
 from fim.persistence import groups
 
+from .conftest import expand_every_group, poll_page
+
 pytestmark = pytest.mark.gui
 
 _INPUT_SCREEN_READY = "window.__fimRunViewReady === true"
-_POLL_INTERVAL_SECONDS = 0.1
-_POLL_ATTEMPTS = 300
-# Generous margin over the raw-driven test's own three sequential poll
-# stages, each individually bounded by `_POLL_ATTEMPTS`.
-_DRIVE_TIMEOUT_SECONDS = 3 * _POLL_ATTEMPTS * _POLL_INTERVAL_SECONDS + 10.0
+# How long to wait for a drive callback's result once `webview.start`
+# returns. Every callback hands its result over before destroying the
+# window, so this only bounds one that failed without a result.
+_DRIVE_TIMEOUT_SECONDS = 10.0
 # A real, selectable run row, excluding a date-bucket group's own header
 # row (`open-run.js`'s own `buildGroupHeaderRow`) -- shared so every
 # "count/select an actual run row" query below stays under this
@@ -196,55 +195,10 @@ def test_open_run_menu_action_reaches_screen_six(
             and value.get("screenVisible")
             and value.get("recentRunsLoaded")
         ),
-        poll_attempts=500,
     )
 
     assert visible["screenVisible"] is True
     assert visible["recentRunsLoaded"] is True
-
-
-def _poll_until(
-    window: webview.Window, script: str, is_ready: Callable[[Any], bool]
-) -> Any:
-    """Evaluate `script` repeatedly, sleeping between tries, until `is_ready` says stop.
-
-    Never waits inside JavaScript itself — see this module's own
-    docstring.
-    """
-    value: Any = None
-    for _ in range(_POLL_ATTEMPTS):
-        value = window.evaluate_js(script)
-        if is_ready(value):
-            return value
-        time.sleep(_POLL_INTERVAL_SECONDS)
-    return value
-
-
-def _wait_until(window: webview.Window, script: str) -> Any:
-    """Evaluate `script` repeatedly, with no timing budget, until it is truthy.
-
-    For a JavaScript-side completion signal that always arrives -- one
-    set at the end of an async bridge call -- where `_poll_until`'s fixed
-    attempt count would make the result depend on machine load rather
-    than on the commit. Only the completion-signal backstop
-    (`conftest.poll_or_fail`) bounds it.
-
-    Args:
-        window: The window to evaluate `script` in.
-        script: A plain, synchronous JavaScript expression.
-
-    Returns:
-        `script`'s first truthy value.
-
-    Raises:
-        AssertionError: If `script` is still falsy at the backstop.
-    """
-    return poll_or_fail(
-        lambda: window.evaluate_js(script),
-        bool,
-        f"JavaScript condition {script!r}",
-        interval=_POLL_INTERVAL_SECONDS,
-    )
 
 
 def _expand_all_recent_run_groups(window: webview.Window) -> None:
@@ -256,11 +210,12 @@ def _expand_all_recent_run_groups(window: webview.Window) -> None:
     after the screen's own recent-runs fetch settles rather than
     re-deriving "expand everything" inline at each call site.
 
-    Clicks in several rounds, not one: `"Earlier"` is itself a parent
-    group (item 3) whose own per-date sub-groups only appear in the DOM
-    -- collapsed by their own separate default -- once `"Earlier"`
-    itself has already been expanded, so a single pass over the
-    toggles visible at the start would miss them entirely.
+    Clicks in several rounds (`conftest.expand_every_group`), not one:
+    `"Earlier"` is itself a parent group (item 3) whose own per-date
+    sub-groups only appear in the DOM -- collapsed by their own separate
+    default -- once `"Earlier"` itself has already been expanded, so a
+    single pass over the toggles visible at the start would miss them
+    entirely.
 
     Waits for `window.__fimOpenRunRecentRunsLoaded === true`, not only
     for a toggle to exist: the app's own launch sequence now shows Home
@@ -281,47 +236,12 @@ def _expand_all_recent_run_groups(window: webview.Window) -> None:
     waiting for `true` again here can only mean *this* fetch's own
     render, never a stale one.
     """
-    _wait_until(
+    poll_page(
         window,
         "window.__fimOpenRunRecentRunsLoaded === true "
         "&& document.querySelectorAll('.open-run-group-toggle').length > 0",
     )
-    for _ in range(6):
-        window.evaluate_js(
-            "Array.from(document.querySelectorAll("
-            "'.open-run-group-toggle[aria-expanded=\"false\"]'"
-            ")).forEach((b) => b.click());"
-        )
-        # A Study group's own toggle click is async (`buildGroupHeaderRow`'s
-        # own handler awaits `get_study_run_summary` before its own rows,
-        # and any further-nested date-bucket toggles inside it, ever reach
-        # the DOM) -- every run now belongs to some real Study, the
-        # always-present default one at worst (`20260918-claude-sonnet-5-
-        # home-tree-reorg-design.md`, `selby/restricted`, §1/§2), so this
-        # loop hits that await on every call. Wait, with no timing budget
-        # (only the completion-signal backstop), for every such fetch to
-        # land and re-render before the next round:
-        # `window.__fimGroupTogglesPending` is decremented in the
-        # handler's `finally`, so it always returns to zero. This used to
-        # sleep a fixed 0.15 seconds instead; on a loaded machine the
-        # fetch outlasted it, the next round clicked the same toggle
-        # again, and the extra fetch's late re-render wiped a batch row's
-        # replicate list a test had expanded in the meantime (".open-run-
-        # replicate-row" null). How long a bridge call takes depends on
-        # machine load, not on the commit; the rounds themselves are a
-        # bound on the tree's depth, not on time.
-        poll_or_fail(
-            lambda: window.evaluate_js("window.__fimGroupTogglesPending"),
-            lambda pending: not pending,
-            "Study toggle fetches (window.__fimGroupTogglesPending)",
-            interval=_POLL_INTERVAL_SECONDS,
-        )
-        remaining = window.evaluate_js(
-            "document.querySelectorAll("
-            "'.open-run-group-toggle[aria-expanded=\"false\"]').length"
-        )
-        if remaining == 0:
-            break
+    expand_every_group(window)
 
 
 def test_selecting_and_opening_a_recent_run_renders_screen_three(
@@ -337,10 +257,10 @@ def test_selecting_and_opening_a_recent_run_renders_screen_three(
 
     def _drive() -> None:
         try:
-            _poll_until(window, _INPUT_SCREEN_READY, lambda value: value is True)
+            poll_page(window, _INPUT_SCREEN_READY, lambda value: value is True)
             window.evaluate_js("window.fim.menu.openRun();")
             _expand_all_recent_run_groups(window)
-            row_count = _poll_until(
+            row_count = poll_page(
                 window,
                 f"document.querySelectorAll({_REAL_ROW_SELECTOR}).length",
                 lambda value: value is not None and value > 0,
@@ -353,7 +273,7 @@ def test_selecting_and_opening_a_recent_run_renders_screen_three(
                 window.evaluate_js(
                     "document.getElementById('open-run-open-button').click();"
                 )
-                settled = _poll_until(
+                settled = poll_page(
                     window,
                     "({"
                     "runViewState: window.fim.getRunViewState(), "
@@ -405,10 +325,10 @@ def test_double_clicking_a_recent_run_row_opens_it_directly(
 
     def _drive() -> None:
         try:
-            _poll_until(window, _INPUT_SCREEN_READY, lambda value: value is True)
+            poll_page(window, _INPUT_SCREEN_READY, lambda value: value is True)
             window.evaluate_js("window.fim.menu.openRun();")
             _expand_all_recent_run_groups(window)
-            row_count = _poll_until(
+            row_count = poll_page(
                 window,
                 f"document.querySelectorAll({_REAL_ROW_SELECTOR}).length",
                 lambda value: value is not None and value > 0,
@@ -420,7 +340,7 @@ def test_double_clicking_a_recent_run_row_opens_it_directly(
                     ".dispatchEvent(new MouseEvent("
                     "'dblclick', {bubbles: true}));"
                 )
-                settled = _poll_until(
+                settled = poll_page(
                     window,
                     "({"
                     "runViewState: window.fim.getRunViewState(), "
@@ -469,20 +389,20 @@ def test_opening_a_run_updates_the_parameter_strip_to_its_own_configuration(
 
     def _drive() -> None:
         try:
-            _poll_until(window, _INPUT_SCREEN_READY, lambda value: value is True)
+            poll_page(window, _INPUT_SCREEN_READY, lambda value: value is True)
             # The starter form's own default `d`, confirmed by
             # `test_nav_rail.py`'s own
             # `test_parameter_strip_shows_the_starter_configuration_on_launch`
             # -- distinct from `_write_run`'s own `d=2`, so a strip that
             # never updated would still visibly read "20" below.
-            starter_d = _poll_until(
+            starter_d = poll_page(
                 window,
                 "document.getElementById('parameter-strip-d').textContent",
                 lambda value: value is not None and value != "",
             )
             window.evaluate_js("window.fim.menu.openRun();")
             _expand_all_recent_run_groups(window)
-            _poll_until(
+            poll_page(
                 window,
                 f"document.querySelectorAll({_REAL_ROW_SELECTOR}).length",
                 lambda value: value is not None and value > 0,
@@ -492,7 +412,7 @@ def test_opening_a_run_updates_the_parameter_strip_to_its_own_configuration(
                 ".dispatchEvent(new MouseEvent("
                 "'dblclick', {bubbles: true}));"
             )
-            opened_d = _poll_until(
+            opened_d = poll_page(
                 window,
                 "({"
                 "runViewState: window.fim.getRunViewState(), "
@@ -535,10 +455,10 @@ def test_returning_to_configure_hands_the_parameter_strip_back_to_the_form(
 
     def _drive() -> None:
         try:
-            _poll_until(window, _INPUT_SCREEN_READY, lambda value: value is True)
+            poll_page(window, _INPUT_SCREEN_READY, lambda value: value is True)
             window.evaluate_js("window.fim.menu.openRun();")
             _expand_all_recent_run_groups(window)
-            _poll_until(
+            poll_page(
                 window,
                 f"document.querySelectorAll({_REAL_ROW_SELECTOR}).length",
                 lambda value: value is not None and value > 0,
@@ -548,7 +468,7 @@ def test_returning_to_configure_hands_the_parameter_strip_back_to_the_form(
                 ".dispatchEvent(new MouseEvent("
                 "'dblclick', {bubbles: true}));"
             )
-            _poll_until(
+            poll_page(
                 window,
                 "window.fim.getRunViewState()",
                 lambda value: value == "completed",
@@ -557,7 +477,7 @@ def test_returning_to_configure_hands_the_parameter_strip_back_to_the_form(
                 "document.querySelector("
                 "'.rail-item[data-destination=\"configure\"]').click();"
             )
-            configure_d = _poll_until(
+            configure_d = poll_page(
                 window,
                 "({"
                 "configureVisible: "
@@ -601,10 +521,10 @@ def test_double_clicking_a_batch_row_opens_its_pooled_results(
 
     def _drive() -> None:
         try:
-            _poll_until(window, _INPUT_SCREEN_READY, lambda value: value is True)
+            poll_page(window, _INPUT_SCREEN_READY, lambda value: value is True)
             window.evaluate_js("window.fim.menu.openRun();")
             _expand_all_recent_run_groups(window)
-            _poll_until(
+            poll_page(
                 window,
                 f"document.querySelectorAll({_REAL_ROW_SELECTOR}).length",
                 lambda value: value is not None and value > 0,
@@ -614,7 +534,7 @@ def test_double_clicking_a_batch_row_opens_its_pooled_results(
                 ".dispatchEvent(new MouseEvent("
                 "'dblclick', {bubbles: true}));"
             )
-            settled = _poll_until(
+            settled = poll_page(
                 window,
                 "({"
                 "runViewState: window.fim.getRunViewState(), "
@@ -669,10 +589,10 @@ def test_selecting_and_opening_a_batch_row_via_the_open_button(
 
     def _drive() -> None:
         try:
-            _poll_until(window, _INPUT_SCREEN_READY, lambda value: value is True)
+            poll_page(window, _INPUT_SCREEN_READY, lambda value: value is True)
             window.evaluate_js("window.fim.menu.openRun();")
             _expand_all_recent_run_groups(window)
-            _poll_until(
+            poll_page(
                 window,
                 f"document.querySelectorAll({_REAL_ROW_SELECTOR}).length",
                 lambda value: value is not None and value > 0,
@@ -687,7 +607,7 @@ def test_selecting_and_opening_a_batch_row_via_the_open_button(
             window.evaluate_js(
                 "document.getElementById('open-run-open-button').click();"
             )
-            settled = _poll_until(
+            settled = poll_page(
                 window,
                 "({"
                 "runViewState: window.fim.getRunViewState(), "
@@ -740,10 +660,10 @@ def test_recent_runs_row_shows_config_summary_and_statistics(
 
     def _drive() -> None:
         try:
-            _poll_until(window, _INPUT_SCREEN_READY, lambda value: value is True)
+            poll_page(window, _INPUT_SCREEN_READY, lambda value: value is True)
             window.evaluate_js("window.fim.menu.openRun();")
             _expand_all_recent_run_groups(window)
-            settled = _poll_until(
+            settled = poll_page(
                 window,
                 "(function(){"
                 f"var row = document.querySelector({_REAL_ROW_SELECTOR}); "
@@ -803,10 +723,10 @@ def test_recent_runs_row_hides_fractional_seconds_in_the_ended_column(
 
     def _drive() -> None:
         try:
-            _poll_until(window, _INPUT_SCREEN_READY, lambda value: value is True)
+            poll_page(window, _INPUT_SCREEN_READY, lambda value: value is True)
             window.evaluate_js("window.fim.menu.openRun();")
             _expand_all_recent_run_groups(window)
-            settled = _poll_until(
+            settled = poll_page(
                 window,
                 "(function(){"
                 f"var row = document.querySelector({_REAL_ROW_SELECTOR}); "
@@ -855,10 +775,10 @@ def test_a_batch_rows_statistics_cell_names_its_own_replicate_count(
 
     def _drive() -> None:
         try:
-            _poll_until(window, _INPUT_SCREEN_READY, lambda value: value is True)
+            poll_page(window, _INPUT_SCREEN_READY, lambda value: value is True)
             window.evaluate_js("window.fim.menu.openRun();")
             _expand_all_recent_run_groups(window)
-            statistics_text = _poll_until(
+            statistics_text = poll_page(
                 window,
                 "(function(){"
                 f"var row = document.querySelector({_REAL_ROW_SELECTOR}); "
@@ -898,10 +818,10 @@ def test_expanding_a_batch_row_shows_its_own_replicate_list(
 
     def _drive() -> None:
         try:
-            _poll_until(window, _INPUT_SCREEN_READY, lambda value: value is True)
+            poll_page(window, _INPUT_SCREEN_READY, lambda value: value is True)
             window.evaluate_js("window.fim.menu.openRun();")
             _expand_all_recent_run_groups(window)
-            _poll_until(
+            poll_page(
                 window,
                 "document.querySelector('.open-run-replicate-toggle') !== null",
                 lambda value: value is True,
@@ -916,7 +836,7 @@ def test_expanding_a_batch_row_shows_its_own_replicate_list(
             # `get_batch_replicate_summary` call has landed and the rows
             # are in place; waited for with no timing budget, not polled for a
             # row count under a fixed attempt budget.
-            _wait_until(
+            poll_page(
                 window,
                 "document.querySelector('.open-run-replicate-toggle')"
                 ".getAttribute('aria-expanded') === 'true'",
@@ -938,7 +858,7 @@ def test_expanding_a_batch_row_shows_its_own_replicate_list(
             window.evaluate_js(
                 "document.querySelector('.open-run-replicate-toggle').click();"
             )
-            after_collapse_count = _poll_until(
+            after_collapse_count = poll_page(
                 window,
                 f"document.querySelectorAll({_REAL_ROW_SELECTOR}).length",
                 lambda value: value == before_count,
@@ -995,9 +915,9 @@ def test_a_second_click_on_a_loading_study_toggle_is_ignored(
 
     def _drive() -> None:
         try:
-            _poll_until(window, _INPUT_SCREEN_READY, lambda value: value is True)
+            poll_page(window, _INPUT_SCREEN_READY, lambda value: value is True)
             window.evaluate_js("window.fim.menu.openRun();")
-            _wait_until(window, "window.__fimOpenRunRecentRunsLoaded === true")
+            poll_page(window, "window.__fimOpenRunRecentRunsLoaded === true")
             # "Default experiment" expands synchronously, revealing the
             # (collapsed, not yet fetched) "Default study" inside it.
             window.evaluate_js(
@@ -1005,7 +925,7 @@ def test_a_second_click_on_a_loading_study_toggle_is_ignored(
                 ".find((b) => b.textContent.includes('Default experiment'))"
                 ".click();"
             )
-            _wait_until(window, f"{study_toggle} !== undefined")
+            poll_page(window, f"{study_toggle} !== undefined")
             window.evaluate_js(
                 "(function () {"
                 "window.__fimStudySummaryCalls = 0;"
@@ -1019,7 +939,7 @@ def test_a_second_click_on_a_loading_study_toggle_is_ignored(
                 "toggle.click();"
                 "})();"
             )
-            _wait_until(window, "window.__fimGroupTogglesPending === 0")
+            poll_page(window, "window.__fimGroupTogglesPending === 0")
             outcome.put(
                 window.evaluate_js(
                     "({"
@@ -1068,10 +988,10 @@ def test_opening_a_run_with_a_sigma_band_shows_it_alongside_the_curve(
 
     def _drive() -> None:
         try:
-            _poll_until(window, _INPUT_SCREEN_READY, lambda value: value is True)
+            poll_page(window, _INPUT_SCREEN_READY, lambda value: value is True)
             window.evaluate_js("window.fim.menu.openRun();")
             _expand_all_recent_run_groups(window)
-            _poll_until(
+            poll_page(
                 window,
                 f"document.querySelectorAll({_REAL_ROW_SELECTOR}).length",
                 lambda value: value is not None and value > 0,
@@ -1080,7 +1000,7 @@ def test_opening_a_run_with_a_sigma_band_shows_it_alongside_the_curve(
             window.evaluate_js(
                 "document.getElementById('open-run-open-button').click();"
             )
-            settled = _poll_until(
+            settled = poll_page(
                 window,
                 "({"
                 "runViewState: window.fim.getRunViewState(), "
@@ -1155,10 +1075,10 @@ def test_opening_a_run_without_a_sigma_band_shows_the_curve_with_no_band(
 
     def _drive() -> None:
         try:
-            _poll_until(window, _INPUT_SCREEN_READY, lambda value: value is True)
+            poll_page(window, _INPUT_SCREEN_READY, lambda value: value is True)
             window.evaluate_js("window.fim.menu.openRun();")
             _expand_all_recent_run_groups(window)
-            _poll_until(
+            poll_page(
                 window,
                 f"document.querySelectorAll({_REAL_ROW_SELECTOR}).length",
                 lambda value: value is not None and value > 0,
@@ -1167,7 +1087,7 @@ def test_opening_a_run_without_a_sigma_band_shows_the_curve_with_no_band(
             window.evaluate_js(
                 "document.getElementById('open-run-open-button').click();"
             )
-            settled = _poll_until(
+            settled = poll_page(
                 window,
                 "({"
                 "runViewState: window.fim.getRunViewState(), "
@@ -1237,9 +1157,9 @@ def test_expanding_a_study_shows_every_run_directly_with_no_date_subgroups(
 
     def _drive() -> None:
         try:
-            _poll_until(window, _INPUT_SCREEN_READY, lambda value: value is True)
+            poll_page(window, _INPUT_SCREEN_READY, lambda value: value is True)
             window.evaluate_js("window.fim.menu.openRun();")
-            collapsed = _poll_until(
+            collapsed = poll_page(
                 window,
                 "(function(){"
                 "var headers = Array.from(document.querySelectorAll("
@@ -1253,7 +1173,7 @@ def test_expanding_a_study_shows_every_run_directly_with_no_date_subgroups(
             # Every group starts collapsed -- expand Default experiment
             # and Default study (only two levels now) to see every row.
             _expand_all_recent_run_groups(window)
-            after_expand = _poll_until(
+            after_expand = poll_page(
                 window,
                 "({"
                 f"rowCount: document.querySelectorAll({_REAL_ROW_SELECTOR}).length, "
@@ -1318,12 +1238,12 @@ def test_recent_runs_filter_narrows_the_visible_rows_and_updates_the_count(
 
     def _drive() -> None:
         try:
-            _poll_until(window, _INPUT_SCREEN_READY, lambda value: value is True)
+            poll_page(window, _INPUT_SCREEN_READY, lambda value: value is True)
             window.evaluate_js("window.fim.menu.openRun();")
             # Groups start collapsed by default -- expand them all first
             # so the filter's own effect on row count is what's measured.
             _expand_all_recent_run_groups(window)
-            _poll_until(
+            poll_page(
                 window,
                 f"document.querySelectorAll({_REAL_ROW_SELECTOR}).length",
                 lambda value: value is not None and value == 2,
@@ -1335,7 +1255,7 @@ def test_recent_runs_filter_narrows_the_visible_rows_and_updates_the_count(
                 "input.dispatchEvent(new Event('input', {bubbles: true}));"
                 "})();"
             )
-            settled = _poll_until(
+            settled = poll_page(
                 window,
                 "({"
                 f"rowCount: document.querySelectorAll({_REAL_ROW_SELECTOR}).length, "
@@ -1381,10 +1301,10 @@ def test_a_reopened_batch_still_offers_its_trajectory_graph(
 
     def _drive() -> None:
         try:
-            _poll_until(window, _INPUT_SCREEN_READY, lambda value: value is True)
+            poll_page(window, _INPUT_SCREEN_READY, lambda value: value is True)
             window.evaluate_js("window.fim.menu.openRun();")
             _expand_all_recent_run_groups(window)
-            _poll_until(
+            poll_page(
                 window,
                 f"document.querySelectorAll({_REAL_ROW_SELECTOR}).length",
                 lambda value: value is not None and value > 0,
@@ -1394,7 +1314,7 @@ def test_a_reopened_batch_still_offers_its_trajectory_graph(
                 ".dispatchEvent(new MouseEvent("
                 "'dblclick', {bubbles: true}));"
             )
-            settled = _poll_until(
+            settled = poll_page(
                 window,
                 "({"
                 "runViewState: window.fim.getRunViewState(), "
@@ -1444,10 +1364,10 @@ def test_reopening_shows_a_busy_indicator_while_the_bridge_call_runs(
 
     def _drive() -> None:
         try:
-            _poll_until(window, _INPUT_SCREEN_READY, lambda value: value is True)
+            poll_page(window, _INPUT_SCREEN_READY, lambda value: value is True)
             window.evaluate_js("window.fim.menu.openRun();")
             _expand_all_recent_run_groups(window)
-            _poll_until(
+            poll_page(
                 window,
                 f"document.querySelectorAll({_REAL_ROW_SELECTOR}).length",
                 lambda value: value is not None and value > 0,
@@ -1469,7 +1389,7 @@ def test_reopening_shows_a_busy_indicator_while_the_bridge_call_runs(
                 ".dispatchEvent(new MouseEvent("
                 "'dblclick', {bubbles: true}));"
             )
-            settled = _poll_until(
+            settled = poll_page(
                 window,
                 "(window.__fimBusyProbe === null ? null : {"
                 "hiddenDuring: window.__fimBusyProbe.hiddenDuring, "
@@ -1562,10 +1482,10 @@ def test_clicking_a_column_header_sorts_that_studys_own_runs(
 
     def _drive() -> None:
         try:
-            _poll_until(window, _INPUT_SCREEN_READY, lambda value: value is True)
+            poll_page(window, _INPUT_SCREEN_READY, lambda value: value is True)
             window.evaluate_js("window.fim.menu.openRun();")
             _expand_all_recent_run_groups(window)
-            _poll_until(
+            poll_page(
                 window,
                 f"document.querySelectorAll({_REAL_ROW_SELECTOR}).length",
                 lambda value: value is not None and value == 2,
@@ -1628,10 +1548,10 @@ def test_dragging_a_column_resize_handle_widens_it_for_the_whole_table(
 
     def _drive() -> None:
         try:
-            _poll_until(window, _INPUT_SCREEN_READY, lambda value: value is True)
+            poll_page(window, _INPUT_SCREEN_READY, lambda value: value is True)
             window.evaluate_js("window.fim.menu.openRun();")
             _expand_all_recent_run_groups(window)
-            _poll_until(
+            poll_page(
                 window,
                 f"document.querySelectorAll({_REAL_ROW_SELECTOR}).length",
                 lambda value: value is not None and value == 1,
@@ -1686,13 +1606,13 @@ def test_selecting_a_study_checkbox_also_checks_its_own_run_rows(
 
     def _drive() -> None:
         try:
-            _poll_until(window, _INPUT_SCREEN_READY, lambda value: value is True)
+            poll_page(window, _INPUT_SCREEN_READY, lambda value: value is True)
             window.evaluate_js("window.fim.menu.openRun();")
             window.evaluate_js(
                 "document.getElementById('open-run-toggle-select-button').click();"
             )
             _expand_all_recent_run_groups(window)
-            _poll_until(
+            poll_page(
                 window,
                 f"document.querySelectorAll({_REAL_ROW_SELECTOR}).length",
                 lambda value: value is not None and value == 1,
@@ -1701,7 +1621,7 @@ def test_selecting_a_study_checkbox_also_checks_its_own_run_rows(
                 "document.querySelector("
                 "'.open-run-group-header .open-run-select-checkbox').click();"
             )
-            after = _poll_until(
+            after = poll_page(
                 window,
                 "Array.from(document.querySelectorAll("
                 f"{_REAL_ROW_SELECTOR})).map("
@@ -1741,15 +1661,15 @@ def test_result_table_cells_are_user_selectable_for_copy(
 
     def _drive() -> None:
         try:
-            _poll_until(window, _INPUT_SCREEN_READY, lambda value: value is True)
+            poll_page(window, _INPUT_SCREEN_READY, lambda value: value is True)
             window.evaluate_js("window.fim.menu.openRun();")
             _expand_all_recent_run_groups(window)
-            _poll_until(
+            poll_page(
                 window,
                 f"document.querySelectorAll({_REAL_ROW_SELECTOR}).length",
                 lambda value: value is not None and value == 1,
             )
-            user_select = _poll_until(
+            user_select = poll_page(
                 window,
                 "getComputedStyle(document.querySelector("
                 f"{_REAL_ROW_SELECTOR}).querySelector('.fim-copyable-text')"
@@ -1795,14 +1715,14 @@ def test_a_reopened_runs_graphs_repaint_at_the_real_pane_size(
 
     def _drive() -> None:
         try:
-            _poll_until(window, _INPUT_SCREEN_READY, lambda value: value is True)
+            poll_page(window, _INPUT_SCREEN_READY, lambda value: value is True)
             window.evaluate_js(
                 "window.pywebview.api.open_run({trajectoryPath: "
                 f"{json.dumps(str(trajectory_path))}"
                 "}).then((result) => { window.fim.enterCompletedState("
                 "result, false); });"
             )
-            settled = _poll_until(
+            settled = poll_page(
                 window,
                 "(window.fim.getRunViewState() === 'completed' && "
                 "window.__fimScrubberPending === 0) ? (() => {"
@@ -1869,9 +1789,9 @@ def test_multiple_graph_panes_do_not_push_the_stats_table_off_the_row(
     def _drive() -> None:
         try:
             window.resize(900, 700)
-            _poll_until(window, _INPUT_SCREEN_READY, lambda value: value is True)
+            poll_page(window, _INPUT_SCREEN_READY, lambda value: value is True)
             window.evaluate_js(f"window.fim.openComputedRun({str(output)!r}, false);")
-            _poll_until(
+            poll_page(
                 window,
                 "window.fim.getRunViewState()",
                 lambda value: value == "completed",
@@ -1880,7 +1800,7 @@ def test_multiple_graph_panes_do_not_push_the_stats_table_off_the_row(
                 "window.fim.setVisibleGraphs("
                 "['scatter', 'alleleComposition', 'frequencySpectrum']);"
             )
-            settled = _poll_until(
+            settled = poll_page(
                 window,
                 "(function() {"
                 "var row = document.getElementById('run-plot-row');"

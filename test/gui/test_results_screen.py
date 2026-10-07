@@ -19,7 +19,7 @@ out (or rely on early convergence of) a 10000-generation run.
 `test/gui/test_running_screen.py`'s own module docstring records a real,
 repeatedly-reproduced investigation into these tests intermittently
 hanging when run alongside that file's — not caused by this file's own
-(small, fast) configuration, and not fixed by raising `_POLL_ATTEMPTS`
+(small, fast) configuration, and not fixed by raising the poll budget
 alone, but by `conftest.py`'s own `_POLL_INTERVAL_SECONDS`: two threads
 (a test's own poll loop, and `fim.gui.app._drain_run_messages` pushing
 progress from its own background thread) both calling `window.
@@ -30,7 +30,6 @@ faster the poll loop hammered it.
 from __future__ import annotations
 
 import queue
-import time
 from collections.abc import Callable
 from pathlib import Path
 from typing import Any
@@ -41,6 +40,8 @@ import webview
 from fim.gui.app import Api, create_window
 from fim.statistics.catalog import default_shown_keys
 
+from .conftest import poll_page, wait_for_canvas_settled
+
 pytestmark = pytest.mark.gui
 
 _SCATTER_KEY_TEXTS = (
@@ -49,11 +50,10 @@ _SCATTER_KEY_TEXTS = (
     "#run-scatter-key span.scatter-key-label')"
     ").map((e) => e.textContent)"
 )
-_POLL_INTERVAL_SECONDS = 0.1
-_POLL_ATTEMPTS = 600
-# Generous margin over the largest test's own sequential poll stages,
-# each individually bounded by `_POLL_ATTEMPTS`.
-_DRIVE_TIMEOUT_SECONDS = 3 * _POLL_ATTEMPTS * _POLL_INTERVAL_SECONDS + 10.0
+# How long to wait for a drive callback's result once `webview.start`
+# returns. Every callback hands its result over before destroying the
+# window, so this only bounds one that failed without a result.
+_DRIVE_TIMEOUT_SECONDS = 10.0
 
 _INPUT_SCREEN_READY = "window.__fimRunViewReady === true"
 
@@ -87,66 +87,6 @@ setField('m_rate', '0.1');
 setField('mu_value', '0.01');
 setField('locus_lengths', '200');
 """
-
-
-def _poll_until(
-    window: webview.Window, script: str, predicate: Callable[[Any], bool]
-) -> Any:
-    value = None
-    for _ in range(_POLL_ATTEMPTS):
-        value = window.evaluate_js(script)
-        if predicate(value):
-            return value
-        time.sleep(_POLL_INTERVAL_SECONDS)
-    return value
-
-
-def _wait_for_canvas_drawn_at_layout_size(
-    window: webview.Window, canvas_id: str
-) -> None:
-    """Poll until a canvas was last drawn at its settled layout size.
-
-    A completed run's first draw can happen before the page's layout
-    settles, and the completed scrubber's frame fetch reflows the page
-    again when it finishes. `run-graph-stage.js`'s per-pane
-    `ResizeObserver` repaints after each real size change, but
-    asynchronously, and in a hidden window it can lag well behind:
-    measured, `#run-canvas` sat at a stale 149x149 buffer while its box had
-    already settled to 142x142, so a snapshot taken then never matched a
-    later redraw of the very same panel.
-
-    Settled: no scrubber fetch in flight, the pixel buffer the same size
-    as the layout box, and the same reading twice in a row.
-
-    Args:
-        window: The test's window.
-        canvas_id: The canvas element's id.
-
-    Raises:
-        AssertionError: If the canvas never settles.
-    """
-    state_script = (
-        "(() => {"
-        f"var c = document.getElementById('{canvas_id}');"
-        "return [window.__fimScrubberPending || 0, c.width, c.height, "
-        "c.clientWidth, c.clientHeight];"
-        "})()"
-    )
-    previous = None
-    current = None
-    for _ in range(_POLL_ATTEMPTS):
-        current = window.evaluate_js(state_script)
-        pending, width, height, client_width, client_height = current
-        drawn_at_layout_size = (
-            pending == 0
-            and client_width > 0
-            and (width, height) == (client_width, client_height)
-        )
-        if drawn_at_layout_size and current == previous:
-            return
-        previous = current if drawn_at_layout_size else None
-        time.sleep(_POLL_INTERVAL_SECONDS)
-    raise AssertionError(f"{canvas_id} never settled: {current!r}")
 
 
 def test_a_completed_run_renders_the_run_view(
@@ -244,7 +184,6 @@ def test_a_completed_run_renders_the_run_view(
             and value.get("statGSTTrackTitle") is not None
             and value.get("statACgdTitle") is not None
         ),
-        poll_attempts=_POLL_ATTEMPTS,
     )
 
     assert settled["runViewState"] == "completed"
@@ -376,7 +315,6 @@ def test_completed_run_consolidates_its_messages_into_one_area(
         ),
         read="window.__fimRunMessagesResult || null",
         is_ready=lambda value: value is not None,
-        poll_attempts=_POLL_ATTEMPTS,
     )
 
     assert settled["outcomeHidden"] is True
@@ -447,7 +385,6 @@ def test_differently_scaled_statistics_start_off_the_trajectory_panel(
             and value.get("reinstated") is not None
             and value.get("scrubberPending") == 0
         ),
-        poll_attempts=_POLL_ATTEMPTS,
     )
 
     pressed = settled["pressed"]
@@ -525,7 +462,6 @@ def test_a_very_long_run_still_renders_its_trajectory_and_deme_pair_panels(
         ),
         read="window.__fimInflatedTrajectoryResult || null",
         is_ready=lambda value: value is not None,
-        poll_attempts=_POLL_ATTEMPTS,
     )
 
     assert settled["threw"] is None
@@ -660,7 +596,6 @@ def test_a_single_replicate_run_gets_a_per_generation_results_table(
             and value.get("scrubberPending") == 0
             and value.get("rowCount", 0) > 0
         ),
-        poll_attempts=_POLL_ATTEMPTS,
     )
 
     assert settled["tableHidden"] is False
@@ -734,7 +669,6 @@ def test_table_headers_toggle_and_highlight_their_statistic(
         ),
         read="window.__fimHeaderToggle",
         is_ready=lambda value: value is not None,
-        poll_attempts=_POLL_ATTEMPTS,
     )
 
     assert settled["headerCount"] == 10
@@ -824,7 +758,6 @@ def test_completed_run_shows_title_above_canvas_and_back_returns_to_initial(
             and value.get("initialHidden") is False
             and value.get("backHidden") is True
         ),
-        poll_attempts=_POLL_ATTEMPTS,
     )
 
     assert settled["runViewState"] == "initial"
@@ -863,7 +796,6 @@ def test_completed_scatter_shows_the_marker_color_key_beneath_the_plot(
             and value.get("runViewState") == "completed"
             and "Other alleles" in value.get("key", [])
         ),
-        poll_attempts=_POLL_ATTEMPTS,
     )
 
     assert "Most frequent" in settled["key"]
@@ -895,7 +827,6 @@ def test_the_default_scatter_style_explains_its_count_colors(
             and value.get("runViewState") == "completed"
             and "16+" in value.get("drawn", [])
         ),
-        poll_attempts=_POLL_ATTEMPTS,
     )
 
     assert settled["style"] == "color-badge"
@@ -933,11 +864,11 @@ def test_deme_pair_selector_switches_to_a_chosen_pair_and_back(
 
     def _drive() -> None:
         try:
-            _poll_until(window, _INPUT_SCREEN_READY, lambda value: value is True)
+            poll_page(window, _INPUT_SCREEN_READY, lambda value: value is True)
             window.evaluate_js(
                 set_fields + "document.getElementById('run-button').click();"
             )
-            _poll_until(
+            poll_page(
                 window,
                 "window.fim.getRunViewState()",
                 lambda value: value == "completed",
@@ -949,12 +880,12 @@ def test_deme_pair_selector_switches_to_a_chosen_pair_and_back(
             # its *own* canvas snapshotting below, and before `finally`
             # destroys the window out from under a still-in-flight
             # bridge call.
-            _poll_until(
+            poll_page(
                 window,
                 "window.__fimScrubberPending",
                 lambda value: value == 0,
             )
-            _wait_for_canvas_drawn_at_layout_size(window, "run-canvas")
+            wait_for_canvas_settled(window, "run-canvas")
             selector_state = window.evaluate_js(
                 "({"
                 "hidden: document.getElementById('run-deme-pair-selector').hidden, "
@@ -970,7 +901,7 @@ def test_deme_pair_selector_switches_to_a_chosen_pair_and_back(
                 "document.getElementById('run-y-deme').dispatchEvent("
                 "new Event('change'));"
             )
-            pair_snapshot = _poll_until(
+            pair_snapshot = poll_page(
                 window,
                 "document.getElementById('run-canvas').toDataURL()",
                 lambda value: value != default_snapshot,
@@ -980,7 +911,7 @@ def test_deme_pair_selector_switches_to_a_chosen_pair_and_back(
                 "document.getElementById('run-y-deme').dispatchEvent("
                 "new Event('change'));"
             )
-            reverted_snapshot = _poll_until(
+            reverted_snapshot = poll_page(
                 window,
                 "document.getElementById('run-canvas').toDataURL()",
                 lambda value: value == default_snapshot,
@@ -1036,11 +967,11 @@ def test_running_simulation_again_from_completed_starts_a_new_run(
 
     def _drive() -> None:
         try:
-            _poll_until(window, _INPUT_SCREEN_READY, lambda value: value is True)
+            poll_page(window, _INPUT_SCREEN_READY, lambda value: value is True)
             window.evaluate_js(
                 _SET_TINY_FIELDS + "document.getElementById('run-button').click();"
             )
-            _poll_until(
+            poll_page(
                 window,
                 "window.fim.getRunViewState()",
                 lambda value: value == "completed",
@@ -1061,7 +992,7 @@ def test_running_simulation_again_from_completed_starts_a_new_run(
                 "seed.dispatchEvent(new Event('input', {bubbles: true})); "
                 "document.getElementById('run-button').click();"
             )
-            second_run_id = _poll_until(
+            second_run_id = poll_page(
                 window,
                 "window.fim.getRunViewState() === 'completed' && "
                 "window.fim.getCompletedOutputDirectory() !== "
@@ -1079,7 +1010,7 @@ def test_running_simulation_again_from_completed_starts_a_new_run(
             # comment). Wait for it to reach zero before `finally`
             # destroys the window out from under a still-in-flight
             # bridge call.
-            _poll_until(
+            poll_page(
                 window,
                 "window.__fimScrubberPending",
                 lambda value: value == 0,
@@ -1139,11 +1070,11 @@ def test_open_folder_button_reaches_the_injected_opener_and_settles(
 
     def _drive() -> None:
         try:
-            _poll_until(window, _INPUT_SCREEN_READY, lambda value: value is True)
+            poll_page(window, _INPUT_SCREEN_READY, lambda value: value is True)
             window.evaluate_js(
                 _SET_TINY_FIELDS + "document.getElementById('run-button').click();"
             )
-            _poll_until(
+            poll_page(
                 window,
                 "window.fim.getRunViewState()",
                 lambda value: value == "completed",
@@ -1153,13 +1084,13 @@ def test_open_folder_button_reaches_the_injected_opener_and_settles(
             # function's own comment on `window.__fimScrubberPending`) --
             # wait for it too, not just `__fimOpenFolderSettled` below,
             # before `finally` destroys the window.
-            _poll_until(
+            poll_page(
                 window,
                 "window.__fimScrubberPending",
                 lambda value: value == 0,
             )
             window.evaluate_js("document.getElementById('open-folder-button').click();")
-            settled = _poll_until(
+            settled = poll_page(
                 window,
                 "window.__fimOpenFolderSettled === true",
                 lambda value: value is True,
@@ -1221,7 +1152,6 @@ def test_a_completed_run_with_a_sigma_band_draws_it_and_shows_the_caption(
         is_ready=lambda value: (
             value is not None and value.get("runViewState") == "completed"
         ),
-        poll_attempts=600,
     )
 
     assert settled["runViewState"] == "completed"
@@ -1273,16 +1203,16 @@ def test_run_view_fits_the_default_window_without_excess_scrolling(
     def _drive() -> None:
         try:
             window.resize(900, 700)
-            _poll_until(window, _INPUT_SCREEN_READY, lambda value: value is True)
+            poll_page(window, _INPUT_SCREEN_READY, lambda value: value is True)
             window.evaluate_js(
                 _SET_TINY_FIELDS + "document.getElementById('run-button').click();"
             )
-            _poll_until(
+            poll_page(
                 window,
                 "window.fim.getRunViewState()",
                 lambda value: value == "completed",
             )
-            settled = _poll_until(
+            settled = poll_page(
                 window,
                 "(function() {"
                 "var row = document.getElementById('run-plot-row');"
@@ -1351,16 +1281,16 @@ def test_run_view_initial_state_canvas_is_unaffected_by_the_trajectory_fix() -> 
     def _drive() -> None:
         try:
             window.resize(900, 700)
-            _poll_until(window, _INPUT_SCREEN_READY, lambda value: value is True)
+            poll_page(window, _INPUT_SCREEN_READY, lambda value: value is True)
             window.evaluate_js(
                 "document.querySelector('[data-destination=\"run\"]').click();"
             )
-            _poll_until(
+            poll_page(
                 window,
                 "window.fim.getRunViewState()",
                 lambda value: value == "initial",
             )
-            settled = _poll_until(
+            settled = poll_page(
                 window,
                 "(function() {"
                 "var row = document.getElementById('run-plot-row');"
@@ -1430,7 +1360,6 @@ def test_completed_scrubber_updates_supplemental_panels_on_scrub_ticks(
             and value.get("scrubberPending") == 0
             and value.get("scrubbedToZero") is True
         ),
-        poll_attempts=_POLL_ATTEMPTS,
     )
 
     assert settled["runViewState"] == "completed"
@@ -1504,7 +1433,6 @@ def test_graph_stage_shows_the_chosen_graphs_together_and_the_menu_changes_them(
             and value.get("runViewState") == "completed"
             and value.get("only") is not None
         ),
-        poll_attempts=_POLL_ATTEMPTS,
     )
 
     # Four graphs on offer, never the fifth: the IBD payload is still
@@ -1610,7 +1538,6 @@ def test_graph_zoom_frame_takes_the_pane_and_gives_it_back(
             and value.get("runViewState") == "completed"
             and value.get("restored") is not None
         ),
-        poll_attempts=_POLL_ATTEMPTS,
     )
 
     assert settled["homeBefore"]["pane"] == "run-visual-panels"
@@ -1699,7 +1626,6 @@ def test_graph_zoom_sizes_are_a_function_of_the_frame_not_of_the_last_zoom(
         ),
         read="window.__fimZoomSizes || null",
         is_ready=lambda value: value is not None,
-        poll_attempts=_POLL_ATTEMPTS,
     )
 
     fit = settled["fit"]
@@ -1773,7 +1699,6 @@ def test_dragging_the_zoomed_scatter_pane_narrows_the_view(
         ),
         read="window.__fimZoomDrag || null",
         is_ready=lambda value: value is not None,
-        poll_attempts=_POLL_ATTEMPTS,
     )
 
     assert settled["before"]["resetHidden"] is False
@@ -1806,7 +1731,6 @@ def test_reset_view_is_hidden_for_a_non_scatter_zoomed_pane(
         ),
         read="window.__fimResetHidden",
         is_ready=lambda value: value is not None,
-        poll_attempts=_POLL_ATTEMPTS,
     )
 
     assert settled is True
@@ -1857,7 +1781,6 @@ def test_deme_pair_selectors_stay_glued_to_the_scatter_axes(
             and value.get("runViewState") == "completed"
             and value.get("axes") is not None
         ),
-        poll_attempts=_POLL_ATTEMPTS,
     )
 
     axes = settled["axes"]
@@ -1956,7 +1879,6 @@ def test_the_graph_you_are_watching_survives_the_run_finishing(
             and value.get("runViewState") == "completed"
             and value.get("after") is not None
         ),
-        poll_attempts=_POLL_ATTEMPTS,
     )
 
     # The switch really happened while the run was still going, so the
@@ -2017,7 +1939,6 @@ def test_the_default_pair_sits_side_by_side_above_the_fold_with_statistics(
         ),
         read="window.__fimLayouts || null",
         is_ready=lambda value: value is not None,
-        poll_attempts=_POLL_ATTEMPTS,
     )
 
     two = settled["two"]
@@ -2075,7 +1996,6 @@ def test_double_click_zooms_the_graph_under_the_pointer_and_the_caption_follows(
         ),
         read="window.__fimZoomed || null",
         is_ready=lambda value: value is not None,
-        poll_attempts=_POLL_ATTEMPTS,
     )
 
     assert settled["open"] is True
@@ -2212,7 +2132,6 @@ def test_every_run_card_graph_draws_tick_marks_on_its_axes(
         ),
         read="window.__fimTickPixels || null",
         is_ready=lambda value: value is not None,
-        poll_attempts=_POLL_ATTEMPTS,
     )
 
     assert settled is not None
@@ -2268,7 +2187,6 @@ def test_scrubbing_a_completed_scalar_run_moves_every_stats_row(
         ),
         read="window.__fimStatScrub || null",
         is_ready=lambda value: value is not None and value.get("restored") is not None,
-        poll_attempts=_POLL_ATTEMPTS,
     )
 
     assert settled is not None
@@ -2315,7 +2233,6 @@ def test_the_scatter_and_trajectory_panes_share_a_height_and_the_scatter_stays_s
             and value.get("scatter", 0) > 0
             and value.get("trajectory", 0) > 0
         ),
-        poll_attempts=_POLL_ATTEMPTS,
     )
 
     assert abs(settled["scatter"] - settled["trajectory"]) <= 2

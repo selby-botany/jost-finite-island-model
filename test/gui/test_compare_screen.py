@@ -14,7 +14,6 @@ Python-only test can check.
 from __future__ import annotations
 
 import queue
-import time
 from collections.abc import Callable
 from pathlib import Path
 from typing import Any
@@ -27,11 +26,11 @@ from fim import cli
 from fim import paths as paths_module
 from fim.gui.app import create_window
 
+from .conftest import poll_page
+
 pytestmark = pytest.mark.gui
 
 _INPUT_SCREEN_READY = "window.__fimRunViewReady === true"
-_POLL_INTERVAL_SECONDS = 0.1
-_POLL_ATTEMPTS = 300
 
 
 def _write_run(results_root: Path, name: str, **overrides: object) -> Path:
@@ -67,19 +66,6 @@ def _write_run(results_root: Path, name: str, **overrides: object) -> Path:
     return output_directory
 
 
-def _poll_until(
-    window: webview.Window, script: str, is_ready: Callable[[Any], bool]
-) -> Any:
-    """Evaluate `script` repeatedly, sleeping between tries, until it is ready."""
-    value: Any = None
-    for _ in range(_POLL_ATTEMPTS):
-        value = window.evaluate_js(script)
-        if is_ready(value):
-            return value
-        time.sleep(_POLL_INTERVAL_SECONDS)
-    return value
-
-
 def test_compare_runs_menu_action_reaches_the_compare_screen(
     window: webview.Window, drive: Callable[..., Any]
 ) -> None:
@@ -108,7 +94,6 @@ def test_compare_runs_menu_action_reaches_the_compare_screen(
             and value.get("screenVisible")
             and value.get("recentRunsLoaded")
         ),
-        poll_attempts=500,
     )
 
     assert visible["screenVisible"] is True
@@ -132,9 +117,9 @@ def test_compare_button_disabled_until_two_runs_are_checked(
 
     def _drive() -> None:
         try:
-            _poll_until(window, _INPUT_SCREEN_READY, lambda value: value is True)
+            poll_page(window, _INPUT_SCREEN_READY, lambda value: value is True)
             window.evaluate_js("window.fim.menu.compareRuns();")
-            _poll_until(
+            poll_page(
                 window,
                 "window.__fimCompareRecentRunsLoaded === true",
                 lambda value: value is True,
@@ -189,9 +174,9 @@ def test_comparing_two_runs_renders_panels_and_the_differing_field(
 
     def _drive() -> None:
         try:
-            _poll_until(window, _INPUT_SCREEN_READY, lambda value: value is True)
+            poll_page(window, _INPUT_SCREEN_READY, lambda value: value is True)
             window.evaluate_js("window.fim.menu.compareRuns();")
-            _poll_until(
+            poll_page(
                 window,
                 "window.__fimCompareRecentRunsLoaded === true",
                 lambda value: value is True,
@@ -203,7 +188,7 @@ def test_comparing_two_runs_renders_panels_and_the_differing_field(
                 "{ checkbox.click(); }"
             )
             window.evaluate_js("document.getElementById('compare-run-button').click();")
-            settled = _poll_until(
+            settled = poll_page(
                 window,
                 "({"
                 "resultsReady: window.__fimCompareResultsReady === true, "
@@ -250,9 +235,9 @@ def test_comparing_runs_with_identical_configs_shows_no_differences(
 
     def _drive() -> None:
         try:
-            _poll_until(window, _INPUT_SCREEN_READY, lambda value: value is True)
+            poll_page(window, _INPUT_SCREEN_READY, lambda value: value is True)
             window.evaluate_js("window.fim.menu.compareRuns();")
-            _poll_until(
+            poll_page(
                 window,
                 "window.__fimCompareRecentRunsLoaded === true",
                 lambda value: value is True,
@@ -264,7 +249,7 @@ def test_comparing_runs_with_identical_configs_shows_no_differences(
                 "{ checkbox.click(); }"
             )
             window.evaluate_js("document.getElementById('compare-run-button').click();")
-            settled = _poll_until(
+            settled = poll_page(
                 window,
                 "({"
                 "resultsReady: window.__fimCompareResultsReady === true, "
@@ -329,9 +314,9 @@ def test_switching_the_trajectory_statistic_redraws_the_overlay(
 
     def _drive() -> None:
         try:
-            _poll_until(window, _INPUT_SCREEN_READY, lambda value: value is True)
+            poll_page(window, _INPUT_SCREEN_READY, lambda value: value is True)
             window.evaluate_js("window.fim.menu.compareRuns();")
-            _poll_until(
+            poll_page(
                 window,
                 "window.__fimCompareRecentRunsLoaded === true",
                 lambda value: value is True,
@@ -343,7 +328,7 @@ def test_switching_the_trajectory_statistic_redraws_the_overlay(
                 "{ checkbox.click(); }"
             )
             window.evaluate_js("document.getElementById('compare-run-button').click();")
-            _poll_until(
+            poll_page(
                 window,
                 "window.__fimCompareResultsReady === true",
                 lambda value: value is True,

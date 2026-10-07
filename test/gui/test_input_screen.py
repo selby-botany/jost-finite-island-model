@@ -14,7 +14,6 @@ elements, which no Python-only test can check.
 from __future__ import annotations
 
 import queue
-import time
 from collections.abc import Callable
 from pathlib import Path
 from typing import Any
@@ -26,6 +25,8 @@ from fim.gui.app import Api, create_window
 from fim.gui.config_form import form_values_to_payload, starter_form_values
 from fim.gui.preferences import GuiPreferences, save_preferences
 from fim.model.params import SimulationParams
+
+from .conftest import poll_page
 
 pytestmark = pytest.mark.gui
 
@@ -50,7 +51,6 @@ def test_input_screen_loads_starter_values(
         trigger="null",
         read="document.getElementById('field-N').value",
         is_ready=lambda value: value == expected,
-        poll_attempts=500,
     )
 
     assert value == expected
@@ -79,7 +79,6 @@ def test_mutation_tab_renders_mu_as_the_greek_letter(
             "})"
         ),
         is_ready=lambda value: value is not None and value.get("mu") == "μ",
-        poll_attempts=500,
     )
 
     assert labels["mu"] == "μ"
@@ -109,7 +108,6 @@ def test_input_screen_run_button_enabled_for_the_valid_starter_form(
             "}) : null"
         ),
         is_ready=lambda value: value is not None,
-        poll_attempts=500,
     )
 
     assert settled["n"] == expected_n
@@ -231,7 +229,6 @@ def test_initial_view_shows_axis_selectors_for_deme_pair_choice(
             "})"
         ),
         is_ready=lambda value: value is not None and value.get("xCount", 0) >= 2,
-        poll_attempts=500,
     )
 
     assert settled["hidden"] is False
@@ -272,7 +269,6 @@ def test_deme_pair_selector_permits_a_self_comparison_and_shows_a_note(
             "})"
         ),
         is_ready=lambda value: value is not None and value.get("noteHidden") is False,
-        poll_attempts=500,
     )
 
     assert settled["xValue"] == settled["yValue"]
@@ -303,7 +299,6 @@ def test_input_screen_invalid_value_disables_the_run_button(
             "N must be an integer"
             in (value.get("reason") or "" if value is not None else "")
         ),
-        poll_attempts=500,
     )
 
     assert "N must be an integer" in settled["reason"]
@@ -348,7 +343,6 @@ def test_run_simulation_with_an_invalid_field_navigates_to_configure_and_marks_i
         is_ready=lambda value: (
             value is not None and value.get("configureVisible") is True
         ),
-        poll_attempts=500,
     )
 
     assert settled["configureVisible"] is True
@@ -416,7 +410,6 @@ def test_menu_new_configuration_resets_an_edited_field(
             and value.get("done") is True
             and value.get("ready") is True
         ),
-        poll_attempts=500,
     )
 
     assert value["fieldN"] == starter_n
@@ -672,18 +665,9 @@ def test_unchecking_and_rechecking_the_sigma_band_toggle_keeps_a_typed_window_va
     """
     outcome: queue.Queue[str | None] = queue.Queue(maxsize=1)
 
-    def _poll_until(script: str, predicate: Callable[[Any], bool]) -> Any:
-        value = None
-        for _ in range(300):
-            value = window.evaluate_js(script)
-            if predicate(value):
-                return value
-            time.sleep(0.1)
-        return value
-
     def _drive() -> None:
         try:
-            _poll_until(_INPUT_SCREEN_READY, lambda value: value is True)
+            poll_page(window, _INPUT_SCREEN_READY, lambda value: value is True)
             window.evaluate_js(
                 "var cb = document.getElementById('field-sigma_band_enabled'); "
                 "cb.checked = true; "

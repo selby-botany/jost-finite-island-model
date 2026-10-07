@@ -26,7 +26,6 @@ from fim.persistence import groups
 pytestmark = pytest.mark.gui
 
 _INPUT_SCREEN_READY = "window.__fimRunViewReady === true"
-_POLL_ATTEMPTS = 600
 _TITLE = "document.getElementById('run-plot-title').textContent"
 
 # Mirrors `test/gui/test_results_screen.py`'s own identically-named
@@ -47,24 +46,39 @@ setField('locus_lengths', '200');
 """
 
 # Opens Home and expands every group, several passes deep (an
-# Experiment's Studies, then a Study's runs, which load lazily).
+# Experiment's Studies, then a Study's runs, which load lazily). Each
+# pass waits for the previous one's Study fetches to land
+# (`window.__fimGroupTogglesPending`, as `conftest.expand_every_group`
+# does) and it ends once nothing is left collapsed. It used to
+# pause a fixed 150 ms between six passes: a slower fetch then got its
+# toggle clicked again, and its late re-render could drop the rows a
+# test went on to read.
 _OPEN_HOME_EXPANDED = """
 window.fim.menu.openRun();
 let passes = 0;
 const expand = () => {
-    if (window.__fimOpenRunRecentRunsLoaded !== true) {
-        setTimeout(expand, 50);
+    if (
+        window.__fimOpenRunRecentRunsLoaded !== true
+        || window.__fimGroupTogglesPending > 0
+    ) {
+        setTimeout(expand, 20);
         return;
     }
-    document
-        .querySelectorAll('.open-run-group-toggle[aria-expanded="false"]')
-        .forEach((toggle) => toggle.click());
-    passes += 1;
-    if (passes < 6) {
-        setTimeout(expand, 150);
-    } else {
+    const collapsed = document.querySelectorAll(
+        '.open-run-group-toggle[aria-expanded="false"]'
+    );
+    if (collapsed.length === 0) {
         window.__fimTestExpanded = true;
+        return;
     }
+    if (passes === 6) {
+        // A tree-depth bound, not a time one: named in the failure.
+        window.__fimTestExpanded = `${collapsed.length} toggles still collapsed`;
+        return;
+    }
+    passes += 1;
+    collapsed.forEach((toggle) => toggle.click());
+    setTimeout(expand, 0);
 };
 expand();
 """
@@ -142,7 +156,6 @@ def test_home_shows_descriptions_and_saves_an_experiments_documentation(
                 for tooltip in value.get("tooltips", [])
             )
         ),
-        poll_attempts=_POLL_ATTEMPTS,
     )
 
     assert settled["openedWith"] == {
@@ -197,7 +210,6 @@ def test_a_named_run_is_titled_with_its_experiment_and_its_name(
             and value.get("state") == "completed"
             and str(value.get("title", "")).startswith("Topology — Baseline (")
         ),
-        poll_attempts=_POLL_ATTEMPTS,
     )
 
     assert settled["title"].startswith("Topology — Baseline (run-")
@@ -229,7 +241,6 @@ def test_the_initial_title_names_the_chosen_studys_experiment(
         ),
         read=_TITLE,
         is_ready=lambda value: value == "Topology — initial conditions (p₀)",
-        poll_attempts=_POLL_ATTEMPTS,
     )
 
     assert settled == "Topology — initial conditions (p₀)"
@@ -297,7 +308,6 @@ def test_a_runs_details_dialog_names_it_without_documentation(
             and value.get("saved") is True
             and "Baseline (run-a)" in str(value.get("tree"))
         ),
-        poll_attempts=_POLL_ATTEMPTS,
     )
 
     assert settled["documentationHidden"] is True

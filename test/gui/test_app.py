@@ -238,11 +238,12 @@ def test_ping_from_worker_round_trip(
     both already built and tested independently) is ever reached through
     it.
 
-    Waits with no attempt limit (`poll_attempts=None`): the call starts a
-    real worker process, and how long that takes depends on machine load
-    -- under a loaded parallel run it outlasted the default 250 polls and
-    the test read `None`. The trigger writes the error on a rejected
-    call, so the wait always ends on the call's own outcome.
+    Waits with no attempt limit (`drive_and_read` has none): the call
+    starts a real worker process, and how long that takes depends on
+    machine load -- under a loaded parallel run it outlasted the 250
+    polls `drive_and_read` used to allow and the test read `None`. The
+    trigger writes the error on a rejected call, so the wait always ends
+    on the call's own outcome.
     """
     result = drive(
         window,
@@ -257,7 +258,6 @@ def test_ping_from_worker_round_trip(
             "})()"
         ),
         read="window.__fimTestResult",
-        poll_attempts=None,
     )
 
     assert result == "pong from worker"

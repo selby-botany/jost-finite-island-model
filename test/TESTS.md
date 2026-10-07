@@ -8244,10 +8244,9 @@ pushing `fim.onRunProgress`/`onRunDone` from its own thread as a run
 proceeds) both calling `evaluate_js` on the same window at once — a
 20ms poll cadence, hammering `AppHelper.callAfter` continuously for the
 lifetime of a whole test, measurably raised the odds of landing on
-whichever thread the collision hit. `poll_attempts` in each test
-controls the real wall-clock ceiling this trades against; a slower
-cadence here only costs time in a genuine failure path, not in the
-common (fast, already-converged) case.
+whichever thread the collision hit. A slower cadence costs at most one
+interval per wait; every wait (`poll_page`) ends on the settled value
+or fails at the completion-signal backstop, never on an attempt count.
 
 A second, distinct hazard, found investigating an intermittent
 multi-minute stall in the *whole* `pytest test/gui/ -m gui` process
@@ -8356,6 +8355,155 @@ to during an actual incident — `sample <pid>` first, check whether the
 blocked thread is a JS bridge delivery or a socket read, and only then
 decide which of the two investigations above it continues.
 
+<a id="gui.conftest.RUN_VIEW_READY"></a>
+
+#### RUN\_VIEW\_READY
+
+True once the run view's async start-up has wired every listener.
+
+<a id="gui.conftest.AWAIT_SETTINGS_SAVES"></a>
+
+#### AWAIT\_SETTINGS\_SAVES
+
+JS, for inside an `async` trigger: wait until no Settings save is in flight.
+
+`settings.js` counts each save's bridge call in
+`window.__fimSettingsSavesPending`, incremented synchronously by the
+`change`/`click` that starts it, so a read-back after this sees the
+saved value -- never a guessed delay's worth of it. It ends on that
+condition alone; the Python-side read of its result is what the
+completion-signal backstop bounds.
+
+<a id="gui.conftest.poll_page"></a>
+
+#### poll\_page
+
+```python
+def poll_page(target_window: Any,
+              script: str,
+              is_done: Callable[[Any], bool] = bool,
+              *,
+              what: str | None = None,
+              interval: float = _POLL_INTERVAL_SECONDS) -> Any
+```
+
+Evaluate `script` until `is_done` accepts its value; fail at the backstop.
+
+The one page-polling wait in this package. It never returns a value
+`is_done` rejected: a wait that runs out raises, naming what never
+happened and the last value it read, instead of letting a test go on
+against a page that never settled. Only the completion-signal
+backstop (`conftest.COMPLETION_BACKSTOP_SECONDS`) bounds it, so how
+long the page takes under load never decides the result.
+
+`script` must be a plain, synchronous expression -- never one that
+waits inside JavaScript (see `drive_and_read`).
+
+**Arguments**:
+
+- `target_window` - The window to evaluate `script` in.
+- `script` - The JS expression read on every attempt.
+- `is_done` - Whether a value read means the page has settled.
+  Defaults to truthiness, for a ready flag or a predicate
+  written in JS.
+- `what` - What is waited for, named in the failure. Defaults to the
+  script itself.
+- `interval` - Seconds between reads; affects only how soon the end
+  is noticed.
+  
+
+**Returns**:
+
+  The first value `is_done` accepts.
+  
+
+**Raises**:
+
+- `AssertionError` - If no accepted value is read before the backstop.
+
+<a id="gui.conftest.wait_for_run_view_ready"></a>
+
+#### wait\_for\_run\_view\_ready
+
+```python
+def wait_for_run_view_ready(target_window: Any) -> None
+```
+
+Wait until the run view's start-up has finished (`RUN_VIEW_READY`).
+
+**Arguments**:
+
+- `target_window` - The window whose page is starting.
+  
+
+**Raises**:
+
+- `AssertionError` - If the run view is not ready by the backstop.
+
+<a id="gui.conftest.expand_every_group"></a>
+
+#### expand\_every\_group
+
+```python
+def expand_every_group(target_window: Any) -> None
+```
+
+Expand every collapsed Home group toggle, however deeply nested.
+
+Clicks in rounds, not once: expanding an outer group (Experiment,
+Study, "Unsorted", "Earlier") can reveal further collapsed toggles
+inside it. A Study toggle's handler awaits a bridge call
+(`get_study_run_summary`) before its rows render, so each round
+waits for `window.__fimGroupTogglesPending` -- decremented in that
+handler's `finally` -- to return to zero before looking again. A
+fixed sleep here used to let a slow fetch outlast it; the next round
+then clicked the same toggle again and the extra fetch's late
+re-render wiped rows a test had already expanded.
+
+**Arguments**:
+
+- `target_window` - The window showing Home.
+  
+
+**Raises**:
+
+- `AssertionError` - If a fetch never settles, or toggles are still
+  collapsed after `_GROUP_TREE_DEPTH` rounds.
+
+<a id="gui.conftest.wait_for_canvas_settled"></a>
+
+#### wait\_for\_canvas\_settled
+
+```python
+def wait_for_canvas_settled(target_window: Any, canvas_id: str) -> None
+```
+
+Wait until a canvas was last drawn at its settled layout size.
+
+A completed run's first draw can come before the page's layout
+settles, and the completed scrubber's frame fetch reflows the page
+again when it finishes. `run-graph-stage.js`'s per-pane
+`ResizeObserver` repaints after each real size change, but
+asynchronously, and in a hidden window it can lag well behind:
+measured, a buffer sat at a stale 149x149 while its box had already
+settled to 142x142, so a snapshot taken then never matched a later
+redraw of the very same panel.
+
+Settled means three things at once, read twice in a row: no scrubber
+fetch in flight (`window.__fimScrubberPending`), the pixel buffer the
+same size as the layout box, and that reading unchanged since the
+previous one.
+
+**Arguments**:
+
+- `target_window` - The window holding the canvas.
+- `canvas_id` - The canvas element's id.
+  
+
+**Raises**:
+
+- `AssertionError` - If the canvas never settles before the backstop.
+
 <a id="gui.conftest.window"></a>
 
 #### window
@@ -8387,7 +8535,6 @@ def drive_and_read(target_window: webview.Window,
                    ready: str | None = None,
                    is_ready: Callable[[Any], bool] = lambda value: value not in
                    (None, "", {}),
-                   poll_attempts: int | None = 250,
                    timeout: float = 10.0) -> Any
 ```
 
@@ -8445,18 +8592,10 @@ own JS.
   object" — right for most DOM-text or plain-value reads;
   override for a call whose real result can legitimately be
   one of those (e.g. an empty string is itself meaningful).
-- `poll_attempts` - How many times to re-evaluate `read` (and, if
-  given, `ready`), each `_POLL_INTERVAL_SECONDS` apart, before
-  giving up. `None` polls until `is_ready` accepts, with no
-  timing budget -- for a `trigger` whose work takes as long as
-  the machine's load makes it (a worker process, a simulation),
-  where a fixed attempt count would make the result depend on
-  that load rather than on the commit. Such a `trigger` must
-  write *something* `is_ready` accepts on failure too (catch a
-  rejected bridge call and write its error), so the wait always
-  ends; only the completion-signal backstop
-  (`conftest.COMPLETION_BACKSTOP_SECONDS`) bounds it, raising
-  instead of hanging.
+  It must accept the settled state, not merely a non-empty
+- `one` - a `read` that is non-empty before `trigger`'s work has
+  finished needs a predicate (or a completion flag in `read`)
+  that tells the two apart.
 - `timeout` - Seconds to wait for `webview.start` itself to return
   after the drive callback finishes, before failing loudly
   rather than hanging the test session.
@@ -8464,19 +8603,23 @@ own JS.
 
 **Returns**:
 
-  `read`'s value once `is_ready` accepts it, or its last observed
-  value if `poll_attempts` is exhausted first — the caller's own
-  assertion is expected to fail clearly on a value that never
-  became ready, rather than this helper raising an opaque timeout
-  for what might be a legitimately slow but still-succeeding call.
+  `read`'s first value `is_ready` accepts.
   
 
 **Raises**:
 
-- `AssertionError` - If `webview.start` did not return within
-  `timeout` after the drive callback finished, or, with
-  `poll_attempts=None`, if `ready` or `read` never settled
-  before the completion-signal backstop.
+- `AssertionError` - If `ready` or `read` never settled before the
+  completion-signal backstop (`conftest.COMPLETION_BACKSTOP_
+- `SECONDS`)` - naming the expression and the last value read
+  -- or if `webview.start` did not return within `timeout`
+  after the drive callback finished. There is no attempt
+- `budget` - how long the page takes depends on machine load,
+  not on the commit, so a wait that used to give up and hand
+  back an unsettled value now either sees the settled one or
+  fails. A `trigger` whose work can fail must write *something*
+  `is_ready` accepts on failure too (catch a rejected bridge
+  call and write its error), so the test fails on that error
+  at once rather than at the backstop.
 
 <a id="gui.conftest.drive"></a>
 
@@ -9117,11 +9260,12 @@ logic (`fim.gui.store.LiveProgressStore`, `fim.gui.batch_runner`,
 both already built and tested independently) is ever reached through
 it.
 
-Waits with no attempt limit (`poll_attempts=None`): the call starts a
-real worker process, and how long that takes depends on machine load
--- under a loaded parallel run it outlasted the default 250 polls and
-the test read `None`. The trigger writes the error on a rejected
-call, so the wait always ends on the call's own outcome.
+Waits with no attempt limit (`drive_and_read` has none): the call
+starts a real worker process, and how long that takes depends on
+machine load -- under a loaded parallel run it outlasted the 250
+polls `drive_and_read` used to allow and the test read `None`. The
+trigger writes the error on a rejected call, so the wait always ends
+on the call's own outcome.
 
 <a id="gui.test_app.test_export_active_graph_image_writes_a_real_png"></a>
 
@@ -19648,7 +19792,7 @@ out (or rely on early convergence of) a 10000-generation run.
 `test/gui/test_running_screen.py`'s own module docstring records a real,
 repeatedly-reproduced investigation into these tests intermittently
 hanging when run alongside that file's — not caused by this file's own
-(small, fast) configuration, and not fixed by raising `_POLL_ATTEMPTS`
+(small, fast) configuration, and not fixed by raising the poll budget
 alone, but by `conftest.py`'s own `_POLL_INTERVAL_SECONDS`: two threads
 (a test's own poll loop, and `fim.gui.app._drain_run_messages` pushing
 progress from its own background thread) both calling `window.
@@ -21211,18 +21355,16 @@ def test_settings_save_button_persists_execution_and_convergence_defaults(
 
 Changing a field and clicking Save is reflected back by the bridge itself.
 
-The trigger script itself retries the readback (bounded, up to 2.5s)
-rather than trusting one fixed delay before reading back: `Save`'s
-own `click` handler is `async` (collects the 11 fields, awaits a
-real `set_default_run_settings` bridge round trip, then updates the
-banner and closes the dialog), so a single fixed sleep before
-reading back raced that round trip under real parallel-test load
-and failed intermittently -- exactly the non-deterministic-test
-defect this project's own testing discipline forbids tolerating.
-Polling until the readback actually reflects the just-saved value
-converges to the same correct result regardless of how long the
-real bridge call takes, rather than gambling that a guessed delay
-was enough.
+The trigger reads back only once the save has landed
+(`AWAIT_SETTINGS_SAVES`, on `window.__fimSettingsSavesPending`):
+`Save`'s own `click` handler is `async` (collects the 11 fields,
+awaits a real `set_default_run_settings` bridge round trip, then
+updates the banner and closes the dialog), so a single fixed sleep
+before reading back raced that round trip under real parallel-test
+load and failed intermittently. A bounded retry of the read-back
+(2.5 s) replaced it next, which still gave up silently on a slower
+machine; waiting on the save's own completion signal does not
+depend on how long the bridge call takes.
 
 <a id="gui.test_settings_modal.test_default_ploidy_select_persists_immediately_and_reloads_on_open"></a>
 
@@ -22642,12 +22784,13 @@ def test_dismissing_the_welcome_panel_persists_through_the_bridge(
 Either button's own `close` event reaches `Api.dismiss_welcome()` for real.
 
 Driven manually, not via the `drive` fixture: `welcomeDialog`'s own
-`close` listener fires `Api.dismiss_welcome()` fire-and-forget (no
-DOM-visible effect of its own to poll for -- the dialog is already
-closed by the time it resolves either way), so this polls the
-bridge's own `get_welcome_dismissed()` back through a second `Api`
-call on the same window, the identical shape `test_input_screen.py`'s
-own significant-digits persistence test uses for the same reason.
+`close` listener has no DOM-visible effect of its own to poll for --
+the dialog is already closed by the time `Api.dismiss_welcome()`
+resolves -- so this waits for that call's settle flag
+(`window.__fimWelcomeDismissSettled`) and then reads the bridge's own
+`get_welcome_dismissed()` back through a second `Api` call on the
+same window. It used to wait a fixed 50 ms instead, which let the
+read race the save it was meant to observe.
 
 
 
