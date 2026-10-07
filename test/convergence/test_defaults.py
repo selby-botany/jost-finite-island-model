@@ -199,9 +199,9 @@ def test_panmictic_burn_in_for_the_equilibrium_split_example() -> None:
     """600 gene copies at `mu` 0.001: tau about 273, burn-in about 4.6 tau.
 
     The bundled equilibrium-split example (3 demes of 200, haploid). Its
-    `tau` exceeds the one-deme recursion's by a relative `mu tau / N`
-    (about 0.05% here), and its expected heterozygosity is close to
-    `theta / (1 + theta)`, `theta = 2 N mu = 1.2`.
+    `tau` is exactly the one-deme recursion's (both are the textbook
+    `1 / (1 - (1 - 1/N)(1 - mu)^2)`), and its expected heterozygosity is
+    close to `theta / (1 + theta)`, `theta = 2 N mu = 1.2`.
     """
     result = panmictic_equilibration(
         total_size=600, mutation_rates=[0.001], tolerance=0.01
@@ -210,9 +210,7 @@ def test_panmictic_burn_in_for_the_equilibrium_split_example() -> None:
         deme_sizes=[600], migration=[[1.0]], mutation=0.001
     )
 
-    assert result.relaxation_time == pytest.approx(
-        one_deme * (1.0 + 0.001 * one_deme / 600), rel=1e-5
-    )
+    assert result.relaxation_time == pytest.approx(one_deme, rel=1e-12)
     assert result.relaxation_time == pytest.approx(273.0, abs=0.5)
     assert result.generations == math.ceil(
         math.log(0.01) / math.log(1.0 - 1.0 / result.relaxation_time)
@@ -226,20 +224,22 @@ def test_panmictic_burn_in_for_the_equilibrium_split_example() -> None:
 def test_panmictic_burn_in_bounds_the_identity_recursion_from_any_start() -> None:
     """After the burn-in, the expected identity is within tolerance of F*.
 
-    Iterates the expected recursion from both extremes (every copy
-    identical, and none) and checks the departure at the burn-in.
+    Iterates the textbook expected recursion (drift, then each copy
+    mutates: `F' = 1/N + (1 - 1/N)(1 - mu)^2 F`) from both extremes
+    (every copy identical, and none) and checks the departure at the
+    burn-in.
     """
     size, rate, tolerance = 40, 0.02, 0.01
     result = panmictic_equilibration(
         total_size=size, mutation_rates=[rate], tolerance=tolerance
     )
     survival = 1.0 - 1.0 / size
-    keep = (1.0 - rate) ** 2 + rate * (1.0 - rate) / size
+    keep = (1.0 - rate) ** 2
     equilibrium = 1.0 - result.expected_heterozygosity
     for start in (0.0, 1.0):
         identity = start
         for _ in range(result.generations):
-            identity = 1.0 / size + survival * (keep * identity + rate / size)
+            identity = 1.0 / size + survival * keep * identity
         assert abs(identity - equilibrium) <= tolerance
 
 

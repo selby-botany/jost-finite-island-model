@@ -223,9 +223,10 @@ def recursion_relaxation_time(
 ) -> float:
     """Return `tau` from the identity recursion's slowest mode.
 
-    The pairwise identity matrix `J` updates as migrate (`M J Mᵀ`), mutate
-    (scale by `(1 - mu)²`), then drift (each diagonal entry `J[i][i]` keeps
-    a fraction `1 - 1/N_i`). Flattening `J` makes this a `d² by d²` matrix;
+    The pairwise identity matrix `J` updates as migrate (`M J Mᵀ`), drift
+    (each diagonal entry `J[i][i]` keeps a fraction `1 - 1/N_i`), then
+    mutate (scale by `(1 - mu)²`) — exactly the engine's own textbook
+    step, `fim.model.operators.step`. Flattening `J` makes this a `d² by d²` matrix;
     its spectral radius `rho` gives `tau = 1 / (1 - rho)`.
 
     Args:
@@ -330,23 +331,22 @@ def panmictic_equilibration(
     """Return the burn-in one panmictic population needs to reach equilibrium.
 
     The single-deme case of the identity recursion behind
-    `recursion_relaxation_time`, written exactly for this project's own
-    operators: with `N` gene copies, `fim.model.operators.mutate` (a
-    `Binomial(N, mu)` number `k` of fresh alleles of frequency `1/N`
-    each, every existing allele's mass scaled by `1 - k/N`) and then
-    `drift` (`N` copies drawn with replacement), the probability `F`
+    `recursion_relaxation_time`, exactly as this project's own operators
+    run it: with `N` gene copies, `fim.model.operators.drift` (`N`
+    copies drawn with replacement) and then `mutate` (each copy,
+    independently, becomes a fresh allele with probability `mu`) — the
+    textbook Wright-Fisher infinite-alleles model — the probability `F`
     that two gene copies drawn with replacement are identical obeys, in
-    expectation, `F' = 1/N + (1 - 1/N)(a F + mu/N)` with
-    `a = (1 - mu)² + mu (1 - mu)/N`. Writing `rho = (1 - 1/N) a`, it
-    settles at `F* = (1/N + (1 - 1/N) mu/N) / (1 - rho)` and its
-    departure from `F*` shrinks by exactly `rho` every generation. `F`
-    lies in `[0, 1]`, so after `t` generations the expected departure is
-    at most `rho^t` whatever the starting draw was; the burn-in is the
-    first `t` with `rho^t <= tolerance`, about `tau ln(1 / tolerance)`
-    with `tau = 1 / (1 - rho)`, longer by a relative `mu tau / N` than
-    `recursion_relaxation_time` with one deme (about
-    `1 / (2 mu + 1/N)`), whose mutation step omits the `a` correction.
-    `tau` is also the time scale on which the population's whole
+    expectation, `F' = 1/N + (1 - 1/N)(1 - mu)² F` (for two distinct
+    copies, the textbook `F' = (1 - mu)² [1/N + (1 - 1/N) F]`). Writing
+    `rho = (1 - 1/N)(1 - mu)²`, it settles at `F* = (1/N) / (1 - rho)`
+    and its departure from `F*` shrinks by exactly `rho` every
+    generation. `F` lies in `[0, 1]`, so after `t` generations the
+    expected departure is at most `rho^t` whatever the starting draw
+    was; the burn-in is the first `t` with `rho^t <= tolerance`, about
+    `tau ln(1 / tolerance)` with `tau = 1 / (1 - rho)` (about
+    `1 / (2 mu + 1/N)`), the same `tau` as `recursion_relaxation_time`
+    with one deme. `tau` is also the time scale on which the population's whole
     genealogy forgets its starting state (two
     ancestral lineages merge or one mutates at rate about `1/N + 2 mu`),
     so the burn-in mixes more than the first moment.
@@ -380,10 +380,7 @@ def panmictic_equilibration(
         raise ValueError("tolerance must be greater than 0")
     inverse_size = 1.0 / total_size
     drift_survival = 1.0 - inverse_size
-    decays = [
-        drift_survival * ((1.0 - rate) ** 2 + rate * (1.0 - rate) * inverse_size)
-        for rate in mutation_rates
-    ]
+    decays = [drift_survival * (1.0 - rate) ** 2 for rate in mutation_rates]
     slowest = max(decays)
     # `slowest` is 0 only for a one-copy population, which is at
     # equilibrium from its first generation.
@@ -392,10 +389,9 @@ def panmictic_equilibration(
         if slowest == 0.0 or tolerance >= 1.0
         else math.ceil(math.log(tolerance) / math.log(slowest))
     )
-    expected = math.fsum(
-        1.0 - (inverse_size + drift_survival * rate * inverse_size) / (1.0 - decay)
-        for rate, decay in zip(mutation_rates, decays, strict=True)
-    ) / len(decays)
+    expected = math.fsum(1.0 - inverse_size / (1.0 - decay) for decay in decays) / len(
+        decays
+    )
     return PanmicticEquilibration(
         generations=generations,
         relaxation_time=1.0 / (1.0 - slowest),

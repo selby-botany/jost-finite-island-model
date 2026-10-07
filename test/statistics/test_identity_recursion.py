@@ -43,8 +43,9 @@ def _brute_force_identities(
 ) -> tuple[float, float]:
     """Iterate the full `d` by `d` identity matrix, no symmetry assumed.
 
-    An independent implementation of the recursion: migrate as `M J M^T`,
-    mutate by the exact second moment, drift on the diagonal only.
+    An independent implementation of the textbook recursion: migrate as
+    `M J M^T`, drift on the diagonal only (`1/N + (1 - 1/N) J_ii`), then
+    each copy mutates (`(1 - mu)^2` on every pair of distinct copies).
 
     Args:
         population_size: Gene copies per deme.
@@ -59,7 +60,7 @@ def _brute_force_identities(
     """
     migration = np.full((d, d), m / (d - 1))
     np.fill_diagonal(migration, 1.0 - m)
-    survival = (1.0 - mu) ** 2 + mu * (1.0 - mu) / population_size
+    survival = (1.0 - mu) ** 2
     identities = start.copy()
     diagonal = np.diag_indices(d)
     for _ in range(steps):
@@ -208,17 +209,13 @@ def _brute_force_statistics(
     d = len(sizes)
     migration = np.asarray(matrix)
     inverse = 1.0 / np.asarray(sizes, dtype=float)
-    survival = (1.0 - mu) ** 2 + mu * (1.0 - mu) * (
-        inverse[:, None] + inverse[None, :]
-    ) / 2.0
+    survival = (1.0 - mu) ** 2
     identities = start.copy()
     diagonal = np.diag_indices(d)
     for _ in range(steps):
         migrated = migration @ identities @ migration.T
         identities = survival * migrated
-        identities[diagonal] = (
-            inverse + (1.0 - inverse) * survival[diagonal] * (migrated[diagonal])
-        )
+        identities[diagonal] = inverse + (1.0 - inverse) * survival * migrated[diagonal]
     return identities_to_statistics(
         float(np.mean(np.diag(identities))),
         float((identities.sum() - np.trace(identities)) / (d * (d - 1))),

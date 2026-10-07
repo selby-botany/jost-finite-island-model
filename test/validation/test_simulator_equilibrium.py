@@ -17,7 +17,7 @@ internal/deep):
   refactor that preserves the model's own scientific behavior. Each
   such test's own docstring says "**Functional**" explicitly.
 * **Internal** tests and helpers assume today's specific Migrate ->
-  Mutate -> Drift pipeline order: the exact per-generation identity
+  Drift -> Mutate pipeline order: the exact per-generation identity
   recursion (:func:`_iterate_identities` and everything built on it --
   :func:`_pipeline_identity_dynamics`, :func:`_identity_fixed_point`,
   :func:`_iterate_pairwise_identities`, :func:`_pairwise_identity_fixed_
@@ -265,41 +265,27 @@ def _identity_coefficients(m: float, d: int) -> tuple[float, float, float, float
     )
 
 
-def _mutation_survival(mu: float, population_size: int) -> float:
-    """Return the exact per-generation mutation-survival factor.
+def _mutation_survival(mu: float) -> float:
+    """Return the per-generation mutation-survival factor, ``(1 - mu)^2``.
 
-    The identity recursion's mutation step scales existing pairwise
-    identity mass by ``1 - k/N``, where ``k ~ Binomial(N, mu)`` counts
-    this generation's mutating gene copies. Because the recursion tracks
-    a *pairwise* (two-lineage) quantity, it needs this factor's second
-    moment, ``E[(1 - k/N)^2]``, not just its mean ``1 - mu``.
-
-    ``k/N`` is the sample mean of ``N`` i.i.d. Bernoulli(mu) mutation
-    indicators, so ``1 - k/N`` is the sample mean of ``N`` i.i.d.
-    Bernoulli(1 - mu) "no mutation" indicators. Squaring a sample mean is
-    a degree-2 polynomial in those indicators, and by linearity its
-    expectation depends on nothing beyond the mean and variance of one
-    indicator -- both closed-form for a Bernoulli:
-
-        E[(1 - k/N)^2] = (1 - mu)^2 + mu(1 - mu)/N
-
-    This is an *exact* identity for every finite ``N >= 1``, not a
-    truncated ``O(1/N)`` asymptotic series: there is no ``O(1/N^2)`` or
-    higher term missing from it. (Were a higher power of this factor ever
-    needed -- e.g. a three-lineage identity requiring
-    ``E[(1 - k/N)^3]`` -- the exact value would still be a *finite*
-    polynomial in ``1/N``, of degree one less than the power, not an
-    infinite series; the second moment used here is that general
-    pattern's ``m=2`` case, hence degree 1.)
+    The textbook Wright-Fisher mutation step `fim.model.operators.step`
+    runs after drift: each of the new generation's gene copies mutates
+    independently with probability ``mu``, and every mutant is a brand-new
+    allele. Two *distinct* gene copies that were identical stay identical
+    only if neither mutated -- probability ``(1 - mu)^2`` -- and two that
+    were not identical can never become identical. One copy compared with
+    itself (drift's ``1/N`` with-replacement term) is always identical,
+    so the factor applies only to distinct copies:
+    :func:`test_mutation_survival_matches_brute_force_per_copy_expectation`
+    checks that against the operator's own exact expectation.
 
     Args:
         mu: Per-copy mutation probability.
-        population_size: Gene-copy count ``N``.
 
     Returns:
-        ``E[(1 - k/N)^2]``, exactly.
+        ``(1 - mu)^2``.
     """
-    return (1.0 - mu) ** 2 + mu * (1.0 - mu) / population_size
+    return (1.0 - mu) ** 2
 
 
 def _iterate_identities(
@@ -316,16 +302,17 @@ def _iterate_identities(
 
     Tracks the expected pairwise identity-in-state within one deme
     (``jw = E[sum_k x_k^2]``) and between two demes (``jb = E[sum_k x_k y_k]``)
-    through one Migrate -> Mutate -> Drift generation, matching the operator
-    order in :func:`fim.model.operators.step`.
+    through one Migrate -> Drift -> Mutate generation, matching the operator
+    order in :func:`fim.model.operators.step` (the textbook Wright-Fisher
+    island model).
 
     Migration maps the identities by the fixed coefficients of
-    :func:`_identity_coefficients`. Mutation scales existing mass by the
-    exact second moment :func:`_mutation_survival`, so the mutation step
-    carries no ``O(1/N)`` residual of its own. Drift is exact
-    Wright-Fisher multinomial resampling, for which
+    :func:`_identity_coefficients`. Drift is exact Wright-Fisher
+    multinomial resampling, for which
     ``E[sum x'^2] = 1/N + (1 - 1/N) E[sum x^2]`` and between-deme identity is
-    unchanged in expectation.
+    unchanged in expectation. Mutation then multiplies the identity of
+    every pair of distinct copies by :func:`_mutation_survival`,
+    ``(1 - mu)^2``, leaving the same-copy ``1/N`` term alone.
 
     Args:
         population_size: Gene-copy count ``N`` per deme.
@@ -345,7 +332,7 @@ def _iterate_identities(
         between_from_within,
         between_from_between,
     ) = _identity_coefficients(m, d)
-    survival = _mutation_survival(mu, population_size)
+    survival = _mutation_survival(mu)
     inverse = 1.0 / population_size
 
     within = within_identity
@@ -489,7 +476,7 @@ def _iterate_pairwise_identities(
     pairwise identities instead, one entry per ordered pair of demes
     (the diagonal holding each deme's own within-deme identity).
 
-    Derivation, one Migrate -> Mutate -> Drift generation at a time,
+    Derivation, one Migrate -> Drift -> Mutate generation at a time,
     matching :func:`fim.model.operators.step`'s own order exactly like
     :func:`_iterate_identities` already does:
 
@@ -506,22 +493,16 @@ def _iterate_pairwise_identities(
       confirmed directly, not assumed, before this function was written
       -- see :func:`test_pairwise_identity_recursion_matches_the_island_
       model_oracle`, below).
-    * **Mutate**: scales every pairwise identity by the same
-      :func:`_mutation_survival` factor :func:`_iterate_identities`
-      already applies uniformly to both its own ``jw`` and ``jb`` --
-      including this function's own off-diagonal (between-deme) entries,
-      which is a mild approximation (the exact between-deme survival
-      factor has no same-deme mutation-count covariance term to correct
-      for, unlike the diagonal) already implicit in the existing,
-      already-published-value-validated ``_iterate_identities``, carried
-      forward here unchanged rather than "fixed" and made inconsistent
-      with it.
     * **Drift**: only the diagonal (within-deme) entries gain the
       ``1/population_size`` collision term -- two copies drawn from
       *different* demes can never be the same physical gene copy, so
       only same-deme identity gets that correction, matching
       :func:`_iterate_identities`'s own ``next_within``/``next_between``
       split exactly.
+    * **Mutate**: every pair of distinct copies, within or between
+      demes, keeps its identity with probability :func:`_mutation_
+      survival` (``(1 - mu)^2``, exact for per-copy infinite-alleles
+      mutation); the same-copy collision term is not scaled.
 
     Args:
         population_size: Gene-copy count ``N``, equal across every deme.
@@ -542,7 +523,7 @@ def _iterate_pairwise_identities(
         requested number of generations.
     """
     migration = np.asarray(migration_matrix, dtype=np.float64)
-    survival = _mutation_survival(mu, population_size)
+    survival = _mutation_survival(mu)
     inverse = 1.0 / population_size
     deme_count = migration.shape[0]
     diagonal = np.diag_indices(deme_count)
@@ -1173,40 +1154,43 @@ def _run_engine_pooled_shannon(
 
 
 @pytest.mark.parametrize(
-    ("mu", "population_size"),
+    ("mu", "counts"),
     [
-        (0.001, 100),
-        (0.1, 50),
-        (0.4, 3),
-        (0.9, 2),
+        (0.001, (60, 40)),
+        (0.1, (3, 1, 1)),
+        (0.4, (2, 1)),
+        (0.9, (1, 1)),
     ],
 )
-def test_mutation_survival_matches_brute_force_binomial_second_moment(
+def test_mutation_survival_matches_brute_force_per_copy_expectation(
     mu: float,
-    population_size: int,
+    counts: tuple[int, ...],
 ) -> None:
-    """The exact formula agrees with the full binomial second moment.
+    """The ``(1 - mu)^2`` factor is the per-copy mutation step's exact expectation.
 
-    Independently sums ``E[(1 - k/N)^2]`` over every possible mutant count
-    ``k`` weighted by its exact binomial probability, rather than
-    re-deriving the same algebra :func:`_mutation_survival` already uses,
-    including a high-``mu``, small-``population_size`` case
-    (``mu=0.4, population_size=3``) where the omitted ``mu(1-mu)/N`` term
-    is ``0.08`` against a base of ``0.36`` -- large enough that the
-    plain ``(1 - mu) ** 2`` approximation this exact term corrects would
-    fail this comparison outright, not merely drift outside a
-    statistical tolerance.
+    Sums ``E[sum_k x_k'^2]`` after per-copy infinite-alleles mutation over
+    every joint outcome -- allele ``k`` loses ``Binomial(n_k, mu)`` of its
+    ``n_k`` copies, each mutant a singleton -- weighted by its exact
+    probability, rather than re-deriving the algebra. The result must be
+    ``1/N + (1 - 1/N) (1 - mu)^2 F`` with ``F`` the distinct-pair identity
+    before mutation, which is what :func:`_iterate_identities` applies.
+    The high-``mu``, tiny-``N`` cases are where the earlier proportional
+    mutation step's extra ``mu (1 - mu) / N`` term would have shown.
     """
-    brute_force = math.fsum(
-        math.comb(population_size, k)
-        * mu**k
-        * (1.0 - mu) ** (population_size - k)
-        * (1.0 - k / population_size) ** 2
-        for k in range(population_size + 1)
-    )
+    size = sum(counts)
+    expected = 0.0
+    for mutants in itertools.product(*(range(n + 1) for n in counts)):
+        probability = math.prod(
+            math.comb(n, k) * mu**k * (1.0 - mu) ** (n - k)
+            for n, k in zip(counts, mutants, strict=True)
+        )
+        kept = sum(((n - k) / size) ** 2 for n, k in zip(counts, mutants, strict=True))
+        expected += probability * (kept + sum(mutants) / size**2)
+    distinct_identity = sum(n * (n - 1) for n in counts) / (size * (size - 1))
 
-    assert _mutation_survival(mu, population_size) == pytest.approx(
-        brute_force, abs=1e-12
+    assert expected == pytest.approx(
+        1.0 / size + (1.0 - 1.0 / size) * _mutation_survival(mu) * distinct_identity,
+        abs=1e-12,
     )
 
 
@@ -1483,7 +1467,7 @@ def test_pairwise_identity_recursion_applied_to_the_crow_aoki_torus() -> None:
     pairwise-identity recursion to the actual Crow & Aoki torus matrix
     (`_crow_aoki_torus_matrix`) at the paper's own `n=9, N=20, m=0.05
     (M=1.0), mu=1e-5` parameters -- the deterministic, exact-math answer
-    to "what does this project's own Migrate -> Mutate -> Drift model
+    to "what does this project's own Migrate -> Drift -> Mutate model
     predict for this topology," with no stochastic noise, no seed, and
     no replicate count involved at all (unlike
     `test_crow_aoki_torus_scenario_via_engine`, this cannot flake and
@@ -1666,7 +1650,6 @@ def _iterate_paper_identities(
     within_identity: float,
     between_identity: float,
     generations: int,
-    mutation_survival: float | None = None,
 ) -> tuple[float, float]:
     """Return ``(J0, J1)`` after ``generations`` steps of the paper's own Eq. 2/3.
 
@@ -1674,12 +1657,12 @@ def _iterate_paper_identities(
     Equations 2 and 3 (see Part 4 of the companion math document cited
     in `_paper_identity_coefficients`, above, for the full derivation),
     reading Drift -> Migrate -> Mutate each step -- the paper's own
-    order, the reverse of `fim`'s own Migrate -> Mutate -> Drift (see
-    `_iterate_identities`). Part 3.3 of the implications document (also
-    private, same caveat) found this ordering difference is not a real
-    difference once the with-replacement/distinct-pair identity
-    conversion is applied: `test_ryman_leimar_equations_2_and_3_match_
-    fims_own_recursion`, below, is the check that finding rests on.
+    order, against `fim`'s own Migrate -> Drift -> Mutate (see
+    `_iterate_identities`). The same cycle read from a different
+    starting point: once the with-replacement/distinct-pair identity
+    conversion is applied the two recursions are the same recursion
+    (`test_ryman_leimar_equations_2_and_3_match_fims_own_recursion`,
+    below).
 
     Args:
         population_size: Gene-copy count -- `fim`'s own `population_
@@ -1702,21 +1685,12 @@ def _iterate_paper_identities(
             *trajectory* comparison, not an equilibrium one (Part 7 of
             the companion math document explains why a trajectory is
             the stronger test).
-        mutation_survival: Override for the paper's own ``(1 - u)^2``
-            mutation-survival prefactor. ``None`` (the default) uses
-            the paper's own factor unmodified; `test_ryman_leimar_
-            equations_2_and_3_match_fims_own_recursion` also calls this
-            with `_mutation_survival`'s own exact-second-moment factor
-            substituted in, to isolate how much of the row-2 residual
-            in Part 3.2's own table is purely the documented mutation-
-            model difference (Part 3.3's "mutation factor" paragraph)
-            and not a bug in either recursion.
 
     Returns:
         The ``(J0, J1)`` pair after ``generations`` steps.
     """
     a, b = _paper_identity_coefficients(m, s)
-    survival = mutation_survival if mutation_survival is not None else (1.0 - mu) ** 2
+    survival = (1.0 - mu) ** 2
     inverse = 1.0 / population_size
     within = within_identity
     between = between_identity
@@ -1760,19 +1734,17 @@ def _fim_identities_to_paper_convention(
     return gs_paper, between
 
 
-# Part 3.2's own tolerances, measured over a 240-combination grid
-# (`N in {200, 2000, 20000}`, `d in {2, 5, 10, 50}`,
+# Part 3.2's own float-noise tolerances (its "row 3": both recursions with
+# the same `(1 - u)^2` mutation factor), measured over a 240-combination
+# grid (`N in {200, 2000, 20000}`, `d in {2, 5, 10, 50}`,
 # `m in {0, 1e-4, 1e-3, 1e-2, 1e-1}`, `u in {0, 1e-6, 1e-4, 1e-3}`) sampled
-# at 714 generations across each 5000-generation trajectory. This test
-# re-checks a small, representative slice of that same grid on every run,
-# not the full sweep -- these are the measured *maxima* from the larger
-# sweep, not values freshly calibrated for the smaller slice below (which
-# measures comfortably inside them; see this module's own git history for
-# the exploration that picked the slice).
-_RYMAN_LEIMAR_ROW2_TOL_G = 1.11e-3
-_RYMAN_LEIMAR_ROW2_TOL_D = 4.54e-3
-_RYMAN_LEIMAR_ROW3_TOL_G = 3.4e-7
-_RYMAN_LEIMAR_ROW3_TOL_D = 1.9e-9
+# at 714 generations across each 5000-generation trajectory. Since `fim`
+# adopted the textbook per-copy mutation step, its own recursion uses that
+# same factor, so the row-3 tolerance is the whole comparison; the looser
+# row-2 tolerances (1.11e-3 on `G_ST`, 4.54e-3 on `D`) measured the earlier
+# proportional mutation step's own `u (1 - u) / N` departure and are gone.
+_RYMAN_LEIMAR_TOL_G = 3.4e-7
+_RYMAN_LEIMAR_TOL_D = 1.9e-9
 
 
 @pytest.mark.parametrize("generations", [1, 10, 100, 1000, 5000])
@@ -1800,24 +1772,13 @@ def test_ryman_leimar_equations_2_and_3_match_fims_own_recursion(
     external check that the current suite otherwise has no equivalent
     of for this recursion.
 
-    Two comparisons, each against its own tolerance above:
-
-    1. Migration mapped and identities converted to the distinct-pair
-       convention, but each recursion keeps its own real mutation
-       model -- `fim`'s exact second moment (`_mutation_survival`)
-       against the paper's own ``(1 - u)^2``. The residual is the
-       *real, documented* difference between two correct but different
-       mutation models (Part 3.3's "mutation factor" paragraph: exact
-       for `fim`'s own binomial-count operator, exact for the paper's
-       own per-lineage infinite-alleles model), not an error in either
-       recursion.
-    2. The same, but `_iterate_paper_identities` also substitutes
-       `fim`'s own `_mutation_survival` factor via its own
-       ``mutation_survival`` override -- isolating whether the two
-       recursions are the *same recursion* once every convention and
-       every model difference is accounted for. What is left is float
-       noise accumulated over up to 5000 generations, not a structural
-       residual.
+    Migration mapped and identities converted to the distinct-pair
+    convention, the two are the *same recursion*: both use the textbook
+    per-copy mutation factor ``(1 - u)^2``, and what is left is float
+    noise accumulated over up to 5000 generations. Before `fim` adopted
+    the textbook mutation step, its own factor
+    ``(1 - u)^2 + u (1 - u) / N`` left a structural residual of up to
+    0.11% on `G_ST` and 0.45% on `D` here.
     """
     m_paper = m * d / (d - 1)
 
@@ -1846,24 +1807,8 @@ def test_ryman_leimar_equations_2_and_3_match_fims_own_recursion(
     )
     paper_g_st, paper_d = _identities_to_statistics(paper_within, paper_between, d)
 
-    assert paper_g_st == pytest.approx(fim_g_st, abs=_RYMAN_LEIMAR_ROW2_TOL_G)
-    assert paper_d == pytest.approx(fim_d, abs=_RYMAN_LEIMAR_ROW2_TOL_D)
-
-    matched_within, matched_between = _iterate_paper_identities(
-        population_size=population_size,
-        m=m_paper,
-        mu=mu,
-        s=d,
-        within_identity=1.0,
-        between_identity=0.0,
-        generations=generations,
-        mutation_survival=_mutation_survival(mu, population_size),
-    )
-    matched_g_st, matched_d = _identities_to_statistics(
-        matched_within, matched_between, d
-    )
-    assert matched_g_st == pytest.approx(fim_g_st, abs=_RYMAN_LEIMAR_ROW3_TOL_G)
-    assert matched_d == pytest.approx(fim_d, abs=_RYMAN_LEIMAR_ROW3_TOL_D)
+    assert paper_g_st == pytest.approx(fim_g_st, abs=_RYMAN_LEIMAR_TOL_G)
+    assert paper_d == pytest.approx(fim_d, abs=_RYMAN_LEIMAR_TOL_D)
 
 
 @pytest.mark.parametrize(
@@ -2601,7 +2546,7 @@ def test_dear_nolan_high_migration_scenario_via_engine() -> None:
     check alone would not (a biased operator could coincidentally still
     land near 0.02/0.90 from a *different* starting point). This check's
     own oracle (`_identity_fixed_point`) assumes today's specific
-    Migrate -> Mutate -> Drift pipeline order, so it is expected to need
+    Migrate -> Drift -> Mutate pipeline order, so it is expected to need
     re-deriving -- not necessarily to signal an engine regression -- once
     a core refactor changes that order; see the labeled assertions below.
 
@@ -2613,7 +2558,7 @@ def test_dear_nolan_high_migration_scenario_via_engine() -> None:
     state rather than an undifferentiated one.
 
     Derivation (no tuning): ``(jw*, jb*)`` is the exact identity fixed point of
-    the Migrate -> Mutate -> Drift recursion (:func:`_identity_fixed_point`).
+    the Migrate -> Drift -> Mutate recursion (:func:`_identity_fixed_point`).
     Each deme is given ``S = 41`` alleles shared by all demes at frequency
     ``fs = sqrt(jb*/S)`` and ``P`` private alleles at
     ``fp = (1 - S*fs)/P``, with ``P = round((1 - S*fs)^2 / (jw* - jb*))``

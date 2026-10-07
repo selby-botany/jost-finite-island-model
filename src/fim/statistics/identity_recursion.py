@@ -10,7 +10,7 @@ function of two expected identities,
 - `within` = `E[sum_k x_k^2]`, two gene copies drawn from one deme, and
 - `between` = `E[sum_k x_k y_k]`, one copy drawn from each of two demes,
 
-and one generation of the engine (migrate, mutate, drift) maps that pair to
+and one generation of the engine (migrate, drift, mutate) maps that pair to
 a new pair by an *affine* rule, `x' = A x + c` with a 2 by 2 matrix `A`. The
 derivation is in the design document `20260911-claude-sonnet-5-derived-
 differentiation-trajectory-design.md` (approach B, iterate the verified
@@ -191,10 +191,21 @@ def identity_recursion(
 ) -> IdentityRecursion:
     """Solve the engine's identity recursion for one configuration.
 
-    One generation is migrate, mutate, drift. Migration maps the two
-    identities by fixed coefficients of `m` and `d`; mutation scales them
-    by the exact second moment `(1 - mu)^2 + mu (1 - mu) / N`; drift adds
-    `1/N` to within-deme identity and keeps `1 - 1/N` of the rest.
+    One generation is migrate, drift, mutate — the textbook Wright-Fisher
+    island model. Migration maps the two identities by fixed coefficients
+    of `m` and `d`; drift adds `1/N` to within-deme identity (the chance
+    two copies drawn with replacement are the same copy) and keeps
+    `1 - 1/N` of the rest; mutation then keeps two distinct copies
+    identical only if neither mutated, a factor `(1 - mu)^2` (one copy
+    compared with itself stays identical, so the `1/N` term is not
+    scaled):
+
+        within'  = 1/N + (1 - 1/N) (1 - mu)^2 within_migrated
+        between' = (1 - mu)^2 between_migrated
+
+    Without migration, and for two *distinct* copies
+    (`F = (within - 1/N) / (1 - 1/N)`), this is the textbook
+    `F' = (1 - mu)^2 [1/N + (1 - 1/N) F]`.
 
     Args:
         population_size: Gene copies `N` per deme.
@@ -229,7 +240,7 @@ def identity_recursion(
         + shared * shared * ((d - 1) ** 2 - (d - 2))
     )
     inverse_size = 1.0 / population_size
-    survival = (1.0 - mu) ** 2 + mu * (1.0 - mu) * inverse_size
+    survival = (1.0 - mu) ** 2
     keep = (1.0 - inverse_size) * survival
     a11 = keep * within_from_within
     a12 = keep * within_from_between
@@ -335,11 +346,11 @@ def matrix_identity_trajectory(
 ) -> dict[str, list[float]]:
     """Return the expected statistics at each of `generations`.
 
-    One generation is `J -> S (M J M^T)` with `M` the row-stochastic
-    migration matrix, `S` the mutation survival (`(1 - mu)^2` plus the
-    same-copy correction `mu (1 - mu) / N`, averaged over the two demes'
-    sizes so it equals `identity_recursion`'s factor for equal sizes), and
-    each deme's diagonal entry then gaining drift's `1/N_i`. That is
+    One generation (migrate, drift, mutate) is `J -> (1 - mu)^2 M J M^T`
+    off the diagonal and `J_ii -> 1/N_i + (1 - 1/N_i)(1 - mu)^2
+    (M J M^T)_ii` on it, with `M` the row-stochastic migration matrix:
+    drift's same-copy term `1/N_i` is a copy compared with itself, which
+    mutation cannot make differ. That is
     affine in the flattened matrix, `x' = A x + c`, so
     `x_t = x* + V diag(lambda^t) V^-1 (x_0 - x*)` (eigenvalues may be
     complex; the result is real). `D`, `G_ST`, `H_S`, `H_T` and `H_ST` use
@@ -375,13 +386,10 @@ def matrix_identity_trajectory(
 
     # Operator on the row-major flattened identity matrix.
     inverse_size = 1.0 / np.asarray(deme_sizes, dtype=np.float64)
-    excess = mutation * (1.0 - mutation)
-    survival = (1.0 - mutation) ** 2 + excess * (
-        inverse_size[:, None] + inverse_size[None, :]
-    ) / 2.0
-    coefficient = survival.copy()
+    survival = (1.0 - mutation) ** 2
+    coefficient = np.full((d, d), survival)
     diagonal = np.diag_indices(d)
-    coefficient[diagonal] = (1.0 - inverse_size) * survival[diagonal]
+    coefficient[diagonal] = (1.0 - inverse_size) * survival
     operator = coefficient.ravel()[:, None] * np.kron(matrix, matrix)
     drift = np.zeros((d, d))
     drift[diagonal] = inverse_size

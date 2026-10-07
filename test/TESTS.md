@@ -4791,9 +4791,9 @@ def test_panmictic_burn_in_for_the_equilibrium_split_example() -> None
 600 gene copies at `mu` 0.001: tau about 273, burn-in about 4.6 tau.
 
 The bundled equilibrium-split example (3 demes of 200, haploid). Its
-`tau` exceeds the one-deme recursion's by a relative `mu tau / N`
-(about 0.05% here), and its expected heterozygosity is close to
-`theta / (1 + theta)`, `theta = 2 N mu = 1.2`.
+`tau` is exactly the one-deme recursion's (both are the textbook
+`1 / (1 - (1 - 1/N)(1 - mu)^2)`), and its expected heterozygosity is
+close to `theta / (1 + theta)`, `theta = 2 N mu = 1.2`.
 
 <a id="convergence.test_defaults.test_panmictic_burn_in_bounds_the_identity_recursion_from_any_start"></a>
 
@@ -4806,8 +4806,10 @@ def test_panmictic_burn_in_bounds_the_identity_recursion_from_any_start(
 
 After the burn-in, the expected identity is within tolerance of F*.
 
-Iterates the expected recursion from both extremes (every copy
-identical, and none) and checks the departure at the burn-in.
+Iterates the textbook expected recursion (drift, then each copy
+mutates: `F' = 1/N + (1 - 1/N)(1 - mu)^2 F`) from both extremes
+(every copy identical, and none) and checks the departure at the
+burn-in.
 
 <a id="convergence.test_defaults.test_panmictic_burn_in_follows_the_slowest_locus_and_rejects_bad_input"></a>
 
@@ -33703,7 +33705,7 @@ internal/deep):
   refactor that preserves the model's own scientific behavior. Each
   such test's own docstring says "**Functional**" explicitly.
 * **Internal** tests and helpers assume today's specific Migrate ->
-  Mutate -> Drift pipeline order: the exact per-generation identity
+  Drift -> Mutate pipeline order: the exact per-generation identity
   recursion (:func:`_iterate_identities` and everything built on it --
   :func:`_pipeline_identity_dynamics`, :func:`_identity_fixed_point`,
   :func:`_iterate_pairwise_identities`, :func:`_pairwise_identity_fixed_
@@ -33858,35 +33860,34 @@ bit-identical in general, there is nothing to band here — either
 this config reproduces that identically too, or the general proof
 has a real, narrower exception this specific shape exposes.
 
-<a id="validation.test_simulator_equilibrium.test_mutation_survival_matches_brute_force_binomial_second_moment"></a>
+<a id="validation.test_simulator_equilibrium.test_mutation_survival_matches_brute_force_per_copy_expectation"></a>
 
-#### test\_mutation\_survival\_matches\_brute\_force\_binomial\_second\_moment
+#### test\_mutation\_survival\_matches\_brute\_force\_per\_copy\_expectation
 
 ```python
 @pytest.mark.parametrize(
-    ("mu", "population_size"),
+    ("mu", "counts"),
     [
-        (0.001, 100),
-        (0.1, 50),
-        (0.4, 3),
-        (0.9, 2),
+        (0.001, (60, 40)),
+        (0.1, (3, 1, 1)),
+        (0.4, (2, 1)),
+        (0.9, (1, 1)),
     ],
 )
-def test_mutation_survival_matches_brute_force_binomial_second_moment(
-        mu: float, population_size: int) -> None
+def test_mutation_survival_matches_brute_force_per_copy_expectation(
+        mu: float, counts: tuple[int, ...]) -> None
 ```
 
-The exact formula agrees with the full binomial second moment.
+The ``(1 - mu)^2`` factor is the per-copy mutation step's exact expectation.
 
-Independently sums ``E[(1 - k/N)^2]`` over every possible mutant count
-``k`` weighted by its exact binomial probability, rather than
-re-deriving the same algebra :func:`_mutation_survival` already uses,
-including a high-``mu``, small-``population_size`` case
-(``mu=0.4, population_size=3``) where the omitted ``mu(1-mu)/N`` term
-is ``0.08`` against a base of ``0.36`` -- large enough that the
-plain ``(1 - mu) ** 2`` approximation this exact term corrects would
-fail this comparison outright, not merely drift outside a
-statistical tolerance.
+Sums ``E[sum_k x_k'^2]`` after per-copy infinite-alleles mutation over
+every joint outcome -- allele ``k`` loses ``Binomial(n_k, mu)`` of its
+``n_k`` copies, each mutant a singleton -- weighted by its exact
+probability, rather than re-deriving the algebra. The result must be
+``1/N + (1 - 1/N) (1 - mu)^2 F`` with ``F`` the distinct-pair identity
+before mutation, which is what :func:`_iterate_identities` applies.
+The high-``mu``, tiny-``N`` cases are where the earlier proportional
+mutation step's extra ``mu (1 - mu) / N`` term would have shown.
 
 <a id="validation.test_simulator_equilibrium.test_identity_recursion_oracle_matches_formula_and_published"></a>
 
@@ -34043,7 +34044,7 @@ Applies the same general, now cross-validated (see the test above)
 pairwise-identity recursion to the actual Crow & Aoki torus matrix
 (`_crow_aoki_torus_matrix`) at the paper's own `n=9, N=20, m=0.05
 (M=1.0), mu=1e-5` parameters -- the deterministic, exact-math answer
-to "what does this project's own Migrate -> Mutate -> Drift model
+to "what does this project's own Migrate -> Drift -> Mutate model
 predict for this topology," with no stochastic noise, no seed, and
 no replicate count involved at all (unlike
 `test_crow_aoki_torus_scenario_via_engine`, this cannot flake and
@@ -34171,24 +34172,13 @@ two, under the R1 migration/identity mapping, is a genuinely
 external check that the current suite otherwise has no equivalent
 of for this recursion.
 
-Two comparisons, each against its own tolerance above:
-
-1. Migration mapped and identities converted to the distinct-pair
-   convention, but each recursion keeps its own real mutation
-   model -- `fim`'s exact second moment (`_mutation_survival`)
-   against the paper's own ``(1 - u)^2``. The residual is the
-   *real, documented* difference between two correct but different
-   mutation models (Part 3.3's "mutation factor" paragraph: exact
-   for `fim`'s own binomial-count operator, exact for the paper's
-   own per-lineage infinite-alleles model), not an error in either
-   recursion.
-2. The same, but `_iterate_paper_identities` also substitutes
-   `fim`'s own `_mutation_survival` factor via its own
-   ``mutation_survival`` override -- isolating whether the two
-   recursions are the *same recursion* once every convention and
-   every model difference is accounted for. What is left is float
-   noise accumulated over up to 5000 generations, not a structural
-   residual.
+Migration mapped and identities converted to the distinct-pair
+convention, the two are the *same recursion*: both use the textbook
+per-copy mutation factor ``(1 - u)^2``, and what is left is float
+noise accumulated over up to 5000 generations. Before `fim` adopted
+the textbook mutation step, its own factor
+``(1 - u)^2 + u (1 - u) / N`` left a structural residual of up to
+0.11% on `G_ST` and 0.45% on `D` here.
 
 <a id="validation.test_simulator_equilibrium.test_ryman_leimar_equation_4_reproduces_figure_1"></a>
 
@@ -34691,7 +34681,7 @@ the fixed point, catching a class of regression the published-value
 check alone would not (a biased operator could coincidentally still
 land near 0.02/0.90 from a *different* starting point). This check's
 own oracle (`_identity_fixed_point`) assumes today's specific
-Migrate -> Mutate -> Drift pipeline order, so it is expected to need
+Migrate -> Drift -> Mutate pipeline order, so it is expected to need
 re-deriving -- not necessarily to signal an engine regression -- once
 a core refactor changes that order; see the labeled assertions below.
 
@@ -34703,7 +34693,7 @@ checks above therefore start from the same derived near-equilibrium
 state rather than an undifferentiated one.
 
 Derivation (no tuning): ``(jw*, jb*)`` is the exact identity fixed point of
-the Migrate -> Mutate -> Drift recursion (:func:`_identity_fixed_point`).
+the Migrate -> Drift -> Mutate recursion (:func:`_identity_fixed_point`).
 Each deme is given ``S = 41`` alleles shared by all demes at frequency
 ``fs = sqrt(jb*/S)`` and ``P`` private alleles at
 ``fp = (1 - S*fs)/P``, with ``P = round((1 - S*fs)^2 / (jw* - jb*))``

@@ -1571,9 +1571,10 @@ def recursion_relaxation_time(*, deme_sizes: Sequence[int],
 
 Return `tau` from the identity recursion's slowest mode.
 
-The pairwise identity matrix `J` updates as migrate (`M J Mᵀ`), mutate
-(scale by `(1 - mu)²`), then drift (each diagonal entry `J[i][i]` keeps
-a fraction `1 - 1/N_i`). Flattening `J` makes this a `d² by d²` matrix;
+The pairwise identity matrix `J` updates as migrate (`M J Mᵀ`), drift
+(each diagonal entry `J[i][i]` keeps a fraction `1 - 1/N_i`), then
+mutate (scale by `(1 - mu)²`) — exactly the engine's own textbook
+step, `fim.model.operators.step`. Flattening `J` makes this a `d² by d²` matrix;
 its spectral radius `rho` gives `tau = 1 / (1 - rho)`.
 
 **Arguments**:
@@ -1661,23 +1662,22 @@ def panmictic_equilibration(*, total_size: int,
 Return the burn-in one panmictic population needs to reach equilibrium.
 
 The single-deme case of the identity recursion behind
-`recursion_relaxation_time`, written exactly for this project's own
-operators: with `N` gene copies, `fim.model.operators.mutate` (a
-`Binomial(N, mu)` number `k` of fresh alleles of frequency `1/N`
-each, every existing allele's mass scaled by `1 - k/N`) and then
-`drift` (`N` copies drawn with replacement), the probability `F`
+`recursion_relaxation_time`, exactly as this project's own operators
+run it: with `N` gene copies, `fim.model.operators.drift` (`N`
+copies drawn with replacement) and then `mutate` (each copy,
+independently, becomes a fresh allele with probability `mu`) — the
+textbook Wright-Fisher infinite-alleles model — the probability `F`
 that two gene copies drawn with replacement are identical obeys, in
-expectation, `F' = 1/N + (1 - 1/N)(a F + mu/N)` with
-`a = (1 - mu)² + mu (1 - mu)/N`. Writing `rho = (1 - 1/N) a`, it
-settles at `F* = (1/N + (1 - 1/N) mu/N) / (1 - rho)` and its
-departure from `F*` shrinks by exactly `rho` every generation. `F`
-lies in `[0, 1]`, so after `t` generations the expected departure is
-at most `rho^t` whatever the starting draw was; the burn-in is the
-first `t` with `rho^t <= tolerance`, about `tau ln(1 / tolerance)`
-with `tau = 1 / (1 - rho)`, longer by a relative `mu tau / N` than
-`recursion_relaxation_time` with one deme (about
-`1 / (2 mu + 1/N)`), whose mutation step omits the `a` correction.
-`tau` is also the time scale on which the population's whole
+expectation, `F' = 1/N + (1 - 1/N)(1 - mu)² F` (for two distinct
+copies, the textbook `F' = (1 - mu)² [1/N + (1 - 1/N) F]`). Writing
+`rho = (1 - 1/N)(1 - mu)²`, it settles at `F* = (1/N) / (1 - rho)`
+and its departure from `F*` shrinks by exactly `rho` every
+generation. `F` lies in `[0, 1]`, so after `t` generations the
+expected departure is at most `rho^t` whatever the starting draw
+was; the burn-in is the first `t` with `rho^t <= tolerance`, about
+`tau ln(1 / tolerance)` with `tau = 1 / (1 - rho)` (about
+`1 / (2 mu + 1/N)`), the same `tau` as `recursion_relaxation_time`
+with one deme. `tau` is also the time scale on which the population's whole
 genealogy forgets its starting state (two
 ancestral lineages merge or one mutates at rate about `1/N + 2 mu`),
 so the burn-in mixes more than the first moment.
@@ -3308,7 +3308,7 @@ This is the one function everything else in the `fim` package
 (the command line, the desktop app, every test) ultimately calls to
 actually run a simulation. Given a validated configuration
 (`params`), it simulates one population's generations one at a time
-— migration, then mutation, then drift, each generation, following
+— migration, then drift, then mutation, each generation, following
 `fim.model.operators.step` — until either its watched statistic(s)
 settle down (convergence) or the hard generation cap is reached,
 then returns everything about the finished run. If
@@ -21300,7 +21300,7 @@ function of two expected identities,
 - `within` = `E[sum_k x_k^2]`, two gene copies drawn from one deme, and
 - `between` = `E[sum_k x_k y_k]`, one copy drawn from each of two demes,
 
-and one generation of the engine (migrate, mutate, drift) maps that pair to
+and one generation of the engine (migrate, drift, mutate) maps that pair to
 a new pair by an *affine* rule, `x' = A x + c` with a 2 by 2 matrix `A`. The
 derivation is in the design document `20260911-claude-sonnet-5-derived-
 differentiation-trajectory-design.md` (approach B, iterate the verified
@@ -21461,10 +21461,21 @@ def identity_recursion(population_size: int, m: float, mu: float,
 
 Solve the engine's identity recursion for one configuration.
 
-One generation is migrate, mutate, drift. Migration maps the two
-identities by fixed coefficients of `m` and `d`; mutation scales them
-by the exact second moment `(1 - mu)^2 + mu (1 - mu) / N`; drift adds
-`1/N` to within-deme identity and keeps `1 - 1/N` of the rest.
+One generation is migrate, drift, mutate — the textbook Wright-Fisher
+island model. Migration maps the two identities by fixed coefficients
+of `m` and `d`; drift adds `1/N` to within-deme identity (the chance
+two copies drawn with replacement are the same copy) and keeps
+`1 - 1/N` of the rest; mutation then keeps two distinct copies
+identical only if neither mutated, a factor `(1 - mu)^2` (one copy
+compared with itself stays identical, so the `1/N` term is not
+scaled):
+
+within'  = 1/N + (1 - 1/N) (1 - mu)^2 within_migrated
+between' = (1 - mu)^2 between_migrated
+
+Without migration, and for two *distinct* copies
+(`F = (within - 1/N) / (1 - 1/N)`), this is the textbook
+`F' = (1 - mu)^2 [1/N + (1 - 1/N) F]`.
 
 **Arguments**:
 
@@ -21526,11 +21537,11 @@ def matrix_identity_trajectory(
 
 Return the expected statistics at each of `generations`.
 
-One generation is `J -> S (M J M^T)` with `M` the row-stochastic
-migration matrix, `S` the mutation survival (`(1 - mu)^2` plus the
-same-copy correction `mu (1 - mu) / N`, averaged over the two demes'
-sizes so it equals `identity_recursion`'s factor for equal sizes), and
-each deme's diagonal entry then gaining drift's `1/N_i`. That is
+One generation (migrate, drift, mutate) is `J -> (1 - mu)^2 M J M^T`
+off the diagonal and `J_ii -> 1/N_i + (1 - 1/N_i)(1 - mu)^2
+(M J M^T)_ii` on it, with `M` the row-stochastic migration matrix:
+drift's same-copy term `1/N_i` is a copy compared with itself, which
+mutation cannot make differ. That is
 affine in the flattened matrix, `x' = A x + c`, so
 `x_t = x* + V diag(lambda^t) V^-1 (x_0 - x*)` (eigenvalues may be
 complex; the result is real). `D`, `G_ST`, `H_S`, `H_T` and `H_ST` use
