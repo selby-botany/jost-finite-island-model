@@ -1271,9 +1271,11 @@
        runs," not what experiment this form asks, and moved into the
        Settings dialog (`#modal-settings`) as global defaults instead --
        Settings' own comment has the full field-by-field account.
-       `replicate_tolerance`/`replicate_minimum`, and `track_expensive_
-       statistics`/the sigma-band pair, stayed here -- real per-run,
-       scientific/batch-tuning choices, not administrative defaults. -->
+       `replicate_tolerance`/`replicate_minimum` and the sigma-band pair
+       stayed here -- real per-run, scientific/batch-tuning choices, not
+       administrative defaults. `track_expensive_statistics` has no
+       control any more: Settings' "Statistics shown" decides it
+       (`Api._merge_default_run_settings`). -->
   <section id="screen-configure" class="screen" hidden>
     <div id="configure-banner" class="banner" hidden></div>
     <!-- See the Run card's identical notice (`#run-run-settings-notice`). -->
