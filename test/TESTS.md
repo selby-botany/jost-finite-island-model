@@ -87,6 +87,7 @@ Every test module, fixture, and test function documented here in full; `doc/fim-
   - [`test_recent_runs`](#gui.test_recent_runs)
   - [`test_results_screen`](#gui.test_results_screen)
   - [`test_run_reuse`](#gui.test_run_reuse)
+  - [`test_run_settings_notice_screen`](#gui.test_run_settings_notice_screen)
   - [`test_runner`](#gui.test_runner)
   - [`test_running_screen`](#gui.test_running_screen)
   - [`test_scatter_styles`](#gui.test_scatter_styles)
@@ -9543,15 +9544,48 @@ No shipped example lacks a configuration any more, so a fixture
 catalog supplies one (`config_yaml: null`, as the catalog generator
 writes for a directory without `config.yaml`).
 
-<a id="gui.test_app_api.test_load_example_syncs_settings_execution_defaults"></a>
+<a id="gui.test_app_api.test_load_example_leaves_settings_unchanged"></a>
 
-#### test\_load\_example\_syncs\_settings\_execution\_defaults
+#### test\_load\_example\_leaves\_settings\_unchanged
 
 ```python
-def test_load_example_syncs_settings_execution_defaults() -> None
+def test_load_example_leaves_settings_unchanged() -> None
 ```
 
-Loading an example makes its execution fields Settings' defaults.
+Loading an example never changes saved Settings (the reported defect).
+
+<a id="gui.test_app_api.test_load_example_lists_exactly_the_differing_run_settings"></a>
+
+#### test\_load\_example\_lists\_exactly\_the\_differing\_run\_settings
+
+```python
+def test_load_example_lists_exactly_the_differing_run_settings() -> None
+```
+
+A lineal, one-replicate example against auto/200 Settings differs in both.
+
+`unequal-island-sizes-with-a-migration-hub` names `engine_backend:
+lineal` and one replicate and leaves every other run setting at its
+library default, which the starter Settings share.
+
+<a id="gui.test_app_api.test_every_example_reports_exactly_its_differing_run_settings"></a>
+
+#### test\_every\_example\_reports\_exactly\_its\_differing\_run\_settings
+
+```python
+@pytest.mark.parametrize(
+    "example_id",
+    [
+        example.example_id
+        for example in presets_module.load_catalog(app_module._webui_directory(
+        )).examples if example.yaml_text is not None
+    ],
+)
+def test_every_example_reports_exactly_its_differing_run_settings(
+        example_id: str) -> None
+```
+
+The differences payload names exactly the differing fields, for every example.
 
 <a id="gui.test_app_api.test_loading_the_vector_example_runs_with_its_own_run_settings"></a>
 
@@ -9568,15 +9602,72 @@ names `generational-vector`, which the starter model cannot use, so
 the saved run settings were judged invalid against the starter and
 silently replaced by the starter's (200 replicates, derived window
 and cap, tolerance 0.01). Configure's form does not submit the run
-settings at all; they come from Settings at submission
-(`Api._merge_default_run_settings`), exactly as here.
+settings; the page adds the loaded configuration's own, which
+`Api._merge_default_run_settings` keeps over Settings — exactly as
+here, with Settings left at the starter's values.
 
-<a id="gui.test_app_api.test_list_examples_does_not_sync_settings_execution_defaults"></a>
+<a id="gui.test_app_api.test_start_run_after_a_load_uses_the_loaded_run_settings"></a>
 
-#### test\_list\_examples\_does\_not\_sync\_settings\_execution\_defaults
+#### test\_start\_run\_after\_a\_load\_uses\_the\_loaded\_run\_settings
 
 ```python
-def test_list_examples_does_not_sync_settings_execution_defaults() -> None
+def test_start_run_after_a_load_uses_the_loaded_run_settings(
+        monkeypatch: pytest.MonkeyPatch) -> None
+```
+
+`start_run` builds the run from the loaded run settings, not from Settings.
+
+<a id="gui.test_app_api.test_making_loaded_run_settings_my_settings_updates_settings"></a>
+
+#### test\_making\_loaded\_run\_settings\_my\_settings\_updates\_settings
+
+```python
+def test_making_loaded_run_settings_my_settings_updates_settings() -> None
+```
+
+The "Make these my Settings" button's save, through the existing path.
+
+The page saves the loaded run settings with `set_default_run_settings`,
+as the Settings dialog does; `max_workers`, a machine setting no
+configuration names, is kept.
+
+<a id="gui.test_app_api.test_get_run_setting_differences_follows_saved_settings"></a>
+
+#### test\_get\_run\_setting\_differences\_follows\_saved\_settings
+
+```python
+def test_get_run_setting_differences_follows_saved_settings() -> None
+```
+
+After Settings change, the comparison is made against the new Settings.
+
+<a id="gui.test_app_api.test_new_configuration_after_a_load_uses_saved_settings"></a>
+
+#### test\_new\_configuration\_after\_a\_load\_uses\_saved\_settings
+
+```python
+def test_new_configuration_after_a_load_uses_saved_settings() -> None
+```
+
+A fresh form after a load carries Settings' run settings, not the load's.
+
+<a id="gui.test_app_api.test_load_yaml_leaves_settings_unchanged"></a>
+
+#### test\_load\_yaml\_leaves\_settings\_unchanged
+
+```python
+def test_load_yaml_leaves_settings_unchanged(
+        tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None
+```
+
+A YAML file's run settings come back for the run; Settings are untouched.
+
+<a id="gui.test_app_api.test_list_examples_does_not_change_settings"></a>
+
+#### test\_list\_examples\_does\_not\_change\_settings
+
+```python
+def test_list_examples_does_not_change_settings() -> None
 ```
 
 Listing probes every example's loadability without touching Settings.
@@ -9715,22 +9806,19 @@ across the example's unequal loci; the form once refused that as "a
 per-locus mu". The recovered `mu_b` must reproduce the rates exactly,
 so a run from the form has the same parameters as one from the file.
 
-<a id="gui.test_app_api.test_load_preset_syncs_settings_execution_defaults"></a>
+<a id="gui.test_app_api.test_load_preset_applies_its_run_settings_to_the_run_only"></a>
 
-#### test\_load\_preset\_syncs\_settings\_execution\_defaults
+#### test\_load\_preset\_applies\_its\_run\_settings\_to\_the\_run\_only
 
 ```python
-def test_load_preset_syncs_settings_execution_defaults() -> None
+def test_load_preset_applies_its_run_settings_to_the_run_only() -> None
 ```
 
-Loading a preset makes its own execution fields the new session default.
+A preset's run settings come back for the run; Settings are untouched.
 
-A real, reported request: `engine_backend`/`n_replicates`/etc. are
-Settings-only fields now (Configure's own `<form>` has no live
-control for any of them), so a submitted run would otherwise
-silently ignore whatever a just-loaded preset named in favor of
-whatever Settings already held — `load_preset`, unlike
-`get_preset_form_values` it wraps, closes that gap.
+Replaces the earlier behavior, where loading a preset copied its
+`engine_backend`/`n_replicates`/etc. into Settings for good, so one
+preset changed every later New configuration.
 
 <a id="gui.test_app_api.test_load_preset_leaves_max_workers_untouched"></a>
 
@@ -9752,22 +9840,19 @@ def test_load_preset_of_an_unknown_id_does_not_touch_settings() -> None
 
 A failed load never overwrites Settings with nothing.
 
-<a id="gui.test_app_api.test_list_presets_does_not_sync_settings_execution_defaults"></a>
+<a id="gui.test_app_api.test_list_presets_does_not_change_settings"></a>
 
-#### test\_list\_presets\_does\_not\_sync\_settings\_execution\_defaults
+#### test\_list\_presets\_does\_not\_change\_settings
 
 ```python
-def test_list_presets_does_not_sync_settings_execution_defaults() -> None
+def test_list_presets_does_not_change_settings() -> None
 ```
 
-Merely listing presets must never silently overwrite Settings' own defaults.
+Merely listing presets never changes Settings' own defaults.
 
-`list_presets` calls `get_preset_form_values` (not `load_preset`)
-once per preset, purely to compute each one's own `loadable` flag —
-if the sync `load_preset` performs lived in `get_preset_form_values`
-instead, opening the picker at all would silently clobber whatever
-Settings held with the *last* preset checked, whether or not the
-user ever chose it.
+`list_presets` calls `get_preset_form_values` once per preset,
+purely to compute each one's own `loadable` flag. No load changes
+Settings any more; this guards the probe all the same.
 
 <a id="gui.test_app_api.test_every_builtin_preset_loads_into_form_values"></a>
 
@@ -14908,6 +14993,48 @@ def test_run_setting_error_names_the_problem_of_one_field_only() -> None
 
 One field's own check, worded as `SimulationParams` words it.
 
+<a id="gui.test_config_form.test_every_run_setting_has_a_plain_language_label"></a>
+
+#### test\_every\_run\_setting\_has\_a\_plain\_language\_label
+
+```python
+def test_every_run_setting_has_a_plain_language_label() -> None
+```
+
+The differences notice can name every run setting in words.
+
+<a id="gui.test_config_form.test_run_setting_differences_lists_only_fields_whose_values_differ"></a>
+
+#### test\_run\_setting\_differences\_lists\_only\_fields\_whose\_values\_differ
+
+```python
+def test_run_setting_differences_lists_only_fields_whose_values_differ(
+) -> None
+```
+
+Equal values spelled differently are not differences; real ones are listed.
+
+<a id="gui.test_config_form.test_run_setting_differences_shows_blank_values_as_words"></a>
+
+#### test\_run\_setting\_differences\_shows\_blank\_values\_as\_words
+
+```python
+def test_run_setting_differences_shows_blank_values_as_words() -> None
+```
+
+Blank concurrency reads "unlimited"; a blank derived cap reads "auto".
+
+<a id="gui.test_config_form.test_run_setting_differences_skips_fields_missing_from_either_side"></a>
+
+#### test\_run\_setting\_differences\_skips\_fields\_missing\_from\_either\_side
+
+```python
+def test_run_setting_differences_skips_fields_missing_from_either_side(
+) -> None
+```
+
+Only fields both sides carry are compared.
+
 <a id="gui.test_config_modal_dialogs"></a>
 
 # gui.test\_config\_modal\_dialogs
@@ -15234,7 +15361,12 @@ def test_load_run_configuration_gives_an_editable_copy_of_a_seeded_example(
         results: Path, bundle: Path) -> None
 ```
 
-"Run it": labels to the boxes, `_` keys dropped, Settings synced.
+"Run it": labels to the boxes, `_` keys dropped, Settings untouched.
+
+The run's own run settings come back for the run, with exactly the
+fields that differ from the starter Settings listed: the fixture's
+one replicate, cap of 10, window of 4 and tolerance of 1.0, and its
+engine, which the configuration leaves at the library default.
 
 <a id="gui.test_examples_bridge.test_load_run_configuration_falls_back_to_the_manifest"></a>
 
@@ -20031,6 +20163,69 @@ Read only after `_wait_idle`: the comparison runs synchronously
 on the run's own drain thread before it clears the in-flight
 guard, so once idle, a push that was ever going to be sent has
 been.
+
+<a id="gui.test_run_settings_notice_screen"></a>
+
+# gui.test\_run\_settings\_notice\_screen
+
+Headless functional tests for a loaded configuration's run settings.
+
+Loading a configuration (here an example, through the real Examples
+dialog) applies its run settings -- engine, replicates and the rest of
+`config_form.DEFAULT_RUN_SETTING_FIELD_NAMES` -- to that run only, never
+to saved Settings. The page then shows a notice listing each run
+setting that differs from Settings, with "Make these my Settings"
+(`screens/run-settings-notice.js`).
+
+`test_app_api.py` proves the bridge half as plain Python calls; these
+tests prove the page wires it: the notice and the parameter strip item,
+the values the Run button actually submits, Settings left alone until
+the button is pressed, and New configuration going back to Settings.
+
+Every wait is on a ready flag or a settled counter the page sets
+(`__fimExampleLoadSettled`, `__fimValidationPending`,
+`__fimRunSettingsNoticeSettled`, `__fimRunViewReady`), polled with
+`poll_or_fail`, so the outcome does not depend on how fast the machine
+is.
+
+<a id="gui.test_run_settings_notice_screen.test_loading_a_lineal_example_runs_it_without_changing_settings"></a>
+
+#### test\_loading\_a\_lineal\_example\_runs\_it\_without\_changing\_settings
+
+```python
+def test_loading_a_lineal_example_runs_it_without_changing_settings(
+        _isolate_gui_preferences: Path, window: webview.Window,
+        monkeypatch: pytest.MonkeyPatch) -> None
+```
+
+Notice lists the differences; the run uses the example; Settings stay.
+
+Settings are the automatic engine with 200 replicates; the example
+is lineal with one replicate. The run itself is intercepted where a
+scalar run would start (`Api._start_scalar_run`), so the test sees
+the exact parameters the Run button produced without running them.
+
+<a id="gui.test_run_settings_notice_screen.test_new_configuration_after_a_load_uses_settings_again"></a>
+
+#### test\_new\_configuration\_after\_a\_load\_uses\_settings\_again
+
+```python
+def test_new_configuration_after_a_load_uses_settings_again(
+        _isolate_gui_preferences: Path, window: webview.Window) -> None
+```
+
+New configuration drops the example's run settings and the notice.
+
+<a id="gui.test_run_settings_notice_screen.test_a_dismissed_notice_comes_back_from_the_parameter_strip"></a>
+
+#### test\_a\_dismissed\_notice\_comes\_back\_from\_the\_parameter\_strip
+
+```python
+def test_a_dismissed_notice_comes_back_from_the_parameter_strip(
+        _isolate_gui_preferences: Path, window: webview.Window) -> None
+```
+
+Dismiss hides the notice; the strip item stays and brings it back.
 
 <a id="gui.test_runner"></a>
 

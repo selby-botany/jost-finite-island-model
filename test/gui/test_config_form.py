@@ -1535,3 +1535,69 @@ def test_run_setting_error_names_the_problem_of_one_field_only() -> None:
     # A field valid alone is valid here even if another field it could
     # contradict is not given.
     assert config_form.run_setting_error("convergence_window", "500") is None
+
+
+def test_every_run_setting_has_a_plain_language_label() -> None:
+    """The differences notice can name every run setting in words."""
+    assert set(config_form.RUN_SETTING_LABELS) == set(
+        config_form.DEFAULT_RUN_SETTING_FIELD_NAMES
+    )
+
+
+def test_run_setting_differences_lists_only_fields_whose_values_differ() -> None:
+    """Equal values spelled differently are not differences; real ones are listed."""
+    settings = config_form.starter_form_values()
+    run = {
+        **settings,
+        "engine_backend": "lineal",
+        "n_replicates": "1",
+        # The same values, spelled differently.
+        "convergence_tolerance": "1e-2",
+        "max_generations": "",
+        "replicate_confidence": "0.950",
+    }
+
+    differences = config_form.run_setting_differences(run, settings)
+
+    assert differences == [
+        {
+            "field": "engine_backend",
+            "label": "Execution engine",
+            "runValue": "lineal",
+            "settingsValue": "auto",
+            "runText": "lineal",
+            "settingsText": "auto",
+        },
+        {
+            "field": "n_replicates",
+            "label": "Number of replicates",
+            "runValue": "1",
+            "settingsValue": "200",
+            "runText": "1",
+            "settingsText": "200",
+        },
+    ]
+
+
+def test_run_setting_differences_shows_blank_values_as_words() -> None:
+    """Blank concurrency reads "unlimited"; a blank derived cap reads "auto"."""
+    settings = config_form.starter_form_values()
+    run = {**settings, "max_concurrent_replicates": "4", "max_generations": "500"}
+
+    differences = config_form.run_setting_differences(run, settings)
+
+    shown = {entry["field"]: entry["settingsText"] for entry in differences}
+    assert shown == {
+        "max_concurrent_replicates": "unlimited",
+        "max_generations": "auto",
+    }
+
+
+def test_run_setting_differences_skips_fields_missing_from_either_side() -> None:
+    """Only fields both sides carry are compared."""
+    assert (
+        config_form.run_setting_differences(
+            {"engine_backend": "lineal"}, {"n_replicates": "3"}
+        )
+        == []
+    )

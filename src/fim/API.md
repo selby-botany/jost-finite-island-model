@@ -155,6 +155,7 @@ Return to the [source-tree orientation](../README.md) or the [developer guide](.
     * [start\_run](#fim.gui.app.Api.start_run)
     * [cancel\_run](#fim.gui.app.Api.cancel_run)
     * [open\_output\_folder](#fim.gui.app.Api.open_output_folder)
+    * [get\_run\_setting\_differences](#fim.gui.app.Api.get_run_setting_differences)
     * [get\_starter\_form](#fim.gui.app.Api.get_starter_form)
     * [get\_starter\_form\_with\_overrides](#fim.gui.app.Api.get_starter_form_with_overrides)
     * [get\_initial\_form](#fim.gui.app.Api.get_initial_form)
@@ -294,6 +295,9 @@ Return to the [source-tree orientation](../README.md) or the [developer guide](.
   * [sigma\_band\_from\_params](#fim.gui.config_form.sigma_band_from_params)
   * [params\_to\_form\_values](#fim.gui.config_form.params_to_form_values)
   * [DEFAULT\_RUN\_SETTING\_FIELD\_NAMES](#fim.gui.config_form.DEFAULT_RUN_SETTING_FIELD_NAMES)
+  * [RUN\_SETTING\_LABELS](#fim.gui.config_form.RUN_SETTING_LABELS)
+  * [run\_setting\_display](#fim.gui.config_form.run_setting_display)
+  * [run\_setting\_differences](#fim.gui.config_form.run_setting_differences)
   * [starter\_form\_values](#fim.gui.config_form.starter_form_values)
   * [payload\_to\_yaml\_text](#fim.gui.config_form.payload_to_yaml_text)
 * [fim.gui.literature\_visuals](#fim.gui.literature_visuals)
@@ -5287,6 +5291,33 @@ Reveal a completed run's output directory in the OS file browser.
   nothing about an already-shown completed run needs
   `Api` to remember which run it was showing).
 
+<a id="fim.gui.app.Api.get_run_setting_differences"></a>
+
+#### get\_run\_setting\_differences
+
+```python
+@_log_bridge_call
+def get_run_setting_differences(
+        values: dict[str, str]) -> list[dict[str, str]]
+```
+
+Return how a run's own run settings differ from saved Settings.
+
+The page asks again whenever Settings change while a loaded
+configuration's run settings are in use (Settings saved, or
+"Make these my Settings"), so the notice it shows stays true.
+
+**Arguments**:
+
+- `values` - The run's own run settings (the `runSettings` a load
+  returned); other keys are ignored.
+
+
+**Returns**:
+
+  `config_form.run_setting_differences`' list: one entry per
+  differing field, empty when they all match.
+
 <a id="fim.gui.app.Api.get_starter_form"></a>
 
 #### get\_starter\_form
@@ -5842,15 +5873,15 @@ Browse for and load a YAML config, returning the form values it renders to.
 
 Routes through `fim.cli.load_config` — the identical function
 `fim run` uses (doc/fim-gui-design.md) — so a config that runs from the
-terminal loads identically here, error for error. Also syncs
-Settings' own execution defaults to match the loaded file
-(`_sync_default_run_settings_from_loaded_config`'s own
-docstring) — the same treatment `load_preset`, below, gives a
-loaded preset.
+terminal loads identically here, error for error. The file's
+run settings apply to this run only; saved Settings are not
+changed (`_loaded_run_settings`).
 
 **Returns**:
 
-- ``{"ok"` - True, "values": {...}}` on success;
+- ``{"ok"` - True, "values": {...}, "runSettings": {...},
+- `"runSettingDifferences"` - [...]}` on success
+  (`_loaded_run_settings`);
 - ``{"ok"` - False, "message": ""}` if the dialog was cancelled
   (no banner to show); `{"ok": False, "message": "..."}` on a
   real load or validation failure.
@@ -5898,14 +5929,14 @@ example's form values once the user loads it.
 def load_example(example_id: str) -> dict[str, Any]
 ```
 
-Return one example's form values and labels, syncing Settings.
+Return one example's form values and labels, leaving Settings alone.
 
 The Examples dialog's "Load into Configure" (design §5). Labels
 (`name`, `description`, `class`) are taken out of the
 configuration and internal `_` keys are dropped
 (`presets.split_configuration`), so the form sees an ordinary,
-editable configuration. Settings' execution defaults follow the
-loaded configuration, as for `load_preset`.
+editable configuration. Its run settings apply to this run only;
+saved Settings are not changed (`_loaded_run_settings`).
 
 **Arguments**:
 
@@ -5915,8 +5946,9 @@ loaded configuration, as for `load_preset`.
 **Returns**:
 
 - ``{"ok"` - True, "values": {...}, "name": ..., "description":
-  ..., "class": ...}` on success, where `name` and
-  `description` fill Configure's "Run name" and "Run
+  ..., "class": ..., "runSettings": {...},
+- `"runSettingDifferences"` - [...]}` on success, where `name`
+  and `description` fill Configure's "Run name" and "Run
   description" boxes; `{"ok": False, "message": ...}` if no
   such example exists or its configuration cannot be loaded
   into the form.
@@ -5959,7 +5991,7 @@ again first. The page then opens it like any run, which takes
 def load_run_configuration(directory: str) -> dict[str, Any]
 ```
 
-Return a saved run's configuration as form values, syncing Settings.
+Return a saved run's configuration as form values, leaving Settings alone.
 
 Home's "Load into Configure" action and the legacy report-only
 "Run it" button load the run into
@@ -5983,7 +6015,8 @@ cleared, and the name and description come from the run's
 **Returns**:
 
 - ``{"ok"` - True, "values": {...}, "name": ..., "description":
-  ...}` (`load_example`'s shape); `{"ok": False, "message":
+  ..., "runSettings": {...}, "runSettingDifferences": [...]}`
+  (`load_example`'s shape, less `class`); `{"ok": False, "message":
   ...}` when the directory holds neither a usable configuration
   nor a readable manifest, or its configuration cannot be
   represented in the form.
@@ -6082,20 +6115,16 @@ Return one preset's own form values, ready for `applyFormValues`.
 def load_preset(preset_id: str) -> dict[str, Any]
 ```
 
-Load one preset into the form, syncing Settings to match it.
+Load one preset into the form, leaving Settings alone.
 
 The actual "apply this preset" bridge call
 (`screens/presets.js`'s own `applyPreset`) — distinct from
 `get_preset_form_values`, above, which `list_presets` also
 calls, once per preset, purely to compute each preset's own
-`loadable` flag. Syncing Settings on every such probe would
-silently overwrite the user's own saved defaults every time the
-picker opens, a real, surprising side effect `list_presets`'s
-own loadability check must never trigger — so the sync
-(`_sync_default_run_settings_from_loaded_config`'s own
-docstring) lives here, the one call site that means "the user
-actually chose this," not inside `get_preset_form_values`
-itself.
+`loadable` flag. The preset's run settings apply to this run
+only; saved Settings are not changed. This method adds what the
+page needs to carry them and to say how they differ from the
+user's Settings (`_loaded_run_settings`).
 
 **Arguments**:
 
@@ -6104,7 +6133,8 @@ itself.
 
 **Returns**:
 
-  The identical shape `get_preset_form_values` returns.
+  `get_preset_form_values`' shape, plus `runSettings` and
+  `runSettingDifferences` on success.
 
 <a id="fim.gui.app.Api.get_preset_yaml"></a>
 
@@ -9347,6 +9377,74 @@ representation at all (`BATCH_FIELDS`'s own comment on the three).
 enabled`/`sigma_band_multiplier`/`sigma_band_window`) stay Configure-
 only throughout, judged scientific/per-run choices rather than
 administrative defaults — never a member of this tuple.
+
+<a id="fim.gui.config_form.RUN_SETTING_LABELS"></a>
+
+#### RUN\_SETTING\_LABELS
+
+Plain-language names for `DEFAULT_RUN_SETTING_FIELD_NAMES`, used when
+the GUI tells a user how a loaded configuration's run settings differ
+from their own saved Settings (`run_setting_differences`). Kept here,
+beside the tuple it labels, so a field added to one is visibly missing
+from the other.
+
+<a id="fim.gui.config_form.run_setting_display"></a>
+
+#### run\_setting\_display
+
+```python
+def run_setting_display(name: str, text: str) -> str
+```
+
+Return how one run setting's value reads to a person.
+
+A blank `max_concurrent_replicates` means "no limit", and a blank
+derivable field (`max_generations`, `convergence_window`) means
+"worked out from the model"; both are shown as words rather than as
+an empty cell.
+
+**Arguments**:
+
+- `name` - One of `DEFAULT_RUN_SETTING_FIELD_NAMES`.
+- `text` - The field's form-value text.
+
+
+**Returns**:
+
+  The text to show.
+
+<a id="fim.gui.config_form.run_setting_differences"></a>
+
+#### run\_setting\_differences
+
+```python
+def run_setting_differences(
+        run_values: Mapping[str, str],
+        settings_values: Mapping[str, str]) -> list[dict[str, str]]
+```
+
+List the run settings a configuration has that differ from saved Settings.
+
+Loading a configuration (an example, a preset, a YAML file, a saved
+run) applies its run settings to that run only; the GUI then tells
+the user which of them differ from their own Settings and offers to
+adopt them. This is that comparison.
+
+**Arguments**:
+
+- `run_values` - Form values carrying the run's own run settings.
+- `settings_values` - The saved Settings run defaults
+  (`Api.get_default_run_settings`).
+
+
+**Returns**:
+
+  One entry per differing field, in `DEFAULT_RUN_SETTING_FIELD_NAMES`
+- `order` - `{"field", "label", "runValue", "settingsValue",
+  "runText", "settingsText"}`, where the `*Value` entries are the
+  raw form text and the `*Text` entries are what to show
+  (`run_setting_display`). A field missing from either mapping is
+  skipped.
 
 <a id="fim.gui.config_form.starter_form_values"></a>
 

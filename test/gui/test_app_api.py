@@ -838,18 +838,115 @@ def test_load_example_without_a_configuration_does_not_touch_settings(
     assert api.get_default_run_settings() == before
 
 
-def test_load_example_syncs_settings_execution_defaults() -> None:
-    """Loading an example makes its execution fields Settings' defaults."""
+def _page_submission(loaded: dict[str, Any]) -> dict[str, str]:
+    """What the page submits after a load: the form's fields plus the run's settings.
+
+    Configure's form has no control for a run setting, so the form
+    itself never yields one (`collectFormValues`); the page adds the
+    loaded configuration's own (`runSettings`, `run-settings-notice.js`).
+    """
+    form_only = {
+        key: value
+        for key, value in loaded["values"].items()
+        if key not in DEFAULT_RUN_SETTING_FIELD_NAMES
+    }
+    return {**form_only, **loaded["runSettings"]}
+
+
+def _expected_differences(
+    run_settings: dict[str, str], settings: dict[str, str]
+) -> set[str]:
+    """The run settings whose values differ, worked out without `config_form`.
+
+    Blank and `auto` are the same derived value; numbers are compared as
+    numbers, so `0.01` and `1e-2` match; anything else as text.
+    """
+
+    def value(text: str) -> object:
+        """One run setting's text as a comparable value."""
+        stripped = text.strip().lower()
+        if stripped in ("", "auto"):
+            return None
+        try:
+            return float(stripped)
+        except ValueError:
+            return stripped
+
+    return {
+        name
+        for name in DEFAULT_RUN_SETTING_FIELD_NAMES
+        if value(run_settings[name]) != value(settings[name])
+    }
+
+
+def test_load_example_leaves_settings_unchanged() -> None:
+    """Loading an example never changes saved Settings (the reported defect)."""
     api = Api()
-    set_result = api.set_default_run_settings({"engine_backend": "lineal"})
-    assert set_result == {"ok": True}
+    assert api.set_default_run_settings({"engine_backend": "auto"}) == {"ok": True}
+    before = api.get_default_run_settings()
 
     result = api.load_example("a-long-locus-batch-under-the-generational-engine")
 
     assert result["ok"] is True
-    defaults = api.get_default_run_settings()
-    assert defaults["engine_backend"] == "generational"
-    assert defaults["n_replicates"] == "16"
+    assert api.get_default_run_settings() == before
+    assert result["runSettings"]["engine_backend"] == "generational"
+    assert result["runSettings"]["n_replicates"] == "16"
+
+
+def test_load_example_lists_exactly_the_differing_run_settings() -> None:
+    """A lineal, one-replicate example against auto/200 Settings differs in both.
+
+    `unequal-island-sizes-with-a-migration-hub` names `engine_backend:
+    lineal` and one replicate and leaves every other run setting at its
+    library default, which the starter Settings share.
+    """
+    api = Api()
+
+    result = api.load_example("unequal-island-sizes-with-a-migration-hub")
+
+    assert result["ok"] is True, result.get("message")
+    settings = api.get_default_run_settings()
+    assert (settings["engine_backend"], settings["n_replicates"]) == ("auto", "200")
+    assert [entry["field"] for entry in result["runSettingDifferences"]] == [
+        "engine_backend",
+        "n_replicates",
+    ]
+    engine, replicates = result["runSettingDifferences"]
+    assert engine == {
+        "field": "engine_backend",
+        "label": "Execution engine",
+        "runValue": "lineal",
+        "settingsValue": "auto",
+        "runText": "lineal",
+        "settingsText": "auto",
+    }
+    assert (replicates["runValue"], replicates["settingsValue"]) == ("1", "200")
+    assert set(result["runSettings"]) == set(DEFAULT_RUN_SETTING_FIELD_NAMES)
+
+
+@pytest.mark.parametrize(
+    "example_id",
+    [
+        example.example_id
+        for example in presets_module.load_catalog(
+            app_module._webui_directory()
+        ).examples
+        if example.yaml_text is not None
+    ],
+)
+def test_every_example_reports_exactly_its_differing_run_settings(
+    example_id: str,
+) -> None:
+    """The differences payload names exactly the differing fields, for every example."""
+    api = Api()
+    settings = api.get_default_run_settings()
+
+    result = api.load_example(example_id)
+
+    assert result["ok"] is True, result.get("message")
+    reported = {entry["field"] for entry in result["runSettingDifferences"]}
+    assert reported == _expected_differences(result["runSettings"], settings)
+    assert api.get_default_run_settings() == settings
 
 
 def test_loading_the_vector_example_runs_with_its_own_run_settings() -> None:
@@ -860,8 +957,9 @@ def test_loading_the_vector_example_runs_with_its_own_run_settings() -> None:
     the saved run settings were judged invalid against the starter and
     silently replaced by the starter's (200 replicates, derived window
     and cap, tolerance 0.01). Configure's form does not submit the run
-    settings at all; they come from Settings at submission
-    (`Api._merge_default_run_settings`), exactly as here.
+    settings; the page adds the loaded configuration's own, which
+    `Api._merge_default_run_settings` keeps over Settings — exactly as
+    here, with Settings left at the starter's values.
     """
     example_id = "a-large-d-batch-under-generational-vector"
     example = presets_module.get_example(app_module._webui_directory(), example_id)
@@ -871,14 +969,11 @@ def test_loading_the_vector_example_runs_with_its_own_run_settings() -> None:
     )
     expected = SimulationParams.from_mapping(model)
     api = Api()
+    settings_before = api.get_default_run_settings()
 
     loaded = api.load_example(example_id)
     assert loaded["ok"] is True, loaded.get("message")
-    submitted = {
-        key: value
-        for key, value in loaded["values"].items()
-        if key not in DEFAULT_RUN_SETTING_FIELD_NAMES
-    }
+    submitted = _page_submission(loaded)
     assert api.validate_form(submitted)["ok"] is True
     effective = SimulationParams.from_mapping(
         form_values_to_payload(api._merge_default_run_settings(submitted))
@@ -888,9 +983,136 @@ def test_loading_the_vector_example_runs_with_its_own_run_settings() -> None:
     for name in DEFAULT_RUN_SETTING_FIELD_NAMES:
         assert getattr(effective, name) == getattr(expected, name), name
     assert effective.to_dict() == expected.to_dict()
+    assert api.get_default_run_settings() == settings_before
 
 
-def test_list_examples_does_not_sync_settings_execution_defaults() -> None:
+def test_start_run_after_a_load_uses_the_loaded_run_settings(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """`start_run` builds the run from the loaded run settings, not from Settings."""
+    captured: list[SimulationParams] = []
+
+    def capture(
+        self: Api, params: SimulationParams, *_args: Any, **_kwargs: Any
+    ) -> dict[str, Any]:
+        """Record the parameters a scalar run would start with, instead of running."""
+        captured.append(params)
+        return {"ok": True}
+
+    monkeypatch.setattr(Api, "_start_scalar_run", capture)
+    api = Api()
+    loaded = api.load_example("unequal-island-sizes-with-a-migration-hub")
+    assert loaded["ok"] is True, loaded.get("message")
+
+    started = api.start_run(_page_submission(loaded))
+
+    assert started["ok"] is True, started.get("message")
+    assert started["isBatch"] is False
+    (params,) = captured
+    assert (params.engine_backend, params.n_replicates) == ("lineal", 1)
+    settings = api.get_default_run_settings()
+    assert (settings["engine_backend"], settings["n_replicates"]) == ("auto", "200")
+
+
+def test_making_loaded_run_settings_my_settings_updates_settings() -> None:
+    """The "Make these my Settings" button's save, through the existing path.
+
+    The page saves the loaded run settings with `set_default_run_settings`,
+    as the Settings dialog does; `max_workers`, a machine setting no
+    configuration names, is kept.
+    """
+    api = Api()
+    assert api.set_default_run_settings({"max_workers": "3"}) == {"ok": True}
+    loaded = api.load_example("unequal-island-sizes-with-a-migration-hub")
+    assert loaded["runSettingDifferences"] != []
+
+    saved = api.set_default_run_settings(
+        {**api.get_default_run_settings(), **loaded["runSettings"]}
+    )
+
+    assert saved == {"ok": True}
+    settings = api.get_default_run_settings()
+    assert (settings["engine_backend"], settings["n_replicates"]) == ("lineal", "1")
+    assert settings["max_workers"] == "3"
+    assert api.get_run_setting_differences(loaded["runSettings"]) == []
+
+
+def test_get_run_setting_differences_follows_saved_settings() -> None:
+    """After Settings change, the comparison is made against the new Settings."""
+    api = Api()
+    loaded = api.load_example("unequal-island-sizes-with-a-migration-hub")
+    assert api.set_default_run_settings({"engine_backend": "lineal"}) == {"ok": True}
+
+    differences = api.get_run_setting_differences(loaded["runSettings"])
+
+    assert [entry["field"] for entry in differences] == ["n_replicates"]
+
+
+def test_new_configuration_after_a_load_uses_saved_settings() -> None:
+    """A fresh form after a load carries Settings' run settings, not the load's."""
+    api = Api()
+    loaded = api.load_example("unequal-island-sizes-with-a-migration-hub")
+    assert loaded["runSettings"]["engine_backend"] == "lineal"
+
+    fresh = api.get_starter_form()
+
+    settings = api.get_default_run_settings()
+    for name in DEFAULT_RUN_SETTING_FIELD_NAMES:
+        assert fresh[name] == settings[name], name
+    assert fresh["engine_backend"] == "auto"
+    effective = SimulationParams.from_mapping(
+        form_values_to_payload(
+            api._merge_default_run_settings(
+                {
+                    key: value
+                    for key, value in {**fresh, "ploidy": "2"}.items()
+                    if key not in DEFAULT_RUN_SETTING_FIELD_NAMES
+                }
+            )
+        )
+    )
+    assert (effective.engine_backend, effective.n_replicates) == ("auto", 200)
+
+
+def test_load_yaml_leaves_settings_unchanged(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A YAML file's run settings come back for the run; Settings are untouched."""
+    config_path = tmp_path / "config.yaml"
+    config_path.write_text(
+        yaml.safe_dump(
+            {
+                **yaml.safe_load(cli.STARTER_CONFIG),
+                "engine_backend": "lineal",
+                "n_replicates": 1,
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    class _FileDialogWindow:
+        """Stands in for the window: its Open dialog picks `config_path`."""
+
+        def create_file_dialog(self, *_args: Any, **_kwargs: Any) -> list[str]:
+            """Return the chosen file, as pywebview's dialog does."""
+            return [str(config_path)]
+
+    monkeypatch.setattr(app_module, "_active_window", _FileDialogWindow)
+    api = Api()
+    before = api.get_default_run_settings()
+
+    result = api.load_yaml()
+
+    assert result["ok"] is True, result.get("message")
+    assert api.get_default_run_settings() == before
+    assert result["runSettings"]["engine_backend"] == "lineal"
+    assert [entry["field"] for entry in result["runSettingDifferences"]] == [
+        "engine_backend",
+        "n_replicates",
+    ]
+
+
+def test_list_examples_does_not_change_settings() -> None:
     """Listing probes every example's loadability without touching Settings."""
     api = Api()
     set_result = api.set_default_run_settings({"engine_backend": "generational"})
@@ -1084,28 +1306,36 @@ def test_the_per_base_mu_example_loads_as_mu_b_and_runs_as_its_yaml() -> None:
     assert restored.to_dict() == expected.to_dict()
 
 
-def test_load_preset_syncs_settings_execution_defaults() -> None:
-    """Loading a preset makes its own execution fields the new session default.
+def test_load_preset_applies_its_run_settings_to_the_run_only() -> None:
+    """A preset's run settings come back for the run; Settings are untouched.
 
-    A real, reported request: `engine_backend`/`n_replicates`/etc. are
-    Settings-only fields now (Configure's own `<form>` has no live
-    control for any of them), so a submitted run would otherwise
-    silently ignore whatever a just-loaded preset named in favor of
-    whatever Settings already held — `load_preset`, unlike
-    `get_preset_form_values` it wraps, closes that gap.
+    Replaces the earlier behavior, where loading a preset copied its
+    `engine_backend`/`n_replicates`/etc. into Settings for good, so one
+    preset changed every later New configuration.
     """
     api = Api()
     values = dict(_submittable_starter())
     values["engine_backend"] = "generational"
     values["n_replicates"] = "16"
     api.save_current_as_preset("Generational scenario", values)
+    before = api.get_default_run_settings()
 
     result = api.load_preset("user:Generational scenario")
 
     assert result["ok"] is True
-    defaults = api.get_default_run_settings()
-    assert defaults["engine_backend"] == "generational"
-    assert defaults["n_replicates"] == "16"
+    assert api.get_default_run_settings() == before
+    assert result["runSettings"]["engine_backend"] == "generational"
+    assert result["runSettings"]["n_replicates"] == "16"
+    assert [entry["field"] for entry in result["runSettingDifferences"]] == [
+        "engine_backend",
+        "n_replicates",
+    ]
+    effective = SimulationParams.from_mapping(
+        form_values_to_payload(
+            api._merge_default_run_settings(_page_submission(result))
+        )
+    )
+    assert (effective.engine_backend, effective.n_replicates) == ("generational", 16)
 
 
 def test_load_preset_leaves_max_workers_untouched() -> None:
@@ -1131,15 +1361,12 @@ def test_load_preset_of_an_unknown_id_does_not_touch_settings() -> None:
     assert api.get_default_run_settings() == before
 
 
-def test_list_presets_does_not_sync_settings_execution_defaults() -> None:
-    """Merely listing presets must never silently overwrite Settings' own defaults.
+def test_list_presets_does_not_change_settings() -> None:
+    """Merely listing presets never changes Settings' own defaults.
 
-    `list_presets` calls `get_preset_form_values` (not `load_preset`)
-    once per preset, purely to compute each one's own `loadable` flag —
-    if the sync `load_preset` performs lived in `get_preset_form_values`
-    instead, opening the picker at all would silently clobber whatever
-    Settings held with the *last* preset checked, whether or not the
-    user ever chose it.
+    `list_presets` calls `get_preset_form_values` once per preset,
+    purely to compute each one's own `loadable` flag. No load changes
+    Settings any more; this guards the probe all the same.
     """
     api = Api()
     set_result = api.set_default_run_settings({"engine_backend": "generational"})

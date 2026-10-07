@@ -100,6 +100,7 @@ from fim.gui.config_form import (
     mu_from_params,
     params_to_form_values,
     payload_to_yaml_text,
+    run_setting_differences,
     run_setting_error,
     starter_form_values,
     tab_for_error,
@@ -2478,62 +2479,78 @@ class Api:
         }
 
     def _merge_default_run_settings(self, values: dict[str, str]) -> dict[str, str]:
-        """Fill in Configure-absent execution-default fields before using a submission.
+        """Fill in the run settings a submission does not carry, from Settings.
 
-        Configure's own `<form>` no longer collects `config_form.
-        DEFAULT_RUN_SETTING_FIELD_NAMES`' fields, or `max_workers`, at
-        all — moved to Settings (`2026-09-16` revision) — so `webui/
-        screens/config-modals.js`'s own `collectFormValues` (a
-        `FormData` scan of `#input-form`) never produces any of them.
-        Every bridge call that expects an `all_fields()`-complete values
-        dict from Configure's live form merges them in here, from
-        whatever Settings currently holds (`get_default_run_settings`'s
-        own fallback chain) — the value *at the moment of this call*,
-        not one captured whenever Configure's form happened to last
-        load, the more correct semantic for a field with no per-run
-        override. Only fills a key `values` does not already have, so a
-        future per-run override (none exists today) is never silently
-        clobbered.
+        Configure's own `<form>` has no control for `config_form.
+        DEFAULT_RUN_SETTING_FIELD_NAMES`' fields, or `max_workers` —
+        moved to Settings (`2026-09-16` revision). A plain form
+        submission therefore carries none of them, and every bridge
+        call that needs an `all_fields()`-complete values dict fills
+        them in here, from whatever Settings holds *at the moment of
+        this call* (`get_default_run_settings`).
+
+        A key `values` already has is kept: that is a per-run value.
+        After a configuration is loaded (`load_example`, `load_preset`,
+        `load_yaml`, `load_run_configuration`), the page sends that
+        configuration's own run settings with every submission
+        (`webui/screens/run-settings-notice.js`), so the run uses the
+        loaded values while saved Settings stay as they were.
         """
         merged = dict(values)
         for key, value in self.get_default_run_settings().items():
             merged.setdefault(key, value)
         return merged
 
-    def _sync_default_run_settings_from_loaded_config(
-        self, values: Mapping[str, str]
-    ) -> None:
-        """Update Settings' own execution defaults to match a just-loaded configuration.
+    def _loaded_run_settings(self, values: Mapping[str, str]) -> dict[str, Any]:
+        """Describe a just-loaded configuration's run settings, for the page.
 
-        A real, reported request: loading a preset or a hand-picked YAML
-        file that names a specific `engine_backend`/`n_replicates`/etc.
-        makes that configuration's own values the session's new
-        execution defaults too — otherwise a submitted run would
-        silently ignore what was just loaded in favor of whatever
-        Settings already held (`_merge_default_run_settings`, above,
-        which only ever reads from Settings, since Configure's own
-        `<form>` no longer submits any of these fields itself). This is
-        the one, deliberate exception to that function's own "no per-run
-        override" rule: loading a named, curated configuration is
-        exactly the moment a user's intent for *this* execution shape is
-        most explicit, so it is allowed to change the session default
-        rather than being silently discarded. `max_workers` is left
-        untouched — not a `SimulationParams` field, so a loaded
-        configuration never has an opinion on it.
+        Loading a configuration never changes saved Settings: its run
+        settings apply to the run being configured only. This returns
+        what the page needs to carry them with that run and to tell the
+        user how they differ from their Settings. `max_workers` is not
+        among them: it is not a `SimulationParams` field, so a
+        configuration never names it, and it stays a machine setting.
 
         Args:
-            values: An already-validated form-values dict (`params_to_
-                form_values`'s own output, or an equivalently-shaped
-                saved preset) — never re-validated here, since every
-                caller has already confirmed it round-trips through
-                `SimulationParams.from_mapping`.
+            values: Already-validated form values (`params_to_form_
+                values`'s output, or an equivalently shaped saved
+                preset).
+
+        Returns:
+            `{"runSettings": {...}, "runSettingDifferences": [...]}`:
+            the configuration's value for each of `DEFAULT_RUN_SETTING_
+            FIELD_NAMES`, and `config_form.run_setting_differences`
+            against the Settings in force.
         """
-        saved = self._preferences.default_run_settings
-        max_workers = (saved or {}).get("max_workers", "")
-        subset = {key: values[key] for key in DEFAULT_RUN_SETTING_FIELD_NAMES}
-        subset["max_workers"] = max_workers
-        self._preferences = self._preferences.with_default_run_settings(subset)
-        save_preferences(self._preferences_path, self._preferences)
+        run_settings = {
+            key: values[key] for key in DEFAULT_RUN_SETTING_FIELD_NAMES if key in values
+        }
+        return {
+            "runSettings": run_settings,
+            "runSettingDifferences": run_setting_differences(
+                run_settings, self.get_default_run_settings()
+            ),
+        }
+
+    @_log_bridge_call
+    def get_run_setting_differences(
+        self, values: dict[str, str]
+    ) -> list[dict[str, str]]:
+        """Return how a run's own run settings differ from saved Settings.
+
+        The page asks again whenever Settings change while a loaded
+        configuration's run settings are in use (Settings saved, or
+        "Make these my Settings"), so the notice it shows stays true.
+
+        Args:
+            values: The run's own run settings (the `runSettings` a load
+                returned); other keys are ignored.
+
+        Returns:
+            `config_form.run_setting_differences`' list: one entry per
+            differing field, empty when they all match.
+        """
+        return run_setting_differences(values, self.get_default_run_settings())
 
     @_log_bridge_call
     def get_starter_form(self) -> dict[str, str]:
@@ -3225,14 +3242,14 @@ class Api:
 
         Routes through `fim.cli.load_config` — the identical function
         `fim run` uses (doc/fim-gui-design.md) — so a config that runs from the
-        terminal loads identically here, error for error. Also syncs
-        Settings' own execution defaults to match the loaded file
-        (`_sync_default_run_settings_from_loaded_config`'s own
-        docstring) — the same treatment `load_preset`, below, gives a
-        loaded preset.
+        terminal loads identically here, error for error. The file's
+        run settings apply to this run only; saved Settings are not
+        changed (`_loaded_run_settings`).
 
         Returns:
-            `{"ok": True, "values": {...}}` on success;
+            `{"ok": True, "values": {...}, "runSettings": {...},
+            "runSettingDifferences": [...]}` on success
+            (`_loaded_run_settings`);
             `{"ok": False, "message": ""}` if the dialog was cancelled
             (no banner to show); `{"ok": False, "message": "..."}` on a
             real load or validation failure.
@@ -3250,8 +3267,7 @@ class Api:
             values = params_to_form_values(params)
         except (OSError, ValueError, yaml.YAMLError) as error:
             return {"ok": False, "message": str(error)}
-        self._sync_default_run_settings_from_loaded_config(values)
-        return {"ok": True, "values": values}
+        return {"ok": True, "values": values, **self._loaded_run_settings(values)}
 
     @_log_bridge_call
     def list_examples(self) -> dict[str, Any]:
@@ -3304,22 +3320,23 @@ class Api:
 
     @_log_bridge_call
     def load_example(self, example_id: str) -> dict[str, Any]:
-        """Return one example's form values and labels, syncing Settings.
+        """Return one example's form values and labels, leaving Settings alone.
 
         The Examples dialog's "Load into Configure" (design §5). Labels
         (`name`, `description`, `class`) are taken out of the
         configuration and internal `_` keys are dropped
         (`presets.split_configuration`), so the form sees an ordinary,
-        editable configuration. Settings' execution defaults follow the
-        loaded configuration, as for `load_preset`.
+        editable configuration. Its run settings apply to this run only;
+        saved Settings are not changed (`_loaded_run_settings`).
 
         Args:
             example_id: An example `id` from `list_examples`.
 
         Returns:
             `{"ok": True, "values": {...}, "name": ..., "description":
-            ..., "class": ...}` on success, where `name` and
-            `description` fill Configure's "Run name" and "Run
+            ..., "class": ..., "runSettings": {...},
+            "runSettingDifferences": [...]}` on success, where `name`
+            and `description` fill Configure's "Run name" and "Run
             description" boxes; `{"ok": False, "message": ...}` if no
             such example exists or its configuration cannot be loaded
             into the form.
@@ -3330,13 +3347,13 @@ class Api:
         result = _example_form_values(example)
         if not result["ok"]:
             return result
-        self._sync_default_run_settings_from_loaded_config(result["values"])
         return {
             "ok": True,
             "values": result["values"],
             "name": example.name,
             "description": example.description,
             "class": example.class_id,
+            **self._loaded_run_settings(result["values"]),
         }
 
     @_log_bridge_call
@@ -3385,7 +3402,7 @@ class Api:
 
     @_log_bridge_call
     def load_run_configuration(self, directory: str) -> dict[str, Any]:
-        """Return a saved run's configuration as form values, syncing Settings.
+        """Return a saved run's configuration as form values, leaving Settings alone.
 
         Home's "Load into Configure" action and the legacy report-only
         "Run it" button load the run into
@@ -3406,7 +3423,8 @@ class Api:
 
         Returns:
             `{"ok": True, "values": {...}, "name": ..., "description":
-            ...}` (`load_example`'s shape); `{"ok": False, "message":
+            ..., "runSettings": {...}, "runSettingDifferences": [...]}`
+            (`load_example`'s shape, less `class`); `{"ok": False, "message":
             ...}` when the directory holds neither a usable configuration
             nor a readable manifest, or its configuration cannot be
             represented in the form.
@@ -3438,12 +3456,12 @@ class Api:
         if not result["ok"]:
             return result
         name, description = _run_name_and_description(run_directory)
-        self._sync_default_run_settings_from_loaded_config(result["values"])
         return {
             "ok": True,
             "values": result["values"],
             "name": labels.get("name") or name,
             "description": labels.get("description") or description,
+            **self._loaded_run_settings(result["values"]),
         }
 
     @_log_bridge_call
@@ -3555,30 +3573,27 @@ class Api:
 
     @_log_bridge_call
     def load_preset(self, preset_id: str) -> dict[str, Any]:
-        """Load one preset into the form, syncing Settings to match it.
+        """Load one preset into the form, leaving Settings alone.
 
         The actual "apply this preset" bridge call
         (`screens/presets.js`'s own `applyPreset`) — distinct from
         `get_preset_form_values`, above, which `list_presets` also
         calls, once per preset, purely to compute each preset's own
-        `loadable` flag. Syncing Settings on every such probe would
-        silently overwrite the user's own saved defaults every time the
-        picker opens, a real, surprising side effect `list_presets`'s
-        own loadability check must never trigger — so the sync
-        (`_sync_default_run_settings_from_loaded_config`'s own
-        docstring) lives here, the one call site that means "the user
-        actually chose this," not inside `get_preset_form_values`
-        itself.
+        `loadable` flag. The preset's run settings apply to this run
+        only; saved Settings are not changed. This method adds what the
+        page needs to carry them and to say how they differ from the
+        user's Settings (`_loaded_run_settings`).
 
         Args:
             preset_id: A `preset_id` from a prior `list_presets` call.
 
         Returns:
-            The identical shape `get_preset_form_values` returns.
+            `get_preset_form_values`' shape, plus `runSettings` and
+            `runSettingDifferences` on success.
         """
         result = self.get_preset_form_values(preset_id)
         if result["ok"]:
-            self._sync_default_run_settings_from_loaded_config(result["values"])
+            return {**result, **self._loaded_run_settings(result["values"])}
         return result
 
     @_log_bridge_call

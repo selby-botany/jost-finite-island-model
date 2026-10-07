@@ -278,10 +278,17 @@ def test_open_batch_shows_a_batch_from_its_saved_summary(
 def test_load_run_configuration_gives_an_editable_copy_of_a_seeded_example(
     results: Path, bundle: Path
 ) -> None:
-    """ "Run it": labels to the boxes, `_` keys dropped, Settings synced."""
+    """ "Run it": labels to the boxes, `_` keys dropped, Settings untouched.
+
+    The run's own run settings come back for the run, with exactly the
+    fields that differ from the starter Settings listed: the fixture's
+    one replicate, cap of 10, window of 4 and tolerance of 1.0, and its
+    engine, which the configuration leaves at the library default.
+    """
     api = Api()
     api.ensure_examples()
     directory = seed.example_run_directory("tiny-example", results=results)
+    before = api.get_default_run_settings()
 
     result = api.load_run_configuration(str(directory))
 
@@ -292,6 +299,19 @@ def test_load_run_configuration_gives_an_editable_copy_of_a_seeded_example(
     )
     assert not any(key.startswith("_") for key in result["values"])
     assert api.validate_form(result["values"])["ok"] is True
+    assert api.get_default_run_settings() == before
+    runs = result["runSettings"]
+    assert (runs["n_replicates"], runs["max_generations"]) == ("1", "10")
+    differing = {entry["field"] for entry in result["runSettingDifferences"]}
+    expected = {
+        "n_replicates",
+        "max_generations",
+        "convergence_window",
+        "convergence_tolerance",
+    }
+    if runs["engine_backend"] != before["engine_backend"]:
+        expected.add("engine_backend")
+    assert differing == expected
 
 
 def test_load_run_configuration_falls_back_to_the_manifest(

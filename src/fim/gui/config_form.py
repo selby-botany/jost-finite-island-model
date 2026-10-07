@@ -1511,6 +1511,107 @@ _RUN_SETTING_FIELDS: Final[Mapping[str, FormField]] = {
     if field.name in DEFAULT_RUN_SETTING_FIELD_NAMES
 }
 
+RUN_SETTING_LABELS: Final[Mapping[str, str]] = {
+    "engine_backend": "Execution engine",
+    "n_replicates": "Number of replicates",
+    "max_generations": "Maximum generations",
+    "convergence_window": "Convergence window",
+    "convergence_tolerance": "Convergence tolerance",
+    "replicate_confidence": "Replicate confidence",
+    "jit": "JIT compilation",
+    "auto_vector_min_d": "Auto-vector minimum demes",
+    "auto_vector_max_capacity": "Auto-vector maximum capacity",
+    "max_concurrent_replicates": "Maximum concurrent replicates at once",
+}
+"""Plain-language names for `DEFAULT_RUN_SETTING_FIELD_NAMES`, used when
+the GUI tells a user how a loaded configuration's run settings differ
+from their own saved Settings (`run_setting_differences`). Kept here,
+beside the tuple it labels, so a field added to one is visibly missing
+from the other."""
+
+
+def run_setting_display(name: str, text: str) -> str:
+    """Return how one run setting's value reads to a person.
+
+    A blank `max_concurrent_replicates` means "no limit", and a blank
+    derivable field (`max_generations`, `convergence_window`) means
+    "worked out from the model"; both are shown as words rather than as
+    an empty cell.
+
+    Args:
+        name: One of `DEFAULT_RUN_SETTING_FIELD_NAMES`.
+        text: The field's form-value text.
+
+    Returns:
+        The text to show.
+    """
+    stripped = text.strip()
+    if name == "max_concurrent_replicates" and not stripped:
+        return "unlimited"
+    if _RUN_SETTING_FIELDS[name].kind == "auto_int" and (
+        not stripped or stripped.lower() == "auto"
+    ):
+        return "auto"
+    return stripped
+
+
+def _same_run_setting(name: str, first: str, second: str) -> bool:
+    """Say whether two texts give one run setting the same value.
+
+    Compared as parsed values, so `"1e-4"` and `"0.0001"`, or `""` and
+    `"auto"`, are the same setting. Text that does not parse is compared
+    as trimmed text instead.
+    """
+    field = _RUN_SETTING_FIELDS[name]
+    try:
+        return _parse_field(field, first) == _parse_field(field, second)
+    except ValueError:
+        return first.strip() == second.strip()
+
+
+def run_setting_differences(
+    run_values: Mapping[str, str], settings_values: Mapping[str, str]
+) -> list[dict[str, str]]:
+    """List the run settings a configuration has that differ from saved Settings.
+
+    Loading a configuration (an example, a preset, a YAML file, a saved
+    run) applies its run settings to that run only; the GUI then tells
+    the user which of them differ from their own Settings and offers to
+    adopt them. This is that comparison.
+
+    Args:
+        run_values: Form values carrying the run's own run settings.
+        settings_values: The saved Settings run defaults
+            (`Api.get_default_run_settings`).
+
+    Returns:
+        One entry per differing field, in `DEFAULT_RUN_SETTING_FIELD_NAMES`
+        order: `{"field", "label", "runValue", "settingsValue",
+        "runText", "settingsText"}`, where the `*Value` entries are the
+        raw form text and the `*Text` entries are what to show
+        (`run_setting_display`). A field missing from either mapping is
+        skipped.
+    """
+    differences: list[dict[str, str]] = []
+    for name in DEFAULT_RUN_SETTING_FIELD_NAMES:
+        if name not in run_values or name not in settings_values:
+            continue
+        run_text = run_values[name]
+        settings_text = settings_values[name]
+        if _same_run_setting(name, run_text, settings_text):
+            continue
+        differences.append(
+            {
+                "field": name,
+                "label": RUN_SETTING_LABELS[name],
+                "runValue": run_text,
+                "settingsValue": settings_text,
+                "runText": run_setting_display(name, run_text),
+                "settingsText": run_setting_display(name, settings_text),
+            }
+        )
+    return differences
+
 
 def starter_form_values(overrides: Mapping[str, str] | None = None) -> dict[str, str]:
     """Return the form's default values, from the CLI's own starter config.
