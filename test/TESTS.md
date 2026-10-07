@@ -23614,24 +23614,54 @@ def test_mutation_events_receive_fresh_ids(
 
 Every observed mutation has a unique mutant-range identity.
 
-<a id="model.test_operators.test_mutation_scales_existing_mass_and_preserves_sub_grid_allele"></a>
+<a id="model.test_operators.test_mutation_rejects_a_state_that_is_not_whole_gene_copies"></a>
 
-#### test\_mutation\_scales\_existing\_mass\_and\_preserves\_sub\_grid\_allele
+#### test\_mutation\_rejects\_a\_state\_that\_is\_not\_whole\_gene\_copies
 
 ```python
-def test_mutation_scales_existing_mass_and_preserves_sub_grid_allele(
+def test_mutation_rejects_a_state_that_is_not_whole_gene_copies(
         rng: Callable[[int], np.random.Generator]) -> None
 ```
 
-Mutation reduces existing mass proportionally, not by grid rounding.
+`mutate` acts on gene copies, so a continuous state is refused.
 
-Regression guard for the mutation operator: existing allele frequencies
-must be scaled by a single retained-mass factor so their ratios are
-preserved and a rare sub-``1/N`` migrant survives. The earlier
-implementation rounded continuous frequencies onto the ``1/N`` grid before
-resampling, which deterministically dropped alleles below ``0.5/N`` (here
-the ``0.004`` allele) and undid migration, biasing runs toward spurious
-differentiation.
+The textbook mutation step mutates each of the `N` gene copies
+`drift` has just drawn; a post-migration (continuous) state, such as
+the sub-`1/N` frequency `0.004` at `N = 100` below, has no gene
+copies to mutate. Earlier releases accepted it and scaled every
+frequency down in proportion, which is not the textbook model.
+
+<a id="model.test_operators.test_mutation_at_rate_one_turns_every_copy_into_a_fresh_allele"></a>
+
+#### test\_mutation\_at\_rate\_one\_turns\_every\_copy\_into\_a\_fresh\_allele
+
+```python
+def test_mutation_at_rate_one_turns_every_copy_into_a_fresh_allele(
+        rng: Callable[[int], np.random.Generator]) -> None
+```
+
+At `mu = 1` every gene copy mutates, each to its own new allele.
+
+The defining property of per-copy infinite-alleles mutation, with no
+randomness left to tolerate: `N` copies become `N` distinct fresh
+identities of one copy (`1/N`) each, and no founding allele remains.
+
+<a id="model.test_operators.test_mutation_keeps_whole_gene_copies_and_draws_per_allele_counts"></a>
+
+#### test\_mutation\_keeps\_whole\_gene\_copies\_and\_draws\_per\_allele\_counts
+
+```python
+def test_mutation_keeps_whole_gene_copies_and_draws_per_allele_counts(
+        rng: Callable[[int], np.random.Generator]) -> None
+```
+
+Each allele loses `Binomial(n, mu)` of its own copies, drawn in order.
+
+Reproduces `mutate`'s own draws by hand from an identically seeded
+generator — one `_inversion_binomial(n_i, mu)` per allele, ascending
+allele id — and checks the surviving counts and the number of fresh
+singletons, so the per-copy model (not one deme-wide event count) is
+what is pinned.
 
 <a id="model.test_operators.test_mutation_finite_alleles_respects_locus_specific_capacity"></a>
 
@@ -23693,7 +23723,7 @@ def test_mutation_finite_alleles_recurrence_rate_matches_theory(
 A fixed-seed sample recurrence rate through `mutate()` matches theory.
 
 End-to-end version of `FiniteAlleleSpace`'s own recurrence-rate test:
-drives the same probability through `mutate()`'s source-attribution and
+drives the same probability through `mutate()`'s per-copy draw and
 accumulation logic, not just the space's `mutate_target` in isolation.
 ``population_size=1, mu=1.0`` makes each call exactly one mutation
 event with a certain, deterministic source — the only randomness left
@@ -23714,29 +23744,6 @@ Isolates the compilation layer from the "does batching the draw
 change anything" question the tests below cover — the same
 isolation `test_jit_multinomial_via_binomial_matches_plain_
 decomposition` already does for drift's own compiled primitive.
-
-<a id="model.test_operators.test_jit_multinomial_via_inversion_binomial_matches_plain_decomposition"></a>
-
-#### test\_jit\_multinomial\_via\_inversion\_binomial\_matches\_plain\_decomposition
-
-```python
-def test_jit_multinomial_via_inversion_binomial_matches_plain_decomposition(
-) -> None
-```
-
-The Numba-JIT-compiled kernel matches the original, not just its own twin.
-
-Mirrors `test_jit_multinomial_via_binomial_matches_plain_
-decomposition`'s own structure, but compares against
-`_multinomial_via_inversion_binomial` — the function `mutate`'s
-own finite-alleles branch actually calls — rather than the older,
-`rng.binomial`-based `_multinomial_via_binomial`. The real risk
-this isolates: `_jit_multinomial_via_inversion_binomial`'s own
-inner `draw_one` closure duplicates `_inversion_binomial`'s
-algorithm rather than calling it (`nopython` mode cannot compile a
-call to a plain module-level function — see either function's own
-docstring), so this checks the duplication stayed faithful, not
-merely that compiling changes nothing.
 
 <a id="model.test_operators.test_jit_mutate_targets_batched_matches_plain_decomposition"></a>
 
@@ -23792,23 +23799,6 @@ for the original this module's own `_mutate_targets_batched` is a
 deliberate duplicate of — re-proven directly here since a duplicate
 is only as trustworthy as its own, independent proof.
 
-<a id="model.test_operators.test_next_mutate_event_count_reads_batched_array_or_draws_inline"></a>
-
-#### test\_next\_mutate\_event\_count\_reads\_batched\_array\_or\_draws\_inline
-
-```python
-def test_next_mutate_event_count_reads_batched_array_or_draws_inline(
-        rng: Callable[[int], np.random.Generator]) -> None
-```
-
-The small helper `mutate` delegates event-count selection to.
-
-Direct unit coverage for `_next_mutate_event_count`, split out of
-`mutate`'s own body purely to keep that function's branch count
-readable (stage 3's own commit message has the full reasoning) —
-covered indirectly by every `mutate`-level test above, but this
-project's own testing standard is one function, one direct test.
-
 <a id="model.test_operators.test_mint_infinite_allele_ids_reads_reserved_slice_or_mints_inline"></a>
 
 #### test\_mint\_infinite\_allele\_ids\_reads\_reserved\_slice\_or\_mints\_inline
@@ -23820,8 +23810,8 @@ def test_mint_infinite_allele_ids_reads_reserved_slice_or_mints_inline(
 
 The small helper `mutate` delegates infinite-alleles minting to.
 
-Direct unit coverage for `_mint_infinite_allele_ids`, split out for
-the same reason `_next_mutate_event_count`'s own test above is.
+Each mutant gene copy gets one fresh identity carried by that one
+copy (count `1`), from a reserved slice or minted inline.
 
 <a id="model.test_operators.test_attribute_finite_allele_targets_batches_when_eligible_or_falls_back"></a>
 
@@ -23855,8 +23845,8 @@ def test_mutate_with_jit_matches_mutate_without_jit_bit_for_bit(
 
 Under the default infinite-alleles model (`finite_alleles=None`),
 `jit=True` is real: `registry.next_id()` consumes no `rng` draw at
-all, so batching every pair's own event count up front never
-disturbs any other draw's own position in the stream.
+all, so batching every pair's own per-allele mutant counts up front
+never disturbs any other draw's own position in the stream.
 
 <a id="model.test_operators.test_mutate_with_jit_under_finite_alleles_matches_without_jit_bit_for_bit"></a>
 
@@ -23869,21 +23859,14 @@ def test_mutate_with_jit_under_finite_alleles_matches_without_jit_bit_for_bit(
 
 `jit=True` under the finite-alleles model changes what runs, not the result.
 
-Stage 2 scoped `jit`'s event-count batching to the infinite-alleles
-model only — the finite-alleles model's own per-event source-
-attribution/target-selection draws interleave with the event-count
-draw in a way batching it up front would desync (`20260901-claude-
-sonnet-5-fim-engine-backend-factory-design.md` §10 item 10e, stage
-2's own docstring). Stages 3 and 3b together now give the finite-
-alleles model real `jit` benefit through the *entire* pipeline for
-a small-capacity locus like this one (`capacity=64`, well under
-`_MAX_JIT_FINITE_ALLELE_CAPACITY`): the event-count draw stays
-unbatched, deliberately, but source attribution is compiled
-(`_jit_multinomial_via_inversion_binomial`, stage 3) *and* target
-selection is now batched per pair too
-(`_jit_mutate_targets_batched`, stage 3b) — bit-identical output
-either way, checked here across the whole pipeline, not just the
-source-attribution slice stage 3 alone left checked. A fresh
+Under the finite-alleles model, target selection draws from `rng`
+between one pair's own mutant counts and the next pair's, so counts
+are drawn (compiled) one pair at a time rather than batched across
+pairs, and target selection is batched per pair
+(`_jit_mutate_targets_batched`) for a small-capacity locus like this
+one (`capacity=64`, well under `_MAX_JIT_FINITE_ALLELE_CAPACITY`) —
+bit-identical output either way, checked across the whole pipeline.
+A fresh
 `FiniteAlleleSpace` per call, not a shared one — `mutate_target`
 mutates its own internal minted-state bookkeeping, so reusing one
 instance across two separate `mutate()` calls would make the
@@ -23969,7 +23952,7 @@ alleles` docstring) — a single-generation test cannot exercise
 whether a batched call's own write-back
 (`FiniteAlleleSpace.restore_from_arrays`) is visible to the *next*
 generation's own processing. This runs several real generations
-(migrate, mutate, drift, in order) through two fully independent,
+(migrate, drift, mutate, in order) through two fully independent,
 self-consistent pipelines, mirroring `test_step_with_mutate_jit_
 matches_without_jit_across_many_generations`'s own proven-safe
 shape.
@@ -23983,16 +23966,17 @@ def test_mutate_with_jit_matches_without_jit_across_many_demes_and_loci(
         rng: Callable[[int], np.random.Generator]) -> None
 ```
 
-The flat, per-pair event-count and minting batching stay bit-identical at scale.
+Flat per-allele mutant-count and minting batching stay bit-identical.
 
 `_state()`'s own fixture (2 demes, 1 locus) barely exercises the
-`(deme, locus)` flat layout `_mutate_event_counts_batched` depends
-on visiting in deme-major, locus-minor order, or `_mint_infinite_
-allele_ids`'s own running `minted_offset` across many pairs — this
+`(deme, locus, allele)` flat layout `_mutate_event_counts_batched`
+depends on visiting in deme-major, locus, ascending-allele order,
+or `_mint_infinite_allele_ids`'s own running `minted_offset` across
+many pairs — this
 uses many demes and several loci of different mutation rates
 (including one exact `0.0` rate, `_inversion_binomial`'s own
-zero-draw short-circuit) against a freshly generated, already-ragged
-initial state, mirroring
+zero-draw short-circuit) against a freshly generated, drifted,
+already-ragged initial state, mirroring
 stage 1's own analogous `migrate` test
 (`test_migrate_with_jit_matches_without_jit_across_many_demes_and_
 loci`) in shape: one realistic-scale call, not a chained multi-
@@ -24002,7 +23986,7 @@ generation-by-generation reshaped allele sets, through two fully
 independent, self-consistent pipelines (this test's own single-call
 shape cannot safely be extended to "chain the result forward" without
 also driving `drift` identically on both sides, since `mutate`'s own
-event-count draw shares one running `rng` stream with everything
+mutant-count draw shares one running `rng` stream with everything
 else called on it afterward).
 
 <a id="model.test_operators.test_step_with_mutate_jit_matches_without_jit_across_many_generations"></a>
@@ -24018,8 +24002,8 @@ def test_step_with_mutate_jit_matches_without_jit_across_many_generations(
 
 Companion to `test_step_with_migrate_jit_matches_without_jit_
 across_many_generations` (stage 1) — same shape, now exercising
-stage 2's own event-count batching inside a full `step` pipeline
-(migrate, mutate, drift, in order, `jit` shared by all three).
+the mutant-count batching inside a full `step` pipeline (migrate,
+drift, mutate, in order, `jit` shared by all three).
 
 <a id="model.test_operators.test_drift_preserves_invariants_and_is_seeded"></a>
 
@@ -24041,7 +24025,10 @@ def test_step_matches_explicit_operator_order(
         rng: Callable[[int], np.random.Generator]) -> None
 ```
 
-The public pipeline is drift(mutate(migrate(state))).
+The public pipeline is mutate(drift(migrate(state))).
+
+The textbook Wright-Fisher order: the new generation's gene copies
+are drawn from the post-migration pool, then each copy mutates.
 
 <a id="model.test_operators.test_matrix_migration_applies_source_weights"></a>
 
@@ -24242,7 +24229,7 @@ def test_step_with_migrate_jit_matches_without_jit_across_many_generations(
 
 `step`'s own migrate stage stays bit-identical under `jit=True` too.
 
-Runs several real generations (migrate, mutate, drift, in order) so
+Runs several real generations (migrate, drift, mutate, in order) so
 `migrate`'s own jit path sees the naturally shrinking, unequal
 per-locus allele sets drift/mutate actually produce over time, not
 only generation zero's own freshly generated state.
@@ -27027,30 +27014,20 @@ vectorized_symmetric_zero_rate_returns_the_same_object`'s own
 docstring for why an object-identity check, not a value-equality
 one, is what actually proves this.
 
-<a id="model.test_vectorized.test_mutate_vectorized_builds_allele_ids_once_per_call_not_per_deme"></a>
+<a id="model.test_vectorized.test_mutate_vectorized_rejects_a_state_that_is_not_whole_gene_copies"></a>
 
-#### test\_mutate\_vectorized\_builds\_allele\_ids\_once\_per\_call\_not\_per\_deme
+#### test\_mutate\_vectorized\_rejects\_a\_state\_that\_is\_not\_whole\_gene\_copies
 
 ```python
-def test_mutate_vectorized_builds_allele_ids_once_per_call_not_per_deme(
-        monkeypatch: pytest.MonkeyPatch,
+def test_mutate_vectorized_rejects_a_state_that_is_not_whole_gene_copies(
         rng: Callable[[int], np.random.Generator]) -> None
 ```
 
-`np.arange(capacity)` is loop-invariant, so it is built once per call.
+A continuous row (here `1/4` of 25 copies) has no gene copies to mutate.
 
-Regression test for FIM-27: `event_sources = np.repeat(np.arange(
-capacity, dtype=np.int64), source_counts)` used to rebuild the same
-`capacity`-length array once per *active-mutating* deme — every one
-of them identical, since neither `capacity` nor anything else the
-array depends on changes across demes within one call. A high `rate`
-(`0.5`) across several demes makes it near-certain more than one
-deme actually mutates, so a fast path that still rebuilt this per
-deme would make this test's own call count come out above `1`.
-`np.arange` is patched globally for the duration of this call —
-safe here specifically because the JIT-compiled kernels this
-function also calls do not invoke NumPy's own Python-level `arange`
-symbol from inside compiled code.
+The same precondition `fim.model.operators.mutate` enforces: the
+textbook mutation step acts on the copies `drift_vectorized` has
+just drawn, never on pre-drift frequencies.
 
 <a id="model.test_vectorized.test_drift_vectorized_matches_dict_based_drift_exactly"></a>
 
@@ -27158,53 +27135,17 @@ def test_mutate_vectorized_matches_dict_based_mutate_exactly(
 
 `mutate`'s own version of the `drift` exact-agreement proof.
 
-`fim.model.operators.mutate` and `mutate_vectorized` now draw via
-the identical event-count, source-attribution, *and* target-
-selection mechanism, in the identical per-deme order (`mutate_
-vectorized`'s own module/function docstrings) —
-`20260901-claude-sonnet-5-fim-engine-backend-factory-design.md`
-§5.4's "one RNG scheme for every backend" reaching `mutate`, not
-just `drift`. Four separate divergence sources had to be found and
-fixed to get here, none of them visible from a single-deme test
-alone: a per-step-batched vs. per-deme-interleaved draw order once
-more than one deme was involved; a rejection-sampling vs. fixed-
-draw mismatch in the recurrence branch; this same partial-capacity
-normalization bug `drift_vectorized`'s own analogous test above
-exists to catch; and a missing final `fsum`-based renormalization
-step `mutate_vectorized` never replicated from `operators.mutate`'s
-own `_normalize` (`mutate_vectorized`'s own docstring has the full
-argument for the last one). Uses `_partial_finite_alleles_state` for
-the same reason the drift test above does — a saturated capacity
-cannot exercise the normalization bug at all.
-
-<a id="model.test_vectorized.test_mutate_vectorized_renormalization_fsum_ignores_zero_padding"></a>
-
-#### test\_mutate\_vectorized\_renormalization\_fsum\_ignores\_zero\_padding
-
-```python
-def test_mutate_vectorized_renormalization_fsum_ignores_zero_padding() -> None
-```
-
-The claim `mutate_vectorized`'s own renormalization comment relies on, isolated.
-
-`mutate_vectorized`'s per-deme renormalization restricts its
-`math.fsum` call to a row's own nonzero entries rather than
-converting the full, mostly-zero `capacity`-wide row (large
-`capacity` values make the full conversion genuinely expensive —
-profiling at `d=60`, `capacity=4096` found `.tolist()` alone
-costing about as much as the JIT-compiled multinomial kernel
-itself). That restriction is safe only because `fsum`'s own
-running sum is bit-for-bit unaffected by omitting exact `0.0`
-terms — proven here directly, in isolation from the rest of
-`mutate_vectorized`'s own machinery, rather than relying on the
-broader `test_mutate_vectorized_matches_dict_based_mutate_exactly`
-to catch a regression only indirectly. Covers realistic shapes:
-a large, mostly-zero row (the actual motivating case), an already-
-dense row (zero padding contributes nothing to check), and a row
-with values spanning several orders of magnitude (the case
-`fsum`'s own correctly-rounded algorithm exists for in the first
-place, so any subtle divergence from reordering terms would show
-up here).
+`fim.model.operators.mutate` and `mutate_vectorized` draw the same
+per-allele mutant counts (`Binomial(n, mu)`, ascending allele id)
+and the same targets, in the same per-deme order (`mutate_
+vectorized`'s own docstring) — `20260901-claude-sonnet-5-fim-
+engine-backend-factory-design.md` §5.4's "one RNG scheme for every
+backend" reaching `mutate`, not just `drift`. Multi-deme
+deliberately: a per-step-batched (rather than per-deme-interleaved)
+order agrees with the dict-based loop for one deme and diverges
+from the second on. Starts from a drifted `_partial_finite_alleles_
+state`, so absent capacity slots (zero counts, no draw) sit between
+present ones.
 
 <a id="model.test_vectorized.test_symmetric_migration_weights_rows_are_stochastic"></a>
 

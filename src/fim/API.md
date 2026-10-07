@@ -12469,8 +12469,8 @@ into d demes." Two real simulation phases, not one:
    `d`-deme run will have, just concentrated in one deme — starting
    from the identical continuous Dirichlet draw
    `DirichletInitialCondition` uses (`_dirichlet_locus_maps`,
-   above), then repeatedly apply `fim.model.operators.mutate`/
-   `drift` (no `migrate` — there is nothing to migrate between with
+   above), then repeatedly apply `fim.model.operators.drift`/
+   `mutate` (no `migrate` — there is nothing to migrate between with
    one deme) for a burn-in derived from the model itself
    (`fim.convergence.defaults.panmictic_equilibration`): the first
    generation by which the expected identity, so the expected `H_S`
@@ -12836,14 +12836,15 @@ three together in the standard order:
 - `migrate` — a fraction of each deme's gene copies are replaced by a
   weighted average of every other deme's own allele frequencies (the
   "migrant pool"), modeling individuals moving between sub-populations.
-- `mutate` — a small, randomly chosen number of gene copies switch to
-  a different, new-or-existing allele, modeling a real mutation event.
 - `drift` — the full population of `N` gene copies is re-sampled from
   the current frequencies, the same way flipping a weighted coin `N`
   times only approximately reproduces the coin's own true weighting;
   this is what makes a finite population's allele frequencies wander
   randomly from one generation to the next, purely from chance, even
   with no migration or mutation happening at all.
+- `mutate` — each of those newly drawn gene copies independently
+  switches, with probability `mu`, to a different, new-or-existing
+  allele, modeling a real mutation event.
 
 Every function here is "pure" in the sense that none of them mutate
 their `ModelState` argument in place — each one returns a brand-new
@@ -12851,9 +12852,10 @@ state representing the *result* of applying that one process, leaving
 the state it was given untouched (see `fim.model.state.ModelState`'s
 own docstring for why that immutability matters). `step`, at the
 bottom of this file, is what `fim.engine`'s run loop actually calls
-once per generation: it runs migration, then mutation, then drift, in
-that fixed order, which is the standard order these three processes
-are applied in a Wright-Fisher-style simulation.
+once per generation: it runs migration, then drift, then mutation, in
+that fixed order — the textbook Wright-Fisher island model, in which
+the new generation's gene copies are drawn from the post-migration
+parental pool and each copy then mutates on its own.
 
 <a id="fim.model.operators.drift"></a>
 
@@ -12907,7 +12909,7 @@ just no longer what this function calls).
 
 **Arguments**:
 
-- `state` - Post-migration and post-mutation state.
+- `state` - Post-migration state (the parental pool).
 - `population_size` - Shared or per-deme gene-copy count.
 - `rng` - The run's explicitly threaded random generator.
 - `jit` - When `True`, draw every (deme, locus) pair's own counts in
@@ -13026,129 +13028,99 @@ def mutate(state: ModelState,
            jit: bool = False) -> ModelState
 ```
 
-Replace a binomially sampled number of copies with new alleles.
+Mutate every gene copy independently with probability `mu`.
 
-A "mutation event" is one gene copy switching to a different
-allele than it currently carries — biologically, a copying error
-when a cell divides. This function decides *how many* such events
-happen this generation in each deme/locus (drawn from a Binomial
-distribution, `Binomial(N, mu)` — the standard way of modeling "each
-of `N` independent gene copies has its own small, fixed probability
-`mu` of mutating this generation"), and then decides *which* new
-allele each mutating copy becomes: under the default infinite-
-alleles model, always a fresh, never-before-seen identity (see
-`fim.model.allele.AlleleRegistry`); under the opt-in finite-alleles
-(K-allele) model, possibly a state that already exists elsewhere in
-the run (see `fim.model.allele.FiniteAlleleSpace`).
+A "mutation" is one gene copy switching to a different allele than
+the one it inherited — biologically, a copying error when the copy
+was made. This is the textbook Wright-Fisher mutation step: `state`
+holds the `N` gene copies `drift` has just drawn for the new
+generation, and each one of them, independently, mutates with
+probability `mu`. For an allele carried by `n` copies, the number
+that mutate is therefore `Binomial(n, mu)`, drawn allele by allele
+in ascending allele-id order (the canonical order every backend
+shares — see `drift`'s own docstring). Each mutant copy then
+becomes:
 
-Existing allele mass is reduced proportionally, avoiding an extra drift
-sample in the mutation stage.
+- under the default infinite-alleles model, a brand-new allele that
+has never existed anywhere in the run (a fresh identity from
+`fim.model.allele.AlleleRegistry`, carried by that one copy);
+- under the opt-in finite-alleles (K-allele) model, one of the other
+`K - 1` states of its locus, uniformly at random — possibly one
+already present (see `fim.model.allele.FiniteAlleleSpace`).
 
-**Not `rng.binomial`/`rng.multinomial` themselves, deliberately, as
-of Stage F8** (`20260901-claude-sonnet-5-fim-engine-backend-
-factory-design.md` §5.4) — the event count draws via `_inversion_
-binomial`, and the finite-alleles source-attribution draw (below)
-decomposes via `_multinomial_via_inversion_binomial`, visiting
-`frequency_map`'s own alleles in ascending allele-id order rather
-than its own insertion order — the same primitive and canonical
-order `drift`'s own docstring describes, extended here to `mutate`.
-No longer bit-identical to `rng.binomial`/`rng.multinomial`'s own
-output for the same seed, the same accepted cost as `drift`'s own
-docstring already names.
+Because every copy mutates on its own, two gene copies of the next
+generation are still identical only if they descend from identical
+parental copies *and* neither mutated: the identity recursion is
+`F' = (1 - mu)^2 [1/N + (1 - 1/N) F]` for two distinct copies of one
+panmictic population (`fim.statistics.identity_recursion` has the
+island-model form). Earlier releases instead drew one
+`Binomial(N, mu)` event count per deme and scaled every allele's
+frequency down by the same factor before drift, which adds a small
+`O(mu / N)` excess identity per generation; that is not the textbook
+model, and this replaced it.
+
+The input must be on the `1 / N` grid (whole gene copies, as `drift`
+leaves it); the output is too. `step` runs this after `drift`.
+
+**Not `rng.binomial` itself, deliberately, as of Stage F8**
+(`20260901-claude-sonnet-5-fim-engine-backend-factory-design.md`
+§5.4) — every count draws via `_inversion_binomial`, a fixed number
+of uniforms per draw, the primitive every backend shares.
 
 **Arguments**:
 
-- `state` - Post-migration state.
+- `state` - The post-drift state of the new generation.
 - `mu` - Per-copy mutation probability — shared by every locus, or one
   rate per locus (`SimulationParams.mutation_rates`; typically
   derived from a per-base rate and each locus's own length via
   `SimulationParams.from_mapping`'s `mu_b`).
 - `population_size` - Shared or per-deme gene-copy count.
 - `registry` - Global mutant-allele allocator for the run — used under
-  the default infinite-alleles model, where every mutation event
+  the default infinite-alleles model, where every mutant copy
   receives a fresh global identity.
 - `rng` - The run's explicitly threaded random generator.
 - `finite_alleles` - Optional per-locus finite-allele-space registry
   selecting the opt-in finite-alleles (K-allele) model instead
   (`SimulationParams.mutation_model == "finite_alleles"`). A
-  mutation event's target then depends on its *source* allele —
+  mutant copy's target then depends on its own source allele —
   never itself, but possibly a state already present elsewhere
-  in the run — so mutating copies are first attributed back to
-  the existing allele each one came from, sampled proportionally
-  to that allele's current share, exactly like the proportional
-  mass reduction below already assumes.
-- `jit` - When `True`, speeds up both mutation models, in two
-  different, independently scoped ways — see stage 3 of
-  `20260901-claude-sonnet-5-fim-engine-backend-factory-
-  design.md` §10 item 10e's own phased plan for the full
-  account of why the two ways differ this much.
+  in the run.
+- `jit` - When `True`, the same draws run through compiled kernels.
+  Bit-identical output either way.
 
   Under the default infinite-alleles model
-  (`finite_alleles is None`): every `(deme, locus)` pair's
-  own event count is drawn in one Numba-JIT-compiled,
-  `nogil=True` call (`_jit_mutate_event_counts_batched`,
-  stage 2) instead of one `_inversion_binomial` call per
-  pair, *and* every minted allele identity this whole call
-  needs, across every pair, is reserved in one
-  `AlleleRegistry.next_k_ids` call instead of one
-  `registry.next_id()` call per event (stage 3) — safe to
-  batch this broadly because `registry.next_id`/`next_k_ids`
-  are pure counters that consume no `rng` draw at all, so
-  precomputing every pair's own event count and every
-  minted ID up front never changes what else that pair's own
-  remaining work draws from `rng` in between. Bit-identical
-  output either way.
+  (`finite_alleles is None`): every `(deme, locus, allele)`
+  mutant count of the whole call is drawn in one
+  Numba-JIT-compiled, `nogil=True` call
+  (`_jit_mutate_event_counts_batched`), in the same
+  deme-major, locus, ascending-allele order the unjitted loop
+  uses, and every fresh identity the call needs is reserved in
+  one `AlleleRegistry.next_k_ids` call — safe because minting
+  consumes no `rng` draw at all, so nothing else draws in
+  between.
 
-  Under the opt-in finite-alleles model (`finite_alleles`
-- `given)` - **not** batched across pairs, deliberately — the
-  per-event source-attribution
-  (`_multinomial_via_inversion_binomial`) and target
-  selection (`finite_alleles.mutate_target`) both draw from
-  `rng`, interleaved with each pair's own event-count draw in
-  the unjitted loop below; precomputing any of those up front
-  for a whole generation would draw a later pair's own count
-  before an earlier pair's own finite-alleles draws happen,
-  desyncing the two paths (confirmed directly — an initial
-  version of stage 2 applied event-count batching
-  unconditionally and a bit-identity test caught the
-  divergence immediately). What stage 3 *does* speed up here,
-  safely, because it changes nothing about call count, order,
-  or position: the source-attribution draw itself is compiled
-  (`_jit_multinomial_via_inversion_binomial`) as a direct,
-  one-call-at-a-time, `nogil`-releasing drop-in for the same
-  call, in the same place, in the same per-pair loop —
-  bit-identical output.
-
-  Target selection (`finite_alleles.mutate_target`) is now
-  batched too, per pair, per locus — but only when that
-  locus's own `FiniteAlleleSpace.capacity` is at most
-  `_MAX_JIT_FINITE_ALLELE_CAPACITY`
-  (`_attribute_finite_allele_targets`, which every pair's own
-  target selection now routes through regardless of `jit`).
-  Below that bound: every event this pair needs targets for
-  is drawn in one Numba-JIT-compiled, `nogil=True` call
-  (`_jit_mutate_targets_batched`, a deliberate duplicate of
-  `fim.model.vectorized`'s own kernel of the same name — see
-  `_mutate_targets_batched`'s own docstring for why it is a
-  duplicate, not an import), against that locus's own
-  `FiniteAlleleSpace` exported to dense arrays and written
-  back afterward — bit-identical output, checked directly,
-  not only inherited from that kernel's own already-proven
-  equivalence to `FiniteAlleleSpace.mutate_target`. Above the
-  bound (including the astronomical capacities
-  `FiniteAlleleSpace`'s own docstring names as a real,
-  intended case — a dense `capacity`-sized array there is not
-  slow, it is impossible): silently falls back to the
-  original, unbounded-capacity-safe, one-draw-at-a-time loop,
-  matching `migrate`'s/`mutate`'s own established
-  "performance hint, not a mode switch" contract. Needs
-  `numba` installed only when `True` and at least one locus
-  is eligible.
+  Under the opt-in finite-alleles model: target selection draws
+  from `rng` between one pair's own counts and the next pair's,
+  so counts are drawn one pair at a time (compiled, one call
+  per pair), followed by that pair's own targets — batched per
+  pair through `_jit_mutate_targets_batched` when the locus's
+  own `FiniteAlleleSpace.capacity` is at most
+  `_MAX_JIT_FINITE_ALLELE_CAPACITY`, one
+  `FiniteAlleleSpace.mutate_target` call per copy above it
+  (`_attribute_finite_allele_targets`). Needs `numba`
+  installed only when `True`.
 
 
 **Returns**:
 
-  A post-mutation state at the same generation.
+  A post-mutation state at the same generation, on the `1 / N`
+  grid.
+
+
+**Raises**:
+
+- `ValueError` - If a frequency in `state` is not a whole number of
+  gene copies out of its deme's `N` (`_gene_copy_counts`).
 
 <a id="fim.model.operators.step"></a>
 
@@ -13164,15 +13136,26 @@ def step(state: ModelState,
          jit: bool = False) -> ModelState
 ```
 
-Advance one generation in migration, mutation, then drift order.
+Advance one generation: migration, then drift, then mutation.
 
 This is the one function `fim.engine`'s run loop actually calls,
-once per generation: it chains `migrate`, `mutate`, and `drift`,
-above, in that fixed order — a real population experiences all
-three of these forces continuously and simultaneously, but a
-discrete-generation simulation has to apply them in *some* order
-each tick, and migration-then-mutation-then-drift is the
-conventional choice this project follows.
+once per generation. It is the textbook Wright-Fisher island model:
+
+1. `migrate` forms each deme's parental pool — its own frequencies
+blended with the migrant pool.
+2. `drift` draws the new generation's `N` gene copies from that pool
+(multinomial sampling, with replacement).
+3. `mutate` then mutates each of those new copies independently
+with probability `mu`.
+
+Mutation acts on the sampled copies, not on the parental
+frequencies before sampling, so two copies of the new generation
+are identical only when their parental copies were and neither of
+them mutated — the `(1 - mu)^2` factor of the textbook identity
+recursions (`fim.statistics.identity_recursion`). Releases before
+this one ran migrate, mutate, drift, with a mutation step that
+scaled allele frequencies down before sampling; see `mutate`'s own
+docstring for why that was not the textbook model.
 
 **Arguments**:
 
@@ -13192,15 +13175,12 @@ conventional choice this project follows.
   silently a no-op in `migrate` for a full custom weight
   matrix or stochastic migrant sampling (see `migrate`'s own
   docstring), real for the default scalar-rate, deterministic
-  case; real in `mutate` under both mutation models, though in
-  different amounts — full event-count *and* minting batching
-  under the default infinite-alleles model; under the opt-in
-  finite-alleles model, the source-attribution draw compiled
-  (not batched) plus target selection itself batched too, per
-  locus, below a capacity bound (`_MAX_JIT_FINITE_ALLELE_
-  CAPACITY`) that keeps the astronomically large capacities
-  `FiniteAlleleSpace` also supports safely unaffected (see
-  `mutate`'s own `jit` docstring for the full account).
+  case; real in `mutate` under both mutation models — the
+  mutant-count draws compiled (all of them in one call under
+  the default infinite-alleles model, one call per pair under
+  the opt-in finite-alleles model) and target selection batched
+  per pair below a capacity bound (`_MAX_JIT_FINITE_ALLELE_
+  CAPACITY`) — see `mutate`'s own `jit` docstring.
 
 
 **Returns**:
@@ -14460,10 +14440,10 @@ With that fixed, a full **single-locus** run *is* bit-identical to
 (`test_generational_vector_backend_matches_lineal_exactly_without_
 migration`, `test/engine/test_engine.py`) — but not in general with
 migration active, and not at all with **two or more loci**, migration
-on or off: `step_vectorized` fuses `migrate`/`mutate`/`drift` per
+on or off: `step_vectorized` fuses `migrate`/`drift`/`mutate` per
 locus, one whole locus's own dense `(deme, capacity)` array per call,
 while `operators.step` runs each stage across every tracked locus
-first — `mutate`/`drift`'s own dict-based loops are deme-major,
+first — `drift`/`mutate`'s own dict-based loops are deme-major,
 locus-minor, so the two draw from the shared RNG stream in a genuinely
 different order the instant a run tracks more than one locus, migration
 active or not. Reconciling the two would mean flattening deme and
@@ -14654,8 +14634,8 @@ Restricts each row to `np.flatnonzero(row)` rather than
 Python — `vectorized_state_to_rows`, below, already used this same
 shortcut; this function did not, until caught by a sweep for the
 same "dense array walked element-by-element in Python" mismatch
-`mutate_vectorized`'s own renormalization step had (that function's
-own inline comment has the measured cost). Even though this
+an earlier `mutate_vectorized` renormalization step had (about 19%
+of a step at `d=60`, `capacity=4096`). Even though this
 function is only called once per lane rather than once per
 generation, walking every one of `capacity` slots in a Python loop
 to test `if frequency` on each is the identical waste at a smaller
@@ -14812,75 +14792,37 @@ def mutate_vectorized(locus_state: VectorizedLocusState, sizes: np.ndarray,
                       rng: np.random.Generator) -> VectorizedLocusState
 ```
 
-Replace a binomially sampled number of copies with new-or-recurring alleles.
+Mutate every gene copy independently with probability `rate`.
 
 The array-native counterpart to `fim.model.operators.mutate`'s own
-finite-alleles branch — same three steps (event count, source
-attribution, target selection), same underlying distributions, and,
-as of Stage F8
-(`20260901-claude-sonnet-5-fim-engine-backend-factory-design.md`
-§5.4), the identical primitive and the identical *interleaving*.
+finite-alleles branch — the textbook per-copy mutation step, applied
+to the gene copies `drift_vectorized` has just drawn: each deme's
+row is whole copies out of `sizes[deme]`; for each allele present,
+`Binomial(n, rate)` of its `n` copies mutate; each mutant copy moves
+to one of the other `capacity - 1` states of the locus, uniformly
+(`_mutate_targets_batched`, the array form of
+`FiniteAlleleSpace.mutate_target`).
 
-**Interleaved per deme, deliberately, not batched by step across
-every deme first.** An earlier version of this function drew every
-deme's own event count first, then every deme's own source
-attribution, then every event's own target, in three separate
-passes — each pass individually using the unified primitive and a
-plausible-looking canonical order (ascending deme, then ascending
-allele id), but *as a whole* still consuming this lane's own `rng`
-in a different sequence than `mutate`'s own dict-based path does,
-which interleaves all three steps *within* each deme before moving
-to the next (draw deme 0's own event count, then its own source
-attribution, then all of deme 0's own targets, only then deme 1's
-own event count, and so on). Found by a direct cross-backend test,
-not caught by reasoning about each step in isolation — the
-single-deme case matched exactly from the very first attempt (both
-orderings agree trivially when there is only one deme to interleave
-with), which is what let the batched-by-step version pass every
-test written against it up to that point; a multi-deme test caught
-the real divergence. Fixed by looping over demes explicitly, in
-ascending order, running all three of one deme's own steps before
-moving to the next — the real cost this pays, not minimized: each
-of `_jit_multinomial_rows_batched`/`_jit_mutate_targets_batched` is
-now called once per deme with active mutation events rather than
-once per generation across every deme at once, reintroducing some
-of the per-call overhead Stage F5's own investigation found
-dominant for a structurally similar case (`fim.model.operators.
-_drift_counts_batched`'s own docstring) — accepted here because
-`mutate`'s own event counts are typically far smaller than
-`drift`'s own full per-deme resampling (`mu` is a small
-probability), so this operator's own share of a generation's total
-cost is small enough that the correctness this buys is judged
-worth it; not separately re-benchmarked end to end as part of this
-change.
-
-Target selection specifically preserves `FiniteAlleleSpace.
-mutate_target`'s own real, load-bearing choice — a recurrence
-probability that grows as more of the bounded state space fills up,
-which is what lets the finite-alleles model recover infinite-alleles
-behavior as capacity grows (its own docstring), and, as of the same
-Stage F8 pass, the identical single-fixed-draw mechanism
-`FiniteAlleleSpace.mutate_target`'s own recurrence branch uses
-(`_mutate_targets_batched`'s own inline comment has the full
-argument for why an earlier, statistically-equivalent-but-not-
-same-draw-count rejection-sampling version needed replacing too).
-
-Two more, independent divergence sources remained even after both
-of the above were fixed, neither one to do with the random draw
-itself: a rare (roughly 1-in-150 demes, at this project's own
-reference scale), floating-point-boundary-triggered mismatch traced
-to source attribution's own probability normalization
-(`_multinomial_rows_batched`'s own inline comment in this module has
-the full argument), and a small, systematic ULP-level drift from
-`mutate`'s own final `_normalize` rescaling step, which this
-function did not originally replicate at all (this function's own
-inline comment right after the `np.add.at` call has that argument).
-Closing both is what makes this function's own output agree with
-`mutate`'s dict-based path *exactly* now, not merely "almost
-always" — checked directly
+**The same draws, in the same order, as the dict-based path** —
+checked directly
 (`test_mutate_vectorized_matches_dict_based_mutate_exactly`,
-`test/model/test_vectorized.py`), across 30 seeds and a deliberately
-non-saturated capacity, not assumed from the first two fixes alone.
+`test/model/test_vectorized.py`): demes in ascending order, and
+within one deme every allele's own mutant count first (ascending
+allele id — this row's own column order; absent alleles have
+`n = 0` and consume no draw), then every mutant copy's own target
+(ascending source), before moving to the next deme. Interleaving
+per deme, not batching each step across every deme, is what the
+dict-based loop does; a per-step-batched order would consume the
+shared stream differently once there is more than one deme.
+
+The result stays on the `1 / N` grid (`counts / size`, the same
+division `drift_vectorized` uses), so no renormalization is needed.
+
+**Raises**:
+
+- `ValueError` - If a row is not whole gene copies out of its own
+  `sizes` entry — the same precondition `operators.mutate`
+  enforces.
 
 <a id="fim.model.vectorized.drift_vectorized"></a>
 
@@ -14928,7 +14870,7 @@ def step_vectorized(state: VectorizedState,
                     symmetric_rate: float | None = None) -> VectorizedState
 ```
 
-Advance one generation: migrate, then mutate, then drift, fused.
+Advance one generation: migrate, then drift, then mutate, fused.
 
 The array-native counterpart to `fim.model.operators.step` — every
 locus stays a dense array from this call's own start to its own end,

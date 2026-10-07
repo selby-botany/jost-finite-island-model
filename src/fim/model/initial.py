@@ -252,8 +252,8 @@ class EquilibriumSplitInitialCondition:
        `d`-deme run will have, just concentrated in one deme — starting
        from the identical continuous Dirichlet draw
        `DirichletInitialCondition` uses (`_dirichlet_locus_maps`,
-       above), then repeatedly apply `fim.model.operators.mutate`/
-       `drift` (no `migrate` — there is nothing to migrate between with
+       above), then repeatedly apply `fim.model.operators.drift`/
+       `mutate` (no `migrate` — there is nothing to migrate between with
        one deme) for a burn-in derived from the model itself
        (`fim.convergence.defaults.panmictic_equilibration`): the first
        generation by which the expected identity, so the expected `H_S`
@@ -476,17 +476,18 @@ class EquilibriumSplitInitialCondition:
         )
         registry = AlleleRegistry(start=max(MINTED_ID_START, highest_initial_id + 1))
 
-        # The burn-in itself: mutation then drift, `burn_in` times, with
+        # The burn-in itself: drift then mutation (`fim.model.operators.
+        # step`'s own order, without migration), `burn_in` times, with
         # `H_S` recorded every generation for `EquilibrationOutcome.
         # history` (it decides nothing; see this class's docstring).
         history = [_mean_h_s(state)]
         if on_generation is not None:
             on_generation(state)
         while state.generation < burn_in:
+            state = drift(state, total_population, equilibrium_rng)
             state = mutate(
                 state, params.mu, total_population, registry, equilibrium_rng
             )
-            state = drift(state, total_population, equilibrium_rng)
             history.append(_mean_h_s(state))
             if on_generation is not None:
                 on_generation(state)

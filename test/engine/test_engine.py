@@ -567,7 +567,12 @@ def test_vectorized_extension_keeps_minted_identities_through_extinction() -> No
     bookkeeping only ever advances.
     """
     pytest.importorskip("numba")
-    params = _sigma_band_vector_params()
+    # Seed 20260902, not the helper's own 20260901: Part 1 needs a lane
+    # that has already lost a minted identity by the time it stops, a
+    # property of one seeded realization. Under the textbook per-copy
+    # mutation step (mutants enter the state before the next drift) the
+    # 20260901 lane happens to stop with every minted identity present.
+    params = _sigma_band_vector_params(seed=20260902)
 
     lane = _drive_vector_lane_to_stop(params)
     assert lane.vectorized_state is not None
@@ -2229,15 +2234,14 @@ def test_any_combinator_can_stop_earlier_than_all() -> None:
 
     assert any_result.report["converged"]
     assert all_result.report["converged"]
-    assert any_result.report["generation"] == 5
-    # 20, not the pre-Stage-F8 value of 15: `drift` now draws via
-    # `_inversion_binomial` in ascending-allele-id order rather than
-    # `rng.multinomial` in dict-insertion order — a deliberate,
-    # accepted change to this seed's own specific trajectory (design
-    # doc §5.4's own "accept the break"), confirmed deterministic (not
-    # flaky) by re-running this exact test in isolation before updating
-    # the expected value.
-    assert all_result.report["generation"] == 20
+    # 9 and 35, not 5 and 20: the textbook per-copy mutation step (drift,
+    # then each sampled copy mutates) draws a different stream than the
+    # earlier proportional-mass step did, so this seed's own trajectory
+    # changed. 20 itself replaced a pre-Stage-F8 15 (`_inversion_
+    # binomial` drift, design doc §5.4's own "accept the break").
+    # Deterministic: re-run in isolation before updating the values.
+    assert any_result.report["generation"] == 9
+    assert all_result.report["generation"] == 35
     assert any_result.report["generation"] < all_result.report["generation"]
 
 

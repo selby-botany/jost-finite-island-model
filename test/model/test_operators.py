@@ -22,16 +22,13 @@ from fim.model.operators import (
     _inversion_binomial,
     _jit_migrate_symmetric_blend,
     _jit_multinomial_via_binomial,
-    _jit_multinomial_via_inversion_binomial,
     _jit_mutate_event_counts_batched,
     _jit_mutate_targets_batched,
     _migrate_symmetric_blend_batched,
     _mint_infinite_allele_ids,
     _multinomial_via_binomial,
-    _multinomial_via_inversion_binomial,
     _mutate_event_counts_batched,
     _mutate_targets_batched,
-    _next_mutate_event_count,
     drift,
     migrate,
     mutate,
@@ -351,38 +348,68 @@ def test_mutation_events_receive_fresh_ids(
     assert len(mutant_ids) == len(set(mutant_ids))
 
 
-def test_mutation_scales_existing_mass_and_preserves_sub_grid_allele(
+def test_mutation_rejects_a_state_that_is_not_whole_gene_copies(
     rng: Callable[[int], np.random.Generator],
 ) -> None:
-    """Mutation reduces existing mass proportionally, not by grid rounding.
+    """`mutate` acts on gene copies, so a continuous state is refused.
 
-    Regression guard for the mutation operator: existing allele frequencies
-    must be scaled by a single retained-mass factor so their ratios are
-    preserved and a rare sub-``1/N`` migrant survives. The earlier
-    implementation rounded continuous frequencies onto the ``1/N`` grid before
-    resampling, which deterministically dropped alleles below ``0.5/N`` (here
-    the ``0.004`` allele) and undid migration, biasing runs toward spurious
-    differentiation.
+    The textbook mutation step mutates each of the `N` gene copies
+    `drift` has just drawn; a post-migration (continuous) state, such as
+    the sub-`1/N` frequency `0.004` at `N = 100` below, has no gene
+    copies to mutate. Earlier releases accepted it and scaled every
+    frequency down in proportion, which is not the textbook model.
     """
-    population_size = 100
-    common = AlleleId(0)
-    sub_grid_migrant = AlleleId(1)
-    # 0.004 < 1 / 100: below the grid the old apportionment could represent.
     state = ModelState(
         loci=(LocusSpec(1, 100),),
-        frequencies=(({common: 0.996, sub_grid_migrant: 0.004},),),
+        frequencies=(({AlleleId(0): 0.996, AlleleId(1): 0.004},),),
     )
 
-    mutated = mutate(state, 0.05, population_size, AlleleRegistry(), rng(7))
-    result = mutated.frequency_map(0, 0)
+    with pytest.raises(ValueError, match="whole gene copies"):
+        mutate(state, 0.05, 100, AlleleRegistry(), rng(7))
 
-    # The rare migrant is retained, not rounded away.
-    assert result.get(sub_grid_migrant, 0.0) > 0.0
-    # Proportional scaling preserves the exact pre-existing frequency ratio.
-    assert result[common] / result[sub_grid_migrant] == pytest.approx(0.996 / 0.004)
-    # Events still mint fresh identities and total mass stays normalized.
-    assert any(int(allele_id) >= MINTED_ID_START for allele_id in result)
-    assert sum(result.values()) == pytest.approx(1.0)
+
+def test_mutation_at_rate_one_turns_every_copy_into_a_fresh_allele(
+    rng: Callable[[int], np.random.Generator],
+) -> None:
+    """At `mu = 1` every gene copy mutates, each to its own new allele.
+
+    The defining property of per-copy infinite-alleles mutation, with no
+    randomness left to tolerate: `N` copies become `N` distinct fresh
+    identities of one copy (`1/N`) each, and no founding allele remains.
+    """
+    mutated = mutate(_state(), 1.0, 100, AlleleRegistry(), rng(7))
+
+    for deme in range(2):
+        result = mutated.frequency_map(deme, 0)
+        assert len(result) == 100
+        assert all(int(allele_id) >= MINTED_ID_START for allele_id in result)
+        assert set(result.values()) == {0.01}
+    assert not set(mutated.frequency_map(0, 0)) & set(mutated.frequency_map(1, 0))
+
+
+def test_mutation_keeps_whole_gene_copies_and_draws_per_allele_counts(
+    rng: Callable[[int], np.random.Generator],
+) -> None:
+    """Each allele loses `Binomial(n, mu)` of its own copies, drawn in order.
+
+    Reproduces `mutate`'s own draws by hand from an identically seeded
+    generator — one `_inversion_binomial(n_i, mu)` per allele, ascending
+    allele id — and checks the surviving counts and the number of fresh
+    singletons, so the per-copy model (not one deme-wide event count) is
+    what is pinned.
+    """
+    size, rate = 100, 0.2
+    mutated = mutate(_state(), rate, size, AlleleRegistry(), rng(11))
+
+    reference = rng(11)
+    for deme, counts in enumerate(((80, 20), (20, 80))):
+        mutants = [_inversion_binomial(reference, n, rate) for n in counts]
+        result = mutated.frequency_map(deme, 0)
+        for allele, (n, lost) in enumerate(zip(counts, mutants, strict=True)):
+            assert result.get(AlleleId(allele), 0.0) == (n - lost) / size
+        fresh = [a for a in result if int(a) >= MINTED_ID_START]
+        assert len(fresh) == sum(mutants)
+        assert all(result[a] == 1 / size for a in fresh)
 
 
 def test_mutation_finite_alleles_respects_locus_specific_capacity(
@@ -484,7 +511,7 @@ def test_mutation_finite_alleles_recurrence_rate_matches_theory(
     """A fixed-seed sample recurrence rate through `mutate()` matches theory.
 
     End-to-end version of `FiniteAlleleSpace`'s own recurrence-rate test:
-    drives the same probability through `mutate()`'s source-attribution and
+    drives the same probability through `mutate()`'s per-copy draw and
     accumulation logic, not just the space's `mutate_target` in isolation.
     ``population_size=1, mu=1.0`` makes each call exactly one mutation
     event with a certain, deterministic source — the only randomness left
@@ -551,39 +578,6 @@ def test_jit_mutate_event_counts_batched_matches_plain_decomposition() -> None:
         )
         jitted = _jit_mutate_event_counts_batched(
             np.random.Generator(np.random.PCG64(seed)), ns, ps
-        )
-        assert plain.tolist() == list(jitted)
-
-
-def test_jit_multinomial_via_inversion_binomial_matches_plain_decomposition() -> None:
-    """The Numba-JIT-compiled kernel matches the original, not just its own twin.
-
-    Mirrors `test_jit_multinomial_via_binomial_matches_plain_
-    decomposition`'s own structure, but compares against
-    `_multinomial_via_inversion_binomial` — the function `mutate`'s
-    own finite-alleles branch actually calls — rather than the older,
-    `rng.binomial`-based `_multinomial_via_binomial`. The real risk
-    this isolates: `_jit_multinomial_via_inversion_binomial`'s own
-    inner `draw_one` closure duplicates `_inversion_binomial`'s
-    algorithm rather than calling it (`nopython` mode cannot compile a
-    call to a plain module-level function — see either function's own
-    docstring), so this checks the duplication stayed faithful, not
-    merely that compiling changes nothing.
-    """
-    pytest.importorskip("numba")
-    controller = np.random.default_rng(20260903)
-    for _ in range(200):
-        seed = int(controller.integers(0, 2**31))
-        category_count = int(controller.integers(2, 8))
-        raw = controller.random(category_count)
-        probabilities = raw / raw.sum()
-        n = int(controller.integers(0, 500))
-
-        plain = _multinomial_via_inversion_binomial(
-            np.random.Generator(np.random.PCG64(seed)), n, probabilities
-        )
-        jitted = _jit_multinomial_via_inversion_binomial(
-            np.random.Generator(np.random.PCG64(seed)), n, probabilities
         )
         assert plain.tolist() == list(jitted)
 
@@ -718,56 +712,34 @@ def test_mutate_targets_batched_raises_when_capacity_is_exhausted() -> None:
         )
 
 
-def test_next_mutate_event_count_reads_batched_array_or_draws_inline(
-    rng: Callable[[int], np.random.Generator],
-) -> None:
-    """The small helper `mutate` delegates event-count selection to.
-
-    Direct unit coverage for `_next_mutate_event_count`, split out of
-    `mutate`'s own body purely to keep that function's branch count
-    readable (stage 3's own commit message has the full reasoning) —
-    covered indirectly by every `mutate`-level test above, but this
-    project's own testing standard is one function, one direct test.
-    """
-    batched = np.array([3, 0, 7], dtype=np.int64)
-    assert _next_mutate_event_count(rng(1), 100, 0.1, batched, 0) == 3
-    assert _next_mutate_event_count(rng(1), 100, 0.1, batched, 2) == 7
-
-    generator = rng(20260903)
-    expected = _inversion_binomial(rng(20260903), 100, 0.1)
-    assert _next_mutate_event_count(generator, 100, 0.1, None, 0) == expected
-
-
 def test_mint_infinite_allele_ids_reads_reserved_slice_or_mints_inline() -> None:
     """The small helper `mutate` delegates infinite-alleles minting to.
 
-    Direct unit coverage for `_mint_infinite_allele_ids`, split out for
-    the same reason `_next_mutate_event_count`'s own test above is.
+    Each mutant gene copy gets one fresh identity carried by that one
+    copy (count `1`), from a reserved slice or minted inline.
     """
     reserved = AlleleRegistry().next_k_ids(5)
-    mutated: dict[AlleleId, float] = {}
-    next_offset = _mint_infinite_allele_ids(
-        mutated, AlleleRegistry(), 3, 0.5, reserved, 0
-    )
+    mutated: dict[AlleleId, int] = {}
+    next_offset = _mint_infinite_allele_ids(mutated, AlleleRegistry(), 3, reserved, 0)
     assert next_offset == 3
     assert mutated == {
-        AlleleId(int(reserved[0])): 0.5,
-        AlleleId(int(reserved[1])): 0.5,
-        AlleleId(int(reserved[2])): 0.5,
+        AlleleId(int(reserved[0])): 1,
+        AlleleId(int(reserved[1])): 1,
+        AlleleId(int(reserved[2])): 1,
     }
 
-    # `minted_ids=None` mints one at a time via `registry.next_id()`,
-    # exactly as every prior release did — a fresh registry's own first
-    # two identities are known in advance (`MINTED_ID_START`, `+ 1`), so
-    # this is checked directly against those values, not just a count.
-    unbatched: dict[AlleleId, float] = {}
+    # `minted_ids=None` mints one at a time via `registry.next_id()` — a
+    # fresh registry's own first two identities are known in advance
+    # (`MINTED_ID_START`, `+ 1`), so this is checked directly against
+    # those values, not just a count.
+    unbatched: dict[AlleleId, int] = {}
     unbatched_offset = _mint_infinite_allele_ids(
-        unbatched, AlleleRegistry(), 2, 0.5, None, 7
+        unbatched, AlleleRegistry(), 2, None, 7
     )
     assert unbatched_offset == 7  # unchanged -- no reservation to advance past
     assert unbatched == {
-        AlleleId(MINTED_ID_START): 0.5,
-        AlleleId(MINTED_ID_START + 1): 0.5,
+        AlleleId(MINTED_ID_START): 1,
+        AlleleId(MINTED_ID_START + 1): 1,
     }
 
 
@@ -789,27 +761,25 @@ def test_attribute_finite_allele_targets_batches_when_eligible_or_falls_back(
     allele_ids = (AlleleId(0), AlleleId(1))
     source_counts = np.array([2, 1], dtype=np.int64)
 
-    eligible_mutated: dict[AlleleId, float] = {}
+    eligible_mutated: dict[AlleleId, int] = {}
     _attribute_finite_allele_targets(
         eligible_mutated,
         FiniteAlleleRegistry({1: FiniteAlleleSpace(16, allele_ids)}),
         locus,
         allele_ids,
         source_counts,
-        0.1,
         rng(20260904),
         jit=True,
     )
 
     monkeypatch.setattr(operators, "_MAX_JIT_FINITE_ALLELE_CAPACITY", 0)
-    fallback_mutated: dict[AlleleId, float] = {}
+    fallback_mutated: dict[AlleleId, int] = {}
     _attribute_finite_allele_targets(
         fallback_mutated,
         FiniteAlleleRegistry({1: FiniteAlleleSpace(16, allele_ids)}),
         locus,
         allele_ids,
         source_counts,
-        0.1,
         rng(20260904),
         jit=True,
     )
@@ -824,8 +794,8 @@ def test_mutate_with_jit_matches_mutate_without_jit_bit_for_bit(
 
     Under the default infinite-alleles model (`finite_alleles=None`),
     `jit=True` is real: `registry.next_id()` consumes no `rng` draw at
-    all, so batching every pair's own event count up front never
-    disturbs any other draw's own position in the stream.
+    all, so batching every pair's own per-allele mutant counts up front
+    never disturbs any other draw's own position in the stream.
     """
     pytest.importorskip("numba")
     unjitted = mutate(_state(), 0.1, 100, AlleleRegistry(), rng(20260903), jit=False)
@@ -838,21 +808,14 @@ def test_mutate_with_jit_under_finite_alleles_matches_without_jit_bit_for_bit(
 ) -> None:
     """`jit=True` under the finite-alleles model changes what runs, not the result.
 
-    Stage 2 scoped `jit`'s event-count batching to the infinite-alleles
-    model only — the finite-alleles model's own per-event source-
-    attribution/target-selection draws interleave with the event-count
-    draw in a way batching it up front would desync (`20260901-claude-
-    sonnet-5-fim-engine-backend-factory-design.md` §10 item 10e, stage
-    2's own docstring). Stages 3 and 3b together now give the finite-
-    alleles model real `jit` benefit through the *entire* pipeline for
-    a small-capacity locus like this one (`capacity=64`, well under
-    `_MAX_JIT_FINITE_ALLELE_CAPACITY`): the event-count draw stays
-    unbatched, deliberately, but source attribution is compiled
-    (`_jit_multinomial_via_inversion_binomial`, stage 3) *and* target
-    selection is now batched per pair too
-    (`_jit_mutate_targets_batched`, stage 3b) — bit-identical output
-    either way, checked here across the whole pipeline, not just the
-    source-attribution slice stage 3 alone left checked. A fresh
+    Under the finite-alleles model, target selection draws from `rng`
+    between one pair's own mutant counts and the next pair's, so counts
+    are drawn (compiled) one pair at a time rather than batched across
+    pairs, and target selection is batched per pair
+    (`_jit_mutate_targets_batched`) for a small-capacity locus like this
+    one (`capacity=64`, well under `_MAX_JIT_FINITE_ALLELE_CAPACITY`) —
+    bit-identical output either way, checked across the whole pipeline.
+    A fresh
     `FiniteAlleleSpace` per call, not a shared one — `mutate_target`
     mutates its own internal minted-state bookkeeping, so reusing one
     instance across two separate `mutate()` calls would make the
@@ -942,7 +905,12 @@ def test_mutate_with_jit_matches_without_jit_under_multi_deme_finite_alleles(
         mutation_model="finite_alleles",
         loci=(LocusSpec(1, 2), LocusSpec(2, 3)),  # capacities 16, 64
     )
-    state = generate_initial_state(params, rng(20260904))
+    # `mutate` acts on whole gene copies, so draw them first.
+    state = drift(
+        generate_initial_state(params, rng(20260904)),
+        params.gene_copies,
+        rng(20260904),
+    )
 
     without_jit = mutate(
         state,
@@ -991,7 +959,12 @@ def test_mutate_with_jit_falls_back_above_the_capacity_bound(
         mutation_model="finite_alleles",
         loci=(LocusSpec(1, 5),),  # capacity 1024, above the patched bound
     )
-    state = generate_initial_state(params, rng(20260904))
+    # `mutate` acts on whole gene copies, so draw them first.
+    state = drift(
+        generate_initial_state(params, rng(20260904)),
+        params.gene_copies,
+        rng(20260904),
+    )
 
     without_jit = mutate(
         state,
@@ -1041,7 +1014,12 @@ def test_mutate_with_jit_handles_mixed_eligible_and_ineligible_loci(
             LocusSpec(2, 5),  # capacity 1024 -- above the patched bound
         ),
     )
-    state = generate_initial_state(params, rng(20260904))
+    # `mutate` acts on whole gene copies, so draw them first.
+    state = drift(
+        generate_initial_state(params, rng(20260904)),
+        params.gene_copies,
+        rng(20260904),
+    )
 
     without_jit = mutate(
         state,
@@ -1075,7 +1053,7 @@ def test_step_with_finite_alleles_jit_matches_without_jit_across_many_generation
     whether a batched call's own write-back
     (`FiniteAlleleSpace.restore_from_arrays`) is visible to the *next*
     generation's own processing. This runs several real generations
-    (migrate, mutate, drift, in order) through two fully independent,
+    (migrate, drift, mutate, in order) through two fully independent,
     self-consistent pipelines, mirroring `test_step_with_mutate_jit_
     matches_without_jit_across_many_generations`'s own proven-safe
     shape.
@@ -1120,16 +1098,17 @@ def test_step_with_finite_alleles_jit_matches_without_jit_across_many_generation
 def test_mutate_with_jit_matches_without_jit_across_many_demes_and_loci(
     rng: Callable[[int], np.random.Generator],
 ) -> None:
-    """The flat, per-pair event-count and minting batching stay bit-identical at scale.
+    """Flat per-allele mutant-count and minting batching stay bit-identical.
 
     `_state()`'s own fixture (2 demes, 1 locus) barely exercises the
-    `(deme, locus)` flat layout `_mutate_event_counts_batched` depends
-    on visiting in deme-major, locus-minor order, or `_mint_infinite_
-    allele_ids`'s own running `minted_offset` across many pairs — this
+    `(deme, locus, allele)` flat layout `_mutate_event_counts_batched`
+    depends on visiting in deme-major, locus, ascending-allele order,
+    or `_mint_infinite_allele_ids`'s own running `minted_offset` across
+    many pairs — this
     uses many demes and several loci of different mutation rates
     (including one exact `0.0` rate, `_inversion_binomial`'s own
-    zero-draw short-circuit) against a freshly generated, already-ragged
-    initial state, mirroring
+    zero-draw short-circuit) against a freshly generated, drifted,
+    already-ragged initial state, mirroring
     stage 1's own analogous `migrate` test
     (`test_migrate_with_jit_matches_without_jit_across_many_demes_and_
     loci`) in shape: one realistic-scale call, not a chained multi-
@@ -1139,7 +1118,7 @@ def test_mutate_with_jit_matches_without_jit_across_many_demes_and_loci(
     independent, self-consistent pipelines (this test's own single-call
     shape cannot safely be extended to "chain the result forward" without
     also driving `drift` identically on both sides, since `mutate`'s own
-    event-count draw shares one running `rng` stream with everything
+    mutant-count draw shares one running `rng` stream with everything
     else called on it afterward).
     """
     pytest.importorskip("numba")
@@ -1151,7 +1130,12 @@ def test_mutate_with_jit_matches_without_jit_across_many_demes_and_loci(
         seed=20260903,
         loci=(LocusSpec(1, 40), LocusSpec(2, 20), LocusSpec(3, 60)),
     )
-    state = generate_initial_state(params, rng(20260903))
+    # `mutate` acts on whole gene copies, so draw them first.
+    state = drift(
+        generate_initial_state(params, rng(20260903)),
+        params.gene_copies,
+        rng(20260903),
+    )
 
     unjitted = mutate(
         state, params.mu, params.gene_copies, AlleleRegistry(), rng(13), jit=False
@@ -1170,8 +1154,8 @@ def test_step_with_mutate_jit_matches_without_jit_across_many_generations(
 
     Companion to `test_step_with_migrate_jit_matches_without_jit_
     across_many_generations` (stage 1) — same shape, now exercising
-    stage 2's own event-count batching inside a full `step` pipeline
-    (migrate, mutate, drift, in order, `jit` shared by all three).
+    the mutant-count batching inside a full `step` pipeline (migrate,
+    drift, mutate, in order, `jit` shared by all three).
     """
     pytest.importorskip("numba")
     params = SimulationParams(
@@ -1210,7 +1194,11 @@ def test_drift_preserves_invariants_and_is_seeded(
 def test_step_matches_explicit_operator_order(
     rng: Callable[[int], np.random.Generator],
 ) -> None:
-    """The public pipeline is drift(mutate(migrate(state)))."""
+    """The public pipeline is mutate(drift(migrate(state))).
+
+    The textbook Wright-Fisher order: the new generation's gene copies
+    are drawn from the post-migration pool, then each copy mutates.
+    """
     params = SimulationParams(
         gene_copies=20,
         m=0.2,
@@ -1220,15 +1208,15 @@ def test_step_matches_explicit_operator_order(
         loci=_state().loci,
     )
     expected_rng = rng(6)
-    expected = drift(
-        mutate(
+    expected = mutate(
+        drift(
             migrate(_state(), params.m, params.gene_copies),
-            params.mu,
             params.gene_copies,
-            AlleleRegistry(),
             expected_rng,
         ),
+        params.mu,
         params.gene_copies,
+        AlleleRegistry(),
         expected_rng,
     )
 
@@ -1509,7 +1497,7 @@ def test_step_with_migrate_jit_matches_without_jit_across_many_generations(
 ) -> None:
     """`step`'s own migrate stage stays bit-identical under `jit=True` too.
 
-    Runs several real generations (migrate, mutate, drift, in order) so
+    Runs several real generations (migrate, drift, mutate, in order) so
     `migrate`'s own jit path sees the naturally shrinking, unequal
     per-locus allele sets drift/mutate actually produce over time, not
     only generation zero's own freshly generated state.

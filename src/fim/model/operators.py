@@ -7,14 +7,15 @@ three together in the standard order:
 - `migrate` — a fraction of each deme's gene copies are replaced by a
   weighted average of every other deme's own allele frequencies (the
   "migrant pool"), modeling individuals moving between sub-populations.
-- `mutate` — a small, randomly chosen number of gene copies switch to
-  a different, new-or-existing allele, modeling a real mutation event.
 - `drift` — the full population of `N` gene copies is re-sampled from
   the current frequencies, the same way flipping a weighted coin `N`
   times only approximately reproduces the coin's own true weighting;
   this is what makes a finite population's allele frequencies wander
   randomly from one generation to the next, purely from chance, even
   with no migration or mutation happening at all.
+- `mutate` — each of those newly drawn gene copies independently
+  switches, with probability `mu`, to a different, new-or-existing
+  allele, modeling a real mutation event.
 
 Every function here is "pure" in the sense that none of them mutate
 their `ModelState` argument in place — each one returns a brand-new
@@ -22,9 +23,10 @@ state representing the *result* of applying that one process, leaving
 the state it was given untouched (see `fim.model.state.ModelState`'s
 own docstring for why that immutability matters). `step`, at the
 bottom of this file, is what `fim.engine`'s run loop actually calls
-once per generation: it runs migration, then mutation, then drift, in
-that fixed order, which is the standard order these three processes
-are applied in a Wright-Fisher-style simulation.
+once per generation: it runs migration, then drift, then mutation, in
+that fixed order — the textbook Wright-Fisher island model, in which
+the new generation's gene copies are drawn from the post-migration
+parental pool and each copy then mutates on its own.
 """
 
 from __future__ import annotations
@@ -73,6 +75,10 @@ _REFLECT_THRESHOLD = 0.5
 # `20260901-claude-sonnet-5-fim-engine-backend-factory-design.md`
 # §10 item 10e's own "target selection" follow-on entry.
 _MAX_JIT_FINITE_ALLELE_CAPACITY = 2**20
+
+# `mutate` acts on whole gene copies: a frequency times its deme's `N`
+# farther than this from a whole number is not a post-drift state.
+_GRID_TOLERANCE = 1e-6
 
 
 def _inversion_binomial(rng: np.random.Generator, n: int, p: float) -> int:
@@ -331,124 +337,6 @@ def _multinomial_via_inversion_binomial(
         remaining_p -= probabilities[index]
     counts[category_count - 1] = remaining_n
     return counts
-
-
-_JIT_MULTINOMIAL_VIA_INVERSION_BINOMIAL: (
-    Callable[[np.random.Generator, int, np.ndarray], np.ndarray] | None
-) = None
-
-
-def _multinomial_via_inversion_binomial_compiled(
-    rng: np.random.Generator, n: int, probabilities: np.ndarray
-) -> np.ndarray:
-    """`_multinomial_via_inversion_binomial`, restated for Numba compilation.
-
-    A single, one-call-at-a-time drop-in for that function's own per-
-    pair call — used by `mutate`'s own finite-alleles branch for its
-    source-attribution draw (stage 3 of `20260901-claude-sonnet-5-fim-
-    engine-backend-factory-design.md` §10 item 10e's own phased plan).
-    Called in the identical per-pair position the plain, unjitted
-    version already was — not batched across pairs the way stage 2's
-    own event-count draw is, and deliberately so: this stage's own
-    docstring already establishes that batching draws across pairs
-    ahead of a pair's own finite-alleles work would desync the two
-    paths, and the same hazard applies here.
-
-    **Nested closure, not a call to the module-level `_inversion_
-    binomial`, for the identical reason `_drift_counts_batched`/
-    `_mutate_event_counts_batched` already duplicate it** — see either
-    function's own docstring: `nopython` mode cannot compile a call to
-    a plain module-level function as an internal callee, and decorating
-    `_inversion_binomial` itself would force every caller, including
-    every `jit=False` one, to pay `numba`'s own import cost. Otherwise
-    a direct restatement of `_multinomial_via_inversion_binomial`: same
-    sequential conditional-binomial decomposition, same clamping, same
-    category-visiting order — bit-identical output for the same seed
-    and inputs, proven by `test_jit_multinomial_via_inversion_binomial_
-    matches_plain_decomposition` rather than merely argued from the
-    two functions looking alike.
-    """
-
-    def draw_one(n: int, p: float) -> int:
-        if n <= 0 or p <= 0.0:
-            return 0
-        if p >= 1.0:
-            return n
-        u = rng.random()
-        reflect = p > _REFLECT_THRESHOLD
-        q = 1.0 - p if reflect else p
-        mode = min(int((n + 1) * q), n)
-        log_pmf_mode = (
-            math.lgamma(n + 1.0)
-            - math.lgamma(mode + 1.0)
-            - math.lgamma(n - mode + 1.0)
-            + mode * math.log(q)
-            + (n - mode) * math.log1p(-q)
-        )
-        pmf_mode = math.exp(log_pmf_mode)
-        low_pmf = [pmf_mode]
-        current = pmf_mode
-        for offset in range(mode, 0, -1):
-            current = current * offset / (n - offset + 1) * (1.0 - q) / q
-            low_pmf.append(current)
-        low_pmf.reverse()
-        cdf = 0.0
-        for candidate in range(mode + 1):
-            cdf += low_pmf[candidate]
-            if cdf >= u:
-                return n - candidate if reflect else candidate
-        pmf = pmf_mode
-        candidate = mode
-        while cdf < u and candidate < n:
-            candidate += 1
-            pmf *= (n - candidate + 1) / candidate * q / (1.0 - q)
-            cdf += pmf
-        return n - candidate if reflect else candidate
-
-    category_count = probabilities.shape[0]
-    counts = np.empty(category_count, dtype=np.int64)
-    remaining_n = n
-    remaining_p = 1.0
-    for index in range(category_count - 1):
-        target_p = probabilities[index] / remaining_p if remaining_p > 0.0 else 0.0
-        if target_p < 0.0:
-            target_p = 0.0
-        elif target_p > 1.0:
-            target_p = 1.0
-        drawn = draw_one(remaining_n, target_p)
-        counts[index] = drawn
-        remaining_n -= drawn
-        remaining_p -= probabilities[index]
-    counts[category_count - 1] = remaining_n
-    return counts
-
-
-def _jit_multinomial_via_inversion_binomial(
-    rng: np.random.Generator, n: int, probabilities: np.ndarray
-) -> np.ndarray:
-    """`_multinomial_via_inversion_binomial_compiled`, JIT-compiled with `nogil=True`.
-
-    Lazily imports and compiles `numba` exactly like `_jit_multinomial_
-    via_binomial` does, and for the same reason (including `cache=True`
-    -- see that function's own docstring, and `fim.model.vectorized.
-    _jit_multinomial_rows_batched`'s beyond it, for the measured
-    cross-process benefit and the confirmed-safe read-only-install
-    fallback). `numba` is an optional dependency (``pip install
-    fim[jit]``) — only a caller that explicitly requests `mutate(...,
-    jit=True)` on a finite-alleles run ever pays its import/compilation
-    cost or needs it installed at all.
-
-    Raises:
-        ImportError: If `numba` is not installed.
-    """
-    global _JIT_MULTINOMIAL_VIA_INVERSION_BINOMIAL  # noqa: PLW0603
-    if _JIT_MULTINOMIAL_VIA_INVERSION_BINOMIAL is None:
-        import numba  # noqa: PLC0415 -- lazy, optional-dependency import
-
-        _JIT_MULTINOMIAL_VIA_INVERSION_BINOMIAL = numba.jit(nogil=True, cache=True)(
-            _multinomial_via_inversion_binomial_compiled
-        )
-    return _JIT_MULTINOMIAL_VIA_INVERSION_BINOMIAL(rng, n, probabilities)
 
 
 _JIT_MUTATE_TARGETS_BATCHED: (
@@ -909,7 +797,7 @@ def drift(
     just no longer what this function calls).
 
     Args:
-        state: Post-migration and post-mutation state.
+        state: Post-migration state (the parental pool).
         population_size: Shared or per-deme gene-copy count.
         rng: The run's explicitly threaded random generator.
         jit: When `True`, draw every (deme, locus) pair's own counts in
@@ -1120,17 +1008,16 @@ def _mutate_event_counts_batched(
     ns: np.ndarray,
     ps: np.ndarray,
 ) -> np.ndarray:
-    """Draw every (deme, locus) pair's own mutation-event count in one pass.
+    """Draw one `Binomial(n, p)` mutant count per gene-copy group, in one pass.
 
-    `mutate`'s own event-count draw is a single `Binomial(n, p)` per
-    pair — simpler than `drift`'s own per-pair *multinomial* draw
-    (`_drift_counts_batched`), so this needs no conditional-binomial
-    decomposition across categories, only the one draw per pair,
-    batched the same way: pay the Python/Numba call-boundary crossing
-    once per generation instead of once per `(deme, locus)` pair (the
-    same regression `_drift_counts_batched`'s own docstring already
-    measured and fixed for the multinomial case, avoided here from the
-    start rather than found the same way twice).
+    A "group" is every gene copy of one allele in one `(deme, locus)`
+    pair: `mutate` mutates each gene copy independently with
+    probability `mu`, so the number of an allele's own `n` copies that
+    mutate is `Binomial(n, mu)` — one draw per group, no
+    conditional-binomial decomposition across categories (unlike
+    `drift`'s own multinomial, `_drift_counts_batched`), batched the
+    same way: pay the Python/Numba call-boundary crossing once per call
+    instead of once per group.
 
     **Nested closure, not a call to the module-level `_inversion_
     binomial`, for the identical reason `_drift_counts_batched`
@@ -1139,28 +1026,27 @@ def _mutate_event_counts_batched(
     undecorated module-level function as an internal callee, and
     decorating `_inversion_binomial` itself would force every caller,
     including every `jit=False` one, to pay `numba`'s own import cost.
+    `draw_one` below is `_inversion_binomial`, line for line, so a
+    group drawn here and a group drawn by `_inversion_binomial` from the
+    same stream position give the same count.
 
-    **Bit-identity depends on visiting pairs in exactly the order
-    `mutate`'s own unjitted loop does** — deme-major, locus-minor
-    (`mutate`'s own docstring/loop order), unlike stage 1's `migrate`
-    work (`20260901-claude-sonnet-5-fim-engine-backend-factory-
-    design.md` §10 item 10e), which had no RNG at all: every pair's
-    own draw consumes real, sequential positions in the shared `rng`'s
-    own bit stream, so an out-of-order batched pass would desync every
-    later pair's own draw from what the unjitted loop would have
-    produced, even though each individual draw's own algorithm is
-    identical either way.
+    **Bit-identity depends on visiting groups in exactly the order
+    `mutate`'s own unjitted loop does** — deme-major, then locus, then
+    ascending allele id: every group's own draw consumes real,
+    sequential positions in the shared `rng`'s own bit stream, so an
+    out-of-order batched pass would desync every later draw. A group
+    with `n == 0` or `p == 0` consumes no draw at all, which is what
+    lets `fim.model.vectorized.mutate_vectorized` pass a deme's whole
+    dense count row through the same kernel.
 
     Args:
         rng: The run's explicitly threaded random generator.
-        ns: One pair count per `(deme, locus)` pair, deme-major,
-            locus-minor — this pair's own deme's `N`.
-        ps: One probability per pair, the same order — this pair's own
-            locus's own mutation rate.
+        ns: One gene-copy count per group, in visiting order.
+        ps: One mutation probability per group, the same order — the
+            group's own locus's own rate.
 
     Returns:
-        One event count per pair, the same flat, deme-major,
-        locus-minor order as `ns`/`ps`.
+        One mutant count per group, the same order as `ns`/`ps`.
     """
 
     def draw_one(n: int, p: float) -> int:
@@ -1234,69 +1120,71 @@ def _jit_mutate_event_counts_batched(
     return _JIT_MUTATE_EVENT_COUNTS_BATCHED(rng, ns, ps)
 
 
-def _next_mutate_event_count(
-    rng: np.random.Generator,
-    size: int,
-    rate: float,
-    event_counts_flat: np.ndarray | None,
-    pair_index: int,
-) -> int:
-    """Return one `(deme, locus)` pair's own mutation-event count.
+def _gene_copy_counts(
+    frequency_map: Mapping[AlleleId, float], size: int
+) -> tuple[tuple[AlleleId, ...], np.ndarray]:
+    """Return one `(deme, locus)` pair's own whole gene-copy counts.
 
-    Reads `event_counts_flat[pair_index]` when `mutate`'s own batched
-    path already drew it (`jit=True` under the infinite-alleles model —
-    see `mutate`'s own `jit` docstring); draws it directly otherwise,
-    exactly as every prior release did. Split out of `mutate`'s own
-    body purely to keep that function's own branch count readable —
-    no behavioral difference from inlining this.
+    `mutate` acts on gene copies, so its input must be a state whose
+    frequencies are whole copies out of `size` — what `drift` produces
+    (`count / size`). Rounding `frequency * size` recovers each count
+    exactly; anything farther than `_GRID_TOLERANCE` from a whole number,
+    or counts that do not add up to `size`, means the caller passed a
+    continuous (pre-drift) state, which has no gene copies to mutate.
 
     Args:
-        rng: The run's explicitly threaded random generator.
-        size: This pair's own deme's gene-copy count.
-        rate: This pair's own locus's own mutation rate.
-        event_counts_flat: `mutate`'s own precomputed, deme-major/
-            locus-minor flat array, or `None` if this pair's own count
-            has not been drawn yet.
-        pair_index: This pair's own position in `event_counts_flat`,
-            when it is not `None`.
+        frequency_map: One pair's own frequencies, on the `1 / size`
+            grid.
+        size: That pair's own deme's gene-copy count.
 
     Returns:
-        This pair's own event count.
+        The pair's own allele ids in ascending order (the canonical
+        visiting order every backend shares — see `drift`'s own
+        docstring) and their gene-copy counts, the same order.
+
+    Raises:
+        ValueError: If the frequencies are not whole gene copies out of
+            `size`.
     """
-    if event_counts_flat is None:
-        return _inversion_binomial(rng, size, rate)
-    return int(event_counts_flat[pair_index])
+    allele_ids = tuple(sorted(frequency_map))
+    scaled = np.fromiter(
+        (frequency_map[allele_id] * size for allele_id in allele_ids),
+        dtype=np.float64,
+        count=len(allele_ids),
+    )
+    counts = np.rint(scaled).astype(np.int64)
+    if np.any(np.abs(scaled - counts) > _GRID_TOLERANCE) or int(counts.sum()) != size:
+        raise ValueError(
+            "mutate needs whole gene copies: every frequency must be a "
+            f"multiple of 1/{size} (a state produced by drift)"
+        )
+    return allele_ids, counts
 
 
 def _mint_infinite_allele_ids(
-    mutated: dict[AlleleId, float],
+    mutated: dict[AlleleId, int],
     registry: AlleleRegistry,
     event_count: int,
-    event_frequency: float,
     minted_ids: np.ndarray | None,
     minted_offset: int,
 ) -> int:
-    """Mint `event_count` fresh identities into `mutated`, in place.
+    """Give `event_count` mutant gene copies one fresh identity each, in place.
 
     Reads this pair's own contiguous slice of `minted_ids` — a single
-    whole-generation reservation `mutate`'s own `jit` docstring explains
-    is safe to draw up front regardless of pair order, since minting
-    consumes no `rng` draw at all — when one was already reserved
-    (`jit=True` under the infinite-alleles model); mints one at a time
-    via `registry.next_id()` otherwise, exactly as every prior release
-    did. Split out of `mutate`'s own body for the same reason `_next_
-    mutate_event_count`, above, was.
+    whole-call reservation `mutate`'s own `jit` docstring explains is
+    safe to draw up front, since minting consumes no `rng` draw at all —
+    when one was already reserved (`jit=True` under the infinite-alleles
+    model); mints one at a time via `registry.next_id()` otherwise. Both
+    hand out the same identities in the same order.
 
     Args:
-        mutated: This pair's own working frequency map, mutated in
-            place with one new entry per minted identity.
+        mutated: This pair's own working gene-copy counts, given one new
+            entry (count `1`) per minted identity.
         registry: Global mutant-allele allocator, used only when
             `minted_ids` is `None`.
-        event_count: How many identities to mint for this pair.
-        event_frequency: The frequency each freshly minted identity
-            starts at (`1 / size`).
-        minted_ids: The whole-generation reservation, or `None` if
-            nothing was reserved up front.
+        event_count: How many mutant copies need an identity.
+        minted_ids: The whole-call reservation, or `None` if nothing was
+            reserved up front.
         minted_offset: Where this pair's own slice of `minted_ids`
             starts.
 
@@ -1306,69 +1194,63 @@ def _mint_infinite_allele_ids(
     """
     if minted_ids is None:
         for _event in range(event_count):
-            mutated[registry.next_id()] = event_frequency
+            mutated[registry.next_id()] = 1
         return minted_offset
     for minted_id in minted_ids[minted_offset : minted_offset + event_count]:
-        mutated[AlleleId(int(minted_id))] = event_frequency
+        mutated[AlleleId(int(minted_id))] = 1
     return minted_offset + event_count
 
 
 def _attribute_finite_allele_targets(
-    mutated: dict[AlleleId, float],
+    mutated: dict[AlleleId, int],
     finite_alleles: FiniteAlleleRegistry,
     locus: LocusSpec,
     allele_ids: tuple[AlleleId, ...],
     source_counts: np.ndarray,
-    event_frequency: float,
     rng: np.random.Generator,
     jit: bool,
 ) -> None:
-    """Attribute every mutating copy's own finite-alleles target into `mutated`.
+    """Add every mutant copy's own finite-alleles target into `mutated`.
 
-    Two paths, chosen per pair, per this call — never a fixed choice
-    for the whole run, since different loci can carry different
-    capacities in the same `FiniteAlleleRegistry` (`FiniteAlleleSpace`'s
-    own docstring; `test_finite_allele_registry_dispatches_by_locus_id`
-    already exercises exactly this):
+    `source_counts[i]` mutant copies came from `allele_ids[i]`; each
+    gets its own target, drawn in ascending source order, one copy at a
+    time. Two paths, chosen per pair, per this call — never a fixed
+    choice for the whole run, since different loci can carry different
+    capacities in the same `FiniteAlleleRegistry`
+    (`test_finite_allele_registry_dispatches_by_locus_id`):
 
     - **Eligible** (`jit` and this locus's own `capacity <= _MAX_JIT_
-      FINITE_ALLELE_CAPACITY`): every event this pair needs handled is
-      drawn in one Numba-JIT-compiled, `nogil=True` call
+      FINITE_ALLELE_CAPACITY`): every target this pair needs is drawn in
+      one Numba-JIT-compiled, `nogil=True` call
       (`_jit_mutate_targets_batched`) against this locus's own
       `FiniteAlleleSpace`, exported to dense arrays
       (`FiniteAlleleSpace.to_arrays`) and written back afterward
-      (`FiniteAlleleSpace.restore_from_arrays`) so the next pair at
-      this same locus — same deme's own next locus, or the next deme
-      entirely, since one `FiniteAlleleSpace` is shared across every
-      deme at a given locus — sees the correctly updated minted state.
-      Bit-identical to the unjitted path below, proven directly
-      (`test_mutate_with_jit_matches_without_jit_under_small_capacity_
-      finite_alleles`), not merely argued from the underlying kernel's
-      own already-proven equivalence to `FiniteAlleleSpace.mutate_
-      target` (`test_mutate_targets_batched_matches_finite_allele_
-      space_exactly`) — the sources array's own construction and the
-      write-back round trip are new code this call adds, and needed
-      their own proof.
+      (`FiniteAlleleSpace.restore_from_arrays`) so the next pair at this
+      same locus sees the updated minted state (one `FiniteAlleleSpace`
+      is shared across every deme at a given locus).
     - **Ineligible** (`jit` is `False`, or this locus's own `capacity`
-      exceeds the bound): the original, unbounded-capacity-safe,
-      one-draw-at-a-time loop through `FiniteAlleleSpace.mutate_target`
-      — unchanged, silently, not an error, matching `migrate`'s/
-      `mutate`'s own established "performance hint, not a mode switch"
-      contract. `_MAX_JIT_FINITE_ALLELE_CAPACITY`'s own module-level
-      comment has the reasoning for where that bound sits.
+      exceeds the bound): one `FiniteAlleleSpace.mutate_target` call per
+      copy — unbounded-capacity-safe, silently, not an error, matching
+      the "performance hint, not a mode switch" contract.
+      `_MAX_JIT_FINITE_ALLELE_CAPACITY`'s own module-level comment has
+      the reasoning for where that bound sits.
+
+    Both paths draw the same targets from the same stream positions
+    (`test_attribute_finite_allele_targets_batches_when_eligible_or_
+    falls_back`).
 
     Args:
-        mutated: This pair's own working frequency map, mutated in
-            place with one accumulated entry per event's own target.
+        mutated: This pair's own working gene-copy counts, each target
+            adding one copy (a target can coincide with another copy's
+            target or with an allele already present, so counts
+            accumulate rather than overwrite).
         finite_alleles: This run's own per-locus finite-allele-space
             registry.
         locus: This pair's own locus.
-        allele_ids: This pair's own segregating alleles, ascending
-            order — `source_counts`'s own index order.
-        source_counts: How many events came from each of `allele_ids`,
-            the same order.
-        event_frequency: The frequency each event's own target
-            accumulates (`1 / size`).
+        allele_ids: This pair's own source alleles, ascending order —
+            `source_counts`'s own index order.
+        source_counts: How many mutant copies came from each of
+            `allele_ids`, the same order.
         rng: The run's explicitly threaded random generator.
         jit: Whether the caller requested the batched path at all.
     """
@@ -1393,12 +1275,45 @@ def _attribute_finite_allele_targets(
         space.restore_from_arrays(minted_mask, minted_list, minted_count, next_unminted)
         for target in targets:
             allele_id = AlleleId(int(target))
-            mutated[allele_id] = mutated.get(allele_id, 0.0) + event_frequency
+            mutated[allele_id] = mutated.get(allele_id, 0) + 1
         return
     for source_id, source_count in zip(allele_ids, source_counts, strict=True):
         for _event in range(int(source_count)):
             target = finite_alleles.mutate_target(locus.locus_id, source_id, rng)
-            mutated[target] = mutated.get(target, 0.0) + event_frequency
+            mutated[target] = mutated.get(target, 0) + 1
+
+
+def _draw_mutant_counts(
+    rng: np.random.Generator,
+    copy_counts: np.ndarray,
+    rate: float,
+    jit: bool,
+) -> np.ndarray:
+    """Draw `Binomial(n_i, rate)` mutant copies for each allele of one pair.
+
+    One `_inversion_binomial` draw per allele, in the given (ascending
+    allele-id) order; with `jit`, the same draws through the compiled
+    `_jit_mutate_event_counts_batched` kernel in one call — identical
+    counts from identical stream positions either way.
+
+    Args:
+        rng: The run's explicitly threaded random generator.
+        copy_counts: Each allele's own gene-copy count in this pair.
+        rate: This pair's own locus's own mutation probability.
+        jit: Whether to use the compiled kernel.
+
+    Returns:
+        One mutant count per allele, each in `[0, copy_counts[i]]`.
+    """
+    if jit:
+        return _jit_mutate_event_counts_batched(
+            rng, copy_counts, np.full(copy_counts.shape[0], rate, dtype=np.float64)
+        )
+    return np.fromiter(
+        (_inversion_binomial(rng, int(count), rate) for count in copy_counts),
+        dtype=np.int64,
+        count=copy_counts.shape[0],
+    )
 
 
 def mutate(
@@ -1411,245 +1326,194 @@ def mutate(
     finite_alleles: FiniteAlleleRegistry | None = None,
     jit: bool = False,
 ) -> ModelState:
-    """Replace a binomially sampled number of copies with new alleles.
+    """Mutate every gene copy independently with probability `mu`.
 
-    A "mutation event" is one gene copy switching to a different
-    allele than it currently carries — biologically, a copying error
-    when a cell divides. This function decides *how many* such events
-    happen this generation in each deme/locus (drawn from a Binomial
-    distribution, `Binomial(N, mu)` — the standard way of modeling "each
-    of `N` independent gene copies has its own small, fixed probability
-    `mu` of mutating this generation"), and then decides *which* new
-    allele each mutating copy becomes: under the default infinite-
-    alleles model, always a fresh, never-before-seen identity (see
-    `fim.model.allele.AlleleRegistry`); under the opt-in finite-alleles
-    (K-allele) model, possibly a state that already exists elsewhere in
-    the run (see `fim.model.allele.FiniteAlleleSpace`).
+    A "mutation" is one gene copy switching to a different allele than
+    the one it inherited — biologically, a copying error when the copy
+    was made. This is the textbook Wright-Fisher mutation step: `state`
+    holds the `N` gene copies `drift` has just drawn for the new
+    generation, and each one of them, independently, mutates with
+    probability `mu`. For an allele carried by `n` copies, the number
+    that mutate is therefore `Binomial(n, mu)`, drawn allele by allele
+    in ascending allele-id order (the canonical order every backend
+    shares — see `drift`'s own docstring). Each mutant copy then
+    becomes:
 
-    Existing allele mass is reduced proportionally, avoiding an extra drift
-    sample in the mutation stage.
+    - under the default infinite-alleles model, a brand-new allele that
+      has never existed anywhere in the run (a fresh identity from
+      `fim.model.allele.AlleleRegistry`, carried by that one copy);
+    - under the opt-in finite-alleles (K-allele) model, one of the other
+      `K - 1` states of its locus, uniformly at random — possibly one
+      already present (see `fim.model.allele.FiniteAlleleSpace`).
 
-    **Not `rng.binomial`/`rng.multinomial` themselves, deliberately, as
-    of Stage F8** (`20260901-claude-sonnet-5-fim-engine-backend-
-    factory-design.md` §5.4) — the event count draws via `_inversion_
-    binomial`, and the finite-alleles source-attribution draw (below)
-    decomposes via `_multinomial_via_inversion_binomial`, visiting
-    `frequency_map`'s own alleles in ascending allele-id order rather
-    than its own insertion order — the same primitive and canonical
-    order `drift`'s own docstring describes, extended here to `mutate`.
-    No longer bit-identical to `rng.binomial`/`rng.multinomial`'s own
-    output for the same seed, the same accepted cost as `drift`'s own
-    docstring already names.
+    Because every copy mutates on its own, two gene copies of the next
+    generation are still identical only if they descend from identical
+    parental copies *and* neither mutated: the identity recursion is
+    `F' = (1 - mu)^2 [1/N + (1 - 1/N) F]` for two distinct copies of one
+    panmictic population (`fim.statistics.identity_recursion` has the
+    island-model form). Earlier releases instead drew one
+    `Binomial(N, mu)` event count per deme and scaled every allele's
+    frequency down by the same factor before drift, which adds a small
+    `O(mu / N)` excess identity per generation; that is not the textbook
+    model, and this replaced it.
+
+    The input must be on the `1 / N` grid (whole gene copies, as `drift`
+    leaves it); the output is too. `step` runs this after `drift`.
+
+    **Not `rng.binomial` itself, deliberately, as of Stage F8**
+    (`20260901-claude-sonnet-5-fim-engine-backend-factory-design.md`
+    §5.4) — every count draws via `_inversion_binomial`, a fixed number
+    of uniforms per draw, the primitive every backend shares.
 
     Args:
-        state: Post-migration state.
+        state: The post-drift state of the new generation.
         mu: Per-copy mutation probability — shared by every locus, or one
             rate per locus (`SimulationParams.mutation_rates`; typically
             derived from a per-base rate and each locus's own length via
             `SimulationParams.from_mapping`'s `mu_b`).
         population_size: Shared or per-deme gene-copy count.
         registry: Global mutant-allele allocator for the run — used under
-            the default infinite-alleles model, where every mutation event
+            the default infinite-alleles model, where every mutant copy
             receives a fresh global identity.
         rng: The run's explicitly threaded random generator.
         finite_alleles: Optional per-locus finite-allele-space registry
             selecting the opt-in finite-alleles (K-allele) model instead
             (`SimulationParams.mutation_model == "finite_alleles"`). A
-            mutation event's target then depends on its *source* allele —
+            mutant copy's target then depends on its own source allele —
             never itself, but possibly a state already present elsewhere
-            in the run — so mutating copies are first attributed back to
-            the existing allele each one came from, sampled proportionally
-            to that allele's current share, exactly like the proportional
-            mass reduction below already assumes.
-        jit: When `True`, speeds up both mutation models, in two
-            different, independently scoped ways — see stage 3 of
-            `20260901-claude-sonnet-5-fim-engine-backend-factory-
-            design.md` §10 item 10e's own phased plan for the full
-            account of why the two ways differ this much.
+            in the run.
+        jit: When `True`, the same draws run through compiled kernels.
+            Bit-identical output either way.
 
             Under the default infinite-alleles model
-            (`finite_alleles is None`): every `(deme, locus)` pair's
-            own event count is drawn in one Numba-JIT-compiled,
-            `nogil=True` call (`_jit_mutate_event_counts_batched`,
-            stage 2) instead of one `_inversion_binomial` call per
-            pair, *and* every minted allele identity this whole call
-            needs, across every pair, is reserved in one
-            `AlleleRegistry.next_k_ids` call instead of one
-            `registry.next_id()` call per event (stage 3) — safe to
-            batch this broadly because `registry.next_id`/`next_k_ids`
-            are pure counters that consume no `rng` draw at all, so
-            precomputing every pair's own event count and every
-            minted ID up front never changes what else that pair's own
-            remaining work draws from `rng` in between. Bit-identical
-            output either way.
+            (`finite_alleles is None`): every `(deme, locus, allele)`
+            mutant count of the whole call is drawn in one
+            Numba-JIT-compiled, `nogil=True` call
+            (`_jit_mutate_event_counts_batched`), in the same
+            deme-major, locus, ascending-allele order the unjitted loop
+            uses, and every fresh identity the call needs is reserved in
+            one `AlleleRegistry.next_k_ids` call — safe because minting
+            consumes no `rng` draw at all, so nothing else draws in
+            between.
 
-            Under the opt-in finite-alleles model (`finite_alleles`
-            given): **not** batched across pairs, deliberately — the
-            per-event source-attribution
-            (`_multinomial_via_inversion_binomial`) and target
-            selection (`finite_alleles.mutate_target`) both draw from
-            `rng`, interleaved with each pair's own event-count draw in
-            the unjitted loop below; precomputing any of those up front
-            for a whole generation would draw a later pair's own count
-            before an earlier pair's own finite-alleles draws happen,
-            desyncing the two paths (confirmed directly — an initial
-            version of stage 2 applied event-count batching
-            unconditionally and a bit-identity test caught the
-            divergence immediately). What stage 3 *does* speed up here,
-            safely, because it changes nothing about call count, order,
-            or position: the source-attribution draw itself is compiled
-            (`_jit_multinomial_via_inversion_binomial`) as a direct,
-            one-call-at-a-time, `nogil`-releasing drop-in for the same
-            call, in the same place, in the same per-pair loop —
-            bit-identical output.
-
-            Target selection (`finite_alleles.mutate_target`) is now
-            batched too, per pair, per locus — but only when that
-            locus's own `FiniteAlleleSpace.capacity` is at most
-            `_MAX_JIT_FINITE_ALLELE_CAPACITY`
-            (`_attribute_finite_allele_targets`, which every pair's own
-            target selection now routes through regardless of `jit`).
-            Below that bound: every event this pair needs targets for
-            is drawn in one Numba-JIT-compiled, `nogil=True` call
-            (`_jit_mutate_targets_batched`, a deliberate duplicate of
-            `fim.model.vectorized`'s own kernel of the same name — see
-            `_mutate_targets_batched`'s own docstring for why it is a
-            duplicate, not an import), against that locus's own
-            `FiniteAlleleSpace` exported to dense arrays and written
-            back afterward — bit-identical output, checked directly,
-            not only inherited from that kernel's own already-proven
-            equivalence to `FiniteAlleleSpace.mutate_target`. Above the
-            bound (including the astronomical capacities
-            `FiniteAlleleSpace`'s own docstring names as a real,
-            intended case — a dense `capacity`-sized array there is not
-            slow, it is impossible): silently falls back to the
-            original, unbounded-capacity-safe, one-draw-at-a-time loop,
-            matching `migrate`'s/`mutate`'s own established
-            "performance hint, not a mode switch" contract. Needs
-            `numba` installed only when `True` and at least one locus
-            is eligible.
+            Under the opt-in finite-alleles model: target selection draws
+            from `rng` between one pair's own counts and the next pair's,
+            so counts are drawn one pair at a time (compiled, one call
+            per pair), followed by that pair's own targets — batched per
+            pair through `_jit_mutate_targets_batched` when the locus's
+            own `FiniteAlleleSpace.capacity` is at most
+            `_MAX_JIT_FINITE_ALLELE_CAPACITY`, one
+            `FiniteAlleleSpace.mutate_target` call per copy above it
+            (`_attribute_finite_allele_targets`). Needs `numba`
+            installed only when `True`.
 
     Returns:
-        A post-mutation state at the same generation.
+        A post-mutation state at the same generation, on the `1 / N`
+        grid.
+
+    Raises:
+        ValueError: If a frequency in `state` is not a whole number of
+            gene copies out of its deme's `N` (`_gene_copy_counts`).
     """
     if isinstance(mu, float) and mu == 0.0:
         return state
     mutation_rates = mu if isinstance(mu, tuple) else (mu,) * state.locus_count
     sizes = _population_sizes(population_size, state.deme_count)
-    # `jit=True` under the infinite-alleles model draws every pair's own
-    # event count up front, in one compiled call, in the identical
-    # deme-major/locus-minor order the loop below visits pairs in — see
-    # `_mutate_event_counts_batched`'s own docstring for why that order
-    # is what keeps this bit-identical to the per-pair `_inversion_
-    # binomial` calls below, and this function's own `jit` docstring for
-    # why that guarantee only holds when `finite_alleles is None`. `None`
-    # (not an empty array) is the "not batched" sentinel, so the loop's
-    # own per-pair fallback stays a single, unambiguous `is None` check.
-    # `minted_ids`/`minted_offset` do the same for every minted identity
-    # this whole call needs, reserved once via `next_k_ids` rather than
-    # once per event via `next_id` — safe for the identical reason: no
-    # `rng` draw involved, so reservation order relative to anything
-    # else this function draws from `rng` cannot matter.
-    event_counts_flat: np.ndarray | None = None
+
+    # Every pair's own gene-copy counts, deme-major, locus-minor,
+    # alleles ascending: the visiting order of every draw below.
+    pairs = [
+        (_gene_copy_counts(frequency_map, size), size, locus, rate)
+        for deme, size in zip(state.frequencies, sizes, strict=True)
+        for frequency_map, locus, rate in zip(
+            deme, state.loci, mutation_rates, strict=True
+        )
+    ]
+
+    # `jit` under infinite alleles: no draw happens between one pair's own
+    # counts and the next pair's, so every count of the call is drawn up
+    # front in one compiled call, in the identical order the loop below
+    # would draw them, and every fresh identity is reserved at once.
+    mutant_counts_flat: np.ndarray | None = None
     minted_ids: np.ndarray | None = None
     minted_offset = 0
     if jit and finite_alleles is None:
-        ns = np.repeat(np.asarray(sizes, dtype=np.int64), state.locus_count)
-        ps = np.tile(np.asarray(mutation_rates, dtype=np.float64), state.deme_count)
-        event_counts_flat = _jit_mutate_event_counts_batched(rng, ns, ps)
-        minted_ids = registry.next_k_ids(int(event_counts_flat.sum()))
-    demes: list[tuple[Mapping[AlleleId, float], ...]] = []
-    pair_index = 0
-    for deme, size in zip(state.frequencies, sizes, strict=True):
-        locus_maps: list[Mapping[AlleleId, float]] = []
-        for frequency_map, locus, rate in zip(
-            deme, state.loci, mutation_rates, strict=True
-        ):
-            event_count = _next_mutate_event_count(
-                rng, size, rate, event_counts_flat, pair_index
+        copy_counts_flat = np.concatenate(
+            [counts for (_ids, counts), _size, _locus, _rate in pairs]
+        )
+        rates_flat = np.concatenate(
+            [
+                np.full(counts.shape[0], rate, dtype=np.float64)
+                for (_ids, counts), _size, _locus, rate in pairs
+            ]
+        )
+        mutant_counts_flat = _jit_mutate_event_counts_batched(
+            rng, copy_counts_flat, rates_flat
+        )
+        minted_ids = registry.next_k_ids(int(mutant_counts_flat.sum()))
+
+    locus_maps: list[Mapping[AlleleId, float]] = []
+    group_offset = 0
+    for (allele_ids, copy_counts), size, locus, rate in pairs:
+        if mutant_counts_flat is not None:
+            mutant_counts = mutant_counts_flat[
+                group_offset : group_offset + copy_counts.shape[0]
+            ]
+            group_offset += copy_counts.shape[0]
+        else:
+            mutant_counts = _draw_mutant_counts(rng, copy_counts, rate, jit)
+        event_count = int(mutant_counts.sum())
+        if event_count == 0:
+            locus_maps.append(
+                {
+                    allele_id: int(count) / size
+                    for allele_id, count in zip(allele_ids, copy_counts, strict=True)
+                }
             )
-            pair_index += 1
-            if event_count == 0:
-                locus_maps.append(dict(frequency_map))
-                continue
-            # Reduce every existing allele's mass by the same factor so the
-            # continuous post-migration frequencies are preserved rather than
-            # rounded onto the 1 / N grid. Rounding here would deterministically
-            # erase sub-grid migrant mass and undo migration, biasing the run
-            # toward spurious differentiation; drift is the sole operator that
-            # realizes N discrete gene copies. Valid under either mutation
-            # model: which existing copies mutate doesn't change how much
-            # mass leaves the surviving distribution, only where it goes.
-            retained_mass = 1.0 - event_count / size
-            mutated: dict[AlleleId, float] = {
-                allele_id: frequency * retained_mass
-                for allele_id, frequency in frequency_map.items()
-            }
-            event_frequency = 1.0 / size
-            if finite_alleles is None:
-                minted_offset = _mint_infinite_allele_ids(
-                    mutated,
-                    registry,
-                    event_count,
-                    event_frequency,
-                    minted_ids,
-                    minted_offset,
-                )
-            else:
-                # Attribute the event_count mutating copies back to the
-                # existing alleles they actually came from, proportionally
-                # to current share — needed here, unlike above, because a
-                # K-allele target excludes its own source, so the source's
-                # identity is no longer irrelevant to the outcome. A target
-                # can coincide with another event's target, or with mass
-                # already retained above, so contributions accumulate
-                # rather than overwrite.
-                allele_ids = tuple(sorted(frequency_map))
-                probabilities = np.fromiter(
-                    (frequency_map[allele_id] for allele_id in allele_ids),
-                    dtype=np.float64,
-                    count=len(allele_ids),
-                )
-                probabilities /= probabilities.sum()
-                # Compiled or not, this is still exactly one call in
-                # exactly this pair's own place in the loop — see this
-                # function's own `jit` docstring for why that keeps it
-                # safe to batch here where the event-count draw above is
-                # not.
-                source_counts = (
-                    _jit_multinomial_via_inversion_binomial(
-                        rng, event_count, probabilities
-                    )
-                    if jit
-                    else _multinomial_via_inversion_binomial(
-                        rng, event_count, probabilities
-                    )
-                )
-                _attribute_finite_allele_targets(
-                    mutated,
-                    finite_alleles,
-                    locus,
-                    allele_ids,
-                    source_counts,
-                    event_frequency,
-                    rng,
-                    jit,
-                )
-            locus_maps.append(_normalize(mutated))
-        demes.append(tuple(locus_maps))
-    # `validate=False`: this is `step()`'s own intermediate state,
-    # immediately consumed as `drift`'s input, never returned to a
-    # caller raw -- see `migrate`'s own identical comment, above, and
-    # `_normalize_frequency_map`'s own docstring for the full argument.
-    # `_normalize`, just above, already guarantees every locus map here
-    # is positive-only and sums to 1 within float precision, on top of
-    # that.
-    return ModelState(
+            continue
+        # The copies that did not mutate keep their allele; each mutant
+        # copy is added back under its new identity.
+        mutated: dict[AlleleId, int] = {
+            allele_id: int(kept)
+            for allele_id, kept in zip(
+                allele_ids, copy_counts - mutant_counts, strict=True
+            )
+            if kept
+        }
+        if finite_alleles is None:
+            minted_offset = _mint_infinite_allele_ids(
+                mutated, registry, event_count, minted_ids, minted_offset
+            )
+        else:
+            _attribute_finite_allele_targets(
+                mutated,
+                finite_alleles,
+                locus,
+                allele_ids,
+                mutant_counts,
+                rng,
+                jit,
+            )
+        locus_maps.append(
+            {allele_id: mutated[allele_id] / size for allele_id in sorted(mutated)}
+        )
+
+    locus_count = state.locus_count
+    demes = tuple(
+        tuple(locus_maps[index : index + locus_count])
+        for index in range(0, len(locus_maps), locus_count)
+    )
+    # `validate=False`: every map above is whole gene copies over `size`
+    # by construction — positive counts summing to `size` — the same
+    # representation `drift` returns.
+    result = ModelState(
         loci=state.loci,
-        frequencies=tuple(demes),
+        frequencies=demes,
         generation=state.generation,
         validate=False,
     )
+    result.validate_support(sizes)
+    return result
 
 
 def step(
@@ -1661,15 +1525,26 @@ def step(
     finite_alleles: FiniteAlleleRegistry | None = None,
     jit: bool = False,
 ) -> ModelState:
-    """Advance one generation in migration, mutation, then drift order.
+    """Advance one generation: migration, then drift, then mutation.
 
     This is the one function `fim.engine`'s run loop actually calls,
-    once per generation: it chains `migrate`, `mutate`, and `drift`,
-    above, in that fixed order — a real population experiences all
-    three of these forces continuously and simultaneously, but a
-    discrete-generation simulation has to apply them in *some* order
-    each tick, and migration-then-mutation-then-drift is the
-    conventional choice this project follows.
+    once per generation. It is the textbook Wright-Fisher island model:
+
+    1. `migrate` forms each deme's parental pool — its own frequencies
+       blended with the migrant pool.
+    2. `drift` draws the new generation's `N` gene copies from that pool
+       (multinomial sampling, with replacement).
+    3. `mutate` then mutates each of those new copies independently
+       with probability `mu`.
+
+    Mutation acts on the sampled copies, not on the parental
+    frequencies before sampling, so two copies of the new generation
+    are identical only when their parental copies were and neither of
+    them mutated — the `(1 - mu)^2` factor of the textbook identity
+    recursions (`fim.statistics.identity_recursion`). Releases before
+    this one ran migrate, mutate, drift, with a mutation step that
+    scaled allele frequencies down before sampling; see `mutate`'s own
+    docstring for why that was not the textbook model.
 
     Args:
         state: Current model state.
@@ -1688,15 +1563,12 @@ def step(
             silently a no-op in `migrate` for a full custom weight
             matrix or stochastic migrant sampling (see `migrate`'s own
             docstring), real for the default scalar-rate, deterministic
-            case; real in `mutate` under both mutation models, though in
-            different amounts — full event-count *and* minting batching
-            under the default infinite-alleles model; under the opt-in
-            finite-alleles model, the source-attribution draw compiled
-            (not batched) plus target selection itself batched too, per
-            locus, below a capacity bound (`_MAX_JIT_FINITE_ALLELE_
-            CAPACITY`) that keeps the astronomically large capacities
-            `FiniteAlleleSpace` also supports safely unaffected (see
-            `mutate`'s own `jit` docstring for the full account).
+            case; real in `mutate` under both mutation models — the
+            mutant-count draws compiled (all of them in one call under
+            the default infinite-alleles model, one call per pair under
+            the opt-in finite-alleles model) and target selection batched
+            per pair below a capacity bound (`_MAX_JIT_FINITE_ALLELE_
+            CAPACITY`) — see `mutate`'s own `jit` docstring.
 
     Returns:
         The next generation.
@@ -1707,8 +1579,9 @@ def step(
     # unaffected by this feature's existence.
     migration_rng = rng if params.migrant_sampling == "stochastic" else None
     migrated = migrate(state, params.m, params.gene_copies, rng=migration_rng, jit=jit)
-    mutated = mutate(
-        migrated,
+    drifted = drift(migrated, params.gene_copies, rng, jit=jit)
+    return mutate(
+        drifted,
         params.mu,
         params.gene_copies,
         registry,
@@ -1716,7 +1589,6 @@ def step(
         finite_alleles=finite_alleles,
         jit=jit,
     )
-    return drift(mutated, params.gene_copies, rng, jit=jit)
 
 
 def _allele_union(frequency_maps: Sequence[FrequencyMap]) -> tuple[AlleleId, ...]:
