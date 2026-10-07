@@ -58,9 +58,10 @@ validation precedent `form_values` already established (a partial
 on load by merging it over the true starter values rather than trying
 to validate a subset in isolation — `config_form.starter_form_values`'s
 own `overrides` parameter), not a sixth pair of narrowly-typed scalar
-fields: `track_expensive_statistics` and the sigma-band pair were
-deliberately left out of this set (judged scientific/per-run choices,
-not administrative defaults), and any future addition or removal from
+fields: the sigma-band pair was deliberately left out of this set
+(judged a scientific/per-run choice, not an administrative default), as
+was `track_expensive_statistics`, which follows `shown_statistics`
+instead (`Api._merge_default_run_settings`), and any future addition or removal from
 that set only ever changes `config_form.DEFAULT_RUN_SETTING_FIELD_
 NAMES`, never this store's own shape. `None` means "nothing saved yet"
 — `Api.get_default_run_settings` falls back to the starter values for
@@ -303,8 +304,10 @@ class GuiPreferences:
         trajectory_display: One of `TRAJECTORY_DISPLAYS`.
         shown_statistics: The statistics shown (Settings, "Statistics
             shown"), as catalog keys in catalog order, or `None` for the
-            catalog's own defaults. Display only: every statistic is
-            computed and saved whatever this holds.
+            catalog's own defaults. Every statistic is saved in each
+            run's results whatever this holds; showing one of the
+            expensive ones also sets `track_expensive_statistics` for
+            later runs (`Api._merge_default_run_settings`).
         pairwise_max_demes: Largest deme count for which a run saves
             every deme pair's Nei identities (`pairwise.json`).
         default_ploidy: `"2"` (the default: diploid) or `"1"`-`"4"`, or

@@ -16,13 +16,19 @@ Each spec answers four separate questions:
   (``"global"``) or one value per pair of demes (``"pair"``).
 - **When is it computed?** `history`: tracked every generation always
   (``"always"``), every generation only when
-  `SimulationParams.track_expensive_statistics` opts in (``"opt_in"``),
-  or not tracked per generation (``"none"``: computed for each report,
-  each displayed frame and each saved result instead).
+  `SimulationParams.track_expensive_statistics` opts in or the run
+  watches it (``"opt_in"``: the expensive ones, each a real extra cost
+  every generation), or not tracked per generation (``"none"``: computed
+  for each report, each displayed frame and each saved result instead).
 - **Is it shown by default?** `default_shown`. What a researcher
   actually sees is their own choice (the GUI's "Statistics shown"
-  setting); this is only the starting point. Showing or hiding a
-  statistic never changes what is computed or saved.
+  setting); this is only the starting point. For every statistic but
+  the ``"opt_in"`` ones, showing or hiding it changes only the screen.
+  The desktop app opts a run in exactly when one of the ``"opt_in"``
+  statistics is shown (`expensive_statistics_requested`), so showing one
+  makes its per-generation history real and hiding them all avoids the
+  cost; none of them is shown by default, so a fresh install's runs cost
+  what they always did.
 
 This module imports nothing from the simulator or the GUI. It sits in
 `fim.statistics` beside the formulas it describes.
@@ -30,7 +36,7 @@ This module imports nothing from the simulator or the GUI. It sits in
 
 from __future__ import annotations
 
-from collections.abc import Iterator
+from collections.abc import Iterable, Iterator
 from dataclasses import asdict, dataclass
 from typing import Final, Literal, TypeAlias
 
@@ -51,6 +57,7 @@ __all__ = [
     "catalog_payload",
     "convergence_statistic_keys",
     "default_shown_keys",
+    "expensive_statistics_requested",
     "history_keys",
     "nei_key",
     "pair_keys",
@@ -132,7 +139,13 @@ def _core(
     *,
     default_plotted: bool = True,
 ) -> StatisticSpec:
-    """Return one of the ten original, convergence-eligible statistics."""
+    """Return one of the ten original, convergence-eligible statistics.
+
+    The expensive (``"opt_in"``) ones start hidden: showing one makes
+    every run compute them each generation (`expensive_statistics_
+    requested`), so they are the researcher's deliberate choice, never a
+    fresh install's silent cost.
+    """
     return StatisticSpec(
         key=key,
         label_html=label_html,
@@ -143,7 +156,7 @@ def _core(
         history=history,
         bounds=bounds,
         convergence_eligible=True,
-        default_shown=True,
+        default_shown=history != "opt_in",
         default_plotted=default_plotted,
     )
 
@@ -518,6 +531,27 @@ def convergence_statistic_keys() -> tuple[str, ...]:
 def default_shown_keys() -> tuple[str, ...]:
     """Return what a fresh install shows, in catalog order."""
     return _keys(entry for entry in CATALOG if entry.default_shown)
+
+
+def expensive_statistics_requested(shown: Iterable[str]) -> bool:
+    """Return whether showing `shown` asks a run to track the expensive statistics.
+
+    The desktop app's rule for `SimulationParams.track_expensive_
+    statistics`: true exactly when at least one ``"opt_in"`` statistic
+    (`E_ST`, `K_ST`, `A_CGD`, `Delta`, `MI`) is shown, so a shown one
+    has a real per-generation history on the trajectory and the
+    scrubbed statistics panel, and hiding all five avoids their cost.
+    The flag covers all five together: showing any one computes all
+    five. A watched statistic is computed whatever this returns (the
+    engine always computes what it watches).
+
+    Args:
+        shown: Catalog keys currently shown; unknown keys are ignored.
+
+    Returns:
+        Whether any of them is an expensive, opt-in statistic.
+    """
+    return any(key in _BY_KEY and _BY_KEY[key].history == "opt_in" for key in shown)
 
 
 def catalog_payload() -> list[dict[str, object]]:

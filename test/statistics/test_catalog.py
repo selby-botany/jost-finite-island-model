@@ -14,6 +14,7 @@ from fim.statistics.catalog import (
     catalog_payload,
     convergence_statistic_keys,
     default_shown_keys,
+    expensive_statistics_requested,
     history_keys,
     nei_key,
     pair_keys,
@@ -44,10 +45,24 @@ class CatalogTests(unittest.TestCase):
         self.assertEqual(len(keys), len(set(keys)))
 
     def test_original_statistics_keep_their_order_and_defaults(self) -> None:
-        """The ten long-standing statistics lead, shown, and stay eligible."""
+        """The ten long-standing statistics lead and stay eligible.
+
+        Only the five cheap ones are shown on a fresh install: showing an
+        expensive one makes every run compute them each generation
+        (`expensive_statistics_requested`), so that cost is opted into.
+        """
         self.assertEqual(tuple(entry.key for entry in CATALOG[:10]), _ORIGINAL_TEN)
         self.assertEqual(convergence_statistic_keys(), _ORIGINAL_TEN)
-        self.assertEqual(default_shown_keys(), _ORIGINAL_TEN)
+        self.assertEqual(default_shown_keys(), ("D", "G_ST", "H_S", "H_T", "H_ST"))
+
+    def test_expensive_statistics_are_requested_by_showing_any_one(self) -> None:
+        """Any shown "opt_in" statistic requests tracking; nothing else does."""
+        self.assertFalse(expensive_statistics_requested(default_shown_keys()))
+        self.assertFalse(expensive_statistics_requested(()))
+        self.assertFalse(expensive_statistics_requested(("D", "NEI_D_ALL_GEO", "NOPE")))
+        for key in history_keys("opt_in"):
+            with self.subTest(key=key):
+                self.assertTrue(expensive_statistics_requested(("D", key)))
 
     def test_history_policies_match_the_engine_split(self) -> None:
         """Five always tracked, five opt-in; everything new is not tracked."""

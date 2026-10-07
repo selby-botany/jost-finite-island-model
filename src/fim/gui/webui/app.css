@@ -1470,6 +1470,14 @@ fieldset.combinator-choice label {
     color: var(--fim-muted);
 }
 
+/* The run-time warning under an expensive statistic (`settings.js`). */
+.settings-statistics-cost {
+    display: block;
+    margin-left: 1.6em;
+    font-size: 0.8rem;
+    color: var(--fim-warning-mark);
+}
+
 .stats-table td {
     padding: 0.25rem 0.6rem;
     border-bottom: 1px solid var(--fim-border);

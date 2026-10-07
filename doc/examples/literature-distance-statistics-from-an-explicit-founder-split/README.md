@@ -9,7 +9,10 @@ distance (`A_CGD`), Gregorius's `Delta`, and Sherwin's mutual information
 (`MI`). The run also reports the standard differentiation statistics.
 
 `track_expensive_statistics: true` makes the supplemental measures
-available through the trajectory, not just the final report. For this
+available through the trajectory, not just the final report. The desktop
+app sets that key from Settings, "Statistics shown" instead: show
+A<sub>CGD</sub>, δ<sub>G</sub> and I there (they start hidden, since
+computing them every generation makes runs take longer) to see them. For this
 complete three-way split, the distances and differentiation measures
 equal 1 and `MI` equals `log(3)`. This is an intentionally simple check,
 not evidence that the measures are interchangeable.

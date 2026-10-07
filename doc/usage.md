@@ -307,7 +307,10 @@ only converges on `D` still records all six for display — this example's
 own final-report values are identical either way, since a report always
 computes every statistic at the converged generation regardless of this
 setting; the flag only changes what is available generation by generation
-before that point.
+before that point. In the desktop app the key follows Settings' "Statistics
+shown" instead: show A<sub>CGD</sub>, δ<sub>G</sub> or I there (they start
+hidden, since computing them every generation makes runs take longer) to
+follow them on the trajectory.
 
 <!-- worked-example-config: examples/literature-distance-statistics-from-an-explicit-founder-split/config.yaml -->
 ```yaml
@@ -1338,7 +1341,10 @@ settings come from your Settings, not from that configuration.
 ### Saved preferences
 
 The GUI remembers these things between launches: Settings' own Significant
-digits setting, which statistics are shown ("Statistics shown"), the
+digits setting, which statistics are shown ("Statistics shown"; showing
+E<sub>ST</sub>, K<sub>ST</sub>, A<sub>CGD</sub>, δ<sub>G</sub> or I also
+makes every new run compute all five every generation, which takes longer —
+see [track_expensive_statistics](configuration.md#track_expensive_statistics)), the
 largest deme count for which runs save every pair's statistics, the light/dark override (absent/`null` means "follow the
 OS," the default), whether the first-launch welcome panel has already been
 dismissed, the startup behavior selected in Settings, the execution defaults

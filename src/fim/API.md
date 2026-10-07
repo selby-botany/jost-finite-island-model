@@ -659,6 +659,7 @@ Return to the [source-tree orientation](../README.md) or the [developer guide](.
   * [pair\_keys](#fim.statistics.catalog.pair_keys)
   * [convergence\_statistic\_keys](#fim.statistics.catalog.convergence_statistic_keys)
   * [default\_shown\_keys](#fim.statistics.catalog.default_shown_keys)
+  * [expensive\_statistics\_requested](#fim.statistics.catalog.expensive_statistics_requested)
   * [catalog\_payload](#fim.statistics.catalog.catalog_payload)
 * [fim.statistics.differentiation](#fim.statistics.differentiation)
   * [DifferentiationReport](#fim.statistics.differentiation.DifferentiationReport)
@@ -6668,7 +6669,11 @@ def set_shown_statistics(keys: list[str] | None) -> dict[str, Any]
 
 Remember which statistics are shown (Settings, "Statistics shown").
 
-Display only: what a run computes and saves never depends on it.
+Display only, except for the five expensive statistics (`E_ST`,
+`K_ST`, `A_CGD`, `Delta`, `MI`): showing any of them makes every
+later run track all five each generation, which lengthens runs,
+and hiding them all stops that (`_track_expensive_statistics_
+text`). A saved run's results never change.
 
 **Arguments**:
 
@@ -9373,10 +9378,12 @@ docstring / `Api`'s own submission-time merge). `replicate_confidence`/
 fields` the same way. `jit`/`auto_vector_min_d`/`auto_vector_max_
 capacity` are new here — "expert-level settings" with no prior GUI
 representation at all (`BATCH_FIELDS`'s own comment on the three).
-`track_expensive_statistics` and the sigma-band pair (`sigma_band_
-enabled`/`sigma_band_multiplier`/`sigma_band_window`) stay Configure-
-only throughout, judged scientific/per-run choices rather than
-administrative defaults — never a member of this tuple.
+The sigma-band pair (`sigma_band_enabled`/`sigma_band_multiplier`/
+`sigma_band_window`) stays Configure-only throughout, judged a
+scientific/per-run choice rather than an administrative default — never
+a member of this tuple. Neither is `track_expensive_statistics`: it is
+derived from Settings' "Statistics shown", not saved as a run default
+(`Api._merge_default_run_settings`).
 
 <a id="fim.gui.config_form.RUN_SETTING_LABELS"></a>
 
@@ -9850,9 +9857,10 @@ validation precedent `form_values` already established (a partial
 on load by merging it over the true starter values rather than trying
 to validate a subset in isolation — `config_form.starter_form_values`'s
 own `overrides` parameter), not a sixth pair of narrowly-typed scalar
-fields: `track_expensive_statistics` and the sigma-band pair were
-deliberately left out of this set (judged scientific/per-run choices,
-not administrative defaults), and any future addition or removal from
+fields: the sigma-band pair was deliberately left out of this set
+(judged a scientific/per-run choice, not an administrative default), as
+was `track_expensive_statistics`, which follows `shown_statistics`
+instead (`Api._merge_default_run_settings`), and any future addition or removal from
 that set only ever changes `config_form.DEFAULT_RUN_SETTING_FIELD_
 NAMES`, never this store's own shape. `None` means "nothing saved yet"
 — `Api.get_default_run_settings` falls back to the starter values for
@@ -9975,8 +9983,10 @@ One loaded (or default) snapshot of the GUI's own preferences.
 - `trajectory_display` - One of `TRAJECTORY_DISPLAYS`.
 - `shown_statistics` - The statistics shown (Settings, "Statistics
   shown"), as catalog keys in catalog order, or `None` for the
-  catalog's own defaults. Display only: every statistic is
-  computed and saved whatever this holds.
+  catalog's own defaults. Every statistic is saved in each
+  run's results whatever this holds; showing one of the
+  expensive ones also sets `track_expensive_statistics` for
+  later runs (`Api._merge_default_run_settings`).
 - `pairwise_max_demes` - Largest deme count for which a run saves
   every deme pair's Nei identities (`pairwise.json`).
 - `default_ploidy` - `"2"` (the default: diploid) or `"1"`-`"4"`, or
@@ -18663,13 +18673,19 @@ Each spec answers four separate questions:
   (``"global"``) or one value per pair of demes (``"pair"``).
 - **When is it computed?** `history`: tracked every generation always
   (``"always"``), every generation only when
-  `SimulationParams.track_expensive_statistics` opts in (``"opt_in"``),
-  or not tracked per generation (``"none"``: computed for each report,
-  each displayed frame and each saved result instead).
+  `SimulationParams.track_expensive_statistics` opts in or the run
+  watches it (``"opt_in"``: the expensive ones, each a real extra cost
+  every generation), or not tracked per generation (``"none"``: computed
+  for each report, each displayed frame and each saved result instead).
 - **Is it shown by default?** `default_shown`. What a researcher
   actually sees is their own choice (the GUI's "Statistics shown"
-  setting); this is only the starting point. Showing or hiding a
-  statistic never changes what is computed or saved.
+  setting); this is only the starting point. For every statistic but
+  the ``"opt_in"`` ones, showing or hiding it changes only the screen.
+  The desktop app opts a run in exactly when one of the ``"opt_in"``
+  statistics is shown (`expensive_statistics_requested`), so showing one
+  makes its per-generation history real and hiding them all avoids the
+  cost; none of them is shown by default, so a fresh install's runs cost
+  what they always did.
 
 This module imports nothing from the simulator or the GUI. It sits in
 `fim.statistics` beside the formulas it describes.
@@ -18813,6 +18829,34 @@ def default_shown_keys() -> tuple[str, ...]
 ```
 
 Return what a fresh install shows, in catalog order.
+
+<a id="fim.statistics.catalog.expensive_statistics_requested"></a>
+
+#### expensive\_statistics\_requested
+
+```python
+def expensive_statistics_requested(shown: Iterable[str]) -> bool
+```
+
+Return whether showing `shown` asks a run to track the expensive statistics.
+
+The desktop app's rule for `SimulationParams.track_expensive_
+statistics`: true exactly when at least one ``"opt_in"`` statistic
+(`E_ST`, `K_ST`, `A_CGD`, `Delta`, `MI`) is shown, so a shown one
+has a real per-generation history on the trajectory and the
+scrubbed statistics panel, and hiding all five avoids their cost.
+The flag covers all five together: showing any one computes all
+five. A watched statistic is computed whatever this returns (the
+engine always computes what it watches).
+
+**Arguments**:
+
+- `shown` - Catalog keys currently shown; unknown keys are ignored.
+
+
+**Returns**:
+
+  Whether any of them is an expensive, opt-in statistic.
 
 <a id="fim.statistics.catalog.catalog_payload"></a>
 

@@ -229,6 +229,15 @@ function renderStatisticsChooser() {
                     ? `Uses the deme pair chosen for the scatter plot. ${spec.description}`
                     : spec.description;
             item.append(box, " ", name, description);
+            // The catalog's "opt_in" statistics cost time every
+            // generation once shown (`Api._merge_default_run_settings`).
+            if (spec.history === "opt_in") {
+                item.title = EXPENSIVE_STATISTIC_NOTE;
+                const cost = document.createElement("span");
+                cost.className = "settings-statistics-cost";
+                cost.textContent = EXPENSIVE_STATISTIC_NOTE;
+                item.appendChild(cost);
+            }
             section.appendChild(item);
         }
         statisticsList.appendChild(section);

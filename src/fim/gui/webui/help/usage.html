@@ -267,7 +267,10 @@ only converges on <code>D</code> still records all six for display — this exam
 own final-report values are identical either way, since a report always
 computes every statistic at the converged generation regardless of this
 setting; the flag only changes what is available generation by generation
-before that point.</p>
+before that point. In the desktop app the key follows Settings' &quot;Statistics
+shown&quot; instead: show A<sub>CGD</sub>, δ<sub>G</sub> or I there (they start
+hidden, since computing them every generation makes runs take longer) to
+follow them on the trajectory.</p>
 <!-- worked-example-config: examples/literature-distance-statistics-from-an-explicit-founder-split/config.yaml -->
 <pre><code class="language-yaml">name: Distance statistics from a founder split
 description: &gt;-
@@ -1216,7 +1219,10 @@ yours. Explore's <strong>Run this for real</strong> also starts from your Settin
 settings come from your Settings, not from that configuration.</p>
 <h3 id="saved-preferences">Saved preferences</h3>
 <p>The GUI remembers these things between launches: Settings' own Significant
-digits setting, which statistics are shown (&quot;Statistics shown&quot;), the
+digits setting, which statistics are shown (&quot;Statistics shown&quot;; showing
+E<sub>ST</sub>, K<sub>ST</sub>, A<sub>CGD</sub>, δ<sub>G</sub> or I also
+makes every new run compute all five every generation, which takes longer —
+see <a href="#" data-fim-help="configuration" data-fim-anchor="track_expensive_statistics">track_expensive_statistics</a>), the
 largest deme count for which runs save every pair's statistics, the light/dark override (absent/<code>null</code> means &quot;follow the
 OS,&quot; the default), whether the first-launch welcome panel has already been
 dismissed, the startup behavior selected in Settings, the execution defaults

@@ -609,6 +609,18 @@ the recurring per-generation cost for your own configuration.
 track_expensive_statistics: true
 ```
 
+In the desktop app there is no control for this key on Configure. The app
+sets it on every run, batch and sweep it starts, and in every preset or
+YAML file it saves, from Settings' "Statistics shown": `true` while
+E<sub>ST</sub>, K<sub>ST</sub>, A<sub>CGD</sub>, δ<sub>G</sub> or I is
+shown, `false` once all five are hidden. Showing any one of them computes
+all five every generation, so runs take longer; the extra time is small
+for a few demes and grows with the deme count (in one measurement, about a
+fifth more at 100 demes and two thirds more at 500). None of the five is
+shown on a fresh install. A value in a loaded YAML file, preset or reopened
+run is replaced by the Settings choice when the app runs it; `fim run`
+and `fim sweep` use the file's own value, as written.
+
 ### max_generations
 
 - **Type:** positive integer, or `auto`

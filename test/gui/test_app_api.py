@@ -89,6 +89,7 @@ from fim.statistics.catalog import (
     CATALOG,
     DEFAULT_PAIRWISE_MAX_DEMES,
     default_shown_keys,
+    history_keys,
     pair_keys,
     report_keys,
 )
@@ -3336,6 +3337,62 @@ def test_set_shown_statistics_persists_filters_and_resets(tmp_path: Path) -> Non
         "NEI_D_PAIR_ARITH",
     ]
     assert api.set_shown_statistics(None)["shown"] == list(default_shown_keys())
+
+
+def _submitted_track_expensive_statistics(api: Api, carried: str) -> bool:
+    """Return the `track_expensive_statistics` a submission would run with.
+
+    `carried` is the value a restored form, preset or loaded file brought
+    in; the merge must replace it with what Settings implies.
+    """
+    values = {**api.get_starter_form(), "track_expensive_statistics": carried}
+    params = SimulationParams.from_mapping(
+        form_values_to_payload(api._merge_default_run_settings(values))
+    )
+    return params.track_expensive_statistics
+
+
+def test_a_fresh_install_shows_no_expensive_statistic_and_tracks_none(
+    tmp_path: Path,
+) -> None:
+    """Default Settings: the five expensive statistics are hidden and off.
+
+    A carried-in `true` (an old restored form, a loaded YAML file) does
+    not survive: Settings decides.
+    """
+    api = Api(preferences_path=tmp_path / "preferences.json")
+    shown = api.get_statistics_catalog()["shown"]
+
+    assert not set(shown) & set(history_keys("opt_in"))
+    assert _submitted_track_expensive_statistics(api, "true") is False
+    assert _submitted_track_expensive_statistics(api, "false") is False
+
+
+@pytest.mark.parametrize("key", history_keys("opt_in"))
+def test_showing_any_expensive_statistic_tracks_them_for_every_submission(
+    tmp_path: Path, key: str
+) -> None:
+    """Showing one expensive statistic turns tracking on; hiding all turns it off."""
+    api = Api(preferences_path=tmp_path / "preferences.json")
+
+    api.set_shown_statistics(["D", key])
+    assert _submitted_track_expensive_statistics(api, "false") is True
+
+    api.set_shown_statistics(["D", "G_ST", "NEI_D_ALL_ARITH"])
+    assert _submitted_track_expensive_statistics(api, "true") is False
+
+
+def test_saved_yaml_records_the_settings_derived_tracking(tmp_path: Path) -> None:
+    """A YAML file saved from the app reproduces the run the app would make.
+
+    `save_yaml` goes through the same merge, so `fim run` on the file
+    tracks exactly what the desktop run did.
+    """
+    api = Api(preferences_path=tmp_path / "preferences.json")
+    api.set_shown_statistics(["D", "E_ST"])
+    merged = api._merge_default_run_settings(api.get_starter_form())
+
+    assert merged["track_expensive_statistics"] == "true"
 
 
 def test_set_pairwise_max_demes_validates_and_persists(tmp_path: Path) -> None:

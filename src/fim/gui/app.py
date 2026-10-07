@@ -165,6 +165,7 @@ from fim.statistics.catalog import (
     CATALOG,
     catalog_payload,
     default_shown_keys,
+    expensive_statistics_requested,
     pair_keys,
     report_keys,
 )
@@ -2495,11 +2496,38 @@ class Api:
         configuration's own run settings with every submission
         (`webui/screens/run-settings-notice.js`), so the run uses the
         loaded values while saved Settings stay as they were.
+
+        `track_expensive_statistics` is the one exception: it is always
+        *set*, never only filled, from Settings' "Statistics shown"
+        (`_track_expensive_statistics_text`). Configure has no control
+        for it any more, so a value carried in by a restored form, a
+        preset, a loaded YAML file or a reopened run's manifest must not
+        outlive what the researcher now chooses to see.
         """
         merged = dict(values)
         for key, value in self.get_default_run_settings().items():
             merged.setdefault(key, value)
+        merged["track_expensive_statistics"] = self._track_expensive_statistics_text()
         return merged
+
+    def _track_expensive_statistics_text(self) -> str:
+        """Return `track_expensive_statistics` as Settings implies it, as form text.
+
+        `"true"` exactly when "Statistics shown" includes at least one
+        expensive statistic (`fim.statistics.catalog.expensive_
+        statistics_requested`): a shown one then has a real per-
+        generation history on the trajectory and the scrubbed statistics
+        panel, and hiding all of them spares every run their cost. Each
+        launch path (a run, a batch, a sweep, a saved preset or YAML
+        file) reads it through `_merge_default_run_settings`, so they all
+        agree. A watched statistic is computed regardless; the engine
+        always computes what it watches.
+        """
+        shown = self._preferences.shown_statistics
+        requested = expensive_statistics_requested(
+            default_shown_keys() if shown is None else shown
+        )
+        return "true" if requested else "false"
 
     def _loaded_run_settings(self, values: Mapping[str, str]) -> dict[str, Any]:
         """Describe a just-loaded configuration's run settings, for the page.
@@ -4187,7 +4215,11 @@ class Api:
     def set_shown_statistics(self, keys: list[str] | None) -> dict[str, Any]:
         """Remember which statistics are shown (Settings, "Statistics shown").
 
-        Display only: what a run computes and saves never depends on it.
+        Display only, except for the five expensive statistics (`E_ST`,
+        `K_ST`, `A_CGD`, `Delta`, `MI`): showing any of them makes every
+        later run track all five each generation, which lengthens runs,
+        and hiding them all stops that (`_track_expensive_statistics_
+        text`). A saved run's results never change.
 
         Args:
             keys: Catalog keys to show; unknown keys are ignored and an

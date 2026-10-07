@@ -80,15 +80,10 @@ function collectFormValues() {
     // unconditionally, so it must always be present as an explicit
     // "true"/"false" string, never missing.
     values.sigma_band_enabled = data.has("sigma_band_enabled") ? "true" : "false";
-    // `track_expensive_statistics` is a plain "bool" `FormField` (unlike
-    // `sigma_band_enabled`, it reveals no second field pair), but an
-    // unchecked checkbox is absent from `FormData` for the identical
-    // reason -- `form_values_to_payload`'s own generic dispatch loop
-    // reads this key unconditionally for every `all_fields()` entry, so
-    // it must always be present too.
-    values.track_expensive_statistics = data.has("track_expensive_statistics")
-        ? "true"
-        : "false";
+    // `track_expensive_statistics` has no control here: it follows
+    // Settings' "Statistics shown" (any expensive statistic shown means
+    // true), set server-side by `Api._merge_default_run_settings` like
+    // the Settings-only fields below.
     // `engine_backend`/`n_replicates`/`max_generations`/the convergence-
     // loop timing pair/`replicate_confidence`/`max_concurrent_
     // replicates`/`max_workers` are Settings-only fields now (`2026-09-

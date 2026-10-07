@@ -98,7 +98,8 @@ const FIELD_HELP = {
         "run's own max generations. A run needing more stops with an error.",
     cs_group: "Which statistic(s) to watch for convergence. Checking more " +
         "than one reveals the choice of when to stop, at the foot of this " +
-        "panel.",
+        "panel. E_ST, K_ST, A_CGD, δG and I are expensive: watching one " +
+        "computes it every generation and makes the run take longer.",
     convergence_combinator: "With several watched statistics: all (the " +
         "default) keeps the run going until every one is stable and " +
         "precise. any stops as soon as one of them is, so the others may " +
@@ -114,13 +115,6 @@ const FIELD_HELP = {
         "not good news.",
     convergence_tolerance: "The run is considered converged once the " +
         "trailing window's two half-means differ by at most this much.",
-    track_expensive_statistics: "D/G_ST/H_S/H_T always display live for " +
-        "free. This also tracks E_ST/K_ST plus three literature-derived " +
-        "\"bonus\" measurements (A_CGD, Gregorius delta, Sherwin mutual " +
-        "information) for display, at a real, generation-scale extra " +
-        "cost -- checking one of the five above as a convergence " +
-        "statistic also tracks it for display, at the same cost, " +
-        "regardless of this checkbox.",
     max_generations: "Hard cap on generations. Leave it as auto and the " +
         "app sets it to a comfortable multiple of the time this " +
         "population needs to settle. Reaching it without converging is " +

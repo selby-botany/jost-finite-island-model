@@ -712,45 +712,54 @@ def test_unchecking_and_rechecking_the_sigma_band_toggle_keeps_a_typed_window_va
     assert window_value == "250"
 
 
-def test_track_expensive_statistics_checkbox_starts_unchecked(
+def test_configure_has_no_expensive_statistics_checkbox(
     window: webview.Window, drive: Callable[..., Any]
 ) -> None:
-    """The E_ST/K_ST display opt-in defaults unchecked, matching `SimulationParams`.
+    """The "track E_ST/K_ST/... for display" checkbox is gone; nothing submits it.
 
-    Unlike the sigma-band toggle above, this is a plain "bool" `FormField`
-    with no second, revealed field pair to seed -- this and the test
-    below are its own entire DOM-level coverage.
+    Settings' "Statistics shown" decides `track_expensive_statistics` now
+    (`Api._merge_default_run_settings`), so Configure neither shows a
+    control nor sends a value that could disagree with Settings.
     """
-    checked = drive(
+    settled = drive(
         window,
-        trigger="null",
-        read="document.getElementById('field-track_expensive_statistics').checked",
         ready=_INPUT_SCREEN_READY,
-        is_ready=lambda value: value is False,
-        poll_attempts=500,
+        trigger="null",
+        read=(
+            "({"
+            "byId: document.getElementById('field-track_expensive_statistics')"
+            " === null, "
+            "byName: document.querySelectorAll("
+            "'[name=\"track_expensive_statistics\"]').length, "
+            "submitted: 'track_expensive_statistics' in collectFormValues()"
+            "})"
+        ),
     )
 
-    assert checked is False
+    assert settled["byId"] is True
+    assert settled["byName"] == 0
+    assert settled["submitted"] is False
 
 
-def test_checking_track_expensive_statistics_updates_the_checkbox(
+def test_expensive_convergence_checkboxes_warn_about_run_time(
     window: webview.Window, drive: Callable[..., Any]
 ) -> None:
-    """Checking the box actually flips its own DOM state, live."""
-    checked = drive(
+    """Each expensive statistic's convergence checkbox carries the cost note."""
+    titles = drive(
         window,
-        trigger=(
-            "var cb = document.getElementById('field-track_expensive_statistics'); "
-            "cb.checked = true; "
-            "cb.dispatchEvent(new Event('change', {bubbles: true}));"
-        ),
-        read="document.getElementById('field-track_expensive_statistics').checked",
         ready=_INPUT_SCREEN_READY,
-        is_ready=lambda value: value is True,
-        poll_attempts=500,
+        trigger="null",
+        read=(
+            "Object.fromEntries(Array.from(document.querySelectorAll("
+            "'#cs-selector > label')).map((label) => "
+            "[label.querySelector('input').name, label.title]))"
+        ),
     )
 
-    assert checked is True
+    for key in ("E_ST", "K_ST", "A_CGD", "Delta", "MI"):
+        assert "take longer" in titles[f"cs_{key}"], key
+    for key in ("D", "G_ST", "H_S", "H_T", "H_ST"):
+        assert titles[f"cs_{key}"] == "", key
 
 
 def test_navigating_to_configure_does_not_reset_run_view_state(

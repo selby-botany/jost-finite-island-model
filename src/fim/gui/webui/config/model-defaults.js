@@ -10,6 +10,16 @@
 // configuration. A ploidy outside this list is shown as "ploidy N".
 const PLOIDY_NAMES = { 1: "haploid", 2: "diploid", 3: "triploid", 4: "tetraploid" };
 
+// The warning beside each expensive statistic (the catalog's `"opt_in"`
+// history: E_ST, K_ST, A_CGD, δG, I) wherever one can be chosen, in
+// Settings' "Statistics shown" and Configure's convergence checkboxes.
+// Showing one turns on `track_expensive_statistics`
+// (`fim.statistics.catalog.expensive_statistics_requested`); watching one
+// computes it every generation (`fim.engine._statistics_to_compute`).
+const EXPENSIVE_STATISTIC_NOTE =
+    "Expensive: while shown or watched it is computed every generation, " +
+    "which makes runs take longer.";
+
 /* ---- Starting contents of the input grids --------------------------- */
 
 /* Every grid's rule for a brand-new cell is the same: it is "already

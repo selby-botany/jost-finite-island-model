@@ -8,8 +8,10 @@
  * the statistics-panel rows, the results tables' statistic columns and
  * the convergence-statistic checkboxes, and it owns which statistics are
  * *shown* (the Settings dialog's "Statistics shown" choice). Showing or
- * hiding a statistic only changes what is on screen: every statistic is
- * still computed and saved.
+ * hiding a statistic changes what is on screen, and every statistic is
+ * still saved in each run's results; showing one of the expensive
+ * (`"opt_in"`) statistics also makes later runs compute them every
+ * generation (`Api._merge_default_run_settings`).
  *
  * The lists below start empty and are filled in place (never replaced)
  * by `loadStatisticsCatalog`, which `initializeRunView` awaits before
@@ -285,6 +287,9 @@ function _buildStatisticSlots() {
             input.checked = key === "D";
             label.append(input, " ");
             label.insertAdjacentHTML("beforeend", formatStatisticLabel(key));
+            if (statisticSpec(key).history === "opt_in") {
+                label.title = EXPENSIVE_STATISTIC_NOTE;
+            }
             selector.insertBefore(label, combinator);
         }
     }

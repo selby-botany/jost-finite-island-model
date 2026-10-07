@@ -63,6 +63,7 @@ Every test module, fixture, and test function documented here in full; `doc/fim-
   - [`test_examples_bridge`](#gui.test_examples_bridge)
   - [`test_examples_dialog_screen`](#gui.test_examples_dialog_screen)
   - [`test_examples_screen`](#gui.test_examples_screen)
+  - [`test_expensive_statistics_screen`](#gui.test_expensive_statistics_screen)
   - [`test_explore_screen`](#gui.test_explore_screen)
   - [`test_explore_surface`](#gui.test_explore_surface)
   - [`test_explore_sweep`](#gui.test_explore_sweep)
@@ -11232,6 +11233,46 @@ def test_set_shown_statistics_persists_filters_and_resets(
 
 Unknown keys are dropped, order follows the catalog, `None` resets.
 
+<a id="gui.test_app_api.test_a_fresh_install_shows_no_expensive_statistic_and_tracks_none"></a>
+
+#### test\_a\_fresh\_install\_shows\_no\_expensive\_statistic\_and\_tracks\_none
+
+```python
+def test_a_fresh_install_shows_no_expensive_statistic_and_tracks_none(
+        tmp_path: Path) -> None
+```
+
+Default Settings: the five expensive statistics are hidden and off.
+
+A carried-in `true` (an old restored form, a loaded YAML file) does
+not survive: Settings decides.
+
+<a id="gui.test_app_api.test_showing_any_expensive_statistic_tracks_them_for_every_submission"></a>
+
+#### test\_showing\_any\_expensive\_statistic\_tracks\_them\_for\_every\_submission
+
+```python
+@pytest.mark.parametrize("key", history_keys("opt_in"))
+def test_showing_any_expensive_statistic_tracks_them_for_every_submission(
+        tmp_path: Path, key: str) -> None
+```
+
+Showing one expensive statistic turns tracking on; hiding all turns it off.
+
+<a id="gui.test_app_api.test_saved_yaml_records_the_settings_derived_tracking"></a>
+
+#### test\_saved\_yaml\_records\_the\_settings\_derived\_tracking
+
+```python
+def test_saved_yaml_records_the_settings_derived_tracking(
+        tmp_path: Path) -> None
+```
+
+A YAML file saved from the app reproduces the run the app would make.
+
+`save_yaml` goes through the same merge, so `fim run` on the file
+tracks exactly what the desktop run did.
+
 <a id="gui.test_app_api.test_set_pairwise_max_demes_validates_and_persists"></a>
 
 #### test\_set\_pairwise\_max\_demes\_validates\_and\_persists
@@ -15580,6 +15621,51 @@ def test_a_complete_example_opens_with_graphs_and_a_working_scrubber(
 
 A compressed example opens like a completed user run, without a rerun.
 
+<a id="gui.test_expensive_statistics_screen"></a>
+
+# gui.test\_expensive\_statistics\_screen
+
+Headless functional tests: Settings' "Statistics shown" decides whether a
+run computes the expensive statistics every generation.
+
+Configure's old "track E_ST/K_ST/A_CGD/δG/I for display" checkbox is
+gone. `Api._merge_default_run_settings` now sets
+`track_expensive_statistics` from what Settings shows
+(`fim.statistics.catalog.expensive_statistics_requested`). These tests
+start a real, small run from the page and check both sides of the rule:
+
+- showing `E_ST` makes the run record it every generation (the scrubbed
+  statistics row shows a real value at generation 0) and shows its row,
+  and the run's manifest records `track_expensive_statistics: true`;
+- the fresh-install choice (every expensive statistic hidden) records
+  none of them (the scrubbed row reads "not known at this generation")
+  and the manifest records `false`.
+
+Every wait is on a page flag (`__fimRunViewReady`, the run-view state,
+`__fimScrubberPending`), bounded only by the completion backstop.
+
+<a id="gui.test_expensive_statistics_screen.test_showing_an_expensive_statistic_computes_and_shows_it_every_generation"></a>
+
+#### test\_showing\_an\_expensive\_statistic\_computes\_and\_shows\_it\_every\_generation
+
+```python
+def test_showing_an_expensive_statistic_computes_and_shows_it_every_generation(
+        fast_scalar_run_settings: Path) -> None
+```
+
+Shown in Settings: E_ST has a real value at generation 0, on screen.
+
+<a id="gui.test_expensive_statistics_screen.test_hiding_every_expensive_statistic_skips_computing_them"></a>
+
+#### test\_hiding\_every\_expensive\_statistic\_skips\_computing\_them
+
+```python
+def test_hiding_every_expensive_statistic_skips_computing_them(
+        fast_scalar_run_settings: Path) -> None
+```
+
+The fresh-install choice: nothing expensive is recorded per generation.
+
 <a id="gui.test_explore_screen"></a>
 
 # gui.test\_explore\_screen
@@ -16854,31 +16940,31 @@ sequence of synchronous `evaluate_js` calls against one window is
 enough — no background thread involved, matching `test_open_run_
 screen.py`'s own "plain, synchronous request/response" precedent).
 
-<a id="gui.test_input_screen.test_track_expensive_statistics_checkbox_starts_unchecked"></a>
+<a id="gui.test_input_screen.test_configure_has_no_expensive_statistics_checkbox"></a>
 
-#### test\_track\_expensive\_statistics\_checkbox\_starts\_unchecked
+#### test\_configure\_has\_no\_expensive\_statistics\_checkbox
 
 ```python
-def test_track_expensive_statistics_checkbox_starts_unchecked(
+def test_configure_has_no_expensive_statistics_checkbox(
         window: webview.Window, drive: Callable[..., Any]) -> None
 ```
 
-The E_ST/K_ST display opt-in defaults unchecked, matching `SimulationParams`.
+The "track E_ST/K_ST/... for display" checkbox is gone; nothing submits it.
 
-Unlike the sigma-band toggle above, this is a plain "bool" `FormField`
-with no second, revealed field pair to seed -- this and the test
-below are its own entire DOM-level coverage.
+Settings' "Statistics shown" decides `track_expensive_statistics` now
+(`Api._merge_default_run_settings`), so Configure neither shows a
+control nor sends a value that could disagree with Settings.
 
-<a id="gui.test_input_screen.test_checking_track_expensive_statistics_updates_the_checkbox"></a>
+<a id="gui.test_input_screen.test_expensive_convergence_checkboxes_warn_about_run_time"></a>
 
-#### test\_checking\_track\_expensive\_statistics\_updates\_the\_checkbox
+#### test\_expensive\_convergence\_checkboxes\_warn\_about\_run\_time
 
 ```python
-def test_checking_track_expensive_statistics_updates_the_checkbox(
+def test_expensive_convergence_checkboxes_warn_about_run_time(
         window: webview.Window, drive: Callable[..., Any]) -> None
 ```
 
-Checking the box actually flips its own DOM state, live.
+Each expensive statistic's convergence checkbox carries the cost note.
 
 <a id="gui.test_input_screen.test_navigating_to_configure_does_not_reset_run_view_state"></a>
 
@@ -21674,6 +21760,21 @@ def test_the_chooser_lists_every_catalog_statistic_grouped(
 ```
 
 Opening it from the panel builds one checkbox per catalog entry.
+
+<a id="gui.test_statistics_shown_screen.test_the_chooser_marks_the_expensive_statistics_as_lengthening_runs"></a>
+
+#### test\_the\_chooser\_marks\_the\_expensive\_statistics\_as\_lengthening\_runs
+
+```python
+def test_the_chooser_marks_the_expensive_statistics_as_lengthening_runs(
+        window: webview.Window, drive: Callable[..., Any]) -> None
+```
+
+E_ST, K_ST, A_CGD, δG and I carry a run-time warning; they start hidden.
+
+Showing one makes every new run compute them each generation
+(`Api._merge_default_run_settings`), so the chooser says so on each of
+them, in a tooltip and in a visible line, and nowhere else.
 
 <a id="gui.test_statistics_shown_screen.test_the_nei_distances_preset_applies_to_the_panel_at_once"></a>
 
@@ -29364,7 +29465,21 @@ No key appears twice.
 def test_original_statistics_keep_their_order_and_defaults() -> None
 ```
 
-The ten long-standing statistics lead, shown, and stay eligible.
+The ten long-standing statistics lead and stay eligible.
+
+Only the five cheap ones are shown on a fresh install: showing an
+expensive one makes every run compute them each generation
+(`expensive_statistics_requested`), so that cost is opted into.
+
+<a id="statistics.test_catalog.CatalogTests.test_expensive_statistics_are_requested_by_showing_any_one"></a>
+
+#### test\_expensive\_statistics\_are\_requested\_by\_showing\_any\_one
+
+```python
+def test_expensive_statistics_are_requested_by_showing_any_one() -> None
+```
+
+Any shown "opt_in" statistic requests tracking; nothing else does.
 
 <a id="statistics.test_catalog.CatalogTests.test_history_policies_match_the_engine_split"></a>
 

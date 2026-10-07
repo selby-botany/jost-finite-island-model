@@ -79,6 +79,43 @@ def test_the_chooser_lists_every_catalog_statistic_grouped(
     assert "Nei distances" in settled["groups"]
 
 
+def test_the_chooser_marks_the_expensive_statistics_as_lengthening_runs(
+    window: webview.Window, drive: Callable[..., Any]
+) -> None:
+    """E_ST, K_ST, A_CGD, δG and I carry a run-time warning; they start hidden.
+
+    Showing one makes every new run compute them each generation
+    (`Api._merge_default_run_settings`), so the chooser says so on each of
+    them, in a tooltip and in a visible line, and nowhere else.
+    """
+    settled = drive(
+        window,
+        ready=_INPUT_SCREEN_READY,
+        trigger="window.fim.openStatisticsSettings();",
+        read=(
+            "document.getElementById('modal-settings').open ? "
+            "Object.fromEntries(Array.from(document.querySelectorAll("
+            "'#settings-statistics-list .settings-statistics-item')).map("
+            "(item) => [item.querySelector('input').value, {"
+            "title: item.title, "
+            "cost: item.querySelector('.settings-statistics-cost') "
+            "? item.querySelector('.settings-statistics-cost').textContent : null, "
+            "checked: item.querySelector('input').checked"
+            "}])) : null"
+        ),
+    )
+
+    expensive = ("E_ST", "K_ST", "A_CGD", "Delta", "MI")
+    for key in expensive:
+        assert "take longer" in settled[key]["title"], key
+        assert settled[key]["cost"] == settled[key]["title"], key
+        assert settled[key]["checked"] is False, key
+    for key, item in settled.items():
+        if key not in expensive:
+            assert item["cost"] is None, key
+    assert settled["D"]["checked"] is True
+
+
 def test_the_nei_distances_preset_applies_to_the_panel_at_once(
     window: webview.Window, drive: Callable[..., Any]
 ) -> None:

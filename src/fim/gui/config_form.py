@@ -199,17 +199,18 @@ INITIAL_CONDITIONS_FIELDS: Final[tuple[FormField, ...]] = (
 # `track_expensive_statistics` (design doc §6.2/§6.3's trajectory-panel
 # "all six report statistics" display, `20260904-claude-sonnet-5-fim-
 # engine-review-remediations.md` Phase 7 item 4/`b12679b`'s own
-# performance split): `D`/`G_ST`/`H_S`/`H_T` are always tracked for free
-# regardless of this field (`fim.engine._ALWAYS_TRACKED_STATISTICS`) —
-# this one plain checkbox is only the opt-in for the two genuinely
-# expensive statistics, `E_ST`/`K_ST`, needing no reveal-additional-
-# fields behavior the way `sigma_band_enabled` does, so it is a plain
-# "bool" `FormField` rather than a composite one.
+# performance split): `D`/`G_ST`/`H_S`/`H_T`/`H_ST` are always tracked
+# for free (`fim.engine._ALWAYS_TRACKED_STATISTICS`); this opts the five
+# expensive ones in. Configure has no control for it: the desktop app
+# sets it from Settings' "Statistics shown" on every submission
+# (`Api._merge_default_run_settings`). It stays a plain "bool" field so
+# a loaded YAML file, preset or manifest still round-trips through
+# `params_to_form_values`/`form_values_to_payload`.
 CONVERGENCE_FIELDS: Final[tuple[FormField, ...]] = (
     FormField("convergence_combinator", "combinator", "choice", choices=("any", "all")),
     FormField("convergence_window", "convergence window", "auto_int"),
     FormField("convergence_tolerance", "tolerance", "float"),
-    FormField("track_expensive_statistics", "track E_ST/K_ST for display", "bool"),
+    FormField("track_expensive_statistics", "track expensive statistics", "bool"),
 )
 
 # `replicate_tolerance`/`replicate_minimum`/`replicate_confidence` are
@@ -1498,10 +1499,12 @@ docstring / `Api`'s own submission-time merge). `replicate_confidence`/
 fields` the same way. `jit`/`auto_vector_min_d`/`auto_vector_max_
 capacity` are new here — "expert-level settings" with no prior GUI
 representation at all (`BATCH_FIELDS`'s own comment on the three).
-`track_expensive_statistics` and the sigma-band pair (`sigma_band_
-enabled`/`sigma_band_multiplier`/`sigma_band_window`) stay Configure-
-only throughout, judged scientific/per-run choices rather than
-administrative defaults — never a member of this tuple."""
+The sigma-band pair (`sigma_band_enabled`/`sigma_band_multiplier`/
+`sigma_band_window`) stays Configure-only throughout, judged a
+scientific/per-run choice rather than an administrative default — never
+a member of this tuple. Neither is `track_expensive_statistics`: it is
+derived from Settings' "Statistics shown", not saved as a run default
+(`Api._merge_default_run_settings`)."""
 
 # Each run default's own `FormField`, so `validate_run_settings` parses a
 # saved value exactly as a submitted form would.
