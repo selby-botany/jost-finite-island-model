@@ -1240,6 +1240,17 @@ project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+- **An adaptive batch on the `generational` engines no longer keeps the
+  fastest replicates.** With `replicate_tolerance` set, `generational`,
+  `generational-vector` and `auto` counted replicates toward the stopping
+  rule in the order they finished, so a batch kept whichever replicates
+  converged first. Convergence time is related to the statistics being
+  estimated: in the adaptive worked example, `generational` kept 19
+  early-converging replicates and reported mean D 0.269 where `lineal`
+  kept replicates 1 to 22 and reported 0.280. Every engine now counts
+  replicates in replicate order, so `lineal` and `generational` keep the
+  same replicates and write the same `summary.json` for the same seed.
+  Earlier adaptive batches run on those engines should be rerun.
 - **The worked examples' documented numbers match their runs again.**
   Eight example READMEs and the usage guide still quoted results from
   before the noise-adequacy check (for example "converges at generation

@@ -756,6 +756,17 @@ replicate runs are needed for a confidence interval" without guessing a
 fixed count in advance — see each statistic's realized interval in
 `summary.json` (CLI) or fim.engine.replicate_summary (library).
 
+Replicates are considered in replicate order — replicate 1, then 2, then
+3, and so on — on every engine_backend, never in the order they happen
+to finish. A `generational` batch advances many replicates at once, and
+one that converges quickly can finish before a lower-numbered one; it
+waits until every lower-numbered replicate has finished before it
+counts. How quickly a replicate converges is related to its own
+statistics, so keeping whichever replicates finish first would bias the
+result. Because of this rule, the same configuration and seed keep the
+same replicates and write the same `summary.json` under `lineal` and
+`generational`.
+
 An **explicit** `replicate_tolerance: null` disables the adaptive stop
 entirely — n<sub>replicates</sub> then always runs in full. This is
 different from simply omitting the key, which means "use the `0.01`

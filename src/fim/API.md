@@ -2302,7 +2302,11 @@ so they are named distinctly throughout:
   `fim.statistics.interval`) to within a chosen tolerance — running
   further replicates past that point would only narrow an already-
   narrow-enough interval, at the cost of more computing time for no
-  real gain in confidence.
+  real gain in confidence. Replicates are always considered in
+  replicate order (1, 2, 3, ...), on every engine backend, never in the
+  order they happen to finish: which replicates converge soonest is
+  itself correlated with their statistics, so keeping the fastest ones
+  would bias the estimate (`run_batch`'s own docstring).
 
 Determinism matters throughout: the same configuration and the same
 random seed always produce the exact same generation-by-generation
@@ -2963,26 +2967,43 @@ The generation-first counterpart to `LinealBackend`'s own
 replica-first dispatch: every currently-active lane's own generation
 *g* is advanced before any of them moves on to generation *g + 1*
 (via `advancer.advance`), rather than one replica's entire trajectory
-running to completion before the next starts. An adaptive
-`replicate_tolerance` stop (`SimulationParams.replicate_tolerance`;
-see `_replicate_monitor`) fires the instant any lane stops, not once
-per whole replicate the way `LinealBackend`'s own sequential batch
-loop checks it — `stopped_so_far` is this check's own ordinal axis,
-incremented once per lane that stops, in ascending `replica_index`
-order among any that stop within the same tick (a deterministic
-tie-break, not an arbitrary one).
+running to completion before the next starts.
+
+An adaptive `replicate_tolerance` stop (`SimulationParams.
+replicate_tolerance`; see `_replicate_monitor`) is judged on an
+*accepted prefix*, in replicate order, exactly as `LinealBackend`'s
+own sequential loop judges it: replicate *i* is fed to the cross-
+replica monitor only once it and every lower-numbered replicate have
+finished, so the monitor sees replicates 1, 2, 3, ... in that order
+regardless of which lane happened to converge first. The stop fires
+at the same replicate, on the same values, as `LinealBackend` for
+the same seed, so both backends keep the same replicates and report
+the same summary. Feeding the monitor in finishing order instead
+(this function's own behavior through 2026-10-06) kept whichever
+replicates converged soonest; convergence time correlates with the
+statistics being estimated (in the adaptive worked example, the
+replicates that converge earliest have lower `D`), so that order
+biased the batch's own estimate rather than merely reordering it.
+
+Waiting for a slow, low-numbered replicate costs only time, never
+correctness: every lane keeps advancing, generation by generation,
+while the prefix waits. A lane that finishes ahead of the prefix is
+finalized immediately (its `RunResult` held until the prefix reaches
+it, the same memory every kept replicate already uses) and its
+window slot (`max_concurrent_replicates`) is reused at once. Once the
+stop fires, every lane past the stopping replicate — still running,
+or finished but not yet admitted — is discarded, exactly as
+`LinealBackend` never runs, and `_run_batch_parallel` discards,
+replicates past its own stopping point.
 
 Every lane owns its own, never-shared `np.random.Generator` and its
 own `AlleleRegistry` — nothing here ever reads or writes another
 lane's state, which is what makes the traversal order above safe:
 reordering *when* one lane's generation is computed relative to
-another's never changes that lane's own result, only when a shared
-observer (the cross-replica monitor) gets to see it.
+another's never changes that lane's own result, and the accepted-
+prefix rule above means it never changes *which* lanes are kept.
 
-An adaptive stop's own abandoned lanes (every lane with no `result`
-at the moment `outcome.stopped` fires — never finalized at all, or
-finalized in the very same tick but not yet reached by the sorted
-loop below when the stop was decided) have their own rows discarded
+An adaptive stop's own discarded lanes have their own rows discarded
 from `store` before returning, not left behind as orphaned data no
 returned `RunResult` accounts for (this project's own multi-model
 engine review, 2026-09-04, `FIM-49`/finding M-01/finding P2-1 case
@@ -3380,15 +3401,16 @@ silently disagree.
   generation advances together, fanned out across a real
   thread pool, rather than one replicate's whole trajectory
   finishing before the next starts) without changing what is
-- `computed` - for the same seed, with `replicate_tolerance`
-  unset, its own trajectory is bit-identical to
-  ``"lineal"``'s, regardless of thread interleaving. With
-  `replicate_tolerance` set, the two can legitimately choose a
-  different subset of replicates to stop on, since
-  ``"generational"``'s own adaptive stop fires the instant any
-  replicate converges rather than only after a whole replicate
-  (or, under `max_workers`, a whole worker-process batch)
-  completes. ``max_workers``/``store_factory`` above are
+- `computed` - for the same seed, its own trajectory is
+  bit-identical to ``"lineal"``'s, regardless of thread
+  interleaving. That includes an adaptive batch
+  (`replicate_tolerance` set): every backend judges the
+  adaptive stop on replicates in replicate order, admitting
+  replicate *i* only once replicates 1 to *i* have all
+  finished (`run_batch`'s own docstring), so ``"generational"``
+  keeps the same replicates as ``"lineal"`` and reports the
+  same summary, never the subset that happened to converge
+  first. ``max_workers``/``store_factory`` above are
   meaningful only for ``"lineal"``; passing either alongside a
   different `engine_backend` is a `ValueError`, not a silent
   no-op — ``"generational"``'s own thread count is a separate,

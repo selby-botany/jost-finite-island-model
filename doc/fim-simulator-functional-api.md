@@ -170,8 +170,8 @@ The one entry point everything else in this project ultimately calls.
 - **`run_batch(params, store, run_id, clock, advancer) -> tuple[RunResult, ...]`**,
   **`ReplicaLane`** — the generation-first driving loop `GenerationalBackend`
   calls, and the per-replica working-state object it advances one
-  generation at a time; for the same seed, with `replicate_tolerance`
-  unset, bit-identical to `LinealBackend`'s own trajectory under
+  generation at a time; for the same seed, bit-identical to
+  `LinealBackend`'s own trajectory under
   `SequentialAdvancer`/`ThreadedAdvancer` — not under `VectorizedAdvancer`
   in general, which matches exactly only for a single-locus run with
   migration off (see `engine_backend`'s own entry above for what
