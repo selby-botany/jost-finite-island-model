@@ -17,8 +17,8 @@ classes to the examples changes the route the keys take, not the test.
 from __future__ import annotations
 
 import queue
-import time
 from collections.abc import Callable
+from functools import partial
 from typing import Any
 
 import pytest
@@ -28,10 +28,10 @@ from fim.gui import app as app_module
 from fim.gui import presets as presets_module
 from fim.gui.app import await_bridge_threads
 
+from .conftest import poll_page
+
 pytestmark = pytest.mark.gui
 
-_POLL_ATTEMPTS = 200
-_POLL_INTERVAL_SECONDS = 0.1
 _INPUT_SCREEN_READY = "window.__fimRunViewReady === true"
 _DIALOG_READY = "window.__fimExamplesDialogReady === true"
 _TARGET_EXAMPLE_ID = "stepping-stone-spatial-migration"
@@ -64,19 +64,10 @@ def _drive(
     """
     outcome: queue.Queue[Any] = queue.Queue(maxsize=1)
 
-    def _poll_until(script: str, predicate: Callable[[Any], bool]) -> Any:
-        value = None
-        for _ in range(_POLL_ATTEMPTS):
-            value = window.evaluate_js(script)
-            if predicate(value):
-                return value
-            time.sleep(_POLL_INTERVAL_SECONDS)
-        return value
-
     def _run() -> None:
         try:
-            _poll_until(_INPUT_SCREEN_READY, lambda value: value is True)
-            outcome.put(steps(_poll_until))
+            poll_page(window, _INPUT_SCREEN_READY, lambda value: value is True)
+            outcome.put(steps(partial(poll_page, window)))
         finally:
             await_bridge_threads()
             window.destroy()

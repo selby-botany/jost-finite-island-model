@@ -3,18 +3,16 @@
 from __future__ import annotations
 
 import queue
-import time
 import webbrowser
-from collections.abc import Callable
 from typing import Any
 
 import pytest
 import webview
 
+from .conftest import poll_page
+
 pytestmark = pytest.mark.gui
 
-_POLL_ATTEMPTS = 100
-_POLL_INTERVAL_SECONDS = 0.1
 _INPUT_SCREEN_READY = "window.__fimRunViewReady === true"
 
 
@@ -32,20 +30,12 @@ def test_help_screen_shows_usage_and_back_returns_to_the_prior_screen(
     """
     outcome: queue.Queue[dict[str, Any]] = queue.Queue(maxsize=1)
 
-    def _poll_until(script: str, predicate: Callable[[Any], bool]) -> Any:
-        value = None
-        for _ in range(_POLL_ATTEMPTS):
-            value = window.evaluate_js(script)
-            if predicate(value):
-                return value
-            time.sleep(_POLL_INTERVAL_SECONDS)
-        return value
-
     def _drive() -> None:
         try:
-            _poll_until(_INPUT_SCREEN_READY, lambda value: value is True)
+            poll_page(window, _INPUT_SCREEN_READY, lambda value: value is True)
             window.evaluate_js("window.fim.showHelp('usage');")
-            settled = _poll_until(
+            settled = poll_page(
+                window,
                 "({"
                 "helpVisible: !document.getElementById('screen-help').hidden, "
                 "hasContent: "
@@ -61,7 +51,8 @@ def test_help_screen_shows_usage_and_back_returns_to_the_prior_screen(
             # `test_home_is_the_default_highlighted_destination`) --
             # `help.js`'s own `returnScreen` captured whichever screen
             # was actually showing at that moment, not a fixed default.
-            back_visible = _poll_until(
+            back_visible = poll_page(
+                window,
                 "!document.getElementById('screen-open-run').hidden",
                 lambda value: value is True,
             )
@@ -110,25 +101,18 @@ def test_external_doc_link_reaches_the_browser_and_settles(
     monkeypatch.setattr(webbrowser, "open", opened.append)
     outcome: queue.Queue[bool] = queue.Queue(maxsize=1)
 
-    def _poll_until(script: str, predicate: Callable[[Any], bool]) -> Any:
-        value = None
-        for _ in range(_POLL_ATTEMPTS):
-            value = window.evaluate_js(script)
-            if predicate(value):
-                return value
-            time.sleep(_POLL_INTERVAL_SECONDS)
-        return value
-
     def _drive() -> None:
         try:
-            _poll_until(_INPUT_SCREEN_READY, lambda value: value is True)
+            poll_page(window, _INPUT_SCREEN_READY, lambda value: value is True)
             window.evaluate_js("window.fim.showHelp('usage');")
-            _poll_until(
+            poll_page(
+                window,
                 "document.querySelectorAll('[data-fim-external]').length > 0",
                 lambda value: value is True,
             )
             window.evaluate_js("document.querySelector('[data-fim-external]').click();")
-            settled = _poll_until(
+            settled = poll_page(
+                window,
                 "window.__fimHelpExternalLinkSettled === true",
                 lambda value: value is True,
             )
@@ -155,18 +139,9 @@ def test_help_screen_returns_to_results_when_opened_from_there(
     """
     outcome: queue.Queue[bool] = queue.Queue(maxsize=1)
 
-    def _poll_until(script: str, predicate: Callable[[Any], bool]) -> Any:
-        value = None
-        for _ in range(_POLL_ATTEMPTS):
-            value = window.evaluate_js(script)
-            if predicate(value):
-                return value
-            time.sleep(_POLL_INTERVAL_SECONDS)
-        return value
-
     def _drive() -> None:
         try:
-            _poll_until(_INPUT_SCREEN_READY, lambda value: value is True)
+            poll_page(window, _INPUT_SCREEN_READY, lambda value: value is True)
             # Show any other screen first -- Screen 6 (open a run) needs
             # no completed run to reach, unlike Results/Batch results.
             window.evaluate_js("window.fim.showOpenRunScreen();")
@@ -183,18 +158,21 @@ def test_help_screen_returns_to_results_when_opened_from_there(
             # (`_returnValuesCallbacks[...] is not a function`) once the
             # background thread tries to deliver its answer to a window
             # already gone, not merely a theoretical race.
-            _poll_until(
+            poll_page(
+                window,
                 "!document.getElementById('screen-open-run').hidden "
                 "&& window.__fimOpenRunRecentRunsLoaded === true",
                 lambda value: value is True,
             )
             window.evaluate_js("window.fim.showHelp('configuration');")
-            _poll_until(
+            poll_page(
+                window,
                 "!document.getElementById('screen-help').hidden",
                 lambda value: value is True,
             )
             window.evaluate_js("document.getElementById('help-back-button').click();")
-            back_visible = _poll_until(
+            back_visible = poll_page(
+                window,
                 "!document.getElementById('screen-open-run').hidden",
                 lambda value: value is True,
             )

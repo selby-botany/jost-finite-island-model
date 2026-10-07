@@ -16,22 +16,21 @@ from __future__ import annotations
 
 import queue
 import threading
-import time
-from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
 import pytest
 import webview
+from conftest import wait_or_fail
 
 from fim.gui.app import Api, create_window
 from fim.gui.batch_runner import BatchMessage
 from fim.gui.runner import RunMessage
 
+from .conftest import poll_page
+
 pytestmark = pytest.mark.gui
 
-_POLL_ATTEMPTS = 200
-_POLL_INTERVAL_SECONDS = 0.1
 _INPUT_SCREEN_READY = "window.__fimRunViewReady === true"
 
 
@@ -50,18 +49,9 @@ def test_switching_to_per_deme_mode_seeds_the_grid_from_the_scalar(
     """Switching to per-deme mode replicates the current scalar N across every row."""
     outcome: queue.Queue[dict[str, Any]] = queue.Queue(maxsize=1)
 
-    def _poll_until(script: str, predicate: Callable[[Any], bool]) -> Any:
-        value = None
-        for _ in range(_POLL_ATTEMPTS):
-            value = window.evaluate_js(script)
-            if predicate(value):
-                return value
-            time.sleep(_POLL_INTERVAL_SECONDS)
-        return value
-
     def _drive() -> None:
         try:
-            _poll_until(_INPUT_SCREEN_READY, lambda value: value is True)
+            poll_page(window, _INPUT_SCREEN_READY, lambda value: value is True)
             starter_n = window.evaluate_js("document.getElementById('field-N').value")
             starter_d = int(
                 window.evaluate_js("document.getElementById('field-d').value")
@@ -70,7 +60,8 @@ def test_switching_to_per_deme_mode_seeds_the_grid_from_the_scalar(
                 "document.querySelector("
                 '\'input[name="n_mode"][value="per_deme"]\').click();'
             )
-            settled = _poll_until(
+            settled = poll_page(
+                window,
                 "({"
                 "rowCount: document.querySelectorAll("
                 "'#n-per-deme-grid tbody tr').length, "
@@ -97,24 +88,16 @@ def test_editing_a_per_deme_row_updates_field_n(window: webview.Window) -> None:
     """Editing one row's own value updates `field-N`'s comma-separated list."""
     outcome: queue.Queue[dict[str, Any]] = queue.Queue(maxsize=1)
 
-    def _poll_until(script: str, predicate: Callable[[Any], bool]) -> Any:
-        value = None
-        for _ in range(_POLL_ATTEMPTS):
-            value = window.evaluate_js(script)
-            if predicate(value):
-                return value
-            time.sleep(_POLL_INTERVAL_SECONDS)
-        return value
-
     def _drive() -> None:
         try:
-            _poll_until(_INPUT_SCREEN_READY, lambda value: value is True)
+            poll_page(window, _INPUT_SCREEN_READY, lambda value: value is True)
             window.evaluate_js(_set_field("d", "3"))
             window.evaluate_js(
                 "document.querySelector("
                 '\'input[name="n_mode"][value="per_deme"]\').click();'
             )
-            _poll_until(
+            poll_page(
+                window,
                 "document.querySelectorAll('#n-per-deme-grid tbody tr').length",
                 lambda value: value == 3,
             )
@@ -123,7 +106,8 @@ def test_editing_a_per_deme_row_updates_field_n(window: webview.Window) -> None:
                 "cells[1].value = '777'; "
                 "cells[1].dispatchEvent(new Event('input', {bubbles: true}));"
             )
-            settled = _poll_until(
+            settled = poll_page(
+                window,
                 "document.getElementById('field-N').value",
                 lambda value: value is not None and "777" in value,
             )
@@ -148,24 +132,16 @@ def test_changing_d_resizes_the_grid_preserving_existing_values_by_position(
     """
     outcome: queue.Queue[dict[str, Any]] = queue.Queue(maxsize=1)
 
-    def _poll_until(script: str, predicate: Callable[[Any], bool]) -> Any:
-        value = None
-        for _ in range(_POLL_ATTEMPTS):
-            value = window.evaluate_js(script)
-            if predicate(value):
-                return value
-            time.sleep(_POLL_INTERVAL_SECONDS)
-        return value
-
     def _drive() -> None:
         try:
-            _poll_until(_INPUT_SCREEN_READY, lambda value: value is True)
+            poll_page(window, _INPUT_SCREEN_READY, lambda value: value is True)
             window.evaluate_js(_set_field("d", "4"))
             window.evaluate_js(
                 "document.querySelector("
                 '\'input[name="n_mode"][value="per_deme"]\').click();'
             )
-            _poll_until(
+            poll_page(
+                window,
                 "document.querySelectorAll('#n-per-deme-grid tbody tr').length",
                 lambda value: value == 4,
             )
@@ -174,12 +150,14 @@ def test_changing_d_resizes_the_grid_preserving_existing_values_by_position(
                 "cells[0].value = '111'; "
                 "cells[0].dispatchEvent(new Event('input', {bubbles: true}));"
             )
-            _poll_until(
+            poll_page(
+                window,
                 "document.getElementById('field-N').value",
                 lambda value: value is not None and value.startswith("111"),
             )
             window.evaluate_js(_set_field("d", "2"))
-            settled = _poll_until(
+            settled = poll_page(
+                window,
                 "({"
                 "rowCount: document.querySelectorAll("
                 "'#n-per-deme-grid tbody tr').length, "
@@ -227,18 +205,9 @@ def test_a_real_run_with_distinct_per_deme_n_values_completes(
     )
     outcome: queue.Queue[dict[str, Any] | None] = queue.Queue(maxsize=1)
 
-    def _poll_until(script: str, predicate: Callable[[Any], bool]) -> Any:
-        value = None
-        for _ in range(_POLL_ATTEMPTS):
-            value = window.evaluate_js(script)
-            if predicate(value):
-                return value
-            time.sleep(_POLL_INTERVAL_SECONDS)
-        return value
-
     def _drive() -> None:
         try:
-            _poll_until(_INPUT_SCREEN_READY, lambda value: value is True)
+            poll_page(window, _INPUT_SCREEN_READY, lambda value: value is True)
             window.evaluate_js(_set_field("d", "2"))
             window.evaluate_js(_set_field("seed", "20260814"))
             window.evaluate_js(_set_field("mu_value", "0.01"))
@@ -246,7 +215,8 @@ def test_a_real_run_with_distinct_per_deme_n_values_completes(
                 "document.querySelector("
                 '\'input[name="n_mode"][value="per_deme"]\').click();'
             )
-            _poll_until(
+            poll_page(
+                window,
                 "document.querySelectorAll('#n-per-deme-grid tbody tr').length",
                 lambda value: value == 2,
             )
@@ -257,20 +227,20 @@ def test_a_real_run_with_distinct_per_deme_n_values_completes(
                 "cells[1].value = '25'; "
                 "cells[1].dispatchEvent(new Event('input', {bubbles: true}));"
             )
-            _poll_until(
+            poll_page(
+                window,
                 "document.getElementById('field-N').value",
                 lambda value: value == "15, 25",
             )
             window.evaluate_js("document.getElementById('run-button').click();")
-            settled = None
-            if done_event.wait(timeout=30.0):
-                settled = window.evaluate_js(
-                    "({"
-                    "runViewState: window.fim.getRunViewState(), "
-                    "outcomeText: document.getElementById('results-outcome')"
-                    ".textContent"
-                    "})"
-                )
+            wait_or_fail(done_event, "run end (done, cancelled or error message)")
+            settled = window.evaluate_js(
+                "({"
+                "runViewState: window.fim.getRunViewState(), "
+                "outcomeText: document.getElementById('results-outcome')"
+                ".textContent"
+                "})"
+            )
             outcome.put(settled)
         finally:
             window.destroy()

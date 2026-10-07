@@ -12,17 +12,16 @@ right fields, which no Python-only test can check.
 from __future__ import annotations
 
 import queue
-import time
 from collections.abc import Callable
 from typing import Any
 
 import pytest
 import webview
 
+from .conftest import poll_page
+
 pytestmark = pytest.mark.gui
 
-_POLL_ATTEMPTS = 200
-_POLL_INTERVAL_SECONDS = 0.1
 _INPUT_SCREEN_READY = "window.__fimRunViewReady === true"
 
 
@@ -40,22 +39,14 @@ def test_load_example_populates_the_list_and_applies_the_chosen_preset(
     """
     outcome: queue.Queue[dict[str, Any]] = queue.Queue(maxsize=1)
 
-    def _poll_until(script: str, predicate: Callable[[Any], bool]) -> Any:
-        value = None
-        for _ in range(_POLL_ATTEMPTS):
-            value = window.evaluate_js(script)
-            if predicate(value):
-                return value
-            time.sleep(_POLL_INTERVAL_SECONDS)
-        return value
-
     def _drive() -> None:
         try:
-            _poll_until(_INPUT_SCREEN_READY, lambda value: value is True)
+            poll_page(window, _INPUT_SCREEN_READY, lambda value: value is True)
             window.evaluate_js(
                 "setTimeout(() => { window.fim.menu.loadExample(); }, 0);"
             )
-            item_count = _poll_until(
+            item_count = poll_page(
+                window,
                 "document.getElementById('presets-list').children.length",
                 lambda value: value is not None and value > 0,
             )
@@ -77,7 +68,8 @@ def test_load_example_populates_the_list_and_applies_the_chosen_preset(
                 "'#presets-list li:nth-child(2) button:first-child')"
                 ".click();"
             )
-            settled = _poll_until(
+            settled = poll_page(
+                window,
                 "({"
                 "dialogOpen: document.getElementById('modal-presets').open, "
                 "mMode: document.querySelector("
@@ -122,29 +114,22 @@ def test_save_current_as_preset_then_delete_it(window: webview.Window) -> None:
     """
     outcome: queue.Queue[dict[str, Any]] = queue.Queue(maxsize=1)
 
-    def _poll_until(script: str, predicate: Callable[[Any], bool]) -> Any:
-        value = None
-        for _ in range(_POLL_ATTEMPTS):
-            value = window.evaluate_js(script)
-            if predicate(value):
-                return value
-            time.sleep(_POLL_INTERVAL_SECONDS)
-        return value
-
     def _drive() -> None:
         try:
-            _poll_until(_INPUT_SCREEN_READY, lambda value: value is True)
+            poll_page(window, _INPUT_SCREEN_READY, lambda value: value is True)
             window.evaluate_js(
                 "setTimeout(() => { window.fim.menu.loadExample(); }, 0);"
             )
-            _poll_until(
+            poll_page(
+                window,
                 "document.getElementById('presets-list').children.length",
                 lambda value: value is not None and value > 0,
             )
             window.evaluate_js(
                 "document.getElementById('save-current-as-preset-button').click();"
             )
-            _poll_until(
+            poll_page(
+                window,
                 "document.getElementById('modal-save-preset').open",
                 lambda value: value is True,
             )
@@ -167,7 +152,8 @@ def test_save_current_as_preset_then_delete_it(window: webview.Window) -> None:
                 "'My saved scenario';"
                 "document.getElementById('save-preset-accept-button').click();"
             )
-            after_save = _poll_until(
+            after_save = poll_page(
+                window,
                 "({"
                 "saveDialogOpen: "
                 "document.getElementById('modal-save-preset').open, "
@@ -187,7 +173,8 @@ def test_save_current_as_preset_then_delete_it(window: webview.Window) -> None:
             window.evaluate_js(
                 "document.querySelector('.presets-delete-button').click();"
             )
-            after_delete = _poll_until(
+            after_delete = poll_page(
+                window,
                 "document.querySelectorAll('.presets-delete-button').length",
                 lambda value: value == 0,
             )
@@ -209,18 +196,9 @@ def test_save_current_as_preset_shows_a_validation_error_without_closing(
     """An invalid current form's own error shows in the dialog, which stays open."""
     outcome: queue.Queue[dict[str, Any]] = queue.Queue(maxsize=1)
 
-    def _poll_until(script: str, predicate: Callable[[Any], bool]) -> Any:
-        value = None
-        for _ in range(_POLL_ATTEMPTS):
-            value = window.evaluate_js(script)
-            if predicate(value):
-                return value
-            time.sleep(_POLL_INTERVAL_SECONDS)
-        return value
-
     def _drive() -> None:
         try:
-            _poll_until(_INPUT_SCREEN_READY, lambda value: value is True)
+            poll_page(window, _INPUT_SCREEN_READY, lambda value: value is True)
             window.evaluate_js(
                 "const field = document.getElementById('field-N'); "
                 "field.value = 'not-a-number'; "
@@ -229,14 +207,16 @@ def test_save_current_as_preset_shows_a_validation_error_without_closing(
             window.evaluate_js(
                 "setTimeout(() => { window.fim.menu.loadExample(); }, 0);"
             )
-            _poll_until(
+            poll_page(
+                window,
                 "document.getElementById('presets-list').children.length",
                 lambda value: value is not None and value > 0,
             )
             window.evaluate_js(
                 "document.getElementById('save-current-as-preset-button').click();"
             )
-            _poll_until(
+            poll_page(
+                window,
                 "document.getElementById('modal-save-preset').open",
                 lambda value: value is True,
             )
@@ -244,7 +224,8 @@ def test_save_current_as_preset_shows_a_validation_error_without_closing(
                 "document.getElementById('save-preset-name').value = 'Broken';"
                 "document.getElementById('save-preset-accept-button').click();"
             )
-            settled = _poll_until(
+            settled = poll_page(
+                window,
                 "({"
                 "errorHidden: "
                 "document.getElementById('save-preset-error').hidden, "
@@ -274,22 +255,14 @@ def test_view_yaml_shows_the_chosen_presets_own_text(window: webview.Window) -> 
     """
     outcome: queue.Queue[dict[str, Any]] = queue.Queue(maxsize=1)
 
-    def _poll_until(script: str, predicate: Callable[[Any], bool]) -> Any:
-        value = None
-        for _ in range(_POLL_ATTEMPTS):
-            value = window.evaluate_js(script)
-            if predicate(value):
-                return value
-            time.sleep(_POLL_INTERVAL_SECONDS)
-        return value
-
     def _drive() -> None:
         try:
-            _poll_until(_INPUT_SCREEN_READY, lambda value: value is True)
+            poll_page(window, _INPUT_SCREEN_READY, lambda value: value is True)
             window.evaluate_js(
                 "setTimeout(() => { window.fim.menu.loadExample(); }, 0);"
             )
-            _poll_until(
+            poll_page(
+                window,
                 "document.getElementById('presets-list').children.length",
                 lambda value: value is not None and value > 0,
             )
@@ -303,7 +276,8 @@ def test_view_yaml_shows_the_chosen_presets_own_text(window: webview.Window) -> 
                 "'#presets-list li:first-child .presets-view-yaml-button')"
                 ".click();"
             )
-            settled = _poll_until(
+            settled = poll_page(
+                window,
                 "({"
                 "presetsDialogOpen: document.getElementById('modal-presets').open, "
                 "yamlDialogOpen: "
@@ -344,18 +318,9 @@ def test_copy_to_clipboard_writes_the_shown_yaml_text(window: webview.Window) ->
     """
     outcome: queue.Queue[dict[str, Any]] = queue.Queue(maxsize=1)
 
-    def _poll_until(script: str, predicate: Callable[[Any], bool]) -> Any:
-        value = None
-        for _ in range(_POLL_ATTEMPTS):
-            value = window.evaluate_js(script)
-            if predicate(value):
-                return value
-            time.sleep(_POLL_INTERVAL_SECONDS)
-        return value
-
     def _drive() -> None:
         try:
-            _poll_until(_INPUT_SCREEN_READY, lambda value: value is True)
+            poll_page(window, _INPUT_SCREEN_READY, lambda value: value is True)
             window.evaluate_js(
                 "window.__fimClipboardCalls = []; "
                 "navigator.clipboard.writeText = (text) => { "
@@ -366,7 +331,8 @@ def test_copy_to_clipboard_writes_the_shown_yaml_text(window: webview.Window) ->
             window.evaluate_js(
                 "setTimeout(() => { window.fim.menu.loadExample(); }, 0);"
             )
-            _poll_until(
+            poll_page(
+                window,
                 "document.getElementById('presets-list').children.length",
                 lambda value: value is not None and value > 0,
             )
@@ -375,8 +341,10 @@ def test_copy_to_clipboard_writes_the_shown_yaml_text(window: webview.Window) ->
                 "'#presets-list li:first-child .presets-view-yaml-button')"
                 ".click();"
             )
-            _poll_until(
-                "window.__fimPresetYamlReady === true", lambda value: value is True
+            poll_page(
+                window,
+                "window.__fimPresetYamlReady === true",
+                lambda value: value is True,
             )
             shown_text = window.evaluate_js(
                 "document.getElementById('preset-yaml-text').value"
@@ -384,7 +352,8 @@ def test_copy_to_clipboard_writes_the_shown_yaml_text(window: webview.Window) ->
             window.evaluate_js(
                 "document.getElementById('preset-yaml-copy-button').click();"
             )
-            settled = _poll_until(
+            settled = poll_page(
+                window,
                 "({"
                 "copyReady: window.__fimPresetYamlCopyReady === true, "
                 "copiedNoteHidden: "
@@ -433,22 +402,14 @@ def test_loading_a_preset_enables_duplicate_and_saving_it_creates_a_new_preset(
     """
     outcome: queue.Queue[dict[str, Any]] = queue.Queue(maxsize=1)
 
-    def _poll_until(script: str, predicate: Callable[[Any], bool]) -> Any:
-        value = None
-        for _ in range(_POLL_ATTEMPTS):
-            value = window.evaluate_js(script)
-            if predicate(value):
-                return value
-            time.sleep(_POLL_INTERVAL_SECONDS)
-        return value
-
     def _drive() -> None:
         try:
-            _poll_until(_INPUT_SCREEN_READY, lambda value: value is True)
+            poll_page(window, _INPUT_SCREEN_READY, lambda value: value is True)
             window.evaluate_js(
                 "setTimeout(() => { window.fim.menu.loadExample(); }, 0);"
             )
-            _poll_until(
+            poll_page(
+                window,
                 "document.getElementById('presets-list').children.length",
                 lambda value: value is not None and value > 0,
             )
@@ -462,7 +423,8 @@ def test_loading_a_preset_enables_duplicate_and_saving_it_creates_a_new_preset(
                 "'#presets-list li:first-child button:first-child')"
                 ".click();"
             )
-            _poll_until(
+            poll_page(
+                window,
                 "document.getElementById('configure-duplicate-preset-button')"
                 ".disabled === false",
                 lambda value: value is True,
@@ -470,7 +432,8 @@ def test_loading_a_preset_enables_duplicate_and_saving_it_creates_a_new_preset(
             window.evaluate_js(
                 "document.getElementById('configure-duplicate-preset-button').click();"
             )
-            _poll_until(
+            poll_page(
+                window,
                 "document.getElementById('modal-save-preset').open",
                 lambda value: value is True,
             )
@@ -481,7 +444,8 @@ def test_loading_a_preset_enables_duplicate_and_saving_it_creates_a_new_preset(
                 "window.__fimPresetsListReady = false;"
                 "document.getElementById('save-preset-accept-button').click();"
             )
-            _poll_until(
+            poll_page(
+                window,
                 "window.__fimPresetsListReady === true"
                 " || !document.getElementById('modal-save-preset').open",
                 lambda value: value is True,
@@ -491,7 +455,8 @@ def test_loading_a_preset_enables_duplicate_and_saving_it_creates_a_new_preset(
                 "(async () => { window.__fimDuplicateSaveResult = "
                 "await window.pywebview.api.list_presets(); })();"
             )
-            list_result = _poll_until(
+            list_result = poll_page(
+                window,
                 "window.__fimDuplicateSaveResult",
                 lambda value: value is not None,
             )
@@ -527,22 +492,14 @@ def test_new_configuration_disables_duplicate_button_again(
     """
     outcome: queue.Queue[bool | None] = queue.Queue(maxsize=1)
 
-    def _poll_until(script: str, predicate: Callable[[Any], bool]) -> Any:
-        value = None
-        for _ in range(_POLL_ATTEMPTS):
-            value = window.evaluate_js(script)
-            if predicate(value):
-                return value
-            time.sleep(_POLL_INTERVAL_SECONDS)
-        return value
-
     def _drive() -> None:
         try:
-            _poll_until(_INPUT_SCREEN_READY, lambda value: value is True)
+            poll_page(window, _INPUT_SCREEN_READY, lambda value: value is True)
             window.evaluate_js(
                 "setTimeout(() => { window.fim.menu.loadExample(); }, 0);"
             )
-            _poll_until(
+            poll_page(
+                window,
                 "document.getElementById('presets-list').children.length",
                 lambda value: value is not None and value > 0,
             )
@@ -551,7 +508,8 @@ def test_new_configuration_disables_duplicate_button_again(
                 "'#presets-list li:first-child button:first-child')"
                 ".click();"
             )
-            _poll_until(
+            poll_page(
+                window,
                 "document.getElementById('configure-duplicate-preset-button')"
                 ".disabled === false",
                 lambda value: value is True,
@@ -560,7 +518,8 @@ def test_new_configuration_disables_duplicate_button_again(
                 "window.__fimRunViewReady = false;"
                 "setTimeout(() => { window.fim.menu.newConfiguration(); }, 0);"
             )
-            settled = _poll_until(
+            settled = poll_page(
+                window,
                 "window.__fimRunViewReady === true ? "
                 "document.getElementById('configure-duplicate-preset-button')"
                 ".disabled : null",

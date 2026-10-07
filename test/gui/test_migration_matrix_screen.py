@@ -15,22 +15,21 @@ from __future__ import annotations
 
 import queue
 import threading
-import time
-from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
 import pytest
 import webview
+from conftest import wait_or_fail
 
 from fim.gui.app import Api, create_window
 from fim.gui.batch_runner import BatchMessage
 from fim.gui.runner import RunMessage
 
+from .conftest import poll_page
+
 pytestmark = pytest.mark.gui
 
-_POLL_ATTEMPTS = 200
-_POLL_INTERVAL_SECONDS = 0.1
 _INPUT_SCREEN_READY = "window.__fimRunViewReady === true"
 
 
@@ -49,24 +48,16 @@ def test_selecting_matrix_mode_builds_an_identity_grid_matching_d(
     """Switching to matrix mode with no prior matrix builds a d-by-d identity grid."""
     outcome: queue.Queue[dict[str, Any]] = queue.Queue(maxsize=1)
 
-    def _poll_until(script: str, predicate: Callable[[Any], bool]) -> Any:
-        value = None
-        for _ in range(_POLL_ATTEMPTS):
-            value = window.evaluate_js(script)
-            if predicate(value):
-                return value
-            time.sleep(_POLL_INTERVAL_SECONDS)
-        return value
-
     def _drive() -> None:
         try:
-            _poll_until(_INPUT_SCREEN_READY, lambda value: value is True)
+            poll_page(window, _INPUT_SCREEN_READY, lambda value: value is True)
             window.evaluate_js(_set_field("d", "3"))
             window.evaluate_js(
                 "document.querySelector("
                 '\'input[name="m_mode"][value="matrix"]\').click();'
             )
-            settled = _poll_until(
+            settled = poll_page(
+                window,
                 "({"
                 "rowCount: document.querySelectorAll("
                 "'#m-matrix-grid tbody tr').length, "
@@ -95,24 +86,16 @@ def test_editing_a_cell_updates_the_row_sum_and_flags_an_invalid_row(
     """Typing into a cell recomputes that row's own sum and warns when it isn't 1."""
     outcome: queue.Queue[dict[str, Any]] = queue.Queue(maxsize=1)
 
-    def _poll_until(script: str, predicate: Callable[[Any], bool]) -> Any:
-        value = None
-        for _ in range(_POLL_ATTEMPTS):
-            value = window.evaluate_js(script)
-            if predicate(value):
-                return value
-            time.sleep(_POLL_INTERVAL_SECONDS)
-        return value
-
     def _drive() -> None:
         try:
-            _poll_until(_INPUT_SCREEN_READY, lambda value: value is True)
+            poll_page(window, _INPUT_SCREEN_READY, lambda value: value is True)
             window.evaluate_js(_set_field("d", "2"))
             window.evaluate_js(
                 "document.querySelector("
                 '\'input[name="m_mode"][value="matrix"]\').click();'
             )
-            _poll_until(
+            poll_page(
+                window,
                 "document.querySelectorAll('#m-matrix-grid tbody tr').length",
                 lambda value: value == 2,
             )
@@ -123,7 +106,8 @@ def test_editing_a_cell_updates_the_row_sum_and_flags_an_invalid_row(
                 "cells[1].value = '0.2'; "
                 "cells[1].dispatchEvent(new Event('input', {bubbles: true}));"
             )
-            settled = _poll_until(
+            settled = poll_page(
+                window,
                 "({"
                 "rowSumText: document.querySelector("
                 "'#m-matrix-grid .matrix-row-sum').textContent, "
@@ -152,24 +136,16 @@ def test_changing_d_resizes_the_grid_preserving_existing_values(
     """Growing `d` while matrix mode is active adds rows/columns without losing data."""
     outcome: queue.Queue[dict[str, Any]] = queue.Queue(maxsize=1)
 
-    def _poll_until(script: str, predicate: Callable[[Any], bool]) -> Any:
-        value = None
-        for _ in range(_POLL_ATTEMPTS):
-            value = window.evaluate_js(script)
-            if predicate(value):
-                return value
-            time.sleep(_POLL_INTERVAL_SECONDS)
-        return value
-
     def _drive() -> None:
         try:
-            _poll_until(_INPUT_SCREEN_READY, lambda value: value is True)
+            poll_page(window, _INPUT_SCREEN_READY, lambda value: value is True)
             window.evaluate_js(_set_field("d", "2"))
             window.evaluate_js(
                 "document.querySelector("
                 '\'input[name="m_mode"][value="matrix"]\').click();'
             )
-            _poll_until(
+            poll_page(
+                window,
                 "document.querySelectorAll('#m-matrix-grid tbody tr').length",
                 lambda value: value == 2,
             )
@@ -180,7 +156,8 @@ def test_changing_d_resizes_the_grid_preserving_existing_values(
                 "cells[0].dispatchEvent(new Event('input', {bubbles: true}));"
             )
             window.evaluate_js(_set_field("d", "3"))
-            settled = _poll_until(
+            settled = poll_page(
+                window,
                 "({"
                 "rowCount: document.querySelectorAll("
                 "'#m-matrix-grid tbody tr').length, "
@@ -229,18 +206,9 @@ def test_a_real_run_with_a_hand_edited_matrix_completes(
     )
     outcome: queue.Queue[dict[str, Any] | None] = queue.Queue(maxsize=1)
 
-    def _poll_until(script: str, predicate: Callable[[Any], bool]) -> Any:
-        value = None
-        for _ in range(_POLL_ATTEMPTS):
-            value = window.evaluate_js(script)
-            if predicate(value):
-                return value
-            time.sleep(_POLL_INTERVAL_SECONDS)
-        return value
-
     def _drive() -> None:
         try:
-            _poll_until(_INPUT_SCREEN_READY, lambda value: value is True)
+            poll_page(window, _INPUT_SCREEN_READY, lambda value: value is True)
             window.evaluate_js(_set_field("N", "20"))
             window.evaluate_js(_set_field("d", "2"))
             window.evaluate_js(_set_field("seed", "20260814"))
@@ -250,7 +218,8 @@ def test_a_real_run_with_a_hand_edited_matrix_completes(
                 "document.querySelector("
                 '\'input[name="m_mode"][value="matrix"]\').click();'
             )
-            _poll_until(
+            poll_page(
+                window,
                 "document.querySelectorAll('#m-matrix-grid tbody tr').length",
                 lambda value: value == 2,
             )
@@ -262,15 +231,14 @@ def test_a_real_run_with_a_hand_edited_matrix_completes(
                 "cells[3].dispatchEvent(new Event('input', {bubbles: true}));"
             )
             window.evaluate_js("document.getElementById('run-button').click();")
-            settled = None
-            if done_event.wait(timeout=30.0):
-                settled = window.evaluate_js(
-                    "({"
-                    "runViewState: window.fim.getRunViewState(), "
-                    "outcomeText: document.getElementById('results-outcome')"
-                    ".textContent"
-                    "})"
-                )
+            wait_or_fail(done_event, "run end (done, cancelled or error message)")
+            settled = window.evaluate_js(
+                "({"
+                "runViewState: window.fim.getRunViewState(), "
+                "outcomeText: document.getElementById('results-outcome')"
+                ".textContent"
+                "})"
+            )
             outcome.put(settled)
         finally:
             window.destroy()

@@ -16,22 +16,21 @@ from __future__ import annotations
 
 import queue
 import threading
-import time
-from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
 import pytest
 import webview
+from conftest import wait_or_fail
 
 from fim.gui.app import Api, create_window
 from fim.gui.batch_runner import BatchMessage
 from fim.gui.runner import RunMessage
 
+from .conftest import poll_page
+
 pytestmark = pytest.mark.gui
 
-_POLL_ATTEMPTS = 200
-_POLL_INTERVAL_SECONDS = 0.1
 _INPUT_SCREEN_READY = "window.__fimRunViewReady === true"
 
 
@@ -50,23 +49,15 @@ def test_selecting_custom_mode_builds_a_single_default_row(
     """Switching to custom mode with no prior `loci` builds one default row."""
     outcome: queue.Queue[dict[str, Any]] = queue.Queue(maxsize=1)
 
-    def _poll_until(script: str, predicate: Callable[[Any], bool]) -> Any:
-        value = None
-        for _ in range(_POLL_ATTEMPTS):
-            value = window.evaluate_js(script)
-            if predicate(value):
-                return value
-            time.sleep(_POLL_INTERVAL_SECONDS)
-        return value
-
     def _drive() -> None:
         try:
-            _poll_until(_INPUT_SCREEN_READY, lambda value: value is True)
+            poll_page(window, _INPUT_SCREEN_READY, lambda value: value is True)
             window.evaluate_js(
                 "document.querySelector("
                 '\'input[name="loci_mode"][value="custom"]\').click();'
             )
-            settled = _poll_until(
+            settled = poll_page(
+                window,
                 "({"
                 "rowCount: document.querySelectorAll("
                 "'#loci-grid tbody tr').length, "
@@ -97,23 +88,15 @@ def test_add_row_button_appends_the_next_sequential_locus_id(
     """ "Add locus" appends a row one past the highest already present."""
     outcome: queue.Queue[dict[str, Any]] = queue.Queue(maxsize=1)
 
-    def _poll_until(script: str, predicate: Callable[[Any], bool]) -> Any:
-        value = None
-        for _ in range(_POLL_ATTEMPTS):
-            value = window.evaluate_js(script)
-            if predicate(value):
-                return value
-            time.sleep(_POLL_INTERVAL_SECONDS)
-        return value
-
     def _drive() -> None:
         try:
-            _poll_until(_INPUT_SCREEN_READY, lambda value: value is True)
+            poll_page(window, _INPUT_SCREEN_READY, lambda value: value is True)
             window.evaluate_js(
                 "document.querySelector("
                 '\'input[name="loci_mode"][value="custom"]\').click();'
             )
-            _poll_until(
+            poll_page(
+                window,
                 "document.querySelectorAll('#loci-grid tbody tr').length",
                 lambda value: value == 1,
             )
@@ -125,7 +108,8 @@ def test_add_row_button_appends_the_next_sequential_locus_id(
             window.evaluate_js(
                 "document.getElementById('loci-add-row-button').click();"
             )
-            settled = _poll_until(
+            settled = poll_page(
+                window,
                 "({"
                 "rowCount: document.querySelectorAll("
                 "'#loci-grid tbody tr').length, "
@@ -154,32 +138,24 @@ def test_remove_row_leaves_at_least_one_row(window: webview.Window) -> None:
     """Removing rows stops at one -- a `loci` list can never submit empty."""
     outcome: queue.Queue[dict[str, Any]] = queue.Queue(maxsize=1)
 
-    def _poll_until(script: str, predicate: Callable[[Any], bool]) -> Any:
-        value = None
-        for _ in range(_POLL_ATTEMPTS):
-            value = window.evaluate_js(script)
-            if predicate(value):
-                return value
-            time.sleep(_POLL_INTERVAL_SECONDS)
-        return value
-
     def _drive() -> None:
         try:
-            _poll_until(_INPUT_SCREEN_READY, lambda value: value is True)
+            poll_page(window, _INPUT_SCREEN_READY, lambda value: value is True)
             window.evaluate_js(
                 "document.querySelector("
                 '\'input[name="loci_mode"][value="custom"]\').click();'
             )
-            _poll_until(
+            poll_page(
+                window,
                 "document.querySelectorAll('#loci-grid tbody tr').length",
                 lambda value: value == 1,
             )
             window.evaluate_js(
                 "document.querySelector('#loci-grid tbody tr button').click();"
             )
-            # Give any (incorrect) removal a moment to happen before
-            # asserting it did not.
-            time.sleep(0.2)
+            # No wait: the Remove button's click listener (`loci-grid.js`)
+            # is synchronous, so any removal has already happened by the
+            # time the clicking `evaluate_js` call returns.
             settled = window.evaluate_js(
                 "({rowCount: document.querySelectorAll('#loci-grid tbody tr').length})"
             )
@@ -222,18 +198,9 @@ def test_a_real_run_with_custom_nonsequential_locus_ids_completes(
     )
     outcome: queue.Queue[dict[str, Any] | None] = queue.Queue(maxsize=1)
 
-    def _poll_until(script: str, predicate: Callable[[Any], bool]) -> Any:
-        value = None
-        for _ in range(_POLL_ATTEMPTS):
-            value = window.evaluate_js(script)
-            if predicate(value):
-                return value
-            time.sleep(_POLL_INTERVAL_SECONDS)
-        return value
-
     def _drive() -> None:
         try:
-            _poll_until(_INPUT_SCREEN_READY, lambda value: value is True)
+            poll_page(window, _INPUT_SCREEN_READY, lambda value: value is True)
             window.evaluate_js(_set_field("N", "20"))
             window.evaluate_js(_set_field("d", "2"))
             window.evaluate_js(_set_field("seed", "20260814"))
@@ -242,7 +209,8 @@ def test_a_real_run_with_custom_nonsequential_locus_ids_completes(
                 "document.querySelector("
                 '\'input[name="loci_mode"][value="custom"]\').click();'
             )
-            _poll_until(
+            poll_page(
+                window,
                 "document.querySelectorAll('#loci-grid tbody tr').length",
                 lambda value: value == 1,
             )
@@ -255,7 +223,8 @@ def test_a_real_run_with_custom_nonsequential_locus_ids_completes(
             window.evaluate_js(
                 "document.getElementById('loci-add-row-button').click();"
             )
-            _poll_until(
+            poll_page(
+                window,
                 "document.querySelectorAll('#loci-grid tbody tr').length",
                 lambda value: value == 2,
             )
@@ -266,15 +235,14 @@ def test_a_real_run_with_custom_nonsequential_locus_ids_completes(
                 "lengthCells[1].dispatchEvent(new Event('input', {bubbles: true}));"
             )
             window.evaluate_js("document.getElementById('run-button').click();")
-            settled = None
-            if done_event.wait(timeout=30.0):
-                settled = window.evaluate_js(
-                    "({"
-                    "runViewState: window.fim.getRunViewState(), "
-                    "outcomeText: document.getElementById('results-outcome')"
-                    ".textContent"
-                    "})"
-                )
+            wait_or_fail(done_event, "run end (done, cancelled or error message)")
+            settled = window.evaluate_js(
+                "({"
+                "runViewState: window.fim.getRunViewState(), "
+                "outcomeText: document.getElementById('results-outcome')"
+                ".textContent"
+                "})"
+            )
             outcome.put(settled)
         finally:
             window.destroy()

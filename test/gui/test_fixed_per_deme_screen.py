@@ -17,22 +17,21 @@ from __future__ import annotations
 
 import queue
 import threading
-import time
-from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
 import pytest
 import webview
+from conftest import wait_or_fail
 
 from fim.gui.app import Api, create_window
 from fim.gui.batch_runner import BatchMessage
 from fim.gui.runner import RunMessage
 
+from .conftest import poll_page
+
 pytestmark = pytest.mark.gui
 
-_POLL_ATTEMPTS = 200
-_POLL_INTERVAL_SECONDS = 0.1
 _INPUT_SCREEN_READY = "window.__fimRunViewReady === true"
 
 
@@ -51,25 +50,17 @@ def test_selecting_fixed_per_deme_mode_shows_the_default_all_same_preview(
     """Switching to fixed-per-deme mode previews the default "all same" choice."""
     outcome: queue.Queue[dict[str, Any]] = queue.Queue(maxsize=1)
 
-    def _poll_until(script: str, predicate: Callable[[Any], bool]) -> Any:
-        value = None
-        for _ in range(_POLL_ATTEMPTS):
-            value = window.evaluate_js(script)
-            if predicate(value):
-                return value
-            time.sleep(_POLL_INTERVAL_SECONDS)
-        return value
-
     def _drive() -> None:
         try:
-            _poll_until(_INPUT_SCREEN_READY, lambda value: value is True)
+            poll_page(window, _INPUT_SCREEN_READY, lambda value: value is True)
             window.evaluate_js(_set_field("d", "3"))
             window.evaluate_js(
                 "document.querySelector("
                 '\'input[name="initial_conditions_mode"]'
                 '[value="fixed_per_deme"]\').click();'
             )
-            settled = _poll_until(
+            settled = poll_page(
+                window,
                 "document.getElementById('fixed-per-deme-preview').textContent",
                 lambda value: value is not None and value != "",
             )
@@ -89,18 +80,9 @@ def test_choosing_all_different_previews_each_demes_own_allele(
     """ "All different" previews deme *i* fixed for allele *i*, for the current `d`."""
     outcome: queue.Queue[dict[str, Any]] = queue.Queue(maxsize=1)
 
-    def _poll_until(script: str, predicate: Callable[[Any], bool]) -> Any:
-        value = None
-        for _ in range(_POLL_ATTEMPTS):
-            value = window.evaluate_js(script)
-            if predicate(value):
-                return value
-            time.sleep(_POLL_INTERVAL_SECONDS)
-        return value
-
     def _drive() -> None:
         try:
-            _poll_until(_INPUT_SCREEN_READY, lambda value: value is True)
+            poll_page(window, _INPUT_SCREEN_READY, lambda value: value is True)
             window.evaluate_js(_set_field("d", "3"))
             window.evaluate_js(
                 "document.querySelector("
@@ -112,7 +94,8 @@ def test_choosing_all_different_previews_each_demes_own_allele(
                 '\'input[name="fixed_per_deme_choice"]'
                 '[value="all_different"]\').click();'
             )
-            settled = _poll_until(
+            settled = poll_page(
+                window,
                 "document.getElementById('fixed-per-deme-preview').textContent",
                 lambda value: (
                     value not in (None, "", "Fixes all 3 deme(s) for allele 0.")
@@ -136,18 +119,9 @@ def test_choosing_all_but_one_previews_the_last_demes_own_distinct_allele(
     """ "All but one" previews every deme but the last fixed for allele 0."""
     outcome: queue.Queue[dict[str, Any]] = queue.Queue(maxsize=1)
 
-    def _poll_until(script: str, predicate: Callable[[Any], bool]) -> Any:
-        value = None
-        for _ in range(_POLL_ATTEMPTS):
-            value = window.evaluate_js(script)
-            if predicate(value):
-                return value
-            time.sleep(_POLL_INTERVAL_SECONDS)
-        return value
-
     def _drive() -> None:
         try:
-            _poll_until(_INPUT_SCREEN_READY, lambda value: value is True)
+            poll_page(window, _INPUT_SCREEN_READY, lambda value: value is True)
             window.evaluate_js(_set_field("d", "4"))
             window.evaluate_js(
                 "document.querySelector("
@@ -159,7 +133,8 @@ def test_choosing_all_but_one_previews_the_last_demes_own_distinct_allele(
                 '\'input[name="fixed_per_deme_choice"]'
                 '[value="all_but_one"]\').click();'
             )
-            settled = _poll_until(
+            settled = poll_page(
+                window,
                 "document.getElementById('fixed-per-deme-preview').textContent",
                 lambda value: value is not None and value != "",
             )
@@ -179,30 +154,23 @@ def test_changing_d_updates_the_preview_live(window: webview.Window) -> None:
     """Growing `d` while fixed-per-deme mode is active recomputes the preview."""
     outcome: queue.Queue[dict[str, Any]] = queue.Queue(maxsize=1)
 
-    def _poll_until(script: str, predicate: Callable[[Any], bool]) -> Any:
-        value = None
-        for _ in range(_POLL_ATTEMPTS):
-            value = window.evaluate_js(script)
-            if predicate(value):
-                return value
-            time.sleep(_POLL_INTERVAL_SECONDS)
-        return value
-
     def _drive() -> None:
         try:
-            _poll_until(_INPUT_SCREEN_READY, lambda value: value is True)
+            poll_page(window, _INPUT_SCREEN_READY, lambda value: value is True)
             window.evaluate_js(_set_field("d", "2"))
             window.evaluate_js(
                 "document.querySelector("
                 '\'input[name="initial_conditions_mode"]'
                 '[value="fixed_per_deme"]\').click();'
             )
-            _poll_until(
+            poll_page(
+                window,
                 "document.getElementById('fixed-per-deme-preview').textContent",
                 lambda value: value == "Fixes all 2 deme(s) for allele 0.",
             )
             window.evaluate_js(_set_field("d", "5"))
-            settled = _poll_until(
+            settled = poll_page(
+                window,
                 "document.getElementById('fixed-per-deme-preview').textContent",
                 lambda value: value == "Fixes all 5 deme(s) for allele 0.",
             )
@@ -246,18 +214,9 @@ def test_a_real_run_with_fixed_per_deme_all_different_completes(
     )
     outcome: queue.Queue[dict[str, Any] | None] = queue.Queue(maxsize=1)
 
-    def _poll_until(script: str, predicate: Callable[[Any], bool]) -> Any:
-        value = None
-        for _ in range(_POLL_ATTEMPTS):
-            value = window.evaluate_js(script)
-            if predicate(value):
-                return value
-            time.sleep(_POLL_INTERVAL_SECONDS)
-        return value
-
     def _drive() -> None:
         try:
-            _poll_until(_INPUT_SCREEN_READY, lambda value: value is True)
+            poll_page(window, _INPUT_SCREEN_READY, lambda value: value is True)
             window.evaluate_js(_set_field("N", "20"))
             window.evaluate_js(_set_field("d", "2"))
             window.evaluate_js(_set_field("seed", "20260814"))
@@ -274,15 +233,14 @@ def test_a_real_run_with_fixed_per_deme_all_different_completes(
                 '[value="all_different"]\').click();'
             )
             window.evaluate_js("document.getElementById('run-button').click();")
-            settled = None
-            if done_event.wait(timeout=30.0):
-                settled = window.evaluate_js(
-                    "({"
-                    "runViewState: window.fim.getRunViewState(), "
-                    "outcomeText: document.getElementById('results-outcome')"
-                    ".textContent"
-                    "})"
-                )
+            wait_or_fail(done_event, "run end (done, cancelled or error message)")
+            settled = window.evaluate_js(
+                "({"
+                "runViewState: window.fim.getRunViewState(), "
+                "outcomeText: document.getElementById('results-outcome')"
+                ".textContent"
+                "})"
+            )
             outcome.put(settled)
         finally:
             window.destroy()

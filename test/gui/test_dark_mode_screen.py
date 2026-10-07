@@ -23,18 +23,17 @@ already needed before this file's own fields ever moved here.
 from __future__ import annotations
 
 import queue
-import time
 from collections.abc import Callable
 from typing import Any
 
 import pytest
 import webview
 
+from .conftest import poll_page
+
 pytestmark = pytest.mark.gui
 
 _INPUT_SCREEN_READY = "window.__fimRunViewReady === true"
-_POLL_ATTEMPTS = 200
-_POLL_INTERVAL_SECONDS = 0.1
 
 
 def test_starts_with_no_theme_override_and_the_select_showing_follow_system(
@@ -94,18 +93,9 @@ def test_choosing_dark_then_follow_system_clears_the_theme_attribute(
     """
     outcome: queue.Queue[bool | None] = queue.Queue(maxsize=1)
 
-    def _poll_until(script: str, predicate: Callable[[Any], bool]) -> Any:
-        value = None
-        for _ in range(_POLL_ATTEMPTS):
-            value = window.evaluate_js(script)
-            if predicate(value):
-                return value
-            time.sleep(_POLL_INTERVAL_SECONDS)
-        return value
-
     def _drive() -> None:
         try:
-            _poll_until(_INPUT_SCREEN_READY, lambda value: value is True)
+            poll_page(window, _INPUT_SCREEN_READY, lambda value: value is True)
             window.evaluate_js(
                 "(function(){"
                 "var select = document.getElementById('settings-dark_mode_override');"
@@ -113,7 +103,8 @@ def test_choosing_dark_then_follow_system_clears_the_theme_attribute(
                 "select.dispatchEvent(new Event('change'));"
                 "})();"
             )
-            _poll_until(
+            poll_page(
+                window,
                 "document.documentElement.dataset.theme",
                 lambda value: value == "dark",
             )
@@ -124,7 +115,8 @@ def test_choosing_dark_then_follow_system_clears_the_theme_attribute(
                 "select.dispatchEvent(new Event('change'));"
                 "})();"
             )
-            settled = _poll_until(
+            settled = poll_page(
+                window,
                 "document.documentElement.hasAttribute('data-theme')",
                 lambda value: value is False,
             )

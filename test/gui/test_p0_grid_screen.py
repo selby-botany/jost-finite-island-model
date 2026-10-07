@@ -18,22 +18,21 @@ from __future__ import annotations
 
 import queue
 import threading
-import time
-from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
 import pytest
 import webview
+from conftest import wait_or_fail
 
 from fim.gui.app import Api, create_window
 from fim.gui.batch_runner import BatchMessage
 from fim.gui.runner import RunMessage
 
+from .conftest import poll_page
+
 pytestmark = pytest.mark.gui
 
-_POLL_ATTEMPTS = 200
-_POLL_INTERVAL_SECONDS = 0.1
 _INPUT_SCREEN_READY = "window.__fimRunViewReady === true"
 
 
@@ -52,25 +51,17 @@ def test_selecting_explicit_p0_mode_builds_a_default_grid_matching_d_and_loci(
     """Switching to explicit-p0 mode with no prior `p_0` builds a d-by-locus grid."""
     outcome: queue.Queue[dict[str, Any]] = queue.Queue(maxsize=1)
 
-    def _poll_until(script: str, predicate: Callable[[Any], bool]) -> Any:
-        value = None
-        for _ in range(_POLL_ATTEMPTS):
-            value = window.evaluate_js(script)
-            if predicate(value):
-                return value
-            time.sleep(_POLL_INTERVAL_SECONDS)
-        return value
-
     def _drive() -> None:
         try:
-            _poll_until(_INPUT_SCREEN_READY, lambda value: value is True)
+            poll_page(window, _INPUT_SCREEN_READY, lambda value: value is True)
             window.evaluate_js(_set_field("d", "3"))
             window.evaluate_js(
                 "document.querySelector("
                 '\'input[name="initial_conditions_mode"]'
                 '[value="explicit_p0"]\').click();'
             )
-            settled = _poll_until(
+            settled = poll_page(
+                window,
                 "({"
                 "rowCount: document.querySelectorAll("
                 "'#p0-grid tbody tr').length, "
@@ -102,25 +93,17 @@ def test_editing_a_cell_updates_its_own_sum_and_flags_an_invalid_cell(
     """Typing into a cell recomputes that cell's own sum and warns when it isn't 1."""
     outcome: queue.Queue[dict[str, Any]] = queue.Queue(maxsize=1)
 
-    def _poll_until(script: str, predicate: Callable[[Any], bool]) -> Any:
-        value = None
-        for _ in range(_POLL_ATTEMPTS):
-            value = window.evaluate_js(script)
-            if predicate(value):
-                return value
-            time.sleep(_POLL_INTERVAL_SECONDS)
-        return value
-
     def _drive() -> None:
         try:
-            _poll_until(_INPUT_SCREEN_READY, lambda value: value is True)
+            poll_page(window, _INPUT_SCREEN_READY, lambda value: value is True)
             window.evaluate_js(_set_field("d", "2"))
             window.evaluate_js(
                 "document.querySelector("
                 '\'input[name="initial_conditions_mode"]'
                 '[value="explicit_p0"]\').click();'
             )
-            _poll_until(
+            poll_page(
+                window,
                 "document.querySelectorAll('#p0-grid tbody tr').length",
                 lambda value: value == 2,
             )
@@ -129,7 +112,8 @@ def test_editing_a_cell_updates_its_own_sum_and_flags_an_invalid_cell(
                 "cell.value = '0:0.5,1:0.3'; "
                 "cell.dispatchEvent(new Event('input', {bubbles: true}));"
             )
-            settled = _poll_until(
+            settled = poll_page(
+                window,
                 "({"
                 "cellSumText: document.querySelector("
                 "'#p0-grid .p0-cell-sum').textContent, "
@@ -158,25 +142,17 @@ def test_changing_d_resizes_the_grid_preserving_existing_values(
     """Growing `d` while explicit mode is active adds rows without losing data."""
     outcome: queue.Queue[dict[str, Any]] = queue.Queue(maxsize=1)
 
-    def _poll_until(script: str, predicate: Callable[[Any], bool]) -> Any:
-        value = None
-        for _ in range(_POLL_ATTEMPTS):
-            value = window.evaluate_js(script)
-            if predicate(value):
-                return value
-            time.sleep(_POLL_INTERVAL_SECONDS)
-        return value
-
     def _drive() -> None:
         try:
-            _poll_until(_INPUT_SCREEN_READY, lambda value: value is True)
+            poll_page(window, _INPUT_SCREEN_READY, lambda value: value is True)
             window.evaluate_js(_set_field("d", "2"))
             window.evaluate_js(
                 "document.querySelector("
                 '\'input[name="initial_conditions_mode"]'
                 '[value="explicit_p0"]\').click();'
             )
-            _poll_until(
+            poll_page(
+                window,
                 "document.querySelectorAll('#p0-grid tbody tr').length",
                 lambda value: value == 2,
             )
@@ -186,7 +162,8 @@ def test_changing_d_resizes_the_grid_preserving_existing_values(
                 "cell.dispatchEvent(new Event('input', {bubbles: true}));"
             )
             window.evaluate_js(_set_field("d", "3"))
-            settled = _poll_until(
+            settled = poll_page(
+                window,
                 "({"
                 "rowCount: document.querySelectorAll("
                 "'#p0-grid tbody tr').length, "
@@ -212,25 +189,17 @@ def test_adding_a_custom_locus_grows_the_p0_grids_own_columns(
     """Adding a row to the custom loci grid grows p_0's own column count to match."""
     outcome: queue.Queue[dict[str, Any]] = queue.Queue(maxsize=1)
 
-    def _poll_until(script: str, predicate: Callable[[Any], bool]) -> Any:
-        value = None
-        for _ in range(_POLL_ATTEMPTS):
-            value = window.evaluate_js(script)
-            if predicate(value):
-                return value
-            time.sleep(_POLL_INTERVAL_SECONDS)
-        return value
-
     def _drive() -> None:
         try:
-            _poll_until(_INPUT_SCREEN_READY, lambda value: value is True)
+            poll_page(window, _INPUT_SCREEN_READY, lambda value: value is True)
             window.evaluate_js(_set_field("d", "1"))
             window.evaluate_js(
                 "document.querySelector("
                 '\'input[name="initial_conditions_mode"]'
                 '[value="explicit_p0"]\').click();'
             )
-            _poll_until(
+            poll_page(
+                window,
                 "document.querySelectorAll('#p0-grid thead th').length - 1",
                 lambda value: value == 1,
             )
@@ -238,14 +207,16 @@ def test_adding_a_custom_locus_grows_the_p0_grids_own_columns(
                 "document.querySelector("
                 '\'input[name="loci_mode"][value="custom"]\').click();'
             )
-            _poll_until(
+            poll_page(
+                window,
                 "document.querySelectorAll('#loci-grid tbody tr').length",
                 lambda value: value == 1,
             )
             window.evaluate_js(
                 "document.getElementById('loci-add-row-button').click();"
             )
-            settled = _poll_until(
+            settled = poll_page(
+                window,
                 "({"
                 "lociRowCount: document.querySelectorAll("
                 "'#loci-grid tbody tr').length, "
@@ -294,18 +265,9 @@ def test_a_real_run_with_a_hand_edited_p0_completes(
     )
     outcome: queue.Queue[dict[str, Any] | None] = queue.Queue(maxsize=1)
 
-    def _poll_until(script: str, predicate: Callable[[Any], bool]) -> Any:
-        value = None
-        for _ in range(_POLL_ATTEMPTS):
-            value = window.evaluate_js(script)
-            if predicate(value):
-                return value
-            time.sleep(_POLL_INTERVAL_SECONDS)
-        return value
-
     def _drive() -> None:
         try:
-            _poll_until(_INPUT_SCREEN_READY, lambda value: value is True)
+            poll_page(window, _INPUT_SCREEN_READY, lambda value: value is True)
             window.evaluate_js(_set_field("N", "20"))
             window.evaluate_js(_set_field("d", "2"))
             window.evaluate_js(_set_field("seed", "20260814"))
@@ -316,7 +278,8 @@ def test_a_real_run_with_a_hand_edited_p0_completes(
                 '\'input[name="initial_conditions_mode"]'
                 '[value="explicit_p0"]\').click();'
             )
-            _poll_until(
+            poll_page(
+                window,
                 "document.querySelectorAll('#p0-grid tbody tr').length",
                 lambda value: value == 2,
             )
@@ -327,15 +290,14 @@ def test_a_real_run_with_a_hand_edited_p0_completes(
                 "cells[1].dispatchEvent(new Event('input', {bubbles: true}));"
             )
             window.evaluate_js("document.getElementById('run-button').click();")
-            settled = None
-            if done_event.wait(timeout=30.0):
-                settled = window.evaluate_js(
-                    "({"
-                    "runViewState: window.fim.getRunViewState(), "
-                    "outcomeText: document.getElementById('results-outcome')"
-                    ".textContent"
-                    "})"
-                )
+            wait_or_fail(done_event, "run end (done, cancelled or error message)")
+            settled = window.evaluate_js(
+                "({"
+                "runViewState: window.fim.getRunViewState(), "
+                "outcomeText: document.getElementById('results-outcome')"
+                ".textContent"
+                "})"
+            )
             outcome.put(settled)
         finally:
             window.destroy()

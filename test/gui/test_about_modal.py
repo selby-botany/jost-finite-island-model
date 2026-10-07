@@ -11,8 +11,6 @@ fills the dialog's fields, which no Python-only test can check.
 from __future__ import annotations
 
 import queue
-import time
-from collections.abc import Callable
 from typing import Any
 
 import pytest
@@ -21,10 +19,10 @@ import webview
 from fim import __dev_commit__ as fim_dev_commit
 from fim import __version__ as fim_version
 
+from .conftest import poll_page
+
 pytestmark = pytest.mark.gui
 
-_POLL_ATTEMPTS = 200
-_POLL_INTERVAL_SECONDS = 0.1
 _INPUT_SCREEN_READY = "window.__fimRunViewReady === true"
 
 
@@ -42,20 +40,12 @@ def test_about_menu_shows_name_version_and_selby_attribution(
     """
     outcome: queue.Queue[dict[str, Any]] = queue.Queue(maxsize=1)
 
-    def _poll_until(script: str, predicate: Callable[[Any], bool]) -> Any:
-        value = None
-        for _ in range(_POLL_ATTEMPTS):
-            value = window.evaluate_js(script)
-            if predicate(value):
-                return value
-            time.sleep(_POLL_INTERVAL_SECONDS)
-        return value
-
     def _drive() -> None:
         try:
-            _poll_until(_INPUT_SCREEN_READY, lambda value: value is True)
+            poll_page(window, _INPUT_SCREEN_READY, lambda value: value is True)
             window.evaluate_js("setTimeout(() => { window.fim.menu.about(); }, 0);")
-            settled = _poll_until(
+            settled = poll_page(
+                window,
                 "({"
                 "dialogOpen: document.getElementById('modal-about').open, "
                 "name: document.getElementById('about-name').textContent, "

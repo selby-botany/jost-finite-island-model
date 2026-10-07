@@ -8,8 +8,8 @@ saw.
 from __future__ import annotations
 
 import queue
-import time
 from collections.abc import Callable
+from functools import partial
 from pathlib import Path
 from typing import Any
 
@@ -20,9 +20,10 @@ from conftest import poll_or_fail
 from fim.gui.app import await_bridge_threads
 from fim.persistence import groups
 
+from .conftest import poll_page
+
 pytestmark = pytest.mark.gui
 
-_POLL_ATTEMPTS = 400
 _POLL_INTERVAL_SECONDS = 0.1
 _READY = "window.__fimRunViewReady === true"
 
@@ -82,23 +83,14 @@ def _drive(window: webview.Window, steps: Callable[[Poll], Any]) -> Any:
     """Run `steps` against a ready `window` and return its result."""
     outcome: queue.Queue[Any] = queue.Queue(maxsize=1)
 
-    def poll_until(script: str, predicate: Callable[[Any], bool]) -> Any:
-        value = None
-        for _ in range(_POLL_ATTEMPTS):
-            value = window.evaluate_js(script)
-            if predicate(value):
-                return value
-            time.sleep(_POLL_INTERVAL_SECONDS)
-        return value
-
     def run() -> None:
         try:
-            poll_until(_READY, lambda value: value is True)
-            outcome.put(steps(poll_until))
+            poll_page(window, _READY, lambda value: value is True)
+            outcome.put(steps(partial(poll_page, window)))
         except AssertionError as error:
-            # A completion-signal backstop failure (`_wait_for_sweep_
-            # finished`) is raised on the test's own thread, not lost on
-            # pywebview's.
+            # A completion-signal backstop failure (any `poll_page` wait
+            # or `_wait_for_sweep_finished`) is raised on the test's own
+            # thread, not lost on pywebview's.
             outcome.put(error)
         finally:
             await_bridge_threads()
@@ -116,8 +108,8 @@ def _wait_for_sweep_finished(window: webview.Window) -> None:
 
     `window.__fimSweepFinished` turns true on the sweep's `sweep_done`,
     `sweep_cancelled` or error push (`sweep.js`'s `finishSweep`), so this
-    ends however the sweep ends. It used to share `_drive`'s 400-attempt
-    poll, which a sweep of real runs outlasted on a loaded machine: the
+    ends however the sweep ends. It used to share `_drive`'s old
+    400-attempt poll, which a sweep of real runs outlasted on a loaded machine: the
     test then went on while points were still running ("0 of 2 points
     finished ... not run yet", a Study with no runs yet). How long a
     sweep takes depends on machine load, not on the commit; only the

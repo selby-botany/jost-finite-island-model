@@ -12,17 +12,15 @@ updates the right elements, which no Python-only test can check.
 from __future__ import annotations
 
 import queue
-import time
-from collections.abc import Callable
 from typing import Any
 
 import pytest
 import webview
 
+from .conftest import poll_page
+
 pytestmark = pytest.mark.gui
 
-_POLL_ATTEMPTS = 200
-_POLL_INTERVAL_SECONDS = 0.1
 _INPUT_SCREEN_READY = "window.__fimRunViewReady === true"
 
 
@@ -45,20 +43,12 @@ def test_menu_explore_shows_predictions_and_back_returns_to_the_prior_screen(
     """
     outcome: queue.Queue[dict[str, Any]] = queue.Queue(maxsize=1)
 
-    def _poll_until(script: str, predicate: Callable[[Any], bool]) -> Any:
-        value = None
-        for _ in range(_POLL_ATTEMPTS):
-            value = window.evaluate_js(script)
-            if predicate(value):
-                return value
-            time.sleep(_POLL_INTERVAL_SECONDS)
-        return value
-
     def _drive() -> None:
         try:
-            _poll_until(_INPUT_SCREEN_READY, lambda value: value is True)
+            poll_page(window, _INPUT_SCREEN_READY, lambda value: value is True)
             window.evaluate_js("setTimeout(() => { window.fim.menu.explore(); }, 0);")
-            settled = _poll_until(
+            settled = poll_page(
+                window,
                 "({"
                 "exploreVisible: !document.getElementById('screen-explore').hidden, "
                 "exploreReady: window.__fimExploreReady === true, "
@@ -84,7 +74,8 @@ def test_menu_explore_shows_predictions_and_back_returns_to_the_prior_screen(
             # `explore.js`'s own `exploreReturnScreen` captured whichever
             # screen was actually showing at that moment, not a fixed
             # default.
-            back_visible = _poll_until(
+            back_visible = poll_page(
+                window,
                 "!document.getElementById('screen-open-run').hidden",
                 lambda value: value is True,
             )
@@ -127,21 +118,12 @@ def test_changing_a_field_recomputes_predictions(
     """
     outcome: queue.Queue[dict[str, str]] = queue.Queue(maxsize=1)
 
-    def _poll_until(script: str, predicate: Callable[[Any], bool]) -> Any:
-        value = None
-        for _ in range(_POLL_ATTEMPTS):
-            value = window.evaluate_js(script)
-            if predicate(value):
-                return value
-            time.sleep(_POLL_INTERVAL_SECONDS)
-        return value
-
     def _drive() -> None:
         try:
-            _poll_until(_INPUT_SCREEN_READY, lambda value: value is True)
+            poll_page(window, _INPUT_SCREEN_READY, lambda value: value is True)
             window.evaluate_js("setTimeout(() => { window.fim.menu.explore(); }, 0);")
-            _poll_until(
-                "window.__fimExploreReady === true", lambda value: value is True
+            poll_page(
+                window, "window.__fimExploreReady === true", lambda value: value is True
             )
             before = window.evaluate_js(
                 "document.getElementById('explore-stat-D').textContent"
@@ -151,7 +133,8 @@ def test_changing_a_field_recomputes_predictions(
                 "field.value = '0.4'; "
                 "field.dispatchEvent(new Event('change'));"
             )
-            after = _poll_until(
+            after = poll_page(
+                window,
                 "document.getElementById('explore-stat-D').textContent",
                 lambda value: value != before,
             )
@@ -188,21 +171,12 @@ def test_sweep_curve_has_a_legend_matching_the_shared_statistic_color_palette(
     """
     outcome: queue.Queue[dict[str, Any]] = queue.Queue(maxsize=1)
 
-    def _poll_until(script: str, predicate: Callable[[Any], bool]) -> Any:
-        value = None
-        for _ in range(_POLL_ATTEMPTS):
-            value = window.evaluate_js(script)
-            if predicate(value):
-                return value
-            time.sleep(_POLL_INTERVAL_SECONDS)
-        return value
-
     def _drive() -> None:
         try:
-            _poll_until(_INPUT_SCREEN_READY, lambda value: value is True)
+            poll_page(window, _INPUT_SCREEN_READY, lambda value: value is True)
             window.evaluate_js("setTimeout(() => { window.fim.menu.explore(); }, 0);")
-            _poll_until(
-                "window.__fimExploreReady === true", lambda value: value is True
+            poll_page(
+                window, "window.__fimExploreReady === true", lambda value: value is True
             )
             result = window.evaluate_js(
                 "({"
@@ -253,21 +227,12 @@ def test_sweep_curve_draws_axis_titles(window: webview.Window) -> None:
     """
     outcome: queue.Queue[dict[str, Any]] = queue.Queue(maxsize=1)
 
-    def _poll_until(script: str, predicate: Callable[[Any], bool]) -> Any:
-        value = None
-        for _ in range(_POLL_ATTEMPTS):
-            value = window.evaluate_js(script)
-            if predicate(value):
-                return value
-            time.sleep(_POLL_INTERVAL_SECONDS)
-        return value
-
     def _drive() -> None:
         try:
-            _poll_until(_INPUT_SCREEN_READY, lambda value: value is True)
+            poll_page(window, _INPUT_SCREEN_READY, lambda value: value is True)
             window.evaluate_js("setTimeout(() => { window.fim.menu.explore(); }, 0);")
-            _poll_until(
-                "window.__fimExploreReady === true", lambda value: value is True
+            poll_page(
+                window, "window.__fimExploreReady === true", lambda value: value is True
             )
             result = window.evaluate_js(
                 "(() => {"
@@ -318,21 +283,12 @@ def test_clicking_a_prediction_row_plots_it_and_switches_unit_family(
     """
     outcome: queue.Queue[dict[str, Any]] = queue.Queue(maxsize=1)
 
-    def _poll_until(script: str, predicate: Callable[[Any], bool]) -> Any:
-        value = None
-        for _ in range(_POLL_ATTEMPTS):
-            value = window.evaluate_js(script)
-            if predicate(value):
-                return value
-            time.sleep(_POLL_INTERVAL_SECONDS)
-        return value
-
     def _drive() -> None:
         try:
-            _poll_until(_INPUT_SCREEN_READY, lambda value: value is True)
+            poll_page(window, _INPUT_SCREEN_READY, lambda value: value is True)
             window.evaluate_js("setTimeout(() => { window.fim.menu.explore(); }, 0);")
-            _poll_until(
-                "window.__fimExploreReady === true", lambda value: value is True
+            poll_page(
+                window, "window.__fimExploreReady === true", lambda value: value is True
             )
             before = window.evaluate_js(
                 "({family: exploreUnitFamily, legend: exploreSeriesInPlot()})"
@@ -382,15 +338,6 @@ def test_axis_scrubber_moves_the_marker_and_repredicts(
     """
     outcome: queue.Queue[dict[str, Any]] = queue.Queue(maxsize=1)
 
-    def _poll_until(script: str, predicate: Callable[[Any], bool]) -> Any:
-        value = None
-        for _ in range(_POLL_ATTEMPTS):
-            value = window.evaluate_js(script)
-            if predicate(value):
-                return value
-            time.sleep(_POLL_INTERVAL_SECONDS)
-        return value
-
     snapshot_script = (
         "({d: document.getElementById('explore-stat-D').textContent, "
         "halfLife: document.getElementById("
@@ -404,10 +351,10 @@ def test_axis_scrubber_moves_the_marker_and_repredicts(
 
     def _drive() -> None:
         try:
-            _poll_until(_INPUT_SCREEN_READY, lambda value: value is True)
+            poll_page(window, _INPUT_SCREEN_READY, lambda value: value is True)
             window.evaluate_js("setTimeout(() => { window.fim.menu.explore(); }, 0);")
-            _poll_until(
-                "window.__fimExploreReady === true", lambda value: value is True
+            poll_page(
+                window, "window.__fimExploreReady === true", lambda value: value is True
             )
             committed = window.evaluate_js(snapshot_script)
             # Drag to the far end of the swept range: the widest possible
@@ -474,29 +421,20 @@ def test_run_this_for_real_seeds_configure_and_preselects_new_study(
     """
     outcome: queue.Queue[dict[str, Any]] = queue.Queue(maxsize=1)
 
-    def _poll_until(script: str, predicate: Callable[[Any], bool]) -> Any:
-        value = None
-        for _ in range(_POLL_ATTEMPTS):
-            value = window.evaluate_js(script)
-            if predicate(value):
-                return value
-            time.sleep(_POLL_INTERVAL_SECONDS)
-        return value
-
     def _drive() -> None:
         try:
-            _poll_until(_INPUT_SCREEN_READY, lambda value: value is True)
+            poll_page(window, _INPUT_SCREEN_READY, lambda value: value is True)
             window.evaluate_js("setTimeout(() => { window.fim.showExplore(); }, 0);")
-            _poll_until(
-                "window.__fimExploreReady === true", lambda value: value is True
+            poll_page(
+                window, "window.__fimExploreReady === true", lambda value: value is True
             )
             window.evaluate_js(
                 "document.getElementById('explore-n').value = '777';"
                 "document.getElementById('explore-n')"
                 ".dispatchEvent(new Event('change'));"
             )
-            _poll_until(
-                "window.__fimExploreReady === true", lambda value: value is True
+            poll_page(
+                window, "window.__fimExploreReady === true", lambda value: value is True
             )
             window.evaluate_js(
                 "setTimeout(() => {"
@@ -513,7 +451,8 @@ def test_run_this_for_real_seeds_configure_and_preselects_new_study(
             # reproduced race under `-n auto` load caught this exact gap
             # (`field-N` still read the pre-handoff starter value, "450",
             # not "777", the instant this poll's predicate first matched).
-            settled = _poll_until(
+            settled = poll_page(
+                window,
                 "({"
                 "configureVisible: !document.getElementById('screen-configure')"
                 ".hidden, "
@@ -551,20 +490,12 @@ def test_explore_opens_on_individuals_and_evaluates_at_the_forms_ploidy(
     """
     outcome: queue.Queue[dict[str, Any]] = queue.Queue(maxsize=1)
 
-    def _poll_until(script: str, predicate: Callable[[Any], bool]) -> Any:
-        value = None
-        for _ in range(_POLL_ATTEMPTS):
-            value = window.evaluate_js(script)
-            if predicate(value):
-                return value
-            time.sleep(_POLL_INTERVAL_SECONDS)
-        return value
-
     def _drive() -> None:
         try:
-            _poll_until(_INPUT_SCREEN_READY, lambda value: value is True)
+            poll_page(window, _INPUT_SCREEN_READY, lambda value: value is True)
             window.evaluate_js("setTimeout(() => { window.fim.menu.explore(); }, 0);")
-            settled = _poll_until(
+            settled = poll_page(
+                window,
                 "({"
                 "ready: window.__fimExploreReady === true, "
                 "n: document.getElementById('explore-n').value, "
