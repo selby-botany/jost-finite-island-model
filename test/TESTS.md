@@ -146,6 +146,7 @@ Every test module, fixture, and test function documented here in full; `doc/fim-
   - [`test_git_hooks`](#validation.test_git_hooks)
   - [`test_identity_recursion_trajectory`](#validation.test_identity_recursion_trajectory)
   - [`test_install_sh`](#validation.test_install_sh)
+  - [`test_mutation_textbook`](#validation.test_mutation_textbook)
   - [`test_packaging_spec`](#validation.test_packaging_spec)
   - [`test_python_wrappers`](#validation.test_python_wrappers)
   - [`test_release_notes`](#validation.test_release_notes)
@@ -33213,6 +33214,100 @@ A missing `PATH` entry produces a visible warning, not a silent gap.
 
 Otherwise a first-time user's `fim`/`fim-gui` install would appear to
 succeed and then be unrunnable with no explanation.
+
+<a id="validation.test_mutation_textbook"></a>
+
+# validation.test\_mutation\_textbook
+
+Seeded validation of the textbook Wright-Fisher mutation step.
+
+`fim.model.operators.step` runs migrate, drift, mutate: the new
+generation's `N` gene copies are drawn from the post-migration pool and
+each copy then mutates on its own with probability `mu`. For two gene
+copies drawn with replacement from one deme (`within`, `sum_k x_k^2`) and
+one copy from each of two demes (`between`), the textbook recursions are
+
+    within'  = 1/N + (1 - 1/N) (1 - mu)^2 within_migrated
+    between' = (1 - mu)^2 between_migrated
+
+(infinite alleles), or the same with `(1 - mu)^2` replaced by the
+symmetric K-allele pair factors (finite alleles). These tests simulate
+the real operators and compare:
+
+- the long-run mean identity of a panmictic population (infinite and
+  finite alleles) and of an island model with the textbook fixed point,
+  within a few standard errors (batch means over the stationary run, so
+  autocorrelation is accounted for);
+- the mean trajectory over many independent loci with the closed forms
+  `panmictic_equilibration` and `identity_recursion` produce.
+
+Each panmictic check also asserts that the earlier, non-textbook
+recursion (`J' = 1/N + (1 - 1/N)[((1 - mu)^2 + mu(1 - mu)/N) J + mu/N]`,
+the proportional-mass mutation step this project used to run) is
+excluded, so a regression back to it would fail here.
+
+Every test is seeded, so its result is a pure function of the commit.
+Parameters are small (`N = 20`) on purpose: the gap between the textbook
+and the earlier recursion is `O(mu / (1 + 2 N mu))`, largest at small `N`.
+
+<a id="validation.test_mutation_textbook.test_panmictic_long_run_identity_matches_the_textbook_recursion"></a>
+
+#### test\_panmictic\_long\_run\_identity\_matches\_the\_textbook\_recursion
+
+```python
+def test_panmictic_long_run_identity_matches_the_textbook_recursion(
+        rng: Callable[[int], np.random.Generator]) -> None
+```
+
+Infinite alleles: long-run mean `H` is `1 - F*` of the textbook recursion.
+
+`panmictic_equilibration` supplies the textbook prediction
+(`1 - F*`, `F* = (1/N) / (1 - (1 - 1/N)(1 - mu)^2)`); the earlier
+recursion's prediction lies outside the band.
+
+<a id="validation.test_mutation_textbook.test_panmictic_finite_alleles_identity_matches_the_k_allele_recursion"></a>
+
+#### test\_panmictic\_finite\_alleles\_identity\_matches\_the\_k\_allele\_recursion
+
+```python
+def test_panmictic_finite_alleles_identity_matches_the_k_allele_recursion(
+        rng: Callable[[int], np.random.Generator]) -> None
+```
+
+Finite alleles (`K = 4`): long-run identity in state is the K-allele one.
+
+A one-base locus has four states; each mutant copy moves to one of
+the other three uniformly (`FiniteAlleleSpace.mutate_target`).
+
+<a id="validation.test_mutation_textbook.test_island_long_run_identities_match_the_textbook_recursion"></a>
+
+#### test\_island\_long\_run\_identities\_match\_the\_textbook\_recursion
+
+```python
+def test_island_long_run_identities_match_the_textbook_recursion(
+        rng: Callable[[int], np.random.Generator]) -> None
+```
+
+Island model: long-run within and between identity are the fixed point.
+
+`identity_recursion`'s fixed point is the textbook island-model one
+(migrate, drift, then per-copy mutation); the simulation runs the
+engine's own `step`.
+
+<a id="validation.test_mutation_textbook.test_closed_form_trajectories_match_the_simulated_mean"></a>
+
+#### test\_closed\_form\_trajectories\_match\_the\_simulated\_mean
+
+```python
+def test_closed_form_trajectories_match_the_simulated_mean(
+        rng: Callable[[int], np.random.Generator]) -> None
+```
+
+The closed forms track the mean over independent loci, generation by generation.
+
+Every locus starts fixed for one allele (identity 1). At each checked
+generation the mean over loci is compared with the closed form, its
+standard error taken across loci (independent replicates).
 
 <a id="validation.test_packaging_spec"></a>
 
