@@ -22,7 +22,6 @@ import json
 import queue
 import re
 import threading
-import time
 from collections.abc import Callable
 from dataclasses import replace
 from datetime import datetime, timedelta
@@ -32,6 +31,7 @@ from typing import Any
 import pytest
 import webview
 import yaml
+from conftest import wait_or_fail
 
 from fim import cli
 from fim import paths as paths_module
@@ -40,14 +40,16 @@ from fim.gui.batch_runner import BatchMessage
 from fim.gui.runner import RunMessage
 from fim.persistence import groups
 
+from .conftest import expand_every_group, poll_page
+
 pytestmark = pytest.mark.gui
 
 _INPUT_SCREEN_READY = "window.__fimRunViewReady === true"
-_POLL_INTERVAL_SECONDS = 0.1
-_POLL_ATTEMPTS = 300
-_DRIVE_TIMEOUT_SECONDS = _POLL_ATTEMPTS * _POLL_INTERVAL_SECONDS + 10.0
+# How long to wait for a drive callback's result once `webview.start`
+# returns. Every callback hands its result over before destroying the
+# window, so this only bounds one that failed without a result.
+_DRIVE_TIMEOUT_SECONDS = 10.0
 _TREE_TEXT = "document.getElementById('open-run-recent-runs-body').textContent"
-_EVENT_WAIT_TIMEOUT_SECONDS = 30.0
 
 # Mirrors `test/gui/test_running_screen.py`'s own identically-named
 # constant -- a direct parallel, not a shared import, per this project's
@@ -143,14 +145,14 @@ def test_home_loads_a_runs_editable_configuration_without_linking_it(
 
     def _drive() -> None:
         try:
-            _poll_until(window, _INPUT_SCREEN_READY, lambda value: value is True)
+            poll_page(window, _INPUT_SCREEN_READY, lambda value: value is True)
             window.evaluate_js("window.fim.menu.openRun();")
-            _poll_until(
+            poll_page(
                 window,
                 "window.__fimOpenRunRecentRunsLoaded === true",
                 lambda value: value is True,
             )
-            _expand_every_group(window)
+            expand_every_group(window)
             clicked = window.evaluate_js(
                 "(function () {"
                 "const row = Array.from(document.querySelectorAll('.open-run-run-row'))"
@@ -162,7 +164,7 @@ def test_home_loads_a_runs_editable_configuration_without_linking_it(
                 "})()"
             )
             assert clicked, "Home run has no Clone action"
-            settled = _poll_until(
+            settled = poll_page(
                 window,
                 "window.__fimHomeRunLoadSettled === true",
                 lambda value: value is True,
@@ -212,40 +214,6 @@ def test_home_loads_a_runs_editable_configuration_without_linking_it(
     } == before
 
 
-def _poll_until(
-    window: webview.Window, script: str, is_ready: Callable[[Any], bool]
-) -> Any:
-    """Evaluate `script` repeatedly, sleeping between tries, until `is_ready` is
-    true."""
-    value: Any = None
-    for _ in range(_POLL_ATTEMPTS):
-        value = window.evaluate_js(script)
-        if is_ready(value):
-            return value
-        time.sleep(_POLL_INTERVAL_SECONDS)
-    return value
-
-
-def _expand_every_group(window: webview.Window) -> None:
-    """Click every currently-collapsed group toggle, several passes deep.
-
-    Mirrors `test_open_run_screen.py`'s own `_expand_all_recent_run_
-    groups` -- several rounds, not one, since expanding an outer group
-    (Experiment, Study, "Unsorted", "Earlier") can reveal further
-    collapsed toggles nested inside it. A Study group's own toggle
-    triggers a real, awaited bridge call (`get_study_run_summary`)
-    before its rows render, so this sleeps briefly between rounds rather
-    than firing every click in one synchronous burst.
-    """
-    for _ in range(6):
-        window.evaluate_js(
-            "Array.from(document.querySelectorAll("
-            "'.open-run-group-toggle[aria-expanded=\"false\"]'"
-            ")).forEach((b) => b.click());"
-        )
-        time.sleep(0.15)
-
-
 def _submit_inline_prompt(window: webview.Window, name: str) -> None:
     """Fill and submit the currently-showing `promptForNameThenRun` inline row."""
     window.evaluate_js(
@@ -266,7 +234,7 @@ def _create_experiment(window: webview.Window, name: str) -> None:
     """Submit Home's own page-level "Create experiment…" button with `name`."""
     window.evaluate_js("document.getElementById('home-new-experiment-button').click();")
     _submit_inline_prompt(window, name)
-    _poll_until(window, _TREE_TEXT, lambda value: value is not None and name in value)
+    poll_page(window, _TREE_TEXT, lambda value: value is not None and name in value)
 
 
 def _check_group_checkbox(window: webview.Window, group_label: str) -> None:
@@ -329,14 +297,14 @@ def test_a_bare_cli_run_appears_under_the_default_study(
 
     def _drive() -> None:
         try:
-            _poll_until(window, _INPUT_SCREEN_READY, lambda value: value is True)
+            poll_page(window, _INPUT_SCREEN_READY, lambda value: value is True)
             window.evaluate_js("window.fim.menu.openRun();")
-            _poll_until(
+            poll_page(
                 window,
                 "window.__fimOpenRunRecentRunsLoaded === true",
                 lambda value: value is True,
             )
-            _expand_every_group(window)
+            expand_every_group(window)
             outcome.put(window.evaluate_js(_TREE_TEXT))
         finally:
             window.destroy()
@@ -378,9 +346,9 @@ def test_home_run_count_label_does_not_double_count_a_run_in_two_studies(
 
     def _drive() -> None:
         try:
-            _poll_until(window, _INPUT_SCREEN_READY, lambda value: value is True)
+            poll_page(window, _INPUT_SCREEN_READY, lambda value: value is True)
             window.evaluate_js("window.fim.menu.openRun();")
-            count_text = _poll_until(
+            count_text = poll_page(
                 window,
                 "document.getElementById('open-run-count').textContent",
                 lambda value: value not in (None, ""),
@@ -415,14 +383,14 @@ def test_home_materializes_the_default_study_on_a_truly_empty_checkout(
 
     def _drive() -> None:
         try:
-            _poll_until(window, _INPUT_SCREEN_READY, lambda value: value is True)
+            poll_page(window, _INPUT_SCREEN_READY, lambda value: value is True)
             window.evaluate_js("window.fim.menu.openRun();")
-            _poll_until(
+            poll_page(
                 window,
                 "window.__fimOpenRunRecentRunsLoaded === true",
                 lambda value: value is True,
             )
-            _expand_every_group(window)
+            expand_every_group(window)
             outcome.put(window.evaluate_js(_TREE_TEXT))
         finally:
             window.destroy()
@@ -451,15 +419,15 @@ def test_creating_an_experiment_from_the_home_toolbar(
 
     def _drive() -> None:
         try:
-            _poll_until(window, _INPUT_SCREEN_READY, lambda value: value is True)
+            poll_page(window, _INPUT_SCREEN_READY, lambda value: value is True)
             window.evaluate_js("window.fim.menu.openRun();")
-            _poll_until(
+            poll_page(
                 window,
                 "window.__fimOpenRunRecentRunsLoaded === true",
                 lambda value: value is True,
             )
             _create_experiment(window, "Topology")
-            _expand_every_group(window)
+            expand_every_group(window)
             outcome.put(window.evaluate_js(_TREE_TEXT))
         finally:
             window.destroy()
@@ -498,9 +466,9 @@ def test_deleting_a_study_cascades_to_its_own_runs(
 
     def _drive() -> None:
         try:
-            _poll_until(window, _INPUT_SCREEN_READY, lambda value: value is True)
+            poll_page(window, _INPUT_SCREEN_READY, lambda value: value is True)
             window.evaluate_js("window.fim.menu.openRun();")
-            _poll_until(
+            poll_page(
                 window,
                 "window.__fimOpenRunRecentRunsLoaded === true",
                 lambda value: value is True,
@@ -513,7 +481,7 @@ def test_deleting_a_study_cascades_to_its_own_runs(
                 "document.querySelector('.open-run-inline-confirm').textContent"
             )
             _confirm_inline(window)
-            tree_text = _poll_until(
+            tree_text = poll_page(
                 window,
                 _TREE_TEXT,
                 lambda value: value is not None and "Ring sweep" not in value,
@@ -551,15 +519,15 @@ def test_home_hierarchy_omits_removed_row_actions(
 
     def _drive() -> None:
         try:
-            _poll_until(window, _INPUT_SCREEN_READY, lambda value: value is True)
+            poll_page(window, _INPUT_SCREEN_READY, lambda value: value is True)
             window.evaluate_js("window.fim.menu.openRun();")
-            _poll_until(
+            poll_page(
                 window,
                 "window.__fimOpenRunRecentRunsLoaded === true",
                 lambda value: value is True,
             )
-            _expand_every_group(window)
-            _poll_until(
+            expand_every_group(window)
+            poll_page(
                 window,
                 _TREE_TEXT,
                 lambda value: value is not None and "Ring sweep (1 run)" in value,
@@ -621,9 +589,9 @@ def test_bulk_select_all_and_delete_selected_removes_every_run(
 
     def _drive() -> None:
         try:
-            _poll_until(window, _INPUT_SCREEN_READY, lambda value: value is True)
+            poll_page(window, _INPUT_SCREEN_READY, lambda value: value is True)
             window.evaluate_js("window.fim.menu.openRun();")
-            _poll_until(
+            poll_page(
                 window,
                 "window.__fimOpenRunRecentRunsLoaded === true",
                 lambda value: value is True,
@@ -631,7 +599,7 @@ def test_bulk_select_all_and_delete_selected_removes_every_run(
             window.evaluate_js(
                 "document.getElementById('open-run-select-all-button').click();"
             )
-            selection_count = _poll_until(
+            selection_count = poll_page(
                 window,
                 "document.getElementById('open-run-selection-count').textContent",
                 lambda value: value == "4 selected",
@@ -640,7 +608,7 @@ def test_bulk_select_all_and_delete_selected_removes_every_run(
                 "document.getElementById('open-run-delete-selected-button').click();"
             )
             _confirm_inline(window)
-            tree_text = _poll_until(
+            tree_text = poll_page(
                 window,
                 "document.getElementById('open-run-count').textContent",
                 lambda value: value == "0 runs",
@@ -707,7 +675,7 @@ def test_starting_a_run_from_configure_with_a_study_selected_attaches_it(
 
     def _drive() -> None:
         try:
-            _poll_until(window, _INPUT_SCREEN_READY, lambda value: value is True)
+            poll_page(window, _INPUT_SCREEN_READY, lambda value: value is True)
             # Waits for `showConfigureScreen()`'s own returned promise to
             # settle, not merely for `run-study-select` to look populated
             # (`options.length > 1` can also turn true from `wireRunView
@@ -724,7 +692,7 @@ def test_starting_a_run_from_configure_with_a_study_selected_attaches_it(
                 "() => { window.__fimTestConfigureReady = true; }"
                 ");"
             )
-            _poll_until(
+            poll_page(
                 window,
                 "window.__fimTestConfigureReady === true",
                 lambda value: value is True,
@@ -740,8 +708,8 @@ def test_starting_a_run_from_configure_with_a_study_selected_attaches_it(
                 _SET_TINY_FIELDS
                 + "document.getElementById('configure-run-button').click();"
             )
-            done = done_event.wait(timeout=_EVENT_WAIT_TIMEOUT_SECONDS)
-            outcome.put({"selected": selected, "done": done})
+            wait_or_fail(done_event, "run end (done, cancelled or error message)")
+            outcome.put({"selected": selected})
         finally:
             window.destroy()
 
@@ -752,7 +720,6 @@ def test_starting_a_run_from_configure_with_a_study_selected_attaches_it(
     assert settled["selected"] == study.study_id, (
         "run-study-select did not accept the chosen study"
     )
-    assert settled["done"] is True, "the run never reached a terminal state"
     updated = groups.get_study(study.study_id, results=results)
     assert updated.run_count == 1
 
@@ -776,14 +743,14 @@ def test_run_study_select_new_study_creates_and_selects_it(
 
     def _drive() -> None:
         try:
-            _poll_until(window, _INPUT_SCREEN_READY, lambda value: value is True)
+            poll_page(window, _INPUT_SCREEN_READY, lambda value: value is True)
             window.evaluate_js(
                 "window.__fimTestConfigureReady = false;"
                 "window.fim.showConfigureScreen().then("
                 "() => { window.__fimTestConfigureReady = true; }"
                 ");"
             )
-            _poll_until(
+            poll_page(
                 window,
                 "window.__fimTestConfigureReady === true",
                 lambda value: value is True,
@@ -805,7 +772,7 @@ def test_run_study_select_new_study_creates_and_selects_it(
             window.evaluate_js(
                 "document.getElementById('run-study-new-create-button').click();"
             )
-            selected = _poll_until(
+            selected = poll_page(
                 window,
                 "document.getElementById('run-study-select').value",
                 lambda value: value not in (None, "", "__new__"),
@@ -851,14 +818,14 @@ def test_run_study_select_new_study_cancel_returns_to_no_study(
 
     def _drive() -> None:
         try:
-            _poll_until(window, _INPUT_SCREEN_READY, lambda value: value is True)
+            poll_page(window, _INPUT_SCREEN_READY, lambda value: value is True)
             window.evaluate_js(
                 "window.__fimTestConfigureReady = false;"
                 "window.fim.showConfigureScreen().then("
                 "() => { window.__fimTestConfigureReady = true; }"
                 ");"
             )
-            _poll_until(
+            poll_page(
                 window,
                 "window.__fimTestConfigureReady === true",
                 lambda value: value is True,
@@ -951,15 +918,15 @@ def test_home_shows_both_runs_of_a_repeated_configuration_by_directory_name(
 
     def _drive() -> None:
         try:
-            _poll_until(window, _INPUT_SCREEN_READY, lambda value: value is True)
+            poll_page(window, _INPUT_SCREEN_READY, lambda value: value is True)
             window.evaluate_js("window.fim.menu.openRun();")
-            _poll_until(
+            poll_page(
                 window,
                 "window.__fimOpenRunRecentRunsLoaded === true",
                 lambda value: value is True,
             )
-            _expand_every_group(window)
-            row_count = _poll_until(
+            expand_every_group(window)
+            row_count = poll_page(
                 window,
                 "document.querySelectorAll("
                 "'#open-run-recent-runs-body tr.open-run-run-row').length",
@@ -1027,15 +994,15 @@ def test_home_select_button_toggles_the_checkbox_column(
 
     def _drive() -> None:
         try:
-            _poll_until(window, _INPUT_SCREEN_READY, lambda value: value is True)
+            poll_page(window, _INPUT_SCREEN_READY, lambda value: value is True)
             window.evaluate_js("window.fim.menu.openRun();")
-            _poll_until(
+            poll_page(
                 window,
                 "window.__fimOpenRunRecentRunsLoaded === true",
                 lambda value: value is True,
             )
-            _expand_every_group(window)
-            _poll_until(
+            expand_every_group(window)
+            poll_page(
                 window,
                 "document.querySelectorAll('.open-run-select-checkbox').length",
                 lambda value: value is not None and value > 0,
@@ -1107,12 +1074,12 @@ def test_home_checkbox_and_toggle_sit_on_one_line(
 
     def _drive() -> None:
         try:
-            _poll_until(window, _INPUT_SCREEN_READY, lambda value: value is True)
+            poll_page(window, _INPUT_SCREEN_READY, lambda value: value is True)
             window.evaluate_js("window.fim.menu.openRun();")
             window.evaluate_js(
                 "document.getElementById('open-run-toggle-select-button').click();"
             )
-            settled = _poll_until(
+            settled = poll_page(
                 window,
                 "(function(){"
                 "var checkbox = document.querySelector("
@@ -1180,9 +1147,9 @@ def test_rendering_a_pooled_study_shows_its_member_runs(
 
     def _drive() -> None:
         try:
-            _poll_until(window, _INPUT_SCREEN_READY, lambda value: value is True)
+            poll_page(window, _INPUT_SCREEN_READY, lambda value: value is True)
             window.evaluate_js("window.fim.menu.openRun();")
-            _poll_until(
+            poll_page(
                 window,
                 "window.__fimOpenRunRecentRunsLoaded === true",
                 lambda value: value is True,
@@ -1193,7 +1160,7 @@ def test_rendering_a_pooled_study_shows_its_member_runs(
                 "window.fim.resetTrajectoryLegendVisibility();"
                 "window.fim.enterCompletedState(result, true);})"
             )
-            settled = _poll_until(
+            settled = poll_page(
                 window,
                 "({"
                 "runViewState: window.fim.getRunViewState(), "
@@ -1237,9 +1204,9 @@ def test_rendering_a_pooled_study_with_a_mismatched_parameter_shows_a_note(
 
     def _drive() -> None:
         try:
-            _poll_until(window, _INPUT_SCREEN_READY, lambda value: value is True)
+            poll_page(window, _INPUT_SCREEN_READY, lambda value: value is True)
             window.evaluate_js("window.fim.menu.openRun();")
-            _poll_until(
+            poll_page(
                 window,
                 "window.__fimOpenRunRecentRunsLoaded === true",
                 lambda value: value is True,
@@ -1250,7 +1217,7 @@ def test_rendering_a_pooled_study_with_a_mismatched_parameter_shows_a_note(
                 "window.fim.resetTrajectoryLegendVisibility();"
                 "window.fim.enterCompletedState(result, true);})"
             )
-            settled = _poll_until(
+            settled = poll_page(
                 window,
                 "({"
                 "runViewState: window.fim.getRunViewState(), "
@@ -1312,9 +1279,9 @@ def test_home_run_count_label_never_shows_more_visible_than_total(
 
     def _drive() -> None:
         try:
-            _poll_until(window, _INPUT_SCREEN_READY, lambda value: value is True)
+            poll_page(window, _INPUT_SCREEN_READY, lambda value: value is True)
             window.evaluate_js("window.fim.menu.openRun();")
-            count_text = _poll_until(
+            count_text = poll_page(
                 window,
                 "document.getElementById('open-run-count').textContent",
                 lambda value: value not in (None, ""),
@@ -1361,16 +1328,16 @@ def test_a_study_header_counts_only_the_runs_that_exist(
 
     def _drive() -> None:
         try:
-            _poll_until(window, _INPUT_SCREEN_READY, lambda value: value is True)
+            poll_page(window, _INPUT_SCREEN_READY, lambda value: value is True)
             window.evaluate_js("window.fim.menu.openRun();")
-            _poll_until(
+            poll_page(
                 window,
                 "window.__fimOpenRunRecentRunsLoaded === true",
                 lambda value: value is True,
             )
             # The default Study sits inside the default Experiment.
-            _expand_every_group(window)
-            headers = _poll_until(
+            expand_every_group(window)
+            headers = poll_page(
                 window,
                 "Array.from(document.querySelectorAll("
                 "'.open-run-group-toggle')).map((b) => b.textContent)",
@@ -1420,9 +1387,9 @@ def test_select_all_also_selects_runs_a_study_holds_from_outside_results(
 
     def _drive() -> None:
         try:
-            _poll_until(window, _INPUT_SCREEN_READY, lambda value: value is True)
+            poll_page(window, _INPUT_SCREEN_READY, lambda value: value is True)
             window.evaluate_js("window.fim.menu.openRun();")
-            _poll_until(
+            poll_page(
                 window,
                 "window.__fimOpenRunRecentRunsLoaded === true",
                 lambda value: value is True,
@@ -1430,8 +1397,8 @@ def test_select_all_also_selects_runs_a_study_holds_from_outside_results(
             window.evaluate_js(
                 "document.getElementById('open-run-select-all-button').click();"
             )
-            _expand_every_group(window)
-            state = _poll_until(
+            expand_every_group(window)
+            state = poll_page(
                 window,
                 "({checked: document.querySelectorAll("
                 "'.open-run-select-checkbox:checked').length, "
