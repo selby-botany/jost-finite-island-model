@@ -350,7 +350,11 @@ def test_run_accepts_several_convergence_statistics(tmp_path: Path) -> None:
     assert manifest["parameters"]["convergence_combinator"] == "any"
     assert manifest["convergence"]["statistic"] == ["D", "G_ST"]
     report = json.loads((output / "report.json").read_text(encoding="utf-8"))
-    assert report["converged_on"] == ["D", "G_ST"]
+    # Under `any`, `converged_on` names whichever watched statistics had
+    # settled when the run stopped -- a property of this seeded
+    # realization: only `D` since the textbook per-copy mutation step
+    # changed the random stream (both, before it).
+    assert report["converged_on"] == ["D"]
     assert (output / "scatter.png").exists()
 
 

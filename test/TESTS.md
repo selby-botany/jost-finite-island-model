@@ -2805,7 +2805,10 @@ them leaves an interior gap in `G_ST` (every tracked locus briefly
 monomorphic), which the reconstruction must reproduce as the same
 short list rather than papering over with a placeholder -- that
 shape is what `pooled_convergence_histories` keys its own
-drop-rather-than-guess rule off.
+drop-rather-than-guess rule off. Whether a gap occurs is a property
+of the seeded realization: seed 14, since the textbook per-copy
+mutation step (mutants recorded before the next drift) changed the
+stream and seed 7 no longer produces one.
 
 <a id="test.test_reproducibility"></a>
 

@@ -583,7 +583,10 @@ def test_a_rebuilt_convergence_history_matches_the_live_one(tmp_path: Path) -> N
     monomorphic), which the reconstruction must reproduce as the same
     short list rather than papering over with a placeholder -- that
     shape is what `pooled_convergence_histories` keys its own
-    drop-rather-than-guess rule off.
+    drop-rather-than-guess rule off. Whether a gap occurs is a property
+    of the seeded realization: seed 14, since the textbook per-copy
+    mutation step (mutants recorded before the next drift) changed the
+    stream and seed 7 no longer produces one.
     """
     config = {
         "N": 20,
@@ -591,7 +594,7 @@ def test_a_rebuilt_convergence_history_matches_the_live_one(tmp_path: Path) -> N
         "d": 2,
         "m": 0.1,
         "mu": 0.01,
-        "seed": 7,
+        "seed": 14,
         "loci": [{"locus_id": 1, "length": 200}],
         "convergence_window": 4,
         "convergence_tolerance": 0.02,
