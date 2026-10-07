@@ -21262,6 +21262,33 @@ in principle drift from it, the same class of markup/value
 inconsistency `test_input_screen.py`'s own history already found
 once for Configure's former copy of this field.
 
+<a id="gui.test_settings_modal.test_every_settings_section_separates_its_hint_from_its_first_field"></a>
+
+#### test\_every\_settings\_section\_separates\_its\_hint\_from\_its\_first\_field
+
+```python
+def test_every_settings_section_separates_its_hint_from_its_first_field(
+        window: webview.Window, drive: Callable[..., Any]) -> None
+```
+
+Each section's explanatory text sits as far above its first label as
+the top section's hint sits above "Default ploidy".
+
+One CSS rule (``modal`-settings fieldset > .hint`, sharing
+`--fim-field-spacing` with `.field`) gives every section the gap;
+before it, the hint ran straight into the first label.
+
+<a id="gui.test_settings_modal.test_the_convergence_section_is_titled_convergence"></a>
+
+#### test\_the\_convergence\_section\_is\_titled\_convergence
+
+```python
+def test_the_convergence_section_is_titled_convergence(
+        window: webview.Window, drive: Callable[..., Any]) -> None
+```
+
+The section holding the convergence window and tolerance reads "Convergence".
+
 <a id="gui.test_shutdown_deadman"></a>
 
 # gui.test\_shutdown\_deadman

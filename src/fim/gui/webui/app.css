@@ -50,6 +50,11 @@
     color-scheme: light;
     --fim-font: -apple-system, "Segoe UI", "Cantarell", system-ui, sans-serif;
     --fim-display-font: "Lato", var(--fim-font);
+    /* The gap between one field and the next, and between a section's
+     * explanatory hint and its first field: one value, so every Settings
+     * section separates its hint from its first label the same way the
+     * top section's fields are separated. */
+    --fim-field-spacing: 0.75rem;
     --fim-canvas: #faf9f6;
     --fim-background: #ffffff;
     --fim-foreground: #242824;
@@ -532,8 +537,17 @@ textarea::placeholder {
     display: flex;
     flex-direction: column;
     gap: 0.2rem;
-    margin-bottom: 0.75rem;
+    margin-bottom: var(--fim-field-spacing);
     max-width: 22rem;
+}
+
+/* A Settings section's leading explanatory hint is set apart from the
+ * first field label below it by the same gap `.field` leaves after
+ * itself, which is what separates the dialog's top fields ("At startup"
+ * and its hint, then "Default ploidy"). Without it the hint, a plain
+ * `.hint` with no margin, runs straight into the label. */
+#modal-settings fieldset > .hint {
+    margin-bottom: var(--fim-field-spacing);
 }
 
 .field label {

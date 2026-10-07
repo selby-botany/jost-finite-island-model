@@ -583,3 +583,91 @@ def test_engine_backend_selector_defaults_to_auto(window: webview.Window) -> Non
     selected = _drive(window, steps)
 
     assert selected == "auto"
+
+
+# Every Settings section (`<fieldset>`) whose explanatory hint is followed
+# by more content, with the measured gap, in CSS pixels, between that hint's
+# bottom and the top of what follows it; plus the reference gap the dialog's
+# top section leaves between "At startup"'s hint and "Default ploidy".
+_SETTINGS_SPACING = """
+(() => {
+    const dialog = document.getElementById('modal-settings');
+    if (!dialog.open) { return null; }
+    const startupHint = document.getElementById('settings-startup-behavior')
+        .closest('.field').querySelector('.hint');
+    const ploidyField = document.getElementById('settings-default-ploidy')
+        .closest('.field');
+    const sections = Array.from(dialog.querySelectorAll('fieldset'))
+        .map((fieldset) => {
+            const hint = fieldset.querySelector(':scope > .hint');
+            // The first following element actually laid out: a field
+            // hidden for the current engine (`JIT`) takes no space.
+            let next = hint ? hint.nextElementSibling : null;
+            while (next && next.getClientRects().length === 0) {
+                next = next.nextElementSibling;
+            }
+            if (!hint || !next) { return null; }
+            return {
+                title: fieldset.querySelector('legend').textContent,
+                gap: next.getBoundingClientRect().top
+                    - hint.getBoundingClientRect().bottom,
+                marginBottom: getComputedStyle(hint).marginBottom,
+            };
+        })
+        .filter((section) => section !== null);
+    return {
+        reference: ploidyField.getBoundingClientRect().top
+            - startupHint.getBoundingClientRect().bottom,
+        fieldMarginBottom: getComputedStyle(ploidyField).marginBottom,
+        sections,
+    };
+})()
+"""
+
+
+def test_every_settings_section_separates_its_hint_from_its_first_field(
+    window: webview.Window, drive: Callable[..., Any]
+) -> None:
+    """Each section's explanatory text sits as far above its first label as
+    the top section's hint sits above "Default ploidy".
+
+    One CSS rule (`#modal-settings fieldset > .hint`, sharing
+    `--fim-field-spacing` with `.field`) gives every section the gap;
+    before it, the hint ran straight into the first label.
+    """
+    settled = drive(
+        window,
+        ready=_INPUT_SCREEN_READY,
+        trigger="window.fim.openStatisticsSettings();",
+        read=_SETTINGS_SPACING,
+    )
+
+    assert settled["reference"] > 0
+    titles = {section["title"] for section in settled["sections"]}
+    assert {
+        "Statistics shown",
+        "Execution defaults",
+        "Convergence",
+        "Expert: engine tuning",
+    } <= titles
+    for section in settled["sections"]:
+        assert section["marginBottom"] == settled["fieldMarginBottom"], section
+        assert section["gap"] == pytest.approx(settled["reference"], abs=0.5), section
+
+
+def test_the_convergence_section_is_titled_convergence(
+    window: webview.Window, drive: Callable[..., Any]
+) -> None:
+    """The section holding the convergence window and tolerance reads "Convergence"."""
+    settled = drive(
+        window,
+        ready=_INPUT_SCREEN_READY,
+        trigger="window.fim.openStatisticsSettings();",
+        read=(
+            "document.getElementById('modal-settings').open ? "
+            "document.getElementById('settings-convergence_window')"
+            ".closest('fieldset').querySelector('legend').textContent : null"
+        ),
+    )
+
+    assert settled == "Convergence"
