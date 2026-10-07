@@ -317,9 +317,30 @@ for (const button of document.querySelectorAll(".stats-choose-button")) {
     });
 }
 
+// Settings saves still awaiting their bridge call (the
+// `window.__fimGroupTogglesPending` shape). Each select below saves on
+// its own `change`, with nothing on screen marking when the save has
+// landed, so a caller reading a saved value back first waits for this
+// to return to zero.
+window.__fimSettingsSavesPending = 0;
+
+/**
+ * Count `save` in `window.__fimSettingsSavesPending` until it settles.
+ * @param {Promise<*>} save - A settings save's bridge call.
+ * @returns {Promise<*>} The bridge call's own result.
+ */
+async function trackSettingsSave(save) {
+    window.__fimSettingsSavesPending += 1;
+    try {
+        return await save;
+    } finally {
+        window.__fimSettingsSavesPending -= 1;
+    }
+}
+
 startupBehaviorSelect.addEventListener("change", async () => {
-    const result = await window.pywebview.api.set_startup_behavior(
-        startupBehaviorSelect.value
+    const result = await trackSettingsSave(
+        window.pywebview.api.set_startup_behavior(startupBehaviorSelect.value)
     );
     if (!result.ok) {
         showSettingsBanner(result.message);
@@ -327,8 +348,8 @@ startupBehaviorSelect.addEventListener("change", async () => {
 });
 
 runGraphColumnsSelect.addEventListener("change", async () => {
-    const result = await window.pywebview.api.set_run_graph_columns(
-        Number(runGraphColumnsSelect.value)
+    const result = await trackSettingsSave(
+        window.pywebview.api.set_run_graph_columns(Number(runGraphColumnsSelect.value))
     );
     if (result.ok) {
         window.fim.setGraphColumns(result.columns);
@@ -338,7 +359,9 @@ runGraphColumnsSelect.addEventListener("change", async () => {
 });
 
 scatterStyleSelect.addEventListener("change", async () => {
-    const result = await window.pywebview.api.set_scatter_style(scatterStyleSelect.value);
+    const result = await trackSettingsSave(
+        window.pywebview.api.set_scatter_style(scatterStyleSelect.value)
+    );
     if (result.ok) {
         window.fim.setScatterStyle(result.style);
     } else {
@@ -347,7 +370,9 @@ scatterStyleSelect.addEventListener("change", async () => {
 });
 
 defaultPloidySelect.addEventListener("change", async () => {
-    const result = await window.pywebview.api.set_default_ploidy(defaultPloidySelect.value);
+    const result = await trackSettingsSave(
+        window.pywebview.api.set_default_ploidy(defaultPloidySelect.value)
+    );
     if (!result.ok) {
         showSettingsBanner(result.message);
     }
@@ -363,8 +388,8 @@ defaultPloidySelect.addEventListener("change", async () => {
 // -- a real, reported bug: Save used to leave it open, indistinguishable
 // from a save that silently failed.
 settingsSaveButton.addEventListener("click", async () => {
-    const result = await window.pywebview.api.set_default_run_settings(
-        collectDefaultRunSettingsValues()
+    const result = await trackSettingsSave(
+        window.pywebview.api.set_default_run_settings(collectDefaultRunSettingsValues())
     );
     if (!result.ok) {
         showSettingsBanner(result.message);
@@ -401,7 +426,7 @@ async function wireSignificantDigitsField() {
     // rather than duplicated now that this field is that menu's
     // replacement.
     select.addEventListener("change", () => {
-        window.fim.menu.setSignificantDigits(Number(select.value));
+        trackSettingsSave(window.fim.menu.setSignificantDigits(Number(select.value)));
     });
 }
 

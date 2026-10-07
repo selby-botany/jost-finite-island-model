@@ -32,8 +32,8 @@ DOM-side.
 from __future__ import annotations
 
 import queue
-import time
 from collections.abc import Callable
+from functools import partial
 from pathlib import Path
 from typing import Any
 
@@ -44,11 +44,11 @@ from fim.gui.app import create_window
 from fim.gui.config_form import starter_form_values
 from fim.gui.preferences import GuiPreferences, save_preferences
 
+from .conftest import AWAIT_SETTINGS_SAVES, poll_page
+
 pytestmark = pytest.mark.gui
 
 _INPUT_SCREEN_READY = "window.__fimRunViewReady === true"
-_POLL_ATTEMPTS = 200
-_POLL_INTERVAL_SECONDS = 0.1
 
 
 def _drive(
@@ -58,19 +58,10 @@ def _drive(
     """Run `steps` against a real, ready `window` (`test_nav_rail.py`'s own pattern)."""
     outcome: queue.Queue[Any] = queue.Queue(maxsize=1)
 
-    def _poll_until(script: str, predicate: Callable[[Any], bool]) -> Any:
-        value = None
-        for _ in range(_POLL_ATTEMPTS):
-            value = window.evaluate_js(script)
-            if predicate(value):
-                return value
-            time.sleep(_POLL_INTERVAL_SECONDS)
-        return value
-
     def _run() -> None:
         try:
-            _poll_until(_INPUT_SCREEN_READY, lambda value: value is True)
-            outcome.put(steps(_poll_until))
+            poll_page(window, _INPUT_SCREEN_READY, lambda value: value is True)
+            outcome.put(steps(partial(poll_page, window)))
         finally:
             window.destroy()
 
@@ -102,8 +93,8 @@ def test_significant_digits_field_loads_and_changes_the_real_value(
             "document.getElementById('settings-significant_digits').value = '6'; "
             "document.getElementById('settings-significant_digits')"
             ".dispatchEvent(new Event('change', {bubbles: true})); "
-            "await new Promise((resolve) => setTimeout(resolve, 50)); "
-            "window.__fimSignificantDigitsResult = "
+            + AWAIT_SETTINGS_SAVES
+            + "window.__fimSignificantDigitsResult = "
             "await window.pywebview.api.get_significant_digits(); "
             "})();"
         ),
@@ -193,18 +184,16 @@ def test_settings_save_button_persists_execution_and_convergence_defaults(
 ) -> None:
     """Changing a field and clicking Save is reflected back by the bridge itself.
 
-    The trigger script itself retries the readback (bounded, up to 2.5s)
-    rather than trusting one fixed delay before reading back: `Save`'s
-    own `click` handler is `async` (collects the 11 fields, awaits a
-    real `set_default_run_settings` bridge round trip, then updates the
-    banner and closes the dialog), so a single fixed sleep before
-    reading back raced that round trip under real parallel-test load
-    and failed intermittently -- exactly the non-deterministic-test
-    defect this project's own testing discipline forbids tolerating.
-    Polling until the readback actually reflects the just-saved value
-    converges to the same correct result regardless of how long the
-    real bridge call takes, rather than gambling that a guessed delay
-    was enough.
+    The trigger reads back only once the save has landed
+    (`AWAIT_SETTINGS_SAVES`, on `window.__fimSettingsSavesPending`):
+    `Save`'s own `click` handler is `async` (collects the 11 fields,
+    awaits a real `set_default_run_settings` bridge round trip, then
+    updates the banner and closes the dialog), so a single fixed sleep
+    before reading back raced that round trip under real parallel-test
+    load and failed intermittently. A bounded retry of the read-back
+    (2.5 s) replaced it next, which still gave up silently on a slower
+    machine; waiting on the save's own completion signal does not
+    depend on how long the bridge call takes.
     """
 
     def steps(poll_until: Callable[[str, Callable[[Any], bool]], Any]) -> Any:
@@ -220,14 +209,9 @@ def test_settings_save_button_persists_execution_and_convergence_defaults(
             "window.__fimSettingsSaveResult = null;"
             "document.getElementById('settings-save-button').click();"
             "(async () => {"
-            "for (let i = 0; i < 50; i++) {"
-            "await new Promise((resolve) => setTimeout(resolve, 50));"
-            "const current = await window.pywebview.api.get_default_run_settings();"
-            "if (current.engine_backend === 'generational') {"
-            "window.__fimSettingsSaveResult = current;"
-            "return;"
-            "}"
-            "}"
+            + AWAIT_SETTINGS_SAVES
+            + "window.__fimSettingsSaveResult = "
+            "await window.pywebview.api.get_default_run_settings();"
             "})();"
         )
         return poll_until(
@@ -264,11 +248,8 @@ def test_default_ploidy_select_persists_immediately_and_reloads_on_open(
             "select.dispatchEvent(new Event('change', {bubbles: true}));"
             "window.__fimSaved = null;"
             "(async () => {"
-            "for (let i = 0; i < 50; i++) {"
-            "await new Promise((resolve) => setTimeout(resolve, 50));"
-            "const saved = await window.pywebview.api.get_default_ploidy();"
-            "if (saved === '3') { window.__fimSaved = saved; return; }"
-            "}"
+            + AWAIT_SETTINGS_SAVES
+            + "window.__fimSaved = await window.pywebview.api.get_default_ploidy();"
             "})();"
         )
         return poll_until("window.__fimSaved", lambda value: value is not None)
@@ -302,12 +283,8 @@ def test_run_card_columns_and_scatter_style_persist_on_change_and_apply_live(
             "}"
             "window.__fimSaved = null;"
             "(async () => {"
-            "for (let i = 0; i < 50; i++) {"
-            "await new Promise((resolve) => setTimeout(resolve, 50));"
-            "const saved = await window.pywebview.api.get_run_card_layout();"
-            "if (saved.columns === 3 && saved.scatterStyle === 'density') {"
-            "window.__fimSaved = saved; return; }"
-            "}"
+            + AWAIT_SETTINGS_SAVES
+            + "window.__fimSaved = await window.pywebview.api.get_run_card_layout();"
             "})();"
         )
         return poll_until("window.__fimSaved", lambda value: value is not None)

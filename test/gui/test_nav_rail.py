@@ -12,8 +12,8 @@ which a Python-only test can check.
 from __future__ import annotations
 
 import queue
-import time
 from collections.abc import Callable
+from functools import partial
 from typing import Any
 
 import pytest
@@ -21,10 +21,10 @@ import webview
 
 from fim.gui.app import await_bridge_threads
 
+from .conftest import AWAIT_SETTINGS_SAVES, poll_page
+
 pytestmark = pytest.mark.gui
 
-_POLL_ATTEMPTS = 200
-_POLL_INTERVAL_SECONDS = 0.1
 _INPUT_SCREEN_READY = "window.__fimRunViewReady === true"
 
 
@@ -41,19 +41,10 @@ def _drive(
     """
     outcome: queue.Queue[Any] = queue.Queue(maxsize=1)
 
-    def _poll_until(script: str, predicate: Callable[[Any], bool]) -> Any:
-        value = None
-        for _ in range(_POLL_ATTEMPTS):
-            value = window.evaluate_js(script)
-            if predicate(value):
-                return value
-            time.sleep(_POLL_INTERVAL_SECONDS)
-        return value
-
     def _run() -> None:
         try:
-            _poll_until(_INPUT_SCREEN_READY, lambda value: value is True)
-            outcome.put(steps(_poll_until))
+            poll_page(window, _INPUT_SCREEN_READY, lambda value: value is True)
+            outcome.put(steps(partial(poll_page, window)))
         finally:
             # `webview.start()` blocks the calling (real) thread running
             # the native run loop until the window is destroyed -- it
@@ -292,14 +283,14 @@ def test_settings_dialog_controls_startup_behavior(
             "document.getElementById('settings-startup-behavior')"
             ".dispatchEvent(new Event('change', {bubbles: true}));"
             "(async () => {"
-            "await new Promise((resolve) => setTimeout(resolve, 50));"
-            "window.__fimStartupBehaviorAfterChange = "
+            + AWAIT_SETTINGS_SAVES
+            + "window.__fimStartupBehaviorAfterChange = "
             "await window.pywebview.api.get_startup_behavior();"
             "})();"
         )
         return poll_until(
             "window.__fimStartupBehaviorAfterChange",
-            lambda value: value == "restart",
+            lambda value: value is not None,
         )
 
     assert _drive(window, steps) == "restart"
