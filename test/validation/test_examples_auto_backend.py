@@ -14,7 +14,11 @@ from the fresh run's own manifest, not predicted here:
   `lineal` (`fim.engine._resolve_auto_engine_backend`), but
   `generational` with its default sequential advancer reproduces
   `lineal` bit for bit for the same seed (`GenerationalBackend`'s own
-  docstring, checked by the golden-parity engine tests). So a committed
+  docstring, checked by the golden-parity engine tests). That holds for
+  an adaptive batch (`replicate_tolerance` set) too: every backend
+  judges the adaptive stop on replicates in replicate order
+  (`fim.engine.run_batch`'s own docstring), so both keep the same
+  replicates. So a committed
   `lineal` or `generational` output and a fresh `generational` run, or
   two local `generational-vector` runs, must agree exactly. Archived
   vector output is not bit-portable: BLAS reduction order can change
@@ -24,17 +28,6 @@ from the fresh run's own manifest, not predicted here:
   Exact local identity is stronger
   than the design's statistical rule and implies it, so it is the rule
   used wherever it holds: a difference is a defect, never noise.
-- **Same random stream, adaptive batch: identical replicates, then
-  half-widths.** The guarantee above is per replicate. Which replicates
-  an adaptive batch (`replicate_tolerance` set) keeps is not: `lineal`
-  checks its stopping rule in replicate order, while `generational`
-  checks it in the order lanes stop (`fim.engine.run_batch`'s own
-  docstring), so the two keep different sets by design. Every replicate
-  kept by both must be identical, at least one must be, and the
-  summaries are compared with the batch half-width rule below. (This
-  ordering makes a `generational` adaptive batch keep the replicates
-  that converge first; the worked example shows that this biases its
-  mean D low, a defect reported separately rather than accepted here.)
 - **Different random stream, single run: window means.**
   `generational-vector` matches `lineal` only statistically
   (`fim.model.vectorized`'s module docstring). For every watched
@@ -93,7 +86,7 @@ EXAMPLES_DIR = ROOT / "doc" / "examples"
 _RUNTIME_SECONDS: dict[str, int] = {
     "a-large-d-batch-under-generational-vector": 40,
     "a-long-locus-batch-under-the-generational-engine": 58,
-    "an-adaptive-replicate-batch-with-a-confidence-interval": 278,
+    "an-adaptive-replicate-batch-with-a-confidence-interval": 381,
     "dear-nolan-high": 305,
     "dear-nolan-low": 1803,
     "equilibrium-split-founding": 34,
@@ -200,30 +193,6 @@ def _compare_identical(committed: Path, fresh: Path) -> list[str]:
                 if expected.get(key) != actual.get(key)
             )
             problems.append(f"{report} differs in {keys}")
-    return problems
-
-
-def _compare_kept_replicates(committed: Path, fresh: Path) -> list[str]:
-    """Require identical reports for every replicate both batches kept.
-
-    Args:
-        committed: The committed adaptive batch directory.
-        fresh: The fresh adaptive batch's output directory.
-
-    Returns:
-        One message per differing report, or one if none is shared.
-    """
-    names_l = {p.name for p in committed.glob("replicate-*")}
-    names_a = {p.name for p in fresh.glob("replicate-*")}
-    common = sorted(names_l & names_a)
-    if not common:
-        return ["the two batches kept no replicate in common"]
-    problems: list[str] = []
-    for name in common:
-        expected = _without_excluded(_load(committed / name / "report.json"))
-        actual = _without_excluded(_load(fresh / name / "report.json"))
-        if expected != actual:
-            problems.append(f"{name}/report.json differs")
     return problems
 
 
@@ -451,21 +420,22 @@ def test_identity_rule_ignores_only_the_run_id(tmp_path: Path) -> None:
     assert _compare_identical(committed, fresh) == ["report.json differs in ['D']"]
 
 
-def test_kept_replicates_rule_compares_only_shared_replicates(
-    tmp_path: Path,
-) -> None:
-    """An adaptive batch's shared replicates must be identical, and exist."""
+def test_identity_rule_requires_the_same_kept_replicates(tmp_path: Path) -> None:
+    """A batch, adaptive or not, must keep the same replicates to agree.
+
+    An adaptive batch on the same random stream keeps the same replicates
+    on every backend, so a different kept set is a failure even when the
+    summaries happen to match.
+    """
     committed, fresh = tmp_path / "l", tmp_path / "a"
-    _write(committed / "replicate-001" / "report.json", {"run_id": "1", "D": 0.2})
-    _write(committed / "replicate-002" / "report.json", {"run_id": "1", "D": 0.3})
-    _write(fresh / "replicate-001" / "report.json", {"run_id": "2", "D": 0.2})
-    _write(fresh / "replicate-003" / "report.json", {"run_id": "2", "D": 0.4})
-    assert _compare_kept_replicates(committed, fresh) == []
-    _write(fresh / "replicate-001" / "report.json", {"run_id": "2", "D": 0.25})
-    assert _compare_kept_replicates(committed, fresh) == [
-        "replicate-001/report.json differs"
+    for directory in (committed, fresh):
+        _write(directory / "summary.json", {"D": {"mean": 0.3, "half_width": 0.02}})
+        _write(directory / "replicate-001" / "report.json", {"run_id": "1", "D": 0.3})
+    assert _compare_identical(committed, fresh) == []
+    _write(fresh / "replicate-002" / "report.json", {"run_id": "2", "D": 0.3})
+    assert _compare_identical(committed, fresh) == [
+        "replicates ['replicate-001'] != ['replicate-001', 'replicate-002']"
     ]
-    assert _compare_kept_replicates(committed, tmp_path / "empty")
 
 
 def test_scalar_rule_uses_three_combined_standard_errors(tmp_path: Path) -> None:
@@ -559,10 +529,10 @@ def test_example_on_auto_agrees_with_its_committed_output(
 
     The comparison follows from the backend `auto` resolved to (the fresh
     manifest) against the backend the committed output ran on: identical
-    reports on the same portable random stream (for an adaptive batch,
-    identical shared replicates plus the half-width rule), otherwise the
-    window-mean or half-width rule. Vector archives use the statistical
-    rule plus exact comparison with a same-host configured run.
+    reports on the same portable random stream (adaptive batches
+    included), otherwise the window-mean or half-width rule. Vector
+    archives use the statistical rule plus exact comparison with a
+    same-host configured run.
     """
     committed = EXAMPLES_DIR / example
     fresh = _run_example(example, tmp_path)
@@ -570,8 +540,6 @@ def test_example_on_auto_agrees_with_its_committed_output(
     backend_a = _resolved_backend(fresh)
     same_stream = _STREAM[backend_l] == _STREAM[backend_a]
     batch = (committed / "summary.json").is_file()
-    parameters = _load(committed / "manifest.json")["parameters"]
-    adaptive = batch and parameters.get("replicate_tolerance") is not None
 
     local_problems: list[str] = []
     if backend_l == backend_a == "generational-vector":
@@ -581,12 +549,10 @@ def test_example_on_auto_agrees_with_its_committed_output(
         # satisfy the statistical contract used for different streams.
         same_stream = False
 
-    if same_stream and not adaptive:
+    if same_stream:
         problems = _compare_identical(committed, fresh)
     elif batch:
         problems = _compare_batch_statistically(committed, fresh, _watched(committed))
-        if same_stream:
-            problems += _compare_kept_replicates(committed, fresh)
     else:
         problems = _compare_scalar_statistically(committed, fresh, _watched(committed))
     problems += [f"local configured backend: {problem}" for problem in local_problems]

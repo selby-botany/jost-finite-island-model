@@ -7067,9 +7067,9 @@ in the same order, for a multi-replicate batch with no adaptive stop.
 def test_run_batch_cross_replica_stop_fires_at_deterministic_ordinal() -> None
 ```
 
-The adaptive replicate stop fires the instant enough lanes stop,
-with simultaneous stops broken by ascending `replica_index`,
-deterministically across repeated runs.
+The adaptive replicate stop fires once enough of the accepted
+prefix has finished, admitting simultaneous stops in ascending
+`replica_index`, deterministically across repeated runs.
 
 Both `convergence_tolerance` and `replicate_tolerance` are set
 astronomically large so every criterion is satisfied the instant it
@@ -7081,6 +7081,103 @@ is under test, not real convergence timing. With `replicate_minimum
 == 2`, the batch-wide stop then fires while processing the *second*
 lane in ascending order — exactly replicates 0 and 1 — leaving
 replicates 2-4 never even reached.
+
+<a id="engine.test_engine._ReversedFinishAdvancer"></a>
+
+## \_ReversedFinishAdvancer Objects
+
+```python
+class _ReversedFinishAdvancer()
+```
+
+Wrap an `Advancer` so higher-numbered lanes report stopping first.
+
+Each lane `inner` reports stopped is held back from `run_batch` for
+`2 * (lane_count - replica_index)` further ticks, so replicate 1 is
+always the last of any group to be reported. A held lane's monitor
+has already stopped, so `inner` hands it back unstepped on every
+later tick (the generation-zero contract of `Advancer.advance`): its
+own result is untouched, and only *when* `run_batch` learns of it
+changes. This is the case where finishing order and replicate order
+disagree as much as they can, built deterministically rather than
+found by searching seeds.
+
+<a id="engine.test_engine._ReversedFinishAdvancer.__init__"></a>
+
+#### \_\_init\_\_
+
+```python
+def __init__(inner: engine.Advancer, lane_count: int) -> None
+```
+
+Wrap `inner` for a batch of `lane_count` replicates.
+
+**Arguments**:
+
+- `inner` - The advancer that actually steps the lanes.
+- `lane_count` - The batch's `n_replicates`.
+
+<a id="engine.test_engine._ReversedFinishAdvancer.advance"></a>
+
+#### advance
+
+```python
+def advance(active_lanes: Sequence[ReplicaLane],
+            store: TrajectoryStore) -> list[ReplicaLane]
+```
+
+Step every lane through `inner`; report only released stops.
+
+<a id="engine.test_engine.test_generational_adaptive_batch_keeps_the_replicate_order_prefix"></a>
+
+#### test\_generational\_adaptive\_batch\_keeps\_the\_replicate\_order\_prefix
+
+```python
+@pytest.mark.parametrize("window", [None, 8])
+def test_generational_adaptive_batch_keeps_the_replicate_order_prefix(
+        window: int | None) -> None
+```
+
+Replicates that finish first are not the ones an adaptive batch keeps.
+
+Regression test for the finishing-order defect: `run_batch` used to
+feed the adaptive stopping rule in the order lanes converged, so a
+generation-first batch kept whichever replicates converged soonest —
+a biased sample, since convergence time correlates with the
+statistics themselves. Here the higher-numbered replicates are made
+to report first (`_ReversedFinishAdvancer`), and the batch must
+still keep exactly the replicates `LinealBackend` keeps, replicates
+1 to k, with an identical summary, with or without a window.
+
+<a id="engine.test_engine.test_generational_adaptive_batch_matches_lineal_under_real_timing"></a>
+
+#### test\_generational\_adaptive\_batch\_matches\_lineal\_under\_real\_timing
+
+```python
+def test_generational_adaptive_batch_matches_lineal_under_real_timing(
+) -> None
+```
+
+With real convergence times, `generational` keeps lineal's replicates.
+
+No artificial delay: replicate 2 really does converge later than
+replicates after it (asserted below from a fixed-count batch of the
+same seeds), so this is the worked example's own situation in
+miniature, through the public `fim()` entry point.
+
+<a id="engine.test_engine.test_vector_adaptive_batch_keeps_the_replicate_order_prefix"></a>
+
+#### test\_vector\_adaptive\_batch\_keeps\_the\_replicate\_order\_prefix
+
+```python
+def test_vector_adaptive_batch_keeps_the_replicate_order_prefix() -> None
+```
+
+`generational-vector` keeps the replicate-order prefix too.
+
+The vector backend draws a different stream from `lineal`, so its
+reference is itself run with a window of one, which advances one
+replicate at a time and so admits them strictly in replicate order.
 
 <a id="engine.test_engine.test_fim_engine_backend_generational_matches_default"></a>
 
@@ -31924,7 +32021,11 @@ from the fresh run's own manifest, not predicted here:
   `lineal` (`fim.engine._resolve_auto_engine_backend`), but
   `generational` with its default sequential advancer reproduces
   `lineal` bit for bit for the same seed (`GenerationalBackend`'s own
-  docstring, checked by the golden-parity engine tests). So a committed
+  docstring, checked by the golden-parity engine tests). That holds for
+  an adaptive batch (`replicate_tolerance` set) too: every backend
+  judges the adaptive stop on replicates in replicate order
+  (`fim.engine.run_batch`'s own docstring), so both keep the same
+  replicates. So a committed
   `lineal` or `generational` output and a fresh `generational` run, or
   two local `generational-vector` runs, must agree exactly. Archived
   vector output is not bit-portable: BLAS reduction order can change
@@ -31934,17 +32035,6 @@ from the fresh run's own manifest, not predicted here:
   Exact local identity is stronger
   than the design's statistical rule and implies it, so it is the rule
   used wherever it holds: a difference is a defect, never noise.
-- **Same random stream, adaptive batch: identical replicates, then
-  half-widths.** The guarantee above is per replicate. Which replicates
-  an adaptive batch (`replicate_tolerance` set) keeps is not: `lineal`
-  checks its stopping rule in replicate order, while `generational`
-  checks it in the order lanes stop (`fim.engine.run_batch`'s own
-  docstring), so the two keep different sets by design. Every replicate
-  kept by both must be identical, at least one must be, and the
-  summaries are compared with the batch half-width rule below. (This
-  ordering makes a `generational` adaptive batch keep the replicates
-  that converge first; the worked example shows that this biases its
-  mean D low, a defect reported separately rather than accepted here.)
 - **Different random stream, single run: window means.**
   `generational-vector` matches `lineal` only statistically
   (`fim.model.vectorized`'s module docstring). For every watched
@@ -32003,16 +32093,20 @@ def test_identity_rule_ignores_only_the_run_id(tmp_path: Path) -> None
 
 Identical reports may differ in `run_id` and in nothing else.
 
-<a id="validation.test_examples_auto_backend.test_kept_replicates_rule_compares_only_shared_replicates"></a>
+<a id="validation.test_examples_auto_backend.test_identity_rule_requires_the_same_kept_replicates"></a>
 
-#### test\_kept\_replicates\_rule\_compares\_only\_shared\_replicates
+#### test\_identity\_rule\_requires\_the\_same\_kept\_replicates
 
 ```python
-def test_kept_replicates_rule_compares_only_shared_replicates(
+def test_identity_rule_requires_the_same_kept_replicates(
         tmp_path: Path) -> None
 ```
 
-An adaptive batch's shared replicates must be identical, and exist.
+A batch, adaptive or not, must keep the same replicates to agree.
+
+An adaptive batch on the same random stream keeps the same replicates
+on every backend, so a different kept set is a failure even when the
+summaries happen to match.
 
 <a id="validation.test_examples_auto_backend.test_scalar_rule_uses_three_combined_standard_errors"></a>
 
@@ -32071,10 +32165,10 @@ The example's `auto` run agrees with its committed output.
 
 The comparison follows from the backend `auto` resolved to (the fresh
 manifest) against the backend the committed output ran on: identical
-reports on the same portable random stream (for an adaptive batch,
-identical shared replicates plus the half-width rule), otherwise the
-window-mean or half-width rule. Vector archives use the statistical
-rule plus exact comparison with a same-host configured run.
+reports on the same portable random stream (adaptive batches
+included), otherwise the window-mean or half-width rule. Vector
+archives use the statistical rule plus exact comparison with a
+same-host configured run.
 
 <a id="validation.test_git_hooks"></a>
 

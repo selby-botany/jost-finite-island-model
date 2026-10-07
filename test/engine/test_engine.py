@@ -3652,9 +3652,9 @@ def test_generational_backend_matches_lineal_for_batch(
 
 
 def test_run_batch_cross_replica_stop_fires_at_deterministic_ordinal() -> None:
-    """The adaptive replicate stop fires the instant enough lanes stop,
-    with simultaneous stops broken by ascending `replica_index`,
-    deterministically across repeated runs.
+    """The adaptive replicate stop fires once enough of the accepted
+    prefix has finished, admitting simultaneous stops in ascending
+    `replica_index`, deterministically across repeated runs.
 
     Both `convergence_tolerance` and `replicate_tolerance` are set
     astronomically large so every criterion is satisfied the instant it
@@ -3697,6 +3697,214 @@ def test_run_batch_cross_replica_stop_fires_at_deterministic_ordinal() -> None:
     # only replicates 0 and 1 (`-r001`/`-r002`) ever got processed.
     assert [result.run_id for result in first] == ["batch-r001", "batch-r002"]
     assert all(result.report["generation"] == 2 for result in first)
+
+
+class _ReversedFinishAdvancer:
+    """Wrap an `Advancer` so higher-numbered lanes report stopping first.
+
+    Each lane `inner` reports stopped is held back from `run_batch` for
+    `2 * (lane_count - replica_index)` further ticks, so replicate 1 is
+    always the last of any group to be reported. A held lane's monitor
+    has already stopped, so `inner` hands it back unstepped on every
+    later tick (the generation-zero contract of `Advancer.advance`): its
+    own result is untouched, and only *when* `run_batch` learns of it
+    changes. This is the case where finishing order and replicate order
+    disagree as much as they can, built deterministically rather than
+    found by searching seeds.
+    """
+
+    def __init__(self, inner: engine.Advancer, lane_count: int) -> None:
+        """Wrap `inner` for a batch of `lane_count` replicates.
+
+        Args:
+            inner: The advancer that actually steps the lanes.
+            lane_count: The batch's `n_replicates`.
+        """
+        self._inner = inner
+        self._lane_count = lane_count
+        self._tick = 0
+        self._release_tick: dict[int, int] = {}
+        self.reported_order: list[int] = []
+
+    def advance(
+        self, active_lanes: Sequence[ReplicaLane], store: TrajectoryStore
+    ) -> list[ReplicaLane]:
+        """Step every lane through `inner`; report only released stops."""
+        self._tick += 1
+        for lane in self._inner.advance(active_lanes, store):
+            delay = 2 * (self._lane_count - lane.replica_index)
+            self._release_tick.setdefault(lane.replica_index, self._tick + delay)
+        released = [
+            lane
+            for lane in active_lanes
+            if self._release_tick.get(lane.replica_index, math.inf) <= self._tick
+        ]
+        self.reported_order += [lane.replica_index for lane in released]
+        return released
+
+
+def _adaptive_dict_params(**overrides: object) -> SimulationParams:
+    """An adaptive batch whose replicates converge at different generations.
+
+    With this seed, replicate 2 converges at generation 10 and most
+    others at generation 3, and the adaptive stop keeps six of twelve
+    replicates in replicate order — so a finishing-order stop would keep
+    a different set. Tests using it assert that precondition rather than
+    assume it.
+    """
+    base = SimulationParams.from_mapping(
+        {
+            **_tiny_config(),
+            "convergence_statistic": "D",
+            "convergence_tolerance": 0.05,
+            "max_generations": 60,
+            "n_replicates": 12,
+            "replicate_minimum": 3,
+            "replicate_tolerance": 0.2,
+        }
+    )
+    return replace(base, **overrides)  # type: ignore[arg-type]
+
+
+def _assert_same_batch(
+    actual: Sequence[RunResult], expected: Sequence[RunResult]
+) -> None:
+    """Require the same kept replicates, reports, final states, and summary."""
+    assert [result.run_id for result in actual] == [
+        result.run_id for result in expected
+    ]
+    for actual_result, expected_result in zip(actual, expected, strict=True):
+        assert actual_result.report == expected_result.report
+        assert actual_result.final_state == expected_result.final_state
+    assert replicate_summary(actual) == replicate_summary(expected)
+
+
+@pytest.mark.parametrize("window", [None, 8])
+def test_generational_adaptive_batch_keeps_the_replicate_order_prefix(
+    window: int | None,
+) -> None:
+    """Replicates that finish first are not the ones an adaptive batch keeps.
+
+    Regression test for the finishing-order defect: `run_batch` used to
+    feed the adaptive stopping rule in the order lanes converged, so a
+    generation-first batch kept whichever replicates converged soonest —
+    a biased sample, since convergence time correlates with the
+    statistics themselves. Here the higher-numbered replicates are made
+    to report first (`_ReversedFinishAdvancer`), and the batch must
+    still keep exactly the replicates `LinealBackend` keeps, replicates
+    1 to k, with an identical summary, with or without a window.
+    """
+    params = _adaptive_dict_params(max_concurrent_replicates=window)
+    lineal = LinealBackend().run(params, InMemoryTrajectoryStore(), "batch", _clock)
+    assert isinstance(lineal, tuple)
+    kept = len(lineal)
+    assert 3 <= kept < params.n_replicates
+
+    advancer = _ReversedFinishAdvancer(
+        ThreadedAdvancer(max_workers=2), params.n_replicates
+    )
+    store = InMemoryTrajectoryStore()
+    generational = run_batch(params, store, "batch", _clock, advancer)
+
+    # Precondition: the first `kept` lanes reported are not replicates
+    # 1 to `kept`, so a finishing-order stop would have kept others.
+    assert sorted(advancer.reported_order[:kept]) != list(range(kept))
+    assert [result.run_id for result in generational] == [
+        f"batch-r{index:03}" for index in range(1, kept + 1)
+    ]
+    _assert_same_batch(generational, lineal)
+
+    # Lanes finished or running past the stopping replicate leave no rows.
+    for index in range(kept + 1, params.n_replicates + 1):
+        assert list(store.read(f"batch-r{index:03}")) == []
+
+
+def test_generational_adaptive_batch_matches_lineal_under_real_timing() -> None:
+    """With real convergence times, `generational` keeps lineal's replicates.
+
+    No artificial delay: replicate 2 really does converge later than
+    replicates after it (asserted below from a fixed-count batch of the
+    same seeds), so this is the worked example's own situation in
+    miniature, through the public `fim()` entry point.
+    """
+    params = _adaptive_dict_params()
+    fixed = fim(
+        params.gene_copies,
+        params.m,
+        params.mu,
+        params.d,
+        params=replace(params, replicate_tolerance=None),
+        clock=_clock,
+    )
+    lineal = fim(
+        params.gene_copies, params.m, params.mu, params.d, params=params, clock=_clock
+    )
+    generational = fim(
+        params.gene_copies,
+        params.m,
+        params.mu,
+        params.d,
+        params=params,
+        clock=_clock,
+        engine_backend="generational",
+    )
+    assert isinstance(fixed, tuple)
+    assert isinstance(lineal, tuple)
+    assert isinstance(generational, tuple)
+
+    # Precondition: some replicate past the kept prefix converges before
+    # the prefix's slowest replicate does.
+    kept = len(lineal)
+    generations = [result.report["generation"] for result in fixed]
+    assert min(generations[kept:]) < max(generations[:kept])
+
+    assert len(generational) == kept
+    for actual, expected in zip(generational, lineal, strict=True):
+        assert actual.final_state == expected.final_state
+        assert {k: v for k, v in actual.report.items() if k != "run_id"} == {
+            k: v for k, v in expected.report.items() if k != "run_id"
+        }
+    assert replicate_summary(generational) == replicate_summary(lineal)
+
+
+def test_vector_adaptive_batch_keeps_the_replicate_order_prefix() -> None:
+    """`generational-vector` keeps the replicate-order prefix too.
+
+    The vector backend draws a different stream from `lineal`, so its
+    reference is itself run with a window of one, which advances one
+    replicate at a time and so admits them strictly in replicate order.
+    """
+    params = SimulationParams(
+        gene_copies=40,
+        m=0.1,
+        mu=0.05,
+        d=3,
+        seed=20260901,
+        loci=(LocusSpec(1, 2),),  # capacity 16
+        mutation_model="finite_alleles",
+        convergence_statistic="D",
+        convergence_window=4,
+        convergence_tolerance=0.05,
+        max_generations=60,
+        n_replicates=12,
+        replicate_minimum=3,
+        replicate_tolerance=0.2,
+    )
+    reference = run_batch(
+        replace(params, max_concurrent_replicates=1),
+        InMemoryTrajectoryStore(),
+        "batch",
+        _clock,
+        VectorizedAdvancer(),
+    )
+    kept = len(reference)
+    assert 3 <= kept < params.n_replicates
+
+    advancer = _ReversedFinishAdvancer(VectorizedAdvancer(), params.n_replicates)
+    vector = run_batch(params, InMemoryTrajectoryStore(), "batch", _clock, advancer)
+
+    assert sorted(advancer.reported_order[:kept]) != list(range(kept))
+    _assert_same_batch(vector, reference)
 
 
 # `fim()`'s own `engine_backend`/`jit` keywords (Stage F2): the factory
