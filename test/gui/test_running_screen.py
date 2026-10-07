@@ -55,13 +55,13 @@ from __future__ import annotations
 import json
 import queue
 import threading
-import time
 from pathlib import Path
 from typing import Any
 
 import numpy as np
 import pytest
 import webview
+from conftest import poll_or_fail, wait_or_fail
 
 from fim.gui.app import Api, create_window
 from fim.gui.batch_runner import BatchMessage
@@ -73,16 +73,16 @@ from fim.statistics import (
     identity_recursion,
 )
 
+from .conftest import poll_page, wait_for_canvas_settled, wait_for_run_view_ready
+
 pytestmark = pytest.mark.gui
 
-# Only used before any run starts (waiting for the input screen's own
-# async initialization) -- no background thread exists yet at that
-# point, so this loop is never a second concurrent `evaluate_js` caller
-# the way a poll loop waiting on a *run's* progress would be.
+# Polls the page only when no run's background thread is pushing (before
+# a run starts, or once its cancellation has been delivered), so it is
+# never a second concurrent `evaluate_js` caller; during a run it polls
+# Python-side state (`progress_count`, `Api.get_live_deme_pair`) instead.
 _READY_POLL_INTERVAL_SECONDS = 0.05
-_READY_POLL_ATTEMPTS = 200
 
-_EVENT_WAIT_TIMEOUT_SECONDS = 30.0
 _OUTCOME_TIMEOUT_SECONDS = 40.0
 
 _INPUT_SCREEN_READY = "window.__fimRunViewReady === true"
@@ -141,28 +141,6 @@ setField('locus_lengths', '200');
 # starter form's own defaults" meant at the time.
 
 
-def _wait_for_input_screen_ready(window: webview.Window) -> None:
-    """Poll until Screen 1's own async initialization has finished.
-
-    Safe to poll here (unlike waiting on a run's own progress): no
-    background thread exists yet, so this loop is never a second
-    concurrent `evaluate_js` caller.
-
-    Raises:
-        AssertionError: If the screen never becomes ready — surfaced
-            loudly rather than silently falling through to fire a
-            trigger against a form that never finished populating.
-    """
-    for _ in range(_READY_POLL_ATTEMPTS):
-        if window.evaluate_js(_INPUT_SCREEN_READY):
-            return
-        time.sleep(_READY_POLL_INTERVAL_SECONDS)
-    raise AssertionError(
-        f"input screen was not ready within "
-        f"{_READY_POLL_ATTEMPTS * _READY_POLL_INTERVAL_SECONDS}s"
-    )
-
-
 def _wait_for_cancel_run_settled(window: webview.Window) -> None:
     """Poll until `cancel_run()`'s own fire-and-forget bridge call has resolved.
 
@@ -190,62 +168,11 @@ def _wait_for_cancel_run_settled(window: webview.Window) -> None:
         AssertionError: If the flag never settles — surfaced loudly
             rather than silently reading stale DOM state.
     """
-    for _ in range(_READY_POLL_ATTEMPTS):
-        if window.evaluate_js("window.__fimCancelRunSettled === true"):
-            return
-        time.sleep(_READY_POLL_INTERVAL_SECONDS)
-    raise AssertionError(
-        f"cancel_run() did not settle within "
-        f"{_READY_POLL_ATTEMPTS * _READY_POLL_INTERVAL_SECONDS}s"
-    )
-
-
-def _wait_for_trajectory_canvas_to_settle(window: webview.Window) -> None:
-    """Poll until `#run-trajectory-canvas` was last drawn at its settled size.
-
-    `renderTrajectory`'s first draw, inside `enterCompletedState`, reads
-    `clientWidth`/`clientHeight` before the page's layout has necessarily
-    settled, and the completed scrubber's frame fetch, which finishes
-    later, unhides the results table and reflows the page again.
-    `run-graph-stage.js`'s per-pane `ResizeObserver` repaints after each
-    real size change -- one transient wrong paint, accepted there -- but
-    it fires asynchronously, and in a hidden window it can lag well
-    behind. A pixel count taken in between counts a buffer drawn at the
-    old size, and the next draw (any toggle) counts a different one.
-
-    Settled means three things at once, read twice in a row: no scrubber
-    fetch in flight (`window.__fimScrubberPending`), the pixel buffer the
-    same size as the canvas's layout box (the last draw used the current
-    size), and that size unchanged since the previous read. Two equal
-    buffer sizes alone are not enough: measured, a buffer can sit at a
-    stale 149x149 while its box has already settled to 142x142.
-
-    Raises:
-        AssertionError: If the canvas never settles.
-    """
-    state_script = (
-        "(() => {"
-        "var c = document.getElementById('run-trajectory-canvas');"
-        "return [window.__fimScrubberPending || 0, c.width, c.height, "
-        "c.clientWidth, c.clientHeight];"
-        "})()"
-    )
-    previous = None
-    for _ in range(_READY_POLL_ATTEMPTS):
-        current = window.evaluate_js(state_script)
-        pending, width, height, client_width, client_height = current
-        drawn_at_layout_size = (
-            pending == 0
-            and client_width > 0
-            and (width, height) == (client_width, client_height)
-        )
-        if drawn_at_layout_size and current == previous:
-            return
-        previous = current if drawn_at_layout_size else None
-        time.sleep(_READY_POLL_INTERVAL_SECONDS)
-    raise AssertionError(
-        "run-trajectory-canvas never settled within "
-        f"{_READY_POLL_ATTEMPTS * _READY_POLL_INTERVAL_SECONDS}s: {current!r}"
+    poll_page(
+        window,
+        "window.__fimCancelRunSettled === true",
+        what="cancel_run() bridge call (window.__fimCancelRunSettled)",
+        interval=_READY_POLL_INTERVAL_SECONDS,
     )
 
 
@@ -295,21 +222,20 @@ def test_run_button_starts_a_real_run_that_pushes_live_progress(
 
     def _drive() -> None:
         try:
-            _wait_for_input_screen_ready(window)
+            wait_for_run_view_ready(window)
             window.evaluate_js(
                 _SET_TINY_FIELDS + "document.getElementById('run-button').click();"
             )
-            settled = None
-            if done_event.wait(timeout=_EVENT_WAIT_TIMEOUT_SECONDS):
-                settled = window.evaluate_js(
-                    "({"
-                    "runViewState: window.fim.getRunViewState(), "
-                    "generationLabel: "
-                    "document.getElementById('progress-generation-label')"
-                    ".textContent, "
-                    "neSText: document.getElementById('stat-Ne_S').textContent"
-                    "})"
-                )
+            wait_or_fail(done_event, "run end (done, cancelled or error message)")
+            settled = window.evaluate_js(
+                "({"
+                "runViewState: window.fim.getRunViewState(), "
+                "generationLabel: "
+                "document.getElementById('progress-generation-label')"
+                ".textContent, "
+                "neSText: document.getElementById('stat-Ne_S').textContent"
+                "})"
+            )
             outcome.put(settled)
         finally:
             window.destroy()
@@ -317,11 +243,7 @@ def test_run_button_starts_a_real_run_that_pushes_live_progress(
     webview.start(_drive)
     settled = outcome.get(timeout=_OUTCOME_TIMEOUT_SECONDS)
 
-    assert settled is not None, (
-        f"done_event was never set within {_EVENT_WAIT_TIMEOUT_SECONDS}s "
-        f"(start_run called: {started_event.is_set()}, "
-        f"messages received: {messages!r})"
-    )
+    assert settled is not None
     assert settled["runViewState"] == "completed"
     assert settled["generationLabel"] != ""
     # The order-2 Hill number's own closed form (botanist GUI design doc
@@ -348,7 +270,7 @@ def test_live_scatter_returns_after_the_graph_stage_is_reset(
 
     def _drive() -> None:
         try:
-            _wait_for_input_screen_ready(window)
+            wait_for_run_view_ready(window)
             outcome.put(
                 window.evaluate_js(
                     "(function () {"
@@ -410,15 +332,14 @@ def test_a_live_runs_own_done_payload_sets_its_trajectory_path(
 
     def _drive() -> None:
         try:
-            _wait_for_input_screen_ready(window)
+            wait_for_run_view_ready(window)
             window.evaluate_js(
                 _SET_TINY_FIELDS + "document.getElementById('run-button').click();"
             )
-            settled = None
-            if done_event.wait(timeout=_EVENT_WAIT_TIMEOUT_SECONDS):
-                settled = window.evaluate_js(
-                    "({trajectoryPath: window.fim.getCompletedTrajectoryPath()})"
-                )
+            wait_or_fail(done_event, "run end (done, cancelled or error message)")
+            settled = window.evaluate_js(
+                "({trajectoryPath: window.fim.getCompletedTrajectoryPath()})"
+            )
             outcome.put(settled)
         finally:
             window.destroy()
@@ -463,31 +384,30 @@ def test_run_button_shows_the_trajectory_panel_for_the_watched_statistic(
 
     def _drive() -> None:
         try:
-            _wait_for_input_screen_ready(window)
+            wait_for_run_view_ready(window)
             window.evaluate_js(
                 _SET_TINY_FIELDS + "document.getElementById('run-button').click();"
             )
-            settled = None
-            if done_event.wait(timeout=_EVENT_WAIT_TIMEOUT_SECONDS):
-                settled = window.evaluate_js(
-                    "({"
-                    "frameHidden: "
-                    "document.getElementById('run-trajectory-frame').hidden, "
-                    "canvasWidth: "
-                    "document.getElementById('run-trajectory-canvas').width, "
-                    "statisticRows: Array.from(document.querySelectorAll("
-                    "'#results-stats tr[data-trajectory-statistic]')).map((row) => ({"
-                    "name: row.dataset.trajectoryStatistic, "
-                    "ariaPressed: row.getAttribute('aria-pressed'), "
-                    "cellClasses: Array.from(row.children).map("
-                    "(cell) => cell.className"
-                    ")"
-                    "})), "
-                    "overlayLegendNames: Array.from("
-                    "document.querySelectorAll('#run-trajectory-legend .legend-item'))"
-                    ".map((span) => span.textContent).filter((text) => text)"
-                    "})"
-                )
+            wait_or_fail(done_event, "run end (done, cancelled or error message)")
+            settled = window.evaluate_js(
+                "({"
+                "frameHidden: "
+                "document.getElementById('run-trajectory-frame').hidden, "
+                "canvasWidth: "
+                "document.getElementById('run-trajectory-canvas').width, "
+                "statisticRows: Array.from(document.querySelectorAll("
+                "'#results-stats tr[data-trajectory-statistic]')).map((row) => ({"
+                "name: row.dataset.trajectoryStatistic, "
+                "ariaPressed: row.getAttribute('aria-pressed'), "
+                "cellClasses: Array.from(row.children).map("
+                "(cell) => cell.className"
+                ")"
+                "})), "
+                "overlayLegendNames: Array.from("
+                "document.querySelectorAll('#run-trajectory-legend .legend-item'))"
+                ".map((span) => span.textContent).filter((text) => text)"
+                "})"
+            )
             outcome.put(settled)
         finally:
             window.destroy()
@@ -495,11 +415,7 @@ def test_run_button_shows_the_trajectory_panel_for_the_watched_statistic(
     webview.start(_drive)
     settled = outcome.get(timeout=_OUTCOME_TIMEOUT_SECONDS)
 
-    assert settled is not None, (
-        f"done_event was never set within {_EVENT_WAIT_TIMEOUT_SECONDS}s "
-        f"(start_run called: {started_event.is_set()}, "
-        f"messages received: {messages!r})"
-    )
+    assert settled is not None
     assert settled["frameHidden"] is False
     assert settled["canvasWidth"] > 0
     rows_by_name = {row["name"]: row for row in settled["statisticRows"]}
@@ -595,14 +511,12 @@ def test_trajectory_row_toggle_hides_and_restores_a_curves_own_pixels(
 
     def _drive() -> None:
         try:
-            _wait_for_input_screen_ready(window)
+            wait_for_run_view_ready(window)
             window.evaluate_js(
                 _SET_TINY_FIELDS + "document.getElementById('run-button').click();"
             )
-            if not done_event.wait(timeout=_EVENT_WAIT_TIMEOUT_SECONDS):
-                outcome.put(None)
-                return
-            _wait_for_trajectory_canvas_to_settle(window)
+            wait_or_fail(done_event, "run end (done, cancelled or error message)")
+            wait_for_canvas_settled(window, "run-trajectory-canvas")
             before_pixels = window.evaluate_js(non_blank_pixel_count_script)
             row_before = window.evaluate_js(row_state_script)
             window.evaluate_js(
@@ -687,13 +601,11 @@ def test_closed_form_curves_follow_each_measures_own_toggle(
 
     def _drive() -> None:
         try:
-            _wait_for_input_screen_ready(window)
+            wait_for_run_view_ready(window)
             window.evaluate_js(
                 _SET_TINY_FIELDS + "document.getElementById('run-button').click();"
             )
-            if not done_event.wait(timeout=_EVENT_WAIT_TIMEOUT_SECONDS):
-                outcome.put(None)
-                return
+            wait_or_fail(done_event, "run end (done, cancelled or error message)")
             shown = window.evaluate_js(legend_names)
             for name in ("D", "G_ST", "H_S", "H_T", "H_ST"):
                 window.evaluate_js(click_row % name)
@@ -757,7 +669,7 @@ def test_page_evaluation_of_the_closed_form_matches_the_python_recursion() -> No
 
     def _drive() -> None:
         try:
-            _wait_for_input_screen_ready(window)
+            wait_for_run_view_ready(window)
             outcome.put(window.evaluate_js(script))
         finally:
             window.destroy()
@@ -796,7 +708,7 @@ def test_page_interpolation_of_a_sampled_closed_form_matches_numpy() -> None:
 
     def _drive() -> None:
         try:
-            _wait_for_input_screen_ready(window)
+            wait_for_run_view_ready(window)
             outcome.put(window.evaluate_js(script))
         finally:
             window.destroy()
@@ -846,13 +758,11 @@ def test_completed_row_tooltip_shows_the_trailing_window_mean(
 
     def _drive() -> None:
         try:
-            _wait_for_input_screen_ready(window)
+            wait_for_run_view_ready(window)
             window.evaluate_js(
                 _SET_TINY_FIELDS + "document.getElementById('run-button').click();"
             )
-            if not done_event.wait(timeout=_EVENT_WAIT_TIMEOUT_SECONDS):
-                outcome.put(None)
-                return
+            wait_or_fail(done_event, "run end (done, cancelled or error message)")
             outcome.put(window.evaluate_js("document.getElementById('stat-D').title"))
         finally:
             window.destroy()
@@ -919,36 +829,35 @@ def test_trajectory_panel_updates_live_while_a_run_is_still_going(
 
     def _drive() -> None:
         try:
-            _wait_for_input_screen_ready(window)
+            wait_for_run_view_ready(window)
             frame_hidden_before_start = window.evaluate_js(
                 "document.getElementById('run-trajectory-frame').hidden"
             )
             window.evaluate_js("document.getElementById('run-button').click();")
-            settled = None
-            if started_event.wait(timeout=_EVENT_WAIT_TIMEOUT_SECONDS):
-                for _ in range(_READY_POLL_ATTEMPTS):
-                    if progress_count >= 2:
-                        break
-                    time.sleep(_READY_POLL_INTERVAL_SECONDS)
-                settled = window.evaluate_js(
-                    "({"
-                    "runViewState: window.fim.getRunViewState(), "
-                    "frameHidden: "
-                    "document.getElementById('run-trajectory-frame').hidden, "
-                    "statisticRows: Array.from(document.querySelectorAll("
-                    "'#results-stats tr[data-trajectory-statistic]'))"
-                    ".map((row) => row.dataset.trajectoryStatistic), "
-                    "overlayLegendNames: Array.from("
-                    "document.querySelectorAll('#run-trajectory-legend .legend-item'))"
-                    ".map((span) => span.textContent).filter((text) => text)"
-                    "})"
-                )
-                settled["frameHiddenBeforeStart"] = frame_hidden_before_start
-                window.evaluate_js(
-                    "document.getElementById('cancel-run-button').click();"
-                )
-                cancelled_event.wait(timeout=_EVENT_WAIT_TIMEOUT_SECONDS)
-                _wait_for_cancel_run_settled(window)
+            wait_or_fail(started_event, "run start (on_run_started)")
+            poll_or_fail(
+                lambda: progress_count,
+                lambda count: count >= 2,
+                "progress message 2",
+                interval=_READY_POLL_INTERVAL_SECONDS,
+            )
+            settled = window.evaluate_js(
+                "({"
+                "runViewState: window.fim.getRunViewState(), "
+                "frameHidden: "
+                "document.getElementById('run-trajectory-frame').hidden, "
+                "statisticRows: Array.from(document.querySelectorAll("
+                "'#results-stats tr[data-trajectory-statistic]'))"
+                ".map((row) => row.dataset.trajectoryStatistic), "
+                "overlayLegendNames: Array.from("
+                "document.querySelectorAll('#run-trajectory-legend .legend-item'))"
+                ".map((span) => span.textContent).filter((text) => text)"
+                "})"
+            )
+            settled["frameHiddenBeforeStart"] = frame_hidden_before_start
+            window.evaluate_js("document.getElementById('cancel-run-button').click();")
+            wait_or_fail(cancelled_event, "run cancellation (cancelled message)")
+            _wait_for_cancel_run_settled(window)
             outcome.put(settled)
         finally:
             window.destroy()
@@ -956,10 +865,7 @@ def test_trajectory_panel_updates_live_while_a_run_is_still_going(
     webview.start(_drive)
     settled = outcome.get(timeout=_OUTCOME_TIMEOUT_SECONDS)
 
-    assert settled is not None, (
-        "started_event or a second progress push was never observed in time "
-        f"(progress messages seen: {progress_count})"
-    )
+    assert settled is not None
     assert settled["frameHiddenBeforeStart"] is True
     assert settled["runViewState"] == "running"
     assert settled["frameHidden"] is False
@@ -1005,39 +911,38 @@ def test_live_run_updates_scrubber_and_supplemental_panels(
 
     def _drive() -> None:
         try:
-            _wait_for_input_screen_ready(window)
+            wait_for_run_view_ready(window)
             window.evaluate_js("document.getElementById('run-button').click();")
-            settled = None
-            if started_event.wait(timeout=_EVENT_WAIT_TIMEOUT_SECONDS):
-                for _ in range(_READY_POLL_ATTEMPTS):
-                    if progress_count >= 3:
-                        break
-                    time.sleep(_READY_POLL_INTERVAL_SECONDS)
-                settled = window.evaluate_js(
-                    "({"
-                    "runViewState: window.fim.getRunViewState(), "
-                    "scrubberHidden: "
-                    "document.getElementById('scrubber-controls').hidden, "
-                    "alleleCompHidden: "
-                    "document.getElementById('allele-composition-card').hidden, "
-                    "freqSpecHidden: "
-                    "document.getElementById('frequency-spectrum-card').hidden, "
-                    "ibdHidden: document.getElementById('ibd-card').hidden, "
-                    "liveLabel: document.getElementById('scrubber-label').textContent, "
-                    "scrubbedLabel: (() => {"
-                    "const range = document.getElementById('scrubber-range');"
-                    "range.value = '0';"
-                    "range.dispatchEvent(new Event('input', {bubbles: true}));"
-                    "return document.getElementById('scrubber-label').textContent;"
-                    "})(), "
-                    "firstFrameGeneration: window.fim.getScrubberGenerations()[0]"
-                    "})"
-                )
-                window.evaluate_js(
-                    "document.getElementById('cancel-run-button').click();"
-                )
-                cancelled_event.wait(timeout=_EVENT_WAIT_TIMEOUT_SECONDS)
-                _wait_for_cancel_run_settled(window)
+            wait_or_fail(started_event, "run start (on_run_started)")
+            poll_or_fail(
+                lambda: progress_count,
+                lambda count: count >= 3,
+                "progress message 3",
+                interval=_READY_POLL_INTERVAL_SECONDS,
+            )
+            settled = window.evaluate_js(
+                "({"
+                "runViewState: window.fim.getRunViewState(), "
+                "scrubberHidden: "
+                "document.getElementById('scrubber-controls').hidden, "
+                "alleleCompHidden: "
+                "document.getElementById('allele-composition-card').hidden, "
+                "freqSpecHidden: "
+                "document.getElementById('frequency-spectrum-card').hidden, "
+                "ibdHidden: document.getElementById('ibd-card').hidden, "
+                "liveLabel: document.getElementById('scrubber-label').textContent, "
+                "scrubbedLabel: (() => {"
+                "const range = document.getElementById('scrubber-range');"
+                "range.value = '0';"
+                "range.dispatchEvent(new Event('input', {bubbles: true}));"
+                "return document.getElementById('scrubber-label').textContent;"
+                "})(), "
+                "firstFrameGeneration: window.fim.getScrubberGenerations()[0]"
+                "})"
+            )
+            window.evaluate_js("document.getElementById('cancel-run-button').click();")
+            wait_or_fail(cancelled_event, "run cancellation (cancelled message)")
+            _wait_for_cancel_run_settled(window)
             outcome.put(settled)
         finally:
             window.destroy()
@@ -1132,20 +1037,19 @@ def test_run_button_starts_a_real_equilibrium_split_run(
 
     def _drive() -> None:
         try:
-            _wait_for_input_screen_ready(window)
+            wait_for_run_view_ready(window)
             window.evaluate_js(
                 _SET_EQUILIBRIUM_SPLIT_FIELDS
                 + "document.getElementById('run-button').click();"
             )
-            settled = None
-            if done_event.wait(timeout=_EVENT_WAIT_TIMEOUT_SECONDS):
-                settled = window.evaluate_js(
-                    "({"
-                    "runViewState: window.fim.getRunViewState(), "
-                    "outcomeText: document.getElementById('results-outcome')"
-                    ".textContent"
-                    "})"
-                )
+            wait_or_fail(done_event, "run end (done, cancelled or error message)")
+            settled = window.evaluate_js(
+                "({"
+                "runViewState: window.fim.getRunViewState(), "
+                "outcomeText: document.getElementById('results-outcome')"
+                ".textContent"
+                "})"
+            )
             outcome.put(settled)
         finally:
             window.destroy()
@@ -1153,11 +1057,7 @@ def test_run_button_starts_a_real_equilibrium_split_run(
     webview.start(_drive)
     settled = outcome.get(timeout=_OUTCOME_TIMEOUT_SECONDS)
 
-    assert settled is not None, (
-        f"done_event was never set within {_EVENT_WAIT_TIMEOUT_SECONDS}s "
-        f"(start_run called: {started_event.is_set()}, "
-        f"messages received: {messages!r})"
-    )
+    assert settled is not None
     assert settled["runViewState"] == "completed"
     assert settled["outcomeText"] != ""
     assert messages[-1][0] == "done"
@@ -1225,50 +1125,46 @@ def test_cancel_button_stops_the_run_and_shows_the_cancelled_banner(
 
     def _drive() -> None:
         try:
-            _wait_for_input_screen_ready(window)
+            wait_for_run_view_ready(window)
             window.evaluate_js("document.getElementById('run-button').click();")
-            settled = None
-            if started_event.wait(timeout=_EVENT_WAIT_TIMEOUT_SECONDS):
-                # `started_event` fires from *inside* `Api.start_run`,
-                # synchronously, before that call even returns to JS --
-                # a real, confirmed-live race, not a hypothetical one:
-                # `cancel-run-button` stays disabled (`onRunClicked`'s
-                # own continuation, which enables it, only runs once
-                # the *full* round trip resolves) at the exact instant
-                # this event fires, every time, measured directly.
-                # Clicking it that early is silently swallowed (a
-                # disabled button fires no click listener), so `Api.
-                # cancel_run()` is never called and `cancelled_event`
-                # never fires either -- indistinguishable, from this
-                # test's own vantage point, from a genuinely stuck run.
-                # A short poll for the actual DOM state the click
-                # depends on closes it: safe this early specifically
-                # because `_drain_run_messages`'s own background thread
-                # (the one whose concurrent `evaluate_js` calls this
-                # file's own module docstring warns against racing) has
-                # not even started yet at this point -- it is spawned
-                # after `Api.start_run` already returns, later than
-                # `on_run_started` fires.
-                for _ in range(_READY_POLL_ATTEMPTS):
-                    if window.evaluate_js(
-                        "document.getElementById('cancel-run-button').disabled === "
-                        "false"
-                    ):
-                        break
-                    time.sleep(_READY_POLL_INTERVAL_SECONDS)
-                window.evaluate_js(
-                    "document.getElementById('cancel-run-button').click();"
-                )
-                if cancelled_event.wait(timeout=_EVENT_WAIT_TIMEOUT_SECONDS):
-                    _wait_for_cancel_run_settled(window)
-                    settled = window.evaluate_js(
-                        "({"
-                        "bannerText: "
-                        "document.getElementById('run-banner').textContent, "
-                        "cancelDisabled: "
-                        "document.getElementById('cancel-run-button').disabled"
-                        "})"
-                    )
+            wait_or_fail(started_event, "run start (on_run_started)")
+            # `started_event` fires from *inside* `Api.start_run`,
+            # synchronously, before that call even returns to JS --
+            # a real, confirmed-live race, not a hypothetical one:
+            # `cancel-run-button` stays disabled (`onRunClicked`'s
+            # own continuation, which enables it, only runs once
+            # the *full* round trip resolves) at the exact instant
+            # this event fires, every time, measured directly.
+            # Clicking it that early is silently swallowed (a
+            # disabled button fires no click listener), so `Api.
+            # cancel_run()` is never called and `cancelled_event`
+            # never fires either -- indistinguishable, from this
+            # test's own vantage point, from a genuinely stuck run.
+            # A short poll for the actual DOM state the click
+            # depends on closes it: safe this early specifically
+            # because `_drain_run_messages`'s own background thread
+            # (the one whose concurrent `evaluate_js` calls this
+            # file's own module docstring warns against racing) has
+            # not even started yet at this point -- it is spawned
+            # after `Api.start_run` already returns, later than
+            # `on_run_started` fires.
+            poll_page(
+                window,
+                "document.getElementById('cancel-run-button').disabled === false",
+                what="Cancel button enabled",
+                interval=_READY_POLL_INTERVAL_SECONDS,
+            )
+            window.evaluate_js("document.getElementById('cancel-run-button').click();")
+            wait_or_fail(cancelled_event, "run cancellation (cancelled message)")
+            _wait_for_cancel_run_settled(window)
+            settled = window.evaluate_js(
+                "({"
+                "bannerText: "
+                "document.getElementById('run-banner').textContent, "
+                "cancelDisabled: "
+                "document.getElementById('cancel-run-button').disabled"
+                "})"
+            )
             outcome.put(settled)
         finally:
             window.destroy()
@@ -1276,10 +1172,7 @@ def test_cancel_button_stops_the_run_and_shows_the_cancelled_banner(
     webview.start(_drive)
     settled = outcome.get(timeout=_OUTCOME_TIMEOUT_SECONDS)
 
-    assert settled is not None, (
-        "started_event or cancelled_event was never set within "
-        f"{_EVENT_WAIT_TIMEOUT_SECONDS}s each"
-    )
+    assert settled is not None
     assert "cancelled" in settled["bannerText"]
     assert settled["cancelDisabled"] is True
 
@@ -1287,7 +1180,7 @@ def test_cancel_button_stops_the_run_and_shows_the_cancelled_banner(
 def _select_live_pair(
     window: webview.Window,
     api: Api,
-) -> bool:
+) -> None:
     """Select Deme 1 versus Deme 3 and wait for the bridge state to update.
 
     Factored out of `test_live_deme_pair_selector_shows_a_chosen_pair_
@@ -1302,20 +1195,21 @@ def _select_live_pair(
         api: The same `Api` the test constructed, for `get_live_deme_
             pair()` — Python-side state, not a bridge call.
 
-    Returns:
-        `True` after `Api.set_live_deme_pair` records `(1, 3)`, else
-        `False` after the fixed poll budget.
+    Raises:
+        AssertionError: If `Api.set_live_deme_pair` never records
+            `(1, 3)` before the completion-signal backstop.
     """
     window.evaluate_js(
         "document.getElementById('run-x-deme').value = '1';"
         "document.getElementById('run-y-deme').value = '3';"
         "document.getElementById('run-y-deme').dispatchEvent(new Event('change'));"
     )
-    for _ in range(_READY_POLL_ATTEMPTS):
-        if api.get_live_deme_pair() == (1, 3):
-            return True
-        time.sleep(_READY_POLL_INTERVAL_SECONDS)
-    return False
+    poll_or_fail(
+        api.get_live_deme_pair,
+        lambda pair: pair == (1, 3),
+        "Api.set_live_deme_pair((1, 3)) bridge round trip",
+        interval=_READY_POLL_INTERVAL_SECONDS,
+    )
 
 
 def test_live_deme_pair_selector_shows_a_chosen_pair_during_a_real_run(
@@ -1396,41 +1290,31 @@ def test_live_deme_pair_selector_shows_a_chosen_pair_during_a_real_run(
 
     def _drive() -> None:
         try:
-            _wait_for_input_screen_ready(window)
+            wait_for_run_view_ready(window)
             window.evaluate_js("document.getElementById('run-button').click();")
-            settled = None
-            if started_event.wait(timeout=_EVENT_WAIT_TIMEOUT_SECONDS):
-                for _ in range(_READY_POLL_ATTEMPTS):
-                    if progress_count >= 1:
-                        break
-                    time.sleep(_READY_POLL_INTERVAL_SECONDS)
-                selector_hidden = window.evaluate_js(
-                    "document.getElementById('run-deme-pair-selector').hidden"
-                )
-                pair_selected = _select_live_pair(window, api)
-                if pair_selected:
-                    settled = {
-                        "selectorHidden": selector_hidden,
-                        "pairSelected": pair_selected,
-                    }
-                window.evaluate_js(
-                    "document.getElementById('cancel-run-button').click();"
-                )
-                cancelled_event.wait(timeout=_EVENT_WAIT_TIMEOUT_SECONDS)
-            outcome.put(settled)
+            wait_or_fail(started_event, "run start (on_run_started)")
+            poll_or_fail(
+                lambda: progress_count,
+                lambda count: count >= 1,
+                "progress message 1",
+                interval=_READY_POLL_INTERVAL_SECONDS,
+            )
+            selector_hidden = window.evaluate_js(
+                "document.getElementById('run-deme-pair-selector').hidden"
+            )
+            _select_live_pair(window, api)
+            window.evaluate_js("document.getElementById('cancel-run-button').click();")
+            wait_or_fail(cancelled_event, "run cancellation (cancelled message)")
+            _wait_for_cancel_run_settled(window)
+            outcome.put({"selectorHidden": selector_hidden})
         finally:
             window.destroy()
 
     webview.start(_drive)
     settled = outcome.get(timeout=_OUTCOME_TIMEOUT_SECONDS)
 
-    assert settled is not None, (
-        "started_event, the first progress push, or set_live_deme_pair's own "
-        "bridge round trip was never observed in time "
-        f"(progress messages seen: {progress_count})"
-    )
+    assert settled is not None
     assert settled["selectorHidden"] is False
-    assert settled["pairSelected"] is True
 
 
 def test_entering_running_state_clears_a_previous_runs_stale_progress_label() -> None:
@@ -1458,7 +1342,7 @@ def test_entering_running_state_clears_a_previous_runs_stale_progress_label() ->
 
     def _drive() -> None:
         try:
-            _wait_for_input_screen_ready(window)
+            wait_for_run_view_ready(window)
             settled = window.evaluate_js(
                 "document.getElementById('progress-generation-label')"
                 ".textContent = '200 / 100 replicates reporting'; "
@@ -1505,7 +1389,7 @@ def test_correcting_the_run_kind_keeps_live_state_a_tick_already_delivered() -> 
 
     def _drive() -> None:
         try:
-            _wait_for_input_screen_ready(window)
+            wait_for_run_view_ready(window)
             settled = window.evaluate_js(
                 "(function () {"
                 "  const selector ="

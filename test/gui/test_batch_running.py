@@ -32,16 +32,16 @@ from typing import Any
 
 import pytest
 import webview
+from conftest import COMPLETION_BACKSTOP_SECONDS, backstop_message, wait_or_fail
 
 from fim.gui.app import Api, create_window
 from fim.gui.batch_runner import BatchMessage
 from fim.gui.runner import RunMessage
 
+from .conftest import wait_for_run_view_ready
+
 pytestmark = pytest.mark.gui
 
-_READY_POLL_INTERVAL_SECONDS = 0.05
-_READY_POLL_ATTEMPTS = 200
-_EVENT_WAIT_TIMEOUT_SECONDS = 30.0
 _OUTCOME_TIMEOUT_SECONDS = 40.0
 
 _INPUT_SCREEN_READY = "window.__fimRunViewReady === true"
@@ -67,24 +67,6 @@ setField('m_rate', '0.1');
 setField('mu_value', '0.01');
 setField('locus_lengths', '200');
 """
-
-
-def _wait_for_input_screen_ready(window: webview.Window) -> None:
-    """Poll until Screen 1's own async initialization has finished.
-
-    Safe to poll here: no background thread exists yet, so this loop is
-    never a second concurrent `evaluate_js` caller — see `test/gui/
-    test_running_screen.py`'s own module docstring for why that
-    distinction matters.
-    """
-    for _ in range(_READY_POLL_ATTEMPTS):
-        if window.evaluate_js(_INPUT_SCREEN_READY):
-            return
-        time.sleep(_READY_POLL_INTERVAL_SECONDS)
-    raise AssertionError(
-        f"input screen was not ready within "
-        f"{_READY_POLL_ATTEMPTS * _READY_POLL_INTERVAL_SECONDS}s"
-    )
 
 
 def test_start_run_dispatches_a_real_batch_and_pushes_its_done_message(
@@ -119,14 +101,13 @@ def test_start_run_dispatches_a_real_batch_and_pushes_its_done_message(
 
     def _drive() -> None:
         try:
-            _wait_for_input_screen_ready(window)
+            wait_for_run_view_ready(window)
             window.evaluate_js(
                 _SET_TINY_BATCH_FIELDS
                 + "document.getElementById('run-button').click();"
             )
-            settled = None
-            if done_event.wait(timeout=_EVENT_WAIT_TIMEOUT_SECONDS):
-                settled = {"started": started_event.is_set()}
+            wait_or_fail(done_event, "batch (done, cancelled or error message)")
+            settled = {"started": started_event.is_set()}
             outcome.put(settled)
         finally:
             window.destroy()
@@ -134,10 +115,7 @@ def test_start_run_dispatches_a_real_batch_and_pushes_its_done_message(
     webview.start(_drive)
     settled = outcome.get(timeout=_OUTCOME_TIMEOUT_SECONDS)
 
-    assert settled is not None, (
-        f"done_event was never set within {_EVENT_WAIT_TIMEOUT_SECONDS}s "
-        f"(messages received: {messages!r})"
-    )
+    assert settled is not None
     assert settled["started"] is True
     assert messages[0][0] == "started"
     assert messages[-1][0] == "done"
@@ -151,11 +129,30 @@ def test_start_run_dispatches_a_real_batch_and_pushes_its_done_message(
     assert len(results) == 2
 
 
+def _next_progress(progress_queue: queue.Queue[dict[str, Any]]) -> dict[str, Any]:
+    """Return the next batch progress tick, failing at the backstop.
+
+    Args:
+        progress_queue: Fed by `Api(on_batch_progress=...)`.
+
+    Returns:
+        The tick's payload.
+
+    Raises:
+        AssertionError: If no tick arrives before the completion-signal
+            backstop.
+    """
+    try:
+        return progress_queue.get(timeout=COMPLETION_BACKSTOP_SECONDS)
+    except queue.Empty:
+        raise AssertionError(backstop_message("batch progress tick")) from None
+
+
 def _wait_for_progress_with_statistics(
-    progress_queue: queue.Queue[dict[str, Any]], timeout: float
-) -> dict[str, Any] | None:
+    progress_queue: queue.Queue[dict[str, Any]],
+) -> dict[str, Any]:
     """Drain `progress_queue` until a tick with a non-empty `statistics`
-    dict arrives, or `timeout` elapses overall.
+    dict arrives, failing at the completion-signal backstop.
 
     Fed by `Api(on_batch_progress=...)` (`app.py`'s own docstring on that
     hook), which is called *after* that tick's own `window.evaluate_js
@@ -178,15 +175,14 @@ def _wait_for_progress_with_statistics(
     interval at all), so this drains past those rather than returning
     the first item unconditionally.
     """
-    deadline = time.monotonic() + timeout
+    deadline = time.monotonic() + COMPLETION_BACKSTOP_SECONDS
     while True:
-        remaining = deadline - time.monotonic()
-        if remaining <= 0:
-            return None
         try:
-            payload = progress_queue.get(timeout=remaining)
+            payload = progress_queue.get(timeout=max(0.0, deadline - time.monotonic()))
         except queue.Empty:
-            return None
+            raise AssertionError(
+                backstop_message("batch progress tick with statistics")
+            ) from None
         if payload.get("statistics"):
             return payload
 
@@ -246,70 +242,67 @@ def test_a_live_batch_shows_a_trajectory_panel_once_two_replicates_report(
 
     def _drive() -> None:
         try:
-            _wait_for_input_screen_ready(window)
+            wait_for_run_view_ready(window)
             window.evaluate_js(
                 _SET_TINY_BATCH_FIELDS
                 + "document.getElementById('run-button').click();"
             )
-            settled = None
-            if _wait_for_progress_with_statistics(
-                progress_queue, _EVENT_WAIT_TIMEOUT_SECONDS
-            ):
-                settled = window.evaluate_js(
-                    "({"
-                    "frameHidden: "
-                    "document.getElementById('run-trajectory-frame').hidden, "
-                    "alleleCompHidden: "
-                    "document.getElementById('allele-composition-card').hidden, "
-                    "freqSpecHidden: "
-                    "document.getElementById('frequency-spectrum-card').hidden, "
-                    "progressLabel: "
-                    "document.getElementById('progress-generation-label').textContent, "
-                    "progressValue: Number("
-                    "document.getElementById('progress-generation').value), "
-                    "progressMax: Number("
-                    "document.getElementById('progress-generation').max), "
-                    "ibdHidden: "
-                    "document.getElementById('ibd-card').hidden, "
-                    "scrubberHidden: "
-                    "document.getElementById('scrubber-controls').hidden, "
-                    "scrubberLabel: "
-                    "document.getElementById('scrubber-label').textContent, "
-                    "scatterTitle: "
-                    "document.getElementById('run-scatter-title').textContent, "
-                    "trajectoryTitle: "
-                    "document.getElementById('run-trajectory-title').textContent, "
-                    "layout: (() => {"
-                    "const rect = (selector) => {"
-                    "const el = document.querySelector(selector);"
-                    "const box = el.getBoundingClientRect();"
-                    "const style = getComputedStyle(el);"
-                    "return {"
-                    "left: box.left, top: box.top, right: box.right, "
-                    "bottom: box.bottom, width: box.width, height: box.height, "
-                    "gridColumnStart: style.gridColumnStart, "
-                    "gridColumnEnd: style.gridColumnEnd, "
-                    "gridRowStart: style.gridRowStart, "
-                    "gridRowEnd: style.gridRowEnd"
-                    "};"
-                    "};"
-                    "return {"
-                    "rowDisplay: getComputedStyle("
-                    "document.getElementById('run-plot-row')).display, "
-                    "scatter: rect('.run-canvas-frame'), "
-                    "trajectory: rect('#run-trajectory-frame'), "
-                    "composition: rect('#allele-composition-card'), "
-                    "spectrum: rect('#frequency-spectrum-card'), "
-                    "stats: rect('#batch-results-summary')"
-                    "};"
-                    "})(), "
-                    "statisticRowCount: document.querySelectorAll("
-                    "'#batch-results-summary tr[data-trajectory-statistic]'"
-                    ").length"
-                    "})"
-                )
+            _wait_for_progress_with_statistics(progress_queue)
+            settled = window.evaluate_js(
+                "({"
+                "frameHidden: "
+                "document.getElementById('run-trajectory-frame').hidden, "
+                "alleleCompHidden: "
+                "document.getElementById('allele-composition-card').hidden, "
+                "freqSpecHidden: "
+                "document.getElementById('frequency-spectrum-card').hidden, "
+                "progressLabel: "
+                "document.getElementById('progress-generation-label').textContent, "
+                "progressValue: Number("
+                "document.getElementById('progress-generation').value), "
+                "progressMax: Number("
+                "document.getElementById('progress-generation').max), "
+                "ibdHidden: "
+                "document.getElementById('ibd-card').hidden, "
+                "scrubberHidden: "
+                "document.getElementById('scrubber-controls').hidden, "
+                "scrubberLabel: "
+                "document.getElementById('scrubber-label').textContent, "
+                "scatterTitle: "
+                "document.getElementById('run-scatter-title').textContent, "
+                "trajectoryTitle: "
+                "document.getElementById('run-trajectory-title').textContent, "
+                "layout: (() => {"
+                "const rect = (selector) => {"
+                "const el = document.querySelector(selector);"
+                "const box = el.getBoundingClientRect();"
+                "const style = getComputedStyle(el);"
+                "return {"
+                "left: box.left, top: box.top, right: box.right, "
+                "bottom: box.bottom, width: box.width, height: box.height, "
+                "gridColumnStart: style.gridColumnStart, "
+                "gridColumnEnd: style.gridColumnEnd, "
+                "gridRowStart: style.gridRowStart, "
+                "gridRowEnd: style.gridRowEnd"
+                "};"
+                "};"
+                "return {"
+                "rowDisplay: getComputedStyle("
+                "document.getElementById('run-plot-row')).display, "
+                "scatter: rect('.run-canvas-frame'), "
+                "trajectory: rect('#run-trajectory-frame'), "
+                "composition: rect('#allele-composition-card'), "
+                "spectrum: rect('#frequency-spectrum-card'), "
+                "stats: rect('#batch-results-summary')"
+                "};"
+                "})(), "
+                "statisticRowCount: document.querySelectorAll("
+                "'#batch-results-summary tr[data-trajectory-statistic]'"
+                ").length"
+                "})"
+            )
             window.evaluate_js("document.getElementById('cancel-run-button').click();")
-            cancelled_event.wait(timeout=_EVENT_WAIT_TIMEOUT_SECONDS)
+            wait_or_fail(cancelled_event, "batch cancellation (cancelled message)")
             outcome.put(settled)
         finally:
             window.destroy()
@@ -317,7 +310,7 @@ def test_a_live_batch_shows_a_trajectory_panel_once_two_replicates_report(
     webview.start(_drive)
     settled = outcome.get(timeout=_OUTCOME_TIMEOUT_SECONDS)
 
-    assert settled is not None, "never saw a progress push with statistics in time"
+    assert settled is not None
     assert settled["frameHidden"] is False
     assert settled["alleleCompHidden"] is True
     assert settled["freqSpecHidden"] is True
@@ -387,55 +380,47 @@ def test_a_live_batch_trajectory_row_toggle_works_mid_run(
 
     def _drive() -> None:
         try:
-            _wait_for_input_screen_ready(window)
+            wait_for_run_view_ready(window)
             window.evaluate_js(
                 _SET_TINY_BATCH_FIELDS
                 + "document.getElementById('run-button').click();"
             )
-            settled = None
-            if _wait_for_progress_with_statistics(
-                progress_queue, _EVENT_WAIT_TIMEOUT_SECONDS
-            ):
-                before = window.evaluate_js(
-                    "document.querySelector("
-                    "'#batch-results-summary tr[data-trajectory-statistic]')"
-                    ".getAttribute('aria-pressed')"
-                )
-                window.evaluate_js(
-                    "document.querySelector("
-                    "'#batch-results-summary tr[data-trajectory-statistic]').click();"
-                )
-                after_click = window.evaluate_js(
-                    "({"
-                    "ariaPressed: document.querySelector("
-                    "'#batch-results-summary tr[data-trajectory-statistic]')"
-                    ".getAttribute('aria-pressed'), "
-                    "className: document.querySelector("
-                    "'#batch-results-summary tr[data-trajectory-statistic]').className"
-                    "})"
-                )
-                # A real, later progress tick must still land cleanly --
-                # proof the toggle did not leave the accumulator/renderer
-                # pair in a broken state a later `onBatchProgress` call
-                # would throw inside. Any further tick at all proves
-                # this, not only one with a non-empty `statistics` dict
-                # (a replicate finishing early can legitimately make a
-                # later tick's own `statistics` empty again) -- a plain
-                # queue drain, not `_wait_for_progress_with_statistics`.
-                still_running = None
-                try:
-                    progress_queue.get(timeout=_EVENT_WAIT_TIMEOUT_SECONDS)
-                except queue.Empty:
-                    pass
-                else:
-                    still_running = window.evaluate_js("window.fim.getRunViewState()")
-                settled = {
-                    "before": before,
-                    "afterClick": after_click,
-                    "stillRunning": still_running,
-                }
+            _wait_for_progress_with_statistics(progress_queue)
+            before = window.evaluate_js(
+                "document.querySelector("
+                "'#batch-results-summary tr[data-trajectory-statistic]')"
+                ".getAttribute('aria-pressed')"
+            )
+            window.evaluate_js(
+                "document.querySelector("
+                "'#batch-results-summary tr[data-trajectory-statistic]').click();"
+            )
+            after_click = window.evaluate_js(
+                "({"
+                "ariaPressed: document.querySelector("
+                "'#batch-results-summary tr[data-trajectory-statistic]')"
+                ".getAttribute('aria-pressed'), "
+                "className: document.querySelector("
+                "'#batch-results-summary tr[data-trajectory-statistic]').className"
+                "})"
+            )
+            # A real, later progress tick must still land cleanly --
+            # proof the toggle did not leave the accumulator/renderer
+            # pair in a broken state a later `onBatchProgress` call
+            # would throw inside. Any further tick at all proves
+            # this, not only one with a non-empty `statistics` dict
+            # (a replicate finishing early can legitimately make a
+            # later tick's own `statistics` empty again) -- a plain
+            # queue drain, not `_wait_for_progress_with_statistics`.
+            _next_progress(progress_queue)
+            still_running = window.evaluate_js("window.fim.getRunViewState()")
+            settled = {
+                "before": before,
+                "afterClick": after_click,
+                "stillRunning": still_running,
+            }
             window.evaluate_js("document.getElementById('cancel-run-button').click();")
-            cancelled_event.wait(timeout=_EVENT_WAIT_TIMEOUT_SECONDS)
+            wait_or_fail(cancelled_event, "batch cancellation (cancelled message)")
             outcome.put(settled)
         finally:
             window.destroy()
@@ -443,7 +428,7 @@ def test_a_live_batch_trajectory_row_toggle_works_mid_run(
     webview.start(_drive)
     settled = outcome.get(timeout=_OUTCOME_TIMEOUT_SECONDS)
 
-    assert settled is not None, "never saw a progress push with statistics in time"
+    assert settled is not None
     assert settled["before"] == "true"
     assert settled["afterClick"]["ariaPressed"] == "false"
     assert "stat-plot-hidden" in settled["afterClick"]["className"]
