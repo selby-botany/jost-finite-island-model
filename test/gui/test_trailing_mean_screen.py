@@ -14,7 +14,6 @@ from __future__ import annotations
 import json
 import queue
 import random
-import time
 from collections.abc import Callable
 from pathlib import Path
 from typing import Any
@@ -24,6 +23,8 @@ import webview
 
 from fim.convergence.window_statistics import window_statistics
 from fim.gui.preferences import GuiPreferences, save_preferences
+
+from .conftest import poll_page
 
 pytestmark = pytest.mark.gui
 
@@ -332,17 +333,6 @@ def estimable_run_settings(_isolate_gui_preferences: Path) -> Path:
     return _isolate_gui_preferences
 
 
-def _poll(window: webview.Window, script: str, predicate: Callable[[Any], bool]) -> Any:
-    """Evaluate `script` until `predicate` holds (bounded), returning the value."""
-    value = None
-    for _ in range(600):
-        value = window.evaluate_js(script)
-        if predicate(value):
-            return value
-        time.sleep(0.1)
-    return value
-
-
 def test_a_completed_run_leads_with_its_estimate_and_offers_the_averages(
     estimable_run_settings: Path, window: webview.Window
 ) -> None:
@@ -392,11 +382,11 @@ def test_a_completed_run_leads_with_its_estimate_and_offers_the_averages(
 
     def _drive() -> None:
         try:
-            _poll(window, _INPUT_SCREEN_READY, lambda value: value is True)
+            poll_page(window, _INPUT_SCREEN_READY, lambda value: value is True)
             window.evaluate_js(
                 set_fields + "document.getElementById('run-button').click();"
             )
-            before = _poll(
+            before = poll_page(
                 window,
                 completed,
                 lambda value: value["state"] == "completed" and value["pending"] == 0,
@@ -419,7 +409,7 @@ def test_a_completed_run_leads_with_its_estimate_and_offers_the_averages(
                     )
 
                 window.evaluate_js(choose(display))
-                chosen_displays[display] = _poll(
+                chosen_displays[display] = poll_page(
                     window,
                     chosen,
                     matches_display,

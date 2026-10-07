@@ -12,13 +12,14 @@ is still compared.
 from __future__ import annotations
 
 import queue
-import time
 from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
 import pytest
 import webview
+
+from .conftest import poll_page
 
 pytestmark = pytest.mark.gui
 
@@ -82,17 +83,6 @@ def test_the_comparison_arithmetic_on_a_known_trajectory(
     assert settled["placed"].endswith(" — description")
 
 
-def _poll(window: webview.Window, script: str, predicate: Callable[[Any], bool]) -> Any:
-    """Evaluate `script` until `predicate` holds (bounded), returning the value."""
-    value = None
-    for _ in range(600):
-        value = window.evaluate_js(script)
-        if predicate(value):
-            return value
-        time.sleep(0.1)
-    return value
-
-
 @pytest.mark.parametrize(
     ("migrant_sampling", "basis"),
     [
@@ -136,12 +126,12 @@ def test_a_completed_runs_predicted_rows_carry_the_comparison(
 
     def _drive() -> None:
         try:
-            _poll(window, _INPUT_SCREEN_READY, lambda value: value is True)
+            poll_page(window, _INPUT_SCREEN_READY, lambda value: value is True)
             window.evaluate_js(
                 set_fields + "document.getElementById('run-button').click();"
             )
             outcome.put(
-                _poll(
+                poll_page(
                     window,
                     titles,
                     lambda value: (

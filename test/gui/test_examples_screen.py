@@ -16,8 +16,6 @@ from __future__ import annotations
 
 import json
 import queue
-import time
-from collections.abc import Callable
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
@@ -34,11 +32,14 @@ from fim.gui import app as app_module
 from fim.gui.app import create_window
 from fim.persistence import groups
 
+from .conftest import poll_page
+
 pytestmark = pytest.mark.gui
 
-_POLL_INTERVAL_SECONDS = 0.1
-_POLL_ATTEMPTS = 300
-_DRIVE_TIMEOUT_SECONDS = 4 * _POLL_ATTEMPTS * _POLL_INTERVAL_SECONDS + 10.0
+# How long to wait for a drive callback's result once `webview.start`
+# returns. Every callback hands its result over before destroying the
+# window, so this only bounds one that failed without a result.
+_DRIVE_TIMEOUT_SECONDS = 10.0
 _EARLY_CLOCK = datetime(2020, 1, 1, tzinfo=UTC)
 
 _CONFIG: dict[str, Any] = {
@@ -140,24 +141,11 @@ def results(
     return root
 
 
-def _poll_until(
-    window: webview.Window, script: str, is_ready: Callable[[Any], bool]
-) -> Any:
-    """Evaluate `script` until `is_ready` accepts its value, or attempts run out."""
-    value: Any = None
-    for _ in range(_POLL_ATTEMPTS):
-        value = window.evaluate_js(script)
-        if is_ready(value):
-            return value
-        time.sleep(_POLL_INTERVAL_SECONDS)
-    return value
-
-
 def _open_home(window: webview.Window) -> None:
     """Wait for the page, show Home, and wait for its tree to load."""
-    _poll_until(window, "window.__fimRunViewReady === true", lambda value: value)
+    poll_page(window, "window.__fimRunViewReady === true", lambda value: value)
     window.evaluate_js("window.fim.menu.openRun();")
-    _poll_until(
+    poll_page(
         window, "window.__fimOpenRunRecentRunsLoaded === true", lambda value: value
     )
 
@@ -223,7 +211,7 @@ def _expand_group(window: webview.Window, label: str) -> None:
         " if (t && t.getAttribute('aria-expanded') === 'false') { t.click(); }"
         " })()"
     )
-    expanded = _poll_until(
+    expanded = poll_page(
         window,
         f"(function () {{ const t = {toggle};"
         " return t ? t.getAttribute('aria-expanded') : null; })()",
@@ -272,14 +260,14 @@ def test_a_seeded_example_opens_from_its_saved_results_and_run_it_loads_it(
             _open_home(window)
             _expand_group(window, "Examples (")
             _expand_group(window, "Getting started (")
-            _poll_until(
+            poll_page(
                 window, f"{example_row} !== undefined", lambda value: value is True
             )
             window.evaluate_js(
                 f"{example_row}.dispatchEvent(new MouseEvent('dblclick',"
                 " {bubbles: true}));"
             )
-            _poll_until(
+            poll_page(
                 window,
                 "window.fim.getRunViewState() === 'completed'"
                 " && !document.getElementById('run-saved-result-note').hidden",
@@ -290,10 +278,10 @@ def test_a_seeded_example_opens_from_its_saved_results_and_run_it_loads_it(
                 "window.__fimSavedRunLoadSettled = false;"
                 "document.getElementById('run-saved-result-run-button').click();"
             )
-            _poll_until(
+            poll_page(
                 window, "window.__fimSavedRunLoadSettled === true", lambda value: value
             )
-            _poll_until(
+            poll_page(
                 window,
                 "(window.__fimValidationPending || 0) === 0",
                 lambda value: value is True,
@@ -301,12 +289,12 @@ def test_a_seeded_example_opens_from_its_saved_results_and_run_it_loads_it(
             configure = json.loads(window.evaluate_js(_SNAPSHOT_CONFIGURE))
             # Leaving `completed` brings the graphs back.
             window.evaluate_js("window.fim.returnToInitialState();")
-            configure["noteHiddenAfterInitial"] = _poll_until(
+            configure["noteHiddenAfterInitial"] = poll_page(
                 window,
                 "document.getElementById('run-saved-result-note').hidden",
                 lambda value: value is True,
             )
-            _poll_until(
+            poll_page(
                 window,
                 "(window.__fimScrubberPending || 0) === 0"
                 " && (window.__fimValidationPending || 0) === 0",
@@ -356,11 +344,9 @@ def test_open_saved_result_opens_the_seeded_run_from_the_examples_dialog(
 
     def _drive() -> None:
         try:
-            _poll_until(
-                window, "window.__fimRunViewReady === true", lambda value: value
-            )
+            poll_page(window, "window.__fimRunViewReady === true", lambda value: value)
             window.evaluate_js("window.fim.showExamplesDialog();")
-            _poll_until(
+            poll_page(
                 window, "window.__fimExamplesDialogReady === true", lambda value: value
             )
             without = json.loads(
@@ -373,11 +359,11 @@ def test_open_saved_result_opens_the_seeded_run_from_the_examples_dialog(
                 "window.__fimExampleOpenSettled = false;"
                 "document.getElementById('examples-open-saved-button').click();"
             )
-            _poll_until(
+            poll_page(
                 window, "window.__fimExampleOpenSettled === true", lambda value: value
             )
             opened = json.loads(
-                _poll_until(
+                poll_page(
                     window,
                     "JSON.stringify({"
                     " state: window.fim.getRunViewState(),"
@@ -389,7 +375,7 @@ def test_open_saved_result_opens_the_seeded_run_from_the_examples_dialog(
                     lambda value: value is not None and '"completed"' in value,
                 )
             )
-            _poll_until(
+            poll_page(
                 window,
                 "(window.__fimScrubberPending || 0) === 0",
                 lambda value: value is True,
@@ -436,7 +422,7 @@ def test_a_complete_example_opens_with_graphs_and_a_working_scrubber(
                 ".find((row) => row.textContent.includes('Shipped example'))"
                 ".dispatchEvent(new MouseEvent('dblclick', {bubbles: true}));"
             )
-            ready = _poll_until(
+            ready = poll_page(
                 window,
                 "window.fim.getRunViewState() === 'completed'"
                 " && (window.__fimScrubberPending || 0) === 0"
@@ -454,7 +440,7 @@ def test_a_complete_example_opens_with_graphs_and_a_working_scrubber(
                 "slider.value = '0';"
                 "slider.dispatchEvent(new Event('input', {bubbles: true}));"
             )
-            _poll_until(
+            poll_page(
                 window,
                 "(window.__fimScrubberPending || 0) === 0",
                 lambda value: value is True,

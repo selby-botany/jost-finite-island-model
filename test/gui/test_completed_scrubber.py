@@ -38,18 +38,20 @@ through.
 from __future__ import annotations
 
 import queue
-import time
 from pathlib import Path
 from typing import Any
 
 import pytest
 import webview
 
+from .conftest import poll_page
+
 pytestmark = pytest.mark.gui
 
-_POLL_INTERVAL_SECONDS = 0.1
-_POLL_ATTEMPTS = 600
-_DRIVE_TIMEOUT_SECONDS = 3 * _POLL_ATTEMPTS * _POLL_INTERVAL_SECONDS + 10.0
+# How long to wait for a drive callback's result once `webview.start`
+# returns. Every callback hands its result over before destroying the
+# window, so this only bounds one that failed without a result.
+_DRIVE_TIMEOUT_SECONDS = 10.0
 
 _INPUT_SCREEN_READY = "window.__fimRunViewReady === true"
 
@@ -98,21 +100,6 @@ def _buffer_synced(canvas_id: str) -> str:
     )
 
 
-def _poll_until(
-    window: webview.Window,
-    script: str,
-    predicate: Any,
-    poll_attempts: int = _POLL_ATTEMPTS,
-) -> Any:
-    value = None
-    for _ in range(poll_attempts):
-        value = window.evaluate_js(script)
-        if predicate(value):
-            return value
-        time.sleep(_POLL_INTERVAL_SECONDS)
-    return value
-
-
 def _scrub_to(window: webview.Window, index: int) -> None:
     """Drag `#scrubber-range` to `index` and fire the same `"input"` event
     a real drag dispatches (`scrubber.js`'s own listener)."""
@@ -138,16 +125,16 @@ def test_scrubbing_to_an_earlier_generation_updates_the_stats_table_and_marker(
 
     def _drive() -> None:
         try:
-            _poll_until(window, _INPUT_SCREEN_READY, lambda value: value is True)
+            poll_page(window, _INPUT_SCREEN_READY, lambda value: value is True)
             window.evaluate_js(
                 _SET_TINY_FIELDS + "document.getElementById('run-button').click();"
             )
-            _poll_until(
+            poll_page(
                 window,
                 "window.fim.getRunViewState()",
                 lambda value: value == "completed",
             )
-            _poll_until(window, "window.__fimScrubberPending", lambda value: value == 0)
+            poll_page(window, "window.__fimScrubberPending", lambda value: value == 0)
             final_snapshot = window.evaluate_js(
                 "document.getElementById('run-trajectory-canvas').toDataURL()"
             )
@@ -242,21 +229,21 @@ def test_scrubbing_back_to_the_final_frame_restores_the_real_statistics_and_mark
 
     def _drive() -> None:
         try:
-            _poll_until(window, _INPUT_SCREEN_READY, lambda value: value is True)
+            poll_page(window, _INPUT_SCREEN_READY, lambda value: value is True)
             window.evaluate_js(_PIN_SCROLLBAR)
             window.evaluate_js(
                 _SET_TINY_FIELDS + "document.getElementById('run-button').click();"
             )
-            _poll_until(
+            poll_page(
                 window,
                 "window.fim.getRunViewState()",
                 lambda value: value == "completed",
             )
-            _poll_until(window, "window.__fimScrubberPending", lambda value: value == 0)
+            poll_page(window, "window.__fimScrubberPending", lambda value: value == 0)
             final_index = (
                 len(window.evaluate_js("window.fim.getScrubberGenerations()")) - 1
             )
-            _poll_until(
+            poll_page(
                 window,
                 _buffer_synced("run-trajectory-canvas"),
                 lambda value: value is True,
@@ -277,13 +264,17 @@ def test_scrubbing_back_to_the_final_frame_restores_the_real_statistics_and_mark
             # (`fim.engine._ALWAYS_TRACKED_STATISTICS`) and so never
             # reads "not known" at any generation any more, which would
             # otherwise spin this poll out to its own full timeout.
-            _poll_until(
+            # A prefix match: the title goes on to describe the
+            # statistic. An exact match here never held once it did, and
+            # the old attempt-limited poll hid that by giving up after
+            # 60 seconds and carrying on, on every run.
+            poll_page(
                 window,
                 "document.getElementById('stat-E_ST').title",
-                lambda value: value == "not known at this generation",
+                lambda value: value.startswith("not known at this generation"),
             )
             _scrub_to(window, final_index)
-            _poll_until(
+            poll_page(
                 window,
                 _buffer_synced("run-trajectory-canvas"),
                 lambda value: value is True,
@@ -336,24 +327,22 @@ def test_the_scrubber_starts_on_the_frame_that_is_actually_drawn(
 
     def _drive() -> None:
         try:
-            _poll_until(window, _INPUT_SCREEN_READY, lambda value: value is True)
+            poll_page(window, _INPUT_SCREEN_READY, lambda value: value is True)
             window.evaluate_js(_PIN_SCROLLBAR)
             window.evaluate_js(
                 _SET_TINY_FIELDS + "document.getElementById('run-button').click();"
             )
-            _poll_until(
+            poll_page(
                 window,
                 "window.fim.getRunViewState()",
                 lambda value: value == "completed",
             )
-            _poll_until(window, "window.__fimScrubberPending", lambda value: value == 0)
+            poll_page(window, "window.__fimScrubberPending", lambda value: value == 0)
             # Snapshot the canvas as opened, then scrub deliberately to
             # the last frame. If the view already sat there, the two
             # images are identical -- which is the real claim: the
             # opening view *is* the final frame's view.
-            _poll_until(
-                window, _buffer_synced("run-canvas"), lambda value: value is True
-            )
+            poll_page(window, _buffer_synced("run-canvas"), lambda value: value is True)
             opened = window.evaluate_js(
                 "({"
                 "label: document.getElementById('scrubber-label').textContent, "
@@ -362,9 +351,7 @@ def test_the_scrubber_starts_on_the_frame_that_is_actually_drawn(
                 "})"
             )
             _scrub_to(window, len(opened["generations"]) - 1)
-            _poll_until(
-                window, _buffer_synced("run-canvas"), lambda value: value is True
-            )
+            poll_page(window, _buffer_synced("run-canvas"), lambda value: value is True)
             at_final = window.evaluate_js(
                 "document.getElementById('run-canvas').toDataURL()"
             )

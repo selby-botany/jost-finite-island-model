@@ -47,7 +47,6 @@ evaluate_js` read, never a `setTimeout` loop inside a trigger — see
 from __future__ import annotations
 
 import queue
-import time
 from pathlib import Path
 from typing import Any
 
@@ -58,12 +57,15 @@ import yaml
 from fim import cli
 from fim.gui.app import create_window
 
+from .conftest import poll_page
+
 pytestmark = pytest.mark.gui
 
 _INPUT_SCREEN_READY = "window.__fimRunViewReady === true"
-_POLL_INTERVAL_SECONDS = 0.1
-_POLL_ATTEMPTS = 300
-_DRIVE_TIMEOUT_SECONDS = 4 * _POLL_ATTEMPTS * _POLL_INTERVAL_SECONDS + 10.0
+# How long to wait for a drive callback's result once `webview.start`
+# returns. Every callback hands its result over before destroying the
+# window, so this only bounds one that failed without a result.
+_DRIVE_TIMEOUT_SECONDS = 10.0
 
 
 def _write_run(tmp_path: Path, *, d: int = 2) -> Path:
@@ -91,21 +93,6 @@ def _write_run(tmp_path: Path, *, d: int = 2) -> Path:
     return output_directory
 
 
-def _poll_until(window: webview.Window, script: str, is_ready: Any) -> Any:
-    """Evaluate `script` repeatedly, sleeping between tries, until `is_ready` accepts.
-
-    Never waits inside JavaScript itself — see `test/gui/conftest.py`'s
-    own module docstring.
-    """
-    value: Any = None
-    for _ in range(_POLL_ATTEMPTS):
-        value = window.evaluate_js(script)
-        if is_ready(value):
-            return value
-        time.sleep(_POLL_INTERVAL_SECONDS)
-    return value
-
-
 def _open_run(window: webview.Window, trajectory_path: Path) -> Any:
     """Open a persisted run through the real bridge and enter `completed`.
 
@@ -124,9 +111,7 @@ def _open_run(window: webview.Window, trajectory_path: Path) -> Any:
         "}"
         "})();"
     )
-    return _poll_until(
-        window, "window.__fimOpenResult", lambda value: value is not None
-    )
+    return poll_page(window, "window.__fimOpenResult", lambda value: value is not None)
 
 
 def test_opening_a_run_populates_the_scrubber_and_scrubbing_moves_the_frame(
@@ -139,7 +124,7 @@ def test_opening_a_run_populates_the_scrubber_and_scrubbing_moves_the_frame(
 
     def _drive() -> None:
         try:
-            _poll_until(window, _INPUT_SCREEN_READY, lambda value: value is True)
+            poll_page(window, _INPUT_SCREEN_READY, lambda value: value is True)
             opened = _open_run(window, output / "trajectory.jsonl")
             settled = None
             if opened is not None and opened.get("ok"):
@@ -147,7 +132,7 @@ def test_opening_a_run_populates_the_scrubber_and_scrubbing_moves_the_frame(
                 # awaited by `enterCompletedState` (`scrubber.js`'s own
                 # fix: loading frames must not repaint the canvas) --
                 # `window.__fimScrubberPending` is its settled signal.
-                after_load = _poll_until(
+                after_load = poll_page(
                     window,
                     "({"
                     "runViewState: window.fim.getRunViewState(), "
@@ -184,7 +169,7 @@ def test_opening_a_run_populates_the_scrubber_and_scrubbing_moves_the_frame(
                         f"window.fim.getScrubberGenerations()[{scrubber_max}]"
                     )
                     expected_label = f"Generation {last_generation}"
-                    after_scrub = _poll_until(
+                    after_scrub = poll_page(
                         window,
                         "document.getElementById('scrubber-label').textContent",
                         lambda value: value == expected_label,

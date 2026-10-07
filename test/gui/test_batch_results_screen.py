@@ -37,7 +37,6 @@ from __future__ import annotations
 
 import queue
 import threading
-import time
 from collections.abc import Callable
 from pathlib import Path
 from typing import Any
@@ -51,10 +50,11 @@ from fim.gui.batch_runner import BatchMessage
 from fim.gui.runner import RunMessage
 from fim.statistics.catalog import default_shown_keys
 
+from .conftest import poll_page, wait_for_run_view_ready
+
 pytestmark = pytest.mark.gui
 
 _READY_POLL_INTERVAL_SECONDS = 0.05
-_READY_POLL_ATTEMPTS = 200
 _OUTCOME_TIMEOUT_SECONDS = 40.0
 
 _INPUT_SCREEN_READY = "window.__fimRunViewReady === true"
@@ -102,22 +102,6 @@ setField('m_rate', '0.1');
 setField('mu_value', '0.01');
 setField('locus_lengths', '200');
 """
-
-
-def _wait_for_input_screen_ready(window: webview.Window) -> None:
-    """Poll until the run view's own async initialization has finished.
-
-    Safe to poll here: no background thread exists yet, so this loop is
-    never a second concurrent `evaluate_js` caller.
-    """
-    for _ in range(_READY_POLL_ATTEMPTS):
-        if window.evaluate_js(_INPUT_SCREEN_READY):
-            return
-        time.sleep(_READY_POLL_INTERVAL_SECONDS)
-    raise AssertionError(
-        f"the run view was not ready within "
-        f"{_READY_POLL_ATTEMPTS * _READY_POLL_INTERVAL_SECONDS}s"
-    )
 
 
 def _wait_until_scrubber_settled(window: webview.Window) -> None:
@@ -272,7 +256,7 @@ def test_a_completed_batch_renders_the_run_view(fast_batch_run_settings: Path) -
 
     def _drive() -> None:
         try:
-            _wait_for_input_screen_ready(window)
+            wait_for_run_view_ready(window)
             window.evaluate_js(
                 _SET_TINY_BATCH_FIELDS
                 + "document.getElementById('run-button').click();"
@@ -378,7 +362,7 @@ def test_a_completed_batchs_own_supplemental_panels_render(
 
     def _drive() -> None:
         try:
-            _wait_for_input_screen_ready(window)
+            wait_for_run_view_ready(window)
             window.evaluate_js(
                 _SET_TINY_BATCH_FIELDS
                 + "document.getElementById('run-button').click();"
@@ -478,7 +462,7 @@ def test_a_completed_batchs_own_effective_allele_rows_render(
 
     def _drive() -> None:
         try:
-            _wait_for_input_screen_ready(window)
+            wait_for_run_view_ready(window)
             window.evaluate_js(
                 _SET_TINY_BATCH_FIELDS
                 + "document.getElementById('run-button').click();"
@@ -547,7 +531,7 @@ def test_a_completed_batchs_own_trajectory_path_stays_unset(
 
     def _drive() -> None:
         try:
-            _wait_for_input_screen_ready(window)
+            wait_for_run_view_ready(window)
             window.evaluate_js(
                 _SET_TINY_BATCH_FIELDS
                 + "document.getElementById('run-button').click();"
@@ -603,7 +587,7 @@ def test_a_completed_batchs_own_pooled_trajectory_renders(
 
     def _drive() -> None:
         try:
-            _wait_for_input_screen_ready(window)
+            wait_for_run_view_ready(window)
             window.evaluate_js(
                 _SET_STAGGERED_BATCH_FIELDS
                 + "document.getElementById('run-button').click();"
@@ -685,7 +669,7 @@ def test_a_completed_batchs_own_scrubber_replays_the_pooled_scatter(
 
     def _drive() -> None:
         try:
-            _wait_for_input_screen_ready(window)
+            wait_for_run_view_ready(window)
             window.evaluate_js(
                 _SET_STAGGERED_BATCH_FIELDS
                 + "document.getElementById('run-button').click();"
@@ -765,7 +749,7 @@ def test_scrubbing_a_completed_batch_moves_every_panel_not_just_the_scatter(
 
     def _drive() -> None:
         try:
-            _wait_for_input_screen_ready(window)
+            wait_for_run_view_ready(window)
             window.evaluate_js(
                 _SET_STAGGERED_BATCH_FIELDS
                 + "document.getElementById('run-button').click();"
@@ -849,7 +833,7 @@ def test_the_ci_meter_names_the_replicate_count_in_its_own_tooltip(
 
     def _drive() -> None:
         try:
-            _wait_for_input_screen_ready(window)
+            wait_for_run_view_ready(window)
             window.evaluate_js(
                 _SET_TINY_BATCH_FIELDS
                 + "document.getElementById('run-button').click();"
@@ -910,18 +894,9 @@ def test_batch_deme_pair_selector_switches_to_a_chosen_pair_and_back(
         "setField('d', '2');", "setField('d', '3');"
     )
 
-    def _poll_until(script: str, predicate: Any) -> Any:
-        value = None
-        for _ in range(_READY_POLL_ATTEMPTS):
-            value = window.evaluate_js(script)
-            if predicate(value):
-                return value
-            time.sleep(_READY_POLL_INTERVAL_SECONDS)
-        return value
-
     def _drive() -> None:
         try:
-            _wait_for_input_screen_ready(window)
+            wait_for_run_view_ready(window)
             window.evaluate_js(
                 set_fields + "document.getElementById('run-button').click();"
             )
@@ -948,7 +923,8 @@ def test_batch_deme_pair_selector_switches_to_a_chosen_pair_and_back(
                 "document.getElementById('run-y-deme').dispatchEvent("
                 "new Event('change'));"
             )
-            pair_snapshot = _poll_until(
+            pair_snapshot = poll_page(
+                window,
                 "document.getElementById('run-canvas').toDataURL()",
                 lambda value: value != default_snapshot,
             )
@@ -957,7 +933,8 @@ def test_batch_deme_pair_selector_switches_to_a_chosen_pair_and_back(
                 "document.getElementById('run-y-deme').dispatchEvent("
                 "new Event('change'));"
             )
-            reverted_snapshot = _poll_until(
+            reverted_snapshot = poll_page(
+                window,
                 "document.getElementById('run-canvas').toDataURL()",
                 lambda value: value == default_snapshot,
             )
@@ -1018,7 +995,7 @@ def test_running_a_batch_again_from_completed_starts_a_new_batch(
 
     def _drive() -> None:
         try:
-            _wait_for_input_screen_ready(window)
+            wait_for_run_view_ready(window)
             window.evaluate_js(
                 _SET_TINY_BATCH_FIELDS
                 + "document.getElementById('run-button').click();"
@@ -1088,19 +1065,19 @@ def test_open_folder_button_reaches_the_injected_opener_and_settles(
 
     def _drive() -> None:
         try:
-            _wait_for_input_screen_ready(window)
+            wait_for_run_view_ready(window)
             window.evaluate_js(
                 _SET_TINY_BATCH_FIELDS
                 + "document.getElementById('run-button').click();"
             )
-            settled = False
             wait_or_fail(done_event, "batch (done, cancelled or error message)")
             window.evaluate_js("document.getElementById('open-folder-button').click();")
-            for _ in range(_READY_POLL_ATTEMPTS):
-                settled = window.evaluate_js("window.__fimOpenFolderSettled === true")
-                if settled:
-                    break
-                time.sleep(_READY_POLL_INTERVAL_SECONDS)
+            settled = poll_page(
+                window,
+                "window.__fimOpenFolderSettled === true",
+                what="open_output_folder() bridge call (window.__fimOpenFolderSettled)",
+                interval=_READY_POLL_INTERVAL_SECONDS,
+            )
             outcome.put(settled)
         finally:
             window.destroy()
@@ -1152,7 +1129,7 @@ def test_scrubbing_a_completed_batch_moves_the_statistics_panel(
 
     def _drive() -> None:
         try:
-            _wait_for_input_screen_ready(window)
+            wait_for_run_view_ready(window)
             window.evaluate_js(
                 _SET_STAGGERED_BATCH_FIELDS
                 + "document.getElementById('run-button').click();"
@@ -1234,7 +1211,7 @@ def test_a_batch_repaint_keeps_the_scrub_position_marker(
 
     def _drive() -> None:
         try:
-            _wait_for_input_screen_ready(window)
+            wait_for_run_view_ready(window)
             window.evaluate_js(
                 _SET_STAGGERED_BATCH_FIELDS
                 + "document.getElementById('run-button').click();"

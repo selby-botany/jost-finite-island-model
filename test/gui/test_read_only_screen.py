@@ -16,8 +16,6 @@ from __future__ import annotations
 
 import json
 import queue
-import time
-from collections.abc import Callable
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
@@ -31,11 +29,14 @@ from fim import paths as paths_module
 from fim.gui.app import create_window
 from fim.persistence import groups
 
+from .conftest import poll_page
+
 pytestmark = pytest.mark.gui
 
-_POLL_INTERVAL_SECONDS = 0.1
-_POLL_ATTEMPTS = 300
-_DRIVE_TIMEOUT_SECONDS = 4 * _POLL_ATTEMPTS * _POLL_INTERVAL_SECONDS + 10.0
+# How long to wait for a drive callback's result once `webview.start`
+# returns. Every callback hands its result over before destroying the
+# window, so this only bounds one that failed without a result.
+_DRIVE_TIMEOUT_SECONDS = 10.0
 _FIXED_CLOCK = datetime(2026, 10, 5, 12, 0, tzinfo=UTC)
 
 _SNAPSHOT_HOME = """
@@ -139,19 +140,6 @@ def _seed_read_only_examples(results: Path) -> Path:
     return example
 
 
-def _poll_until(
-    window: webview.Window, script: str, is_ready: Callable[[Any], bool]
-) -> Any:
-    """Evaluate `script` until `is_ready` accepts its value, or attempts run out."""
-    value: Any = None
-    for _ in range(_POLL_ATTEMPTS):
-        value = window.evaluate_js(script)
-        if is_ready(value):
-            return value
-        time.sleep(_POLL_INTERVAL_SECONDS)
-    return value
-
-
 def _expand_group(window: webview.Window, label: str) -> None:
     """Expand the Home group whose toggle names `label`, and wait until it is open.
 
@@ -169,7 +157,7 @@ def _expand_group(window: webview.Window, label: str) -> None:
         " return true; })()"
     )
     assert clicked is True, f"no Home group named {label!r}"
-    expanded = _poll_until(
+    expanded = poll_page(
         window,
         f"(function () {{ const t = {toggle};"
         " return t ? t.getAttribute('aria-expanded') : null; })()",
@@ -180,9 +168,9 @@ def _expand_group(window: webview.Window, label: str) -> None:
 
 def _open_home(window: webview.Window) -> None:
     """Wait for the page, show Home, and wait for its tree to load."""
-    _poll_until(window, "window.__fimRunViewReady === true", lambda value: value)
+    poll_page(window, "window.__fimRunViewReady === true", lambda value: value)
     window.evaluate_js("window.fim.menu.openRun();")
-    _poll_until(
+    poll_page(
         window, "window.__fimOpenRunRecentRunsLoaded === true", lambda value: value
     )
 
@@ -203,7 +191,7 @@ def test_home_locks_read_only_items_and_disables_their_edit_controls(
             _open_home(window)
             _expand_group(window, "Examples (")
             _expand_group(window, "Getting started (")
-            _poll_until(
+            poll_page(
                 window,
                 "document.querySelectorAll('.open-run-run-row .read-only-badge')"
                 ".length",
@@ -213,7 +201,7 @@ def test_home_locks_read_only_items_and_disables_their_edit_controls(
             window.evaluate_js(
                 "document.getElementById('open-run-select-all-button').click();"
             )
-            snapshot["deleteSelected"] = _poll_until(
+            snapshot["deleteSelected"] = poll_page(
                 window,
                 "document.getElementById('open-run-delete-selected-button')"
                 ".textContent",
@@ -295,13 +283,13 @@ def test_home_deletes_an_example_link_without_deleting_the_example(
                 "'.open-run-inline-confirm button'))"
                 ".find((button) => button.textContent === 'Confirm').click();"
             )
-            remaining = _poll_until(
+            remaining = poll_page(
                 window,
                 "document.querySelectorAll("
                 "'.open-run-run-row .read-only-badge').length",
                 lambda value: value == 1,
             )
-            settled = _poll_until(
+            settled = poll_page(
                 window,
                 "window.__fimOpenRunRecentRunsLoaded === true",
                 lambda value: value is True,
@@ -362,14 +350,14 @@ def test_details_dialog_and_run_title_show_a_read_only_run_as_locked(
             _open_home(window)
             _expand_group(window, "Examples (")
             _expand_group(window, "Getting started (")
-            _poll_until(
+            poll_page(
                 window, f"{example_row} !== undefined", lambda value: value is True
             )
             window.evaluate_js(
                 "window.__fimDetailsDialogReady = false;"
                 f"{example_row}.querySelector('.details-button').click();"
             )
-            _poll_until(
+            poll_page(
                 window, "window.__fimDetailsDialogReady === true", lambda value: value
             )
             details = json.loads(window.evaluate_js(_SNAPSHOT_DETAILS))
@@ -378,18 +366,18 @@ def test_details_dialog_and_run_title_show_a_read_only_run_as_locked(
                 f"{example_row}.dispatchEvent(new MouseEvent('dblclick',"
                 " {bubbles: true}));"
             )
-            _poll_until(
+            poll_page(
                 window,
                 "window.fim.getRunViewState() === 'completed'"
                 " && window.__fimRunTitleReady === true",
                 lambda value: value is True,
             )
-            title_badges = _poll_until(
+            title_badges = poll_page(
                 window,
                 "document.querySelectorAll('#run-plot-title .read-only-badge').length",
                 lambda value: value == 2,
             )
-            _poll_until(
+            poll_page(
                 window,
                 "(window.__fimScrubberPending || 0) === 0",
                 lambda value: value is True,

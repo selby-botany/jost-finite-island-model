@@ -9,13 +9,14 @@ family by default (statistics catalog design, section 6.5).
 from __future__ import annotations
 
 import queue
-import time
 from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
 import pytest
 import webview
+
+from .conftest import poll_page
 
 pytestmark = pytest.mark.gui
 
@@ -168,17 +169,6 @@ def test_the_filter_narrows_the_list_to_matching_statistics(
     assert "NEI_D_PAIR_GEO" not in settled
 
 
-def _poll(window: webview.Window, script: str, predicate: Callable[[Any], bool]) -> Any:
-    """Evaluate `script` until `predicate` holds (bounded), returning the value."""
-    value = None
-    for _ in range(600):
-        value = window.evaluate_js(script)
-        if predicate(value):
-            return value
-        time.sleep(0.1)
-    return value
-
-
 def test_pair_rows_follow_the_deme_pair_chosen_for_the_scatter(
     fast_scalar_run_settings: Path, window: webview.Window
 ) -> None:
@@ -206,13 +196,13 @@ def test_pair_rows_follow_the_deme_pair_chosen_for_the_scatter(
 
     def _drive() -> None:
         try:
-            _poll(window, _INPUT_SCREEN_READY, lambda value: value is True)
+            poll_page(window, _INPUT_SCREEN_READY, lambda value: value is True)
             window.evaluate_js(
                 "window.fim.setShownStatistics(['D', 'NEI_D_PAIR_GEO']);"
                 + set_fields
                 + "document.getElementById('run-button').click();"
             )
-            default_pair = _poll(
+            default_pair = poll_page(
                 window,
                 pair_state,
                 lambda value: value["state"] == "completed" and value["pending"] == 0,
@@ -223,7 +213,7 @@ def test_pair_rows_follow_the_deme_pair_chosen_for_the_scatter(
                 "document.getElementById('run-y-deme')"
                 ".dispatchEvent(new Event('change'));"
             )
-            chosen_pair = _poll(
+            chosen_pair = poll_page(
                 window,
                 pair_state,
                 lambda value: (
