@@ -467,8 +467,10 @@ n_replicates: 1   # a single scalar run; the default (200) would batch
 fim run stochastic-migrants.yaml --output results/stochastic-migrants --quiet
 ```
 
-Converges at generation 5,559, after about 20 seconds, with D = 0.127 and a
-trailing-window mean D of 0.060 ± 0.005. Re-run with migrant_sampling
+Converges at generation 11,802, after about a minute, with D = 0.032 and a
+trailing-window mean D of 0.076 ± 0.005 (the model's expectation is 0.059; one
+locus swings slowly, so a single run's window mean can sit this far from it,
+more than its standard error suggests). Re-run with migrant_sampling
 removed (or set to `continuous`, the default) at the same seed to compare
 against the deterministic-migration baseline directly.
 
@@ -558,15 +560,15 @@ fim run finite-deme-correction.yaml \
   --output results/finite-deme-correction --quiet
 ```
 
-Converges (on G<sub>ST</sub>) at generation 10,109, after under a minute, with
-a trailing-window mean G<sub>ST</sub> of 0.205 ± 0.008
+Converges (on G<sub>ST</sub>) at generation 10,109, after about two minutes, with
+a trailing-window mean G<sub>ST</sub> of 0.200 ± 0.007
 (`convergence_tolerance: 0.02` keeps the run short; see the
 [example's README](examples/wright-takahata-finite-deme-correction/README.md)).
 The closed-form finite-deme prediction for these parameters
 is about 0.141, below the corresponding infinite-island approximation of
 about 0.238 because the `d / (d - 1)` correction is retained. A single locus
 scatters widely around that expectation (the exact expectation for this
-model is G<sub>ST</sub> 0.195 and D 0.318); a batch averages it out.
+model is G<sub>ST</sub> 0.195 and D 0.319); a batch averages it out.
 
 ### Kimura-Weiss isolation by distance
 
@@ -605,8 +607,8 @@ fim run kimura-weiss-isolation-by-distance.yaml \
   --output results/kimura-weiss-isolation-by-distance --quiet
 ```
 
-Converges at generation 2,532, after about 25 seconds, with D = 0.614 and
-G<sub>ST</sub> = 0.140. `convergence_tolerance: 0.05` is deliberately loose:
+Converges at generation 2,539, after about a minute, with D = 0.475 and
+G<sub>ST</sub> = 0.093. `convergence_tolerance: 0.05` is deliberately loose:
 at the default 0.01 this one-locus ring needs about 175,000 generations,
 well over an hour (see the
 [example's README](examples/kimura-weiss-isolation-by-distance/README.md)).

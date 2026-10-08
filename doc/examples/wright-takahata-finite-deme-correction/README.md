@@ -12,10 +12,10 @@ approximation. The correction depends on finite deme count and is not a
 claim that this stochastic single-locus result must equal the
 expectation.
 
-The run converges on `G_ST` at generation 10,109, after under a minute on
-ordinary development hardware. Its trailing-window mean `G_ST` is
-0.205 ± 0.008 (one standard error), close to the model's exact
-expectation of 0.195; the final generation's own value, 0.148, is one
+The run converges on `G_ST` at generation 10,109, after about two minutes
+on a busy development machine. Its trailing-window mean `G_ST` is
+0.200 ± 0.007 (one standard error), close to the model's exact
+expectation of 0.195; the final generation's own value, 0.125, is one
 noisy draw.
 
 ## Why the tolerance is 0.02

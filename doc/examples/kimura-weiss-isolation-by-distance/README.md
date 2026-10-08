@@ -7,9 +7,9 @@ Migration is restricted to neighboring demes, and the completed-run GUI
 can group deme-pair genetic correlations by distance to show spatial
 decay.
 
-The run converges at generation 2,532, after about 25 seconds on ordinary
-development hardware, with `D` = 0.614 and `G_ST` = 0.140 (trailing-window
-means 0.568 ± 0.023 and 0.140 ± 0.006). These are values from one locus
+The run converges at generation 2,539, after about a minute on a busy
+development machine, with `D` = 0.475 and `G_ST` = 0.093 (trailing-window
+means 0.516 ± 0.017 and 0.126 ± 0.003). These are values from one locus
 and one seeded run, not ensemble estimates.
 
 ## Why the tolerance is 0.05
