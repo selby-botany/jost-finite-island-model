@@ -1,28 +1,28 @@
 {
   "artifacts": {
     "convergence": {
-      "bytes": 1086348,
-      "sha256": "090f92d084073496f1b7b6f01ef57256c6441126a6ab0a6f631ff169a6b6b8d9"
+      "bytes": 2033515,
+      "sha256": "5fb79900573054b0f35e442f65689121095e4d392f6953690a5aa9f0445cb6ac"
     },
     "pairwise": {
-      "bytes": 804,
-      "sha256": "6870233446d833a3b933abc24913d7aa8e33fc03c520ae75e0fda082c6a8fbd2"
+      "bytes": 810,
+      "sha256": "6788c20a1392abeda7977924d9a3c0c2c85dd6703bba4cd67bff6d6b28079e5d"
     },
     "report": {
-      "bytes": 2318,
-      "sha256": "c8367032472bf992a5b6db278d4231e86f137af3abe65c14abafce340a04ea61"
+      "bytes": 2303,
+      "sha256": "4ecf2236ffb49ed2c112e45d71359ba6707f0b7ebf71682a3313c91190f7fb5d"
     },
     "scatter": {
-      "bytes": 216353,
-      "sha256": "023b4e6c423453dde9f0853cc0ecf6376b0bde601a4ba5408d30dfe03113b431"
+      "bytes": 215598,
+      "sha256": "587d22293df3cbdcf1dc2c05bcb355b7dc60f77dd0be3a395c06db77465e471b"
     },
     "sigma_band_trajectory": {
-      "bytes": 1311,
-      "sha256": "ccb0a5b65da71c68ee2c43ef0929ebf44db30540c63fe69d1a3d9153aca30093"
+      "bytes": 1341,
+      "sha256": "840fcfa141e1764e81a5edb7e2de70797dfd1733b1d589b038ef2dc5a91d5a32"
     },
     "trajectory": {
-      "bytes": 151901441,
-      "sha256": "62648d21b700550b4f5d8b9389aed10ec22419c4ccecda9f3f88e384ae040975"
+      "bytes": 279744637,
+      "sha256": "c0ff27cbf67dfeb84d7924e58d67d3618eb5c267a6896547538963fd71d1fe1b"
     }
   },
   "auto_derived": [
@@ -31,12 +31,12 @@
   ],
   "convergence": {
     "converged": true,
-    "generation": 7460,
-    "generation_count": 7461,
+    "generation": 13909,
+    "generation_count": 13910,
     "reason": "statistic converged",
     "statistic": "D"
   },
-  "ended_at": "2026-10-06T17:55:10.669338Z",
+  "ended_at": "2026-10-08T15:43:15.516644Z",
   "engine_backend": "lineal",
   "equilibrium_final_heterozygosity": null,
   "equilibrium_generation_count": null,
@@ -112,14 +112,14 @@
   "schema_version": 3,
   "sigma_band": {
     "D": {
-      "lower": 0.09357312262053669,
-      "mean": 0.1341621582906373,
-      "sigma": 0.020294517835050308,
-      "upper": 0.1747511939607379
+      "lower": 0.09367867308495673,
+      "mean": 0.1570375917676264,
+      "sigma": 0.03167945934133484,
+      "upper": 0.2203965104502961
     }
   },
   "sigma_band_multiplier": 2.0,
   "sigma_band_window": 30,
   "software_version": "1.2.0",
-  "started_at": "2026-10-06T17:52:15.175133Z"
+  "started_at": "2026-10-08T15:40:05.157150Z"
 }

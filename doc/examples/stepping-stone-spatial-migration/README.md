@@ -7,10 +7,10 @@ neighbors. The `topology: ring` shorthand builds this sparse migration
 graph without writing all 36 matrix entries. Replacing `ring` with
 `linear` removes the wrap-around connection.
 
-The run converges at generation 16,516, after about a minute on ordinary
-development hardware. Its trailing-window mean `D` is 0.132 ± 0.006 (one
-standard error) and its mean `G_ST` 0.058; the final generation's own
-`D`, 0.041, is one noisy draw. In the GUI, the resulting graph has
+The run converges at generation 7,918, after under a minute on ordinary
+development hardware. Its trailing-window mean `D` is 0.133 ± 0.007 (one
+standard error) and its mean `G_ST` 0.057; the final generation's own
+`D`, 0.266, is one noisy draw. In the GUI, the resulting graph has
 distance classes for the isolation-by-distance visualization.
 
 ## Why the tolerance is 0.02

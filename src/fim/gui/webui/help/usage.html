@@ -245,8 +245,8 @@ n_replicates: 1   # a single scalar run; the default (200) would batch
 </code></pre>
 <pre><code class="language-console">fim run stepping-stone.yaml --output results/stepping-stone --quiet
 </code></pre>
-<p>Converges at generation 16,516, after about a minute, with a trailing-window
-mean D of 0.132 ± 0.006. <code>convergence_tolerance: 0.02</code> keeps the run to a
+<p>Converges at generation 7,918, after under a minute, with a trailing-window
+mean D of 0.133 ± 0.007. <code>convergence_tolerance: 0.02</code> keeps the run to a
 minute; at the default 0.01 one locus needs about 32,000 generations (see
 the <a href="#" data-fim-external="https://github.com/selby-botany/jost-finite-island-model/blob/main/doc/examples/stepping-stone-spatial-migration/README.md">example's README</a>).
 Swap <code>topology: ring</code> for
@@ -657,8 +657,8 @@ n_replicates: 1   # a single scalar run; the default (200) would batch
 </code></pre>
 <pre><code class="language-console">fim run sigma-band.yaml --output results/sigma-band --quiet
 </code></pre>
-<p>Converges at generation 7,460, after about 45 seconds, with D = 0.158; the
-following 30-generation extension reports D = 0.134 ± 0.041 (mean ± 2σ).
+<p>Converges at generation 13,909, after about three minutes, with D = 0.163; the
+following 30-generation extension reports D = 0.157 ± 0.063 (mean ± 2σ).
 The example pools eight loci: with one locus, a stretch near fixation can
 look steady for the wrong reason (see the
 <a href="#" data-fim-external="https://github.com/selby-botany/jost-finite-island-model/blob/main/doc/examples/within-run-sigma-band/README.md">example's README</a>). The band's own mean

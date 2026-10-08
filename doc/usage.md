@@ -283,8 +283,8 @@ n_replicates: 1   # a single scalar run; the default (200) would batch
 fim run stepping-stone.yaml --output results/stepping-stone --quiet
 ```
 
-Converges at generation 16,516, after about a minute, with a trailing-window
-mean D of 0.132 ± 0.006. `convergence_tolerance: 0.02` keeps the run to a
+Converges at generation 7,918, after under a minute, with a trailing-window
+mean D of 0.133 ± 0.007. `convergence_tolerance: 0.02` keeps the run to a
 minute; at the default 0.01 one locus needs about 32,000 generations (see
 the [example's README](examples/stepping-stone-spatial-migration/README.md)).
 Swap `topology: ring` for
@@ -759,8 +759,8 @@ n_replicates: 1   # a single scalar run; the default (200) would batch
 fim run sigma-band.yaml --output results/sigma-band --quiet
 ```
 
-Converges at generation 7,460, after about 45 seconds, with D = 0.158; the
-following 30-generation extension reports D = 0.134 ± 0.041 (mean ± 2σ).
+Converges at generation 13,909, after about three minutes, with D = 0.163; the
+following 30-generation extension reports D = 0.157 ± 0.063 (mean ± 2σ).
 The example pools eight loci: with one locus, a stretch near fixation can
 look steady for the wrong reason (see the
 [example's README](examples/within-run-sigma-band/README.md)). The band's own mean
