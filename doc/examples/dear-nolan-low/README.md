@@ -2,8 +2,27 @@
 
 This example implements the low-migration scenario from the Dear-Nolan
 botanical simulations: five demes of 100 individuals each with very low
-migration and negligible mutation. It runs to the population's equilibrium,
-which takes tens of thousands of generations.
+migration and negligible mutation. It is meant to run to the population's
+equilibrium, which takes tens of thousands of generations.
+
+## Status: this example does not yet converge
+
+**This run does not converge under today's convergence rule.** It runs to its
+generation cap (295,390) and reports `converged_on: null` and
+`"reason": "hit the cap"`. The window the rule averages over starts inside
+the transient, before the population has forgotten its starting state. The
+lag-1 standard error the rule uses is too small for a statistic that swings
+this slowly, so the rule keeps growing the window without ever judging `D`
+precise enough.
+
+Jost's published targets for these parameters (d = 5, N = 100, m = 0.0001,
+mu = 0.000001, averaged over 200 runs) are **D ≈ 0.04 and G<sub>ST</sub> ≈
+0.97**. The committed run's window means land close to them (see "Expected
+output"), but the run cannot yet say so on its own authority.
+
+A fix is planned: a redesign of the convergence rule, and a faster
+engine, so that this example finishes in minutes and converges. The
+configuration is left unchanged until then.
 
 ## Biological context
 
@@ -23,7 +42,9 @@ differentiation of allele frequencies, is near zero: it is controlled by
 m / [(d − 1) &mu;] = 25, not by Nm.
 
 Published ensemble values (engineered equilibrium start, multi-locus,
-100 replicates): **G<sub>ST</sub> ≈ 0.970, D ≈ 0.038**.
+100 replicates): **G<sub>ST</sub> ≈ 0.970, D ≈ 0.038**; Jost's published
+targets for the same parameters over 200 runs are D ≈ 0.04 and
+G<sub>ST</sub> ≈ 0.97.
 
 ## Why the run is long
 
@@ -43,11 +64,10 @@ window's own mean is actually known to the configured tolerance — not just
 flat, but precise (see [Convergence defaults](../../convergence.md)'s own
 "Is the reported value actually precise enough?"). Earlier versions stopped
 this scenario after a few hundred generations, on the plateau, with a large
-D. This run watches **D** specifically, and D turns out to be the harder of
-the two statistics to pin down here: its own evidence window grows to
-236,312 generations without quite reaching the requested precision, and the
-run ends honestly reporting the cap, not convergence — see "Expected
-output," below, for what that still says.
+D. This run watches **D** specifically, and D never reaches the requested
+precision here: its own evidence window grows to 236,312 generations
+without getting there, and the run ends at the cap instead of converging
+(see "Status," above, and "Expected output," below).
 
 ## Parameters
 
@@ -72,9 +92,9 @@ fim run doc/examples/dear-nolan-low/config.yaml \
     --output results/dear-nolan-low --quiet
 ```
 
-Takes about 20 to 25 minutes on ordinary development hardware, and longer on a
-busy machine (295,390 generations — the derived cap — of 30 loci), and
-writes a large `trajectory.jsonl`. `results/dear-nolan-low/
+Takes about an hour on a busy development machine (295,390 generations — the
+derived cap — of 30 loci; 3,583 s with a load average of about 15), and less
+on an idle one, and writes a large `trajectory.jsonl`. `results/dear-nolan-low/
 report.json` will match `report.json` in this directory exactly.
 
 ## Expected output
@@ -84,19 +104,19 @@ report.json` will match `report.json` in this directory exactly.
   "converged": false,
   "converged_on": null,
   "generation": 295390,
-  "G_ST": 0.9487036088409319,
-  "D": 0.06748576189094388,
+  "G_ST": 0.9896728676778502,
+  "D": 0.046496707389133626,
   "reason": "hit the cap",
   "window_statistics": {
     "D": {
-      "mean": 0.0527925006091829,
-      "standard_error": 0.010682169871340578,
+      "mean": 0.0426709810456776,
+      "standard_error": 0.008094012422523073,
       "noise_adequate": false,
       "window": 236312
     },
     "G_ST": {
-      "mean": 0.9688172150934331,
-      "standard_error": 0.002533421965157816,
+      "mean": 0.9654562723780273,
+      "standard_error": 0.0033129065168817744,
       "noise_adequate": true,
       "window": 59078
     }
@@ -109,19 +129,19 @@ in this directory has every field, every recorded statistic's own
 `window_statistics` entry, and full floating-point precision.)
 
 The run ends at the cap, generation 295,390, so `converged_on` is `null`:
-it converged on nothing. That is because **D** — the statistic
-this example actually watches — is the more stubborn of the two to pin
-down: its own evidence window grew to 236,312 generations, and its
-standard error, 0.0107, is still a little over twice the 0.005 the
-requested tolerance demands. Its window mean, **0.0528**, is nonetheless
-close to the published ensemble D ≈ 0.038, and closer than the final
-generation's own single point value, 0.0675.
+it converged on nothing. That is because **D** — the statistic this example
+actually watches — never became precise enough for the rule: its evidence
+window grew to 236,312 generations, and its standard error, 0.0081, is still
+about 1.6 times the 0.005 the requested tolerance demands. Its window mean,
+**0.0427**, is nonetheless close to Jost's published D ≈ 0.04. The final
+generation's own value, 0.0465, is near it too, but a single generation is
+one draw, not an averaged estimate.
 
 `window_statistics.G_ST` tells a different story, computed the same way
 (the fixed, un-grown 59,078-generation window, since only D gated this
 run's own stop decision) but already `noise_adequate: true`: G<sub>ST</sub>'s
-own mean, **0.969**, matches the published G<sub>ST</sub> ≈ 0.970 closely, and
-its own noise (`effective_sample_size` near 292, against D's 8.5 at a
+own mean, **0.965**, is close to Jost's published G<sub>ST</sub> ≈ 0.97, and
+its own noise (`effective_sample_size` near 302, against D's 10.6 at a
 window 4x longer) is far smaller here — D and G<sub>ST</sub> are not equally
 noisy for this scenario, even though both are computed from the same
 identity matrix. H<sub>S</sub> ≈ 0.001 and H<sub>T</sub> ≈ 0.03 (also
