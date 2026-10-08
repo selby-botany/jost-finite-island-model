@@ -11,9 +11,12 @@ The manifest records the expanded per-locus rates, 0.0009995 for the
 50-base locus and 0.0099503 for the 500-base one. This demonstrates
 configuration behavior rather than a particular literature result.
 
-The run converges at generation 7,481, after about 30 seconds on
-ordinary development hardware, with a trailing-window mean `D` of
-0.220 ± 0.011 (one standard error) pooled over both loci.
+The run converges at generation 231, after a few seconds on ordinary
+development hardware, with a trailing-window mean `D` of 0.128 ± 0.009
+(one standard error) pooled over both loci. Generation 231 is the first
+generation its 232-generation window can fill, so the window still covers
+the approach from the starting state; treat that `D` as an early value,
+not an equilibrium estimate.
 
 ## Why the tolerance is 0.03
 

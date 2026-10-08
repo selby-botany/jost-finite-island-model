@@ -13,11 +13,17 @@ The ancestral phase runs for a burn-in derived from the model: with
 `equilibrium_convergence_tolerance: 0.01`, the 600 ancestral gene copies
 need 1,256 generations. The configuration allows at most 2,000
 (`equilibrium_max_generations`); a burn-in longer than that cap is an
-error, reported before anything is simulated. The main run then
-converges at generation 4,238, after about 35 seconds on ordinary
-development hardware, with a trailing-window mean `D` of 0.279 ± 0.014
-(one standard error), close to the 0.286 that the island model's
-identity recursion predicts for these parameters.
+error, reported before anything is simulated. The ancestral phase is
+saved, every generation of it, in `equilibrium_trajectory.jsonl` beside
+the main run's `trajectory.jsonl`; this is the only example that writes
+that file (see [`equilibrium_trajectory.jsonl`](../../usage.md#equilibrium_trajectoryjsonl)).
+The main run then converges at generation 1,374, with a 924-generation
+evidence window, after about half a minute on a busy
+development machine. Its trailing-window mean `D` is 0.241 ± 0.014 (one
+standard error), below the 0.287 that the island model's identity
+recursion predicts for these parameters. The gap is larger than the
+reported standard error suggests: the eight pooled loci still swing
+slowly, and a window this short is one draw from those swings.
 
 ## Why eight loci and a tolerance of 0.03
 
@@ -28,7 +34,7 @@ mean is known to half the tolerance: at the default 0.01 it reached the
 200,000-generation cap without getting there, and even at 0.05 it needed
 about 30,000 generations and two minutes. Eight pooled loci average those
 swings, and 0.03 keeps the run under a minute while its window still
-starts well after the founding generation. The founder effect this
+starts after the founding generation. The founder effect this
 example shows is unchanged: it comes from the split, not from the
 number of loci.
 

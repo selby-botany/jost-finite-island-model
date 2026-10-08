@@ -8,9 +8,9 @@ configuration selects `finite_alleles` and a length-3 locus, which has
 mutation rate, mutations can recur to states already present in the
 population during an interactive run.
 
-The run converges at generation 4,521, after about 20 seconds on ordinary
-development hardware. Its trailing-window mean `D` is 0.609 ± 0.010 (one
-standard error); the final generation's own value is 0.758. This is a
+The run converges at generation 8,977, after about a minute on a busy
+development machine. Its trailing-window mean `D` is 0.611 ± 0.006 (one
+standard error); the final generation's own value is 0.862. This is a
 small illustration of recurrent mutation in a finite state space, not a
 distance-based stepwise mutation model.
 

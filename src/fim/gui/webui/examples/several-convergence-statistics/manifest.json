@@ -1,24 +1,24 @@
 {
   "artifacts": {
     "convergence": {
-      "bytes": 365439,
-      "sha256": "e0e592692d03374efaca0594320edd67c6e8f862f8eb247decd4712bb6f63f15"
+      "bytes": 735823,
+      "sha256": "d994ca9c6040878f953063366ed586d22fee99e2563af509c8b4bc7b40f83d54"
     },
     "pairwise": {
-      "bytes": 523,
-      "sha256": "3286065237bf475d827f72162547f3a334866afeb411f5df98372c514c16936d"
+      "bytes": 520,
+      "sha256": "01c2f952aa24be4982c60d7eb8e98655fa0ba6b2cb5c4981c8e9fdf544b6b6a5"
     },
     "report": {
-      "bytes": 2309,
-      "sha256": "c4551e4f06c395ef1e7361d2f68db345e6983bfc34d1d7df4d599d6ef1da15b2"
+      "bytes": 2320,
+      "sha256": "f62737d04760fe29d52d17e2c1e5530590b48e00b537afc11eaf43d121c52492"
     },
     "scatter": {
-      "bytes": 124822,
-      "sha256": "ca2547a969deec09bd4dd288ce10078398fd89ee41225afd3bb2993f08122583"
+      "bytes": 124258,
+      "sha256": "be7ca4fbb03edafc1c44d5999b35fd52ec80eb8a64c4bc69e2dcd9e98d0548c7"
     },
     "trajectory": {
-      "bytes": 4350854,
-      "sha256": "61de59a4918cbba8b91115544c07c41ae5dabe8404a69eefe8632c3475642eb4"
+      "bytes": 9107351,
+      "sha256": "6270ff2b9a2384d61d5adbb20194c4a21f02ab89f3e36cc57e69331e3c81d4ed"
     }
   },
   "auto_derived": [
@@ -27,15 +27,15 @@
   ],
   "convergence": {
     "converged": true,
-    "generation": 3033,
-    "generation_count": 3034,
+    "generation": 6059,
+    "generation_count": 6060,
     "reason": "statistic converged",
     "statistic": [
       "D",
       "G_ST"
     ]
   },
-  "ended_at": "2026-10-06T17:46:24.120294Z",
+  "ended_at": "2026-10-08T15:50:22.743286Z",
   "engine_backend": "lineal",
   "equilibrium_final_heterozygosity": null,
   "equilibrium_generation_count": null,
@@ -86,5 +86,5 @@
   "sigma_band_multiplier": null,
   "sigma_band_window": null,
   "software_version": "1.2.0",
-  "started_at": "2026-10-06T17:45:56.691089Z"
+  "started_at": "2026-10-08T15:49:52.693673Z"
 }
