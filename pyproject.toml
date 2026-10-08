@@ -323,6 +323,15 @@ source = ["fim"]
 fail_under = 90
 show_missing = true
 skip_covered = true
+# Backend V's Numba kernels run as machine code, which coverage.py cannot
+# trace, so every statement of the module would count as missed however
+# thoroughly it is tested. Their proof is exactness, not line coverage:
+# `test/model/test_vector_kernels.py` fuzzes each numeric primitive against
+# the Python original it copies, and `test_vector_block.py` and
+# `test/engine/test_vector_parity.py` compare complete row streams with
+# Backends L and G bit for bit. The Python around them (`vector_block`) is
+# measured as usual.
+omit = ["src/fim/model/vector_kernels.py", "*/fim/model/vector_kernels.py"]
 exclude_also = [
     "if TYPE_CHECKING:",
     "if __name__ == .__main__.:",
