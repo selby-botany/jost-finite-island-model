@@ -109,6 +109,13 @@ setField('mu_value', '0.01');
 setField('locus_lengths', '200');
 """
 
+# Seed 20260815 for the G_ST row-toggle and stats-scrubber tests: since
+# the textbook per-copy mutation step changed the random stream, seed
+# 20260814's tiny run shows D as 0.00 at both generation 0 and the end,
+# and hiding its G_ST row removes no pixels, so neither test has
+# anything to observe. The other tests keep 20260814.
+_SET_TINY_FIELDS_SEED_20260815 = _SET_TINY_FIELDS + "setField('seed', '20260815');\n"
+
 # A real, previously-reproduced defect closed by every test below that
 # requests `unreachable_convergence_run_settings` (`conftest.py`): the
 # starter form's own defaults (`d=20`) were assumed, in an earlier
@@ -513,7 +520,8 @@ def test_trajectory_row_toggle_hides_and_restores_a_curves_own_pixels(
         try:
             wait_for_run_view_ready(window)
             window.evaluate_js(
-                _SET_TINY_FIELDS + "document.getElementById('run-button').click();"
+                _SET_TINY_FIELDS_SEED_20260815
+                + "document.getElementById('run-button').click();"
             )
             wait_or_fail(done_event, "run end (done, cancelled or error message)")
             wait_for_canvas_settled(window, "run-trajectory-canvas")

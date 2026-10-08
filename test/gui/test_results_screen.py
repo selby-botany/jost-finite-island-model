@@ -88,6 +88,13 @@ setField('mu_value', '0.01');
 setField('locus_lengths', '200');
 """
 
+# Seed 20260815 for the G_ST row-toggle and stats-scrubber tests: since
+# the textbook per-copy mutation step changed the random stream, seed
+# 20260814's tiny run shows D as 0.00 at both generation 0 and the end,
+# and hiding its G_ST row removes no pixels, so neither test has
+# anything to observe. The other tests keep 20260814.
+_SET_TINY_FIELDS_SEED_20260815 = _SET_TINY_FIELDS + "setField('seed', '20260815');\n"
+
 
 def test_a_completed_run_renders_the_run_view(
     fast_scalar_run_settings: Path, window: webview.Window, drive: Callable[..., Any]
@@ -2164,7 +2171,7 @@ def test_scrubbing_a_completed_scalar_run_moves_every_stats_row(
         window,
         ready=_INPUT_SCREEN_READY,
         trigger=(
-            _SET_TINY_FIELDS
+            _SET_TINY_FIELDS_SEED_20260815
             + "document.getElementById('run-button').click(); "
             + "const pollStats = () => { "
             + "if (window.fim.getRunViewState() === 'completed' && "
