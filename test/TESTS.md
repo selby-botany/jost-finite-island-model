@@ -160,6 +160,7 @@ Every test module, fixture, and test function documented here in full; `doc/fim-
   - [`test_sdist_contents`](#validation.test_sdist_contents)
   - [`test_simulator_equilibrium`](#validation.test_simulator_equilibrium)
   - [`test_test_docs`](#validation.test_test_docs)
+  - [`test_vector_statistical`](#validation.test_vector_statistical)
   - [`test_webui_assets`](#validation.test_webui_assets)
   - [`test_workflow_pins`](#validation.test_workflow_pins)
 - [`test/viz/`](#group-viz)
@@ -36463,6 +36464,70 @@ Compared against a normal, ordinary-environment run rather than the
 committed `test/TESTS.md` -- freshness of the committed file against
 the real test tree is `pre-push`'s own job; this test's own job is
 narrower: confirm the two environments produce identical output.
+
+<a id="validation.test_vector_statistical"></a>
+
+# validation.test\_vector\_statistical
+
+Backend V reproduces the textbook infinite-alleles recursions, statistically.
+
+The exactness tests (`test/model/test_vector_block.py`,
+`test/engine/test_vector_parity.py`) prove Backend V equals Backends L and
+G bit for bit. This file checks the other half: that the model all three
+implement is the textbook one. Each case runs many independent loci in one
+block (every locus is an independent replicate of the same process),
+estimates an identity probability, and compares it with the exact expected
+value, in units of its standard error across loci.
+
+1. One population (`d = 1`), three mutation rates: the probability that two
+   distinct gene copies are identical, `sum n_i (n_i - 1) / (N (N - 1))`,
+   time-averaged at equilibrium, against the fixed point of
+   `F' = (1 - mu)^2 [1/N + (1 - 1/N) F]`.
+2. An island model (`d = 5`, `N = 100`, `m = 0.01`, `mu = 0.001`) from a
+   monomorphic start: mean within- and between-deme identity at several
+   generations against `fim.statistics.identity_recursion`, and the pooled
+   `D = 1 - between / within`.
+3. The dear-nolan-low worked example's own transient (`d = 5`,
+   `m = 0.0001`, `mu = 0.000001`, two founding alleles with a
+   Dirichlet(1, 1) frequency start).
+
+Every run is seeded, so each outcome is a pure function of the commit; the
+bound, |z| below 4, is wide enough that a correct implementation passes
+for any reasonable seed and a biased one (a mutation step that adds or
+loses identity at the `1 / N` scale) fails.
+
+<a id="validation.test_vector_statistical.test_one_population_identity_matches_the_textbook_fixed_point"></a>
+
+#### test\_one\_population\_identity\_matches\_the\_textbook\_fixed\_point
+
+```python
+@pytest.mark.parametrize("mu", [0.0005, 0.0025, 0.01])
+def test_one_population_identity_matches_the_textbook_fixed_point(
+        mu: float) -> None
+```
+
+Two distinct copies are identical with the recursion's equilibrium odds.
+
+<a id="validation.test_vector_statistical.test_island_model_identities_follow_the_recursion_from_a_monomorphic_start"></a>
+
+#### test\_island\_model\_identities\_follow\_the\_recursion\_from\_a\_monomorphic\_start
+
+```python
+def test_island_model_identities_follow_the_recursion_from_a_monomorphic_start(
+) -> (None)
+```
+
+Within, between and pooled `D` track `identity_recursion` at 3 checkpoints.
+
+<a id="validation.test_vector_statistical.test_dear_nolan_low_transient_follows_the_recursion"></a>
+
+#### test\_dear\_nolan\_low\_transient\_follows\_the\_recursion
+
+```python
+def test_dear_nolan_low_transient_follows_the_recursion() -> None
+```
+
+The worked example's own start and rates: transient to generation 5,000.
 
 <a id="validation.test_webui_assets"></a>
 
