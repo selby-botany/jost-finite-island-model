@@ -566,6 +566,7 @@ Return to the [source-tree orientation](../README.md) or the [developer guide](.
   * [supersede\_run](#fim.persistence.groups.supersede_run)
 * [fim.persistence.jsonl\_store](#fim.persistence.jsonl_store)
   * [EQUILIBRIUM\_TRAJECTORY\_FILENAME](#fim.persistence.jsonl_store.EQUILIBRIUM_TRAJECTORY_FILENAME)
+  * [encode\_rows](#fim.persistence.jsonl_store.encode_rows)
   * [JSONLTrajectoryStore](#fim.persistence.jsonl_store.JSONLTrajectoryStore)
     * [\_\_init\_\_](#fim.persistence.jsonl_store.JSONLTrajectoryStore.__init__)
     * [\_\_enter\_\_](#fim.persistence.jsonl_store.JSONLTrajectoryStore.__enter__)
@@ -16754,6 +16755,49 @@ Written beside the run's own `trajectory.jsonl` (`JSONLTrajectoryStore.
 equilibrium_store`), in the same row schema, numbered by the ancestral
 phase's own generation counter.
 
+<a id="fim.persistence.jsonl_store.encode_rows"></a>
+
+#### encode\_rows
+
+```python
+def encode_rows(rows: Iterable[Mapping[str, Any]]) -> str
+```
+
+Return the JSON Lines text for ``rows``, byte for byte what `json.dumps` gives.
+
+Every line is ``json.dumps(row, sort_keys=True, separators=(",", ":"),
+allow_nan=False)`` followed by a newline. For a trajectory row (exactly
+the keys ``allele_id``, ``deme``, ``frequency``, ``generation``,
+``locus_id`` and ``run_id``, each integer a plain `int` and the frequency
+a finite `float`) the line is built directly, with the keys already in
+sorted order: `json.dumps` costs about 30 microseconds per locus
+generation of a 400-locus model, 74 percent of the write cost once the
+file is kept open, and this costs about a sixth of that. The pieces are
+the ones `json` itself uses (`int.__repr__`, `float.__repr__`, and its
+own ASCII string encoder, so escapes, non-ASCII text and lone surrogates
+come out identical).
+
+Any other row falls back to `json.dumps`: a different key set, a `bool`
+or a numpy integer where an `int` belongs, a non-finite frequency (which
+then raises the same ``ValueError`` as before). The fast path therefore
+never changes what is written, only how quickly; the property tests in
+`test/persistence/test_jsonl_encoder.py` pin that.
+
+**Arguments**:
+
+- `rows` - The rows of one generation.
+
+
+**Returns**:
+
+  All lines, each ending in a newline.
+
+
+**Raises**:
+
+- `ValueError` - If a frequency is not finite.
+- `TypeError` - If a value is not JSON serializable.
+
 <a id="fim.persistence.jsonl_store.JSONLTrajectoryStore"></a>
 
 ## JSONLTrajectoryStore Objects
@@ -16881,9 +16925,10 @@ malformed row is rejected up front rather than partially
 written to disk — `validate=False` skips that for a caller
 that already vouches for its own rows (`fim.persistence.store`'s
 own top docstring has the full reasoning and which callers this
-applies to; `json.dumps`'s own ``allow_nan=False`` below still
-catches a non-finite frequency either way, as a last resort,
-not a substitute for real validation on an untrusted row).
+applies to; the encoder (`encode_rows`, whose ``allow_nan=False``
+rule is `json.dumps`'s own) still catches a non-finite frequency
+either way, as a last resort, not a substitute for real
+validation on an untrusted row).
 ``handle.flush()`` hands this generation's bytes from Python's
 own internal buffer to the operating system right away, rather
 than leaving them sitting in memory until the file is

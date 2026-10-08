@@ -330,6 +330,20 @@ while the run is in progress. The lifecycle rules:
 - Tests prove a real entry point leaves nothing open with
   `conftest.tracked_jsonl_stores` and `assert_none_open`.
 
+Rows are encoded by `fim.persistence.jsonl_store.encode_rows`, not by a
+`json.dumps` call per row (about 30 microseconds per locus generation at 400
+loci, against about 5). For a row with exactly the six trajectory keys, plain
+`int` ids and a finite `float` frequency it builds the line directly, keys
+already sorted, using the pieces `json` itself uses (`int.__repr__`,
+`float.__repr__` and `json.encoder.encode_basestring_ascii`). Any other row, or
+a non-finite frequency, goes through `json.dumps(row, sort_keys=True,
+separators=(",", ":"), allow_nan=False)`, so the file and every error are
+unchanged. If the row schema changes (a field, a key, a type), update
+`encode_rows` or its fast path will quietly stop applying; the byte-identity
+tests in `test/persistence/test_jsonl_encoder.py` (a property test, a seeded
+bulk comparison, and the whole row streams of real runs) fail on any
+difference from `json.dumps`.
+
 A replicate batch needs one store *per replicate*, not one shared instance —
 mandatory once max_workers is set, since a single store object cannot
 cross a worker-process boundary. `fim`'s store_factory builds one given a

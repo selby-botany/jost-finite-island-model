@@ -18,6 +18,7 @@ from __future__ import annotations
 import contextlib
 import json
 import logging
+import math
 import os
 import threading
 from collections.abc import Iterable, Iterator, Mapping
@@ -36,6 +37,114 @@ Written beside the run's own `trajectory.jsonl` (`JSONLTrajectoryStore.
 equilibrium_store`), in the same row schema, numbered by the ancestral
 phase's own generation counter.
 """
+
+
+_ROW_KEYS: Final = frozenset(
+    {"allele_id", "deme", "frequency", "generation", "locus_id", "run_id"}
+)
+"""The one key set the fast row encoder (`encode_rows`) handles."""
+
+_ROW_FIELD_COUNT: Final = len(_ROW_KEYS)
+
+_encode_run_id = json.encoder.encode_basestring_ascii
+"""The string encoder `json.dumps` itself uses (ASCII-only output)."""
+
+_float_repr = float.__repr__
+"""What `json` calls for every float, including float subclasses."""
+
+
+def _json_line(row: Mapping[str, Any]) -> str:
+    """Return one row's line exactly as the general JSON encoder writes it.
+
+    The reference behavior `encode_rows` reproduces, and its fallback for
+    any row it does not recognize (and so the source of every error a bad
+    row raises).
+
+    Args:
+        row: Any mapping `json.dumps` accepts.
+
+    Returns:
+        The compact, key-sorted JSON text plus a newline.
+
+    Raises:
+        ValueError: If a float is not finite (``allow_nan=False``).
+        TypeError: If a value is not JSON serializable.
+    """
+    return (
+        json.dumps(row, sort_keys=True, separators=(",", ":"), allow_nan=False) + "\n"
+    )
+
+
+def encode_rows(rows: Iterable[Mapping[str, Any]]) -> str:
+    """Return the JSON Lines text for ``rows``, byte for byte what `json.dumps` gives.
+
+    Every line is ``json.dumps(row, sort_keys=True, separators=(",", ":"),
+    allow_nan=False)`` followed by a newline. For a trajectory row (exactly
+    the keys ``allele_id``, ``deme``, ``frequency``, ``generation``,
+    ``locus_id`` and ``run_id``, each integer a plain `int` and the frequency
+    a finite `float`) the line is built directly, with the keys already in
+    sorted order: `json.dumps` costs about 30 microseconds per locus
+    generation of a 400-locus model, 74 percent of the write cost once the
+    file is kept open, and this costs about a sixth of that. The pieces are
+    the ones `json` itself uses (`int.__repr__`, `float.__repr__`, and its
+    own ASCII string encoder, so escapes, non-ASCII text and lone surrogates
+    come out identical).
+
+    Any other row falls back to `json.dumps`: a different key set, a `bool`
+    or a numpy integer where an `int` belongs, a non-finite frequency (which
+    then raises the same ``ValueError`` as before). The fast path therefore
+    never changes what is written, only how quickly; the property tests in
+    `test/persistence/test_jsonl_encoder.py` pin that.
+
+    Args:
+        rows: The rows of one generation.
+
+    Returns:
+        All lines, each ending in a newline.
+
+    Raises:
+        ValueError: If a frequency is not finite.
+        TypeError: If a value is not JSON serializable.
+    """
+    lines: list[str] = []
+    append = lines.append
+    # Rows of one generation share a run id; encode it once, not per row.
+    cached_run_id: object = None
+    cached_encoded = ""
+    for row in rows:
+        if len(row) != _ROW_FIELD_COUNT or type(row) is not dict:
+            append(_json_line(row))
+            continue
+        try:
+            allele_id = row["allele_id"]
+            deme = row["deme"]
+            frequency = row["frequency"]
+            generation = row["generation"]
+            locus_id = row["locus_id"]
+            run_id = row["run_id"]
+        except KeyError:
+            append(_json_line(row))
+            continue
+        if (
+            type(allele_id) is not int
+            or type(deme) is not int
+            or type(generation) is not int
+            or type(locus_id) is not int
+            or type(frequency) is not float
+            or not math.isfinite(frequency)
+            or type(run_id) is not str
+        ):
+            append(_json_line(row))
+            continue
+        if run_id is not cached_run_id:
+            cached_run_id = run_id
+            cached_encoded = _encode_run_id(run_id)
+        append(
+            f'{{"allele_id":{allele_id},"deme":{deme},'
+            f'"frequency":{_float_repr(frequency)},"generation":{generation},'
+            f'"locus_id":{locus_id},"run_id":{cached_encoded}}}\n'
+        )
+    return "".join(lines)
 
 
 class JSONLTrajectoryStore:
@@ -145,9 +254,10 @@ class JSONLTrajectoryStore:
         written to disk — `validate=False` skips that for a caller
         that already vouches for its own rows (`fim.persistence.store`'s
         own top docstring has the full reasoning and which callers this
-        applies to; `json.dumps`'s own ``allow_nan=False`` below still
-        catches a non-finite frequency either way, as a last resort,
-        not a substitute for real validation on an untrusted row).
+        applies to; the encoder (`encode_rows`, whose ``allow_nan=False``
+        rule is `json.dumps`'s own) still catches a non-finite frequency
+        either way, as a last resort, not a substitute for real
+        validation on an untrusted row).
         ``handle.flush()`` hands this generation's bytes from Python's
         own internal buffer to the operating system right away, rather
         than leaving them sitting in memory until the file is
@@ -171,16 +281,7 @@ class JSONLTrajectoryStore:
             normalized_rows = [cast("TrajectoryRow", dict(row)) for row in rows]
         if not normalized_rows:
             raise ValueError("a generation must contain at least one row")
-        payload = "".join(
-            json.dumps(
-                row,
-                sort_keys=True,
-                separators=(",", ":"),
-                allow_nan=False,
-            )
-            + "\n"
-            for row in normalized_rows
-        )
+        payload = encode_rows(normalized_rows)
         with self._lock:
             handle = self._open_handle()
             try:

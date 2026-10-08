@@ -890,7 +890,9 @@ project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   and still flushes every generation, so an interrupted run keeps every
   complete line and the live view still sees each generation. The files are
   byte for byte the same. A run releases the handle when it ends, fails, or
-  is cancelled, before its output directory is published.
+  is cancelled, before its output directory is published. Rows are also
+  encoded without calling `json.dumps` for each one (about six times faster),
+  with identical output.
 
 - **Loading a configuration no longer changes your Settings.** In the
   desktop app, loading an example, a preset, a YAML file, or a saved run

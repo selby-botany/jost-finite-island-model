@@ -118,6 +118,7 @@ Every test module, fixture, and test function documented here in full; `doc/fim-
   - [`test_vectorized`](#model.test_vectorized)
 - [`test/persistence/`](#group-persistence)
   - [`test_groups`](#persistence.test_groups)
+  - [`test_jsonl_encoder`](#persistence.test_jsonl_encoder)
   - [`test_jsonl_lifecycle`](#persistence.test_jsonl_lifecycle)
   - [`test_manifest`](#persistence.test_manifest)
   - [`test_pairwise_file`](#persistence.test_pairwise_file)
@@ -28019,6 +28020,302 @@ def test_experiments_containing_study_lists_each_holder(
 ```
 
 Every Experiment listing the Study is returned, and no other.
+
+<a id="persistence.test_jsonl_encoder"></a>
+
+# persistence.test\_jsonl\_encoder
+
+Byte-identity tests for `fim.persistence.jsonl_store.encode_rows`.
+
+`encode_rows` builds a trajectory row's JSON line by hand instead of
+calling `json.dumps` (about six times faster). It is only acceptable if
+the file is byte for byte what `json.dumps(row, sort_keys=True,
+separators=(",", ":"), allow_nan=False)` always wrote. Three independent
+bodies of evidence pin that, none of which depends on the clock or the
+machine:
+
+- a Hypothesis property (derandomized by this suite's profile) over rows
+  with edge-case floats, integers, and run ids;
+- a seeded bulk comparison of tens of thousands of rows, including every
+  float bit pattern class (subnormals, huge, tiny, negative zero);
+- the complete row streams of real runs (a single lineal run, an
+  equilibrium-split run with its companion store, batches on two engines,
+  and Backend V), compared against `json.dumps` of the very rows the
+  engine handed to the store.
+
+Rows that are not the known shape must fall back to `json.dumps`, so every
+outcome, including its exception, matches; that is tested too.
+
+<a id="persistence.test_jsonl_encoder.EDGE_FLOATS"></a>
+
+#### EDGE\_FLOATS
+
+Floats whose `repr` is a known hazard: exponent form, rounding, signs.
+
+<a id="persistence.test_jsonl_encoder.EDGE_RUN_IDS"></a>
+
+#### EDGE\_RUN\_IDS
+
+Run ids that exercise every escape `json` makes (it escapes non-ASCII).
+
+<a id="persistence.test_jsonl_encoder.test_property_encode_rows_is_byte_identical_to_json_dumps"></a>
+
+#### test\_property\_encode\_rows\_is\_byte\_identical\_to\_json\_dumps
+
+```python
+@settings(max_examples=600)
+@given(_rows())
+def test_property_encode_rows_is_byte_identical_to_json_dumps(
+        rows: list[dict[str, Any]]) -> None
+```
+
+For any known-shape generation the bytes equal `json.dumps`'s.
+
+<a id="persistence.test_jsonl_encoder.test_property_encode_rows_handles_alternating_run_ids"></a>
+
+#### test\_property\_encode\_rows\_handles\_alternating\_run\_ids
+
+```python
+def test_property_encode_rows_handles_alternating_run_ids() -> None
+```
+
+The per-call run-id cache never leaks one row's id into the next.
+
+<a id="persistence.test_jsonl_encoder.BULK_ROW_COUNT"></a>
+
+#### BULK\_ROW\_COUNT
+
+Rows compared in `test_seeded_bulk_rows_are_byte_identical`.
+
+<a id="persistence.test_jsonl_encoder.test_seeded_bulk_rows_are_byte_identical"></a>
+
+#### test\_seeded\_bulk\_rows\_are\_byte\_identical
+
+```python
+def test_seeded_bulk_rows_are_byte_identical() -> None
+```
+
+Tens of thousands of seeded random rows encode exactly as `json.dumps`.
+
+Seeded with a literal, so the same commit always compares the same rows.
+
+<a id="persistence.test_jsonl_encoder.test_validated_rows_round_trip_through_normalize_row"></a>
+
+#### test\_validated\_rows\_round\_trip\_through\_normalize\_row
+
+```python
+def test_validated_rows_round_trip_through_normalize_row() -> None
+```
+
+`validate=True` output equals `json.dumps` of the normalized rows.
+
+<a id="persistence.test_jsonl_encoder._Weight"></a>
+
+## \_Weight Objects
+
+```python
+class _Weight(float)
+```
+
+A `float` subclass with its own `repr`, as numpy's floats have.
+
+<a id="persistence.test_jsonl_encoder._Weight.__repr__"></a>
+
+#### \_\_repr\_\_
+
+```python
+def __repr__() -> str
+```
+
+Differ from `float.__repr__`, which is what `json` uses.
+
+<a id="persistence.test_jsonl_encoder.test_unrecognized_rows_fall_back_with_json_dumps_own_outcome"></a>
+
+#### test\_unrecognized\_rows\_fall\_back\_with\_json\_dumps\_own\_outcome
+
+```python
+@pytest.mark.parametrize(
+    "row",
+    [
+        _row(allele_id=True),
+        _row(deme=False),
+        _row(generation=_Color.RED),
+        _row(allele_id=np.int64(5)),  # type: ignore[arg-type]
+        _row(frequency=np.float64(0.25)),
+        _row(frequency=_Weight(0.25)),
+        _row(frequency=1),  # an int where a float belongs
+        _row(frequency=float("nan")),
+        _row(frequency=float("inf")),
+        _row(frequency=float("-inf")),
+        _row(run_id=_Name("named")),
+        _row(run_id=7),  # type: ignore[arg-type]
+        {
+            **_row(), "extra": 1
+        },
+        {
+            key: value
+            for key, value in _row().items() if key != "deme"
+        },
+        {},
+        {
+            **_row(), "deme": None
+        },
+    ],
+    ids=[
+        "bool-int",
+        "bool-int-false",
+        "int-enum",
+        "numpy-int",
+        "numpy-float",
+        "float-subclass",
+        "int-frequency",
+        "nan",
+        "inf",
+        "-inf",
+        "str-subclass",
+        "int-run-id",
+        "extra-key",
+        "missing-key",
+        "empty-row",
+        "none-value",
+    ],
+)
+def test_unrecognized_rows_fall_back_with_json_dumps_own_outcome(
+        row: dict[str, Any]) -> None
+```
+
+Anything off the known shape yields what `json.dumps` yields, errors too.
+
+<a id="persistence.test_jsonl_encoder.test_non_finite_frequency_raises_the_same_error_as_before"></a>
+
+#### test\_non\_finite\_frequency\_raises\_the\_same\_error\_as\_before
+
+```python
+def test_non_finite_frequency_raises_the_same_error_as_before() -> None
+```
+
+`allow_nan=False` still rejects a non-finite frequency, with its text.
+
+<a id="persistence.test_jsonl_encoder.test_a_non_dict_mapping_is_not_encoded_as_a_row"></a>
+
+#### test\_a\_non\_dict\_mapping\_is\_not\_encoded\_as\_a\_row
+
+```python
+def test_a_non_dict_mapping_is_not_encoded_as_a_row() -> None
+```
+
+A `Mapping` that is not a `dict` is left to `json.dumps` (a `TypeError`).
+
+<a id="persistence.test_jsonl_encoder.test_an_empty_iterable_encodes_to_nothing"></a>
+
+#### test\_an\_empty\_iterable\_encodes\_to\_nothing
+
+```python
+def test_an_empty_iterable_encodes_to_nothing() -> None
+```
+
+No rows, no bytes (the store rejects an empty generation itself).
+
+<a id="persistence.test_jsonl_encoder._RecordingStore"></a>
+
+## \_RecordingStore Objects
+
+```python
+class _RecordingStore(JSONLTrajectoryStore)
+```
+
+A real store that also keeps a copy of every row it was handed.
+
+The rows are captured before the store encodes them, so they are
+exactly the dicts `encode_rows` receives from the engine.
+
+<a id="persistence.test_jsonl_encoder._RecordingStore.__init__"></a>
+
+#### \_\_init\_\_
+
+```python
+def __init__(path: Path | str) -> None
+```
+
+Bind to `path` with an empty capture list.
+
+<a id="persistence.test_jsonl_encoder._RecordingStore.write_generation"></a>
+
+#### write\_generation
+
+```python
+def write_generation(run_id: str,
+                     generation: int,
+                     rows: Iterable[Mapping[str, Any]],
+                     *,
+                     validate: bool = True) -> None
+```
+
+Capture the generation's rows, then write them as usual.
+
+<a id="persistence.test_jsonl_encoder._RecordingStore.equilibrium_store"></a>
+
+#### equilibrium\_store
+
+```python
+def equilibrium_store(run_id: str) -> JSONLTrajectoryStore
+```
+
+Return a recording companion, so the ancestral stream is checked too.
+
+<a id="persistence.test_jsonl_encoder.test_real_single_lineal_run_stream_is_byte_identical"></a>
+
+#### test\_real\_single\_lineal\_run\_stream\_is\_byte\_identical
+
+```python
+def test_real_single_lineal_run_stream_is_byte_identical(
+        tmp_path: Path) -> None
+```
+
+A whole single run's trajectory file equals `json.dumps` of its rows.
+
+<a id="persistence.test_jsonl_encoder.test_real_equilibrium_split_streams_are_byte_identical"></a>
+
+#### test\_real\_equilibrium\_split\_streams\_are\_byte\_identical
+
+```python
+def test_real_equilibrium_split_streams_are_byte_identical(
+        tmp_path: Path) -> None
+```
+
+Both files of an equilibrium-split run, the companion's included.
+
+<a id="persistence.test_jsonl_encoder.test_real_batch_streams_are_byte_identical"></a>
+
+#### test\_real\_batch\_streams\_are\_byte\_identical
+
+```python
+@pytest.mark.parametrize("backend", ["lineal", "generational"])
+def test_real_batch_streams_are_byte_identical(tmp_path: Path,
+                                               backend: str) -> None
+```
+
+Every replicate's file in a batch, on both in-process engine paths.
+
+<a id="persistence.test_jsonl_encoder.test_real_backend_v_stream_is_byte_identical"></a>
+
+#### test\_real\_backend\_v\_stream\_is\_byte\_identical
+
+```python
+def test_real_backend_v_stream_is_byte_identical(tmp_path: Path) -> None
+```
+
+Backend V builds its rows another way; its file is identical too.
+
+<a id="persistence.test_jsonl_encoder.test_store_with_validation_writes_identical_bytes"></a>
+
+#### test\_store\_with\_validation\_writes\_identical\_bytes
+
+```python
+def test_store_with_validation_writes_identical_bytes(tmp_path: Path) -> None
+```
+
+The default `validate=True` path writes `json.dumps`'s bytes as well.
 
 <a id="persistence.test_jsonl_lifecycle"></a>
 
