@@ -33,10 +33,12 @@ from fim.model.vector_block import (
     DEFAULT_MEMORY_CEILING_BYTES,
     MEMORY_CEILING_ENVIRONMENT_VARIABLE,
     MINIMUM_WIDTH,
+    MODE_CACHE_LIMIT_ENTRIES,
     SHRINK_CHECK_INTERVAL,
     VectorBlock,
     VectorMemoryCeilingError,
     VectorMigration,
+    _mode_cache_for,
     estimated_block_bytes,
     resolve_memory_ceiling,
 )
@@ -344,3 +346,42 @@ def test_frequency_maps_hold_present_alleles_in_ascending_order() -> None:
         for deme, mapping in enumerate(maps):
             assert list(mapping) == sorted(mapping)
             assert mapping == dict(model_state.frequency_map(deme, locus))
+
+
+def test_mode_cache_has_one_row_per_distinct_nonzero_rate() -> None:
+    """Loci share a cache row when their mutation probability is the same."""
+    rates = np.array([0.001, 0.0, 0.002, 0.001], dtype=np.float64)
+    sizes = np.array([50, 120], dtype=np.int64)
+    rate_class, cache = _mode_cache_for(rates, sizes)
+    assert rate_class.tolist() == [0, -1, 1, 0]
+    assert cache.shape == (2, 121)
+    assert np.isnan(cache).all()
+
+
+def test_mode_cache_is_disabled_when_it_would_be_too_large() -> None:
+    """Past the entry limit every locus draws uncached, which is only slower."""
+    rates = np.array([0.001, 0.002], dtype=np.float64)
+    sizes = np.array([MODE_CACHE_LIMIT_ENTRIES], dtype=np.int64)
+    rate_class, cache = _mode_cache_for(rates, sizes)
+    assert rate_class.tolist() == [-1, -1]
+    assert cache.size == 0
+
+
+def test_a_run_without_the_mode_cache_is_identical_to_one_with_it() -> None:
+    """Disabling the cache changes no row: it is a pure speedup."""
+    params = make_params(60, loci=loci(2), mu=0.01, m=0.05)
+    results = []
+    for disable in (False, True):
+        state, registry = _generation_zero(params)
+        block = _block_for(params, state, registry)
+        if disable:
+            block._rate_class = np.full(2, -1, dtype=np.int64)
+            block._mode_cache = np.zeros((0, 0), dtype=np.float64)
+        rng = np.random.Generator(np.random.PCG64(params.seed))
+        generate_initial_state(params, rng)
+        rows = []
+        for _ in range(60):
+            block.advance(rng)
+            rows.append(block.rows("run"))
+        results.append((rows, rng.bit_generator.state))
+    assert results[0] == results[1]

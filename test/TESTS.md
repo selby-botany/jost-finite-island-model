@@ -27483,6 +27483,36 @@ def test_frequency_maps_hold_present_alleles_in_ascending_order() -> None
 
 `frequency_maps` is `statistics_report`'s input, built from the arrays.
 
+<a id="model.test_vector_block.test_mode_cache_has_one_row_per_distinct_nonzero_rate"></a>
+
+#### test\_mode\_cache\_has\_one\_row\_per\_distinct\_nonzero\_rate
+
+```python
+def test_mode_cache_has_one_row_per_distinct_nonzero_rate() -> None
+```
+
+Loci share a cache row when their mutation probability is the same.
+
+<a id="model.test_vector_block.test_mode_cache_is_disabled_when_it_would_be_too_large"></a>
+
+#### test\_mode\_cache\_is\_disabled\_when\_it\_would\_be\_too\_large
+
+```python
+def test_mode_cache_is_disabled_when_it_would_be_too_large() -> None
+```
+
+Past the entry limit every locus draws uncached, which is only slower.
+
+<a id="model.test_vector_block.test_a_run_without_the_mode_cache_is_identical_to_one_with_it"></a>
+
+#### test\_a\_run\_without\_the\_mode\_cache\_is\_identical\_to\_one\_with\_it
+
+```python
+def test_a_run_without_the_mode_cache_is_identical_to_one_with_it() -> None
+```
+
+Disabling the cache changes no row: it is a pure speedup.
+
 <a id="model.test_vector_kernels"></a>
 
 # model.test\_vector\_kernels
@@ -27654,6 +27684,22 @@ The draw phase of migration is the hook stochastic sampling will use.
 Under continuous sampling it fills one fraction per destination deme
 with the migration rate and consumes no random number, so the
 generator stream is exactly what the dictionary-based operators leave.
+
+<a id="model.test_vector_kernels.test_cached_binomial_equals_the_uncached_draw_bit_for_bit"></a>
+
+#### test\_cached\_binomial\_equals\_the\_uncached\_draw\_bit\_for\_bit
+
+```python
+@pytest.mark.parametrize("p", [1e-6, 0.002, 0.3, 0.5, 0.75, 0.999])
+def test_cached_binomial_equals_the_uncached_draw_bit_for_bit(
+        p: float) -> None
+```
+
+Reusing the mode probability changes no draw and no stream position.
+
+The cache holds the exact float the uncached code computes for that
+count, so values and the final generator state agree, over counts that
+repeat (cache hits) and counts seen once (cache fills).
 
 <a id="model.test_vectorized"></a>
 

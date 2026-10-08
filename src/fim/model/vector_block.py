@@ -73,6 +73,9 @@ DEFAULT_MEMORY_CEILING_BYTES: Final = 2 * 1024**3
 MEMORY_CEILING_ENVIRONMENT_VARIABLE: Final = "FIM_VECTOR_MEMORY_CEILING_BYTES"
 """Environment variable that overrides `DEFAULT_MEMORY_CEILING_BYTES`."""
 
+MODE_CACHE_LIMIT_ENTRIES: Final = 8 * 1024 * 1024
+"""Most entries (8 bytes each) the mode-PMF cache may hold; above it, uncached."""
+
 _BYTES_PER_CELL: Final = 16
 _BYTES_PER_ID: Final = 8
 _BYTES_PER_MINTED_ENTRY: Final = 9
@@ -264,6 +267,42 @@ def _describe_count(count: int) -> str:
     return f"about 10^{len(str(count)) - 1}"
 
 
+def _mode_cache_for(
+    mutation_rates: np.ndarray, sizes: np.ndarray
+) -> tuple[np.ndarray, np.ndarray]:
+    """Build the per-rate cache of binomial mode probabilities.
+
+    A locus's mutation probability never changes during a run and its
+    gene-copy counts never exceed the largest deme, so each mutation-count
+    draw's mode probability depends on the count alone. One cache row per
+    distinct nonzero rate holds it, indexed by count (`nan` = not yet
+    computed); `rate_class[locus]` names the row, or is `-1` for a locus
+    that never mutates. When the cache would exceed
+    `MODE_CACHE_LIMIT_ENTRIES` it is disabled (every class `-1`, an empty
+    cache) and the draws are made without it: identical, only slower.
+
+    Args:
+        mutation_rates: `(loci,)` per-copy mutation probability per locus.
+        sizes: `(demes,)` gene copies per deme.
+
+    Returns:
+        `(rate_class, mode_cache)` as `kernels.run_generation` takes them.
+    """
+    rates = sorted({float(rate) for rate in mutation_rates.tolist() if rate > 0.0})
+    columns = int(sizes.max()) + 1
+    if not rates or len(rates) * columns > MODE_CACHE_LIMIT_ENTRIES:
+        return (
+            np.full(mutation_rates.shape[0], -1, dtype=np.int64),
+            np.zeros((0, 0), dtype=np.float64),
+        )
+    index = {rate: position for position, rate in enumerate(rates)}
+    rate_class = np.array(
+        [index.get(float(rate), -1) for rate in mutation_rates.tolist()],
+        dtype=np.int64,
+    )
+    return rate_class, np.full((len(rates), columns), np.nan, dtype=np.float64)
+
+
 def _power_of_two_at_least(value: int) -> int:
     """Return the smallest power of two that is at least `value`."""
     width = 1
@@ -362,6 +401,7 @@ class VectorBlock:
             minted_count if minted_count is not None else np.zeros(0, np.int64)
         )
         self._mutants = np.zeros((freq.shape[0], freq.shape[1]), dtype=np.int64)
+        self._rate_class, self._mode_cache = _mode_cache_for(mutation_rates, sizes)
         self._next_id = np.array([next_id], dtype=np.int64)
         self._locus_ids = np.array([locus.locus_id for locus in loci], dtype=np.int64)
         self._steps_since_shrink_check = 0
@@ -548,6 +588,8 @@ class VectorBlock:
                 self.migration.kind,
                 self.migration.rate,
                 self.migration.weights,
+                self._rate_class,
+                self._mode_cache,
                 self._capacities,
                 self._minted_mask,
                 self._minted_list,

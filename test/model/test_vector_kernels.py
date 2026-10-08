@@ -252,3 +252,27 @@ def test_continuous_migration_fills_every_fraction_and_draws_nothing() -> None:
         kernels._draw_migrant_fractions(rng, kind, 0.05, untouched)
         assert untouched.tolist() == [0.0] * 5
     assert rng.bit_generator.state == before
+
+
+@pytest.mark.parametrize("p", [1e-6, 0.002, 0.3, 0.5, 0.75, 0.999])
+def test_cached_binomial_equals_the_uncached_draw_bit_for_bit(p: float) -> None:
+    """Reusing the mode probability changes no draw and no stream position.
+
+    The cache holds the exact float the uncached code computes for that
+    count, so values and the final generator state agree, over counts that
+    repeat (cache hits) and counts seen once (cache fills).
+    """
+    shape = np.random.default_rng(31)
+    plain = np.random.Generator(np.random.PCG64(8))
+    cached = np.random.Generator(np.random.PCG64(8))
+    scratch = np.empty(301, dtype=np.float64)
+    cache = np.full(301, np.nan, dtype=np.float64)
+    for _ in range(5000):
+        n = int(shape.integers(0, 301))
+        assert kernels.cached_binomial(cached, n, p, scratch, cache) == (
+            kernels.inversion_binomial(plain, n, p, scratch)
+        )
+    assert plain.bit_generator.state == cached.bit_generator.state
+    filled = ~np.isnan(cache)
+    assert filled[0] == (p >= 1.0)  # n = 0 never reaches the cache
+    assert filled[1:].any()

@@ -485,6 +485,7 @@ Return to the [source-tree orientation](../README.md) or the [developer guide](.
   * [SHRINK\_FACTOR](#fim.model.vector_block.SHRINK_FACTOR)
   * [DEFAULT\_MEMORY\_CEILING\_BYTES](#fim.model.vector_block.DEFAULT_MEMORY_CEILING_BYTES)
   * [MEMORY\_CEILING\_ENVIRONMENT\_VARIABLE](#fim.model.vector_block.MEMORY_CEILING_ENVIRONMENT_VARIABLE)
+  * [MODE\_CACHE\_LIMIT\_ENTRIES](#fim.model.vector_block.MODE_CACHE_LIMIT_ENTRIES)
   * [VectorMemoryCeilingError](#fim.model.vector_block.VectorMemoryCeilingError)
   * [VectorMigration](#fim.model.vector_block.VectorMigration)
     * [from\_parameter](#fim.model.vector_block.VectorMigration.from_parameter)
@@ -510,6 +511,7 @@ Return to the [source-tree orientation](../README.md) or the [developer guide](.
   * [STATISTIC\_COLUMNS](#fim.model.vector_kernels.STATISTIC_COLUMNS)
   * [STATISTICS\_TOLERANCE](#fim.model.vector_kernels.STATISTICS_TOLERANCE)
   * [inversion\_binomial](#fim.model.vector_kernels.inversion_binomial)
+  * [cached\_binomial](#fim.model.vector_kernels.cached_binomial)
   * [pairwise\_sum](#fim.model.vector_kernels.pairwise_sum)
   * [exact\_sum](#fim.model.vector_kernels.exact_sum)
   * [compact\_columns](#fim.model.vector_kernels.compact_columns)
@@ -14550,6 +14552,12 @@ Default per-replicate ceiling on the block, in bytes (2 GiB).
 
 Environment variable that overrides `DEFAULT_MEMORY_CEILING_BYTES`.
 
+<a id="fim.model.vector_block.MODE_CACHE_LIMIT_ENTRIES"></a>
+
+#### MODE\_CACHE\_LIMIT\_ENTRIES
+
+Most entries (8 bytes each) the mode-PMF cache may hold; above it, uncached.
+
 <a id="fim.model.vector_block.VectorMemoryCeilingError"></a>
 
 ## VectorMemoryCeilingError Objects
@@ -15063,12 +15071,13 @@ def inversion_binomial(rng, n, p, pmf)
 
 Draw one `Binomial(n, p)` count, exactly as `_inversion_binomial` does.
 
-A line-for-line copy of `fim.model.operators._inversion_binomial`.
-The only difference is storage: the original builds a Python list of
-the lower half of the PMF, this one writes the same values into the
-caller's scratch array. The values, the order of every floating-point
-operation and the number of uniforms drawn (one for a real draw, none
-for the three short-circuits) are identical.
+A line-for-line copy of `fim.model.operators._inversion_binomial`,
+split into `_mode_pmf` and `_walk_pmf` (the operations and their order
+are unchanged). The only other difference is storage: the original
+builds a Python list of the lower half of the PMF, this one writes the
+same values into the caller's scratch array. The number of uniforms
+drawn is the same too (one for a real draw, none for the three
+short-circuits).
 
 **Arguments**:
 
@@ -15076,6 +15085,36 @@ for the three short-circuits) are identical.
 - `n` - Number of trials (`n >= 0`).
 - `p` - Success probability (`0.0 <= p <= 1.0`).
 - `pmf` - Scratch `float64` array of length at least `n + 1`.
+
+
+**Returns**:
+
+  A `Binomial(n, p)` count in `[0, n]`.
+
+<a id="fim.model.vector_kernels.cached_binomial"></a>
+
+#### cached\_binomial
+
+```python
+@numba.njit(cache=True, nogil=True)
+def cached_binomial(rng, n, p, pmf, mode_cache)
+```
+
+`inversion_binomial` for a fixed `p`, reusing the mode PMF across calls.
+
+The mode PMF is a pure function of `(n, p)`, and a locus's mutation
+probability never changes, so it is computed once per `n` and kept in
+`mode_cache[n]` (`nan` marks an entry not yet computed). A cached value
+is the very float the uncached code computes, so the draw is bit for
+bit `inversion_binomial`'s.
+
+**Arguments**:
+
+- `rng` - The run's `numpy.random.Generator`.
+- `n` - Number of trials (`0 <= n < len(mode_cache)`).
+- `p` - Success probability, the same for every call on this cache row.
+- `pmf` - Scratch `float64` array of length at least `n + 1`.
+- `mode_cache` - One row of the mode-PMF cache.
 
 
 **Returns**:
@@ -15198,8 +15237,8 @@ appended columns keep the locus in ascending id order.
 ```python
 @numba.njit(cache=True, nogil=True)
 def run_generation(freq, counts, ids, ncol, sizes, mus, mutants, rng, kind,
-                   rate, weights, caps, minted_mask, minted_list, minted_count,
-                   next_id)
+                   rate, weights, rate_class, mode_cache, caps, minted_mask,
+                   minted_list, minted_count, next_id)
 ```
 
 Advance every locus one generation: migrate, drift, mutate.
@@ -15223,6 +15262,10 @@ call `mint_columns`.
 - `kind` - `MIGRATION_NONE`, `MIGRATION_SCALAR` or `MIGRATION_MATRIX`.
 - `rate` - Scalar migration rate.
 - `weights` - Migration matrix (a `(0, 0)` array when unused).
+- `rate_class` - `(loci,)` int64, the row of `mode_cache` a locus's
+  mutation draws use, or `-1` for uncached draws.
+- `mode_cache` - `(classes, max_size + 1)` float64 mode-PMF cache
+  (`nan` = not yet computed); persists across generations.
 - `caps` - Finite-alleles capacity per locus (empty for infinite).
 - `minted_mask` - `(loci, width)` bool, finite alleles only.
 - `minted_list` - `(loci, width)` int64, finite alleles only.

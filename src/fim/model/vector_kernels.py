@@ -79,32 +79,17 @@ _LEAF_LIMIT = 128
 
 
 @numba.njit(cache=True, nogil=True)
-def inversion_binomial(rng, n, p, pmf):
-    """Draw one `Binomial(n, p)` count, exactly as `_inversion_binomial` does.
+def _mode_pmf(n, q):
+    """Return the binomial PMF at its mode, in log space (never underflows).
 
-    A line-for-line copy of `fim.model.operators._inversion_binomial`.
-    The only difference is storage: the original builds a Python list of
-    the lower half of the PMF, this one writes the same values into the
-    caller's scratch array. The values, the order of every floating-point
-    operation and the number of uniforms drawn (one for a real draw, none
-    for the three short-circuits) are identical.
+    The first floating-point step of `operators._inversion_binomial`,
+    unchanged: `exp` of a `lgamma`-based log of `C(n, mode) q^mode
+    (1 - q)^(n - mode)`.
 
     Args:
-        rng: The run's `numpy.random.Generator`.
-        n: Number of trials (`n >= 0`).
-        p: Success probability (`0.0 <= p <= 1.0`).
-        pmf: Scratch `float64` array of length at least `n + 1`.
-
-    Returns:
-        A `Binomial(n, p)` count in `[0, n]`.
+        n: Number of trials.
+        q: The success probability, reflected into `(0, 0.5]`.
     """
-    if n <= 0 or p <= 0.0:
-        return 0
-    if p >= 1.0:
-        return n
-    u = rng.random()
-    reflect = p > _REFLECT_THRESHOLD
-    q = 1.0 - p if reflect else p
     mode = min(int((n + 1) * q), n)
     log_pmf_mode = (
         math.lgamma(n + 1.0)
@@ -113,7 +98,27 @@ def inversion_binomial(rng, n, p, pmf):
         + mode * math.log(q)
         + (n - mode) * math.log1p(-q)
     )
-    pmf_mode = math.exp(log_pmf_mode)
+    return math.exp(log_pmf_mode)
+
+
+@numba.njit(cache=True, nogil=True)
+def _walk_pmf(u, n, q, reflect, pmf_mode, pmf):
+    """Invert the binomial CDF at `u` by walking the PMF out from its mode.
+
+    The rest of `operators._inversion_binomial`, unchanged: the lower half
+    of the PMF is built from the mode downward into the caller's scratch
+    array, scanned upward to the cumulative through the mode, and the walk
+    then continues above the mode from that running total.
+
+    Args:
+        u: The uniform draw.
+        n: Number of trials.
+        q: The success probability, reflected into `(0, 0.5]`.
+        reflect: Whether `q` is `1 - p` (the count is then `n - k`).
+        pmf_mode: `_mode_pmf(n, q)`.
+        pmf: Scratch `float64` array of length at least `n + 1`.
+    """
+    mode = min(int((n + 1) * q), n)
     pmf[mode] = pmf_mode
     current = pmf_mode
     for k in range(mode, 0, -1):
@@ -131,6 +136,71 @@ def inversion_binomial(rng, n, p, pmf):
         upper *= (n - k + 1) / k * q / (1.0 - q)
         cdf += upper
     return n - k if reflect else k
+
+
+@numba.njit(cache=True, nogil=True)
+def inversion_binomial(rng, n, p, pmf):
+    """Draw one `Binomial(n, p)` count, exactly as `_inversion_binomial` does.
+
+    A line-for-line copy of `fim.model.operators._inversion_binomial`,
+    split into `_mode_pmf` and `_walk_pmf` (the operations and their order
+    are unchanged). The only other difference is storage: the original
+    builds a Python list of the lower half of the PMF, this one writes the
+    same values into the caller's scratch array. The number of uniforms
+    drawn is the same too (one for a real draw, none for the three
+    short-circuits).
+
+    Args:
+        rng: The run's `numpy.random.Generator`.
+        n: Number of trials (`n >= 0`).
+        p: Success probability (`0.0 <= p <= 1.0`).
+        pmf: Scratch `float64` array of length at least `n + 1`.
+
+    Returns:
+        A `Binomial(n, p)` count in `[0, n]`.
+    """
+    if n <= 0 or p <= 0.0:
+        return 0
+    if p >= 1.0:
+        return n
+    u = rng.random()
+    reflect = p > _REFLECT_THRESHOLD
+    q = 1.0 - p if reflect else p
+    return _walk_pmf(u, n, q, reflect, _mode_pmf(n, q), pmf)
+
+
+@numba.njit(cache=True, nogil=True)
+def cached_binomial(rng, n, p, pmf, mode_cache):
+    """`inversion_binomial` for a fixed `p`, reusing the mode PMF across calls.
+
+    The mode PMF is a pure function of `(n, p)`, and a locus's mutation
+    probability never changes, so it is computed once per `n` and kept in
+    `mode_cache[n]` (`nan` marks an entry not yet computed). A cached value
+    is the very float the uncached code computes, so the draw is bit for
+    bit `inversion_binomial`'s.
+
+    Args:
+        rng: The run's `numpy.random.Generator`.
+        n: Number of trials (`0 <= n < len(mode_cache)`).
+        p: Success probability, the same for every call on this cache row.
+        pmf: Scratch `float64` array of length at least `n + 1`.
+        mode_cache: One row of the mode-PMF cache.
+
+    Returns:
+        A `Binomial(n, p)` count in `[0, n]`.
+    """
+    if n <= 0 or p <= 0.0:
+        return 0
+    if p >= 1.0:
+        return n
+    u = rng.random()
+    reflect = p > _REFLECT_THRESHOLD
+    q = 1.0 - p if reflect else p
+    pmf_mode = mode_cache[n]
+    if math.isnan(pmf_mode):
+        pmf_mode = _mode_pmf(n, q)
+        mode_cache[n] = pmf_mode
+    return _walk_pmf(u, n, q, reflect, pmf_mode, pmf)
 
 
 @numba.njit(cache=True, nogil=True)
@@ -503,6 +573,8 @@ def _mutate(
     rng,
     pmf,
     taken,
+    rate_class,
+    mode_cache,
     caps,
     minted_mask,
     minted_list,
@@ -516,6 +588,11 @@ def _mutate(
     minted afterwards. Under finite alleles (`caps` non-empty) each lost
     copy immediately draws its target and the copy is added to it, before
     the next pair's counts, as `operators.mutate` interleaves them.
+
+    A locus whose `rate_class` is not negative draws its counts with
+    `cached_binomial` on row `rate_class` of `mode_cache` (the mutation
+    probability is fixed per locus, so the mode PMF is reused); a negative
+    class draws with `inversion_binomial`. The draws are identical.
 
     Returns:
         `0` on success, or `1 + locus` when a finite-alleles locus has no
@@ -534,7 +611,12 @@ def _mutate(
                     if finite:
                         taken[c] = 0
                     if n > 0:
-                        k = inversion_binomial(rng, n, mu, pmf)
+                        if rate_class[locus] >= 0:
+                            k = cached_binomial(
+                                rng, n, mu, pmf, mode_cache[rate_class[locus]]
+                            )
+                        else:
+                            k = inversion_binomial(rng, n, mu, pmf)
                         counts[locus, i, c] = n - k
                         total_mutants += k
                         if finite:
@@ -661,6 +743,8 @@ def run_generation(
     kind,
     rate,
     weights,
+    rate_class,
+    mode_cache,
     caps,
     minted_mask,
     minted_list,
@@ -687,6 +771,10 @@ def run_generation(
         kind: `MIGRATION_NONE`, `MIGRATION_SCALAR` or `MIGRATION_MATRIX`.
         rate: Scalar migration rate.
         weights: Migration matrix (a `(0, 0)` array when unused).
+        rate_class: `(loci,)` int64, the row of `mode_cache` a locus's
+            mutation draws use, or `-1` for uncached draws.
+        mode_cache: `(classes, max_size + 1)` float64 mode-PMF cache
+            (`nan` = not yet computed); persists across generations.
         caps: Finite-alleles capacity per locus (empty for infinite).
         minted_mask: `(loci, width)` bool, finite alleles only.
         minted_list: `(loci, width)` int64, finite alleles only.
@@ -729,6 +817,8 @@ def run_generation(
         rng,
         pmf,
         taken,
+        rate_class,
+        mode_cache,
         caps,
         minted_mask,
         minted_list,
