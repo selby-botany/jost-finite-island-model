@@ -19,8 +19,11 @@ the main run's `trajectory.jsonl`; this is the only example that writes
 that file (see [`equilibrium_trajectory.jsonl`](../../usage.md#equilibrium_trajectoryjsonl)).
 The main run then converges at generation 1,374, with a 924-generation
 evidence window, after about half a minute on a busy
-development machine. Its trailing-window mean `D` is 0.241 ± 0.014 (one
-standard error), below the 0.287 that the island model's identity
+development machine. That looks like a premature stop: the window opens
+only about 450 generations after the founding split, while the demes are
+still differentiating, and the planned convergence redesign addresses it
+(the configuration is left unchanged until then). Its trailing-window
+mean `D` is 0.241 ± 0.014 (one standard error), below the 0.287 that the island model's identity
 recursion predicts for these parameters. The gap is larger than the
 reported standard error suggests: the eight pooled loci still swing
 slowly, and a window this short is one draw from those swings.

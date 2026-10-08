@@ -145,8 +145,8 @@ trailing-window mean is known to half of convergence_tolerance. With one
 locus that second condition can take tens of thousands of generations, so
 several examples set a looser convergence_tolerance (0.02 to 0.05) or pool
 eight loci, and each one's README says what that costs. Every example
-here finishes in about a second to about a minute of wall-clock time on
-ordinary development hardware. Most use one locus, so a single run's
+here finishes in a few seconds to about three minutes of wall-clock
+time on a busy development machine (an idle one is faster). Most use one locus, so a single run's
 numbers scatter widely around the model's expectation; use a batch
 (`n_replicates`) when you want a stable value. Each uses a
 seed distinct from [`fim init`](#create-a-configuration)'s starter config.
@@ -232,8 +232,8 @@ n_replicates: 1   # a single scalar run; the default (200) would batch
 fim run hub-island.yaml --output results/hub-island --quiet
 ```
 
-Converges at generation 1,136, after about 10 seconds, with D = 0.0498 and a
-trailing-window mean D of 0.0540 ± 0.0016. The example pools eight loci: one
+Converges at generation 1,006, after about 20 seconds, with D = 0.0644 and a
+trailing-window mean D of 0.0468 ± 0.0019. The example pools eight loci: one
 locus alone swings too widely for its D to settle honestly (see the
 [example's README](examples/unequal-island-sizes-with-a-migration-hub/README.md)).
 `manifest.json`'s `parameters.N`
@@ -243,8 +243,8 @@ unequal size and asymmetric connectivity on differentiation.
 
 deme_weighting only affects E<sub>ST</sub> — D and K<sub>ST</sub> weight demes equally by
 definition, regardless of this setting. With the unequal per-deme `N` above,
-the default `equal` weighting gives E<sub>ST</sub> = 0.0676; adding
-`deme_weighting: size` to the same configuration gives E<sub>ST</sub> = 0.0618
+the default `equal` weighting gives E<sub>ST</sub> = 0.0815; adding
+`deme_weighting: size` to the same configuration gives E<sub>ST</sub> = 0.0764
 instead — deme 4's own 800-gene-copy weight pulls the size-weighted value
 down, since it is both the largest deme and the best-connected one.
 
@@ -413,9 +413,12 @@ fim run equilibrium-split.yaml --output results/equilibrium-split --quiet
 ```
 
 The ancestral phase runs 1,256 generations; the main run then converges at
-generation 4,238, after about 35 seconds, with a trailing-window mean D of
-0.279 ± 0.014 — real differentiation that grew from the ancestral-population
-founder effect, with no explicit `p_0` anywhere in the file. The example pools
+generation 1,374, after about half a minute, with a trailing-window mean D of
+0.241 ± 0.014 (the model's expectation is 0.287; this looks like a premature stop, with a
+short window that is one draw from slow swings, which the planned convergence
+redesign addresses) — real differentiation that grew from the
+ancestral-population founder effect, with no explicit `p_0` anywhere in the
+file. The example pools
 eight loci and sets `convergence_tolerance: 0.03`, because one locus here
 needs about 30,000 generations to settle (see the
 [example's README](examples/equilibrium-split-founding/README.md)). How long the ancestral phase runs is worked out from
@@ -513,8 +516,8 @@ n_replicates: 1   # a single scalar run; the default (200) would batch
 fim run finite-alleles.yaml --output results/finite-alleles --quiet
 ```
 
-Converges at generation 4,521, after about 20 seconds, with a trailing-window
-mean D of 0.609 ± 0.010 (`convergence_tolerance: 0.02` halves the run's
+Converges at generation 8,977, after about a minute, with a trailing-window
+mean D of 0.611 ± 0.006 (`convergence_tolerance: 0.02` halves the run's
 precision target to keep it short; see the
 [example's README](examples/finite-length-alleles-the-k-allele-model/README.md)).
 This is the Kimura-Crow
@@ -652,8 +655,10 @@ n_replicates: 1   # a single scalar run; the default (200) would batch
 fim run mu-b.yaml --output results/mu-b --quiet
 ```
 
-Converges at generation 7,481, after about 30 seconds, with a trailing-window
-mean D of 0.220 ± 0.011 (`convergence_tolerance: 0.03` keeps the run short;
+Converges at generation 231, after a few seconds, with a trailing-window
+mean D of 0.128 ± 0.009 (a premature stop and an early value: the window is the first 232
+generations, still on the approach from the starting state, which the planned
+convergence redesign addresses; `convergence_tolerance: 0.03` keeps the run short;
 see the
 [example's README](examples/per-base-mutation-rate-across-unequal-locus-lengths/README.md)).
 `results/mu-b/manifest.json`'s
@@ -701,11 +706,11 @@ n_replicates: 1   # a single scalar run; the default (200) would batch
 fim run multi-statistic.yaml --output results/multi-statistic --quiet
 ```
 
-Converges at generation 3,033, after about 10 seconds. `report.json`'s
+Converges at generation 6,059, after about half a minute. `report.json`'s
 converged_on lists the watched statistics that had actually settled when the
 run stopped: here ["G<sub>ST</sub>"] alone, because G<sub>ST</sub>'s
-trailing-window mean was already known precisely (0.0636 ± 0.0042) while D's
-was not (0.097 ± 0.025), and `any` needs only one. A run that reaches its cap
+trailing-window mean was already known precisely (0.0660 ± 0.0038) while D's
+was not (0.101 ± 0.010), and `any` needs only one. A run that reaches its cap
 records `null`, since it converged on nothing.
 
 ### Within-run sigma band
@@ -900,9 +905,9 @@ replicate_tolerance: null   # always run all 16 replicates
 fim run vector-showcase.yaml --output results/vector-showcase --quiet
 ```
 
-Ran in about 20 seconds on ordinary development hardware, all 16 replicates
+Ran in about 40 seconds on a busy development machine, all 16 replicates
 to the 100-generation cap, with `D`'s 95% confidence interval at
-`0.0264 +/- 0.0021`. In the desktop
+`0.0267 +/- 0.0019`. In the desktop
 app, loading this example runs it with its own `generational-vector`
 engine and 16 replicates, whatever your Settings hold, and leaves your
 Settings unchanged; a notice lists the differences and offers to make
@@ -952,8 +957,8 @@ replicate_tolerance: null   # always run all 16 replicates
 fim run generational-showcase.yaml --output results/generational-showcase --quiet
 ```
 
-Ran in about 25 seconds on the same hardware, with `D`'s 95% confidence
-interval at `0.0237 +/- 0.0020`. That is a little slower than the
+Ran in about 55 seconds on the same hardware, with `D`'s 95% confidence
+interval at `0.0262 +/- 0.0030`. That is a little slower than the
 `generational-vector` example above, although an earlier measurement on a
 less loaded machine found it a little faster: neither backend is
 universally faster, and which one wins depends on where a configuration

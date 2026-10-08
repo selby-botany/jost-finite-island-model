@@ -27,10 +27,11 @@ The `report.json` (or `summary.json`) you get matches the reference for
 the same backend and numerical environment. Vector results can differ
 across platforms because of BLAS reduction rounding; their statistical
 comparison is described in the vector example's README.
-Most examples finish in about a second to
-about a minute on ordinary development hardware. The calibration
-examples take longer: Dear-Nolan low about 20 to 25 minutes, Golden Part VI
-about ten minutes, and Dear-Nolan high about two minutes.
+Most examples finish in a few seconds to
+about three minutes. The calibration examples take longer: Dear-Nolan low
+about an hour, Golden Part VI about 15 minutes, and Dear-Nolan high about
+two minutes. These times were measured on a busy, shared development machine
+(load average about 15); an idle machine is faster.
 
 For maintainers: `dev/bin/regenerate-example-outputs` reruns the examples
 and replaces their committed outputs, and `test/test_doc_examples.py`
@@ -43,10 +44,10 @@ and replaces their committed outputs, and `test/test_doc_examples.py`
 
 **Jost (2008) Part VI** — the primary calibration anchor for `fim`.
 Four demes, N = 100, moderate migration (m = 0.01) and mutation
-(mu = 0.005). D genuinely converges at generation 130,194, its own
+(mu = 0.005). D genuinely converges at generation 130,242, its own
 evidence window grown to 130,048 generations to confirm precision — a
-trailing-window D of 0.624 ± 0.004. G_ST is left honestly unconfirmed
-(this example watches D alone), at 0.193 from the un-grown base window.
+trailing-window D of 0.605 ± 0.004. G_ST is left honestly unconfirmed
+(this example watches D alone), at 0.132 from the un-grown base window.
 Published ensemble values (100 replicates, multi-locus engineered
 start): G_ST ≈ 0.176, D ≈ 0.604 — see the example's own README for why
 D reaches that precision here while G_ST does not, and where the real,
@@ -56,13 +57,14 @@ calibrated multi-locus/multi-replicate agreement lives.
 
 **Dear-Nolan low-migration botanical scenario** — five isolated plant
 patches, N = 100, very low migration (m = 0.0001) and negligible mutation
-(mu = 0.000001). Runs the full derived cap, 295,390 generations (20 to 25
-minutes): almost all demes fixed for the same allele. D — the statistic
-this example watches — is the harder of the two to pin down here, ending
-honestly at the cap (`converged_on: null`) with a trailing-window mean of
-0.053 (published D ≈ 0.038); G_ST, computed the same way but not gated
-on, is already precise at 0.969 (published G_ST ≈ 0.970) — D and G_ST are
-not equally noisy for this scenario, see its own README for why.
+(mu = 0.000001). **This example does not yet converge:** it runs the full
+derived cap, 295,390 generations (about an hour on a busy machine), and
+reports `converged_on: null`, because the convergence window starts inside
+the transient and the lag-1 standard error is too small; a convergence
+redesign and a faster engine are planned. Jost's published targets (200
+runs) are D ≈ 0.04 and G_ST ≈ 0.97; the run's trailing-window means are D
+0.043 (published ≈ 0.04) and G_ST 0.965 (published ≈ 0.97). D and G_ST are
+not equally noisy for this scenario, see its own README.
 
 ### [dear-nolan-high](dear-nolan-high/README.md)
 

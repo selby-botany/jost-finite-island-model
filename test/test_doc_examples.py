@@ -42,8 +42,8 @@ REPLICATE_OUTPUT_NAMES = ("manifest.json", "report.json")
 VOLATILE_MANIFEST_KEYS = frozenset({"started_at", "ended_at", "software_version"})
 
 # Every example with a configuration. All are slow: the quickest take
-# seconds, Jost (2008) Part VI minutes, and Dear-Nolan low (30 loci, about
-# 295,000 generations) the better part of an hour.
+# seconds, Jost (2008) Part VI about a quarter of an hour, and Dear-Nolan
+# low (30 loci, about 295,000 generations) about an hour.
 EXAMPLE_IDS = tuple(
     sorted(path.parent.name for path in EXAMPLES_DIRECTORY.glob("*/config.yaml"))
 )

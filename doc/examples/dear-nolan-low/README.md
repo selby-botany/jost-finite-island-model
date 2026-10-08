@@ -20,6 +20,10 @@ mu = 0.000001, averaged over 200 runs) are **D ≈ 0.04 and G<sub>ST</sub> ≈
 0.97**. The committed run's window means land close to them (see "Expected
 output"), but the run cannot yet say so on its own authority.
 
+The committed outputs here were generated on the textbook mutation model
+(each gene copy mutates independently; each generation runs migrate, drift,
+then mutate) and still reach the generation cap, by design for now.
+
 A fix is planned: a redesign of the convergence rule, and a faster
 engine, so that this example finishes in minutes and converges. The
 configuration is left unchanged until then.

@@ -770,8 +770,8 @@ configuration, so every setting a configuration leaves out takes
 
 **When to run it:** After a change to an example's configuration, or to
 the engine, statistics, or report format, once the slow test reports a
-mismatch. Some examples take a long time: Dear-Nolan low runs for the
-better part of an hour, and Jost (2008) Part VI for several minutes. On
+mismatch. Some examples take a long time: Dear-Nolan low runs for about an
+hour, and Jost (2008) Part VI for about a quarter of an hour. On
 a shared machine, `--jobs` and `--workers` keep the load bounded;
 neither changes any result.
 

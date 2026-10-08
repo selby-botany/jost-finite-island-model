@@ -13,10 +13,12 @@ configuration behavior rather than a particular literature result.
 
 The run converges at generation 231, after a few seconds on ordinary
 development hardware, with a trailing-window mean `D` of 0.128 ± 0.009
-(one standard error) pooled over both loci. Generation 231 is the first
-generation its 232-generation window can fill, so the window still covers
-the approach from the starting state; treat that `D` as an early value,
-not an equilibrium estimate.
+(one standard error) pooled over both loci. This is a premature stop:
+generation 231 is the first generation its 232-generation window can
+fill, so the window still covers the approach from the starting state.
+Treat that `D` as an early value, not an equilibrium estimate. The
+planned convergence redesign addresses this; the configuration is left
+unchanged until then.
 
 ## Why the tolerance is 0.03
 
