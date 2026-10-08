@@ -72,8 +72,8 @@ The test derives a near-equilibrium initial state
 (`_dn2_equilibrium_start`) so the engine is started at the fixed point
 rather than slowly integrating from an undifferentiated state;
 `reproduce.py` writes that state into `config.yaml` as an explicit `p_0`.
-Five replicates of 30 generations land at mean G_ST 0.0220 ± 0.0004 and
-mean D 0.911 ± 0.003, matching the predicted equilibrium (G_ST 0.0220,
+Five replicates of 30 generations land at mean G_ST 0.0219 ± 0.0003 and
+mean D 0.907 ± 0.004, matching the predicted equilibrium (G_ST 0.0220,
 D 0.909) and the published G_ST ≈ 0.02 and D ≈ 0.90.
 
 ## Configure card examples

@@ -715,16 +715,17 @@ replicate_tolerance: 0.03
 </code></pre>
 <pre><code class="language-console">fim run adaptive-batch.yaml --output results/adaptive-batch --sequential --quiet
 </code></pre>
-<p>Stops at 22 replicates — <code>D</code>'s 95% confidence interval has just tightened to
-<code>0.280 +/- 0.030</code>, inside the requested <code>0.03</code> half-width, so the
-remaining 28 possible replicates were never needed. Each replicate pools
+<p>Stops at 10 replicates, the required minimum — <code>D</code>'s 95% confidence interval
+is already <code>0.287 +/- 0.026</code>, inside the requested <code>0.03</code> half-width, so the
+remaining 40 possible replicates were never needed. (A smaller
+<code>replicate_tolerance</code> makes the batch run past the minimum.) Each replicate pools
 eight loci with <code>convergence_tolerance: 0.05</code>, so it settles in about a
 thousand generations; one-locus replicates at the default tolerance would
 take hours for the whole batch (see the
 <a href="#" data-fim-external="https://github.com/selby-botany/jost-finite-island-model/blob/main/doc/examples/an-adaptive-replicate-batch-with-a-confidence-interval/README.md">example's README</a>).
 <code>results/adaptive-batch/summary.json</code> reports every statistic's own
 interval; <code>results/adaptive-batch/replicate-001/</code> through
-<code>replicate-022/</code> each hold the ordinary four-file scalar-run contract for
+<code>replicate-010/</code> each hold the ordinary scalar-run files for
 that one replicate. Drop <code>--sequential</code> to run the same batch across a
 worker process per CPU instead — the computed numbers are identical
 either way (see <a href="#batches-nreplicates-greater-than-one">Batches</a>); only

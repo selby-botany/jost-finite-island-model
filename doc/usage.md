@@ -824,16 +824,17 @@ replicate_tolerance: 0.03
 fim run adaptive-batch.yaml --output results/adaptive-batch --sequential --quiet
 ```
 
-Stops at 22 replicates — `D`'s 95% confidence interval has just tightened to
-`0.280 +/- 0.030`, inside the requested `0.03` half-width, so the
-remaining 28 possible replicates were never needed. Each replicate pools
+Stops at 10 replicates, the required minimum — `D`'s 95% confidence interval
+is already `0.287 +/- 0.026`, inside the requested `0.03` half-width, so the
+remaining 40 possible replicates were never needed. (A smaller
+`replicate_tolerance` makes the batch run past the minimum.) Each replicate pools
 eight loci with `convergence_tolerance: 0.05`, so it settles in about a
 thousand generations; one-locus replicates at the default tolerance would
 take hours for the whole batch (see the
 [example's README](examples/an-adaptive-replicate-batch-with-a-confidence-interval/README.md)).
 `results/adaptive-batch/summary.json` reports every statistic's own
 interval; `results/adaptive-batch/replicate-001/` through
-`replicate-022/` each hold the ordinary four-file scalar-run contract for
+`replicate-010/` each hold the ordinary scalar-run files for
 that one replicate. Drop `--sequential` to run the same batch across a
 worker process per CPU instead — the computed numbers are identical
 either way (see [Batches](#batches-nreplicates-greater-than-one)); only

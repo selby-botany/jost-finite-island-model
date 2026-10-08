@@ -199,8 +199,8 @@ replicates with a 95% confidence interval:
 
 | Statistic | Five-replicate mean | Predicted equilibrium |
 |---|---|---|
-| G<sub>ST</sub> | 0.02203 ± 0.00035 | 0.02196 |
-| D | 0.9109 ± 0.0029 | 0.9088 |
+| G<sub>ST</sub> | 0.02193 ± 0.00034 | 0.02196 |
+| D | 0.9072 ± 0.0040 | 0.9088 |
 
 Both predictions lie inside their intervals. This is the published
 high-migration equilibrium: low differentiation between patches, but still

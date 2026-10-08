@@ -1,99 +1,51 @@
 {
   "artifacts": {
     "replicate-001": {
-      "bytes": 2657,
-      "sha256": "5b3715ad08db2a217c3ab15c458742249129a54aef4361209f253e1840bcaedc"
+      "bytes": 2659,
+      "sha256": "2e39e77856c2a11c8a38ed7349947ed45e2b6c5a0e6e26d83dab54195d4f9e81"
     },
     "replicate-002": {
       "bytes": 2657,
-      "sha256": "d6775255e6c286f189de7d5742cbde5c81605405857fbbb6ca19caae8e918c31"
+      "sha256": "da588ea85afdd988621d5f47f8689d36fc52658b72bffaed19f381d8c5f686b8"
     },
     "replicate-003": {
-      "bytes": 2657,
-      "sha256": "5373c7ffed56c9616b3bf973319da0c5adca0692675808067e49e324b58a9b59"
+      "bytes": 2659,
+      "sha256": "7e81f04d96b3d69eb07f9e01a5ef89b27dad1422480154ad11002c9ac269a299"
     },
     "replicate-004": {
-      "bytes": 2659,
-      "sha256": "2aff4368e6c3bb36c2134676931027bd72883c90670741e3e5f57e9f9315c145"
+      "bytes": 2657,
+      "sha256": "220d0ad43ddeab62efdb9959478c50111312ddd8b02d15e1d4fe0611957fa71a"
     },
     "replicate-005": {
       "bytes": 2657,
-      "sha256": "29a67cd7c335a7549803b8a4080d7976de72b38dcf5da2c32df8d19607f947f1"
+      "sha256": "d4f398883445bcb0e3e42cbf45524f6e48c16524746ccec7f5bd01bfc96ac74e"
     },
     "replicate-006": {
       "bytes": 2659,
-      "sha256": "db0e8d77a7b38663249cf337f4ba1b5b2f08710f0b8bad30ad7055a090381dda"
+      "sha256": "da3b6789697181d994bf1e0d5e6733a943e4c92a2fb05f975d92f4738a91707f"
     },
     "replicate-007": {
       "bytes": 2659,
-      "sha256": "9256a5fcd4ba450f615f46de48627c8f276862aaabf3c7e6335355eda755e5cc"
+      "sha256": "22c7b2e6055f30079ca21782ac510cefbc125d9316ffff48e0b7d75538c90908"
     },
     "replicate-008": {
-      "bytes": 2659,
-      "sha256": "968c7583ce460fe2cc2527997fcfd54bf8059940d6c9f5de1b785bf3c265378d"
+      "bytes": 2657,
+      "sha256": "26a02e09510475ae534de9dad8b2cc8099a5c67b0594f330ff6e4f7b36fb88a4"
     },
     "replicate-009": {
       "bytes": 2657,
-      "sha256": "296eb82fd98305a68d27953b41ffb63082e06748432390591a9dba6b52c126b4"
+      "sha256": "ec701469b2837a8843404c304a87ea0c08f90ad715fce6e45cda68fbd46af759"
     },
     "replicate-010": {
-      "bytes": 2659,
-      "sha256": "6c1336b7830fc1a51cfec36cee8bea8e2b963b4afc8718a48a671808feaf9e37"
-    },
-    "replicate-011": {
       "bytes": 2657,
-      "sha256": "e8742343c3533819c1823f729879cee4944f57235581b4373d9683e38c174313"
-    },
-    "replicate-012": {
-      "bytes": 2659,
-      "sha256": "4e635730e1fadd8c1df44596e46c4f9888dd84a05f175a18be8864e37c4a747a"
-    },
-    "replicate-013": {
-      "bytes": 2659,
-      "sha256": "5dcb68afe6c7e5a03284bae2ac5cd13b78a918f02c310eb83432e427ea34bef9"
-    },
-    "replicate-014": {
-      "bytes": 2657,
-      "sha256": "d566e852df4afecc906c69ddbebbcc48f842939dce9621e314f2ffa62ab2e3bd"
-    },
-    "replicate-015": {
-      "bytes": 2659,
-      "sha256": "7bedea8b21d13bf53b14025f0778491fac6ca469cfd27d0e0d8d5856eb38480a"
-    },
-    "replicate-016": {
-      "bytes": 2659,
-      "sha256": "24fe6cb6d2667cce1550fe71003e76ee3e806c5ce4a10662e334b6767b2fd83b"
-    },
-    "replicate-017": {
-      "bytes": 2657,
-      "sha256": "a07e8fbb2e2b58b247f02bbbc10b0c280acf922b62cec36dfd035ee0b63de004"
-    },
-    "replicate-018": {
-      "bytes": 2657,
-      "sha256": "6c1c814ca8811e728a4d74bb6532f7ee537a5277cfc8187026644e3e8f88b138"
-    },
-    "replicate-019": {
-      "bytes": 2659,
-      "sha256": "0b96d0e5e4d2fe50e0bd202f34cb52634a4202f4b68398eabbfa1e114d715246"
-    },
-    "replicate-020": {
-      "bytes": 2657,
-      "sha256": "53ae8bf5caad712b7e7de63e2addc427de92d3561b2469c649637254e786226e"
-    },
-    "replicate-021": {
-      "bytes": 2657,
-      "sha256": "8a1ac003a61f66c7562d689e72afc57b5e46f46fc6b7753181220c3fe96d4979"
-    },
-    "replicate-022": {
-      "bytes": 2657,
-      "sha256": "ad9edeb51745fc055cf8fe85bfcef8ada9642e750a692ead014816fce557a812"
+      "sha256": "8cb69e84511f62ac4d8a4b28c9dae31f983c67010e038144bcbb74a1fdf2d8c9"
     },
     "summary": {
-      "bytes": 6091,
-      "sha256": "2acac10816bcd16fa88ec1ee568a80e6ef1adcb63e6f2914e2b4cc6fb87cbfd2"
+      "bytes": 6057,
+      "sha256": "fe2c72e4f446bbee39d2a25b7b6378855906d39a4966b8fd1d4e2944640c58ec"
     }
   },
-  "ended_at": "2026-10-06T17:40:50.960190Z",
+  "ended_at": "2026-10-08T15:33:06.781495Z",
   "parameters": {
     "N": 100,
     "_read_only": true,
@@ -157,7 +109,7 @@
     "seed": 20260819,
     "track_expensive_statistics": false
   },
-  "replicate_count": 22,
+  "replicate_count": 10,
   "replicate_run_ids": [
     "run-23f55cf2c98e7afd-r001",
     "run-23f55cf2c98e7afd-r002",
@@ -168,22 +120,10 @@
     "run-23f55cf2c98e7afd-r007",
     "run-23f55cf2c98e7afd-r008",
     "run-23f55cf2c98e7afd-r009",
-    "run-23f55cf2c98e7afd-r010",
-    "run-23f55cf2c98e7afd-r011",
-    "run-23f55cf2c98e7afd-r012",
-    "run-23f55cf2c98e7afd-r013",
-    "run-23f55cf2c98e7afd-r014",
-    "run-23f55cf2c98e7afd-r015",
-    "run-23f55cf2c98e7afd-r016",
-    "run-23f55cf2c98e7afd-r017",
-    "run-23f55cf2c98e7afd-r018",
-    "run-23f55cf2c98e7afd-r019",
-    "run-23f55cf2c98e7afd-r020",
-    "run-23f55cf2c98e7afd-r021",
-    "run-23f55cf2c98e7afd-r022"
+    "run-23f55cf2c98e7afd-r010"
   ],
   "run_id": "run-23f55cf2c98e7afd",
   "schema_version": 1,
   "software_version": "1.2.0",
-  "started_at": "2026-10-06T17:36:46.664284Z"
+  "started_at": "2026-10-08T15:31:28.742413Z"
 }

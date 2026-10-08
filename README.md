@@ -151,17 +151,21 @@ See [installation alternatives](install/README.md) and the
 
 Each scalar CLI run (`n_replicates: 1`; the library default is actually
 `200`, an adaptively-stopped batch — see [n_replicates](doc/configuration.md#nreplicates))
-writes exactly four artifacts:
+writes these artifacts:
 
 | File | Purpose |
 |---|---|
 | `trajectory.jsonl` | Every nonzero `(generation, deme, locus, allele)` frequency |
+| `equilibrium_trajectory.jsonl` | The ancestral phase's own trajectory; written only by an equilibrium-split run |
+| `convergence.jsonl` | One row per generation of each watched convergence statistic |
 | `manifest.json` | Replayable parameters, seed, version, timestamps, and stop outcome |
 | `report.json` | Final `H_S`, `H_T`, `G_ST`, Jost's `D`, `E_ST`, and `K_ST` |
+| `pairwise.json` | Every deme pair's Nei identities and pairwise `F_ST` at the final generation |
 | `scatter.png` | Canonical allele-frequency scatter or labeled projection |
+| `sigma_band_trajectory.jsonl` | The post-convergence extension window; written only when a sigma band is requested |
 
 The trajectory is long-format JSON Lines and can be loaded without a custom
-database. `n_replicates` greater than one runs a batch instead: one of the
+database. `n_replicates` greater than one runs a batch instead: one set of the
 above per replicate subdirectory, plus a batch-level `summary.json` — each
 reported statistic's mean and confidence interval across replicates — and
 its own `manifest.json`. See [output schemas](doc/usage.md#output-schemas).
