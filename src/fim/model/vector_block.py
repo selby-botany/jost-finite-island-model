@@ -236,8 +236,8 @@ def _check_memory(
         )
     else:
         remedies = (
-            "Reduce the number of loci or demes, or lower 2 * N * mu so "
-            "fewer alleles are alive at once, "
+            "Reduce the number of loci or demes, lower the mutation rate or "
+            "the deme sizes so fewer alleles are alive at once, "
         )
     raise VectorMemoryCeilingError(
         f"engine_backend 'generational-vector' needs about "
