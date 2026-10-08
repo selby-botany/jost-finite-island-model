@@ -369,12 +369,14 @@ Return to the [source-tree orientation](../README.md) or the [developer guide](.
     * [write\_generation](#fim.gui.store.GuiProgressStore.write_generation)
     * [read](#fim.gui.store.GuiProgressStore.read)
     * [discard](#fim.gui.store.GuiProgressStore.discard)
+    * [close](#fim.gui.store.GuiProgressStore.close)
     * [equilibrium\_store](#fim.gui.store.GuiProgressStore.equilibrium_store)
   * [LiveProgressStore](#fim.gui.store.LiveProgressStore)
     * [\_\_init\_\_](#fim.gui.store.LiveProgressStore.__init__)
     * [write\_generation](#fim.gui.store.LiveProgressStore.write_generation)
     * [read](#fim.gui.store.LiveProgressStore.read)
     * [discard](#fim.gui.store.LiveProgressStore.discard)
+    * [close](#fim.gui.store.LiveProgressStore.close)
     * [equilibrium\_store](#fim.gui.store.LiveProgressStore.equilibrium_store)
   * [write\_progress\_sidecar](#fim.gui.store.write_progress_sidecar)
   * [read\_progress\_sidecar](#fim.gui.store.read_progress_sidecar)
@@ -566,9 +568,14 @@ Return to the [source-tree orientation](../README.md) or the [developer guide](.
   * [EQUILIBRIUM\_TRAJECTORY\_FILENAME](#fim.persistence.jsonl_store.EQUILIBRIUM_TRAJECTORY_FILENAME)
   * [JSONLTrajectoryStore](#fim.persistence.jsonl_store.JSONLTrajectoryStore)
     * [\_\_init\_\_](#fim.persistence.jsonl_store.JSONLTrajectoryStore.__init__)
+    * [\_\_enter\_\_](#fim.persistence.jsonl_store.JSONLTrajectoryStore.__enter__)
+    * [\_\_exit\_\_](#fim.persistence.jsonl_store.JSONLTrajectoryStore.__exit__)
+    * [\_\_del\_\_](#fim.persistence.jsonl_store.JSONLTrajectoryStore.__del__)
     * [\_\_getstate\_\_](#fim.persistence.jsonl_store.JSONLTrajectoryStore.__getstate__)
     * [\_\_setstate\_\_](#fim.persistence.jsonl_store.JSONLTrajectoryStore.__setstate__)
     * [write\_generation](#fim.persistence.jsonl_store.JSONLTrajectoryStore.write_generation)
+    * [close](#fim.persistence.jsonl_store.JSONLTrajectoryStore.close)
+    * [is\_open](#fim.persistence.jsonl_store.JSONLTrajectoryStore.is_open)
     * [discard](#fim.persistence.jsonl_store.JSONLTrajectoryStore.discard)
     * [equilibrium\_store](#fim.persistence.jsonl_store.JSONLTrajectoryStore.equilibrium_store)
     * [read](#fim.persistence.jsonl_store.JSONLTrajectoryStore.read)
@@ -626,6 +633,10 @@ Return to the [source-tree orientation](../README.md) or the [developer guide](.
   * [EquilibriumStoreProvider](#fim.persistence.store.EquilibriumStoreProvider)
     * [equilibrium\_store](#fim.persistence.store.EquilibriumStoreProvider.equilibrium_store)
   * [equilibrium\_store\_for](#fim.persistence.store.equilibrium_store_for)
+  * [ClosableStore](#fim.persistence.store.ClosableStore)
+    * [close](#fim.persistence.store.ClosableStore.close)
+  * [close\_run\_store](#fim.persistence.store.close_run_store)
+  * [close\_store](#fim.persistence.store.close_store)
   * [InMemoryTrajectoryStore](#fim.persistence.store.InMemoryTrajectoryStore)
     * [\_\_init\_\_](#fim.persistence.store.InMemoryTrajectoryStore.__init__)
     * [\_\_getstate\_\_](#fim.persistence.store.InMemoryTrajectoryStore.__getstate__)
@@ -633,6 +644,7 @@ Return to the [source-tree orientation](../README.md) or the [developer guide](.
     * [write\_generation](#fim.persistence.store.InMemoryTrajectoryStore.write_generation)
     * [read](#fim.persistence.store.InMemoryTrajectoryStore.read)
     * [discard](#fim.persistence.store.InMemoryTrajectoryStore.discard)
+    * [close](#fim.persistence.store.InMemoryTrajectoryStore.close)
     * [equilibrium\_store](#fim.persistence.store.InMemoryTrajectoryStore.equilibrium_store)
   * [ReplicateFanoutStore](#fim.persistence.store.ReplicateFanoutStore)
     * [\_\_init\_\_](#fim.persistence.store.ReplicateFanoutStore.__init__)
@@ -641,6 +653,8 @@ Return to the [source-tree orientation](../README.md) or the [developer guide](.
     * [write\_generation](#fim.persistence.store.ReplicateFanoutStore.write_generation)
     * [read](#fim.persistence.store.ReplicateFanoutStore.read)
     * [discard](#fim.persistence.store.ReplicateFanoutStore.discard)
+    * [close](#fim.persistence.store.ReplicateFanoutStore.close)
+    * [close\_run](#fim.persistence.store.ReplicateFanoutStore.close_run)
     * [equilibrium\_store](#fim.persistence.store.ReplicateFanoutStore.equilibrium_store)
   * [normalize\_row](#fim.persistence.store.normalize_row)
 * [fim.reanalyze](#fim.reanalyze)
@@ -11075,6 +11089,16 @@ def discard(run_id: str) -> None
 
 Delegate straight to the wrapped store; nothing to decorate here.
 
+<a id="fim.gui.store.GuiProgressStore.close"></a>
+
+#### close
+
+```python
+def close() -> None
+```
+
+Close the wrapped store's own resources (`ClosableStore`).
+
 <a id="fim.gui.store.GuiProgressStore.equilibrium_store"></a>
 
 #### equilibrium\_store
@@ -11171,6 +11195,16 @@ def discard(run_id: str) -> None
 ```
 
 Delegate straight to the wrapped store; nothing to decorate here.
+
+<a id="fim.gui.store.LiveProgressStore.close"></a>
+
+#### close
+
+```python
+def close() -> None
+```
+
+Close the wrapped store's own resources (`ClosableStore`).
 
 <a id="fim.gui.store.LiveProgressStore.equilibrium_store"></a>
 
@@ -16737,6 +16771,18 @@ used by `fim.engine` for a real run (as opposed to
 stand-in used by library calls and unit tests that never need a
 file on disk at all).
 
+The store keeps one append handle open between generations, opened
+on the first write. Re-opening a just-written file costs several
+milliseconds on some filesystems — more than encoding a whole
+generation of a small model — so `write_generation` writes through
+the kept handle and still flushes once per generation. `close`
+(also run by leaving a `with` block) releases the handle. A closed
+store is not finished: the next write quietly re-opens the file in
+append mode, so closing is always safe and never loses data. Every
+owner of a store that writes to a directory later renamed into place
+(`fim.paths.atomic_directory`) must close it first, because an open
+handle blocks a rename on Windows.
+
 <a id="fim.persistence.jsonl_store.JSONLTrajectoryStore.__init__"></a>
 
 #### \_\_init\_\_
@@ -16751,6 +16797,42 @@ Bind the store to one trajectory file.
 
 - `path` - JSON Lines file path. Its parent is created on first write.
 
+<a id="fim.persistence.jsonl_store.JSONLTrajectoryStore.__enter__"></a>
+
+#### \_\_enter\_\_
+
+```python
+def __enter__() -> JSONLTrajectoryStore
+```
+
+Return this store, for use as a context manager.
+
+<a id="fim.persistence.jsonl_store.JSONLTrajectoryStore.__exit__"></a>
+
+#### \_\_exit\_\_
+
+```python
+def __exit__(exc_type: type[BaseException] | None,
+             exc_value: BaseException | None,
+             traceback: TracebackType | None) -> None
+```
+
+Close the store's file handles when the `with` block ends.
+
+<a id="fim.persistence.jsonl_store.JSONLTrajectoryStore.__del__"></a>
+
+#### \_\_del\_\_
+
+```python
+def __del__() -> None
+```
+
+Release a handle its owner forgot to close, without a warning.
+
+A safety net only: every flushed generation is already on disk,
+so nothing is lost either way. It keeps a forgotten `close` from
+surfacing as a `ResourceWarning` from the file object itself.
+
 <a id="fim.persistence.jsonl_store.JSONLTrajectoryStore.__getstate__"></a>
 
 #### \_\_getstate\_\_
@@ -16759,7 +16841,7 @@ Bind the store to one trajectory file.
 def __getstate__() -> dict[str, Any]
 ```
 
-Drop `_lock` before pickling.
+Drop `_lock` and the open handle before pickling.
 
 `RunResult.store` crosses a real process boundary under
 `fim.engine.LinealBackend`'s own `max_workers` path
@@ -16808,7 +16890,46 @@ than leaving them sitting in memory until the file is
 eventually closed — this generation is written to disk as soon
 as this call returns, instead of remaining vulnerable to being
 lost entirely if the process is interrupted or crashes before
-the file handle would otherwise have been closed.
+the file handle would otherwise have been closed. The handle
+itself stays open for the next generation (see this class's own
+docstring); a reader of the file sees every generation already
+flushed.
+
+Every line is encoded before the first byte is written, so a
+row that cannot be encoded (a non-finite frequency) leaves the
+file untouched instead of holding a partial generation.
+
+<a id="fim.persistence.jsonl_store.JSONLTrajectoryStore.close"></a>
+
+#### close
+
+```python
+def close() -> None
+```
+
+Release this store's open file handles; safe to call repeatedly.
+
+Closes the handle of this file and of its ancestral-phase
+companion (`equilibrium_store`), if either is open. The store is
+not unusable afterwards: the next `write_generation` re-opens
+the file in append mode, and `read`/`discard` never needed the
+handle. Every generation is flushed as it is written, so closing
+loses nothing; it exists so a directory can be renamed or removed
+(an open handle blocks both on Windows) and so no file descriptor
+outlives its run.
+
+<a id="fim.persistence.jsonl_store.JSONLTrajectoryStore.is_open"></a>
+
+#### is\_open
+
+```python
+def is_open() -> bool
+```
+
+Whether this file's own append handle is currently open.
+
+Reports this file only, not its ancestral-phase companion. For
+diagnostics and for tests that prove no run leaves a file open.
 
 <a id="fim.persistence.jsonl_store.JSONLTrajectoryStore.discard"></a>
 
@@ -18066,6 +18187,63 @@ Return the ancestral-phase companion of `store` for one run.
   readable ancestral trajectory on `fim.engine.RunResult.
   equilibrium_store`, just not a file.
 
+<a id="fim.persistence.store.ClosableStore"></a>
+
+## ClosableStore Objects
+
+```python
+@runtime_checkable
+class ClosableStore(Protocol)
+```
+
+A trajectory store that holds an open resource until it is closed.
+
+Optional, like `EquilibriumStoreProvider`: `TrajectoryStore` itself
+needs no `close` (a custom store, or a test double, can omit it).
+`fim.persistence.jsonl_store.JSONLTrajectoryStore` keeps its file open
+between generations and implements it; closing is idempotent, and a
+closed store re-opens itself if written to again.
+
+<a id="fim.persistence.store.ClosableStore.close"></a>
+
+#### close
+
+```python
+def close() -> None
+```
+
+Release whatever the store holds open; safe to call repeatedly.
+
+<a id="fim.persistence.store.close_run_store"></a>
+
+#### close\_run\_store
+
+```python
+def close_run_store(store: TrajectoryStore, run_id: str) -> None
+```
+
+Close the resources one run of a multi-run store holds, if it can.
+
+**Arguments**:
+
+- `store` - A store that may hold one child store per run
+  (`ReplicateFanoutStore`); any other store is left alone.
+- `run_id` - The run whose own writing is finished.
+
+<a id="fim.persistence.store.close_store"></a>
+
+#### close\_store
+
+```python
+def close_store(store: TrajectoryStore) -> None
+```
+
+Close `store`'s open resources when it has any; otherwise do nothing.
+
+**Arguments**:
+
+- `store` - Any `TrajectoryStore`; only a `ClosableStore` is closed.
+
 <a id="fim.persistence.store.InMemoryTrajectoryStore"></a>
 
 ## InMemoryTrajectoryStore Objects
@@ -18179,6 +18357,19 @@ See `TrajectoryStore.discard`'s own docstring for why this
 exists at all. Held under `_lock`, the same guard `write_
 generation`/`read` already use, so a concurrent write from
 another thread can never interleave with this rebuild of `_rows`.
+
+<a id="fim.persistence.store.InMemoryTrajectoryStore.close"></a>
+
+#### close
+
+```python
+def close() -> None
+```
+
+Do nothing: rows live in memory, so there is nothing to release.
+
+Present so a caller can close any store without checking which
+kind it has (`ClosableStore`).
 
 <a id="fim.persistence.store.InMemoryTrajectoryStore.equilibrium_store"></a>
 
@@ -18305,6 +18496,31 @@ Matches `TrajectoryStore.discard`'s own "no rows, no error"
 contract exactly: a `run_id` this store never saw (an adaptive
 stop's own abandoned lane, `run_batch`'s own docstring) has no
 child store to create just to immediately discard from.
+
+<a id="fim.persistence.store.ReplicateFanoutStore.close"></a>
+
+#### close
+
+```python
+def close() -> None
+```
+
+Close every child store built so far (`ClosableStore`).
+
+<a id="fim.persistence.store.ReplicateFanoutStore.close_run"></a>
+
+#### close\_run
+
+```python
+def close_run(run_id: str) -> None
+```
+
+Close `run_id`'s own child store, if one was built.
+
+Called once a replicate has written its last generation, so a
+batch holds open only the files of the replicates still running
+rather than one per replicate for the whole batch. A no-op for a
+run this store never saw; the child re-opens if written again.
 
 <a id="fim.persistence.store.ReplicateFanoutStore.equilibrium_store"></a>
 

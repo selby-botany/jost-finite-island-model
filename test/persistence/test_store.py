@@ -1,5 +1,6 @@
 """Tests for incremental trajectory and manifest persistence."""
 
+import json
 import threading
 from collections.abc import Iterator
 from pathlib import Path
@@ -189,6 +190,18 @@ def test_jsonl_store_write_generation_is_thread_safe(tmp_path: Path) -> None:
     rows = list(store.read("run-a"))
     assert len(rows) == generation_count * 3
     assert {row["generation"] for row in rows} == set(range(generation_count))
+    # The kept-open handle is shared by every writer: still the one open
+    # handle, and no generation's lines are interleaved with another's —
+    # each generation's three lines are adjacent, and every line is whole
+    # JSON.
+    assert store.is_open()
+    lines = (tmp_path / "trajectory.jsonl").read_text().splitlines()
+    generations = [json.loads(line)["generation"] for line in lines]
+    assert len(generations) == generation_count * 3
+    for start in range(0, len(generations), 3):
+        assert len(set(generations[start : start + 3])) == 1
+    store.close()
+    assert not store.is_open()
 
 
 def test_replicate_fanout_store_routes_each_run_id_to_its_own_store() -> None:

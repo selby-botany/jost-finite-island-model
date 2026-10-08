@@ -32,6 +32,7 @@ Every test module, fixture, and test function documented here in full; `doc/fim-
   - [`test_cli`](#cli.test_cli)
   - [`test_cli_labels`](#cli.test_cli_labels)
   - [`test_cli_sweep`](#cli.test_cli_sweep)
+  - [`test_trajectory_handles`](#cli.test_trajectory_handles)
 - [`test/convergence/`](#group-convergence)
   - [`test_criteria_validation`](#convergence.test_criteria_validation)
   - [`test_defaults`](#convergence.test_defaults)
@@ -117,6 +118,7 @@ Every test module, fixture, and test function documented here in full; `doc/fim-
   - [`test_vectorized`](#model.test_vectorized)
 - [`test/persistence/`](#group-persistence)
   - [`test_groups`](#persistence.test_groups)
+  - [`test_jsonl_lifecycle`](#persistence.test_jsonl_lifecycle)
   - [`test_manifest`](#persistence.test_manifest)
   - [`test_pairwise_file`](#persistence.test_pairwise_file)
   - [`test_read_only`](#persistence.test_read_only)
@@ -563,6 +565,49 @@ def rng() -> Callable[[int], np.random.Generator]
 ```
 
 Return the only sanctioned deterministic RNG factory for tests.
+
+<a id="test.conftest.tracked_jsonl_stores"></a>
+
+#### tracked\_jsonl\_stores
+
+```python
+@pytest.fixture
+def tracked_jsonl_stores(
+        monkeypatch: pytest.MonkeyPatch) -> list[JSONLTrajectoryStore]
+```
+
+Record every `JSONLTrajectoryStore` the test (or code under test) builds.
+
+The leak check for the kept-open trajectory handle: a test runs a real
+entry point in this process, then asserts through `assert_none_open`
+that no store it created still holds a file open. Counts the
+ancestral-phase companions too, which are built through the same
+constructor. Only stores built in this process are seen, so a test of a
+worker-process path checks the stores that come back instead.
+
+**Returns**:
+
+  The list that fills with each store as it is constructed.
+
+<a id="test.conftest.assert_none_open"></a>
+
+#### assert\_none\_open
+
+```python
+def assert_none_open(stores: list[JSONLTrajectoryStore]) -> None
+```
+
+Assert `stores` is non-empty and none of them holds a file open.
+
+**Arguments**:
+
+- `stores` - What `tracked_jsonl_stores` collected.
+  
+
+**Raises**:
+
+- `AssertionError` - If no store was built (the check would prove
+  nothing) or any store still has an open append handle.
 
 <a id="test.conftest.tiny_params"></a>
 
@@ -4488,6 +4533,54 @@ def sweep_file(tmp_path: Path) -> Path
 ```
 
 Write a two-point sweep file and return its path.
+
+<a id="cli.test_trajectory_handles"></a>
+
+# cli.test\_trajectory\_handles
+
+`fim run` leaves no trajectory file open (the kept-open handle leak check).
+
+`JSONLTrajectoryStore` keeps its append handle open between generations,
+so every owner must release it before `fim.paths.atomic_directory` renames
+(or, on failure, removes) the run directory; an open handle blocks both on
+Windows. These tests run the real command in this process and assert,
+through `conftest.tracked_jsonl_stores`, that no store it built is still
+open afterwards.
+
+<a id="cli.test_trajectory_handles.test_scalar_run_closes_its_trajectory_and_ancestral_handles"></a>
+
+#### test\_scalar\_run\_closes\_its\_trajectory\_and\_ancestral\_handles
+
+```python
+def test_scalar_run_closes_its_trajectory_and_ancestral_handles(
+        tmp_path: Path,
+        tracked_jsonl_stores: list[JSONLTrajectoryStore]) -> None
+```
+
+A scalar `fim run` closes both stores of an equilibrium-split run.
+
+<a id="cli.test_trajectory_handles.test_batch_run_closes_every_replicates_handles"></a>
+
+#### test\_batch\_run\_closes\_every\_replicates\_handles
+
+```python
+@pytest.mark.parametrize(
+    ("backend", "flags"),
+    [
+        ("lineal", ["--sequential"]),
+        ("generational", []),
+    ],
+)
+def test_batch_run_closes_every_replicates_handles(
+        tmp_path: Path, tracked_jsonl_stores: list[JSONLTrajectoryStore],
+        backend: str, flags: list[str]) -> None
+```
+
+A `fim run` batch closes every replicate's handles on each engine path.
+
+A `--workers` batch builds its stores in worker processes, which this
+process cannot see; those close in `fim.engine._run_one`, which the
+engine-level tests in `test/persistence/test_jsonl_lifecycle.py` cover.
 
 
 
@@ -13307,6 +13400,22 @@ for any backend but `lineal` — so this produces exactly the same
 artifact tree `test_start_batch_run_writes_every_replicate_and_
 batch_artifact_on_success` already proves for `lineal`.
 
+<a id="gui.test_batch_runner.test_start_batch_run_leaves_no_trajectory_file_open"></a>
+
+#### test\_start\_batch\_run\_leaves\_no\_trajectory\_file\_open
+
+```python
+def test_start_batch_run_leaves_no_trajectory_file_open(
+        tmp_path: Path, batch_params: SimulationParams,
+        tracked_jsonl_stores: list[JSONLTrajectoryStore]) -> None
+```
+
+A finished GUI batch has closed every replicate's trajectory handle.
+
+Run under `engine_backend="generational"` so the replicate stores are
+built in this process, where they can be inspected; a `lineal` batch
+builds them in worker processes (they close in `fim.engine._run_one`).
+
 <a id="gui.test_batch_runner.test_start_batch_run_writes_every_replicate_and_batch_artifact_on_success"></a>
 
 #### test\_start\_batch\_run\_writes\_every\_replicate\_and\_batch\_artifact\_on\_success
@@ -20684,6 +20793,21 @@ def test_start_run_writes_the_six_documented_artifacts_on_success(
 
 A real, uncancelled run produces the same six artifacts `fim run` does.
 
+<a id="gui.test_runner.test_start_run_leaves_no_trajectory_file_open"></a>
+
+#### test\_start\_run\_leaves\_no\_trajectory\_file\_open
+
+```python
+def test_start_run_leaves_no_trajectory_file_open(
+        tmp_path: Path, tiny_params: SimulationParams,
+        tracked_jsonl_stores: list[JSONLTrajectoryStore]) -> None
+```
+
+A finished GUI scalar run has closed its trajectory handle.
+
+Closed before `atomic_directory` renames the directory (an open
+handle blocks that on Windows), and the published file is complete.
+
 <a id="gui.test_runner.test_start_run_records_matching_digests_in_the_published_manifest"></a>
 
 #### test\_start\_run\_records\_matching\_digests\_in\_the\_published\_manifest
@@ -22308,6 +22432,22 @@ The exact property `fim.engine._require_picklable` checks on a
 the process boundary, but this proves the class *could*, and is a
 much faster, more direct signal than discovering a pickling failure
 three layers away inside a real subprocess.
+
+<a id="gui.test_store.test_progress_stores_close_delegates_to_the_inner_store"></a>
+
+#### test\_progress\_stores\_close\_delegates\_to\_the\_inner\_store
+
+```python
+def test_progress_stores_close_delegates_to_the_inner_store(
+        tmp_path: Path) -> None
+```
+
+Closing either decorator releases the wrapped file's handle.
+
+The run owners close the store they built (`GuiProgressStore` around a
+`JSONLTrajectoryStore`) before `fim.paths.atomic_directory` renames the
+directory; the decorator must pass that through, or the handle stays
+open behind it.
 
 <a id="gui.test_store.test_read_progress_sidecar_returns_none_for_a_missing_file"></a>
 
@@ -27879,6 +28019,275 @@ def test_experiments_containing_study_lists_each_holder(
 ```
 
 Every Experiment listing the Study is returned, and no other.
+
+<a id="persistence.test_jsonl_lifecycle"></a>
+
+# persistence.test\_jsonl\_lifecycle
+
+Lifecycle tests for the kept-open `JSONLTrajectoryStore` append handle.
+
+`JSONLTrajectoryStore.write_generation` keeps one append handle open
+between generations (re-opening a just-written file costs milliseconds)
+and flushes once per generation. These tests pin the contract that makes
+that safe: a reader sees every flushed generation while the handle is
+open, `close` is idempotent and never ends a store's life, a pickled copy
+re-opens by itself, `discard` and an external delete stay consistent, a
+directory renamed into place by `fim.paths.atomic_directory` loses
+nothing, and no real entry point leaves a file open.
+
+Everything is deterministic: no test waits on a timing budget, and the
+only waits (threads) are bounded by `conftest.join_or_fail`.
+
+<a id="persistence.test_jsonl_lifecycle.test_a_reader_sees_every_flushed_generation_while_the_handle_is_open"></a>
+
+#### test\_a\_reader\_sees\_every\_flushed\_generation\_while\_the\_handle\_is\_open
+
+```python
+def test_a_reader_sees_every_flushed_generation_while_the_handle_is_open(
+        tmp_path: Path) -> None
+```
+
+Reading mid-run needs no close: each generation is flushed on return.
+
+<a id="persistence.test_jsonl_lifecycle.test_the_handle_is_opened_once_and_reused_across_generations"></a>
+
+#### test\_the\_handle\_is\_opened\_once\_and\_reused\_across\_generations
+
+```python
+def test_the_handle_is_opened_once_and_reused_across_generations(
+        tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None
+```
+
+Ten generations cost one `open`, the point of keeping the handle.
+
+<a id="persistence.test_jsonl_lifecycle.test_close_is_idempotent_and_the_next_write_appends"></a>
+
+#### test\_close\_is\_idempotent\_and\_the\_next\_write\_appends
+
+```python
+def test_close_is_idempotent_and_the_next_write_appends(
+        tmp_path: Path) -> None
+```
+
+A closed store is not finished: it re-opens in append mode, losing nothing.
+
+<a id="persistence.test_jsonl_lifecycle.test_close_before_any_write_is_a_no_op"></a>
+
+#### test\_close\_before\_any\_write\_is\_a\_no\_op
+
+```python
+def test_close_before_any_write_is_a_no_op(tmp_path: Path) -> None
+```
+
+Closing a store that never wrote creates no file and raises nothing.
+
+<a id="persistence.test_jsonl_lifecycle.test_context_manager_closes_on_exit_and_on_error"></a>
+
+#### test\_context\_manager\_closes\_on\_exit\_and\_on\_error
+
+```python
+def test_context_manager_closes_on_exit_and_on_error(tmp_path: Path) -> None
+```
+
+Leaving a `with` block releases the handle, even through an exception.
+
+<a id="persistence.test_jsonl_lifecycle.test_close_also_closes_the_ancestral_phase_companion"></a>
+
+#### test\_close\_also\_closes\_the\_ancestral\_phase\_companion
+
+```python
+def test_close_also_closes_the_ancestral_phase_companion(
+        tmp_path: Path) -> None
+```
+
+`close` reaches the sibling `equilibrium_trajectory.jsonl` handle too.
+
+<a id="persistence.test_jsonl_lifecycle.test_pickle_drops_the_handle_and_the_copy_appends_on_its_own"></a>
+
+#### test\_pickle\_drops\_the\_handle\_and\_the\_copy\_appends\_on\_its\_own
+
+```python
+def test_pickle_drops_the_handle_and_the_copy_appends_on_its_own(
+        tmp_path: Path) -> None
+```
+
+A pickled store crosses a process boundary without its open handle.
+
+`RunResult.store` is pickled back from a worker process while a store
+may still be open. The original keeps its handle; the copy re-opens
+the file lazily, in append mode, on its first write.
+
+<a id="persistence.test_jsonl_lifecycle.test_discard_then_write_re_creates_the_file_consistently"></a>
+
+#### test\_discard\_then\_write\_re\_creates\_the\_file\_consistently
+
+```python
+def test_discard_then_write_re_creates_the_file_consistently(
+        tmp_path: Path) -> None
+```
+
+`discard` closes the handle; the next write starts a fresh, correct file.
+
+<a id="persistence.test_jsonl_lifecycle.test_discard_of_an_unknown_run_still_releases_the_handle"></a>
+
+#### test\_discard\_of\_an\_unknown\_run\_still\_releases\_the\_handle
+
+```python
+def test_discard_of_an_unknown_run_still_releases_the_handle(
+        tmp_path: Path) -> None
+```
+
+A no-op discard leaves the rows alone; the store stays usable.
+
+<a id="persistence.test_jsonl_lifecycle.test_a_file_deleted_under_an_open_handle_is_re_created_by_the_next_write"></a>
+
+#### test\_a\_file\_deleted\_under\_an\_open\_handle\_is\_re\_created\_by\_the\_next\_write
+
+```python
+@pytest.mark.skipif(
+    sys.platform == "win32",
+    reason="Windows refuses to delete a file that is held open",
+)
+def test_a_file_deleted_under_an_open_handle_is_re_created_by_the_next_write(
+        tmp_path: Path) -> None
+```
+
+Writing on to an unlinked file would lose data; the file is re-created.
+
+The open-per-generation writer this replaced re-created a deleted
+file; the kept handle notices its link count dropped to zero and does
+the same.
+
+<a id="persistence.test_jsonl_lifecycle.test_a_failed_write_drops_the_handle_so_no_partial_bytes_follow"></a>
+
+#### test\_a\_failed\_write\_drops\_the\_handle\_so\_no\_partial\_bytes\_follow
+
+```python
+def test_a_failed_write_drops_the_handle_so_no_partial_bytes_follow(
+        tmp_path: Path) -> None
+```
+
+An I/O error mid-write must not leave buffered bytes for a retry to append.
+
+<a id="persistence.test_jsonl_lifecycle.test_an_unencodable_row_leaves_the_file_untouched"></a>
+
+#### test\_an\_unencodable\_row\_leaves\_the\_file\_untouched
+
+```python
+def test_an_unencodable_row_leaves_the_file_untouched(tmp_path: Path) -> None
+```
+
+Every line is encoded before the first byte is written.
+
+`validate=False` skips `normalize_row`, so a non-finite frequency is
+caught only by the encoder; the generation must not be half-written.
+
+<a id="persistence.test_jsonl_lifecycle.test_an_empty_generation_is_still_rejected_before_any_file_is_opened"></a>
+
+#### test\_an\_empty\_generation\_is\_still\_rejected\_before\_any\_file\_is\_opened
+
+```python
+def test_an_empty_generation_is_still_rejected_before_any_file_is_opened(
+        tmp_path: Path) -> None
+```
+
+Behavior kept from the open-per-generation writer.
+
+<a id="persistence.test_jsonl_lifecycle.test_atomic_directory_publishes_a_closed_store_intact"></a>
+
+#### test\_atomic\_directory\_publishes\_a\_closed\_store\_intact
+
+```python
+def test_atomic_directory_publishes_a_closed_store_intact(
+        tmp_path: Path) -> None
+```
+
+Closing before the rename (the owners' rule) publishes every byte.
+
+<a id="persistence.test_jsonl_lifecycle.test_a_rename_under_an_open_handle_loses_nothing_on_posix"></a>
+
+#### test\_a\_rename\_under\_an\_open\_handle\_loses\_nothing\_on\_posix
+
+```python
+@pytest.mark.skipif(
+    sys.platform == "win32",
+    reason="Windows refuses to rename a directory holding an open file",
+)
+def test_a_rename_under_an_open_handle_loses_nothing_on_posix(
+        tmp_path: Path) -> None
+```
+
+The handle follows the file through a rename (POSIX); no data is lost.
+
+Documents why the owners still close first: this only holds where the
+platform allows the rename at all, and it leaves `store.path` stale.
+
+<a id="persistence.test_jsonl_lifecycle.test_fanout_close_run_closes_only_that_child"></a>
+
+#### test\_fanout\_close\_run\_closes\_only\_that\_child
+
+```python
+def test_fanout_close_run_closes_only_that_child(tmp_path: Path) -> None
+```
+
+`close_run` releases one replicate's file; `close` releases the rest.
+
+<a id="persistence.test_jsonl_lifecycle.test_close_helpers_ignore_stores_without_a_close_method"></a>
+
+#### test\_close\_helpers\_ignore\_stores\_without\_a\_close\_method
+
+```python
+def test_close_helpers_ignore_stores_without_a_close_method() -> None
+```
+
+`close_store`/`close_run_store` accept any `TrajectoryStore`.
+
+<a id="persistence.test_jsonl_lifecycle.test_engine_closes_the_store_it_was_given_and_the_result_still_reads"></a>
+
+#### test\_engine\_closes\_the\_store\_it\_was\_given\_and\_the\_result\_still\_reads
+
+```python
+def test_engine_closes_the_store_it_was_given_and_the_result_still_reads(
+        tmp_path: Path,
+        tracked_jsonl_stores: list[JSONLTrajectoryStore]) -> None
+```
+
+`fim(store=...)` closes the store when the run ends, even on `fim` alone.
+
+<a id="persistence.test_jsonl_lifecycle.test_engine_closes_the_store_when_the_run_raises"></a>
+
+#### test\_engine\_closes\_the\_store\_when\_the\_run\_raises
+
+```python
+def test_engine_closes_the_store_when_the_run_raises(tmp_path: Path) -> None
+```
+
+A run that fails partway still releases its file (a cancelled GUI run).
+
+<a id="persistence.test_jsonl_lifecycle.store_run_id"></a>
+
+#### store\_run\_id
+
+```python
+def store_run_id(store: JSONLTrajectoryStore) -> str
+```
+
+Return the single run id found in `store`'s file.
+
+<a id="persistence.test_jsonl_lifecycle.test_generational_batch_holds_open_only_the_running_lanes"></a>
+
+#### test\_generational\_batch\_holds\_open\_only\_the\_running\_lanes
+
+```python
+def test_generational_batch_holds_open_only_the_running_lanes(
+        tmp_path: Path) -> None
+```
+
+With a window of one, a finished replicate's file is closed before the next.
+
+Without per-lane closing a batch of N replicates would hold N files
+open for its whole run, which exhausts the descriptor limit on a large
+batch.
 
 <a id="persistence.test_manifest"></a>
 

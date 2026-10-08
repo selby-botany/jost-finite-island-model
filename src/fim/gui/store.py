@@ -47,6 +47,7 @@ from fim.paths import write_text_atomically
 from fim.persistence.store import (
     TrajectoryRow,
     TrajectoryStore,
+    close_store,
     equilibrium_store_for,
 )
 from fim.reanalyze import group_rows_by_generation
@@ -152,6 +153,10 @@ class GuiProgressStore:
         """Delegate straight to the wrapped store; nothing to decorate here."""
         self._inner.discard(run_id)
 
+    def close(self) -> None:
+        """Close the wrapped store's own resources (`ClosableStore`)."""
+        close_store(self._inner)
+
     def equilibrium_store(self, run_id: str) -> TrajectoryStore:
         """Return the wrapped store's own ancestral-phase companion, undecorated.
 
@@ -228,6 +233,10 @@ class LiveProgressStore:
     def discard(self, run_id: str) -> None:
         """Delegate straight to the wrapped store; nothing to decorate here."""
         self._inner.discard(run_id)
+
+    def close(self) -> None:
+        """Close the wrapped store's own resources (`ClosableStore`)."""
+        close_store(self._inner)
 
     def equilibrium_store(self, run_id: str) -> TrajectoryStore:
         """Return the wrapped store's own ancestral-phase companion, undecorated.

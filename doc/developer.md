@@ -297,6 +297,39 @@ Add a new backend under `fim.persistence` without changing the engine,
 statistics, or visualizations. The JSON Lines backend flushes each
 generation so an interrupted file retains every complete line.
 
+`JSONLTrajectoryStore` keeps one append handle open between generations
+(opened on the first write) instead of re-opening the file for every
+generation, which costs several milliseconds on some filesystems, more than
+encoding a generation of a small model. Each `write_generation` call still
+flushes, so "on disk once the call returns" holds at the operating-system
+level and a reader (`read`, the live GUI view) sees every flushed generation
+while the run is in progress. The lifecycle rules:
+
+- `close()` (also the `with` form) releases the handle and the ancestral-phase
+  companion's. It is idempotent and never ends the store's life: the next
+  write re-opens the file in append mode, and `read`/`discard` do not need
+  the handle. `close` is optional on the protocol (`ClosableStore`,
+  `fim.persistence.store.close_store`); `InMemoryTrajectoryStore` has a
+  no-op one.
+- The engine closes what it writes: `fim.engine._run_one` closes the store
+  when a replicate ends (or raises), `ReplicateFanoutStore.close_run` closes
+  a generational lane's store the moment it finishes (a batch holds open
+  only its running lanes, so a large batch cannot exhaust file descriptors),
+  and `GenerationalBackend` closes the rest at the end. The scalar run owners
+  (`fim run`, the GUI runner) also close in a `with`/`closing` block.
+- Close before the directory is renamed or removed. A run directory is built
+  in a hidden sibling and renamed into place by `fim.paths.atomic_directory`;
+  on POSIX an open handle follows the file through the rename, but Windows
+  refuses to rename or delete a directory holding an open file. Any new owner
+  of a store inside an `atomic_directory` block must close it before the
+  block ends.
+- A pickled store (a `RunResult.store` returned from a worker process) is
+  sent without its handle and re-opens lazily in append mode.
+- `discard(run_id)` closes the handle before it rewrites or removes the file;
+  a file deleted from under an open handle is re-created by the next write.
+- Tests prove a real entry point leaves nothing open with
+  `conftest.tracked_jsonl_stores` and `assert_none_open`.
+
 A replicate batch needs one store *per replicate*, not one shared instance —
 mandatory once max_workers is set, since a single store object cannot
 cross a worker-process boundary. `fim`'s store_factory builds one given a

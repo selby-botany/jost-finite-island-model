@@ -28,12 +28,13 @@ from datetime import UTC, datetime
 from pathlib import Path
 
 import pytest
-from conftest import join_or_fail, poll_or_fail
+from conftest import assert_none_open, join_or_fail, poll_or_fail
 
 from fim.engine import Clock, SimulationOutput, replicate_summary
 from fim.engine import fim as engine_fim
 from fim.gui import batch_runner
 from fim.model.params import Migration, MutationRate, PopulationSize, SimulationParams
+from fim.persistence.jsonl_store import JSONLTrajectoryStore
 from fim.persistence.manifest import hash_file, read_batch_manifest
 from fim.persistence.store import TrajectoryStore
 
@@ -177,6 +178,31 @@ def test_start_batch_run_succeeds_for_a_non_lineal_engine_backend(
     }
     messages = _drain(message_queue)
     assert messages[-1][0] == "done"
+
+
+def test_start_batch_run_leaves_no_trajectory_file_open(
+    tmp_path: Path,
+    batch_params: SimulationParams,
+    tracked_jsonl_stores: list[JSONLTrajectoryStore],
+) -> None:
+    """A finished GUI batch has closed every replicate's trajectory handle.
+
+    Run under `engine_backend="generational"` so the replicate stores are
+    built in this process, where they can be inspected; a `lineal` batch
+    builds them in worker processes (they close in `fim.engine._run_one`).
+    """
+    params = replace(batch_params, engine_backend="generational")
+    output_directory = tmp_path / "batch"
+    message_queue: queue.Queue[batch_runner.BatchMessage] = queue.Queue()
+
+    thread = batch_runner.start_batch_run(
+        params, output_directory, message_queue, threading.Event()
+    )
+    join_or_fail(thread, "batch thread")
+
+    assert _drain(message_queue)[-1][0] == "done"
+    assert len(tracked_jsonl_stores) == 3
+    assert_none_open(tracked_jsonl_stores)
 
 
 def test_start_batch_run_writes_every_replicate_and_batch_artifact_on_success(

@@ -166,6 +166,8 @@ from fim.persistence.store import (
     InMemoryTrajectoryStore,
     ReplicateFanoutStore,
     TrajectoryStore,
+    close_run_store,
+    close_store,
     equilibrium_store_for,
 )
 from fim.statistics.catalog import history_keys, nei_key, report_keys
@@ -1232,6 +1234,11 @@ def _finalize_replica_lane(
     instant each one's own extension finishes — the named, temporary
     peak-memory cost decision 9 accepts explicitly.
     """
+    # This lane has written its last generation: release its trajectory
+    # file now, so a batch holds open only the files of the lanes still
+    # running (at most `max_concurrent_replicates`), never one per
+    # replicate for the whole batch.
+    close_run_store(store, lane.run_id)
     outcome = lane.monitor.outcome()
     if not _lane_is_sigma_band_eligible(lane, outcome):
         lane.vectorized_state = None
@@ -1677,7 +1684,13 @@ class GenerationalBackend:
             if self._store_factory is not None
             else (store if store is not None else InMemoryTrajectoryStore())
         )
-        results = run_batch(params, trajectory_store, run_id, clock, self._advancer)
+        try:
+            results = run_batch(params, trajectory_store, run_id, clock, self._advancer)
+        finally:
+            # Every replicate was already closed as it finished; this
+            # catches the lanes of a batch that raised partway, and a
+            # shared store, which has only the one handle to close.
+            close_store(trajectory_store)
         if params.n_replicates == 1:
             return results[0]
         return results
@@ -3514,6 +3527,28 @@ def _run_replicate_worker(
 
 
 def _run_one(
+    params: SimulationParams,
+    store: TrajectoryStore,
+    run_id: str,
+    clock: Clock,
+) -> RunResult:
+    """Execute one scalar replicate, then release the store's open files.
+
+    Runs `_simulate_one` and closes `store` (and its ancestral-phase
+    companion) afterwards, whether the run finished or raised — a
+    cancelled GUI run, for one, must not leave a file open inside a
+    directory `fim.paths.atomic_directory` is about to remove, which
+    Windows refuses. Closing never loses data and never makes the store
+    unusable: the returned `RunResult.store` still reads, and a later
+    write re-opens its file.
+    """
+    try:
+        return _simulate_one(params, store, run_id, clock)
+    finally:
+        close_store(store)
+
+
+def _simulate_one(
     params: SimulationParams,
     store: TrajectoryStore,
     run_id: str,

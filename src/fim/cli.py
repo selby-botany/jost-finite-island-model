@@ -592,16 +592,19 @@ def _command_run_scalar(
         _print_derived_convergence(params)
     with paths.atomic_directory(output_directory) as working_directory:
         targets = _run_artifact_targets(working_directory)
-        store = JSONLTrajectoryStore(targets["trajectory"])
-        output = fim(
-            params.gene_copies,
-            params.m,
-            params.mu,
-            params.d,
-            params=params,
-            store=store,
-            run_id=run_id,
-        )
+        # Closed here as well as by the engine, before `atomic_directory`
+        # renames (or, on failure, removes) the directory: an open handle
+        # blocks both on Windows.
+        with JSONLTrajectoryStore(targets["trajectory"]) as store:
+            output = fim(
+                params.gene_copies,
+                params.m,
+                params.mu,
+                params.d,
+                params=params,
+                store=store,
+                run_id=run_id,
+            )
         if not isinstance(output, RunResult):
             raise RuntimeError("scalar CLI run unexpectedly returned a batch")
         logger.debug("writing run artifacts to %s", working_directory)

@@ -324,8 +324,10 @@ directly from a frequency table instead of from a live simulation.
 
 - **`TrajectoryStore`** (the interface) and its two implementations,
   **`JSONLTrajectoryStore`** (the real, file-backed store — one
-  generation written at a time, so a run's history survives an
-  interruption) and **`InMemoryTrajectoryStore`** (a test double with
+  generation written and flushed at a time through one kept-open handle,
+  so a run's history survives an interruption; `close()` or a `with`
+  block releases the handle, and a closed store re-opens on its next
+  write) and **`InMemoryTrajectoryStore`** (a test double with
   the same interface, nothing touches disk). **`TrajectoryRow`** is one
   row of that per-generation history.
 - **`RunManifest`**, **`read_manifest`**, **`write_manifest`** — a

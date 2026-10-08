@@ -24,7 +24,7 @@ from dataclasses import replace
 from pathlib import Path
 
 import pytest
-from conftest import join_or_fail
+from conftest import assert_none_open, join_or_fail
 
 from fim.engine import RunResult
 from fim.gui import runner
@@ -145,6 +145,29 @@ def test_start_run_writes_the_six_documented_artifacts_on_success(
             assert "frequencySpectrum" in visuals
             checked += 1
     assert checked == len(progress_messages)
+
+
+def test_start_run_leaves_no_trajectory_file_open(
+    tmp_path: Path,
+    tiny_params: SimulationParams,
+    tracked_jsonl_stores: list[JSONLTrajectoryStore],
+) -> None:
+    """A finished GUI scalar run has closed its trajectory handle.
+
+    Closed before `atomic_directory` renames the directory (an open
+    handle blocks that on Windows), and the published file is complete.
+    """
+    output_directory = tmp_path / "output"
+    message_queue: queue.Queue[runner.RunMessage] = queue.Queue()
+
+    thread = runner.start_run(
+        tiny_params, output_directory, message_queue, threading.Event()
+    )
+    join_or_fail(thread, "run thread")
+
+    assert _drain(message_queue)[-1][0] == "done"
+    assert_none_open(tracked_jsonl_stores)
+    assert (output_directory / "trajectory.jsonl").read_text().strip()
 
 
 def test_start_run_records_matching_digests_in_the_published_manifest(

@@ -883,6 +883,15 @@ project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Changed
 
+- **Trajectory files are written through one open handle.** The JSON Lines
+  trajectory writer re-opened `trajectory.jsonl` for every generation, which
+  cost several milliseconds per generation on macOS, about three quarters of
+  the writing time at 30 loci. It now keeps one append handle open per run
+  and still flushes every generation, so an interrupted run keeps every
+  complete line and the live view still sees each generation. The files are
+  byte for byte the same. A run releases the handle when it ends, fails, or
+  is cancelled, before its output directory is published.
+
 - **Loading a configuration no longer changes your Settings.** In the
   desktop app, loading an example, a preset, a YAML file, or a saved run
   (Home's Clone, or Run it) used to copy its execution engine,

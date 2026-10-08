@@ -15,12 +15,15 @@ once, either to write it or to read it back.
 
 from __future__ import annotations
 
+import contextlib
 import json
 import logging
+import os
 import threading
 from collections.abc import Iterable, Iterator, Mapping
 from pathlib import Path
-from typing import Any, Final, cast
+from types import TracebackType
+from typing import Any, Final, TextIO, cast
 
 from fim.persistence.store import TrajectoryRow, normalize_row
 
@@ -44,6 +47,18 @@ class JSONLTrajectoryStore:
     `fim.persistence.store.InMemoryTrajectoryStore`, a lighter-weight
     stand-in used by library calls and unit tests that never need a
     file on disk at all).
+
+    The store keeps one append handle open between generations, opened
+    on the first write. Re-opening a just-written file costs several
+    milliseconds on some filesystems — more than encoding a whole
+    generation of a small model — so `write_generation` writes through
+    the kept handle and still flushes once per generation. `close`
+    (also run by leaving a `with` block) releases the handle. A closed
+    store is not finished: the next write quietly re-opens the file in
+    append mode, so closing is always safe and never loses data. Every
+    owner of a store that writes to a directory later renamed into place
+    (`fim.paths.atomic_directory`) must close it first, because an open
+    handle blocks a rename on Windows.
     """
 
     def __init__(self, path: Path | str) -> None:
@@ -60,9 +75,37 @@ class JSONLTrajectoryStore:
         # calls on the same underlying file descriptor, garbling lines.
         self._lock = threading.Lock()
         self._equilibrium: JSONLTrajectoryStore | None = None
+        # The kept-open append handle; `None` until the first write and
+        # again after `close`. Guarded by `_lock`.
+        self._handle: TextIO | None = None
+
+    def __enter__(self) -> JSONLTrajectoryStore:
+        """Return this store, for use as a context manager."""
+        return self
+
+    def __exit__(
+        self,
+        exc_type: type[BaseException] | None,
+        exc_value: BaseException | None,
+        traceback: TracebackType | None,
+    ) -> None:
+        """Close the store's file handles when the `with` block ends."""
+        self.close()
+
+    def __del__(self) -> None:
+        """Release a handle its owner forgot to close, without a warning.
+
+        A safety net only: every flushed generation is already on disk,
+        so nothing is lost either way. It keeps a forgotten `close` from
+        surfacing as a `ResourceWarning` from the file object itself.
+        """
+        handle = getattr(self, "_handle", None)
+        if handle is not None:
+            with contextlib.suppress(OSError):
+                handle.close()
 
     def __getstate__(self) -> dict[str, Any]:
-        """Drop `_lock` before pickling.
+        """Drop `_lock` and the open handle before pickling.
 
         `RunResult.store` crosses a real process boundary under
         `fim.engine.LinealBackend`'s own `max_workers` path
@@ -74,6 +117,11 @@ class JSONLTrajectoryStore:
         """
         state = self.__dict__.copy()
         del state["_lock"]
+        # An open file handle cannot be pickled and would mean nothing in
+        # another process. Every generation is flushed as it is written,
+        # so dropping it loses nothing; the unpickled copy re-opens the
+        # file in append mode on its first write.
+        state["_handle"] = None
         return state
 
     def __setstate__(self, state: dict[str, Any]) -> None:
@@ -106,7 +154,14 @@ class JSONLTrajectoryStore:
         eventually closed — this generation is written to disk as soon
         as this call returns, instead of remaining vulnerable to being
         lost entirely if the process is interrupted or crashes before
-        the file handle would otherwise have been closed.
+        the file handle would otherwise have been closed. The handle
+        itself stays open for the next generation (see this class's own
+        docstring); a reader of the file sees every generation already
+        flushed.
+
+        Every line is encoded before the first byte is written, so a
+        row that cannot be encoded (a non-finite frequency) leaves the
+        file untouched instead of holding a partial generation.
         """
         if validate:
             normalized_rows = [
@@ -116,19 +171,27 @@ class JSONLTrajectoryStore:
             normalized_rows = [cast("TrajectoryRow", dict(row)) for row in rows]
         if not normalized_rows:
             raise ValueError("a generation must contain at least one row")
-        self.path.parent.mkdir(parents=True, exist_ok=True)
-        with self._lock, self.path.open("a", encoding="utf-8", newline="\n") as handle:
-            for row in normalized_rows:
-                handle.write(
-                    json.dumps(
-                        row,
-                        sort_keys=True,
-                        separators=(",", ":"),
-                        allow_nan=False,
-                    )
-                )
-                handle.write("\n")
-            handle.flush()
+        payload = "".join(
+            json.dumps(
+                row,
+                sort_keys=True,
+                separators=(",", ":"),
+                allow_nan=False,
+            )
+            + "\n"
+            for row in normalized_rows
+        )
+        with self._lock:
+            handle = self._open_handle()
+            try:
+                handle.write(payload)
+                handle.flush()
+            except BaseException:
+                # A failed write may leave unwritten bytes buffered in the
+                # handle; drop it so they cannot be appended later, out of
+                # order, by a retry. The next write re-opens the file.
+                self._close_handle()
+                raise
         # Guarded like `fim.engine._run_one`'s own per-generation loop
         # (`doc/fim-logging-design.md` §9): this is called once per
         # generation for the life of a run, so the message is only
@@ -141,6 +204,58 @@ class JSONLTrajectoryStore:
                 generation,
                 self.path,
             )
+
+    def close(self) -> None:
+        """Release this store's open file handles; safe to call repeatedly.
+
+        Closes the handle of this file and of its ancestral-phase
+        companion (`equilibrium_store`), if either is open. The store is
+        not unusable afterwards: the next `write_generation` re-opens
+        the file in append mode, and `read`/`discard` never needed the
+        handle. Every generation is flushed as it is written, so closing
+        loses nothing; it exists so a directory can be renamed or removed
+        (an open handle blocks both on Windows) and so no file descriptor
+        outlives its run.
+        """
+        with self._lock:
+            self._close_handle()
+            equilibrium = self._equilibrium
+        if equilibrium is not None:
+            equilibrium.close()
+
+    def is_open(self) -> bool:
+        """Whether this file's own append handle is currently open.
+
+        Reports this file only, not its ancestral-phase companion. For
+        diagnostics and for tests that prove no run leaves a file open.
+        """
+        handle = self._handle
+        return handle is not None and not handle.closed
+
+    def _close_handle(self) -> None:
+        """Close and forget the kept-open handle, if any; caller holds `_lock`."""
+        handle, self._handle = self._handle, None
+        if handle is not None:
+            handle.close()
+
+    def _open_handle(self) -> TextIO:
+        """Return the append handle, opening it if needed; caller holds `_lock`.
+
+        A kept handle is reused only while it still names the file at
+        `path`: if something deleted the file meanwhile (a link count of
+        zero), writing on would silently feed an unlinked file, so the
+        handle is dropped and the file re-created, exactly as the
+        open-per-generation writer this replaced would have done.
+        """
+        handle = self._handle
+        if handle is not None:
+            if not handle.closed and os.fstat(handle.fileno()).st_nlink > 0:
+                return handle
+            self._close_handle()
+        self.path.parent.mkdir(parents=True, exist_ok=True)
+        handle = self.path.open("a", encoding="utf-8", newline="\n")
+        self._handle = handle
+        return handle
 
     def discard(self, run_id: str) -> None:
         """Rewrite this file without ``run_id``'s own rows; a no-op if there are none.
@@ -162,6 +277,11 @@ class JSONLTrajectoryStore:
         data is gone," not "assert it was there first."
         """
         with self._lock:
+            # The file is about to be rewritten or removed: release the
+            # kept handle first (a removal is blocked by it on Windows,
+            # and a rewrite would leave it pointing at stale content).
+            # The next write re-opens the file.
+            self._close_handle()
             if not self.path.is_file():
                 return
             kept_lines: list[str] = []

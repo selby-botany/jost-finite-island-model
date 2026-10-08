@@ -172,6 +172,45 @@ def equilibrium_store_for(store: TrajectoryStore, run_id: str) -> TrajectoryStor
     return InMemoryTrajectoryStore()
 
 
+@runtime_checkable
+class ClosableStore(Protocol):
+    """A trajectory store that holds an open resource until it is closed.
+
+    Optional, like `EquilibriumStoreProvider`: `TrajectoryStore` itself
+    needs no `close` (a custom store, or a test double, can omit it).
+    `fim.persistence.jsonl_store.JSONLTrajectoryStore` keeps its file open
+    between generations and implements it; closing is idempotent, and a
+    closed store re-opens itself if written to again.
+    """
+
+    def close(self) -> None:
+        """Release whatever the store holds open; safe to call repeatedly."""
+        ...
+
+
+def close_run_store(store: TrajectoryStore, run_id: str) -> None:
+    """Close the resources one run of a multi-run store holds, if it can.
+
+    Args:
+        store: A store that may hold one child store per run
+            (`ReplicateFanoutStore`); any other store is left alone.
+        run_id: The run whose own writing is finished.
+    """
+    close_run = getattr(store, "close_run", None)
+    if callable(close_run):
+        close_run(run_id)
+
+
+def close_store(store: TrajectoryStore) -> None:
+    """Close `store`'s open resources when it has any; otherwise do nothing.
+
+    Args:
+        store: Any `TrajectoryStore`; only a `ClosableStore` is closed.
+    """
+    if isinstance(store, ClosableStore):
+        store.close()
+
+
 class InMemoryTrajectoryStore:
     """Store trajectories in memory for library calls and focused tests.
 
@@ -267,6 +306,13 @@ class InMemoryTrajectoryStore:
         """
         with self._lock:
             self._rows = [row for row in self._rows if row["run_id"] != run_id]
+
+    def close(self) -> None:
+        """Do nothing: rows live in memory, so there is nothing to release.
+
+        Present so a caller can close any store without checking which
+        kind it has (`ClosableStore`).
+        """
 
     def equilibrium_store(self, run_id: str) -> TrajectoryStore:
         """Return this store's one in-memory ancestral-phase companion.
@@ -373,6 +419,25 @@ class ReplicateFanoutStore:
         store = self._stores.get(run_id)
         if store is not None:
             store.discard(run_id)
+
+    def close(self) -> None:
+        """Close every child store built so far (`ClosableStore`)."""
+        with self._lock:
+            children = list(self._stores.values())
+        for child in children:
+            close_store(child)
+
+    def close_run(self, run_id: str) -> None:
+        """Close `run_id`'s own child store, if one was built.
+
+        Called once a replicate has written its last generation, so a
+        batch holds open only the files of the replicates still running
+        rather than one per replicate for the whole batch. A no-op for a
+        run this store never saw; the child re-opens if written again.
+        """
+        child = self._stores.get(run_id)
+        if child is not None:
+            close_store(child)
 
     def equilibrium_store(self, run_id: str) -> TrajectoryStore:
         """Return the ancestral-phase companion of `run_id`'s own child store.

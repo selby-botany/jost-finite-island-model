@@ -340,6 +340,38 @@ def test_live_progress_store_is_picklable(tmp_path: Path) -> None:
     assert read_progress_sidecar(tmp_path / ".progress") is not None
 
 
+def test_progress_stores_close_delegates_to_the_inner_store(tmp_path: Path) -> None:
+    """Closing either decorator releases the wrapped file's handle.
+
+    The run owners close the store they built (`GuiProgressStore` around a
+    `JSONLTrajectoryStore`) before `fim.paths.atomic_directory` renames the
+    directory; the decorator must pass that through, or the handle stays
+    open behind it.
+    """
+    gui_inner = JSONLTrajectoryStore(tmp_path / "gui.jsonl")
+    gui_store = GuiProgressStore(
+        gui_inner,
+        on_generation=lambda _generation, _rows: None,
+        cancel_event=threading.Event(),
+    )
+    live_inner = JSONLTrajectoryStore(tmp_path / "live.jsonl")
+    live_store = LiveProgressStore(
+        live_inner,
+        progress_path=tmp_path / ".progress",
+        cancel_path=tmp_path / "cancel",
+    )
+    gui_store.write_generation("run-1", 0, _rows(0))
+    live_store.write_generation("run-1", 0, _rows(0))
+    assert gui_inner.is_open()
+    assert live_inner.is_open()
+
+    gui_store.close()
+    live_store.close()
+
+    assert not gui_inner.is_open()
+    assert not live_inner.is_open()
+
+
 def test_read_progress_sidecar_returns_none_for_a_missing_file(tmp_path: Path) -> None:
     """A not-yet-started replicate has no sidecar at all — not an error."""
     assert read_progress_sidecar(tmp_path / "never-written") is None

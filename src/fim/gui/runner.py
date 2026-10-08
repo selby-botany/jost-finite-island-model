@@ -30,6 +30,7 @@ against.
 
 from __future__ import annotations
 
+import contextlib
 import logging
 import queue
 import threading
@@ -324,20 +325,26 @@ def _run_worker(
     try:
         with paths.atomic_directory(output_directory) as working_directory:
             targets = run_artifact_targets(working_directory)
-            store = GuiProgressStore(
-                JSONLTrajectoryStore(targets["trajectory"]),
-                on_generation=on_generation,
-                cancel_event=cancel_event,
-            )
-            result = fim(
-                params.gene_copies,
-                params.m,
-                params.mu,
-                params.d,
-                params=params,
-                store=store,
-                run_id=run_id,
-            )
+            # Closed here as well as by the engine, before
+            # `atomic_directory` renames (or, on a cancel or failure,
+            # removes) the directory: an open handle blocks both on
+            # Windows.
+            with contextlib.closing(
+                GuiProgressStore(
+                    JSONLTrajectoryStore(targets["trajectory"]),
+                    on_generation=on_generation,
+                    cancel_event=cancel_event,
+                )
+            ) as store:
+                result = fim(
+                    params.gene_copies,
+                    params.m,
+                    params.mu,
+                    params.d,
+                    params=params,
+                    store=store,
+                    run_id=run_id,
+                )
             if not isinstance(result, RunResult):
                 # n_replicates == 1 is enforced by every path that can
                 # reach this worker — multi-replicate runs are out of

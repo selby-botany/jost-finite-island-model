@@ -52,6 +52,7 @@ from hypothesis import settings
 from fim import paths
 from fim.model.locus import LocusSpec
 from fim.model.params import SimulationParams
+from fim.persistence.jsonl_store import JSONLTrajectoryStore
 
 settings.register_profile(
     "deterministic",
@@ -434,6 +435,48 @@ def rng() -> Callable[[int], np.random.Generator]:
         return np.random.Generator(np.random.PCG64(seed))
 
     return factory
+
+
+@pytest.fixture
+def tracked_jsonl_stores(
+    monkeypatch: pytest.MonkeyPatch,
+) -> list[JSONLTrajectoryStore]:
+    """Record every `JSONLTrajectoryStore` the test (or code under test) builds.
+
+    The leak check for the kept-open trajectory handle: a test runs a real
+    entry point in this process, then asserts through `assert_none_open`
+    that no store it created still holds a file open. Counts the
+    ancestral-phase companions too, which are built through the same
+    constructor. Only stores built in this process are seen, so a test of a
+    worker-process path checks the stores that come back instead.
+
+    Returns:
+        The list that fills with each store as it is constructed.
+    """
+    stores: list[JSONLTrajectoryStore] = []
+    original_init = JSONLTrajectoryStore.__init__
+
+    def recording_init(self: JSONLTrajectoryStore, path: Path | str) -> None:
+        original_init(self, path)
+        stores.append(self)
+
+    monkeypatch.setattr(JSONLTrajectoryStore, "__init__", recording_init)
+    return stores
+
+
+def assert_none_open(stores: list[JSONLTrajectoryStore]) -> None:
+    """Assert `stores` is non-empty and none of them holds a file open.
+
+    Args:
+        stores: What `tracked_jsonl_stores` collected.
+
+    Raises:
+        AssertionError: If no store was built (the check would prove
+            nothing) or any store still has an open append handle.
+    """
+    assert stores, "no JSONLTrajectoryStore was built; the leak check is vacuous"
+    leaked = [str(store.path) for store in stores if store.is_open()]
+    assert not leaked, f"trajectory files left open: {leaked}"
 
 
 @pytest.fixture
