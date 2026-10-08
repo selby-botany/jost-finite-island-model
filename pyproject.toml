@@ -225,6 +225,11 @@ ignore = [
 # the same total validation behind an arbitrary boundary with no real
 # behavioral benefit.
 "src/fim/model/params.py" = ["PLR0915"]
+# Backend V's compiled kernels are straight-line numeric code whose
+# branching mirrors the dictionary-based operators they reproduce bit for
+# bit; `_migrate` carries one branch per migration kind and one per case
+# of the arithmetic, and splitting it would only scatter that mirror.
+"src/fim/model/vector_kernels.py" = ["PLR0912"]
 "test/**/*.py" = ["ARG001", "PLR2004", "S101"]
 
 [tool.mypy]
@@ -265,6 +270,21 @@ ignore_missing_imports = true
 [[tool.mypy.overrides]]
 module = "numba.*"
 ignore_missing_imports = true
+
+# Backend V's compiled kernels (`fim.model.vector_kernels`) are Numba
+# `nopython` functions: their arguments are untyped arrays, scalars and a
+# `numpy.random.Generator` that Numba infers from the call, and
+# `numba.njit` is an untyped decorator when numba is not installed (CI's
+# default `[dev]` install). Annotations would be ignored by Numba and
+# only restate what the docstrings already say, so this one module is
+# exempt from the strict function-signature checks; every caller in
+# `fim.model.vector_block` is fully typed.
+[[tool.mypy.overrides]]
+module = "fim.model.vector_kernels"
+disallow_untyped_defs = false
+disallow_untyped_decorators = false
+disallow_incomplete_defs = false
+check_untyped_defs = false
 
 [tool.pytest.ini_options]
 # `-n auto` (pytest-xdist): distribute test items across one worker

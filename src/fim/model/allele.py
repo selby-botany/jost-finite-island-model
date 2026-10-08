@@ -133,6 +133,36 @@ class AlleleRegistry:
             )
         self._next = start
 
+    @property
+    def next_value(self) -> int:
+        """The identity the next `next_id` call returns, without minting it.
+
+        Read by the array-native Backend V, which assigns identities
+        itself (in the same order) and must start from, then hand back,
+        exactly the counter this registry holds.
+        """
+        return self._next
+
+    def advance_to(self, value: int) -> None:
+        """Move the counter forward to `value`, as if every id below it was minted.
+
+        The write-back half of `next_value`: Backend V mints identities
+        inside its own arrays, then calls this so a registry that is used
+        afterwards still never returns an identity V already handed out.
+
+        Args:
+            value: The next unused identity.
+
+        Raises:
+            ValueError: If `value` is below the current counter. Identities
+                are never reused, so the counter only moves forward.
+        """
+        if value < self._next:
+            raise ValueError(
+                f"the registry counter cannot move back from {self._next} to {value}"
+            )
+        self._next = value
+
     def next_id(self) -> AlleleId:
         """Return a new allele identity that has never been returned before."""
         allele_id = AlleleId(self._next)

@@ -27,6 +27,7 @@ Every test module, fixture, and test function documented here in full; `doc/fim-
   - [`test_sweep`](#test.test_sweep)
   - [`test_sweep_run`](#test.test_sweep_run)
   - [`test_update`](#test.test_update)
+  - [`vector_support`](#test.vector_support)
 - [`test/cli/`](#group-cli)
   - [`conftest`](#cli.conftest)
   - [`test_cli`](#cli.test_cli)
@@ -115,6 +116,8 @@ Every test module, fixture, and test function documented here in full; `doc/fim-
   - [`test_state`](#model.test_state)
   - [`test_state_validation`](#model.test_state_validation)
   - [`test_topology`](#model.test_topology)
+  - [`test_vector_block`](#model.test_vector_block)
+  - [`test_vector_kernels`](#model.test_vector_kernels)
   - [`test_vectorized`](#model.test_vectorized)
 - [`test/persistence/`](#group-persistence)
   - [`test_groups`](#persistence.test_groups)
@@ -3225,6 +3228,76 @@ def test_version_parser_rejects_non_semantic_values(value: str) -> None
 ```
 
 Release version parsing requires exactly three non-negative integers.
+
+<a id="test.vector_support"></a>
+
+# test.vector\_support
+
+Shared configurations and checks for Backend V's exactness tests.
+
+Backend V promises the same rows, report and final state as Backends L
+and G for the same seed (`fim.model.vector_block`). The parity tests in
+`test/model/test_vector_block.py` and `test/engine/test_vector_parity.py`
+prove it over one shared matrix of configurations, defined here once so
+the operator-level and engine-level tests cannot drift apart:
+multi-locus with migration, more than 8 and more than 128 alleles per
+deme, no migration, unequal deme sizes, per-locus mutation rates, 20
+demes, a full migration matrix, the dear-nolan-low shape, and the
+finite-alleles counterparts.
+
+Test modules import this with `from vector_support import ...`, as they
+import `conftest`.
+
+<a id="test.vector_support.loci"></a>
+
+#### loci
+
+```python
+def loci(count: int, length: int = 200) -> tuple[LocusSpec, ...]
+```
+
+Return `count` loci of the same length, numbered from 1.
+
+<a id="test.vector_support.ring_matrix"></a>
+
+#### ring\_matrix
+
+```python
+def ring_matrix(demes: int, rate: float) -> tuple[tuple[float, ...], ...]
+```
+
+Return a stepping-stone ring migration matrix.
+
+<a id="test.vector_support.make_params"></a>
+
+#### make\_params
+
+```python
+def make_params(generations: int, **overrides: object) -> SimulationParams
+```
+
+Build a seeded configuration that runs exactly `generations` generations.
+
+The convergence tolerance is tiny, so the monitor never stops a run
+early on its own (`max_generations` ends it); the defaults describe
+the dear-nolan-low shape at three loci.
+
+**Arguments**:
+
+- `generations` - The run length.
+- `**overrides` - `SimulationParams` fields replacing the defaults.
+
+<a id="test.vector_support.INFINITE_CASES"></a>
+
+#### INFINITE\_CASES
+
+Infinite-alleles configurations, each a function of the run length.
+
+<a id="test.vector_support.FINITE_CASES"></a>
+
+#### FINITE\_CASES
+
+Finite-alleles configurations, each a function of the run length.
 
 
 
@@ -26977,6 +27050,365 @@ def test_torus_rejects_invalid_shapes(kwargs: dict[str, object],
 ```
 
 Missing, too-small, mismatched, or misplaced lattice dimensions are refused.
+
+<a id="model.test_vector_block"></a>
+
+# model.test\_vector\_block
+
+Tests for Backend V's dense block: exactness, layout, growth, memory.
+
+The first group steps a `VectorBlock` and `fim.model.operators.step` side
+by side from the same generation zero and the same seed, and compares
+the complete row stream of every generation (every allele id, every
+frequency bit, in order), the final state, and the generator state (which
+proves the two consumed exactly the same random draws). The rest check
+the layout invariants the kernel relies on, column growth and compaction,
+the memory ceiling, and the registry counter hand-back.
+
+<a id="model.test_vector_block.test_infinite_alleles_block_matches_operators_exactly"></a>
+
+#### test\_infinite\_alleles\_block\_matches\_operators\_exactly
+
+```python
+@pytest.mark.parametrize("name", list(INFINITE_CASES))
+def test_infinite_alleles_block_matches_operators_exactly(name: str) -> None
+```
+
+Every infinite-alleles case reproduces `operators.step` bit for bit.
+
+<a id="model.test_vector_block.test_finite_alleles_block_matches_operators_exactly"></a>
+
+#### test\_finite\_alleles\_block\_matches\_operators\_exactly
+
+```python
+@pytest.mark.parametrize("name", list(FINITE_CASES))
+def test_finite_alleles_block_matches_operators_exactly(name: str) -> None
+```
+
+Every finite-alleles case reproduces `operators.step` bit for bit.
+
+Includes the K-allele target draws, which interleave with the next
+pair's mutation counts, so the generator states agree only if the
+kernel visits pairs and draws in the operators' order.
+
+<a id="model.test_vector_block.test_dear_nolan_low_shape_matches_operators_for_thousands_of_generations"></a>
+
+#### test\_dear\_nolan\_low\_shape\_matches\_operators\_for\_thousands\_of\_generations
+
+```python
+def test_dear_nolan_low_shape_matches_operators_for_thousands_of_generations(
+) -> None
+```
+
+The dear-nolan-low shape, three loci, 3,000 generations, every row.
+
+Mutations are rare here (about one per 2,000 locus-generations), so a
+long run is what exercises minting, the column that appears, and the
+compaction that follows when a one-copy mutant is lost.
+
+<a id="model.test_vector_block.test_block_matches_operators_after_compaction_and_growth_together"></a>
+
+#### test\_block\_matches\_operators\_after\_compaction\_and\_growth\_together
+
+```python
+def test_block_matches_operators_after_compaction_and_growth_together(
+) -> None
+```
+
+High mutation and low drift: columns grow, die, and grow again.
+
+<a id="model.test_vector_block.test_layout_invariants_hold_after_every_generation"></a>
+
+#### test\_layout\_invariants\_hold\_after\_every\_generation
+
+```python
+@pytest.mark.parametrize(
+    "case",
+    [
+        INFINITE_CASES["multi-locus with migration"],
+        INFINITE_CASES["more than 8 alleles per deme"],
+        FINITE_CASES["finite, 16 states"],
+    ],
+)
+def test_layout_invariants_hold_after_every_generation(
+        case: Callable[[int], SimulationParams]) -> None
+```
+
+Ascending ids, no empty column, zero padding and exact frequencies.
+
+<a id="model.test_vector_block.test_extinct_columns_are_dropped_and_survivors_keep_their_order"></a>
+
+#### test\_extinct\_columns\_are\_dropped\_and\_survivors\_keep\_their\_order
+
+```python
+def test_extinct_columns_are_dropped_and_survivors_keep_their_order() -> None
+```
+
+A lost allele's column disappears; the others keep ascending order.
+
+<a id="model.test_vector_block.test_width_doubles_when_the_live_alleles_outgrow_it"></a>
+
+#### test\_width\_doubles\_when\_the\_live\_alleles\_outgrow\_it
+
+```python
+def test_width_doubles_when_the_live_alleles_outgrow_it() -> None
+```
+
+Growth happens by doubling, from `MINIMUM_WIDTH` upward.
+
+<a id="model.test_vector_block.test_width_shrinks_after_a_long_stretch_of_low_use"></a>
+
+#### test\_width\_shrinks\_after\_a\_long\_stretch\_of\_low\_use
+
+```python
+def test_width_shrinks_after_a_long_stretch_of_low_use() -> None
+```
+
+A table far wider than its live alleles is halved, bits unchanged.
+
+Starts with many alleles, then removes mutation so drift fixes the
+population down to a handful; after `SHRINK_CHECK_INTERVAL`
+generations the width follows the live count back down, and the
+result is still exactly the operators' (shrinking changes no bit).
+
+<a id="model.test_vector_block.test_memory_estimate_counts_cells_ids_and_finite_bookkeeping"></a>
+
+#### test\_memory\_estimate\_counts\_cells\_ids\_and\_finite\_bookkeeping
+
+```python
+def test_memory_estimate_counts_cells_ids_and_finite_bookkeeping() -> None
+```
+
+The estimate is 16 bytes a cell, 8 an id, and 9 more a finite entry.
+
+<a id="model.test_vector_block.test_a_block_over_the_ceiling_is_refused_before_allocation"></a>
+
+#### test\_a\_block\_over\_the\_ceiling\_is\_refused\_before\_allocation
+
+```python
+def test_a_block_over_the_ceiling_is_refused_before_allocation() -> None
+```
+
+The failure names the size, the ceiling, and every remedy.
+
+<a id="model.test_vector_block.test_growth_past_the_ceiling_fails_with_the_same_clear_message"></a>
+
+#### test\_growth\_past\_the\_ceiling\_fails\_with\_the\_same\_clear\_message
+
+```python
+def test_growth_past_the_ceiling_fails_with_the_same_clear_message() -> None
+```
+
+A table that outgrows the ceiling mid-run raises at the doubling.
+
+<a id="model.test_vector_block.test_a_finite_alleles_locus_too_long_to_allocate_is_refused"></a>
+
+#### test\_a\_finite\_alleles\_locus\_too\_long\_to\_allocate\_is\_refused
+
+```python
+def test_a_finite_alleles_locus_too_long_to_allocate_is_refused() -> None
+```
+
+Capacity `4 ** 200` cannot fit; the error says to shorten the locus.
+
+<a id="model.test_vector_block.test_the_ceiling_comes_from_the_argument_then_the_environment"></a>
+
+#### test\_the\_ceiling\_comes\_from\_the\_argument\_then\_the\_environment
+
+```python
+def test_the_ceiling_comes_from_the_argument_then_the_environment(
+        monkeypatch: pytest.MonkeyPatch) -> None
+```
+
+Explicit beats environment beats the 2 GiB default; junk is rejected.
+
+<a id="model.test_vector_block.test_the_registry_counter_only_moves_forward"></a>
+
+#### test\_the\_registry\_counter\_only\_moves\_forward
+
+```python
+def test_the_registry_counter_only_moves_forward() -> None
+```
+
+`advance_to` hands ids back to the registry and refuses to go back.
+
+<a id="model.test_vector_block.test_rows_refuse_an_empty_run_id"></a>
+
+#### test\_rows\_refuse\_an\_empty\_run\_id
+
+```python
+def test_rows_refuse_an_empty_run_id() -> None
+```
+
+`rows` validates its run id as `ModelState.to_rows` does.
+
+<a id="model.test_vector_block.test_frequency_maps_hold_present_alleles_in_ascending_order"></a>
+
+#### test\_frequency\_maps\_hold\_present\_alleles\_in\_ascending\_order
+
+```python
+def test_frequency_maps_hold_present_alleles_in_ascending_order() -> None
+```
+
+`frequency_maps` is `statistics_report`'s input, built from the arrays.
+
+<a id="model.test_vector_kernels"></a>
+
+# model.test\_vector\_kernels
+
+Exactness tests for the compiled primitives of Backend V.
+
+Backend V reproduces Backends L and G bit for bit, so every numeric
+primitive its kernel re-implements is checked here against the original
+it copies: `math.fsum`, NumPy's pairwise `ndarray.sum()`, the inversion
+binomial, and the five differentiation statistics. Every case is seeded;
+none depends on timing or on the machine's load.
+
+<a id="model.test_vector_kernels.test_statistics_tolerance_mirrors_the_python_implementation"></a>
+
+#### test\_statistics\_tolerance\_mirrors\_the\_python\_implementation
+
+```python
+def test_statistics_tolerance_mirrors_the_python_implementation() -> None
+```
+
+The kernel clamps with the same tolerance `statistics_report` does.
+
+<a id="model.test_vector_kernels.test_exact_sum_matches_math_fsum_on_seeded_fuzz"></a>
+
+#### test\_exact\_sum\_matches\_math\_fsum\_on\_seeded\_fuzz
+
+```python
+def test_exact_sum_matches_math_fsum_on_seeded_fuzz() -> None
+```
+
+The `fsum` port returns the same bits as CPython for any finite input.
+
+<a id="model.test_vector_kernels.test_exact_sum_of_nothing_is_zero"></a>
+
+#### test\_exact\_sum\_of\_nothing\_is\_zero
+
+```python
+def test_exact_sum_of_nothing_is_zero() -> None
+```
+
+An empty sum is exactly zero, as in `math.fsum`.
+
+<a id="model.test_vector_kernels.test_pairwise_sum_matches_numpy_for_every_length_to_four_hundred"></a>
+
+#### test\_pairwise\_sum\_matches\_numpy\_for\_every\_length\_to\_four\_hundred
+
+```python
+def test_pairwise_sum_matches_numpy_for_every_length_to_four_hundred() -> None
+```
+
+Every regime of NumPy's pairwise sum is reproduced exactly.
+
+Below 8 values the sum is sequential, up to 128 it uses eight
+accumulators, above that it halves recursively; lengths 1 to 400
+cover all three, including each boundary.
+
+<a id="model.test_vector_kernels.test_pairwise_sum_matches_numpy_on_seeded_fuzz"></a>
+
+#### test\_pairwise\_sum\_matches\_numpy\_on\_seeded\_fuzz
+
+```python
+def test_pairwise_sum_matches_numpy_on_seeded_fuzz() -> None
+```
+
+Random lengths and magnitudes up to several thousand values agree.
+
+<a id="model.test_vector_kernels.test_pairwise_sum_uses_only_the_leading_values"></a>
+
+#### test\_pairwise\_sum\_uses\_only\_the\_leading\_values
+
+```python
+def test_pairwise_sum_uses_only_the_leading_values() -> None
+```
+
+Values past `count` are ignored, as the kernel's scratch arrays need.
+
+<a id="model.test_vector_kernels.test_inversion_binomial_matches_the_original_stream_and_values"></a>
+
+#### test\_inversion\_binomial\_matches\_the\_original\_stream\_and\_values
+
+```python
+@pytest.mark.parametrize(
+    ("n", "p"),
+    [
+        (0, 0.3),
+        (5, 0.0),
+        (5, 1.0),
+        (1, 0.5),
+        (1, 0.7),
+        (10, 0.001),
+        (100, 0.000001),
+        (100, 0.5),
+        (100, 0.9),
+        (400, 0.4),
+        (400, 0.6),
+        (5000, 0.02),
+        (5000, 0.98),
+    ],
+)
+def test_inversion_binomial_matches_the_original_stream_and_values(
+        n: int, p: float) -> None
+```
+
+Same values and the same generator state as `_inversion_binomial`.
+
+Equal final generator states prove the draw count (one uniform for a
+real draw, none for the short-circuits) is the same too.
+
+<a id="model.test_vector_kernels.test_inversion_binomial_matches_on_seeded_fuzz"></a>
+
+#### test\_inversion\_binomial\_matches\_on\_seeded\_fuzz
+
+```python
+def test_inversion_binomial_matches_on_seeded_fuzz() -> None
+```
+
+Random `(n, p)` pairs, one stream, stay in step to the last bit.
+
+<a id="model.test_vector_kernels.test_locus_statistics_match_statistics_report_bit_for_bit"></a>
+
+#### test\_locus\_statistics\_match\_statistics\_report\_bit\_for\_bit
+
+```python
+@pytest.mark.parametrize("demes", [2, 3, 5, 20])
+@pytest.mark.parametrize("alleles", [1, 2, 7, 30, 200])
+def test_locus_statistics_match_statistics_report_bit_for_bit(
+        demes: int, alleles: int) -> None
+```
+
+`H_S`, `H_T`, `H_ST`, `G_ST` and `D` equal `statistics_report`'s bits.
+
+Seeded states with 1 to 200 alleles, shared and private across demes.
+
+<a id="model.test_vector_kernels.test_locus_statistics_report_g_st_undefined_when_every_deme_is_fixed_alike"></a>
+
+#### test\_locus\_statistics\_report\_g\_st\_undefined\_when\_every\_deme\_is\_fixed\_alike
+
+```python
+def test_locus_statistics_report_g_st_undefined_when_every_deme_is_fixed_alike(
+) -> (None)
+```
+
+A monomorphic locus has no `G_ST`: the kernel returns `nan`, not an error.
+
+<a id="model.test_vector_kernels.test_locus_statistics_flag_a_frequency_row_that_is_not_normalized"></a>
+
+#### test\_locus\_statistics\_flag\_a\_frequency\_row\_that\_is\_not\_normalized
+
+```python
+def test_locus_statistics_flag_a_frequency_row_that_is_not_normalized(
+) -> None
+```
+
+A value outside the unit interval is flagged, not silently clamped.
+
+`statistics_report` raises `ArithmeticError` there, so the kernel
+sets the locus's status and lets the caller recompute with Python.
 
 <a id="model.test_vectorized"></a>
 

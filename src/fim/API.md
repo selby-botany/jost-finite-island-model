@@ -403,6 +403,8 @@ Return to the [source-tree orientation](../README.md) or the [developer guide](.
   * [founding\_allele\_ids](#fim.model.allele.founding_allele_ids)
   * [AlleleRegistry](#fim.model.allele.AlleleRegistry)
     * [\_\_init\_\_](#fim.model.allele.AlleleRegistry.__init__)
+    * [next\_value](#fim.model.allele.AlleleRegistry.next_value)
+    * [advance\_to](#fim.model.allele.AlleleRegistry.advance_to)
     * [next\_id](#fim.model.allele.AlleleRegistry.next_id)
     * [next\_k\_ids](#fim.model.allele.AlleleRegistry.next_k_ids)
   * [FiniteAlleleSpace](#fim.model.allele.FiniteAlleleSpace)
@@ -473,6 +475,46 @@ Return to the [source-tree orientation](../README.md) or the [developer guide](.
 * [fim.model.topology](#fim.model.topology)
   * [stepping\_stone\_neighbors](#fim.model.topology.stepping_stone_neighbors)
   * [dense\_matrix\_from\_neighbors](#fim.model.topology.dense_matrix_from_neighbors)
+* [fim.model.vector\_block](#fim.model.vector_block)
+  * [MIGRATION\_NONE](#fim.model.vector_block.MIGRATION_NONE)
+  * [MIGRATION\_SCALAR](#fim.model.vector_block.MIGRATION_SCALAR)
+  * [MIGRATION\_MATRIX](#fim.model.vector_block.MIGRATION_MATRIX)
+  * [MINIMUM\_WIDTH](#fim.model.vector_block.MINIMUM_WIDTH)
+  * [SHRINK\_CHECK\_INTERVAL](#fim.model.vector_block.SHRINK_CHECK_INTERVAL)
+  * [SHRINK\_FACTOR](#fim.model.vector_block.SHRINK_FACTOR)
+  * [DEFAULT\_MEMORY\_CEILING\_BYTES](#fim.model.vector_block.DEFAULT_MEMORY_CEILING_BYTES)
+  * [MEMORY\_CEILING\_ENVIRONMENT\_VARIABLE](#fim.model.vector_block.MEMORY_CEILING_ENVIRONMENT_VARIABLE)
+  * [VectorMemoryCeilingError](#fim.model.vector_block.VectorMemoryCeilingError)
+  * [VectorMigration](#fim.model.vector_block.VectorMigration)
+    * [from\_parameter](#fim.model.vector_block.VectorMigration.from_parameter)
+  * [kernels](#fim.model.vector_block.kernels)
+  * [estimated\_block\_bytes](#fim.model.vector_block.estimated_block_bytes)
+  * [resolve\_memory\_ceiling](#fim.model.vector_block.resolve_memory_ceiling)
+  * [VectorBlock](#fim.model.vector_block.VectorBlock)
+    * [\_\_init\_\_](#fim.model.vector_block.VectorBlock.__init__)
+    * [from\_model\_state](#fim.model.vector_block.VectorBlock.from_model_state)
+    * [width](#fim.model.vector_block.VectorBlock.width)
+    * [deme\_count](#fim.model.vector_block.VectorBlock.deme_count)
+    * [next\_id](#fim.model.vector_block.VectorBlock.next_id)
+    * [nbytes](#fim.model.vector_block.VectorBlock.nbytes)
+    * [advance](#fim.model.vector_block.VectorBlock.advance)
+    * [present\_entries](#fim.model.vector_block.VectorBlock.present_entries)
+    * [rows](#fim.model.vector_block.VectorBlock.rows)
+    * [frequency\_maps](#fim.model.vector_block.VectorBlock.frequency_maps)
+    * [locus\_statistics](#fim.model.vector_block.VectorBlock.locus_statistics)
+    * [to\_model\_state](#fim.model.vector_block.VectorBlock.to_model_state)
+    * [sync\_registry](#fim.model.vector_block.VectorBlock.sync_registry)
+* [fim.model.vector\_kernels](#fim.model.vector_kernels)
+  * [STATISTIC\_COLUMNS](#fim.model.vector_kernels.STATISTIC_COLUMNS)
+  * [STATISTICS\_TOLERANCE](#fim.model.vector_kernels.STATISTICS_TOLERANCE)
+  * [inversion\_binomial](#fim.model.vector_kernels.inversion_binomial)
+  * [pairwise\_sum](#fim.model.vector_kernels.pairwise_sum)
+  * [exact\_sum](#fim.model.vector_kernels.exact_sum)
+  * [compact\_columns](#fim.model.vector_kernels.compact_columns)
+  * [mint\_columns](#fim.model.vector_kernels.mint_columns)
+  * [run\_generation](#fim.model.vector_kernels.run_generation)
+  * [locus\_statistics](#fim.model.vector_kernels.locus_statistics)
+  * [present\_entries](#fim.model.vector_kernels.present_entries)
 * [fim.model.vectorized](#fim.model.vectorized)
   * [VectorizedLocusState](#fim.model.vectorized.VectorizedLocusState)
     * [frequencies](#fim.model.vectorized.VectorizedLocusState.frequencies)
@@ -11849,6 +11891,45 @@ Initialize a registry at the first mutant-only identifier.
 
 - `ValueError` - If ``start`` overlaps the founding-allele range.
 
+<a id="fim.model.allele.AlleleRegistry.next_value"></a>
+
+#### next\_value
+
+```python
+@property
+def next_value() -> int
+```
+
+The identity the next `next_id` call returns, without minting it.
+
+Read by the array-native Backend V, which assigns identities
+itself (in the same order) and must start from, then hand back,
+exactly the counter this registry holds.
+
+<a id="fim.model.allele.AlleleRegistry.advance_to"></a>
+
+#### advance\_to
+
+```python
+def advance_to(value: int) -> None
+```
+
+Move the counter forward to `value`, as if every id below it was minted.
+
+The write-back half of `next_value`: Backend V mints identities
+inside its own arrays, then calls this so a registry that is used
+afterwards still never returns an identity V already handed out.
+
+**Arguments**:
+
+- `value` - The next unused identity.
+
+
+**Raises**:
+
+- `ValueError` - If `value` is below the current counter. Identities
+  are never reused, so the counter only moves forward.
+
 <a id="fim.model.allele.AlleleRegistry.next_id"></a>
 
 #### next\_id
@@ -14364,6 +14445,810 @@ migrates with nobody — its row is the identity row.
 - `ValueError` - If a deme or neighbor id is outside ``1..d``, a deme
   lists itself as its own neighbor, a weight is outside
   ``[0, 1]``, or one deme's weights sum to more than ``1``.
+
+<a id="fim.model.vector_block"></a>
+
+# fim.model.vector\_block
+
+The dense per-replicate state of Backend V, and its two boundaries.
+
+`VectorBlock` holds one replicate's allele frequencies for every locus at
+once in plain NumPy arrays (`fim.model.vector_kernels` documents the
+layout and the exactness rules), advances them one generation per call
+with the compiled kernel, and converts to the rest of the program's
+shapes only where something outside Backend V needs them: trajectory
+rows, a `ModelState` for the final report, per-locus frequency maps for
+the statistics the kernel does not compute, and the allele registry
+counter.
+
+Backend V's reproducibility contract, which this class exists to keep:
+for the same configuration and seed, V under either mutation model
+produces the same trajectory rows, report and final state as Backends L
+and G (every allele identity and every frequency bit), on the same
+platform. Only `RunManifest.engine_backend` records which backend ran.
+"Same platform" carries the caveat Backend G with `jit` already has: the
+compiled `lgamma`, `log`, `log1p` and `exp` are verified to match CPython
+only on the development platform, so a result is exactly reproducible
+across backends on one machine, and statistically (not bitwise) across
+machines.
+
+Memory. The block is `loci x demes x width` cells of 16 bytes (a
+frequency and a gene-copy count). Under infinite alleles `width` follows
+the live allele count: it doubles when a locus needs more columns, extinct
+columns are dropped every generation, and the width is halved again after
+a long stretch of low use. Under finite alleles `width` is the largest
+locus capacity (`4 ** length`) for the whole run. Either way the size is
+checked against a ceiling before any allocation, so a configuration that
+cannot fit fails at once with a message that names the remedies, not
+partway through a long run with an out-of-memory kill. The ceiling is per
+replicate: `max_concurrent_replicates` replicates can be alive at once.
+
+This module imports only NumPy. The compiled kernels (Numba) are imported
+on first use, so importing `fim` never requires Numba.
+
+<a id="fim.model.vector_block.MIGRATION_NONE"></a>
+
+#### MIGRATION\_NONE
+
+Migration kind: no blending (a zero rate, or a single deme).
+
+<a id="fim.model.vector_block.MIGRATION_SCALAR"></a>
+
+#### MIGRATION\_SCALAR
+
+Migration kind: one rate, every other deme in the pool (continuous).
+
+<a id="fim.model.vector_block.MIGRATION_MATRIX"></a>
+
+#### MIGRATION\_MATRIX
+
+Migration kind: a full row-stochastic source-weight matrix (continuous).
+
+<a id="fim.model.vector_block.MINIMUM_WIDTH"></a>
+
+#### MINIMUM\_WIDTH
+
+The fewest columns an infinite-alleles block is ever given.
+
+<a id="fim.model.vector_block.SHRINK_CHECK_INTERVAL"></a>
+
+#### SHRINK\_CHECK\_INTERVAL
+
+Generations between looks at whether the block is far wider than needed.
+
+<a id="fim.model.vector_block.SHRINK_FACTOR"></a>
+
+#### SHRINK\_FACTOR
+
+The block shrinks when its width is at least this many times the need.
+
+<a id="fim.model.vector_block.DEFAULT_MEMORY_CEILING_BYTES"></a>
+
+#### DEFAULT\_MEMORY\_CEILING\_BYTES
+
+Default per-replicate ceiling on the block, in bytes (2 GiB).
+
+<a id="fim.model.vector_block.MEMORY_CEILING_ENVIRONMENT_VARIABLE"></a>
+
+#### MEMORY\_CEILING\_ENVIRONMENT\_VARIABLE
+
+Environment variable that overrides `DEFAULT_MEMORY_CEILING_BYTES`.
+
+<a id="fim.model.vector_block.VectorMemoryCeilingError"></a>
+
+## VectorMemoryCeilingError Objects
+
+```python
+class VectorMemoryCeilingError(RuntimeError)
+```
+
+Backend V's allele table would exceed the per-replicate memory ceiling.
+
+Raised before the memory is allocated. The message names the size
+that was needed, the ceiling, and what to change.
+
+<a id="fim.model.vector_block.VectorMigration"></a>
+
+## VectorMigration Objects
+
+```python
+@dataclass(frozen=True, slots=True)
+class VectorMigration()
+```
+
+How one generation's migration step runs inside the kernel.
+
+**Arguments**:
+
+- `kind` - `MIGRATION_NONE`, `MIGRATION_SCALAR` or `MIGRATION_MATRIX`.
+- `rate` - The scalar migration rate (scalar kind).
+- `weights` - The `(demes, demes)` row-stochastic source-weight matrix
+  (matrix kind); an empty `(0, 0)` array otherwise.
+
+  A stochastic-migrant-count kind is a planned extension: it adds one
+  kind value and one draw per destination deme to the kernel's migration
+  step, and changes nothing here or in the rest of the generation.
+
+<a id="fim.model.vector_block.VectorMigration.from_parameter"></a>
+
+#### from\_parameter
+
+```python
+@classmethod
+def from_parameter(cls, migration: float | Sequence[Sequence[float]],
+                   deme_count: int) -> VectorMigration
+```
+
+Build the plan for a `SimulationParams.m` value.
+
+**Arguments**:
+
+- `migration` - A scalar rate or a full migration matrix.
+- `deme_count` - The number of demes.
+
+
+**Returns**:
+
+  The matching plan. A scalar rate of zero, or a single deme,
+  blends nothing, exactly as `operators.migrate` returns the
+  state unchanged in those cases. A matrix always blends, even
+  an identity one, because `operators` normalizes its rows.
+
+<a id="fim.model.vector_block.kernels"></a>
+
+#### kernels
+
+```python
+def kernels() -> ModuleType
+```
+
+Import and return the compiled kernel module (needs Numba).
+
+Imported here, not at module level, so that Numba stays optional for
+everything that does not run Backend V.
+
+**Raises**:
+
+- `ImportError` - If Numba is not installed.
+
+<a id="fim.model.vector_block.estimated_block_bytes"></a>
+
+#### estimated\_block\_bytes
+
+```python
+def estimated_block_bytes(loci: int,
+                          demes: int,
+                          width: int,
+                          *,
+                          finite: bool = False) -> int
+```
+
+Return the memory a block of this shape needs, in bytes.
+
+Counts the frequency and count cells, the id table and, for finite
+alleles, the minted-state bookkeeping. The kernel's own per-call
+scratch is a few vectors of `width` entries and is not counted.
+
+**Arguments**:
+
+- `loci` - Number of loci.
+- `demes` - Number of demes.
+- `width` - Columns per locus.
+- `finite` - Whether the finite-alleles bookkeeping is included.
+
+
+**Returns**:
+
+  The size in bytes (an `int`, which may exceed 64 bits for an
+  astronomically wide finite-alleles locus).
+
+<a id="fim.model.vector_block.resolve_memory_ceiling"></a>
+
+#### resolve\_memory\_ceiling
+
+```python
+def resolve_memory_ceiling(explicit: int | None = None) -> int
+```
+
+Return the per-replicate memory ceiling in bytes.
+
+**Arguments**:
+
+- `explicit` - A ceiling given by the caller, which wins.
+
+
+**Returns**:
+
+  `explicit` when given; otherwise the value of the
+  `FIM_VECTOR_MEMORY_CEILING_BYTES` environment variable when set;
+  otherwise `DEFAULT_MEMORY_CEILING_BYTES`.
+
+
+**Raises**:
+
+- `ValueError` - If the value is not a positive whole number of bytes.
+
+<a id="fim.model.vector_block.VectorBlock"></a>
+
+## VectorBlock Objects
+
+```python
+class VectorBlock()
+```
+
+One replicate's dense allele table for every locus, and its stepping.
+
+Build one with `from_model_state`, advance it with `advance`, and read
+it through `rows`, `to_model_state`, `frequency_maps` and
+`locus_statistics`. The arrays are public by design (the kernels and
+tests read them), but only this class changes them.
+
+**Attributes**:
+
+- `loci` - The tracked loci, in column order of the first axis.
+- `mutation_model` - `"infinite_alleles"` or `"finite_alleles"`.
+- `freq` - `(loci, demes, width)` float64 frequencies.
+- `counts` - `(loci, demes, width)` int64 gene-copy counts.
+- `ids` - `(loci, width)` int64 allele id of each column.
+- `ncol` - `(loci,)` int64 live columns per locus.
+- `sizes` - `(demes,)` int64 gene copies per deme.
+- `mutation_rates` - `(loci,)` float64 per-copy mutation probability.
+- `migration` - The migration plan.
+- `generation` - The generation the table currently holds.
+- `grow_events` - How many times the width has doubled.
+- `shrink_events` - How many times the width has been halved or more.
+
+<a id="fim.model.vector_block.VectorBlock.__init__"></a>
+
+#### \_\_init\_\_
+
+```python
+def __init__(*,
+             loci: tuple[LocusSpec, ...],
+             mutation_model: str,
+             freq: np.ndarray,
+             counts: np.ndarray,
+             ids: np.ndarray,
+             ncol: np.ndarray,
+             sizes: np.ndarray,
+             mutation_rates: np.ndarray,
+             migration: VectorMigration,
+             next_id: int,
+             generation: int,
+             memory_ceiling_bytes: int,
+             capacities: np.ndarray | None = None,
+             minted_mask: np.ndarray | None = None,
+             minted_list: np.ndarray | None = None,
+             minted_count: np.ndarray | None = None) -> None
+```
+
+Wrap already-built arrays; use `from_model_state` to build them.
+
+**Arguments**:
+
+- `loci` - The tracked loci.
+- `mutation_model` - `"infinite_alleles"` or `"finite_alleles"`.
+- `freq` - `(loci, demes, width)` frequencies.
+- `counts` - `(loci, demes, width)` gene-copy counts (scratch).
+- `ids` - `(loci, width)` allele id per column.
+- `ncol` - Live columns per locus.
+- `sizes` - Gene copies per deme.
+- `mutation_rates` - Per-copy mutation probability per locus.
+- `migration` - The migration plan.
+- `next_id` - The next unused allele id (infinite alleles).
+- `generation` - The generation the arrays hold.
+- `memory_ceiling_bytes` - Per-replicate ceiling used when growing.
+- `capacities` - Finite alleles only: locus capacities (`4 ** length`).
+- `minted_mask` - Finite alleles only: `(loci, width)` bool, minted.
+- `minted_list` - Finite alleles only: `(loci, width)` minted order.
+- `minted_count` - Finite alleles only: minted states per locus.
+
+<a id="fim.model.vector_block.VectorBlock.from_model_state"></a>
+
+#### from\_model\_state
+
+```python
+@classmethod
+def from_model_state(cls,
+                     state: ModelState,
+                     *,
+                     sizes: Sequence[int],
+                     mutation_rates: Sequence[float],
+                     migration: VectorMigration,
+                     mutation_model: str,
+                     next_id: int,
+                     memory_ceiling_bytes: int | None = None) -> VectorBlock
+```
+
+Build a block holding exactly the frequencies of `state`.
+
+Under infinite alleles each locus's columns are the sorted union
+of the allele ids present in any deme. Under finite alleles the
+column of an allele is its id, every locus gets its full capacity
+of columns, and the minted bookkeeping starts from the ids present
+now, as `FiniteAlleleSpace` does.
+
+**Arguments**:
+
+- `state` - The generation to hold (typically generation zero).
+- `sizes` - Gene copies per deme.
+- `mutation_rates` - Per-copy mutation probability per locus.
+- `migration` - The migration plan.
+- `mutation_model` - `"infinite_alleles"` or `"finite_alleles"`.
+- `next_id` - The next unused allele id (the registry counter).
+- `memory_ceiling_bytes` - Per-replicate ceiling; `None` uses
+  `resolve_memory_ceiling`.
+
+
+**Returns**:
+
+  The block.
+
+
+**Raises**:
+
+- `ValueError` - For an unknown mutation model, or (finite alleles)
+  an allele id outside `0 .. capacity - 1`.
+- `VectorMemoryCeilingError` - If the block would not fit.
+
+<a id="fim.model.vector_block.VectorBlock.width"></a>
+
+#### width
+
+```python
+@property
+def width() -> int
+```
+
+Columns allocated per locus.
+
+<a id="fim.model.vector_block.VectorBlock.deme_count"></a>
+
+#### deme\_count
+
+```python
+@property
+def deme_count() -> int
+```
+
+Number of demes.
+
+<a id="fim.model.vector_block.VectorBlock.next_id"></a>
+
+#### next\_id
+
+```python
+@property
+def next_id() -> int
+```
+
+The next allele id the block would hand out (infinite alleles).
+
+<a id="fim.model.vector_block.VectorBlock.nbytes"></a>
+
+#### nbytes
+
+```python
+@property
+def nbytes() -> int
+```
+
+Memory held by the block's own arrays, in bytes.
+
+<a id="fim.model.vector_block.VectorBlock.advance"></a>
+
+#### advance
+
+```python
+def advance(rng: np.random.Generator) -> None
+```
+
+Advance one generation: migrate, drift, then mutate, all loci.
+
+**Arguments**:
+
+- `rng` - The run's random generator; the draws are those
+  `operators.step` would make from the same stream position.
+
+
+**Raises**:
+
+- `VectorMemoryCeilingError` - If an infinite-alleles locus needs
+  more columns than the ceiling allows.
+- `RuntimeError` - If a finite-alleles locus has no unminted state
+  left to target (the same guard `FiniteAlleleSpace` has).
+
+<a id="fim.model.vector_block.VectorBlock.present_entries"></a>
+
+#### present\_entries
+
+```python
+def present_entries() -> tuple[np.ndarray, ...]
+```
+
+Return `(deme, locus_id, allele_id, frequency)` arrays of present alleles.
+
+In `ModelState.to_rows` order: deme-major, then locus, then
+ascending allele id. Demes are one-based.
+
+<a id="fim.model.vector_block.VectorBlock.rows"></a>
+
+#### rows
+
+```python
+def rows(run_id: str) -> list[dict[str, int | float | str]]
+```
+
+Return the trajectory rows `ModelState.to_rows` would return.
+
+Same rows, same field order, same order of rows, so a store cannot
+tell which produced them.
+
+**Arguments**:
+
+- `run_id` - Stable identifier grouping rows from one simulation.
+
+
+**Raises**:
+
+- `ValueError` - If `run_id` is empty.
+
+<a id="fim.model.vector_block.VectorBlock.frequency_maps"></a>
+
+#### frequency\_maps
+
+```python
+def frequency_maps(locus_index: int) -> list[dict[int, float]]
+```
+
+Return one locus's per-deme `{allele_id: frequency}` maps.
+
+Present alleles only, in ascending id order: the input
+`statistics_report` takes.
+
+**Arguments**:
+
+- `locus_index` - Zero-based locus position.
+
+<a id="fim.model.vector_block.VectorBlock.locus_statistics"></a>
+
+#### locus\_statistics
+
+```python
+def locus_statistics() -> tuple[np.ndarray, np.ndarray]
+```
+
+Compute `H_S`, `H_T`, `H_ST`, `G_ST` and `D` for every locus.
+
+**Returns**:
+
+  `(table, status)`: `table` is `(loci, 5)` float64 in that
+  column order (`G_ST` is `nan` where undefined); `status` is
+  `(loci,)` int64, non-zero where `statistics_report` would have
+  raised (the caller then uses it, to raise the real error).
+
+<a id="fim.model.vector_block.VectorBlock.to_model_state"></a>
+
+#### to\_model\_state
+
+```python
+def to_model_state() -> ModelState
+```
+
+Return the table as a `ModelState`, ascending ids in every map.
+
+<a id="fim.model.vector_block.VectorBlock.sync_registry"></a>
+
+#### sync\_registry
+
+```python
+def sync_registry(registry: AlleleRegistry) -> None
+```
+
+Bring `registry`'s counter up to the ids this block has handed out.
+
+Only meaningful under infinite alleles; a no-op under finite
+alleles, which never mints identities.
+
+<a id="fim.model.vector_kernels"></a>
+
+# fim.model.vector\_kernels
+
+Compiled kernels for Backend V: one generation, all loci, bit-exact.
+
+Every function here is a Numba `nopython` kernel. This module imports
+`numba` at the top, so it must only be imported lazily, by code that is
+about to run Backend V (`fim.model.vector_block` does that); importing
+`fim` itself never needs Numba.
+
+What a kernel generation reproduces, operation for operation, from the
+dict-based operators in `fim.model.operators` (Backends L and G):
+
+1. Stage-major order across loci, as `operators.step` runs it: migrate
+   every locus, then drift every `(deme, locus)` pair deme-major and
+   locus-minor, then draw mutation counts (and, under finite alleles,
+   the K-allele targets) pair by pair in the same order.
+2. Ascending allele-id order inside a pair, for the drift categories and
+   the mutation counts. An absent allele consumes no random draw.
+3. Migration arithmetic, as written in `operators`: the size-weighted
+   mass is a sequential deme-ascending sum, each pool value is clamped
+   at zero, and each destination row is divided by the exactly rounded
+   sum (`math.fsum`) of its positive entries. A full migration matrix
+   uses one `fsum` per cell, as `_migrate_matrix` does.
+4. Drift normalization with NumPy's own pairwise `ndarray.sum()` over the
+   present probabilities (`pairwise_sum`).
+5. The same binomial primitive, `inversion_binomial`, a copy of
+   `operators._inversion_binomial` with a scratch buffer in place of a
+   Python list (identical floating-point operations in identical order).
+6. Infinite alleles: new ids are handed out deme-major, locus-minor,
+   consecutively inside a pair, from one counter, as `AlleleRegistry`
+   does. Finite alleles: every mutant copy draws its target exactly as
+   `FiniteAlleleSpace.mutate_target` does.
+
+Nothing here uses `fastmath`: a fused multiply-add would change bits.
+There is no self-recursion either (the cached-kernel recursion hazard
+the design notes record): NumPy's recursive pairwise sum is evaluated
+with explicit stacks.
+
+The state layout (see `fim.model.vector_block.VectorBlock`) is one dense
+`(loci, demes, width)` array for a whole replicate. Locus `l` keeps its
+live alleles in columns `0 .. ncol[l] - 1`, in ascending allele-id order,
+with the id of each column in `ids[l, column]`. Under infinite alleles
+ids only grow, so appending every new mutant keeps the columns sorted,
+and dropping extinct columns with an order-preserving compaction keeps
+them sorted too. Under finite alleles the column is the allele id and
+`ncol[l]` is the locus capacity.
+
+<a id="fim.model.vector_kernels.STATISTIC_COLUMNS"></a>
+
+#### STATISTIC\_COLUMNS
+
+Columns of the per-locus statistics table: H_S, H_T, H_ST, G_ST, D.
+
+<a id="fim.model.vector_kernels.STATISTICS_TOLERANCE"></a>
+
+#### STATISTICS\_TOLERANCE
+
+Mirror of `fim.statistics.differentiation._TOLERANCE` (checked by a test).
+
+<a id="fim.model.vector_kernels.inversion_binomial"></a>
+
+#### inversion\_binomial
+
+```python
+@numba.njit(cache=True, nogil=True)
+def inversion_binomial(rng, n, p, pmf)
+```
+
+Draw one `Binomial(n, p)` count, exactly as `_inversion_binomial` does.
+
+A line-for-line copy of `fim.model.operators._inversion_binomial`.
+The only difference is storage: the original builds a Python list of
+the lower half of the PMF, this one writes the same values into the
+caller's scratch array. The values, the order of every floating-point
+operation and the number of uniforms drawn (one for a real draw, none
+for the three short-circuits) are identical.
+
+**Arguments**:
+
+- `rng` - The run's `numpy.random.Generator`.
+- `n` - Number of trials (`n >= 0`).
+- `p` - Success probability (`0.0 <= p <= 1.0`).
+- `pmf` - Scratch `float64` array of length at least `n + 1`.
+
+
+**Returns**:
+
+  A `Binomial(n, p)` count in `[0, n]`.
+
+<a id="fim.model.vector_kernels.pairwise_sum"></a>
+
+#### pairwise\_sum
+
+```python
+@numba.njit(cache=True, nogil=True)
+def pairwise_sum(values, count)
+```
+
+Return `values[:count].sum()` exactly as NumPy computes it.
+
+NumPy recurses above 128 values (halves, the left half rounded down
+to a multiple of 8) and adds `sum(left) + sum(right)` at every
+internal node. The recursion is evaluated here post-order with
+explicit stacks, so the additions happen in exactly NumPy's order
+without a self-recursive function (which Numba's on-disk cache
+mishandles).
+
+**Arguments**:
+
+- `values` - `float64` array.
+- `count` - How many leading values to sum (`count >= 0`).
+
+
+**Returns**:
+
+  The same `float64` NumPy's `ndarray.sum()` returns for that slice.
+
+<a id="fim.model.vector_kernels.exact_sum"></a>
+
+#### exact\_sum
+
+```python
+@numba.njit(cache=True, nogil=True)
+def exact_sum(values, count, partials)
+```
+
+Return the exactly rounded sum of `values[:count]`, as `math.fsum`.
+
+A port of CPython's `math.fsum` (Shewchuk's algorithm with the final
+half-even correction) for finite inputs.
+
+**Arguments**:
+
+- `values` - `float64` array of finite values.
+- `count` - How many leading values to sum.
+- `partials` - Scratch `float64` array of length at least `count + 1`.
+
+
+**Returns**:
+
+  The correctly rounded sum.
+
+<a id="fim.model.vector_kernels.compact_columns"></a>
+
+#### compact\_columns
+
+```python
+@numba.njit(cache=True, nogil=True)
+def compact_columns(counts, ids, ncol, mutants)
+```
+
+Drop extinct columns, keeping survivors in order; return the width needed.
+
+Under infinite alleles an allele absent from every deme can never
+return, so its column is free. The stable compaction keeps each
+locus's columns in ascending allele-id order.
+
+**Arguments**:
+
+- `counts` - `(loci, demes, width)` kept gene-copy counts.
+- `ids` - `(loci, width)` allele id of each column.
+- `ncol` - Live columns per locus, updated in place.
+- `mutants` - `(loci, demes)` mutant copies still to be minted.
+
+
+**Returns**:
+
+  The largest per-locus column count after compaction plus the new
+  mutant columns the locus is about to receive.
+
+<a id="fim.model.vector_kernels.mint_columns"></a>
+
+#### mint\_columns
+
+```python
+@numba.njit(cache=True, nogil=True)
+def mint_columns(freq, counts, ids, ncol, sizes, mutants, next_id)
+```
+
+Append one column per mutant copy, then write every frequency.
+
+Ids are handed out as `AlleleRegistry` would: pairs deme-major,
+locus-minor, consecutive inside a pair. Inside one locus that order
+is deme-ascending and every new id exceeds every older one, so the
+appended columns keep the locus in ascending id order.
+
+**Arguments**:
+
+- `freq` - `(loci, demes, width)` frequencies, rewritten as
+  `counts / sizes`.
+- `counts` - Kept counts after compaction; new columns are appended.
+- `ids` - Allele id of each column, extended for the new columns.
+- `ncol` - Live columns per locus, updated in place.
+- `sizes` - Gene copies per deme.
+- `mutants` - `(loci, demes)` mutant copies to mint.
+- `next_id` - One-element `int64` array holding the next unused id,
+  advanced in place.
+
+<a id="fim.model.vector_kernels.run_generation"></a>
+
+#### run\_generation
+
+```python
+@numba.njit(cache=True, nogil=True)
+def run_generation(freq, counts, ids, ncol, sizes, mus, mutants, rng, kind,
+                   rate, weights, caps, minted_mask, minted_list, minted_count,
+                   next_id)
+```
+
+Advance every locus one generation: migrate, drift, mutate.
+
+For infinite alleles (`caps` empty) the generation ends with
+compaction and minting when the columns still fit. If they do not,
+the call returns early with the width needed, leaving the arrays
+after compaction and before minting, so the caller can grow them and
+call `mint_columns`.
+
+**Arguments**:
+
+- `freq` - `(loci, demes, width)` frequencies, rewritten in place.
+- `counts` - `(loci, demes, width)` int64 scratch and kept counts.
+- `ids` - `(loci, width)` allele id of each column.
+- `ncol` - Live columns per locus.
+- `sizes` - Gene copies per deme.
+- `mus` - Per-copy mutation probability per locus.
+- `mutants` - `(loci, demes)` output, mutant copies per pair.
+- `rng` - The run's `numpy.random.Generator`.
+- `kind` - `MIGRATION_NONE`, `MIGRATION_SCALAR` or `MIGRATION_MATRIX`.
+- `rate` - Scalar migration rate.
+- `weights` - Migration matrix (a `(0, 0)` array when unused).
+- `caps` - Finite-alleles capacity per locus (empty for infinite).
+- `minted_mask` - `(loci, width)` bool, finite alleles only.
+- `minted_list` - `(loci, width)` int64, finite alleles only.
+- `minted_count` - `(loci,)` int64, finite alleles only.
+- `next_id` - One-element array holding the next unused allele id.
+
+
+**Returns**:
+
+  `0` when the generation is complete; a positive width when the
+  infinite-alleles columns must grow to that width before
+  `mint_columns`; a negative `-(1 + locus)` when a finite-alleles
+  locus has no unminted state left to target.
+
+<a id="fim.model.vector_kernels.locus_statistics"></a>
+
+#### locus\_statistics
+
+```python
+@numba.njit(cache=True, nogil=True)
+def locus_statistics(freq, ncol, out, status)
+```
+
+Compute `H_S`, `H_T`, `H_ST`, `G_ST` and `D` for every locus.
+
+Equal deme weights, as `statistics_report` uses for these five
+fields. Each value reproduces `fim.statistics.differentiation`
+operation for operation: exact sums (`math.fsum`) of squared
+frequencies, pooled frequencies accumulated deme-ascending, the same
+clamp to `[0, 1]` within a tolerance, the same formulas.
+
+**Arguments**:
+
+- `freq` - `(loci, demes, width)` frequencies.
+- `ncol` - Live columns per locus.
+- `out` - `(loci, 5)` output: `H_S`, `H_T`, `H_ST`, `G_ST`, `D`.
+  `G_ST` is `nan` where it is undefined (`H_T` is zero).
+- `status` - `(loci,)` int64 output, `0` when every value is in range.
+  A non-zero entry means the Python implementation would have
+  raised; the caller recomputes that generation with it.
+
+<a id="fim.model.vector_kernels.present_entries"></a>
+
+#### present\_entries
+
+```python
+@numba.njit(cache=True, nogil=True)
+def present_entries(freq, ids, ncol, locus_ids)
+```
+
+List every present allele frequency in trajectory-row order.
+
+The order is deme-major, then locus, then ascending allele id, the
+order `ModelState.to_rows` writes.
+
+**Arguments**:
+
+- `freq` - `(loci, demes, width)` frequencies.
+- `ids` - `(loci, width)` allele id of each column.
+- `ncol` - Live columns per locus.
+- `locus_ids` - `(loci,)` the `locus_id` of each locus.
+
+
+**Returns**:
+
+  Four equal-length arrays: one-based deme, `locus_id`, allele id
+  and frequency.
 
 <a id="fim.model.vectorized"></a>
 
