@@ -108,11 +108,13 @@ A batch runs under any [engine_backend](configuration.md#engine_backend),
 not only `lineal`; every backend writes the same `replicate-NNN/` +
 `manifest.json` + `summary.json` layout. Whether a replicate's own
 trajectory is bit-identical across backends for the same seed follows
-`engine_backend`'s own documented parity rules (bit-for-bit with no
-migration; statistically equivalent otherwise for
-`generational-vector`) — running the same batch under a different
-backend is not a way to reproduce one replicate's own exact trajectory
-a different backend already produced, only its statistical behavior.
+`engine_backend`'s own documented parity rules: `lineal`,
+`generational` and `generational-vector` produce the same trajectory,
+bit for bit, for the same seed on the same machine, so running the same
+batch under a different backend reproduces every replicate exactly (and
+across different machines, statistically — the compiled arithmetic
+`generational-vector` and `jit: numba` use is checked against Python's
+only on the development platform).
 
 Under `engine_backend: lineal` (the only backend with a worker-process
 pool), batch replicates run in parallel by default, one worker per

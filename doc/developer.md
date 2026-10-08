@@ -148,19 +148,54 @@ implementation-level view, plus what building it actually cost.
   string, since it buys nothing `"lineal"` does not already give a
   caller who just wants the reference behavior.
 - **`VectorizedAdvancer`** (`"generational-vector"`). A third
-  `Advancer`: converts each replicate's own state to a dense
-  `(deme, allele)` NumPy array once per generation and runs a fused
-  `migrate`/`mutate`/`drift` on that array instead of one Python-level
-  operator call per deme (`fim.model.vectorized`). Raises `ValueError`
-  immediately for any config outside `mutation_model="finite_alleles"`
-  and `migrant_sampling="continuous"` together — there is no silent
-  fallback path.
-  Requires `numba` unconditionally (its own JIT-batched multinomial
-  decomposition is what makes it competitive at all, unlike Backend
-  L/G's optional, genuinely-optional `jit="numba"`) — see
-  `pyproject.toml`'s own `jit` extra comment for the two-different-
-  import-paths distinction this cost a real CI outage to get right
-  (below).
+  `Advancer`: keeps each replicate's state in one dense NumPy table
+  (`fim.model.vector_block.VectorBlock`: `loci x demes x width`
+  frequencies and counts, an allele-id array per locus) and advances a
+  whole generation, every locus, with one compiled kernel call
+  (`fim.model.vector_kernels.run_generation`) instead of one Python-level
+  operator call per deme. Both mutation models run on it; stochastic
+  migrant counts do not yet (`ValueError`, with a message pointing to
+  `lineal`/`generational`; the kernel's migration step is already split
+  into a draw phase and a blend phase for that follow-up). Under infinite
+  alleles the table's columns are the alleles alive now, kept in
+  ascending id order, appended for each new mutant, compacted when
+  extinct, grown by doubling and shrunk after a long quiet stretch, with
+  a per-replicate memory ceiling that fails early with the remedies
+  named. Requires `numba` unconditionally — see `pyproject.toml`'s own
+  `jit` extra comment for the two-different-import-paths distinction
+  this cost a real CI outage to get right (below); the kernel module is
+  imported lazily, so `import fim` never needs it. `fim.model.vectorized`
+  is the earlier per-locus implementation, superseded and no longer
+  called by the engine.
+
+**What keeps Backend V bit-identical to L and G — the rules a change to
+`fim.model.operators` must not silently break.** Each is checked by exact
+tests (`test/model/test_vector_kernels.py`, `test_vector_block.py`,
+`test/engine/test_vector_parity.py`), which compare complete ordered row
+streams, never summaries:
+
+1. Stage-major order across loci: migrate every locus, then draw drift
+   for every `(deme, locus)` pair deme-major, then mutation counts (and
+   finite-alleles targets) pair by pair in the same order.
+2. Ascending allele-id order within a pair, for the drift categories and
+   the mutation counts; an absent allele consumes no draw.
+3. Migration arithmetic operation for operation: a sequential
+   deme-ascending size-weighted mass, each pool value clamped at zero,
+   each row divided by the `fsum` of its positive entries; a full matrix
+   is one `fsum` per cell.
+4. Drift normalization with NumPy's own pairwise `ndarray.sum()` over the
+   present probabilities (ported to the kernel).
+5. The same inversion binomial, one uniform per real draw.
+6. Infinite alleles: identities handed out deme-major, locus-minor from
+   one counter; finite alleles: the K-allele target draws of
+   `FiniteAlleleSpace`, interleaved with the next pair's counts.
+
+A change to `operators` that alters any of these (a summation order, a
+clamp, a normalization, a draw order) makes the parity tests fail at the
+first generation, which is the intent. The statistics `D`, `G_ST`, `H_S`,
+`H_T` and `H_ST` are computed in the kernel and must equal
+`statistics_report`'s bits for the same reason (a different last bit can,
+rarely, move a convergence stop).
 
 **A cross-backend RNG-unification story worth knowing before touching
 any of this code.** For a long stretch of this feature's own
@@ -260,22 +295,17 @@ reasoned about.
   above has the full story). `"lineal"` and `"generational"` are
   bit-identical for the same seed, always, by construction — different
   execution order over the identical dict-based arithmetic.
-  `"generational-vector"` is bit-identical to both *only* for a
-  **single-locus** run with migration off (`m: 0`); with migration
-  active, or with two or more loci regardless of migration, it matches
-  them statistically instead (no directional bias, confirmed) rather
-  than row-for-row. Migration-active divergence is because its own
-  dense-matrix migration blend is a different, equally valid
-  floating-point reduction order than the dict-based backends' own
-  arithmetic. Multi-locus divergence is structural, not floating-point:
-  `step_vectorized` fuses `migrate`/`mutate`/`drift` per locus, one
-  whole locus at a time, while the dict-based backends run each stage
-  across every locus first in a deme-major order — the two draw from
-  the shared RNG stream in a different order whenever more than one
-  locus is tracked, migration on or off. Never assume "same seed" alone
-  is enough to reproduce an archived `"generational-vector"` trajectory
-  exactly unless that run was both single-locus and used zero migration
-  — check `manifest.engine_backend` first. The
+  `"generational-vector"` is bit-identical to both too, for the same
+  seed *on the same machine*, under either mutation model, with or
+  without migration, for any number of loci (the rules above). Its one
+  limit is the compiled mathematics: Numba's `lgamma`, `log`, `log1p`
+  and `exp` are verified against CPython's only on the development
+  platform, the same caveat `jit="numba"` carries, so across machines
+  results agree statistically, not row for row. (Before the compiled
+  kernel it matched only statistically, for two reasons — migration by a
+  BLAS matrix product, and a locus-major draw order — both gone.) Check
+  `manifest.engine_backend` to know which engine produced an archived
+  run. The
   [simulator design's own §4.6](fim-simulator-design.md#46-choosing-an-engine-backend)
   has the equation-level explanation of why (the same weighted-blend
   formula, two different summation orders, occasionally landing on
@@ -423,8 +453,8 @@ Never use the public internet or wall-clock values in an assertion.
 
 The coverage gate is 90 percent branch coverage for `src/fim`, excluding
 visualization rendering. Coverage is a floor; golden and invariant tests carry
-the scientific proof. Every Backend-V-only test (`fim.model.vectorized`,
-`VectorizedAdvancer`) starts with `pytest.importorskip("numba")` rather
+the scientific proof. Every Backend-V-only test (`fim.model.vector_kernels`,
+`fim.model.vector_block`, `VectorizedAdvancer`) starts with `pytest.importorskip("numba")` rather
 than assuming it is installed, so `.[dev]` alone still runs cleanly —
 those tests skip instead of failing. CI's own coverage-gated job installs
 `.[dev,jit]` specifically, not `.[dev]`: skipped tests contribute no

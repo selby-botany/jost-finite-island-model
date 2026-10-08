@@ -202,6 +202,14 @@ its own `manifest.json`. See [output schemas](doc/usage.md#output-schemas).
   statistic's across-replicate confidence interval is tight enough,
   rather than requiring a hand-guessed replicate count in advance, or
   running the full `n_replicates` every time.
+- `engine_backend` chooses how fast a run goes, not what it computes:
+  `lineal` (the reference), `generational` and `generational-vector` (an
+  array engine that needs the optional `numba`, `pip install fim[jit]`)
+  produce the same trajectory, bit for bit, for the same seed on the same
+  machine, under both mutation models. `auto` picks the fast one for your
+  configuration, and the array engine is typically tens to hundreds of
+  times faster; see [the configuration
+  reference](doc/configuration.md#engine_backend).
 
 The [simulator design](doc/fim-simulator-design.md)
 defines the complete scientific and architectural contract.

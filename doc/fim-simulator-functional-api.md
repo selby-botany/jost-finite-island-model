@@ -83,31 +83,37 @@ The one entry point everything else in this project ultimately calls.
   default too, every earlier release's own behavior, unchanged),
   `"generational"`
   (real thread-based replicate fan-out, bit-identical trajectory to
-  `"lineal"` for the same seed), `"generational-vector"` (array-native,
-  fused `migrate`/`mutate`/`drift`; matches `"lineal"` exactly, same
-  seed, only for a **single-locus** run with migration off, and matches
-  it statistically otherwise — same mean differentiation statistics
-  across many seeds, not necessarily the same individual trajectory —
-  whenever migration is active (its own dense-matrix migration blend
-  and `"lineal"`'s own arithmetic are two different, equally valid
-  floating-point paths to the same computation) or whenever two or more
-  loci are tracked, migration on or off (`step_vectorized` fuses all
-  three operators per locus, one whole locus at a time, while the
-  dict-based backends run each stage across every locus first in a
-  deme-major order — the two draw from the shared RNG stream in a
-  different order the instant more than one locus is tracked)), or
-  `"auto"` (picks between `"generational"` and
-  `"generational-vector"` using `params.d`/`auto_vector_min_d` and
-  every locus's own capacity against `params.auto_vector_max_capacity`,
-  both below — never `"lineal"`).
-  `"generational-vector"` is scoped to `params.mutation_model=
-  "finite_alleles"` and `params.migrant_sampling="continuous"`; a
-  direct `"generational-vector"` choice outside that scope raises
-  `ValueError` naming the violated constraint (`"auto"` falls back to
+  `"lineal"` for the same seed), `"generational-vector"` (array-native:
+  one compiled kernel call per generation over every locus, in
+  `operators.step`'s own stage and draw order; **identical** to
+  `"lineal"` and `"generational"` for the same seed on the same
+  platform, under both mutation models, with a scalar or matrix `m`,
+  for any number of loci — every trajectory row, the report, the final
+  state and the manifest apart from `engine_backend`; the compiled
+  `lgamma`/`log`/`log1p`/`exp` are verified against CPython's only on the
+  development platform, so across machines results agree statistically),
+  or `"auto"` (picks between `"generational"` and
+  `"generational-vector"` — never `"lineal"`: V for continuous migration
+  when `numba` is importable, `jit` is `"off"`, `params.d` is at least
+  `auto_vector_min_d` and, under finite alleles only, every locus's
+  capacity is at most `params.auto_vector_max_capacity`; otherwise G.
+  The output is identical either way, so a missing `numba` just means
+  G).
+  `"generational-vector"` runs both mutation models and needs
+  `params.migrant_sampling="continuous"` (stochastic migrant counts are
+  not implemented for it yet); a direct `"generational-vector"` choice
+  with stochastic sampling raises `ValueError` naming the violated
+  constraint, as does one without `numba` (`"auto"` falls back to
   `"generational"` instead, silently, since it is choosing on the
-  caller's behalf), and needs the optional `numba` dependency
+  caller's behalf). It needs the optional `numba` dependency
   (`pip install fim[jit]`) unconditionally — it has no separate `jit`
   toggle of its own, so only `jit="off"` (the default) is accepted
+  alongside it; `"auto"` with `jit="numba"` resolves to `"generational"`.
+  It holds one `loci x demes x alleles` table per replicate; a table
+  over the per-replicate ceiling (2 GiB, or the
+  `FIM_VECTOR_MEMORY_CEILING_BYTES` environment variable) raises
+  `fim.model.vector_block.VectorMemoryCeilingError` at the start with the
+  remedies named.
   alongside it or alongside `"auto"` resolving to it. `max_workers`/
   `store_factory` opt `"lineal"` into running independent replicates
   across real OS processes rather than one at a time (`clock`/
@@ -127,9 +133,11 @@ The one entry point everything else in this project ultimately calls.
   defined in `fim.model.params`), a real benchmark-measured default
   with known cross-environment caveats (see that constant's own
   docstring). `auto_vector_max_capacity` is the per-locus capacity
-  ceiling `"auto"` uses alongside it — every locus in `params.loci`
-  must be at most this value for `"auto"` to pick `"generational-
-  vector"`, regardless of `d`; `params.auto_vector_max_capacity`'s own
+  ceiling `"auto"` uses alongside it under finite alleles (4 ** length;
+  not under infinite alleles, whose table is as wide as the alleles
+  alive at once) — every locus in `params.loci` must be at most this
+  value for `"auto"` to pick `"generational-vector"`, regardless of `d`;
+  `params.auto_vector_max_capacity`'s own
   default is `DEFAULT_AUTO_VECTOR_MAX_CAPACITY` (4096), likewise a real
   benchmark-measured default with the same caveats. Whichever backend
   actually ran — the resolved choice, not
@@ -164,19 +172,16 @@ The one entry point everything else in this project ultimately calls.
   defaults to when constructed directly rather than through
   `build_engine_backend`; `ThreadedAdvancer`, real thread-based fan-out —
   what `engine_backend="generational"` actually builds;
-  `VectorizedAdvancer`, array-native fused `migrate`/`mutate`/`drift`
-  scoped to finite-alleles/continuous-migration configs — what
+  `VectorizedAdvancer`, array-native, one compiled kernel call per
+  generation, both mutation models, continuous migration — what
   `engine_backend="generational-vector"` actually builds).
 - **`run_batch(params, store, run_id, clock, advancer) -> tuple[RunResult, ...]`**,
   **`ReplicaLane`** — the generation-first driving loop `GenerationalBackend`
   calls, and the per-replica working-state object it advances one
   generation at a time; for the same seed, bit-identical to
   `LinealBackend`'s own trajectory under
-  `SequentialAdvancer`/`ThreadedAdvancer` — not under `VectorizedAdvancer`
-  in general, which matches exactly only for a single-locus run with
-  migration off (see `engine_backend`'s own entry above for what
-  "statistically" means the rest of the time, including every
-  multi-locus case).
+  `SequentialAdvancer`/`ThreadedAdvancer`/`VectorizedAdvancer` (the last
+  on the same platform; see `engine_backend`'s own entry above).
 - **`FinalReport`** (a `TypedDict`) — the scalar numbers a finished
   run reports, averaged across every tracked locus: `run_id`,
   `generation`, `converged`, `converged_on` (the watched statistic(s)

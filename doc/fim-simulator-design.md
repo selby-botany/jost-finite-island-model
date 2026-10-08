@@ -593,134 +593,91 @@ against, while two faster alternatives sit beside it, opt-in:
   next starts. Same answer, same seed, provably bit-for-bit — it is a
   different *order* of doing identical arithmetic, not different
   arithmetic.
-- **`"generational-vector"`** goes further: it computes the *identical*
+- **`"generational-vector"`** goes further: one compiled routine carries
+  out a whole generation for every deme and every locus at once, instead
+  of one deme at a time in a Python loop. It computes the *identical*
   equations §3.4's own pipeline is built from — migration's weighted
-  blend and drift's multinomial draw, spelled out in full in the
-  [finite-island-model introduction's own
+  blend, drift's multinomial draw and the per-copy mutation step, spelled
+  out in full in the [finite-island-model introduction's own
   §3.2](finite-island-model-introduction.md#32-one-generation-in-two-steps)
-  — for every deme at once, as one array operation, rather than one
-  deme at a time in a loop. Concretely: stack every deme's own
-  frequency vector into one matrix, `P_t` — `d` rows (one per deme),
-  one column per possible allele. Migration's own weighted blend, the
-  introduction's §3.2 own `p_{\mathrm{mig},i} = (1-m)\, p_{t,i} + m\,
-  \bar p_i`, restated as a single matrix equation for the whole table
-  at once:
+  — and it does so in the same order and with the same arithmetic as
+  `"lineal"`: it blends every locus, then draws drift deme by deme and
+  locus by locus, then mutation, adding the same numbers in the same
+  sequence and taking the same random numbers from the same stream.
+  Concretely, each replicate keeps one table per locus: `d` rows (one
+  per deme), one column per allele alive at that locus, and a short list
+  naming which allele each column is. Migration's own weighted blend,
+  the introduction's §3.2 own `p_{\mathrm{mig},i} = (1-m)\, p_{t,i} + m\,
+  \bar p_i`, is then `d` copies of that scalar formula evaluated for every
+  column at once — exactly the ordinary formula, evaluated together
+  rather than one cell at a time, the way a spreadsheet computes an
+  entire column with one formula. (When every deme shares the same rate
+  `m` and pool composition, no `d × d` matrix is ever built: the blend
+  follows directly from each deme's own size and the size-weighted total
+  across every other deme, `O(d)` instead of `O(d^2)` work.) Drift's
+  multinomial draw and mutation's per-copy draw have no such formula
+  form; they are the same sequence of one-at-a-time random draws the
+  other engines make, only compiled. This is where the speed lives, from
+  a handful of demes up.
 
-  ```math
-  P_{\mathrm{mig}} = W\, P_t
-  ```
-
-  `W` is a `d × d` matrix — row `i` holds `(1-m)` on the diagonal and
-  the weight given to every other deme's own contribution to `\bar
-  p_i` off it, summing to 1 across the row (a row-stochastic matrix).
-  `P_t` has one column per possible allele; multiplying `W` into one
-  such column is one matrix–vector product computing all `d` demes' own
-  blend for that single allele at once — exactly `d` copies of the
-  introduction's own scalar formula, evaluated together rather than one
-  at a time. `W P_t` performs that same product across every column
-  simultaneously, one matrix–vector product per allele, all of them at
-  once — the ordinary meaning of a matrix–matrix product, not a new
-  operation invented for speed. (When every deme shares the same rate
-  `m` and pool
-  composition, `W` never actually needs to be built at all: the
-  identical blend follows directly from each deme's own size and the
-  size-weighted total across every other deme, `O(d)` instead of
-  `O(d^2)` to construct a matrix only to discard most of it as zero
-  weight — the shortcut this project's own `migrate_vectorized_
-  symmetric` takes.) Drift's own multinomial draw runs the same way,
-  one array-wide random draw instead of one loop iteration per deme,
-  though a random draw has no comparable matrix-equation form the way
-  a deterministic blend does. Nothing about *what* gets computed
-  changes — this is the same arithmetic the introduction's §3.2
-  already names, restated as one linear-algebra operation over the
-  whole table instead of row by row, the way a spreadsheet computes an
-  entire column with one formula instead of one cell at a time. This
-  is where the real speed lives for a large number of demes — and
-  where the guarantee changes shape (below).
-
-  **Why the table needs a column count fixed in advance.** A table
-  needs a known, fixed width — one column per possible allele — before
-  any arithmetic can run on it. §3.2's own default model (infinite
-  alleles: a mutation can mint a genuinely novel allele that has never
-  existed before, forever) has no such fixed count to allocate a column
-  for. The bounded, `4 ** L`-state finite-alleles model (§3.2, above)
-  does — every possible state is enumerable in advance, which is
-  exactly what makes a fixed-width table representable at all. That is
-  why `"generational-vector"` is scoped to the finite-alleles model
-  only: not an arbitrary restriction chosen for speed's own sake, but
-  the one model whose own state space is small and bounded enough to
-  become a table's own column count.
+  **How the table copes with new alleles.** A table needs a width before
+  any arithmetic can run on it. Under the bounded `4 ** L`-state
+  finite-alleles model (§3.2, above) every possible state is enumerable
+  in advance, so the table simply has that many columns for the whole
+  run. Under the default infinite-alleles model a mutation mints a
+  genuinely novel allele that has never existed before, so there is no
+  fixed set of columns; instead the table keeps a column for each allele
+  that is alive somewhere *right now*, appends one column for every new
+  mutant (new alleles always get a larger identifier than every older
+  one, so the columns stay in identifier order, which is the order the
+  random draws visit them in), and drops a column the moment its allele
+  has been lost from every deme (an infinite-alleles allele that is lost
+  can never return). The table doubles in width when a locus needs more
+  columns than it has and is halved again after a long stretch of low
+  use. Its memory is therefore proportional to the alleles alive at once,
+  not to the number of mutations that ever happened. A configuration
+  whose table cannot fit in the per-replicate memory ceiling (2 GiB by
+  default, the `FIM_VECTOR_MEMORY_CEILING_BYTES` environment variable
+  changes it) is refused at the start with a message naming the
+  remedies.
 
 **How to decide — the short version:** if you never touch Python and
-just run `fim run` on a YAML file, this section does not apply to you
-yet (no CLI flag exists). If you do call `fim()` directly and a run
-with a lot of demes (`d`) feels slow, `"generational-vector"` is worth
-trying first — [§9.1's own table
-row](#91-variations-reachable-from-configuration) has the exact,
-measured evidence for when it wins and by how much, and that evidence
-is updated as this project re-measures it, not a one-time guess. If you
-need every run to match `"lineal"`'s own trajectory exactly, keep
-reading before switching: `"generational"` always matches exactly;
-`"generational-vector"` matches exactly only for a single-locus run
-with migration off (`m: 0`), and matches statistically — no directional
-bias, but not row-for-row — the moment either migration is active or
-two or more loci are tracked (migration on or off; the two backends
-draw from the shared random stream in a different order once more than
-one locus is involved) — see [the functional API
-reference](fim-simulator-functional-api.md) for the precise guarantee
-each one makes, and never guess at this from the name alone.
+just run `fim run` on a YAML file, set `engine_backend: auto` (the
+desktop app's own starting value) and the right engine is chosen for
+you. If you do call `fim()` directly and a run with a lot of demes (`d`)
+or loci feels slow, `"generational-vector"` is worth trying first —
+[§9.1's own table row](#91-variations-reachable-from-configuration) has
+the exact, measured evidence for when it wins and by how much, and that
+evidence is updated as this project re-measures it, not a one-time
+guess. Because all three engines give the same answer for the same seed
+on one machine, you can switch between them freely, even in the middle
+of a project: the numbers do not change, only the time they take. See
+[the functional API reference](fim-simulator-functional-api.md) for the
+precise guarantee each one makes.
 
-**What "matches statistically, not row-for-row" actually means, once
-migration is active.** Not a different science, and not an
-approximation of the equation above — the exact same weighted-blend
-formula, computed two different, both fully correct, ways: one column
-at a time as a running sum over demes (`"lineal"`/`"generational"`'s
-own dict-based arithmetic), or as one array operation across every
-deme at once (`"generational-vector"`'s own array, added up in
-whatever order the underlying array library chooses). Floating-point
-addition is not perfectly associative — `(a + b) + c` and `a + (b +
-c)` can differ in the very last bit of precision — so these two
-equally valid summation orders can land on a frequency that differs
-from the other engine's own by less than one part in `10^15`,
-invisible anywhere the number is actually used. The one place it is
-not invisible is drift's own multinomial draw, immediately afterward:
-which allele count a draw lands on depends on which side of a cutoff
-the frequency falls, and that sub-microscopic disagreement
-occasionally sits close enough to one such cutoff to flip which side
-of it the draw lands on — measured directly, not assumed: 23 of 30
-seeds with migration active diverged from `"lineal"`'s own trajectory
-within the first three generations. What keeps this an acceptable
-trade rather than a defect is that the divergence carries no
-directional bias — checked directly by comparing each engine's own
-*mean* differentiation statistics across many independently seeded
-replicates, not merely asserted: a small sample can show a borderline
-gap, but it narrows back to noise as the sample grows, exactly what an
-unbiased alternate realization of the same random process looks like,
-and a real bias would not.
-
-**What "matches statistically, not row-for-row" actually means with two
-or more genetic loci, migration on or off.** A different mechanism
-entirely from the floating-point one above, not a second instance of
-it: `"generational-vector"` advances one whole locus's own table of
-demes through migrate, drift, *and* mutate before moving to the next
-locus, while `"lineal"`/`"generational"` instead run migrate across
-every locus, then drift across every locus, then mutate across every
-locus. Both orderings compute the identical science — nothing about
-*which* locus's random draw happens *when* changes what either engine
-converges to — but they draw from the shared stream of random numbers
-in a different sequence the moment more than one locus is tracked, so
-the two engines' trajectories diverge from the very first random draw
-onward rather than only occasionally, the way the migration-active case
-above does. This is not a defect to fix: reordering
-`"generational-vector"`'s own loop to match the other two engines'
-ordering exactly would mean processing one deme at a time across every
-locus instead of one whole locus at a time across every deme — giving
-up the exact array-at-once operation this engine exists to be fast at,
-for a guarantee (matching another engine's trajectory bit for bit) with
-no scientific consequence, since each engine's own output already
-carries no directional bias relative to the others (the identical
-mean-differentiation-statistics check described above holds for the
-multi-locus case too).
+**Why the three engines agree to the last bit — and what "on one
+machine" means.** Floating-point addition is not perfectly associative —
+`(a + b) + c` and `a + (b + c)` can differ in the very last bit of
+precision — so two programs that add the same numbers in a different
+order can end up one part in `10^15` apart. That would be invisible
+anywhere the number is used, except in drift's multinomial draw
+immediately afterward, where a sub-microscopic disagreement can sit
+close enough to a cutoff to flip which count a draw lands on, after
+which the two runs follow different histories. This project's earlier
+vector engine summed with a matrix product whose order the array
+library chose, and visited loci one at a time rather than stage by
+stage, so it matched the other two only statistically (the same mean
+differentiation statistics across many seeds, with no directional bias,
+but not the same individual trajectory). The current one adds in exactly
+the other engines' sequence, so that gap is closed: each trajectory row,
+the report and the final state are identical, bit for bit. The one
+remaining limit is the compiled mathematics: the engine's `lgamma`,
+`log`, `log1p` and `exp` are checked against Python's own only on the
+platform this project is developed on. On another operating system or
+processor they may differ in the last bit, so a result reproduces
+exactly across the three engines *on one machine*, and agrees
+statistically, not row for row, across machines (the same caveat
+`jit: numba` has always carried).
 
 **A caution from this project's own history, worth knowing before you
 lean on either faster engine:** the exact same code change that made
@@ -1157,7 +1114,7 @@ built (§11): each names the one place the change lands.
 | …many replicate runs were needed for a confidence interval, without hand-guessing the count? | 𝖯["replicate_tolerance"]: once replicate_minimum replicates exist, the batch stops as soon as every watched statistic's across-replicate Student's-t interval (`fim.statistics.interval`) is that tight, combined by the same convergence_combinator used within a run, with n<sub>replicates</sub> as the hard cap. fim.engine.replicate_summary and the CLI's `summary.json` report the realized interval | `ConfidenceIntervalCriterion` implements the same `ConvergenceCriterion` protocol as `TrailingWindowCriterion` and plugs into an unmodified `ConvergenceMonitor`, so the replicate batch loop gains a second stopping rule rather than a second loop |
 | …replicate batches ran faster? | max_workers (library) / `--workers`, `--sequential` (CLI); the library default is sequential, the CLI default is one worker per processor | replicates are fully independent (own seed, own registries, own convergence monitor), so `ProcessPoolExecutor` runs _run_one unmodified. Worker *processes*, not threads: per-generation state is Python-object sparse maps that hold the GIL. A store_factory gives each replicate its own trajectory store in either mode, since one store object cannot cross a process boundary |
 | …replicate batches ran faster, without process-per-replicate overhead? | `fim()`'s own `engine_backend="generational"` (a config-file field — see doc/configuration.md#engine-backend-and-jit) | a second engine implementation, `ReplicaLane`/`run_batch`, advances every still-active replicate's own generation together, fanned out across real threads (`ThreadedAdvancer`) rather than processes — one address space, no picklability constraint, bit-identical trajectory to the default for the same seed. `jit="numba"` additionally JIT-compiles `drift`'s own random draw (optional `numba` dependency): a real, substantial speedup that comes from removing CPython interpreter overhead rather than from thread-count parallelism — the same speedup is already present at a single worker and does not grow as more workers are added; `jit="off"` shows no speedup at any worker count ([Appendix B.2](fim-engine-backend-benchmarks.md#b2-g-thread-count-sweep) has the measured table). `migrate`'s/`mutate`'s own RNG calls stay unjitted for the matrix-form migration and stochastic migrant-sampling paths, so those two configurations do not see this speedup |
-| …`migrate`/`mutate`/`drift` themselves operated on dense arrays instead of one Python loop per deme, for the bounded-K (finite-alleles) mutation model? | `fim()`'s own `engine_backend="generational-vector"` (a config-file field — see doc/configuration.md#engine-backend-and-jit), scoped to `mutation_model="finite_alleles"` and `migrant_sampling="continuous"` — a config outside that scope raises `ValueError` naming the violated constraint | a third engine implementation, `VectorizedAdvancer`, converts each replicate's own state to a dense `(deme, allele)` array once per generation and runs `migrate`/`mutate`/`drift` fused on that array (`fim.model.vectorized`; [§4.6](#46-choosing-an-engine-backend) explains the underlying math for a scientist reader). Matches the other two backends exactly, same seed, only for a single-locus run with migration off; with migration active, or with two or more loci regardless of migration, matches them statistically rather than bit-for-bit — same mean differentiation statistics across many seeds, confirmed to carry no directional bias, not necessarily the same individual trajectory ([§4.6](#46-choosing-an-engine-backend) has the precise mechanism and a measured figure). Needs the optional `numba` dependency unconditionally (no separate `jit` toggle). `"generational-vector"` is the fastest of the four measured engine/JIT combinations at every `d` tested, from 2 through 120 — [Appendix B.1](fim-engine-backend-benchmarks.md#b1-d-deme-count-sweep) has the measured tables |
+| …`migrate`/`mutate`/`drift` themselves operated on dense arrays instead of one Python loop per deme? | `fim()`'s own `engine_backend="generational-vector"` (a config-file field — see doc/configuration.md#engine-backend-and-jit), both mutation models, `migrant_sampling="continuous"` only — a config outside that scope raises `ValueError` naming the violated constraint | a third engine implementation, `VectorizedAdvancer`, keeps each replicate's allele frequencies in one dense table per run (`fim.model.vector_block`) and runs a whole generation, every locus, as one compiled call (`fim.model.vector_kernels`; [§4.6](#46-choosing-an-engine-backend) explains the underlying math for a scientist reader). Identical to the other two backends for the same seed on the same machine: every trajectory row, the report and the final state, bit for bit, with migration on or off, for any number of loci. Stochastic migrant counts are not implemented for it yet. Needs the optional `numba` dependency unconditionally (no separate `jit` toggle). Measured 30 to 300 times faster than `"lineal"` on the infinite-alleles worked examples; [Appendix B.1](fim-engine-backend-benchmarks.md#b1-d-deme-count-sweep) has the earlier finite-alleles tables |
 | …the choice between `"generational"` and `"generational-vector"` were made automatically, on `d` and locus capacity, instead of by hand? | `fim()`'s own `engine_backend="auto"` (a config-file field — see doc/configuration.md#engine-backend-and-jit), with `auto_vector_min_d` (default `2`) and `auto_vector_max_capacity` (default `4096`) as the two configurable thresholds | picks `"generational-vector"` when `d` clears its own cutover, *every* locus's own capacity (4<sup>length</sup> under `finite_alleles`) is at most the capacity ceiling, *and* the config is otherwise eligible for it (`finite_alleles`/continuous migration), `"generational"` otherwise — never `"lineal"`, since no benchmark data yet fully characterizes that boundary (though [Appendix B.6](fim-engine-backend-benchmarks.md#b6-joint-d--locus-length-sweep-post-phase-7-2026-09-05) found `"lineal"` outright winning in two small corners of the grid). Both current defaults come from [Appendix B.6](fim-engine-backend-benchmarks.md#b6-joint-d--locus-length-sweep-post-phase-7-2026-09-05)'s own 104-point joint `d` × locus-length grid, run specifically because [Appendix B.5](fim-engine-backend-benchmarks.md#b5-joint-d--locus-length-sweep-heatmap) found the two axes interact (a diagonal boundary, not a rectangle) — `4096` is the largest capacity at which `"generational-vector"` won at every tested `d`, and `2` is the smallest `d` a config can have at all, since no `d` below that capacity ceiling was ever found losing. The resolved choice (never the literal string `"auto"`) and the `jit` setting are both recorded on the run's own `manifest.engine_backend`/`manifest.jit`, so a saved run's own record always says what actually produced it. Checking every locus's own capacity, not `d` alone, is what stops a large-`d`, large-capacity config from resolving to `"generational-vector"` inside a region it actually loses in. A real, `d`-dependent losing region still exists above the new capacity ceiling (Appendix B.6 again) — a single rectangular threshold pair cannot reach it without also misrouting the region below `4096`, so it stays outside `"auto"`'s reach, reachable only by overriding `auto_vector_max_capacity` by hand with that risk understood |
 
 ### 9.2 Landing spots for changes that are not built
@@ -1537,5 +1494,24 @@ generator-version: Claude Sonnet 5
 generator-model-token: claude-sonnet-5
 generator-provider: Anthropic
 generation-date: 2026-09-06
+generator-responsibility: revision
+```
+
+Rewrote §4.6's account of `"generational-vector"` and its §9.1 row.
+Backend V now runs the infinite-alleles model and both mutation models
+are bit-identical to `"lineal"`/`"generational"` on one machine
+(`fim.model.vector_block`, `fim.model.vector_kernels`): the paragraphs on
+a column count fixed in advance, on statistical rather than row-for-row
+agreement with migration, and on the multi-locus draw order described the
+earlier per-locus engine and were replaced. The appendix B tables still
+describe the earlier finite-alleles engine's measurements and were not
+re-run here.
+
+```text
+generator-name: Claude Code
+generator-version: Claude Sonnet 5.5
+generator-model-token: claude-sonnet-5-5
+generator-provider: Anthropic
+generation-date: 2026-10-08
 generator-responsibility: revision
 ```

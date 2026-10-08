@@ -8,6 +8,25 @@ project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- **The array engine runs the default model, and gives the same numbers.**
+  `engine_backend: generational-vector` now runs `infinite_alleles` (it used
+  to refuse everything but `finite_alleles`) and reproduces `lineal` and
+  `generational` exactly: for the same seed on the same machine, every
+  trajectory row (each allele identity and frequency, bit for bit), the
+  report, the final state and the manifest (apart from the `engine_backend`
+  field) are identical, under both mutation models, with a scalar or a
+  matrix `m`, for any number of loci, in batches, adaptive batches and the
+  within-run σ band. Each generation, every locus, is one compiled step;
+  the convergence statistics D, G<sub>ST</sub>, H<sub>S</sub>, H<sub>T</sub>
+  and H<sub>ST</sub> are computed inside it. Measured per locus-generation
+  (writing rows, discarding them, a shared machine at load 11 to 15):
+  dear-nolan-low at 30 loci 12 µs against 353 (`lineal`) and 368
+  (`generational`); 100 demes at μ = 0.001 about 1 ms against 30 ms; 50 demes
+  at θ = 10 about 9 ms against 281 ms. A table that would not fit in memory
+  (2 GiB per replicate; `FIM_VECTOR_MEMORY_CEILING_BYTES` changes it) stops
+  at the start with a message naming the remedies. Stochastic migrant counts
+  are not available for it yet and are rejected up front. See
+  [engine_backend](doc/configuration.md#engine_backend).
 - **Say what each Experiment, Study, and Run is, and why.** Experiments and
   Studies gain longer free-form documentation beside their one-line
   description; Runs gain a name and description in the desktop app
@@ -894,6 +913,19 @@ project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   encoded without calling `json.dumps` for each one (about six times faster),
   with identical output.
 
+- **`engine_backend: auto` now picks the array engine for infinite alleles,
+  and no longer fails without numba.** `auto` chooses `generational-vector`
+  whenever migration is continuous, `jit` is off, `numba` is installed and `d`
+  is at least `auto_vector_min_d` (and, under finite alleles, every locus fits
+  under `auto_vector_max_capacity`, which infinite alleles does not need).
+  Because the engines give identical results, this changes how fast a run
+  finishes and nothing in its output but the manifest's `engine_backend`
+  field. A machine without `numba` gets `generational` instead of an error,
+  and `jit: numba` under `auto` gets `generational`, the one engine that has
+  the toggle. Finite-alleles `generational-vector` runs now follow
+  `lineal`'s realization, not the earlier engine's, so a finite-alleles run
+  archived under the earlier engine does not reproduce row for row (its
+  statistics agree).
 - **Loading a configuration no longer changes your Settings.** In the
   desktop app, loading an example, a preset, a YAML file, or a saved run
   (Home's Clone, or Run it) used to copy its execution engine,

@@ -682,13 +682,13 @@ the manifest fields — an unconverged tail is never extended.
 Works under every engine_backend (`lineal`, `generational`,
 `generational-vector`, and `auto` resolving to either of the latter
 two), and under batches of any size — each replicate gets its own
-independent band, computed from its own converged tail. `lineal` and
-`generational` produce bit-identical bands for the same seed, since
-both continue the run with the same per-generation code;
-`generational-vector` computes its own band array-natively and, like
-that backend generally, is not expected to match the other two
-bit-for-bit. A replicate that an adaptive replicate_tolerance stop
-discarded never gets a band, since its results are not kept at all.
+independent band, computed from its own converged tail. All three
+engines produce bit-identical bands for the same seed on the same
+machine: `lineal` and `generational` continue the run with the same
+per-generation code, and `generational-vector` continues its own table
+with the same draws in the same order. A replicate that an adaptive
+replicate_tolerance stop discarded never gets a band, since its results
+are not kept at all.
 
 ### sigma_band_window
 
@@ -846,7 +846,10 @@ which `m` shape is configured above.
   Migrant *composition* is unaffected either way: migrants still carry
   exactly the deterministic, weighted pool average. Requires a concrete
   `N` (always true for a CLI run; a direct `fim.model.operators.migrate`
-  call needs population_size).
+  call needs population_size). Not yet available under
+  `engine_backend: generational-vector` (rejected at config-load time,
+  with a message to choose `lineal` or `generational`); `auto` runs
+  `generational` for it.
 
 ```yaml
 migrant_sampling: stochastic
@@ -889,38 +892,53 @@ the run:
   instead of processes. Produces bit-for-bit identical results to
   `lineal` for the same inputs.
 - `generational-vector`: the same computation again, this time done
-  with whole-array math instead of one calculation per deme — the
-  fastest option once a run has enough demes for that to matter, but
-  only for runs using mutation_model: finite_alleles and
-  migrant_sampling: continuous (see those settings above); any other
-  combination is rejected up front, at config-load time, rather than
-  accepted and failing later. Needs an extra, optional piece of
-  software (`numba`) that a plain `pip install fim` does not include —
-  install `fim[jit]` instead to add it. Matches `lineal`/`generational`
-  exactly (same seed, bit-for-bit) when
-  migration (`m`) is off; with migration active, matches them
-  statistically instead (same average result across many seeds, no
-  systematic bias, but not necessarily the identical trajectory for one
-  specific seed).
-- `auto`: picks `generational` or `generational-vector` automatically,
-  from `d`, `auto_vector_min_d`, and `auto_vector_max_capacity` (both
-  below) — never `lineal`. Every locus must fit under the capacity
-  ceiling, not just `d` clearing the deme-count threshold — a run with
-  enough demes but a locus long enough to make `generational-vector`'s
-  own whole-array approach wasteful still falls back to `generational`.
+  with whole-array math and one compiled step per generation instead of
+  one calculation per deme — by far the fastest option, from a handful
+  of demes up. It runs both mutation models (`infinite_alleles` and
+  `finite_alleles`) and a scalar or full-matrix `m`, but needs
+  migrant_sampling: continuous (see those settings above); stochastic
+  migrant counts are rejected up front, at config-load time, rather than
+  accepted and failing later. Needs an extra, optional piece of software
+  (`numba`) that a plain `pip install fim` does not include — install
+  `fim[jit]` instead to add it. Matches `lineal` and `generational`
+  exactly: for the same seed on the same machine, every trajectory row
+  (allele identity and frequency, bit for bit), the report, the final
+  state and the manifest (apart from the `engine_backend` field that
+  names it) are identical, under both mutation models, with or without
+  migration, for any number of loci. (The compiled arithmetic is checked
+  against Python's only on the development platform, so across machines
+  results agree statistically, as they already do for `jit: numba`.) It
+  keeps one table of `loci x demes x alleles` numbers per replicate in
+  memory; a configuration whose table cannot fit — a very high
+  mutation rate with many demes and loci, or a finite-alleles locus
+  that is very long — stops at the start with a message that names the
+  remedies. The ceiling is 2 GiB per replicate, and the
+  `FIM_VECTOR_MEMORY_CEILING_BYTES` environment variable (a number of
+  bytes) raises or lowers it. With several replicates running at once
+  each holds its own table; `max_concurrent_replicates` bounds how many.
+- `auto`: picks `generational` or `generational-vector` automatically —
+  never `lineal`. It picks `generational-vector` when migration is
+  continuous, `jit` is `off`, `numba` is installed, `d` is at least
+  `auto_vector_min_d` and, under `mutation_model: finite_alleles` only,
+  every locus fits under `auto_vector_max_capacity` (both below).
+  Otherwise it picks `generational`. Because both give identical
+  results, the choice changes how fast a run finishes, nothing else, and
+  a computer without `numba` quietly gets `generational` instead of an
+  error.
 
 **Why you might care:** if a run is taking uncomfortably long —
-especially one with a large number of demes (`d`) — that slowness is a
-property of the chosen engine, not of the science being simulated; the
-same configuration can run meaningfully faster under a different engine
-choice. `generational-vector` is the one worth reaching for first at a
-large `d`; see [the simulator design's own section on choosing an
+especially one with a large number of demes (`d`) or loci — that
+slowness is a property of the chosen engine, not of the science being
+simulated; the same configuration can run meaningfully faster under a
+different engine choice. `generational-vector` is the one worth
+reaching for first (for example 30 to 300 times faster than `lineal` on
+the infinite-alleles worked examples); see [the simulator design's own section on choosing an
 engine backend](fim-simulator-design.md#46-choosing-an-engine-backend)
 for the full decision guide and the measured evidence behind it.
 
 ```yaml
 engine_backend: generational-vector
-mutation_model: finite_alleles
+mutation_model: infinite_alleles
 migrant_sampling: continuous
 ```
 
@@ -980,6 +998,8 @@ dominates more than the draw itself); `lineal` never accepts anything
 but `off`, permanently; `generational-vector` always requires `numba`
 regardless of this setting, so it too only accepts `off` here (there is
 no separate toggle to turn off what it already needs unconditionally).
+Under `engine_backend: auto`, `jit: numba` selects `generational` (the
+one engine that offers the toggle) rather than `generational-vector`.
 
 ### auto_vector_min_d
 
@@ -989,9 +1009,11 @@ no separate toggle to turn off what it already needs unconditionally).
 The deme-count threshold `engine_backend: auto` uses to choose
 `generational-vector` over `generational`. Ignored under every other
 `engine_backend` value. Re-measured 2026-09-05 on a joint `d` x
-locus-length grid (104 points, real hardware): `generational-vector`
-never lost to `generational` at any tested `d` within
-`auto_vector_max_capacity`'s own default ceiling, so this threshold is
+locus-length grid (104 points, real hardware, finite alleles):
+`generational-vector` never lost to `generational` at any tested `d`
+within `auto_vector_max_capacity`'s own default ceiling, and the
+infinite-alleles kernel measured 5 to 300 times faster than
+`generational` from `d = 2` up (2026-10-08), so this threshold is
 set to the smallest `d` a config can have at all — see [the simulator
 design's own section on choosing an engine
 backend](fim-simulator-design.md#46-choosing-an-engine-backend) for the
@@ -1006,11 +1028,14 @@ for how to re-measure either threshold on your own hardware.
 - **Default:** `4096`
 
 The per-locus capacity ceiling `engine_backend: auto` uses alongside
-`auto_vector_min_d` — `generational-vector` is only chosen when `d`
-clears its own threshold *and* every locus's own capacity
-(4<sup>length</sup> under `mutation_model: finite_alleles`) is at most
-this value; a single locus above it falls back to `generational`
-regardless of `d`. Ignored under every other `engine_backend` value.
+`auto_vector_min_d`, **under `mutation_model: finite_alleles` only** —
+`generational-vector` is only chosen when `d` clears its own threshold
+*and* every locus's own capacity (4<sup>length</sup>) is at most this
+value; a single locus above it falls back to `generational` regardless
+of `d`. A finite-alleles table is `capacity` columns wide however few
+states are in use, which is why it needs a ceiling; an infinite-alleles
+table is as wide as the alleles alive at once, so `auto` does not apply
+this ceiling there. Ignored under every other `engine_backend` value.
 Re-measured alongside `auto_vector_min_d` on the same joint grid: the
 largest capacity at which `generational-vector` won at every tested
 `d` — the same `dev/bin/benchmark-engines` maintainer tool re-measures
@@ -1047,7 +1072,7 @@ uses.
 n_replicates: 200
 engine_backend: generational-vector
 max_concurrent_replicates: 4
-mutation_model: finite_alleles
+mutation_model: infinite_alleles
 migrant_sampling: continuous
 ```
 
@@ -1188,7 +1213,8 @@ existed.
 | auto_vector_min_d less than 1 | rejected |
 | auto_vector_max_capacity less than 1 | rejected |
 | jit: numba with engine_backend: lineal or generational-vector | rejected |
-| engine_backend: generational-vector without mutation_model: finite_alleles and migrant_sampling: continuous | rejected |
+| engine_backend: generational-vector with migrant_sampling: stochastic | rejected |
+| engine_backend: generational-vector with either mutation_model, scalar or matrix `m` | accepted |
 | max_concurrent_replicates less than 1 | rejected |
 | max_concurrent_replicates greater than n<sub>replicates</sub> | silently capped at n<sub>replicates</sub> |
 | sigma_band_multiplier and sigma_band_window not both given, or neither | rejected |
