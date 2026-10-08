@@ -839,7 +839,6 @@ class SimulationParams:
             jit=self.jit,
             auto_vector_min_d=self.auto_vector_min_d,
             auto_vector_max_capacity=self.auto_vector_max_capacity,
-            mutation_model=self.mutation_model,
             migrant_sampling=self.migrant_sampling,
         )
         if self.max_concurrent_replicates is not None:
@@ -2153,31 +2152,26 @@ def _validate_engine_backend(
     jit: Jit,
     auto_vector_min_d: int,
     auto_vector_max_capacity: int,
-    mutation_model: MutationModel,
     migrant_sampling: MigrantSampling,
 ) -> None:
-    """Reject an engine_backend/jit combination the engine would refuse anyway.
+    """Reject an engine_backend/jit/migration combination the engine refuses anyway.
 
     Checked here, at config-parse time, rather than only once a run
     actually starts and `fim.engine.LinealBackend`/`VectorizedAdvancer`
     raise the same complaint deep inside a call stack: a config this
     obviously self-contradictory should never get far enough to start a
     run at all. Mirrors two different real counterparts, not one single
-    function — corrected here, found stale while reading this docstring
-    against the current code rather than trusting it
-    (`20260903-claude-sonnet-5-fim-vg-performance-campaign-design.md`
-    §6.1 item 2): the `jit`-related rejections mirror `fim.engine.
-    build_engine_backend`'s own identical checks
-    (`20260901-claude-sonnet-5-fim-engine-backend-factory-design.md`
-    §7.5); the `mutation_model`/`migrant_sampling` rejection mirrors
-    `fim.engine.VectorizedAdvancer.advance`'s own runtime check instead
-    — `build_engine_backend` itself never checks either field, it only
-    ever raises on `jit`. **No automated cross-check enforces either
-    stays in sync — that claim, previously made here, did not hold**:
-    checked directly against the test suite, not merely assumed
-    correct; no such test exists anywhere under `test/`. Kept as a
-    plain code comment, not a verified guarantee, until a real test is
-    built.
+    function: the `jit`-related rejections mirror `fim.engine.
+    build_engine_backend`'s own identical checks; the `migrant_sampling`
+    rejection mirrors `fim.engine.VectorizedAdvancer.advance`'s own
+    runtime check. The test suite checks the pair agrees
+    (`test_params_and_engine_reject_the_same_vector_configurations`).
+
+    Backend V (`generational-vector`) runs both mutation models, so
+    `mutation_model` is not checked; it needs `migrant_sampling`
+    "continuous", because stochastic migrant counts are not implemented
+    for it yet.
+
     `auto_vector_min_d`/`auto_vector_max_capacity` are a different kind
     of check entirely — validated here only as plain positive integers,
     never cross-referenced against `d`/any locus's own capacity; that
@@ -2189,8 +2183,8 @@ def _validate_engine_backend(
     Split in two: `_validate_engine_settings` checks the four execution
     fields against each other alone, which is all `validate_execution_
     settings` (the desktop app's Settings defaults) can know; the
-    `mutation_model`/`migrant_sampling` check below needs the scientific
-    half of a configuration and so is made only here.
+    `migrant_sampling` check below needs the scientific half of a
+    configuration and so is made only here.
     """
     _validate_engine_settings(
         engine_backend=engine_backend,
@@ -2198,12 +2192,12 @@ def _validate_engine_backend(
         auto_vector_min_d=auto_vector_min_d,
         auto_vector_max_capacity=auto_vector_max_capacity,
     )
-    if engine_backend == "generational-vector" and not (
-        mutation_model == "finite_alleles" and migrant_sampling == "continuous"
-    ):
+    if engine_backend == "generational-vector" and migrant_sampling != "continuous":
         raise ValueError(
             "engine_backend 'generational-vector' requires "
-            "mutation_model='finite_alleles' and migrant_sampling='continuous'"
+            "migrant_sampling='continuous'; stochastic migrant counts are "
+            "not implemented for it yet (choose engine_backend 'lineal' or "
+            "'generational')"
         )
 
 

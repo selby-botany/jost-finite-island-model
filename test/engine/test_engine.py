@@ -47,6 +47,7 @@ from fim.model.operators import _population_sizes
 from fim.model.params import ConvergenceCombinator, EngineBackend, SimulationParams
 from fim.model.state import ModelState
 from fim.model.vectorized import (
+    VectorizedState,
     build_vectorized_state,
     step_vectorized,
     vectorized_state_to_model_state,
@@ -575,7 +576,7 @@ def test_vectorized_extension_keeps_minted_identities_through_extinction() -> No
     params = _sigma_band_vector_params(seed=20260902)
 
     lane = _drive_vector_lane_to_stop(params)
-    assert lane.vectorized_state is not None
+    assert isinstance(lane.vectorized_state, VectorizedState)
     before = lane.vectorized_state.locus_states[0]
     minted_before = int(before.minted_mask.sum())
 
@@ -589,7 +590,7 @@ def test_vectorized_extension_keeps_minted_identities_through_extinction() -> No
     # it. A replay is needed because the extension itself persists no
     # per-generation state, only each watched statistic's own value.
     replay = _drive_vector_lane_to_stop(params)
-    assert replay.vectorized_state is not None
+    assert isinstance(replay.vectorized_state, VectorizedState)
     sizes = np.asarray(
         _population_sizes(replay.params.gene_copies, replay.state.deme_count),
         dtype=np.int64,
@@ -624,7 +625,7 @@ def test_vectorized_extension_keeps_minted_identities_through_extinction() -> No
         lane, multiplier=2.0, window=12
     )
     assert band and len(trajectory) == 12
-    assert lane.vectorized_state is not None
+    assert isinstance(lane.vectorized_state, VectorizedState)
     after = lane.vectorized_state.locus_states[0]
     assert int(after.minted_mask.sum()) >= minted_before
     assert after.minted_count >= before.minted_count
@@ -4007,25 +4008,73 @@ def test_fim_rejects_max_workers_on_other_backends(
         )
 
 
-def test_fim_generational_vector_rejects_infinite_alleles(
+def test_fim_generational_vector_runs_infinite_alleles(
     tiny_params: SimulationParams,
 ) -> None:
-    """`"generational-vector"` is scoped to `finite_alleles` — never a silent fallback.
+    """`"generational-vector"` runs the default infinite-alleles model.
 
-    `tiny_params`'s own default `mutation_model` is `"infinite_alleles"`
-    (unbounded, per-generation-ragged identity space — out of scope for
-    `fim.model.vectorized`'s bounded-`K` representation), so this is the
-    common case a caller is most likely to hit by accident.
+    `tiny_params`'s own default `mutation_model` is `"infinite_alleles"`,
+    the common case a caller reaches without choosing anything. The
+    result is `LinealBackend`'s (the exactness contract; the full matrix
+    is `test/engine/test_vector_parity.py`), so a report comparison is
+    enough here.
     """
-    with pytest.raises(ValueError, match="finite_alleles"):
-        fim(
-            tiny_params.gene_copies,
-            tiny_params.m,
-            tiny_params.mu,
-            tiny_params.d,
-            params=tiny_params,
+    pytest.importorskip("numba")
+    vector = fim(
+        tiny_params.gene_copies,
+        tiny_params.m,
+        tiny_params.mu,
+        tiny_params.d,
+        params=tiny_params,
+        run_id="run",
+        clock=_clock,
+        engine_backend="generational-vector",
+    )
+    lineal = fim(
+        tiny_params.gene_copies,
+        tiny_params.m,
+        tiny_params.mu,
+        tiny_params.d,
+        params=tiny_params,
+        run_id="run",
+        clock=_clock,
+        engine_backend="lineal",
+    )
+    assert isinstance(vector, RunResult) and isinstance(lineal, RunResult)
+    assert vector.report == lineal.report
+    assert vector.final_state == lineal.final_state
+    assert vector.manifest.engine_backend == "generational-vector"
+
+
+def test_params_and_engine_reject_the_same_vector_configurations(
+    tiny_params: SimulationParams,
+) -> None:
+    """Config-time validation and the advancer's own check agree.
+
+    `generational-vector` runs both mutation models and only refuses
+    stochastic migrant counts. `SimulationParams` refuses that at
+    construction; `VectorizedAdvancer.advance` refuses it again for a lane
+    built some other way, with the same words.
+    """
+    pytest.importorskip("numba")
+    for model in ("infinite_alleles", "finite_alleles"):
+        replace(
+            tiny_params,
+            mutation_model=model,
+            loci=(LocusSpec(1, 2),),
             engine_backend="generational-vector",
         )
+    with pytest.raises(ValueError, match="migrant_sampling='continuous'"):
+        replace(
+            tiny_params,
+            migrant_sampling="stochastic",
+            engine_backend="generational-vector",
+        )
+    stochastic = replace(tiny_params, migrant_sampling="stochastic")
+    store = InMemoryTrajectoryStore()
+    lane = _build_replica_lane(stochastic, 0, None, store, _clock)
+    with pytest.raises(ValueError, match="migrant_sampling='continuous'"):
+        VectorizedAdvancer().advance([lane], store)
 
 
 def test_fim_generational_vector_rejects_stochastic_migrant_sampling(

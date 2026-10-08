@@ -43,6 +43,7 @@ Every test module, fixture, and test function documented here in full; `doc/fim-
   - [`test_window_statistics`](#convergence.test_window_statistics)
 - [`test/engine/`](#group-engine)
   - [`test_engine`](#engine.test_engine)
+  - [`test_vector_parity`](#engine.test_vector_parity)
 - [`test/gui/`](#group-gui)
   - [`conftest`](#gui.conftest)
   - [`test_about_modal`](#gui.test_about_modal)
@@ -7445,21 +7446,38 @@ only `LinealBackend` ever builds
 (`20260914-claude-sonnet-5-non-lineal-batch-execution-design.md`,
 `selby/restricted`, §5.3).
 
-<a id="engine.test_engine.test_fim_generational_vector_rejects_infinite_alleles"></a>
+<a id="engine.test_engine.test_fim_generational_vector_runs_infinite_alleles"></a>
 
-#### test\_fim\_generational\_vector\_rejects\_infinite\_alleles
+#### test\_fim\_generational\_vector\_runs\_infinite\_alleles
 
 ```python
-def test_fim_generational_vector_rejects_infinite_alleles(
+def test_fim_generational_vector_runs_infinite_alleles(
         tiny_params: SimulationParams) -> None
 ```
 
-`"generational-vector"` is scoped to `finite_alleles` — never a silent fallback.
+`"generational-vector"` runs the default infinite-alleles model.
 
-`tiny_params`'s own default `mutation_model` is `"infinite_alleles"`
-(unbounded, per-generation-ragged identity space — out of scope for
-`fim.model.vectorized`'s bounded-`K` representation), so this is the
-common case a caller is most likely to hit by accident.
+`tiny_params`'s own default `mutation_model` is `"infinite_alleles"`,
+the common case a caller reaches without choosing anything. The
+result is `LinealBackend`'s (the exactness contract; the full matrix
+is `test/engine/test_vector_parity.py`), so a report comparison is
+enough here.
+
+<a id="engine.test_engine.test_params_and_engine_reject_the_same_vector_configurations"></a>
+
+#### test\_params\_and\_engine\_reject\_the\_same\_vector\_configurations
+
+```python
+def test_params_and_engine_reject_the_same_vector_configurations(
+        tiny_params: SimulationParams) -> None
+```
+
+Config-time validation and the advancer's own check agree.
+
+`generational-vector` runs both mutation models and only refuses
+stochastic migrant counts. `SimulationParams` refuses that at
+construction; `VectorizedAdvancer.advance` refuses it again for a lane
+built some other way, with the same words.
 
 <a id="engine.test_engine.test_fim_generational_vector_rejects_stochastic_migrant_sampling"></a>
 
@@ -8369,6 +8387,192 @@ assertion says so directly instead of comparing whatever each one
 happened to do. A backend that converged early would fail loudly
 here rather than quietly being compared against a different-length
 run.
+
+<a id="engine.test_vector_parity"></a>
+
+# engine.test\_vector\_parity
+
+Backend V's exactness contract, checked through the public `fim()` call.
+
+For the same configuration and seed, Backend V (`generational-vector`)
+must produce exactly what Backends L (`lineal`) and G (`generational`)
+produce: every trajectory row (allele id and frequency bit, in order),
+the final report, the final state, the convergence histories, the batch
+summary, and the manifest except the field that records which backend
+ran. These tests compare complete row streams and complete outputs, never
+summaries alone, over the shared configuration matrix in
+`test/vector_support.py`, and also through batches, adaptive batches, a
+sigma-band extension, a convergence-stopped run, the expensive opt-in
+statistics and a JSONL trajectory file (byte for byte).
+
+Same-platform identity is the contract: the compiled kernels use Numba's
+`lgamma`, `log`, `log1p` and `exp`, which are verified to match CPython's
+only on the development platform (see `fim.model.vector_block`).
+
+<a id="engine.test_vector_parity.test_infinite_alleles_vector_matches_lineal_through_fim"></a>
+
+#### test\_infinite\_alleles\_vector\_matches\_lineal\_through\_fim
+
+```python
+@pytest.mark.parametrize("name", list(INFINITE_CASES))
+def test_infinite_alleles_vector_matches_lineal_through_fim(name: str) -> None
+```
+
+Every infinite-alleles case: rows, report, final state, manifest.
+
+<a id="engine.test_vector_parity.test_infinite_alleles_vector_matches_generational_through_fim"></a>
+
+#### test\_infinite\_alleles\_vector\_matches\_generational\_through\_fim
+
+```python
+@pytest.mark.parametrize(
+    "name",
+    [
+        "multi-locus with migration",
+        "per-locus mutation rates",
+        "migration matrix",
+        "unequal deme sizes",
+    ],
+)
+def test_infinite_alleles_vector_matches_generational_through_fim(
+        name: str) -> None
+```
+
+V also equals G (`generational`, threaded advancer), not just L.
+
+<a id="engine.test_vector_parity.test_dear_nolan_low_shape_matches_lineal_for_thousands_of_generations"></a>
+
+#### test\_dear\_nolan\_low\_shape\_matches\_lineal\_for\_thousands\_of\_generations
+
+```python
+def test_dear_nolan_low_shape_matches_lineal_for_thousands_of_generations(
+) -> None
+```
+
+The dear-nolan-low shape at three loci, 3,000 generations, every row.
+
+<a id="engine.test_vector_parity.test_replicate_batch_matches_lineal"></a>
+
+#### test\_replicate\_batch\_matches\_lineal
+
+```python
+def test_replicate_batch_matches_lineal() -> None
+```
+
+Three replicates: every replicate's rows, reports and the batch summary.
+
+<a id="engine.test_vector_parity.test_adaptive_replicate_batch_keeps_the_same_replicates"></a>
+
+#### test\_adaptive\_replicate\_batch\_keeps\_the\_same\_replicates
+
+```python
+def test_adaptive_replicate_batch_keeps_the_same_replicates() -> None
+```
+
+An adaptive batch (`replicate_tolerance`) keeps the same replicate prefix.
+
+<a id="engine.test_vector_parity.test_convergence_stopped_run_matches_lineal"></a>
+
+#### test\_convergence\_stopped\_run\_matches\_lineal
+
+```python
+def test_convergence_stopped_run_matches_lineal() -> None
+```
+
+A run that converges (not one cut off by the cap) stops identically.
+
+<a id="engine.test_vector_parity.test_sigma_band_extension_matches_lineal"></a>
+
+#### test\_sigma\_band\_extension\_matches\_lineal
+
+```python
+def test_sigma_band_extension_matches_lineal() -> None
+```
+
+The extension after convergence (rows aside) gives the same band.
+
+<a id="engine.test_vector_parity.test_expensive_statistics_and_aggregation_choices_match_lineal"></a>
+
+#### test\_expensive\_statistics\_and\_aggregation\_choices\_match\_lineal
+
+```python
+@pytest.mark.parametrize("aggregation", ["ratio_of_means", "mean_of_ratios"])
+def test_expensive_statistics_and_aggregation_choices_match_lineal(
+        aggregation: str) -> None
+```
+
+Opt-in statistics (computed in Python) and both locus aggregations.
+
+<a id="engine.test_vector_parity.test_window_of_concurrent_replicates_matches_lineal"></a>
+
+#### test\_window\_of\_concurrent\_replicates\_matches\_lineal
+
+```python
+def test_window_of_concurrent_replicates_matches_lineal() -> None
+```
+
+`max_concurrent_replicates` changes scheduling, never results.
+
+<a id="engine.test_vector_parity.test_jsonl_trajectory_file_is_byte_identical"></a>
+
+#### test\_jsonl\_trajectory\_file\_is\_byte\_identical
+
+```python
+def test_jsonl_trajectory_file_is_byte_identical(tmp_path: Path) -> None
+```
+
+The JSONL file V writes equals Backend L's, byte for byte.
+
+<a id="engine.test_vector_parity.test_fim_records_the_resolved_backend_in_the_manifest"></a>
+
+#### test\_fim\_records\_the\_resolved\_backend\_in\_the\_manifest
+
+```python
+def test_fim_records_the_resolved_backend_in_the_manifest() -> None
+```
+
+The manifest names the backend that actually ran.
+
+<a id="engine.test_vector_parity.test_a_stopped_lane_hands_its_identity_counter_back_to_the_registry"></a>
+
+#### test\_a\_stopped\_lane\_hands\_its\_identity\_counter\_back\_to\_the\_registry
+
+```python
+def test_a_stopped_lane_hands_its_identity_counter_back_to_the_registry(
+) -> None
+```
+
+After the lane stops, `lane.registry` has not fallen behind the block.
+
+The block mints identities inside its arrays; `lane.state` and the
+registry are brought up to date only at the stop, the one moment
+something outside the array loop reads them.
+
+<a id="engine.test_vector_parity.test_the_advancer_enforces_its_memory_ceiling_with_an_actionable_message"></a>
+
+#### test\_the\_advancer\_enforces\_its\_memory\_ceiling\_with\_an\_actionable\_message
+
+```python
+def test_the_advancer_enforces_its_memory_ceiling_with_an_actionable_message(
+) -> None
+```
+
+A table that cannot fit fails at the first tick, naming the remedies.
+
+<a id="engine.test_vector_parity.test_equilibrium_split_start_matches_lineal"></a>
+
+#### test\_equilibrium\_split\_start\_matches\_lineal
+
+```python
+def test_equilibrium_split_start_matches_lineal() -> None
+```
+
+A run founded by an equilibrium split continues identically on V.
+
+The ancestral phase runs on the dictionary-based operators (and
+mints identities there); V then starts from that founding state and
+from the registry counter the phase left, and must neither collide
+with an ancestral identity nor draw differently.
 
 
 
@@ -9632,13 +9836,14 @@ def test_a_vector_run_default_survives_a_fresh_form_and_is_reported_at_validatio
         tmp_path: Path) -> None
 ```
 
-A default the starter model cannot use is kept, and the conflict is reported.
+A default the chosen model cannot use is kept, and the conflict is reported.
 
-`generational-vector` needs finite alleles; the starter model uses
-infinite alleles. The default is the user's own valid choice, so a
-fresh form keeps it (and the saved ploidy) rather than silently
-reverting to the starter's run settings, and validating the form
-names the real conflict.
+`generational-vector` runs the starter model (infinite alleles) but
+needs continuous migration; the same default is a conflict once the
+form asks for stochastic migrant counts. The default is the user's own
+valid choice, so a fresh form keeps it (and the saved ploidy) rather
+than silently reverting to the starter's run settings, and validating
+the form names the real conflict.
 
 <a id="gui.test_app_api.test_get_starter_form_with_overrides_applies_the_given_values"></a>
 

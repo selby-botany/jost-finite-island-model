@@ -2438,7 +2438,7 @@ class Api:
         as `get_default_run_settings` returns them — each already valid
         on its own — and are *not* re-validated against the starter
         model: a default that model cannot use (`generational-vector`
-        with the starter's infinite-alleles model) is the user's real
+        with a stochastic-migration model) is the user's real
         choice, reported when the form is validated or run, and
         discarding it here would silently drop the ploidy too.
         """
@@ -3981,8 +3981,8 @@ class Api:
         own (`_effective_default_run_settings`), never by overlaying it
         on the starter configuration: these are defaults for whatever
         model runs next, and the starter model cannot use some valid
-        ones (`generational-vector` needs `mutation_model:
-        finite_alleles`), so an overlay once threw away a loaded
+        ones (`generational-vector` needs `migrant_sampling:
+        continuous`), so an overlay once threw away a loaded
         preset's whole run setup and ran the starter's instead. A key
         missing from an older saved dict takes the starter's value; a
         saved value that is itself invalid is replaced by the starter's

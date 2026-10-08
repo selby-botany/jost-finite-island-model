@@ -153,6 +153,7 @@ from fim.model.params import (
 from fim.model.params import EngineBackend as ModelEngineBackend
 from fim.model.params import Jit as ModelJit
 from fim.model.state import ModelState
+from fim.model.vector_block import VectorBlock, VectorMigration
 from fim.model.vectorized import (
     VectorizedLocusState,
     VectorizedState,
@@ -725,7 +726,7 @@ class ReplicaLane:
     active: bool = True
     result: RunResult | None = None
     migration_weights: tuple[np.ndarray, ...] | None = None
-    vectorized_state: VectorizedState | None = None
+    vectorized_state: VectorizedState | VectorBlock | None = None
     equilibration_outcome: EquilibrationOutcome | None = None
     equilibrium_store: TrajectoryStore | None = None
 
@@ -988,126 +989,203 @@ class ThreadedAdvancer:
 
 
 class VectorizedAdvancer:
-    """Steps every currently-active lane forward by one generation, fused.
+    """Steps every currently-active lane forward by one generation, array-native.
 
-    The one `Advancer` that actually answers
-    `20260901-claude-sonnet-5-fim-engine-backend-factory-design.md`
-    §11's own "fusing `migrate` -> `mutate` -> `drift` across stage
-    boundaries" open question — and, since that same design's own §11
-    was reopened once this generation-to-generation cost was actually
-    measured, its "across-generation fusion" question too: each lane's
-    own `ModelState` is converted to `fim.model.vectorized.
-    VectorizedState` exactly once, the first tick it is ever advanced
-    (`lane.vectorized_state`, cached on the lane itself — see
-    `ReplicaLane`'s own docstring), then every subsequent generation's
-    migrate/mutate/drift sequence (`step_vectorized`) runs directly on
-    that same cached array, feeding straight into the next tick with no
-    `ModelState` in between at all. Trajectory rows are written
-    directly from the dense array (`vectorized_state_to_rows`), and
-    convergence statistics are read directly from it too
-    (`_convergence_values_vectorized`) — a real `ModelState` is only
-    ever reconstructed once per lane, when that lane's own monitor
-    reports it has stopped, for the report/`RunResult` machinery that
-    genuinely needs one. Measured directly, not assumed: at a large
-    capacity, the per-tick reconstruction this removes was itself ~40%
-    of that tick's own wall-clock time — larger than the biology
-    (`step_vectorized` itself) it was sitting next to. A genuine
-    caller-supplied `(d, d)` migration weight matrix is likewise built
-    once per lane and cached on `lane.migration_weights`, not rebuilt
-    every generation; the far more common plain-scalar-rate case skips
-    building one at all now — see `ReplicaLane`'s own docstring for
-    both the original caching finding and the newer `O(d^2)`-avoidance
-    fix.
+    Backend V's `Advancer`. Each lane's generation-zero `ModelState` is
+    converted exactly once, the first tick the lane is advanced, into a
+    dense array table cached on the lane (`ReplicaLane.vectorized_state`);
+    from then on every generation runs on that table with no `ModelState`
+    in between. Trajectory rows are written straight from the arrays,
+    convergence statistics are read from them, and a real `ModelState` is
+    rebuilt once per lane, when its monitor reports it has stopped, for
+    the report and `RunResult` machinery that needs one.
 
-    Scope, deliberately, matching `fim.model.vectorized`'s own module
-    docstring: `SimulationParams.mutation_model == "finite_alleles"`
-    (bounded `K`, no reindexing problem) and `migrant_sampling ==
-    "continuous"` (deterministic migration) only. A lane outside that
-    scope raises `ValueError` immediately, naming which constraint it
-    violated — never a silent fallback to the dict-based path.
+    **Infinite alleles** (the default model) runs on
+    `fim.model.vector_block.VectorBlock`: one compiled kernel call per
+    generation over every locus, in the same stage and draw order as
+    `fim.model.operators.step`, with the arithmetic of the dictionary-based
+    operators ported operation for operation. For the same seed on the same
+    platform the trajectory rows, report and final state are therefore
+    identical to Backend L's and G's, every allele identity and frequency
+    bit; the lane's `AlleleRegistry` counter is brought up to the
+    identities the block handed out when the lane stops. The convergence
+    statistics `D`, `G_ST`, `H_S`, `H_T` and `H_ST` are computed inside
+    the kernel and equal `statistics_report`'s bits; the opt-in expensive
+    statistics (`E_ST`, `K_ST`, `A_CGD`, `Delta`, `MI`) stay in Python.
+
+    **Finite alleles** (bounded `K`) still runs on `fim.model.vectorized`'s
+    per-locus `VectorizedState`, whose multi-locus draw order and BLAS
+    migration make it statistically, not bitwise, equal to Backend L.
+
+    Both models need `migrant_sampling="continuous"`: a lane that asks for
+    stochastic migrant counts raises `ValueError` immediately, never a
+    silent fallback to a dictionary-based path. A genuine caller-supplied
+    `(d, d)` migration matrix is supported (one exact sum per cell).
+
+    Args:
+        memory_ceiling_bytes: Per-lane ceiling on the infinite-alleles
+            table, in bytes; `None` uses the 2 GiB default or the
+            `FIM_VECTOR_MEMORY_CEILING_BYTES` environment variable
+            (`fim.model.vector_block.resolve_memory_ceiling`). A lane
+            whose table would exceed it raises
+            `fim.model.vector_block.VectorMemoryCeilingError`, naming
+            what to change.
     """
+
+    def __init__(self, *, memory_ceiling_bytes: int | None = None) -> None:
+        """Remember the per-lane memory ceiling for new tables.
+
+        Args:
+            memory_ceiling_bytes: See the class docstring.
+        """
+        self._memory_ceiling_bytes = memory_ceiling_bytes
 
     def advance(
         self,
         active_lanes: Sequence[ReplicaLane],
         store: TrajectoryStore,
     ) -> list[ReplicaLane]:
-        """Step every active lane by one generation, fused and array-native."""
+        """Step every active lane by one generation, fused and array-native.
+
+        Args:
+            active_lanes: The lanes still running.
+            store: Where each lane's rows for the new generation go.
+
+        Returns:
+            The lanes whose monitor reports stopped, including one that was
+            already stopped before this call and is returned unstepped.
+
+        Raises:
+            ValueError: If a lane asks for `migrant_sampling="stochastic"`.
+        """
         newly_stopped: list[ReplicaLane] = []
         for lane in active_lanes:
             if lane.monitor.should_stop():
                 newly_stopped.append(lane)
                 continue
-            if lane.params.mutation_model != "finite_alleles":
-                raise ValueError(
-                    "VectorizedAdvancer only supports "
-                    f"mutation_model='finite_alleles', got "
-                    f"{lane.params.mutation_model!r} for replicate {lane.run_id}"
-                )
             if lane.params.migrant_sampling != "continuous":
                 raise ValueError(
                     "VectorizedAdvancer only supports "
                     f"migrant_sampling='continuous', got "
-                    f"{lane.params.migrant_sampling!r} for replicate {lane.run_id}"
+                    f"{lane.params.migrant_sampling!r} for replicate "
+                    f"{lane.run_id}; stochastic migrant counts are not "
+                    "implemented for engine_backend 'generational-vector' "
+                    "yet. Choose engine_backend 'lineal' or 'generational'"
                 )
-            sizes = np.asarray(
-                _population_sizes(lane.params.gene_copies, lane.state.deme_count),
-                dtype=np.int64,
-            )
-            # A plain scalar `params.m` never needs a `(d, d)` matrix
-            # built at all — `migrate_vectorized_symmetric` computes the
-            # identical blend in `O(d*K)` directly (`20260903-claude-
-            # sonnet-5-fim-vg-performance-campaign-design.md` §6.1 item
-            # 1), so `lane.migration_weights` stays `None` and is never
-            # populated for this case. A genuine caller-supplied weight
-            # matrix still needs one real `(d, d)` array; `params.m`/
-            # deme sizes never change mid-run, so that array is still
-            # built once per lane and cached on it, not reconverted from
-            # `params.m` every generation — the Stage 4/Stage V3
-            # benchmark sweep found the earlier per-generation rebuild
-            # made Backend V's own d-scaling measurably worse than the
-            # dict-based backends' own linear-in-d migration formula
-            # (`ReplicaLane`'s own docstring has the full note).
-            symmetric_rate: float | None = None
-            if isinstance(lane.params.m, int | float):
-                symmetric_rate = float(lane.params.m)
-            elif lane.migration_weights is None:
-                weights = np.asarray(lane.params.m, dtype=np.float64)
-                lane.migration_weights = (weights,) * len(lane.state.loci)
-            if lane.vectorized_state is None:
-                # Only the very first tick this lane is ever advanced —
-                # `lane.state` is still the real generation-zero
-                # `ModelState` `_build_replica_lane` constructed it
-                # from. Every subsequent tick steps `lane.vectorized_
-                # state` (set below) directly; `build_vectorized_state`
-                # is never called again for this lane.
-                lane.vectorized_state = build_vectorized_state(lane.state)
-            stepped = step_vectorized(
-                lane.vectorized_state,
-                lane.migration_weights,
-                lane.params.mutation_rates,
-                sizes,
-                lane.rng,
-                symmetric_rate=symmetric_rate,
-            )
-            store.write_generation(
-                lane.run_id,
-                stepped.generation,
-                vectorized_state_to_rows(stepped, lane.run_id),
-                validate=False,
-            )
-            lane.vectorized_state = stepped
-            values = _convergence_values_vectorized(stepped, lane.params)
-            lane.monitor.record(stepped.generation, values)
+            if lane.params.mutation_model == "infinite_alleles":
+                self._advance_block(lane, store)
+            else:
+                self._advance_finite_alleles(lane, store)
             if lane.monitor.should_stop():
-                # `lane.state` (`ModelState`) has been left stale, at
-                # whichever generation it was last built for, this
-                # whole time — materialize a real one now, the one
-                # point something outside this array-native loop
-                # (`_finalize_replica_lane`) actually needs it.
-                lane.state = vectorized_state_to_model_state(stepped)
                 newly_stopped.append(lane)
         return newly_stopped
+
+    def _advance_block(self, lane: ReplicaLane, store: TrajectoryStore) -> None:
+        """Advance one infinite-alleles lane on its `VectorBlock`.
+
+        Builds the block on the lane's first tick, steps it, writes the
+        generation's rows, and records the convergence statistics. When
+        the monitor reports stopped, `lane.state` (stale until now) is
+        rebuilt from the block and the lane's registry counter is brought
+        up to the identities the block minted.
+
+        Args:
+            lane: The lane to advance.
+            store: Where the new generation's rows go.
+        """
+        block = lane.vectorized_state
+        if block is None:
+            # Only the very first tick: `lane.state` is still the real
+            # generation-zero `ModelState`. Every later tick steps the
+            # cached block; this conversion never runs again for the lane.
+            block = VectorBlock.from_model_state(
+                lane.state,
+                sizes=_population_sizes(lane.params.gene_copies, lane.state.deme_count),
+                mutation_rates=lane.params.mutation_rates,
+                migration=VectorMigration.from_parameter(
+                    lane.params.m, lane.state.deme_count
+                ),
+                mutation_model=lane.params.mutation_model,
+                next_id=lane.registry.next_value,
+                memory_ceiling_bytes=self._memory_ceiling_bytes,
+            )
+            lane.vectorized_state = block
+        if not isinstance(block, VectorBlock):
+            raise TypeError(
+                f"replicate {lane.run_id} holds a {type(block).__name__}, "
+                "not a VectorBlock, under infinite alleles"
+            )
+        block.advance(lane.rng)
+        store.write_generation(
+            lane.run_id,
+            block.generation,
+            block.rows(lane.run_id),
+            validate=False,
+        )
+        lane.monitor.record(
+            block.generation, _convergence_values_vectorized(block, lane.params)
+        )
+        if lane.monitor.should_stop():
+            # `lane.state` has been left stale, at generation zero, this
+            # whole time: materialize the real final state now, the one
+            # point something outside the array-native loop needs it.
+            lane.state = block.to_model_state()
+            block.sync_registry(lane.registry)
+
+    def _advance_finite_alleles(
+        self, lane: ReplicaLane, store: TrajectoryStore
+    ) -> None:
+        """Advance one finite-alleles lane on `fim.model.vectorized`'s state.
+
+        Args:
+            lane: The lane to advance.
+            store: Where the new generation's rows go.
+        """
+        sizes = np.asarray(
+            _population_sizes(lane.params.gene_copies, lane.state.deme_count),
+            dtype=np.int64,
+        )
+        # A plain scalar `params.m` never needs a `(d, d)` matrix built at
+        # all — `migrate_vectorized_symmetric` computes the identical blend
+        # in `O(d*K)` directly — so `lane.migration_weights` stays `None`
+        # for it. A genuine caller-supplied weight matrix is built once per
+        # lane and cached on it, not reconverted every generation.
+        symmetric_rate: float | None = None
+        if isinstance(lane.params.m, int | float):
+            symmetric_rate = float(lane.params.m)
+        elif lane.migration_weights is None:
+            weights = np.asarray(lane.params.m, dtype=np.float64)
+            lane.migration_weights = (weights,) * len(lane.state.loci)
+        if lane.vectorized_state is None:
+            # Only the very first tick this lane is ever advanced;
+            # `build_vectorized_state` is never called again for it.
+            lane.vectorized_state = build_vectorized_state(lane.state)
+        previous = lane.vectorized_state
+        if not isinstance(previous, VectorizedState):
+            raise TypeError(
+                f"replicate {lane.run_id} holds a {type(previous).__name__}, "
+                "not a VectorizedState, under finite alleles"
+            )
+        stepped = step_vectorized(
+            previous,
+            lane.migration_weights,
+            lane.params.mutation_rates,
+            sizes,
+            lane.rng,
+            symmetric_rate=symmetric_rate,
+        )
+        store.write_generation(
+            lane.run_id,
+            stepped.generation,
+            vectorized_state_to_rows(stepped, lane.run_id),
+            validate=False,
+        )
+        lane.vectorized_state = stepped
+        lane.monitor.record(
+            stepped.generation, _convergence_values_vectorized(stepped, lane.params)
+        )
+        if lane.monitor.should_stop():
+            lane.state = vectorized_state_to_model_state(stepped)
 
 
 def _build_replica_lane(
@@ -1809,13 +1887,13 @@ def build_engine_backend(
             going through this factory, if a caller wants zero new
             thread-safety surface). `"generational-vector"` builds
             `GenerationalBackend(VectorizedAdvancer())` — array-native,
-            fused `migrate`/`mutate`/`drift` (`fim.model.vectorized`'s
-            own module docstring); scoped to `mutation_model=
-            "finite_alleles"` and `migrant_sampling="continuous"` only,
-            raising `ValueError` for any lane outside that scope rather
-            than silently falling back to the dict-based path — needs
-            the optional `numba` dependency unconditionally (see `jit`,
-            below, for why that is not the same thing as `jit="numba"`).
+            one compiled kernel call per generation over every locus
+            (`fim.model.vector_block`); runs both mutation models,
+            `migrant_sampling="continuous"` only, raising `ValueError`
+            for any lane outside that scope rather than silently falling
+            back to the dict-based path — needs the optional `numba`
+            dependency unconditionally (see `jit`, below, for why that is
+            not the same thing as `jit="numba"`).
             `"auto"` picks between `"generational"` and
             `"generational-vector"` using `params`/`auto_vector_min_d`
             (below) — never `"lineal"`, since no data yet characterizes
@@ -2173,41 +2251,26 @@ def fim(
             not-yet-publicly-reachable knob (see `ThreadedAdvancer`'s own
             docstring).
             ``"generational-vector"`` is a real, working third choice —
-            array-native, fused `migrate`/`mutate`/`drift`
-            (`fim.model.vectorized`), scoped to
-            `mutation_model="finite_alleles"` and
-            `migrant_sampling="continuous"` only; a replicate outside
-            that scope raises `ValueError` naming which constraint it
-            violated, rather than silently falling back to the other
-            backends' dict-based path. For a **single-locus** config,
-            matches the other two backends exactly (same seed,
-            bit-identical) when migration is off. With two or more loci,
-            bit-identity does **not** hold even with migration off —
-            `step_vectorized` fuses `migrate`/`mutate`/`drift` per locus,
-            while `operators.step` runs each stage across every locus
-            first, so the two draw from the shared RNG stream in a
-            different order the instant more than one locus is tracked
-            (`mutate`/`drift`'s own dict-based loops are deme-major,
-            locus-minor; each vectorized stage processes one whole
-            locus's own dense array per call, so it is inherently
-            locus-major — the two orders cannot be reconciled without
-            flattening deme and locus together inside the batched RNG
-            kernels themselves, a substantially larger change to this
-            module's one-locus-per-array design for a benefit — cross-
-            backend bit-identity — with no scientific value beyond test
-            convenience, since each backend's own per-locus output is
-            independently correct regardless of draw order). With
-            migration active (any locus count), or with two or more
-            loci regardless of migration, matches the other backends
-            statistically instead (no directional bias, not row-for-row)
-            — see `fim.model.vectorized`'s own module docstring for why,
-            and `test_generational_vector_matches_lineal_statistically_
-            multi_locus` for the multi-locus case's own statistical
-            parity proof (this project's own
-            multi-model engine review, 2026-09-04, `FIM-09`/finding
-            C-01/finding P1-1 — the claim here was previously
-            unqualified by locus count, and the sole existing exact-
-            match test used only one locus).
+            array-native, `migrant_sampling="continuous"` only; a
+            replicate outside that scope raises `ValueError` naming which
+            constraint it violated, rather than silently falling back to
+            the other backends' dict-based path. Under **infinite
+            alleles** (the default model) it runs
+            `fim.model.vector_block.VectorBlock`, one compiled kernel
+            call per generation over every locus in `operators.step`'s
+            own stage and draw order, and is **identical** to
+            ``"lineal"`` and ``"generational"`` for the same seed on the
+            same platform: every trajectory row, the report, the final
+            state and the manifest apart from `engine_backend` (a
+            memory ceiling, `FIM_VECTOR_MEMORY_CEILING_BYTES`, fails a
+            table too large for the machine with a message naming the
+            remedies). Under **finite alleles** it still runs
+            `fim.model.vectorized`'s per-locus state: bit-identical to
+            ``"lineal"`` for a single locus with migration off, otherwise
+            statistically equal only (`step_vectorized` fuses the stages
+            per locus while `operators.step` runs each stage across every
+            locus first, and BLAS reduction order differs) — see that
+            module's own docstring.
             ``"auto"`` picks between ``"generational"`` and
             ``"generational-vector"`` on `params`'s own behalf, using
             `auto_vector_min_d` (below) — never ``"lineal"`` (see
@@ -3166,9 +3229,10 @@ def _generate_initial_state_with_outcome(
     equilibrium-split-design.md`, decision 5). Every engine path —
     `LinealBackend` through `_run_one`, `GenerationalBackend` through
     `_build_replica_lane` — reaches the ancestral phase here
-    (`generational-vector` never completes one: it supports only the
-    finite-alleles model, equilibrium-split only infinite alleles), so
-    this is also the one place its trajectory is persisted: each
+    (the ancestral phase runs on the dictionary-based operators under
+    every backend; `generational-vector` then continues from its
+    founding state), so this is also the one place its trajectory is
+    persisted: each
     ancestral generation is written, as it is
     simulated, to `store`'s ancestral-phase companion
     (`fim.persistence.store.equilibrium_store_for`; beside a JSONL
@@ -4016,10 +4080,14 @@ def tracked_statistic_values(
 
 
 def _convergence_values_vectorized(
-    state: VectorizedState,
+    state: VectorizedState | VectorBlock,
     params: SimulationParams,
 ) -> dict[str, float]:
     """`_convergence_values`'s own array-native counterpart.
+
+    A `VectorBlock` (infinite alleles) goes through
+    `_convergence_values_block`; the finite-alleles `VectorizedState`
+    through the per-locus dictionary path described below.
 
     `VectorizedAdvancer.advance` calls this instead of `_convergence_
     values`, specifically so a whole generation's convergence check
@@ -4035,6 +4103,8 @@ def _convergence_values_vectorized(
     same "an undefined `G_ST` this generation is omitted, not
     substituted" rule.
     """
+    if isinstance(state, VectorBlock):
+        return _convergence_values_block(state, params)
     statistics_to_compute = _statistics_to_compute(params)
     locus_reports = tuple(
         _statistics_for_locus_vectorized(
@@ -4049,6 +4119,86 @@ def _convergence_values_vectorized(
     # it the identical way.
     deme_count = state.locus_states[0].frequencies.shape[0] if state.locus_states else 0
     return _watched_statistic_values(locus_reports, params, deme_count=deme_count)
+
+
+def _convergence_values_block(
+    block: VectorBlock,
+    params: SimulationParams,
+) -> dict[str, float]:
+    """`_convergence_values` for a `VectorBlock`, mostly inside the kernel.
+
+    `D`, `G_ST`, `H_S`, `H_T` and `H_ST`, the statistics every run tracks
+    and the ones the convergence monitor usually watches, are computed for
+    every locus by one compiled call (`VectorBlock.locus_statistics`),
+    which reproduces `statistics_report` bit for bit; the cross-locus
+    aggregation then follows `_watched_statistic_values` exactly. The
+    expensive opt-in statistics (`E_ST`, `K_ST`, `A_CGD`, `Delta`, `MI`)
+    have no kernel form, so a run that watches or tracks any of them
+    builds each locus's frequency maps and uses `statistics_report`. So
+    does the one generation in which the kernel flags a value that
+    `statistics_report` would have refused (outside `[0, 1]`), so the
+    Python implementation raises its own, specific error.
+
+    Args:
+        block: The replicate's current table.
+        params: The run's parameters (`convergence_statistics`,
+            `track_expensive_statistics`, `locus_aggregation`).
+
+    Returns:
+        The same mapping `_convergence_values` returns for the same state.
+    """
+    statistics = _statistics_to_compute(params)
+    if not statistics - set(_ALWAYS_TRACKED_STATISTICS):
+        table, status = block.locus_statistics()
+        if not status.any():
+            return _watched_values_from_table(table, params, block.deme_count)
+    reports = tuple(
+        _statistics_for_locus_block(block, params, locus_index, statistics=statistics)
+        for locus_index in range(len(block.loci))
+    )
+    return _watched_statistic_values(reports, params, deme_count=block.deme_count)
+
+
+def _watched_values_from_table(
+    table: np.ndarray,
+    params: SimulationParams,
+    deme_count: int,
+) -> dict[str, float]:
+    """Aggregate per-locus kernel statistics as `_watched_statistic_values` does.
+
+    The same arithmetic in the same order as `_watched_statistic_values`
+    for the always-tracked statistics, starting from the kernel's table
+    instead of one `DifferentiationReport` per locus (the dictionaries
+    would cost more than the kernel at hundreds of loci). A test compares
+    the two on seeded states, bit for bit, under both
+    `locus_aggregation` choices.
+
+    Args:
+        table: `(loci, 5)` columns `H_S`, `H_T`, `H_ST`, `G_ST`, `D`;
+            `G_ST` is `nan` where undefined.
+        params: Supplies `locus_aggregation`.
+        deme_count: Number of demes.
+
+    Returns:
+        `D`, `H_S`, `H_T`, `G_ST` (omitted when undefined) and `H_ST`.
+    """
+    h_s = table[:, 0].tolist()
+    h_t = table[:, 1].tolist()
+    mean_h_s = _mean(h_s)
+    mean_h_t = _mean(h_t)
+    g_st: float | None
+    if params.locus_aggregation == "mean_of_ratios":
+        defined = [value for value in table[:, 3].tolist() if not math.isnan(value)]
+        g_st = _mean(defined) if defined else None
+        d = _mean(table[:, 4].tolist())
+    else:
+        g_st = _g_st_from_demes(mean_h_t, mean_h_s)
+        d = _jost_d_from_within_and_total(deme_count, mean_h_s, mean_h_t)
+    values: dict[str, float] = {"D": d, "H_S": mean_h_s, "H_T": mean_h_t}
+    if g_st is not None:
+        values["G_ST"] = g_st
+    values["H_ST"] = _mean(table[:, 2].tolist())
+    return values
 
 
 def _watched_statistic_values(
@@ -4571,6 +4721,13 @@ def _run_vectorized_sigma_band_extension(
 ) -> tuple[dict[str, dict[str, float]], tuple[dict[str, object], ...]]:
     """Run a converged `"generational-vector"` lane's own sigma-band extension.
 
+    For an infinite-alleles lane (a `VectorBlock`) the block is advanced
+    in place for `window` generations: it carries its own identity counter
+    and nothing else reads it once the lane has stopped. The rest of this
+    docstring describes the finite-alleles `VectorizedState` case, whose
+    bookkeeping is the reason the extension cannot reuse the dict-based
+    helper.
+
     `VectorizedAdvancer`'s array-native counterpart to
     `_run_dict_based_sigma_band_extension`, and a genuinely separate
     implementation rather than a reuse — `20260907-claude-sonnet-5-
@@ -4623,13 +4780,32 @@ def _run_vectorized_sigma_band_extension(
         raise RuntimeError(
             f"replicate {lane.run_id} has no cached vectorized state to extend"
         )
-    # Rebuilt exactly the way `VectorizedAdvancer.advance` builds them
-    # per tick, from the same immutable inputs (`params.m`/`params.gene_copies`/
-    # deme count never change mid-run), so the extension's own
-    # generations are stepped with identical migration handling to the
-    # main run's: a plain scalar rate stays matrix-free (`O(d*K)`), a
-    # genuine caller-supplied weight matrix reuses this lane's own
-    # already-cached `(d, d)` arrays rather than reconverting them.
+    band_values: dict[str, list[float]] = {
+        name: [] for name in lane.params.convergence_statistics
+    }
+    band_rows: list[dict[str, object]] = []
+    extension_state = lane.vectorized_state
+    if isinstance(extension_state, VectorBlock):
+        # Infinite alleles: the block carries its own identity counter and
+        # is advanced in place (the lane is finished, nothing else reads
+        # it), exactly the continuation the dictionary-based extension
+        # makes with the lane's registry.
+        for _ in range(window):
+            extension_state.advance(lane.rng)
+            values = _watched_sigma_band_values(
+                _convergence_values_vectorized(extension_state, lane.params),
+                band_values,
+            )
+            for name, value in values.items():
+                band_values[name].append(value)
+            band_rows.append({"generation": extension_state.generation, **values})
+        extension_state.sync_registry(lane.registry)
+        return _sigma_band_summary(band_values, multiplier), tuple(band_rows)
+    # Rebuilt exactly the way `VectorizedAdvancer._advance_finite_alleles`
+    # builds them per tick, from the same immutable inputs (`params.m`/
+    # `params.gene_copies`/deme count never change mid-run), so the
+    # extension's own generations are stepped with identical migration
+    # handling to the main run's.
     sizes = np.asarray(
         _population_sizes(lane.params.gene_copies, lane.state.deme_count),
         dtype=np.int64,
@@ -4637,11 +4813,6 @@ def _run_vectorized_sigma_band_extension(
     symmetric_rate: float | None = None
     if isinstance(lane.params.m, int | float):
         symmetric_rate = float(lane.params.m)
-    band_values: dict[str, list[float]] = {
-        name: [] for name in lane.params.convergence_statistics
-    }
-    band_rows: list[dict[str, object]] = []
-    extension_state = lane.vectorized_state
     for _ in range(window):
         extension_state = step_vectorized(
             extension_state,
@@ -4800,6 +4971,33 @@ def _statistics_for_locus_vectorized(
         }
         for deme_index in range(frequencies.shape[0])
     ]
+    weights: Sequence[float] | None = (
+        params.population_sizes if params.deme_weighting == "size" else None
+    )
+    return statistics_report(table, weights, validate=False, statistics=statistics)
+
+
+def _statistics_for_locus_block(
+    block: VectorBlock,
+    params: SimulationParams,
+    locus_index: int,
+    *,
+    statistics: Collection[str] | None = None,
+) -> DifferentiationReport:
+    """`_statistics_for_locus` for one locus of a `VectorBlock`.
+
+    Builds the per-deme frequency maps `statistics_report` takes straight
+    from the block's arrays (`VectorBlock.frequency_maps`) and hands them
+    to it; computes nothing statistical itself. `statistics` is forwarded
+    as in `_statistics_for_locus`.
+
+    Args:
+        block: The replicate's current table.
+        params: Supplies `deme_weighting` and the population sizes.
+        locus_index: Zero-based locus position.
+        statistics: Names forwarded to `statistics_report`.
+    """
+    table: list[Mapping[Any, float]] = list(block.frequency_maps(locus_index))
     weights: Sequence[float] | None = (
         params.population_sizes if params.deme_weighting == "size" else None
     )

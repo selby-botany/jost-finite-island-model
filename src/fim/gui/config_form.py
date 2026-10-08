@@ -573,7 +573,7 @@ def validate_run_settings(values: Mapping[str, str]) -> None:
     against the cap). Deliberately *not* checked against any scientific
     field: these are defaults for whatever model is run next, so whether
     they suit a particular model (`generational-vector` needs
-    `mutation_model: finite_alleles`, for one) is decided when that
+    `migrant_sampling: continuous`, for one) is decided when that
     complete configuration is validated, at run time, where the message
     can name the real conflict. Overlaying them on the starter
     configuration instead, as this module once did, rejected every
