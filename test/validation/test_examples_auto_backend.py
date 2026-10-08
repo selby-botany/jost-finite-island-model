@@ -81,27 +81,27 @@ ROOT = Path(__file__).resolve().parents[2]
 EXAMPLES_DIR = ROOT / "doc" / "examples"
 
 # Measured wall time of each case on the development machine (2026-10-08,
-# Apple Silicon, shared and busy: load average about 15, at most two cases
-# at once), in whole seconds. Recorded so a reader can budget a run; over
-# `_SLOW_SECONDS` also marks `slow`.
+# Apple Silicon, shared: three cases at once, load average varying from
+# about 10 to 60), in whole seconds. Recorded so a reader can budget a run;
+# over `_SLOW_SECONDS` also marks `slow`.
 _RUNTIME_SECONDS: dict[str, int] = {
-    "a-large-d-batch-under-generational-vector": 147,
-    "a-long-locus-batch-under-the-generational-engine": 90,
-    "an-adaptive-replicate-batch-with-a-confidence-interval": 675,
-    "dear-nolan-high": 375,
-    "dear-nolan-low": 3600,
-    "equilibrium-split-founding": 67,
-    "finite-length-alleles-the-k-allele-model": 118,
-    "golden-part-vi": 1066,
-    "kimura-weiss-isolation-by-distance": 50,
-    "literature-distance-statistics-from-an-explicit-founder-split": 2,
-    "per-base-mutation-rate-across-unequal-locus-lengths": 5,
-    "several-convergence-statistics": 53,
-    "stepping-stone-spatial-migration": 65,
-    "stochastic-migrant-counts": 82,
-    "unequal-island-sizes-with-a-migration-hub": 25,
-    "within-run-sigma-band": 182,
-    "wright-takahata-finite-deme-correction": 89,
+    "a-large-d-batch-under-generational-vector": 92,
+    "a-long-locus-batch-under-the-generational-engine": 60,
+    "an-adaptive-replicate-batch-with-a-confidence-interval": 395,
+    "dear-nolan-high": 312,
+    "dear-nolan-low": 2271,
+    "equilibrium-split-founding": 12,
+    "finite-length-alleles-the-k-allele-model": 10,
+    "golden-part-vi": 221,
+    "kimura-weiss-isolation-by-distance": 26,
+    "literature-distance-statistics-from-an-explicit-founder-split": 4,
+    "per-base-mutation-rate-across-unequal-locus-lengths": 2,
+    "several-convergence-statistics": 9,
+    "stepping-stone-spatial-migration": 25,
+    "stochastic-migrant-counts": 20,
+    "unequal-island-sizes-with-a-migration-hub": 21,
+    "within-run-sigma-band": 104,
+    "wright-takahata-finite-deme-correction": 35,
 }
 _SLOW_SECONDS = 60
 
