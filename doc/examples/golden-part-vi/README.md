@@ -41,15 +41,15 @@ flattens, that evidence window keeps growing — not staying fixed at the
 derived 254 generations — until the noise itself has been averaged down
 enough, or the run's own cap arrives. For **D**, the statistic this
 example actually watches (`convergence_statistic: D`), that window grew
-to 130,048 generations before its own mean, **0.6237 ± 0.0042**, was
+to 130,048 generations before its own mean, **0.6048 ± 0.0043**, was
 finally precise enough — very close to the published 0.604, and a real,
-earned result, not a lucky one: the run stops at generation 130,194.
+earned result, not a lucky one: the run stops at generation 130,242.
 
 **G<sub>ST</sub> is a different story, deliberately left honest rather than
 implied.** Only the statistic a run actually watches gets that same
 growing treatment; `report.json`'s own `window_statistics.G_ST` still
-reflects the plain, un-grown 254-generation window (mean 0.193, standard
-error 0.018) — nowhere near the requested precision, and correctly marked
+reflects the plain, un-grown 254-generation window (mean 0.132, standard
+error 0.013) — nowhere near the requested precision, and correctly marked
 `"noise_adequate": false`. Watching **G_ST** as well (`convergence_
 statistic: [D, G_ST]`) would earn it the same growing treatment D gets
 here, at the cost of a longer run; that is a choice for a future revision
@@ -84,9 +84,9 @@ fim run doc/examples/golden-part-vi/config.yaml \
     --output results/golden-part-vi --quiet
 ```
 
-Takes about ten minutes on ordinary development hardware (130,194
-generations, each one written to a trajectory file of about 480 MB), and
-longer on a busy machine. `results/golden-part-vi/report.json` will match
+Takes about 15 minutes on a busy development machine (130,242
+generations, each one written to a trajectory file of about 500 MB), and
+less on an idle one. `results/golden-part-vi/report.json` will match
 `report.json` in this directory exactly.
 
 ## Expected output
@@ -95,20 +95,20 @@ longer on a busy machine. `results/golden-part-vi/report.json` will match
 {
   "converged": true,
   "converged_on": "D",
-  "generation": 130194,
-  "G_ST": 0.13905013986224318,
-  "D": 0.5418424753867791,
+  "generation": 130242,
+  "G_ST": 0.3107038946455005,
+  "D": 0.6165923824959482,
   "reason": "statistic converged",
   "window_statistics": {
     "D": {
-      "mean": 0.623650057980255,
-      "standard_error": 0.004193292255722906,
+      "mean": 0.6047625395130292,
+      "standard_error": 0.004300053258510983,
       "noise_adequate": true,
       "window": 130048
     },
     "G_ST": {
-      "mean": 0.19330519212198638,
-      "standard_error": 0.018257804320953017,
+      "mean": 0.13202295055234037,
+      "standard_error": 0.012997508957349531,
       "noise_adequate": false,
       "window": 254
     }
@@ -121,15 +121,18 @@ longer on a busy machine. `results/golden-part-vi/report.json` will match
 statistic's own `window_statistics` entry, and full floating-point
 precision.)
 
-D converges to **0.624** (window mean), close to the published ensemble
-mean (D ≈ 0.604). The final generation's own single point value, 0.542,
+D converges to **0.605** (window mean), matching the published ensemble
+mean (D ≈ 0.604). The final generation's own single point value, 0.617,
 is real too but noisier — one stochastic draw, not the averaged estimate.
-G<sub>ST</sub>'s own window mean, **0.193**, is close to the published
-G<sub>ST</sub> ≈ 0.176 as well, even though its own window was never grown to
-confirm that precision — a single locus samples one trajectory through
-allele-frequency space, so both statistics scatter around their own
-ensemble means; watching G<sub>ST</sub> directly, not just D, would confirm
-whether that particular closeness holds up or is itself a lucky draw.
+G<sub>ST</sub>'s own window mean, **0.132**, sits below the published
+G<sub>ST</sub> ≈ 0.176, and its own window was never grown to confirm
+that precision (the gap is about three of its own standard errors, but a
+254-generation window is far too short to trust those) —
+a single locus samples one trajectory through allele-frequency space, so
+both statistics scatter around their own ensemble means; watching
+G<sub>ST</sub> directly, not just D, would show whether that gap closes with
+a longer window or is real scatter. The final generation's own
+G<sub>ST</sub>, 0.311, is a single noisy draw and says nothing either way.
 
 ## Files in this directory
 
