@@ -9,9 +9,9 @@ possible states than the preceding large-deme example. As there, a
 every one of the 16 replicates run exactly 100 generations, so the
 amount of work is fixed.
 
-The run takes about 25 seconds on ordinary development hardware, a
-little longer than the large-deme example's 20. The across-replicate
-mean `D` is 0.0237 ± 0.0020 (95% confidence interval).
+The run takes about 55 seconds on a busy development machine, a
+little longer than the large-deme example's 40. The across-replicate
+mean `D` is 0.0262 ± 0.0030 (95% confidence interval).
 
 This is an engine workload, not an equilibrium result or a universal
 benchmark. Runtime depends on the machine, its load, and the software

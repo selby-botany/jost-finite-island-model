@@ -16,8 +16,8 @@ Two settings fix the amount of work:
   16 replicates always run. Without it, the default tolerance of 0.01 stops
   the batch at the 10-replicate minimum.
 
-The run takes about 20 seconds on ordinary development hardware. The
-across-replicate mean `D` is 0.0264 ± 0.0021 (95% confidence interval).
+The run takes about 40 seconds on a busy development machine. The
+across-replicate mean `D` is 0.0267 ± 0.0019 (95% confidence interval).
 The configuration is intended to exercise a larger deme count and the
 vector backend. Its short run is not suitable for interpreting
 equilibrium statistics: the population is nowhere near equilibrium after
