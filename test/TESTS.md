@@ -8453,7 +8453,9 @@ def test_window_of_concurrent_replicates_matches_lineal() -> None
 #### test\_jsonl\_trajectory\_file\_is\_byte\_identical
 
 ```python
-def test_jsonl_trajectory_file_is_byte_identical(tmp_path: Path) -> None
+def test_jsonl_trajectory_file_is_byte_identical(
+        tmp_path: Path,
+        tracked_jsonl_stores: list[JSONLTrajectoryStore]) -> None
 ```
 
 The JSONL file V writes equals Backend L's, byte for byte.
@@ -8569,7 +8571,8 @@ window, which is what a forgotten-minted-identity bug would mishandle.
 
 ```python
 def test_finite_alleles_jsonl_trajectory_file_is_byte_identical(
-        tmp_path: Path) -> None
+        tmp_path: Path,
+        tracked_jsonl_stores: list[JSONLTrajectoryStore]) -> None
 ```
 
 The finite-alleles JSONL file V writes equals Backend L's, byte for byte.

@@ -22,6 +22,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 
 import pytest
+from conftest import assert_none_open
 from vector_support import FINITE_CASES, INFINITE_CASES, loci, make_params
 
 pytest.importorskip("numba")
@@ -252,7 +253,9 @@ def test_window_of_concurrent_replicates_matches_lineal() -> None:
     _assert_vector_matches(params)
 
 
-def test_jsonl_trajectory_file_is_byte_identical(tmp_path: Path) -> None:
+def test_jsonl_trajectory_file_is_byte_identical(
+    tmp_path: Path, tracked_jsonl_stores: list[JSONLTrajectoryStore]
+) -> None:
     """The JSONL file V writes equals Backend L's, byte for byte."""
     params = make_params(25, loci=loci(2), mu=0.02, m=0.05)
     paths = {}
@@ -272,6 +275,8 @@ def test_jsonl_trajectory_file_is_byte_identical(tmp_path: Path) -> None:
         )
         assert isinstance(output, RunResult)
     assert paths["lineal"].read_bytes() == paths["generational-vector"].read_bytes()
+    # The vector lane's trajectory handle is released when the run ends.
+    assert_none_open(tracked_jsonl_stores)
     assert paths["lineal"].stat().st_size > 0
 
 
@@ -428,7 +433,7 @@ def test_finite_alleles_sigma_band_extension_matches_lineal() -> None:
 
 
 def test_finite_alleles_jsonl_trajectory_file_is_byte_identical(
-    tmp_path: Path,
+    tmp_path: Path, tracked_jsonl_stores: list[JSONLTrajectoryStore]
 ) -> None:
     """The finite-alleles JSONL file V writes equals Backend L's, byte for byte."""
     params = make_params(
@@ -451,6 +456,8 @@ def test_finite_alleles_jsonl_trajectory_file_is_byte_identical(
         )
         assert isinstance(output, RunResult)
     assert paths["lineal"].read_bytes() == paths["generational-vector"].read_bytes()
+    # The vector lane's trajectory handle is released when the run ends.
+    assert_none_open(tracked_jsonl_stores)
 
 
 @pytest.mark.parametrize("name", ["multi-locus with migration", "migration matrix"])
