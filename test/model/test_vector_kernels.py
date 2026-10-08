@@ -18,6 +18,11 @@ pytest.importorskip("numba")
 
 from fim.model import vector_kernels as kernels
 from fim.model.operators import _inversion_binomial
+from fim.model.vector_block import (
+    MIGRATION_MATRIX,
+    MIGRATION_NONE,
+    MIGRATION_SCALAR,
+)
 from fim.statistics import differentiation
 
 FUZZ_CASES = 10_000
@@ -227,3 +232,23 @@ def test_locus_statistics_flag_a_frequency_row_that_is_not_normalized() -> None:
     status = np.zeros(1, dtype=np.int64)
     kernels.locus_statistics(freq, np.array([2], dtype=np.int64), out, status)
     assert status[0] == 1
+
+
+def test_continuous_migration_fills_every_fraction_and_draws_nothing() -> None:
+    """The draw phase of migration is the hook stochastic sampling will use.
+
+    Under continuous sampling it fills one fraction per destination deme
+    with the migration rate and consumes no random number, so the
+    generator stream is exactly what the dictionary-based operators leave.
+    """
+    rng = np.random.Generator(np.random.PCG64(11))
+    before = rng.bit_generator.state
+    fractions = np.zeros(5, dtype=np.float64)
+    kernels._draw_migrant_fractions(rng, MIGRATION_SCALAR, 0.05, fractions)
+    assert fractions.tolist() == [0.05] * 5
+    assert rng.bit_generator.state == before
+    for kind in (MIGRATION_NONE, MIGRATION_MATRIX):
+        untouched = np.zeros(5, dtype=np.float64)
+        kernels._draw_migrant_fractions(rng, kind, 0.05, untouched)
+        assert untouched.tolist() == [0.0] * 5
+    assert rng.bit_generator.state == before

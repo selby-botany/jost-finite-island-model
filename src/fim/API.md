@@ -3242,6 +3242,10 @@ class tree to maintain.
   (below) — never `"lineal"`, since no data yet characterizes
   where that boundary sits (see `auto_vector_min_d`'s own
   entry for why only the L-vs-V axis is automated so far).
+  `_resolve_auto_engine_backend` lists the conditions: V for
+  continuous migration when `numba` is importable and `d` is
+  large enough (and, for finite alleles, the capacity small
+  enough), otherwise G. The output is identical either way.
 - `jit` - Whether the chosen backend should JIT-compile its own
   operators. Under `"generational"`, `"numba"` JIT-compiles
   `drift`'s own multinomial draw (`fim.model.operators.drift`'s
@@ -3321,8 +3325,11 @@ class tree to maintain.
   `"auto"` uses alongside `auto_vector_min_d` — the largest
   capacity across every locus in `params.loci` must be at
   most this value, in addition to `d >= auto_vector_min_d`,
-  for `"auto"` to pick `"generational-vector"`; irrelevant,
-  and unused, under every other `engine_backend` value.
+  for `"auto"` to pick `"generational-vector"` — under
+  `mutation_model="finite_alleles"` only (an infinite-alleles
+  table is as wide as the alleles alive at once, not
+  `4 ** length`); irrelevant, and unused, under every other
+  `engine_backend` value.
   Defaults to `DEFAULT_AUTO_VECTOR_MAX_CAPACITY` (`4096`) —
   see that constant's own docstring for the measured finding
   behind it and the same cross-environment/cross-fix
@@ -3563,7 +3570,9 @@ silently disagree.
   hardware.
 - `auto_vector_max_capacity` - The per-locus capacity ceiling
   ``engine_backend="auto"`` uses alongside `auto_vector_min_d`
-  — ignored under every other `engine_backend` value. Left
+  under ``mutation_model="finite_alleles"`` — ignored under
+  infinite alleles and under every other `engine_backend`
+  value. Left
   unset (``None``, the default), falls back to `params.
   auto_vector_max_capacity` — see `DEFAULT_AUTO_VECTOR_MAX_
   CAPACITY`'s own docstring (`fim.model.params`) for the
@@ -13419,6 +13428,12 @@ admits, no `min_d` value was ever justified by real evidence.)
 vector"` — above it, `"auto"` picks `"generational"` instead, regardless
 of `d`/`auto_vector_min_d`.
 
+Applies under `mutation_model="finite_alleles"` only: a finite-alleles
+table is `capacity` columns wide however few states are in use. An
+infinite-alleles table is as wide as the alleles alive at once, so `"auto"`
+does not read this ceiling there (the measurements below were all
+finite-alleles).
+
 Closes a real, previously-unaddressed gap: `"auto"`'s own resolution
 used to read `params.d` alone, never any locus's own capacity
 (`20260901-claude-sonnet-5-fim-engine-backend-factory-design.md` §10
@@ -13721,21 +13736,26 @@ functions that actually use each one.
   engine implementations actually drives the run — "lineal"
   (default, the reference implementation), "generational"
   (thread-parallel, bit-identical to "lineal"), or
-  "generational-vector" (array-native, fastest at a large
-  deme count, requires `mutation_model="finite_alleles"` and
-  `migrant_sampling="continuous"`), or "auto" to pick between
-  "generational"/"generational-vector" from `d` and
-  `auto_vector_min_d` — never "lineal", see that field's own
-  entry. This never changes what a run converges to, only how
-  it gets there; see `doc/fim-simulator-design.md`'s own §4.6
-  for the full "what/why/how".
+  "generational-vector" (array-native, one compiled kernel call
+  per generation, requires `numba` and `migrant_sampling=
+  "continuous"`; runs both mutation models and is bit-identical
+  to "lineal" for the same seed on the same platform), or "auto"
+  to pick between "generational"/"generational-vector" from
+  `d`, `auto_vector_min_d`, the mutation model and the migration
+  model — never "lineal", see that field's own entry. This never
+  changes what a run converges to, only how fast it gets there;
+  see `doc/fim-simulator-design.md`'s own §4.6 for the full
+  "what/why/how".
 - `jit` - Whether the chosen `engine_backend` should JIT-compile its
   own random draws via the optional `numba` dependency — "off"
-  (default) or "numba". Meaningful for "lineal"/"generational"
-  only; "generational-vector" always requires `numba`
-  regardless of this setting, and "lineal" never accepts
-  anything but "off" (a permanent restriction — see
-  `fim.engine.LinealBackend`'s own docstring).
+  (default) or "numba". Meaningful for "generational" only;
+  "generational-vector" always requires `numba` regardless of
+  this setting (and rejects "numba": it has no separate
+  toggle), "lineal" never accepts anything but "off" (a
+  permanent restriction — see `fim.engine.LinealBackend`'s own
+  docstring), and "auto" runs "generational" when "numba" is
+  requested (the one engine that offers it; the output is the
+  same either way).
 - `auto_vector_min_d` - The deme-count threshold `engine_backend=
   "auto"` uses to choose "generational-vector" over
   "generational". Only meaningful when `engine_backend` is
@@ -13746,11 +13766,14 @@ functions that actually use each one.
   given machine.
 - `auto_vector_max_capacity` - The per-locus capacity ceiling
   `engine_backend="auto"` uses alongside `auto_vector_min_d`
-  — "generational-vector" is only chosen when `d >=
-  auto_vector_min_d` *and* every locus's own capacity is at
-  most this value; exceeding it at even one locus falls back
-  to "generational" regardless of `d`. Only meaningful when
-  `engine_backend` is "auto"; ignored otherwise. Defaults to
+  under `mutation_model="finite_alleles"` — "generational-
+  vector" is only chosen when `d >= auto_vector_min_d` *and*
+  every locus's own capacity (4 ** length) is at most this
+  value; exceeding it at even one locus falls back to
+  "generational" regardless of `d`. Ignored under infinite
+  alleles, whose table is as wide as the alleles alive at once,
+  not 4 ** length. Only meaningful when `engine_backend` is
+  "auto"; ignored otherwise. Defaults to
   `DEFAULT_AUTO_VECTOR_MAX_CAPACITY` — see that constant's
   own docstring for the same "considered default, not a
   portable constant" caveat `auto_vector_min_d` already
@@ -13766,9 +13789,9 @@ functions that actually use each one.
   next not-yet-started replicate rather than every replicate
   starting at once. Meaningful for any `engine_backend` that
   reaches `run_batch`; matters most for `"generational-
-  vector"`, whose own per-lane cached `VectorizedState` is a
-  dense `(deme_count, capacity)` array per locus — held by
-  every concurrently active lane at once, so an unbounded
+  vector"`, whose own per-lane cached `VectorBlock` is a dense
+  `(loci, deme_count, width)` array — held by every
+  concurrently active lane at once, so an unbounded
   batch's steady-state memory scales with `n_replicates`
   directly (`dev/doc/apps/selby/jost-finite-island-model/
   20260904-claude-sonnet-5-fim-engine-review-remediations.md`,

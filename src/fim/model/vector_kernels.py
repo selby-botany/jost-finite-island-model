@@ -53,10 +53,19 @@ import numpy as np
 
 from fim.model.vector_block import MIGRATION_MATRIX, MIGRATION_SCALAR
 
-# Reserved for the follow-up that adds `migrant_sampling: stochastic`:
-# one inversion-binomial draw per destination deme, in deme order, before
-# the locus loop (`operators._migrant_fraction`). It slots into
-# `_migrate` as one more branch; nothing else in the generation changes.
+# Migration is two phases, so `migrant_sampling: stochastic` (a follow-up,
+# designed in the stochastic-migration sketch) needs no restructuring:
+#
+# 1. `_draw_migrant_fractions` fills one migrant fraction per destination
+#    deme. Continuous sampling fills every fraction with the migration
+#    rate and draws nothing. Stochastic sampling will draw one
+#    inversion-binomial count per destination, in ascending deme order,
+#    before any locus is blended (`operators._migrant_fraction`), and
+#    store `count / size`.
+# 2. `_blend_scalar` blends every locus with the per-deme fractions it was
+#    given, drawing nothing. A matrix needs its own blend (the stochastic
+#    and continuous matrix arithmetic differ), added beside
+#    `_blend_matrix`.
 
 STATISTIC_COLUMNS = 5
 """Columns of the per-locus statistics table: H_S, H_T, H_ST, G_ST, D."""
@@ -299,64 +308,109 @@ def _normalize_row(row, count, probs, partials):
 
 
 @numba.njit(cache=True, nogil=True)
-def _migrate(freq, ncol, sizes, kind, rate, weights, probs, partials, mass, blended):
-    """Blend every deme with its migrant pool, every locus, no random draw.
+def _draw_migrant_fractions(rng, kind, rate, fractions):  # noqa: ARG001
+    """Fill the per-destination migrant fractions for this generation.
+
+    The draw phase of migration. Continuous sampling uses the migration
+    rate itself for every destination and consumes no random number, so
+    the generator stream is untouched. (`rng` is unused today; it is the
+    argument the stochastic draw will consume.)
+
+    Args:
+        rng: The run's `numpy.random.Generator`.
+        kind: `MIGRATION_NONE`, `MIGRATION_SCALAR` or `MIGRATION_MATRIX`.
+        rate: The scalar migration rate (scalar kind).
+        fractions: `(demes,)` output, the fraction of each destination
+            deme's gene copies replaced by the migrant pool.
+    """
+    if kind == MIGRATION_SCALAR:
+        for i in range(fractions.shape[0]):
+            fractions[i] = rate
+
+
+@numba.njit(cache=True, nogil=True)
+def _blend_scalar(freq, ncol, sizes, fractions, probs, partials, mass, blended):
+    """Blend every deme with its all-other-deme pool, every locus.
+
+    `operators._migrate_symmetric`, operation for operation: the
+    size-weighted global mass is a sequential deme-ascending sum, each
+    destination's pool removes its own contribution and is clamped at
+    zero, the blend is `(1 - f) * local + f * pool` with the destination's
+    own fraction `f`, and the row is divided by the exactly rounded sum
+    (`math.fsum`) of its positive entries.
 
     Args:
         freq: `(loci, demes, width)` frequencies, updated in place.
         ncol: Live columns per locus.
         sizes: Gene copies per deme.
-        kind: `MIGRATION_NONE`, `MIGRATION_SCALAR` or `MIGRATION_MATRIX`.
-        rate: The scalar migration rate (scalar kind).
-        weights: `(demes, demes)` row-stochastic matrix (matrix kind).
+        fractions: `(demes,)` migrant fraction per destination deme.
+        probs: Scratch of length at least `width`.
+        partials: Scratch of length at least `width + 1`.
+        mass: Scratch of length at least `width`.
+        blended: Scratch of length at least `width`.
+    """
+    loci, demes, _ = freq.shape
+    total_size = 0
+    for i in range(demes):
+        total_size += sizes[i]
+    total_size_f = float(total_size)
+    for locus in range(loci):
+        nc = ncol[locus]
+        for c in range(nc):
+            total = 0.0
+            for i in range(demes):
+                total += float(sizes[i]) * freq[locus, i, c]
+            mass[c] = total
+        for i in range(demes):
+            size_f = float(sizes[i])
+            other = total_size_f - size_f
+            fraction = fractions[i]
+            for c in range(nc):
+                local = freq[locus, i, c]
+                pool = (mass[c] - size_f * local) / other
+                pool = max(0.0, pool)
+                blended[c] = (1.0 - fraction) * local + fraction * pool
+            _normalize_row(blended, nc, probs, partials)
+            for c in range(nc):
+                freq[locus, i, c] = blended[c]
+
+
+@numba.njit(cache=True, nogil=True)
+def _blend_matrix(freq, ncol, weights, probs, partials, mass, blended):
+    """Blend every deme from a full continuous migration matrix, every locus.
+
+    `operators._migrate_matrix` with no random generator: every cell is
+    the exactly rounded sum (`math.fsum`) of `weights[i, j] * freq[j]`
+    over all source demes `j`, and each destination row is divided by the
+    exactly rounded sum of its positive entries.
+
+    Args:
+        freq: `(loci, demes, width)` frequencies, updated in place.
+        ncol: Live columns per locus.
+        weights: `(demes, demes)` row-stochastic source-weight matrix.
         probs: Scratch of length at least `width`.
         partials: Scratch of length at least `width + 1`.
         mass: Scratch of length at least `width`.
         blended: Scratch of length at least `demes * width`.
     """
     loci, demes, width = freq.shape
-    if kind == MIGRATION_SCALAR:
-        total_size = 0
+    terms = np.empty(demes, dtype=np.float64)
+    term_partials = np.empty(demes + 1, dtype=np.float64)
+    for locus in range(loci):
+        nc = ncol[locus]
+        # Every destination reads the pre-migration sources, so the
+        # blended rows are collected first and written back after.
         for i in range(demes):
-            total_size += sizes[i]
-        total_size_f = float(total_size)
-        for locus in range(loci):
-            nc = ncol[locus]
-            # Size-weighted global mass, a sequential deme-ascending sum.
             for c in range(nc):
-                total = 0.0
-                for i in range(demes):
-                    total += float(sizes[i]) * freq[locus, i, c]
-                mass[c] = total
-            for i in range(demes):
-                size_f = float(sizes[i])
-                other = total_size_f - size_f
-                for c in range(nc):
-                    local = freq[locus, i, c]
-                    pool = (mass[c] - size_f * local) / other
-                    pool = max(0.0, pool)
-                    blended[c] = (1.0 - rate) * local + rate * pool
-                _normalize_row(blended, nc, probs, partials)
-                for c in range(nc):
-                    freq[locus, i, c] = blended[c]
-    elif kind == MIGRATION_MATRIX:
-        terms = np.empty(demes, dtype=np.float64)
-        term_partials = np.empty(demes + 1, dtype=np.float64)
-        for locus in range(loci):
-            nc = ncol[locus]
-            # Every destination reads the pre-migration sources, so the
-            # blended rows are collected first and written back after.
-            for i in range(demes):
-                for c in range(nc):
-                    for j in range(demes):
-                        terms[j] = weights[i, j] * freq[locus, j, c]
-                    mass[c] = exact_sum(terms, demes, term_partials)
-                _normalize_row(mass, nc, probs, partials)
-                for c in range(nc):
-                    blended[i * width + c] = mass[c]
-            for i in range(demes):
-                for c in range(nc):
-                    freq[locus, i, c] = blended[i * width + c]
+                for j in range(demes):
+                    terms[j] = weights[i, j] * freq[locus, j, c]
+                mass[c] = exact_sum(terms, demes, term_partials)
+            _normalize_row(mass, nc, probs, partials)
+            for c in range(nc):
+                blended[i * width + c] = mass[c]
+        for i in range(demes):
+            for c in range(nc):
+                freq[locus, i, c] = blended[i * width + c]
 
 
 @numba.njit(cache=True, nogil=True)
@@ -657,9 +711,14 @@ def run_generation(
     blended = np.empty(demes * width, dtype=np.float64)
     taken = np.empty(width, dtype=np.int64)
 
-    # Migration draws no random number under continuous sampling, so it
-    # can run for every locus before drift, as `operators.step` does.
-    _migrate(freq, ncol, sizes, kind, rate, weights, probs, partials, mass, blended)
+    # Migration runs for every locus before drift, as `operators.step`
+    # does; under continuous sampling it draws no random number.
+    fractions = np.zeros(demes, dtype=np.float64)
+    _draw_migrant_fractions(rng, kind, rate, fractions)
+    if kind == MIGRATION_SCALAR:
+        _blend_scalar(freq, ncol, sizes, fractions, probs, partials, mass, blended)
+    elif kind == MIGRATION_MATRIX:
+        _blend_matrix(freq, ncol, weights, probs, partials, mass, blended)
     _drift(freq, counts, ncol, sizes, rng, probs, cols, pmf)
     failed = _mutate(
         counts,

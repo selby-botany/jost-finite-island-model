@@ -7525,22 +7525,23 @@ and the failure only surfaced as a raw `ImportError` from inside
 zero had already been persisted to the trajectory store (this
 project's own multi-model engine review, 2026-09-04, `FIM-01`).
 
-<a id="engine.test_engine.test_build_engine_backend_auto_requires_numba_when_resolved_to_vector"></a>
+<a id="engine.test_engine.test_build_engine_backend_auto_falls_back_to_generational_without_numba"></a>
 
-#### test\_build\_engine\_backend\_auto\_requires\_numba\_when\_resolved\_to\_vector
+#### test\_build\_engine\_backend\_auto\_falls\_back\_to\_generational\_without\_numba
 
 ```python
-def test_build_engine_backend_auto_requires_numba_when_resolved_to_vector(
-        monkeypatch: pytest.MonkeyPatch) -> None
+@pytest.mark.parametrize("model", ["infinite_alleles", "finite_alleles"])
+def test_build_engine_backend_auto_falls_back_to_generational_without_numba(
+        monkeypatch: pytest.MonkeyPatch,
+        model: Literal["infinite_alleles", "finite_alleles"]) -> None
 ```
 
-`"auto"` resolving to Backend V hits the identical numba guard.
+`"auto"` never raises for a missing numba: it picks Backend G instead.
 
-`_resolve_auto_engine_backend` never checks numba itself (its own
-docstring names only `d`/capacity/mutation-model/migrant-sampling as
-what it decides on) — the guard lives once, in `build_engine_backend`
-itself, downstream of resolution, so `"auto"` gets it for free rather
-than needing its own duplicate check.
+Backend V's output is identical to Backend G's, so the only cost of a
+machine without numba is speed. An *explicit* `"generational-vector"`
+still raises (the test above), because the caller named a backend that
+cannot run.
 
 <a id="engine.test_engine.test_build_engine_backend_generational_vector_accepts_numba_present"></a>
 
@@ -7571,7 +7572,7 @@ lower-level, params-less construction form.
 def test_build_engine_backend_vector_rejects_oversized_capacity() -> None
 ```
 
-Explicit selection now gets the same capacity ceiling `"auto"` already had.
+Explicit finite-alleles selection gets the same capacity ceiling `"auto"` has.
 
 <a id="engine.test_engine.test_build_engine_backend_vector_respects_custom_capacity_ceiling"></a>
 
@@ -7647,10 +7648,24 @@ def test_build_engine_backend_auto_picks_generational_when_vector_ineligible(
 
 A large `d` alone is not enough — `"auto"` still checks V's own scope.
 
-`d=40` clears the default threshold, but `infinite_alleles` (the
-default `mutation_model`) is outside `VectorizedAdvancer`'s own
-scope — `"auto"` must fall back to Backend G here, not raise the
-`ValueError` a direct `"generational-vector"` choice would.
+`d=40` clears the default threshold, but stochastic migrant counts are
+outside `VectorizedAdvancer`'s own scope — `"auto"` must fall back to
+Backend G here, not raise the `ValueError` a direct
+`"generational-vector"` choice would.
+
+<a id="engine.test_engine.test_build_engine_backend_auto_picks_vector_for_infinite_alleles"></a>
+
+#### test\_build\_engine\_backend\_auto\_picks\_vector\_for\_infinite\_alleles
+
+```python
+def test_build_engine_backend_auto_picks_vector_for_infinite_alleles() -> None
+```
+
+Infinite alleles with continuous migration is V's home ground now.
+
+Locus length 200 (capacity `4 ** 200`) is irrelevant: an
+infinite-alleles table is as wide as the alleles alive at once, so the
+capacity ceiling does not apply, however small it is set.
 
 <a id="engine.test_engine.test_build_engine_backend_auto_respects_custom_threshold"></a>
 
@@ -7662,16 +7677,21 @@ def test_build_engine_backend_auto_respects_custom_threshold() -> None
 
 The cutover is a real, configurable parameter, not a hidden constant.
 
-<a id="engine.test_engine.test_build_engine_backend_auto_rejects_jit_when_resolved_to_vector"></a>
+<a id="engine.test_engine.test_build_engine_backend_auto_honors_a_jit_request_with_generational"></a>
 
-#### test\_build\_engine\_backend\_auto\_rejects\_jit\_when\_resolved\_to\_vector
+#### test\_build\_engine\_backend\_auto\_honors\_a\_jit\_request\_with\_generational
 
 ```python
-def test_build_engine_backend_auto_rejects_jit_when_resolved_to_vector(
+def test_build_engine_backend_auto_honors_a_jit_request_with_generational(
 ) -> None
 ```
 
-`jit="numba"` is still rejected once `"auto"` resolves to Backend V.
+`"auto"` with `jit="numba"` picks Backend G, the one backend with a toggle.
+
+Backend V has no `jit` switch; failing a configuration that names
+`engine_backend: auto` and `jit: numba` (which ran Backend G before V
+could run infinite alleles) would be a regression, and the output is
+the same either way, so the request wins.
 
 <a id="engine.test_engine.test_build_engine_backend_auto_picks_generational_above_capacity_ceiling"></a>
 
@@ -7728,9 +7748,24 @@ def test_fim_engine_backend_auto_runs_end_to_end(
 
 `fim(..., engine_backend="auto")` works through the public entry point.
 
-`tiny_params`'s own `d=2` and default `infinite_alleles` model both
-put it outside Backend V's scope — `"auto"` must land on Backend G
-here, and still produce a normal, successful result.
+`tiny_params` is an infinite-alleles run with `d=2`, which is exactly
+the default `auto_vector_min_d`, so `"auto"` lands on Backend V, and
+the manifest says so.
+
+<a id="engine.test_engine.test_fim_engine_backend_auto_records_generational_without_numba"></a>
+
+#### test\_fim\_engine\_backend\_auto\_records\_generational\_without\_numba
+
+```python
+def test_fim_engine_backend_auto_records_generational_without_numba(
+        tiny_params: SimulationParams,
+        monkeypatch: pytest.MonkeyPatch) -> None
+```
+
+Without numba, `"auto"` runs Backend G and the manifest records G.
+
+The same run, same seed: only the provenance differs from the run
+above, because Backend V and Backend G produce identical output.
 
 <a id="engine.test_engine.test_fim_engine_backend_auto_reaches_vector_end_to_end"></a>
 
@@ -8537,6 +8572,33 @@ def test_finite_alleles_jsonl_trajectory_file_is_byte_identical(
 ```
 
 The finite-alleles JSONL file V writes equals Backend L's, byte for byte.
+
+<a id="engine.test_vector_parity.test_auto_resolves_to_vector_and_matches_lineal"></a>
+
+#### test\_auto\_resolves\_to\_vector\_and\_matches\_lineal
+
+```python
+@pytest.mark.parametrize("name",
+                         ["multi-locus with migration", "migration matrix"])
+def test_auto_resolves_to_vector_and_matches_lineal(name: str) -> None
+```
+
+`engine_backend: auto` picks V for infinite alleles, and nothing changes.
+
+The manifest records the resolved backend; every other part of the
+output equals Backend L's, which is why `auto` may choose V whenever it
+is eligible.
+
+<a id="engine.test_vector_parity.test_auto_without_numba_falls_back_to_generational_with_identical_output"></a>
+
+#### test\_auto\_without\_numba\_falls\_back\_to\_generational\_with\_identical\_output
+
+```python
+def test_auto_without_numba_falls_back_to_generational_with_identical_output(
+        monkeypatch: pytest.MonkeyPatch) -> None
+```
+
+With numba missing `auto` runs G, and the output is the same as V's.
 
 
 
@@ -27579,6 +27641,20 @@ A value outside the unit interval is flagged, not silently clamped.
 `statistics_report` raises `ArithmeticError` there, so the kernel
 sets the locus's status and lets the caller recompute with Python.
 
+<a id="model.test_vector_kernels.test_continuous_migration_fills_every_fraction_and_draws_nothing"></a>
+
+#### test\_continuous\_migration\_fills\_every\_fraction\_and\_draws\_nothing
+
+```python
+def test_continuous_migration_fills_every_fraction_and_draws_nothing() -> None
+```
+
+The draw phase of migration is the hook stochastic sampling will use.
+
+Under continuous sampling it fills one fraction per destination deme
+with the migration rate and consumes no random number, so the
+generator stream is exactly what the dictionary-based operators leave.
+
 <a id="model.test_vectorized"></a>
 
 # model.test\_vectorized
@@ -33981,29 +34057,32 @@ Which comparison applies depends on the backend `auto` resolves to, read
 from the fresh run's own manifest, not predicted here:
 
 - **Same random stream: identical reports.** `auto` never resolves to
-  `lineal` (`fim.engine._resolve_auto_engine_backend`), but
-  `generational` with its default sequential advancer reproduces
-  `lineal` bit for bit for the same seed (`GenerationalBackend`'s own
-  docstring, checked by the golden-parity engine tests). That holds for
-  an adaptive batch (`replicate_tolerance` set) too: every backend
-  judges the adaptive stop on replicates in replicate order
-  (`fim.engine.run_batch`'s own docstring), so both keep the same
-  replicates. So a committed
-  `lineal` or `generational` output and a fresh `generational` run, or
-  two local `generational-vector` runs, must agree exactly. Archived
-  vector output is not bit-portable: BLAS reduction order can change
-  rounding across machines and flip a later discrete draw. Vector cases
-  therefore also run the configured backend locally for exact identity,
-  and use the existing statistical rule against the archived output.
-  Exact local identity is stronger
-  than the design's statistical rule and implies it, so it is the rule
-  used wherever it holds: a difference is a defect, never noise.
-- **Different random stream, single run: window means.**
-  `generational-vector` matches `lineal` only statistically
-  (`fim.model.vectorized`'s module docstring). For every watched
-  statistic (the configuration's `convergence_statistic`), the two
-  `report.json` `window_statistics` means must agree within
-  `3 * sqrt(se_L**2 + se_auto**2)`.
+  `lineal` (`fim.engine._resolve_auto_engine_backend`), but both
+  `generational` with its default sequential advancer and
+  `generational-vector` reproduce `lineal` bit for bit for the same seed,
+  under either mutation model (`GenerationalBackend`'s own docstring and
+  `fim.model.vector_block`, checked by the golden-parity engine tests and
+  `test/engine/test_vector_parity.py`). That holds for an adaptive batch
+  (`replicate_tolerance` set) too: every backend judges the adaptive stop
+  on replicates in replicate order (`fim.engine.run_batch`'s own
+  docstring), so all keep the same replicates. So a committed `lineal`
+  or `generational` output and a fresh `generational` or
+  `generational-vector` run must agree exactly, and so must two local
+  `generational-vector` runs. A committed *vector* output is the one
+  exception: it may have been archived by an older vector engine whose
+  random stream differed from `lineal`'s (it was statistically, not
+  bit-for-bit, equal to `lineal` before the compiled kernel replaced its
+  BLAS migration), or on another platform. Vector cases therefore also
+  run the configured backend locally for exact identity, and use the
+  statistical rule against the archived output until it is regenerated.
+  Exact local identity is stronger than the design's statistical rule and
+  implies it, so it is the rule used wherever it holds: a difference is a
+  defect, never noise.
+- **Different random stream, single run: window means.** Applies only
+  when a committed archive is on a different stream from the fresh run
+  (above). For every watched statistic (the configuration's
+  `convergence_statistic`), the two `report.json` `window_statistics`
+  means must agree within `3 * sqrt(se_L**2 + se_auto**2)`.
 - **Different random stream, batch: interval half-widths.** For every
   watched statistic, the two `summary.json` across-replicate means must
   agree within the sum of the two confidence-interval half-widths.
@@ -34043,8 +34122,9 @@ def test_batch_rule_uses_the_sum_of_half_widths(tmp_path: Path) -> None
 
 A batch disagreement is a mean difference beyond both half-widths.
 
-No example's `auto` run currently lands on a different random stream
-as a batch, so the rule is checked here on synthetic summaries.
+No example's `auto` run lands on a different random stream from a
+committed non-vector archive as a batch, so the rule is checked here on
+synthetic summaries.
 
 <a id="validation.test_examples_auto_backend.test_identity_rule_ignores_only_the_run_id"></a>
 
@@ -34084,6 +34164,21 @@ A single-run disagreement is beyond `3 * sqrt(se_L**2 + se_auto**2)`.
 
 Combined standard error 0.05 here, so the bound is 0.15. With no
 window statistics in either report, final values must agree exactly.
+
+<a id="validation.test_examples_auto_backend.test_every_backend_shares_the_lineal_random_stream"></a>
+
+#### test\_every\_backend\_shares\_the\_lineal\_random\_stream
+
+```python
+def test_every_backend_shares_the_lineal_random_stream() -> None
+```
+
+All three engines draw `lineal`'s stream, so identity is the rule.
+
+Backend V's kernel reproduces the dictionary-based operators bit for
+bit, so a committed `lineal` output against a fresh vector run is an
+identity comparison. Were V mapped to a stream of its own, the
+statistical rule would silently replace the stronger one.
 
 <a id="validation.test_examples_auto_backend.test_every_example_has_a_recorded_runtime"></a>
 
