@@ -1,5 +1,19 @@
 """Bounded-K (finite-alleles), array-native migrate/mutate/drift.
 
+**Superseded.** `fim.engine.VectorizedAdvancer` no longer calls anything
+in this module: Backend V now runs both mutation models on
+`fim.model.vector_block.VectorBlock` and the compiled kernels in
+`fim.model.vector_kernels`, which reproduce `fim.model.operators` bit for
+bit (stage-major across loci, the same migration arithmetic, the same
+K-allele target draws). This module is kept, with its operator-level tests
+(`test/model/test_vectorized.py`), as the per-locus reference
+implementation the statistical-parity history below describes; everything
+below describes this module as it was designed, and its statements about
+Backend V's reproducibility ("statistical, not bit-identical", the
+multi-locus and BLAS divergences) are **historical**: they no longer
+describe the engine's Backend V.
+
+
 Scope, deliberately: the finite-alleles mutation model only (bounded
 `K = finite_allele_capacity(length)` per locus — see `fim.model.locus`).
 Infinite alleles is out of scope here, matching the vector design's own

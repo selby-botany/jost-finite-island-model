@@ -22,7 +22,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 
 import pytest
-from vector_support import INFINITE_CASES, loci, make_params
+from vector_support import FINITE_CASES, INFINITE_CASES, loci, make_params
 
 pytest.importorskip("numba")
 
@@ -343,3 +343,110 @@ def test_equilibrium_split_start_matches_lineal() -> None:
     lineal = _run(params, "lineal", lineal_store)
     assert lineal[0].manifest.initial_condition_mode == "equilibrium_split"
     _assert_identical(vector, vector_store, lineal, lineal_store)
+
+
+@pytest.mark.parametrize("name", list(FINITE_CASES))
+def test_finite_alleles_vector_matches_lineal_through_fim(name: str) -> None:
+    """Every finite-alleles case: rows, report, final state, manifest.
+
+    Finite alleles used to match Backend L only statistically (and only
+    bitwise for one locus without migration); the kernel now reproduces
+    the stage order, the migration arithmetic and the K-allele target
+    draws, so it is exact here too.
+    """
+    assert _assert_vector_matches(FINITE_CASES[name](40)) > 2
+
+
+@pytest.mark.parametrize(
+    "name", ["finite, 64 states", "finite, migration matrix", "finite, unequal sizes"]
+)
+def test_finite_alleles_vector_matches_generational_through_fim(name: str) -> None:
+    """V also equals G for finite alleles, not just L."""
+    _assert_vector_matches(FINITE_CASES[name](40), against=("generational",))
+
+
+def test_finite_alleles_replicate_batch_and_adaptive_stop_match_lineal() -> None:
+    """Finite alleles through a 3-replicate batch and an adaptive batch."""
+    batch = make_params(
+        30,
+        loci=loci(2, 3),
+        mu=0.03,
+        m=0.05,
+        n_replicates=3,
+        mutation_model="finite_alleles",
+    )
+    assert _assert_vector_matches(batch, against=("lineal", "generational")) > 2
+    adaptive = make_params(
+        60,
+        loci=loci(2, 3),
+        gene_copies=40,
+        d=3,
+        mu=0.03,
+        m=0.05,
+        n_replicates=8,
+        replicate_minimum=3,
+        replicate_tolerance=0.5,
+        convergence_window=10,
+        convergence_tolerance=0.2,
+        mutation_model="finite_alleles",
+    )
+    vector_store = InMemoryTrajectoryStore()
+    vector = _run(adaptive, "generational-vector", vector_store)
+    lineal_store = InMemoryTrajectoryStore()
+    lineal = _run(adaptive, "lineal", lineal_store)
+    assert 3 <= len(lineal) < adaptive.n_replicates, "the batch should stop early"
+    _assert_identical(vector, vector_store, lineal, lineal_store)
+
+
+def test_finite_alleles_sigma_band_extension_matches_lineal() -> None:
+    """The extension continues the minted bookkeeping exactly as L does.
+
+    A 16-state locus makes alleles go extinct and reappear within the
+    window, which is what a forgotten-minted-identity bug would mishandle.
+    """
+    params = make_params(
+        4000,
+        loci=loci(1, 2),
+        gene_copies=40,
+        d=3,
+        mu=0.1,
+        m=0.2,
+        convergence_window=20,
+        convergence_tolerance=0.15,
+        sigma_band_multiplier=2.0,
+        sigma_band_window=15,
+        mutation_model="finite_alleles",
+    )
+    vector_store = InMemoryTrajectoryStore()
+    vector = _run(params, "generational-vector", vector_store)
+    lineal_store = InMemoryTrajectoryStore()
+    lineal = _run(params, "lineal", lineal_store)
+    assert lineal[0].manifest.converged
+    assert lineal[0].manifest.sigma_band is not None
+    _assert_identical(vector, vector_store, lineal, lineal_store)
+
+
+def test_finite_alleles_jsonl_trajectory_file_is_byte_identical(
+    tmp_path: Path,
+) -> None:
+    """The finite-alleles JSONL file V writes equals Backend L's, byte for byte."""
+    params = make_params(
+        25, loci=loci(2, 3), mu=0.03, m=0.05, mutation_model="finite_alleles"
+    )
+    paths = {}
+    for backend in ("lineal", "generational-vector"):
+        path = tmp_path / f"{backend}.jsonl"
+        paths[backend] = path
+        output = fim(
+            params.gene_copies,
+            params.m,
+            params.mu,
+            params.d,
+            params=params,
+            store=JSONLTrajectoryStore(path),
+            run_id=RUN_ID,
+            clock=_clock,
+            engine_backend=backend,
+        )
+        assert isinstance(output, RunResult)
+    assert paths["lineal"].read_bytes() == paths["generational-vector"].read_bytes()

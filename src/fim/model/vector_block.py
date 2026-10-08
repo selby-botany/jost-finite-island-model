@@ -611,6 +611,26 @@ class VectorBlock:
         self.ids = np.ascontiguousarray(self.ids[:, :target])
         self.shrink_events += 1
 
+    def minted_states(self, locus_index: int) -> tuple[int, ...]:
+        """Return every state ever minted at a finite-alleles locus, in order.
+
+        The same list `FiniteAlleleSpace` keeps: the ids present at
+        generation zero (ascending), then each state first reached by a
+        mutation, in the order reached. A state that has since gone
+        extinct stays in it, which is what makes the K-allele
+        recurrence probability depend on history, not on the state alone.
+
+        Args:
+            locus_index: Zero-based locus position.
+
+        Raises:
+            ValueError: Under infinite alleles, which has no such list.
+        """
+        if not self._finite:
+            raise ValueError("minted states are tracked only under finite alleles")
+        count = int(self._minted_count[locus_index])
+        return tuple(self._minted_list[locus_index, :count].tolist())
+
     def present_entries(self) -> tuple[np.ndarray, ...]:
         """Return `(deme, locus_id, allele_id, frequency)` arrays of present alleles.
 

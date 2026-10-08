@@ -46,11 +46,11 @@ from fim.model.locus import LocusSpec, finite_allele_capacity
 from fim.model.operators import _population_sizes
 from fim.model.params import ConvergenceCombinator, EngineBackend, SimulationParams
 from fim.model.state import ModelState
-from fim.model.vectorized import (
-    VectorizedState,
-    build_vectorized_state,
-    step_vectorized,
-    vectorized_state_to_model_state,
+from fim.model.vector_block import (
+    MIGRATION_MATRIX,
+    MIGRATION_SCALAR,
+    VectorBlock,
+    VectorMigration,
 )
 from fim.persistence.jsonl_store import JSONLTrajectoryStore
 from fim.persistence.store import (
@@ -496,10 +496,11 @@ def _drive_vector_lane_to_stop(params: SimulationParams) -> ReplicaLane:
     return lane
 
 
-def _present_allele_ids(locus_state: object) -> set[int]:
-    """Return which allele ids carry any frequency at all in a locus's dense array."""
-    frequencies = locus_state.frequencies  # type: ignore[attr-defined]
-    return {int(i) for i in np.flatnonzero(frequencies.sum(axis=0) > 0.0)}
+def _present_allele_ids(block: VectorBlock) -> set[int]:
+    """Return which allele ids carry any frequency at all at the first locus."""
+    columns = int(block.ncol[0])
+    present = np.flatnonzero(block.freq[0, :, :columns].sum(axis=0) > 0.0)
+    return {int(block.ids[0, column]) for column in present}
 
 
 def _lanes_holding_caches(lanes: Sequence[ReplicaLane]) -> int:
@@ -553,7 +554,7 @@ def test_vectorized_extension_keeps_minted_identities_through_extinction() -> No
     """The extension never forgets an allele minted and since driven extinct.
 
     Decision 7's own named bug, guarded directly. A V-lane's minted
-    bookkeeping lives inside `VectorizedState`, never in
+    bookkeeping lives inside `VectorBlock`, never in
     `lane.finite_alleles`, so continuing such a lane by rebuilding a
     state from `lane.state` alone (or by switching to the dict-based
     `step`) would treat only the currently-*present* alleles as the
@@ -576,38 +577,32 @@ def test_vectorized_extension_keeps_minted_identities_through_extinction() -> No
     params = _sigma_band_vector_params(seed=20260902)
 
     lane = _drive_vector_lane_to_stop(params)
-    assert isinstance(lane.vectorized_state, VectorizedState)
-    before = lane.vectorized_state.locus_states[0]
-    minted_before = int(before.minted_mask.sum())
+    block = lane.vectorized_state
+    assert isinstance(block, VectorBlock)
+    before = block.minted_states(0)
 
     # Part 1: the rejected approach demonstrably loses minted identities.
-    rebuilt = build_vectorized_state(lane.state).locus_states[0]
-    assert int(rebuilt.minted_mask.sum()) < minted_before
-    assert rebuilt.minted_count < before.minted_count
+    rebuilt = VectorBlock.from_model_state(
+        lane.state,
+        sizes=params.population_sizes,
+        mutation_rates=params.mutation_rates,
+        migration=VectorMigration.from_parameter(params.m, params.d),
+        mutation_model=params.mutation_model,
+        next_id=lane.registry.next_value,
+    )
+    assert len(rebuilt.minted_states(0)) < len(before)
 
     # Part 2: replay the same window on an identically-seeded second lane
     # to confirm an extinction and a later reappearance really occur in
     # it. A replay is needed because the extension itself persists no
     # per-generation state, only each watched statistic's own value.
     replay = _drive_vector_lane_to_stop(params)
-    assert isinstance(replay.vectorized_state, VectorizedState)
-    sizes = np.asarray(
-        _population_sizes(replay.params.gene_copies, replay.state.deme_count),
-        dtype=np.int64,
-    )
-    presence = [_present_allele_ids(replay.vectorized_state.locus_states[0])]
-    vectorized_state = replay.vectorized_state
-    assert isinstance(replay.params.m, float)
+    replay_block = replay.vectorized_state
+    assert isinstance(replay_block, VectorBlock)
+    presence = [_present_allele_ids(replay_block)]
     for _ in range(12):
-        vectorized_state = step_vectorized(
-            vectorized_state,
-            replay.migration_weights,
-            replay.params.mutation_rates,
-            sizes,
-            replay.rng,
-            symmetric_rate=replay.params.m,
-        )
-        presence.append(_present_allele_ids(vectorized_state.locus_states[0]))
+        replay_block.advance(replay.rng)
+        presence.append(_present_allele_ids(replay_block))
     went_extinct: set[int] = set()
     for earlier, later in itertools.pairwise(presence):
         went_extinct |= earlier - later
@@ -625,12 +620,12 @@ def test_vectorized_extension_keeps_minted_identities_through_extinction() -> No
         lane, multiplier=2.0, window=12
     )
     assert band and len(trajectory) == 12
-    assert isinstance(lane.vectorized_state, VectorizedState)
-    after = lane.vectorized_state.locus_states[0]
-    assert int(after.minted_mask.sum()) >= minted_before
-    assert after.minted_count >= before.minted_count
-    # Every identity minted before the extension is still marked minted.
-    assert bool(np.all(after.minted_mask[before.minted_mask]))
+    assert isinstance(lane.vectorized_state, VectorBlock)
+    after = lane.vectorized_state.minted_states(0)
+    assert len(after) >= len(before)
+    # Every identity minted before the extension is still marked minted,
+    # and the minting order is only ever extended, never rewritten.
+    assert after[: len(before)] == before
 
 
 def test_sigma_band_extensions_never_interleave_with_batch_ticks() -> None:
@@ -702,7 +697,7 @@ def test_vectorized_sigma_band_caches_peak_in_the_post_pass_then_release() -> No
 
     Decision 9's accepted worst case, measured rather than merely
     asserted: with the band enabled, every eligible lane defers its
-    `VectorizedState` release (reopening the growth `FIM-48` closed), so
+    `VectorBlock` release (reopening the growth `FIM-48` closed), so
     all of them are alive when the post-pass begins. The cost stays a
     *temporary* peak because the pass releases each lane's own cache the
     instant that lane's extension finishes — so the live count falls
@@ -757,7 +752,7 @@ def test_a_batch_without_a_sigma_band_still_releases_caches_at_finalization() ->
 
     The control for the test above. `_finalize_replica_lane` only skips
     its release for a sigma-band-eligible lane, so a batch that never
-    asked for a band must still release every `VectorizedState` the
+    asked for a band must still release every `VectorBlock` the
     instant its lane stops — exactly `FIM-48`'s own guarantee, not
     weakened by v2 having made a conditional out of it.
     """
@@ -2746,8 +2741,7 @@ def _two_locus_state_with_divergent_per_locus_estimates() -> ModelState:
     this file's own usual `100` — inert for the dict-based statistics
     either way (`test_locus_length_does_not_affect_the_report`), but
     `test_convergence_values_vectorized_watches_the_same_d_and_g_st`
-    below feeds this same state through `build_vectorized_state`, which
-    allocates a real `(deme_count, 4**length)` array.
+    below feeds this same state through a `VectorBlock`.
     """
     loci = (LocusSpec(1, 1), LocusSpec(2, 1))
     return ModelState(
@@ -2762,6 +2756,22 @@ def _two_locus_state_with_divergent_per_locus_estimates() -> ModelState:
                 {AlleleId(0): 0.05, AlleleId(1): 0.95},
             ),
         ),
+    )
+
+
+def _vector_block_for(state: ModelState, params: SimulationParams) -> VectorBlock:
+    """Return a `VectorBlock` holding `state`, for the statistics-only tests.
+
+    The state need not be on the `1 / N` grid: these tests only read the
+    block's statistics, they never step it.
+    """
+    return VectorBlock.from_model_state(
+        state,
+        sizes=params.population_sizes,
+        mutation_rates=params.mutation_rates,
+        migration=VectorMigration.from_parameter(params.m, params.d),
+        mutation_model=params.mutation_model,
+        next_id=MINTED_ID_START,
     )
 
 
@@ -2810,10 +2820,9 @@ def test_convergence_values_vectorized_watches_the_same_d_and_g_st() -> None:
 
     `_convergence_values_vectorized` shares `_watched_statistic_values`
     with the dict-based path above — this only needs to confirm the
-    `VectorizedState`-specific plumbing (deriving `deme_count` from a
-    locus's own dense array shape, not a `ModelState.deme_count`
-    attribute that doesn't exist here) feeds it correctly, not
-    re-litigate the aggregation math itself.
+    `VectorBlock`-specific plumbing (the kernel's per-locus table and its
+    own aggregation) agrees with it, not re-litigate the aggregation math
+    itself.
     """
     state = _two_locus_state_with_divergent_per_locus_estimates()
     params = SimulationParams(
@@ -2828,7 +2837,7 @@ def test_convergence_values_vectorized_watches_the_same_d_and_g_st() -> None:
     report = report_for_state(
         state, params, run_id="run-a", converged=False, reason="test"
     )
-    vectorized_state = build_vectorized_state(state)
+    vectorized_state = _vector_block_for(state, params)
     watched = _convergence_values_vectorized(vectorized_state, params)
     assert report["G_ST"] is not None
     assert watched["D"] == pytest.approx(report["D"])
@@ -2892,7 +2901,7 @@ def test_convergence_values_vectorized_skips_e_st_and_k_st_when_only_d_is_watche
 
     Mirrors `test_convergence_values_skips_e_st_and_k_st_when_only_d_
     is_watched` above, through `_convergence_values_vectorized` instead
-    — proves `VectorizedState`'s own dense-array path skips the same
+    — proves the array-native path skips the same
     work, not just the dict-based path.
     """
     state = _two_locus_state_with_divergent_per_locus_estimates()
@@ -2905,7 +2914,7 @@ def test_convergence_values_vectorized_skips_e_st_and_k_st_when_only_d_is_watche
         loci=state.loci,
         convergence_statistic="D",
     )
-    vectorized_state = build_vectorized_state(state)
+    vectorized_state = _vector_block_for(state, params)
     e_st_calls = 0
     k_st_calls = 0
     original_e_st = differentiation._e_st_from_demes
@@ -2972,7 +2981,7 @@ def test_convergence_values_vectorized_always_includes_d_g_st_h_s_h_t() -> None:
         loci=state.loci,
         convergence_statistic="D",
     )
-    vectorized_state = build_vectorized_state(state)
+    vectorized_state = _vector_block_for(state, params)
 
     values = _convergence_values_vectorized(vectorized_state, params)
 
@@ -3053,7 +3062,7 @@ def test_track_expensive_statistics_vectorized_computes_e_st_and_k_st(
         convergence_statistic="D",
         track_expensive_statistics=True,
     )
-    vectorized_state = build_vectorized_state(state)
+    vectorized_state = _vector_block_for(state, params)
     e_st_calls = 0
     k_st_calls = 0
     original_e_st = differentiation._e_st_from_demes
@@ -5179,7 +5188,7 @@ def test_finalize_replica_lane_releases_vectorized_state(
     """`_finalize_replica_lane` clears a lane's own dense cache once it stops.
 
     Regression test for `FIM-48`: without this, a finished lane's own
-    `VectorizedState` cache stayed referenced by `run_batch`'s own
+    `VectorBlock` cache stayed referenced by `run_batch`'s own
     `lanes` list for the rest of the batch's own run, for nothing —
     `RunResult` only ever reads `lane.state` (already rebuilt by
     `VectorizedAdvancer.advance` before this function is ever called),
@@ -5199,7 +5208,6 @@ def test_finalize_replica_lane_releases_vectorized_state(
         had_cache_before_release = lane.vectorized_state is not None
         result = real_finalize(lane, clock, store)
         assert lane.vectorized_state is None
-        assert lane.migration_weights is None
         return result
 
     monkeypatch.setattr(engine, "_finalize_replica_lane", _spying_finalize)
@@ -5247,29 +5255,17 @@ def test_generational_vector_backend_windowed_batch_matches_unbounded() -> None:
 
 
 def test_generational_vector_backend_matches_lineal_exactly_without_migration() -> None:
-    """A full multi-generation run matches `LinealBackend` bit-for-bit when `m=0`.
+    """A full multi-generation finite-alleles run matches `LinealBackend` when `m=0`.
 
-    The real, end-to-end proof this project's own operator-level exact-
-    match tests (`test/model/test_vectorized.py`) never actually
-    exercised: `fim.engine.VectorizedAdvancer` calls `build_vectorized_
-    state` once, on a lane's own first tick, then steps that cached
-    `VectorizedState` (`ReplicaLane.vectorized_state`) directly for
-    every generation after — and a real correctness bug in the earlier,
-    per-generation-rebuild version of that path — re-deriving finite-
-    alleles minted bookkeeping from scratch every generation, silently
-    forgetting any allele minted and then driven extinct within the
-    same generation it was minted in — meant this never actually held,
-    even though every individual operator had been proven exact in
-    isolation. Fixed by carrying the bookkeeping forward
-    (`build_vectorized_state`'s own `previous_locus_states` argument,
-    still used for that one first-tick call); confirmed directly, not
-    assumed, with `m=0` here specifically to
-    remove `migrate`'s own floating-point reduction-order divergence
-    from the picture (`migrate_vectorized`'s dense matmul and `migrate`'s
-    dict-based blend are two different, both-deterministic reduction
-    orders for the same computation — a separate, accepted residual
-    `test_generational_vector_backend_matches_lineal_statistically`,
-    below, exists to characterize, not eliminate).
+    The original end-to-end exactness proof, kept as a small, readable
+    case now that exactness holds in general
+    (`test/engine/test_vector_parity.py` is the full matrix, with
+    migration, several loci and batches). It guards the bug that made the
+    first version of this path diverge: a locus's minted-state bookkeeping
+    re-derived from the present alleles every generation forgets any allele
+    minted and then driven extinct, even within the generation it was
+    minted in — the normal fate of a fresh low-frequency mutant. The block
+    carries the bookkeeping forward instead.
     """
     pytest.importorskip("numba")
     params = replace(_finite_alleles_vector_params(d=3), m=0.0, max_generations=10)
@@ -5296,19 +5292,18 @@ def test_vectorized_advancer_builds_a_lanes_state_only_once_each_way(
 ) -> None:
     """`VectorizedAdvancer` converts a lane's state once each way, not every tick.
 
-    Regression test: `advance()` used to call `build_vectorized_state`
-    (rebuilding `VectorizedState` from `ModelState`) and `vectorized_
-    state_to_model_state` (the reverse) on *every* generation, for
-    every lane — a real, measured cost, larger than the biology it sat
-    next to at a large capacity (design doc `20260901-claude-sonnet-5-
-    fim-engine-backend-factory-design.md` §11's own reopened "across-
-    generation fusion" question). `ReplicaLane.vectorized_state` now
-    caches the live array state across generations, so each direction
-    should be paid exactly once per lane for a whole run: forward, on
-    that lane's own first tick; backward, once it stops. Counts real
-    calls by wrapping (not replacing) both functions, so this also
-    exercises a real multi-generation, multi-replicate batch end to
-    end, not a mocked-out one.
+    Regression test: `advance()` used to rebuild its array state from the
+    `ModelState` and convert back on *every* generation, for every lane —
+    a real, measured cost, larger than the biology it sat next to at a
+    large capacity (design doc `20260901-claude-sonnet-5-fim-engine-
+    backend-factory-design.md` §11's own reopened "across-generation
+    fusion" question). `ReplicaLane.vectorized_state` caches the live
+    `VectorBlock` across generations, so each direction is paid exactly
+    once per lane for a whole run: forward (`VectorBlock.from_model_state`)
+    on that lane's own first tick; backward (`VectorBlock.to_model_state`)
+    once it stops. Counts real calls by wrapping (not replacing) both, so
+    this also exercises a real multi-generation, multi-replicate batch end
+    to end, not a mocked-out one.
 
     `lane.state` (`ModelState`) itself is checked too: it must stay
     exactly the generation-zero object `_build_replica_lane` built,
@@ -5322,29 +5317,23 @@ def test_vectorized_advancer_builds_a_lanes_state_only_once_each_way(
     )
 
     build_call_count = 0
+    real_build = VectorBlock.from_model_state
 
-    def _counting_build_vectorized_state(*args: object, **kwargs: object) -> object:
+    def _counting_build(*args: object, **kwargs: object) -> VectorBlock:
         nonlocal build_call_count
         build_call_count += 1
-        return build_vectorized_state(*args, **kwargs)  # type: ignore[arg-type]
+        return real_build(*args, **kwargs)  # type: ignore[arg-type]
 
     reconstruct_call_count = 0
+    real_reconstruct = VectorBlock.to_model_state
 
-    def _counting_vectorized_state_to_model_state(
-        *args: object, **kwargs: object
-    ) -> object:
+    def _counting_reconstruct(block: VectorBlock) -> ModelState:
         nonlocal reconstruct_call_count
         reconstruct_call_count += 1
-        return vectorized_state_to_model_state(*args, **kwargs)  # type: ignore[arg-type]
+        return real_reconstruct(block)
 
-    monkeypatch.setattr(
-        engine, "build_vectorized_state", _counting_build_vectorized_state
-    )
-    monkeypatch.setattr(
-        engine,
-        "vectorized_state_to_model_state",
-        _counting_vectorized_state_to_model_state,
-    )
+    monkeypatch.setattr(VectorBlock, "from_model_state", _counting_build)
+    monkeypatch.setattr(VectorBlock, "to_model_state", _counting_reconstruct)
 
     advancer = VectorizedAdvancer()
     store = InMemoryTrajectoryStore()
@@ -5369,184 +5358,6 @@ def test_vectorized_advancer_builds_a_lanes_state_only_once_each_way(
         assert lane.state is not initial_model_states[lane.replica_index]
 
 
-def test_generational_vector_backend_matches_lineal_statistically() -> None:
-    """Aggregate differentiation statistics agree with `LinealBackend`, at scale.
-
-    With migration active, a full multi-generation run is *not*
-    bit-for-bit identical to `LinealBackend` in general — `migrate`'s
-    own floating-point reduction-order divergence (dense matmul vs.
-    dict-based blend, `test_generational_vector_backend_matches_
-    lineal_exactly_without_migration`'s own docstring) occasionally sits
-    close enough to a discrete draw's own decision boundary to flip it,
-    and that one flip changes which allele identities exist from that
-    generation forward — measured directly across 30 seeds with
-    migration active, 23 diverged from `LinealBackend` within the first
-    three generations. That is expected, not a defect: the vector
-    design's own original correctness bar for this backend was always
-    "statistically, not bit-identically, equivalent" (`fim.model.
-    vectorized`'s own module docstring), and Stage F8 only ever
-    strengthened that to full bit-identity for the *individual
-    operators* feeding a shared, identical starting state, not for a
-    full run's own compounding sequence of independent decision points.
-
-    What actually matters is whether that per-seed divergence is a
-    genuine, unbiased alternate realization of the same underlying
-    random process, or a *systematic* bias — the same distinction that
-    made the minted-bookkeeping bug (fixed alongside this test) a real
-    defect and this residual floating-point one not: checked directly,
-    not assumed, via the same normal-approximation-band methodology
-    this project's own `test_drift_vectorized_variance_matches_
-    binomial_theory` already established, comparing each backend's own
-    mean `D`/`G_ST` across 200 independently seeded replicates. A
-    smaller sample (40, then 200, at a longer horizon) showed a
-    borderline-significant gap that a larger one (600) resolved back to
-    noise — recorded honestly rather than only reporting the
-    comfortable number: real bias would have gotten *more* precisely
-    measured as the sample grew, not smaller.
-    """
-    pytest.importorskip("numba")
-    params = SimulationParams(
-        gene_copies=40,
-        m=0.1,
-        mu=0.05,
-        d=4,
-        seed=13579,
-        loci=(LocusSpec(1, 2),),
-        mutation_model="finite_alleles",
-        convergence_tolerance=0.0,
-        convergence_window=21,
-        max_generations=20,
-        n_replicates=200,
-        # Explicit, not `SimulationParams`'s own current default
-        # (`0.01`): this test's own paired-mean comparison needs the
-        # exact same fixed replicate count run by both backends,
-        # deliberately not an adaptive stop that could legitimately fire
-        # at a different replicate count for each (their per-replicate
-        # values differ slightly under migration by design — that
-        # divergence is exactly what this test measures).
-        replicate_tolerance=None,
-    )
-
-    lineal_results = fim(
-        params.gene_copies,
-        params.m,
-        params.mu,
-        params.d,
-        params=params,
-        engine_backend="lineal",
-    )
-    vector_results = fim(
-        params.gene_copies,
-        params.m,
-        params.mu,
-        params.d,
-        params=params,
-        engine_backend="generational-vector",
-    )
-    assert isinstance(lineal_results, tuple)
-    assert isinstance(vector_results, tuple)
-
-    def _as_float(value: float | None) -> float:
-        # `G_ST` alone can be `None` (`DifferentiationReport`'s own
-        # docstring) -- never for this config (real differentiation
-        # signal, every replicate), so a real `None` here is a genuine
-        # test-setup bug, not a case to special-case around.
-        assert value is not None
-        return value
-
-    for stat in ("D", "G_ST"):
-        lineal_values = [_as_float(result.report[stat]) for result in lineal_results]
-        vector_values = [_as_float(result.report[stat]) for result in vector_results]
-        lineal_mean = statistics.fmean(lineal_values)
-        vector_mean = statistics.fmean(vector_values)
-        standard_error = (
-            statistics.variance(lineal_values) / len(lineal_values)
-            + statistics.variance(vector_values) / len(vector_values)
-        ) ** 0.5
-        assert vector_mean == pytest.approx(lineal_mean, abs=5.0 * standard_error), stat
-
-
-def test_generational_vector_matches_lineal_statistically_multi_locus() -> None:
-    """Aggregate differentiation statistics agree with `LinealBackend` for 2+ loci.
-
-    A genuinely different mechanism from `test_generational_vector_
-    backend_matches_lineal_statistically`, above, not a duplicate of it:
-    that test isolates *migration's* own floating-point reduction-order
-    divergence by using one locus (where `step_vectorized`'s per-locus
-    fusion cannot diverge from `operators.step`'s own stage ordering at
-    all — there is only one locus to loop over either way). This test
-    instead sets `m=0.0` (no floating-point migration divergence
-    possible) and uses two loci, isolating the *other*, structural
-    mechanism this project's own multi-model engine review, 2026-09-04,
-    found (`FIM-09`/finding C-01/finding P1-1): `step_vectorized` fuses
-    `migrate` → `mutate` → `drift` per locus, one whole locus at a time,
-    while `operators.step` runs each stage across every locus first, in
-    a deme-major order — the two draw from the shared RNG stream in a
-    different sequence the instant more than one locus is tracked, with
-    or without migration. `fim.model.vectorized`'s and `fim.engine.fim`'s
-    own docstrings were previously unqualified by locus count on this
-    exact claim; both now name this test as the multi-locus statistical
-    parity proof superseding the old, narrower claim.
-
-    Same normal-approximation-band methodology as the migration-active
-    test above, applied to the same two watched statistics.
-    """
-    pytest.importorskip("numba")
-    params = SimulationParams(
-        gene_copies=40,
-        m=0.0,
-        mu=0.05,
-        d=4,
-        seed=13579,
-        loci=(LocusSpec(1, 2), LocusSpec(2, 2)),
-        mutation_model="finite_alleles",
-        convergence_tolerance=0.0,
-        convergence_window=21,
-        max_generations=20,
-        n_replicates=200,
-        # Explicit, not `SimulationParams`'s own current default
-        # (`0.01`): this test's own paired-mean comparison needs the
-        # exact same fixed replicate count run by both backends,
-        # deliberately not an adaptive stop that could legitimately fire
-        # at a different replicate count for each.
-        replicate_tolerance=None,
-    )
-
-    lineal_results = fim(
-        params.gene_copies,
-        params.m,
-        params.mu,
-        params.d,
-        params=params,
-        engine_backend="lineal",
-    )
-    vector_results = fim(
-        params.gene_copies,
-        params.m,
-        params.mu,
-        params.d,
-        params=params,
-        engine_backend="generational-vector",
-    )
-    assert isinstance(lineal_results, tuple)
-    assert isinstance(vector_results, tuple)
-
-    def _as_float(value: float | None) -> float:
-        assert value is not None
-        return value
-
-    for stat in ("D", "G_ST"):
-        lineal_values = [_as_float(result.report[stat]) for result in lineal_results]
-        vector_values = [_as_float(result.report[stat]) for result in vector_results]
-        lineal_mean = statistics.fmean(lineal_values)
-        vector_mean = statistics.fmean(vector_values)
-        standard_error = (
-            statistics.variance(lineal_values) / len(lineal_values)
-            + statistics.variance(vector_values) / len(vector_values)
-        ) ** 0.5
-        assert vector_mean == pytest.approx(lineal_mean, abs=5.0 * standard_error), stat
-
-
 def test_fim_engine_backend_generational_vector_runs_end_to_end() -> None:
     """`fim(..., engine_backend="generational-vector")` works end to end."""
     pytest.importorskip("numba")
@@ -5565,21 +5376,16 @@ def test_fim_engine_backend_generational_vector_runs_end_to_end() -> None:
     assert result.report["converged"] in (True, False)
 
 
-def test_vectorized_advancer_caches_migration_weights_across_generations() -> None:
-    """`ReplicaLane.migration_weights` is built once, then reused, not rebuilt.
+def test_vectorized_advancer_builds_a_migration_plan_once_per_lane() -> None:
+    """A genuine `(d, d)` matrix `m` is converted once, then reused every tick.
 
-    Found by the Stage 4/Stage V3 benchmark sweep: a genuine `(d, d)`
-    weight-matrix conversion was being redone every single generation,
-    even though `params.m`/deme sizes never change mid-run. A genuine
-    matrix `m` (`d=3`, symmetric-equivalent by construction, not a
-    scalar) — `20260903-claude-sonnet-5-fim-vg-performance-campaign-
-    design.md` §6.1 item 1's own `O(d)` fix took the scalar-rate case
-    out of this cache entirely (see `test_vectorized_advancer_skips_
-    migration_weights_cache_for_a_scalar_rate`, below); this test still
-    covers the case that fix deliberately left the caching behavior
-    unchanged for. Checked directly, not just inferred from timing: the
-    exact same array object (`is`, not just equal) survives two
-    consecutive `advance()` calls.
+    Found by the Stage 4/Stage V3 benchmark sweep: a weight-matrix
+    conversion was being redone every generation even though `params.m`
+    and the deme sizes never change mid-run. The lane's block now holds
+    one `VectorMigration` for the whole run; checked directly rather than
+    inferred from timing: the exact same plan and the exact same array
+    object (`is`, not just equal) survive two consecutive `advance()`
+    calls.
     """
     pytest.importorskip("numba")
     matrix = ((0.8, 0.1, 0.1), (0.1, 0.8, 0.1), (0.1, 0.1, 0.8))
@@ -5588,39 +5394,27 @@ def test_vectorized_advancer_caches_migration_weights_across_generations() -> No
     )
     store = InMemoryTrajectoryStore()
     lane = _build_replica_lane(params, 0, None, store, _clock)
-    # `_build_replica_lane` never populates `migration_weights` itself —
-    # only `VectorizedAdvancer.advance` does, on first use — but that
-    # isn't asserted directly here: mypy narrows a field's type across
-    # an `is None` check and does not invalidate that narrowing across
-    # an opaque method call that mutates it, which would make the
-    # second `advance()` call below a mypy-reported false "unreachable
-    # statement." The two assertions that matter (cache populated;
-    # cache reused, not rebuilt) do not need that initial check.
     advancer = VectorizedAdvancer()
 
     advancer.advance([lane], store)
-    first_weights = lane.migration_weights
-    assert first_weights is not None, "cache populated after the first generation"
+    assert isinstance(lane.vectorized_state, VectorBlock)
+    first_plan = lane.vectorized_state.migration
+    assert first_plan.kind == MIGRATION_MATRIX
+    assert first_plan.weights.tolist() == [list(row) for row in matrix]
 
     advancer.advance([lane], store)
-    second_weights = lane.migration_weights
-    assert second_weights is first_weights, (
-        "same object, not rebuilt, second generation"
-    )
+    assert isinstance(lane.vectorized_state, VectorBlock)
+    assert lane.vectorized_state.migration is first_plan
+    assert lane.vectorized_state.migration.weights is first_plan.weights
 
 
-def test_vectorized_advancer_skips_migration_weights_cache_for_a_scalar_rate() -> None:
-    """A plain scalar `m` never populates `migration_weights` at all, ever.
+def test_vectorized_advancer_builds_no_matrix_for_a_scalar_rate() -> None:
+    """A plain scalar `m` never builds a `(d, d)` matrix, on any tick.
 
-    `20260903-claude-sonnet-5-fim-vg-performance-campaign-design.md`
-    §6.1 item 1: `migrate_vectorized_symmetric` computes a scalar-rate
-    migration blend directly, in `O(d*K)`, with no `(d, d)` matrix ever
-    built — so there is nothing to cache for this, this project's own
-    most common configuration, not merely a cache that happens to stay
-    unused. Checked across several generations, not just the first
-    tick, since a regression that rebuilds-and-discards a matrix every
-    generation would leave this field `None` too, indistinguishable
-    from the fix at a single tick.
+    The scalar rate is applied by a size-weighted pool in `O(d * K)` with
+    no matrix at all, so there is nothing to build for this, the most
+    common configuration. Checked across several generations, not just
+    the first tick.
     """
     pytest.importorskip("numba")
     params = _finite_alleles_vector_params(max_generations=3, convergence_window=3)
@@ -5630,7 +5424,10 @@ def test_vectorized_advancer_skips_migration_weights_cache_for_a_scalar_rate() -
 
     for _ in range(3):
         advancer.advance([lane], store)
-        assert lane.migration_weights is None
+        assert isinstance(lane.vectorized_state, VectorBlock)
+        plan = lane.vectorized_state.migration
+        assert plan.kind == MIGRATION_SCALAR
+        assert plan.weights.size == 0
 
 
 # Cross-backend *structural* parity (performance-baseline remediation

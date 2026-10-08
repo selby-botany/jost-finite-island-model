@@ -499,6 +499,7 @@ Return to the [source-tree orientation](../README.md) or the [developer guide](.
     * [next\_id](#fim.model.vector_block.VectorBlock.next_id)
     * [nbytes](#fim.model.vector_block.VectorBlock.nbytes)
     * [advance](#fim.model.vector_block.VectorBlock.advance)
+    * [minted\_states](#fim.model.vector_block.VectorBlock.minted_states)
     * [present\_entries](#fim.model.vector_block.VectorBlock.present_entries)
     * [rows](#fim.model.vector_block.VectorBlock.rows)
     * [frequency\_maps](#fim.model.vector_block.VectorBlock.frequency_maps)
@@ -2723,56 +2724,23 @@ each replica's entire trajectory before starting the next (see
 `GenerationalBackend`, below). Nothing about what any one lane
 computes changes because of this.
 
-`migration_weights` is a `VectorizedAdvancer`-only cache: one dense
-`(d, d)` migration weight matrix per locus, built once from a
-genuine caller-supplied weight matrix (`params.m` given as a full
-matrix, not a scalar) and reused for the rest of this lane's own
-run — `params.m`/deme sizes never change mid-run, so reconverting
-this every generation is pure, avoidable waste (found via the
-Stage 4/Stage V3 benchmark sweep, `20260827-claude-sonnet-5-fim-
-engine-parallel-refactor-design.md`'s own §9). **Stays `None` for a
-plain scalar `params.m` too, now** — `migrate_vectorized_symmetric`
-computes that case directly in `O(d*K)`, with no `(d, d)` matrix
-ever built at all (`20260903-claude-sonnet-5-fim-vg-performance-
-campaign-design.md` §6.1 item 1); this field's own role narrowed to
-the genuine-matrix case specifically, not retired. Unused by every
-other `Advancer` either way; stays `None` for the whole run under
-those.
-
-`vectorized_state` is also a `VectorizedAdvancer`-only cache — the
-live, dense `VectorizedState` this lane is actually stepping,
-carried forward generation to generation via `step_vectorized`
-directly, with `state` (the `ModelState` below) left untouched
-mid-run rather than reconstructed from it every tick. Two things
-used to force a `ModelState` round trip every generation: (1) each
-locus's own finite-alleles minted bookkeeping (`minted_mask`/
-`minted_list`/`minted_count`/`next_unminted`) needed to persist
-across generations exactly the way `FiniteAlleleRegistry`'s own
-dict-based state already does for `LinealBackend`/
-`GenerationalBackend`'s default advancer — re-deriving it from
-`state` alone, every generation, silently forgets any allele minted
-and then driven extinct (including within the very generation it
-was minted in, the normal outcome for a fresh low-frequency mutant,
-not a rare one), both re-minting identities `LinealBackend` has
-permanently retired and undercounting `minted_count`; and (2)
-`_convergence_values` itself needed a `ModelState` to read.
-Caching the whole `VectorizedState` here (not just the locus
-bookkeeping) fixes both at once: `step_vectorized` already threads
-a `VectorizedLocusState`'s own minted bookkeeping through unchanged
-(`fim.model.vectorized.build_vectorized_state`'s own `previous_
-locus_states` argument has the original bug and a directly measured
-example — this field is what made that fix persist-able across
-ticks in the first place), and `_convergence_values_vectorized`
-reads statistics straight from this cached state's own dense
-arrays, so `state` only needs rebuilding once, when the lane
-actually stops (measured directly: at a large capacity, the
-reconstruction this avoids on every other tick was ~40% of that
-tick's own wall-clock time — `20260901-claude-sonnet-5-fim-engine-
-backend-factory-design.md` §11). Unused by every other `Advancer`;
-stays `None` for the whole run under those. Released (set back to
-`None`) by `_finalize_replica_lane` the instant a lane stops, not
-held for the rest of the batch's own run — see that function's own
-docstring (`FIM-48`).
+`vectorized_state` is a `VectorizedAdvancer`-only cache — the live
+`fim.model.vector_block.VectorBlock` this lane is actually stepping,
+carried forward generation to generation, with `state` (the
+`ModelState` below) left untouched mid-run rather than reconstructed
+from it every tick. The block is what carries everything a
+`ModelState` cannot: the identity of every column, the counter that
+mints new allele identities (infinite alleles), and each locus's
+minted-state bookkeeping (finite alleles — re-deriving it from `state`
+alone, every generation, would forget any allele minted and then
+driven extinct, the normal fate of a fresh low-frequency mutant).
+`_convergence_values_vectorized` reads statistics straight from the
+block's arrays, so `state` only needs rebuilding once, when the lane
+actually stops. Unused by every other `Advancer`; stays `None` for the
+whole run under those. Released (set back to `None`) by
+`_finalize_replica_lane` the instant a lane stops, not held for the
+rest of the batch's own run — see that function's own docstring
+(`FIM-48`).
 
 `equilibration_outcome` is set once, by `_build_replica_lane`
 (`_generate_initial_state_with_outcome`'s own return value), and
@@ -2993,39 +2961,39 @@ Steps every currently-active lane forward by one generation, array-native.
 
 Backend V's `Advancer`. Each lane's generation-zero `ModelState` is
 converted exactly once, the first tick the lane is advanced, into a
-dense array table cached on the lane (`ReplicaLane.vectorized_state`);
-from then on every generation runs on that table with no `ModelState`
-in between. Trajectory rows are written straight from the arrays,
+dense `fim.model.vector_block.VectorBlock` cached on the lane
+(`ReplicaLane.vectorized_state`); from then on every generation is one
+compiled kernel call over every locus, with no `ModelState` in
+between. Trajectory rows are written straight from the arrays,
 convergence statistics are read from them, and a real `ModelState` is
 rebuilt once per lane, when its monitor reports it has stopped, for
 the report and `RunResult` machinery that needs one.
 
-**Infinite alleles** (the default model) runs on
-`fim.model.vector_block.VectorBlock`: one compiled kernel call per
-generation over every locus, in the same stage and draw order as
-`fim.model.operators.step`, with the arithmetic of the dictionary-based
-operators ported operation for operation. For the same seed on the same
-platform the trajectory rows, report and final state are therefore
-identical to Backend L's and G's, every allele identity and frequency
-bit; the lane's `AlleleRegistry` counter is brought up to the
-identities the block handed out when the lane stops. The convergence
-statistics `D`, `G_ST`, `H_S`, `H_T` and `H_ST` are computed inside
-the kernel and equal `statistics_report`'s bits; the opt-in expensive
-statistics (`E_ST`, `K_ST`, `A_CGD`, `Delta`, `MI`) stay in Python.
+**Both mutation models** run on the block, in the same stage and draw
+order as `fim.model.operators.step`, with the arithmetic of the
+dictionary-based operators ported operation for operation. For the same
+seed on the same platform the trajectory rows, report and final state
+are therefore identical to Backend L's and G's, every allele identity
+and frequency bit. Under infinite alleles the lane's `AlleleRegistry`
+counter is brought up to the identities the block handed out when the
+lane stops; under finite alleles the K-allele target draws are made in
+the kernel, interleaved with the next pair's mutation counts exactly as
+`operators.mutate` does. The convergence statistics `D`, `G_ST`, `H_S`,
+`H_T` and `H_ST` are computed inside the kernel and equal
+`statistics_report`'s bits; the opt-in expensive statistics (`E_ST`,
+`K_ST`, `A_CGD`, `Delta`, `MI`) stay in Python.
 
-**Finite alleles** (bounded `K`) still runs on `fim.model.vectorized`'s
-per-locus `VectorizedState`, whose multi-locus draw order and BLAS
-migration make it statistically, not bitwise, equal to Backend L.
-
-Both models need `migrant_sampling="continuous"`: a lane that asks for
-stochastic migrant counts raises `ValueError` immediately, never a
-silent fallback to a dictionary-based path. A genuine caller-supplied
-`(d, d)` migration matrix is supported (one exact sum per cell).
+`migrant_sampling="continuous"` only: a lane that asks for stochastic
+migrant counts raises `ValueError` immediately, never a silent
+fallback to a dictionary-based path (the migration step is structured
+to take one more kind, a binomial draw per destination deme, when that
+follow-up is built). A genuine caller-supplied `(d, d)` migration
+matrix is supported (one exact sum per cell).
 
 **Arguments**:
 
-- `memory_ceiling_bytes` - Per-lane ceiling on the infinite-alleles
-  table, in bytes; `None` uses the 2 GiB default or the
+- `memory_ceiling_bytes` - Per-lane ceiling on the table, in bytes;
+  `None` uses the 2 GiB default or the
   `FIM_VECTOR_MEMORY_CEILING_BYTES` environment variable
   (`fim.model.vector_block.resolve_memory_ceiling`). A lane
   whose table would exceed it raises
@@ -3055,7 +3023,13 @@ def advance(active_lanes: Sequence[ReplicaLane],
             store: TrajectoryStore) -> list[ReplicaLane]
 ```
 
-Step every active lane by one generation, fused and array-native.
+Step every active lane by one generation, array-native.
+
+Builds each lane's block on its first tick, steps it, writes the
+generation's rows, and records the convergence statistics. When a
+lane's monitor reports stopped, `lane.state` (stale until now) is
+rebuilt from the block and the lane's registry counter is brought
+up to the identities the block minted.
 
 **Arguments**:
 
@@ -3146,7 +3120,7 @@ point — never merely reserved. This is `FIM-45`/`P-04`/`P2-7`'s own
 fix (a replicate `run_batch` never gets to before an adaptive stop
 now never pays for that replicate's own setup either, on any
 `Advancer`) and, for `VectorizedAdvancer` specifically,
-`FIM-48`'s own fix too: that advancer's cached `VectorizedState`
+`FIM-48`'s own fix too: that advancer's cached `VectorBlock`
 (`ReplicaLane.vectorized_state`, released immediately once a lane
 finalizes — see `_finalize_replica_lane`) is held by every
 concurrently active lane at once, so bounding how many lanes are
@@ -3539,26 +3513,24 @@ silently disagree.
   not-yet-publicly-reachable knob (see `ThreadedAdvancer`'s own
   docstring).
   ``"generational-vector"`` is a real, working third choice —
-  array-native, `migrant_sampling="continuous"` only; a
-  replicate outside that scope raises `ValueError` naming which
-  constraint it violated, rather than silently falling back to
-  the other backends' dict-based path. Under **infinite
-  alleles** (the default model) it runs
-  `fim.model.vector_block.VectorBlock`, one compiled kernel
-  call per generation over every locus in `operators.step`'s
-  own stage and draw order, and is **identical** to
-  ``"lineal"`` and ``"generational"`` for the same seed on the
-  same platform: every trajectory row, the report, the final
-  state and the manifest apart from `engine_backend` (a
-  memory ceiling, `FIM_VECTOR_MEMORY_CEILING_BYTES`, fails a
-  table too large for the machine with a message naming the
-  remedies). Under **finite alleles** it still runs
-  `fim.model.vectorized`'s per-locus state: bit-identical to
-  ``"lineal"`` for a single locus with migration off, otherwise
-  statistically equal only (`step_vectorized` fuses the stages
-  per locus while `operators.step` runs each stage across every
-  locus first, and BLAS reduction order differs) — see that
-  module's own docstring.
+  array-native, both mutation models, `migrant_sampling=
+  "continuous"` only; a replicate outside that scope raises
+  `ValueError` naming which constraint it violated, rather than
+  silently falling back to the other backends' dict-based path.
+  It runs `fim.model.vector_block.VectorBlock`, one compiled
+  kernel call per generation over every locus in
+  `operators.step`'s own stage and draw order, and is
+  **identical** to ``"lineal"`` and ``"generational"`` for the
+  same seed on the same platform: every trajectory row (allele
+  identity and frequency bit), the report, the final state and
+  the manifest apart from `engine_backend`. "Same platform"
+  carries the caveat `jit="numba"` already has: the compiled
+  `lgamma`/`log`/`log1p`/`exp` are verified to match CPython
+  only on the development platform, so across machines results
+  agree statistically, not bit for bit. A memory ceiling
+  (`FIM_VECTOR_MEMORY_CEILING_BYTES`, 2 GiB per replicate by
+  default) fails a table too large for the machine with a
+  message naming the remedies.
   ``"auto"`` picks between ``"generational"`` and
   ``"generational-vector"`` on `params`'s own behalf, using
   `auto_vector_min_d` (below) — never ``"lineal"`` (see
@@ -14879,6 +14851,31 @@ Advance one generation: migrate, drift, then mutate, all loci.
 - `RuntimeError` - If a finite-alleles locus has no unminted state
   left to target (the same guard `FiniteAlleleSpace` has).
 
+<a id="fim.model.vector_block.VectorBlock.minted_states"></a>
+
+#### minted\_states
+
+```python
+def minted_states(locus_index: int) -> tuple[int, ...]
+```
+
+Return every state ever minted at a finite-alleles locus, in order.
+
+The same list `FiniteAlleleSpace` keeps: the ids present at
+generation zero (ascending), then each state first reached by a
+mutation, in the order reached. A state that has since gone
+extinct stays in it, which is what makes the K-allele
+recurrence probability depend on history, not on the state alone.
+
+**Arguments**:
+
+- `locus_index` - Zero-based locus position.
+
+
+**Raises**:
+
+- `ValueError` - Under infinite alleles, which has no such list.
+
 <a id="fim.model.vector_block.VectorBlock.present_entries"></a>
 
 #### present\_entries
@@ -15276,6 +15273,20 @@ order `ModelState.to_rows` writes.
 # fim.model.vectorized
 
 Bounded-K (finite-alleles), array-native migrate/mutate/drift.
+
+**Superseded.** `fim.engine.VectorizedAdvancer` no longer calls anything
+in this module: Backend V now runs both mutation models on
+`fim.model.vector_block.VectorBlock` and the compiled kernels in
+`fim.model.vector_kernels`, which reproduce `fim.model.operators` bit for
+bit (stage-major across loci, the same migration arithmetic, the same
+K-allele target draws). This module is kept, with its operator-level tests
+(`test/model/test_vectorized.py`), as the per-locus reference
+implementation the statistical-parity history below describes; everything
+below describes this module as it was designed, and its statements about
+Backend V's reproducibility ("statistical, not bit-identical", the
+multi-locus and BLAS divergences) are **historical**: they no longer
+describe the engine's Backend V.
+
 
 Scope, deliberately: the finite-alleles mutation model only (bounded
 `K = finite_allele_capacity(length)` per locus — see `fim.model.locus`).
