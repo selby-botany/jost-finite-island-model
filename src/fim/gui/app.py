@@ -3980,7 +3980,7 @@ class Api:
         A saved `default_run_settings` is judged field by field, on its
         own (`_effective_default_run_settings`), never by overlaying it
         on the starter configuration: these are defaults for whatever
-        model runs next, and the starter model cannot use some valid
+        model runs next, and a given model cannot use some valid
         ones (`generational-vector` needs `migrant_sampling:
         continuous`), so an overlay once threw away a loaded
         preset's whole run setup and ran the starter's instead. A key

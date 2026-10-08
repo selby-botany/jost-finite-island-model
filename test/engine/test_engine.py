@@ -8,7 +8,7 @@ from collections.abc import Mapping, Sequence
 from dataclasses import replace
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import cast
+from typing import Literal, cast
 
 import numpy as np
 import pytest
@@ -4144,21 +4144,24 @@ def test_build_engine_backend_generational_vector_requires_numba(
         build_engine_backend("generational-vector")
 
 
-def test_build_engine_backend_auto_requires_numba_when_resolved_to_vector(
+@pytest.mark.parametrize("model", ["infinite_alleles", "finite_alleles"])
+def test_build_engine_backend_auto_falls_back_to_generational_without_numba(
     monkeypatch: pytest.MonkeyPatch,
+    model: Literal["infinite_alleles", "finite_alleles"],
 ) -> None:
-    """`"auto"` resolving to Backend V hits the identical numba guard.
+    """`"auto"` never raises for a missing numba: it picks Backend G instead.
 
-    `_resolve_auto_engine_backend` never checks numba itself (its own
-    docstring names only `d`/capacity/mutation-model/migrant-sampling as
-    what it decides on) — the guard lives once, in `build_engine_backend`
-    itself, downstream of resolution, so `"auto"` gets it for free rather
-    than needing its own duplicate check.
+    Backend V's output is identical to Backend G's, so the only cost of a
+    machine without numba is speed. An *explicit* `"generational-vector"`
+    still raises (the test above), because the caller named a backend that
+    cannot run.
     """
     monkeypatch.setattr(engine, "_numba_is_available", lambda: False)
-    params = _finite_alleles_vector_params(d=40)
-    with pytest.raises(ValueError, match="numba"):
-        build_engine_backend("auto", params=params, auto_vector_min_d=35)
+    params = replace(_finite_alleles_vector_params(d=40), mutation_model=model)
+    params = replace(params, loci=(LocusSpec(1, 2),))
+    backend = build_engine_backend("auto", params=params, auto_vector_min_d=35)
+    assert isinstance(backend, GenerationalBackend)
+    assert isinstance(backend._advancer, ThreadedAdvancer)
 
 
 def test_build_engine_backend_generational_vector_accepts_numba_present() -> None:
@@ -4192,7 +4195,7 @@ def test_build_engine_backend_generational_vector_accepts_numba_present() -> Non
 
 
 def test_build_engine_backend_vector_rejects_oversized_capacity() -> None:
-    """Explicit selection now gets the same capacity ceiling `"auto"` already had."""
+    """Explicit finite-alleles selection gets the same capacity ceiling `"auto"` has."""
     params = _finite_alleles_vector_params(
         d=40, loci=(LocusSpec(1, 6),)
     )  # capacity 4096
@@ -4265,17 +4268,33 @@ def test_build_engine_backend_auto_picks_generational_below_threshold() -> None:
 def test_build_engine_backend_auto_picks_generational_when_vector_ineligible() -> None:
     """A large `d` alone is not enough — `"auto"` still checks V's own scope.
 
-    `d=40` clears the default threshold, but `infinite_alleles` (the
-    default `mutation_model`) is outside `VectorizedAdvancer`'s own
-    scope — `"auto"` must fall back to Backend G here, not raise the
-    `ValueError` a direct `"generational-vector"` choice would.
+    `d=40` clears the default threshold, but stochastic migrant counts are
+    outside `VectorizedAdvancer`'s own scope — `"auto"` must fall back to
+    Backend G here, not raise the `ValueError` a direct
+    `"generational-vector"` choice would.
     """
-    params = replace(
-        _finite_alleles_vector_params(d=40), mutation_model="infinite_alleles"
-    )
+    params = replace(_finite_alleles_vector_params(d=40), migrant_sampling="stochastic")
     backend = build_engine_backend("auto", params=params, auto_vector_min_d=35)
     assert isinstance(backend, GenerationalBackend)
     assert isinstance(backend._advancer, ThreadedAdvancer)
+
+
+def test_build_engine_backend_auto_picks_vector_for_infinite_alleles() -> None:
+    """Infinite alleles with continuous migration is V's home ground now.
+
+    Locus length 200 (capacity `4 ** 200`) is irrelevant: an
+    infinite-alleles table is as wide as the alleles alive at once, so the
+    capacity ceiling does not apply, however small it is set.
+    """
+    params = replace(
+        _finite_alleles_vector_params(d=40, loci=(LocusSpec(1, 200),)),
+        mutation_model="infinite_alleles",
+    )
+    backend = build_engine_backend(
+        "auto", params=params, auto_vector_min_d=2, auto_vector_max_capacity=1
+    )
+    assert isinstance(backend, GenerationalBackend)
+    assert isinstance(backend._advancer, VectorizedAdvancer)
 
 
 def test_build_engine_backend_auto_respects_custom_threshold() -> None:
@@ -4286,11 +4305,22 @@ def test_build_engine_backend_auto_respects_custom_threshold() -> None:
     assert isinstance(backend._advancer, VectorizedAdvancer)
 
 
-def test_build_engine_backend_auto_rejects_jit_when_resolved_to_vector() -> None:
-    """`jit="numba"` is still rejected once `"auto"` resolves to Backend V."""
+def test_build_engine_backend_auto_honors_a_jit_request_with_generational() -> None:
+    """`"auto"` with `jit="numba"` picks Backend G, the one backend with a toggle.
+
+    Backend V has no `jit` switch; failing a configuration that names
+    `engine_backend: auto` and `jit: numba` (which ran Backend G before V
+    could run infinite alleles) would be a regression, and the output is
+    the same either way, so the request wins.
+    """
     params = _finite_alleles_vector_params(d=40)
+    backend = build_engine_backend(
+        "auto", params=params, auto_vector_min_d=35, jit="numba"
+    )
+    assert isinstance(backend, GenerationalBackend)
+    assert isinstance(backend._advancer, ThreadedAdvancer)
     with pytest.raises(ValueError, match="generational-vector"):
-        build_engine_backend("auto", params=params, auto_vector_min_d=35, jit="numba")
+        build_engine_backend("generational-vector", params=params, jit="numba")
 
 
 # `auto_vector_max_capacity` (`20260903-claude-sonnet-5-fim-vg-
@@ -4353,10 +4383,11 @@ def test_fim_engine_backend_auto_runs_end_to_end(
 ) -> None:
     """`fim(..., engine_backend="auto")` works through the public entry point.
 
-    `tiny_params`'s own `d=2` and default `infinite_alleles` model both
-    put it outside Backend V's scope — `"auto"` must land on Backend G
-    here, and still produce a normal, successful result.
+    `tiny_params` is an infinite-alleles run with `d=2`, which is exactly
+    the default `auto_vector_min_d`, so `"auto"` lands on Backend V, and
+    the manifest says so.
     """
+    pytest.importorskip("numba")
     result = fim(
         tiny_params.gene_copies,
         tiny_params.m,
@@ -4368,6 +4399,29 @@ def test_fim_engine_backend_auto_runs_end_to_end(
     )
     assert isinstance(result, RunResult)
     assert result.report["converged"] in (True, False)
+    assert result.manifest.engine_backend == "generational-vector"
+
+
+def test_fim_engine_backend_auto_records_generational_without_numba(
+    tiny_params: SimulationParams, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Without numba, `"auto"` runs Backend G and the manifest records G.
+
+    The same run, same seed: only the provenance differs from the run
+    above, because Backend V and Backend G produce identical output.
+    """
+    monkeypatch.setattr(engine, "_numba_is_available", lambda: False)
+    result = fim(
+        tiny_params.gene_copies,
+        tiny_params.m,
+        tiny_params.mu,
+        tiny_params.d,
+        params=tiny_params,
+        clock=_clock,
+        engine_backend="auto",
+    )
+    assert isinstance(result, RunResult)
+    assert result.manifest.engine_backend == "generational"
 
 
 def test_fim_engine_backend_auto_reaches_vector_end_to_end() -> None:

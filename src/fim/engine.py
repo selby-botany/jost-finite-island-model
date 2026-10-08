@@ -1679,6 +1679,7 @@ def _resolve_auto_engine_backend(
     params: SimulationParams,
     auto_vector_min_d: int,
     auto_vector_max_capacity: int,
+    jit: JitOption = "off",
 ) -> Literal["generational", "generational-vector"]:
     """Resolve `engine_backend="auto"` to a concrete, non-`"auto"` choice.
 
@@ -1690,32 +1691,40 @@ def _resolve_auto_engine_backend(
     — see `build_engine_backend`'s own `engine_backend` Args entry for
     why only the generational-vs-vector axis is automated so far.
 
-    Reads capacity as well as `d` now (`20260903-claude-sonnet-5-fim-vg-
-    performance-campaign-design.md` §6.1 item 2) — a real, previously
-    unaddressed gap: this function used to read `params.d` alone, so a
-    large-`d`, large-capacity config could resolve to
-    `"generational-vector"` even in the exact loci-length-sweep region
-    already found to lose there (backend-factory design §10 item 10b).
-    Checks the *largest* capacity across every locus in `params.loci` —
-    one large-capacity locus already pays the array-native path's own
-    per-cell cost every generation even when every other locus in the
-    same run is small, the identical "one disqualifying property
-    anywhere disqualifies the whole choice" logic `mutation_model`/
-    `migrant_sampling` eligibility already uses, just applied over
-    `loci` instead of over a single scalar field.
+    `"generational-vector"` is chosen when all of these hold:
+
+    - `migrant_sampling` is `"continuous"` (stochastic migrant counts are
+      not implemented for Backend V yet);
+    - `jit` is `"off"`: Backend V has no `jit` toggle, only Backend G
+      offers one, and a caller who asked for it gets it (the output is the
+      same either way);
+    - `numba` is importable. Backend V's output is identical to
+      Backend G's, so a missing `numba` costs only speed: `"auto"` falls
+      back to `"generational"` instead of raising, as an explicit
+      `"generational-vector"` choice does;
+    - `params.d >= auto_vector_min_d`;
+    - under `mutation_model="finite_alleles"` only, the largest locus
+      capacity (`4 ** length`) is at most `auto_vector_max_capacity`: a
+      finite-alleles table is `capacity` columns wide however few states
+      are in use. Under infinite alleles the table is as wide as the
+      alleles alive at once, so there is no such ceiling (the table's own
+      memory ceiling, `fim.model.vector_block`, guards the rest).
+
+    Otherwise `"generational"`. Because V reproduces G bit for bit, the
+    choice changes how fast a run finishes and nothing in its output but
+    the manifest's `engine_backend` field.
     """
-    vector_eligible = (
-        params.mutation_model == "finite_alleles"
-        and params.migrant_sampling == "continuous"
-    )
-    max_capacity = max(finite_allele_capacity(locus.length) for locus in params.loci)
-    return (
-        "generational-vector"
-        if vector_eligible
-        and params.d >= auto_vector_min_d
-        and max_capacity <= auto_vector_max_capacity
-        else "generational"
-    )
+    if params.migrant_sampling != "continuous" or jit != "off":
+        return "generational"
+    if not _numba_is_available() or params.d < auto_vector_min_d:
+        return "generational"
+    if params.mutation_model == "finite_alleles":
+        max_capacity = max(
+            finite_allele_capacity(locus.length) for locus in params.loci
+        )
+        if max_capacity > auto_vector_max_capacity:
+            return "generational"
+    return "generational-vector"
 
 
 def _numba_is_available() -> bool:
@@ -1785,6 +1794,10 @@ def build_engine_backend(
             (below) — never `"lineal"`, since no data yet characterizes
             where that boundary sits (see `auto_vector_min_d`'s own
             entry for why only the L-vs-V axis is automated so far).
+            `_resolve_auto_engine_backend` lists the conditions: V for
+            continuous migration when `numba` is importable and `d` is
+            large enough (and, for finite alleles, the capacity small
+            enough), otherwise G. The output is identical either way.
         jit: Whether the chosen backend should JIT-compile its own
             operators. Under `"generational"`, `"numba"` JIT-compiles
             `drift`'s own multinomial draw (`fim.model.operators.drift`'s
@@ -1864,8 +1877,11 @@ def build_engine_backend(
             `"auto"` uses alongside `auto_vector_min_d` — the largest
             capacity across every locus in `params.loci` must be at
             most this value, in addition to `d >= auto_vector_min_d`,
-            for `"auto"` to pick `"generational-vector"`; irrelevant,
-            and unused, under every other `engine_backend` value.
+            for `"auto"` to pick `"generational-vector"` — under
+            `mutation_model="finite_alleles"` only (an infinite-alleles
+            table is as wide as the alleles alive at once, not
+            `4 ** length`); irrelevant, and unused, under every other
+            `engine_backend` value.
             Defaults to `DEFAULT_AUTO_VECTOR_MAX_CAPACITY` (`4096`) —
             see that constant's own docstring for the measured finding
             behind it and the same cross-environment/cross-fix
@@ -1898,7 +1914,7 @@ def build_engine_backend(
         # branches below — never invents a third code path, just picks
         # which existing one applies.
         engine_backend = _resolve_auto_engine_backend(
-            params, auto_vector_min_d, auto_vector_max_capacity
+            params, auto_vector_min_d, auto_vector_max_capacity, jit
         )
     if engine_backend == "lineal":
         if jit != "off":
@@ -2187,7 +2203,9 @@ def fim(
             hardware.
         auto_vector_max_capacity: The per-locus capacity ceiling
             ``engine_backend="auto"`` uses alongside `auto_vector_min_d`
-            — ignored under every other `engine_backend` value. Left
+            under ``mutation_model="finite_alleles"`` — ignored under
+            infinite alleles and under every other `engine_backend`
+            value. Left
             unset (``None``, the default), falls back to `params.
             auto_vector_max_capacity` — see `DEFAULT_AUTO_VECTOR_MAX_
             CAPACITY`'s own docstring (`fim.model.params`) for the
@@ -2266,7 +2284,7 @@ def fim(
     # the feature unreachable for the great majority of real runs.
     resolved_engine_backend = (
         _resolve_auto_engine_backend(
-            params, auto_vector_min_d, auto_vector_max_capacity
+            params, auto_vector_min_d, auto_vector_max_capacity, jit
         )
         if engine_backend == "auto"
         else engine_backend

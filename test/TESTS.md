@@ -10251,8 +10251,9 @@ def test_loading_the_vector_example_runs_with_its_own_run_settings() -> None
 The run started from a loaded example uses that example's YAML, field for field.
 
 The reported defect: `a-large-d-batch-under-generational-vector`
-names `generational-vector`, which the starter model cannot use, so
-the saved run settings were judged invalid against the starter and
+names `generational-vector`, which the starter model could not use
+at the time (it ran finite alleles only), so the saved run settings
+were judged invalid against the starter and
 silently replaced by the starter's (200 replicates, derived window
 and cap, tolerance 0.01). Configure's form does not submit the run
 settings; the page adds the loaded configuration's own, which
@@ -15679,8 +15680,10 @@ def test_validate_run_settings_accepts_every_engine_backend_the_form_offers(
 
 Run defaults are judged on their own, not against the starter model.
 
-The starter uses infinite alleles, which `generational-vector` cannot
-run; judging defaults against it once rejected that backend outright.
+Whether a model can use a backend depends on the model
+(`generational-vector` refuses stochastic migrant counts, and once
+refused the starter's infinite alleles too); judging defaults against
+the starter once rejected that backend outright.
 
 <a id="gui.test_config_form.test_validate_run_settings_parses_text_as_a_submitted_form_would"></a>
 
@@ -26419,6 +26422,27 @@ def test_a_large_explicit_matrix_needs_explicit_values() -> None
 
 An explicit matrix beyond the eigenvalue route's size is refused.
 
+<a id="model.test_params.test_generational_vector_accepts_either_mutation_model"></a>
+
+#### test\_generational\_vector\_accepts\_either\_mutation\_model
+
+```python
+@pytest.mark.parametrize("model", ["infinite_alleles", "finite_alleles"])
+def test_generational_vector_accepts_either_mutation_model(model: str) -> None
+```
+
+Backend V runs both mutation models, so neither is rejected at load.
+
+<a id="model.test_params.test_generational_vector_rejects_stochastic_migrant_sampling"></a>
+
+#### test\_generational\_vector\_rejects\_stochastic\_migrant\_sampling
+
+```python
+def test_generational_vector_rejects_stochastic_migrant_sampling() -> None
+```
+
+The one thing V cannot do yet is refused up front, with the way out.
+
 <a id="model.test_params.test_validate_execution_settings_accepts_a_vector_backend_without_a_model"></a>
 
 #### test\_validate\_execution\_settings\_accepts\_a\_vector\_backend\_without\_a\_model
@@ -26430,8 +26454,8 @@ def test_validate_execution_settings_accepts_a_vector_backend_without_a_model(
 
 `generational-vector` is a valid execution default on its own.
 
-Whether a particular model can use it (finite alleles, continuous
-migrants) is decided when that complete configuration is validated.
+Whether a particular model can use it (continuous migrants only) is
+decided when that complete configuration is validated.
 
 <a id="model.test_params.test_validate_execution_settings_rejects_with_simulation_params_wording"></a>
 

@@ -956,8 +956,9 @@ def test_loading_the_vector_example_runs_with_its_own_run_settings() -> None:
     """The run started from a loaded example uses that example's YAML, field for field.
 
     The reported defect: `a-large-d-batch-under-generational-vector`
-    names `generational-vector`, which the starter model cannot use, so
-    the saved run settings were judged invalid against the starter and
+    names `generational-vector`, which the starter model could not use
+    at the time (it ran finite alleles only), so the saved run settings
+    were judged invalid against the starter and
     silently replaced by the starter's (200 replicates, derived window
     and cap, tolerance 0.01). Configure's form does not submit the run
     settings; the page adds the loaded configuration's own, which

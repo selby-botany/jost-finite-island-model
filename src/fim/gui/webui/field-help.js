@@ -132,16 +132,17 @@ const FIELD_HELP = {
     // all four options' one-line descriptions live in this one field
     // help string -- the same "one shared help string per field" shape
     // every other entry here uses. Results are identical whichever is
-    // picked (`lineal` and `generational` are bit-identical for a given
-    // seed; the two array-native choices give up only cross-machine
-    // bit-for-bit reproducibility), so the wording keeps the choice
-    // about speed, which is all it actually is.
+    // picked (all three are bit-identical for a given seed on one
+    // machine; the compiled array-native choice gives up only
+    // cross-machine bit-for-bit reproducibility), so the wording keeps
+    // the choice about speed, which is all it actually is.
     engine_backend: "Which engine runs the simulation. auto picks the " +
         "fastest for your configuration and is the recommended choice. " +
         "lineal is the single-threaded reference implementation; " +
         "generational is thread-parallel; generational-vector is " +
         "array-native and fastest for large configurations. Every choice " +
-        "computes the same statistics.",
+        "computes the same statistics, and on one machine gives the same " +
+        "results for the same seed.",
     n_replicates: "Number of independently seeded replicate runs. 1 means " +
         "a single ordinary run with no batching.",
     replicate_tolerance: "Stop the batch early once every watched " +
@@ -166,9 +167,11 @@ const FIELD_HELP = {
     auto_vector_min_d: "The deme-count threshold the auto engine uses to " +
         "prefer generational-vector over generational. Only meaningful " +
         "when the execution engine above is auto; ignored otherwise.",
-    auto_vector_max_capacity: "The N x d x loci capacity ceiling the auto " +
-        "engine uses to prefer generational-vector. Only meaningful " +
-        "when the execution engine above is auto; ignored otherwise.",
+    auto_vector_max_capacity: "The locus-capacity ceiling (4 to the power " +
+        "of the locus length) the auto engine uses to prefer " +
+        "generational-vector under finite alleles. Not used with " +
+        "infinite alleles. Only meaningful when the execution engine " +
+        "above is auto; ignored otherwise.",
     significant_digits: "How many digits every displayed statistic rounds " +
         "to. Cosmetic only — saved files always keep full precision.",
     dark_mode_override: "Follow system matches your OS's own light/dark " +

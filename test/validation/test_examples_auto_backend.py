@@ -11,29 +11,32 @@ Which comparison applies depends on the backend `auto` resolves to, read
 from the fresh run's own manifest, not predicted here:
 
 - **Same random stream: identical reports.** `auto` never resolves to
-  `lineal` (`fim.engine._resolve_auto_engine_backend`), but
-  `generational` with its default sequential advancer reproduces
-  `lineal` bit for bit for the same seed (`GenerationalBackend`'s own
-  docstring, checked by the golden-parity engine tests). That holds for
-  an adaptive batch (`replicate_tolerance` set) too: every backend
-  judges the adaptive stop on replicates in replicate order
-  (`fim.engine.run_batch`'s own docstring), so both keep the same
-  replicates. So a committed
-  `lineal` or `generational` output and a fresh `generational` run, or
-  two local `generational-vector` runs, must agree exactly. Archived
-  vector output is not bit-portable: BLAS reduction order can change
-  rounding across machines and flip a later discrete draw. Vector cases
-  therefore also run the configured backend locally for exact identity,
-  and use the existing statistical rule against the archived output.
-  Exact local identity is stronger
-  than the design's statistical rule and implies it, so it is the rule
-  used wherever it holds: a difference is a defect, never noise.
-- **Different random stream, single run: window means.**
-  `generational-vector` matches `lineal` only statistically
-  (`fim.model.vectorized`'s module docstring). For every watched
-  statistic (the configuration's `convergence_statistic`), the two
-  `report.json` `window_statistics` means must agree within
-  `3 * sqrt(se_L**2 + se_auto**2)`.
+  `lineal` (`fim.engine._resolve_auto_engine_backend`), but both
+  `generational` with its default sequential advancer and
+  `generational-vector` reproduce `lineal` bit for bit for the same seed,
+  under either mutation model (`GenerationalBackend`'s own docstring and
+  `fim.model.vector_block`, checked by the golden-parity engine tests and
+  `test/engine/test_vector_parity.py`). That holds for an adaptive batch
+  (`replicate_tolerance` set) too: every backend judges the adaptive stop
+  on replicates in replicate order (`fim.engine.run_batch`'s own
+  docstring), so all keep the same replicates. So a committed `lineal`
+  or `generational` output and a fresh `generational` or
+  `generational-vector` run must agree exactly, and so must two local
+  `generational-vector` runs. A committed *vector* output is the one
+  exception: it may have been archived by an older vector engine whose
+  random stream differed from `lineal`'s (it was statistically, not
+  bit-for-bit, equal to `lineal` before the compiled kernel replaced its
+  BLAS migration), or on another platform. Vector cases therefore also
+  run the configured backend locally for exact identity, and use the
+  statistical rule against the archived output until it is regenerated.
+  Exact local identity is stronger than the design's statistical rule and
+  implies it, so it is the rule used wherever it holds: a difference is a
+  defect, never noise.
+- **Different random stream, single run: window means.** Applies only
+  when a committed archive is on a different stream from the fresh run
+  (above). For every watched statistic (the configuration's
+  `convergence_statistic`), the two `report.json` `window_statistics`
+  means must agree within `3 * sqrt(se_L**2 + se_auto**2)`.
 - **Different random stream, batch: interval half-widths.** For every
   watched statistic, the two `summary.json` across-replicate means must
   agree within the sum of the two confidence-interval half-widths.
@@ -106,11 +109,13 @@ _RUNTIME_SECONDS: dict[str, int] = {
 _SLOW_SECONDS = 60
 
 # Backends whose runs draw the same random stream for the same seed, so
-# their outputs are identical (see the module docstring).
+# their outputs are identical (see the module docstring). Backend V joined
+# `lineal`'s stream when its kernel became bit-identical to Backends L and
+# G; an older archived vector output is handled separately in the test.
 _STREAM: dict[str, str] = {
     "lineal": "lineal",
     "generational": "lineal",
-    "generational-vector": "generational-vector",
+    "generational-vector": "lineal",
 }
 
 # A run ID digests the configuration, which differs in `engine_backend`.
@@ -399,8 +404,9 @@ def _write(path: Path, data: dict[str, Any]) -> None:
 def test_batch_rule_uses_the_sum_of_half_widths(tmp_path: Path) -> None:
     """A batch disagreement is a mean difference beyond both half-widths.
 
-    No example's `auto` run currently lands on a different random stream
-    as a batch, so the rule is checked here on synthetic summaries.
+    No example's `auto` run lands on a different random stream from a
+    committed non-vector archive as a batch, so the rule is checked here on
+    synthetic summaries.
     """
     committed, fresh = tmp_path / "l", tmp_path / "a"
     _write(committed / "summary.json", {"D": {"mean": 0.30, "half_width": 0.02}})
@@ -468,6 +474,17 @@ def test_scalar_rule_uses_three_combined_standard_errors(tmp_path: Path) -> None
     assert _compare_scalar_statistically(committed, fresh, ["D"]) == []
     _write(fresh / "report.json", {"D": 0.9, "window_statistics": {}})
     assert _compare_scalar_statistically(committed, fresh, ["D"])
+
+
+def test_every_backend_shares_the_lineal_random_stream() -> None:
+    """All three engines draw `lineal`'s stream, so identity is the rule.
+
+    Backend V's kernel reproduces the dictionary-based operators bit for
+    bit, so a committed `lineal` output against a fresh vector run is an
+    identity comparison. Were V mapped to a stream of its own, the
+    statistical rule would silently replace the stronger one.
+    """
+    assert set(_STREAM.values()) == {"lineal"}
 
 
 def test_every_example_has_a_recorded_runtime() -> None:
@@ -546,8 +563,10 @@ def test_example_on_auto_agrees_with_its_committed_output(
     if backend_l == backend_a == "generational-vector":
         reference = _run_example(example, tmp_path / "configured", backend=backend_l)
         local_problems = _compare_identical(reference, fresh)
-        # Same-host identity is mandatory; archived BLAS results instead
-        # satisfy the statistical contract used for different streams.
+        # Same-host identity is mandatory; an archived vector output may
+        # predate the exact kernel (a different stream) or come from
+        # another platform, so it satisfies the statistical contract used
+        # for different streams until it is regenerated.
         same_stream = False
 
     if same_stream:

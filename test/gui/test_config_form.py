@@ -1503,8 +1503,10 @@ def test_a_form_showing_auto_round_trips_through_the_params() -> None:
 def test_validate_run_settings_accepts_every_engine_backend_the_form_offers() -> None:
     """Run defaults are judged on their own, not against the starter model.
 
-    The starter uses infinite alleles, which `generational-vector` cannot
-    run; judging defaults against it once rejected that backend outright.
+    Whether a model can use a backend depends on the model
+    (`generational-vector` refuses stochastic migrant counts, and once
+    refused the starter's infinite alleles too); judging defaults against
+    the starter once rejected that backend outright.
     """
     for backend in ("lineal", "auto", "generational", "generational-vector"):
         config_form.validate_run_settings({"engine_backend": backend, "jit": "off"})

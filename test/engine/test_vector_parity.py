@@ -26,6 +26,7 @@ from vector_support import FINITE_CASES, INFINITE_CASES, loci, make_params
 
 pytest.importorskip("numba")
 
+from fim import engine
 from fim.engine import (
     RunResult,
     VectorizedAdvancer,
@@ -450,3 +451,35 @@ def test_finite_alleles_jsonl_trajectory_file_is_byte_identical(
         )
         assert isinstance(output, RunResult)
     assert paths["lineal"].read_bytes() == paths["generational-vector"].read_bytes()
+
+
+@pytest.mark.parametrize("name", ["multi-locus with migration", "migration matrix"])
+def test_auto_resolves_to_vector_and_matches_lineal(name: str) -> None:
+    """`engine_backend: auto` picks V for infinite alleles, and nothing changes.
+
+    The manifest records the resolved backend; every other part of the
+    output equals Backend L's, which is why `auto` may choose V whenever it
+    is eligible.
+    """
+    params = INFINITE_CASES[name](30)
+    auto_store = InMemoryTrajectoryStore()
+    auto = _run(params, "auto", auto_store)
+    lineal_store = InMemoryTrajectoryStore()
+    lineal = _run(params, "lineal", lineal_store)
+    assert auto[0].manifest.engine_backend == "generational-vector"
+    _assert_identical(auto, auto_store, lineal, lineal_store)
+
+
+def test_auto_without_numba_falls_back_to_generational_with_identical_output(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """With numba missing `auto` runs G, and the output is the same as V's."""
+    params = INFINITE_CASES["multi-locus with migration"](30)
+    vector_store = InMemoryTrajectoryStore()
+    vector = _run(params, "auto", vector_store)
+    assert vector[0].manifest.engine_backend == "generational-vector"
+    monkeypatch.setattr(engine, "_numba_is_available", lambda: False)
+    fallback_store = InMemoryTrajectoryStore()
+    fallback = _run(params, "auto", fallback_store)
+    assert fallback[0].manifest.engine_backend == "generational"
+    _assert_identical(vector, vector_store, fallback, fallback_store)
