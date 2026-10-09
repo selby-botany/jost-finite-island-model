@@ -33,6 +33,7 @@ from typing import Any
 
 import numpy as np
 
+from fim.model.state import ModelState
 from fim.persistence.store import TrajectoryRow, normalize_row
 
 UNKNOWN_DEME_SIZE = 0
@@ -352,4 +353,63 @@ def layout_for_sizes(
     return FrameLayout(
         locus_ids=tuple(int(x) for x in locus_ids),
         deme_sizes=tuple(int(x) for x in deme_sizes),
+    )
+
+
+def layout_for_state(
+    state: ModelState, deme_sizes: Sequence[int] | None = None
+) -> FrameLayout:
+    """Return the layout of a `ModelState`'s frames.
+
+    Args:
+        state: Any generation of the run.
+        deme_sizes: Gene copies per deme, when known; otherwise every deme
+            is `UNKNOWN_DEME_SIZE`.
+
+    Returns:
+        The layout: the state's locus identifiers in order, and the sizes.
+
+    Raises:
+        ValueError: If `deme_sizes` does not have one entry per deme.
+    """
+    if deme_sizes is None:
+        deme_sizes = (UNKNOWN_DEME_SIZE,) * state.deme_count
+    elif len(deme_sizes) != state.deme_count:
+        raise ValueError("deme_sizes must have one entry per deme")
+    return layout_for_sizes([locus.locus_id for locus in state.loci], deme_sizes)
+
+
+def state_to_frame(state: ModelState) -> TrajectoryFrame:
+    """Return a `ModelState`'s generation as a frame, without building rows.
+
+    The entries are in `ModelState.to_rows` order (deme-major, then locus,
+    then the frequency map's own order), so `frame_to_rows` of the result
+    equals `to_rows`. Backends L and G hold dictionaries, so this walks them
+    once in Python; Backend V builds its frame with a compiled call
+    (`VectorBlock.frame`).
+
+    Args:
+        state: The generation.
+
+    Returns:
+        The frame, numbered with the state's generation.
+
+    Raises:
+        ValueError: If the state has no allele at all.
+    """
+    counts: list[int] = []
+    allele_ids: list[int] = []
+    frequencies: list[float] = []
+    for deme in state.frequencies:
+        for frequency_map in deme:
+            counts.append(len(frequency_map))
+            allele_ids.extend(int(allele_id) for allele_id in frequency_map)
+            frequencies.extend(frequency_map.values())
+    if not allele_ids:
+        raise ValueError("a generation must contain at least one row")
+    return TrajectoryFrame(
+        generation=state.generation,
+        counts=np.asarray(counts, dtype=np.int32),
+        allele_ids=np.asarray(allele_ids, dtype=np.int64),
+        frequencies=np.asarray(frequencies, dtype=np.float64),
     )

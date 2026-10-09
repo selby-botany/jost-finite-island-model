@@ -504,6 +504,8 @@ Return to the [source-tree orientation](../README.md) or the [developer guide](.
     * [advance](#fim.model.vector_block.VectorBlock.advance)
     * [minted\_states](#fim.model.vector_block.VectorBlock.minted_states)
     * [present\_entries](#fim.model.vector_block.VectorBlock.present_entries)
+    * [frame](#fim.model.vector_block.VectorBlock.frame)
+    * [frame\_layout](#fim.model.vector_block.VectorBlock.frame_layout)
     * [rows](#fim.model.vector_block.VectorBlock.rows)
     * [frequency\_maps](#fim.model.vector_block.VectorBlock.frequency_maps)
     * [locus\_statistics](#fim.model.vector_block.VectorBlock.locus_statistics)
@@ -521,6 +523,7 @@ Return to the [source-tree orientation](../README.md) or the [developer guide](.
   * [run\_generation](#fim.model.vector_kernels.run_generation)
   * [locus\_statistics](#fim.model.vector_kernels.locus_statistics)
   * [present\_entries](#fim.model.vector_kernels.present_entries)
+  * [extract\_csr](#fim.model.vector_kernels.extract_csr)
 * [fim.model.vectorized](#fim.model.vectorized)
   * [VectorizedLocusState](#fim.model.vectorized.VectorizedLocusState)
     * [frequencies](#fim.model.vectorized.VectorizedLocusState.frequencies)
@@ -572,6 +575,8 @@ Return to the [source-tree orientation](../README.md) or the [developer guide](.
   * [rows\_to\_frame](#fim.persistence.frame.rows_to_frame)
   * [validate\_frame](#fim.persistence.frame.validate_frame)
   * [layout\_for\_sizes](#fim.persistence.frame.layout_for_sizes)
+  * [layout\_for\_state](#fim.persistence.frame.layout_for_state)
+  * [state\_to\_frame](#fim.persistence.frame.state_to_frame)
 * [fim.persistence.groups](#fim.persistence.groups)
   * [ReadOnlyError](#fim.persistence.groups.ReadOnlyError)
   * [is\_run\_read\_only](#fim.persistence.groups.is_run_read_only)
@@ -14945,6 +14950,30 @@ Return `(deme, locus_id, allele_id, frequency)` arrays of present alleles.
 In `ModelState.to_rows` order: deme-major, then locus, then
 ascending allele id. Demes are one-based.
 
+<a id="fim.model.vector_block.VectorBlock.frame"></a>
+
+#### frame
+
+```python
+def frame() -> TrajectoryFrame
+```
+
+Return the generation as a `TrajectoryFrame`.
+
+The same entries, in the same order, as `rows`, but built by one
+compiled call with no object per row, so it costs a small fraction
+of `rows`.
+
+<a id="fim.model.vector_block.VectorBlock.frame_layout"></a>
+
+#### frame\_layout
+
+```python
+def frame_layout() -> FrameLayout
+```
+
+Return the layout `frame` uses: locus identifiers and deme sizes.
+
 <a id="fim.model.vector_block.VectorBlock.rows"></a>
 
 #### rows
@@ -15358,6 +15387,35 @@ order `ModelState.to_rows` writes.
 
   Four equal-length arrays: one-based deme, `locus_id`, allele id
   and frequency.
+
+<a id="fim.model.vector_kernels.extract_csr"></a>
+
+#### extract\_csr
+
+```python
+@numba.njit(cache=True, nogil=True)
+def extract_csr(freq, ids, ncol)
+```
+
+List every present allele frequency as a compressed-sparse-row frame.
+
+The same entries, in the same order, as `present_entries` (pair-major:
+deme-major, then locus, then ascending allele id), but as the flat
+arrays a `TrajectoryFrame` holds: one count per (deme, locus) pair and
+the allele ids and frequencies of all pairs end to end. No Python
+object is created per row.
+
+**Arguments**:
+
+- `freq` - `(loci, demes, width)` frequencies.
+- `ids` - `(loci, width)` allele id of each column.
+- `ncol` - Live columns per locus.
+
+
+**Returns**:
+
+  `(counts, allele_ids, frequencies)`: `int32[demes * loci]`,
+  `int64[entries]` and `float64[entries]`.
 
 <a id="fim.model.vectorized"></a>
 
@@ -16860,6 +16918,63 @@ Build a layout from plain sequences.
 **Returns**:
 
   The layout.
+
+<a id="fim.persistence.frame.layout_for_state"></a>
+
+#### layout\_for\_state
+
+```python
+def layout_for_state(state: ModelState,
+                     deme_sizes: Sequence[int] | None = None) -> FrameLayout
+```
+
+Return the layout of a `ModelState`'s frames.
+
+**Arguments**:
+
+- `state` - Any generation of the run.
+- `deme_sizes` - Gene copies per deme, when known; otherwise every deme
+  is `UNKNOWN_DEME_SIZE`.
+
+
+**Returns**:
+
+  The layout: the state's locus identifiers in order, and the sizes.
+
+
+**Raises**:
+
+- `ValueError` - If `deme_sizes` does not have one entry per deme.
+
+<a id="fim.persistence.frame.state_to_frame"></a>
+
+#### state\_to\_frame
+
+```python
+def state_to_frame(state: ModelState) -> TrajectoryFrame
+```
+
+Return a `ModelState`'s generation as a frame, without building rows.
+
+The entries are in `ModelState.to_rows` order (deme-major, then locus,
+then the frequency map's own order), so `frame_to_rows` of the result
+equals `to_rows`. Backends L and G hold dictionaries, so this walks them
+once in Python; Backend V builds its frame with a compiled call
+(`VectorBlock.frame`).
+
+**Arguments**:
+
+- `state` - The generation.
+
+
+**Returns**:
+
+  The frame, numbered with the state's generation.
+
+
+**Raises**:
+
+- `ValueError` - If the state has no allele at all.
 
 <a id="fim.persistence.groups"></a>
 

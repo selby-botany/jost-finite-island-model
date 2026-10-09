@@ -49,6 +49,7 @@ from fim.model.vector_block import (
     estimated_block_bytes,
     resolve_memory_ceiling,
 )
+from fim.persistence.frame import frame_to_rows, rows_to_frame
 
 PARITY_GENERATIONS = 60
 
@@ -166,6 +167,44 @@ def test_block_matches_operators_after_compaction_and_growth_together() -> None:
     """High mutation and low drift: columns grow, die, and grow again."""
     params = make_params(150, loci=loci(2), gene_copies=60, mu=0.3, m=0.2, d=4)
     _assert_block_follows_operators(params, 150)
+
+
+@pytest.mark.parametrize(
+    "case",
+    [
+        INFINITE_CASES["multi-locus with migration"],
+        INFINITE_CASES["migration matrix"],
+        FINITE_CASES["finite, 16 states"],
+        INFINITE_CASES["unequal deme sizes"],
+    ],
+)
+def test_frame_is_the_rows_in_flat_form_every_generation(
+    case: Callable[[int], SimulationParams],
+) -> None:
+    """`frame()` carries exactly the entries `rows()` lists, in the same order.
+
+    Checked at generation zero and after every step, through both the
+    block's own layout and a frame rebuilt from the rows, so the compiled
+    extractor, `frame_to_rows` and `rows_to_frame` all have to agree.
+    """
+    params = case(30)
+    state, registry = _generation_zero(params)
+    block = _block_for(params, state, registry)
+    rng = np.random.Generator(np.random.PCG64(params.seed))
+    generate_initial_state(params, rng)
+    layout = block.frame_layout()
+    assert layout.deme_sizes == tuple(params.population_sizes)
+    assert layout.locus_ids == tuple(locus.locus_id for locus in params.loci)
+    for generation in range(31):
+        frame = block.frame()
+        rows = block.rows("run")
+        assert frame.generation == generation
+        assert frame_to_rows(frame, layout, "run") == rows
+        rebuilt = rows_to_frame(rows, layout, run_id="run", generation=generation)
+        assert rebuilt.counts.tolist() == frame.counts.tolist()
+        assert rebuilt.allele_ids.tolist() == frame.allele_ids.tolist()
+        assert rebuilt.frequencies.tolist() == frame.frequencies.tolist()
+        block.advance(rng)
 
 
 def _assert_layout(block: VectorBlock) -> None:

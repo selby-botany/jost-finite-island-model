@@ -27554,6 +27554,30 @@ def test_block_matches_operators_after_compaction_and_growth_together(
 
 High mutation and low drift: columns grow, die, and grow again.
 
+<a id="model.test_vector_block.test_frame_is_the_rows_in_flat_form_every_generation"></a>
+
+#### test\_frame\_is\_the\_rows\_in\_flat\_form\_every\_generation
+
+```python
+@pytest.mark.parametrize(
+    "case",
+    [
+        INFINITE_CASES["multi-locus with migration"],
+        INFINITE_CASES["migration matrix"],
+        FINITE_CASES["finite, 16 states"],
+        INFINITE_CASES["unequal deme sizes"],
+    ],
+)
+def test_frame_is_the_rows_in_flat_form_every_generation(
+        case: Callable[[int], SimulationParams]) -> None
+```
+
+`frame()` carries exactly the entries `rows()` lists, in the same order.
+
+Checked at generation zero and after every step, through both the
+block's own layout and a frame rebuilt from the rows, so the compiled
+extractor, `frame_to_rows` and `rows_to_frame` all have to agree.
+
 <a id="model.test_vector_block.test_layout_invariants_hold_after_every_generation"></a>
 
 #### test\_layout\_invariants\_hold\_after\_every\_generation
@@ -28600,6 +28624,16 @@ def test_a_real_initial_state_survives_the_round_trip() -> None
 ```
 
 Frames carry a generated generation zero exactly, ids and float bits.
+
+<a id="persistence.test_frame.test_state_to_frame_equals_to_rows_for_every_generation_of_a_run"></a>
+
+#### test\_state\_to\_frame\_equals\_to\_rows\_for\_every\_generation\_of\_a\_run
+
+```python
+def test_state_to_frame_equals_to_rows_for_every_generation_of_a_run() -> None
+```
+
+Backends L and G hand over `ModelState`; its frame must equal its rows.
 
 <a id="persistence.test_groups"></a>
 

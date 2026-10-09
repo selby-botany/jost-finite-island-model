@@ -1039,3 +1039,47 @@ def present_entries(freq, ids, ncol, locus_ids):
                     freq_out[at] = value
                     at += 1
     return deme_out, locus_out, allele_out, freq_out
+
+
+@numba.njit(cache=True, nogil=True)
+def extract_csr(freq, ids, ncol):
+    """List every present allele frequency as a compressed-sparse-row frame.
+
+    The same entries, in the same order, as `present_entries` (pair-major:
+    deme-major, then locus, then ascending allele id), but as the flat
+    arrays a `TrajectoryFrame` holds: one count per (deme, locus) pair and
+    the allele ids and frequencies of all pairs end to end. No Python
+    object is created per row.
+
+    Args:
+        freq: `(loci, demes, width)` frequencies.
+        ids: `(loci, width)` allele id of each column.
+        ncol: Live columns per locus.
+
+    Returns:
+        `(counts, allele_ids, frequencies)`: `int32[demes * loci]`,
+        `int64[entries]` and `float64[entries]`.
+    """
+    loci, demes, _ = freq.shape
+    counts = np.zeros(demes * loci, dtype=np.int32)
+    total = 0
+    for i in range(demes):
+        for locus in range(loci):
+            n = 0
+            for c in range(ncol[locus]):
+                if freq[locus, i, c] > 0.0:
+                    n += 1
+            counts[i * loci + locus] = n
+            total += n
+    allele_out = np.empty(total, dtype=np.int64)
+    freq_out = np.empty(total, dtype=np.float64)
+    at = 0
+    for i in range(demes):
+        for locus in range(loci):
+            for c in range(ncol[locus]):
+                value = freq[locus, i, c]
+                if value > 0.0:
+                    allele_out[at] = ids[locus, c]
+                    freq_out[at] = value
+                    at += 1
+    return counts, allele_out, freq_out

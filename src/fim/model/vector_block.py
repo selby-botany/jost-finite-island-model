@@ -48,6 +48,7 @@ import numpy as np
 from fim.model.allele import AlleleId, AlleleRegistry
 from fim.model.locus import LocusSpec, finite_allele_capacity
 from fim.model.state import ModelState
+from fim.persistence.frame import FrameLayout, TrajectoryFrame
 
 MIGRATION_NONE: Final = 0
 """Migration kind: no blending (a zero rate, or a single deme)."""
@@ -698,6 +699,30 @@ class VectorBlock:
         """
         return tuple(
             kernels().present_entries(self.freq, self.ids, self.ncol, self._locus_ids)
+        )
+
+    def frame(self) -> TrajectoryFrame:
+        """Return the generation as a `TrajectoryFrame`.
+
+        The same entries, in the same order, as `rows`, but built by one
+        compiled call with no object per row, so it costs a small fraction
+        of `rows`.
+        """
+        counts, allele_ids, frequencies = kernels().extract_csr(
+            self.freq, self.ids, self.ncol
+        )
+        return TrajectoryFrame(
+            generation=self.generation,
+            counts=counts,
+            allele_ids=allele_ids,
+            frequencies=frequencies,
+        )
+
+    def frame_layout(self) -> FrameLayout:
+        """Return the layout `frame` uses: locus identifiers and deme sizes."""
+        return FrameLayout(
+            locus_ids=tuple(int(x) for x in self._locus_ids),
+            deme_sizes=tuple(int(x) for x in self.sizes),
         )
 
     def rows(self, run_id: str) -> list[dict[str, int | float | str]]:

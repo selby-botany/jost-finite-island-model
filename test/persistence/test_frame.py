@@ -11,6 +11,7 @@ from __future__ import annotations
 import numpy as np
 import pytest
 
+from fim.engine import fim
 from fim.model.initial import generate_initial_state
 from fim.model.locus import LocusSpec
 from fim.model.params import SimulationParams
@@ -20,9 +21,12 @@ from fim.persistence.frame import (
     TrajectoryFrame,
     frame_to_rows,
     layout_for_sizes,
+    layout_for_state,
     rows_to_frame,
+    state_to_frame,
     validate_frame,
 )
+from fim.persistence.store import InMemoryTrajectoryStore
 
 RUN_ID = "run-frame"
 
@@ -242,3 +246,41 @@ def test_a_real_initial_state_survives_the_round_trip() -> None:
     rows = state.to_rows(RUN_ID)
     frame = rows_to_frame(rows, layout, run_id=RUN_ID, generation=0)
     assert frame_to_rows(frame, layout, RUN_ID) == rows
+
+
+def test_state_to_frame_equals_to_rows_for_every_generation_of_a_run() -> None:
+    """Backends L and G hand over `ModelState`; its frame must equal its rows."""
+    params = SimulationParams(
+        gene_copies=(30, 40),
+        m=0.2,
+        mu=0.05,
+        d=2,
+        seed=11,
+        loci=tuple(LocusSpec(i + 1, 50) for i in range(3)),
+        initial_allele_count=2,
+        convergence_window=4,
+        convergence_tolerance=1e-12,
+        max_generations=20,
+        n_replicates=1,
+        replicate_tolerance=None,
+    )
+    store = InMemoryTrajectoryStore()
+    result = fim(
+        params.gene_copies,
+        params.m,
+        params.mu,
+        params.d,
+        params=params,
+        store=store,
+        run_id=RUN_ID,
+    )
+    assert not isinstance(result, tuple)
+    state = result.final_state
+    layout = layout_for_state(state, (30, 40))
+    assert layout.deme_sizes == (30, 40)
+    frame = state_to_frame(state)
+    assert frame.generation == state.generation
+    assert frame_to_rows(frame, layout, RUN_ID) == state.to_rows(RUN_ID)
+    with pytest.raises(ValueError, match="one entry per deme"):
+        layout_for_state(state, (30,))
+    assert layout_for_state(state).deme_sizes == (UNKNOWN_DEME_SIZE,) * 2
