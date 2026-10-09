@@ -480,6 +480,8 @@ Return to the [source-tree orientation](../README.md) or the [developer guide](.
   * [MIGRATION\_NONE](#fim.model.vector_block.MIGRATION_NONE)
   * [MIGRATION\_SCALAR](#fim.model.vector_block.MIGRATION_SCALAR)
   * [MIGRATION\_MATRIX](#fim.model.vector_block.MIGRATION_MATRIX)
+  * [MIGRATION\_SCALAR\_STOCHASTIC](#fim.model.vector_block.MIGRATION_SCALAR_STOCHASTIC)
+  * [MIGRATION\_MATRIX\_STOCHASTIC](#fim.model.vector_block.MIGRATION_MATRIX_STOCHASTIC)
   * [MINIMUM\_WIDTH](#fim.model.vector_block.MINIMUM_WIDTH)
   * [SHRINK\_CHECK\_INTERVAL](#fim.model.vector_block.SHRINK_CHECK_INTERVAL)
   * [SHRINK\_FACTOR](#fim.model.vector_block.SHRINK_FACTOR)
@@ -14522,6 +14524,18 @@ Migration kind: one rate, every other deme in the pool (continuous).
 
 Migration kind: a full row-stochastic source-weight matrix (continuous).
 
+<a id="fim.model.vector_block.MIGRATION_SCALAR_STOCHASTIC"></a>
+
+#### MIGRATION\_SCALAR\_STOCHASTIC
+
+Migration kind: `MIGRATION_SCALAR` with a drawn migrant count per deme.
+
+<a id="fim.model.vector_block.MIGRATION_MATRIX_STOCHASTIC"></a>
+
+#### MIGRATION\_MATRIX\_STOCHASTIC
+
+Migration kind: `MIGRATION_MATRIX` with a drawn migrant count per deme.
+
 <a id="fim.model.vector_block.MINIMUM_WIDTH"></a>
 
 #### MINIMUM\_WIDTH
@@ -14584,14 +14598,17 @@ How one generation's migration step runs inside the kernel.
 
 **Arguments**:
 
-- `kind` - `MIGRATION_NONE`, `MIGRATION_SCALAR` or `MIGRATION_MATRIX`.
-- `rate` - The scalar migration rate (scalar kind).
+- `kind` - `MIGRATION_NONE`, `MIGRATION_SCALAR`, `MIGRATION_MATRIX`,
+  `MIGRATION_SCALAR_STOCHASTIC` or `MIGRATION_MATRIX_STOCHASTIC`.
+- `rate` - The scalar migration rate (scalar kinds).
 - `weights` - The `(demes, demes)` row-stochastic source-weight matrix
-  (matrix kind); an empty `(0, 0)` array otherwise.
+  (matrix kinds); an empty `(0, 0)` array otherwise.
 
-  A stochastic-migrant-count kind is a planned extension: it adds one
-  kind value and one draw per destination deme to the kernel's migration
-  step, and changes nothing here or in the rest of the generation.
+  The stochastic kinds (`migrant_sampling: stochastic`) draw one
+  binomial migrant count per destination deme per generation, shared by
+  every locus, before any locus is blended. The migrant pool itself
+  stays the deterministic weighted average of the other demes, exactly
+  as `fim.model.operators.migrate` does with a generator.
 
 <a id="fim.model.vector_block.VectorMigration.from_parameter"></a>
 
@@ -14599,8 +14616,11 @@ How one generation's migration step runs inside the kernel.
 
 ```python
 @classmethod
-def from_parameter(cls, migration: float | Sequence[Sequence[float]],
-                   deme_count: int) -> VectorMigration
+def from_parameter(cls,
+                   migration: float | Sequence[Sequence[float]],
+                   deme_count: int,
+                   *,
+                   stochastic: bool = False) -> VectorMigration
 ```
 
 Build the plan for a `SimulationParams.m` value.
@@ -14609,14 +14629,16 @@ Build the plan for a `SimulationParams.m` value.
 
 - `migration` - A scalar rate or a full migration matrix.
 - `deme_count` - The number of demes.
+- `stochastic` - Whether `migrant_sampling` is `"stochastic"`.
 
 
 **Returns**:
 
   The matching plan. A scalar rate of zero, or a single deme,
-  blends nothing, exactly as `operators.migrate` returns the
-  state unchanged in those cases. A matrix always blends, even
-  an identity one, because `operators` normalizes its rows.
+  blends nothing and draws nothing, exactly as
+  `operators.migrate` returns the state unchanged in those
+  cases, whatever the sampling. A matrix always blends, even an
+  identity one, because `operators` normalizes its rows.
 
 <a id="fim.model.vector_block.kernels"></a>
 
@@ -15259,7 +15281,7 @@ call `mint_columns`.
 - `mus` - Per-copy mutation probability per locus.
 - `mutants` - `(loci, demes)` output, mutant copies per pair.
 - `rng` - The run's `numpy.random.Generator`.
-- `kind` - `MIGRATION_NONE`, `MIGRATION_SCALAR` or `MIGRATION_MATRIX`.
+- `kind` - A `MIGRATION_*` kind (see `fim.model.vector_block`).
 - `rate` - Scalar migration rate.
 - `weights` - Migration matrix (a `(0, 0)` array when unused).
 - `rate_class` - `(loci,)` int64, the row of `mode_cache` a locus's

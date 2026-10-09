@@ -51,21 +51,27 @@ import math
 import numba
 import numpy as np
 
-from fim.model.vector_block import MIGRATION_MATRIX, MIGRATION_SCALAR
+from fim.model.vector_block import (
+    MIGRATION_MATRIX,
+    MIGRATION_MATRIX_STOCHASTIC,
+    MIGRATION_SCALAR,
+    MIGRATION_SCALAR_STOCHASTIC,
+)
 
-# Migration is two phases, so `migrant_sampling: stochastic` (a follow-up,
-# designed in the stochastic-migration sketch) needs no restructuring:
+# Migration is two phases, so continuous and stochastic sampling share a
+# blend:
 #
 # 1. `_draw_migrant_fractions` fills one migrant fraction per destination
 #    deme. Continuous sampling fills every fraction with the migration
-#    rate and draws nothing. Stochastic sampling will draw one
+#    rate and draws nothing. Stochastic sampling draws one
 #    inversion-binomial count per destination, in ascending deme order,
 #    before any locus is blended (`operators._migrant_fraction`), and
-#    store `count / size`.
+#    stores `count / size`. The count is shared by every locus.
 # 2. `_blend_scalar` blends every locus with the per-deme fractions it was
-#    given, drawing nothing. A matrix needs its own blend (the stochastic
-#    and continuous matrix arithmetic differ), added beside
-#    `_blend_matrix`.
+#    given, drawing nothing. A stochastic matrix needs its own blend
+#    (`_blend_matrix_stochastic`): its arithmetic differs from the
+#    continuous matrix blend, because the pool excludes the destination's
+#    own weight and is divided by the row's migrant weight.
 
 STATISTIC_COLUMNS = 5
 """Columns of the per-locus statistics table: H_S, H_T, H_ST, G_ST, D."""
@@ -378,24 +384,45 @@ def _normalize_row(row, count, probs, partials):
 
 
 @numba.njit(cache=True, nogil=True)
-def _draw_migrant_fractions(rng, kind, rate, fractions):  # noqa: ARG001
+def _draw_migrant_fractions(rng, kind, rate, weights, sizes, fractions, pmf):
     """Fill the per-destination migrant fractions for this generation.
 
     The draw phase of migration. Continuous sampling uses the migration
     rate itself for every destination and consumes no random number, so
-    the generator stream is untouched. (`rng` is unused today; it is the
-    argument the stochastic draw will consume.)
+    the generator stream is untouched. Stochastic sampling draws
+    `Binomial(size, p) / size` for each destination in ascending deme
+    order, with `p` the scalar rate or, for a matrix, the row's migrant
+    weight `1 - weights[i, i]`; `operators._migrant_fraction` does the
+    same through `_inversion_binomial`, which takes one uniform for a real
+    draw and none when `size <= 0`, `p <= 0` or `p >= 1`. A matrix row
+    with no migrant weight (`p <= 0`) is not drawn for and its fraction
+    stays `0.0`; the blend copies that row unchanged.
 
     Args:
         rng: The run's `numpy.random.Generator`.
-        kind: `MIGRATION_NONE`, `MIGRATION_SCALAR` or `MIGRATION_MATRIX`.
-        rate: The scalar migration rate (scalar kind).
+        kind: A `MIGRATION_*` kind.
+        rate: The scalar migration rate (scalar kinds).
+        weights: The migration matrix (matrix kinds).
+        sizes: Gene copies per deme.
         fractions: `(demes,)` output, the fraction of each destination
             deme's gene copies replaced by the migrant pool.
+        pmf: Scratch of length at least `max(sizes) + 1`.
     """
+    demes = fractions.shape[0]
     if kind == MIGRATION_SCALAR:
-        for i in range(fractions.shape[0]):
+        for i in range(demes):
             fractions[i] = rate
+    elif kind == MIGRATION_SCALAR_STOCHASTIC:
+        for i in range(demes):
+            fractions[i] = inversion_binomial(rng, sizes[i], rate, pmf) / sizes[i]
+    elif kind == MIGRATION_MATRIX_STOCHASTIC:
+        for i in range(demes):
+            migrant_weight = 1.0 - weights[i, i]
+            if migrant_weight > 0.0:
+                count = inversion_binomial(rng, sizes[i], migrant_weight, pmf)
+                fractions[i] = count / sizes[i]
+            else:
+                fractions[i] = 0.0
 
 
 @numba.njit(cache=True, nogil=True)
@@ -478,6 +505,71 @@ def _blend_matrix(freq, ncol, weights, probs, partials, mass, blended):
             _normalize_row(mass, nc, probs, partials)
             for c in range(nc):
                 blended[i * width + c] = mass[c]
+        for i in range(demes):
+            for c in range(nc):
+                freq[locus, i, c] = blended[i * width + c]
+
+
+@numba.njit(cache=True, nogil=True)
+def _blend_matrix_stochastic(
+    freq, ncol, weights, fractions, probs, partials, mass, blended
+):
+    """Blend every deme from a migration matrix with drawn migrant fractions.
+
+    `operators._migrate_matrix` with a random generator, after the counts
+    are drawn: for each destination `i` with migrant weight
+    `1 - weights[i, i] > 0`, the pool of an allele is the exactly rounded
+    sum (`math.fsum`) of `weights[i, j] * freq[j]` over the other demes
+    `j != i`, divided by the migrant weight and not clamped; the row is
+    `(1 - f) * local + f * pool` with the destination's drawn fraction
+    `f`, divided by the exactly rounded sum of its positive entries. A
+    row with no migrant weight is copied unchanged and not normalized.
+
+    When `f == 0.0` the blend is exactly `local` (`1.0 * local + 0.0 *
+    pool`), so the pool is not computed; the row is still normalized.
+
+    Args:
+        freq: `(loci, demes, width)` frequencies, updated in place.
+        ncol: Live columns per locus.
+        weights: `(demes, demes)` row-stochastic source-weight matrix.
+        fractions: `(demes,)` migrant fraction per destination deme.
+        probs: Scratch of length at least `width`.
+        partials: Scratch of length at least `width + 1`.
+        mass: Scratch of length at least `width`.
+        blended: Scratch of length at least `demes * width`.
+    """
+    loci, demes, width = freq.shape
+    terms = np.empty(demes, dtype=np.float64)
+    term_partials = np.empty(demes + 1, dtype=np.float64)
+    for locus in range(loci):
+        nc = ncol[locus]
+        # Every destination reads the pre-migration sources, so the
+        # blended rows are collected first and written back after.
+        for i in range(demes):
+            migrant_weight = 1.0 - weights[i, i]
+            fraction = fractions[i]
+            base = i * width
+            if migrant_weight <= 0.0:
+                for c in range(nc):
+                    blended[base + c] = freq[locus, i, c]
+                continue
+            for c in range(nc):
+                local = freq[locus, i, c]
+                if fraction == 0.0:
+                    blended[base + c] = local
+                    continue
+                used = 0
+                for j in range(demes):
+                    if j != i:
+                        terms[used] = weights[i, j] * freq[locus, j, c]
+                        used += 1
+                pool = exact_sum(terms, used, term_partials) / migrant_weight
+                blended[base + c] = (1.0 - fraction) * local + fraction * pool
+            for c in range(nc):
+                mass[c] = blended[base + c]
+            _normalize_row(mass, nc, probs, partials)
+            for c in range(nc):
+                blended[base + c] = mass[c]
         for i in range(demes):
             for c in range(nc):
                 freq[locus, i, c] = blended[i * width + c]
@@ -768,7 +860,7 @@ def run_generation(
         mus: Per-copy mutation probability per locus.
         mutants: `(loci, demes)` output, mutant copies per pair.
         rng: The run's `numpy.random.Generator`.
-        kind: `MIGRATION_NONE`, `MIGRATION_SCALAR` or `MIGRATION_MATRIX`.
+        kind: A `MIGRATION_*` kind (see `fim.model.vector_block`).
         rate: Scalar migration rate.
         weights: Migration matrix (a `(0, 0)` array when unused).
         rate_class: `(loci,)` int64, the row of `mode_cache` a locus's
@@ -800,13 +892,18 @@ def run_generation(
     taken = np.empty(width, dtype=np.int64)
 
     # Migration runs for every locus before drift, as `operators.step`
-    # does; under continuous sampling it draws no random number.
+    # does; under continuous sampling it draws no random number, and
+    # under stochastic sampling its draws form one block ahead of drift.
     fractions = np.zeros(demes, dtype=np.float64)
-    _draw_migrant_fractions(rng, kind, rate, fractions)
-    if kind == MIGRATION_SCALAR:
+    _draw_migrant_fractions(rng, kind, rate, weights, sizes, fractions, pmf)
+    if kind in (MIGRATION_SCALAR, MIGRATION_SCALAR_STOCHASTIC):
         _blend_scalar(freq, ncol, sizes, fractions, probs, partials, mass, blended)
     elif kind == MIGRATION_MATRIX:
         _blend_matrix(freq, ncol, weights, probs, partials, mass, blended)
+    elif kind == MIGRATION_MATRIX_STOCHASTIC:
+        _blend_matrix_stochastic(
+            freq, ncol, weights, fractions, probs, partials, mass, blended
+        )
     _drift(freq, counts, ncol, sizes, rng, probs, cols, pmf)
     failed = _mutate(
         counts,

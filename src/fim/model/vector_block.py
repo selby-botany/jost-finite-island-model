@@ -58,6 +58,12 @@ MIGRATION_SCALAR: Final = 1
 MIGRATION_MATRIX: Final = 2
 """Migration kind: a full row-stochastic source-weight matrix (continuous)."""
 
+MIGRATION_SCALAR_STOCHASTIC: Final = 3
+"""Migration kind: `MIGRATION_SCALAR` with a drawn migrant count per deme."""
+
+MIGRATION_MATRIX_STOCHASTIC: Final = 4
+"""Migration kind: `MIGRATION_MATRIX` with a drawn migrant count per deme."""
+
 MINIMUM_WIDTH: Final = 8
 """The fewest columns an infinite-alleles block is ever given."""
 
@@ -97,14 +103,17 @@ class VectorMigration:
     """How one generation's migration step runs inside the kernel.
 
     Args:
-        kind: `MIGRATION_NONE`, `MIGRATION_SCALAR` or `MIGRATION_MATRIX`.
-        rate: The scalar migration rate (scalar kind).
+        kind: `MIGRATION_NONE`, `MIGRATION_SCALAR`, `MIGRATION_MATRIX`,
+            `MIGRATION_SCALAR_STOCHASTIC` or `MIGRATION_MATRIX_STOCHASTIC`.
+        rate: The scalar migration rate (scalar kinds).
         weights: The `(demes, demes)` row-stochastic source-weight matrix
-            (matrix kind); an empty `(0, 0)` array otherwise.
+            (matrix kinds); an empty `(0, 0)` array otherwise.
 
-    A stochastic-migrant-count kind is a planned extension: it adds one
-    kind value and one draw per destination deme to the kernel's migration
-    step, and changes nothing here or in the rest of the generation.
+    The stochastic kinds (`migrant_sampling: stochastic`) draw one
+    binomial migrant count per destination deme per generation, shared by
+    every locus, before any locus is blended. The migrant pool itself
+    stays the deterministic weighted average of the other demes, exactly
+    as `fim.model.operators.migrate` does with a generator.
     """
 
     kind: int
@@ -113,27 +122,35 @@ class VectorMigration:
 
     @classmethod
     def from_parameter(
-        cls, migration: float | Sequence[Sequence[float]], deme_count: int
+        cls,
+        migration: float | Sequence[Sequence[float]],
+        deme_count: int,
+        *,
+        stochastic: bool = False,
     ) -> VectorMigration:
         """Build the plan for a `SimulationParams.m` value.
 
         Args:
             migration: A scalar rate or a full migration matrix.
             deme_count: The number of demes.
+            stochastic: Whether `migrant_sampling` is `"stochastic"`.
 
         Returns:
             The matching plan. A scalar rate of zero, or a single deme,
-            blends nothing, exactly as `operators.migrate` returns the
-            state unchanged in those cases. A matrix always blends, even
-            an identity one, because `operators` normalizes its rows.
+            blends nothing and draws nothing, exactly as
+            `operators.migrate` returns the state unchanged in those
+            cases, whatever the sampling. A matrix always blends, even an
+            identity one, because `operators` normalizes its rows.
         """
         if isinstance(migration, int | float):
             rate = float(migration)
             if rate == 0.0 or deme_count == 1:
                 return cls(MIGRATION_NONE)
-            return cls(MIGRATION_SCALAR, rate=rate)
+            kind = MIGRATION_SCALAR_STOCHASTIC if stochastic else MIGRATION_SCALAR
+            return cls(kind, rate=rate)
         weights = np.ascontiguousarray(np.asarray(migration, dtype=np.float64))
-        return cls(MIGRATION_MATRIX, weights=weights)
+        kind = MIGRATION_MATRIX_STOCHASTIC if stochastic else MIGRATION_MATRIX
+        return cls(kind, weights=weights)
 
 
 def kernels() -> ModuleType:

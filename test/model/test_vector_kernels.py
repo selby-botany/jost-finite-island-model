@@ -17,11 +17,13 @@ import pytest
 pytest.importorskip("numba")
 
 from fim.model import vector_kernels as kernels
-from fim.model.operators import _inversion_binomial
+from fim.model.operators import _inversion_binomial, _migrant_fraction
 from fim.model.vector_block import (
     MIGRATION_MATRIX,
+    MIGRATION_MATRIX_STOCHASTIC,
     MIGRATION_NONE,
     MIGRATION_SCALAR,
+    MIGRATION_SCALAR_STOCHASTIC,
 )
 from fim.statistics import differentiation
 
@@ -234,24 +236,89 @@ def test_locus_statistics_flag_a_frequency_row_that_is_not_normalized() -> None:
     assert status[0] == 1
 
 
-def test_continuous_migration_fills_every_fraction_and_draws_nothing() -> None:
-    """The draw phase of migration is the hook stochastic sampling will use.
+def _draw(
+    rng: np.random.Generator,
+    kind: int,
+    rate: float,
+    weights: np.ndarray,
+    sizes: list[int],
+) -> np.ndarray:
+    """Run the kernel's draw phase and return the fractions it filled."""
+    fractions = np.zeros(len(sizes), dtype=np.float64)
+    scratch = np.empty(max(sizes) + 1, dtype=np.float64)
+    kernels._draw_migrant_fractions(
+        rng,
+        kind,
+        rate,
+        weights,
+        np.asarray(sizes, dtype=np.int64),
+        fractions,
+        scratch,
+    )
+    return fractions
 
-    Under continuous sampling it fills one fraction per destination deme
-    with the migration rate and consumes no random number, so the
-    generator stream is exactly what the dictionary-based operators leave.
+
+NO_WEIGHTS = np.zeros((0, 0), dtype=np.float64)
+
+
+def test_continuous_migration_fills_every_fraction_and_draws_nothing() -> None:
+    """Continuous sampling fills each fraction with the rate, drawing nothing.
+
+    The generator stream is exactly what the dictionary-based operators
+    leave, so a continuous run is unaffected by the stochastic option.
     """
     rng = np.random.Generator(np.random.PCG64(11))
     before = rng.bit_generator.state
-    fractions = np.zeros(5, dtype=np.float64)
-    kernels._draw_migrant_fractions(rng, MIGRATION_SCALAR, 0.05, fractions)
-    assert fractions.tolist() == [0.05] * 5
-    assert rng.bit_generator.state == before
+    sizes = [100] * 5
+    assert _draw(rng, MIGRATION_SCALAR, 0.05, NO_WEIGHTS, sizes).tolist() == [0.05] * 5
     for kind in (MIGRATION_NONE, MIGRATION_MATRIX):
-        untouched = np.zeros(5, dtype=np.float64)
-        kernels._draw_migrant_fractions(rng, kind, 0.05, untouched)
+        untouched = _draw(rng, kind, 0.05, NO_WEIGHTS, sizes)
         assert untouched.tolist() == [0.0] * 5
     assert rng.bit_generator.state == before
+
+
+@pytest.mark.parametrize("rate", [0.0001, 0.05, 0.3, 0.75, 1.0])
+def test_stochastic_scalar_fractions_equal_the_operators_draws(rate: float) -> None:
+    """Each destination draws `Binomial(size, rate) / size`, in deme order.
+
+    Compared against `operators._migrant_fraction` on an identical stream,
+    with unequal sizes, and the generator state afterward must agree (one
+    uniform per real draw, none when `rate >= 1`).
+    """
+    sizes = [50, 80, 100, 120, 150, 1]
+    kernel_rng = np.random.Generator(np.random.PCG64(5))
+    operator_rng = np.random.Generator(np.random.PCG64(5))
+    for _ in range(200):
+        got = _draw(kernel_rng, MIGRATION_SCALAR_STOCHASTIC, rate, NO_WEIGHTS, sizes)
+        want = [_migrant_fraction(operator_rng, size, rate) for size in sizes]
+        assert got.tolist() == want
+    assert kernel_rng.bit_generator.state == operator_rng.bit_generator.state
+
+
+def test_stochastic_matrix_fractions_use_each_rows_migrant_weight() -> None:
+    """Matrix draws use `1 - weights[i, i]`; a row with none is not drawn.
+
+    Row 0 keeps everything (no migrant weight): no uniform, fraction 0.
+    Row 2 has no self-weight (migrant weight 1): no uniform, fraction 1.
+    """
+    weights = np.array(
+        [
+            [1.0, 0.0, 0.0, 0.0],
+            [0.1, 0.6, 0.2, 0.1],
+            [0.0, 0.5, 0.0, 0.5],
+            [0.2, 0.2, 0.2, 0.4],
+        ]
+    )
+    sizes = [60, 90, 120, 150]
+    kernel_rng = np.random.Generator(np.random.PCG64(9))
+    operator_rng = np.random.Generator(np.random.PCG64(9))
+    for _ in range(200):
+        got = _draw(kernel_rng, MIGRATION_MATRIX_STOCHASTIC, 0.0, weights, sizes)
+        want = [0.0, 0.0, 1.0, 0.0]
+        want[1] = _migrant_fraction(operator_rng, sizes[1], 1.0 - 0.6)
+        want[3] = _migrant_fraction(operator_rng, sizes[3], 1.0 - 0.4)
+        assert got.tolist() == want
+    assert kernel_rng.bit_generator.state == operator_rng.bit_generator.state
 
 
 @pytest.mark.parametrize("p", [1e-6, 0.002, 0.3, 0.5, 0.75, 0.999])

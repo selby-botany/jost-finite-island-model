@@ -3301,6 +3301,44 @@ Infinite-alleles configurations, each a function of the run length.
 
 Finite-alleles configurations, each a function of the run length.
 
+<a id="test.vector_support.DENSE_MATRIX_4"></a>
+
+#### DENSE\_MATRIX\_4
+
+A dense asymmetric row-stochastic matrix over four demes.
+
+<a id="test.vector_support.EDGE_MATRIX_4"></a>
+
+#### EDGE\_MATRIX\_4
+
+Row 0 keeps everything (no migrant weight, so no draw and no
+normalization); row 2 has no self-weight (migrant weight 1, so no uniform is
+consumed and every copy is replaced).
+
+<a id="test.vector_support.stochastic"></a>
+
+#### stochastic
+
+```python
+def stochastic(
+    case: Callable[[int],
+                   SimulationParams]) -> Callable[[int], SimulationParams]
+```
+
+Return `case` with stochastic migrant counts switched on.
+
+<a id="test.vector_support.STOCHASTIC_INFINITE_CASES"></a>
+
+#### STOCHASTIC\_INFINITE\_CASES
+
+Infinite-alleles configurations with `migrant_sampling: stochastic`.
+
+<a id="test.vector_support.STOCHASTIC_FINITE_CASES"></a>
+
+#### STOCHASTIC\_FINITE\_CASES
+
+Finite-alleles configurations with `migrant_sampling: stochastic`.
+
 
 
 <a id="group-cli"></a>
@@ -27350,6 +27388,34 @@ Includes the K-allele target draws, which interleave with the next
 pair's mutation counts, so the generator states agree only if the
 kernel visits pairs and draws in the operators' order.
 
+<a id="model.test_vector_block.test_stochastic_infinite_alleles_block_matches_operators_exactly"></a>
+
+#### test\_stochastic\_infinite\_alleles\_block\_matches\_operators\_exactly
+
+```python
+@pytest.mark.parametrize("name", list(STOCHASTIC_INFINITE_CASES))
+def test_stochastic_infinite_alleles_block_matches_operators_exactly(
+        name: str) -> None
+```
+
+Drawn migrant counts reproduce `operators.step` bit for bit.
+
+The generator state is compared after every run, so a draw taken in a
+different order, or skipped where the operators take it, fails here
+even if the frequencies happened to agree.
+
+<a id="model.test_vector_block.test_stochastic_finite_alleles_block_matches_operators_exactly"></a>
+
+#### test\_stochastic\_finite\_alleles\_block\_matches\_operators\_exactly
+
+```python
+@pytest.mark.parametrize("name", list(STOCHASTIC_FINITE_CASES))
+def test_stochastic_finite_alleles_block_matches_operators_exactly(
+        name: str) -> None
+```
+
+Drawn migrant counts with finite alleles, K-allele targets included.
+
 <a id="model.test_vector_block.test_dear_nolan_low_shape_matches_operators_for_thousands_of_generations"></a>
 
 #### test\_dear\_nolan\_low\_shape\_matches\_operators\_for\_thousands\_of\_generations
@@ -27364,6 +27430,17 @@ The dear-nolan-low shape, three loci, 3,000 generations, every row.
 Mutations are rare here (about one per 2,000 locus-generations), so a
 long run is what exercises minting, the column that appears, and the
 compaction that follows when a one-copy mutant is lost.
+
+<a id="model.test_vector_block.test_stochastic_dear_nolan_low_shape_matches_operators_for_thousands"></a>
+
+#### test\_stochastic\_dear\_nolan\_low\_shape\_matches\_operators\_for\_thousands
+
+```python
+def test_stochastic_dear_nolan_low_shape_matches_operators_for_thousands(
+) -> None
+```
+
+Stochastic counts, 3,000 generations: most draws are zero migrants.
 
 <a id="model.test_vector_block.test_block_matches_operators_after_compaction_and_growth_together"></a>
 
@@ -27707,11 +27784,39 @@ sets the locus's status and lets the caller recompute with Python.
 def test_continuous_migration_fills_every_fraction_and_draws_nothing() -> None
 ```
 
-The draw phase of migration is the hook stochastic sampling will use.
+Continuous sampling fills each fraction with the rate, drawing nothing.
 
-Under continuous sampling it fills one fraction per destination deme
-with the migration rate and consumes no random number, so the
-generator stream is exactly what the dictionary-based operators leave.
+The generator stream is exactly what the dictionary-based operators
+leave, so a continuous run is unaffected by the stochastic option.
+
+<a id="model.test_vector_kernels.test_stochastic_scalar_fractions_equal_the_operators_draws"></a>
+
+#### test\_stochastic\_scalar\_fractions\_equal\_the\_operators\_draws
+
+```python
+@pytest.mark.parametrize("rate", [0.0001, 0.05, 0.3, 0.75, 1.0])
+def test_stochastic_scalar_fractions_equal_the_operators_draws(
+        rate: float) -> None
+```
+
+Each destination draws `Binomial(size, rate) / size`, in deme order.
+
+Compared against `operators._migrant_fraction` on an identical stream,
+with unequal sizes, and the generator state afterward must agree (one
+uniform per real draw, none when `rate >= 1`).
+
+<a id="model.test_vector_kernels.test_stochastic_matrix_fractions_use_each_rows_migrant_weight"></a>
+
+#### test\_stochastic\_matrix\_fractions\_use\_each\_rows\_migrant\_weight
+
+```python
+def test_stochastic_matrix_fractions_use_each_rows_migrant_weight() -> None
+```
+
+Matrix draws use `1 - weights[i, i]`; a row with none is not drawn.
+
+Row 0 keeps everything (no migrant weight): no uniform, fraction 0.
+Row 2 has no self-weight (migrant weight 1): no uniform, fraction 1.
 
 <a id="model.test_vector_kernels.test_cached_binomial_equals_the_uncached_draw_bit_for_bit"></a>
 

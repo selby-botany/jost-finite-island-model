@@ -15,7 +15,14 @@ from collections.abc import Callable
 
 import numpy as np
 import pytest
-from vector_support import FINITE_CASES, INFINITE_CASES, loci, make_params
+from vector_support import (
+    FINITE_CASES,
+    INFINITE_CASES,
+    STOCHASTIC_FINITE_CASES,
+    STOCHASTIC_INFINITE_CASES,
+    loci,
+    make_params,
+)
 
 pytest.importorskip("numba")
 
@@ -65,7 +72,9 @@ def _block_for(
         state,
         sizes=params.population_sizes,
         mutation_rates=params.mutation_rates,
-        migration=VectorMigration.from_parameter(params.m, params.d),
+        migration=VectorMigration.from_parameter(
+            params.m, params.d, stochastic=params.migrant_sampling == "stochastic"
+        ),
         mutation_model=params.mutation_model,
         next_id=registry.next_value,
         **kwargs,
@@ -115,6 +124,27 @@ def test_finite_alleles_block_matches_operators_exactly(name: str) -> None:
     _assert_block_follows_operators(FINITE_CASES[name](PARITY_GENERATIONS), 60)
 
 
+@pytest.mark.parametrize("name", list(STOCHASTIC_INFINITE_CASES))
+def test_stochastic_infinite_alleles_block_matches_operators_exactly(name: str) -> None:
+    """Drawn migrant counts reproduce `operators.step` bit for bit.
+
+    The generator state is compared after every run, so a draw taken in a
+    different order, or skipped where the operators take it, fails here
+    even if the frequencies happened to agree.
+    """
+    _assert_block_follows_operators(
+        STOCHASTIC_INFINITE_CASES[name](PARITY_GENERATIONS), 60
+    )
+
+
+@pytest.mark.parametrize("name", list(STOCHASTIC_FINITE_CASES))
+def test_stochastic_finite_alleles_block_matches_operators_exactly(name: str) -> None:
+    """Drawn migrant counts with finite alleles, K-allele targets included."""
+    _assert_block_follows_operators(
+        STOCHASTIC_FINITE_CASES[name](PARITY_GENERATIONS), 60
+    )
+
+
 def test_dear_nolan_low_shape_matches_operators_for_thousands_of_generations() -> None:
     """The dear-nolan-low shape, three loci, 3,000 generations, every row.
 
@@ -123,6 +153,12 @@ def test_dear_nolan_low_shape_matches_operators_for_thousands_of_generations() -
     compaction that follows when a one-copy mutant is lost.
     """
     params = make_params(3000, loci=loci(3))
+    _assert_block_follows_operators(params, 3000)
+
+
+def test_stochastic_dear_nolan_low_shape_matches_operators_for_thousands() -> None:
+    """Stochastic counts, 3,000 generations: most draws are zero migrants."""
+    params = make_params(3000, loci=loci(3), migrant_sampling="stochastic")
     _assert_block_follows_operators(params, 3000)
 
 
