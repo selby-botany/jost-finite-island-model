@@ -135,6 +135,7 @@ Every test module, fixture, and test function documented here in full; `doc/fim-
   - [`test_store`](#persistence.test_store)
   - [`test_tlog`](#persistence.test_tlog)
   - [`test_tlog_codec`](#persistence.test_tlog_codec)
+  - [`test_tlog_export`](#persistence.test_tlog_export)
   - [`test_tlog_writer`](#persistence.test_tlog_writer)
   - [`test_validation`](#persistence.test_validation)
 - [`test/statistics/`](#group-statistics)
@@ -31789,6 +31790,219 @@ With numba absent the same code runs as plain Python and round-trips.
 A fresh interpreter hides numba (`sys.modules["numba"] = None` makes
 its import fail), so this proves the optional dependency really is
 optional for the module every default store uses.
+
+<a id="persistence.test_tlog_export"></a>
+
+# persistence.test\_tlog\_export
+
+Byte-identity tests for the derived `trajectory.jsonl`.
+
+The export is only acceptable if its bytes are exactly what
+`json.dumps(row, sort_keys=True, separators=(",", ":"), allow_nan=False)`
+and a newline give for every row. These tests build the expected text
+independently from the frames that were written (never from the decoded
+log), over adversarial inputs: arbitrary floats from subnormal to huge,
+mixed counted and raw pairs, uneven deme sizes including one above the
+table cap and one unknown, large allele identifiers, and a run id that
+needs escaping. They then check real runs against the JSON Lines store's own
+file, sharded against single-process derivation, and the size pass against
+the written size. All seeded; nothing depends on timing.
+
+<a id="persistence.test_tlog_export.test_derived_jsonl_is_what_json_dumps_gives"></a>
+
+#### test\_derived\_jsonl\_is\_what\_json\_dumps\_gives
+
+```python
+@pytest.mark.parametrize(
+    ("deme_sizes", "run_id"),
+    [
+        ((100, 64, 7), "run-plain"),
+        ((100, 0, 25), NASTY_RUN_ID),
+        ((LUT_MAX_SIZE + 5, 100, 3), "run-big-deme"),
+    ],
+)
+def test_derived_jsonl_is_what_json_dumps_gives(tmp_path: Path,
+                                                deme_sizes: tuple[int, ...],
+                                                run_id: str) -> None
+```
+
+Every byte equals `json.dumps` of the original rows, digest included.
+
+<a id="persistence.test_tlog_export.test_digest_only_derivation_matches_the_file_derivation"></a>
+
+#### test\_digest\_only\_derivation\_matches\_the\_file\_derivation
+
+```python
+def test_digest_only_derivation_matches_the_file_derivation(
+        tmp_path: Path) -> None
+```
+
+With no output path nothing is stored but digest and size are the same.
+
+<a id="persistence.test_tlog_export.test_the_size_pass_equals_the_written_size"></a>
+
+#### test\_the\_size\_pass\_equals\_the\_written\_size
+
+```python
+def test_the_size_pass_equals_the_written_size(tmp_path: Path) -> None
+```
+
+`free_space_needed` knows the exact size without formatting anything.
+
+<a id="persistence.test_tlog_export.test_sharded_derivation_equals_single_process_derivation"></a>
+
+#### test\_sharded\_derivation\_equals\_single\_process\_derivation
+
+```python
+def test_sharded_derivation_equals_single_process_derivation(
+        tmp_path: Path) -> None
+```
+
+Shards sized, written to their offsets and hashed give the same file.
+
+<a id="persistence.test_tlog_export.test_plan_shards_start_at_keyframe_blocks_and_cover_every_block"></a>
+
+#### test\_plan\_shards\_start\_at\_keyframe\_blocks\_and\_cover\_every\_block
+
+```python
+def test_plan_shards_start_at_keyframe_blocks_and_cover_every_block(
+        tmp_path: Path) -> None
+```
+
+Shard boundaries are block indexes; together they cover the log once.
+
+<a id="persistence.test_tlog_export.test_a_log_with_no_blocks_derives_an_empty_file"></a>
+
+#### test\_a\_log\_with\_no\_blocks\_derives\_an\_empty\_file
+
+```python
+def test_a_log_with_no_blocks_derives_an_empty_file(tmp_path: Path) -> None
+```
+
+No generations means no lines, and the SHA-256 of the empty string.
+
+<a id="persistence.test_tlog_export.test_derivation_refuses_a_missing_or_foreign_file"></a>
+
+#### test\_derivation\_refuses\_a\_missing\_or\_foreign\_file
+
+```python
+def test_derivation_refuses_a_missing_or_foreign_file(tmp_path: Path) -> None
+```
+
+A missing file and a non-log file raise clear errors.
+
+<a id="persistence.test_tlog_export._FrameTap"></a>
+
+## \_FrameTap Objects
+
+```python
+class _FrameTap()
+```
+
+A store that wants frames and keeps a copy of every frame it gets.
+
+<a id="persistence.test_tlog_export._FrameTap.__init__"></a>
+
+#### \_\_init\_\_
+
+```python
+def __init__() -> None
+```
+
+Start empty.
+
+<a id="persistence.test_tlog_export._FrameTap.begin_run"></a>
+
+#### begin\_run
+
+```python
+def begin_run(run_id: str, layout: FrameLayout) -> None
+```
+
+Remember the layout.
+
+<a id="persistence.test_tlog_export._FrameTap.wants_frames"></a>
+
+#### wants\_frames
+
+```python
+def wants_frames(run_id: str) -> bool
+```
+
+Ask for frames.
+
+<a id="persistence.test_tlog_export._FrameTap.write_frame"></a>
+
+#### write\_frame
+
+```python
+def write_frame(run_id: str, frame: TrajectoryFrame) -> None
+```
+
+Keep a copy of the frame.
+
+<a id="persistence.test_tlog_export._FrameTap.write_generation"></a>
+
+#### write\_generation
+
+```python
+def write_generation(*_args: object, **_kwargs: object) -> None
+```
+
+Fail: a store that wants frames must not be given rows.
+
+<a id="persistence.test_tlog_export._FrameTap.read"></a>
+
+#### read
+
+```python
+def read(run_id: str) -> Iterator[TrajectoryRow]
+```
+
+Unused.
+
+<a id="persistence.test_tlog_export._FrameTap.discard"></a>
+
+#### discard
+
+```python
+def discard(run_id: str) -> None
+```
+
+Unused.
+
+<a id="persistence.test_tlog_export._FrameTap.equilibrium_store"></a>
+
+#### equilibrium\_store
+
+```python
+def equilibrium_store(run_id: str) -> _FrameTap
+```
+
+Return the ancestral-phase tap.
+
+<a id="persistence.test_tlog_export.test_a_real_run_derives_the_jsonl_store_file_byte_for_byte"></a>
+
+#### test\_a\_real\_run\_derives\_the\_jsonl\_store\_file\_byte\_for\_byte
+
+```python
+@pytest.mark.parametrize("backend", ["lineal", "generational-vector"])
+def test_a_real_run_derives_the_jsonl_store_file_byte_for_byte(
+        tmp_path: Path, backend: str) -> None
+```
+
+The log of a run, derived, is the file the JSON Lines store wrote.
+
+<a id="persistence.test_tlog_export.test_a_real_equilibrium_split_run_derives_both_files_byte_for_byte"></a>
+
+#### test\_a\_real\_equilibrium\_split\_run\_derives\_both\_files\_byte\_for\_byte
+
+```python
+def test_a_real_equilibrium_split_run_derives_both_files_byte_for_byte(
+        tmp_path: Path) -> None
+```
+
+The ancestral companion (one deme of every deme's copies) is exact too.
 
 <a id="persistence.test_tlog_writer"></a>
 

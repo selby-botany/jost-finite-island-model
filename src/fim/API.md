@@ -793,6 +793,25 @@ Return to the [source-tree orientation](../README.md) or the [developer guide](.
     * [\_\_init\_\_](#fim.persistence.tlog_codec.DecodedState.__init__)
     * [grow](#fim.persistence.tlog_codec.DecodedState.grow)
     * [frame\_arrays](#fim.persistence.tlog_codec.DecodedState.frame_arrays)
+* [fim.persistence.tlog\_export](#fim.persistence.tlog_export)
+  * [LUT\_MAX\_SIZE](#fim.persistence.tlog_export.LUT_MAX_SIZE)
+  * [format\_pairs](#fim.persistence.tlog_export.format_pairs)
+  * [size\_pairs](#fim.persistence.tlog_export.size_pairs)
+  * [JsonlFormatter](#fim.persistence.tlog_export.JsonlFormatter)
+    * [\_\_init\_\_](#fim.persistence.tlog_export.JsonlFormatter.__init__)
+    * [generation\_bytes](#fim.persistence.tlog_export.JsonlFormatter.generation_bytes)
+    * [row\_bound](#fim.persistence.tlog_export.JsonlFormatter.row_bound)
+    * [format\_generation](#fim.persistence.tlog_export.JsonlFormatter.format_generation)
+    * [size\_generation](#fim.persistence.tlog_export.JsonlFormatter.size_generation)
+  * [plan\_shards](#fim.persistence.tlog_export.plan_shards)
+  * [\_Emitter](#fim.persistence.tlog_export._Emitter)
+    * [\_\_init\_\_](#fim.persistence.tlog_export._Emitter.__init__)
+    * [visit](#fim.persistence.tlog_export._Emitter.visit)
+    * [flush](#fim.persistence.tlog_export._Emitter.flush)
+  * [DerivedJsonl](#fim.persistence.tlog_export.DerivedJsonl)
+  * [derive\_jsonl](#fim.persistence.tlog_export.derive_jsonl)
+  * [free\_space\_needed](#fim.persistence.tlog_export.free_space_needed)
+  * [check\_free\_space](#fim.persistence.tlog_export.check_free_space)
 * [fim.reanalyze](#fim.reanalyze)
   * [ReanalyzedGeneration](#fim.reanalyze.ReanalyzedGeneration)
   * [differentiation\_q\_for\_state](#fim.reanalyze.differentiation_q_for_state)
@@ -21211,6 +21230,329 @@ def frame_arrays() -> tuple[np.ndarray, np.ndarray, np.ndarray]
 ```
 
 Return the state as CSR arrays `(counts, allele_ids, frequencies)`.
+
+<a id="fim.persistence.tlog_export"></a>
+
+# fim.persistence.tlog\_export
+
+Derive the canonical `trajectory.jsonl` from a binary trajectory log.
+
+The log is what a run stores; the JSON Lines file is something a person (or
+a spreadsheet, or `jq`) asks for. This module turns the one into the other.
+Every line is byte for byte what
+
+```python
+json.dumps(row, sort_keys=True, separators=(",", ":"), allow_nan=False) + "\n"
+```
+
+gives for a trajectory row, that is
+
+```text
+{"allele_id":A,"deme":D,"frequency":F,"generation":G,"locus_id":L,"run_id":"R"}
+```
+
+so the file is canonical: the same log always yields the same bytes and the
+same SHA-256.
+
+How it stays exact and fast:
+
+- Integers are formatted here, digit by digit (exact by construction).
+- A float's text is never produced by a reimplementation. For a count-coded
+  frequency `c / size` the text comes from a table built once per deme size
+  with Python's own `repr`; any other frequency (a raw pair, or a size too
+  large to tabulate) is formatted by a Python path that calls
+  `float.__repr__`, the very function `json` calls.
+- A *size pass* computes the exact byte length of a shard without copying a
+  byte, so shards of the log (each starting at a keyframe block) can be
+  formatted by separate processes and written to their final offsets in one
+  pre-sized file with `pwrite`; no concatenation is needed.
+- The SHA-256 is of the whole file. A single-process derivation hashes the
+  bytes as they are written; a sharded one hashes the finished file in one
+  sequential pass.
+
+The compiled kernels (`format_pairs`, `size_pairs`) come from the same
+optional-Numba decorator as the codec, so without Numba the module runs, only
+more slowly.
+
+<a id="fim.persistence.tlog_export.LUT_MAX_SIZE"></a>
+
+#### LUT\_MAX\_SIZE
+
+Largest deme size whose float text is tabulated (others use Python).
+
+<a id="fim.persistence.tlog_export.format_pairs"></a>
+
+#### format\_pairs
+
+```python
+@codec.kernel
+def format_pairs(out, opos, p_start, loci, demes, pn, pid, pc, consts,
+                 head_len, deme_off, deme_len, suf_off, suf_len, gen_bytes,
+                 lut_arena, lut_off, lut_len, lut_base, lut_size)
+```
+
+Format pairs `p_start..` into `out`, stopping at the first one needing Python.
+
+**Returns**:
+
+  `(status, pair, new position)`. Status 0 means every pair was
+  done; status 1 means pair `pair` has a raw or untabulated frequency
+  and nothing of it was written.
+
+<a id="fim.persistence.tlog_export.size_pairs"></a>
+
+#### size\_pairs
+
+```python
+@codec.kernel
+def size_pairs(p_start, loci, demes, pn, pid, pc, head_len, deme_len, suf_len,
+               gen_len, lut_len, lut_base, lut_size)
+```
+
+Byte count of pairs `p_start..` (same walk as `format_pairs`, no copying).
+
+**Returns**:
+
+  `(status, pair, bytes)` with the same stop rule as `format_pairs`.
+
+<a id="fim.persistence.tlog_export.JsonlFormatter"></a>
+
+## JsonlFormatter Objects
+
+```python
+class JsonlFormatter()
+```
+
+The constant tables that turn decoded generations into canonical lines.
+
+Built once per log (it depends on the run id, the locus identifiers and
+the deme sizes only).
+
+**Arguments**:
+
+- `run_id` - The run the rows belong to.
+- `locus_ids` - Locus identifiers in layout order.
+- `deme_sizes` - Gene copies per deme (`0` where unknown).
+
+<a id="fim.persistence.tlog_export.JsonlFormatter.__init__"></a>
+
+#### \_\_init\_\_
+
+```python
+def __init__(run_id: str, locus_ids: tuple[int, ...],
+             deme_sizes: tuple[int, ...]) -> None
+```
+
+Build the constant fragments and the float text tables.
+
+<a id="fim.persistence.tlog_export.JsonlFormatter.generation_bytes"></a>
+
+#### generation\_bytes
+
+```python
+@staticmethod
+def generation_bytes(generation: int) -> np.ndarray
+```
+
+Return the per-generation constant text `,"generation":G`.
+
+<a id="fim.persistence.tlog_export.JsonlFormatter.row_bound"></a>
+
+#### row\_bound
+
+```python
+def row_bound(rows: int) -> int
+```
+
+Return an upper bound on the bytes of a generation of `rows` rows.
+
+<a id="fim.persistence.tlog_export.JsonlFormatter.format_generation"></a>
+
+#### format\_generation
+
+```python
+def format_generation(out: np.ndarray, opos: int, generation: int,
+                      state: codec.DecodedState) -> int
+```
+
+Append one generation's lines to `out` and return the new offset.
+
+<a id="fim.persistence.tlog_export.JsonlFormatter.size_generation"></a>
+
+#### size\_generation
+
+```python
+def size_generation(generation: int, state: codec.DecodedState) -> int
+```
+
+Return the exact bytes `format_generation` would write.
+
+<a id="fim.persistence.tlog_export.plan_shards"></a>
+
+#### plan\_shards
+
+```python
+def plan_shards(scan: ScanResult,
+                blocks_per_shard: int) -> list[tuple[int, int]]
+```
+
+Split a log's blocks into shards that each start at a keyframe block.
+
+**Arguments**:
+
+- `scan` - The scanned log.
+- `blocks_per_shard` - About how many blocks a shard should hold.
+
+
+**Returns**:
+
+  `(first, stop)` block index pairs covering every block.
+
+<a id="fim.persistence.tlog_export._Emitter"></a>
+
+## \_Emitter Objects
+
+```python
+class _Emitter()
+```
+
+Format generations into a chunk buffer and hand full chunks to a sink.
+
+<a id="fim.persistence.tlog_export._Emitter.__init__"></a>
+
+#### \_\_init\_\_
+
+```python
+def __init__(formatter: JsonlFormatter, sink: Callable[[memoryview],
+                                                       None]) -> None
+```
+
+Start with an empty chunk.
+
+<a id="fim.persistence.tlog_export._Emitter.visit"></a>
+
+#### visit
+
+```python
+def visit(generation: int, rows: int, state: codec.DecodedState) -> None
+```
+
+Format one generation, flushing the chunk when it is full.
+
+<a id="fim.persistence.tlog_export._Emitter.flush"></a>
+
+#### flush
+
+```python
+def flush() -> None
+```
+
+Hand the chunk to the sink and start a new one.
+
+<a id="fim.persistence.tlog_export.DerivedJsonl"></a>
+
+## DerivedJsonl Objects
+
+```python
+@dataclass(frozen=True, slots=True)
+class DerivedJsonl()
+```
+
+What deriving a trajectory produced.
+
+**Arguments**:
+
+- `path` - The JSON Lines file, or `None` when it was only counted.
+- `sha256` - The SHA-256 of the file's bytes, as hex.
+- `size` - The file's byte count.
+- `generations` - Generations written.
+- `rows` - Rows (lines) written.
+- `run_id` - The run the log holds.
+
+<a id="fim.persistence.tlog_export.derive_jsonl"></a>
+
+#### derive\_jsonl
+
+```python
+def derive_jsonl(log_path: Path | str,
+                 out_path: Path | str | None = None,
+                 *,
+                 workers: int = 1,
+                 shard_blocks: int = _SHARD_TARGET_BLOCKS) -> DerivedJsonl
+```
+
+Derive the canonical JSON Lines trajectory from a log.
+
+**Arguments**:
+
+- `log_path` - The binary log.
+- `out_path` - Where to write the JSON Lines file; `None` only computes
+  its digest, size and counts (nothing is stored).
+- `workers` - Processes to format with. `1` formats in this process and
+  hashes as it writes; more split the log at keyframe blocks, size
+  each shard, write each to its final offset, then hash the file.
+- `shard_blocks` - About how many blocks one shard of a sharded
+  derivation holds.
+
+
+**Returns**:
+
+  The digest, size and counts of the derived file.
+
+
+**Raises**:
+
+- `FileNotFoundError` - If the log does not exist.
+- `TlogError` - If the log is unusable.
+
+<a id="fim.persistence.tlog_export.free_space_needed"></a>
+
+#### free\_space\_needed
+
+```python
+def free_space_needed(log_path: Path | str) -> int
+```
+
+Return the bytes of free space deriving this log's JSON Lines will need.
+
+Computed exactly by the size pass (about sixteen times faster than
+formatting), without writing anything.
+
+**Arguments**:
+
+- `log_path` - The binary log.
+
+
+**Returns**:
+
+  The size in bytes of the file `derive_jsonl` would write.
+
+
+**Raises**:
+
+- `FileNotFoundError` - If the log does not exist.
+- `TlogError` - If the log is unusable.
+
+<a id="fim.persistence.tlog_export.check_free_space"></a>
+
+#### check\_free\_space
+
+```python
+def check_free_space(log_path: Path | str,
+                     directory: Path | str) -> tuple[int, int]
+```
+
+Return `(bytes needed, bytes free)` for deriving into `directory`.
+
+**Arguments**:
+
+- `log_path` - The binary log.
+- `directory` - Where the file would be written (it must exist).
+
+
+**Returns**:
+
+  The exact size of the JSON Lines file and the free bytes there.
 
 <a id="fim.reanalyze"></a>
 
