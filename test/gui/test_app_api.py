@@ -313,12 +313,11 @@ def test_a_vector_run_default_survives_a_fresh_form_and_is_reported_at_validatio
 ) -> None:
     """A default the chosen model cannot use is kept, and the conflict is reported.
 
-    `generational-vector` runs the starter model (infinite alleles) but
-    needs continuous migration; the same default is a conflict once the
-    form asks for stochastic migrant counts. The default is the user's own
-    valid choice, so a fresh form keeps it (and the saved ploidy) rather
-    than silently reverting to the starter's run settings, and validating
-    the form names the real conflict.
+    `generational-vector` has no `jit` toggle, so the same default is a
+    conflict once the form asks for `jit: numba`. The default is the user's
+    own valid choice, so a fresh form keeps it (and the saved ploidy)
+    rather than silently reverting to the starter's run settings, and
+    validating the form names the real conflict.
     """
     preferences_path = tmp_path / "preferences.json"
     save_preferences(
@@ -337,12 +336,12 @@ def test_a_vector_run_default_survives_a_fresh_form_and_is_reported_at_validatio
         if key not in DEFAULT_RUN_SETTING_FIELD_NAMES
     }
     assert api.validate_form(form_fields)["ok"] is True
-    conflicting = api.validate_form({**form_fields, "migrant_sampling": "stochastic"})
+    conflicting = api.validate_form({**form_fields, "jit": "numba"})
 
     assert form["engine_backend"] == "generational-vector"
     assert form["ploidy"] == "1"
     assert conflicting["ok"] is False
-    assert "migrant_sampling" in conflicting["message"]
+    assert "jit" in conflicting["message"]
     assert api.get_startup_warnings() == []
 
 

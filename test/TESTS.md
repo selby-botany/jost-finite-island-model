@@ -7501,32 +7501,44 @@ result is `LinealBackend`'s (the exactness contract; the full matrix
 is `test/engine/test_vector_parity.py`), so a report comparison is
 enough here.
 
-<a id="engine.test_engine.test_params_and_engine_reject_the_same_vector_configurations"></a>
+<a id="engine.test_engine.test_params_and_engine_accept_stochastic_migrants_on_the_vector_backend"></a>
 
-#### test\_params\_and\_engine\_reject\_the\_same\_vector\_configurations
+#### test\_params\_and\_engine\_accept\_stochastic\_migrants\_on\_the\_vector\_backend
 
 ```python
-def test_params_and_engine_reject_the_same_vector_configurations(
+def test_params_and_engine_accept_stochastic_migrants_on_the_vector_backend(
         tiny_params: SimulationParams) -> None
 ```
 
-Config-time validation and the advancer's own check agree.
+`generational-vector` runs stochastic migrant counts, and says so everywhere.
 
-`generational-vector` runs both mutation models and only refuses
-stochastic migrant counts. `SimulationParams` refuses that at
-construction; `VectorizedAdvancer.advance` refuses it again for a lane
-built some other way, with the same words.
+`SimulationParams` constructs with it, and `VectorizedAdvancer.advance`
+steps a stochastic lane instead of refusing it. (Parity with Backend L
+is `test_vector_parity`'s job.)
 
-<a id="engine.test_engine.test_fim_generational_vector_rejects_stochastic_migrant_sampling"></a>
+<a id="engine.test_engine.test_params_and_engine_reject_the_same_vector_jit_configuration"></a>
 
-#### test\_fim\_generational\_vector\_rejects\_stochastic\_migrant\_sampling
+#### test\_params\_and\_engine\_reject\_the\_same\_vector\_jit\_configuration
 
 ```python
-def test_fim_generational_vector_rejects_stochastic_migrant_sampling(
+def test_params_and_engine_reject_the_same_vector_jit_configuration(
         tiny_params: SimulationParams) -> None
 ```
 
-`"generational-vector"` is also scoped to deterministic migration only.
+Config-time validation and `build_engine_backend` agree on `jit`.
+
+`generational-vector` has no `jit` toggle, so both refuse `jit="numba"`.
+
+<a id="engine.test_engine.test_fim_generational_vector_runs_stochastic_migrant_sampling"></a>
+
+#### test\_fim\_generational\_vector\_runs\_stochastic\_migrant\_sampling
+
+```python
+def test_fim_generational_vector_runs_stochastic_migrant_sampling(
+        tiny_params: SimulationParams) -> None
+```
+
+`"generational-vector"` runs stochastic migrant counts, equal to lineal.
 
 <a id="engine.test_engine.test_fim_generational_vector_rejects_jit"></a>
 
@@ -7676,6 +7688,21 @@ def test_build_engine_backend_auto_picks_generational_below_threshold(
 
 Below the cutover, `"auto"` picks Backend G, not Backend V.
 
+<a id="engine.test_engine.test_build_engine_backend_auto_picks_vector_for_stochastic_migration"></a>
+
+#### test\_build\_engine\_backend\_auto\_picks\_vector\_for\_stochastic\_migration
+
+```python
+def test_build_engine_backend_auto_picks_vector_for_stochastic_migration(
+) -> None
+```
+
+Stochastic migrant counts no longer disqualify `"auto"` from Backend V.
+
+`d=40` clears the default threshold, and `VectorizedAdvancer` draws the
+migrant counts itself, so `"auto"` picks it just as for continuous
+migration.
+
 <a id="engine.test_engine.test_build_engine_backend_auto_picks_generational_when_vector_ineligible"></a>
 
 #### test\_build\_engine\_backend\_auto\_picks\_generational\_when\_vector\_ineligible
@@ -7685,12 +7712,10 @@ def test_build_engine_backend_auto_picks_generational_when_vector_ineligible(
 ) -> None
 ```
 
-A large `d` alone is not enough — `"auto"` still checks V's own scope.
+A large `d` alone is not enough: `jit="numba"` keeps `"auto"` on G.
 
-`d=40` clears the default threshold, but stochastic migrant counts are
-outside `VectorizedAdvancer`'s own scope — `"auto"` must fall back to
-Backend G here, not raise the `ValueError` a direct
-`"generational-vector"` choice would.
+`d=40` clears the default threshold, but only Backend G offers `jit`,
+so a caller who asked for it gets it rather than a `ValueError`.
 
 <a id="engine.test_engine.test_build_engine_backend_auto_picks_vector_for_infinite_alleles"></a>
 
@@ -8392,6 +8417,82 @@ def test_infinite_alleles_vector_matches_lineal_through_fim(name: str) -> None
 ```
 
 Every infinite-alleles case: rows, report, final state, manifest.
+
+<a id="engine.test_vector_parity.test_stochastic_infinite_alleles_vector_matches_lineal_through_fim"></a>
+
+#### test\_stochastic\_infinite\_alleles\_vector\_matches\_lineal\_through\_fim
+
+```python
+@pytest.mark.parametrize("name", list(STOCHASTIC_INFINITE_CASES))
+def test_stochastic_infinite_alleles_vector_matches_lineal_through_fim(
+        name: str) -> None
+```
+
+Drawn migrant counts, infinite alleles: rows, report, final state.
+
+<a id="engine.test_vector_parity.test_stochastic_finite_alleles_vector_matches_lineal_through_fim"></a>
+
+#### test\_stochastic\_finite\_alleles\_vector\_matches\_lineal\_through\_fim
+
+```python
+@pytest.mark.parametrize("name", list(STOCHASTIC_FINITE_CASES))
+def test_stochastic_finite_alleles_vector_matches_lineal_through_fim(
+        name: str) -> None
+```
+
+Drawn migrant counts, finite alleles: rows, report, final state.
+
+<a id="engine.test_vector_parity.test_stochastic_vector_matches_generational_through_fim"></a>
+
+#### test\_stochastic\_vector\_matches\_generational\_through\_fim
+
+```python
+@pytest.mark.parametrize(
+    "name",
+    [
+        "multi-locus, m 0.05",
+        "unequal deme sizes",
+        "dense asymmetric matrix",
+        "matrix with edge rows",
+    ],
+)
+def test_stochastic_vector_matches_generational_through_fim(name: str) -> None
+```
+
+V also equals G (`generational`, threaded advancer) under stochastic counts.
+
+<a id="engine.test_vector_parity.test_stochastic_replicate_batch_matches_lineal"></a>
+
+#### test\_stochastic\_replicate\_batch\_matches\_lineal
+
+```python
+def test_stochastic_replicate_batch_matches_lineal() -> None
+```
+
+Three stochastic replicates: every replicate's rows and the batch summary.
+
+<a id="engine.test_vector_parity.test_stochastic_dear_nolan_low_matches_lineal_for_thousands_of_generations"></a>
+
+#### test\_stochastic\_dear\_nolan\_low\_matches\_lineal\_for\_thousands\_of\_generations
+
+```python
+def test_stochastic_dear_nolan_low_matches_lineal_for_thousands_of_generations(
+) -> (None)
+```
+
+Stochastic counts at the dear-nolan-low shape, 3,000 generations.
+
+<a id="engine.test_vector_parity.test_stochastic_jsonl_trajectory_file_is_byte_identical"></a>
+
+#### test\_stochastic\_jsonl\_trajectory\_file\_is\_byte\_identical
+
+```python
+def test_stochastic_jsonl_trajectory_file_is_byte_identical(
+        tmp_path: Path,
+        tracked_jsonl_stores: list[JSONLTrajectoryStore]) -> None
+```
+
+The JSONL file V writes under stochastic counts equals L's, byte for byte.
 
 <a id="engine.test_vector_parity.test_infinite_alleles_vector_matches_generational_through_fim"></a>
 
@@ -9906,12 +10007,11 @@ def test_a_vector_run_default_survives_a_fresh_form_and_is_reported_at_validatio
 
 A default the chosen model cannot use is kept, and the conflict is reported.
 
-`generational-vector` runs the starter model (infinite alleles) but
-needs continuous migration; the same default is a conflict once the
-form asks for stochastic migrant counts. The default is the user's own
-valid choice, so a fresh form keeps it (and the saved ploidy) rather
-than silently reverting to the starter's run settings, and validating
-the form names the real conflict.
+`generational-vector` has no `jit` toggle, so the same default is a
+conflict once the form asks for `jit: numba`. The default is the user's
+own valid choice, so a fresh form keeps it (and the saved ploidy)
+rather than silently reverting to the starter's run settings, and
+validating the form names the real conflict.
 
 <a id="gui.test_app_api.test_get_starter_form_with_overrides_applies_the_given_values"></a>
 
@@ -15551,10 +15651,10 @@ de-emphasized values (`"generational"`/`"generational-vector"`) are
 the ones that matter here — a botanist rarely picks either, but a
 hand-edited YAML or a reopened manifest can genuinely hold one.
 
-`finite_alleles` and a short locus because `"generational-vector"`
-refuses any other mutation model outright
-(`_validate_engine_backend`), not for any reason to do with the form
-itself — the starter config's own single 200-base locus is replaced
+`finite_alleles` and a short locus because a finite-alleles table is
+`4 ** length` columns wide, so `"generational-vector"` refuses the
+starter's 200-base locus (`build_engine_backend`), not for any reason
+to do with the form itself — the starter config's own locus is replaced
 rather than supplemented, since `loci` and `locus_lengths` cannot
 both be given.
 
@@ -26475,15 +26575,15 @@ def test_generational_vector_accepts_either_mutation_model(model: str) -> None
 
 Backend V runs both mutation models, so neither is rejected at load.
 
-<a id="model.test_params.test_generational_vector_rejects_stochastic_migrant_sampling"></a>
+<a id="model.test_params.test_generational_vector_accepts_stochastic_migrant_sampling"></a>
 
-#### test\_generational\_vector\_rejects\_stochastic\_migrant\_sampling
+#### test\_generational\_vector\_accepts\_stochastic\_migrant\_sampling
 
 ```python
-def test_generational_vector_rejects_stochastic_migrant_sampling() -> None
+def test_generational_vector_accepts_stochastic_migrant_sampling() -> None
 ```
 
-The one thing V cannot do yet is refused up front, with the way out.
+Backend V draws stochastic migrant counts, so the combination is valid.
 
 <a id="model.test_params.test_validate_execution_settings_accepts_a_vector_backend_without_a_model"></a>
 
@@ -26496,8 +26596,8 @@ def test_validate_execution_settings_accepts_a_vector_backend_without_a_model(
 
 `generational-vector` is a valid execution default on its own.
 
-Whether a particular model can use it (continuous migrants only) is
-decided when that complete configuration is validated.
+Whether a particular model can use it (a finite-alleles locus short
+enough to allocate) is decided when the backend is built.
 
 <a id="model.test_params.test_validate_execution_settings_rejects_with_simulation_params_wording"></a>
 

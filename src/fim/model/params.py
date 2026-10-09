@@ -578,12 +578,12 @@ class SimulationParams:
             (default, the reference implementation), "generational"
             (thread-parallel, bit-identical to "lineal"), or
             "generational-vector" (array-native, one compiled kernel call
-            per generation, requires `numba` and `migrant_sampling=
-            "continuous"`; runs both mutation models and is bit-identical
-            to "lineal" for the same seed on the same platform), or "auto"
+            per generation, requires `numba`; runs both mutation models
+            and both migrant sampling modes and is bit-identical to
+            "lineal" for the same seed on the same platform), or "auto"
             to pick between "generational"/"generational-vector" from
-            `d`, `auto_vector_min_d`, the mutation model and the migration
-            model — never "lineal", see that field's own entry. This never
+            `d`, `auto_vector_min_d`, `jit` and the mutation model —
+            never "lineal", see that field's own entry. This never
             changes what a run converges to, only how fast it gets there;
             see `doc/fim-simulator-design.md`'s own §4.6 for the full
             "what/why/how".
@@ -848,12 +848,11 @@ class SimulationParams:
             raise ValueError(
                 "mutation_model must be 'infinite_alleles' or 'finite_alleles'"
             )
-        _validate_engine_backend(
+        _validate_engine_settings(
             engine_backend=self.engine_backend,
             jit=self.jit,
             auto_vector_min_d=self.auto_vector_min_d,
             auto_vector_max_capacity=self.auto_vector_max_capacity,
-            migrant_sampling=self.migrant_sampling,
         )
         if self.max_concurrent_replicates is not None:
             _require_integer(
@@ -2160,61 +2159,6 @@ def _validate_weighting_and_aggregation(
         )
 
 
-def _validate_engine_backend(
-    *,
-    engine_backend: EngineBackend,
-    jit: Jit,
-    auto_vector_min_d: int,
-    auto_vector_max_capacity: int,
-    migrant_sampling: MigrantSampling,
-) -> None:
-    """Reject an engine_backend/jit/migration combination the engine refuses anyway.
-
-    Checked here, at config-parse time, rather than only once a run
-    actually starts and `fim.engine.LinealBackend`/`VectorizedAdvancer`
-    raise the same complaint deep inside a call stack: a config this
-    obviously self-contradictory should never get far enough to start a
-    run at all. Mirrors two different real counterparts, not one single
-    function: the `jit`-related rejections mirror `fim.engine.
-    build_engine_backend`'s own identical checks; the `migrant_sampling`
-    rejection mirrors `fim.engine.VectorizedAdvancer.advance`'s own
-    runtime check. The test suite checks the pair agrees
-    (`test_params_and_engine_reject_the_same_vector_configurations`).
-
-    Backend V (`generational-vector`) runs both mutation models, so
-    `mutation_model` is not checked; it needs `migrant_sampling`
-    "continuous", because stochastic migrant counts are not implemented
-    for it yet.
-
-    `auto_vector_min_d`/`auto_vector_max_capacity` are a different kind
-    of check entirely — validated here only as plain positive integers,
-    never cross-referenced against `d`/any locus's own capacity; that
-    cross-referencing is `fim.engine._resolve_auto_engine_backend`'s
-    own job, at resolution time, not a construction-time rejection at
-    all (an out-of-range `auto_vector_min_d`/`auto_vector_max_capacity`
-    changes what `"auto"` picks, it never makes construction fail).
-
-    Split in two: `_validate_engine_settings` checks the four execution
-    fields against each other alone, which is all `validate_execution_
-    settings` (the desktop app's Settings defaults) can know; the
-    `migrant_sampling` check below needs the scientific half of a
-    configuration and so is made only here.
-    """
-    _validate_engine_settings(
-        engine_backend=engine_backend,
-        jit=jit,
-        auto_vector_min_d=auto_vector_min_d,
-        auto_vector_max_capacity=auto_vector_max_capacity,
-    )
-    if engine_backend == "generational-vector" and migrant_sampling != "continuous":
-        raise ValueError(
-            "engine_backend 'generational-vector' requires "
-            "migrant_sampling='continuous'; stochastic migrant counts are "
-            "not implemented for it yet (choose engine_backend 'lineal' or "
-            "'generational')"
-        )
-
-
 def _validate_engine_settings(
     *,
     engine_backend: object,
@@ -2224,9 +2168,14 @@ def _validate_engine_settings(
 ) -> None:
     """Reject engine fields that are invalid whatever model they run.
 
-    The model-independent half of `_validate_engine_backend`: each
-    field's own legal values, plus the two `jit` combinations a backend
-    refuses outright. Nothing here reads a scientific field.
+    Checked at config-parse time, rather than only once a run starts and
+    `fim.engine.LinealBackend` or `build_engine_backend` raise the same
+    complaint deep inside a call stack: each field's own legal values,
+    plus the `jit` combinations a backend refuses outright. Nothing here
+    reads a scientific field, so it is also all `validate_execution_
+    settings` (the desktop app's Settings defaults) needs. The test suite
+    checks it agrees with the engine
+    (`test_params_and_engine_reject_the_same_vector_configurations`).
 
     Args:
         engine_backend: Candidate `SimulationParams.engine_backend`.

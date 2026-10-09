@@ -23,7 +23,14 @@ from pathlib import Path
 
 import pytest
 from conftest import assert_none_open
-from vector_support import FINITE_CASES, INFINITE_CASES, loci, make_params
+from vector_support import (
+    FINITE_CASES,
+    INFINITE_CASES,
+    STOCHASTIC_FINITE_CASES,
+    STOCHASTIC_INFINITE_CASES,
+    loci,
+    make_params,
+)
 
 pytest.importorskip("numba")
 
@@ -125,6 +132,88 @@ def _assert_vector_matches(
 def test_infinite_alleles_vector_matches_lineal_through_fim(name: str) -> None:
     """Every infinite-alleles case: rows, report, final state, manifest."""
     assert _assert_vector_matches(INFINITE_CASES[name](40)) > 2
+
+
+@pytest.mark.parametrize("name", list(STOCHASTIC_INFINITE_CASES))
+def test_stochastic_infinite_alleles_vector_matches_lineal_through_fim(
+    name: str,
+) -> None:
+    """Drawn migrant counts, infinite alleles: rows, report, final state."""
+    assert _assert_vector_matches(STOCHASTIC_INFINITE_CASES[name](40)) > 2
+
+
+@pytest.mark.parametrize("name", list(STOCHASTIC_FINITE_CASES))
+def test_stochastic_finite_alleles_vector_matches_lineal_through_fim(
+    name: str,
+) -> None:
+    """Drawn migrant counts, finite alleles: rows, report, final state."""
+    assert _assert_vector_matches(STOCHASTIC_FINITE_CASES[name](40)) > 2
+
+
+@pytest.mark.parametrize(
+    "name",
+    [
+        "multi-locus, m 0.05",
+        "unequal deme sizes",
+        "dense asymmetric matrix",
+        "matrix with edge rows",
+    ],
+)
+def test_stochastic_vector_matches_generational_through_fim(name: str) -> None:
+    """V also equals G (`generational`, threaded advancer) under stochastic counts."""
+    _assert_vector_matches(
+        STOCHASTIC_INFINITE_CASES[name](40), against=("generational",)
+    )
+
+
+def test_stochastic_replicate_batch_matches_lineal() -> None:
+    """Three stochastic replicates: every replicate's rows and the batch summary."""
+    params = make_params(
+        30,
+        loci=loci(2),
+        mu=0.01,
+        m=0.05,
+        n_replicates=3,
+        replicate_tolerance=None,
+        migrant_sampling="stochastic",
+    )
+    assert _assert_vector_matches(params, against=("lineal", "generational")) > 2
+
+
+def test_stochastic_dear_nolan_low_matches_lineal_for_thousands_of_generations() -> (
+    None
+):
+    """Stochastic counts at the dear-nolan-low shape, 3,000 generations."""
+    params = make_params(3000, loci=loci(3), migrant_sampling="stochastic")
+    assert _assert_vector_matches(params) == 3001
+
+
+def test_stochastic_jsonl_trajectory_file_is_byte_identical(
+    tmp_path: Path, tracked_jsonl_stores: list[JSONLTrajectoryStore]
+) -> None:
+    """The JSONL file V writes under stochastic counts equals L's, byte for byte."""
+    params = make_params(
+        25, loci=loci(2), mu=0.02, m=0.05, migrant_sampling="stochastic"
+    )
+    paths = {}
+    for backend in ("lineal", "generational-vector"):
+        path = tmp_path / f"{backend}.jsonl"
+        paths[backend] = path
+        output = fim(
+            params.gene_copies,
+            params.m,
+            params.mu,
+            params.d,
+            params=params,
+            store=JSONLTrajectoryStore(path),
+            run_id=RUN_ID,
+            clock=_clock,
+            engine_backend=backend,
+        )
+        assert isinstance(output, RunResult)
+    assert paths["lineal"].read_bytes() == paths["generational-vector"].read_bytes()
+    assert_none_open(tracked_jsonl_stores)
+    assert paths["lineal"].stat().st_size > 0
 
 
 @pytest.mark.parametrize(

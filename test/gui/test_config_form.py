@@ -1296,10 +1296,10 @@ def test_engine_backend_round_trips_every_legal_value(backend: str) -> None:
     the ones that matter here — a botanist rarely picks either, but a
     hand-edited YAML or a reopened manifest can genuinely hold one.
 
-    `finite_alleles` and a short locus because `"generational-vector"`
-    refuses any other mutation model outright
-    (`_validate_engine_backend`), not for any reason to do with the form
-    itself — the starter config's own single 200-base locus is replaced
+    `finite_alleles` and a short locus because a finite-alleles table is
+    `4 ** length` columns wide, so `"generational-vector"` refuses the
+    starter's 200-base locus (`build_engine_backend`), not for any reason
+    to do with the form itself — the starter config's own locus is replaced
     rather than supplemented, since `loci` and `locus_lengths` cannot
     both be given.
     """

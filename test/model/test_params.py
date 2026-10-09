@@ -1507,29 +1507,29 @@ def test_generational_vector_accepts_either_mutation_model(model: str) -> None:
     assert params.mutation_model == model
 
 
-def test_generational_vector_rejects_stochastic_migrant_sampling() -> None:
-    """The one thing V cannot do yet is refused up front, with the way out."""
-    with pytest.raises(ValueError, match="migrant_sampling='continuous'") as caught:
-        SimulationParams.from_mapping(
-            {
-                "N": 20,
-                "ploidy": "haploid",
-                "d": 3,
-                "m": 0.1,
-                "mu": 0.001,
-                "seed": 1,
-                "migrant_sampling": "stochastic",
-                "engine_backend": "generational-vector",
-            }
-        )
-    assert "'lineal' or 'generational'" in str(caught.value)
+def test_generational_vector_accepts_stochastic_migrant_sampling() -> None:
+    """Backend V draws stochastic migrant counts, so the combination is valid."""
+    params = SimulationParams.from_mapping(
+        {
+            "N": 20,
+            "ploidy": "haploid",
+            "d": 3,
+            "m": 0.1,
+            "mu": 0.001,
+            "seed": 1,
+            "migrant_sampling": "stochastic",
+            "engine_backend": "generational-vector",
+        }
+    )
+    assert params.migrant_sampling == "stochastic"
+    assert params.engine_backend == "generational-vector"
 
 
 def test_validate_execution_settings_accepts_a_vector_backend_without_a_model() -> None:
     """`generational-vector` is a valid execution default on its own.
 
-    Whether a particular model can use it (continuous migrants only) is
-    decided when that complete configuration is validated.
+    Whether a particular model can use it (a finite-alleles locus short
+    enough to allocate) is decided when the backend is built.
     """
     validate_execution_settings(
         {

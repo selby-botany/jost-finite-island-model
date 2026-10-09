@@ -973,12 +973,12 @@ class VectorizedAdvancer:
     `statistics_report`'s bits; the opt-in expensive statistics (`E_ST`,
     `K_ST`, `A_CGD`, `Delta`, `MI`) stay in Python.
 
-    `migrant_sampling="continuous"` only: a lane that asks for stochastic
-    migrant counts raises `ValueError` immediately, never a silent
-    fallback to a dictionary-based path (the migration step is structured
-    to take one more kind, a binomial draw per destination deme, when that
-    follow-up is built). A genuine caller-supplied `(d, d)` migration
-    matrix is supported (one exact sum per cell).
+    Both migrant sampling modes run in the kernel. Under
+    `migrant_sampling="stochastic"` the kernel draws one binomial migrant
+    count per destination deme per generation, shared by every locus and
+    ahead of drift, exactly as `operators.migrate` does with a generator.
+    A genuine caller-supplied `(d, d)` migration matrix is supported (one
+    exact sum per cell in the continuous case).
 
     Args:
         memory_ceiling_bytes: Per-lane ceiling on the table, in bytes;
@@ -1018,24 +1018,12 @@ class VectorizedAdvancer:
         Returns:
             The lanes whose monitor reports stopped, including one that was
             already stopped before this call and is returned unstepped.
-
-        Raises:
-            ValueError: If a lane asks for `migrant_sampling="stochastic"`.
         """
         newly_stopped: list[ReplicaLane] = []
         for lane in active_lanes:
             if lane.monitor.should_stop():
                 newly_stopped.append(lane)
                 continue
-            if lane.params.migrant_sampling != "continuous":
-                raise ValueError(
-                    "VectorizedAdvancer only supports "
-                    f"migrant_sampling='continuous', got "
-                    f"{lane.params.migrant_sampling!r} for replicate "
-                    f"{lane.run_id}; stochastic migrant counts are not "
-                    "implemented for engine_backend 'generational-vector' "
-                    "yet. Choose engine_backend 'lineal' or 'generational'"
-                )
             block = lane.vectorized_state
             if block is None:
                 # Only the very first tick: `lane.state` is still the real
@@ -1048,7 +1036,9 @@ class VectorizedAdvancer:
                     ),
                     mutation_rates=lane.params.mutation_rates,
                     migration=VectorMigration.from_parameter(
-                        lane.params.m, lane.state.deme_count
+                        lane.params.m,
+                        lane.state.deme_count,
+                        stochastic=lane.params.migrant_sampling == "stochastic",
                     ),
                     mutation_model=lane.params.mutation_model,
                     next_id=lane.registry.next_value,
@@ -1693,8 +1683,6 @@ def _resolve_auto_engine_backend(
 
     `"generational-vector"` is chosen when all of these hold:
 
-    - `migrant_sampling` is `"continuous"` (stochastic migrant counts are
-      not implemented for Backend V yet);
     - `jit` is `"off"`: Backend V has no `jit` toggle, only Backend G
       offers one, and a caller who asked for it gets it (the output is the
       same either way);
@@ -1714,7 +1702,7 @@ def _resolve_auto_engine_backend(
     choice changes how fast a run finishes and nothing in its output but
     the manifest's `engine_backend` field.
     """
-    if params.migrant_sampling != "continuous" or jit != "off":
+    if jit != "off":
         return "generational"
     if not _numba_is_available() or params.d < auto_vector_min_d:
         return "generational"
@@ -1784,9 +1772,7 @@ def build_engine_backend(
             `GenerationalBackend(VectorizedAdvancer())` — array-native,
             one compiled kernel call per generation over every locus
             (`fim.model.vector_block`); runs both mutation models,
-            `migrant_sampling="continuous"` only, raising `ValueError`
-            for any lane outside that scope rather than silently falling
-            back to the dict-based path — needs the optional `numba`
+            both migrant sampling modes — needs the optional `numba`
             dependency unconditionally (see `jit`, below, for why that is
             not the same thing as `jit="numba"`).
             `"auto"` picks between `"generational"` and
@@ -1893,14 +1879,11 @@ def build_engine_backend(
             resolves to it) and `jit != "off"`, `engine_backend ==
             "generational-vector"` (or `"auto"` resolves to it) and the
             optional `numba` dependency is not installed, `engine_backend
-            == "generational-vector"` and `params` is both vector-eligible
-            (`mutation_model == "finite_alleles"`, `migrant_sampling ==
-            "continuous"`) and names a locus whose capacity exceeds
+            == "generational-vector"` and `params` uses `mutation_model ==
+            "finite_alleles"` and names a locus whose capacity exceeds
             `auto_vector_max_capacity` (checked only when `params` is
-            given and already eligible on those two axes — an ineligible
-            config raises its own, more specific error later, from
-            `backend.run()`, and `"auto"` already refuses an over-capacity
-            eligible config on its own, before ever reaching this branch),
+            given; `"auto"` already refuses an over-capacity config on its
+            own, before ever reaching this branch),
             `engine_backend == "auto"` and `params` is `None`, or
             `engine_backend` names something unrecognized.
     """
@@ -1945,34 +1928,16 @@ def build_engine_backend(
             )
         # `"auto"` already refuses this same backend when a locus's own
         # capacity exceeds `auto_vector_max_capacity`
-        # (`_resolve_auto_engine_backend`, above) — explicit selection used
-        # to skip that check entirely, accepting a config `build_
-        # vectorized_state` cannot actually allocate (the default locus
-        # length, 200, implies capacity 4**200; this project's own
-        # multi-model engine review, 2026-09-04, found this independently
-        # three times — `FIM-47`/finding C-04/finding P1.2/finding P1-4).
-        # Only checkable when `params` is given: `fim()` itself always
-        # passes one, so this closes the actual reachable gap; a caller
-        # using this function's own lower-level, params-less form (as
-        # several tests here already do, to construct a backend without a
-        # real run in mind) gets no capacity opinion, same as it always
-        # has for every other params-dependent question this function
-        # answers. Gated on the identical `vector_eligible` condition
-        # `_resolve_auto_engine_backend` uses, not on `params` alone: a
-        # `mutation_model="infinite_alleles"` or `migrant_sampling=
-        # "stochastic"` config has no real "capacity" to speak of (locus
-        # length means something else entirely there), and already gets
-        # its own, more specific `ValueError` later, from `backend.run()`
-        # — this check firing first on `tiny_params`'s own out-of-scope
-        # default locus length would otherwise mask that more relevant
-        # error with a misleading capacity complaint (caught live by
-        # `test_fim_generational_vector_rejects_infinite_alleles`/`test_
-        # fim_generational_vector_rejects_stochastic_migrant_sampling`
-        # failing when this check was first written without the gate).
-        if params is not None and (
-            params.mutation_model == "finite_alleles"
-            and params.migrant_sampling == "continuous"
-        ):
+        # (`_resolve_auto_engine_backend`, above); explicit selection must
+        # refuse it too, because a finite-alleles table is `capacity`
+        # columns wide however few states are in use (the default locus
+        # length, 200, implies capacity 4**200). Only checkable when
+        # `params` is given: `fim()` itself always passes one, so this
+        # closes the reachable gap, while the params-less form (used by
+        # several tests to build a backend with no real run in mind) gets
+        # no capacity opinion. Infinite alleles has no capacity to speak
+        # of (locus length means something else there), so it is skipped.
+        if params is not None and params.mutation_model == "finite_alleles":
             max_capacity = max(
                 finite_allele_capacity(locus.length) for locus in params.loci
             )
@@ -2153,10 +2118,8 @@ def fim(
             not-yet-publicly-reachable knob (see `ThreadedAdvancer`'s own
             docstring).
             ``"generational-vector"`` is a real, working third choice —
-            array-native, both mutation models, `migrant_sampling=
-            "continuous"` only; a replicate outside that scope raises
-            `ValueError` naming which constraint it violated, rather than
-            silently falling back to the other backends' dict-based path.
+            array-native, both mutation models and both migrant sampling
+            modes.
             It runs `fim.model.vector_block.VectorBlock`, one compiled
             kernel call per generation over every locus in
             `operators.step`'s own stage and draw order, and is

@@ -2987,12 +2987,12 @@ the kernel, interleaved with the next pair's mutation counts exactly as
 `statistics_report`'s bits; the opt-in expensive statistics (`E_ST`,
 `K_ST`, `A_CGD`, `Delta`, `MI`) stay in Python.
 
-`migrant_sampling="continuous"` only: a lane that asks for stochastic
-migrant counts raises `ValueError` immediately, never a silent
-fallback to a dictionary-based path (the migration step is structured
-to take one more kind, a binomial draw per destination deme, when that
-follow-up is built). A genuine caller-supplied `(d, d)` migration
-matrix is supported (one exact sum per cell).
+Both migrant sampling modes run in the kernel. Under
+`migrant_sampling="stochastic"` the kernel draws one binomial migrant
+count per destination deme per generation, shared by every locus and
+ahead of drift, exactly as `operators.migrate` does with a generator.
+A genuine caller-supplied `(d, d)` migration matrix is supported (one
+exact sum per cell in the continuous case).
 
 **Arguments**:
 
@@ -3045,11 +3045,6 @@ up to the identities the block minted.
 
   The lanes whose monitor reports stopped, including one that was
   already stopped before this call and is returned unstepped.
-
-
-**Raises**:
-
-- `ValueError` - If a lane asks for `migrant_sampling="stochastic"`.
 
 <a id="fim.engine.run_batch"></a>
 
@@ -3236,9 +3231,7 @@ class tree to maintain.
   `GenerationalBackend(VectorizedAdvancer())` — array-native,
   one compiled kernel call per generation over every locus
   (`fim.model.vector_block`); runs both mutation models,
-  `migrant_sampling="continuous"` only, raising `ValueError`
-  for any lane outside that scope rather than silently falling
-  back to the dict-based path — needs the optional `numba`
+  both migrant sampling modes — needs the optional `numba`
   dependency unconditionally (see `jit`, below, for why that is
   not the same thing as `jit="numba"`).
   `"auto"` picks between `"generational"` and
@@ -3347,14 +3340,11 @@ class tree to maintain.
   resolves to it) and `jit != "off"`, `engine_backend ==
   "generational-vector"` (or `"auto"` resolves to it) and the
   optional `numba` dependency is not installed, `engine_backend
-  == "generational-vector"` and `params` is both vector-eligible
-  (`mutation_model == "finite_alleles"`, `migrant_sampling ==
-  "continuous"`) and names a locus whose capacity exceeds
+  == "generational-vector"` and `params` uses `mutation_model ==
+  "finite_alleles"` and names a locus whose capacity exceeds
   `auto_vector_max_capacity` (checked only when `params` is
-  given and already eligible on those two axes — an ineligible
-  config raises its own, more specific error later, from
-  `backend.run()`, and `"auto"` already refuses an over-capacity
-  eligible config on its own, before ever reaching this branch),
+  given; `"auto"` already refuses an over-capacity config on its
+  own, before ever reaching this branch),
   `engine_backend == "auto"` and `params` is `None`, or
   `engine_backend` names something unrecognized.
 
@@ -3524,10 +3514,8 @@ silently disagree.
   not-yet-publicly-reachable knob (see `ThreadedAdvancer`'s own
   docstring).
   ``"generational-vector"`` is a real, working third choice —
-  array-native, both mutation models, `migrant_sampling=
-  "continuous"` only; a replicate outside that scope raises
-  `ValueError` naming which constraint it violated, rather than
-  silently falling back to the other backends' dict-based path.
+  array-native, both mutation models and both migrant sampling
+  modes.
   It runs `fim.model.vector_block.VectorBlock`, one compiled
   kernel call per generation over every locus in
   `operators.step`'s own stage and draw order, and is
@@ -13741,12 +13729,12 @@ functions that actually use each one.
   (default, the reference implementation), "generational"
   (thread-parallel, bit-identical to "lineal"), or
   "generational-vector" (array-native, one compiled kernel call
-  per generation, requires `numba` and `migrant_sampling=
-  "continuous"`; runs both mutation models and is bit-identical
-  to "lineal" for the same seed on the same platform), or "auto"
+  per generation, requires `numba`; runs both mutation models
+  and both migrant sampling modes and is bit-identical to
+  "lineal" for the same seed on the same platform), or "auto"
   to pick between "generational"/"generational-vector" from
-  `d`, `auto_vector_min_d`, the mutation model and the migration
-  model — never "lineal", see that field's own entry. This never
+  `d`, `auto_vector_min_d`, `jit` and the mutation model —
+  never "lineal", see that field's own entry. This never
   changes what a run converges to, only how fast it gets there;
   see `doc/fim-simulator-design.md`'s own §4.6 for the full
   "what/why/how".

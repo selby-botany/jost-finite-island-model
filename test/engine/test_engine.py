@@ -4055,15 +4055,14 @@ def test_fim_generational_vector_runs_infinite_alleles(
     assert vector.manifest.engine_backend == "generational-vector"
 
 
-def test_params_and_engine_reject_the_same_vector_configurations(
+def test_params_and_engine_accept_stochastic_migrants_on_the_vector_backend(
     tiny_params: SimulationParams,
 ) -> None:
-    """Config-time validation and the advancer's own check agree.
+    """`generational-vector` runs stochastic migrant counts, and says so everywhere.
 
-    `generational-vector` runs both mutation models and only refuses
-    stochastic migrant counts. `SimulationParams` refuses that at
-    construction; `VectorizedAdvancer.advance` refuses it again for a lane
-    built some other way, with the same words.
+    `SimulationParams` constructs with it, and `VectorizedAdvancer.advance`
+    steps a stochastic lane instead of refusing it. (Parity with Backend L
+    is `test_vector_parity`'s job.)
     """
     pytest.importorskip("numba")
     for model in ("infinite_alleles", "finite_alleles"):
@@ -4071,37 +4070,56 @@ def test_params_and_engine_reject_the_same_vector_configurations(
             tiny_params,
             mutation_model=model,
             loci=(LocusSpec(1, 2),),
-            engine_backend="generational-vector",
-        )
-    with pytest.raises(ValueError, match="migrant_sampling='continuous'"):
-        replace(
-            tiny_params,
             migrant_sampling="stochastic",
             engine_backend="generational-vector",
         )
     stochastic = replace(tiny_params, migrant_sampling="stochastic")
     store = InMemoryTrajectoryStore()
     lane = _build_replica_lane(stochastic, 0, None, store, _clock)
-    with pytest.raises(ValueError, match="migrant_sampling='continuous'"):
-        VectorizedAdvancer().advance([lane], store)
+    VectorizedAdvancer().advance([lane], store)
+    assert lane.vectorized_state is not None
+    assert lane.vectorized_state.generation == 1
 
 
-def test_fim_generational_vector_rejects_stochastic_migrant_sampling(
+def test_params_and_engine_reject_the_same_vector_jit_configuration(
     tiny_params: SimulationParams,
 ) -> None:
-    """`"generational-vector"` is also scoped to deterministic migration only."""
+    """Config-time validation and `build_engine_backend` agree on `jit`.
+
+    `generational-vector` has no `jit` toggle, so both refuse `jit="numba"`.
+    """
+    pytest.importorskip("numba")
+    with pytest.raises(ValueError, match="jit='off'"):
+        replace(tiny_params, engine_backend="generational-vector", jit="numba")
+    with pytest.raises(ValueError, match="jit"):
+        build_engine_backend("generational-vector", jit="numba")
+
+
+def test_fim_generational_vector_runs_stochastic_migrant_sampling(
+    tiny_params: SimulationParams,
+) -> None:
+    """`"generational-vector"` runs stochastic migrant counts, equal to lineal."""
+    pytest.importorskip("numba")
     params = replace(
-        tiny_params, mutation_model="finite_alleles", migrant_sampling="stochastic"
+        tiny_params,
+        mutation_model="finite_alleles",
+        loci=(LocusSpec(1, 2),),
+        migrant_sampling="stochastic",
     )
-    with pytest.raises(ValueError, match="migrant_sampling"):
-        fim(
+    reports = {}
+    for backend in ("lineal", "generational-vector"):
+        result = fim(
             params.gene_copies,
             params.m,
             params.mu,
             params.d,
             params=params,
-            engine_backend="generational-vector",
+            engine_backend=backend,
+            store=InMemoryTrajectoryStore(),
         )
+        assert not isinstance(result, tuple)
+        reports[backend] = (result.report, result.final_state)
+    assert reports["generational-vector"] == reports["lineal"]
 
 
 def test_fim_generational_vector_rejects_jit(tiny_params: SimulationParams) -> None:
@@ -4265,16 +4283,32 @@ def test_build_engine_backend_auto_picks_generational_below_threshold() -> None:
     assert isinstance(backend._advancer, ThreadedAdvancer)
 
 
-def test_build_engine_backend_auto_picks_generational_when_vector_ineligible() -> None:
-    """A large `d` alone is not enough — `"auto"` still checks V's own scope.
+def test_build_engine_backend_auto_picks_vector_for_stochastic_migration() -> None:
+    """Stochastic migrant counts no longer disqualify `"auto"` from Backend V.
 
-    `d=40` clears the default threshold, but stochastic migrant counts are
-    outside `VectorizedAdvancer`'s own scope — `"auto"` must fall back to
-    Backend G here, not raise the `ValueError` a direct
-    `"generational-vector"` choice would.
+    `d=40` clears the default threshold, and `VectorizedAdvancer` draws the
+    migrant counts itself, so `"auto"` picks it just as for continuous
+    migration.
     """
+    pytest.importorskip("numba")
     params = replace(_finite_alleles_vector_params(d=40), migrant_sampling="stochastic")
     backend = build_engine_backend("auto", params=params, auto_vector_min_d=35)
+    assert isinstance(backend, GenerationalBackend)
+    assert isinstance(backend._advancer, VectorizedAdvancer)
+
+
+def test_build_engine_backend_auto_picks_generational_when_vector_ineligible() -> None:
+    """A large `d` alone is not enough: `jit="numba"` keeps `"auto"` on G.
+
+    `d=40` clears the default threshold, but only Backend G offers `jit`,
+    so a caller who asked for it gets it rather than a `ValueError`.
+    """
+    params = replace(
+        _finite_alleles_vector_params(d=40), engine_backend="auto", jit="numba"
+    )
+    backend = build_engine_backend(
+        "auto", params=params, auto_vector_min_d=35, jit="numba"
+    )
     assert isinstance(backend, GenerationalBackend)
     assert isinstance(backend._advancer, ThreadedAdvancer)
 
