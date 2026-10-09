@@ -846,10 +846,10 @@ which `m` shape is configured above.
   Migrant *composition* is unaffected either way: migrants still carry
   exactly the deterministic, weighted pool average. Requires a concrete
   `N` (always true for a CLI run; a direct `fim.model.operators.migrate`
-  call needs population_size). Not yet available under
-  `engine_backend: generational-vector` (rejected at config-load time,
-  with a message to choose `lineal` or `generational`); `auto` runs
-  `generational` for it.
+  call needs population_size). Every `engine_backend` runs it, with the
+  same numbers: `generational-vector` draws the migrant counts inside
+  its compiled step, in the same order as `lineal`, so a stochastic run
+  matches the other two exactly for the same seed.
 
 ```yaml
 migrant_sampling: stochastic
@@ -895,10 +895,8 @@ the run:
   with whole-array math and one compiled step per generation instead of
   one calculation per deme — by far the fastest option, from a handful
   of demes up. It runs both mutation models (`infinite_alleles` and
-  `finite_alleles`) and a scalar or full-matrix `m`, but needs
-  migrant_sampling: continuous (see those settings above); stochastic
-  migrant counts are rejected up front, at config-load time, rather than
-  accepted and failing later. Needs an extra, optional piece of software
+  `finite_alleles`), a scalar or full-matrix `m`, and either
+  migrant_sampling setting (see those settings above). Needs an extra, optional piece of software
   (`numba`) that a plain `pip install fim` does not include — install
   `fim[jit]` instead to add it. Matches `lineal` and `generational`
   exactly: for the same seed on the same machine, every trajectory row
@@ -1213,8 +1211,7 @@ existed.
 | auto_vector_min_d less than 1 | rejected |
 | auto_vector_max_capacity less than 1 | rejected |
 | jit: numba with engine_backend: lineal or generational-vector | rejected |
-| engine_backend: generational-vector with migrant_sampling: stochastic | rejected |
-| engine_backend: generational-vector with either mutation_model, scalar or matrix `m` | accepted |
+| engine_backend: generational-vector with either mutation_model, scalar or matrix `m`, either migrant_sampling | accepted |
 | max_concurrent_replicates less than 1 | rejected |
 | max_concurrent_replicates greater than n<sub>replicates</sub> | silently capped at n<sub>replicates</sub> |
 | sigma_band_multiplier and sigma_band_window not both given, or neither | rejected |

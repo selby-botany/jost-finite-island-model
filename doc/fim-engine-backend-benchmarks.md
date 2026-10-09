@@ -55,7 +55,8 @@ independent runs at that one swept value:
 **Fixed across B.1 and B.3** (both produced by `dev/bin/benchmark-
 engines`): `n_replicates=16`, `max_generations=100`,
 `mutation_model="finite_alleles"`, `migrant_sampling="continuous"`
-(the only combination `"generational-vector"` accepts at all — see
+(the combination these sweeps were run with, before `"generational-vector"`
+ran the other mutation model and stochastic sampling — see
 [the design document's §4.6](fim-simulator-design.md#46-choosing-an-engine-backend)),
 `replicate_tolerance=None` (every replicate runs to the full
 generation count, never stopped early, so what gets timed does not

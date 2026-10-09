@@ -24,9 +24,21 @@ project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   (`generational`); 100 demes at μ = 0.001 about 1 ms against 30 ms; 50 demes
   at θ = 10 about 9 ms against 281 ms. A table that would not fit in memory
   (2 GiB per replicate; `FIM_VECTOR_MEMORY_CEILING_BYTES` changes it) stops
-  at the start with a message naming the remedies. Stochastic migrant counts
-  are not available for it yet and are rejected up front. See
+  at the start with a message naming the remedies. See
   [engine_backend](doc/configuration.md#engine_backend).
+- **The array engine draws stochastic migrant counts too.**
+  `migrant_sampling: stochastic` now runs on `generational-vector`, and
+  `engine_backend: auto` picks it for those runs instead of
+  `generational`. The compiled step draws one binomial migrant count per
+  destination deme per generation, shared by every locus and ahead of
+  drift, in the same order as `lineal`, so the numbers are identical for
+  the same seed on the same machine (every trajectory row, the report, the
+  final state, with a scalar or matrix `m`, in batches, and a JSONL
+  trajectory file byte for byte). The shipped `stochastic-migrant-counts`
+  example reproduces its committed output on `auto` and runs about 3.5
+  times faster. A run on `generational-vector` that asked for stochastic
+  sampling used to be rejected; it now runs. See
+  [migrant_sampling](doc/configuration.md#migrant_sampling).
 - **Say what each Experiment, Study, and Run is, and why.** Experiments and
   Studies gain longer free-form documentation beside their one-line
   description; Runs gain a name and description in the desktop app

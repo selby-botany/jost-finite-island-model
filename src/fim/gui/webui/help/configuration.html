@@ -737,10 +737,10 @@ continuous case in expectation, but varying generation to generation.
 Migrant <em>composition</em> is unaffected either way: migrants still carry
 exactly the deterministic, weighted pool average. Requires a concrete
 <code>N</code> (always true for a CLI run; a direct <code>fim.model.operators.migrate</code>
-call needs population_size). Not yet available under
-<code>engine_backend: generational-vector</code> (rejected at config-load time,
-with a message to choose <code>lineal</code> or <code>generational</code>); <code>auto</code> runs
-<code>generational</code> for it.</li>
+call needs population_size). Every <code>engine_backend</code> runs it, with the
+same numbers: <code>generational-vector</code> draws the migrant counts inside
+its compiled step, in the same order as <code>lineal</code>, so a stochastic run
+matches the other two exactly for the same seed.</li>
 </ul>
 <pre><code class="language-yaml">migrant_sampling: stochastic
 </code></pre>
@@ -781,10 +781,8 @@ instead of processes. Produces bit-for-bit identical results to
 with whole-array math and one compiled step per generation instead of
 one calculation per deme — by far the fastest option, from a handful
 of demes up. It runs both mutation models (<code>infinite_alleles</code> and
-<code>finite_alleles</code>) and a scalar or full-matrix <code>m</code>, but needs
-migrant_sampling: continuous (see those settings above); stochastic
-migrant counts are rejected up front, at config-load time, rather than
-accepted and failing later. Needs an extra, optional piece of software
+<code>finite_alleles</code>), a scalar or full-matrix <code>m</code>, and either
+migrant_sampling setting (see those settings above). Needs an extra, optional piece of software
 (<code>numba</code>) that a plain <code>pip install fim</code> does not include — install
 <code>fim[jit]</code> instead to add it. Matches <code>lineal</code> and <code>generational</code>
 exactly: for the same seed on the same machine, every trajectory row
@@ -1184,11 +1182,7 @@ existed.</p>
 <td>rejected</td>
 </tr>
 <tr>
-<td>engine_backend: generational-vector with migrant_sampling: stochastic</td>
-<td>rejected</td>
-</tr>
-<tr>
-<td>engine_backend: generational-vector with either mutation_model, scalar or matrix <code>m</code></td>
+<td>engine_backend: generational-vector with either mutation_model, scalar or matrix <code>m</code>, either migrant_sampling</td>
 <td>accepted</td>
 </tr>
 <tr>

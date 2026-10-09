@@ -93,19 +93,17 @@ The one entry point everything else in this project ultimately calls.
   `lgamma`/`log`/`log1p`/`exp` are verified against CPython's only on the
   development platform, so across machines results agree statistically),
   or `"auto"` (picks between `"generational"` and
-  `"generational-vector"` — never `"lineal"`: V for continuous migration
-  when `numba` is importable, `jit` is `"off"`, `params.d` is at least
+  `"generational-vector"` — never `"lineal"`: V when `numba` is importable, `jit` is `"off"`, `params.d` is at least
   `auto_vector_min_d` and, under finite alleles only, every locus's
   capacity is at most `params.auto_vector_max_capacity`; otherwise G.
   The output is identical either way, so a missing `numba` just means
   G).
-  `"generational-vector"` runs both mutation models and needs
-  `params.migrant_sampling="continuous"` (stochastic migrant counts are
-  not implemented for it yet); a direct `"generational-vector"` choice
-  with stochastic sampling raises `ValueError` naming the violated
-  constraint, as does one without `numba` (`"auto"` falls back to
-  `"generational"` instead, silently, since it is choosing on the
-  caller's behalf). It needs the optional `numba` dependency
+  `"generational-vector"` runs both mutation models and both
+  `params.migrant_sampling` modes, drawing the stochastic migrant counts
+  in the compiled step; a direct `"generational-vector"` choice without
+  `numba` raises `ValueError` naming the violated constraint
+  (`"auto"` falls back to `"generational"` instead, silently, since it is
+  choosing on the caller's behalf). It needs the optional `numba` dependency
   (`pip install fim[jit]`) unconditionally — it has no separate `jit`
   toggle of its own, so only `jit="off"` (the default) is accepted
   alongside it; `"auto"` with `jit="numba"` resolves to `"generational"`.
@@ -173,7 +171,7 @@ The one entry point everything else in this project ultimately calls.
   `build_engine_backend`; `ThreadedAdvancer`, real thread-based fan-out —
   what `engine_backend="generational"` actually builds;
   `VectorizedAdvancer`, array-native, one compiled kernel call per
-  generation, both mutation models, continuous migration — what
+  generation, both mutation models, both migrant sampling modes — what
   `engine_backend="generational-vector"` actually builds).
 - **`run_batch(params, store, run_id, clock, advancer) -> tuple[RunResult, ...]`**,
   **`ReplicaLane`** — the generation-first driving loop `GenerationalBackend`
