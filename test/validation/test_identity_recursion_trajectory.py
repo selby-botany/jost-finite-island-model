@@ -76,7 +76,7 @@ def _run_history(
     config_path.write_text(yaml.safe_dump(config, sort_keys=False), encoding="utf-8")
     output = tmp_path / f"out-{seed}"
     assert cli.main(["run", str(config_path), "-o", str(output), "--quiet"]) == 0
-    history = sampled_statistic_history(output / "trajectory.jsonl")
+    history = sampled_statistic_history(output / "trajectory.tlog")
     return history.generations, history.histories
 
 
@@ -166,7 +166,7 @@ def hub_histories(
             assert (
                 cli.main(["run", str(config_path), "-o", str(output), "--quiet"]) == 0
             )
-            history = sampled_statistic_history(output / "trajectory.jsonl")
+            history = sampled_statistic_history(output / "trajectory.tlog")
             runs.append(
                 (
                     SimulationParams.from_mapping(config),

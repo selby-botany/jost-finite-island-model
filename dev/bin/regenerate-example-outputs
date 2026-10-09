@@ -17,8 +17,10 @@ with the fresh ones (design doc
 
 Every result artifact is retained, including trajectories, convergence
 histories, pairwise matrices, and scatter plots, for each kept replicate
-of a batch too. JSONL files are losslessly gzip-compressed and split into
-parts of at most 50 MiB. The desktop app restores them automatically
+of a batch too. The trajectories are binary logs (`trajectory.tlog`,
+`equilibrium_trajectory.tlog`), already compact, so they are copied as they
+are; the other JSONL files are losslessly gzip-compressed and split into
+parts of at most 50 MiB. The desktop app restores those automatically
 when opening the completed example; no rerun is required.
 
 Out-of-the-box defaults. The command line carries nothing but the
