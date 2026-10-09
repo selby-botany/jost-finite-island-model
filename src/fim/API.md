@@ -583,6 +583,8 @@ Return to the [source-tree orientation](../README.md) or the [developer guide](.
     * [write\_generation](#fim.persistence.binary_store.BinaryLogStore.write_generation)
     * [read](#fim.persistence.binary_store.BinaryLogStore.read)
     * [frames](#fim.persistence.binary_store.BinaryLogStore.frames)
+    * [checkpoint](#fim.persistence.binary_store.BinaryLogStore.checkpoint)
+    * [resume](#fim.persistence.binary_store.BinaryLogStore.resume)
     * [frame\_at](#fim.persistence.binary_store.BinaryLogStore.frame_at)
     * [discard](#fim.persistence.binary_store.BinaryLogStore.discard)
     * [flush](#fim.persistence.binary_store.BinaryLogStore.flush)
@@ -790,6 +792,7 @@ Return to the [source-tree orientation](../README.md) or the [developer guide](.
     * [generations](#fim.persistence.tlog.ScanResult.generations)
     * [rows](#fim.persistence.tlog.ScanResult.rows)
     * [last\_generation](#fim.persistence.tlog.ScanResult.last_generation)
+  * [LogPosition](#fim.persistence.tlog.LogPosition)
   * [build\_header](#fim.persistence.tlog.build_header)
   * [parse\_header](#fim.persistence.tlog.parse_header)
   * [scan\_blocks](#fim.persistence.tlog.scan_blocks)
@@ -809,6 +812,8 @@ Return to the [source-tree orientation](../README.md) or the [developer guide](.
     * [flush](#fim.persistence.tlog.LogWriter.flush)
     * [close](#fim.persistence.tlog.LogWriter.close)
     * [snapshot](#fim.persistence.tlog.LogWriter.snapshot)
+    * [checkpoint](#fim.persistence.tlog.LogWriter.checkpoint)
+    * [position](#fim.persistence.tlog.LogWriter.position)
   * [iter\_frames](#fim.persistence.tlog.iter_frames)
 * [fim.persistence.tlog\_codec](#fim.persistence.tlog_codec)
   * [PAD4](#fim.persistence.tlog_codec.PAD4)
@@ -17088,6 +17093,64 @@ Yield every committed generation as a frame, oldest first.
 
 - `FileNotFoundError` - If there is no log file.
 
+<a id="fim.persistence.binary_store.BinaryLogStore.checkpoint"></a>
+
+#### checkpoint
+
+```python
+def checkpoint() -> tlog.LogPosition
+```
+
+Commit and sync everything written so far and return its position.
+
+The barrier a checkpoint or a pause needs. The position names the end
+of the last committed block (byte offset, chained checksum, last
+generation, counts, and a copy of the file header); `resume` later
+cuts the file back to it.
+
+**Raises**:
+
+- `ValueError` - If nothing has been written yet.
+
+<a id="fim.persistence.binary_store.BinaryLogStore.resume"></a>
+
+#### resume
+
+```python
+def resume(run_id: str,
+           layout: FrameLayout,
+           position: tlog.LogPosition | None = None) -> tlog.LogPosition
+```
+
+Continue an existing log: drop its torn tail (or cut back to a checkpoint).
+
+Without a position, everything up to the last intact block is kept.
+With one (from `checkpoint`), the file is first checked against it
+(a checksum comparison, not a hash of the file) and then cut back to
+it, which removes any later generations: they belong to a state the
+checkpoint does not describe. The next frame written must be a later
+generation and is stored as a keyframe.
+
+**Arguments**:
+
+- `run_id` - The run the log holds.
+- `layout` - Its layout.
+- `position` - A checkpoint's position, or `None` for the last
+  committed block.
+
+
+**Returns**:
+
+  The committed position resumed at.
+
+
+**Raises**:
+
+- `ValueError` - If the store is already writing, or the position does
+  not match the file.
+- `TlogError` - If the file is another run's, another layout, or unusable.
+- `FileNotFoundError` - If there is no log to resume.
+
 <a id="fim.persistence.binary_store.BinaryLogStore.frame_at"></a>
 
 #### frame\_at
@@ -21073,6 +21136,32 @@ def last_generation() -> int
 
 The last committed generation, or `-1` when none is committed.
 
+<a id="fim.persistence.tlog.LogPosition"></a>
+
+## LogPosition Objects
+
+```python
+@dataclass(frozen=True, slots=True)
+class LogPosition()
+```
+
+A committed position in a log: what a checkpoint records about it.
+
+It names the end of a committed block by its byte offset, the chained
+checksum there and the last generation inside, so resuming can check
+that the file really holds that block (one 32-bit comparison; no hash of
+the file) and cut off everything after it. The header is copied in too:
+a damaged header makes a log unusable, so resuming can restore it.
+
+**Arguments**:
+
+- `generation` - The last committed generation (`-1` for none).
+- `offset` - Bytes of the file up to the end of the last committed block.
+- `chain_crc` - The chained checksum at that offset.
+- `generations` - Generations committed so far.
+- `rows` - Rows committed so far.
+- `header` - The file header's bytes.
+
 <a id="fim.persistence.tlog.build_header"></a>
 
 #### build\_header
@@ -21363,11 +21452,21 @@ when the writer closes.
 - `sync_seconds` - Seconds between group-commit syncs.
 - `sync_function` - Replaces `sync_file` (tests inject one).
 - `fault` - A `FaultHook` for tests.
+- `resume` - `None` creates a new log (the file must not exist). `True`
+  reopens an existing log of the same run and layout, drops any torn
+  or corrupt tail and continues after the last committed block. A
+  `LogPosition` does the same but cuts back to that checkpointed
+  position, which it first checks against the file. After either,
+  the first record written is a keyframe (the previous frame is
+  not in memory), so the log stays decodable from any keyframe.
 
 
 **Raises**:
 
-- `FileExistsError` - If `path` already exists.
+- `FileExistsError` - If `path` already exists and `resume` is `None`.
+- `FileNotFoundError` - If `resume` is set and the file does not exist.
+- `TlogError` - If a resumed file is not a log of this run and layout.
+- `ValueError` - If a checkpoint position does not match the file.
 
 <a id="fim.persistence.tlog.LogWriter.__init__"></a>
 
@@ -21389,10 +21488,11 @@ def __init__(path: Path | str,
              sync: SyncMode = "none",
              sync_seconds: float = DEFAULT_SYNC_SECONDS,
              sync_function: Callable[[int, SyncMode], None] = sync_file,
-             fault: FaultHook | None = None) -> None
+             fault: FaultHook | None = None,
+             resume: LogPosition | bool | None = None) -> None
 ```
 
-Create the file, write its header and start the thread if asked.
+Create the file (or reopen it to continue) and start the thread if asked.
 
 <a id="fim.persistence.tlog.LogWriter.synced_generation"></a>
 
@@ -21479,6 +21579,43 @@ Return `(committed generation, committed bytes, chain checksum)` together.
 
 Read under the lock the writer thread holds while it updates them,
 so the three always describe the same block.
+
+<a id="fim.persistence.tlog.LogWriter.checkpoint"></a>
+
+#### checkpoint
+
+```python
+def checkpoint() -> LogPosition
+```
+
+Commit and sync everything written so far and return its position.
+
+The barrier a checkpoint or a pause needs: when this returns, every
+submitted generation is in a committed block and durable (when the
+sync mode is not `"none"`), and the returned position names exactly
+that. Resuming from it later cuts the file back to this point.
+
+**Returns**:
+
+  The committed position.
+
+
+**Raises**:
+
+- `BaseException` - Whatever the writer thread raised.
+
+<a id="fim.persistence.tlog.LogWriter.position"></a>
+
+#### position
+
+```python
+def position() -> LogPosition
+```
+
+Return the committed position now, without waiting for anything.
+
+Whatever the writer thread has committed so far; `checkpoint` is the
+barrier that makes it everything submitted.
 
 <a id="fim.persistence.tlog.iter_frames"></a>
 

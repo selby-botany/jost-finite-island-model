@@ -140,6 +140,7 @@ Every test module, fixture, and test function documented here in full; `doc/fim-
   - [`test_tlog_codec`](#persistence.test_tlog_codec)
   - [`test_tlog_export`](#persistence.test_tlog_export)
   - [`test_tlog_reader`](#persistence.test_tlog_reader)
+  - [`test_tlog_resume`](#persistence.test_tlog_resume)
   - [`test_tlog_sparse`](#persistence.test_tlog_sparse)
   - [`test_tlog_writer`](#persistence.test_tlog_writer)
   - [`test_validation`](#persistence.test_validation)
@@ -32581,6 +32582,158 @@ def test_skipping_missing_generations_never_loses_a_later_one(
 A thinned log asked for absent and present generations in one pass.
 
 Asking for 2 overshoots to 3 while looking; 3 must still be found.
+
+<a id="persistence.test_tlog_resume"></a>
+
+# persistence.test\_tlog\_resume
+
+Checkpoint and resume: a killed run continues from a committed position.
+
+A checkpoint records where the committed log ended (byte offset, chained
+checksum, last generation, counts, a copy of the header). Resuming checks the
+file against it with one comparison, cuts everything after it, and continues
+with a keyframe. The central claim is the stage's exit criterion: a run that
+is killed and resumed leaves exactly the log of the uninterrupted run, byte
+for byte when the checkpoint falls on a block and keyframe boundary, and with
+identical frames and exported JSONL in every case. Everything is seeded and
+the kills are real process exits at injected points, never timers.
+
+<a id="persistence.test_tlog_resume.test_resuming_at_a_block_and_keyframe_boundary_gives_the_uninterrupted_bytes"></a>
+
+#### test\_resuming\_at\_a\_block\_and\_keyframe\_boundary\_gives\_the\_uninterrupted\_bytes
+
+```python
+@pytest.mark.parametrize("background", [False, True])
+@pytest.mark.parametrize("mode", ["sparse", "dense"])
+def test_resuming_at_a_block_and_keyframe_boundary_gives_the_uninterrupted_bytes(
+        tmp_path: Path, mode: str, background: bool) -> None
+```
+
+Kill-and-resume equals the uninterrupted run, byte for byte.
+
+<a id="persistence.test_tlog_resume.test_resuming_anywhere_keeps_every_frame_and_the_exported_jsonl"></a>
+
+#### test\_resuming\_anywhere\_keeps\_every\_frame\_and\_the\_exported\_jsonl
+
+```python
+@pytest.mark.parametrize("checkpoint_after", [1, 5, 13, 33, 61])
+def test_resuming_anywhere_keeps_every_frame_and_the_exported_jsonl(
+        tmp_path: Path, checkpoint_after: int) -> None
+```
+
+Off a boundary the bytes may differ (a short block, an extra keyframe),
+but the generations, and so the canonical export, are the same.
+
+<a id="persistence.test_tlog_resume.test_the_first_record_after_a_resume_is_a_keyframe"></a>
+
+#### test\_the\_first\_record\_after\_a\_resume\_is\_a\_keyframe
+
+```python
+def test_the_first_record_after_a_resume_is_a_keyframe(tmp_path: Path) -> None
+```
+
+The previous frame is not in memory, so the log restarts from a keyframe.
+
+<a id="persistence.test_tlog_resume.test_resuming_without_a_position_keeps_the_committed_prefix_and_drops_a_torn_tail"></a>
+
+#### test\_resuming\_without\_a\_position\_keeps\_the\_committed\_prefix\_and\_drops\_a\_torn\_tail
+
+```python
+def test_resuming_without_a_position_keeps_the_committed_prefix_and_drops_a_torn_tail(
+        tmp_path: Path) -> None
+```
+
+After a crash with no checkpoint: everything intact is kept.
+
+<a id="persistence.test_tlog_resume.test_a_thinned_stream_resumes_with_its_gaps"></a>
+
+#### test\_a\_thinned\_stream\_resumes\_with\_its\_gaps
+
+```python
+def test_a_thinned_stream_resumes_with_its_gaps(tmp_path: Path) -> None
+```
+
+Generation numbers need only increase; the gaps survive a resume.
+
+<a id="persistence.test_tlog_resume.test_a_resumed_writer_refuses_a_generation_that_does_not_follow"></a>
+
+#### test\_a\_resumed\_writer\_refuses\_a\_generation\_that\_does\_not\_follow
+
+```python
+def test_a_resumed_writer_refuses_a_generation_that_does_not_follow(
+        tmp_path: Path) -> None
+```
+
+Resuming at generation 15 means the next frame must be later than 15.
+
+<a id="persistence.test_tlog_resume.test_a_position_that_does_not_match_the_file_is_refused"></a>
+
+#### test\_a\_position\_that\_does\_not\_match\_the\_file\_is\_refused
+
+```python
+def test_a_position_that_does_not_match_the_file_is_refused(
+        tmp_path: Path) -> None
+```
+
+Checksum, offset, generation, a shorter file, another log: all refused.
+
+<a id="persistence.test_tlog_resume.test_resume_refuses_another_run_layout_or_mode"></a>
+
+#### test\_resume\_refuses\_another\_run\_layout\_or\_mode
+
+```python
+def test_resume_refuses_another_run_layout_or_mode(tmp_path: Path) -> None
+```
+
+A file that is not this run's log is never continued.
+
+<a id="persistence.test_tlog_resume.test_a_damaged_header_is_restored_from_the_checkpoints_copy"></a>
+
+#### test\_a\_damaged\_header\_is\_restored\_from\_the\_checkpoints\_copy
+
+```python
+def test_a_damaged_header_is_restored_from_the_checkpoints_copy(
+        tmp_path: Path) -> None
+```
+
+The header is copied into every checkpoint so a bad one is not fatal.
+
+<a id="persistence.test_tlog_resume.test_a_checkpoint_position_is_a_plain_record_of_the_committed_end"></a>
+
+#### test\_a\_checkpoint\_position\_is\_a\_plain\_record\_of\_the\_committed\_end
+
+```python
+def test_a_checkpoint_position_is_a_plain_record_of_the_committed_end(
+        tmp_path: Path) -> None
+```
+
+The position names the committed end and matches a fresh scan of it.
+
+<a id="persistence.test_tlog_resume.test_the_store_checkpoints_and_resumes"></a>
+
+#### test\_the\_store\_checkpoints\_and\_resumes
+
+```python
+def test_the_store_checkpoints_and_resumes(tmp_path: Path) -> None
+```
+
+The same, through `BinaryLogStore`, reading rows back across the resume.
+
+<a id="persistence.test_tlog_resume.test_a_process_killed_after_a_checkpoint_resumes_to_the_uninterrupted_log"></a>
+
+#### test\_a\_process\_killed\_after\_a\_checkpoint\_resumes\_to\_the\_uninterrupted\_log
+
+```python
+def test_a_process_killed_after_a_checkpoint_resumes_to_the_uninterrupted_log(
+        tmp_path: Path) -> None
+```
+
+A real abrupt process exit, then resume: the log equals the whole run.
+
+The child checkpoints at generation 31 (a block and keyframe boundary),
+commits more blocks, and exits without closing anything. The parent
+resumes from the checkpoint, writes the rest, and compares with a log
+written without interruption: byte for byte.
 
 <a id="persistence.test_tlog_sparse"></a>
 

@@ -264,6 +264,70 @@ class BinaryLogStore:
             raise FileNotFoundError(f"trajectory does not exist: {self.path}")
         return tlog.iter_frames(self.path)
 
+    def checkpoint(self) -> tlog.LogPosition:
+        """Commit and sync everything written so far and return its position.
+
+        The barrier a checkpoint or a pause needs. The position names the end
+        of the last committed block (byte offset, chained checksum, last
+        generation, counts, and a copy of the file header); `resume` later
+        cuts the file back to it.
+
+        Raises:
+            ValueError: If nothing has been written yet.
+        """
+        with self._lock:
+            if self._writer is None:
+                raise ValueError("nothing has been written, so there is no position")
+            return self._writer.checkpoint()
+
+    def resume(
+        self,
+        run_id: str,
+        layout: FrameLayout,
+        position: tlog.LogPosition | None = None,
+    ) -> tlog.LogPosition:
+        """Continue an existing log: drop its torn tail (or cut back to a checkpoint).
+
+        Without a position, everything up to the last intact block is kept.
+        With one (from `checkpoint`), the file is first checked against it
+        (a checksum comparison, not a hash of the file) and then cut back to
+        it, which removes any later generations: they belong to a state the
+        checkpoint does not describe. The next frame written must be a later
+        generation and is stored as a keyframe.
+
+        Args:
+            run_id: The run the log holds.
+            layout: Its layout.
+            position: A checkpoint's position, or `None` for the last
+                committed block.
+
+        Returns:
+            The committed position resumed at.
+
+        Raises:
+            ValueError: If the store is already writing, or the position does
+                not match the file.
+            TlogError: If the file is another run's, another layout, or unusable.
+            FileNotFoundError: If there is no log to resume.
+        """
+        with self._lock:
+            if self._writer is not None or self._finished:
+                raise ValueError("resume must come before any write")
+            self._bind(run_id)
+            if self._layout is not None and self._layout != layout:
+                raise ValueError(
+                    f"run {run_id!r} was already begun with another layout"
+                )
+            self._layout = layout
+            self._writer = tlog.LogWriter(
+                self.path,
+                run_id,
+                layout,
+                resume=position if position is not None else True,
+                **self._options,
+            )
+            return self._writer.position()
+
     def frame_at(self, generation: int) -> TrajectoryFrame:
         """Rebuild one committed generation as a frame, without reading the rest.
 

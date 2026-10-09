@@ -43,7 +43,7 @@ import zlib
 from collections.abc import Callable, Iterator
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Final, Literal, Protocol
+from typing import BinaryIO, Final, Literal, Protocol
 
 import numpy as np
 
@@ -197,6 +197,33 @@ class ScanResult:
     def last_generation(self) -> int:
         """The last committed generation, or `-1` when none is committed."""
         return self.blocks[-1].last_generation if self.blocks else -1
+
+
+@dataclass(frozen=True, slots=True)
+class LogPosition:
+    """A committed position in a log: what a checkpoint records about it.
+
+    It names the end of a committed block by its byte offset, the chained
+    checksum there and the last generation inside, so resuming can check
+    that the file really holds that block (one 32-bit comparison; no hash of
+    the file) and cut off everything after it. The header is copied in too:
+    a damaged header makes a log unusable, so resuming can restore it.
+
+    Args:
+        generation: The last committed generation (`-1` for none).
+        offset: Bytes of the file up to the end of the last committed block.
+        chain_crc: The chained checksum at that offset.
+        generations: Generations committed so far.
+        rows: Rows committed so far.
+        header: The file header's bytes.
+    """
+
+    generation: int
+    offset: int
+    chain_crc: int
+    generations: int
+    rows: int
+    header: bytes
 
 
 def _varints(values: list[int] | tuple[int, ...]) -> bytes:
@@ -596,9 +623,19 @@ class LogWriter:
         sync_seconds: Seconds between group-commit syncs.
         sync_function: Replaces `sync_file` (tests inject one).
         fault: A `FaultHook` for tests.
+        resume: `None` creates a new log (the file must not exist). `True`
+            reopens an existing log of the same run and layout, drops any torn
+            or corrupt tail and continues after the last committed block. A
+            `LogPosition` does the same but cuts back to that checkpointed
+            position, which it first checks against the file. After either,
+            the first record written is a keyframe (the previous frame is
+            not in memory), so the log stays decodable from any keyframe.
 
     Raises:
-        FileExistsError: If `path` already exists.
+        FileExistsError: If `path` already exists and `resume` is `None`.
+        FileNotFoundError: If `resume` is set and the file does not exist.
+        TlogError: If a resumed file is not a log of this run and layout.
+        ValueError: If a checkpoint position does not match the file.
     """
 
     def __init__(
@@ -619,24 +656,19 @@ class LogWriter:
         sync_seconds: float = DEFAULT_SYNC_SECONDS,
         sync_function: Callable[[int, SyncMode], None] = sync_file,
         fault: FaultHook | None = None,
+        resume: LogPosition | bool | None = None,
     ) -> None:
-        """Create the file, write its header and start the thread if asked."""
-        if block_generations < 1:
-            raise ValueError("block_generations must be at least 1")
-        if block_seconds is not None and block_seconds <= 0:
-            raise ValueError("block_seconds must be positive")
-        if buffer_bytes < MIN_BUFFER_BYTES:
-            raise ValueError(f"buffer_bytes must be at least {MIN_BUFFER_BYTES}")
-        if queue_depth < 1:
-            raise ValueError("queue_depth must be at least 1")
-        if sync_seconds <= 0:
-            raise ValueError("sync_seconds must be positive")
-        if sync not in ("none", "fsync", "full", "auto"):
-            raise ValueError(f"unknown sync mode {sync!r}")
-        if mode not in ("dense", "sparse"):
-            raise ValueError(f"unknown log mode {mode!r}")
-        if key_every < 1:
-            raise ValueError("key_every must be at least 1")
+        """Create the file (or reopen it to continue) and start the thread if asked."""
+        self._validate_options(
+            block_generations=block_generations,
+            block_seconds=block_seconds,
+            buffer_bytes=buffer_bytes,
+            queue_depth=queue_depth,
+            sync=sync,
+            sync_seconds=sync_seconds,
+            mode=mode,
+            key_every=key_every,
+        )
         self.path = Path(path)
         self.run_id = run_id
         self.layout = layout
@@ -657,21 +689,171 @@ class LogWriter:
         self._header = build_header(
             run_id, layout, key_every, FLAG_SPARSE if mode == "sparse" else 0
         )
-        self._fd = os.open(
-            self.path, os.O_WRONLY | os.O_CREAT | os.O_EXCL | _O_BINARY, 0o644
-        )
         self._closed = False
         self._state_lock = threading.Lock()
         self._error: BaseException | None = None
-        try:
-            self._write_all(self._header)
-        except BaseException:
-            os.close(self._fd)
-            raise
+        resumed: ScanResult | None = None
+        if resume is None or resume is False:
+            self._fd = os.open(
+                self.path, os.O_WRONLY | os.O_CREAT | os.O_EXCL | _O_BINARY, 0o644
+            )
+            try:
+                self._write_all(self._header)
+            except BaseException:
+                os.close(self._fd)
+                raise
+        else:
+            resumed = self._open_for_resume(None if resume is True else resume)
         self._init_state(clock)
+        if resumed is not None:
+            self._adopt_scan(resumed)
         self._init_buffers(queue_depth)
         if background:
             self._start_thread()
+
+    @staticmethod
+    def _validate_options(
+        *,
+        block_generations: int,
+        block_seconds: float | None,
+        buffer_bytes: int,
+        queue_depth: int,
+        sync: str,
+        sync_seconds: float,
+        mode: str,
+        key_every: int,
+    ) -> None:
+        """Refuse nonsense options before any file is touched.
+
+        Raises:
+            ValueError: For the first bad option, naming it.
+        """
+        if block_generations < 1:
+            raise ValueError("block_generations must be at least 1")
+        if block_seconds is not None and block_seconds <= 0:
+            raise ValueError("block_seconds must be positive")
+        if buffer_bytes < MIN_BUFFER_BYTES:
+            raise ValueError(f"buffer_bytes must be at least {MIN_BUFFER_BYTES}")
+        if queue_depth < 1:
+            raise ValueError("queue_depth must be at least 1")
+        if sync_seconds <= 0:
+            raise ValueError("sync_seconds must be positive")
+        if sync not in ("none", "fsync", "full", "auto"):
+            raise ValueError(f"unknown sync mode {sync!r}")
+        if mode not in ("dense", "sparse"):
+            raise ValueError(f"unknown log mode {mode!r}")
+        if key_every < 1:
+            raise ValueError("key_every must be at least 1")
+
+    def _open_for_resume(self, position: LogPosition | None) -> ScanResult:
+        """Reopen an existing log for appending after its committed prefix.
+
+        Checks that the file is this run's log, restores a damaged header from
+        the checkpoint when one is given, verifies the checkpoint against the
+        file, and cuts off everything after the resume point.
+
+        Returns:
+            The scan of what remains.
+        """
+        if not self.path.is_file():
+            raise FileNotFoundError(f"trajectory log does not exist: {self.path}")
+        with self.path.open("r+b") as handle:
+            if os.fstat(handle.fileno()).st_size == 0:
+                raise TlogError("trajectory log is empty")
+            self._restore_damaged_header(handle, position)
+            with mmap.mmap(handle.fileno(), 0, access=mmap.ACCESS_READ) as data:
+                header = parse_header(data)
+                self._check_same_log(header)
+                scan = scan_blocks(data, header)
+            if position is not None:
+                scan = self._cut_back_to(scan, position)
+            if scan.valid_end < os.fstat(handle.fileno()).st_size:
+                handle.truncate(scan.valid_end)
+        self._fd = os.open(self.path, os.O_WRONLY | os.O_APPEND | _O_BINARY)
+        return scan
+
+    def _restore_damaged_header(
+        self, handle: BinaryIO, position: LogPosition | None
+    ) -> None:
+        """Rewrite a header that no longer parses from the checkpoint's copy.
+
+        Raises:
+            TlogError: If the header is damaged and there is no copy to restore.
+        """
+        with mmap.mmap(handle.fileno(), 0, access=mmap.ACCESS_READ) as data:
+            try:
+                parse_header(data)
+            except TlogError:
+                if position is None or len(data) < len(position.header):
+                    raise
+            else:
+                return
+        handle.seek(0)
+        handle.write(position.header if position is not None else b"")
+        handle.flush()
+
+    def _check_same_log(self, header: LogHeader) -> None:
+        """Require the file's header to be this writer's run, layout and mode.
+
+        Raises:
+            TlogError: If it is not.
+        """
+        if header.run_id != self.run_id or header.layout != self.layout:
+            raise TlogError(
+                f"{self.path.name} holds another run or layout, cannot continue it"
+            )
+        if bool(header.flags & FLAG_SPARSE) != (self.mode == "sparse"):
+            raise TlogError(f"{self.path.name} was written in another mode")
+        self.key_every = header.key_every
+
+    def _cut_back_to(self, scan: ScanResult, position: LogPosition) -> ScanResult:
+        """Return `scan` limited to the blocks up to a checked checkpoint."""
+        cut = self._checkpoint_offset(scan, position)
+        kept = [block for block in scan.blocks if block.end <= cut]
+        return ScanResult(
+            header=scan.header,
+            blocks=kept,
+            valid_end=cut,
+            file_size=scan.file_size,
+            reason=scan.reason,
+            chain_crc=kept[-1].chain_crc if kept else scan.header.crc,
+        )
+
+    @staticmethod
+    def _checkpoint_offset(scan: ScanResult, position: LogPosition) -> int:
+        """Return the offset a checkpoint names after checking it against the scan.
+
+        Raises:
+            ValueError: If no committed block ends there with that checksum
+                and last generation (the file is shorter, or another log).
+        """
+        if position.generation < 0:
+            if position.offset != scan.header.header_len:
+                raise ValueError("checkpoint does not match the log (offset)")
+            return position.offset
+        for block in scan.blocks:
+            if block.end == position.offset:
+                if (
+                    block.chain_crc != position.chain_crc
+                    or block.last_generation != position.generation
+                ):
+                    raise ValueError("checkpoint does not match the log (checksum)")
+                return position.offset
+        raise ValueError(
+            "checkpoint does not match the log: no committed block ends at "
+            f"byte {position.offset} (the file may be shorter than the checkpoint)"
+        )
+
+    def _adopt_scan(self, scan: ScanResult) -> None:
+        """Continue from a scanned committed prefix instead of an empty log."""
+        self.file_position = scan.valid_end
+        self.chain_crc = scan.chain_crc
+        self.committed_generation = scan.last_generation
+        self.generations_written = scan.generations
+        self.rows_written = scan.rows
+        self.blocks_written = len(scan.blocks)
+        self._latest = scan.last_generation
+        self.stats.bytes = scan.valid_end
 
     def _init_state(self, clock: Callable[[], float]) -> None:
         """Set the commit counters and the open-block bookkeeping."""
@@ -886,6 +1068,39 @@ class LogWriter:
         ids[:, :width] = self._previous_ids
         freq[:, :width] = self._previous_freq
         self._previous_ids, self._previous_freq = ids, freq
+
+    def checkpoint(self) -> LogPosition:
+        """Commit and sync everything written so far and return its position.
+
+        The barrier a checkpoint or a pause needs: when this returns, every
+        submitted generation is in a committed block and durable (when the
+        sync mode is not `"none"`), and the returned position names exactly
+        that. Resuming from it later cuts the file back to this point.
+
+        Returns:
+            The committed position.
+
+        Raises:
+            BaseException: Whatever the writer thread raised.
+        """
+        self.flush(sync=True)
+        return self.position()
+
+    def position(self) -> LogPosition:
+        """Return the committed position now, without waiting for anything.
+
+        Whatever the writer thread has committed so far; `checkpoint` is the
+        barrier that makes it everything submitted.
+        """
+        with self._state_lock:
+            return LogPosition(
+                generation=self.committed_generation,
+                offset=self.file_position,
+                chain_crc=self.chain_crc,
+                generations=self.generations_written,
+                rows=self.rows_written,
+                header=self._header,
+            )
 
     def _raise_error(self) -> None:
         """Raise the exception the writer thread stored, if any."""
