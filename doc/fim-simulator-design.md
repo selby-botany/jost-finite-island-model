@@ -1266,7 +1266,7 @@ Running it — a real, reproducible transcript, not a sketch:
 $ fim run myrun.yaml -o results/example
 Running run-cee6b47ea87691ee (N=450, d=20, m=0.001, mu=3e-07, seed=20260814)
 Statistic converged: generation 49, D=0.238373, G_ST=0.365507
-Trajectory -> results/example/trajectory.jsonl
+Trajectory -> results/example/trajectory.tlog
 Manifest   -> results/example/manifest.json
 Report     -> results/example/report.json
 Scatter    -> results/example/scatter.png
@@ -1291,9 +1291,10 @@ Scatter    -> results/example/scatter.png
 }
 ```
 
-`trajectory.jsonl` — one line per `(generation, deme, locus, allele)` row,
-exactly §6's schema, openable in a text editor, Excel, R, or pandas
-without any custom parser:
+`trajectory.jsonl` — produced by `fim export` from the run's binary
+`trajectory.tlog` (`doc/trajectory-log.md`): one line per `(generation, deme,
+locus, allele)` row, exactly §6's schema, openable in a text editor, Excel, R,
+or pandas without any custom parser:
 
 ```jsonl
 {"allele_id":0,"deme":1,"frequency":0.9469332873780484,"generation":0,"locus_id":1,"run_id":"run-cee6b47ea87691ee"}

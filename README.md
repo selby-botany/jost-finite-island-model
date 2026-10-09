@@ -155,8 +155,8 @@ writes these artifacts:
 
 | File | Purpose |
 |---|---|
-| `trajectory.jsonl` | Every nonzero `(generation, deme, locus, allele)` frequency |
-| `equilibrium_trajectory.jsonl` | The ancestral phase's own trajectory; written only by an equilibrium-split run |
+| `trajectory.tlog` | Every nonzero `(generation, deme, locus, allele)` frequency, as a compact binary log |
+| `equilibrium_trajectory.tlog` | The ancestral phase's own trajectory; written only by an equilibrium-split run |
 | `convergence.jsonl` | One row per generation of each watched convergence statistic |
 | `manifest.json` | Replayable parameters, seed, version, timestamps, and stop outcome |
 | `report.json` | Final `H_S`, `H_T`, `G_ST`, Jost's `D`, `E_ST`, and `K_ST` |
@@ -164,8 +164,10 @@ writes these artifacts:
 | `scatter.png` | Canonical allele-frequency scatter or labeled projection |
 | `sigma_band_trajectory.jsonl` | The post-convergence extension window; written only when a sigma band is requested |
 
-The trajectory is long-format JSON Lines and can be loaded without a custom
-database. `n_replicates` greater than one runs a batch instead: one set of the
+The trajectory is stored as a compact binary log; `fim export` turns it into
+long-format JSON Lines (`trajectory.jsonl`), which can be loaded without a
+custom database (see [the trajectory log](doc/trajectory-log.md)).
+`n_replicates` greater than one runs a batch instead: one set of the
 above per replicate subdirectory, plus a batch-level `summary.json` — each
 reported statistic's mean and confidence interval across replicates — and
 its own `manifest.json`. See [output schemas](doc/usage.md#output-schemas).

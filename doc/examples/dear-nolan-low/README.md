@@ -98,7 +98,8 @@ fim run doc/examples/dear-nolan-low/config.yaml \
 
 Takes about an hour on a busy development machine (295,390 generations — the
 derived cap — of 30 loci; 3,583 s with a load average of about 15), and less
-on an idle one, and writes a large `trajectory.jsonl`. `results/dear-nolan-low/
+on an idle one, and writes a trajectory log of about 7 MB (`fim export` turns it into a
+4.8 GB `trajectory.jsonl`). `results/dear-nolan-low/
 report.json` will match `report.json` in this directory exactly.
 
 ## Expected output

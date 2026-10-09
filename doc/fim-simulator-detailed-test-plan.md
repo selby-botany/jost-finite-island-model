@@ -891,10 +891,10 @@ documented separately in `doc/fim-gui-test-plan.md`, not here.
 
 - **`fim run` produces exactly the documented artifacts**: given a small
   YAML config and a fixed seed, the output directory contains
-  `trajectory.jsonl`, `manifest.json`, `report.json`, and `scatter.png`,
+  `trajectory.tlog`, `manifest.json`, `report.json`, and `scatter.png`,
   and `report.json` carries every scalar in design §12's example shape
   (requirement 6a). Two runs at the same seed produce identical
-  `trajectory.jsonl` and `report.json`; a run that would collide with an
+  `trajectory.tlog` and `report.json`; a run that would collide with an
   existing output directory is rejected. Progress output describes the
   run's outcome.
 - **A batch (n<sub>replicates</sub> greater than one) produces exactly the
@@ -921,7 +921,7 @@ documented separately in `doc/fim-gui-test-plan.md`, not here.
   offending key/value; a config whose YAML root is not a mapping is
   rejected; a valid config round-trips into `SimulationParams`.
 - **`fim stats` re-analysis**: re-computing a statistic (including a swept
-  `q`) from a persisted `trajectory.jsonl` reproduces the live report,
+  `q`) from a persisted `trajectory.tlog` reproduces the live report,
   without re-running the simulation (design §4.1); explicit-generation and
   JSON-output modes are covered, as are an empty trajectory and a request
   for an unknown generation.

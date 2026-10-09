@@ -477,8 +477,8 @@ relax in about 273 generations, so a tolerance of 0.01 needs 1,256
 generations, and the example below (tolerance 0.005) needs 1,445.
 
 The run saves every generation of the first phase in its own
-[`equilibrium_trajectory.jsonl`](usage.md#equilibrium_trajectoryjsonl),
-beside `trajectory.jsonl`. Its generations are numbered from 0 within the
+[`equilibrium_trajectory.tlog`](usage.md#equilibrium_trajectorytlog),
+beside `trajectory.tlog`. Its generations are numbered from 0 within the
 first phase, separately from the main run's, and the manifest records how
 many there were (`equilibrium_generation_count`) and the diversity at the
 split (`equilibrium_final_heterozygosity`).
@@ -670,7 +670,7 @@ sigma_band_window: 100
 ```
 
 When enabled, the run writes an additional
-`sigma_band_trajectory.jsonl` artifact alongside `trajectory.jsonl` —
+`sigma_band_trajectory.jsonl` artifact alongside `trajectory.tlog` —
 one JSON object per extension generation, `{"generation": ...,
 "D": ...}` (one key per watched statistic, only when that statistic
 was actually defined that generation) — and records the resulting

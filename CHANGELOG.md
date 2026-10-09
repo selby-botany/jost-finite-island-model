@@ -8,6 +8,31 @@ project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- **A run's trajectory is a compact binary log, and the text is an export.**
+  `fim run` and the app now write `trajectory.tlog` (and, for an
+  equilibrium-split run, `equilibrium_trajectory.tlog`) instead of
+  `trajectory.jsonl`. The log stores most generations as only what changed
+  since the one before, with a full snapshot every 256 generations, in blocks
+  whose checksums chain from one to the next, so a run that is killed keeps
+  every complete block and loses at most the one being filled. It is written
+  by a background thread, so recording costs the simulation a fraction of a
+  microsecond per locus-generation instead of about 16. Measured on the
+  shipped examples: the 295,391 generations of Dear-Nolan low take 7.2 MB
+  (129 MB as compressed JSON Lines, 4.8 GB as text), and `doc/examples` and
+  the app's bundled examples shrink from 214 MB to 112 MB. `fim export RUN`
+  writes the familiar `trajectory.jsonl`, byte for byte what the old store
+  wrote (checked against all 61 committed example trajectories, each of which
+  reproduces its recorded SHA-256), after checking the log against its
+  manifest and the disk for room, and leaves a receipt with both digests.
+  The scrubber, history graphs, animation, `fim stats` and the live batch
+  view read single generations straight from the log (a random generation in
+  about 0.13 ms; no row of any other generation is built). For `fim run`, the
+  file is a pure function of the run, so its digest in `manifest.json` is
+  reproducible; the app asks for its open block to be written every second
+  so a live view is never stale. A log can be checkpointed and resumed (the
+  engine does not write run checkpoints yet). `trajectory.jsonl` files from
+  earlier runs can still be opened and analyzed. See
+  [the trajectory log](doc/trajectory-log.md).
 - **The array engine runs the default model, and gives the same numbers.**
   `engine_backend: generational-vector` now runs `infinite_alleles` (it used
   to refuse everything but `finite_alleles`) and reproduces `lineal` and

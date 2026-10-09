@@ -14,9 +14,9 @@ The ancestral phase runs for a burn-in derived from the model: with
 need 1,256 generations. The configuration allows at most 2,000
 (`equilibrium_max_generations`); a burn-in longer than that cap is an
 error, reported before anything is simulated. The ancestral phase is
-saved, every generation of it, in `equilibrium_trajectory.jsonl` beside
-the main run's `trajectory.jsonl`; this is the only example that writes
-that file (see [`equilibrium_trajectory.jsonl`](../../usage.md#equilibrium_trajectoryjsonl)).
+saved, every generation of it, in `equilibrium_trajectory.tlog` beside
+the main run's `trajectory.tlog`; this is the only example that writes
+that file (see [`equilibrium_trajectory.tlog`](../../usage.md#equilibrium_trajectorytlog)).
 The main run then converges at generation 1,374, with a 924-generation
 evidence window, after about half a minute on a busy
 development machine. That looks like a premature stop: the window opens

@@ -324,8 +324,22 @@ tolerances are derived from sample size before a seed is selected.
 - read(run_id)
 
 Add a new backend under `fim.persistence` without changing the engine,
-statistics, or visualizations. The JSON Lines backend flushes each
-generation so an interrupted file retains every complete line.
+statistics, or visualizations. A store may also take a generation as a
+`TrajectoryFrame` (flat arrays; `FrameStore`: `begin_run`, `write_frame`,
+`wants_frames`), which is what makes a binary store fast: the engine hands
+frames only to a store that asks for them (`wants_frames`) and keeps handing
+rows to any other.
+
+**The default store is the binary log.** `BinaryLogStore` writes
+`trajectory.tlog` (and `equilibrium_trajectory.tlog`): a chained-checksum
+block log with sparse delta records, written by a background thread, read
+back with random access (`LogReader`), exported to the canonical
+`trajectory.jsonl` on request (`fim export`), and resumable from a
+checkpoint. [The trajectory log](trajectory-log.md) describes the format, the
+modules, the determinism rules and the tests. The JSON Lines backend
+(`JSONLTrajectoryStore`) remains for library use and as the test oracle for
+the export: it flushes each generation so an interrupted file retains every
+complete line.
 
 `JSONLTrajectoryStore` keeps one append handle open between generations
 (opened on the first write) instead of re-opening the file for every
@@ -380,7 +394,7 @@ cross a worker-process boundary. `fim`'s store_factory builds one given a
 replicate's run_id; it must itself be picklable under max_workers (a
 module-level function, or `functools.partial` over one — never a closure or
 lambda), which is exactly how the CLI wires each replicate to its own real
-`replicate-NNN/trajectory.jsonl`.
+`replicate-NNN/trajectory.tlog`.
 
 Statistics are computed per locus, then arithmetic-mean aggregated in the final
 report. Keep locus-specific analysis in pure statistics functions rather than

@@ -380,8 +380,8 @@ equilibrium), or tighten it for a longer one; either way, a phase needing
 more than equilibrium_max_generations is a hard error, reported before the
 phase starts, not an ordinary result. The ancestral phase is saved, every
 generation of it, in
-<a href="#equilibrium_trajectoryjsonl"><code>equilibrium_trajectory.jsonl</code></a> beside the
-run's <code>trajectory.jsonl</code> — see
+<a href="#equilibrium_trajectorytlog"><code>equilibrium_trajectory.tlog</code></a> beside the
+run's <code>trajectory.tlog</code> — see
 <a href="#" data-fim-help="configuration" data-fim-anchor="equilibrium_convergence_window-equilibrium_convergence_tolerance-equilibrium_max_generations">equilibrium_convergence_window, equilibrium_convergence_tolerance,
 equilibrium_max_generations</a>.</p>
 <h3 id="stochastic-migrant-counts">Stochastic migrant counts</h3>
@@ -920,7 +920,7 @@ where it sits in the sweep (<code>Point 8 of 21 of the sweep &quot;Migration and
 generation is analyzed unless <code>--generation</code> selects another persisted
 generation. Repeat <code>--q</code> to evaluate several Hill-number differentiation
 orders without re-running the simulation:</p>
-<pre><code class="language-console">fim stats run/trajectory.jsonl --q 0 --q 1 --q 2
+<pre><code class="language-console">fim stats run/trajectory.tlog --q 0 --q 1 --q 2
 </code></pre>
 <p>JSON is printed to standard output. <code>--output</code> also writes the same result.
 <code>--q 0</code> and <code>--q 2</code> always match the report's own K<sub>ST</sub> and <code>D</code>; <code>--q 1</code>
@@ -1257,7 +1257,7 @@ purpose. Loading a saved configuration file, a preset, a worked example or
 a saved run never changes the saved execution defaults: see
 <a href="#loading-a-configuration-does-not-change-your-settings">Loading a configuration does not change your Settings</a>.</p>
 <p>Nothing scientific is stored here: a run's own configuration, seed, and
-results always live in that run's own <code>manifest.json</code>/<code>trajectory.jsonl</code>
+results always live in that run's own <code>manifest.json</code>/<code>trajectory.tlog</code>
 under <code>results/</code>, exactly as described throughout this guide. This file
 holds only the GUI conveniences above.</p>
 <p>It lives in the platform's normal per-user settings location — you do not
@@ -1366,8 +1366,18 @@ above for <code>FIM_LOG_LEVEL</code>/<code>FIM_LOG_OPTIONS</code>. The desktop a
 Settings dialog additionally offers a &quot;Storage location&quot; field for
 results — see the in-app Help screen.</p>
 <h2 id="output-schemas">Output schemas</h2>
+<h3 id="trajectorytlog"><code>trajectory.tlog</code></h3>
+<p>The run's trajectory, as a compact binary log: every nonzero allele frequency
+of every generation, most generations stored as only what changed since the
+one before. You rarely open it yourself; the app and <code>fim stats</code> read it
+directly. To get the text form (<code>trajectory.jsonl</code>, below), export it:</p>
+<pre><code class="language-console">fim export results/my-run
+</code></pre>
+<p><a href="#" data-fim-external="https://github.com/selby-botany/jost-finite-island-model/blob/main/doc/trajectory-log.md">The trajectory log</a> explains the size, what happens when
+a run is interrupted, how to export, and the file format.</p>
 <h3 id="trajectoryjsonl"><code>trajectory.jsonl</code></h3>
-<p>One JSON object is appended for every nonzero frequency:</p>
+<p>Produced only by <code>fim export</code>, from <code>trajectory.tlog</code>. One JSON object per
+nonzero frequency, byte for byte what <code>json.dumps</code> writes with sorted keys:</p>
 <pre><code class="language-json">{&quot;allele_id&quot;:0,&quot;deme&quot;:1,&quot;frequency&quot;:0.5,&quot;generation&quot;:0,&quot;locus_id&quot;:1,&quot;run_id&quot;:&quot;run-example&quot;}
 </code></pre>
 <table>
@@ -1411,19 +1421,21 @@ results — see the in-app Help screen.</p>
 </tr>
 </tbody>
 </table>
-<h3 id="equilibrium_trajectoryjsonl"><code>equilibrium_trajectory.jsonl</code></h3>
+<h3 id="equilibrium_trajectorytlog"><code>equilibrium_trajectory.tlog</code></h3>
 <p>Written only by an <a href="#equilibrium-split-founding">equilibrium-split</a> run: the
 ancestral population's own trajectory, simulated before it is split into
-your demes. Every generation of that ancestral phase is kept. The rows have
-exactly the <code>trajectory.jsonl</code> fields above, so anything that reads
-<code>trajectory.jsonl</code> reads this file too, with two differences:</p>
+your demes, as a binary log like <code>trajectory.tlog</code>. Every generation of that
+ancestral phase is kept. Its rows (export it with <code>fim export</code> to see them as
+<code>equilibrium_trajectory.jsonl</code>) have exactly the <code>trajectory.jsonl</code> fields
+above, so anything that reads the trajectory reads this file too, with two
+differences:</p>
 <ul>
 <li><code>deme</code> is always 1: the ancestral population is one deme holding all of
 your demes' gene copies.</li>
 <li><code>generation</code> counts the ancestral phase on its own, from 0 (the starting
 draw) to the manifest's <code>equilibrium_generation_count</code>. Its last
 generation is the population that was split. The main run's own
-generation 0 in <code>trajectory.jsonl</code> is the moment just after that split,
+generation 0 in <code>trajectory.tlog</code> is the moment just after that split,
 so ancestral generation <code>g</code> happened
 <code>equilibrium_generation_count - g</code> generations before it.</li>
 </ul>
@@ -1437,12 +1449,12 @@ convergence or the hard cap ended the run. It also carries:</p>
 <ul>
 <li>schema_version: the manifest's own shape version.</li>
 <li>convergence.generation_count: how many distinct generations the run
-actually wrote to <code>trajectory.jsonl</code> (<code>convergence.generation + 1</code> for
+actually wrote to <code>trajectory.tlog</code> (<code>convergence.generation + 1</code> for
 every run, since no generation is ever skipped — recorded explicitly
 rather than left implicit).</li>
-<li><code>artifacts</code>: the SHA-256 digest and byte count of <code>trajectory.jsonl</code>,
+<li><code>artifacts</code>: the SHA-256 digest and byte count of <code>trajectory.tlog</code>,
 <code>report.json</code>, <code>scatter.png</code>, and every other file the run wrote (for
-example <code>equilibrium_trajectory.jsonl</code>) as they existed at the moment
+example <code>equilibrium_trajectory.tlog</code>) as they existed at the moment
 the run finished writing and flushing them. <code>fim stats</code> recomputes and checks the
 trajectory's digest (and its generation count) before reading a single
 row, so a trajectory edited, truncated, or replaced after the run
@@ -1670,7 +1682,9 @@ subdirectories actually present always equal replicate_run_ids exactly.</p>
 <li>Copy <code>manifest.json</code>.</li>
 <li>Use its <code>parameters</code> object as a new YAML config.</li>
 <li>Run the same <code>fim</code> version shown in software_version.</li>
-<li>Compare <code>trajectory.jsonl</code> and <code>report.json</code> byte for byte.</li>
+<li>Compare <code>trajectory.tlog</code> and <code>report.json</code> byte for byte (a run made by
+<code>fim run</code>; the desktop app writes the same generations but may place block
+boundaries differently, so compare its exported <code>trajectory.jsonl</code>).</li>
 </ol>
 <p><strong>Across software versions.</strong> One configuration and seed give the same result,
 bit for bit, every time within a software version (checked for single runs and

@@ -383,7 +383,8 @@ after each generation and checks a shared cancellation file before
 each write. The bridge polls every in-flight replicate's own sidecar
 on a coarser cadence (`_BATCH_POLL_INTERVAL_SECONDS`, 0.5s) than the
 scalar path's own in-process push interval, since each poll re-reads a
-whole `trajectory.jsonl` per currently-reporting replicate — a real,
+whole `trajectory.tlog` per currently-reporting replicate (a block scan, then
+one rebuilt generation; see `doc/trajectory-log.md`) — a real,
 if usually small, cost that grows with replicate count and how far
 each has run. A batch's terminal outcome (done, cancelled, or error)
 still arrives through the same in-process message queue as before,
@@ -403,7 +404,7 @@ raises one of a small set of expected engine errors. Either way,
 directory and `output_directory` is never created — no GUI-specific
 cleanup code is needed for either outcome. The same four artifacts are
 written, in the same order, as the CLI's own
-`_write_run_artifacts`: `trajectory.jsonl` streamed generation by
+`_write_run_artifacts`: `trajectory.tlog` streamed generation by
 generation, then `report.json` and `scatter.png` once the run
 finishes, then — last, and only once both are flushed —
 `manifest.json`, augmented with each artifact's SHA-256 digest.
