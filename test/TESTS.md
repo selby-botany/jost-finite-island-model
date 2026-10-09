@@ -122,6 +122,7 @@ Every test module, fixture, and test function documented here in full; `doc/fim-
   - [`test_vector_kernels`](#model.test_vector_kernels)
   - [`test_vectorized`](#model.test_vectorized)
 - [`test/persistence/`](#group-persistence)
+  - [`test_binary_store`](#persistence.test_binary_store)
   - [`test_frame`](#persistence.test_frame)
   - [`test_groups`](#persistence.test_groups)
   - [`test_jsonl_encoder`](#persistence.test_jsonl_encoder)
@@ -28627,6 +28628,211 @@ Every deme's own frequencies sum to 1 after a full fused generation.
 <a id="group-persistence"></a>
 
 ## `test/persistence/`
+
+<a id="persistence.test_binary_store"></a>
+
+# persistence.test\_binary\_store
+
+Tests of `BinaryLogStore`: the log behind the `TrajectoryStore` protocols.
+
+The store must be a drop-in for the JSON Lines store as far as every
+reader of rows is concerned, so the central tests run real simulations into
+it and compare what `read` returns with what the in-memory store holds for
+the same seeded run: every row, in order, with identical float bits. The
+rest pin its own rules: one run per store, the flush barrier, discard, the
+equilibrium companion, closing, pickling across a process boundary, and
+the derived JSON Lines equalling the JSON Lines store's own file.
+
+<a id="persistence.test_binary_store.test_the_store_satisfies_every_store_protocol"></a>
+
+#### test\_the\_store\_satisfies\_every\_store\_protocol
+
+```python
+def test_the_store_satisfies_every_store_protocol(tmp_path: Path) -> None
+```
+
+It is a trajectory store, takes frames, has a companion and can close.
+
+<a id="persistence.test_binary_store.test_a_real_run_reads_back_exactly_what_the_memory_store_holds"></a>
+
+#### test\_a\_real\_run\_reads\_back\_exactly\_what\_the\_memory\_store\_holds
+
+```python
+@pytest.mark.parametrize("backend",
+                         ["lineal", "generational", "generational-vector"])
+def test_a_real_run_reads_back_exactly_what_the_memory_store_holds(
+        tmp_path: Path, backend: str) -> None
+```
+
+Every row of a real run, in order, with identical float bits.
+
+<a id="persistence.test_binary_store.test_an_equilibrium_split_run_keeps_its_ancestral_phase_beside_it"></a>
+
+#### test\_an\_equilibrium\_split\_run\_keeps\_its\_ancestral\_phase\_beside\_it
+
+```python
+def test_an_equilibrium_split_run_keeps_its_ancestral_phase_beside_it(
+        tmp_path: Path) -> None
+```
+
+The companion log holds the ancestral generations, with its own counter.
+
+<a id="persistence.test_binary_store.test_a_batch_with_a_factory_writes_one_log_per_replicate"></a>
+
+#### test\_a\_batch\_with\_a\_factory\_writes\_one\_log\_per\_replicate
+
+```python
+def test_a_batch_with_a_factory_writes_one_log_per_replicate(
+        tmp_path: Path) -> None
+```
+
+Replicates each get their own store; the logs hold different runs.
+
+<a id="persistence.test_binary_store.test_one_store_holds_one_run"></a>
+
+#### test\_one\_store\_holds\_one\_run
+
+```python
+def test_one_store_holds_one_run(tmp_path: Path) -> None
+```
+
+A second run id is refused, with a hint about store factories.
+
+<a id="persistence.test_binary_store.test_begin_run_is_idempotent_and_refuses_another_layout"></a>
+
+#### test\_begin\_run\_is\_idempotent\_and\_refuses\_another\_layout
+
+```python
+def test_begin_run_is_idempotent_and_refuses_another_layout(
+        tmp_path: Path) -> None
+```
+
+The run's shape is fixed once told.
+
+<a id="persistence.test_binary_store.test_rows_without_a_layout_get_an_inferred_one_and_stay_lossless"></a>
+
+#### test\_rows\_without\_a\_layout\_get\_an\_inferred\_one\_and\_stay\_lossless
+
+```python
+def test_rows_without_a_layout_get_an_inferred_one_and_stay_lossless(
+        tmp_path: Path) -> None
+```
+
+A caller that never says the deme sizes still gets exact floats back.
+
+<a id="persistence.test_binary_store.test_write_generation_refuses_malformed_rows"></a>
+
+#### test\_write\_generation\_refuses\_malformed\_rows
+
+```python
+@pytest.mark.parametrize(
+    ("rows", "message"),
+    [
+        ([], "at least one row"),
+        ([{
+            "run_id": RUN_ID
+        }], "missing"),
+    ],
+)
+def test_write_generation_refuses_malformed_rows(tmp_path: Path,
+                                                 rows: list[dict[str, object]],
+                                                 message: str) -> None
+```
+
+Empty and malformed generations are refused before anything is written.
+
+<a id="persistence.test_binary_store.test_a_closed_store_refuses_further_writes"></a>
+
+#### test\_a\_closed\_store\_refuses\_further\_writes
+
+```python
+def test_a_closed_store_refuses_further_writes(tmp_path: Path) -> None
+```
+
+A finished log is not silently reopened.
+
+<a id="persistence.test_binary_store.test_a_frame_before_begin_run_is_refused"></a>
+
+#### test\_a\_frame\_before\_begin\_run\_is\_refused
+
+```python
+def test_a_frame_before_begin_run_is_refused(tmp_path: Path) -> None
+```
+
+Without a layout the log cannot be started.
+
+<a id="persistence.test_binary_store.test_the_context_manager_closes_the_log"></a>
+
+#### test\_the\_context\_manager\_closes\_the\_log
+
+```python
+def test_the_context_manager_closes_the_log(tmp_path: Path) -> None
+```
+
+Leaving the `with` block commits and closes.
+
+<a id="persistence.test_binary_store.test_read_is_a_barrier_that_sees_everything_written"></a>
+
+#### test\_read\_is\_a\_barrier\_that\_sees\_everything\_written
+
+```python
+def test_read_is_a_barrier_that_sees_everything_written(
+        tmp_path: Path) -> None
+```
+
+A reader mid-run sees every generation already submitted.
+
+<a id="persistence.test_binary_store.test_reading_a_log_that_does_not_exist_raises"></a>
+
+#### test\_reading\_a\_log\_that\_does\_not\_exist\_raises
+
+```python
+def test_reading_a_log_that_does_not_exist_raises(tmp_path: Path) -> None
+```
+
+Like the JSON Lines store, a missing trajectory is an error.
+
+<a id="persistence.test_binary_store.test_discard_removes_only_the_run_it_holds"></a>
+
+#### test\_discard\_removes\_only\_the\_run\_it\_holds
+
+```python
+def test_discard_removes_only_the_run_it_holds(tmp_path: Path) -> None
+```
+
+Discarding the held run deletes the log; any other run is a no-op.
+
+<a id="persistence.test_binary_store.test_a_store_pickles_as_its_closed_log_and_reads_in_another_process"></a>
+
+#### test\_a\_store\_pickles\_as\_its\_closed\_log\_and\_reads\_in\_another\_process
+
+```python
+def test_a_store_pickles_as_its_closed_log_and_reads_in_another_process(
+        tmp_path: Path) -> None
+```
+
+The copy that crosses a process boundary reads the finished file.
+
+<a id="persistence.test_binary_store.test_the_derived_jsonl_of_a_real_run_is_the_jsonl_stores_file"></a>
+
+#### test\_the\_derived\_jsonl\_of\_a\_real\_run\_is\_the\_jsonl\_stores\_file
+
+```python
+def test_the_derived_jsonl_of_a_real_run_is_the_jsonl_stores_file(
+        tmp_path: Path) -> None
+```
+
+Export of the run's log equals the file the JSON Lines store wrote.
+
+<a id="persistence.test_binary_store.test_the_log_is_far_smaller_than_the_jsonl"></a>
+
+#### test\_the\_log\_is\_far\_smaller\_than\_the\_jsonl
+
+```python
+def test_the_log_is_far_smaller_than_the_jsonl(tmp_path: Path) -> None
+```
+
+Count coding and binary records: at least ten times smaller here.
 
 <a id="persistence.test_frame"></a>
 

@@ -560,6 +560,29 @@ Return to the [source-tree orientation](../README.md) or the [developer guide](.
   * [studies\_directory](#fim.paths.studies_directory)
   * [experiments\_directory](#fim.paths.experiments_directory)
 * [fim.persistence](#fim.persistence)
+* [fim.persistence.binary\_store](#fim.persistence.binary_store)
+  * [TRAJECTORY\_LOG\_FILENAME](#fim.persistence.binary_store.TRAJECTORY_LOG_FILENAME)
+  * [EQUILIBRIUM\_LOG\_FILENAME](#fim.persistence.binary_store.EQUILIBRIUM_LOG_FILENAME)
+  * [BinaryLogStore](#fim.persistence.binary_store.BinaryLogStore)
+    * [\_\_init\_\_](#fim.persistence.binary_store.BinaryLogStore.__init__)
+    * [\_\_enter\_\_](#fim.persistence.binary_store.BinaryLogStore.__enter__)
+    * [\_\_exit\_\_](#fim.persistence.binary_store.BinaryLogStore.__exit__)
+    * [\_\_del\_\_](#fim.persistence.binary_store.BinaryLogStore.__del__)
+    * [\_\_getstate\_\_](#fim.persistence.binary_store.BinaryLogStore.__getstate__)
+    * [\_\_setstate\_\_](#fim.persistence.binary_store.BinaryLogStore.__setstate__)
+    * [begin\_run](#fim.persistence.binary_store.BinaryLogStore.begin_run)
+    * [wants\_frames](#fim.persistence.binary_store.BinaryLogStore.wants_frames)
+    * [write\_frame](#fim.persistence.binary_store.BinaryLogStore.write_frame)
+    * [write\_generation](#fim.persistence.binary_store.BinaryLogStore.write_generation)
+    * [read](#fim.persistence.binary_store.BinaryLogStore.read)
+    * [frames](#fim.persistence.binary_store.BinaryLogStore.frames)
+    * [discard](#fim.persistence.binary_store.BinaryLogStore.discard)
+    * [flush](#fim.persistence.binary_store.BinaryLogStore.flush)
+    * [snapshot](#fim.persistence.binary_store.BinaryLogStore.snapshot)
+    * [is\_open](#fim.persistence.binary_store.BinaryLogStore.is_open)
+    * [close](#fim.persistence.binary_store.BinaryLogStore.close)
+    * [equilibrium\_store](#fim.persistence.binary_store.BinaryLogStore.equilibrium_store)
+    * [exists](#fim.persistence.binary_store.BinaryLogStore.exists)
 * [fim.persistence.frame](#fim.persistence.frame)
   * [UNKNOWN\_DEME\_SIZE](#fim.persistence.frame.UNKNOWN_DEME_SIZE)
   * [FrameLayout](#fim.persistence.frame.FrameLayout)
@@ -16694,6 +16717,331 @@ writing other JSON result files (`report.json`, a batch's own
 the manifest — not itself re-exported here, since it is used directly
 by `fim.engine` and `fim.cli` rather than through this package's own
 top-level API.
+
+<a id="fim.persistence.binary_store"></a>
+
+# fim.persistence.binary\_store
+
+The trajectory store backed by the binary log.
+
+`BinaryLogStore` is what a run uses to keep its trajectory: one compact,
+checksummed log file per run (`fim.persistence.tlog`), written by a
+background thread, in place of one JSON line per allele frequency. It
+implements the same protocols as the JSON Lines store
+(`fim.persistence.store.TrajectoryStore`, the companion store of an
+equilibrium-split run, closing) and also `FrameStore`: the engine hands it
+whole generations as `TrajectoryFrame`s, which is what makes it fast.
+
+A store holds exactly one run. The log's header names the run, the demes'
+gene copies and the loci, so the first frame (or `begin_run`) fixes them; a
+second run id is refused with an explanation (a batch uses one store per
+replicate, through a store factory). `read` yields the run's rows exactly as
+the JSON Lines store would, so every reader of rows keeps working; the
+canonical `trajectory.jsonl` is something to *export*
+(`fim.persistence.tlog_export`).
+
+<a id="fim.persistence.binary_store.TRAJECTORY_LOG_FILENAME"></a>
+
+#### TRAJECTORY\_LOG\_FILENAME
+
+The log of a run's own trajectory, in the run's directory.
+
+<a id="fim.persistence.binary_store.EQUILIBRIUM_LOG_FILENAME"></a>
+
+#### EQUILIBRIUM\_LOG\_FILENAME
+
+The log of an equilibrium-split run's ancestral phase, beside the main one.
+
+<a id="fim.persistence.binary_store.BinaryLogStore"></a>
+
+## BinaryLogStore Objects
+
+```python
+class BinaryLogStore()
+```
+
+Append and read one run's trajectory through a binary log file.
+
+**Arguments**:
+
+- `path` - The log file; it must not exist when the first generation is
+  written (its parent directory is created then).
+- `background` - Whether a writer thread checksums, writes and syncs, so
+  the producing thread only encodes.
+- `block_generations` - Generations per block, at most.
+- `block_seconds` - Seconds an open block may wait before being written.
+- `sync` - Durability policy (`tlog.SyncMode`); `"auto"` uses
+  `F_FULLFSYNC` on macOS and `fsync` elsewhere.
+- `sync_seconds` - Seconds between group-commit syncs.
+- `buffer_bytes` - Size of a block buffer.
+- `key_every` - Generations between keyframes in sparse mode.
+- `queue_depth` - Sealed blocks that may wait for the writer thread.
+- `clock` - Monotonic clock deciding when to seal and sync (tests inject
+  one); no time enters any byte of the log.
+- `fault` - A `tlog.FaultHook` for tests.
+
+<a id="fim.persistence.binary_store.BinaryLogStore.__init__"></a>
+
+#### \_\_init\_\_
+
+```python
+def __init__(path: Path | str,
+             *,
+             background: bool = True,
+             block_generations: int = tlog.DEFAULT_BLOCK_GENERATIONS,
+             block_seconds: float = tlog.DEFAULT_BLOCK_SECONDS,
+             sync: tlog.SyncMode = "auto",
+             sync_seconds: float = tlog.DEFAULT_SYNC_SECONDS,
+             buffer_bytes: int = tlog.DEFAULT_BUFFER_BYTES,
+             key_every: int = tlog.DEFAULT_KEY_EVERY,
+             queue_depth: int = tlog.DEFAULT_QUEUE_DEPTH,
+             clock: Callable[[], float] = time.monotonic,
+             fault: tlog.FaultHook | None = None) -> None
+```
+
+Bind the store to one log file; nothing is created until a write.
+
+<a id="fim.persistence.binary_store.BinaryLogStore.__enter__"></a>
+
+#### \_\_enter\_\_
+
+```python
+def __enter__() -> BinaryLogStore
+```
+
+Return this store, for use as a context manager.
+
+<a id="fim.persistence.binary_store.BinaryLogStore.__exit__"></a>
+
+#### \_\_exit\_\_
+
+```python
+def __exit__(exc_type: type[BaseException] | None,
+             exc_value: BaseException | None,
+             traceback: TracebackType | None) -> None
+```
+
+Close the store when the `with` block ends.
+
+<a id="fim.persistence.binary_store.BinaryLogStore.__del__"></a>
+
+#### \_\_del\_\_
+
+```python
+def __del__() -> None
+```
+
+Release a writer its owner forgot to close, without a warning.
+
+A safety net only: it keeps a forgotten `close` from leaving a
+thread and a file descriptor behind. Whatever was committed stays
+committed either way.
+
+<a id="fim.persistence.binary_store.BinaryLogStore.__getstate__"></a>
+
+#### \_\_getstate\_\_
+
+```python
+def __getstate__() -> dict[str, Any]
+```
+
+Close the log, then drop everything that cannot be pickled.
+
+`RunResult.store` crosses a process boundary under
+`LinealBackend`'s `max_workers` path. A writer thread and a lock mean
+nothing in another process, so the log is closed first (everything
+submitted reaches the file) and the copy that arrives holds only the
+path and the options; it reads the finished file.
+
+<a id="fim.persistence.binary_store.BinaryLogStore.__setstate__"></a>
+
+#### \_\_setstate\_\_
+
+```python
+def __setstate__(state: dict[str, Any]) -> None
+```
+
+Restore the plain attributes and rebuild a lock; no writer is open.
+
+<a id="fim.persistence.binary_store.BinaryLogStore.begin_run"></a>
+
+#### begin\_run
+
+```python
+def begin_run(run_id: str, layout: FrameLayout) -> None
+```
+
+Fix the run this log holds and its layout; repeating it is harmless.
+
+**Raises**:
+
+- `ValueError` - If the store holds another run or another layout.
+
+<a id="fim.persistence.binary_store.BinaryLogStore.wants_frames"></a>
+
+#### wants\_frames
+
+```python
+def wants_frames(run_id: str) -> bool
+```
+
+Return `True`: frames are what this store is fastest with.
+
+<a id="fim.persistence.binary_store.BinaryLogStore.write_frame"></a>
+
+#### write\_frame
+
+```python
+def write_frame(run_id: str, frame: TrajectoryFrame) -> None
+```
+
+Encode one generation into the log.
+
+**Raises**:
+
+- `ValueError` - If `begin_run` was not called, the run differs, or the
+  generation does not follow the last one.
+- `RuntimeError` - If the store was closed.
+
+<a id="fim.persistence.binary_store.BinaryLogStore.write_generation"></a>
+
+#### write\_generation
+
+```python
+def write_generation(run_id: str,
+                     generation: int,
+                     rows: Iterable[Mapping[str, Any]],
+                     *,
+                     validate: bool = True) -> None
+```
+
+Encode one generation given as rows.
+
+The rows become a frame (in pair order). Without a prior `begin_run`
+the layout is inferred from these rows, with unknown deme sizes, so
+every frequency is stored as a raw float; telling the store the real
+sizes (the engine does) is what makes the log compact.
+
+**Raises**:
+
+- `ValueError` - If the rows are malformed, empty, or of another run
+  or generation.
+
+<a id="fim.persistence.binary_store.BinaryLogStore.read"></a>
+
+#### read
+
+```python
+def read(run_id: str) -> Iterator[TrajectoryRow]
+```
+
+Yield the rows of `run_id` that are committed to the log, oldest first.
+
+Everything written so far is committed first (a flush barrier), so a
+reader sees every generation already submitted. A run other than the
+one in the log has no rows here.
+
+**Raises**:
+
+- `FileNotFoundError` - If there is no log file.
+
+<a id="fim.persistence.binary_store.BinaryLogStore.frames"></a>
+
+#### frames
+
+```python
+def frames() -> Iterator[TrajectoryFrame]
+```
+
+Yield every committed generation as a frame, oldest first.
+
+**Raises**:
+
+- `FileNotFoundError` - If there is no log file.
+
+<a id="fim.persistence.binary_store.BinaryLogStore.discard"></a>
+
+#### discard
+
+```python
+def discard(run_id: str) -> None
+```
+
+Remove the log if it holds `run_id`; a no-op otherwise.
+
+Closes the writer first (an open file blocks removal on Windows).
+
+<a id="fim.persistence.binary_store.BinaryLogStore.flush"></a>
+
+#### flush
+
+```python
+def flush(*, sync: bool = False) -> None
+```
+
+Commit everything written so far (a barrier); optionally make it durable.
+
+**Arguments**:
+
+- `sync` - Also sync the file now (a checkpoint or a pause).
+
+<a id="fim.persistence.binary_store.BinaryLogStore.snapshot"></a>
+
+#### snapshot
+
+```python
+def snapshot() -> tuple[int, int, int]
+```
+
+Return `(committed generation, committed bytes, chain checksum)`.
+
+`(-1, 0, 0)` before anything is written.
+
+<a id="fim.persistence.binary_store.BinaryLogStore.is_open"></a>
+
+#### is\_open
+
+```python
+def is_open() -> bool
+```
+
+Whether this log's writer is currently open (for tests and diagnostics).
+
+<a id="fim.persistence.binary_store.BinaryLogStore.close"></a>
+
+#### close
+
+```python
+def close() -> None
+```
+
+Commit and close the log, and its ancestral-phase companion if any.
+
+Idempotent. A closed store is finished: writing again raises.
+
+<a id="fim.persistence.binary_store.BinaryLogStore.equilibrium_store"></a>
+
+#### equilibrium\_store
+
+```python
+def equilibrium_store(run_id: str) -> BinaryLogStore
+```
+
+Return the store of this run's ancestral phase, beside this file.
+
+`EQUILIBRIUM_LOG_FILENAME` in this file's directory, with the same
+options, so it is staged and published with the run's other
+artifacts. One instance per store.
+
+<a id="fim.persistence.binary_store.BinaryLogStore.exists"></a>
+
+#### exists
+
+```python
+def exists() -> bool
+```
+
+Whether the log file exists on disk.
 
 <a id="fim.persistence.frame"></a>
 
