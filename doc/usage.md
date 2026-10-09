@@ -909,7 +909,7 @@ fim run vector-showcase.yaml --output results/vector-showcase --quiet
 
 Ran in about 40 seconds on a busy development machine, all 16 replicates
 to the 100-generation cap, with `D`'s 95% confidence interval at
-`0.0267 +/- 0.0019`. In the desktop
+`0.0275 +/- 0.0016`. In the desktop
 app, loading this example runs it with its own `generational-vector`
 engine and 16 replicates, whatever your Settings hold, and leaves your
 Settings unchanged; a notice lists the differences and offers to make

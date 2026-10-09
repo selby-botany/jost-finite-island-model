@@ -29,7 +29,7 @@
     "reason": "hit the cap",
     "statistic": "D"
   },
-  "ended_at": "2026-10-08T15:51:19.816801Z",
+  "ended_at": "2026-10-09T23:37:18.404323Z",
   "engine_backend": "generational-vector",
   "equilibrium_final_heterozygosity": null,
   "equilibrium_generation_count": null,
@@ -77,5 +77,5 @@
   "sigma_band_multiplier": null,
   "sigma_band_window": null,
   "software_version": "1.2.0",
-  "started_at": "2026-10-08T15:50:40.316948Z"
+  "started_at": "2026-10-09T23:37:15.736324Z"
 }

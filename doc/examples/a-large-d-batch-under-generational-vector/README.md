@@ -17,7 +17,7 @@ Two settings fix the amount of work:
   the batch at the 10-replicate minimum.
 
 The run takes about 40 seconds on a busy development machine. The
-across-replicate mean `D` is 0.0267 ± 0.0019 (95% confidence interval).
+across-replicate mean `D` is 0.0275 ± 0.0016 (95% confidence interval).
 The configuration is intended to exercise a larger deme count and the
 vector backend. Its short run is not suitable for interpreting
 equilibrium statistics: the population is nowhere near equilibrium after
