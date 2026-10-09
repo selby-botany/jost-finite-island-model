@@ -11173,8 +11173,9 @@ Seconds a run's open log block may wait before it is written.
 
 The app shows a run while it is going, and a batch's live view reads each
 replicate's log from disk, so an open block is never held longer than this.
-(Command-line runs leave it off, which keeps their files byte-reproducible;
-the app's runs trade that for a live view that is never stale.)
+(Command-line runs leave it off. A log that did seal on the clock is
+rewritten with the canonical block boundaries when it is closed, so the
+finished file is byte-for-byte the one a command-line run writes.)
 
 <a id="fim.gui.store.RunCancelledError"></a>
 
@@ -16889,6 +16890,10 @@ Append and read one run's trajectory through a binary log file.
   generations and, between them, only the pairs that changed) or
   `"dense"` (every generation in full).
 - `queue_depth` - Sealed blocks that may wait for the writer thread.
+- `canonical_on_close` - Whether closing a log whose blocks were sealed on
+  `block_seconds` rewrites it with the canonical block boundaries
+  (see `tlog.LogWriter`), so the finished file never depends on
+  timing.
 - `clock` - Monotonic clock deciding when to seal and sync (tests inject
   one); no time enters any byte of the log.
 - `fault` - A `tlog.FaultHook` for tests.
@@ -16909,6 +16914,7 @@ def __init__(path: Path | str,
              key_every: int = tlog.DEFAULT_KEY_EVERY,
              mode: tlog.LogMode = "sparse",
              queue_depth: int = tlog.DEFAULT_QUEUE_DEPTH,
+             canonical_on_close: bool = True,
              clock: Callable[[], float] = time.monotonic,
              fault: tlog.FaultHook | None = None) -> None
 ```
@@ -20588,7 +20594,9 @@ fast the machine ran (the block boundaries move), while sealing on count and
 size alone makes the file a pure function of the run: the same configuration
 always writes the same bytes, so a digest in a manifest can be compared
 between runs. An interactive caller that wants its live view never more than
-a moment stale opts in with a number of seconds.
+a moment stale opts in with a number of seconds; when such a writer closes it
+rewrites the log with the canonical block boundaries (see
+`LogWriter.canonical_on_close`), so the finished file is the same either way.
 
 <a id="fim.persistence.tlog.DEFAULT_KEY_EVERY"></a>
 
@@ -20986,6 +20994,8 @@ Counters a writer keeps, for tests and for tuning.
 - `bytes` - File bytes written, header included.
 - `syncs` - Durability calls made.
 - `stall_seconds` - Time the producer waited for a free buffer.
+- `timed_seals` - Blocks sealed because `block_seconds` had passed, the only
+  kind of seal that depends on how fast the machine ran.
 
 <a id="fim.persistence.tlog.LogWriter"></a>
 
@@ -21039,6 +21049,16 @@ when the writer closes.
 - `background` - Whether a writer thread does the checksum, write and sync.
 - `queue_depth` - Sealed blocks that may wait for the thread, and one
   less than the number of buffers.
+- `canonical_on_close` - When a block was sealed on `block_seconds`, the
+  block boundaries (and so the file's bytes) depend on timing. With
+  this set (the default) `close` then rewrites the log, in the same
+  directory and from the committed frames, with the boundaries a
+  writer without `block_seconds` would have chosen, and replaces
+  the file. The finished log is then a pure function of the run
+  whatever the timing was. Positions from `checkpoint` refer to
+  the file before that rewrite. A rewrite that fails (a reader
+  holding the file open on Windows, a full disk) leaves the valid
+  original and logs a warning.
 - `sync` - Durability policy, see `sync_file`.
 - `sync_seconds` - Seconds between group-commit syncs.
 - `sync_function` - Replaces `sync_file` (tests inject one).
@@ -21076,6 +21096,7 @@ def __init__(path: Path | str,
              clock: Callable[[], float] = time.monotonic,
              background: bool = False,
              queue_depth: int = DEFAULT_QUEUE_DEPTH,
+             canonical_on_close: bool = True,
              sync: SyncMode = "none",
              sync_seconds: float = DEFAULT_SYNC_SECONDS,
              sync_function: Callable[[int, SyncMode], None] = sync_file,

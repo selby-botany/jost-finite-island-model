@@ -13,10 +13,12 @@ from __future__ import annotations
 
 import struct
 from pathlib import Path
+from typing import Any
 
 import numpy as np
 import pytest
 
+from fim.persistence import tlog as tlog_module
 from fim.persistence.frame import FrameLayout, TrajectoryFrame
 from fim.persistence.tlog import (
     BLOCK_HEADER_SIZE,
@@ -185,6 +187,7 @@ def test_a_block_is_sealed_when_its_time_is_up(tmp_path: Path) -> None:
         LAYOUT,
         block_generations=1000,
         block_seconds=2.0,
+        canonical_on_close=False,
         clock=clock,
     )
     for index, frame in enumerate(frames):
@@ -197,6 +200,89 @@ def test_a_block_is_sealed_when_its_time_is_up(tmp_path: Path) -> None:
     writer.close()
     result = recover(tmp_path / "t.tlog")
     assert [b.n_records for b in result.blocks] == [2, 2, 2]
+
+
+def _write_with_clock(
+    path: Path, frames: list[TrajectoryFrame], **options: Any
+) -> LogWriter:
+    """Write `frames` with a clock that advances one second per frame."""
+    clock = _FakeClock()
+    writer = LogWriter(
+        path, RUN_ID, LAYOUT, mode="sparse", key_every=5, clock=clock, **options
+    )
+    for frame in frames:
+        writer.submit(frame)
+        clock.now += 1.0
+    writer.close()
+    return writer
+
+
+def test_a_log_sealed_on_time_is_rewritten_with_the_canonical_blocks(
+    tmp_path: Path,
+) -> None:
+    """Timing moves block boundaries, but the finished file never shows it."""
+    frames = _frames(23)
+    timed = _write_with_clock(
+        tmp_path / "timed.tlog", frames, block_generations=8, block_seconds=2.0
+    )
+    _write_with_clock(tmp_path / "plain.tlog", frames, block_generations=8)
+    assert timed.stats.timed_seals > 0
+    assert (tmp_path / "timed.tlog").read_bytes() == (
+        tmp_path / "plain.tlog"
+    ).read_bytes()
+    assert not (tmp_path / "timed.tlog.canonical").exists()
+    _same(list(iter_frames(tmp_path / "timed.tlog")), frames)
+
+
+def test_a_writer_can_keep_the_blocks_timing_chose(tmp_path: Path) -> None:
+    """`canonical_on_close=False` leaves the time-sealed layout in place."""
+    frames = _frames(23)
+    _write_with_clock(
+        tmp_path / "timed.tlog",
+        frames,
+        block_generations=8,
+        block_seconds=2.0,
+        canonical_on_close=False,
+    )
+    _write_with_clock(tmp_path / "plain.tlog", frames, block_generations=8)
+    assert (tmp_path / "timed.tlog").read_bytes() != (
+        tmp_path / "plain.tlog"
+    ).read_bytes()
+    _same(list(iter_frames(tmp_path / "timed.tlog")), frames)
+
+
+def test_a_log_with_no_timed_seal_is_never_rewritten(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """No clock-driven seal means the bytes are already canonical: no rewrite."""
+
+    def refuse(self: LogWriter) -> None:
+        raise AssertionError("the log was rewritten")
+
+    monkeypatch.setattr(LogWriter, "_rewrite_canonically", refuse)
+    writer = _write_with_clock(tmp_path / "t.tlog", _frames(23), block_generations=8)
+    assert writer.stats.timed_seals == 0
+
+
+def test_a_failed_rewrite_keeps_the_original_log(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """A reader that blocks the replacement leaves the complete original."""
+    frames = _frames(23)
+    path = tmp_path / "t.tlog"
+
+    def refuse(_path: object, **_options: object) -> object:
+        raise PermissionError("the file is in use")
+
+    monkeypatch.setattr(tlog_module, "iter_frames", refuse)
+    with caplog.at_level("WARNING", logger="fim.persistence.tlog"):
+        _write_with_clock(path, frames, block_generations=8, block_seconds=2.0)
+    assert "keeping the original" in caplog.text
+    assert not (tmp_path / "t.tlog.canonical").exists()
+    monkeypatch.undo()
+    _same(list(iter_frames(path)), frames)
 
 
 def test_a_block_is_sealed_when_the_buffer_is_full(tmp_path: Path) -> None:

@@ -12,6 +12,7 @@ across a process boundary, and the derived JSON Lines equalling the plain
 from __future__ import annotations
 
 import hashlib
+import itertools
 import pickle
 from pathlib import Path
 
@@ -21,6 +22,7 @@ from tlog_support import canonical_jsonl
 
 from fim.engine import fim
 from fim.model.params import SimulationParams
+from fim.persistence import tlog
 from fim.persistence.binary_store import (
     EQUILIBRIUM_LOG_FILENAME,
     TRAJECTORY_LOG_FILENAME,
@@ -392,6 +394,42 @@ def test_a_run_writes_the_same_log_bytes_every_time(tmp_path: Path) -> None:
     assert list(BinaryLogStore(paths[3]).read(RUN_ID)) == list(
         BinaryLogStore(paths[0]).read(RUN_ID)
     )
+
+
+def test_a_store_that_seals_on_time_still_finishes_with_the_canonical_bytes(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The app's live-view setting never changes the finished file.
+
+    A clock that moves a tenth of a second per reading makes every few
+    generations a timed seal; the closed log must still equal the one written
+    with no timer at all, so its digest in the manifest is reproducible.
+    """
+    params = _params(max_generations=60)
+    plain = BinaryLogStore(tmp_path / "plain.tlog")
+    _run(params, plain, "lineal")
+    plain.close()
+    ticks = itertools.count()
+    rewrites: list[Path] = []
+    original = tlog.LogWriter._rewrite_canonically
+
+    def spy(self: tlog.LogWriter) -> None:
+        rewrites.append(self.path)
+        original(self)
+
+    monkeypatch.setattr(tlog.LogWriter, "_rewrite_canonically", spy)
+    timed = BinaryLogStore(
+        tmp_path / "timed.tlog",
+        block_seconds=1.0,
+        clock=lambda: next(ticks) * 0.1,
+    )
+    _run(params, timed, "lineal")
+    timed.close()
+    assert rewrites == [tmp_path / "timed.tlog"]
+    assert (tmp_path / "timed.tlog").read_bytes() == (
+        tmp_path / "plain.tlog"
+    ).read_bytes()
+    assert not (tmp_path / "timed.tlog.canonical").exists()
 
 
 def test_a_dense_store_holds_the_same_rows_as_a_sparse_one(tmp_path: Path) -> None:

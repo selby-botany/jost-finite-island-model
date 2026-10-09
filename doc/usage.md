@@ -1144,8 +1144,8 @@ action the matching on-screen control already performs.
 | Help | This guide and the [configuration reference](configuration.md), rendered in-app with working cross-links; every other doc opens on GitHub in the OS default browser instead. Reachable from the rail's own Help button, or the Help menu, from any screen; Back/Forward use the shared screen history | No CLI equivalent — the terminal reads these same two files directly |
 
 A GUI-authored run with the same parameters and seed produces byte-identical
-`report.json`, and an identical exported `trajectory.jsonl`, to the same
-configuration run from the terminal — see [Reproduce a run](#reproduce-a-run). The GUI performs network
+`report.json` and `trajectory.tlog` to the same configuration run from the
+terminal — see [Reproduce a run](#reproduce-a-run). The GUI performs network
 access only for the same explicit, opt-in release check the terminal's `fim
 update --check` performs (Help menu → "Check for updates") — otherwise, like
 the CLI, none at all.

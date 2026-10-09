@@ -67,6 +67,10 @@ class BinaryLogStore:
             generations and, between them, only the pairs that changed) or
             `"dense"` (every generation in full).
         queue_depth: Sealed blocks that may wait for the writer thread.
+        canonical_on_close: Whether closing a log whose blocks were sealed on
+            `block_seconds` rewrites it with the canonical block boundaries
+            (see `tlog.LogWriter`), so the finished file never depends on
+            timing.
         clock: Monotonic clock deciding when to seal and sync (tests inject
             one); no time enters any byte of the log.
         fault: A `tlog.FaultHook` for tests.
@@ -85,6 +89,7 @@ class BinaryLogStore:
         key_every: int = tlog.DEFAULT_KEY_EVERY,
         mode: tlog.LogMode = "sparse",
         queue_depth: int = tlog.DEFAULT_QUEUE_DEPTH,
+        canonical_on_close: bool = True,
         clock: Callable[[], float] = time.monotonic,
         fault: tlog.FaultHook | None = None,
     ) -> None:
@@ -100,6 +105,7 @@ class BinaryLogStore:
             "key_every": key_every,
             "mode": mode,
             "queue_depth": queue_depth,
+            "canonical_on_close": canonical_on_close,
             "clock": clock,
             "fault": fault,
         }

@@ -64,8 +64,9 @@ LIVE_BLOCK_SECONDS = 1.0
 
 The app shows a run while it is going, and a batch's live view reads each
 replicate's log from disk, so an open block is never held longer than this.
-(Command-line runs leave it off, which keeps their files byte-reproducible;
-the app's runs trade that for a live view that is never stale.)"""
+(Command-line runs leave it off. A log that did seal on the clock is
+rewritten with the canonical block boundaries when it is closed, so the
+finished file is byte-for-byte the one a command-line run writes.)"""
 
 
 class RunCancelledError(Exception):

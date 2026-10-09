@@ -91,13 +91,17 @@ system to flush them to the disk every two seconds, and when the log is
 closed. On macOS that uses the full-flush call (`F_FULLFSYNC`), because the
 ordinary flush there does not reach the drive.
 
-**Reproducibility.** For `fim run` the file is a pure function of the run: the
+**Reproducibility.** The finished file is a pure function of the run: the
 same configuration and seed write the same bytes, so the digest recorded in
-`manifest.json` can be compared between runs. The desktop app asks for its
-open block to be written every second so a live view never goes stale; that
-moves block boundaries, so an app-made log can differ in bytes from a command-
-line one while holding exactly the same generations (their exports are
-identical).
+`manifest.json` can be compared between runs and between software versions.
+The desktop app asks for its open block to be written every second so a live
+view never goes stale. That moves block boundaries while the run is going, so
+when the app's log is closed it is rewritten, from its own committed
+generations, with the boundaries a command-line run would have chosen, and
+replaces the file (a second or so for the largest examples). Nothing is
+rewritten when no block was sealed on the clock. If the replacement fails (for
+example another program holds the file open on Windows) the valid original
+stays and a warning is logged.
 
 **Software without Numba.** The compiled routines that encode and decode the
 log are optional. Without Numba the same code runs as ordinary Python, which
@@ -183,8 +187,9 @@ keeps getting rows.
   float formatter was reimplemented, so there is nothing to prove equal.
 - **Determinism.** No wall clock reaches a byte. Blocks are sealed on count
   and size by default; sealing on elapsed time is opt-in
-  (`block_seconds`) because it moves block boundaries. Time only decides when
-  the writer thread syncs.
+  (`block_seconds`) because it moves block boundaries, and a log that used it
+  is rewritten with the canonical boundaries when it closes. Time otherwise
+  only decides when the writer thread syncs.
 - **One run per log.** The header names the run, so a store holds one run; a
   batch uses one store per replicate (a store factory).
 - **The writer thread** calls only `zlib.crc32`, `os.write` and the sync call,

@@ -33,6 +33,7 @@ when Numba is installed and runs as plain Python otherwise.
 
 from __future__ import annotations
 
+import logging
 import mmap
 import os
 import queue
@@ -49,6 +50,8 @@ import numpy as np
 
 from fim.persistence import tlog_codec as codec
 from fim.persistence.frame import FrameLayout, TrajectoryFrame
+
+logger = logging.getLogger(__name__)
 
 try:  # `fcntl` does not exist on Windows.
     import fcntl
@@ -80,7 +83,9 @@ fast the machine ran (the block boundaries move), while sealing on count and
 size alone makes the file a pure function of the run: the same configuration
 always writes the same bytes, so a digest in a manifest can be compared
 between runs. An interactive caller that wants its live view never more than
-a moment stale opts in with a number of seconds."""
+a moment stale opts in with a number of seconds; when such a writer closes it
+rewrites the log with the canonical block boundaries (see
+`LogWriter.canonical_on_close`), so the finished file is the same either way."""
 
 DEFAULT_KEY_EVERY: Final = 256
 """Generations between keyframes in sparse mode."""
@@ -549,6 +554,8 @@ class WriterStats:
         bytes: File bytes written, header included.
         syncs: Durability calls made.
         stall_seconds: Time the producer waited for a free buffer.
+        timed_seals: Blocks sealed because `block_seconds` had passed, the only
+            kind of seal that depends on how fast the machine ran.
     """
 
     blocks: int = 0
@@ -557,6 +564,7 @@ class WriterStats:
     bytes: int = 0
     syncs: int = 0
     stall_seconds: float = 0.0
+    timed_seals: int = 0
 
 
 @dataclass(slots=True)
@@ -619,6 +627,16 @@ class LogWriter:
         background: Whether a writer thread does the checksum, write and sync.
         queue_depth: Sealed blocks that may wait for the thread, and one
             less than the number of buffers.
+        canonical_on_close: When a block was sealed on `block_seconds`, the
+            block boundaries (and so the file's bytes) depend on timing. With
+            this set (the default) `close` then rewrites the log, in the same
+            directory and from the committed frames, with the boundaries a
+            writer without `block_seconds` would have chosen, and replaces
+            the file. The finished log is then a pure function of the run
+            whatever the timing was. Positions from `checkpoint` refer to
+            the file before that rewrite. A rewrite that fails (a reader
+            holding the file open on Windows, a full disk) leaves the valid
+            original and logs a warning.
         sync: Durability policy, see `sync_file`.
         sync_seconds: Seconds between group-commit syncs.
         sync_function: Replaces `sync_file` (tests inject one).
@@ -652,6 +670,7 @@ class LogWriter:
         clock: Callable[[], float] = time.monotonic,
         background: bool = False,
         queue_depth: int = DEFAULT_QUEUE_DEPTH,
+        canonical_on_close: bool = True,
         sync: SyncMode = "none",
         sync_seconds: float = DEFAULT_SYNC_SECONDS,
         sync_function: Callable[[int, SyncMode], None] = sync_file,
@@ -678,6 +697,7 @@ class LogWriter:
         self.key_every = key_every
         self.mode = mode
         self.background = background
+        self.canonical_on_close = canonical_on_close
         self.sync = sync
         self.sync_seconds = sync_seconds
         self.stats = WriterStats()
@@ -931,15 +951,18 @@ class LogWriter:
         # keyframe, which always opens a block.
         keyframe = self.mode == "dense" or self._since_key == 0
         keyframe = keyframe or self._since_key >= self.key_every
-        if self._buffer is not None and (
-            self._pos + bound + _BLOCK_SLACK > self._limit
-            or (
-                self.block_seconds is not None
+        if self._buffer is not None:
+            regular = self._pos + bound + _BLOCK_SLACK > self._limit or (
+                keyframe and self.mode == "sparse" and self._records > 0
+            )
+            timed = (
+                not regular
+                and self.block_seconds is not None
                 and self._clock() - self._opened_at >= self.block_seconds
             )
-            or (keyframe and self.mode == "sparse" and self._records > 0)
-        ):
-            self._seal()
+            if regular or timed:
+                self.stats.timed_seals += timed
+                self._seal()
         if self._buffer is None:
             self._begin(frame.generation, bound)
         assert self._buffer is not None
@@ -1047,6 +1070,45 @@ class LogWriter:
         finally:
             self._closed = True
             os.close(self._fd)
+        if self.canonical_on_close and self.stats.timed_seals:
+            self._rewrite_canonically()
+
+    def _rewrite_canonically(self) -> None:
+        """Replace the closed log with the same frames in canonical blocks.
+
+        Called once, from `close`, when timing moved a block boundary. The
+        rewrite goes to a sibling file that replaces the log atomically, so a
+        failure at any point leaves the original, complete, log in place.
+        """
+        rewritten = self.path.with_name(self.path.name + ".canonical")
+        rewritten.unlink(missing_ok=True)
+        try:
+            writer = LogWriter(
+                rewritten,
+                self.run_id,
+                self.layout,
+                block_generations=self.block_generations,
+                block_seconds=None,
+                buffer_bytes=self.buffer_bytes,
+                key_every=self.key_every,
+                mode=self.mode,
+                background=False,
+                sync=self.sync,
+                clock=self._clock,
+            )
+            try:
+                for frame in iter_frames(self.path):
+                    writer.submit(frame)
+            finally:
+                writer.close()
+            rewritten.replace(self.path)
+        except (OSError, TlogError):
+            logger.warning(
+                "could not rewrite %s with canonical blocks; keeping the original",
+                self.path,
+                exc_info=True,
+            )
+            rewritten.unlink(missing_ok=True)
 
     def snapshot(self) -> tuple[int, int, int]:
         """Return `(committed generation, committed bytes, chain checksum)` together.

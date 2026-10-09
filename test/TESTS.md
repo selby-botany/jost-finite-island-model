@@ -28997,6 +28997,21 @@ Sealing on count and size only (the default) means the block
 boundaries, and so the file and its digest, are the same whether the
 machine was fast or slow, with or without the writer thread.
 
+<a id="persistence.test_binary_store.test_a_store_that_seals_on_time_still_finishes_with_the_canonical_bytes"></a>
+
+#### test\_a\_store\_that\_seals\_on\_time\_still\_finishes\_with\_the\_canonical\_bytes
+
+```python
+def test_a_store_that_seals_on_time_still_finishes_with_the_canonical_bytes(
+        tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None
+```
+
+The app's live-view setting never changes the finished file.
+
+A clock that moves a tenth of a second per reading makes every few
+generations a timed seal; the closed log must still equal the one written
+with no timer at all, so its digest in the manifest is reproducible.
+
 <a id="persistence.test_binary_store.test_a_dense_store_holds_the_same_rows_as_a_sparse_one"></a>
 
 #### test\_a\_dense\_store\_holds\_the\_same\_rows\_as\_a\_sparse\_one
@@ -31328,6 +31343,50 @@ def test_a_block_is_sealed_when_its_time_is_up(tmp_path: Path) -> None
 ```
 
 With an injected clock the block boundary is exactly where time says.
+
+<a id="persistence.test_tlog.test_a_log_sealed_on_time_is_rewritten_with_the_canonical_blocks"></a>
+
+#### test\_a\_log\_sealed\_on\_time\_is\_rewritten\_with\_the\_canonical\_blocks
+
+```python
+def test_a_log_sealed_on_time_is_rewritten_with_the_canonical_blocks(
+        tmp_path: Path) -> None
+```
+
+Timing moves block boundaries, but the finished file never shows it.
+
+<a id="persistence.test_tlog.test_a_writer_can_keep_the_blocks_timing_chose"></a>
+
+#### test\_a\_writer\_can\_keep\_the\_blocks\_timing\_chose
+
+```python
+def test_a_writer_can_keep_the_blocks_timing_chose(tmp_path: Path) -> None
+```
+
+`canonical_on_close=False` leaves the time-sealed layout in place.
+
+<a id="persistence.test_tlog.test_a_log_with_no_timed_seal_is_never_rewritten"></a>
+
+#### test\_a\_log\_with\_no\_timed\_seal\_is\_never\_rewritten
+
+```python
+def test_a_log_with_no_timed_seal_is_never_rewritten(
+        tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None
+```
+
+No clock-driven seal means the bytes are already canonical: no rewrite.
+
+<a id="persistence.test_tlog.test_a_failed_rewrite_keeps_the_original_log"></a>
+
+#### test\_a\_failed\_rewrite\_keeps\_the\_original\_log
+
+```python
+def test_a_failed_rewrite_keeps_the_original_log(
+        tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+        caplog: pytest.LogCaptureFixture) -> None
+```
+
+A reader that blocks the replacement leaves the complete original.
 
 <a id="persistence.test_tlog.test_a_block_is_sealed_when_the_buffer_is_full"></a>
 

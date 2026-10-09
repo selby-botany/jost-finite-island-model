@@ -29,7 +29,9 @@ project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   about 0.13 ms; no row of any other generation is built). For `fim run`, the
   file is a pure function of the run, so its digest in `manifest.json` is
   reproducible; the app asks for its open block to be written every second
-  so a live view is never stale. A log can be checkpointed and resumed (the
+  so a live view is never stale, and rewrites the finished log with the
+  canonical block boundaries, so it is byte-identical to a command-line
+  run's. A log can be checkpointed and resumed (the
   engine does not write run checkpoints yet). See
   [the trajectory log](doc/trajectory-log.md).
 - **The array engine runs the default model, and gives the same numbers.**
