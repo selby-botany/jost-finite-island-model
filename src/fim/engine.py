@@ -117,14 +117,17 @@ from typing import Any, Final, Literal, Protocol, TypeAlias, TypedDict, cast
 import numpy as np
 
 from fim import __version__
+from fim.config.convergence import MINIMUM_NOISE_CHECK_WINDOW
+from fim.config.defaults import (
+    DEFAULT_AUTO_VECTOR_MAX_CAPACITY,
+    DEFAULT_AUTO_VECTOR_MIN_D,
+)
+from fim.config.numerics import MINIMUM_REPLICATE_COUNT
 from fim.convergence.criteria import (
     ConfidenceIntervalCriterion,
     TrailingWindowCriterion,
 )
 from fim.convergence.monitor import ConvergenceMonitor, ConvergenceOutcome
-from fim.convergence.window_statistics import (
-    MINIMUM_NOISE_CHECK_WINDOW,
-)
 from fim.convergence.window_statistics import (
     window_statistics as _compute_window_statistics,
 )
@@ -141,17 +144,15 @@ from fim.model.initial import (
 )
 from fim.model.locus import finite_allele_capacity
 from fim.model.operators import _population_sizes, step
+from fim.model.params import EngineBackend as ModelEngineBackend
+from fim.model.params import Jit as ModelJit
 from fim.model.params import (
-    DEFAULT_AUTO_VECTOR_MAX_CAPACITY,
-    DEFAULT_AUTO_VECTOR_MIN_D,
     LocusAggregation,
     Migration,
     MutationRate,
     PopulationSize,
     SimulationParams,
 )
-from fim.model.params import EngineBackend as ModelEngineBackend
-from fim.model.params import Jit as ModelJit
 from fim.model.state import ModelState
 from fim.model.vector_block import VectorBlock, VectorMigration
 from fim.persistence.frame import FrameLayout, state_to_frame
@@ -186,7 +187,6 @@ from fim.statistics.interval import ConfidenceInterval, confidence_interval
 
 Clock: TypeAlias = Callable[[], datetime]
 
-_MINIMUM_REPLICATE_SUMMARY_COUNT = 2
 
 logger = logging.getLogger(__name__)
 
@@ -2707,7 +2707,7 @@ def reports_summary(
             # its identity (always finite) is still summarized.
             continue
         values = [value for value in raw if value is not None]
-        if len(values) < _MINIMUM_REPLICATE_SUMMARY_COUNT:
+        if len(values) < MINIMUM_REPLICATE_COUNT:
             continue
         summary[statistic] = confidence_interval(values, confidence=confidence)
     return summary
@@ -2774,7 +2774,7 @@ def replicate_summary(
     Raises:
         ValueError: If fewer than two results are supplied.
     """
-    if len(results) < _MINIMUM_REPLICATE_SUMMARY_COUNT:
+    if len(results) < MINIMUM_REPLICATE_COUNT:
         raise ValueError("replicate_summary requires at least two results")
     return reports_summary([result.report for result in results], confidence=confidence)
 
@@ -2896,7 +2896,7 @@ def pooled_convergence_histories_from_pairs(
     Raises:
         ValueError: If fewer than two replicates are supplied.
     """
-    if len(histories) < _MINIMUM_REPLICATE_SUMMARY_COUNT:
+    if len(histories) < MINIMUM_REPLICATE_COUNT:
         raise ValueError("pooled_convergence_histories requires at least two results")
     statistic_names = sorted(
         {name for _, replicate_histories in histories for name in replicate_histories}
@@ -2934,7 +2934,7 @@ def pooled_convergence_histories_from_pairs(
                 for index, lookup in enumerate(per_replicate_lookup)
                 if name in lookup
             ]
-            if len(pooled_values) < _MINIMUM_REPLICATE_SUMMARY_COUNT:
+            if len(pooled_values) < MINIMUM_REPLICATE_COUNT:
                 continue
             interval = confidence_interval(pooled_values, confidence=confidence)
             pooled[name].append(
@@ -3092,7 +3092,7 @@ def bootstrap_replicate_summary(
         ValueError: If fewer than two results are supplied, `confidence`
             is not in `(0, 1)`, or `bootstrap_samples` is not positive.
     """
-    if len(results) < _MINIMUM_REPLICATE_SUMMARY_COUNT:
+    if len(results) < MINIMUM_REPLICATE_COUNT:
         raise ValueError("bootstrap_replicate_summary requires at least two results")
     if not 0.0 < confidence < 1.0:
         raise ValueError("confidence must be between 0 and 1")

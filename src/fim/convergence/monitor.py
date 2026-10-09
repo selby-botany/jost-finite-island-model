@@ -23,16 +23,13 @@ from dataclasses import dataclass
 from enum import StrEnum
 from typing import Literal
 
+from fim.config.convergence import MINIMUM_NOISE_CHECK_WINDOW
 from fim.convergence.criteria import (
     ConvergenceCriterion,
     TrailingWindowCriterion,
     TrailingWindowTracker,
 )
-from fim.convergence.window_statistics import (
-    MINIMUM_NOISE_CHECK_WINDOW,
-    WindowStatistics,
-    window_statistics,
-)
+from fim.convergence.window_statistics import WindowStatistics, window_statistics
 
 Combinator = Literal["any", "all"]
 

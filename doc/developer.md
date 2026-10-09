@@ -23,6 +23,7 @@ use the [generated API reference](../src/fim/API.md) for exact signatures.
 |---|---|
 | `fim.model` | Allele/locus/state values, parameter validation, initialization, update operators |
 | `fim.statistics` | Pure diversity/differentiation functions, and across-replicate confidence intervals |
+| `fim.config` | Every named policy constant and numerical guard of the convergence and statistics code, one module per subject — see its [README](../src/fim/config/README.md) |
 | `fim.convergence` | Trailing-window and confidence-interval criteria, and the hard-cap monitor |
 | `fim.persistence` | Store protocol, binary trajectory log, replayable manifest |
 | `fim.engine` | Public run loop and final report assembly, behind three interchangeable backend implementations (`LinealBackend`/`GenerationalBackend` + `Advancer`) — see [Engine backends](#engine-backends) |

@@ -29,6 +29,8 @@ from webview.menu import Menu, MenuAction, MenuSeparator
 from fim import __version__ as fim_version
 from fim import cli, paths, update
 from fim import engine as engine_module
+from fim.config.defaults import DEFAULT_PAIRWISE_MAX_DEMES
+from fim.config.limits import MAXIMUM_RECURSION_DEMES
 from fim.engine import (
     RunResult,
     bootstrap_replicate_summary,
@@ -69,7 +71,6 @@ from fim.persistence.manifest import hash_file, read_manifest
 from fim.persistence.pairwise import pair_value, read_pairwise
 from fim.persistence.report import write_report
 from fim.statistics import (
-    MAXIMUM_MATRIX_DEMES,
     confidence_interval,
     effective_allele_count,
     equilibrium_d,
@@ -87,7 +88,6 @@ from fim.statistics import (
 )
 from fim.statistics.catalog import (
     CATALOG,
-    DEFAULT_PAIRWISE_MAX_DEMES,
     default_shown_keys,
     history_keys,
     pair_keys,
@@ -1895,8 +1895,8 @@ def test_closed_form_trajectory_payload_is_none_where_no_solver_applies(
     )
     too_many = replace(
         tiny_params,
-        d=MAXIMUM_MATRIX_DEMES + 1,
-        gene_copies=tuple(range(10, 10 + MAXIMUM_MATRIX_DEMES + 1)),
+        d=MAXIMUM_RECURSION_DEMES + 1,
+        gene_copies=tuple(range(10, 10 + MAXIMUM_RECURSION_DEMES + 1)),
     )
 
     assert app_module._closed_form_trajectory_payload(per_locus_mu) is None

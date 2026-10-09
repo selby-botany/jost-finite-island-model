@@ -67,6 +67,7 @@ from matplotlib import pyplot as plt
 
 from fim import __version__, logging_setup, paths, reanalyze, update
 from fim.cli_sweep import add_sweep_subcommands, command_sweep
+from fim.config.defaults import DEFAULT_PAIRWISE_MAX_DEMES
 from fim.convergence.defaults import describe_derived_convergence
 from fim.engine import (
     FinalReport,
@@ -120,7 +121,6 @@ from fim.persistence.run_metadata import (
     write_run_labels,
 )
 from fim.persistence.tlog_export import DEFAULT_EXPORT_WORKERS, export_trajectory
-from fim.statistics.catalog import DEFAULT_PAIRWISE_MAX_DEMES
 from fim.viz.scatter import plot_frequency_scatter
 
 logger = logging.getLogger(__name__)

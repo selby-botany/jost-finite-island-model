@@ -68,6 +68,7 @@ from fim import __version__ as fim_version
 from fim import engine as engine_module
 from fim import logging_setup, paths, update
 from fim.cli import load_config
+from fim.config.limits import MAXIMUM_RECURSION_DEMES
 from fim.convergence.defaults import (
     describe_derived_convergence,
     island_migration_matrix,
@@ -145,7 +146,6 @@ from fim.reanalyze import (
 )
 from fim.reproducibility import compare_runs
 from fim.statistics import (
-    MAXIMUM_MATRIX_DEMES,
     effective_allele_count,
     equilibrium_d,
     equilibrium_g_st,
@@ -1144,7 +1144,7 @@ def _closed_form_trajectory_payload(
       (`generate_initial_state(params)`, the engine's own call) and the
       solved trajectory is sampled on a grid, `{"generations": [...],
       "statistics": {name: [...]}}`, that the page interpolates. At most
-      `MAXIMUM_MATRIX_DEMES` demes.
+      `MAXIMUM_RECURSION_DEMES` demes.
 
     Args:
         params: A validated configuration, at run-start or a reopened run's.
@@ -1229,7 +1229,7 @@ def _sampled_closed_form_payload(params: SimulationParams) -> dict[str, Any] | N
     if (
         not isinstance(params.mu, float)
         or params.equilibrium_max_generations is not None
-        or params.d > MAXIMUM_MATRIX_DEMES
+        or params.d > MAXIMUM_RECURSION_DEMES
     ):
         return None
     sizes = params.population_sizes

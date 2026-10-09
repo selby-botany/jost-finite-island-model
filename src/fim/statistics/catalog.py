@@ -40,6 +40,8 @@ from collections.abc import Iterable, Iterator
 from dataclasses import asdict, dataclass
 from typing import Final, Literal, TypeAlias
 
+from fim.config.defaults import DEFAULT_PAIRWISE_MAX_DEMES
+
 from .genetic_distance import (
     NEI_DENOMINATORS,
     NEI_LOCUS_RULES,
@@ -69,15 +71,6 @@ Scope: TypeAlias = Literal["global", "pair"]
 History: TypeAlias = Literal["always", "opt_in", "none"]
 Measure: TypeAlias = Literal["distance", "identity"]
 
-DEFAULT_PAIRWISE_MAX_DEMES: Final = 1024
-"""Largest deme count whose full all-pairs matrices are saved by default.
-
-At d = 1024 one run's `pairwise.json` is about 52 MB (five matrices of
-523,776 values) and takes about a second to compute and write. Above the
-limit the file records only that the matrices were skipped; any specific
-pair can still be recomputed from the saved trajectory. A researcher can raise or
-lower the limit in Settings or with `fim run --pairwise-max-demes`.
-"""
 
 Bounds: TypeAlias = tuple[float | None, float | None]
 

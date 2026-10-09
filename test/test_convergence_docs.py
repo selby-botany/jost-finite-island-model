@@ -6,7 +6,7 @@ from pathlib import Path
 
 import pytest
 
-from fim.convergence.defaults import (
+from fim.config.convergence import (
     CAP_RELAXATION_MULTIPLE,
     MINIMUM_MAX_GENERATIONS,
     MINIMUM_WINDOW,

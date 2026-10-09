@@ -29,10 +29,12 @@ from collections.abc import Sequence
 from dataclasses import dataclass
 from typing import Protocol
 
+from fim.config.numerics import (
+    EXACT_SCALE_BITS,
+    MINIMUM_CRITERION_WINDOW,
+    MINIMUM_REPLICATE_COUNT,
+)
 from fim.statistics.interval import confidence_interval
-
-MINIMUM_WINDOW = 2
-MINIMUM_REPLICATE_COUNT = 2
 
 
 class ConvergenceCriterion(Protocol):
@@ -109,7 +111,7 @@ def trailing_window_stable(
         ValueError: If `window` is smaller than 2, or `tolerance` is
             negative or not a finite number (``NaN`` or infinity).
     """
-    if window < MINIMUM_WINDOW:
+    if window < MINIMUM_CRITERION_WINDOW:
         raise ValueError("window must be at least 2")
     if not math.isfinite(tolerance) or tolerance < 0.0:
         raise ValueError("tolerance must be finite and non-negative")
@@ -158,7 +160,7 @@ class TrailingWindowCriterion:
         letting it silently produce a criterion that can never
         actually detect stability once a run is already under way.
         """
-        if self.window < MINIMUM_WINDOW:
+        if self.window < MINIMUM_CRITERION_WINDOW:
             raise ValueError("window must be at least 2")
         if not math.isfinite(self.tolerance) or self.tolerance < 0.0:
             raise ValueError("tolerance must be finite and non-negative")
@@ -172,10 +174,7 @@ class TrailingWindowCriterion:
         return TrailingWindowTracker(self.window, self.tolerance)
 
 
-_EXACT_SCALE_BITS = 1074
-"""Every finite double is an integer multiple of `2 ** -1074`."""
-
-_EXACT_SCALE = 1 << _EXACT_SCALE_BITS
+_EXACT_SCALE = 1 << EXACT_SCALE_BITS
 
 
 def _to_exact(value: float) -> int:
@@ -188,7 +187,7 @@ def _to_exact(value: float) -> int:
         The integer `value * 2 ** 1074`, exactly.
     """
     numerator, denominator = value.as_integer_ratio()
-    return numerator << (_EXACT_SCALE_BITS - (denominator.bit_length() - 1))
+    return numerator << (EXACT_SCALE_BITS - (denominator.bit_length() - 1))
 
 
 class TrailingWindowTracker:
@@ -218,7 +217,7 @@ class TrailingWindowTracker:
             ValueError: If `window` is smaller than 2, or `tolerance` is
                 negative or not finite.
         """
-        if window < MINIMUM_WINDOW:
+        if window < MINIMUM_CRITERION_WINDOW:
             raise ValueError("window must be at least 2")
         if not math.isfinite(tolerance) or tolerance < 0.0:
             raise ValueError("tolerance must be finite and non-negative")

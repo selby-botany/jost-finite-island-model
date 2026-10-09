@@ -9,6 +9,7 @@ Every test module, fixture, and test function documented here in full; `doc/fim-
 - [`test/`](#group-test)
   - [`conftest`](#test.conftest)
   - [`test_build_ci_parallel`](#test.test_build_ci_parallel)
+  - [`test_constants`](#test.test_constants)
   - [`test_convergence_docs`](#test.test_convergence_docs)
   - [`test_doc_examples`](#test.test_doc_examples)
   - [`test_doc_snippets`](#test.test_doc_snippets)
@@ -692,6 +693,79 @@ def test_ci_build_runs_non_gui_parallel_and_gui_serially() -> None
 ```
 
 `--ci` keeps stateful tests out of xdist while parallelizing the rest.
+
+<a id="test.test_constants"></a>
+
+# test.test\_constants
+
+The constants scan: policy constants live in `fim.config`, nowhere else.
+
+`fim.config` holds every named policy constant and numerical guard of the
+convergence and statistics code (see its `README.md`). These tests read the
+source, not the running program, so they cost milliseconds and need nothing
+installed. They fail when a new module-level numeric constant appears in the
+scanned modules outside `fim/config/`, when a constant in `fim/config/`
+lacks a docstring with a `Kind:` line, and when the README's table drifts
+from the modules.
+
+<a id="test.test_constants.ALLOWED"></a>
+
+#### ALLOWED
+
+Module-level numeric constants allowed outside `fim/config/`, with why.
+
+<a id="test.test_constants.test_no_numeric_constant_is_defined_outside_the_config_package"></a>
+
+#### test\_no\_numeric\_constant\_is\_defined\_outside\_the\_config\_package
+
+```python
+def test_no_numeric_constant_is_defined_outside_the_config_package() -> None
+```
+
+A new magic number goes into `fim/config/`, not into the module using it.
+
+<a id="test.test_constants.test_every_allow_list_entry_still_exists"></a>
+
+#### test\_every\_allow\_list\_entry\_still\_exists
+
+```python
+def test_every_allow_list_entry_still_exists() -> None
+```
+
+A retired constant leaves the allow list with it.
+
+<a id="test.test_constants.test_every_config_constant_says_what_it_is_and_which_kind"></a>
+
+#### test\_every\_config\_constant\_says\_what\_it\_is\_and\_which\_kind
+
+```python
+def test_every_config_constant_says_what_it_is_and_which_kind() -> None
+```
+
+Each constant has a docstring ending in a `Kind:` line with a known kind.
+
+<a id="test.test_constants.test_the_readme_table_lists_exactly_the_config_constants"></a>
+
+#### test\_the\_readme\_table\_lists\_exactly\_the\_config\_constants
+
+```python
+def test_the_readme_table_lists_exactly_the_config_constants() -> None
+```
+
+The README names every constant once, and nothing that is gone.
+
+<a id="test.test_constants.test_scanned_modules_exist"></a>
+
+#### test\_scanned\_modules\_exist
+
+```python
+@pytest.mark.parametrize("path",
+                         SCANNED,
+                         ids=lambda p: str(p.relative_to(SOURCE)))
+def test_scanned_modules_exist(path: Path) -> None
+```
+
+A renamed module must not silently drop out of the scan.
 
 <a id="test.test_convergence_docs"></a>
 
@@ -35695,12 +35769,12 @@ Haploid N=100 plugs in directly without a ploidy conversion.
 @pytest.mark.parametrize(
     ("x", "expected"),
     [
-        (1.0, -_EULER_GAMMA),
-        (2.0, 1.0 - _EULER_GAMMA),
-        (3.0, 1.0 + 1.0 / 2.0 - _EULER_GAMMA),
-        (5.0, 1.0 + 1.0 / 2.0 + 1.0 / 3.0 + 1.0 / 4.0 - _EULER_GAMMA),
-        (0.5, -_EULER_GAMMA - 2.0 * math.log(2.0)),
-        (1.5, 2.0 - _EULER_GAMMA - 2.0 * math.log(2.0)),
+        (1.0, -EULER_GAMMA),
+        (2.0, 1.0 - EULER_GAMMA),
+        (3.0, 1.0 + 1.0 / 2.0 - EULER_GAMMA),
+        (5.0, 1.0 + 1.0 / 2.0 + 1.0 / 3.0 + 1.0 / 4.0 - EULER_GAMMA),
+        (0.5, -EULER_GAMMA - 2.0 * math.log(2.0)),
+        (1.5, 2.0 - EULER_GAMMA - 2.0 * math.log(2.0)),
     ],
 )
 def test_digamma_matches_known_closed_forms(x: float, expected: float) -> None

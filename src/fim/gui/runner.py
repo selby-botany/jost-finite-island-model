@@ -43,6 +43,7 @@ from typing import Any, Final, Literal
 from matplotlib import pyplot as plt
 
 from fim import paths
+from fim.config.defaults import DEFAULT_PAIRWISE_MAX_DEMES
 from fim.engine import (
     FinalReport,
     RunResult,
@@ -69,7 +70,6 @@ from fim.persistence.pairwise import (
     write_pairwise,
 )
 from fim.persistence.report import write_jsonl_rows, write_report
-from fim.statistics.catalog import DEFAULT_PAIRWISE_MAX_DEMES
 from fim.viz.scatter import (
     FloatArray,
     frequency_points,

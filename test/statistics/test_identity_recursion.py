@@ -7,9 +7,9 @@ import math
 import numpy as np
 import pytest
 
+from fim.config.limits import MAXIMUM_RECURSION_DEMES
 from fim.statistics import (
     IDENTITY_STATISTIC_NAMES,
-    MAXIMUM_MATRIX_DEMES,
     equilibrium_d,
     g_st,
     h_s,
@@ -299,7 +299,7 @@ def test_identity_matrix_from_frequencies_matches_the_definition() -> None:
 
 def test_matrix_trajectory_refuses_too_many_demes() -> None:
     """More demes than the eigenproblem limit is refused, not slow."""
-    d = MAXIMUM_MATRIX_DEMES + 1
+    d = MAXIMUM_RECURSION_DEMES + 1
     with pytest.raises(ValueError, match="between 2 and"):
         matrix_identity_trajectory(
             deme_sizes=(10,) * d,

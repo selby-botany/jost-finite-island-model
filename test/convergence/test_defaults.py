@@ -6,13 +6,15 @@ import math
 
 import pytest
 
-from fim.convergence.defaults import (
+from fim.config.convergence import (
     ABSOLUTE_MAX_GENERATIONS,
     CAP_RELAXATION_MULTIPLE,
-    MAXIMUM_RECURSION_DEMES,
     MINIMUM_MAX_GENERATIONS,
     MINIMUM_WINDOW,
     WINDOW_RELAXATION_MULTIPLE,
+)
+from fim.config.limits import MAXIMUM_RECURSION_DEMES
+from fim.convergence.defaults import (
     derive_convergence_defaults,
     describe_derived_convergence,
     island_relaxation_time,

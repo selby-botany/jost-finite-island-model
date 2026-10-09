@@ -27,9 +27,10 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Final, cast
 
+from fim.config.display import GUI_ANIMATION_MAX_FRAMES
 from fim.engine import report_for_state
 from fim.examples.artifacts import materialize_outputs
-from fim.gui.animation import GUI_ANIMATION_MAX_FRAMES, select_sample_generations
+from fim.gui.animation import select_sample_generations
 from fim.model.params import SimulationParams
 from fim.model.state import ModelState
 from fim.persistence.manifest import (

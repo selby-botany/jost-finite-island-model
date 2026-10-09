@@ -38,6 +38,7 @@ from pathlib import Path
 from typing import Any, Literal, Protocol
 
 from fim import __version__, paths
+from fim.config.defaults import DEFAULT_PAIRWISE_MAX_DEMES
 from fim.model.params import SimulationParams
 from fim.persistence import groups
 from fim.persistence.groups import StudyManifest
@@ -47,7 +48,6 @@ from fim.persistence.run_metadata import (
     run_metadata_path,
 )
 from fim.reproducibility import compare_runs
-from fim.statistics.catalog import DEFAULT_PAIRWISE_MAX_DEMES
 from fim.sweep import (
     SweepPlan,
     SweepPoint,

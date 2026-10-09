@@ -13,6 +13,42 @@ Return to the [source-tree orientation](../README.md) or the [developer guide](.
 * [fim.cli\_sweep](#fim.cli_sweep)
   * [add\_sweep\_subcommands](#fim.cli_sweep.add_sweep_subcommands)
   * [command\_sweep](#fim.cli_sweep.command_sweep)
+* [fim.config](#fim.config)
+* [fim.config.convergence](#fim.config.convergence)
+  * [WINDOW\_RELAXATION\_MULTIPLE](#fim.config.convergence.WINDOW_RELAXATION_MULTIPLE)
+  * [CAP\_RELAXATION\_MULTIPLE](#fim.config.convergence.CAP_RELAXATION_MULTIPLE)
+  * [MINIMUM\_WINDOW](#fim.config.convergence.MINIMUM_WINDOW)
+  * [MINIMUM\_MAX\_GENERATIONS](#fim.config.convergence.MINIMUM_MAX_GENERATIONS)
+  * [ABSOLUTE\_MAX\_GENERATIONS](#fim.config.convergence.ABSOLUTE_MAX_GENERATIONS)
+  * [NOISE\_TOLERANCE\_FRACTION](#fim.config.convergence.NOISE_TOLERANCE_FRACTION)
+  * [MINIMUM\_NOISE\_CHECK\_WINDOW](#fim.config.convergence.MINIMUM_NOISE_CHECK_WINDOW)
+* [fim.config.defaults](#fim.config.defaults)
+  * [DEFAULT\_LOCUS\_LENGTH](#fim.config.defaults.DEFAULT_LOCUS_LENGTH)
+  * [DEFAULT\_AUTO\_VECTOR\_MIN\_D](#fim.config.defaults.DEFAULT_AUTO_VECTOR_MIN_D)
+  * [DEFAULT\_AUTO\_VECTOR\_MAX\_CAPACITY](#fim.config.defaults.DEFAULT_AUTO_VECTOR_MAX_CAPACITY)
+  * [DEFAULT\_N\_REPLICATES](#fim.config.defaults.DEFAULT_N_REPLICATES)
+  * [DEFAULT\_REPLICATE\_TOLERANCE](#fim.config.defaults.DEFAULT_REPLICATE_TOLERANCE)
+  * [DEFAULT\_PAIRWISE\_MAX\_DEMES](#fim.config.defaults.DEFAULT_PAIRWISE_MAX_DEMES)
+* [fim.config.display](#fim.config.display)
+  * [GUI\_ANIMATION\_MAX\_FRAMES](#fim.config.display.GUI_ANIMATION_MAX_FRAMES)
+* [fim.config.limits](#fim.config.limits)
+  * [MAXIMUM\_RECURSION\_DEMES](#fim.config.limits.MAXIMUM_RECURSION_DEMES)
+* [fim.config.numerics](#fim.config.numerics)
+  * [MAXIMUM\_LAG1\_CORRELATION](#fim.config.numerics.MAXIMUM_LAG1_CORRELATION)
+  * [MINIMUM\_WINDOW\_VALUES](#fim.config.numerics.MINIMUM_WINDOW_VALUES)
+  * [MINIMUM\_CRITERION\_WINDOW](#fim.config.numerics.MINIMUM_CRITERION_WINDOW)
+  * [MINIMUM\_REPLICATE\_COUNT](#fim.config.numerics.MINIMUM_REPLICATE_COUNT)
+  * [EXACT\_SCALE\_BITS](#fim.config.numerics.EXACT_SCALE_BITS)
+  * [MINIMUM\_DEMES](#fim.config.numerics.MINIMUM_DEMES)
+  * [DEGENERACY\_TOLERANCE](#fim.config.numerics.DEGENERACY_TOLERANCE)
+  * [SINGULAR\_FIXED\_POINT](#fim.config.numerics.SINGULAR_FIXED_POINT)
+  * [SINGULAR\_EIGENVECTORS](#fim.config.numerics.SINGULAR_EIGENVECTORS)
+  * [MAXIMUM\_CONDITION](#fim.config.numerics.MAXIMUM_CONDITION)
+  * [RECONSTRUCTION\_TOLERANCE](#fim.config.numerics.RECONSTRUCTION_TOLERANCE)
+  * [MINIMUM\_SAMPLE\_GENE\_COPIES](#fim.config.numerics.MINIMUM_SAMPLE_GENE_COPIES)
+  * [DIFFERENTIATION\_TOLERANCE](#fim.config.numerics.DIFFERENTIATION_TOLERANCE)
+  * [EULER\_GAMMA](#fim.config.numerics.EULER_GAMMA)
+  * [DIGAMMA\_ASYMPTOTIC\_THRESHOLD](#fim.config.numerics.DIGAMMA_ASYMPTOTIC_THRESHOLD)
 * [fim.convergence](#fim.convergence)
 * [fim.convergence.criteria](#fim.convergence.criteria)
   * [ConvergenceCriterion](#fim.convergence.criteria.ConvergenceCriterion)
@@ -30,12 +66,6 @@ Return to the [source-tree orientation](../README.md) or the [developer guide](.
     * [\_\_post\_init\_\_](#fim.convergence.criteria.ConfidenceIntervalCriterion.__post_init__)
     * [is\_stable](#fim.convergence.criteria.ConfidenceIntervalCriterion.is_stable)
 * [fim.convergence.defaults](#fim.convergence.defaults)
-  * [WINDOW\_RELAXATION\_MULTIPLE](#fim.convergence.defaults.WINDOW_RELAXATION_MULTIPLE)
-  * [CAP\_RELAXATION\_MULTIPLE](#fim.convergence.defaults.CAP_RELAXATION_MULTIPLE)
-  * [MINIMUM\_WINDOW](#fim.convergence.defaults.MINIMUM_WINDOW)
-  * [MINIMUM\_MAX\_GENERATIONS](#fim.convergence.defaults.MINIMUM_MAX_GENERATIONS)
-  * [ABSOLUTE\_MAX\_GENERATIONS](#fim.convergence.defaults.ABSOLUTE_MAX_GENERATIONS)
-  * [MAXIMUM\_RECURSION\_DEMES](#fim.convergence.defaults.MAXIMUM_RECURSION_DEMES)
   * [DerivedConvergence](#fim.convergence.defaults.DerivedConvergence)
   * [derive\_convergence\_defaults](#fim.convergence.defaults.derive_convergence_defaults)
   * [describe\_derived\_convergence](#fim.convergence.defaults.describe_derived_convergence)
@@ -454,10 +484,6 @@ Return to the [source-tree orientation](../README.md) or the [developer guide](.
 * [fim.model.params](#fim.model.params)
   * [PLOIDY\_WORDS](#fim.model.params.PLOIDY_WORDS)
   * [AUTO\_CONVERGENCE](#fim.model.params.AUTO_CONVERGENCE)
-  * [DEFAULT\_AUTO\_VECTOR\_MIN\_D](#fim.model.params.DEFAULT_AUTO_VECTOR_MIN_D)
-  * [DEFAULT\_AUTO\_VECTOR\_MAX\_CAPACITY](#fim.model.params.DEFAULT_AUTO_VECTOR_MAX_CAPACITY)
-  * [DEFAULT\_N\_REPLICATES](#fim.model.params.DEFAULT_N_REPLICATES)
-  * [DEFAULT\_REPLICATE\_TOLERANCE](#fim.model.params.DEFAULT_REPLICATE_TOLERANCE)
   * [SimulationParams](#fim.model.params.SimulationParams)
     * [\_\_post\_init\_\_](#fim.model.params.SimulationParams.__post_init__)
     * [convergence\_statistics](#fim.model.params.SimulationParams.convergence_statistics)
@@ -873,7 +899,6 @@ Return to the [source-tree orientation](../README.md) or the [developer guide](.
   * [compare\_runs](#fim.reproducibility.compare_runs)
 * [fim.statistics](#fim.statistics)
 * [fim.statistics.catalog](#fim.statistics.catalog)
-  * [DEFAULT\_PAIRWISE\_MAX\_DEMES](#fim.statistics.catalog.DEFAULT_PAIRWISE_MAX_DEMES)
   * [StatisticSpec](#fim.statistics.catalog.StatisticSpec)
   * [nei\_key](#fim.statistics.catalog.nei_key)
   * [CATALOG](#fim.statistics.catalog.CATALOG)
@@ -1213,6 +1238,568 @@ def command_sweep(arguments: argparse.Namespace,
 ```
 
 Dispatch one `fim sweep` subcommand and return its exit status.
+
+<a id="fim.config"></a>
+
+# fim.config
+
+Named constants for convergence, statistics, limits and defaults.
+
+One module per subject: `convergence`, `limits`, `numerics`, `defaults` and
+`display`. Nothing else under `src/fim` defines a policy constant; see
+`README.md` for the table and `test/test_constants.py` for the scan that
+enforces it.
+
+<a id="fim.config.convergence"></a>
+
+# fim.config.convergence
+
+Convergence policy constants.
+
+Every value here is a choice a careful person could make differently, so
+each is a policy constant: named, documented with its evidence, and (once
+Expert Settings exist) adjustable. Retired constants stay until the rule
+that uses them is replaced.
+
+See `README.md` in this directory for the table of every constant.
+
+<a id="fim.config.convergence.WINDOW_RELAXATION_MULTIPLE"></a>
+
+#### WINDOW\_RELAXATION\_MULTIPLE
+
+Default `convergence_window`, in units of the relaxation time `tau`.
+
+Set by `dev/bin/calibrate-convergence-defaults` and recorded in
+`test/validation/convergence-defaults-evidence.json`. The noise-free
+analysis (design Appendix A.6) already accepts a residual of a third of
+`convergence_tolerance` at `2 tau`, but a single stochastic run also
+carries sampling noise. Golden Part VI (60 replicates, 8 loci) stops
+0.14 below its analytic D at `1 tau`, 0.060 at `2 tau` (outside the 0.05
+acceptance) and 0.040 at `3 tau`; a longer window does not improve on that
+(0.039 at `4 tau`), because the remaining offset comes from estimating D
+over a finite number of loci, not from stopping early. The slower regimes
+measured (Dear-Nolan low, ring, unequal mutation rates) are within 0.025
+at `2 tau` and within 0.01 at `4 tau`.
+
+Kind: policy.
+
+<a id="fim.config.convergence.CAP_RELAXATION_MULTIPLE"></a>
+
+#### CAP\_RELAXATION\_MULTIPLE
+
+Default `max_generations`, in units of `tau`.
+
+A run needs its window plus the time to settle. The slowest stop measured
+was `10.2 tau` (Golden Part VI at a window of `4 tau`; `9.0 tau` at the
+shipped `3 tau`), so `15 tau` leaves a margin of about 1.5 and no measured
+run ended at the cap. Only binding once `15 tau` exceeds `MINIMUM_MAX_
+GENERATIONS`'s own floor (its own docstring has why that floor is now
+large) -- a fast-relaxing model's cap is set by the floor instead, since
+`15 tau` alone was never a measurement of how long a single-locus run's
+own noise takes to average out, only of how long the *trend* takes to
+settle.
+
+Kind: policy.
+
+<a id="fim.config.convergence.MINIMUM_WINDOW"></a>
+
+#### MINIMUM\_WINDOW
+
+Smallest derived window: the historical default, kept as a floor.
+
+Kind: policy.
+
+<a id="fim.config.convergence.MINIMUM_MAX_GENERATIONS"></a>
+
+#### MINIMUM\_MAX\_GENERATIONS
+
+Smallest derived cap.
+
+Set by the same evidence as `WINDOW_RELAXATION_MULTIPLE`'s own docstring,
+extended: `fim.convergence.monitor.ConvergenceMonitor`'s noise-adequacy
+gate lets the evidence window actually used to judge stability grow past
+`convergence_window` on its own, generation by generation, whenever a
+single, fast-relaxing (small `tau`) model's own per-generation noise
+still leaves the trailing-window mean short of the requested tolerance --
+the single-locus case the original `10_000` floor (this project's own
+pre-derived-defaults historical default) was never measured against. Two
+independent single-locus, single-replicate regimes (Golden Part VI,
+`tau = 85`; Dear-Nolan low, `tau = 19,693` -- two orders of magnitude
+apart in `tau`) both needed close to 130,000 generations for their own
+`D` to become genuinely noise-adequate, despite that wide spread in
+`tau`: this floor is a small multiple of that measured need, not derived
+from `tau` at all (a third, well-resolved regime, a 10-deme ring, settled
+at 12,000, comfortably under this floor on its own). A model that settles
+long before this floor is unaffected -- the adaptive window still stops
+the instant it is genuinely adequate, this floor only raises how long a
+run is *allowed* to keep growing that window before giving up
+honestly. See `20260927-claude-sonnet-5-noise-aware-convergence-design.md`
+(`selby/restricted`) for the full measurement.
+
+Kind: policy.
+
+<a id="fim.config.convergence.ABSOLUTE_MAX_GENERATIONS"></a>
+
+#### ABSOLUTE\_MAX\_GENERATIONS
+
+Ceiling on a derived cap, so a nearly isolated system stays finite.
+
+Kind: policy (safety).
+
+<a id="fim.config.convergence.NOISE_TOLERANCE_FRACTION"></a>
+
+#### NOISE\_TOLERANCE\_FRACTION
+
+A window's own trailing-window mean is only judged noise-adequate once its
+standard error is at most this fraction of the configured tolerance — half,
+so that a mean landing anywhere within one standard error of the true value
+is still within tolerance of it (a one-sigma bound, not a five- or
+ninety-five-percent one; see the design note this module implements,
+`20260927-...-noise-aware-convergence-design.md`, `selby/restricted`, for
+why a stricter multiple was not chosen).
+
+Kind: policy.
+
+<a id="fim.config.convergence.MINIMUM_NOISE_CHECK_WINDOW"></a>
+
+#### MINIMUM\_NOISE\_CHECK\_WINDOW
+
+Below this many values, a lag-1 correlation estimate is too noisy itself to
+trust (a handful of points can look arbitrarily correlated or
+anticorrelated by chance) — `fim.convergence.monitor.ConvergenceMonitor`
+skips the noise-adequacy gate entirely under this window length, matching
+the trend-only check's own original behavior for a short window.
+
+Kind: policy.
+
+<a id="fim.config.defaults"></a>
+
+# fim.config.defaults
+
+Default values of regular settings.
+
+The value a setting takes when a configuration leaves it out. Each is a
+regular setting (or an Expert Setting) a user can change; the default is a
+policy choice recorded here with its reason.
+
+See `README.md` in this directory for the table of every constant.
+
+<a id="fim.config.defaults.DEFAULT_LOCUS_LENGTH"></a>
+
+#### DEFAULT\_LOCUS\_LENGTH
+
+`DEFAULT_LOCUS_LENGTH`.
+
+Kind: policy; a regular setting.
+
+<a id="fim.config.defaults.DEFAULT_AUTO_VECTOR_MIN_D"></a>
+
+#### DEFAULT\_AUTO\_VECTOR\_MIN\_D
+
+`"auto"`'s own default deme-count cutover, below which it never picks
+`"generational-vector"` even when the config is otherwise eligible for it.
+
+Lives here, not in `fim.engine`, because it is a `SimulationParams` field
+default like any other (`replicate_minimum`'s own `10`, for one) —
+`fim.engine` imports it from here rather than the other way around,
+matching this project's own one-directional dependency rule (the engine
+depends on the model; the model depends on nothing in the engine).
+
+Measured, not guessed — the generation-first design's own Stage 4/vector
+design's own Stage V3 deme-axis sweep found Backend V crosses over from
+slower than Backend L to clearly faster somewhere between `d=30` and
+`d=40` on the primary benchmarking machine. **This default has not been
+re-measured since a later correctness fix
+(`20260901-claude-sonnet-5-fim-engine-backend-factory-design.md` §10
+Stage F8) changed the underlying performance picture materially — a
+2026-09-02 re-measurement (`dev/bin/benchmark-engines`) found
+`"generational-vector"` already ahead at `d=4`, the smallest value
+tested, not just past this threshold.** Kept at `35` rather than changed
+alongside that finding: altering a shipped default needs its own
+deliberate confirmation, not a silent edit. `auto_vector_min_d` stays a
+caller-supplied `SimulationParams` field for exactly this kind of
+drift — see `dev/bin/benchmark-engines --sweep d` to re-characterize it
+on any given machine.
+
+**Re-measured again 2026-09-05 (`FIM-52`, Phase 7 item 6,
+`20260904-claude-sonnet-5-fim-engine-review-remediations.md`) — on
+different, native hardware this time (`citrus-2`, Intel Core Ultra 9
+185H, x86_64 Linux, not this project's own Apple Silicon development
+machine), and after every Phase 1-7 correctness/performance fix, not
+just Stage F8: `dev/bin/benchmark-engines --sweep d --values
+2,4,8,16,25,35,50,70,100,150,250 --replicates 16 --generations 100
+--trials 5` found `"generational-vector"` fastest at *every* tested
+`d`, from `2` (the smallest value `SimulationParams` accepts at all)
+through `250` — never losing even once, and never approaching a
+crossover from below. Its own margin over `"generational"` with
+`jit="numba"` (the closest competitor at every point) shrinks as `d`
+grows (from roughly 2x at `d=2` to roughly 6x at `d=250`, both favoring
+V) but never comes close to reversing. This confirms, on a second,
+independent, materially different machine, that `35` is not merely
+stale but has never been correct against any post-Stage-F8 build of
+this codebase — every tested value below it would have been routed to
+the slower engine by `"auto"`.
+
+**Changed 2026-09-05, `35` -> `2` (the floor `SimulationParams.d`
+accepts at all)**, after a further, joint `d` x locus-length heatmap
+(`dev/bin/generate-heatmap-queue`/`benchmark-queue`, 104 points, `d` in
+`{2,4,8,...,500}` x locus length `1`-`8`, `citrus-2`, run explicitly to
+check whether this axis and `auto_vector_max_capacity`'s own axis
+interact before changing either value — see that constant's own
+docstring for why a single-axis result alone was not enough to trust).
+That joint sweep found no `d`, at any capacity up to and including
+`4096` (locus length `6`), where `"generational-vector"` loses — the
+`d`-axis crossover this constant thresholds simply does not exist
+inside the region `auto_vector_max_capacity` now admits, so gating on
+`d` at all, within that region, only ever excludes configurations V
+would have won. (Above capacity `4096`, a real, narrower `d`-dependent
+region does exist — see `auto_vector_max_capacity`'s own docstring —
+but a single scalar `auto_vector_min_d` cannot express "conditional on
+capacity" at all, so lowering this threshold to `2` is what the data
+supports regardless: the region where a *higher* `min_d` would help is
+already excluded by `max_capacity`, and everywhere `max_capacity`
+admits, no `min_d` value was ever justified by real evidence.)
+
+Kind: policy; already an Expert Setting.
+
+<a id="fim.config.defaults.DEFAULT_AUTO_VECTOR_MAX_CAPACITY"></a>
+
+#### DEFAULT\_AUTO\_VECTOR\_MAX\_CAPACITY
+
+`"auto"`'s own default per-locus capacity ceiling for `"generational-
+vector"` — above it, `"auto"` picks `"generational"` instead, regardless
+of `d`/`auto_vector_min_d`.
+
+Applies under `mutation_model="finite_alleles"` only: a finite-alleles
+table is `capacity` columns wide however few states are in use. An
+infinite-alleles table is as wide as the alleles alive at once, so `"auto"`
+does not read this ceiling there (the measurements below were all
+finite-alleles).
+
+Closes a real, previously-unaddressed gap: `"auto"`'s own resolution
+used to read `params.d` alone, never any locus's own capacity
+(`20260901-claude-sonnet-5-fim-engine-backend-factory-design.md` §10
+item 10b — "a large-`d`, large-capacity config could pick the wrong
+engine"). Measured, not guessed, the same way `auto_vector_min_d`
+itself was: that same document's own loci-length sweep found
+`"generational-vector"` winning through capacity `1024` (locus length
+`2`-`5`) and losing to `"generational"` + `jit="numba"` at capacity
+`4096` (length `6`, `71.3s` vs `92.4s`) — the array-native path touches
+every cell of a locus's own `(d, capacity)` grid every generation
+regardless of how much of it is actually occupied, where the dict-based
+backends only ever touch what is present. `1024`, not a value strictly
+between the two, because a real capacity is always `4 ** length` for
+some integer `length` — there is no config that could ever land between
+`1024` and `4096`, so the boundary sits exactly at the last *tested,
+winning* value rather than an interpolated one nothing could reach
+anyway. Applies to the largest capacity across every locus in `params.
+loci` — one large-capacity locus already pays this cost even if every
+other locus in the same run is small, the same "one disqualifying
+property anywhere disqualifies the whole choice" logic `mutation_model`/
+`migrant_sampling` eligibility already uses. Not yet re-measured on
+different hardware, and not yet re-measured against the same-day
+`ThreadedAdvancer`/`migrate_vectorized` fixes that already made
+`auto_vector_min_d`'s own default doubly stale — see that constant's
+own docstring for the precedent this one inherits, and `dev/bin/
+benchmark-engines --sweep loci-length` to re-characterize it.
+
+**Re-measured 2026-09-05 (`FIM-52`, Phase 7 item 6,
+`20260904-claude-sonnet-5-fim-engine-review-remediations.md`) — on
+`citrus-2` (Intel Core Ultra 9 185H, x86_64 Linux), after every Phase
+1-7 fix: `dev/bin/benchmark-engines --sweep loci-length --values
+1,2,3,4,5,6,7,8 --replicates 8 --generations 50 --trials 3` found the
+crossover has moved, not merely shifted within noise — `"generational-
+vector"` now wins through capacity `4096` (locus length `6`, `1.942s`
+vs `"generational"` + `jit="numba"`'s `5.152s` — V faster, reversing
+the earlier `71.3s` vs `92.4s` finding at this same capacity), and
+loses starting at capacity `16384` (locus length `7`, `7.333s` vs
+`5.077s`), with the gap widening sharply by capacity `65536` (length
+`8`: `28.158s` vs `5.547s`, V now the slower engine by roughly `5x`).
+The likely mechanism: several of the same Phase 7 fixes measured
+against `d` above (`FIM-53`/`FIM-54`/`FIM-27`/`FIM-28`) reduce V's own
+per-generation cost in ways that scale with capacity specifically
+(fewer full `(d, capacity)`-shaped temporaries, fewer full-array
+copies) — exactly the dimension this constant thresholds, so a
+capacity-sensitive fix category moving this specific crossover, while
+leaving `auto_vector_min_d`'s own `d`-axis crossover unmoved (still no
+reversal found at any tested `d`, see that constant's own docstring),
+is the expected shape of the result, not a surprising one. `1024`
+significantly understates what current code can actually do — real
+data now supports `4096`, still not an interpolated value (capacity is
+always `4 ** length`; nothing could land between `4096` and `16384`
+either).
+
+**Changed 2026-09-05, `1024` -> `4096`**, confirmed by the same joint
+`d` x locus-length heatmap `auto_vector_min_d`'s own docstring
+describes (104 points, `citrus-2`, run specifically to check whether
+this axis and `auto_vector_min_d`'s own axis interact before changing
+either): `"generational-vector"` won at *every* tested `d` (`2` through
+`500`) at capacity `4096` — the single-axis result above already found
+this at one fixed `d`; the joint sweep confirms it holds at every `d`
+this project has ever benchmarked, not only that one. The real,
+`d`-dependent losing region the joint sweep also found (capacity
+`16384`: G-jit wins for `16 <= d <= 70`, V regains the lead at `d >=
+100`; capacity `65536`: G-jit wins through `d=250`, V only recovers at
+`d >= 350`) is exactly the "diagonal boundary" shape a single pair of
+independent scalar thresholds cannot express at any choice of values —
+raising `auto_vector_max_capacity` to `16384` to chase that region's
+own large-`d` recovery would require also raising `auto_vector_min_d`
+high enough to exclude its own losing sub-region, which would then
+incorrectly exclude every small-`d` configuration at capacity `<=
+4096` that the data shows V winning unconditionally. `4096` is
+therefore not a compromise pending a future fix — it is the largest
+capacity at which a single threshold, paired with any `auto_vector_
+min_d`, can never misroute a config to the slower engine, given every
+point this project has actually measured. Capacities above it are
+correctly left to `"generational"` by `"auto"`, even in the sub-regions
+above `d=100`/`d=350` where V would actually win — expressing a
+diagonal boundary correctly needs a resolution rule that reads both
+`d` and capacity jointly, not two independent thresholds; that is a
+real design question of its own, not a parameter tweak, and remains
+open (see `doc/fim-simulator-design.md` §B.5's own conclusion, which
+reached the identical judgment from the pre-Phase-7 data this session's
+own joint sweep superseded).
+
+Kind: policy; already an Expert Setting.
+
+<a id="fim.config.defaults.DEFAULT_N_REPLICATES"></a>
+
+#### DEFAULT\_N\_REPLICATES
+
+How many independently seeded replicates a run tries by default.
+
+Not `1` — the most useful ordinary use of this tool is a measurement
+*with* a confidence interval (`replicate_tolerance`, below), not a
+single point estimate, so that is what an unconfigured run now does by
+default: run up to `DEFAULT_N_REPLICATES` replicates, stopping early
+once `DEFAULT_REPLICATE_TOLERANCE` is reached. `200` is a generous cap,
+not an expectation of always reaching it — chosen to match this
+project's own worked examples and test scenarios that already use a
+comparable count for a real confidence interval, giving the adaptive
+stop (`replicate_minimum` onward) real room to tighten before the cap
+would ever bind. A caller who wants the old single-run behavior back
+sets `n_replicates: 1` explicitly, same as always; nothing about what an
+explicit `n_replicates` means has changed, only what an *absent* one now
+means.
+
+Kind: policy; a regular setting.
+
+<a id="fim.config.defaults.DEFAULT_REPLICATE_TOLERANCE"></a>
+
+#### DEFAULT\_REPLICATE\_TOLERANCE
+
+Default early-stopping half-width for a replicate batch.
+
+Matches `convergence_tolerance`'s own default (`0.01`) deliberately —
+the same tightness applied one layer up, to the across-replicate mean
+instead of the within-run trailing window. Paired with
+`DEFAULT_N_REPLICATES` above: together they make an unconfigured run
+compute a real confidence interval by default rather than a single,
+uncertainty-free-looking point estimate.
+
+Kind: policy; a regular setting.
+
+<a id="fim.config.defaults.DEFAULT_PAIRWISE_MAX_DEMES"></a>
+
+#### DEFAULT\_PAIRWISE\_MAX\_DEMES
+
+Largest deme count whose full all-pairs matrices are saved by default.
+
+At d = 1024 one run's `pairwise.json` is about 52 MB (five matrices of
+523,776 values) and takes about a second to compute and write. Above the
+limit the file records only that the matrices were skipped; any specific
+pair can still be recomputed from the saved trajectory. A researcher can raise or
+lower the limit in Settings or with `fim run --pairwise-max-demes`.
+
+Kind: policy; a regular setting.
+
+<a id="fim.config.display"></a>
+
+# fim.config.display
+
+Display policy constants.
+
+Limits that shape what the desktop app draws, not what a run computes.
+
+See `README.md` in this directory for the table of every constant.
+
+<a id="fim.config.display.GUI_ANIMATION_MAX_FRAMES"></a>
+
+#### GUI\_ANIMATION\_MAX\_FRAMES
+
+`GUI_ANIMATION_MAX_FRAMES`.
+
+Kind: policy (display).
+
+<a id="fim.config.limits"></a>
+
+# fim.config.limits
+
+Run-time limits.
+
+Sizes beyond which a computation is refused or skipped because its cost
+grows too fast.
+
+See `README.md` in this directory for the table of every constant.
+
+<a id="fim.config.limits.MAXIMUM_RECURSION_DEMES"></a>
+
+#### MAXIMUM\_RECURSION\_DEMES
+
+Largest `d` for which the `d² by d²` eigenvalue route is used.
+
+A 24-deme system is a 576 by 576 eigenproblem, well under a second. The
+cost grows as `d⁶`, so larger explicit migration matrices must be given
+explicit convergence values.
+
+Kind: policy (run time).
+
+<a id="fim.config.numerics"></a>
+
+# fim.config.numerics
+
+Numerical guards and derivable constants.
+
+Values that keep a computation finite and well conditioned, or that follow
+from mathematics or IEEE double precision. They are named and documented but
+are not settings: changing one would make the code wrong, not different.
+
+See `README.md` in this directory for the table of every constant.
+
+<a id="fim.config.numerics.MAXIMUM_LAG1_CORRELATION"></a>
+
+#### MAXIMUM\_LAG1\_CORRELATION
+
+A lag-1 correlation this close to 1 makes `tau_int` (below) blow up
+numerically for a reason that is itself informative -- the window has not
+actually decorrelated from itself at all, which is precisely "not
+noise-adequate," not a division to guard around. Clamped rather than
+raising, so a caller always gets a finite (very large) standard error back.
+
+Kind: numerical guard.
+
+<a id="fim.config.numerics.MINIMUM_WINDOW_VALUES"></a>
+
+#### MINIMUM\_WINDOW\_VALUES
+
+`window_statistics` needs at least this many values to define a lag-1
+correlation at all (two consecutive-pair terms and a variance).
+
+Kind: derivable.
+
+<a id="fim.config.numerics.MINIMUM_CRITERION_WINDOW"></a>
+
+#### MINIMUM\_CRITERION\_WINDOW
+
+`MINIMUM_CRITERION_WINDOW`.
+
+Kind: derivable.
+
+<a id="fim.config.numerics.MINIMUM_REPLICATE_COUNT"></a>
+
+#### MINIMUM\_REPLICATE\_COUNT
+
+`MINIMUM_REPLICATE_COUNT`.
+
+Kind: derivable.
+
+<a id="fim.config.numerics.EXACT_SCALE_BITS"></a>
+
+#### EXACT\_SCALE\_BITS
+
+Every finite double is an integer multiple of `2 ** -1074`.
+
+Kind: derivable (IEEE 754).
+
+<a id="fim.config.numerics.MINIMUM_DEMES"></a>
+
+#### MINIMUM\_DEMES
+
+The recursion needs a between-deme identity, so at least two demes.
+
+Kind: derivable.
+
+<a id="fim.config.numerics.DEGENERACY_TOLERANCE"></a>
+
+#### DEGENERACY\_TOLERANCE
+
+Eigenvalues closer than this (relative to the larger) make the 2 by 2
+eigenvector matrix numerically singular.
+
+Kind: numerical guard.
+
+<a id="fim.config.numerics.SINGULAR_FIXED_POINT"></a>
+
+#### SINGULAR\_FIXED\_POINT
+
+Below these, the fixed-point system or the eigenvector matrix is singular
+to double precision.
+
+Kind: numerical guard.
+
+<a id="fim.config.numerics.SINGULAR_EIGENVECTORS"></a>
+
+#### SINGULAR\_EIGENVECTORS
+
+`SINGULAR_EIGENVECTORS`.
+
+Kind: numerical guard.
+
+<a id="fim.config.numerics.MAXIMUM_CONDITION"></a>
+
+#### MAXIMUM\_CONDITION
+
+The eigenvector matrix is trusted only while it is this well conditioned
+and reproduces the operator to this relative accuracy.
+
+Kind: numerical guard.
+
+<a id="fim.config.numerics.RECONSTRUCTION_TOLERANCE"></a>
+
+#### RECONSTRUCTION\_TOLERANCE
+
+`RECONSTRUCTION_TOLERANCE`.
+
+Kind: numerical guard.
+
+<a id="fim.config.numerics.MINIMUM_SAMPLE_GENE_COPIES"></a>
+
+#### MINIMUM\_SAMPLE\_GENE\_COPIES
+
+`MINIMUM_SAMPLE_GENE_COPIES`.
+
+Kind: derivable.
+
+<a id="fim.config.numerics.DIFFERENTIATION_TOLERANCE"></a>
+
+#### DIFFERENTIATION\_TOLERANCE
+
+`DIFFERENTIATION_TOLERANCE`.
+
+Kind: numerical guard.
+
+<a id="fim.config.numerics.EULER_GAMMA"></a>
+
+#### EULER\_GAMMA
+
+Euler-Mascheroni constant gamma = -psi(1), to full double precision
+(Abramowitz & Stegun 1972, table 1.1) -- the additive constant every
+equilibrium Shannon-entropy formula below (`equilibrium_shannon_
+entropy_isolated` and its siblings) carries, following Chao et al.
+(2015) Eq. 2A.
+
+Kind: derivable (a mathematical constant).
+
+<a id="fim.config.numerics.DIGAMMA_ASYMPTOTIC_THRESHOLD"></a>
+
+#### DIGAMMA\_ASYMPTOTIC\_THRESHOLD
+
+Threshold above which `_digamma`'s asymptotic series (Abramowitz &
+Stegun 1972, formula 6.3.18 -- the same one Chao et al.'s own S2
+Appendix cites) is accurate to within machine precision; below it,
+the recurrence psi(x+1) = psi(x) + 1/x shifts the argument up first.
+
+Kind: numerical guard, derivable.
 
 <a id="fim.convergence"></a>
 
@@ -1581,89 +2168,6 @@ Two routes give `tau`:
 - `recursion_relaxation_time` builds the recurrence's linear part as a
   `d² by d²` matrix and takes its spectral radius. It handles any migration
   matrix and unequal deme sizes, at a cost that limits it to small `d`.
-
-<a id="fim.convergence.defaults.WINDOW_RELAXATION_MULTIPLE"></a>
-
-#### WINDOW\_RELAXATION\_MULTIPLE
-
-Default `convergence_window`, in units of the relaxation time `tau`.
-
-Set by `dev/bin/calibrate-convergence-defaults` and recorded in
-`test/validation/convergence-defaults-evidence.json`. The noise-free
-analysis (design Appendix A.6) already accepts a residual of a third of
-`convergence_tolerance` at `2 tau`, but a single stochastic run also
-carries sampling noise. Golden Part VI (60 replicates, 8 loci) stops
-0.14 below its analytic D at `1 tau`, 0.060 at `2 tau` (outside the 0.05
-acceptance) and 0.040 at `3 tau`; a longer window does not improve on that
-(0.039 at `4 tau`), because the remaining offset comes from estimating D
-over a finite number of loci, not from stopping early. The slower regimes
-measured (Dear-Nolan low, ring, unequal mutation rates) are within 0.025
-at `2 tau` and within 0.01 at `4 tau`.
-
-<a id="fim.convergence.defaults.CAP_RELAXATION_MULTIPLE"></a>
-
-#### CAP\_RELAXATION\_MULTIPLE
-
-Default `max_generations`, in units of `tau`.
-
-A run needs its window plus the time to settle. The slowest stop measured
-was `10.2 tau` (Golden Part VI at a window of `4 tau`; `9.0 tau` at the
-shipped `3 tau`), so `15 tau` leaves a margin of about 1.5 and no measured
-run ended at the cap. Only binding once `15 tau` exceeds `MINIMUM_MAX_
-GENERATIONS`'s own floor (its own docstring has why that floor is now
-large) -- a fast-relaxing model's cap is set by the floor instead, since
-`15 tau` alone was never a measurement of how long a single-locus run's
-own noise takes to average out, only of how long the *trend* takes to
-settle.
-
-<a id="fim.convergence.defaults.MINIMUM_WINDOW"></a>
-
-#### MINIMUM\_WINDOW
-
-Smallest derived window: the historical default, kept as a floor.
-
-<a id="fim.convergence.defaults.MINIMUM_MAX_GENERATIONS"></a>
-
-#### MINIMUM\_MAX\_GENERATIONS
-
-Smallest derived cap.
-
-Set by the same evidence as `WINDOW_RELAXATION_MULTIPLE`'s own docstring,
-extended: `fim.convergence.monitor.ConvergenceMonitor`'s noise-adequacy
-gate lets the evidence window actually used to judge stability grow past
-`convergence_window` on its own, generation by generation, whenever a
-single, fast-relaxing (small `tau`) model's own per-generation noise
-still leaves the trailing-window mean short of the requested tolerance --
-the single-locus case the original `10_000` floor (this project's own
-pre-derived-defaults historical default) was never measured against. Two
-independent single-locus, single-replicate regimes (Golden Part VI,
-`tau = 85`; Dear-Nolan low, `tau = 19,693` -- two orders of magnitude
-apart in `tau`) both needed close to 130,000 generations for their own
-`D` to become genuinely noise-adequate, despite that wide spread in
-`tau`: this floor is a small multiple of that measured need, not derived
-from `tau` at all (a third, well-resolved regime, a 10-deme ring, settled
-at 12,000, comfortably under this floor on its own). A model that settles
-long before this floor is unaffected -- the adaptive window still stops
-the instant it is genuinely adequate, this floor only raises how long a
-run is *allowed* to keep growing that window before giving up
-honestly. See `20260927-claude-sonnet-5-noise-aware-convergence-design.md`
-(`selby/restricted`) for the full measurement.
-
-<a id="fim.convergence.defaults.ABSOLUTE_MAX_GENERATIONS"></a>
-
-#### ABSOLUTE\_MAX\_GENERATIONS
-
-Ceiling on a derived cap, so a nearly isolated system stays finite.
-
-<a id="fim.convergence.defaults.MAXIMUM_RECURSION_DEMES"></a>
-
-#### MAXIMUM\_RECURSION\_DEMES
-
-Largest `d` for which the `d² by d²` eigenvalue route is used.
-
-A 24-deme system is a 576 by 576 eigenproblem, well under a second. The
-cost grows as `d⁶`, so larger explicit migration matrices must be given
-explicit convergence values.
 
 <a id="fim.convergence.defaults.DerivedConvergence"></a>
 
@@ -2389,7 +2893,7 @@ How well a window's own mean is known, given its internal correlation.
 - `effective_sample_size` - How many independent draws this window's
   `len(window)` correlated values are worth, in information.
 - `lag1_autocorrelation` - The estimated correlation between neighboring
-  values, clamped to `_MAXIMUM_LAG1_CORRELATION`.
+  values, clamped to `MAXIMUM_LAG1_CORRELATION`.
 - `window` - `len(window)` this was computed from, carried along so a
   caller does not have to keep the original sequence around too.
 
@@ -13582,205 +14086,6 @@ every consumer of a constructed `SimulationParams` still reads a plain
 positive integer. Zero is safe as the sentinel because an explicit value must
 be positive (config parsing rejects an explicit `0`).
 
-<a id="fim.model.params.DEFAULT_AUTO_VECTOR_MIN_D"></a>
-
-#### DEFAULT\_AUTO\_VECTOR\_MIN\_D
-
-`"auto"`'s own default deme-count cutover, below which it never picks
-`"generational-vector"` even when the config is otherwise eligible for it.
-
-Lives here, not in `fim.engine`, because it is a `SimulationParams` field
-default like any other (`replicate_minimum`'s own `10`, for one) —
-`fim.engine` imports it from here rather than the other way around,
-matching this project's own one-directional dependency rule (the engine
-depends on the model; the model depends on nothing in the engine).
-
-Measured, not guessed — the generation-first design's own Stage 4/vector
-design's own Stage V3 deme-axis sweep found Backend V crosses over from
-slower than Backend L to clearly faster somewhere between `d=30` and
-`d=40` on the primary benchmarking machine. **This default has not been
-re-measured since a later correctness fix
-(`20260901-claude-sonnet-5-fim-engine-backend-factory-design.md` §10
-Stage F8) changed the underlying performance picture materially — a
-2026-09-02 re-measurement (`dev/bin/benchmark-engines`) found
-`"generational-vector"` already ahead at `d=4`, the smallest value
-tested, not just past this threshold.** Kept at `35` rather than changed
-alongside that finding: altering a shipped default needs its own
-deliberate confirmation, not a silent edit. `auto_vector_min_d` stays a
-caller-supplied `SimulationParams` field for exactly this kind of
-drift — see `dev/bin/benchmark-engines --sweep d` to re-characterize it
-on any given machine.
-
-**Re-measured again 2026-09-05 (`FIM-52`, Phase 7 item 6,
-`20260904-claude-sonnet-5-fim-engine-review-remediations.md`) — on
-different, native hardware this time (`citrus-2`, Intel Core Ultra 9
-185H, x86_64 Linux, not this project's own Apple Silicon development
-machine), and after every Phase 1-7 correctness/performance fix, not
-just Stage F8: `dev/bin/benchmark-engines --sweep d --values
-2,4,8,16,25,35,50,70,100,150,250 --replicates 16 --generations 100
---trials 5` found `"generational-vector"` fastest at *every* tested
-`d`, from `2` (the smallest value `SimulationParams` accepts at all)
-through `250` — never losing even once, and never approaching a
-crossover from below. Its own margin over `"generational"` with
-`jit="numba"` (the closest competitor at every point) shrinks as `d`
-grows (from roughly 2x at `d=2` to roughly 6x at `d=250`, both favoring
-V) but never comes close to reversing. This confirms, on a second,
-independent, materially different machine, that `35` is not merely
-stale but has never been correct against any post-Stage-F8 build of
-this codebase — every tested value below it would have been routed to
-the slower engine by `"auto"`.
-
-**Changed 2026-09-05, `35` -> `2` (the floor `SimulationParams.d`
-accepts at all)**, after a further, joint `d` x locus-length heatmap
-(`dev/bin/generate-heatmap-queue`/`benchmark-queue`, 104 points, `d` in
-`{2,4,8,...,500}` x locus length `1`-`8`, `citrus-2`, run explicitly to
-check whether this axis and `auto_vector_max_capacity`'s own axis
-interact before changing either value — see that constant's own
-docstring for why a single-axis result alone was not enough to trust).
-That joint sweep found no `d`, at any capacity up to and including
-`4096` (locus length `6`), where `"generational-vector"` loses — the
-`d`-axis crossover this constant thresholds simply does not exist
-inside the region `auto_vector_max_capacity` now admits, so gating on
-`d` at all, within that region, only ever excludes configurations V
-would have won. (Above capacity `4096`, a real, narrower `d`-dependent
-region does exist — see `auto_vector_max_capacity`'s own docstring —
-but a single scalar `auto_vector_min_d` cannot express "conditional on
-capacity" at all, so lowering this threshold to `2` is what the data
-supports regardless: the region where a *higher* `min_d` would help is
-already excluded by `max_capacity`, and everywhere `max_capacity`
-admits, no `min_d` value was ever justified by real evidence.)
-
-<a id="fim.model.params.DEFAULT_AUTO_VECTOR_MAX_CAPACITY"></a>
-
-#### DEFAULT\_AUTO\_VECTOR\_MAX\_CAPACITY
-
-`"auto"`'s own default per-locus capacity ceiling for `"generational-
-vector"` — above it, `"auto"` picks `"generational"` instead, regardless
-of `d`/`auto_vector_min_d`.
-
-Applies under `mutation_model="finite_alleles"` only: a finite-alleles
-table is `capacity` columns wide however few states are in use. An
-infinite-alleles table is as wide as the alleles alive at once, so `"auto"`
-does not read this ceiling there (the measurements below were all
-finite-alleles).
-
-Closes a real, previously-unaddressed gap: `"auto"`'s own resolution
-used to read `params.d` alone, never any locus's own capacity
-(`20260901-claude-sonnet-5-fim-engine-backend-factory-design.md` §10
-item 10b — "a large-`d`, large-capacity config could pick the wrong
-engine"). Measured, not guessed, the same way `auto_vector_min_d`
-itself was: that same document's own loci-length sweep found
-`"generational-vector"` winning through capacity `1024` (locus length
-`2`-`5`) and losing to `"generational"` + `jit="numba"` at capacity
-`4096` (length `6`, `71.3s` vs `92.4s`) — the array-native path touches
-every cell of a locus's own `(d, capacity)` grid every generation
-regardless of how much of it is actually occupied, where the dict-based
-backends only ever touch what is present. `1024`, not a value strictly
-between the two, because a real capacity is always `4 ** length` for
-some integer `length` — there is no config that could ever land between
-`1024` and `4096`, so the boundary sits exactly at the last *tested,
-winning* value rather than an interpolated one nothing could reach
-anyway. Applies to the largest capacity across every locus in `params.
-loci` — one large-capacity locus already pays this cost even if every
-other locus in the same run is small, the same "one disqualifying
-property anywhere disqualifies the whole choice" logic `mutation_model`/
-`migrant_sampling` eligibility already uses. Not yet re-measured on
-different hardware, and not yet re-measured against the same-day
-`ThreadedAdvancer`/`migrate_vectorized` fixes that already made
-`auto_vector_min_d`'s own default doubly stale — see that constant's
-own docstring for the precedent this one inherits, and `dev/bin/
-benchmark-engines --sweep loci-length` to re-characterize it.
-
-**Re-measured 2026-09-05 (`FIM-52`, Phase 7 item 6,
-`20260904-claude-sonnet-5-fim-engine-review-remediations.md`) — on
-`citrus-2` (Intel Core Ultra 9 185H, x86_64 Linux), after every Phase
-1-7 fix: `dev/bin/benchmark-engines --sweep loci-length --values
-1,2,3,4,5,6,7,8 --replicates 8 --generations 50 --trials 3` found the
-crossover has moved, not merely shifted within noise — `"generational-
-vector"` now wins through capacity `4096` (locus length `6`, `1.942s`
-vs `"generational"` + `jit="numba"`'s `5.152s` — V faster, reversing
-the earlier `71.3s` vs `92.4s` finding at this same capacity), and
-loses starting at capacity `16384` (locus length `7`, `7.333s` vs
-`5.077s`), with the gap widening sharply by capacity `65536` (length
-`8`: `28.158s` vs `5.547s`, V now the slower engine by roughly `5x`).
-The likely mechanism: several of the same Phase 7 fixes measured
-against `d` above (`FIM-53`/`FIM-54`/`FIM-27`/`FIM-28`) reduce V's own
-per-generation cost in ways that scale with capacity specifically
-(fewer full `(d, capacity)`-shaped temporaries, fewer full-array
-copies) — exactly the dimension this constant thresholds, so a
-capacity-sensitive fix category moving this specific crossover, while
-leaving `auto_vector_min_d`'s own `d`-axis crossover unmoved (still no
-reversal found at any tested `d`, see that constant's own docstring),
-is the expected shape of the result, not a surprising one. `1024`
-significantly understates what current code can actually do — real
-data now supports `4096`, still not an interpolated value (capacity is
-always `4 ** length`; nothing could land between `4096` and `16384`
-either).
-
-**Changed 2026-09-05, `1024` -> `4096`**, confirmed by the same joint
-`d` x locus-length heatmap `auto_vector_min_d`'s own docstring
-describes (104 points, `citrus-2`, run specifically to check whether
-this axis and `auto_vector_min_d`'s own axis interact before changing
-either): `"generational-vector"` won at *every* tested `d` (`2` through
-`500`) at capacity `4096` — the single-axis result above already found
-this at one fixed `d`; the joint sweep confirms it holds at every `d`
-this project has ever benchmarked, not only that one. The real,
-`d`-dependent losing region the joint sweep also found (capacity
-`16384`: G-jit wins for `16 <= d <= 70`, V regains the lead at `d >=
-100`; capacity `65536`: G-jit wins through `d=250`, V only recovers at
-`d >= 350`) is exactly the "diagonal boundary" shape a single pair of
-independent scalar thresholds cannot express at any choice of values —
-raising `auto_vector_max_capacity` to `16384` to chase that region's
-own large-`d` recovery would require also raising `auto_vector_min_d`
-high enough to exclude its own losing sub-region, which would then
-incorrectly exclude every small-`d` configuration at capacity `<=
-4096` that the data shows V winning unconditionally. `4096` is
-therefore not a compromise pending a future fix — it is the largest
-capacity at which a single threshold, paired with any `auto_vector_
-min_d`, can never misroute a config to the slower engine, given every
-point this project has actually measured. Capacities above it are
-correctly left to `"generational"` by `"auto"`, even in the sub-regions
-above `d=100`/`d=350` where V would actually win — expressing a
-diagonal boundary correctly needs a resolution rule that reads both
-`d` and capacity jointly, not two independent thresholds; that is a
-real design question of its own, not a parameter tweak, and remains
-open (see `doc/fim-simulator-design.md` §B.5's own conclusion, which
-reached the identical judgment from the pre-Phase-7 data this session's
-own joint sweep superseded).
-
-<a id="fim.model.params.DEFAULT_N_REPLICATES"></a>
-
-#### DEFAULT\_N\_REPLICATES
-
-How many independently seeded replicates a run tries by default.
-
-Not `1` — the most useful ordinary use of this tool is a measurement
-*with* a confidence interval (`replicate_tolerance`, below), not a
-single point estimate, so that is what an unconfigured run now does by
-default: run up to `DEFAULT_N_REPLICATES` replicates, stopping early
-once `DEFAULT_REPLICATE_TOLERANCE` is reached. `200` is a generous cap,
-not an expectation of always reaching it — chosen to match this
-project's own worked examples and test scenarios that already use a
-comparable count for a real confidence interval, giving the adaptive
-stop (`replicate_minimum` onward) real room to tighten before the cap
-would ever bind. A caller who wants the old single-run behavior back
-sets `n_replicates: 1` explicitly, same as always; nothing about what an
-explicit `n_replicates` means has changed, only what an *absent* one now
-means.
-
-<a id="fim.model.params.DEFAULT_REPLICATE_TOLERANCE"></a>
-
-#### DEFAULT\_REPLICATE\_TOLERANCE
-
-Default early-stopping half-width for a replicate batch.
-
-Matches `convergence_tolerance`'s own default (`0.01`) deliberately —
-the same tightness applied one layer up, to the across-replicate mean
-instead of the within-run trailing window. Paired with
-`DEFAULT_N_REPLICATES` above: together they make an unconfigured run
-compute a real confidence interval by default rather than a single,
-uncertainty-free-looking point estimate.
-
 <a id="fim.model.params.SimulationParams"></a>
 
 ## SimulationParams Objects
@@ -15330,7 +15635,7 @@ Columns of the per-locus statistics table: H_S, H_T, H_ST, G_ST, D.
 
 #### STATISTICS\_TOLERANCE
 
-Mirror of `fim.statistics.differentiation._TOLERANCE` (checked by a test).
+Mirror of `fim.config.numerics.DIFFERENTIATION_TOLERANCE` (checked by a test).
 
 <a id="fim.model.vector_kernels.inversion_binomial"></a>
 
@@ -22812,18 +23117,6 @@ Each spec answers four separate questions:
 This module imports nothing from the simulator or the GUI. It sits in
 `fim.statistics` beside the formulas it describes.
 
-<a id="fim.statistics.catalog.DEFAULT_PAIRWISE_MAX_DEMES"></a>
-
-#### DEFAULT\_PAIRWISE\_MAX\_DEMES
-
-Largest deme count whose full all-pairs matrices are saved by default.
-
-At d = 1024 one run's `pairwise.json` is about 52 MB (five matrices of
-523,776 values) and takes about a second to compute and write. Above the
-limit the file records only that the matrices were skipped; any specific
-pair can still be recomputed from the saved trajectory. A researcher can raise or
-lower the limit in Settings or with `fim run --pairwise-max-demes`.
-
 <a id="fim.statistics.catalog.StatisticSpec"></a>
 
 ## StatisticSpec Objects
@@ -25553,7 +25846,7 @@ equal deme weights, as the engine's reports do.
 **Raises**:
 
 - `ValueError` - If the inputs are out of range, `d` is outside
-  `[2, MAXIMUM_MATRIX_DEMES]`, or the operator has no fixed
+  `[2, MAXIMUM_RECURSION_DEMES]`, or the operator has no fixed
   point or no reliable eigen-decomposition.
 
 <a id="fim.statistics.interval"></a>

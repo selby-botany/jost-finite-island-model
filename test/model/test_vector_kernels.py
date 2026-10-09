@@ -16,6 +16,7 @@ import pytest
 
 pytest.importorskip("numba")
 
+from fim.config.numerics import DIFFERENTIATION_TOLERANCE
 from fim.model import vector_kernels as kernels
 from fim.model.operators import _inversion_binomial, _migrant_fraction
 from fim.model.vector_block import (
@@ -32,7 +33,7 @@ FUZZ_CASES = 10_000
 
 def test_statistics_tolerance_mirrors_the_python_implementation() -> None:
     """The kernel clamps with the same tolerance `statistics_report` does."""
-    assert kernels.STATISTICS_TOLERANCE == differentiation._TOLERANCE
+    assert kernels.STATISTICS_TOLERANCE == DIFFERENTIATION_TOLERANCE
 
 
 def test_exact_sum_matches_math_fsum_on_seeded_fuzz() -> None:

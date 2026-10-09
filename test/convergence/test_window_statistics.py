@@ -8,12 +8,8 @@ import statistics
 
 import pytest
 
-from fim.convergence.window_statistics import (
-    MINIMUM_NOISE_CHECK_WINDOW,
-    NOISE_TOLERANCE_FRACTION,
-    WindowStatistics,
-    window_statistics,
-)
+from fim.config.convergence import MINIMUM_NOISE_CHECK_WINDOW, NOISE_TOLERANCE_FRACTION
+from fim.convergence.window_statistics import WindowStatistics, window_statistics
 
 
 def _ar1_series(

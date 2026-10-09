@@ -39,34 +39,9 @@ from __future__ import annotations
 import math
 from collections.abc import Sequence
 from dataclasses import dataclass
-from typing import Final
 
-# A window's own trailing-window mean is only judged noise-adequate once its
-# standard error is at most this fraction of the configured tolerance — half,
-# so that a mean landing anywhere within one standard error of the true value
-# is still within tolerance of it (a one-sigma bound, not a five- or
-# ninety-five-percent one; see the design note this module implements,
-# `20260927-...-noise-aware-convergence-design.md`, `selby/restricted`, for
-# why a stricter multiple was not chosen).
-NOISE_TOLERANCE_FRACTION: Final = 0.5
-
-# Below this many values, a lag-1 correlation estimate is too noisy itself to
-# trust (a handful of points can look arbitrarily correlated or
-# anticorrelated by chance) — `fim.convergence.monitor.ConvergenceMonitor`
-# skips the noise-adequacy gate entirely under this window length, matching
-# the trend-only check's own original behavior for a short window.
-MINIMUM_NOISE_CHECK_WINDOW: Final = 8
-
-# A lag-1 correlation this close to 1 makes `tau_int` (below) blow up
-# numerically for a reason that is itself informative -- the window has not
-# actually decorrelated from itself at all, which is precisely "not
-# noise-adequate," not a division to guard around. Clamped rather than
-# raising, so a caller always gets a finite (very large) standard error back.
-_MAXIMUM_LAG1_CORRELATION: Final = 1.0 - 1e-9
-
-# `window_statistics` needs at least this many values to define a lag-1
-# correlation at all (two consecutive-pair terms and a variance).
-_MINIMUM_VALUES: Final = 3
+from fim.config.convergence import NOISE_TOLERANCE_FRACTION
+from fim.config.numerics import MAXIMUM_LAG1_CORRELATION, MINIMUM_WINDOW_VALUES
 
 
 @dataclass(frozen=True, slots=True)
@@ -87,7 +62,7 @@ class WindowStatistics:
         effective_sample_size: How many independent draws this window's
             `len(window)` correlated values are worth, in information.
         lag1_autocorrelation: The estimated correlation between neighboring
-            values, clamped to `_MAXIMUM_LAG1_CORRELATION`.
+            values, clamped to `MAXIMUM_LAG1_CORRELATION`.
         window: `len(window)` this was computed from, carried along so a
             caller does not have to keep the original sequence around too.
     """
@@ -132,7 +107,7 @@ def window_statistics(values: Sequence[float]) -> WindowStatistics:
             of anything shorter is undefined, not merely unreliable).
     """
     count = len(values)
-    if count < _MINIMUM_VALUES:
+    if count < MINIMUM_WINDOW_VALUES:
         raise ValueError("window_statistics needs at least 3 values")
     mean = math.fsum(values) / count
     centered = [value - mean for value in values]
@@ -163,7 +138,7 @@ def window_statistics(values: Sequence[float]) -> WindowStatistics:
     cross_products = math.fsum(
         centered[index] * centered[index + 1] for index in range(count - 1)
     )
-    lag1 = max(-1.0, min(cross_products / sum_squares, _MAXIMUM_LAG1_CORRELATION))
+    lag1 = max(-1.0, min(cross_products / sum_squares, MAXIMUM_LAG1_CORRELATION))
     # The AR(1) closed form (this module's own docstring): `tau_int = (1 +
     # rho) / (1 - rho)`. A negative (anticorrelated, oscillating) window
     # gives `tau_int < 1` -- more effective samples than raw observations,

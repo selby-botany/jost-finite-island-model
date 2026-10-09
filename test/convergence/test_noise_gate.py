@@ -21,13 +21,10 @@ from typing import Literal
 
 import pytest
 
+from fim.config.convergence import MINIMUM_NOISE_CHECK_WINDOW
 from fim.convergence.criteria import TrailingWindowCriterion, trailing_window_stable
 from fim.convergence.monitor import ConvergenceMonitor, ConvergenceOutcome
-from fim.convergence.window_statistics import (
-    MINIMUM_NOISE_CHECK_WINDOW,
-    WindowStatistics,
-    window_statistics,
-)
+from fim.convergence.window_statistics import WindowStatistics, window_statistics
 
 
 def _noisy_flat_series(

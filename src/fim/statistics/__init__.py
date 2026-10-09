@@ -109,7 +109,6 @@ from .genetic_distance import (
 )
 from .identity_recursion import (
     IDENTITY_STATISTIC_NAMES,
-    MAXIMUM_MATRIX_DEMES,
     IdentityRecursion,
     identities_from_heterozygosities,
     identities_to_statistics,
@@ -127,7 +126,6 @@ from .pairwise import (
 
 __all__ = [
     "IDENTITY_STATISTIC_NAMES",
-    "MAXIMUM_MATRIX_DEMES",
     "NEI_DENOMINATORS",
     "NEI_LOCUS_RULES",
     "ConfidenceInterval",

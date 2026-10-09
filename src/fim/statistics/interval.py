@@ -50,8 +50,9 @@ from collections.abc import Sequence
 from statistics import NormalDist
 from typing import TypedDict
 
+from fim.config.numerics import MINIMUM_REPLICATE_COUNT
+
 _SUPPORTED_CONFIDENCE_LEVELS = (0.90, 0.95, 0.99)
-_MINIMUM_SAMPLE_COUNT = 2
 
 # Two-tailed Student's-t critical values, by degrees of freedom, at each
 # supported confidence level. Every entry matches a standard published
@@ -171,7 +172,7 @@ def confidence_interval(
             is not finite.
     """
     sample_count = len(values)
-    if sample_count < _MINIMUM_SAMPLE_COUNT:
+    if sample_count < MINIMUM_REPLICATE_COUNT:
         raise ValueError("confidence_interval requires at least two values")
     # No per-value finiteness check existed here at all before this
     # project's own multi-model engine review, 2026-09-04 (`FIM-07`/

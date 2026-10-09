@@ -53,6 +53,7 @@ from pathlib import Path
 from typing import Final, Literal
 
 from fim import __version__, paths
+from fim.config.defaults import DEFAULT_PAIRWISE_MAX_DEMES
 from fim.engine import RunResult, deterministic_run_id, fim, replicate_summary
 from fim.gui.runner import (
     pairwise_status_text,
@@ -71,7 +72,6 @@ from fim.persistence.manifest import (
 )
 from fim.persistence.pairwise import SLOW_PAIRWISE_DEMES
 from fim.persistence.report import write_report
-from fim.statistics.catalog import DEFAULT_PAIRWISE_MAX_DEMES
 
 # Mirrors `fim.gui.runner`'s own catch-all — see its definition for the
 # full rationale. Duplicated rather than imported: `fim.gui.runner`'s

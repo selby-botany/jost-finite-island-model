@@ -103,8 +103,9 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any, Final
 
+from fim.config.defaults import DEFAULT_PAIRWISE_MAX_DEMES
 from fim.paths import write_text_atomically
-from fim.statistics.catalog import CATALOG, DEFAULT_PAIRWISE_MAX_DEMES
+from fim.statistics.catalog import CATALOG
 
 logger = logging.getLogger(__name__)
 

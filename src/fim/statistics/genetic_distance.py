@@ -63,9 +63,9 @@ from collections.abc import Mapping, Sequence
 from math import exp, fsum, inf, isfinite, log, sqrt
 from typing import Any, Final, Literal, TypeAlias
 
+from fim.config.numerics import DIFFERENTIATION_TOLERANCE, MINIMUM_DEMES
+
 from .differentiation import (
-    _MINIMUM_DEMES,
-    _TOLERANCE,
     FrequencyTable,
     _bounded,
     _validate_deme,
@@ -482,7 +482,7 @@ def deme_gene_identities(
     Raises:
         ValueError: If `table` has fewer than two demes.
     """
-    if len(table) < _MINIMUM_DEMES:
+    if len(table) < MINIMUM_DEMES:
         raise ValueError("J_between needs at least two demes")
     within = _within_deme_identities(table)
     return within, _between_deme_identity(table, within)
@@ -503,7 +503,7 @@ def nei_distance_from_identity(identity_value: float) -> float:
     """
     if identity_value <= 0.0:
         return inf
-    if abs(identity_value - 1.0) <= _TOLERANCE:
+    if abs(identity_value - 1.0) <= DIFFERENTIATION_TOLERANCE:
         return 0.0
     return -log(identity_value)
 
@@ -684,7 +684,7 @@ def nei_all_demes_identity(
     deme_count: int | None = None
     for table in tables:
         demes = _validate_table(table)
-        if len(demes) < _MINIMUM_DEMES:
+        if len(demes) < MINIMUM_DEMES:
             raise ValueError("the all-demes Nei identity needs at least two demes")
         if deme_count is not None and len(demes) != deme_count:
             raise ValueError("every locus must list the same number of demes")
@@ -697,7 +697,7 @@ def nei_all_demes_identity(
     ]
     if denominator == "arithmetic":
         return _bounded(value, "Nei all-demes arithmetic identity")
-    return 1.0 if abs(value - 1.0) <= _TOLERANCE else value
+    return 1.0 if abs(value - 1.0) <= DIFFERENTIATION_TOLERANCE else value
 
 
 def nei_all_demes_distance(

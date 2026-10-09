@@ -3,7 +3,7 @@
 
 `engine_backend="auto"` picks `"generational-vector"` over
 `"generational"` once a run's own deme count (`d`) clears
-`auto_vector_min_d` (`fim.model.params.DEFAULT_AUTO_VECTOR_MIN_D`,
+`auto_vector_min_d` (`fim.config.defaults.DEFAULT_AUTO_VECTOR_MIN_D`,
 shipped default `35`). That default was measured once, on one specific
 machine, before Stage F8's own RNG-unification work changed
 `"generational"`'s own real-world performance materially (design doc

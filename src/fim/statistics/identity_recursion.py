@@ -53,21 +53,19 @@ from typing import Any
 import numpy as np
 from numpy.typing import NDArray
 
+from fim.config.limits import MAXIMUM_RECURSION_DEMES
+from fim.config.numerics import (
+    DEGENERACY_TOLERANCE,
+    MAXIMUM_CONDITION,
+    MINIMUM_DEMES,
+    RECONSTRUCTION_TOLERANCE,
+    SINGULAR_EIGENVECTORS,
+    SINGULAR_FIXED_POINT,
+)
+
 # Statistics that are a function of the two identities alone. `E_ST`,
 # `K_ST` and the effective-allele family need the allele structure itself.
 IDENTITY_STATISTIC_NAMES = ("D", "G_ST", "H_S", "H_T", "H_ST")
-
-# The recursion needs a between-deme identity, so at least two demes.
-_MINIMUM_DEMES = 2
-
-# Eigenvalues closer than this (relative to the larger) make the 2 by 2
-# eigenvector matrix numerically singular.
-_DEGENERACY_TOLERANCE = 1e-9
-
-# Below these, the fixed-point system or the eigenvector matrix is singular
-# to double precision.
-_SINGULAR_FIXED_POINT = 1e-15
-_SINGULAR_EIGENVECTORS = 1e-300
 
 
 @dataclass(frozen=True)
@@ -222,7 +220,7 @@ def identity_recursion(
             mutation leaves no fixed point; two equal eigenvalues make
             the eigenvector matrix singular).
     """
-    if d < _MINIMUM_DEMES:
+    if d < MINIMUM_DEMES:
         raise ValueError("identity recursion needs at least two demes")
     if population_size < 1 or not 0.0 <= m <= 1.0 or not 0.0 <= mu <= 1.0:
         raise ValueError("identity recursion inputs are out of range")
@@ -249,7 +247,7 @@ def identity_recursion(
 
     # Fixed point: solve (I - A) x = c with c = (1/N, 0).
     determinant = (1.0 - a11) * (1.0 - a22) - a12 * a21
-    if not abs(determinant) > _SINGULAR_FIXED_POINT:
+    if not abs(determinant) > SINGULAR_FIXED_POINT:
         raise ValueError(
             "no closed-form trajectory: the configuration has no unique "
             "fixed point (no migration and no mutation)"
@@ -265,7 +263,7 @@ def identity_recursion(
     root = math.sqrt(max(discriminant, 0.0))
     high = (trace + root) / 2.0
     low = (trace - root) / 2.0
-    if root <= _DEGENERACY_TOLERANCE * max(abs(high), abs(low), _SINGULAR_EIGENVECTORS):
+    if root <= DEGENERACY_TOLERANCE * max(abs(high), abs(low), SINGULAR_EIGENVECTORS):
         raise ValueError(
             "no closed-form trajectory: the recursion has a repeated "
             "eigenvalue for this configuration"
@@ -281,7 +279,7 @@ def identity_recursion(
     v_high = eigenvector(high)
     v_low = eigenvector(low)
     matrix_determinant = v_high[0] * v_low[1] - v_low[0] * v_high[1]
-    if not abs(matrix_determinant) > _SINGULAR_EIGENVECTORS:
+    if not abs(matrix_determinant) > SINGULAR_EIGENVECTORS:
         raise ValueError("no closed-form trajectory: singular eigenvectors")
     return IdentityRecursion(
         deme_count=d,
@@ -294,15 +292,6 @@ def identity_recursion(
         ),
     )
 
-
-# The matrix solver diagonalizes a d^2 by d^2 operator; this keeps that
-# eigenproblem small and quick (576 by 576 at the limit, well under a second).
-MAXIMUM_MATRIX_DEMES = 24
-
-# The eigenvector matrix is trusted only while it is this well conditioned
-# and reproduces the operator to this relative accuracy.
-_MAXIMUM_CONDITION = 1e8
-_RECONSTRUCTION_TOLERANCE = 1e-8
 
 FrequencyTable = Sequence[Sequence[Mapping[Any, float]]]
 
@@ -369,14 +358,14 @@ def matrix_identity_trajectory(
 
     Raises:
         ValueError: If the inputs are out of range, `d` is outside
-            `[2, MAXIMUM_MATRIX_DEMES]`, or the operator has no fixed
+            `[2, MAXIMUM_RECURSION_DEMES]`, or the operator has no fixed
             point or no reliable eigen-decomposition.
     """
     d = len(deme_sizes)
-    if not _MINIMUM_DEMES <= d <= MAXIMUM_MATRIX_DEMES:
+    if not MINIMUM_DEMES <= d <= MAXIMUM_RECURSION_DEMES:
         raise ValueError(
-            f"matrix identity trajectory needs between {_MINIMUM_DEMES} and "
-            f"{MAXIMUM_MATRIX_DEMES} demes"
+            f"matrix identity trajectory needs between {MINIMUM_DEMES} and "
+            f"{MAXIMUM_RECURSION_DEMES} demes"
         )
     if not 0.0 <= mutation <= 1.0 or min(deme_sizes) < 1:
         raise ValueError("matrix identity trajectory inputs are out of range")
@@ -407,8 +396,8 @@ def matrix_identity_trajectory(
     reconstruction = np.max(np.abs(operator @ vectors - vectors * values))
     if (
         not np.all(np.isfinite(fixed))
-        or np.linalg.cond(vectors) > _MAXIMUM_CONDITION
-        or reconstruction > _RECONSTRUCTION_TOLERANCE * scale
+        or np.linalg.cond(vectors) > MAXIMUM_CONDITION
+        or reconstruction > RECONSTRUCTION_TOLERANCE * scale
     ):
         raise ValueError("no closed-form trajectory: unreliable eigen-decomposition")
 

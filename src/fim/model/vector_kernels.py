@@ -77,7 +77,7 @@ STATISTIC_COLUMNS = 5
 """Columns of the per-locus statistics table: H_S, H_T, H_ST, G_ST, D."""
 
 STATISTICS_TOLERANCE = 1e-12
-"""Mirror of `fim.statistics.differentiation._TOLERANCE` (checked by a test)."""
+"""Mirror of `fim.config.numerics.DIFFERENTIATION_TOLERANCE` (checked by a test)."""
 
 _REFLECT_THRESHOLD = 0.5
 _UNROLL = 8

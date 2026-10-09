@@ -28,7 +28,7 @@ const EXPENSIVE_STATISTIC_NOTE =
  */
 
 // A new locus row's length: the library's own default
-// (`fim.model.params.DEFAULT_LOCUS_LENGTH`).
+// (`fim.config.defaults.DEFAULT_LOCUS_LENGTH`).
 const DEFAULT_LOCUS_LENGTH = 200;
 
 // A new per-deme population size row (when `d` grew past the values

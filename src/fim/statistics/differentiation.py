@@ -54,6 +54,14 @@ from numbers import Real
 from operator import index as integer_index
 from typing import Any, TypeAlias, TypedDict, cast
 
+from fim.config.numerics import (
+    DIFFERENTIATION_TOLERANCE,
+    DIGAMMA_ASYMPTOTIC_THRESHOLD,
+    EULER_GAMMA,
+    MINIMUM_DEMES,
+    MINIMUM_SAMPLE_GENE_COPIES,
+)
+
 # The *value* half of both aliases is `float`, not `Any`: a frequency or
 # a deme weight is a number, and saying so lets a type checker reject a
 # `str`/`None` frequency at the call site instead of at `_coerce_
@@ -78,22 +86,6 @@ from typing import Any, TypeAlias, TypedDict, cast
 # key at all.
 FrequencyTable: TypeAlias = Sequence[Mapping[Any, float]]
 DemeWeights: TypeAlias = Sequence[float] | None
-
-_MINIMUM_DEMES = 2
-_MINIMUM_SAMPLE_GENE_COPIES = 2
-_TOLERANCE = 1e-12
-
-# Euler-Mascheroni constant gamma = -psi(1), to full double precision
-# (Abramowitz & Stegun 1972, table 1.1) -- the additive constant every
-# equilibrium Shannon-entropy formula below (`equilibrium_shannon_
-# entropy_isolated` and its siblings) carries, following Chao et al.
-# (2015) Eq. 2A.
-_EULER_GAMMA = 0.5772156649015328606
-# Threshold above which `_digamma`'s asymptotic series (Abramowitz &
-# Stegun 1972, formula 6.3.18 -- the same one Chao et al.'s own S2
-# Appendix cites) is accurate to within machine precision; below it,
-# the recurrence psi(x+1) = psi(x) + 1/x shifts the argument up first.
-_DIGAMMA_ASYMPTOTIC_THRESHOLD = 6.0
 
 
 class DifferentiationReport(TypedDict):
@@ -174,12 +166,12 @@ def _bounded(value: float, name: str) -> float:
     billionth outside that range (`1.0000000000003` instead of exactly
     `1.0`, for instance). This function is the one place that gets
     quietly clamped back to the true mathematical range — but only
-    within `_TOLERANCE`, an extremely small margin; a value meaningfully
+    within `DIFFERENTIATION_TOLERANCE`, an extremely small margin; a value meaningfully
     outside `[0, 1]` is a real bug somewhere upstream, not rounding
     error, and is deliberately raised as an error here rather than
     silently clamped away, so that bug gets noticed instead of hidden.
     """
-    if -_TOLERANCE <= value <= 1.0 + _TOLERANCE:
+    if -DIFFERENTIATION_TOLERANCE <= value <= 1.0 + DIFFERENTIATION_TOLERANCE:
         return min(1.0, max(0.0, value))
     message = f"{name} is outside its mathematical range [0, 1]: {value!r}"
     raise ArithmeticError(message)
@@ -232,7 +224,7 @@ def _validate_deme(deme: Mapping[Any, Any], index: int) -> dict[int, float]:
         )
 
     total = fsum(normalized.values())
-    if abs(total - 1.0) > _TOLERANCE:
+    if abs(total - 1.0) > DIFFERENTIATION_TOLERANCE:
         message = f"deme {index} frequencies must sum to 1, got {total!r}"
         raise ValueError(message)
     return normalized
@@ -391,7 +383,7 @@ def _validate_order(order: float | int) -> float:
 
 def _require_multiple_demes(demes: Sequence[Mapping[int, float]]) -> None:
     """Reject differentiation requests with fewer than two demes."""
-    if len(demes) < _MINIMUM_DEMES:
+    if len(demes) < MINIMUM_DEMES:
         raise ValueError("a differentiation statistic requires at least two demes")
 
 
@@ -456,7 +448,7 @@ def unbiased_heterozygosity(
         raise TypeError("sample_size must be an integer")
     if is_gene_copies:
         gene_copies = sample_size
-        if gene_copies < _MINIMUM_SAMPLE_GENE_COPIES:
+        if gene_copies < MINIMUM_SAMPLE_GENE_COPIES:
             raise ValueError(
                 "sample_size in gene copies must be at least 2 for bias correction"
             )
@@ -873,7 +865,7 @@ def d_m(table: FrequencyTable) -> float:
     deme_count = len(demes)
     value = (deme_count / (deme_count - 1)) * (total - within)
     if value < 0.0:
-        if value < -_TOLERANCE:
+        if value < -DIFFERENTIATION_TOLERANCE:
             message = f"D_m is negative beyond floating-point tolerance: {value!r}"
             raise ArithmeticError(message)
         return 0.0
@@ -985,7 +977,7 @@ def g_st_max(h_s: float, deme_count: int) -> float:
         raise ValueError("h_s must be in [0, 1)")
     if isinstance(deme_count, bool) or not isinstance(deme_count, int):
         raise ValueError("deme_count must be an integer")
-    if deme_count < _MINIMUM_DEMES:
+    if deme_count < MINIMUM_DEMES:
         raise ValueError("a differentiation statistic requires at least two demes")
     return (deme_count - 1) * (1.0 - h_s) / (deme_count - 1 + h_s)
 
@@ -1029,7 +1021,7 @@ def derived_differentiation(
     Raises:
         ValueError: If `deme_count` is below 2.
     """
-    if deme_count < _MINIMUM_DEMES:
+    if deme_count < MINIMUM_DEMES:
         raise ValueError("derived differentiation needs at least two demes")
     scale = deme_count / (deme_count - 1)
     d_m_value = max(0.0, (h_t - h_s) * scale)
@@ -1272,7 +1264,7 @@ def _gregorius_delta_from_demes(
     grand total once, up front, rather than re-deriving one `d - 1`-term
     sum per deme, turns the whole function from O(d^2) into O(d) in the
     deme count. Confirmed to agree with the direct-sum form to within
-    1.2e-16 (`_TOLERANCE` is 1e-12) across 300 random deme/weight
+    1.2e-16 (`DIFFERENTIATION_TOLERANCE` is 1e-12) across 300 random deme/weight
     configurations of varying size, and a 23.7x speedup at `d=70`.
     """
     allele_ids = {allele_id for deme in demes for allele_id in deme}
@@ -1329,7 +1321,7 @@ def _mutual_information_from_demes(
         weight * _entropy(deme) for deme, weight in zip(demes, weights, strict=True)
     )
     value = total_entropy - within_entropy
-    if value < 0.0 and value >= -_TOLERANCE:
+    if value < 0.0 and value >= -DIFFERENTIATION_TOLERANCE:
         return 0.0
     if value < 0.0:
         raise ArithmeticError(
@@ -1963,7 +1955,7 @@ def _digamma(x: float) -> float:
     `scipy` is not a dependency at all — see this module's own docstring
     for why formulas here stay dependency-free), so this is a small,
     self-contained one: the standard recurrence `psi(x+1) = psi(x) +
-    1/x` shifts a small `x` up past `_DIGAMMA_ASYMPTOTIC_THRESHOLD`,
+    1/x` shifts a small `x` up past `DIGAMMA_ASYMPTOTIC_THRESHOLD`,
     where the asymptotic series below is accurate to roughly `2.4e-9`
     absolute error at the threshold itself (`_digamma(1.0)` against the
     exactly known `psi(1) = -gamma`, the Euler-Mascheroni constant) —
@@ -1999,7 +1991,7 @@ def _digamma(x: float) -> float:
         raise ValueError("digamma is only defined here for a positive, finite x")
     value = 0.0
     shifted = float(x)
-    while shifted < _DIGAMMA_ASYMPTOTIC_THRESHOLD:
+    while shifted < DIGAMMA_ASYMPTOTIC_THRESHOLD:
         value -= 1.0 / shifted
         shifted += 1.0
     inverse = 1.0 / shifted
@@ -2103,7 +2095,7 @@ def equilibrium_shannon_entropy_isolated(population_size: int, mu: float) -> flo
     if mu == 0.0:
         raise ValueError("equilibrium Shannon entropy requires mu greater than 0")
     theta = 2.0 * population_size * mu
-    return _digamma(theta + 1.0) + _EULER_GAMMA
+    return _digamma(theta + 1.0) + EULER_GAMMA
 
 
 def equilibrium_heterozygosity_isolated(population_size: int, mu: float) -> float:
@@ -2229,7 +2221,7 @@ def equilibrium_shannon_entropy_total(
     if mu == 0.0:
         raise ValueError("equilibrium Shannon entropy requires mu greater than 0")
     theta_total = _theta_total_iam(population_size, m, mu, d)
-    return _digamma(theta_total + 1.0) + _EULER_GAMMA
+    return _digamma(theta_total + 1.0) + EULER_GAMMA
 
 
 def equilibrium_heterozygosity_total(
@@ -2551,7 +2543,7 @@ def _validate_equilibrium_inputs(
         or population_size < 1
     ):
         raise ValueError("N must be a positive gene-copy count")
-    if isinstance(d, bool) or not isinstance(d, int) or d < _MINIMUM_DEMES:
+    if isinstance(d, bool) or not isinstance(d, int) or d < MINIMUM_DEMES:
         raise ValueError("d must be at least 2")
     for name, value in (("m", m), ("mu", mu)):
         if (

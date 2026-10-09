@@ -33,8 +33,9 @@ import logging
 from collections.abc import Sequence
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Final
+from typing import Any
 
+from fim.config.display import GUI_ANIMATION_MAX_FRAMES
 from fim.gui.literature_visuals import (
     allele_composition_payload,
     frequency_spectrum_payload,
@@ -46,8 +47,6 @@ from fim.model.state import ModelState
 from fim.persistence.store import TrajectoryRow
 from fim.reanalyze import group_rows_by_generation, trajectory_generations
 from fim.viz.scatter import FloatArray, frequency_points, pooled_frequency_points
-
-GUI_ANIMATION_MAX_FRAMES: Final = 100
 
 logger = logging.getLogger(__name__)
 

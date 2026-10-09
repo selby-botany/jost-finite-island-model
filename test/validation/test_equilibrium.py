@@ -4,6 +4,7 @@ import math
 
 import pytest
 
+from fim.config.numerics import EULER_GAMMA
 from fim.statistics import (
     equilibrium_d,
     equilibrium_g_st,
@@ -15,7 +16,7 @@ from fim.statistics import (
     equilibrium_shannon_entropy_subpopulation,
     equilibrium_shannon_entropy_total,
 )
-from fim.statistics.differentiation import _EULER_GAMMA, _digamma
+from fim.statistics.differentiation import _digamma
 
 
 @pytest.mark.parametrize(
@@ -71,12 +72,12 @@ def test_gene_copy_convention_uses_two_n_not_four_n() -> None:
 @pytest.mark.parametrize(
     ("x", "expected"),
     [
-        (1.0, -_EULER_GAMMA),
-        (2.0, 1.0 - _EULER_GAMMA),
-        (3.0, 1.0 + 1.0 / 2.0 - _EULER_GAMMA),
-        (5.0, 1.0 + 1.0 / 2.0 + 1.0 / 3.0 + 1.0 / 4.0 - _EULER_GAMMA),
-        (0.5, -_EULER_GAMMA - 2.0 * math.log(2.0)),
-        (1.5, 2.0 - _EULER_GAMMA - 2.0 * math.log(2.0)),
+        (1.0, -EULER_GAMMA),
+        (2.0, 1.0 - EULER_GAMMA),
+        (3.0, 1.0 + 1.0 / 2.0 - EULER_GAMMA),
+        (5.0, 1.0 + 1.0 / 2.0 + 1.0 / 3.0 + 1.0 / 4.0 - EULER_GAMMA),
+        (0.5, -EULER_GAMMA - 2.0 * math.log(2.0)),
+        (1.5, 2.0 - EULER_GAMMA - 2.0 * math.log(2.0)),
     ],
 )
 def test_digamma_matches_known_closed_forms(x: float, expected: float) -> None:

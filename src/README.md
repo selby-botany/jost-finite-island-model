@@ -9,6 +9,9 @@ monitoring, headless plots, and a thin command-line boundary.
 - `fim/model/` — validated model values, initialization, and operators
 - `fim/statistics/` — diversity and differentiation formulas, and
   across-replicate confidence intervals
+- `fim/config/` — named policy constants and numerical guards, with a
+  table (`config/README.md`) and a test that keeps magic numbers out of
+  the other modules
 - `fim/convergence/` — stability and confidence-interval criteria, the
   monitor, and stop outcomes
 - `fim/persistence/` — trajectory protocol, binary trajectory log, manifests
