@@ -64,7 +64,7 @@ from fim.model.locus import LocusSpec
 from fim.model.params import SimulationParams
 from fim.model.state import ModelState
 from fim.persistence import groups
-from fim.persistence.jsonl_store import JSONLTrajectoryStore
+from fim.persistence.binary_store import BinaryLogStore
 from fim.persistence.manifest import hash_file, read_manifest
 from fim.persistence.pairwise import pair_value, read_pairwise
 from fim.persistence.report import write_report
@@ -1865,7 +1865,7 @@ def test_sampled_closed_form_starts_where_the_real_run_starts(tmp_path: Path) ->
     config_path.write_text(yaml.safe_dump(config, sort_keys=False), encoding="utf-8")
     output = tmp_path / "out"
     assert cli.main(["run", str(config_path), "-o", str(output), "--quiet"]) == 0
-    history = sampled_statistic_history(output / "trajectory.jsonl")
+    history = sampled_statistic_history(output / "trajectory.tlog")
 
     payload = app_module._closed_form_trajectory_payload(
         SimulationParams.from_mapping(config)
@@ -2693,7 +2693,7 @@ def test_batch_done_payload_carries_one_replicate_row_per_result(
         expected_directory = batch_runner.replicate_output_directory(
             tmp_path, run_id, result.run_id
         )
-        assert row["trajectoryPath"] == str(expected_directory / "trajectory.jsonl")
+        assert row["trajectoryPath"] == str(expected_directory / "trajectory.tlog")
         assert row["replicateId"] == result.run_id
 
 
@@ -2930,10 +2930,10 @@ def test_open_batch_reports_a_tampered_replicate_trajectory(
     results = _use_isolated_results_directory(tmp_path, monkeypatch)
     output_directory = _write_run_under(results, "batch-a", n_replicates=2)
     first_replicate = sorted(output_directory.glob("replicate-*"))[0]
-    trajectory_path = first_replicate / "trajectory.jsonl"
-    trajectory_path.write_text(
-        trajectory_path.read_text(encoding="utf-8") + "\n", encoding="utf-8"
-    )
+    trajectory_path = first_replicate / "trajectory.tlog"
+    tampered = bytearray(trajectory_path.read_bytes())
+    tampered[len(tampered) // 2] ^= 0x01
+    trajectory_path.write_bytes(bytes(tampered))
 
     result = Api().open_batch(str(output_directory))
 
@@ -3066,7 +3066,7 @@ def test_push_batch_progress_pushes_a_pooled_scatter_from_real_sidecars(
     """Reads whichever replicates have reported so far; skips the rest silently.
 
     Writes one replicate's own real `.progress` sidecar and
-    `trajectory.jsonl`, in exactly the file layout `LiveProgressStore`
+    `trajectory.tlog`, in exactly the file layout `LiveProgressStore`
     itself produces (`fim.gui.batch_runner._replicate_store_factory`'s
     own construction, mirrored here directly) — the second replicate's
     directory is never created at all, the "has not started yet" case
@@ -3081,7 +3081,9 @@ def test_push_batch_progress_pushes_a_pooled_scatter_from_real_sidecars(
     )
     directory.mkdir(parents=True)
     store = LiveProgressStore(
-        JSONLTrajectoryStore(directory / "trajectory.jsonl"),
+        BinaryLogStore(
+            directory / "trajectory.tlog", background=False, block_generations=1
+        ),
         progress_path=directory / ".progress",
         cancel_path=tmp_path / "cancel",
     )
@@ -3130,7 +3132,7 @@ def test_push_batch_progress_includes_a_generation_zero_baseline(
     happened to land -- plausibly well past generation 0 for a batch
     that already outran a poll interval or two before this function
     first got to look. Two replicates each write generation 0, then
-    advance to generation 2 -- `trajectory.jsonl` is append-only, so
+    advance to generation 2 -- `trajectory.tlog` is append-only, so
     generation 0's own rows stay readable even after later ones are
     written (`read_live_state`'s own docstring), and this call reads
     them via a fresh, real file read, the same as it reads the current
@@ -3163,7 +3165,9 @@ def test_push_batch_progress_includes_a_generation_zero_baseline(
         )
         directory.mkdir(parents=True)
         store = LiveProgressStore(
-            JSONLTrajectoryStore(directory / "trajectory.jsonl"),
+            BinaryLogStore(
+                directory / "trajectory.tlog", background=False, block_generations=1
+            ),
             progress_path=directory / ".progress",
             cancel_path=tmp_path / "cancel",
         )
@@ -3230,7 +3234,9 @@ def test_push_batch_progress_includes_a_live_deme_pair_panel_when_selected(
     )
     directory.mkdir(parents=True)
     store = LiveProgressStore(
-        JSONLTrajectoryStore(directory / "trajectory.jsonl"),
+        BinaryLogStore(
+            directory / "trajectory.tlog", background=False, block_generations=1
+        ),
         progress_path=directory / ".progress",
         cancel_path=tmp_path / "cancel",
     )
@@ -3577,7 +3583,7 @@ def test_list_recent_runs_reshapes_every_recent_run_into_a_json_dict(
             "runId": "run-1",
             "directoryName": "run-1",
             "directory": str(tmp_path / "run-1"),
-            "trajectoryPath": str(tmp_path / "run-1" / "trajectory.jsonl"),
+            "trajectoryPath": str(tmp_path / "run-1" / "trajectory.tlog"),
             "endedAt": "2026-08-22T00:00:00Z",
             "label": "statistic converged",
             "isBatch": False,
@@ -4170,7 +4176,7 @@ def test_open_run_reanalyzes_the_final_generation_by_default(tmp_path: Path) -> 
     output = _write_run(tmp_path)
     manifest = read_manifest(output / "manifest.json")
 
-    result = Api().open_run({"trajectoryPath": str(output / "trajectory.jsonl")})
+    result = Api().open_run({"trajectoryPath": str(output / "trajectory.tlog")})
 
     assert result["ok"] is True
     assert result["runId"] == manifest.run_id
@@ -4194,7 +4200,7 @@ def test_open_run_carries_no_sigma_band_for_an_ordinary_run(tmp_path: Path) -> N
     """A run that never requested a sigma band reopens with `sigmaBand: None`."""
     output = _write_run(tmp_path)
 
-    result = Api().open_run({"trajectoryPath": str(output / "trajectory.jsonl")})
+    result = Api().open_run({"trajectoryPath": str(output / "trajectory.tlog")})
 
     assert result["ok"] is True
     assert result["sigmaBand"] is None
@@ -4219,7 +4225,7 @@ def test_open_run_carries_the_real_sigma_band(tmp_path: Path) -> None:
     assert manifest.sigma_band is not None
     api = Api()
 
-    result = api.open_run({"trajectoryPath": str(output / "trajectory.jsonl")})
+    result = api.open_run({"trajectoryPath": str(output / "trajectory.tlog")})
 
     assert result["ok"] is True
     expected = app_module._sigma_band_payload(manifest, api._significant_digits)
@@ -4240,7 +4246,7 @@ def test_open_run_carries_the_real_equilibrium_prediction(tmp_path: Path) -> Non
     output = _write_run(tmp_path)
     api = Api()
 
-    result = api.open_run({"trajectoryPath": str(output / "trajectory.jsonl")})
+    result = api.open_run({"trajectoryPath": str(output / "trajectory.tlog")})
 
     assert result["ok"] is True
     # Full precision: the page computes with these (the dashed line and
@@ -4267,7 +4273,7 @@ def test_open_run_echoes_the_trajectory_path_it_was_given(tmp_path: Path) -> Non
     (`test_running_screen.py`'s own coverage for that half).
     """
     output = _write_run(tmp_path)
-    trajectory_path = str(output / "trajectory.jsonl")
+    trajectory_path = str(output / "trajectory.tlog")
 
     result = Api().open_run({"trajectoryPath": trajectory_path})
 
@@ -4296,7 +4302,7 @@ def test_open_run_carries_the_derived_convergence_note(tmp_path: Path) -> None:
     below.
     """
     output = _write_run(tmp_path)
-    trajectory_path = str(output / "trajectory.jsonl")
+    trajectory_path = str(output / "trajectory.tlog")
 
     result = Api().open_run({"trajectoryPath": trajectory_path})
 
@@ -4343,7 +4349,7 @@ def test_open_run_carries_a_real_convergence_note_and_trajectory_curve(
     config_path.write_text(yaml.safe_dump(config, sort_keys=False), encoding="utf-8")
     output = tmp_path / "output"
     assert cli.main(["run", str(config_path), "-o", str(output), "--quiet"]) == 0
-    trajectory_path = str(output / "trajectory.jsonl")
+    trajectory_path = str(output / "trajectory.tlog")
 
     result = Api().open_run({"trajectoryPath": trajectory_path})
 
@@ -4364,7 +4370,7 @@ def test_open_run_carries_the_real_identity_recovery_reference(tmp_path: Path) -
     """
     output = _write_run(tmp_path)
 
-    result = Api().open_run({"trajectoryPath": str(output / "trajectory.jsonl")})
+    result = Api().open_run({"trajectoryPath": str(output / "trajectory.tlog")})
 
     assert result["ok"] is True
     assert result["identityRecovery"] == {
@@ -4377,7 +4383,7 @@ def test_open_run_carries_the_real_closed_form_trajectory(tmp_path: Path) -> Non
     """A reopened run's own `closedForm` is the solved recursion for its params."""
     output = _write_run(tmp_path)
 
-    result = Api().open_run({"trajectoryPath": str(output / "trajectory.jsonl")})
+    result = Api().open_run({"trajectoryPath": str(output / "trajectory.tlog")})
 
     assert result["ok"] is True
     recursion = identity_recursion(20, 0.1, 0.01, 2)
@@ -4390,7 +4396,7 @@ def test_open_run_carries_the_convergence_window_and_tolerance(tmp_path: Path) -
     """The trailing mean averages over the run's own window, judged by its tolerance."""
     output = _write_run(tmp_path, convergence_window=10, convergence_tolerance=0.02)
 
-    result = Api().open_run({"trajectoryPath": str(output / "trajectory.jsonl")})
+    result = Api().open_run({"trajectoryPath": str(output / "trajectory.tlog")})
 
     assert result["ok"] is True
     assert result["convergence"] == {"window": 10, "tolerance": 0.02}
@@ -4406,7 +4412,7 @@ def test_open_run_choose_reanalyzes_an_earlier_generation_as_re_analysis(
 
     result = Api().open_run(
         {
-            "trajectoryPath": str(output / "trajectory.jsonl"),
+            "trajectoryPath": str(output / "trajectory.tlog"),
             "generationMode": "choose",
             "generation": str(earlier),
         }
@@ -4425,7 +4431,7 @@ def test_open_run_runs_a_differentiation_q_sweep_when_requested(
 
     result = Api().open_run(
         {
-            "trajectoryPath": str(output / "trajectory.jsonl"),
+            "trajectoryPath": str(output / "trajectory.tlog"),
             "differentiationOrders": "0.5, 2",
         }
     )
@@ -4443,7 +4449,7 @@ def test_open_run_rejects_an_invalid_generation_entry(tmp_path: Path) -> None:
 
     result = Api().open_run(
         {
-            "trajectoryPath": str(output / "trajectory.jsonl"),
+            "trajectoryPath": str(output / "trajectory.tlog"),
             "generationMode": "choose",
             "generation": "not-a-number",
         }
@@ -4457,7 +4463,7 @@ def test_open_run_reports_a_missing_trajectory_without_raising(tmp_path: Path) -
     `FileNotFoundError` (an `OSError`), not the `ValueError` this bridge
     method's exception handling originally caught alone."""
     result = Api().open_run(
-        {"trajectoryPath": str(tmp_path / "never-written" / "trajectory.jsonl")}
+        {"trajectoryPath": str(tmp_path / "never-written" / "trajectory.tlog")}
     )
 
     assert result["ok"] is False
@@ -4477,7 +4483,7 @@ def test_compare_runs_summarizes_a_genuinely_per_locus_mu(tmp_path: Path) -> Non
     second = _write_run(tmp_path / "second", seed=2, loci=loci, mu=[0.001, 0.05])
 
     result = Api().compare_runs(
-        [str(first / "trajectory.jsonl"), str(second / "trajectory.jsonl")]
+        [str(first / "trajectory.tlog"), str(second / "trajectory.tlog")]
     )
 
     assert result["ok"] is True, result.get("message")
@@ -4504,8 +4510,8 @@ def test_compare_runs_overlays_two_runs_and_names_the_differing_field(
 
     result = Api().compare_runs(
         [
-            str(first / "trajectory.jsonl"),
-            str(second / "trajectory.jsonl"),
+            str(first / "trajectory.tlog"),
+            str(second / "trajectory.tlog"),
         ]
     )
 
@@ -4541,8 +4547,8 @@ def test_compare_runs_names_no_differing_field_for_identical_configs(
 
     result = Api().compare_runs(
         [
-            str(first / "trajectory.jsonl"),
-            str(second / "trajectory.jsonl"),
+            str(first / "trajectory.tlog"),
+            str(second / "trajectory.tlog"),
         ]
     )
 
@@ -4559,8 +4565,8 @@ def test_compare_runs_reports_a_missing_trajectory_without_raising(
 
     result = Api().compare_runs(
         [
-            str(first / "trajectory.jsonl"),
-            str(tmp_path / "never-written" / "trajectory.jsonl"),
+            str(first / "trajectory.tlog"),
+            str(tmp_path / "never-written" / "trajectory.tlog"),
         ]
     )
 
@@ -4757,7 +4763,7 @@ def test_reopening_a_run_saved_before_a_statistic_existed_fills_it_in(
     manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
     before = report_path.read_bytes()
 
-    result = Api().open_run({"trajectoryPath": str(output / "trajectory.jsonl")})
+    result = Api().open_run({"trajectoryPath": str(output / "trajectory.tlog")})
 
     assert result["ok"] is True
     assert result["statistics"]["NEI_D_ALL_ARITH"] == app_module.format_statistic(
@@ -4887,7 +4893,7 @@ def test_get_batch_replicate_summary_lists_every_replicate(tmp_path: Path) -> No
     assert len(result["replicates"]) == 3
     for replicate in result["replicates"]:
         assert replicate["replicateId"].endswith(("-r001", "-r002", "-r003"))
-        assert Path(replicate["trajectoryPath"]).name == "trajectory.jsonl"
+        assert Path(replicate["trajectoryPath"]).name == "trajectory.tlog"
         assert Path(replicate["trajectoryPath"]).exists()
         assert replicate["statistics"] is not None
         assert set(replicate["statistics"]) == set(report_keys())

@@ -279,7 +279,7 @@ def test_engine_agrees_with_the_payload_for_every_example(
         path.write_text(yaml.safe_dump(config, sort_keys=False), encoding="utf-8")
         output = tmp_path / f"out-{name.replace('/', '-')}-{offset}"
         assert cli.main(["run", str(path), "-o", str(output), "--quiet"]) == 0
-        history = sampled_statistic_history(output / "trajectory.jsonl")
+        history = sampled_statistic_history(output / "trajectory.tlog")
         payload = app_module._closed_form_trajectory_payload(
             SimulationParams.from_mapping(config)
         )

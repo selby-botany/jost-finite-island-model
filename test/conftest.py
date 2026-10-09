@@ -41,9 +41,9 @@ import subprocess
 import sys
 import threading
 import time
-from collections.abc import Callable, Iterator
+from collections.abc import Callable, Iterator, Sequence
 from pathlib import Path
-from typing import Protocol
+from typing import Any, Protocol
 
 import numpy as np
 import pytest
@@ -52,6 +52,7 @@ from hypothesis import settings
 from fim import paths
 from fim.model.locus import LocusSpec
 from fim.model.params import SimulationParams
+from fim.persistence.binary_store import BinaryLogStore
 from fim.persistence.jsonl_store import JSONLTrajectoryStore
 
 settings.register_profile(
@@ -464,17 +465,43 @@ def tracked_jsonl_stores(
     return stores
 
 
-def assert_none_open(stores: list[JSONLTrajectoryStore]) -> None:
+@pytest.fixture
+def tracked_log_stores(
+    monkeypatch: pytest.MonkeyPatch,
+) -> list[BinaryLogStore]:
+    """Record every `BinaryLogStore` the test (or code under test) builds.
+
+    The leak check for the binary log's writer thread and file descriptor,
+    the counterpart of `tracked_jsonl_stores`: a test runs a real entry
+    point in this process, then asserts through `assert_none_open` that no
+    store it created still has a writer open. Counts the ancestral-phase
+    companions too, which are built through the same constructor.
+
+    Returns:
+        The list that fills with each store as it is constructed.
+    """
+    stores: list[BinaryLogStore] = []
+    original_init = BinaryLogStore.__init__
+
+    def recording_init(self: BinaryLogStore, path: Path | str, **options: Any) -> None:
+        original_init(self, path, **options)
+        stores.append(self)
+
+    monkeypatch.setattr(BinaryLogStore, "__init__", recording_init)
+    return stores
+
+
+def assert_none_open(stores: Sequence[BinaryLogStore | JSONLTrajectoryStore]) -> None:
     """Assert `stores` is non-empty and none of them holds a file open.
 
     Args:
-        stores: What `tracked_jsonl_stores` collected.
+        stores: What `tracked_jsonl_stores` or `tracked_log_stores` collected.
 
     Raises:
         AssertionError: If no store was built (the check would prove
-            nothing) or any store still has an open append handle.
+            nothing) or any store still has an open file or writer.
     """
-    assert stores, "no JSONLTrajectoryStore was built; the leak check is vacuous"
+    assert stores, "no trajectory store was built; the leak check is vacuous"
     leaked = [str(store.path) for store in stores if store.is_open()]
     assert not leaked, f"trajectory files left open: {leaked}"
 

@@ -665,7 +665,7 @@ async function openSweepPoint(result) {
     if (result.nReplicates > 1) {
         await openBatch(result.directory);
     } else {
-        await openTrajectory(`${result.directory}/trajectory.jsonl`);
+        await openTrajectory(`${result.directory}/trajectory.tlog`);
     }
 }
 

@@ -186,8 +186,9 @@ def test_all_output_files_and_compressed_trajectories_are_bundled(
     examples = tmp_path / "examples"
     directory = _example(examples, "batch")
     (directory / "summary.json").write_text("{}\n", encoding="utf-8")
-    (directory / "trajectory.jsonl").write_text("{}\n", encoding="utf-8")
-    (directory / "trajectory.jsonl.gz.part-0001").write_bytes(b"archive")
+    (directory / "trajectory.tlog").write_bytes(b"log")
+    (directory / "convergence.jsonl").write_text("{}\n", encoding="utf-8")
+    (directory / "convergence.jsonl.gz.part-0001").write_bytes(b"archive")
     (directory / "pairwise.json").write_text("{}\n", encoding="utf-8")
     (directory / "scatter.png").write_bytes(b"image")
     replicate = directory / "replicate-001"
@@ -199,14 +200,15 @@ def test_all_output_files_and_compressed_trajectories_are_bundled(
     catalog, outputs = catalog_generator.build_catalog(examples, _usage(tmp_path))
 
     assert catalog["examples"][0]["outputs"] == [
+        "convergence.jsonl",
+        "convergence.jsonl.gz.part-0001",
         "pairwise.json",
         "replicate-001/convergence.jsonl",
         "replicate-001/manifest.json",
         "replicate-001/report.json",
         "scatter.png",
         "summary.json",
-        "trajectory.jsonl",
-        "trajectory.jsonl.gz.part-0001",
+        "trajectory.tlog",
     ]
     assert outputs == {
         "batch/summary.json": b"{}\n",
@@ -215,8 +217,9 @@ def test_all_output_files_and_compressed_trajectories_are_bundled(
         "batch/replicate-001/convergence.jsonl": b"{}\n",
         "batch/pairwise.json": b"{}\n",
         "batch/scatter.png": b"image",
-        "batch/trajectory.jsonl": b"{}\n",
-        "batch/trajectory.jsonl.gz.part-0001": b"archive",
+        "batch/trajectory.tlog": b"log",
+        "batch/convergence.jsonl": b"{}\n",
+        "batch/convergence.jsonl.gz.part-0001": b"archive",
     }
 
 

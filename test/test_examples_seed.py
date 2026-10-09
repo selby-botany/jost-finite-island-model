@@ -268,23 +268,23 @@ def test_reseeding_keeps_decoded_data_until_an_archive_changes(
     files = {
         "manifest.json": _manifest("archived"),
         "report.json": b'{"D": 0.1}\n',
-        "trajectory.jsonl.gz.part-0001": b"first",
-        "trajectory.jsonl.gz.part-0002": b"second",
+        "convergence.jsonl.gz.part-0001": b"first",
+        "convergence.jsonl.gz.part-0002": b"second",
     }
     bundle = _write_bundle(
         tmp_path / "bundle", [_entry("archived", "getting-started", files)]
     )
     _seed(results, bundle)
     run = results / "examples" / "archived"
-    restored = run / "trajectory.jsonl"
+    restored = run / "convergence.jsonl"
     restored.write_bytes(b"decoded")
     assert not _seed(results, bundle).changed
     assert restored.read_bytes() == b"decoded"
     (run / "notes.txt").write_bytes(b"keep")
     if remove_part:
-        del files["trajectory.jsonl.gz.part-0002"]
+        del files["convergence.jsonl.gz.part-0002"]
     else:
-        files["trajectory.jsonl.gz.part-0001"] = b"new first"
+        files["convergence.jsonl.gz.part-0001"] = b"new first"
     _write_bundle(bundle, [_entry("archived", "getting-started", files)])
     _seed(results, bundle)
     assert not restored.exists()

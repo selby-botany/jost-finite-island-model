@@ -13,7 +13,7 @@ import yaml
 
 from fim import __version__, cli, paths, update
 from fim.gui.preferences import preferences_file_override
-from fim.persistence.jsonl_store import JSONLTrajectoryStore
+from fim.persistence.binary_store import BinaryLogStore
 from fim.persistence.manifest import hash_file, read_batch_manifest
 
 
@@ -60,7 +60,7 @@ def test_run_writes_exactly_six_documented_artifacts(tmp_path: Path) -> None:
 
     assert status == 0
     assert {path.name for path in output.iterdir()} == {
-        "trajectory.jsonl",
+        "trajectory.tlog",
         "manifest.json",
         "report.json",
         "scatter.png",
@@ -150,7 +150,7 @@ def test_run_with_sigma_band_writes_the_fifth_trajectory_artifact(
 
     assert status == 0
     assert {path.name for path in output.iterdir()} == {
-        "trajectory.jsonl",
+        "trajectory.tlog",
         "manifest.json",
         "report.json",
         "scatter.png",
@@ -198,8 +198,8 @@ def _assert_equilibrium_trajectory(directory: Path) -> None:
     digested in the manifest, with a digest that verifies.
     """
     manifest = json.loads((directory / "manifest.json").read_text(encoding="utf-8"))
-    path = directory / "equilibrium_trajectory.jsonl"
-    rows = list(JSONLTrajectoryStore(path).read(manifest["run_id"]))
+    path = directory / "equilibrium_trajectory.tlog"
+    rows = list(BinaryLogStore(path).read(manifest["run_id"]))
     generations = list(dict.fromkeys(row["generation"] for row in rows))
     assert generations == list(range(manifest["equilibrium_generation_count"] + 1))
     assert {row["deme"] for row in rows} == {1}
@@ -209,10 +209,10 @@ def _assert_equilibrium_trajectory(directory: Path) -> None:
 def test_equilibrium_split_run_writes_and_digests_its_ancestral_trajectory(
     tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
-    """An equilibrium-split run adds `equilibrium_trajectory.jsonl`, and lists it.
+    """An equilibrium-split run adds `equilibrium_trajectory.tlog`, and lists it.
 
     The main trajectory and its re-analysis are unaffected: `fim stats`
-    still reads `trajectory.jsonl`, whose own digest still verifies.
+    still reads `trajectory.tlog`, whose own digest still verifies.
     """
     config = tmp_path / "run.yaml"
     output = tmp_path / "output"
@@ -226,10 +226,10 @@ def test_equilibrium_split_run_writes_and_digests_its_ancestral_trajectory(
         for line in capsys.readouterr().out.splitlines()
         if " -> " in line
     ]
-    assert str(output / "equilibrium_trajectory.jsonl") in listed
+    assert str(output / "equilibrium_trajectory.tlog") in listed
     assert {path.name for path in output.iterdir()} == {
-        "trajectory.jsonl",
-        "equilibrium_trajectory.jsonl",
+        "trajectory.tlog",
+        "equilibrium_trajectory.tlog",
         "manifest.json",
         "report.json",
         "scatter.png",
@@ -239,10 +239,10 @@ def test_equilibrium_split_run_writes_and_digests_its_ancestral_trajectory(
     _assert_equilibrium_trajectory(output)
     manifest = json.loads((output / "manifest.json").read_text(encoding="utf-8"))
     main_rows = list(
-        JSONLTrajectoryStore(output / "trajectory.jsonl").read(manifest["run_id"])
+        BinaryLogStore(output / "trajectory.tlog").read(manifest["run_id"])
     )
     assert {row["deme"] for row in main_rows} == {1, 2}
-    assert cli.main(["stats", str(output / "trajectory.jsonl")]) == 0
+    assert cli.main(["stats", str(output / "trajectory.tlog")]) == 0
     live = json.loads((output / "report.json").read_text(encoding="utf-8"))
     printed = json.loads(capsys.readouterr().out)
     assert printed["D"] == live["D"]
@@ -469,9 +469,11 @@ def test_run_accepts_finite_alleles_mutation_model(tmp_path: Path) -> None:
     first_report = (first_output / "report.json").read_text(encoding="utf-8")
     second_report = (second_output / "report.json").read_text(encoding="utf-8")
     assert first_report == second_report
-    trajectory = (first_output / "trajectory.jsonl").read_text(encoding="utf-8")
     allele_ids = {
-        json.loads(line)["allele_id"] for line in trajectory.splitlines() if line
+        row["allele_id"]
+        for row in BinaryLogStore(first_output / "trajectory.tlog").read(
+            manifest["run_id"]
+        )
     }
     assert allele_ids <= set(range(4))
     assert (first_output / "scatter.png").exists()
@@ -526,7 +528,7 @@ def test_two_runs_have_identical_trajectory_and_report(tmp_path: Path) -> None:
     assert cli.main(["run", str(config), "-o", str(first), "--quiet"]) == 0
     assert cli.main(["run", str(config), "-o", str(second), "--quiet"]) == 0
 
-    for filename in ("trajectory.jsonl", "report.json"):
+    for filename in ("trajectory.tlog", "report.json"):
         assert (first / filename).read_bytes() == (second / filename).read_bytes()
 
 
@@ -542,7 +544,7 @@ def test_stats_reanalysis_matches_live_report(
     status = cli.main(
         [
             "stats",
-            str(output / "trajectory.jsonl"),
+            str(output / "trajectory.tlog"),
             "--q",
             "2",
         ]
@@ -579,7 +581,7 @@ def test_stats_q1_agrees_with_e_st_under_size_weighting_and_unequal_demes(
     status = cli.main(
         [
             "stats",
-            str(output / "trajectory.jsonl"),
+            str(output / "trajectory.tlog"),
             "--q",
             "0",
             "--q",
@@ -819,7 +821,7 @@ def test_log_and_log_options_are_accepted_before_every_subcommand(
         ).log_options
         == "file=none"
     )
-    assert parser.parse_args(["-l", "warn", "stats", "trajectory.jsonl"]).log == "warn"
+    assert parser.parse_args(["-l", "warn", "stats", "trajectory.tlog"]).log == "warn"
     assert parser.parse_args(["-l", "error", "update"]).log == "error"
 
 
@@ -1145,8 +1147,8 @@ def test_run_scalar_leaves_no_trace_when_interrupted_mid_trajectory(
     """A failure while still writing generations leaves no output directory.
 
     Failure-injection test for the write boundary: the third
-    `write_generation` call (well after the temporary directory has a
-    real, partial `trajectory.jsonl` on disk) raises, simulating an
+    `write_frame` call (well after the temporary directory has a
+    real, partial `trajectory.tlog` on disk) raises, simulating an
     interruption mid-run. `output_directory` must not exist afterward —
     `_atomic_directory` never publishes a directory the `with` block
     didn't finish populating, regardless of how far into it the failure
@@ -1155,18 +1157,16 @@ def test_run_scalar_leaves_no_trace_when_interrupted_mid_trajectory(
     config = tmp_path / "run.yaml"
     _write_config(config, max_generations=10)
     output = tmp_path / "output"
-    original_write_generation = JSONLTrajectoryStore.write_generation
+    original_write_frame = BinaryLogStore.write_frame
     calls = {"count": 0}
 
-    def flaky_write_generation(self: Any, *args: Any, **kwargs: Any) -> None:
+    def flaky_write_frame(self: Any, *args: Any, **kwargs: Any) -> None:
         calls["count"] += 1
         if calls["count"] == 3:
             raise RuntimeError("simulated write failure")
-        original_write_generation(self, *args, **kwargs)
+        original_write_frame(self, *args, **kwargs)
 
-    monkeypatch.setattr(
-        JSONLTrajectoryStore, "write_generation", flaky_write_generation
-    )
+    monkeypatch.setattr(BinaryLogStore, "write_frame", flaky_write_frame)
 
     assert cli.main(["run", str(config), "-o", str(output), "--quiet"]) == 2
     assert calls["count"] == 3
@@ -1181,7 +1181,7 @@ def test_run_scalar_leaves_no_trace_when_the_report_write_fails(
     """A failure writing `report.json` leaves no output directory.
 
     Failure-injection test for the report boundary: by this point the
-    temporary directory already has a real, complete `trajectory.jsonl`
+    temporary directory already has a real, complete `trajectory.tlog`
     on disk (the run itself finished), but the failure still means
     `output_directory` must not exist afterward.
     """
@@ -1208,7 +1208,7 @@ def test_run_scalar_leaves_no_trace_when_the_plot_fails(
 ) -> None:
     """A failure rendering `scatter.png` leaves no output directory.
 
-    Failure-injection test for the plot boundary: `trajectory.jsonl`
+    Failure-injection test for the plot boundary: `trajectory.tlog`
     and `report.json` are both already real and complete in the
     temporary directory when this fails, but the whole run still must
     not appear at `output_directory`.
@@ -1249,7 +1249,7 @@ def test_run_batch_produces_replicate_and_summary_artifacts(
     }
     for replicate in ("replicate-001", "replicate-002", "replicate-003"):
         assert {path.name for path in (output / replicate).iterdir()} == {
-            "trajectory.jsonl",
+            "trajectory.tlog",
             "manifest.json",
             "report.json",
             "scatter.png",
@@ -1312,8 +1312,8 @@ def test_run_batch_defaults_to_parallel_workers(tmp_path: Path) -> None:
     status = cli.main(["run", str(config), "-o", str(output), "--quiet"])
 
     assert status == 0
-    assert (output / "replicate-001" / "trajectory.jsonl").exists()
-    assert (output / "replicate-002" / "trajectory.jsonl").exists()
+    assert (output / "replicate-001" / "trajectory.tlog").exists()
+    assert (output / "replicate-002" / "trajectory.tlog").exists()
 
 
 def test_run_batch_respects_an_explicit_worker_count(tmp_path: Path) -> None:
@@ -1454,7 +1454,7 @@ def test_run_batch_succeeds_under_a_non_lineal_engine_backend(
         "manifest.json",
     }
     for replicate in ("replicate-001", "replicate-002", "replicate-003"):
-        assert (output / replicate / "trajectory.jsonl").exists()
+        assert (output / replicate / "trajectory.tlog").exists()
     manifest = json.loads((output / "manifest.json").read_text(encoding="utf-8"))
     assert manifest["replicate_count"] == 3
 
@@ -1663,7 +1663,7 @@ def test_stats_supports_explicit_generation_and_json_output(
         cli.main(
             [
                 "stats",
-                str(output / "trajectory.jsonl"),
+                str(output / "trajectory.tlog"),
                 "--generation",
                 "0",
                 "--output",
@@ -1683,27 +1683,19 @@ def test_stats_reports_a_tampered_trajectory_and_unknown_generations(
 ) -> None:
     """Stats errors distinguish a tampered trajectory from a missing generation.
 
-    Regression test: editing the trajectory after the run
-    completed — even a content-preserving edit like retagging every
-    row's ``run_id`` — no longer re-analyzes silently. It now fails the
-    manifest's recorded SHA-256 digest
-    check before `_command_stats` ever gets to read a row, superseding
-    the weaker "no rows for this run_id" diagnosis a retag used to
-    produce.
+    Regression test: editing the trajectory after the run completed —
+    here, flipping one bit of the log — no longer re-analyzes silently.
+    It fails the manifest's recorded SHA-256 digest check before
+    `_command_stats` ever gets to read a generation.
     """
     config = tmp_path / "run.yaml"
     output = tmp_path / "output"
     _write_config(config)
     assert cli.main(["run", str(config), "-o", str(output), "--quiet"]) == 0
-    trajectory = output / "trajectory.jsonl"
-    corrupted = trajectory.read_text(encoding="utf-8").replace(
-        '"run_id":"run-',
-        '"run_id":"other-',
-    )
-    trajectory.write_text(
-        corrupted,
-        encoding="utf-8",
-    )
+    trajectory = output / "trajectory.tlog"
+    corrupted = bytearray(trajectory.read_bytes())
+    corrupted[len(corrupted) // 2] ^= 0x01
+    trajectory.write_bytes(bytes(corrupted))
     assert cli.main(["stats", str(trajectory)]) == 2
     assert "does not match its manifest" in capsys.readouterr().err
 
@@ -1711,8 +1703,7 @@ def test_stats_reports_a_tampered_trajectory_and_unknown_generations(
     output = tmp_path / "second"
     assert cli.main(["run", str(config), "-o", str(output), "--quiet"]) == 0
     assert (
-        cli.main(["stats", str(output / "trajectory.jsonl"), "--generation", "999"])
-        == 2
+        cli.main(["stats", str(output / "trajectory.tlog"), "--generation", "999"]) == 2
     )
     assert "no generation" in capsys.readouterr().err
 

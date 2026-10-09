@@ -827,6 +827,7 @@ Return to the [source-tree orientation](../README.md) or the [developer guide](.
     * [frame\_arrays](#fim.persistence.tlog_codec.DecodedState.frame_arrays)
 * [fim.persistence.tlog\_export](#fim.persistence.tlog_export)
   * [LUT\_MAX\_SIZE](#fim.persistence.tlog_export.LUT_MAX_SIZE)
+  * [DEFAULT\_EXPORT\_WORKERS](#fim.persistence.tlog_export.DEFAULT_EXPORT_WORKERS)
   * [format\_pairs](#fim.persistence.tlog_export.format_pairs)
   * [size\_pairs](#fim.persistence.tlog_export.size_pairs)
   * [JsonlFormatter](#fim.persistence.tlog_export.JsonlFormatter)
@@ -844,6 +845,10 @@ Return to the [source-tree orientation](../README.md) or the [developer guide](.
   * [derive\_jsonl](#fim.persistence.tlog_export.derive_jsonl)
   * [free\_space\_needed](#fim.persistence.tlog_export.free_space_needed)
   * [check\_free\_space](#fim.persistence.tlog_export.check_free_space)
+  * [RECEIPT\_SCHEMA](#fim.persistence.tlog_export.RECEIPT_SCHEMA)
+  * [ExportReceipt](#fim.persistence.tlog_export.ExportReceipt)
+  * [resolve\_log](#fim.persistence.tlog_export.resolve_log)
+  * [export\_trajectory](#fim.persistence.tlog_export.export_trajectory)
 * [fim.reanalyze](#fim.reanalyze)
   * [ReanalyzedGeneration](#fim.reanalyze.ReanalyzedGeneration)
   * [differentiation\_q\_for\_state](#fim.reanalyze.differentiation_q_for_state)
@@ -21773,6 +21778,12 @@ more slowly.
 
 Largest deme size whose float text is tabulated (others use Python).
 
+<a id="fim.persistence.tlog_export.DEFAULT_EXPORT_WORKERS"></a>
+
+#### DEFAULT\_EXPORT\_WORKERS
+
+Processes an export formats with unless told otherwise.
+
 <a id="fim.persistence.tlog_export.format_pairs"></a>
 
 #### format\_pairs
@@ -22046,6 +22057,102 @@ Return `(bytes needed, bytes free)` for deriving into `directory`.
 **Returns**:
 
   The exact size of the JSON Lines file and the free bytes there.
+
+<a id="fim.persistence.tlog_export.RECEIPT_SCHEMA"></a>
+
+#### RECEIPT\_SCHEMA
+
+The `schema` field of an export receipt.
+
+<a id="fim.persistence.tlog_export.ExportReceipt"></a>
+
+## ExportReceipt Objects
+
+```python
+@dataclass(frozen=True, slots=True)
+class ExportReceipt()
+```
+
+What an export produced, as recorded in its receipt file.
+
+**Arguments**:
+
+- `run_id` - The run the log holds.
+- `source` - The binary log that was exported.
+- `source_sha256` - The log file's SHA-256.
+- `source_bytes` - The log file's size.
+- `output` - The JSON Lines file written.
+- `sha256` - The JSON Lines file's SHA-256.
+- `size` - The JSON Lines file's size.
+- `generations` - Generations exported.
+- `rows` - Rows (lines) exported.
+- `receipt` - The receipt file written beside the output.
+
+<a id="fim.persistence.tlog_export.resolve_log"></a>
+
+#### resolve\_log
+
+```python
+def resolve_log(path: Path | str) -> Path
+```
+
+Return the log file a path names: the file itself, or a run directory's.
+
+**Arguments**:
+
+- `path` - A `.tlog` file, or a run directory holding `trajectory.tlog`.
+
+
+**Returns**:
+
+  The log file.
+
+
+**Raises**:
+
+- `FileNotFoundError` - If neither exists.
+
+<a id="fim.persistence.tlog_export.export_trajectory"></a>
+
+#### export\_trajectory
+
+```python
+def export_trajectory(path: Path | str,
+                      output: Path | str | None = None,
+                      *,
+                      workers: int = DEFAULT_EXPORT_WORKERS,
+                      overwrite: bool = False) -> ExportReceipt
+```
+
+Export a run's trajectory log as the canonical `trajectory.jsonl`.
+
+Checks the log against its run's manifest, refuses when the disk cannot
+hold the file (the exact size is known first, from the size pass),
+writes the JSON Lines to a partial file and renames it into place, and
+leaves a receipt recording both digests next to it.
+
+**Arguments**:
+
+- `path` - A `.tlog` file or a run directory.
+- `output` - The JSON Lines file to write; by default the log's own name
+  with `.jsonl` beside it.
+- `workers` - Processes to format with (`derive_jsonl`).
+- `overwrite` - Replace an existing output.
+
+
+**Returns**:
+
+  The receipt, which has also been written to
+  `<output>.export.json`.
+
+
+**Raises**:
+
+- `FileNotFoundError` - If the log does not exist.
+- `FileExistsError` - If the output exists and `overwrite` is false.
+- `OSError` - If the disk does not have room for the file.
+- `ValueError` - If the log does not match its manifest.
+- `TlogError` - If the log is unusable.
 
 <a id="fim.reanalyze"></a>
 

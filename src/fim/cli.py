@@ -76,6 +76,11 @@ from fim.engine import (
     replicate_summary,
 )
 from fim.model.params import SimulationParams, describe_population
+from fim.persistence.binary_store import (
+    EQUILIBRIUM_LOG_FILENAME,
+    TRAJECTORY_LOG_FILENAME,
+    BinaryLogStore,
+)
 from fim.persistence.groups import (
     ExperimentManifest,
     StudyManifest,
@@ -91,10 +96,6 @@ from fim.persistence.groups import (
     list_experiments,
     list_studies,
     resolve_run_directory,
-)
-from fim.persistence.jsonl_store import (
-    EQUILIBRIUM_TRAJECTORY_FILENAME,
-    JSONLTrajectoryStore,
 )
 from fim.persistence.manifest import (
     CURRENT_BATCH_SCHEMA_VERSION,
@@ -554,7 +555,7 @@ def _command_run_scalar(
     The ordinary "run one simulation" path — every `fim run` invocation
     whose configuration does not set `n_replicates` above 1 reaches this
     function. Produces exactly four files in `output_directory`:
-    `trajectory.jsonl` (every generation's own full state, for later
+    `trajectory.tlog` (every generation's own full state, for later
     replay or re-analysis — see `fim.reanalyze`), `report.json` (the
     final differentiation statistics, see `fim.engine.FinalReport`),
     `scatter.png` (a plot of the final population), and `manifest.json`
@@ -562,7 +563,7 @@ def _command_run_scalar(
 
     Every artifact is built inside a hidden temporary sibling directory
     and published at `output_directory` with one atomic rename, only
-    once `trajectory.jsonl`, `report.json`, and `scatter.png` are all
+    once `trajectory.tlog`, `report.json`, and `scatter.png` are all
     flushed and `manifest.json` — written last, and only then — records
     each of their own checksums, a short fingerprint of each file's
     exact content that later reveals whether it has been altered since
@@ -595,7 +596,7 @@ def _command_run_scalar(
         # Closed here as well as by the engine, before `atomic_directory`
         # renames (or, on failure, removes) the directory: an open handle
         # blocks both on Windows.
-        with JSONLTrajectoryStore(targets["trajectory"]) as store:
+        with BinaryLogStore(targets["trajectory"]) as store:
             output = fim(
                 params.gene_copies,
                 params.m,
@@ -1149,7 +1150,7 @@ def _prune_orphan_replicate_directories(
     ascending replicate order. A worker beyond the replicate that
     triggered the stop still runs to completion — its `store_factory`
     call has already created its `replicate-NNN/` directory and
-    streamed a full `trajectory.jsonl` into it — even though its
+    streamed a full `trajectory.tlog` into it — even though its
     result is discarded, never appearing in the tuple `fim` returns.
     Without this pass, `fim.paths.atomic_directory` would publish that orphan
     directory verbatim: complete, present on disk, and absent from
@@ -1189,7 +1190,7 @@ def _replicate_store_factory(
     output_directory: Path,
     batch_run_id: str,
     replicate_run_id: str,
-) -> JSONLTrajectoryStore:
+) -> BinaryLogStore:
     """Build one replicate's real on-disk trajectory store.
 
     This is the `store_factory` `_command_run_batch` hands to `fim()`
@@ -1207,7 +1208,7 @@ def _replicate_store_factory(
         output_directory, batch_run_id, replicate_run_id
     )
     directory.mkdir(parents=True, exist_ok=True)
-    return JSONLTrajectoryStore(directory / "trajectory.jsonl")
+    return BinaryLogStore(directory / TRAJECTORY_LOG_FILENAME)
 
 
 def _run_artifact_targets(directory: Path) -> dict[str, Path]:
@@ -1224,11 +1225,11 @@ def _run_artifact_targets(directory: Path) -> dict[str, Path]:
     on-disk existence (or `manifest.artifacts` membership) for that.
     `equilibrium_trajectory` is likewise present only for an
     equilibrium-split run, streamed by the engine itself beside
-    `trajectory.jsonl` (`fim.engine.RunResult.equilibrium_store`).
+    `trajectory.tlog` (`fim.engine.RunResult.equilibrium_store`).
     """
     return {
-        "trajectory": directory / "trajectory.jsonl",
-        "equilibrium_trajectory": directory / EQUILIBRIUM_TRAJECTORY_FILENAME,
+        "trajectory": directory / TRAJECTORY_LOG_FILENAME,
+        "equilibrium_trajectory": directory / EQUILIBRIUM_LOG_FILENAME,
         "manifest": directory / "manifest.json",
         "report": directory / "report.json",
         "scatter": directory / "scatter.png",
@@ -1289,7 +1290,7 @@ def _write_run_artifacts(
 ) -> dict[str, Path]:
     """Write one run's report, scatter plot, and — last — its verifiable manifest.
 
-    ``trajectory.jsonl`` is not written here: it is streamed
+    ``trajectory.tlog`` is not written here: it is streamed
     generation-by-generation by the `TrajectoryStore` already passed
     into `fim`, so it exists before this function ever runs. Every other
     artifact is written and flushed first; ``manifest.json`` is written
@@ -1340,7 +1341,7 @@ def _write_run_artifacts(
         write_jsonl_rows(targets["sigma_band_trajectory"], result.sigma_band_trajectory)
         digested_names.append("sigma_band_trajectory")
     if targets["equilibrium_trajectory"].is_file():
-        # Streamed, like `trajectory.jsonl`, by the engine itself during
+        # Streamed, like `trajectory.tlog`, by the engine itself during
         # an equilibrium-split run's ancestral phase
         # (`RunResult.equilibrium_store`); no other run writes one.
         digested_names.append("equilibrium_trajectory")

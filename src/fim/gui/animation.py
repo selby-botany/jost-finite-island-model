@@ -97,7 +97,7 @@ def pre_render_frames(
     """Sample up to `max_frames` frames' worth of coordinates from a trajectory.
 
     Args:
-        trajectory_path: The `trajectory.jsonl` to read.
+        trajectory_path: The `trajectory.tlog` to read.
         params: The run's validated parameters.
         run_id: The run identity every row must belong to.
         max_frames: See `select_sample_generations`.
@@ -143,7 +143,7 @@ def pre_render_batch_frames(
     """Sample up to `max_frames` *pooled* frames' worth of coordinates from a batch.
 
     The completed-batch counterpart to `pre_render_frames`, needed
-    because a batch has no single `trajectory.jsonl` to sample from —
+    because a batch has no single `trajectory.tlog` to sample from —
     one per replicate instead, each stopping at its own generation
     (batch trajectory panel design `20260912-claude-sonnet-5-batch-
     trajectory-panel-design.md`, `selby/restricted`). A replicate that
@@ -162,7 +162,7 @@ def pre_render_batch_frames(
             — `run_id` is that replicate's own id (`RunResult.run_id`,
             `"{batch_run_id}-r{index:03}"`), not the batch's own id,
             matching every row's own recorded `run_id` in that
-            replicate's `trajectory.jsonl`.
+            replicate's `trajectory.tlog`.
         params: The batch's own validated parameters, shared by every
             replicate.
         max_frames: See `select_sample_generations`.

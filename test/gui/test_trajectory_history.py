@@ -56,7 +56,7 @@ def test_final_sample_matches_the_live_report(tmp_path: Path) -> None:
     """
     output = _write_run(tmp_path)
 
-    history = sampled_statistic_history(output / "trajectory.jsonl")
+    history = sampled_statistic_history(output / "trajectory.tlog")
 
     live = json.loads((output / "report.json").read_text(encoding="utf-8"))
     assert history.generations[-1] == live["generation"]
@@ -68,7 +68,7 @@ def test_generations_and_every_history_share_one_length(tmp_path: Path) -> None:
     """`generations` and each statistic's own history line up one to one."""
     output = _write_run(tmp_path)
 
-    history = sampled_statistic_history(output / "trajectory.jsonl")
+    history = sampled_statistic_history(output / "trajectory.tlog")
 
     assert len(history.generations) > 1
     assert history.generations == sorted(history.generations)
@@ -80,7 +80,7 @@ def test_generation_zero_is_always_the_first_sample(tmp_path: Path) -> None:
     """The starting population is always included, not just the final one."""
     output = _write_run(tmp_path)
 
-    history = sampled_statistic_history(output / "trajectory.jsonl")
+    history = sampled_statistic_history(output / "trajectory.tlog")
 
     assert history.generations[0] == 0
 
@@ -102,7 +102,7 @@ def test_max_samples_bounds_how_many_generations_are_recomputed(
     live = json.loads((output / "report.json").read_text(encoding="utf-8"))
     assert live["generation"] == 20, "fixture assumption: this run reaches the cap"
 
-    history = sampled_statistic_history(output / "trajectory.jsonl", max_samples=5)
+    history = sampled_statistic_history(output / "trajectory.tlog", max_samples=5)
 
     assert len(history.generations) <= 5
     assert history.generations[0] == 0
@@ -116,11 +116,10 @@ def test_rejects_a_tampered_trajectory(tmp_path: Path) -> None:
     test — the same `verify_trajectory_integrity` call underneath.
     """
     output = _write_run(tmp_path)
-    trajectory = output / "trajectory.jsonl"
-    corrupted = trajectory.read_text(encoding="utf-8").replace(
-        '"run_id":"run-', '"run_id":"other-'
-    )
-    trajectory.write_text(corrupted, encoding="utf-8")
+    trajectory = output / "trajectory.tlog"
+    corrupted = bytearray(trajectory.read_bytes())
+    corrupted[len(corrupted) // 2] ^= 0x01
+    trajectory.write_bytes(bytes(corrupted))
 
     with pytest.raises(ValueError, match="does not match its manifest"):
         sampled_statistic_history(trajectory)

@@ -111,7 +111,7 @@ class RunManifest:
     `fim.engine._run_one` returns a `RunResult` without ever writing to
     disk, so it cannot yet know a durable file's content digest. A
     manifest actually persisted to disk (`fim.cli._write_run_artifacts`)
-    is written only once every other artifact (`trajectory.jsonl`,
+    is written only once every other artifact (`trajectory.tlog`,
     `report.json`, `scatter.png`) is fully flushed, with `artifacts`
     populated from their real on-disk digests — so `artifacts is not
     None` on a *read* manifest doubles as "every sibling artifact this

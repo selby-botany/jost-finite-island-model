@@ -100,7 +100,7 @@ def test_launcher_dispatches_empty_sys_argv_to_the_gui(
         ["--version"],
         ["run", "config.yaml"],
         ["init", "--output", "out.yaml"],
-        ["stats", "trajectory.jsonl"],
+        ["stats", "trajectory.tlog"],
     ],
 )
 def test_launcher_dispatches_nonempty_argv_to_cli_main_unchanged(

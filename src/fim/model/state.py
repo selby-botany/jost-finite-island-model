@@ -197,11 +197,11 @@ class ModelState:
         one output row per individual (deme, locus, allele) combination
         that actually has a nonzero frequency, rather than one row per
         deme or per generation holding a nested table — the same shape
-        `fim.persistence.jsonl_store.JSONLTrajectoryStore` writes to
-        `trajectory.jsonl` and `ModelState.from_rows`, below, reads back.
-        This shape is what makes the persisted file directly usable by
-        ordinary tools (a spreadsheet, `jq`, a pandas `DataFrame`)
-        without first needing to unpack a nested structure.
+        a trajectory store's `read` yields, the exported `trajectory.jsonl`
+        holds, and `ModelState.from_rows`, below, reads back. This shape is
+        what makes the exported file directly usable by ordinary tools (a
+        spreadsheet, `jq`, a pandas `DataFrame`) without first needing to
+        unpack a nested structure.
 
         Args:
             run_id: Stable identifier grouping rows from one simulation.

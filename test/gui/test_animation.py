@@ -141,7 +141,7 @@ def test_pre_render_frames_matches_select_sample_generations(tmp_path: Path) -> 
     output = _write_run(tmp_path)
     manifest = read_manifest(output / "manifest.json")
     params = manifest.params()
-    trajectory = output / "trajectory.jsonl"
+    trajectory = output / "trajectory.tlog"
 
     frames = animation.pre_render_frames(trajectory, params, manifest.run_id)
 
@@ -187,7 +187,7 @@ def test_frame_sampling_retains_only_selected_generations(
 
     monkeypatch.setattr(animation, "group_rows_by_generation", selected_rows)
     frames = animation.pre_render_frames(
-        output / "trajectory.jsonl", manifest.params(), manifest.run_id, max_frames=3
+        output / "trajectory.tlog", manifest.params(), manifest.run_id, max_frames=3
     )
     assert retained == [frame.generation for frame in frames]
     assert len(frames) == 3
@@ -200,7 +200,7 @@ def test_pre_render_frames_are_sorted_ascending_by_generation(tmp_path: Path) ->
     output = _write_run(tmp_path)
     manifest = read_manifest(output / "manifest.json")
     params = manifest.params()
-    trajectory = output / "trajectory.jsonl"
+    trajectory = output / "trajectory.tlog"
 
     frames = animation.pre_render_frames(trajectory, params, manifest.run_id)
 
@@ -239,7 +239,7 @@ def test_pre_render_batch_frames_carries_a_stopped_replicates_state_forward(
             batch_runner.replicate_output_directory(
                 output, manifest.run_id, replicate_run_id
             )
-            / "trajectory.jsonl"
+            / "trajectory.tlog"
         )
         for replicate_run_id in manifest.replicate_run_ids
     }
@@ -339,7 +339,7 @@ def test_pre_render_batch_frames_carry_pooled_supplemental_payloads(
             batch_runner.replicate_output_directory(
                 output, manifest.run_id, replicate_run_id
             )
-            / "trajectory.jsonl",
+            / "trajectory.tlog",
         )
         for replicate_run_id in manifest.replicate_run_ids
     ]

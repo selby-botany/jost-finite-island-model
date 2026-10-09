@@ -356,7 +356,7 @@ def test_a_live_runs_own_done_payload_sets_its_trajectory_path(
 
     assert settled is not None
     assert settled["trajectoryPath"] is not None
-    assert settled["trajectoryPath"].endswith("trajectory.jsonl")
+    assert settled["trajectoryPath"].endswith("trajectory.tlog")
 
 
 def test_run_button_shows_the_trajectory_panel_for_the_watched_statistic(

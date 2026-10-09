@@ -36,7 +36,7 @@ def _saved_run(
 
     `equilibrium_split` founds the demes from a short ancestral phase
     instead (infinite alleles, which that mode requires), so the run
-    also writes `equilibrium_trajectory.jsonl`.
+    also writes `equilibrium_trajectory.tlog`.
     """
     config = root / "config.yaml"
     settings: dict[str, object] = {
@@ -74,13 +74,13 @@ def test_full_outputs_round_trip_and_open_with_graphs(
     original = _saved_run(tmp_path, replicates=replicates)
     target = tmp_path / "example"
     copied = copy_outputs(original, target, part_bytes=200)
-    assert any("trajectory.jsonl.gz.part-0002" in name for name in copied)
+    assert any("convergence.jsonl.gz.part-0002" in name for name in copied)
     assert all(path.stat().st_size <= 200 for path in target.rglob("*.gz.part-*"))
     api = Api()
     opened = (
         api.open_batch(str(target))
         if replicates > 1
-        else api.open_run({"trajectoryPath": str(target / "trajectory.jsonl")})
+        else api.open_run({"trajectoryPath": str(target / "trajectory.tlog")})
     )
     assert opened["ok"], opened
     assert not opened.get("reportOnly", False)
@@ -98,28 +98,29 @@ def test_full_outputs_round_trip_and_open_with_graphs(
     assert materialize_outputs(target) == []
 
 
-def test_equilibrium_trajectory_is_archived_and_restored_on_opening(
+def test_equilibrium_trajectory_is_bundled_and_opens_with_its_own_digest(
     tmp_path: Path,
 ) -> None:
     """An equilibrium-split run's ancestral trajectory survives bundling.
 
-    It is archived as gzip parts like every other JSONL artifact, and
-    opening the example restores it byte for byte, checked against its
-    own manifest digest; the main trajectory still opens with its frames.
+    The binary log is already compact, so it is copied as it is (the
+    JSONL artifacts are the ones archived as gzip parts); it arrives byte
+    for byte, checked against its own manifest digest, and the main
+    trajectory still opens with its frames.
     """
     original = _saved_run(tmp_path, equilibrium_split=True)
     target = tmp_path / "example"
 
     copied = copy_outputs(original, target, part_bytes=200)
     api = Api()
-    opened = api.open_run({"trajectoryPath": str(target / "trajectory.jsonl")})
+    opened = api.open_run({"trajectoryPath": str(target / "trajectory.tlog")})
 
-    assert "equilibrium_trajectory.jsonl.gz.part-0002" in copied
+    assert "equilibrium_trajectory.tlog" in copied
+    assert not any(name.startswith("equilibrium_trajectory.tlog.gz") for name in copied)
     assert opened["ok"], opened
-    restored = target / "equilibrium_trajectory.jsonl"
+    restored = target / "equilibrium_trajectory.tlog"
     assert (
-        restored.read_bytes()
-        == (original / "equilibrium_trajectory.jsonl").read_bytes()
+        restored.read_bytes() == (original / "equilibrium_trajectory.tlog").read_bytes()
     )
     manifest = json.loads((target / "manifest.json").read_text(encoding="utf-8"))
     assert manifest["artifacts"]["equilibrium_trajectory"] == hash_file(restored)
@@ -136,15 +137,15 @@ def test_archive_is_deterministic_and_rejects_missing_or_corrupt_parts(
     assert {
         path.relative_to(first): path.read_bytes() for path in output_files(first)
     } == {path.relative_to(second): path.read_bytes() for path in output_files(second)}
-    (first / "trajectory.jsonl.gz.part-0001").unlink()
+    (first / "convergence.jsonl.gz.part-0001").unlink()
     with pytest.raises(ValueError, match="incomplete example archive"):
         materialize_outputs(first)
-    part = second / "trajectory.jsonl.gz.part-0001"
+    part = second / "convergence.jsonl.gz.part-0001"
     part.write_bytes(b"not gzip")
     with pytest.raises(OSError):
         materialize_outputs(second)
-    assert not (second / "trajectory.jsonl").exists()
-    assert not list(second.glob(".trajectory.jsonl-*"))
+    assert not (second / "convergence.jsonl").exists()
+    assert not list(second.glob(".convergence.jsonl-*"))
 
 
 def test_archive_digest_is_verified_before_publishing(tmp_path: Path) -> None:
@@ -154,24 +155,24 @@ def test_archive_digest_is_verified_before_publishing(tmp_path: Path) -> None:
     copy_outputs(original, target)
     manifest_path = target / "manifest.json"
     manifest = json.loads(manifest_path.read_text("utf-8"))
-    manifest["artifacts"]["trajectory"] = hash_file(original / "report.json")
+    manifest["artifacts"]["convergence"] = hash_file(original / "report.json")
     manifest_path.write_text(json.dumps(manifest), "utf-8")
     with pytest.raises(ValueError, match="digest mismatch"):
         materialize_outputs(target)
-    assert not (target / "trajectory.jsonl").exists()
+    assert not (target / "convergence.jsonl").exists()
 
 
-def test_truncated_gzip_does_not_publish_a_partial_trajectory(tmp_path: Path) -> None:
+def test_truncated_gzip_does_not_publish_a_partial_archive(tmp_path: Path) -> None:
     """A missing gzip footer is an explicit failure and leaves no raw output."""
     original = _saved_run(tmp_path)
     target = tmp_path / "example"
     copy_outputs(original, target)
-    part = target / "trajectory.jsonl.gz.part-0001"
+    part = target / "convergence.jsonl.gz.part-0001"
     part.write_bytes(part.read_bytes()[:-8])
     with pytest.raises(ValueError, match="corrupt example archive"):
         materialize_outputs(target)
-    assert not (target / "trajectory.jsonl").exists()
-    assert not list(target.glob(".trajectory.jsonl-*"))
+    assert not (target / "convergence.jsonl").exists()
+    assert not list(target.glob(".convergence.jsonl-*"))
 
 
 def test_artifact_inventory_matches_the_run_producer(tmp_path: Path) -> None:
@@ -191,6 +192,6 @@ def test_opening_a_study_restores_its_archived_members(tmp_path: Path) -> None:
     opened = Api().open_study(study.study_id)
     assert opened["ok"], opened
     assert opened["panels"]
-    assert (target / "trajectory.jsonl").read_bytes() == (
-        original / "trajectory.jsonl"
+    assert (target / "convergence.jsonl").read_bytes() == (
+        original / "convergence.jsonl"
     ).read_bytes()

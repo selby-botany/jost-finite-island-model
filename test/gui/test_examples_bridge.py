@@ -214,7 +214,7 @@ def test_open_run_shows_a_seeded_example_from_its_saved_report(
     directory = seed.example_run_directory("tiny-example", results=results)
     saved_report = json.loads((directory / "report.json").read_text("utf-8"))
 
-    result = api.open_run({"trajectoryPath": str(directory / "trajectory.jsonl")})
+    result = api.open_run({"trajectoryPath": str(directory / "trajectory.tlog")})
 
     assert result["ok"] is True
     assert result["reportOnly"] is True
@@ -240,7 +240,7 @@ def test_open_run_without_a_trajectory_or_a_report_still_fails(
     directory = seed.example_run_directory("tiny-example", results=results)
     (directory / "report.json").unlink()
 
-    result = api.open_run({"trajectoryPath": str(directory / "trajectory.jsonl")})
+    result = api.open_run({"trajectoryPath": str(directory / "trajectory.tlog")})
 
     assert result["ok"] is False
 
@@ -366,7 +366,7 @@ def test_open_saved_example_seeds_when_needed_and_names_the_run(
     directory = seed.example_run_directory("tiny-example", results=results)
     assert result == {"ok": True, "directory": str(directory), "isBatch": False}
     assert (directory / "manifest.json").is_file()
-    opened = api.open_run({"trajectoryPath": str(directory / "trajectory.jsonl")})
+    opened = api.open_run({"trajectoryPath": str(directory / "trajectory.tlog")})
     assert opened["reportOnly"] is True
 
 

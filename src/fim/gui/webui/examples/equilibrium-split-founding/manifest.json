@@ -5,8 +5,8 @@
       "sha256": "d91d729a3546b1c88195f089d0c6c704f1902e1ec4415c411c0222ec097f9076"
     },
     "equilibrium_trajectory": {
-      "bytes": 9361669,
-      "sha256": "468e04674c3276fc8089e60eed76a9e49fcb3699c04c7dd2be253a87f06f94d7"
+      "bytes": 459712,
+      "sha256": "ae2f2cb407eca9c988545fd8a68a0cb89d801385d05f358c4830181feaacb93f"
     },
     "pairwise": {
       "bytes": 521,
@@ -21,8 +21,8 @@
       "sha256": "ac4fe6ade8799e6616e61948219b9adced11832113ab585c8f7b0e806d4a8638"
     },
     "trajectory": {
-      "bytes": 18378745,
-      "sha256": "23f3f20e180369260d38e2aa72572e994ef53b67dda47ce8fdc124f21cf56991"
+      "bytes": 1031819,
+      "sha256": "7f2e8b41aa7af2126f3855e819ded6d6e99c4b4fdc97921577e36f85c701bb82"
     }
   },
   "auto_derived": [

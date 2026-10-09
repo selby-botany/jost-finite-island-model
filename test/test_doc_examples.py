@@ -5,8 +5,9 @@ output files of its own run (`dev/bin/regenerate-example-outputs`, design
 doc `20261005-claude-opus-5-5-read-only-examples-and-classes-design.md`,
 `selby/restricted`, sections 4.1 and 6): `manifest.json` and
 `report.json` for a single run, or `manifest.json`, `summary.json`, and
-each replicate's complete artifacts for a batch. JSONL artifacts are
-losslessly archived; the app restores them on opening. The slow test
+each replicate's complete artifacts for a batch. The trajectories are
+binary logs; the other JSONL artifacts are losslessly archived and the app
+restores them on opening. The slow test
 below reruns every example exactly as that script does and compares.
 
 A run is a pure function of its configuration, so the comparison is
@@ -127,8 +128,9 @@ def test_dear_nolan_high_configuration_matches_its_derivation() -> None:
 def test_every_example_commits_its_output_files(example: str) -> None:
     """Each example directory holds a complete set of committed outputs.
 
-    Every manifest-referenced artifact is present, with JSONL data
-    losslessly archived and each part bounded to the Git-safe size limit.
+    Every manifest-referenced artifact is present: the trajectories as
+    binary logs (already compact, so copied as they are), the other JSONL
+    data losslessly archived with each part bounded to the Git-safe size.
     """
     directory = EXAMPLES_DIRECTORY / example
     files = _output_files(directory)
@@ -141,6 +143,7 @@ def test_every_example_commits_its_output_files(example: str) -> None:
     else:
         assert files == ["manifest.json", "report.json"]
     assert not list(directory.rglob("trajectory.jsonl"))
+    assert not list(directory.rglob("trajectory.jsonl.gz.part-*"))
     assert not list(directory.rglob("convergence.jsonl"))
     for manifest_path in directory.rglob("manifest.json"):
         manifest = _read_json(manifest_path)
@@ -151,14 +154,10 @@ def test_every_example_commits_its_output_files(example: str) -> None:
             target = (
                 f"{key}.png"
                 if key == "scatter"
+                else f"{key}.tlog"
+                if key in {"trajectory", "equilibrium_trajectory"}
                 else f"{key}.jsonl"
-                if key
-                in {
-                    "trajectory",
-                    "equilibrium_trajectory",
-                    "convergence",
-                    "sigma_band_trajectory",
-                }
+                if key in {"convergence", "sigma_band_trajectory"}
                 else f"{key}.json"
             )
             if target.endswith(".jsonl"):

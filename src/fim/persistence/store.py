@@ -140,7 +140,7 @@ class EquilibriumStoreProvider(Protocol):
     EquilibriumSplitInitialCondition`) simulates one panmictic ancestral
     population before founding its demes. That phase's own trajectory
     is persisted separately from the main one — the
-    `equilibrium_trajectory.jsonl` artifact — in the identical
+    `equilibrium_trajectory.tlog` artifact — in the identical
     `TrajectoryRow` schema, with its own generation counter starting at
     zero, so it can never be mistaken for the main run's own
     generations. A store implementing this method names the companion
@@ -558,8 +558,8 @@ class ReplicateFanoutStore:
     def equilibrium_store(self, run_id: str) -> TrajectoryStore:
         """Return the ancestral-phase companion of `run_id`'s own child store.
 
-        So a replicate's `equilibrium_trajectory.jsonl` lands beside its
-        own `trajectory.jsonl`, in its own directory
+        So a replicate's `equilibrium_trajectory.tlog` lands beside its
+        own `trajectory.tlog`, in its own directory
         (`EquilibriumStoreProvider`).
         """
         return equilibrium_store_for(self._store_for(run_id), run_id)

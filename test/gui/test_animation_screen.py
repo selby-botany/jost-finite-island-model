@@ -125,7 +125,7 @@ def test_opening_a_run_populates_the_scrubber_and_scrubbing_moves_the_frame(
     def _drive() -> None:
         try:
             poll_page(window, _INPUT_SCREEN_READY, lambda value: value is True)
-            opened = _open_run(window, output / "trajectory.jsonl")
+            opened = _open_run(window, output / "trajectory.tlog")
             settled = None
             if opened is not None and opened.get("ok"):
                 # `wireCompletedScrubber`'s own fetch is async and not

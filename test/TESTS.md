@@ -33,6 +33,7 @@ Every test module, fixture, and test function documented here in full; `doc/fim-
   - [`test_cli`](#cli.test_cli)
   - [`test_cli_labels`](#cli.test_cli_labels)
   - [`test_cli_sweep`](#cli.test_cli_sweep)
+  - [`test_export_command`](#cli.test_export_command)
   - [`test_trajectory_handles`](#cli.test_trajectory_handles)
 - [`test/convergence/`](#group-convergence)
   - [`test_criteria_validation`](#convergence.test_criteria_validation)
@@ -4678,6 +4679,104 @@ def sweep_file(tmp_path: Path) -> Path
 ```
 
 Write a two-point sweep file and return its path.
+
+<a id="cli.test_export_command"></a>
+
+# cli.test\_export\_command
+
+`fim export` and `export_trajectory`: the explicit JSON Lines export.
+
+The export is the one producer of `trajectory.jsonl`, so its guarantees are
+tested end to end on real runs made by `fim run`: the file is the canonical
+bytes (equal to what the JSON Lines store writes for the same run), the log is
+checked against its manifest first, a full disk and an existing file are
+refused with clear messages, nothing partial is left behind, and a receipt
+records both SHA-256 digests.
+
+<a id="cli.test_export_command.test_export_writes_the_canonical_file_and_a_receipt"></a>
+
+#### test\_export\_writes\_the\_canonical\_file\_and\_a\_receipt
+
+```python
+def test_export_writes_the_canonical_file_and_a_receipt(
+        tmp_path: Path) -> None
+```
+
+The exported file is what the JSON Lines store writes; the receipt says so.
+
+<a id="cli.test_export_command.test_the_command_exports_a_run_directory_or_a_log_path"></a>
+
+#### test\_the\_command\_exports\_a\_run\_directory\_or\_a\_log\_path
+
+```python
+def test_the_command_exports_a_run_directory_or_a_log_path(
+        tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None
+```
+
+`fim export` takes either, prints the digest and honors -o and --workers.
+
+<a id="cli.test_export_command.test_the_export_of_an_equilibrium_split_run_covers_both_logs"></a>
+
+#### test\_the\_export\_of\_an\_equilibrium\_split\_run\_covers\_both\_logs
+
+```python
+def test_the_export_of_an_equilibrium_split_run_covers_both_logs(
+        tmp_path: Path) -> None
+```
+
+The ancestral log exports to its own file, checked against its own digest.
+
+<a id="cli.test_export_command.test_an_existing_output_is_refused_unless_forced"></a>
+
+#### test\_an\_existing\_output\_is\_refused\_unless\_forced
+
+```python
+def test_an_existing_output_is_refused_unless_forced(tmp_path: Path) -> None
+```
+
+Nothing is overwritten by accident.
+
+<a id="cli.test_export_command.test_a_log_that_no_longer_matches_its_manifest_is_not_exported"></a>
+
+#### test\_a\_log\_that\_no\_longer\_matches\_its\_manifest\_is\_not\_exported
+
+```python
+def test_a_log_that_no_longer_matches_its_manifest_is_not_exported(
+        tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None
+```
+
+A tampered log fails the manifest digest before anything is written.
+
+<a id="cli.test_export_command.test_a_full_disk_is_reported_before_anything_is_written"></a>
+
+#### test\_a\_full\_disk\_is\_reported\_before\_anything\_is\_written
+
+```python
+def test_a_full_disk_is_reported_before_anything_is_written(
+        tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None
+```
+
+The exact size is known first, so a too-small disk is refused up front.
+
+<a id="cli.test_export_command.test_a_missing_log_is_a_clear_error"></a>
+
+#### test\_a\_missing\_log\_is\_a\_clear\_error
+
+```python
+def test_a_missing_log_is_a_clear_error(tmp_path: Path) -> None
+```
+
+A directory with no log, and a path that does not exist, are refused.
+
+<a id="cli.test_export_command.test_a_log_without_a_manifest_still_exports"></a>
+
+#### test\_a\_log\_without\_a\_manifest\_still\_exports
+
+```python
+def test_a_log_without_a_manifest_still_exports(tmp_path: Path) -> None
+```
+
+The manifest check applies when there is a manifest, not otherwise.
 
 <a id="cli.test_trajectory_handles"></a>
 

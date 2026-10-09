@@ -2,7 +2,7 @@
 
 Every generation of a completed run is saved to disk, as one row per
 deme/locus/allele combination actually present that generation (in a
-file called `trajectory.jsonl` — see `fim.persistence`). "Re-analyzing"
+file called `trajectory.tlog` — see `fim.persistence`). "Re-analyzing"
 that file means reading it back afterward and computing fresh statistics
 from it — the differentiation numbers for whichever generation you
 actually want to look at, computed the exact same way they were the
@@ -13,7 +13,7 @@ stopped (and was reported) at generation 500 — the full history was
 saved, so any of it can be revisited later.
 
 Extracted from `fim.cli._command_stats` so every consumer that needs to
-"read a persisted `trajectory.jsonl` the same way `cli._command_stats`
+"read a persisted `trajectory.tlog` the same way `cli._command_stats`
 already does" (§3.8) — Screen 6, "open an existing run" (§4.6), and
 Screen 5, "animated trajectory" (§4.5, via `group_rows_by_generation`)
 — shares the exact same algorithm `fim stats` uses, rather than a
@@ -35,7 +35,7 @@ from fim.engine import report_for_state, tracked_statistic_values
 from fim.examples.artifacts import materialize_outputs
 from fim.model.params import SimulationParams
 from fim.model.state import ModelState
-from fim.persistence.jsonl_store import JSONLTrajectoryStore
+from fim.persistence.binary_store import open_trajectory
 from fim.persistence.manifest import (
     RunManifest,
     hash_file,
@@ -135,7 +135,7 @@ def group_rows_by_generation(
 ) -> dict[int, list[TrajectoryRow]]:
     """Group every persisted row by its generation number, in stored order.
 
-    A `trajectory.jsonl` file already stores its rows generation by
+    A `trajectory.tlog` file already stores its rows generation by
     generation, in the order they were written during the original run —
     but as one long, flat sequence, not indexed for picking out a
     specific generation's own rows directly. This function reads that
@@ -152,7 +152,7 @@ def group_rows_by_generation(
     memory to that selection even for gigabyte-scale example data.
 
     Args:
-        trajectory_path: The `trajectory.jsonl` to read.
+        trajectory_path: The `trajectory.tlog` to read.
         run_id: The run identity every row must belong to.
         generations: Only these generations are retained, when specified.
 
@@ -161,7 +161,7 @@ def group_rows_by_generation(
     """
     grouped: dict[int, list[TrajectoryRow]] = {}
     selected = set(generations) if generations is not None else None
-    for row in JSONLTrajectoryStore(trajectory_path).read(run_id):
+    for row in open_trajectory(trajectory_path).read(run_id):
         if selected is None or row["generation"] in selected:
             grouped.setdefault(row["generation"], []).append(row)
     return grouped
@@ -171,10 +171,7 @@ def trajectory_generations(trajectory_path: Path, run_id: str) -> list[int]:
     """List persisted generations without retaining their population rows."""
     materialize_outputs(trajectory_path.parent)
     return sorted(
-        {
-            row["generation"]
-            for row in JSONLTrajectoryStore(trajectory_path).read(run_id)
-        }
+        {row["generation"] for row in open_trajectory(trajectory_path).read(run_id)}
     )
 
 
@@ -205,7 +202,7 @@ def _cached_final_report(
     to a recompute that would mask the tampering.
 
     Args:
-        trajectory_path: The run's own `trajectory.jsonl` — `report.json`
+        trajectory_path: The run's own `trajectory.tlog` — `report.json`
             is expected as its sibling, `fim.cli._run_artifact_targets`'s
             own established convention.
         manifest: The run's own manifest.
@@ -268,7 +265,7 @@ def read_persisted_convergence_history(
     run completed, and silently ignoring it would mask that.
 
     Args:
-        trajectory_path: The run's own `trajectory.jsonl` --
+        trajectory_path: The run's own `trajectory.tlog` --
             `convergence.jsonl` is expected as its sibling.
         manifest: The run's own manifest.
 
@@ -343,7 +340,7 @@ def reanalyze_trajectory(
     run's own true final one.
 
     Args:
-        trajectory_path: The `trajectory.jsonl` to read.
+        trajectory_path: The `trajectory.tlog` to read.
         manifest_path: Its companion manifest; defaults to
             `trajectory_path.with_name("manifest.json")`, `fim stats`'s
             own default.
@@ -420,7 +417,7 @@ def reanalyze_trajectory(
     generation_rows: list[TrajectoryRow] = []
     seen_generations: set[int] = set()
     row_count = 0
-    for row in JSONLTrajectoryStore(trajectory_path).read(manifest.run_id):
+    for row in open_trajectory(trajectory_path).read(manifest.run_id):
         row_count += 1
         row_generation = row["generation"]
         seen_generations.add(row_generation)
@@ -539,7 +536,7 @@ def replicate_convergence_history(
     independently plausible ones.
 
     Args:
-        trajectory_path: The replicate's own `trajectory.jsonl`.
+        trajectory_path: The replicate's own `trajectory.tlog`.
         run_id: The run identity every row must belong to (a batch
             replicate's own id, not the batch's).
         params: That run's own validated parameters.

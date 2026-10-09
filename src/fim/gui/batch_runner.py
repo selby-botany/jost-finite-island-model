@@ -59,9 +59,9 @@ from fim.gui.runner import (
     run_artifact_targets,
     write_run_artifacts,
 )
-from fim.gui.store import LiveProgressStore, RunCancelledError
+from fim.gui.store import LIVE_BLOCK_SECONDS, LiveProgressStore, RunCancelledError
 from fim.model.params import SimulationParams
-from fim.persistence.jsonl_store import JSONLTrajectoryStore
+from fim.persistence.binary_store import TRAJECTORY_LOG_FILENAME, BinaryLogStore
 from fim.persistence.manifest import (
     CURRENT_BATCH_SCHEMA_VERSION,
     ArtifactDigest,
@@ -275,7 +275,7 @@ def _batch_worker(
             # suffix, not derivable from `output_directory` alone) —
             # posted here, first, so a parent-side poller
             # (`doc/fim-gui-design.md` §7.2) knows where each replicate's
-            # `.progress` sidecar and `trajectory.jsonl` actually live
+            # `.progress` sidecar and `trajectory.tlog` actually live
             # while the batch is still running, not only once it is
             # published at `output_directory` — an event no reader
             # outside this worker could otherwise ever observe.
@@ -388,7 +388,9 @@ def _replicate_store_factory(
     )
     directory.mkdir(parents=True, exist_ok=True)
     return LiveProgressStore(
-        JSONLTrajectoryStore(directory / "trajectory.jsonl"),
+        BinaryLogStore(
+            directory / TRAJECTORY_LOG_FILENAME, block_seconds=LIVE_BLOCK_SECONDS
+        ),
         progress_path=directory / ".progress",
         cancel_path=cancel_path,
     )
@@ -425,7 +427,7 @@ def _prune_orphan_replicate_directories(
     afterward, in ascending replicate order, so a worker beyond the
     replicate that triggered the stop can still run to completion — its
     `store_factory` call has already created its `replicate-NNN/`
-    directory and streamed a full `trajectory.jsonl` into it — even
+    directory and streamed a full `trajectory.tlog` into it — even
     though its result never appears in the tuple `fim` returns. Without
     this pass, `fim.paths.atomic_directory` would publish that orphan
     directory verbatim: complete, present on disk, and absent from both

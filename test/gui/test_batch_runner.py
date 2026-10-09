@@ -34,7 +34,7 @@ from fim.engine import Clock, SimulationOutput, replicate_summary
 from fim.engine import fim as engine_fim
 from fim.gui import batch_runner
 from fim.model.params import Migration, MutationRate, PopulationSize, SimulationParams
-from fim.persistence.jsonl_store import JSONLTrajectoryStore
+from fim.persistence.binary_store import BinaryLogStore
 from fim.persistence.manifest import hash_file, read_batch_manifest
 from fim.persistence.store import TrajectoryStore
 
@@ -183,7 +183,7 @@ def test_start_batch_run_succeeds_for_a_non_lineal_engine_backend(
 def test_start_batch_run_leaves_no_trajectory_file_open(
     tmp_path: Path,
     batch_params: SimulationParams,
-    tracked_jsonl_stores: list[JSONLTrajectoryStore],
+    tracked_log_stores: list[BinaryLogStore],
 ) -> None:
     """A finished GUI batch has closed every replicate's trajectory handle.
 
@@ -201,8 +201,8 @@ def test_start_batch_run_leaves_no_trajectory_file_open(
     join_or_fail(thread, "batch thread")
 
     assert _drain(message_queue)[-1][0] == "done"
-    assert len(tracked_jsonl_stores) == 3
-    assert_none_open(tracked_jsonl_stores)
+    assert len(tracked_log_stores) == 3
+    assert_none_open(tracked_log_stores)
 
 
 def test_start_batch_run_writes_every_replicate_and_batch_artifact_on_success(
@@ -232,7 +232,7 @@ def test_start_batch_run_writes_every_replicate_and_batch_artifact_on_success(
         # stays exactly the CLI's own six-file contract, nothing extra
         # left behind.
         assert {path.name for path in replicate_directory.iterdir()} == {
-            "trajectory.jsonl",
+            "trajectory.tlog",
             "manifest.json",
             "report.json",
             "scatter.png",

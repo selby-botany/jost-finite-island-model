@@ -86,7 +86,7 @@ def sampled_statistic_history(
     """Sample up to `max_samples` generations' worth of `STATISTIC_NAMES`.
 
     Args:
-        trajectory_path: The `trajectory.jsonl` to read.
+        trajectory_path: The `trajectory.tlog` to read.
         manifest_path: Its companion manifest; defaults to
             `trajectory_path.with_name("manifest.json")`, matching
             `reanalyze_trajectory`'s own default.

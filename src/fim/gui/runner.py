@@ -19,7 +19,7 @@ own `except BaseException` clause discards the temporary directory and
 needed for either outcome.
 
 Writes the same four artifacts, in the same order, as
-`cli._write_run_artifacts`: `trajectory.jsonl` streamed
+`cli._write_run_artifacts`: `trajectory.tlog` streamed
 generation-by-generation by the `TrajectoryStore` passed into `fim`,
 then `report.json` and `scatter.png` once the run finishes, then —
 last, and only once both are flushed — `manifest.json`, augmented with
@@ -54,12 +54,13 @@ from fim.gui.literature_visuals import (
     allele_composition_payload,
     frequency_spectrum_payload,
 )
-from fim.gui.store import GuiProgressStore, RunCancelledError
+from fim.gui.store import LIVE_BLOCK_SECONDS, GuiProgressStore, RunCancelledError
 from fim.model.params import SimulationParams
 from fim.model.state import ModelState
-from fim.persistence.jsonl_store import (
-    EQUILIBRIUM_TRAJECTORY_FILENAME,
-    JSONLTrajectoryStore,
+from fim.persistence.binary_store import (
+    EQUILIBRIUM_LOG_FILENAME,
+    TRAJECTORY_LOG_FILENAME,
+    BinaryLogStore,
 )
 from fim.persistence.manifest import hash_file, write_manifest
 from fim.persistence.pairwise import (
@@ -170,8 +171,8 @@ def run_artifact_targets(directory: Path) -> dict[str, Path]:
     an equilibrium-split run, streamed by the engine itself.
     """
     return {
-        "trajectory": directory / "trajectory.jsonl",
-        "equilibrium_trajectory": directory / EQUILIBRIUM_TRAJECTORY_FILENAME,
+        "trajectory": directory / TRAJECTORY_LOG_FILENAME,
+        "equilibrium_trajectory": directory / EQUILIBRIUM_LOG_FILENAME,
         "manifest": directory / "manifest.json",
         "report": directory / "report.json",
         "scatter": directory / "scatter.png",
@@ -331,7 +332,9 @@ def _run_worker(
             # Windows.
             with contextlib.closing(
                 GuiProgressStore(
-                    JSONLTrajectoryStore(targets["trajectory"]),
+                    BinaryLogStore(
+                        targets["trajectory"], block_seconds=LIVE_BLOCK_SECONDS
+                    ),
                     on_generation=on_generation,
                     cancel_event=cancel_event,
                 )
@@ -376,7 +379,7 @@ def write_run_artifacts(
 ) -> None:
     """Write `report.json`, `scatter.png`, and — last — `manifest.json`.
 
-    Mirrors `cli._write_run_artifacts` exactly: `trajectory.jsonl` is
+    Mirrors `cli._write_run_artifacts` exactly: `trajectory.tlog` is
     not written here, since it was already streamed
     generation-by-generation by the `TrajectoryStore` passed into
     `fim`; every other artifact is written and flushed first, and

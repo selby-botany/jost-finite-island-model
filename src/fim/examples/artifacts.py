@@ -12,13 +12,17 @@ from collections.abc import Buffer, Sequence
 from pathlib import Path
 from typing import BinaryIO, Final
 
+from fim.persistence.binary_store import (
+    EQUILIBRIUM_LOG_FILENAME,
+    TRAJECTORY_LOG_FILENAME,
+)
 from fim.persistence.manifest import hash_file
 
 RUN_OUTPUT_NAMES: Final = (
     "manifest.json",
     "report.json",
-    "trajectory.jsonl",
-    "equilibrium_trajectory.jsonl",
+    TRAJECTORY_LOG_FILENAME,
+    EQUILIBRIUM_LOG_FILENAME,
     "convergence.jsonl",
     "sigma_band_trajectory.jsonl",
     "pairwise.json",

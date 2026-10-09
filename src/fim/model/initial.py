@@ -220,7 +220,7 @@ class EquilibrationOutcome:
     allele frequencies, not only this `H_S` summary — is not held here:
     `generate_with_outcome` streams it, one generation at a time, to its
     `on_generation` observer, which `fim.engine` writes as the run's
-    `equilibrium_trajectory.jsonl` artifact.
+    `equilibrium_trajectory.tlog` artifact.
 
     Args:
         generation_count: The generation at which the ancestral phase
@@ -411,7 +411,7 @@ class EquilibriumSplitInitialCondition:
                 of the split run's own generation zero. Observing draws
                 nothing from any random stream, so the result is the
                 same with or without an observer. `fim.engine` uses it
-                to stream `equilibrium_trajectory.jsonl`; `None` (the
+                to stream `equilibrium_trajectory.tlog`; `None` (the
                 default) observes nothing.
 
         Returns:

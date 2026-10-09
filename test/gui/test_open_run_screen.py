@@ -1708,7 +1708,7 @@ def test_a_reopened_runs_graphs_repaint_at_the_real_pane_size(
     """
     monkeypatch.setattr(paths_module, "results_directory", lambda: tmp_path / "results")
     output_directory = _write_run_with_sigma_band(tmp_path)
-    trajectory_path = output_directory / "trajectory.jsonl"
+    trajectory_path = output_directory / "trajectory.tlog"
 
     window = create_window(hidden=True)
     outcome: queue.Queue[dict[str, Any] | None] = queue.Queue(maxsize=1)

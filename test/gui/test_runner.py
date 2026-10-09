@@ -29,7 +29,7 @@ from conftest import assert_none_open, join_or_fail
 from fim.engine import RunResult
 from fim.gui import runner
 from fim.model.params import SimulationParams
-from fim.persistence.jsonl_store import JSONLTrajectoryStore
+from fim.persistence.binary_store import BinaryLogStore
 from fim.persistence.manifest import hash_file, read_manifest
 
 
@@ -64,8 +64,8 @@ def test_run_artifact_targets_matches_the_documented_filenames(
     targets = runner.run_artifact_targets(tmp_path)
 
     assert {path.name for path in targets.values()} == {
-        "trajectory.jsonl",
-        "equilibrium_trajectory.jsonl",
+        "trajectory.tlog",
+        "equilibrium_trajectory.tlog",
         "manifest.json",
         "report.json",
         "scatter.png",
@@ -102,7 +102,7 @@ def test_start_run_writes_the_six_documented_artifacts_on_success(
     join_or_fail(thread, "run thread")
 
     assert {path.name for path in output_directory.iterdir()} == {
-        "trajectory.jsonl",
+        "trajectory.tlog",
         "manifest.json",
         "report.json",
         "scatter.png",
@@ -150,7 +150,7 @@ def test_start_run_writes_the_six_documented_artifacts_on_success(
 def test_start_run_leaves_no_trajectory_file_open(
     tmp_path: Path,
     tiny_params: SimulationParams,
-    tracked_jsonl_stores: list[JSONLTrajectoryStore],
+    tracked_log_stores: list[BinaryLogStore],
 ) -> None:
     """A finished GUI scalar run has closed its trajectory handle.
 
@@ -166,8 +166,8 @@ def test_start_run_leaves_no_trajectory_file_open(
     join_or_fail(thread, "run thread")
 
     assert _drain(message_queue)[-1][0] == "done"
-    assert_none_open(tracked_jsonl_stores)
-    assert (output_directory / "trajectory.jsonl").read_text().strip()
+    assert_none_open(tracked_log_stores)
+    assert (output_directory / "trajectory.tlog").stat().st_size > 0
 
 
 def test_start_run_records_matching_digests_in_the_published_manifest(
@@ -192,7 +192,7 @@ def test_start_run_records_matching_digests_in_the_published_manifest(
     manifest = read_manifest(output_directory / "manifest.json")
     assert manifest.artifacts is not None
     for name, filename in (
-        ("trajectory", "trajectory.jsonl"),
+        ("trajectory", "trajectory.tlog"),
         ("report", "report.json"),
         ("scatter", "scatter.png"),
     ):
@@ -203,7 +203,7 @@ def test_start_run_writes_and_digests_an_equilibrium_split_ancestral_trajectory(
     tmp_path: Path,
     tiny_params: SimulationParams,
 ) -> None:
-    """A GUI equilibrium-split run publishes `equilibrium_trajectory.jsonl` too.
+    """A GUI equilibrium-split run publishes `equilibrium_trajectory.tlog` too.
 
     Digested in the manifest like every other artifact, exactly as
     `cli._write_run_artifacts` does; its rows are the ancestral phase's
@@ -222,13 +222,13 @@ def test_start_run_writes_and_digests_an_equilibrium_split_ancestral_trajectory(
     )
     join_or_fail(thread, "run thread")
 
-    path = output_directory / "equilibrium_trajectory.jsonl"
+    path = output_directory / "equilibrium_trajectory.tlog"
     manifest = read_manifest(output_directory / "manifest.json")
     assert manifest.artifacts is not None
     assert manifest.artifacts["equilibrium_trajectory"] == hash_file(path)
     assert manifest.equilibrium_generation_count is not None
     generations = {
-        row["generation"] for row in JSONLTrajectoryStore(path).read(manifest.run_id)
+        row["generation"] for row in BinaryLogStore(path).read(manifest.run_id)
     }
     assert generations == set(range(manifest.equilibrium_generation_count + 1))
 

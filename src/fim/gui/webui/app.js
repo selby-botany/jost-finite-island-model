@@ -35,7 +35,7 @@ let runViewState = "initial";
 // applied here too).
 let completedOutputDirectory = null;
 
-// The currently showing scalar run's own `trajectory.jsonl` path, `null`
+// The currently showing scalar run's own `trajectory.tlog` path, `null`
 // for a batch (which has no single trajectory of its own) or before any
 // run has completed -- the same one-state-model precedent
 // `completedOutputDirectory` already established immediately above.

@@ -33,7 +33,7 @@ is undefined (both demes fixed for the same allele).
 Above the deme-count limit (`fim.statistics.catalog.
 DEFAULT_PAIRWISE_MAX_DEMES` unless the researcher sets another) the file
 records ``"mode": "skipped"`` and the limit instead of the matrices; any
-specific pair can still be recomputed from `trajectory.jsonl`.
+specific pair can still be recomputed from `trajectory.tlog`.
 
 Size: five lists of ``d (d - 1) / 2`` numbers, about 20 bytes each in
 compact JSON. At ``d = 1024`` that is about 52 MB per run (each replicate

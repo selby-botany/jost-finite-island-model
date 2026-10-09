@@ -76,7 +76,7 @@ def test_normalize_row_reports_missing_extra_and_context_mismatches() -> None:
 def test_stores_reject_empty_generations_and_filter_run_ids(tmp_path: Path) -> None:
     """Both storage backends enforce nonempty appends and run filtering."""
     memory = InMemoryTrajectoryStore()
-    jsonl = JSONLTrajectoryStore(tmp_path / "nested" / "trajectory.jsonl")
+    jsonl = JSONLTrajectoryStore(tmp_path / "nested" / "trajectory.tlog")
     for store in (memory, jsonl):
         with pytest.raises(ValueError, match="at least one row"):
             store.write_generation("run-a", 0, [])

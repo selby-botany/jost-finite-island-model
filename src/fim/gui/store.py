@@ -44,15 +44,27 @@ from typing import Any
 from fim.model.locus import LocusSpec
 from fim.model.state import ModelState
 from fim.paths import write_text_atomically
+from fim.persistence.frame import FrameLayout, TrajectoryFrame
 from fim.persistence.store import (
+    FrameStore,
     TrajectoryRow,
     TrajectoryStore,
+    begin_store_run,
     close_store,
     equilibrium_store_for,
+    store_wants_frames,
 )
 from fim.reanalyze import group_rows_by_generation
 
 logger = logging.getLogger(__name__)
+
+LIVE_BLOCK_SECONDS = 1.0
+"""Seconds a run's open log block may wait before it is written.
+
+The app shows a run while it is going, and a batch's live view reads each
+replicate's log from disk, so an open block is never held longer than this.
+(Command-line runs leave it off, which keeps their files byte-reproducible;
+the app's runs trade that for a live view that is never stale.)"""
 
 
 class RunCancelledError(Exception):
@@ -118,7 +130,7 @@ class GuiProgressStore:
 
         Checked before delegating, not after: a cancellation observed
         here never reaches the real store at all, so a cancelled run's
-        `trajectory.jsonl` never gains the generation that triggered the
+        `trajectory.tlog` never gains the generation that triggered the
         cancellation — only the generations already written before it.
 
         `rows` is materialized into a plain `list` before delegating,
@@ -144,6 +156,24 @@ class GuiProgressStore:
             run_id, generation, materialized_rows, validate=validate
         )
         self._on_generation(generation, materialized_rows)
+
+    def begin_run(self, run_id: str, layout: FrameLayout) -> None:
+        """Tell the wrapped store the run's layout (`FrameStore`).
+
+        The wrapped store needs it to store frequencies compactly even
+        though this decorator hands it rows.
+        """
+        begin_store_run(self._inner, run_id, layout)
+
+    def wants_frames(self, run_id: str) -> bool:
+        """Return `False`: the live scatter's callback needs the rows."""
+        del run_id
+        return False
+
+    def write_frame(self, run_id: str, frame: TrajectoryFrame) -> None:
+        """Refuse frames; this decorator is fed rows (`wants_frames` is false)."""
+        del run_id, frame
+        raise TypeError(f"{type(self).__name__} takes rows, not frames")
 
     def read(self, run_id: str) -> Iterator[TrajectoryRow]:
         """Delegate straight to the wrapped store; nothing to decorate here."""
@@ -204,6 +234,52 @@ class LiveProgressStore:
         self._inner = inner
         self._progress_path = progress_path
         self._cancel_path = cancel_path
+        # The last generation handed to `inner`, and the last one reported
+        # in the sidecar: with a log the two differ, because the sidecar
+        # only ever names a generation that is already readable on disk.
+        self._last_written = -1
+        self._last_reported = -1
+
+    def begin_run(self, run_id: str, layout: FrameLayout) -> None:
+        """Tell the wrapped store the run's layout (`FrameStore`)."""
+        begin_store_run(self._inner, run_id, layout)
+
+    def wants_frames(self, run_id: str) -> bool:
+        """Whether the wrapped store prefers frames; nothing here needs rows."""
+        return store_wants_frames(self._inner, run_id)
+
+    def write_frame(self, run_id: str, frame: TrajectoryFrame) -> None:
+        """Delegate one frame, or raise `RunCancelledError` instead.
+
+        The frame twin of `write_generation`: cancellation is checked
+        first, and the sidecar follows the committed generation.
+
+        Raises:
+            TypeError: If the wrapped store cannot take frames.
+        """
+        if self._cancel_path.exists():
+            raise RunCancelledError(run_id, frame.generation)
+        inner = self._inner
+        if not isinstance(inner, FrameStore):
+            raise TypeError(f"{type(inner).__name__} cannot take frames")
+        inner.write_frame(run_id, frame)
+        self._last_written = frame.generation
+        self._report_progress()
+
+    def _report_progress(self) -> None:
+        """Update the `.progress` sidecar to the newest generation readable on disk.
+
+        A store with a commit watermark (`BinaryLogStore.snapshot`) reports
+        its committed generation, so a poller that reads the file never
+        asks for a generation still in the writer's memory; the sidecar is
+        rewritten only when that generation advances. Any other store has
+        flushed what it was given, so its generation is reported as is.
+        """
+        snapshot = getattr(self._inner, "snapshot", None)
+        readable = snapshot()[0] if callable(snapshot) else self._last_written
+        if readable > self._last_reported:
+            write_progress_sidecar(self._progress_path, readable)
+            self._last_reported = readable
 
     def write_generation(
         self,
@@ -224,7 +300,8 @@ class LiveProgressStore:
         if self._cancel_path.exists():
             raise RunCancelledError(run_id, generation)
         self._inner.write_generation(run_id, generation, rows, validate=validate)
-        write_progress_sidecar(self._progress_path, generation)
+        self._last_written = generation
+        self._report_progress()
 
     def read(self, run_id: str) -> Iterator[TrajectoryRow]:
         """Delegate straight to the wrapped store; nothing to decorate here."""
@@ -235,8 +312,16 @@ class LiveProgressStore:
         self._inner.discard(run_id)
 
     def close(self) -> None:
-        """Close the wrapped store's own resources (`ClosableStore`)."""
+        """Close the wrapped store, then report the last generation it holds.
+
+        Closing commits everything, so the sidecar's final value is the
+        last generation written, even though the watermark lagged behind it
+        while the run was going.
+        """
         close_store(self._inner)
+        if self._last_written > self._last_reported:
+            write_progress_sidecar(self._progress_path, self._last_written)
+            self._last_reported = self._last_written
 
     def equilibrium_store(self, run_id: str) -> TrajectoryStore:
         """Return the wrapped store's own ancestral-phase companion, undecorated.
@@ -316,7 +401,7 @@ def read_live_state(
     reanalyze_trajectory`: that function requires a completed run's own
     `manifest.json` (written only once, at the very end), so it cannot
     read a replicate that is still running. This reads the same
-    `trajectory.jsonl` directly instead, with no manifest at all, and
+    `trajectory.tlog` directly instead, with no manifest at all, and
     is meant to be called only with a `generation` already confirmed by
     that replicate's own `.progress` sidecar
     (`read_progress_sidecar`/`write_progress_sidecar`):
@@ -327,7 +412,7 @@ def read_live_state(
     generation still being written.
 
     Args:
-        trajectory_path: The replicate's own `trajectory.jsonl`.
+        trajectory_path: The replicate's own `trajectory.tlog`.
         run_id: The replicate's own run id (not the batch's).
         generation: The generation to reconstruct — normally
             `read_progress_sidecar(...)`'s own `"generation"` value.

@@ -22,7 +22,7 @@ import yaml
 
 from fim import cli, engine, paths, reanalyze
 from fim.engine import report_for_state
-from fim.persistence.jsonl_store import JSONLTrajectoryStore
+from fim.persistence.binary_store import BinaryLogStore
 from fim.persistence.manifest import hash_file, read_manifest, write_manifest
 
 
@@ -124,12 +124,12 @@ def _build_large_synthetic_trajectory(
     template_output = _write_run(template_directory)
     template_manifest = read_manifest(template_output / "manifest.json")
     template_rows = reanalyze.group_rows_by_generation(
-        template_output / "trajectory.jsonl", template_manifest.run_id
+        template_output / "trajectory.tlog", template_manifest.run_id
     )[0]
 
     run_id = "synthetic-large-trajectory"
-    trajectory_path = tmp_path / "synthetic-trajectory.jsonl"
-    store = JSONLTrajectoryStore(trajectory_path)
+    trajectory_path = tmp_path / "synthetic-trajectory.tlog"
+    store = BinaryLogStore(trajectory_path)
     for generation_index in range(generation_count):
         store.write_generation(
             run_id,
@@ -139,6 +139,7 @@ def _build_large_synthetic_trajectory(
                 for row in template_rows
             ],
         )
+    store.close()
 
     manifest_path = tmp_path / "synthetic-manifest.json"
     write_manifest(
@@ -157,12 +158,12 @@ def _build_large_synthetic_trajectory(
 def _count_row_liveness(
     monkeypatch: pytest.MonkeyPatch,
 ) -> tuple[list[int], list[int]]:
-    """Patch `JSONLTrajectoryStore.read` to track simultaneously live rows.
+    """Patch `BinaryLogStore.read` to track simultaneously live rows.
 
     Real-issue-9 regression proof (see `doc/20260906-gpt-5.6-open-
     issues.md` item 9): rather than a wall-clock timing measurement
     (non-deterministic across machines, forbidden by this project's own
-    testing discipline), this wraps every row `JSONLTrajectoryStore.read`
+    testing discipline), this wraps every row `BinaryLogStore.read`
     yields in a `dict` subclass (a plain `dict` cannot hold a weak
     reference) and registers a `weakref.finalize` callback on each one.
     CPython frees an object the instant its reference count reaches
@@ -184,12 +185,12 @@ def _count_row_liveness(
     alive = 0
     alive_after_each_row: list[int] = []
     total_yielded: list[int] = []
-    real_read = JSONLTrajectoryStore.read
+    real_read = BinaryLogStore.read
 
     class _TrackedRow(dict[str, object]):
         """A `dict` subclass (plain `dict` instances cannot hold a weakref)."""
 
-    def _tracking_read(self: JSONLTrajectoryStore, run_id: str) -> object:
+    def _tracking_read(self: BinaryLogStore, run_id: str) -> object:
         nonlocal alive
 
         def _mark_collected(_reference: object = None) -> None:
@@ -205,7 +206,7 @@ def _count_row_liveness(
             alive_after_each_row.append(alive)
             total_yielded.append(len(alive_after_each_row))
 
-    monkeypatch.setattr(JSONLTrajectoryStore, "read", _tracking_read)
+    monkeypatch.setattr(BinaryLogStore, "read", _tracking_read)
     return alive_after_each_row, total_yielded
 
 
@@ -249,7 +250,7 @@ def test_reanalyze_trajectory_does_not_hold_every_row_live_for_the_final_generat
 
     `generation=None` cannot know which generation is the maximum until
     the stream ends (`reanalyze_trajectory`'s own docstring on
-    `JSONLTrajectoryStore.read`'s ordering guarantee), so this exercises
+    `BinaryLogStore.read`'s ordering guarantee), so this exercises
     the rolling running-max buffer specifically: every earlier
     generation's buffered rows must be dropped, not accumulated, each
     time a higher generation number is seen.
@@ -276,7 +277,7 @@ def test_reanalyze_trajectory_matches_the_live_report(tmp_path: Path) -> None:
     """Re-analyzing the final generation reproduces the run's own report.json."""
     output = _write_run(tmp_path)
 
-    result = reanalyze.reanalyze_trajectory(output / "trajectory.jsonl")
+    result = reanalyze.reanalyze_trajectory(output / "trajectory.tlog")
 
     live = json.loads((output / "report.json").read_text(encoding="utf-8"))
     assert result.report == live
@@ -288,7 +289,7 @@ def test_reanalyze_trajectory_supports_an_explicit_earlier_generation(
     """A non-final generation reports "re-analysis", not the run's own outcome."""
     output = _write_run(tmp_path)
 
-    result = reanalyze.reanalyze_trajectory(output / "trajectory.jsonl", generation=0)
+    result = reanalyze.reanalyze_trajectory(output / "trajectory.tlog", generation=0)
 
     assert result.state.generation == 0
     assert result.report["reason"] == "re-analysis"
@@ -302,7 +303,7 @@ def test_reanalyze_trajectory_computes_a_differentiation_q_sweep(
     output = _write_run(tmp_path)
 
     result = reanalyze.reanalyze_trajectory(
-        output / "trajectory.jsonl", differentiation_orders=(0.0, 1.0, 2.0)
+        output / "trajectory.tlog", differentiation_orders=(0.0, 1.0, 2.0)
     )
 
     swept = result.report["Differentiation_q"]
@@ -315,11 +316,10 @@ def test_reanalyze_trajectory_computes_a_differentiation_q_sweep(
 def test_reanalyze_trajectory_rejects_a_tampered_trajectory(tmp_path: Path) -> None:
     """A trajectory edited after the run completed fails the digest check."""
     output = _write_run(tmp_path)
-    trajectory = output / "trajectory.jsonl"
-    corrupted = trajectory.read_text(encoding="utf-8").replace(
-        '"run_id":"run-', '"run_id":"other-'
-    )
-    trajectory.write_text(corrupted, encoding="utf-8")
+    trajectory = output / "trajectory.tlog"
+    corrupted = bytearray(trajectory.read_bytes())
+    corrupted[len(corrupted) // 2] ^= 0x01
+    trajectory.write_bytes(bytes(corrupted))
 
     with pytest.raises(ValueError, match="does not match its manifest"):
         reanalyze.reanalyze_trajectory(trajectory)
@@ -330,7 +330,7 @@ def test_reanalyze_trajectory_rejects_an_unknown_generation(tmp_path: Path) -> N
     output = _write_run(tmp_path)
 
     with pytest.raises(ValueError, match="no generation 999"):
-        reanalyze.reanalyze_trajectory(output / "trajectory.jsonl", generation=999)
+        reanalyze.reanalyze_trajectory(output / "trajectory.tlog", generation=999)
 
 
 def test_reanalyze_trajectory_reuses_report_json_at_the_final_generation(
@@ -359,7 +359,7 @@ def test_reanalyze_trajectory_reuses_report_json_at_the_final_generation(
 
     monkeypatch.setattr(reanalyze, "report_for_state", _must_not_be_called)
 
-    result = reanalyze.reanalyze_trajectory(output / "trajectory.jsonl")
+    result = reanalyze.reanalyze_trajectory(output / "trajectory.tlog")
 
     live = json.loads((output / "report.json").read_text(encoding="utf-8"))
     assert result.report == live
@@ -385,7 +385,7 @@ def test_reanalyze_trajectory_still_recomputes_an_earlier_generation(
 
     monkeypatch.setattr(reanalyze, "report_for_state", _counting_report_for_state)
 
-    result = reanalyze.reanalyze_trajectory(output / "trajectory.jsonl", generation=0)
+    result = reanalyze.reanalyze_trajectory(output / "trajectory.tlog", generation=0)
 
     assert calls
     assert result.state.generation == 0
@@ -409,7 +409,7 @@ def test_reanalyze_trajectory_rejects_a_tampered_report_json(tmp_path: Path) -> 
     report_path.write_text(corrupted, encoding="utf-8")
 
     with pytest.raises(ValueError, match=r"report\.json does not match its manifest"):
-        reanalyze.reanalyze_trajectory(output / "trajectory.jsonl")
+        reanalyze.reanalyze_trajectory(output / "trajectory.tlog")
 
 
 def test_reanalyze_trajectory_falls_back_when_report_json_is_missing(
@@ -425,7 +425,7 @@ def test_reanalyze_trajectory_falls_back_when_report_json_is_missing(
     output = _write_run(tmp_path)
     (output / "report.json").unlink()
 
-    result = reanalyze.reanalyze_trajectory(output / "trajectory.jsonl")
+    result = reanalyze.reanalyze_trajectory(output / "trajectory.tlog")
 
     assert result.report["converged"] is True
 
@@ -449,7 +449,7 @@ def test_read_persisted_convergence_history_matches_the_live_monitor(
     raw_rows = [json.loads(line) for line in convergence_text.splitlines()]
 
     result = reanalyze.read_persisted_convergence_history(
-        output / "trajectory.jsonl", manifest
+        output / "trajectory.tlog", manifest
     )
 
     assert result is not None
@@ -477,7 +477,7 @@ def test_read_persisted_convergence_history_rejects_a_tampered_file(
         ValueError, match=r"convergence\.jsonl does not match its manifest"
     ):
         reanalyze.read_persisted_convergence_history(
-            output / "trajectory.jsonl", manifest
+            output / "trajectory.tlog", manifest
         )
 
 
@@ -497,7 +497,7 @@ def test_read_persisted_convergence_history_returns_none_when_absent(
     (output / "convergence.jsonl").unlink()
 
     result = reanalyze.read_persisted_convergence_history(
-        output / "trajectory.jsonl", manifest
+        output / "trajectory.tlog", manifest
     )
 
     assert result is None
@@ -541,7 +541,7 @@ def test_differentiation_q_for_state_agrees_with_e_st_under_size_weighting(
     output = _write_run(tmp_path, N=[12, 30])
 
     result = reanalyze.reanalyze_trajectory(
-        output / "trajectory.jsonl", differentiation_orders=(1.0,)
+        output / "trajectory.tlog", differentiation_orders=(1.0,)
     )
 
     swept = result.report["Differentiation_q"]
@@ -554,7 +554,7 @@ def test_group_rows_by_generation_groups_every_persisted_generation(
 ) -> None:
     """Every persisted generation appears, keyed by its own generation number."""
     output = _write_run(tmp_path)
-    trajectory = output / "trajectory.jsonl"
+    trajectory = output / "trajectory.tlog"
     manifest = read_manifest(output / "manifest.json")
 
     grouped = reanalyze.group_rows_by_generation(trajectory, manifest.run_id)
@@ -608,10 +608,10 @@ def test_a_rebuilt_convergence_history_matches_the_live_one(tmp_path: Path) -> N
 
     trajectory_paths: dict[str, Path] = {}
 
-    def _store_factory(run_id: str) -> JSONLTrajectoryStore:
-        path = tmp_path / f"{run_id}.jsonl"
+    def _store_factory(run_id: str) -> BinaryLogStore:
+        path = tmp_path / f"{run_id}.tlog"
         trajectory_paths[run_id] = path
-        return JSONLTrajectoryStore(path)
+        return BinaryLogStore(path)
 
     results = engine.fim(
         params.gene_copies,

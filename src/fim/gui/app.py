@@ -129,6 +129,7 @@ from fim.model.params import ALLOWED_PLOIDIES, SimulationParams
 from fim.model.state import ModelState
 from fim.model.topology import MINIMUM_DEMES
 from fim.persistence import groups
+from fim.persistence.binary_store import TRAJECTORY_LOG_FILENAME
 from fim.persistence.manifest import (
     BatchManifest,
     RunManifest,
@@ -351,7 +352,7 @@ class _EvaluatesJs(Protocol):
 # batch's terminal outcome (`doc/fim-gui-design.md` §7.2). Coarser than `fim.gui.
 # runner.PROGRESS_THROTTLE_INTERVAL_SECONDS` (a scalar run's own,
 # in-process push interval) on purpose: each tick here re-reads a whole
-# `trajectory.jsonl` per currently-reporting replicate
+# `trajectory.tlog` per currently-reporting replicate
 # (`read_live_state`'s own docstring), a real, if usually small, cost
 # that grows with both replicate count and how far each has run.
 _BATCH_POLL_INTERVAL_SECONDS: Final = 0.5
@@ -518,7 +519,7 @@ def _replicate_pair_values(
         else:
             values["F_ST_PAIR"] = pair_value(payload, "F_ST_PAIR", first, second)
             return values
-    state = reanalyze_trajectory(replicate_directory / "trajectory.jsonl").state
+    state = reanalyze_trajectory(replicate_directory / TRAJECTORY_LOG_FILENAME).state
     return pair_statistic_values(state, first, second)
 
 
@@ -1431,7 +1432,7 @@ def _home_run_row(run: recent_runs.RecentRun, *, digits: int) -> dict[str, Any]:
         "directoryName": run.directory.name,
         "directory": str(run.directory),
         "trajectoryPath": (
-            None if run.is_batch else str(run.directory / "trajectory.jsonl")
+            None if run.is_batch else str(run.directory / TRAJECTORY_LOG_FILENAME)
         ),
         "endedAt": run.ended_at,
         "label": run.label,
@@ -4357,7 +4358,7 @@ class Api:
         it and reshaping each `RecentRun` into a JSON-ready dict.
         `trajectoryPath` is joined here, in Python (`pathlib.Path`'s
         own platform-correct separator), rather than the page
-        concatenating `directory` and `"trajectory.jsonl"` itself —
+        concatenating `directory` and `"trajectory.tlog"` itself —
         string-joining a path client-side would silently produce a
         mixed-separator path on Windows. `None` for a batch row: it has
         no single trajectory of its own to open.
@@ -4370,7 +4371,9 @@ class Api:
                 "directoryName": run.directory.name,
                 "directory": str(run.directory),
                 "trajectoryPath": (
-                    None if run.is_batch else str(run.directory / "trajectory.jsonl")
+                    None
+                    if run.is_batch
+                    else str(run.directory / TRAJECTORY_LOG_FILENAME)
                 ),
                 "endedAt": run.ended_at,
                 "label": run.label,
@@ -5370,7 +5373,9 @@ class Api:
             replicates.append(
                 {
                     "replicateId": replicate_run_id,
-                    "trajectoryPath": str(replicate_directory / "trajectory.jsonl"),
+                    "trajectoryPath": str(
+                        replicate_directory / TRAJECTORY_LOG_FILENAME
+                    ),
                     "statistics": statistics,
                 }
             )
@@ -5433,7 +5438,7 @@ class Api:
         Reached from the recent-runs picker (a run row, a batch row's
         own "Open…", or "Open replicate" on an expanded batch) — the
         exact same operation over one replicate's own
-        `trajectory.jsonl`. The
+        `trajectory.tlog`. The
         returned payload is deliberately shaped exactly like
         `_drain_run_messages`'s own `"done"` payload, so the caller can
         hand it straight to the already-built `window.fim.showResults`
@@ -5629,7 +5634,7 @@ class Api:
         `20260919-claude-sonnet-5-unified-batch-and-study-results-
         reopen-design.md` (`selby/restricted`), §1: every replicate's
         own final `state`/`report` is rediscovered fresh from its own
-        `trajectory.jsonl` (`reanalyze_trajectory`, the identical
+        `trajectory.tlog` (`reanalyze_trajectory`, the identical
         function `open_run`/`get_batch_deme_pair_panel` already use),
         never from a possibly-stale `report.json`/`summary.json` --
         this gets the identical tamper/corruption check a scalar reopen
@@ -5685,7 +5690,7 @@ class Api:
                 batch_runner.replicate_output_directory(
                     batch_directory, manifest.run_id, replicate_run_id
                 )
-                / "trajectory.jsonl"
+                / TRAJECTORY_LOG_FILENAME
             ).exists()
             for replicate_run_id in manifest.replicate_run_ids
         ):
@@ -5707,7 +5712,7 @@ class Api:
                 replicate_directory = batch_runner.replicate_output_directory(
                     batch_directory, manifest.run_id, replicate_run_id
                 )
-                trajectory_path = replicate_directory / "trajectory.jsonl"
+                trajectory_path = replicate_directory / TRAJECTORY_LOG_FILENAME
                 reanalyzed = reanalyze_trajectory(trajectory_path)
                 if first_replicate_manifest is None:
                     first_replicate_manifest = reanalyzed.manifest
@@ -5832,7 +5837,7 @@ class Api:
                         replicate_directory = batch_runner.replicate_output_directory(
                             directory, batch_manifest.run_id, replicate_run_id
                         )
-                        trajectory_path = replicate_directory / "trajectory.jsonl"
+                        trajectory_path = replicate_directory / TRAJECTORY_LOG_FILENAME
                         reanalyzed = reanalyze_trajectory(trajectory_path)
                         if first_manifest is None:
                             first_manifest = reanalyzed.manifest
@@ -5842,7 +5847,7 @@ class Api:
                         trajectory_paths.append(trajectory_path)
                         params_list.append(batch_params)
                 else:
-                    trajectory_path = directory / "trajectory.jsonl"
+                    trajectory_path = directory / TRAJECTORY_LOG_FILENAME
                     reanalyzed = reanalyze_trajectory(trajectory_path)
                     if first_manifest is None:
                         first_manifest = reanalyzed.manifest
@@ -5899,7 +5904,7 @@ class Api:
         animation screen's own frame sampler already computes.
 
         Args:
-            trajectory_paths: Two or more `trajectory.jsonl` paths,
+            trajectory_paths: Two or more `trajectory.tlog` paths,
                 typically `webui/screens/compare.js`'s own checked
                 rows from the recent-runs list.
 
@@ -6002,7 +6007,7 @@ class Api:
             manifest = read_manifest(directory / "manifest.json")
             params = manifest.params()
             frames = pre_render_frames(
-                directory / "trajectory.jsonl", params, manifest.run_id
+                directory / TRAJECTORY_LOG_FILENAME, params, manifest.run_id
             )
         except (OSError, ValueError, KeyError) as error:
             return {"ok": False, "message": str(error)}
@@ -6074,7 +6079,7 @@ class Api:
             manifest = read_manifest(directory / "manifest.json")
             params = manifest.params()
             frames = pre_render_frames(
-                directory / "trajectory.jsonl", params, manifest.run_id
+                directory / TRAJECTORY_LOG_FILENAME, params, manifest.run_id
             )
             panel_frames = [
                 {
@@ -6132,7 +6137,7 @@ class Api:
             deliberate self-comparison, not an error
             (`deme_pair_panel`'s own docstring).
         """
-        trajectory_path = Path(output_directory) / "trajectory.jsonl"
+        trajectory_path = Path(output_directory) / TRAJECTORY_LOG_FILENAME
         try:
             state = reanalyze_trajectory(trajectory_path).state
             panel = deme_pair_panel(
@@ -6176,7 +6181,7 @@ class Api:
             not an error (`deme_pair_panel`'s own docstring).
         """
         directory = Path(output_directory)
-        trajectory_paths = sorted(directory.glob("replicate-*/trajectory.jsonl"))
+        trajectory_paths = sorted(directory.glob("replicate-*/trajectory.tlog"))
         if not trajectory_paths:
             return {"ok": False, "message": f"no replicates found under {directory}"}
         try:
@@ -6235,7 +6240,7 @@ class Api:
                     batch_runner.replicate_output_directory(
                         directory, manifest.run_id, replicate_run_id
                     )
-                    / "trajectory.jsonl",
+                    / TRAJECTORY_LOG_FILENAME,
                 )
                 for replicate_run_id in manifest.replicate_run_ids
             ]
@@ -6772,8 +6777,8 @@ def _drain_run_messages(
                 # return payload carries the identical key for that
                 # second case. Every scalar run's own trajectory is
                 # always at this fixed path (`Api.list_home_runs`'s own
-                # established `directory / "trajectory.jsonl"` join).
-                "trajectoryPath": str(output_directory / "trajectory.jsonl"),
+                # established `directory / "trajectory.tlog"` join).
+                "trajectoryPath": str(output_directory / TRAJECTORY_LOG_FILENAME),
                 "generationCount": result.manifest.generation_count,
                 "demeCount": deme_count,
                 # The trajectory panel (botanist GUI design doc
@@ -6970,7 +6975,7 @@ def _push_batch_progress(
     the run's own early history was actually skipped, not shown.
     `initial_states` is the cross-tick cache that makes this cheap: read
     once per replicate (`read_live_state(..., generation=0, ...)`, safe
-    to call at any later generation too, since `trajectory.jsonl` is
+    to call at any later generation too, since `trajectory.tlog` is
     append-only and generation 0's own rows are never overwritten),
     never re-read on a later tick.
 
@@ -7005,7 +7010,7 @@ def _push_batch_progress(
         sidecar = read_progress_sidecar(directory / ".progress")
         if sidecar is None:
             continue
-        trajectory_path = directory / "trajectory.jsonl"
+        trajectory_path = directory / TRAJECTORY_LOG_FILENAME
         state = read_live_state(
             trajectory_path,
             replicate_run_id,
@@ -7187,7 +7192,7 @@ def _batch_done_payload(
             batch_runner.replicate_output_directory(
                 output_directory, run_id, result.run_id
             )
-            / "trajectory.jsonl"
+            / TRAJECTORY_LOG_FILENAME
             for result in results
         ],
         digits=digits,
@@ -7253,7 +7258,7 @@ def _rebuilt_pooled_histories(
     Args:
         replicate_ids: Each replicate's own run id, positionally
             matching `trajectory_paths` and `params_list`.
-        trajectory_paths: Each replicate's own `trajectory.jsonl`.
+        trajectory_paths: Each replicate's own `trajectory.tlog`.
         params_list: Each replicate's own validated parameters (a
             Study's members are separate runs, so these are read per
             replicate rather than shared).
@@ -8635,7 +8640,7 @@ def _report_only_run_payload(directory: Path, digits: int) -> dict[str, Any]:
     """Build `Api.open_run`'s result from a run's saved files, without a trajectory.
 
     Read-only examples design §4.3: a seeded example ships its
-    `manifest.json` and `report.json` but not `trajectory.jsonl`, so it
+    `manifest.json` and `report.json` but not `trajectory.tlog`, so it
     cannot be re-analyzed. The statistics panel and the messages come
     from the saved report; everything that needs the trajectory (the
     scatter, the curves, the scrubber, the deme-pair rows) is absent,
@@ -8726,7 +8731,7 @@ def _report_only_batch_payload(
             continue
         replicate_ids.append(replicate_run_id)
         reports.append(cast("FinalReport", report))
-        trajectory_paths.append(replicate_directory / "trajectory.jsonl")
+        trajectory_paths.append(replicate_directory / TRAJECTORY_LOG_FILENAME)
     payload = _pooled_batch_payload(
         params,
         manifest.run_id,

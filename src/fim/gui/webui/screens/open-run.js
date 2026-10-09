@@ -8,7 +8,7 @@
  * sonnet-5-home-enrichment-design.md`'s (`selby/restricted`) per-row
  * config summary and final statistics/outcome columns (`Api.list_home_
  * runs`, approach A1: reads each row's own already-computed `report.
- * json`/`summary.json`, never `trajectory.jsonl`, never re-derived)
+ * json`/`summary.json`, never `trajectory.tlog`, never re-derived)
  * show up identically whether this screen was reached via the rail or
  * via the File menu's own "Open run…" action.
  *
@@ -1788,7 +1788,7 @@ window.fim.openComputedRun = async function openComputedRun(directory, isBatch) 
     if (isBatch) {
         await openBatch(directory);
     } else {
-        await openTrajectory(`${directory}/trajectory.jsonl`);
+        await openTrajectory(`${directory}/trajectory.tlog`);
     }
 };
 

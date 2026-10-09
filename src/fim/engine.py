@@ -435,7 +435,7 @@ class RunResult:
             the ancestral phase's own counter, `0` through
             `manifest.equilibrium_generation_count`; the split demes'
             generation zero follows its last generation. Beside
-            `trajectory.jsonl` as `equilibrium_trajectory.jsonl` when
+            `trajectory.tlog` as `equilibrium_trajectory.tlog` when
             `store` is a file (`fim.persistence.store.
             equilibrium_store_for`). `None` for every other initial
             condition.
@@ -673,7 +673,7 @@ class ReplicaLane:
     lane` reads it to populate this lane's own manifest fields.
     `equilibrium_store` is set alongside it: where `_build_replica_lane`
     already streamed the ancestral phase's own trajectory (the
-    `equilibrium_trajectory.jsonl` artifact), handed on to
+    `equilibrium_trajectory.tlog` artifact), handed on to
     `RunResult.equilibrium_store`.
     """
 
@@ -3148,7 +3148,7 @@ def _generate_initial_state_with_outcome(
     ancestral generation is written, as it is
     simulated, to `store`'s ancestral-phase companion
     (`fim.persistence.store.equilibrium_store_for`; beside a JSONL
-    `trajectory.jsonl`, that is `equilibrium_trajectory.jsonl`), keyed
+    `trajectory.tlog`, that is `equilibrium_trajectory.tlog`), keyed
     by `run_id` and numbered by the ancestral phase's own counter. That
     companion is returned third, `None` when there was no ancestral
     phase. The dispatch condition below intentionally
@@ -4553,7 +4553,7 @@ def _run_dict_based_sigma_band_extension(
 
     Writes nothing to any `TrajectoryStore` and records nothing to any
     `ConvergenceMonitor`: the extension needs only each watched
-    statistic's own scalar value, so the run's own `trajectory.jsonl`/
+    statistic's own scalar value, so the run's own `trajectory.tlog`/
     `final_state`/`report.json` stay byte-for-byte what an otherwise
     identical run without a sigma band would have produced (decision 3).
 

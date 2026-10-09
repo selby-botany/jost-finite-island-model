@@ -1,11 +1,11 @@
 """`fim run` leaves no trajectory file open (the kept-open handle leak check).
 
-`JSONLTrajectoryStore` keeps its append handle open between generations,
-so every owner must release it before `fim.paths.atomic_directory` renames
-(or, on failure, removes) the run directory; an open handle blocks both on
-Windows. These tests run the real command in this process and assert,
-through `conftest.tracked_jsonl_stores`, that no store it built is still
-open afterwards.
+`BinaryLogStore` keeps its log file open (and a writer thread running)
+between generations, so every owner must close it before
+`fim.paths.atomic_directory` renames (or, on failure, removes) the run
+directory; an open file blocks both on Windows. These tests run the real
+command in this process and assert, through `conftest.tracked_log_stores`,
+that no store it built is still open afterwards.
 """
 
 from __future__ import annotations
@@ -17,10 +17,7 @@ import yaml
 from conftest import assert_none_open
 
 from fim import cli
-from fim.persistence.jsonl_store import (
-    EQUILIBRIUM_TRAJECTORY_FILENAME,
-    JSONLTrajectoryStore,
-)
+from fim.persistence.binary_store import EQUILIBRIUM_LOG_FILENAME, BinaryLogStore
 
 
 def _write_config(path: Path, **updates: object) -> None:
@@ -48,7 +45,7 @@ def _write_config(path: Path, **updates: object) -> None:
 
 
 def test_scalar_run_closes_its_trajectory_and_ancestral_handles(
-    tmp_path: Path, tracked_jsonl_stores: list[JSONLTrajectoryStore]
+    tmp_path: Path, tracked_log_stores: list[BinaryLogStore]
 ) -> None:
     """A scalar `fim run` closes both stores of an equilibrium-split run."""
     config = tmp_path / "run.yaml"
@@ -64,10 +61,10 @@ def test_scalar_run_closes_its_trajectory_and_ancestral_handles(
 
     assert status == 0
     # The main store and its ancestral-phase companion, both checked.
-    assert len(tracked_jsonl_stores) == 2
-    assert_none_open(tracked_jsonl_stores)
-    assert (output / "trajectory.jsonl").read_text().strip()
-    assert (output / EQUILIBRIUM_TRAJECTORY_FILENAME).read_text().strip()
+    assert len(tracked_log_stores) == 2
+    assert_none_open(tracked_log_stores)
+    assert (output / "trajectory.tlog").stat().st_size > 0
+    assert (output / EQUILIBRIUM_LOG_FILENAME).stat().st_size > 0
 
 
 @pytest.mark.parametrize(
@@ -79,7 +76,7 @@ def test_scalar_run_closes_its_trajectory_and_ancestral_handles(
 )
 def test_batch_run_closes_every_replicates_handles(
     tmp_path: Path,
-    tracked_jsonl_stores: list[JSONLTrajectoryStore],
+    tracked_log_stores: list[BinaryLogStore],
     backend: str,
     flags: list[str],
 ) -> None:
@@ -96,7 +93,7 @@ def test_batch_run_closes_every_replicates_handles(
     status = cli.main(["run", str(config), "-o", str(output), "--quiet", *flags])
 
     assert status == 0
-    assert len(tracked_jsonl_stores) == 3
-    assert_none_open(tracked_jsonl_stores)
+    assert len(tracked_log_stores) == 3
+    assert_none_open(tracked_log_stores)
     for replicate in ("replicate-001", "replicate-002", "replicate-003"):
-        assert (output / replicate / "trajectory.jsonl").read_text().strip()
+        assert (output / replicate / "trajectory.tlog").stat().st_size > 0
