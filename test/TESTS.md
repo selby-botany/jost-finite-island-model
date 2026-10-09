@@ -121,6 +121,7 @@ Every test module, fixture, and test function documented here in full; `doc/fim-
   - [`test_vector_kernels`](#model.test_vector_kernels)
   - [`test_vectorized`](#model.test_vectorized)
 - [`test/persistence/`](#group-persistence)
+  - [`test_frame`](#persistence.test_frame)
   - [`test_groups`](#persistence.test_groups)
   - [`test_jsonl_encoder`](#persistence.test_jsonl_encoder)
   - [`test_jsonl_lifecycle`](#persistence.test_jsonl_lifecycle)
@@ -28383,6 +28384,222 @@ Every deme's own frequencies sum to 1 after a full fused generation.
 <a id="group-persistence"></a>
 
 ## `test/persistence/`
+
+<a id="persistence.test_frame"></a>
+
+# persistence.test\_frame
+
+Tests for `fim.persistence.frame`: frames, layouts and row conversion.
+
+A frame is the flat-array spelling of one generation's rows, so the
+central property is that converting rows to a frame and back returns the
+same rows. The rest pin the pair numbering, the canonical order, and
+every refusal. Every case is seeded or fixed; none depends on timing.
+
+<a id="persistence.test_frame.test_layout_numbers_pairs_deme_major_then_locus_position"></a>
+
+#### test\_layout\_numbers\_pairs\_deme\_major\_then\_locus\_position
+
+```python
+def test_layout_numbers_pairs_deme_major_then_locus_position() -> None
+```
+
+Pair 0 is deme 1 locus 7; the locus order is the layout's, not sorted.
+
+<a id="persistence.test_frame.test_layout_refuses_a_pair_it_does_not_have"></a>
+
+#### test\_layout\_refuses\_a\_pair\_it\_does\_not\_have
+
+```python
+@pytest.mark.parametrize(
+    ("deme", "locus_id"),
+    [(0, 7), (3, 7), (1, 99)],
+)
+def test_layout_refuses_a_pair_it_does_not_have(deme: int,
+                                                locus_id: int) -> None
+```
+
+A deme outside `1..demes` or an unknown locus is an error.
+
+<a id="persistence.test_frame.test_layout_refuses_a_malformed_shape"></a>
+
+#### test\_layout\_refuses\_a\_malformed\_shape
+
+```python
+@pytest.mark.parametrize(
+    ("loci", "sizes", "message"),
+    [
+        ([], [10], "at least one locus"),
+        ([1], [], "at least one deme"),
+        ([1, 1], [10], "unique"),
+        ([1], [-1], "negative"),
+    ],
+)
+def test_layout_refuses_a_malformed_shape(loci: list[int], sizes: list[int],
+                                          message: str) -> None
+```
+
+Empty, repeated or negative layout parts are refused at construction.
+
+<a id="persistence.test_frame.test_rows_to_frame_and_back_returns_the_same_rows"></a>
+
+#### test\_rows\_to\_frame\_and\_back\_returns\_the\_same\_rows
+
+```python
+def test_rows_to_frame_and_back_returns_the_same_rows() -> None
+```
+
+Rows in pair order survive the round trip exactly, field order included.
+
+<a id="persistence.test_frame.test_rows_in_another_order_are_put_in_pair_order"></a>
+
+#### test\_rows\_in\_another\_order\_are\_put\_in\_pair\_order
+
+```python
+def test_rows_in_another_order_are_put_in_pair_order() -> None
+```
+
+The frame is canonical: pairs ascending, each pair keeps its given order.
+
+<a id="persistence.test_frame.test_rows_to_frame_infers_the_generation_from_the_rows"></a>
+
+#### test\_rows\_to\_frame\_infers\_the\_generation\_from\_the\_rows
+
+```python
+def test_rows_to_frame_infers_the_generation_from_the_rows() -> None
+```
+
+Without a `generation` argument the rows' own generation is used.
+
+<a id="persistence.test_frame.test_rows_of_two_generations_are_refused"></a>
+
+#### test\_rows\_of\_two\_generations\_are\_refused
+
+```python
+def test_rows_of_two_generations_are_refused() -> None
+```
+
+One frame is one generation.
+
+<a id="persistence.test_frame.test_rows_to_frame_refuses_an_empty_generation"></a>
+
+#### test\_rows\_to\_frame\_refuses\_an\_empty\_generation
+
+```python
+def test_rows_to_frame_refuses_an_empty_generation() -> None
+```
+
+A generation must hold at least one row.
+
+<a id="persistence.test_frame.test_rows_to_frame_checks_run_and_generation_when_asked"></a>
+
+#### test\_rows\_to\_frame\_checks\_run\_and\_generation\_when\_asked
+
+```python
+def test_rows_to_frame_checks_run_and_generation_when_asked() -> None
+```
+
+A row of another run or generation fails when the caller names them.
+
+<a id="persistence.test_frame.test_rows_to_frame_refuses_a_frequency_outside_the_unit_interval"></a>
+
+#### test\_rows\_to\_frame\_refuses\_a\_frequency\_outside\_the\_unit\_interval
+
+```python
+@pytest.mark.parametrize(
+    "frequency",
+    [0.0, -0.5, 1.5, float("nan"), float("inf")])
+def test_rows_to_frame_refuses_a_frequency_outside_the_unit_interval(
+        frequency: float) -> None
+```
+
+Validation keeps `(0, 1]` and finite, as every store does.
+
+<a id="persistence.test_frame.test_validate_false_trusts_the_rows"></a>
+
+#### test\_validate\_false\_trusts\_the\_rows
+
+```python
+def test_validate_false_trusts_the_rows() -> None
+```
+
+The engine's own rows skip the per-row checks (and still convert).
+
+<a id="persistence.test_frame.test_layout_infer_reads_demes_and_loci_from_rows"></a>
+
+#### test\_layout\_infer\_reads\_demes\_and\_loci\_from\_rows
+
+```python
+def test_layout_infer_reads_demes_and_loci_from_rows() -> None
+```
+
+Without a layout the demes are `1..max` and loci keep first appearance.
+
+<a id="persistence.test_frame.test_validate_frame_refuses_an_inconsistent_frame"></a>
+
+#### test\_validate\_frame\_refuses\_an\_inconsistent\_frame
+
+```python
+@pytest.mark.parametrize(
+    ("changes", "message"),
+    [
+        ({
+            "generation": -1
+        }, "generation"),
+        ({
+            "counts": np.array([2, 1, 1], dtype=np.int32)
+        }, "counts"),
+        ({
+            "counts": np.array([2, 1, 1, 3], dtype=np.int32)
+        }, "sum"),
+        ({
+            "counts": np.array([-1, 1, 1, 5], dtype=np.int32)
+        }, "non-negative"),
+        ({
+            "allele_ids": np.array([1, 2, 5, 2, 5], dtype=np.int64)
+        }, "same length"),
+        ({
+            "allele_ids": np.array([-1, 2, 5, 2, 5, 9], dtype=np.int64)
+        }, "negative"),
+        ({
+            "frequencies": np.array([0.25, 0.75, 1.0, 1.0, 0.5, 0.0])
+        }, r"\(0, 1\]"),
+        (
+            {
+                "counts": np.zeros(4, dtype=np.int32),
+                "allele_ids": np.zeros(0, dtype=np.int64),
+                "frequencies": np.zeros(0),
+            },
+            "at least one row",
+        ),
+    ],
+)
+def test_validate_frame_refuses_an_inconsistent_frame(changes: dict[str,
+                                                                    object],
+                                                      message: str) -> None
+```
+
+Every way a frame can disagree with itself or its layout is reported.
+
+<a id="persistence.test_frame.test_frame_to_rows_refuses_an_empty_run_id"></a>
+
+#### test\_frame\_to\_rows\_refuses\_an\_empty\_run\_id
+
+```python
+def test_frame_to_rows_refuses_an_empty_run_id() -> None
+```
+
+Rows need a run identity.
+
+<a id="persistence.test_frame.test_a_real_initial_state_survives_the_round_trip"></a>
+
+#### test\_a\_real\_initial\_state\_survives\_the\_round\_trip
+
+```python
+def test_a_real_initial_state_survives_the_round_trip() -> None
+```
+
+Frames carry a generated generation zero exactly, ids and float bits.
 
 <a id="persistence.test_groups"></a>
 

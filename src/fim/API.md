@@ -557,6 +557,21 @@ Return to the [source-tree orientation](../README.md) or the [developer guide](.
   * [studies\_directory](#fim.paths.studies_directory)
   * [experiments\_directory](#fim.paths.experiments_directory)
 * [fim.persistence](#fim.persistence)
+* [fim.persistence.frame](#fim.persistence.frame)
+  * [UNKNOWN\_DEME\_SIZE](#fim.persistence.frame.UNKNOWN_DEME_SIZE)
+  * [FrameLayout](#fim.persistence.frame.FrameLayout)
+    * [\_\_post\_init\_\_](#fim.persistence.frame.FrameLayout.__post_init__)
+    * [demes](#fim.persistence.frame.FrameLayout.demes)
+    * [loci](#fim.persistence.frame.FrameLayout.loci)
+    * [pairs](#fim.persistence.frame.FrameLayout.pairs)
+    * [pair\_index](#fim.persistence.frame.FrameLayout.pair_index)
+    * [infer](#fim.persistence.frame.FrameLayout.infer)
+  * [TrajectoryFrame](#fim.persistence.frame.TrajectoryFrame)
+    * [rows](#fim.persistence.frame.TrajectoryFrame.rows)
+  * [frame\_to\_rows](#fim.persistence.frame.frame_to_rows)
+  * [rows\_to\_frame](#fim.persistence.frame.rows_to_frame)
+  * [validate\_frame](#fim.persistence.frame.validate_frame)
+  * [layout\_for\_sizes](#fim.persistence.frame.layout_for_sizes)
 * [fim.persistence.groups](#fim.persistence.groups)
   * [ReadOnlyError](#fim.persistence.groups.ReadOnlyError)
   * [is\_run\_read\_only](#fim.persistence.groups.is_run_read_only)
@@ -16535,6 +16550,316 @@ writing other JSON result files (`report.json`, a batch's own
 the manifest — not itself re-exported here, since it is used directly
 by `fim.engine` and `fim.cli` rather than through this package's own
 top-level API.
+
+<a id="fim.persistence.frame"></a>
+
+# fim.persistence.frame
+
+Compact per-generation frames: the form a trajectory takes between engine and disk.
+
+A trajectory row names one allele frequency; a generation holds thousands
+of them, and building one Python dictionary per row costs far more than
+the simulation that produced them. A `TrajectoryFrame` carries the same
+information as flat arrays, in the compressed-sparse-row layout:
+
+- a *pair* is one (deme, locus) combination, numbered
+  `pair = deme_index * loci + locus_index` (both zero-based, demes in
+  order, loci in the order of the run's own locus list);
+- `counts[pair]` is how many alleles that pair has at a nonzero
+  frequency;
+- `allele_ids` and `frequencies` hold every pair's alleles one after
+  another, pair 0 first, so a pair's entries start at the running sum of
+  the counts before it.
+
+That is exactly the order `ModelState.to_rows` and `VectorBlock.rows`
+produce, so a frame and a generation's rows are two spellings of one
+thing, and `frame_to_rows(rows_to_frame(rows))` returns the same rows.
+
+A `FrameLayout` says which pair is which: the locus identifiers, and the
+gene-copy count of every deme. The gene-copy counts let the binary log
+store a frequency as an integer count (`count / size`); a size of `0`
+means "unknown", and every frequency of that deme is then stored as the
+raw float, which is larger but still exact.
+
+<a id="fim.persistence.frame.UNKNOWN_DEME_SIZE"></a>
+
+#### UNKNOWN\_DEME\_SIZE
+
+A deme size of `0` means the gene-copy count is not known.
+
+<a id="fim.persistence.frame.FrameLayout"></a>
+
+## FrameLayout Objects
+
+```python
+@dataclass(frozen=True, slots=True)
+class FrameLayout()
+```
+
+Which (deme, locus) pair each position of a frame means.
+
+**Arguments**:
+
+- `locus_ids` - The locus identifiers in the order of the run's locus
+  list (one-based identifiers, as in a trajectory row).
+- `deme_sizes` - Gene copies per deme, demes in order; `0` for a deme
+  whose size is not known.
+
+<a id="fim.persistence.frame.FrameLayout.__post_init__"></a>
+
+#### \_\_post\_init\_\_
+
+```python
+def __post_init__() -> None
+```
+
+Check the layout and build the locus lookup.
+
+**Raises**:
+
+- `ValueError` - If there are no loci or demes, an identifier
+  repeats, or a size is negative.
+
+<a id="fim.persistence.frame.FrameLayout.demes"></a>
+
+#### demes
+
+```python
+@property
+def demes() -> int
+```
+
+The number of demes.
+
+<a id="fim.persistence.frame.FrameLayout.loci"></a>
+
+#### loci
+
+```python
+@property
+def loci() -> int
+```
+
+The number of loci.
+
+<a id="fim.persistence.frame.FrameLayout.pairs"></a>
+
+#### pairs
+
+```python
+@property
+def pairs() -> int
+```
+
+The number of (deme, locus) pairs, the length of `counts`.
+
+<a id="fim.persistence.frame.FrameLayout.pair_index"></a>
+
+#### pair\_index
+
+```python
+def pair_index(deme: int, locus_id: int) -> int
+```
+
+Return the pair number of a one-based deme and a locus identifier.
+
+**Arguments**:
+
+- `deme` - One-based deme number, as in a trajectory row.
+- `locus_id` - Locus identifier, as in a trajectory row.
+
+
+**Returns**:
+
+  The zero-based pair number.
+
+
+**Raises**:
+
+- `ValueError` - If the deme or the locus is not in the layout.
+
+<a id="fim.persistence.frame.FrameLayout.infer"></a>
+
+#### infer
+
+```python
+@classmethod
+def infer(cls, rows: Iterable[Mapping[str, Any]]) -> FrameLayout
+```
+
+Infer a layout from one generation's rows, with unknown deme sizes.
+
+For a caller that writes rows without telling the store the run's
+shape. The demes are `1..max(deme)` and the loci are the
+identifiers seen, in order of first appearance.
+
+**Arguments**:
+
+- `rows` - One generation's rows.
+
+
+**Returns**:
+
+  A layout whose deme sizes are all `UNKNOWN_DEME_SIZE`.
+
+
+**Raises**:
+
+- `ValueError` - If `rows` is empty.
+
+<a id="fim.persistence.frame.TrajectoryFrame"></a>
+
+## TrajectoryFrame Objects
+
+```python
+@dataclass(frozen=True, slots=True)
+class TrajectoryFrame()
+```
+
+One generation of a trajectory as flat arrays.
+
+**Arguments**:
+
+- `generation` - The generation number.
+- `counts` - `int32[pairs]`, alleles per (deme, locus) pair.
+- `allele_ids` - `int64[entries]`, every pair's allele identifiers,
+  pair 0 first.
+- `frequencies` - `float64[entries]`, the matching frequencies.
+
+  The arrays are not copied or validated here; a frame is a cheap view
+  of what a backend already holds, and `validate_frame` checks one that
+  came from outside.
+
+<a id="fim.persistence.frame.TrajectoryFrame.rows"></a>
+
+#### rows
+
+```python
+@property
+def rows() -> int
+```
+
+The number of rows this frame stands for.
+
+<a id="fim.persistence.frame.frame_to_rows"></a>
+
+#### frame\_to\_rows
+
+```python
+def frame_to_rows(frame: TrajectoryFrame,
+                  layout: FrameLayout,
+                  run_id: str,
+                  *,
+                  validate: bool = True) -> list[TrajectoryRow]
+```
+
+Return the trajectory rows a frame stands for, in pair order.
+
+**Arguments**:
+
+- `frame` - The frame.
+- `layout` - Its layout.
+- `run_id` - The run the rows belong to.
+- `validate` - Whether to check the frame first (`validate_frame`). A
+  frame a backend just built passes `False`.
+
+
+**Returns**:
+
+  One row per entry, deme-major then locus then the frame's own
+  allele order, with the field order `ModelState.to_rows` uses.
+
+
+**Raises**:
+
+- `ValueError` - If `run_id` is empty or the frame does not fit the
+  layout.
+
+<a id="fim.persistence.frame.rows_to_frame"></a>
+
+#### rows\_to\_frame
+
+```python
+def rows_to_frame(rows: Iterable[Mapping[str, Any]],
+                  layout: FrameLayout,
+                  *,
+                  run_id: str | None = None,
+                  generation: int | None = None,
+                  validate: bool = True) -> TrajectoryFrame
+```
+
+Build the frame of one generation's rows.
+
+Rows already in pair order (what the engine produces) keep their
+order. Rows in any other order are put in pair order, each pair
+keeping its own entries in the order given, so the frame is always
+canonical.
+
+**Arguments**:
+
+- `rows` - One generation's rows.
+- `layout` - The run's layout.
+- `run_id` - When given, every row must carry it.
+- `generation` - When given, every row must carry it; otherwise the
+  rows' own (single) generation is used.
+- `validate` - Whether to run each row through `normalize_row`. The
+  engine's own rows are well formed by construction and pass
+  `False`.
+
+
+**Returns**:
+
+  The frame.
+
+
+**Raises**:
+
+- `ValueError` - If `rows` is empty, a row is malformed or belongs to
+  another run or generation, a pair is not in the layout, or a
+  frequency is not in `(0, 1]`.
+
+<a id="fim.persistence.frame.validate_frame"></a>
+
+#### validate\_frame
+
+```python
+def validate_frame(frame: TrajectoryFrame, layout: FrameLayout) -> None
+```
+
+Check that a frame is consistent and fits a layout.
+
+**Arguments**:
+
+- `frame` - The frame.
+- `layout` - The layout it should fit.
+
+
+**Raises**:
+
+- `ValueError` - If the arrays have the wrong shape or type, the counts
+  do not add up to the number of entries, a count is negative, an
+  identifier is negative, or a frequency is outside `(0, 1]`.
+
+<a id="fim.persistence.frame.layout_for_sizes"></a>
+
+#### layout\_for\_sizes
+
+```python
+def layout_for_sizes(locus_ids: Sequence[int],
+                     deme_sizes: Sequence[int]) -> FrameLayout
+```
+
+Build a layout from plain sequences.
+
+**Arguments**:
+
+- `locus_ids` - Locus identifiers in order.
+- `deme_sizes` - Gene copies per deme in order.
+
+
+**Returns**:
+
+  The layout.
 
 <a id="fim.persistence.groups"></a>
 
