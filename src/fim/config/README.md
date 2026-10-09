@@ -8,7 +8,7 @@ value, the reason for it and its kind in one place. Code imports from
 and engine modules for any module-level numeric constant outside this
 package and fails on one that is not on its short allow list.
 
-## The three kinds
+## The four kinds
 
 - **Derivable.** Follows from mathematics, from IEEE double precision, or
   from other settings. Named and documented, never adjustable: changing it
@@ -16,6 +16,8 @@ package and fails on one that is not on its short allow list.
 - **Numerical guard.** A threshold that keeps a computation finite and well
   conditioned. Derivable in principle from double precision; an internal
   constant, not a setting.
+- **Convention.** Fixed by a published convention (Geweke's 10% and 50%
+  segments). Named and documented, not adjustable.
 - **Policy.** A choice a careful person could make differently. Documented
   with its evidence, and a regular setting or an Expert Setting.
 
@@ -40,6 +42,9 @@ package and fails on one that is not on its short allow list.
 | `ABSOLUTE_MAX_GENERATIONS` | `convergence.py` | policy (safety) | Ceiling on a derived cap, so a nearly isolated system stays finite. |
 | `NOISE_TOLERANCE_FRACTION` | `convergence.py` | policy | A window's own trailing-window mean is only judged noise-adequate once its standard error is at most this ... |
 | `MINIMUM_NOISE_CHECK_WINDOW` | `convergence.py` | policy | Below this many values, a lag-1 correlation estimate is too noisy itself to trust (a handful of points can ... |
+| `GEWEKE_FIRST_FRACTION` | `convergence.py` | convention | Share of an evidence window, from its start, that Geweke's `z` compares. |
+| `GEWEKE_LAST_FRACTION` | `convergence.py` | convention | Share of an evidence window, from its end, that Geweke's `z` compares. |
+| `START_DRIFT_ALERT_Z` | `convergence.py` | policy | Absolute Geweke `z` above which the report says the burn-in may be too short. |
 | `MAXIMUM_RECURSION_DEMES` | `limits.py` | policy (run time) | Largest `d` for which the `d² by d²` eigenvalue route is used. |
 | `MAXIMUM_LAG1_CORRELATION` | `numerics.py` | numerical guard | A lag-1 correlation this close to 1 makes `tau_int` (below) blow up numerically for a reason that is ... |
 | `MINIMUM_WINDOW_VALUES` | `numerics.py` | derivable | `window_statistics` needs at least this many values to define a lag-1 correlation at all (two ... |

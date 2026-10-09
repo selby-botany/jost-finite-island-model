@@ -5950,6 +5950,82 @@ starts. The true spread of the mean over all 1000 phases is computed
 exactly from the noise-free wave, and the Geyer standard error at every
 tested phase is at least that.
 
+<a id="convergence.test_window_statistics.test_geweke_z_is_zero_for_a_constant_window"></a>
+
+#### test\_geweke\_z\_is\_zero\_for\_a\_constant\_window
+
+```python
+def test_geweke_z_is_zero_for_a_constant_window() -> None
+```
+
+Nothing differs between the start and the end of a flat window.
+
+<a id="convergence.test_window_statistics.test_geweke_z_of_a_constant_step_is_infinite_with_the_sign_of_the_gap"></a>
+
+#### test\_geweke\_z\_of\_a\_constant\_step\_is\_infinite\_with\_the\_sign\_of\_the\_gap
+
+```python
+def test_geweke_z_of_a_constant_step_is_infinite_with_the_sign_of_the_gap(
+) -> None
+```
+
+Both segments exactly known but different: `z` is `-inf` (start below end).
+
+<a id="convergence.test_window_statistics.test_geweke_z_matches_the_hand_value_on_two_known_segments"></a>
+
+#### test\_geweke\_z\_matches\_the\_hand\_value\_on\_two\_known\_segments
+
+```python
+def test_geweke_z_matches_the_hand_value_on_two_known_segments() -> None
+```
+
+Hand-worked: `1..4` against `5..8`, each half of an 8-value window.
+
+Each segment has standard error `sqrt(0.625)` (see the `1, 2, 3, 4` case
+above) and the means are `2.5` and `6.5`, so `z = -4 / sqrt(1.25)`.
+
+<a id="convergence.test_window_statistics.test_geweke_z_uses_the_first_tenth_and_the_last_half_by_default"></a>
+
+#### test\_geweke\_z\_uses\_the\_first\_tenth\_and\_the\_last\_half\_by\_default
+
+```python
+def test_geweke_z_uses_the_first_tenth_and_the_last_half_by_default() -> None
+```
+
+The default segments are exactly the slices `Geweke (1992)` names.
+
+<a id="convergence.test_window_statistics.test_geweke_z_flags_a_start_that_has_not_settled"></a>
+
+#### test\_geweke\_z\_flags\_a\_start\_that\_has\_not\_settled
+
+```python
+def test_geweke_z_flags_a_start_that_has_not_settled() -> None
+```
+
+A decaying transient inside the window gives a large positive `z`.
+
+<a id="convergence.test_window_statistics.test_geweke_z_refuses_a_fraction_outside_zero_to_one"></a>
+
+#### test\_geweke\_z\_refuses\_a\_fraction\_outside\_zero\_to\_one
+
+```python
+@pytest.mark.parametrize("fraction", [0.0, -0.1, 1.5])
+def test_geweke_z_refuses_a_fraction_outside_zero_to_one(
+        fraction: float) -> None
+```
+
+A fraction must be in `(0, 1]`.
+
+<a id="convergence.test_window_statistics.test_geweke_z_refuses_a_window_too_short_for_its_segments"></a>
+
+#### test\_geweke\_z\_refuses\_a\_window\_too\_short\_for\_its\_segments
+
+```python
+def test_geweke_z_refuses_a_window_too_short_for_its_segments() -> None
+```
+
+Ten values leave a one-value first segment, too few for an autocorrelation.
+
 
 
 <a id="group-engine"></a>

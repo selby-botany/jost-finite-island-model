@@ -42,7 +42,11 @@ from dataclasses import dataclass
 
 import numpy as np
 
-from fim.config.convergence import NOISE_TOLERANCE_FRACTION
+from fim.config.convergence import (
+    GEWEKE_FIRST_FRACTION,
+    GEWEKE_LAST_FRACTION,
+    NOISE_TOLERANCE_FRACTION,
+)
 from fim.config.numerics import MAXIMUM_LAG1_CORRELATION, MINIMUM_WINDOW_VALUES
 
 
@@ -238,3 +242,54 @@ def geyer_window_statistics(values: Sequence[float]) -> WindowStatistics:
         lag1_autocorrelation=max(-1.0, min(float(correlation[1]), 1.0)),
         window=count,
     )
+
+
+def geweke_z(
+    values: Sequence[float],
+    *,
+    first_fraction: float = GEWEKE_FIRST_FRACTION,
+    last_fraction: float = GEWEKE_LAST_FRACTION,
+) -> float:
+    """Return Geweke's (1992) `z` for the start of a window against its end.
+
+    The mean of the first `first_fraction` of the window is compared with the
+    mean of the last `last_fraction`, in units of their combined standard
+    error (each from `geyer_window_statistics`, so each is corrected for its
+    own autocorrelation). If the averaging window began before the
+    population had forgotten its starting state, the start differs from the
+    end and `|z|` is large. The report carries it as a diagnostic; it does not
+    stop or continue a run (design 6.5).
+
+    Args:
+        values: The window's per-generation values, in order.
+        first_fraction: Share of the window, from its start, to compare.
+        last_fraction: Share of the window, from its end, to compare.
+
+    Returns:
+        `(mean_start - mean_end) / sqrt(se_start**2 + se_end**2)`. Zero when
+        the means are equal and both segments are exactly known; infinite,
+        with the sign of the difference, when the means differ and both are
+        exactly known.
+
+    Raises:
+        ValueError: If a fraction is not in `(0, 1]`, or a segment would hold
+            fewer than `MINIMUM_WINDOW_VALUES` values.
+    """
+    for name, fraction in (("first", first_fraction), ("last", last_fraction)):
+        if not 0.0 < fraction <= 1.0:
+            raise ValueError(f"{name}_fraction must be in (0, 1]")
+    count = len(values)
+    first_count = int(count * first_fraction)
+    last_count = int(count * last_fraction)
+    if min(first_count, last_count) < MINIMUM_WINDOW_VALUES:
+        raise ValueError(
+            f"a window of {count} values is too short for Geweke's z: each "
+            f"segment needs at least {MINIMUM_WINDOW_VALUES} values"
+        )
+    start = geyer_window_statistics(values[:first_count])
+    end = geyer_window_statistics(values[count - last_count :])
+    difference = start.mean - end.mean
+    spread = math.hypot(start.standard_error, end.standard_error)
+    if spread == 0.0:
+        return 0.0 if difference == 0.0 else math.copysign(math.inf, difference)
+    return difference / spread

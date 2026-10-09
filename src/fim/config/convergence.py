@@ -106,3 +106,25 @@ the trend-only check's own original behavior for a short window.
 
 Kind: policy.
 """
+
+GEWEKE_FIRST_FRACTION: Final = 0.1
+"""Share of an evidence window, from its start, that Geweke's `z` compares.
+
+Kind: convention (Geweke 1992: the first 10% against the last 50%).
+"""
+
+GEWEKE_LAST_FRACTION: Final = 0.5
+"""Share of an evidence window, from its end, that Geweke's `z` compares.
+
+Kind: convention (Geweke 1992: the first 10% against the last 50%).
+"""
+
+START_DRIFT_ALERT_Z: Final = 3.0
+"""Absolute Geweke `z` above which the report says the burn-in may be too short.
+
+The design measured the diagnostic as a stopping guard and found it blocked 5
+to 11 of 138 to 179 stationary stops (false alarms) without lowering the miss
+rate, so it only labels the result (design 6.5).
+
+Kind: policy.
+"""

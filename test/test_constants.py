@@ -19,7 +19,7 @@ import pytest
 
 SOURCE = Path(__file__).resolve().parent.parent / "src" / "fim"
 CONFIG = SOURCE / "config"
-KINDS = ("derivable", "numerical guard", "policy")
+KINDS = ("derivable", "numerical guard", "convention", "policy")
 
 SCANNED = (
     *sorted((SOURCE / "convergence").glob("*.py")),

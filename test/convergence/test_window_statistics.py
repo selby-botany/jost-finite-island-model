@@ -12,6 +12,7 @@ import pytest
 from fim.config.convergence import MINIMUM_NOISE_CHECK_WINDOW, NOISE_TOLERANCE_FRACTION
 from fim.convergence.window_statistics import (
     WindowStatistics,
+    geweke_z,
     geyer_window_statistics,
     window_statistics,
 )
@@ -271,3 +272,58 @@ def test_geyer_standard_error_covers_the_spread_of_a_slow_square_wave(
     for phase in range(0, period, 125):
         series = wave(phase) + noise.normal(0.0, 0.2, length)
         assert geyer_window_statistics(series.tolist()).standard_error >= true_spread
+
+
+def test_geweke_z_is_zero_for_a_constant_window() -> None:
+    """Nothing differs between the start and the end of a flat window."""
+    assert geweke_z([0.3] * 60) == 0.0
+
+
+def test_geweke_z_of_a_constant_step_is_infinite_with_the_sign_of_the_gap() -> None:
+    """Both segments exactly known but different: `z` is `-inf` (start below end)."""
+    assert geweke_z([0.0] * 10 + [1.0] * 90) == -math.inf
+    assert geweke_z([1.0] * 10 + [0.0] * 90) == math.inf
+
+
+def test_geweke_z_matches_the_hand_value_on_two_known_segments() -> None:
+    """Hand-worked: `1..4` against `5..8`, each half of an 8-value window.
+
+    Each segment has standard error `sqrt(0.625)` (see the `1, 2, 3, 4` case
+    above) and the means are `2.5` and `6.5`, so `z = -4 / sqrt(1.25)`.
+    """
+    z = geweke_z([1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0], first_fraction=0.5)
+    assert z == pytest.approx(-4.0 / math.sqrt(1.25))
+
+
+def test_geweke_z_uses_the_first_tenth_and_the_last_half_by_default() -> None:
+    """The default segments are exactly the slices `Geweke (1992)` names."""
+    series = _ar1_series(phi=0.8, sigma=0.1, length=200, seed=3)
+    start = geyer_window_statistics(series[:20])
+    end = geyer_window_statistics(series[100:])
+    expected = (start.mean - end.mean) / math.hypot(
+        start.standard_error, end.standard_error
+    )
+    assert geweke_z(series) == pytest.approx(expected, rel=1e-12)
+
+
+def test_geweke_z_flags_a_start_that_has_not_settled() -> None:
+    """A decaying transient inside the window gives a large positive `z`."""
+    noise = _ar1_series(phi=0.5, sigma=0.05, length=400, seed=9, mean=0.0)
+    window = [
+        value + 2.0 * math.exp(-index / 40.0) for index, value in enumerate(noise)
+    ]
+    assert geweke_z(window) > 3.0
+    assert abs(geweke_z(noise)) < 3.0
+
+
+@pytest.mark.parametrize("fraction", [0.0, -0.1, 1.5])
+def test_geweke_z_refuses_a_fraction_outside_zero_to_one(fraction: float) -> None:
+    """A fraction must be in `(0, 1]`."""
+    with pytest.raises(ValueError, match="fraction"):
+        geweke_z([0.5] * 100, first_fraction=fraction)
+
+
+def test_geweke_z_refuses_a_window_too_short_for_its_segments() -> None:
+    """Ten values leave a one-value first segment, too few for an autocorrelation."""
+    with pytest.raises(ValueError, match="too short"):
+        geweke_z([0.5] * 10)

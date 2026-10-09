@@ -22,6 +22,9 @@ Return to the [source-tree orientation](../README.md) or the [developer guide](.
   * [ABSOLUTE\_MAX\_GENERATIONS](#fim.config.convergence.ABSOLUTE_MAX_GENERATIONS)
   * [NOISE\_TOLERANCE\_FRACTION](#fim.config.convergence.NOISE_TOLERANCE_FRACTION)
   * [MINIMUM\_NOISE\_CHECK\_WINDOW](#fim.config.convergence.MINIMUM_NOISE_CHECK_WINDOW)
+  * [GEWEKE\_FIRST\_FRACTION](#fim.config.convergence.GEWEKE_FIRST_FRACTION)
+  * [GEWEKE\_LAST\_FRACTION](#fim.config.convergence.GEWEKE_LAST_FRACTION)
+  * [START\_DRIFT\_ALERT\_Z](#fim.config.convergence.START_DRIFT_ALERT_Z)
 * [fim.config.defaults](#fim.config.defaults)
   * [DEFAULT\_LOCUS\_LENGTH](#fim.config.defaults.DEFAULT_LOCUS_LENGTH)
   * [DEFAULT\_AUTO\_VECTOR\_MIN\_D](#fim.config.defaults.DEFAULT_AUTO_VECTOR_MIN_D)
@@ -95,6 +98,7 @@ Return to the [source-tree orientation](../README.md) or the [developer guide](.
     * [noise\_adequate](#fim.convergence.window_statistics.WindowStatistics.noise_adequate)
   * [window\_statistics](#fim.convergence.window_statistics.window_statistics)
   * [geyer\_window\_statistics](#fim.convergence.window_statistics.geyer_window_statistics)
+  * [geweke\_z](#fim.convergence.window_statistics.geweke_z)
 * [fim.engine](#fim.engine)
   * [FinalReport](#fim.engine.FinalReport)
   * [RunResult](#fim.engine.RunResult)
@@ -1371,6 +1375,34 @@ trust (a handful of points can look arbitrarily correlated or
 anticorrelated by chance) — `fim.convergence.monitor.ConvergenceMonitor`
 skips the noise-adequacy gate entirely under this window length, matching
 the trend-only check's own original behavior for a short window.
+
+Kind: policy.
+
+<a id="fim.config.convergence.GEWEKE_FIRST_FRACTION"></a>
+
+#### GEWEKE\_FIRST\_FRACTION
+
+Share of an evidence window, from its start, that Geweke's `z` compares.
+
+Kind: convention (Geweke 1992: the first 10% against the last 50%).
+
+<a id="fim.config.convergence.GEWEKE_LAST_FRACTION"></a>
+
+#### GEWEKE\_LAST\_FRACTION
+
+Share of an evidence window, from its end, that Geweke's `z` compares.
+
+Kind: convention (Geweke 1992: the first 10% against the last 50%).
+
+<a id="fim.config.convergence.START_DRIFT_ALERT_Z"></a>
+
+#### START\_DRIFT\_ALERT\_Z
+
+Absolute Geweke `z` above which the report says the burn-in may be too short.
+
+The design measured the diagnostic as a stopping guard and found it blocked 5
+to 11 of 138 to 179 stationary stops (false alarms) without lowering the miss
+rate, so it only labels the result (design 6.5).
 
 Kind: policy.
 
@@ -3003,6 +3035,47 @@ window of `L` values costs `O(L log L)`.
 **Raises**:
 
 - `ValueError` - If `values` has fewer than `MINIMUM_WINDOW_VALUES` entries.
+
+<a id="fim.convergence.window_statistics.geweke_z"></a>
+
+#### geweke\_z
+
+```python
+def geweke_z(values: Sequence[float],
+             *,
+             first_fraction: float = GEWEKE_FIRST_FRACTION,
+             last_fraction: float = GEWEKE_LAST_FRACTION) -> float
+```
+
+Return Geweke's (1992) `z` for the start of a window against its end.
+
+The mean of the first `first_fraction` of the window is compared with the
+mean of the last `last_fraction`, in units of their combined standard
+error (each from `geyer_window_statistics`, so each is corrected for its
+own autocorrelation). If the averaging window began before the
+population had forgotten its starting state, the start differs from the
+end and `|z|` is large. The report carries it as a diagnostic; it does not
+stop or continue a run (design 6.5).
+
+**Arguments**:
+
+- `values` - The window's per-generation values, in order.
+- `first_fraction` - Share of the window, from its start, to compare.
+- `last_fraction` - Share of the window, from its end, to compare.
+
+
+**Returns**:
+
+  `(mean_start - mean_end) / sqrt(se_start**2 + se_end**2)`. Zero when
+  the means are equal and both segments are exactly known; infinite,
+  with the sign of the difference, when the means differ and both are
+  exactly known.
+
+
+**Raises**:
+
+- `ValueError` - If a fraction is not in `(0, 1]`, or a segment would hold
+  fewer than `MINIMUM_WINDOW_VALUES` values.
 
 <a id="fim.engine"></a>
 
