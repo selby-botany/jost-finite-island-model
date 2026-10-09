@@ -288,22 +288,26 @@ def test_sync_runs_when_its_period_has_passed_and_at_flush_and_close(
     for frame in frames[:6]:
         writer.submit(frame)
         clock.now += 1.0
-    # Blocks 1..5 are written as generations 1..5 arrive; the clock reads
-    # 2.0 after generation 1's block, so the first sync follows the write at
-    # the start of generation 3's submit (clock 3.0 - last sync 0.0 >= 2.0).
+    # One generation per block, and a block is written as soon as it is full,
+    # so generation i is written when the clock reads i. The sync period is
+    # 2 s, so the first sync follows the write at clock 2.0, the next the
+    # write at clock 4.0 (4.0 - 2.0 >= 2.0).
     assert events == [
-        "write",  # generation 0 (written when generation 1 arrives, clock 1.0)
-        "write",  # generation 1 (clock 2.0): 2.0 - 0.0 >= 2.0
+        "write",  # generation 0, clock 0.0
+        "write",  # generation 1, clock 1.0: 1.0 - 0.0 < 2.0
+        "write",  # generation 2, clock 2.0: 2.0 - 0.0 >= 2.0
         "sync:full",
-        "write",  # generation 2 (clock 3.0)
-        "write",  # generation 3 (clock 4.0): 4.0 - 2.0 >= 2.0
+        "write",  # generation 3, clock 3.0
+        "write",  # generation 4, clock 4.0: 4.0 - 2.0 >= 2.0
         "sync:full",
-        "write",  # generation 4 (clock 5.0)
+        "write",  # generation 5, clock 5.0
     ]
+    # A flush that asks for durability syncs what is not yet durable.
     writer.flush(sync=True)
-    assert events[-2:] == ["write", "sync:full"]
+    assert events[-1] == "sync:full"
     assert writer.synced_generation == 5
     writer.submit(frames[6])
+    assert events[-1] == "write"
     writer.close()
     assert events[-2:] == ["write", "sync:full"]
     assert writer.stats.syncs == 4

@@ -72,8 +72,15 @@ CRC_SIZE: Final = _CRC.size
 DEFAULT_BLOCK_GENERATIONS: Final = 512
 """Generations after which the open block is sealed and written."""
 
-DEFAULT_BLOCK_SECONDS: Final = 2.0
-"""Seconds after which the open block is sealed and written, whichever first."""
+DEFAULT_BLOCK_SECONDS: Final[float | None] = None
+"""Seconds after which the open block is sealed and written; `None` for never.
+
+Off by default because sealing on time makes the file's bytes depend on how
+fast the machine ran (the block boundaries move), while sealing on count and
+size alone makes the file a pure function of the run: the same configuration
+always writes the same bytes, so a digest in a manifest can be compared
+between runs. An interactive caller that wants its live view never more than
+a moment stale opts in with a number of seconds."""
 
 DEFAULT_KEY_EVERY: Final = 256
 """Generations between keyframes in sparse mode."""
@@ -426,6 +433,11 @@ class FaultHook(Protocol):
         ...
 
 
+LogMode = Literal["dense", "sparse"]
+"""`"dense"` writes every generation in full; `"sparse"` writes a full
+keyframe every `key_every` generations and, between them, only the (deme,
+locus) pairs that changed."""
+
 SyncMode = Literal["none", "fsync", "full", "auto"]
 """How the file is made durable: not at all, `fsync`, `F_FULLFSYNC`, or the
 strongest call the platform has (`"full"` on macOS, `fsync` elsewhere)."""
@@ -493,6 +505,7 @@ class _Sealed:
     rows: int
 
 
+_INITIAL_WIDTH: Final = 16
 _STOP: Final = object()
 _SYNC: Final = object()
 
@@ -502,7 +515,8 @@ class LogWriter:
 
     One writer owns one log file for one run. `submit` encodes a frame into
     the open block; the block is sealed when it holds `block_generations`
-    generations, when `block_seconds` have passed on the injected `clock`, or
+    generations, when `block_seconds` (if set) have passed on the injected
+    `clock`, or
     when the next record would not fit. A sealed block is checksummed and
     written with `write(2)`; once that returns it is *committed*, and a
     process killed afterwards loses at most the open block and the blocks
@@ -527,9 +541,14 @@ class LogWriter:
         run_id: The run the log holds.
         layout: Its frame layout.
         block_generations: Generations per block, at most.
-        block_seconds: Seconds an open block may wait before being sealed.
+        block_seconds: Seconds an open block may wait before being sealed, or
+            `None` (the default) to seal on count and size only, which keeps
+            the file's bytes a pure function of the frames written.
         buffer_bytes: Size of a block buffer.
         key_every: Generations between keyframes in sparse mode.
+        mode: `"dense"` (every record full) or `"sparse"` (keyframes and
+            deltas). A keyframe always opens a block, so a reader can
+            start decoding there.
         clock: A monotonic clock returning seconds (tests inject one). It
             only decides *when* to seal or sync; no time enters any byte.
         background: Whether a writer thread does the checksum, write and sync.
@@ -551,9 +570,10 @@ class LogWriter:
         layout: FrameLayout,
         *,
         block_generations: int = DEFAULT_BLOCK_GENERATIONS,
-        block_seconds: float = DEFAULT_BLOCK_SECONDS,
+        block_seconds: float | None = DEFAULT_BLOCK_SECONDS,
         buffer_bytes: int = DEFAULT_BUFFER_BYTES,
         key_every: int = DEFAULT_KEY_EVERY,
+        mode: LogMode = "dense",
         clock: Callable[[], float] = time.monotonic,
         background: bool = False,
         queue_depth: int = DEFAULT_QUEUE_DEPTH,
@@ -565,7 +585,7 @@ class LogWriter:
         """Create the file, write its header and start the thread if asked."""
         if block_generations < 1:
             raise ValueError("block_generations must be at least 1")
-        if block_seconds <= 0:
+        if block_seconds is not None and block_seconds <= 0:
             raise ValueError("block_seconds must be positive")
         if buffer_bytes < MIN_BUFFER_BYTES:
             raise ValueError(f"buffer_bytes must be at least {MIN_BUFFER_BYTES}")
@@ -575,6 +595,10 @@ class LogWriter:
             raise ValueError("sync_seconds must be positive")
         if sync not in ("none", "fsync", "full", "auto"):
             raise ValueError(f"unknown sync mode {sync!r}")
+        if mode not in ("dense", "sparse"):
+            raise ValueError(f"unknown log mode {mode!r}")
+        if key_every < 1:
+            raise ValueError("key_every must be at least 1")
         self.path = Path(path)
         self.run_id = run_id
         self.layout = layout
@@ -582,6 +606,7 @@ class LogWriter:
         self.block_seconds = block_seconds
         self.buffer_bytes = buffer_bytes
         self.key_every = key_every
+        self.mode = mode
         self.background = background
         self.sync = sync
         self.sync_seconds = sync_seconds
@@ -591,7 +616,9 @@ class LogWriter:
         self._fault = fault
         self._sizes = np.asarray(layout.deme_sizes, dtype=np.int64)
         self._tmp8 = np.zeros(1, np.float64)
-        self._header = build_header(run_id, layout, key_every)
+        self._header = build_header(
+            run_id, layout, key_every, FLAG_SPARSE if mode == "sparse" else 0
+        )
         self._fd = os.open(
             self.path, os.O_WRONLY | os.O_CREAT | os.O_EXCL | _O_BINARY, 0o644
         )
@@ -629,6 +656,10 @@ class LogWriter:
         self._first_generation = 0
         self._last_generation = 0
         self._opened_at = 0.0
+        self._since_key = 0
+        self._previous_count = np.zeros(self.layout.pairs, np.int32)
+        self._previous_ids = np.zeros((self.layout.pairs, _INITIAL_WIDTH), np.int64)
+        self._previous_freq = np.zeros((self.layout.pairs, _INITIAL_WIDTH), np.float64)
 
     def _init_buffers(self, queue_depth: int) -> None:
         """Set up the buffer pool and queues used by a background writer."""
@@ -676,10 +707,17 @@ class LogWriter:
             )
         entries = int(frame.allele_ids.shape[0])
         bound = _record_bound(self.layout.pairs, entries)
+        # In sparse mode every `key_every`-th record (and the first) is a full
+        # keyframe, which always opens a block.
+        keyframe = self.mode == "dense" or self._since_key == 0
+        keyframe = keyframe or self._since_key >= self.key_every
         if self._buffer is not None and (
             self._pos + bound + _BLOCK_SLACK > self._limit
-            or self._records >= self.block_generations
-            or self._clock() - self._opened_at >= self.block_seconds
+            or (
+                self.block_seconds is not None
+                and self._clock() - self._opened_at >= self.block_seconds
+            )
+            or (keyframe and self.mode == "sparse" and self._records > 0)
         ):
             self._seal()
         if self._buffer is None:
@@ -688,22 +726,56 @@ class LogWriter:
         gen_delta = (
             0 if self._records == 0 else frame.generation - self._last_generation
         )
-        self._pos, rows = codec.enc_full(
-            self._buffer,
-            self._pos,
-            gen_delta,
-            frame.counts,
-            frame.allele_ids,
-            frame.frequencies,
-            self.layout.demes,
-            self.layout.loci,
-            self._sizes,
-            self._tmp8,
-        )
+        if keyframe:
+            self._pos, rows = codec.enc_full(
+                self._buffer,
+                self._pos,
+                gen_delta,
+                frame.counts,
+                frame.allele_ids,
+                frame.frequencies,
+                self.layout.demes,
+                self.layout.loci,
+                self._sizes,
+                self._tmp8,
+            )
+            if self.mode == "sparse":
+                self._ensure_state_width(int(frame.counts.max()))
+                codec.load_state_from_csr(
+                    frame.counts,
+                    frame.allele_ids,
+                    frame.frequencies,
+                    self._previous_count,
+                    self._previous_ids,
+                    self._previous_freq,
+                )
+                self._since_key = 0
+        else:
+            self._ensure_state_width(int(frame.counts.max()))
+            self._pos, rows, _changed = codec.enc_delta(
+                self._buffer,
+                self._pos,
+                gen_delta,
+                frame.counts,
+                frame.allele_ids,
+                frame.frequencies,
+                self.layout.demes,
+                self.layout.loci,
+                self._sizes,
+                self._previous_count,
+                self._previous_ids,
+                self._previous_freq,
+                self._tmp8,
+            )
+        self._since_key += 1
         self._records += 1
         self._rows += rows
         self._last_generation = frame.generation
         self._latest = frame.generation
+        # A block that has reached its generation count is sealed at once, so
+        # it becomes readable now rather than when the next frame arrives.
+        if self._records >= self.block_generations:
+            self._seal()
 
     def flush(self, *, sync: bool = False) -> None:
         """Seal the open block and wait until everything submitted is written.
@@ -764,6 +836,18 @@ class LogWriter:
         """
         with self._state_lock:
             return self.committed_generation, self.file_position, self.chain_crc
+
+    def _ensure_state_width(self, needed: int) -> None:
+        """Widen the previous-frame state so every pair of `needed` alleles fits."""
+        width = self._previous_ids.shape[1]
+        if needed <= width:
+            return
+        new_width = max(needed, 2 * width)
+        ids = np.zeros((self.layout.pairs, new_width), np.int64)
+        freq = np.zeros((self.layout.pairs, new_width), np.float64)
+        ids[:, :width] = self._previous_ids
+        freq[:, :width] = self._previous_freq
+        self._previous_ids, self._previous_freq = ids, freq
 
     def _raise_error(self) -> None:
         """Raise the exception the writer thread stored, if any."""

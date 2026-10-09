@@ -137,6 +137,7 @@ Every test module, fixture, and test function documented here in full; `doc/fim-
   - [`test_tlog`](#persistence.test_tlog)
   - [`test_tlog_codec`](#persistence.test_tlog_codec)
   - [`test_tlog_export`](#persistence.test_tlog_export)
+  - [`test_tlog_sparse`](#persistence.test_tlog_sparse)
   - [`test_tlog_writer`](#persistence.test_tlog_writer)
   - [`test_validation`](#persistence.test_validation)
 - [`test/statistics/`](#group-statistics)
@@ -602,25 +603,48 @@ worker-process path checks the stores that come back instead.
 
   The list that fills with each store as it is constructed.
 
+<a id="test.conftest.tracked_log_stores"></a>
+
+#### tracked\_log\_stores
+
+```python
+@pytest.fixture
+def tracked_log_stores(
+        monkeypatch: pytest.MonkeyPatch) -> list[BinaryLogStore]
+```
+
+Record every `BinaryLogStore` the test (or code under test) builds.
+
+The leak check for the binary log's writer thread and file descriptor,
+the counterpart of `tracked_jsonl_stores`: a test runs a real entry
+point in this process, then asserts through `assert_none_open` that no
+store it created still has a writer open. Counts the ancestral-phase
+companions too, which are built through the same constructor.
+
+**Returns**:
+
+  The list that fills with each store as it is constructed.
+
 <a id="test.conftest.assert_none_open"></a>
 
 #### assert\_none\_open
 
 ```python
-def assert_none_open(stores: list[JSONLTrajectoryStore]) -> None
+def assert_none_open(
+        stores: Sequence[BinaryLogStore | JSONLTrajectoryStore]) -> None
 ```
 
 Assert `stores` is non-empty and none of them holds a file open.
 
 **Arguments**:
 
-- `stores` - What `tracked_jsonl_stores` collected.
+- `stores` - What `tracked_jsonl_stores` or `tracked_log_stores` collected.
   
 
 **Raises**:
 
 - `AssertionError` - If no store was built (the check would prove
-  nothing) or any store still has an open append handle.
+  nothing) or any store still has an open file or writer.
 
 <a id="test.conftest.tiny_params"></a>
 
@@ -718,8 +742,9 @@ output files of its own run (`dev/bin/regenerate-example-outputs`, design
 doc `20261005-claude-opus-5-5-read-only-examples-and-classes-design.md`,
 `selby/restricted`, sections 4.1 and 6): `manifest.json` and
 `report.json` for a single run, or `manifest.json`, `summary.json`, and
-each replicate's complete artifacts for a batch. JSONL artifacts are
-losslessly archived; the app restores them on opening. The slow test
+each replicate's complete artifacts for a batch. The trajectories are
+binary logs; the other JSONL artifacts are losslessly archived and the app
+restores them on opening. The slow test
 below reruns every example exactly as that script does and compares.
 
 A run is a pure function of its configuration, so the comparison is
@@ -752,8 +777,9 @@ def test_every_example_commits_its_output_files(example: str) -> None
 
 Each example directory holds a complete set of committed outputs.
 
-Every manifest-referenced artifact is present, with JSONL data
-losslessly archived and each part bounded to the Git-safe size limit.
+Every manifest-referenced artifact is present: the trajectories as
+binary logs (already compact, so copied as they are), the other JSONL
+data losslessly archived with each part bounded to the Git-safe size.
 
 <a id="test.test_doc_examples.test_regeneration_uses_only_the_configuration"></a>
 
@@ -853,20 +879,21 @@ def test_full_outputs_round_trip_and_open_with_graphs(tmp_path: Path,
 
 Scalar and batch opens reconstruct every byte, with frames and histories.
 
-<a id="test.test_example_artifacts.test_equilibrium_trajectory_is_archived_and_restored_on_opening"></a>
+<a id="test.test_example_artifacts.test_equilibrium_trajectory_is_bundled_and_opens_with_its_own_digest"></a>
 
-#### test\_equilibrium\_trajectory\_is\_archived\_and\_restored\_on\_opening
+#### test\_equilibrium\_trajectory\_is\_bundled\_and\_opens\_with\_its\_own\_digest
 
 ```python
-def test_equilibrium_trajectory_is_archived_and_restored_on_opening(
+def test_equilibrium_trajectory_is_bundled_and_opens_with_its_own_digest(
         tmp_path: Path) -> None
 ```
 
 An equilibrium-split run's ancestral trajectory survives bundling.
 
-It is archived as gzip parts like every other JSONL artifact, and
-opening the example restores it byte for byte, checked against its
-own manifest digest; the main trajectory still opens with its frames.
+The binary log is already compact, so it is copied as it is (the
+JSONL artifacts are the ones archived as gzip parts); it arrives byte
+for byte, checked against its own manifest digest, and the main
+trajectory still opens with its frames.
 
 <a id="test.test_example_artifacts.test_archive_is_deterministic_and_rejects_missing_or_corrupt_parts"></a>
 
@@ -889,12 +916,12 @@ def test_archive_digest_is_verified_before_publishing(tmp_path: Path) -> None
 
 A valid gzip stream with wrong contents cannot become a completed run.
 
-<a id="test.test_example_artifacts.test_truncated_gzip_does_not_publish_a_partial_trajectory"></a>
+<a id="test.test_example_artifacts.test_truncated_gzip_does_not_publish_a_partial_archive"></a>
 
-#### test\_truncated\_gzip\_does\_not\_publish\_a\_partial\_trajectory
+#### test\_truncated\_gzip\_does\_not\_publish\_a\_partial\_archive
 
 ```python
-def test_truncated_gzip_does_not_publish_a_partial_trajectory(
+def test_truncated_gzip_does_not_publish_a_partial_archive(
         tmp_path: Path) -> None
 ```
 
@@ -1343,7 +1370,7 @@ def test_launcher_dispatches_empty_sys_argv_to_the_gui(
         ["--version"],
         ["run", "config.yaml"],
         ["init", "--output", "out.yaml"],
-        ["stats", "trajectory.jsonl"],
+        ["stats", "trajectory.tlog"],
     ],
 )
 def test_launcher_dispatches_nonempty_argv_to_cli_main_unchanged(
@@ -2612,7 +2639,7 @@ The default ("final generation") path is equally memory-bounded.
 
 `generation=None` cannot know which generation is the maximum until
 the stream ends (`reanalyze_trajectory`'s own docstring on
-`JSONLTrajectoryStore.read`'s ordering guarantee), so this exercises
+`BinaryLogStore.read`'s ordering guarantee), so this exercises
 the rolling running-max buffer specifically: every earlier
 generation's buffered rows must be dropped, not accumulated, each
 time a higher generation number is seen.
@@ -3440,10 +3467,10 @@ def test_equilibrium_split_run_writes_and_digests_its_ancestral_trajectory(
         tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None
 ```
 
-An equilibrium-split run adds `equilibrium_trajectory.jsonl`, and lists it.
+An equilibrium-split run adds `equilibrium_trajectory.tlog`, and lists it.
 
 The main trajectory and its re-analysis are unaffected: `fim stats`
-still reads `trajectory.jsonl`, whose own digest still verifies.
+still reads `trajectory.tlog`, whose own digest still verifies.
 
 <a id="cli.test_cli.test_equilibrium_split_batch_writes_each_replicates_ancestral_trajectory"></a>
 
@@ -4009,8 +4036,8 @@ def test_run_scalar_leaves_no_trace_when_interrupted_mid_trajectory(
 A failure while still writing generations leaves no output directory.
 
 Failure-injection test for the write boundary: the third
-`write_generation` call (well after the temporary directory has a
-real, partial `trajectory.jsonl` on disk) raises, simulating an
+`write_frame` call (well after the temporary directory has a
+real, partial `trajectory.tlog` on disk) raises, simulating an
 interruption mid-run. `output_directory` must not exist afterward —
 `_atomic_directory` never publishes a directory the `with` block
 didn't finish populating, regardless of how far into it the failure
@@ -4028,7 +4055,7 @@ def test_run_scalar_leaves_no_trace_when_the_report_write_fails(
 A failure writing `report.json` leaves no output directory.
 
 Failure-injection test for the report boundary: by this point the
-temporary directory already has a real, complete `trajectory.jsonl`
+temporary directory already has a real, complete `trajectory.tlog`
 on disk (the run itself finished), but the failure still means
 `output_directory` must not exist afterward.
 
@@ -4043,7 +4070,7 @@ def test_run_scalar_leaves_no_trace_when_the_plot_fails(
 
 A failure rendering `scatter.png` leaves no output directory.
 
-Failure-injection test for the plot boundary: `trajectory.jsonl`
+Failure-injection test for the plot boundary: `trajectory.tlog`
 and `report.json` are both already real and complete in the
 temporary directory when this fails, but the whole run still must
 not appear at `output_directory`.
@@ -4303,13 +4330,10 @@ def test_stats_reports_a_tampered_trajectory_and_unknown_generations(
 
 Stats errors distinguish a tampered trajectory from a missing generation.
 
-Regression test: editing the trajectory after the run
-completed — even a content-preserving edit like retagging every
-row's ``run_id`` — no longer re-analyzes silently. It now fails the
-manifest's recorded SHA-256 digest
-check before `_command_stats` ever gets to read a row, superseding
-the weaker "no rows for this run_id" diagnosis a retag used to
-produce.
+Regression test: editing the trajectory after the run completed —
+here, flipping one bit of the log — no longer re-analyzes silently.
+It fails the manifest's recorded SHA-256 digest check before
+`_command_stats` ever gets to read a generation.
 
 <a id="cli.test_cli.test_run_name_and_description_write_a_metadata_sidecar"></a>
 
@@ -4661,12 +4685,12 @@ Write a two-point sweep file and return its path.
 
 `fim run` leaves no trajectory file open (the kept-open handle leak check).
 
-`JSONLTrajectoryStore` keeps its append handle open between generations,
-so every owner must release it before `fim.paths.atomic_directory` renames
-(or, on failure, removes) the run directory; an open handle blocks both on
-Windows. These tests run the real command in this process and assert,
-through `conftest.tracked_jsonl_stores`, that no store it built is still
-open afterwards.
+`BinaryLogStore` keeps its log file open (and a writer thread running)
+between generations, so every owner must close it before
+`fim.paths.atomic_directory` renames (or, on failure, removes) the run
+directory; an open file blocks both on Windows. These tests run the real
+command in this process and assert, through `conftest.tracked_log_stores`,
+that no store it built is still open afterwards.
 
 <a id="cli.test_trajectory_handles.test_scalar_run_closes_its_trajectory_and_ancestral_handles"></a>
 
@@ -4674,8 +4698,7 @@ open afterwards.
 
 ```python
 def test_scalar_run_closes_its_trajectory_and_ancestral_handles(
-        tmp_path: Path,
-        tracked_jsonl_stores: list[JSONLTrajectoryStore]) -> None
+        tmp_path: Path, tracked_log_stores: list[BinaryLogStore]) -> None
 ```
 
 A scalar `fim run` closes both stores of an equilibrium-split run.
@@ -4693,8 +4716,8 @@ A scalar `fim run` closes both stores of an equilibrium-split run.
     ],
 )
 def test_batch_run_closes_every_replicates_handles(
-        tmp_path: Path, tracked_jsonl_stores: list[JSONLTrajectoryStore],
-        backend: str, flags: list[str]) -> None
+        tmp_path: Path, tracked_log_stores: list[BinaryLogStore], backend: str,
+        flags: list[str]) -> None
 ```
 
 A `fim run` batch closes every replicate's handles on each engine path.
@@ -12151,7 +12174,7 @@ def test_push_batch_progress_pushes_a_pooled_scatter_from_real_sidecars(
 Reads whichever replicates have reported so far; skips the rest silently.
 
 Writes one replicate's own real `.progress` sidecar and
-`trajectory.jsonl`, in exactly the file layout `LiveProgressStore`
+`trajectory.tlog`, in exactly the file layout `LiveProgressStore`
 itself produces (`fim.gui.batch_runner._replicate_store_factory`'s
 own construction, mirrored here directly) — the second replicate's
 directory is never created at all, the "has not started yet" case
@@ -12176,7 +12199,7 @@ ever start wherever the *first* two-or-more-replicates tick
 happened to land -- plausibly well past generation 0 for a batch
 that already outran a poll interval or two before this function
 first got to look. Two replicates each write generation 0, then
-advance to generation 2 -- `trajectory.jsonl` is append-only, so
+advance to generation 2 -- `trajectory.tlog` is append-only, so
 generation 0's own rows stay readable even after later ones are
 written (`read_live_state`'s own docstring), and this call reads
 them via a fresh, real file read, the same as it reads the current
@@ -14076,7 +14099,7 @@ batch_artifact_on_success` already proves for `lineal`.
 ```python
 def test_start_batch_run_leaves_no_trajectory_file_open(
         tmp_path: Path, batch_params: SimulationParams,
-        tracked_jsonl_stores: list[JSONLTrajectoryStore]) -> None
+        tracked_log_stores: list[BinaryLogStore]) -> None
 ```
 
 A finished GUI batch has closed every replicate's trajectory handle.
@@ -21471,7 +21494,7 @@ A real, uncancelled run produces the same six artifacts `fim run` does.
 ```python
 def test_start_run_leaves_no_trajectory_file_open(
         tmp_path: Path, tiny_params: SimulationParams,
-        tracked_jsonl_stores: list[JSONLTrajectoryStore]) -> None
+        tracked_log_stores: list[BinaryLogStore]) -> None
 ```
 
 A finished GUI scalar run has closed its trajectory handle.
@@ -21504,7 +21527,7 @@ def test_start_run_writes_and_digests_an_equilibrium_split_ancestral_trajectory(
         tmp_path: Path, tiny_params: SimulationParams) -> None
 ```
 
-A GUI equilibrium-split run publishes `equilibrium_trajectory.jsonl` too.
+A GUI equilibrium-split run publishes `equilibrium_trajectory.tlog` too.
 
 Digested in the manifest like every other artifact, exactly as
 `cli._write_run_artifacts` does; its rows are the ancestral phase's
@@ -28834,6 +28857,31 @@ def test_the_log_is_far_smaller_than_the_jsonl(tmp_path: Path) -> None
 
 Count coding and binary records: at least ten times smaller here.
 
+<a id="persistence.test_binary_store.test_a_run_writes_the_same_log_bytes_every_time"></a>
+
+#### test\_a\_run\_writes\_the\_same\_log\_bytes\_every\_time
+
+```python
+def test_a_run_writes_the_same_log_bytes_every_time(tmp_path: Path) -> None
+```
+
+The log is a pure function of the run: no timing reaches a byte.
+
+Sealing on count and size only (the default) means the block
+boundaries, and so the file and its digest, are the same whether the
+machine was fast or slow, with or without the writer thread.
+
+<a id="persistence.test_binary_store.test_a_dense_store_holds_the_same_rows_as_a_sparse_one"></a>
+
+#### test\_a\_dense\_store\_holds\_the\_same\_rows\_as\_a\_sparse\_one
+
+```python
+def test_a_dense_store_holds_the_same_rows_as_a_sparse_one(
+        tmp_path: Path) -> None
+```
+
+The mode changes the file, never what `read` returns.
+
 <a id="persistence.test_frame"></a>
 
 # persistence.test\_frame
@@ -32209,6 +32257,142 @@ def test_a_real_equilibrium_split_run_derives_both_files_byte_for_byte(
 ```
 
 The ancestral companion (one deme of every deme's copies) is exact too.
+
+<a id="persistence.test_tlog_sparse"></a>
+
+# persistence.test\_tlog\_sparse
+
+Tests of the log's sparse mode: keyframes and deltas.
+
+In sparse mode a full keyframe opens a block every `key_every`
+generations, and the generations between are stored as the (deme, locus)
+pairs that changed. These tests check, over long random walks with quiet
+and busy stretches, that the sparse log decodes to exactly the frames that
+were written, that its blocks and keyframes sit where the rules say, that it
+is much smaller than the dense log on a quiet run, and that export, sharding
+and recovery all work on it. Seeded; nothing depends on timing.
+
+<a id="persistence.test_tlog_sparse.test_a_sparse_log_decodes_to_exactly_the_frames_written"></a>
+
+#### test\_a\_sparse\_log\_decodes\_to\_exactly\_the\_frames\_written
+
+```python
+@pytest.mark.parametrize("change", [0.0, 0.03, 0.5, 1.0])
+def test_a_sparse_log_decodes_to_exactly_the_frames_written(
+        tmp_path: Path, change: float) -> None
+```
+
+From a frozen run to one that changes everything every generation.
+
+<a id="persistence.test_tlog_sparse.test_pairs_that_gain_many_alleles_widen_the_encoder_state"></a>
+
+#### test\_pairs\_that\_gain\_many\_alleles\_widen\_the\_encoder\_state
+
+```python
+def test_pairs_that_gain_many_alleles_widen_the_encoder_state(
+        tmp_path: Path) -> None
+```
+
+More alleles than the initial width in a changed pair still round-trips.
+
+<a id="persistence.test_tlog_sparse.test_the_header_says_sparse_and_keyframes_open_blocks"></a>
+
+#### test\_the\_header\_says\_sparse\_and\_keyframes\_open\_blocks
+
+```python
+def test_the_header_says_sparse_and_keyframes_open_blocks(
+        tmp_path: Path) -> None
+```
+
+Every `key_every`-th generation opens a block with a full record.
+
+<a id="persistence.test_tlog_sparse.test_blocks_sealed_between_keyframes_start_with_a_delta"></a>
+
+#### test\_blocks\_sealed\_between\_keyframes\_start\_with\_a\_delta
+
+```python
+def test_blocks_sealed_between_keyframes_start_with_a_delta(
+        tmp_path: Path) -> None
+```
+
+A block cut by its generation count mid-interval is not a keyframe block.
+
+<a id="persistence.test_tlog_sparse.test_a_quiet_sparse_run_is_far_smaller_than_the_dense_log"></a>
+
+#### test\_a\_quiet\_sparse\_run\_is\_far\_smaller\_than\_the\_dense\_log
+
+```python
+def test_a_quiet_sparse_run_is_far_smaller_than_the_dense_log(
+        tmp_path: Path) -> None
+```
+
+The point of the mode: most generations change almost nothing.
+
+<a id="persistence.test_tlog_sparse.test_thinned_generations_keep_their_numbers_in_sparse_mode"></a>
+
+#### test\_thinned\_generations\_keep\_their\_numbers\_in\_sparse\_mode
+
+```python
+def test_thinned_generations_keep_their_numbers_in_sparse_mode(
+        tmp_path: Path) -> None
+```
+
+Generation gaps survive the deltas and the keyframe blocks.
+
+<a id="persistence.test_tlog_sparse.test_export_of_a_sparse_log_equals_export_of_the_dense_log"></a>
+
+#### test\_export\_of\_a\_sparse\_log\_equals\_export\_of\_the\_dense\_log
+
+```python
+def test_export_of_a_sparse_log_equals_export_of_the_dense_log(
+        tmp_path: Path) -> None
+```
+
+The canonical JSONL does not depend on how the log was stored.
+
+<a id="persistence.test_tlog_sparse.test_sharded_export_of_a_sparse_log_starts_shards_at_keyframes"></a>
+
+#### test\_sharded\_export\_of\_a\_sparse\_log\_starts\_shards\_at\_keyframes
+
+```python
+def test_sharded_export_of_a_sparse_log_starts_shards_at_keyframes(
+        tmp_path: Path) -> None
+```
+
+Shards begin at keyframe blocks only, and sharded equals single-process.
+
+<a id="persistence.test_tlog_sparse.test_a_flipped_bit_in_a_sparse_log_ends_the_prefix_at_that_block"></a>
+
+#### test\_a\_flipped\_bit\_in\_a\_sparse\_log\_ends\_the\_prefix\_at\_that\_block
+
+```python
+@pytest.mark.parametrize("block", [0, 1, 3, 5])
+def test_a_flipped_bit_in_a_sparse_log_ends_the_prefix_at_that_block(
+        tmp_path: Path, block: int) -> None
+```
+
+Recovery works block by block; deltas never reach across a bad block.
+
+<a id="persistence.test_tlog_sparse.test_writer_option_validation"></a>
+
+#### test\_writer\_option\_validation
+
+```python
+def test_writer_option_validation(tmp_path: Path) -> None
+```
+
+A bad mode or key interval is refused before the file exists.
+
+<a id="persistence.test_tlog_sparse.test_the_background_sparse_writer_writes_the_inline_writers_bytes"></a>
+
+#### test\_the\_background\_sparse\_writer\_writes\_the\_inline\_writers\_bytes
+
+```python
+def test_the_background_sparse_writer_writes_the_inline_writers_bytes(
+        tmp_path: Path) -> None
+```
+
+Thread or not, a sparse log is the same file.
 
 <a id="persistence.test_tlog_writer"></a>
 

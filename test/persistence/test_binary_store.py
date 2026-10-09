@@ -368,3 +368,44 @@ def test_the_log_is_far_smaller_than_the_jsonl(tmp_path: Path) -> None:
     log_bytes = (tmp_path / "t.tlog").stat().st_size
     jsonl_bytes = (tmp_path / "rows" / "trajectory.jsonl").stat().st_size
     assert log_bytes * 10 < jsonl_bytes
+
+
+def test_a_run_writes_the_same_log_bytes_every_time(tmp_path: Path) -> None:
+    """The log is a pure function of the run: no timing reaches a byte.
+
+    Sealing on count and size only (the default) means the block
+    boundaries, and so the file and its digest, are the same whether the
+    machine was fast or slow, with or without the writer thread.
+    """
+    params = _params(max_generations=40)
+    paths = []
+    for name, options in (
+        ("a", {}),
+        ("b", {}),
+        ("inline", {"background": False}),
+        ("small-blocks", {"block_generations": 7}),
+    ):
+        path = tmp_path / f"{name}.tlog"
+        store = BinaryLogStore(path, **options)
+        _run(params, store, "lineal")
+        store.close()
+        paths.append(path)
+    first, second, inline, small = (path.read_bytes() for path in paths)
+    assert first == second == inline
+    # A different block size is a different file, with the same content.
+    assert small != first
+    assert list(BinaryLogStore(paths[3]).read(RUN_ID)) == list(
+        BinaryLogStore(paths[0]).read(RUN_ID)
+    )
+
+
+def test_a_dense_store_holds_the_same_rows_as_a_sparse_one(tmp_path: Path) -> None:
+    """The mode changes the file, never what `read` returns."""
+    params = _params(max_generations=50)
+    for mode in ("dense", "sparse"):
+        store = BinaryLogStore(tmp_path / f"{mode}.tlog", mode=mode)
+        _run(params, store, "lineal")
+        store.close()
+    dense = BinaryLogStore(tmp_path / "dense.tlog")
+    sparse = BinaryLogStore(tmp_path / "sparse.tlog")
+    assert list(dense.read(RUN_ID)) == list(sparse.read(RUN_ID))

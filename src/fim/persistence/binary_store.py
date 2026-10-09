@@ -13,7 +13,7 @@ gene copies and the loci, so the first frame (or `begin_run`) fixes them; a
 second run id is refused with an explanation (a batch uses one store per
 replicate, through a store factory). `read` yields the run's rows exactly as
 the JSON Lines store would, so every reader of rows keeps working; the
-canonical `trajectory.jsonl` is something to *export*
+canonical `trajectory.tlog` is something to *export*
 (`fim.persistence.tlog_export`).
 """
 
@@ -35,7 +35,8 @@ from fim.persistence.frame import (
     frame_to_rows,
     rows_to_frame,
 )
-from fim.persistence.store import TrajectoryRow
+from fim.persistence.jsonl_store import JSONLTrajectoryStore
+from fim.persistence.store import TrajectoryRow, TrajectoryStore
 
 logger = logging.getLogger(__name__)
 
@@ -55,12 +56,17 @@ class BinaryLogStore:
         background: Whether a writer thread checksums, writes and syncs, so
             the producing thread only encodes.
         block_generations: Generations per block, at most.
-        block_seconds: Seconds an open block may wait before being written.
+        block_seconds: Seconds an open block may wait before being written, or
+            `None` (the default) to write on count and size only; see
+            `tlog.DEFAULT_BLOCK_SECONDS` for why that is the default.
         sync: Durability policy (`tlog.SyncMode`); `"auto"` uses
             `F_FULLFSYNC` on macOS and `fsync` elsewhere.
         sync_seconds: Seconds between group-commit syncs.
         buffer_bytes: Size of a block buffer.
         key_every: Generations between keyframes in sparse mode.
+        mode: `"sparse"` (the default: a keyframe every `key_every`
+            generations and, between them, only the pairs that changed) or
+            `"dense"` (every generation in full).
         queue_depth: Sealed blocks that may wait for the writer thread.
         clock: Monotonic clock deciding when to seal and sync (tests inject
             one); no time enters any byte of the log.
@@ -73,11 +79,12 @@ class BinaryLogStore:
         *,
         background: bool = True,
         block_generations: int = tlog.DEFAULT_BLOCK_GENERATIONS,
-        block_seconds: float = tlog.DEFAULT_BLOCK_SECONDS,
+        block_seconds: float | None = tlog.DEFAULT_BLOCK_SECONDS,
         sync: tlog.SyncMode = "auto",
         sync_seconds: float = tlog.DEFAULT_SYNC_SECONDS,
         buffer_bytes: int = tlog.DEFAULT_BUFFER_BYTES,
         key_every: int = tlog.DEFAULT_KEY_EVERY,
+        mode: tlog.LogMode = "sparse",
         queue_depth: int = tlog.DEFAULT_QUEUE_DEPTH,
         clock: Callable[[], float] = time.monotonic,
         fault: tlog.FaultHook | None = None,
@@ -92,6 +99,7 @@ class BinaryLogStore:
             "sync_seconds": sync_seconds,
             "buffer_bytes": buffer_bytes,
             "key_every": key_every,
+            "mode": mode,
             "queue_depth": queue_depth,
             "clock": clock,
             "fault": fault,
@@ -374,3 +382,21 @@ class BinaryLogStore:
     def exists(self) -> bool:
         """Whether the log file exists on disk."""
         return self.path.is_file()
+
+
+def open_trajectory(path: Path | str) -> TrajectoryStore:
+    """Open a trajectory file for reading, whichever form it is in.
+
+    A `.tlog` file is a binary log (a run's own trajectory); anything else
+    is read as JSON Lines (an export, or a file from elsewhere). Both give
+    the same rows through `read`.
+
+    Args:
+        path: The trajectory file.
+
+    Returns:
+        A store whose `read(run_id)` yields the file's rows.
+    """
+    if Path(path).suffix == ".tlog":
+        return BinaryLogStore(path)
+    return JSONLTrajectoryStore(path)

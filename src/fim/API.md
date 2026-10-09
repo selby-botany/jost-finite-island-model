@@ -364,16 +364,23 @@ Return to the [source-tree orientation](../README.md) or the [developer guide](.
   * [start\_run](#fim.gui.runner.start_run)
   * [write\_run\_artifacts](#fim.gui.runner.write_run_artifacts)
 * [fim.gui.store](#fim.gui.store)
+  * [LIVE\_BLOCK\_SECONDS](#fim.gui.store.LIVE_BLOCK_SECONDS)
   * [RunCancelledError](#fim.gui.store.RunCancelledError)
   * [GuiProgressStore](#fim.gui.store.GuiProgressStore)
     * [\_\_init\_\_](#fim.gui.store.GuiProgressStore.__init__)
     * [write\_generation](#fim.gui.store.GuiProgressStore.write_generation)
+    * [begin\_run](#fim.gui.store.GuiProgressStore.begin_run)
+    * [wants\_frames](#fim.gui.store.GuiProgressStore.wants_frames)
+    * [write\_frame](#fim.gui.store.GuiProgressStore.write_frame)
     * [read](#fim.gui.store.GuiProgressStore.read)
     * [discard](#fim.gui.store.GuiProgressStore.discard)
     * [close](#fim.gui.store.GuiProgressStore.close)
     * [equilibrium\_store](#fim.gui.store.GuiProgressStore.equilibrium_store)
   * [LiveProgressStore](#fim.gui.store.LiveProgressStore)
     * [\_\_init\_\_](#fim.gui.store.LiveProgressStore.__init__)
+    * [begin\_run](#fim.gui.store.LiveProgressStore.begin_run)
+    * [wants\_frames](#fim.gui.store.LiveProgressStore.wants_frames)
+    * [write\_frame](#fim.gui.store.LiveProgressStore.write_frame)
     * [write\_generation](#fim.gui.store.LiveProgressStore.write_generation)
     * [read](#fim.gui.store.LiveProgressStore.read)
     * [discard](#fim.gui.store.LiveProgressStore.discard)
@@ -583,6 +590,7 @@ Return to the [source-tree orientation](../README.md) or the [developer guide](.
     * [close](#fim.persistence.binary_store.BinaryLogStore.close)
     * [equilibrium\_store](#fim.persistence.binary_store.BinaryLogStore.equilibrium_store)
     * [exists](#fim.persistence.binary_store.BinaryLogStore.exists)
+  * [open\_trajectory](#fim.persistence.binary_store.open_trajectory)
 * [fim.persistence.frame](#fim.persistence.frame)
   * [UNKNOWN\_DEME\_SIZE](#fim.persistence.frame.UNKNOWN_DEME_SIZE)
   * [FrameLayout](#fim.persistence.frame.FrameLayout)
@@ -788,6 +796,7 @@ Return to the [source-tree orientation](../README.md) or the [developer guide](.
   * [InjectedFaultError](#fim.persistence.tlog.InjectedFaultError)
   * [FaultHook](#fim.persistence.tlog.FaultHook)
     * [\_\_call\_\_](#fim.persistence.tlog.FaultHook.__call__)
+  * [LogMode](#fim.persistence.tlog.LogMode)
   * [SyncMode](#fim.persistence.tlog.SyncMode)
   * [sync\_file](#fim.persistence.tlog.sync_file)
   * [WriterStats](#fim.persistence.tlog.WriterStats)
@@ -2748,7 +2757,7 @@ Fields:
         the ancestral phase's own counter, `0` through
         `manifest.equilibrium_generation_count`; the split demes'
         generation zero follows its last generation. Beside
-        `trajectory.jsonl` as `equilibrium_trajectory.jsonl` when
+        `trajectory.tlog` as `equilibrium_trajectory.tlog` when
         `store` is a file (`fim.persistence.store.
         equilibrium_store_for`). `None` for every other initial
         condition.
@@ -2882,7 +2891,7 @@ only when this lane's own `params` configured equilibrium-split —
 lane` reads it to populate this lane's own manifest fields.
 `equilibrium_store` is set alongside it: where `_build_replica_lane`
 already streamed the ancestral phase's own trajectory (the
-`equilibrium_trajectory.jsonl` artifact), handed on to
+`equilibrium_trajectory.tlog` artifact), handed on to
 `RunResult.equilibrium_store`.
 
 <a id="fim.engine.Advancer"></a>
@@ -5079,7 +5088,7 @@ Sample up to `max_frames` frames' worth of coordinates from a trajectory.
 
 **Arguments**:
 
-- `trajectory_path` - The `trajectory.jsonl` to read.
+- `trajectory_path` - The `trajectory.tlog` to read.
 - `params` - The run's validated parameters.
 - `run_id` - The run identity every row must belong to.
 - `max_frames` - See `select_sample_generations`.
@@ -5108,7 +5117,7 @@ def pre_render_batch_frames(
 Sample up to `max_frames` *pooled* frames' worth of coordinates from a batch.
 
 The completed-batch counterpart to `pre_render_frames`, needed
-because a batch has no single `trajectory.jsonl` to sample from —
+because a batch has no single `trajectory.tlog` to sample from —
 one per replicate instead, each stopping at its own generation
 (batch trajectory panel design `20260912-claude-sonnet-5-batch-
 trajectory-panel-design.md`, `selby/restricted`). A replicate that
@@ -5128,7 +5137,7 @@ was a real, reported defect for the band.
   — `run_id` is that replicate's own id (`RunResult.run_id`,
   `"{batch_run_id}-r{index:03}"`), not the batch's own id,
   matching every row's own recorded `run_id` in that
-  replicate's `trajectory.jsonl`.
+  replicate's `trajectory.tlog`.
 - `params` - The batch's own validated parameters, shared by every
   replicate.
 - `max_frames` - See `select_sample_generations`.
@@ -7030,7 +7039,7 @@ this bridge method adds little logic of its own beyond calling
 it and reshaping each `RecentRun` into a JSON-ready dict.
 `trajectoryPath` is joined here, in Python (`pathlib.Path`'s
 own platform-correct separator), rather than the page
-concatenating `directory` and `"trajectory.jsonl"` itself —
+concatenating `directory` and `"trajectory.tlog"` itself —
 string-joining a path client-side would silently produce a
 mixed-separator path on Windows. `None` for a batch row: it has
 no single trajectory of its own to open.
@@ -7800,7 +7809,7 @@ Re-analyze a persisted trajectory, matching `fim stats`'s own semantics.
 Reached from the recent-runs picker (a run row, a batch row's
 own "Open…", or "Open replicate" on an expanded batch) — the
 exact same operation over one replicate's own
-`trajectory.jsonl`. The
+`trajectory.tlog`. The
 returned payload is deliberately shaped exactly like
 `_drain_run_messages`'s own `"done"` payload, so the caller can
 hand it straight to the already-built `window.fim.showResults`
@@ -7878,7 +7887,7 @@ Reopen a persisted batch, matching `open_run`'s own semantics one level up.
 `20260919-claude-sonnet-5-unified-batch-and-study-results-
 reopen-design.md` (`selby/restricted`), §1: every replicate's
 own final `state`/`report` is rediscovered fresh from its own
-`trajectory.jsonl` (`reanalyze_trajectory`, the identical
+`trajectory.tlog` (`reanalyze_trajectory`, the identical
 function `open_run`/`get_batch_deme_pair_panel` already use),
 never from a possibly-stale `report.json`/`summary.json` --
 this gets the identical tamper/corruption check a scalar reopen
@@ -8017,7 +8026,7 @@ animation screen's own frame sampler already computes.
 
 **Arguments**:
 
-- `trajectory_paths` - Two or more `trajectory.jsonl` paths,
+- `trajectory_paths` - Two or more `trajectory.tlog` paths,
   typically `webui/screens/compare.js`'s own checked
   rows from the recent-runs list.
 
@@ -10942,7 +10951,7 @@ own `except BaseException` clause discards the temporary directory and
 needed for either outcome.
 
 Writes the same four artifacts, in the same order, as
-`cli._write_run_artifacts`: `trajectory.jsonl` streamed
+`cli._write_run_artifacts`: `trajectory.tlog` streamed
 generation-by-generation by the `TrajectoryStore` passed into `fim`,
 then `report.json` and `scatter.png` once the run finishes, then —
 last, and only once both are flushed — `manifest.json`, augmented with
@@ -11090,7 +11099,7 @@ def write_run_artifacts(
 
 Write `report.json`, `scatter.png`, and — last — `manifest.json`.
 
-Mirrors `cli._write_run_artifacts` exactly: `trajectory.jsonl` is
+Mirrors `cli._write_run_artifacts` exactly: `trajectory.tlog` is
 not written here, since it was already streamed
 generation-by-generation by the `TrajectoryStore` passed into
 `fim`; every other artifact is written and flushed first, and
@@ -11141,6 +11150,17 @@ fim-gui-design.md` §7.1, §7.2):
   cancellation by creating the cancellation file — both plain
   filesystem operations, needing no cross-process synchronization
   primitive at all.
+
+<a id="fim.gui.store.LIVE_BLOCK_SECONDS"></a>
+
+#### LIVE\_BLOCK\_SECONDS
+
+Seconds a run's open log block may wait before it is written.
+
+The app shows a run while it is going, and a batch's live view reads each
+replicate's log from disk, so an open block is never held longer than this.
+(Command-line runs leave it off, which keeps their files byte-reproducible;
+the app's runs trade that for a live view that is never stale.)
 
 <a id="fim.gui.store.RunCancelledError"></a>
 
@@ -11216,7 +11236,7 @@ Delegate one generation's write, or raise `RunCancelledError` instead.
 
 Checked before delegating, not after: a cancellation observed
 here never reaches the real store at all, so a cancelled run's
-`trajectory.jsonl` never gains the generation that triggered the
+`trajectory.tlog` never gains the generation that triggered the
 cancellation — only the generations already written before it.
 
 `rows` is materialized into a plain `list` before delegating,
@@ -11234,6 +11254,39 @@ contract does not silently depend on that happening to be true.
 inspected or overridden here — this decorator has no opinion of
 its own on whether a row needs validating; see `fim.persistence.
 store`'s own top docstring for who does.
+
+<a id="fim.gui.store.GuiProgressStore.begin_run"></a>
+
+#### begin\_run
+
+```python
+def begin_run(run_id: str, layout: FrameLayout) -> None
+```
+
+Tell the wrapped store the run's layout (`FrameStore`).
+
+The wrapped store needs it to store frequencies compactly even
+though this decorator hands it rows.
+
+<a id="fim.gui.store.GuiProgressStore.wants_frames"></a>
+
+#### wants\_frames
+
+```python
+def wants_frames(run_id: str) -> bool
+```
+
+Return `False`: the live scatter's callback needs the rows.
+
+<a id="fim.gui.store.GuiProgressStore.write_frame"></a>
+
+#### write\_frame
+
+```python
+def write_frame(run_id: str, frame: TrajectoryFrame) -> None
+```
+
+Refuse frames; this decorator is fed rows (`wants_frames` is false).
 
 <a id="fim.gui.store.GuiProgressStore.read"></a>
 
@@ -11322,6 +11375,43 @@ Wrap `inner`, recording progress in and honoring cancellation from disk.
   creating it once cancels all of them, matching "Cancel
   batch" stopping the batch, not one replicate.
 
+<a id="fim.gui.store.LiveProgressStore.begin_run"></a>
+
+#### begin\_run
+
+```python
+def begin_run(run_id: str, layout: FrameLayout) -> None
+```
+
+Tell the wrapped store the run's layout (`FrameStore`).
+
+<a id="fim.gui.store.LiveProgressStore.wants_frames"></a>
+
+#### wants\_frames
+
+```python
+def wants_frames(run_id: str) -> bool
+```
+
+Whether the wrapped store prefers frames; nothing here needs rows.
+
+<a id="fim.gui.store.LiveProgressStore.write_frame"></a>
+
+#### write\_frame
+
+```python
+def write_frame(run_id: str, frame: TrajectoryFrame) -> None
+```
+
+Delegate one frame, or raise `RunCancelledError` instead.
+
+The frame twin of `write_generation`: cancellation is checked
+first, and the sidecar follows the committed generation.
+
+**Raises**:
+
+- `TypeError` - If the wrapped store cannot take frames.
+
 <a id="fim.gui.store.LiveProgressStore.write_generation"></a>
 
 #### write\_generation
@@ -11370,7 +11460,11 @@ Delegate straight to the wrapped store; nothing to decorate here.
 def close() -> None
 ```
 
-Close the wrapped store's own resources (`ClosableStore`).
+Close the wrapped store, then report the last generation it holds.
+
+Closing commits everything, so the sidecar's final value is the
+last generation written, even though the watermark lagged behind it
+while the run was going.
 
 <a id="fim.gui.store.LiveProgressStore.equilibrium_store"></a>
 
@@ -11442,7 +11536,7 @@ The live-batch counterpart to `fim.reanalyze.
 reanalyze_trajectory`: that function requires a completed run's own
 `manifest.json` (written only once, at the very end), so it cannot
 read a replicate that is still running. This reads the same
-`trajectory.jsonl` directly instead, with no manifest at all, and
+`trajectory.tlog` directly instead, with no manifest at all, and
 is meant to be called only with a `generation` already confirmed by
 that replicate's own `.progress` sidecar
 (`read_progress_sidecar`/`write_progress_sidecar`):
@@ -11454,7 +11548,7 @@ generation still being written.
 
 **Arguments**:
 
-- `trajectory_path` - The replicate's own `trajectory.jsonl`.
+- `trajectory_path` - The replicate's own `trajectory.tlog`.
 - `run_id` - The replicate's own run id (not the batch's).
 - `generation` - The generation to reconstruct — normally
   `read_progress_sidecar(...)`'s own `"generation"` value.
@@ -11618,7 +11712,7 @@ Sample up to `max_samples` generations' worth of `STATISTIC_NAMES`.
 
 **Arguments**:
 
-- `trajectory_path` - The `trajectory.jsonl` to read.
+- `trajectory_path` - The `trajectory.tlog` to read.
 - `manifest_path` - Its companion manifest; defaults to
   `trajectory_path.with_name("manifest.json")`, matching
   `reanalyze_trajectory`'s own default.
@@ -12674,7 +12768,7 @@ The ancestral phase's full trajectory — every generation's own
 allele frequencies, not only this `H_S` summary — is not held here:
 `generate_with_outcome` streams it, one generation at a time, to its
 `on_generation` observer, which `fim.engine` writes as the run's
-`equilibrium_trajectory.jsonl` artifact.
+`equilibrium_trajectory.tlog` artifact.
 
 **Arguments**:
 
@@ -12866,7 +12960,7 @@ Equilibrate one ancestral population, then split it into `params.d` demes.
   of the split run's own generation zero. Observing draws
   nothing from any random stream, so the result is the
   same with or without an observer. `fim.engine` uses it
-  to stream `equilibrium_trajectory.jsonl`; `None` (the
+  to stream `equilibrium_trajectory.tlog`; `None` (the
   default) observes nothing.
 
 
@@ -14363,11 +14457,11 @@ Serialize the state to the public long-form trajectory row schema.
 one output row per individual (deme, locus, allele) combination
 that actually has a nonzero frequency, rather than one row per
 deme or per generation holding a nested table — the same shape
-`fim.persistence.jsonl_store.JSONLTrajectoryStore` writes to
-`trajectory.jsonl` and `ModelState.from_rows`, below, reads back.
-This shape is what makes the persisted file directly usable by
-ordinary tools (a spreadsheet, `jq`, a pandas `DataFrame`)
-without first needing to unpack a nested structure.
+a trajectory store's `read` yields, the exported `trajectory.jsonl`
+holds, and `ModelState.from_rows`, below, reads back. This shape is
+what makes the exported file directly usable by ordinary tools (a
+spreadsheet, `jq`, a pandas `DataFrame`) without first needing to
+unpack a nested structure.
 
 **Arguments**:
 
@@ -16737,7 +16831,7 @@ gene copies and the loci, so the first frame (or `begin_run`) fixes them; a
 second run id is refused with an explanation (a batch uses one store per
 replicate, through a store factory). `read` yields the run's rows exactly as
 the JSON Lines store would, so every reader of rows keeps working; the
-canonical `trajectory.jsonl` is something to *export*
+canonical `trajectory.tlog` is something to *export*
 (`fim.persistence.tlog_export`).
 
 <a id="fim.persistence.binary_store.TRAJECTORY_LOG_FILENAME"></a>
@@ -16769,12 +16863,17 @@ Append and read one run's trajectory through a binary log file.
 - `background` - Whether a writer thread checksums, writes and syncs, so
   the producing thread only encodes.
 - `block_generations` - Generations per block, at most.
-- `block_seconds` - Seconds an open block may wait before being written.
+- `block_seconds` - Seconds an open block may wait before being written, or
+  `None` (the default) to write on count and size only; see
+  `tlog.DEFAULT_BLOCK_SECONDS` for why that is the default.
 - `sync` - Durability policy (`tlog.SyncMode`); `"auto"` uses
   `F_FULLFSYNC` on macOS and `fsync` elsewhere.
 - `sync_seconds` - Seconds between group-commit syncs.
 - `buffer_bytes` - Size of a block buffer.
 - `key_every` - Generations between keyframes in sparse mode.
+- `mode` - `"sparse"` (the default: a keyframe every `key_every`
+  generations and, between them, only the pairs that changed) or
+  `"dense"` (every generation in full).
 - `queue_depth` - Sealed blocks that may wait for the writer thread.
 - `clock` - Monotonic clock deciding when to seal and sync (tests inject
   one); no time enters any byte of the log.
@@ -16789,11 +16888,12 @@ def __init__(path: Path | str,
              *,
              background: bool = True,
              block_generations: int = tlog.DEFAULT_BLOCK_GENERATIONS,
-             block_seconds: float = tlog.DEFAULT_BLOCK_SECONDS,
+             block_seconds: float | None = tlog.DEFAULT_BLOCK_SECONDS,
              sync: tlog.SyncMode = "auto",
              sync_seconds: float = tlog.DEFAULT_SYNC_SECONDS,
              buffer_bytes: int = tlog.DEFAULT_BUFFER_BYTES,
              key_every: int = tlog.DEFAULT_KEY_EVERY,
+             mode: tlog.LogMode = "sparse",
              queue_depth: int = tlog.DEFAULT_QUEUE_DEPTH,
              clock: Callable[[], float] = time.monotonic,
              fault: tlog.FaultHook | None = None) -> None
@@ -17042,6 +17142,29 @@ def exists() -> bool
 ```
 
 Whether the log file exists on disk.
+
+<a id="fim.persistence.binary_store.open_trajectory"></a>
+
+#### open\_trajectory
+
+```python
+def open_trajectory(path: Path | str) -> TrajectoryStore
+```
+
+Open a trajectory file for reading, whichever form it is in.
+
+A `.tlog` file is a binary log (a run's own trajectory); anything else
+is read as JSON Lines (an export, or a file from elsewhere). Both give
+the same rows through `read`.
+
+**Arguments**:
+
+- `path` - The trajectory file.
+
+
+**Returns**:
+
+  A store whose `read(run_id)` yields the file's rows.
 
 <a id="fim.persistence.frame"></a>
 
@@ -19040,7 +19163,7 @@ Capture everything needed to identify, verify, and replay a run.
 `fim.engine._run_one` returns a `RunResult` without ever writing to
 disk, so it cannot yet know a durable file's content digest. A
 manifest actually persisted to disk (`fim.cli._write_run_artifacts`)
-is written only once every other artifact (`trajectory.jsonl`,
+is written only once every other artifact (`trajectory.tlog`,
 `report.json`, `scatter.png`) is fully flushed, with `artifacts`
 populated from their real on-disk digests — so `artifacts is not
 None` on a *read* manifest doubles as "every sibling artifact this
@@ -19394,7 +19517,7 @@ is undefined (both demes fixed for the same allele).
 Above the deme-count limit (`fim.statistics.catalog.
 DEFAULT_PAIRWISE_MAX_DEMES` unless the researcher sets another) the file
 records ``"mode": "skipped"`` and the limit instead of the matrices; any
-specific pair can still be recomputed from `trajectory.jsonl`.
+specific pair can still be recomputed from `trajectory.tlog`.
 
 Size: five lists of ``d (d - 1) / 2`` numbers, about 20 bytes each in
 compact JSON. At ``d = 1024`` that is about 52 MB per run (each replicate
@@ -20097,7 +20220,7 @@ An equilibrium-split run (`fim.model.initial.
 EquilibriumSplitInitialCondition`) simulates one panmictic ancestral
 population before founding its demes. That phase's own trajectory
 is persisted separately from the main one — the
-`equilibrium_trajectory.jsonl` artifact — in the identical
+`equilibrium_trajectory.tlog` artifact — in the identical
 `TrajectoryRow` schema, with its own generation counter starting at
 zero, so it can never be mistaken for the main run's own
 generations. A store implementing this method names the companion
@@ -20655,8 +20778,8 @@ def equilibrium_store(run_id: str) -> TrajectoryStore
 
 Return the ancestral-phase companion of `run_id`'s own child store.
 
-So a replicate's `equilibrium_trajectory.jsonl` lands beside its
-own `trajectory.jsonl`, in its own directory
+So a replicate's `equilibrium_trajectory.tlog` lands beside its
+own `trajectory.tlog`, in its own directory
 (`EquilibriumStoreProvider`).
 
 <a id="fim.persistence.store.normalize_row"></a>
@@ -20753,7 +20876,14 @@ Generations after which the open block is sealed and written.
 
 #### DEFAULT\_BLOCK\_SECONDS
 
-Seconds after which the open block is sealed and written, whichever first.
+Seconds after which the open block is sealed and written; `None` for never.
+
+Off by default because sealing on time makes the file's bytes depend on how
+fast the machine ran (the block boundaries move), while sealing on count and
+size alone makes the file a pure function of the run: the same configuration
+always writes the same bytes, so a digest in a manifest can be compared
+between runs. An interactive caller that wants its live view never more than
+a moment stale opts in with a number of seconds.
 
 <a id="fim.persistence.tlog.DEFAULT_KEY_EVERY"></a>
 
@@ -21029,6 +21159,14 @@ def __call__(point: str, size: int = 0) -> int | None
 
 Observe `point`; optionally shorten a write or raise.
 
+<a id="fim.persistence.tlog.LogMode"></a>
+
+#### LogMode
+
+`"dense"` writes every generation in full; `"sparse"` writes a full
+keyframe every `key_every` generations and, between them, only the (deme,
+locus) pairs that changed.
+
 <a id="fim.persistence.tlog.SyncMode"></a>
 
 #### SyncMode
@@ -21095,7 +21233,8 @@ Encode frames into blocks and append them to a log file.
 
 One writer owns one log file for one run. `submit` encodes a frame into
 the open block; the block is sealed when it holds `block_generations`
-generations, when `block_seconds` have passed on the injected `clock`, or
+generations, when `block_seconds` (if set) have passed on the injected
+`clock`, or
 when the next record would not fit. A sealed block is checksummed and
 written with `write(2)`; once that returns it is *committed*, and a
 process killed afterwards loses at most the open block and the blocks
@@ -21121,9 +21260,14 @@ when the writer closes.
 - `run_id` - The run the log holds.
 - `layout` - Its frame layout.
 - `block_generations` - Generations per block, at most.
-- `block_seconds` - Seconds an open block may wait before being sealed.
+- `block_seconds` - Seconds an open block may wait before being sealed, or
+  `None` (the default) to seal on count and size only, which keeps
+  the file's bytes a pure function of the frames written.
 - `buffer_bytes` - Size of a block buffer.
 - `key_every` - Generations between keyframes in sparse mode.
+- `mode` - `"dense"` (every record full) or `"sparse"` (keyframes and
+  deltas). A keyframe always opens a block, so a reader can
+  start decoding there.
 - `clock` - A monotonic clock returning seconds (tests inject one). It
   only decides *when* to seal or sync; no time enters any byte.
 - `background` - Whether a writer thread does the checksum, write and sync.
@@ -21149,9 +21293,10 @@ def __init__(path: Path | str,
              layout: FrameLayout,
              *,
              block_generations: int = DEFAULT_BLOCK_GENERATIONS,
-             block_seconds: float = DEFAULT_BLOCK_SECONDS,
+             block_seconds: float | None = DEFAULT_BLOCK_SECONDS,
              buffer_bytes: int = DEFAULT_BUFFER_BYTES,
              key_every: int = DEFAULT_KEY_EVERY,
+             mode: LogMode = "dense",
              clock: Callable[[], float] = time.monotonic,
              background: bool = False,
              queue_depth: int = DEFAULT_QUEUE_DEPTH,
@@ -21910,7 +22055,7 @@ Re-analyze a persisted trajectory (`doc/fim-gui-design.md` §12).
 
 Every generation of a completed run is saved to disk, as one row per
 deme/locus/allele combination actually present that generation (in a
-file called `trajectory.jsonl` — see `fim.persistence`). "Re-analyzing"
+file called `trajectory.tlog` — see `fim.persistence`). "Re-analyzing"
 that file means reading it back afterward and computing fresh statistics
 from it — the differentiation numbers for whichever generation you
 actually want to look at, computed the exact same way they were the
@@ -21921,7 +22066,7 @@ stopped (and was reported) at generation 500 — the full history was
 saved, so any of it can be revisited later.
 
 Extracted from `fim.cli._command_stats` so every consumer that needs to
-"read a persisted `trajectory.jsonl` the same way `cli._command_stats`
+"read a persisted `trajectory.tlog` the same way `cli._command_stats`
 already does" (§3.8) — Screen 6, "open an existing run" (§4.6), and
 Screen 5, "animated trajectory" (§4.5, via `group_rows_by_generation`)
 — shares the exact same algorithm `fim stats` uses, rather than a
@@ -22006,7 +22151,7 @@ def group_rows_by_generation(
 
 Group every persisted row by its generation number, in stored order.
 
-A `trajectory.jsonl` file already stores its rows generation by
+A `trajectory.tlog` file already stores its rows generation by
 generation, in the order they were written during the original run —
 but as one long, flat sequence, not indexed for picking out a
 specific generation's own rows directly. This function reads that
@@ -22024,7 +22169,7 @@ memory to that selection even for gigabyte-scale example data.
 
 **Arguments**:
 
-- `trajectory_path` - The `trajectory.jsonl` to read.
+- `trajectory_path` - The `trajectory.tlog` to read.
 - `run_id` - The run identity every row must belong to.
 - `generations` - Only these generations are retained, when specified.
 
@@ -22080,7 +22225,7 @@ run completed, and silently ignoring it would mask that.
 
 **Arguments**:
 
-- `trajectory_path` - The run's own `trajectory.jsonl` --
+- `trajectory_path` - The run's own `trajectory.tlog` --
   `convergence.jsonl` is expected as its sibling.
 - `manifest` - The run's own manifest.
 
@@ -22132,7 +22277,7 @@ run's own true final one.
 
 **Arguments**:
 
-- `trajectory_path` - The `trajectory.jsonl` to read.
+- `trajectory_path` - The `trajectory.tlog` to read.
 - `manifest_path` - Its companion manifest; defaults to
   `trajectory_path.with_name("manifest.json")`, `fim stats`'s
   own default.
@@ -22184,7 +22329,7 @@ independently plausible ones.
 
 **Arguments**:
 
-- `trajectory_path` - The replicate's own `trajectory.jsonl`.
+- `trajectory_path` - The replicate's own `trajectory.tlog`.
 - `run_id` - The run identity every row must belong to (a batch
   replicate's own id, not the batch's).
 - `params` - That run's own validated parameters.
