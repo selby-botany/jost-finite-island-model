@@ -13,6 +13,10 @@ A record:
 padded-4 varint  body_len   bytes after this field
 padded-4 varint  rows       rows of the whole generation (not only a delta)
 u8               kind       0 = full frame, 1 = delta (changed pairs only)
+varint           gen_delta  generations since the previous record (0 for the
+                            first record of a block, whose generation is in
+                            the block header; usually 1; more when the run
+                            is thinned)
 body
 ```
 
@@ -155,12 +159,14 @@ def put_pair(out, pos, n, ids, fr, base, size, tmp8):
 
 
 @kernel
-def enc_full(out, pos, nal, ids, fr, demes, loci, sizes, tmp8):
+def enc_full(out, pos, gen_delta, nal, ids, fr, demes, loci, sizes, tmp8):
     """Append one full-frame record built from a CSR frame.
 
     Args:
         out: The block buffer.
         pos: Where the record starts.
+        gen_delta: Generations since the previous record (0 for a block's
+            first).
         nal: `int32[pairs]` alleles per pair.
         ids: Allele ids, pair 0 first.
         fr: Frequencies, same order.
@@ -175,6 +181,7 @@ def enc_full(out, pos, nal, ids, fr, demes, loci, sizes, tmp8):
     start = pos
     pos += 2 * PAD4 + 1
     out[start + 2 * PAD4] = KIND_FULL
+    pos = put_varint(out, pos, gen_delta)
     e = 0
     p = 0
     for d in range(demes):
@@ -193,7 +200,7 @@ def enc_full(out, pos, nal, ids, fr, demes, loci, sizes, tmp8):
 
 
 @kernel
-def enc_delta(out, pos, nal, ids, fr, demes, loci, sizes, pn, pid, pf, tmp8):
+def enc_delta(out, pos, gen_delta, nal, ids, fr, demes, loci, sizes, pn, pid, pf, tmp8):
     """Append a delta record against `pn/pid/pf` and update that state.
 
     Only pairs whose alleles or frequency bits differ from the previous
@@ -203,6 +210,7 @@ def enc_delta(out, pos, nal, ids, fr, demes, loci, sizes, pn, pid, pf, tmp8):
     Args:
         out: The block buffer.
         pos: Where the record starts.
+        gen_delta: Generations since the previous record.
         nal: `int32[pairs]` alleles per pair.
         ids: Allele ids, pair 0 first.
         fr: Frequencies, same order.
@@ -220,6 +228,7 @@ def enc_delta(out, pos, nal, ids, fr, demes, loci, sizes, pn, pid, pf, tmp8):
     start = pos
     pos += 2 * PAD4 + 1
     out[start + 2 * PAD4] = KIND_DELTA
+    pos = put_varint(out, pos, gen_delta)
     count_pos = pos
     pos += _COUNT_PAD
     e = 0
@@ -316,14 +325,14 @@ def apply_record(buf, pos, demes, loci, sizes, pn, pid, pc, pf):
     """Apply the record at `pos` to the decoded state.
 
     Returns:
-        `(end position, rows, kind)`. An end position of `-1` means the
-        state is too narrow: widen it and call again.
+        `(end position, rows, kind, gen_delta)`. An end position of `-1`
+        means the state is too narrow: widen it and call again.
     """
     blen, p0 = get_varint(buf, pos)
     end = p0 + blen
     rows, p1 = get_varint(buf, p0)
     kind = buf[p1]
-    cur = p1 + 1
+    gen_delta, cur = get_varint(buf, p1 + 1)
     if kind == KIND_FULL:
         p = 0
         for d in range(demes):
@@ -331,7 +340,7 @@ def apply_record(buf, pos, demes, loci, sizes, pn, pid, pc, pf):
             for _l in range(loci):
                 cur = get_pair(buf, cur, size, p, pn, pid, pc, pf)
                 if cur < 0:
-                    return np.int64(-1), rows, kind
+                    return np.int64(-1), rows, kind, gen_delta
                 p += 1
     else:
         nch, cur = get_varint(buf, cur)
@@ -342,8 +351,8 @@ def apply_record(buf, pos, demes, loci, sizes, pn, pid, pc, pf):
             size = sizes[p // loci]
             cur = get_pair(buf, cur, size, p, pn, pid, pc, pf)
             if cur < 0:
-                return np.int64(-1), rows, kind
-    return end, rows, kind
+                return np.int64(-1), rows, kind, gen_delta
+    return end, rows, kind, gen_delta
 
 
 @kernel

@@ -741,6 +741,31 @@ Return to the [source-tree orientation](../README.md) or the [developer guide](.
     * [close\_run](#fim.persistence.store.ReplicateFanoutStore.close_run)
     * [equilibrium\_store](#fim.persistence.store.ReplicateFanoutStore.equilibrium_store)
   * [normalize\_row](#fim.persistence.store.normalize_row)
+* [fim.persistence.tlog](#fim.persistence.tlog)
+  * [FLAG\_SPARSE](#fim.persistence.tlog.FLAG_SPARSE)
+  * [BLOCK\_HEADER\_SIZE](#fim.persistence.tlog.BLOCK_HEADER_SIZE)
+  * [DEFAULT\_BLOCK\_GENERATIONS](#fim.persistence.tlog.DEFAULT_BLOCK_GENERATIONS)
+  * [DEFAULT\_BLOCK\_SECONDS](#fim.persistence.tlog.DEFAULT_BLOCK_SECONDS)
+  * [DEFAULT\_KEY\_EVERY](#fim.persistence.tlog.DEFAULT_KEY_EVERY)
+  * [DEFAULT\_BUFFER\_BYTES](#fim.persistence.tlog.DEFAULT_BUFFER_BYTES)
+  * [MIN\_BUFFER\_BYTES](#fim.persistence.tlog.MIN_BUFFER_BYTES)
+  * [TlogError](#fim.persistence.tlog.TlogError)
+  * [LogHeader](#fim.persistence.tlog.LogHeader)
+  * [BlockInfo](#fim.persistence.tlog.BlockInfo)
+  * [ScanResult](#fim.persistence.tlog.ScanResult)
+    * [generations](#fim.persistence.tlog.ScanResult.generations)
+    * [rows](#fim.persistence.tlog.ScanResult.rows)
+    * [last\_generation](#fim.persistence.tlog.ScanResult.last_generation)
+  * [build\_header](#fim.persistence.tlog.build_header)
+  * [parse\_header](#fim.persistence.tlog.parse_header)
+  * [scan\_blocks](#fim.persistence.tlog.scan_blocks)
+  * [recover](#fim.persistence.tlog.recover)
+  * [LogWriter](#fim.persistence.tlog.LogWriter)
+    * [\_\_init\_\_](#fim.persistence.tlog.LogWriter.__init__)
+    * [submit](#fim.persistence.tlog.LogWriter.submit)
+    * [flush](#fim.persistence.tlog.LogWriter.flush)
+    * [close](#fim.persistence.tlog.LogWriter.close)
+  * [iter\_frames](#fim.persistence.tlog.iter_frames)
 * [fim.persistence.tlog\_codec](#fim.persistence.tlog_codec)
   * [PAD4](#fim.persistence.tlog_codec.PAD4)
   * [kernel](#fim.persistence.tlog_codec.kernel)
@@ -20293,6 +20318,413 @@ handed in).
 
   A typed row with primitive values.
 
+<a id="fim.persistence.tlog"></a>
+
+# fim.persistence.tlog
+
+The binary trajectory log: file format, block writer, scanning and recovery.
+
+A log holds one run's trajectory as a header followed by *blocks*. All
+integers are little-endian.
+
+```text
+file header   "FIMTLOG1" | u16 version | u16 flags | u32 demes | u32 loci
+              | u32 key_every | u16 run_id length | run_id (UTF-8)
+              | varint deme_sizes[demes] | varint locus_ids[loci] | u32 crc32
+block         "FTB1" | u32 payload_len | u64 first_generation
+              | u64 last_generation | u32 n_records | u32 rows
+              | payload (n_records records, `fim.persistence.tlog_codec`)
+              | u32 chain_crc
+```
+
+`chain_crc` is the CRC-32 of the block header and payload seeded with the
+previous block's `chain_crc` (the first block is seeded with the CRC of the
+file header's body). A **block is the unit of commit**: it counts only when
+its magic, bounds and chained checksum all hold, and because each checksum
+covers its predecessor, a damaged or missing block invalidates everything
+after it, so a block that happens to look valid after a hole (pages can
+reach a disk out of order after a power failure) is never accepted. The
+longest valid prefix of blocks is exactly what was committed.
+
+The block header carries the first and last generation and the row count, so
+a reader (or a checkpoint) learns what a block holds without decoding it. A
+*keyframe* (a full record) always opens a block, so a reader can start
+decoding at any keyframe block.
+
+This module has no dependency on Numba: the record codec compiles itself
+when Numba is installed and runs as plain Python otherwise.
+
+<a id="fim.persistence.tlog.FLAG_SPARSE"></a>
+
+#### FLAG\_SPARSE
+
+Header flag: delta records may follow keyframes (the log is "sparse").
+
+<a id="fim.persistence.tlog.BLOCK_HEADER_SIZE"></a>
+
+#### BLOCK\_HEADER\_SIZE
+
+Bytes of a block's header (32).
+
+<a id="fim.persistence.tlog.DEFAULT_BLOCK_GENERATIONS"></a>
+
+#### DEFAULT\_BLOCK\_GENERATIONS
+
+Generations after which the open block is sealed and written.
+
+<a id="fim.persistence.tlog.DEFAULT_BLOCK_SECONDS"></a>
+
+#### DEFAULT\_BLOCK\_SECONDS
+
+Seconds after which the open block is sealed and written, whichever first.
+
+<a id="fim.persistence.tlog.DEFAULT_KEY_EVERY"></a>
+
+#### DEFAULT\_KEY\_EVERY
+
+Generations between keyframes in sparse mode.
+
+<a id="fim.persistence.tlog.DEFAULT_BUFFER_BYTES"></a>
+
+#### DEFAULT\_BUFFER\_BYTES
+
+Bytes of one block buffer.
+
+<a id="fim.persistence.tlog.MIN_BUFFER_BYTES"></a>
+
+#### MIN\_BUFFER\_BYTES
+
+The smallest block buffer a writer accepts.
+
+<a id="fim.persistence.tlog.TlogError"></a>
+
+## TlogError Objects
+
+```python
+class TlogError(ValueError)
+```
+
+The file is not a usable trajectory log (bad magic, header or version).
+
+<a id="fim.persistence.tlog.LogHeader"></a>
+
+## LogHeader Objects
+
+```python
+@dataclass(frozen=True, slots=True)
+class LogHeader()
+```
+
+The parsed file header of a log.
+
+**Arguments**:
+
+- `version` - The format version.
+- `flags` - Header flags (`FLAG_SPARSE`).
+- `run_id` - The one run the log holds.
+- `layout` - The frame layout (locus identifiers, gene copies per deme).
+- `key_every` - Generations between keyframes in sparse mode.
+- `header_len` - Bytes of the header including its checksum.
+- `crc` - The CRC-32 of the header's body (the seed of the block chain).
+
+<a id="fim.persistence.tlog.BlockInfo"></a>
+
+## BlockInfo Objects
+
+```python
+@dataclass(frozen=True, slots=True)
+class BlockInfo()
+```
+
+One committed block, as found by `scan_blocks`.
+
+**Arguments**:
+
+- `offset` - Where the block starts in the file.
+- `payload_len` - Bytes of the block's records.
+- `first_generation` - Generation of the block's first record.
+- `last_generation` - Generation of the block's last record.
+- `n_records` - Records (generations) in the block.
+- `rows` - Trajectory rows in the block's generations.
+- `end` - Offset just after the block's checksum.
+- `chain_crc` - The chained checksum after this block.
+- `is_key` - Whether the block opens with a full record.
+
+<a id="fim.persistence.tlog.ScanResult"></a>
+
+## ScanResult Objects
+
+```python
+@dataclass(frozen=True, slots=True)
+class ScanResult()
+```
+
+What `scan_blocks` and `recover` found.
+
+**Arguments**:
+
+- `header` - The file header.
+- `blocks` - The committed blocks, in order.
+- `valid_end` - Offset just after the last committed block (the header's
+  end for a log with none).
+- `file_size` - Bytes in the file when it was scanned.
+- `reason` - Why scanning stopped (`"end of file"` for a clean log).
+
+<a id="fim.persistence.tlog.ScanResult.generations"></a>
+
+#### generations
+
+```python
+@property
+def generations() -> int
+```
+
+Records (generations) in the committed blocks.
+
+<a id="fim.persistence.tlog.ScanResult.rows"></a>
+
+#### rows
+
+```python
+@property
+def rows() -> int
+```
+
+Trajectory rows in the committed blocks.
+
+<a id="fim.persistence.tlog.ScanResult.last_generation"></a>
+
+#### last\_generation
+
+```python
+@property
+def last_generation() -> int
+```
+
+The last committed generation, or `-1` when none is committed.
+
+<a id="fim.persistence.tlog.build_header"></a>
+
+#### build\_header
+
+```python
+def build_header(run_id: str,
+                 layout: FrameLayout,
+                 key_every: int,
+                 flags: int = 0) -> bytes
+```
+
+Return the file header of a log.
+
+**Arguments**:
+
+- `run_id` - The run the log holds.
+- `layout` - Its frame layout.
+- `key_every` - Generations between keyframes in sparse mode.
+- `flags` - Header flags.
+
+
+**Returns**:
+
+  The header bytes including the trailing CRC-32.
+
+<a id="fim.persistence.tlog.parse_header"></a>
+
+#### parse\_header
+
+```python
+def parse_header(data: bytes | mmap.mmap | memoryview) -> LogHeader
+```
+
+Parse and verify a log's file header.
+
+**Arguments**:
+
+- `data` - The start of the file.
+
+
+**Returns**:
+
+  The header.
+
+
+**Raises**:
+
+- `TlogError` - If the magic, version, length or checksum is wrong.
+
+<a id="fim.persistence.tlog.scan_blocks"></a>
+
+#### scan\_blocks
+
+```python
+def scan_blocks(data: bytes | mmap.mmap | memoryview,
+                header: LogHeader | None = None) -> ScanResult
+```
+
+Walk the chained blocks of a log and return the committed prefix.
+
+Stops at the first block that is torn, zero-filled, out of chain or
+corrupt; everything before it is committed, everything from it on is not.
+
+**Arguments**:
+
+- `data` - The whole file.
+- `header` - Its parsed header, if already known.
+
+
+**Returns**:
+
+  The committed blocks and why scanning stopped.
+
+<a id="fim.persistence.tlog.recover"></a>
+
+#### recover
+
+```python
+def recover(path: Path | str, *, truncate: bool = True) -> ScanResult
+```
+
+Scan a log file and, by default, cut off everything after the committed prefix.
+
+**Arguments**:
+
+- `path` - The log file.
+- `truncate` - Whether to truncate a torn or corrupt tail. A reader that
+  does not own the file passes `False`.
+
+
+**Returns**:
+
+  What was found.
+
+
+**Raises**:
+
+- `TlogError` - If the file is empty or its header is unusable.
+
+<a id="fim.persistence.tlog.LogWriter"></a>
+
+## LogWriter Objects
+
+```python
+class LogWriter()
+```
+
+Encode frames into blocks and append them to a log file.
+
+One writer owns one log file for one run. `submit` encodes a frame into
+the open block; the block is sealed (checksummed and written with
+`write(2)`) when it holds `block_generations` generations, when
+`block_seconds` have passed on the injected `clock`, or when the next
+record would not fit. A sealed block is committed as soon as `write(2)`
+returns: a process killed afterwards loses at most the open block.
+
+**Arguments**:
+
+- `path` - The log file; it must not exist.
+- `run_id` - The run the log holds.
+- `layout` - Its frame layout.
+- `block_generations` - Generations per block, at most.
+- `block_seconds` - Seconds an open block may wait before being sealed.
+- `buffer_bytes` - Size of a block buffer.
+- `key_every` - Generations between keyframes in sparse mode.
+- `clock` - A monotonic clock returning seconds (tests inject one).
+
+
+**Raises**:
+
+- `FileExistsError` - If `path` already exists.
+
+<a id="fim.persistence.tlog.LogWriter.__init__"></a>
+
+#### \_\_init\_\_
+
+```python
+def __init__(path: Path | str,
+             run_id: str,
+             layout: FrameLayout,
+             *,
+             block_generations: int = DEFAULT_BLOCK_GENERATIONS,
+             block_seconds: float = DEFAULT_BLOCK_SECONDS,
+             buffer_bytes: int = DEFAULT_BUFFER_BYTES,
+             key_every: int = DEFAULT_KEY_EVERY,
+             clock: Callable[[], float] = time.monotonic) -> None
+```
+
+Create the file and write its header.
+
+<a id="fim.persistence.tlog.LogWriter.submit"></a>
+
+#### submit
+
+```python
+def submit(frame: TrajectoryFrame) -> None
+```
+
+Encode one generation into the open block, sealing it when due.
+
+**Arguments**:
+
+- `frame` - The generation; its counts must match the layout.
+
+
+**Raises**:
+
+- `ValueError` - If generations do not strictly increase or the
+  frame does not fit the layout.
+- `RuntimeError` - If the writer is closed.
+
+<a id="fim.persistence.tlog.LogWriter.flush"></a>
+
+#### flush
+
+```python
+def flush() -> None
+```
+
+Seal and write the open block, if there is one (a commit point).
+
+<a id="fim.persistence.tlog.LogWriter.close"></a>
+
+#### close
+
+```python
+def close() -> None
+```
+
+Write the open block and close the file; safe to call twice.
+
+<a id="fim.persistence.tlog.iter_frames"></a>
+
+#### iter\_frames
+
+```python
+def iter_frames(path: Path | str,
+                *,
+                scan: ScanResult | None = None) -> Iterator[TrajectoryFrame]
+```
+
+Yield every committed generation of a log as a frame, in order.
+
+Reads the file through a read-only memory map, applying each record to a
+decoded state (a delta needs the generation before it). Frames are
+independent copies.
+
+**Arguments**:
+
+- `path` - The log file.
+- `scan` - A scan of the same file, to avoid scanning twice.
+
+
+**Yields**:
+
+  One `TrajectoryFrame` per committed generation.
+
+
+**Raises**:
+
+- `TlogError` - If the file is not a usable log.
+
 <a id="fim.persistence.tlog_codec"></a>
 
 # fim.persistence.tlog\_codec
@@ -20312,6 +20744,10 @@ A record:
 padded-4 varint  body_len   bytes after this field
 padded-4 varint  rows       rows of the whole generation (not only a delta)
 u8               kind       0 = full frame, 1 = delta (changed pairs only)
+varint           gen_delta  generations since the previous record (0 for the
+                            first record of a block, whose generation is in
+                            the block header; usually 1; more when the run
+                            is thinned)
 body
 ```
 
@@ -20423,7 +20859,7 @@ Write one pair body from the entries `ids/fr[base:base + n]`.
 
 ```python
 @kernel
-def enc_full(out, pos, nal, ids, fr, demes, loci, sizes, tmp8)
+def enc_full(out, pos, gen_delta, nal, ids, fr, demes, loci, sizes, tmp8)
 ```
 
 Append one full-frame record built from a CSR frame.
@@ -20432,6 +20868,8 @@ Append one full-frame record built from a CSR frame.
 
 - `out` - The block buffer.
 - `pos` - Where the record starts.
+- `gen_delta` - Generations since the previous record (0 for a block's
+  first).
 - `nal` - `int32[pairs]` alleles per pair.
 - `ids` - Allele ids, pair 0 first.
 - `fr` - Frequencies, same order.
@@ -20451,7 +20889,8 @@ Append one full-frame record built from a CSR frame.
 
 ```python
 @kernel
-def enc_delta(out, pos, nal, ids, fr, demes, loci, sizes, pn, pid, pf, tmp8)
+def enc_delta(out, pos, gen_delta, nal, ids, fr, demes, loci, sizes, pn, pid,
+              pf, tmp8)
 ```
 
 Append a delta record against `pn/pid/pf` and update that state.
@@ -20464,6 +20903,7 @@ frame are written. Every `nal[p]` must be at most `pid.shape[1]`
 
 - `out` - The block buffer.
 - `pos` - Where the record starts.
+- `gen_delta` - Generations since the previous record.
 - `nal` - `int32[pairs]` alleles per pair.
 - `ids` - Allele ids, pair 0 first.
 - `fr` - Frequencies, same order.
@@ -20520,8 +20960,8 @@ Apply the record at `pos` to the decoded state.
 
 **Returns**:
 
-  `(end position, rows, kind)`. An end position of `-1` means the
-  state is too narrow: widen it and call again.
+  `(end position, rows, kind, gen_delta)`. An end position of `-1`
+  means the state is too narrow: widen it and call again.
 
 <a id="fim.persistence.tlog_codec.state_to_csr"></a>
 

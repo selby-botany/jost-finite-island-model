@@ -133,6 +133,7 @@ Every test module, fixture, and test function documented here in full; `doc/fim-
   - [`test_run_classes`](#persistence.test_run_classes)
   - [`test_run_metadata`](#persistence.test_run_metadata)
   - [`test_store`](#persistence.test_store)
+  - [`test_tlog`](#persistence.test_tlog)
   - [`test_tlog_codec`](#persistence.test_tlog_codec)
   - [`test_validation`](#persistence.test_validation)
 - [`test/statistics/`](#group-statistics)
@@ -31376,6 +31377,241 @@ def test_manifest_round_trip_reconstructs_several_convergence_statistics(
 
 A manifest watching several statistics is a lossless replay too.
 
+<a id="persistence.test_tlog"></a>
+
+# persistence.test\_tlog
+
+Tests of the binary log file: header, blocks, chained checksums, recovery.
+
+Every case writes real frames through `LogWriter` into a temporary file and
+checks the bytes that come back, so the writer, the scan, the recovery and
+the frame iterator are tested against one another. The corruption cases
+follow the design's list (cut, zeroed page, bit flip, swapped blocks,
+trailing garbage, zero tail): each must recover to a prefix of whole blocks
+whose frames equal the frames that were written. Time-based sealing uses an
+injected clock; nothing sleeps and nothing depends on the machine.
+
+<a id="persistence.test_tlog._FakeClock"></a>
+
+## \_FakeClock Objects
+
+```python
+class _FakeClock()
+```
+
+A clock the test advances by hand.
+
+<a id="persistence.test_tlog._FakeClock.__init__"></a>
+
+#### \_\_init\_\_
+
+```python
+def __init__() -> None
+```
+
+Start at zero.
+
+<a id="persistence.test_tlog._FakeClock.__call__"></a>
+
+#### \_\_call\_\_
+
+```python
+def __call__() -> float
+```
+
+Return the current fake time.
+
+<a id="persistence.test_tlog.test_header_round_trips_run_id_layout_and_flags"></a>
+
+#### test\_header\_round\_trips\_run\_id\_layout\_and\_flags
+
+```python
+def test_header_round_trips_run_id_layout_and_flags() -> None
+```
+
+The header carries the run id (non-ASCII too), sizes (0 allowed), loci.
+
+<a id="persistence.test_tlog.test_every_truncation_of_the_header_is_refused"></a>
+
+#### test\_every\_truncation\_of\_the\_header\_is\_refused
+
+```python
+def test_every_truncation_of_the_header_is_refused() -> None
+```
+
+A header cut at any byte (or flipped at any byte) never parses.
+
+<a id="persistence.test_tlog.test_an_unsupported_version_is_refused"></a>
+
+#### test\_an\_unsupported\_version\_is\_refused
+
+```python
+def test_an_unsupported_version_is_refused() -> None
+```
+
+A future version number is a clear error, not a misread.
+
+<a id="persistence.test_tlog.test_blocks_hold_what_was_written"></a>
+
+#### test\_blocks\_hold\_what\_was\_written
+
+```python
+def test_blocks_hold_what_was_written(tmp_path: Path) -> None
+```
+
+Block boundaries, counts, rows and generation ranges are all recorded.
+
+<a id="persistence.test_tlog.test_a_log_with_no_frames_has_a_header_and_no_blocks"></a>
+
+#### test\_a\_log\_with\_no\_frames\_has\_a\_header\_and\_no\_blocks
+
+```python
+def test_a_log_with_no_frames_has_a_header_and_no_blocks(
+        tmp_path: Path) -> None
+```
+
+Closing an unused writer leaves a valid, empty log.
+
+<a id="persistence.test_tlog.test_thinned_generations_keep_their_numbers"></a>
+
+#### test\_thinned\_generations\_keep\_their\_numbers
+
+```python
+def test_thinned_generations_keep_their_numbers(tmp_path: Path) -> None
+```
+
+Gaps between recorded generations survive through the record deltas.
+
+<a id="persistence.test_tlog.test_a_block_is_sealed_when_its_time_is_up"></a>
+
+#### test\_a\_block\_is\_sealed\_when\_its\_time\_is\_up
+
+```python
+def test_a_block_is_sealed_when_its_time_is_up(tmp_path: Path) -> None
+```
+
+With an injected clock the block boundary is exactly where time says.
+
+<a id="persistence.test_tlog.test_a_block_is_sealed_when_the_buffer_is_full"></a>
+
+#### test\_a\_block\_is\_sealed\_when\_the\_buffer\_is\_full
+
+```python
+def test_a_block_is_sealed_when_the_buffer_is_full(tmp_path: Path) -> None
+```
+
+A small buffer makes many blocks; a frame larger than it still fits.
+
+<a id="persistence.test_tlog.test_writer_refusals"></a>
+
+#### test\_writer\_refusals
+
+```python
+def test_writer_refusals(tmp_path: Path) -> None
+```
+
+Bad options, a second file, wrong layout, repeated generations, closed.
+
+<a id="persistence.test_tlog.test_an_empty_file_is_not_a_log"></a>
+
+#### test\_an\_empty\_file\_is\_not\_a\_log
+
+```python
+def test_an_empty_file_is_not_a_log(tmp_path: Path) -> None
+```
+
+Scanning an empty or foreign file raises a clear error.
+
+<a id="persistence.test_tlog.test_a_log_cut_inside_its_last_block_recovers_the_earlier_blocks"></a>
+
+#### test\_a\_log\_cut\_inside\_its\_last\_block\_recovers\_the\_earlier\_blocks
+
+```python
+@pytest.mark.parametrize("cut_back", [1, 2, 4, 5, 40, 200])
+def test_a_log_cut_inside_its_last_block_recovers_the_earlier_blocks(
+        tmp_path: Path, cut_back: int) -> None
+```
+
+A torn tail loses only the open block; recovery truncates the file.
+
+<a id="persistence.test_tlog.test_recovery_without_truncation_leaves_the_file_alone"></a>
+
+#### test\_recovery\_without\_truncation\_leaves\_the\_file\_alone
+
+```python
+def test_recovery_without_truncation_leaves_the_file_alone(
+        tmp_path: Path) -> None
+```
+
+A reader that does not own the file must not modify it.
+
+<a id="persistence.test_tlog.test_trailing_zeros_or_garbage_are_cut_off"></a>
+
+#### test\_trailing\_zeros\_or\_garbage\_are\_cut\_off
+
+```python
+@pytest.mark.parametrize("tail",
+                         [b"\x00" * 5000, b"garbage", b"FTB1" + b"\x00" * 40])
+def test_trailing_zeros_or_garbage_are_cut_off(tmp_path: Path,
+                                               tail: bytes) -> None
+```
+
+A pre-sized zero tail or random trailing bytes never count as a block.
+
+<a id="persistence.test_tlog.test_a_flipped_bit_in_any_block_ends_the_committed_prefix_there"></a>
+
+#### test\_a\_flipped\_bit\_in\_any\_block\_ends\_the\_committed\_prefix\_there
+
+```python
+@pytest.mark.parametrize("block", [0, 1, 2, 3])
+def test_a_flipped_bit_in_any_block_ends_the_committed_prefix_there(
+        tmp_path: Path, block: int) -> None
+```
+
+A bit flip in a block's payload invalidates that block and all later ones.
+
+<a id="persistence.test_tlog.test_a_zeroed_page_in_the_middle_ends_the_committed_prefix"></a>
+
+#### test\_a\_zeroed\_page\_in\_the\_middle\_ends\_the\_committed\_prefix
+
+```python
+def test_a_zeroed_page_in_the_middle_ends_the_committed_prefix(
+        tmp_path: Path) -> None
+```
+
+A hole (zeroed bytes) in block 1 loses blocks 1 onward, never block 2.
+
+<a id="persistence.test_tlog.test_swapped_blocks_are_not_accepted"></a>
+
+#### test\_swapped\_blocks\_are\_not\_accepted
+
+```python
+def test_swapped_blocks_are_not_accepted(tmp_path: Path) -> None
+```
+
+Each checksum covers its predecessor, so reordered blocks break the chain.
+
+<a id="persistence.test_tlog.test_a_missing_block_breaks_the_chain_for_every_later_block"></a>
+
+#### test\_a\_missing\_block\_breaks\_the\_chain\_for\_every\_later\_block
+
+```python
+def test_a_missing_block_breaks_the_chain_for_every_later_block(
+        tmp_path: Path) -> None
+```
+
+A valid-looking block after a hole is rejected (power-failure case).
+
+<a id="persistence.test_tlog.test_recover_checks_the_header_first"></a>
+
+#### test\_recover\_checks\_the\_header\_first
+
+```python
+def test_recover_checks_the_header_first(tmp_path: Path) -> None
+```
+
+A damaged header makes the whole log unusable rather than misread.
+
 <a id="persistence.test_tlog_codec"></a>
 
 # persistence.test\_tlog\_codec
@@ -31473,6 +31709,17 @@ def test_the_state_widens_when_a_pair_has_more_alleles_than_it_holds() -> None
 ```
 
 More than the initial 16 alleles in a pair widens the state and retries.
+
+<a id="persistence.test_tlog_codec.test_the_generation_delta_of_a_record_round_trips"></a>
+
+#### test\_the\_generation\_delta\_of\_a\_record\_round\_trips
+
+```python
+@pytest.mark.parametrize("gen_delta", [0, 1, 2, 127, 128, 10_000, 2**33])
+def test_the_generation_delta_of_a_record_round_trips(gen_delta: int) -> None
+```
+
+A record carries how many generations it follows (more than 1 when thinned).
 
 <a id="persistence.test_tlog_codec.test_varints_round_trip"></a>
 

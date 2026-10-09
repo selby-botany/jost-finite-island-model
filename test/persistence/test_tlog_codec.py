@@ -77,7 +77,7 @@ def _encode_full(
     """Encode one frame as a full record."""
     out = np.zeros(64 + 40 * len(ids) + 12 * len(nal), np.uint8)
     pos, rows = codec.enc_full(
-        out, 0, nal, ids, fr, len(sizes), loci, sizes, np.zeros(1)
+        out, 0, 1, nal, ids, fr, len(sizes), loci, sizes, np.zeros(1)
     )
     assert rows == len(ids)
     return bytes(out[:pos])
@@ -92,7 +92,7 @@ def _decode(
     """Apply one record to `state` (widening it as needed); return its summary."""
     buf = np.frombuffer(data, dtype=np.uint8)
     while True:
-        end, rows, kind = codec.apply_record(
+        end, rows, kind, _gen = codec.apply_record(
             buf, 0, len(sizes), loci, sizes, state.pn, state.pid, state.pc, state.pf
         )
         if end >= 0:
@@ -159,7 +159,7 @@ def test_a_single_allele_at_frequency_one_costs_two_bytes_plus_the_id() -> None:
     ids = np.arange(1, 13, dtype=np.int64)
     fr = np.ones(12)
     data = _encode_full(nal, ids, fr)
-    assert len(data) == 9 + 12 * 2
+    assert len(data) == 10 + 12 * 2
     state = codec.DecodedState(12)
     _decode(data, state)
     _same(state, nal, ids, fr)
@@ -195,6 +195,23 @@ def test_the_state_widens_when_a_pair_has_more_alleles_than_it_holds() -> None:
     state = codec.DecodedState(1, width=4)
     _decode(data, state, sizes=sizes, loci=1)
     assert state.width >= 40
+    _same(state, nal, ids, fr)
+
+
+@pytest.mark.parametrize("gen_delta", [0, 1, 2, 127, 128, 10_000, 2**33])
+def test_the_generation_delta_of_a_record_round_trips(gen_delta: int) -> None:
+    """A record carries how many generations it follows (more than 1 when thinned)."""
+    rng = np.random.default_rng(gen_delta % 31)
+    nal, ids, fr = _random_frame(rng)
+    out = np.zeros(64 + 40 * len(ids) + 12 * len(nal), np.uint8)
+    pos, _rows = codec.enc_full(
+        out, 0, gen_delta, nal, ids, fr, PAIRS_DEMES, PAIRS_LOCI, SIZES, np.zeros(1)
+    )
+    state = codec.DecodedState(len(nal))
+    end, _rows2, _kind, got = codec.apply_record(
+        out, 0, PAIRS_DEMES, PAIRS_LOCI, SIZES, state.pn, state.pid, state.pc, state.pf
+    )
+    assert (int(end), int(got)) == (int(pos), gen_delta)
     _same(state, nal, ids, fr)
 
 
@@ -255,6 +272,7 @@ def test_a_long_random_walk_of_delta_records_reproduces_every_frame() -> None:
         pos, rows, changed = codec.enc_delta(
             out,
             0,
+            1,
             nal,
             ids,
             fr,
@@ -284,11 +302,23 @@ def test_an_unchanged_generation_is_a_short_delta() -> None:
     codec.load_state_from_csr(nal, ids, fr, pn, pid, pf)
     out = np.zeros(4096, np.uint8)
     pos, rows, changed = codec.enc_delta(
-        out, 0, nal, ids, fr, PAIRS_DEMES, PAIRS_LOCI, SIZES, pn, pid, pf, np.zeros(1)
+        out,
+        0,
+        1,
+        nal,
+        ids,
+        fr,
+        PAIRS_DEMES,
+        PAIRS_LOCI,
+        SIZES,
+        pn,
+        pid,
+        pf,
+        np.zeros(1),
     )
     assert changed == 0
     assert rows == len(ids)
-    assert pos == 8 + 1 + 3
+    assert pos == 8 + 1 + 1 + 3
 
 
 @pytest.mark.skipif(not codec.HAVE_NUMBA, reason="needs numba to compare against")
@@ -299,18 +329,23 @@ def test_the_pure_python_kernels_produce_the_compiled_bytes() -> None:
     size = len(ids) * 40 + 200
     compiled = np.zeros(size, np.uint8)
     plain = np.zeros(size, np.uint8)
-    a = codec.enc_full(compiled, 0, nal, ids, fr, 3, 4, SIZES, np.zeros(1))
+    a = codec.enc_full(compiled, 0, 1, nal, ids, fr, 3, 4, SIZES, np.zeros(1))
     b = cast(Any, codec.enc_full).py_func(
-        plain, 0, nal, ids, fr, 3, 4, SIZES, np.zeros(1)
+        plain, 0, 1, nal, ids, fr, 3, 4, SIZES, np.zeros(1)
     )
     assert a == b
     assert compiled.tobytes() == plain.tobytes()
     state = codec.DecodedState(len(nal))
     buf = compiled
-    end, rows, kind = cast(Any, codec.apply_record).py_func(
+    end, rows, kind, gen_delta = cast(Any, codec.apply_record).py_func(
         buf, 0, 3, 4, SIZES, state.pn, state.pid, state.pc, state.pf
     )
-    assert (int(end), int(rows), int(kind)) == (a[0], len(ids), codec.KIND_FULL)
+    assert (int(end), int(rows), int(kind), int(gen_delta)) == (
+        a[0],
+        len(ids),
+        codec.KIND_FULL,
+        1,
+    )
     _same(state, nal, ids, fr)
 
 
@@ -332,12 +367,12 @@ def test_the_codec_runs_without_numba() -> None:
         "ids = np.array([1, 2, 7, 4, 5, 6, 9], dtype=np.int64)\n"
         "fr = np.array([0.25, 0.75, 1.0, 0.1, 0.2, 0.7, 1.0 / 3.0])\n"
         "out = np.zeros(512, np.uint8)\n"
-        "pos, rows = c.enc_full(out, 0, nal, ids, fr, 2, 2, sizes, np.zeros(1))\n"
+        "pos, rows = c.enc_full(out, 0, 5, nal, ids, fr, 2, 2, sizes, np.zeros(1))\n"
         "assert rows == 7\n"
         "state = c.DecodedState(4)\n"
-        "end, rows, kind = c.apply_record(\n"
+        "end, rows, kind, gen = c.apply_record(\n"
         "    out, 0, 2, 2, sizes, state.pn, state.pid, state.pc, state.pf)\n"
-        "assert end == pos and rows == 7 and kind == 0\n"
+        "assert end == pos and rows == 7 and kind == 0 and gen == 5\n"
         "counts, got_ids, got_fr = state.frame_arrays()\n"
         "assert counts.tolist() == nal.tolist()\n"
         "assert got_ids.tolist() == ids.tolist()\n"
