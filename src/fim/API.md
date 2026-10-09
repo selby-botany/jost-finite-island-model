@@ -91,8 +91,10 @@ Return to the [source-tree orientation](../README.md) or the [developer guide](.
     * [window\_statistics](#fim.convergence.monitor.ConvergenceMonitor.window_statistics)
 * [fim.convergence.window\_statistics](#fim.convergence.window_statistics)
   * [WindowStatistics](#fim.convergence.window_statistics.WindowStatistics)
+    * [tau\_int](#fim.convergence.window_statistics.WindowStatistics.tau_int)
     * [noise\_adequate](#fim.convergence.window_statistics.WindowStatistics.noise_adequate)
   * [window\_statistics](#fim.convergence.window_statistics.window_statistics)
+  * [geyer\_window\_statistics](#fim.convergence.window_statistics.geyer_window_statistics)
 * [fim.engine](#fim.engine)
   * [FinalReport](#fim.engine.FinalReport)
   * [RunResult](#fim.engine.RunResult)
@@ -2897,6 +2899,17 @@ How well a window's own mean is known, given its internal correlation.
 - `window` - `len(window)` this was computed from, carried along so a
   caller does not have to keep the original sequence around too.
 
+<a id="fim.convergence.window_statistics.WindowStatistics.tau_int"></a>
+
+#### tau\_int
+
+```python
+@property
+def tau_int() -> float
+```
+
+The integrated autocorrelation time: `window / effective_sample_size`.
+
 <a id="fim.convergence.window_statistics.WindowStatistics.noise_adequate"></a>
 
 #### noise\_adequate
@@ -2947,6 +2960,49 @@ Estimate a window's own mean and its correlation-corrected precision.
 
 - `ValueError` - If `values` has fewer than 3 entries (an autocorrelation
   of anything shorter is undefined, not merely unreliable).
+
+<a id="fim.convergence.window_statistics.geyer_window_statistics"></a>
+
+#### geyer\_window\_statistics
+
+```python
+def geyer_window_statistics(values: Sequence[float]) -> WindowStatistics
+```
+
+Estimate a window's mean and its standard error by Geyer's method.
+
+The lag-1 formula of `window_statistics` is exact only for a first-order
+autoregressive process. A statistic with two relaxation times (the sum of a
+fast and a slow mode, as a two-locus or ring model gives) is
+underestimated by it, because the slow mode shows up as a small step at
+lag 1 and a long tail beyond. Geyer's (1992) initial positive sequence
+estimator sums the whole autocorrelation function instead: pair the lags,
+`Gamma_m = rho(2m) + rho(2m + 1)`, add the pairs while they stay positive
+(the sum of a true autocorrelation function's pairs is positive, so the
+first non-positive pair is noise), and set
+`tau_int = -1 + 2 * sum(Gamma_m)`.
+
+The autocorrelation comes from one FFT of the centered window, zero-padded
+to twice its length so the circular correlation equals the linear one, so a
+window of `L` values costs `O(L log L)`.
+
+**Arguments**:
+
+- `values` - The window's per-generation values, in order; at least
+  `MINIMUM_WINDOW_VALUES` of them.
+
+
+**Returns**:
+
+  The mean, the sample standard deviation, the effective sample size
+  `window / tau_int` (with `tau_int` at least 1, so a negatively
+  correlated window is never credited with more draws than it has), the
+  standard error `SD / sqrt(ESS)` and the lag-1 autocorrelation.
+
+
+**Raises**:
+
+- `ValueError` - If `values` has fewer than `MINIMUM_WINDOW_VALUES` entries.
 
 <a id="fim.engine"></a>
 

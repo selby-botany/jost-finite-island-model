@@ -40,6 +40,8 @@ import math
 from collections.abc import Sequence
 from dataclasses import dataclass
 
+import numpy as np
+
 from fim.config.convergence import NOISE_TOLERANCE_FRACTION
 from fim.config.numerics import MAXIMUM_LAG1_CORRELATION, MINIMUM_WINDOW_VALUES
 
@@ -73,6 +75,11 @@ class WindowStatistics:
     effective_sample_size: float
     lag1_autocorrelation: float
     window: int
+
+    @property
+    def tau_int(self) -> float:
+        """The integrated autocorrelation time: `window / effective_sample_size`."""
+        return self.window / self.effective_sample_size
 
     def noise_adequate(self, tolerance: float) -> bool:
         """Return whether `mean` is known to within `tolerance`.
@@ -156,5 +163,78 @@ def window_statistics(values: Sequence[float]) -> WindowStatistics:
         standard_deviation=standard_deviation,
         effective_sample_size=effective_sample_size,
         lag1_autocorrelation=lag1,
+        window=count,
+    )
+
+
+def geyer_window_statistics(values: Sequence[float]) -> WindowStatistics:
+    """Estimate a window's mean and its standard error by Geyer's method.
+
+    The lag-1 formula of `window_statistics` is exact only for a first-order
+    autoregressive process. A statistic with two relaxation times (the sum of a
+    fast and a slow mode, as a two-locus or ring model gives) is
+    underestimated by it, because the slow mode shows up as a small step at
+    lag 1 and a long tail beyond. Geyer's (1992) initial positive sequence
+    estimator sums the whole autocorrelation function instead: pair the lags,
+    `Gamma_m = rho(2m) + rho(2m + 1)`, add the pairs while they stay positive
+    (the sum of a true autocorrelation function's pairs is positive, so the
+    first non-positive pair is noise), and set
+    `tau_int = -1 + 2 * sum(Gamma_m)`.
+
+    The autocorrelation comes from one FFT of the centered window, zero-padded
+    to twice its length so the circular correlation equals the linear one, so a
+    window of `L` values costs `O(L log L)`.
+
+    Args:
+        values: The window's per-generation values, in order; at least
+            `MINIMUM_WINDOW_VALUES` of them.
+
+    Returns:
+        The mean, the sample standard deviation, the effective sample size
+        `window / tau_int` (with `tau_int` at least 1, so a negatively
+        correlated window is never credited with more draws than it has), the
+        standard error `SD / sqrt(ESS)` and the lag-1 autocorrelation.
+
+    Raises:
+        ValueError: If `values` has fewer than `MINIMUM_WINDOW_VALUES` entries.
+    """
+    count = len(values)
+    if count < MINIMUM_WINDOW_VALUES:
+        raise ValueError(
+            f"geyer_window_statistics needs at least {MINIMUM_WINDOW_VALUES} values"
+        )
+    array = np.asarray(values, dtype=np.float64)
+    mean = math.fsum(values) / count
+    centered = array - mean
+    sum_squares = float(np.dot(centered, centered))
+    standard_deviation = math.sqrt(sum_squares / (count - 1))
+    if standard_deviation == 0.0:
+        # A flat window has nothing left to estimate: exactly known.
+        return WindowStatistics(
+            mean=mean,
+            standard_error=0.0,
+            standard_deviation=0.0,
+            effective_sample_size=float(count),
+            lag1_autocorrelation=0.0,
+            window=count,
+        )
+    # Autocovariance by FFT, normalized so that lag 0 is 1. Zero-padding to at
+    # least twice the length turns the circular correlation into the linear one.
+    transform = np.fft.rfft(centered, 2 * count)
+    autocovariance = np.fft.irfft(transform * np.conj(transform), 2 * count)[:count]
+    correlation = autocovariance / autocovariance[0]
+    # Initial positive sequence: whole pairs of lags only, while positive.
+    pair_count = count // 2
+    pairs = correlation[: 2 * pair_count : 2] + correlation[1 : 2 * pair_count : 2]
+    non_positive = np.flatnonzero(pairs <= 0.0)
+    kept = pairs if non_positive.size == 0 else pairs[: non_positive[0]]
+    tau_int = max(-1.0 + 2.0 * float(np.sum(kept)), 1.0)
+    effective_sample_size = count / tau_int
+    return WindowStatistics(
+        mean=mean,
+        standard_error=standard_deviation / math.sqrt(effective_sample_size),
+        standard_deviation=standard_deviation,
+        effective_sample_size=effective_sample_size,
+        lag1_autocorrelation=max(-1.0, min(float(correlation[1]), 1.0)),
         window=count,
     )

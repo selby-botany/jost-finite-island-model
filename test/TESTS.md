@@ -5854,6 +5854,102 @@ def test_minimum_noise_check_window_is_at_least_three() -> None
 
 The monitor's own skip threshold must not be shorter than this module needs.
 
+<a id="convergence.test_window_statistics.test_geyer_flat_window_is_exactly_known"></a>
+
+#### test\_geyer\_flat\_window\_is\_exactly\_known
+
+```python
+def test_geyer_flat_window_is_exactly_known() -> None
+```
+
+A constant window has no uncertainty and its full length in draws.
+
+<a id="convergence.test_window_statistics.test_geyer_strictly_alternating_window_is_credited_no_extra_draws"></a>
+
+#### test\_geyer\_strictly\_alternating\_window\_is\_credited\_no\_extra\_draws
+
+```python
+def test_geyer_strictly_alternating_window_is_credited_no_extra_draws(
+) -> None
+```
+
+Hand-worked: eight alternating values.
+
+The biased autocorrelation is `rho(k) = (-1)^k (8 - k) / 8`, so each pair
+`rho(2m) + rho(2m + 1)` is `1/8`, all four are positive and
+`-1 + 2 * 4/8 = 0`. `tau_int` is never below 1, so the effective sample
+size is the window length.
+
+<a id="convergence.test_window_statistics.test_geyer_on_a_short_known_sequence_matches_the_hand_value"></a>
+
+#### test\_geyer\_on\_a\_short\_known\_sequence\_matches\_the\_hand\_value
+
+```python
+def test_geyer_on_a_short_known_sequence_matches_the_hand_value() -> None
+```
+
+Hand-worked: `1, 2, 3, 4`.
+
+Centered `-1.5, -0.5, 0.5, 1.5`; the biased autocovariances are `1.25`,
+`0.3125`, `-0.375`, `-0.5625`, so `rho = 1, 0.25, -0.3, -0.45`. The first
+pair is `1.25` (positive) and the second `-0.75` stops the sum:
+`tau_int = -1 + 2 * 1.25 = 1.5`. The sample variance is `5 / 3`.
+
+<a id="convergence.test_window_statistics.test_geyer_refuses_a_window_too_short_for_an_autocorrelation"></a>
+
+#### test\_geyer\_refuses\_a\_window\_too\_short\_for\_an\_autocorrelation
+
+```python
+@pytest.mark.parametrize("count", [0, 1, 2])
+def test_geyer_refuses_a_window_too_short_for_an_autocorrelation(
+        count: int) -> None
+```
+
+Fewer than three values define no autocorrelation.
+
+<a id="convergence.test_window_statistics.test_geyer_tau_int_matches_the_exact_ar1_value"></a>
+
+#### test\_geyer\_tau\_int\_matches\_the\_exact\_ar1\_value
+
+```python
+def test_geyer_tau_int_matches_the_exact_ar1_value() -> None
+```
+
+A seeded AR(1) series: `tau_int = (1 + phi) / (1 - phi)` is 19 at 0.9.
+
+<a id="convergence.test_window_statistics.test_geyer_sees_a_slow_mode_the_lag_one_formula_misses"></a>
+
+#### test\_geyer\_sees\_a\_slow\_mode\_the\_lag\_one\_formula\_misses
+
+```python
+def test_geyer_sees_a_slow_mode_the_lag_one_formula_misses() -> None
+```
+
+The sum of two AR(1) processes with time constants 20 and 450.
+
+Each has unit variance, so the exact `tau_int` of the sum is the average
+of the two: `(39 + 899) / 2 = 469`. The lag-1 formula sees only the
+correlation of neighboring values, which is dominated by the weighted
+average of the two lag-1 correlations, `(0.95 + 1 - 1/450) / 2`, and
+gives about 75; this pins the failure of the old estimator.
+
+<a id="convergence.test_window_statistics.test_geyer_standard_error_covers_the_spread_of_a_slow_square_wave"></a>
+
+#### test\_geyer\_standard\_error\_covers\_the\_spread\_of\_a\_slow\_square\_wave
+
+```python
+@pytest.mark.parametrize("length", [3500, 20_300])
+def test_geyer_standard_error_covers_the_spread_of_a_slow_square_wave(
+        length: int) -> None
+```
+
+A square wave of period 1000 plus small noise, at eight phases.
+
+The migration-hub shape: the window mean moves with where the window
+starts. The true spread of the mean over all 1000 phases is computed
+exactly from the noise-free wave, and the Geyer standard error at every
+tested phase is at least that.
+
 
 
 <a id="group-engine"></a>
