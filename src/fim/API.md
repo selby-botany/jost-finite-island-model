@@ -748,6 +748,8 @@ Return to the [source-tree orientation](../README.md) or the [developer guide](.
   * [DEFAULT\_BLOCK\_SECONDS](#fim.persistence.tlog.DEFAULT_BLOCK_SECONDS)
   * [DEFAULT\_KEY\_EVERY](#fim.persistence.tlog.DEFAULT_KEY_EVERY)
   * [DEFAULT\_BUFFER\_BYTES](#fim.persistence.tlog.DEFAULT_BUFFER_BYTES)
+  * [DEFAULT\_QUEUE\_DEPTH](#fim.persistence.tlog.DEFAULT_QUEUE_DEPTH)
+  * [DEFAULT\_SYNC\_SECONDS](#fim.persistence.tlog.DEFAULT_SYNC_SECONDS)
   * [MIN\_BUFFER\_BYTES](#fim.persistence.tlog.MIN_BUFFER_BYTES)
   * [TlogError](#fim.persistence.tlog.TlogError)
   * [LogHeader](#fim.persistence.tlog.LogHeader)
@@ -760,11 +762,19 @@ Return to the [source-tree orientation](../README.md) or the [developer guide](.
   * [parse\_header](#fim.persistence.tlog.parse_header)
   * [scan\_blocks](#fim.persistence.tlog.scan_blocks)
   * [recover](#fim.persistence.tlog.recover)
+  * [InjectedFaultError](#fim.persistence.tlog.InjectedFaultError)
+  * [FaultHook](#fim.persistence.tlog.FaultHook)
+    * [\_\_call\_\_](#fim.persistence.tlog.FaultHook.__call__)
+  * [SyncMode](#fim.persistence.tlog.SyncMode)
+  * [sync\_file](#fim.persistence.tlog.sync_file)
+  * [WriterStats](#fim.persistence.tlog.WriterStats)
   * [LogWriter](#fim.persistence.tlog.LogWriter)
     * [\_\_init\_\_](#fim.persistence.tlog.LogWriter.__init__)
+    * [synced\_generation](#fim.persistence.tlog.LogWriter.synced_generation)
     * [submit](#fim.persistence.tlog.LogWriter.submit)
     * [flush](#fim.persistence.tlog.LogWriter.flush)
     * [close](#fim.persistence.tlog.LogWriter.close)
+    * [snapshot](#fim.persistence.tlog.LogWriter.snapshot)
   * [iter\_frames](#fim.persistence.tlog.iter_frames)
 * [fim.persistence.tlog\_codec](#fim.persistence.tlog_codec)
   * [PAD4](#fim.persistence.tlog_codec.PAD4)
@@ -20390,6 +20400,18 @@ Generations between keyframes in sparse mode.
 
 Bytes of one block buffer.
 
+<a id="fim.persistence.tlog.DEFAULT_QUEUE_DEPTH"></a>
+
+#### DEFAULT\_QUEUE\_DEPTH
+
+Sealed blocks that may wait for the writer thread.
+
+<a id="fim.persistence.tlog.DEFAULT_SYNC_SECONDS"></a>
+
+#### DEFAULT\_SYNC\_SECONDS
+
+Seconds between group-commit syncs.
+
 <a id="fim.persistence.tlog.MIN_BUFFER_BYTES"></a>
 
 #### MIN\_BUFFER\_BYTES
@@ -20602,6 +20624,98 @@ Scan a log file and, by default, cut off everything after the committed prefix.
 
 - `TlogError` - If the file is empty or its header is unusable.
 
+<a id="fim.persistence.tlog.InjectedFaultError"></a>
+
+## InjectedFaultError Objects
+
+```python
+class InjectedFaultError(OSError)
+```
+
+A failure a `FaultHook` asked for; it stands in for a crash or a full disk.
+
+<a id="fim.persistence.tlog.FaultHook"></a>
+
+## FaultHook Objects
+
+```python
+class FaultHook(Protocol)
+```
+
+Named points in the write path where a test may inject a failure.
+
+The writer calls the hook as `hook(point, size)` at each point:
+`"before_write"` (`size` is the bytes about to be written),
+`"after_write"`, `"before_sync"` and `"after_sync"`. The hook may raise
+(`InjectedFaultError`) to stop the writer there. At `"before_write"` it may
+instead return a byte count smaller than `size`: only that many bytes
+are written and then `InjectedFaultError` is raised, which leaves a torn
+block exactly as a crash in the middle of `write(2)` would.
+
+<a id="fim.persistence.tlog.FaultHook.__call__"></a>
+
+#### \_\_call\_\_
+
+```python
+def __call__(point: str, size: int = 0) -> int | None
+```
+
+Observe `point`; optionally shorten a write or raise.
+
+<a id="fim.persistence.tlog.SyncMode"></a>
+
+#### SyncMode
+
+How the file is made durable: not at all, `fsync`, `F_FULLFSYNC`, or the
+strongest call the platform has (`"full"` on macOS, `fsync` elsewhere).
+
+<a id="fim.persistence.tlog.sync_file"></a>
+
+#### sync\_file
+
+```python
+def sync_file(fd: int, mode: SyncMode) -> None
+```
+
+Make the data written to `fd` durable.
+
+`fsync` on macOS only hands data to the drive, which may keep it in its
+cache; `F_FULLFSYNC` asks the drive to flush, and costs milliseconds.
+Elsewhere `fsync` is durable.
+
+**Arguments**:
+
+- `fd` - An open file descriptor.
+- `mode` - `"none"` does nothing, `"fsync"` calls `os.fsync`, `"full"`
+  calls `F_FULLFSYNC`, `"auto"` picks `"full"` where the platform
+  has it and `"fsync"` otherwise.
+
+
+**Raises**:
+
+- `OSError` - If `"full"` is asked for and the platform lacks it, or the
+  call fails.
+
+<a id="fim.persistence.tlog.WriterStats"></a>
+
+## WriterStats Objects
+
+```python
+@dataclass(slots=True)
+class WriterStats()
+```
+
+Counters a writer keeps, for tests and for tuning.
+
+**Arguments**:
+
+- `blocks` - Blocks committed.
+- `generations` - Generations committed.
+- `rows` - Rows committed.
+- `bytes` - File bytes written, header included.
+- `syncs` - Durability calls made.
+- `stall_seconds` - Time the producer waited for a free buffer.
+
 <a id="fim.persistence.tlog.LogWriter"></a>
 
 ## LogWriter Objects
@@ -20613,11 +20727,26 @@ class LogWriter()
 Encode frames into blocks and append them to a log file.
 
 One writer owns one log file for one run. `submit` encodes a frame into
-the open block; the block is sealed (checksummed and written with
-`write(2)`) when it holds `block_generations` generations, when
-`block_seconds` have passed on the injected `clock`, or when the next
-record would not fit. A sealed block is committed as soon as `write(2)`
-returns: a process killed afterwards loses at most the open block.
+the open block; the block is sealed when it holds `block_generations`
+generations, when `block_seconds` have passed on the injected `clock`, or
+when the next record would not fit. A sealed block is checksummed and
+written with `write(2)`; once that returns it is *committed*, and a
+process killed afterwards loses at most the open block and the blocks
+still queued.
+
+With `background=True` the checksum, the write and the sync run on a
+writer thread, so the producing thread only encodes. That thread calls
+nothing but `zlib.crc32`, `os.write` and the sync call, all of which
+release the GIL, so it never competes with a compiled kernel for it. A
+pool of block buffers bounds memory: when every buffer is queued or being
+written the producer waits (back-pressure), and the wait is counted in
+`stats.stall_seconds`. An exception in the thread is raised by the next
+`submit` or by `close`.
+
+Durability is a group commit: with `sync` other than `"none"` the writer
+thread syncs the file when `sync_seconds` have passed since the last
+sync, when `flush(sync=True)` is called (a checkpoint or a pause), and
+when the writer closes.
 
 **Arguments**:
 
@@ -20628,7 +20757,15 @@ returns: a process killed afterwards loses at most the open block.
 - `block_seconds` - Seconds an open block may wait before being sealed.
 - `buffer_bytes` - Size of a block buffer.
 - `key_every` - Generations between keyframes in sparse mode.
-- `clock` - A monotonic clock returning seconds (tests inject one).
+- `clock` - A monotonic clock returning seconds (tests inject one). It
+  only decides *when* to seal or sync; no time enters any byte.
+- `background` - Whether a writer thread does the checksum, write and sync.
+- `queue_depth` - Sealed blocks that may wait for the thread, and one
+  less than the number of buffers.
+- `sync` - Durability policy, see `sync_file`.
+- `sync_seconds` - Seconds between group-commit syncs.
+- `sync_function` - Replaces `sync_file` (tests inject one).
+- `fault` - A `FaultHook` for tests.
 
 
 **Raises**:
@@ -20648,10 +20785,27 @@ def __init__(path: Path | str,
              block_seconds: float = DEFAULT_BLOCK_SECONDS,
              buffer_bytes: int = DEFAULT_BUFFER_BYTES,
              key_every: int = DEFAULT_KEY_EVERY,
-             clock: Callable[[], float] = time.monotonic) -> None
+             clock: Callable[[], float] = time.monotonic,
+             background: bool = False,
+             queue_depth: int = DEFAULT_QUEUE_DEPTH,
+             sync: SyncMode = "none",
+             sync_seconds: float = DEFAULT_SYNC_SECONDS,
+             sync_function: Callable[[int, SyncMode], None] = sync_file,
+             fault: FaultHook | None = None) -> None
 ```
 
-Create the file and write its header.
+Create the file, write its header and start the thread if asked.
+
+<a id="fim.persistence.tlog.LogWriter.synced_generation"></a>
+
+#### synced\_generation
+
+```python
+@property
+def synced_generation() -> int
+```
+
+The last generation known to have been made durable (`-1` for none).
 
 <a id="fim.persistence.tlog.LogWriter.submit"></a>
 
@@ -20673,16 +20827,30 @@ Encode one generation into the open block, sealing it when due.
 - `ValueError` - If generations do not strictly increase or the
   frame does not fit the layout.
 - `RuntimeError` - If the writer is closed.
+- `BaseException` - Whatever the writer thread raised earlier.
 
 <a id="fim.persistence.tlog.LogWriter.flush"></a>
 
 #### flush
 
 ```python
-def flush() -> None
+def flush(*, sync: bool = False) -> None
 ```
 
-Seal and write the open block, if there is one (a commit point).
+Seal the open block and wait until everything submitted is written.
+
+A barrier: when this returns every generation submitted so far is
+committed (and durable when `sync` is true and the sync mode is not
+`"none"`). A checkpoint or a pause calls it with `sync=True`.
+
+**Arguments**:
+
+- `sync` - Also make the data durable now.
+
+
+**Raises**:
+
+- `BaseException` - Whatever the writer thread raised.
 
 <a id="fim.persistence.tlog.LogWriter.close"></a>
 
@@ -20692,7 +20860,27 @@ Seal and write the open block, if there is one (a commit point).
 def close() -> None
 ```
 
-Write the open block and close the file; safe to call twice.
+Write the open block, sync, stop the thread and close the file.
+
+Safe to call twice. The file descriptor is closed even when an
+earlier write failed; the failure is then raised from here.
+
+**Raises**:
+
+- `BaseException` - Whatever the writer thread raised.
+
+<a id="fim.persistence.tlog.LogWriter.snapshot"></a>
+
+#### snapshot
+
+```python
+def snapshot() -> tuple[int, int, int]
+```
+
+Return `(committed generation, committed bytes, chain checksum)` together.
+
+Read under the lock the writer thread holds while it updates them,
+so the three always describe the same block.
 
 <a id="fim.persistence.tlog.iter_frames"></a>
 

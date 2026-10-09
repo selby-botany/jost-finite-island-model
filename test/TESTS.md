@@ -135,6 +135,7 @@ Every test module, fixture, and test function documented here in full; `doc/fim-
   - [`test_store`](#persistence.test_store)
   - [`test_tlog`](#persistence.test_tlog)
   - [`test_tlog_codec`](#persistence.test_tlog_codec)
+  - [`test_tlog_writer`](#persistence.test_tlog_writer)
   - [`test_validation`](#persistence.test_validation)
 - [`test/statistics/`](#group-statistics)
   - [`test_catalog`](#statistics.test_catalog)
@@ -31788,6 +31789,229 @@ With numba absent the same code runs as plain Python and round-trips.
 A fresh interpreter hides numba (`sys.modules["numba"] = None` makes
 its import fail), so this proves the optional dependency really is
 optional for the module every default store uses.
+
+<a id="persistence.test_tlog_writer"></a>
+
+# persistence.test\_tlog\_writer
+
+Tests of the log writer's thread, back-pressure, sync policy and faults.
+
+The writer's promises are about *what reaches the file and when*, and none
+of them may depend on timing, so every test drives the writer through an
+injected clock, an injected sync function or a fault hook, and waits on
+barriers (`flush`) rather than on time. The central check is that the
+background writer produces exactly the bytes of the inline one.
+
+<a id="persistence.test_tlog_writer._FakeClock"></a>
+
+## \_FakeClock Objects
+
+```python
+class _FakeClock()
+```
+
+A clock the test advances by hand.
+
+<a id="persistence.test_tlog_writer._FakeClock.__init__"></a>
+
+#### \_\_init\_\_
+
+```python
+def __init__() -> None
+```
+
+Start at zero.
+
+<a id="persistence.test_tlog_writer._FakeClock.__call__"></a>
+
+#### \_\_call\_\_
+
+```python
+def __call__() -> float
+```
+
+Return the current fake time.
+
+<a id="persistence.test_tlog_writer.test_the_background_writer_writes_the_bytes_of_the_inline_writer"></a>
+
+#### test\_the\_background\_writer\_writes\_the\_bytes\_of\_the\_inline\_writer
+
+```python
+@pytest.mark.parametrize(
+    "options",
+    [
+        {
+            "block_generations": 4,
+            "queue_depth": 4
+        },
+        {
+            "block_generations": 1,
+            "queue_depth": 1
+        },
+        {
+            "block_generations": 7,
+            "queue_depth": 2,
+            "buffer_bytes": 4096
+        },
+    ],
+)
+def test_the_background_writer_writes_the_bytes_of_the_inline_writer(
+        tmp_path: Path, options: dict[str, int]) -> None
+```
+
+Thread or no thread, pool of one or many: the file is the same.
+
+<a id="persistence.test_tlog_writer.test_back_pressure_with_every_buffer_in_use_still_writes_every_frame"></a>
+
+#### test\_back\_pressure\_with\_every\_buffer\_in\_use\_still\_writes\_every\_frame
+
+```python
+def test_back_pressure_with_every_buffer_in_use_still_writes_every_frame(
+        tmp_path: Path) -> None
+```
+
+Gate the thread until the producer has used every buffer, then release.
+
+One generation per block and a queue of one means the producer needs a
+fourth buffer while the thread is stuck on the first write: it must wait
+for the pool rather than allocate without bound, and nothing is lost.
+
+<a id="persistence.test_tlog_writer.test_flush_is_a_barrier_after_which_everything_is_committed"></a>
+
+#### test\_flush\_is\_a\_barrier\_after\_which\_everything\_is\_committed
+
+```python
+def test_flush_is_a_barrier_after_which_everything_is_committed(
+        tmp_path: Path) -> None
+```
+
+After `flush` the file holds every submitted generation, readable now.
+
+<a id="persistence.test_tlog_writer.test_an_error_in_the_writer_thread_surfaces_on_the_next_submit"></a>
+
+#### test\_an\_error\_in\_the\_writer\_thread\_surfaces\_on\_the\_next\_submit
+
+```python
+def test_an_error_in_the_writer_thread_surfaces_on_the_next_submit(
+        tmp_path: Path) -> None
+```
+
+A failed write is raised to the producer, not swallowed in the thread.
+
+<a id="persistence.test_tlog_writer.test_a_write_cut_short_leaves_a_torn_block_that_recovery_removes"></a>
+
+#### test\_a\_write\_cut\_short\_leaves\_a\_torn\_block\_that\_recovery\_removes
+
+```python
+@pytest.mark.parametrize("keep", [0, 1, 7, 100])
+def test_a_write_cut_short_leaves_a_torn_block_that_recovery_removes(
+        tmp_path: Path, keep: int) -> None
+```
+
+A crash in the middle of `write(2)`: whole earlier blocks survive.
+
+<a id="persistence.test_tlog_writer.test_sync_runs_when_its_period_has_passed_and_at_flush_and_close"></a>
+
+#### test\_sync\_runs\_when\_its\_period\_has\_passed\_and\_at\_flush\_and\_close
+
+```python
+def test_sync_runs_when_its_period_has_passed_and_at_flush_and_close(
+        tmp_path: Path) -> None
+```
+
+The exact order of writes and syncs under an injected clock.
+
+<a id="persistence.test_tlog_writer.test_sync_none_never_syncs"></a>
+
+#### test\_sync\_none\_never\_syncs
+
+```python
+def test_sync_none_never_syncs(tmp_path: Path) -> None
+```
+
+The default policy makes no durability call at all.
+
+<a id="persistence.test_tlog_writer.test_a_background_writer_syncs_on_its_own_thread"></a>
+
+#### test\_a\_background\_writer\_syncs\_on\_its\_own\_thread
+
+```python
+def test_a_background_writer_syncs_on_its_own_thread(tmp_path: Path) -> None
+```
+
+The group commit happens off the producing thread.
+
+<a id="persistence.test_tlog_writer.test_a_failed_sync_surfaces_like_a_failed_write"></a>
+
+#### test\_a\_failed\_sync\_surfaces\_like\_a\_failed\_write
+
+```python
+def test_a_failed_sync_surfaces_like_a_failed_write(tmp_path: Path) -> None
+```
+
+An error at a named sync point stops the writer and is raised.
+
+<a id="persistence.test_tlog_writer.test_sync_file_modes"></a>
+
+#### test\_sync\_file\_modes
+
+```python
+def test_sync_file_modes(monkeypatch: pytest.MonkeyPatch,
+                         tmp_path: Path) -> None
+```
+
+`fsync`, `full` and `auto` call what they say; `full` needs the platform.
+
+<a id="persistence.test_tlog_writer.test_writer_options_are_validated"></a>
+
+#### test\_writer\_options\_are\_validated
+
+```python
+@pytest.mark.parametrize(
+    "options",
+    [
+        {
+            "queue_depth": 0
+        },
+        {
+            "sync_seconds": 0.0
+        },
+        {
+            "sync": "sometimes"
+        },
+    ],
+)
+def test_writer_options_are_validated(tmp_path: Path,
+                                      options: dict[str, object]) -> None
+```
+
+Nonsense options are refused before the file exists.
+
+<a id="persistence.test_tlog_writer.test_a_process_that_dies_loses_only_what_was_never_written"></a>
+
+#### test\_a\_process\_that\_dies\_loses\_only\_what\_was\_never\_written
+
+```python
+def test_a_process_that_dies_loses_only_what_was_never_written(
+        tmp_path: Path) -> None
+```
+
+Kill the writer process after a flush: everything flushed survives.
+
+The child flushes after generation 59 (a barrier), writes 40 more
+generations and then exits without closing anything (`os._exit`), which
+stops it as abruptly as a crash does. The parent recovers the file: it
+must hold every flushed generation and nothing but a prefix of the rest.
+
+<a id="persistence.test_tlog_writer.test_the_byte_path_never_reads_the_wall_clock"></a>
+
+#### test\_the\_byte\_path\_never\_reads\_the\_wall\_clock
+
+```python
+def test_the_byte_path_never_reads_the_wall_clock() -> None
+```
+
+Time decides when to seal or sync, never what a byte says.
 
 <a id="persistence.test_validation"></a>
 

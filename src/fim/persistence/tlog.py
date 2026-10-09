@@ -35,18 +35,25 @@ from __future__ import annotations
 
 import mmap
 import os
+import queue
 import struct
+import threading
 import time
 import zlib
 from collections.abc import Callable, Iterator
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Final
+from typing import Final, Literal, Protocol
 
 import numpy as np
 
 from fim.persistence import tlog_codec as codec
 from fim.persistence.frame import FrameLayout, TrajectoryFrame
+
+try:  # `fcntl` does not exist on Windows.
+    import fcntl
+except ImportError:  # pragma: no cover - exercised only on Windows
+    fcntl = None  # type: ignore[assignment]
 
 FILE_MAGIC: Final = b"FIMTLOG1"
 BLOCK_MAGIC: Final = b"FTB1"
@@ -73,6 +80,14 @@ DEFAULT_KEY_EVERY: Final = 256
 
 DEFAULT_BUFFER_BYTES: Final = 4 * 1024 * 1024
 """Bytes of one block buffer."""
+
+DEFAULT_QUEUE_DEPTH: Final = 4
+"""Sealed blocks that may wait for the writer thread."""
+
+DEFAULT_SYNC_SECONDS: Final = 2.0
+"""Seconds between group-commit syncs."""
+
+_POLL_SECONDS: Final = 0.05
 
 _VARINT_MORE: Final = 128
 _VARINT_PAYLOAD: Final = 127
@@ -390,15 +405,122 @@ def _record_bound(pairs: int, entries: int) -> int:
     )
 
 
+class InjectedFaultError(OSError):
+    """A failure a `FaultHook` asked for; it stands in for a crash or a full disk."""
+
+
+class FaultHook(Protocol):
+    """Named points in the write path where a test may inject a failure.
+
+    The writer calls the hook as `hook(point, size)` at each point:
+    `"before_write"` (`size` is the bytes about to be written),
+    `"after_write"`, `"before_sync"` and `"after_sync"`. The hook may raise
+    (`InjectedFaultError`) to stop the writer there. At `"before_write"` it may
+    instead return a byte count smaller than `size`: only that many bytes
+    are written and then `InjectedFaultError` is raised, which leaves a torn
+    block exactly as a crash in the middle of `write(2)` would.
+    """
+
+    def __call__(self, point: str, size: int = 0) -> int | None:
+        """Observe `point`; optionally shorten a write or raise."""
+        ...
+
+
+SyncMode = Literal["none", "fsync", "full", "auto"]
+"""How the file is made durable: not at all, `fsync`, `F_FULLFSYNC`, or the
+strongest call the platform has (`"full"` on macOS, `fsync` elsewhere)."""
+
+
+def sync_file(fd: int, mode: SyncMode) -> None:
+    """Make the data written to `fd` durable.
+
+    `fsync` on macOS only hands data to the drive, which may keep it in its
+    cache; `F_FULLFSYNC` asks the drive to flush, and costs milliseconds.
+    Elsewhere `fsync` is durable.
+
+    Args:
+        fd: An open file descriptor.
+        mode: `"none"` does nothing, `"fsync"` calls `os.fsync`, `"full"`
+            calls `F_FULLFSYNC`, `"auto"` picks `"full"` where the platform
+            has it and `"fsync"` otherwise.
+
+    Raises:
+        OSError: If `"full"` is asked for and the platform lacks it, or the
+            call fails.
+    """
+    if mode == "none":
+        return
+    full = getattr(fcntl, "F_FULLFSYNC", None) if fcntl is not None else None
+    if mode == "auto":
+        mode = "full" if full is not None else "fsync"
+    if mode == "full":
+        if full is None or fcntl is None:
+            raise OSError("F_FULLFSYNC is not available on this platform")
+        fcntl.fcntl(fd, full)
+    else:
+        os.fsync(fd)
+
+
+@dataclass(slots=True)
+class WriterStats:
+    """Counters a writer keeps, for tests and for tuning.
+
+    Args:
+        blocks: Blocks committed.
+        generations: Generations committed.
+        rows: Rows committed.
+        bytes: File bytes written, header included.
+        syncs: Durability calls made.
+        stall_seconds: Time the producer waited for a free buffer.
+    """
+
+    blocks: int = 0
+    generations: int = 0
+    rows: int = 0
+    bytes: int = 0
+    syncs: int = 0
+    stall_seconds: float = 0.0
+
+
+@dataclass(slots=True)
+class _Sealed:
+    """A sealed block waiting to be checksummed and written."""
+
+    buffer: np.ndarray
+    length: int
+    last_generation: int
+    records: int
+    rows: int
+
+
+_STOP: Final = object()
+_SYNC: Final = object()
+
+
 class LogWriter:
     """Encode frames into blocks and append them to a log file.
 
     One writer owns one log file for one run. `submit` encodes a frame into
-    the open block; the block is sealed (checksummed and written with
-    `write(2)`) when it holds `block_generations` generations, when
-    `block_seconds` have passed on the injected `clock`, or when the next
-    record would not fit. A sealed block is committed as soon as `write(2)`
-    returns: a process killed afterwards loses at most the open block.
+    the open block; the block is sealed when it holds `block_generations`
+    generations, when `block_seconds` have passed on the injected `clock`, or
+    when the next record would not fit. A sealed block is checksummed and
+    written with `write(2)`; once that returns it is *committed*, and a
+    process killed afterwards loses at most the open block and the blocks
+    still queued.
+
+    With `background=True` the checksum, the write and the sync run on a
+    writer thread, so the producing thread only encodes. That thread calls
+    nothing but `zlib.crc32`, `os.write` and the sync call, all of which
+    release the GIL, so it never competes with a compiled kernel for it. A
+    pool of block buffers bounds memory: when every buffer is queued or being
+    written the producer waits (back-pressure), and the wait is counted in
+    `stats.stall_seconds`. An exception in the thread is raised by the next
+    `submit` or by `close`.
+
+    Durability is a group commit: with `sync` other than `"none"` the writer
+    thread syncs the file when `sync_seconds` have passed since the last
+    sync, when `flush(sync=True)` is called (a checkpoint or a pause), and
+    when the writer closes.
 
     Args:
         path: The log file; it must not exist.
@@ -408,7 +530,15 @@ class LogWriter:
         block_seconds: Seconds an open block may wait before being sealed.
         buffer_bytes: Size of a block buffer.
         key_every: Generations between keyframes in sparse mode.
-        clock: A monotonic clock returning seconds (tests inject one).
+        clock: A monotonic clock returning seconds (tests inject one). It
+            only decides *when* to seal or sync; no time enters any byte.
+        background: Whether a writer thread does the checksum, write and sync.
+        queue_depth: Sealed blocks that may wait for the thread, and one
+            less than the number of buffers.
+        sync: Durability policy, see `sync_file`.
+        sync_seconds: Seconds between group-commit syncs.
+        sync_function: Replaces `sync_file` (tests inject one).
+        fault: A `FaultHook` for tests.
 
     Raises:
         FileExistsError: If `path` already exists.
@@ -425,14 +555,26 @@ class LogWriter:
         buffer_bytes: int = DEFAULT_BUFFER_BYTES,
         key_every: int = DEFAULT_KEY_EVERY,
         clock: Callable[[], float] = time.monotonic,
+        background: bool = False,
+        queue_depth: int = DEFAULT_QUEUE_DEPTH,
+        sync: SyncMode = "none",
+        sync_seconds: float = DEFAULT_SYNC_SECONDS,
+        sync_function: Callable[[int, SyncMode], None] = sync_file,
+        fault: FaultHook | None = None,
     ) -> None:
-        """Create the file and write its header."""
+        """Create the file, write its header and start the thread if asked."""
         if block_generations < 1:
             raise ValueError("block_generations must be at least 1")
         if block_seconds <= 0:
             raise ValueError("block_seconds must be positive")
         if buffer_bytes < MIN_BUFFER_BYTES:
             raise ValueError(f"buffer_bytes must be at least {MIN_BUFFER_BYTES}")
+        if queue_depth < 1:
+            raise ValueError("queue_depth must be at least 1")
+        if sync_seconds <= 0:
+            raise ValueError("sync_seconds must be positive")
+        if sync not in ("none", "fsync", "full", "auto"):
+            raise ValueError(f"unknown sync mode {sync!r}")
         self.path = Path(path)
         self.run_id = run_id
         self.layout = layout
@@ -440,7 +582,13 @@ class LogWriter:
         self.block_seconds = block_seconds
         self.buffer_bytes = buffer_bytes
         self.key_every = key_every
+        self.background = background
+        self.sync = sync
+        self.sync_seconds = sync_seconds
+        self.stats = WriterStats()
         self._clock = clock
+        self._sync_function = sync_function
+        self._fault = fault
         self._sizes = np.asarray(layout.deme_sizes, dtype=np.int64)
         self._tmp8 = np.zeros(1, np.float64)
         self._header = build_header(run_id, layout, key_every)
@@ -448,17 +596,29 @@ class LogWriter:
             self.path, os.O_WRONLY | os.O_CREAT | os.O_EXCL | _O_BINARY, 0o644
         )
         self._closed = False
+        self._state_lock = threading.Lock()
+        self._error: BaseException | None = None
         try:
             self._write_all(self._header)
         except BaseException:
             os.close(self._fd)
             raise
+        self._init_state(clock)
+        self._init_buffers(queue_depth)
+        if background:
+            self._start_thread()
+
+    def _init_state(self, clock: Callable[[], float]) -> None:
+        """Set the commit counters and the open-block bookkeeping."""
         self.file_position = len(self._header)
+        self.stats.bytes = len(self._header)
         self.chain_crc = zlib.crc32(self._header[:-CRC_SIZE])
         self.committed_generation = -1
         self.generations_written = 0
         self.rows_written = 0
         self.blocks_written = 0
+        self._last_sync = clock()
+        self._synced_generation = -1
         self._buffer: np.ndarray | None = None
         self._spare: np.ndarray | None = None
         self._latest = -1
@@ -470,6 +630,29 @@ class LogWriter:
         self._last_generation = 0
         self._opened_at = 0.0
 
+    def _init_buffers(self, queue_depth: int) -> None:
+        """Set up the buffer pool and queues used by a background writer."""
+        self._work: queue.Queue[object] | None = None
+        self._free: queue.Queue[np.ndarray] | None = None
+        self._buffers_made = 0
+        self._buffer_limit = queue_depth + 2
+        self._thread: threading.Thread | None = None
+        self._queue_depth = queue_depth
+
+    def _start_thread(self) -> None:
+        """Start the writer thread and its queues."""
+        self._work = queue.Queue(maxsize=self._queue_depth)
+        self._free = queue.Queue()
+        self._thread = threading.Thread(
+            target=self._run, name="fim-tlog-writer", daemon=True
+        )
+        self._thread.start()
+
+    @property
+    def synced_generation(self) -> int:
+        """The last generation known to have been made durable (`-1` for none)."""
+        return self._synced_generation
+
     def submit(self, frame: TrajectoryFrame) -> None:
         """Encode one generation into the open block, sealing it when due.
 
@@ -480,9 +663,11 @@ class LogWriter:
             ValueError: If generations do not strictly increase or the
                 frame does not fit the layout.
             RuntimeError: If the writer is closed.
+            BaseException: Whatever the writer thread raised earlier.
         """
         if self._closed:
             raise RuntimeError("the log writer is closed")
+        self._raise_error()
         if frame.counts.shape != (self.layout.pairs,):
             raise ValueError("frame does not fit the log's layout")
         if frame.generation <= self._latest:
@@ -520,32 +705,76 @@ class LogWriter:
         self._last_generation = frame.generation
         self._latest = frame.generation
 
-    def flush(self) -> None:
-        """Seal and write the open block, if there is one (a commit point)."""
+    def flush(self, *, sync: bool = False) -> None:
+        """Seal the open block and wait until everything submitted is written.
+
+        A barrier: when this returns every generation submitted so far is
+        committed (and durable when `sync` is true and the sync mode is not
+        `"none"`). A checkpoint or a pause calls it with `sync=True`.
+
+        Args:
+            sync: Also make the data durable now.
+
+        Raises:
+            BaseException: Whatever the writer thread raised.
+        """
+        self._raise_error()
         if self._buffer is not None and self._records:
             self._seal()
+        if self._work is not None:
+            if sync:
+                self._work.put(_SYNC)
+            self._work.join()
+            self._raise_error()
+        elif sync:
+            self._sync_now()
 
     def close(self) -> None:
-        """Write the open block and close the file; safe to call twice."""
+        """Write the open block, sync, stop the thread and close the file.
+
+        Safe to call twice. The file descriptor is closed even when an
+        earlier write failed; the failure is then raised from here.
+
+        Raises:
+            BaseException: Whatever the writer thread raised.
+        """
         if self._closed:
             return
         try:
-            self.flush()
+            try:
+                if self._buffer is not None and self._records:
+                    self._seal()
+            finally:
+                if self._work is not None:
+                    self._work.put(_STOP)
+                    assert self._thread is not None
+                    self._thread.join()
+            self._raise_error()
+            if self.sync != "none":
+                self._sync_now()
         finally:
             self._closed = True
             os.close(self._fd)
 
+    def snapshot(self) -> tuple[int, int, int]:
+        """Return `(committed generation, committed bytes, chain checksum)` together.
+
+        Read under the lock the writer thread holds while it updates them,
+        so the three always describe the same block.
+        """
+        with self._state_lock:
+            return self.committed_generation, self.file_position, self.chain_crc
+
+    def _raise_error(self) -> None:
+        """Raise the exception the writer thread stored, if any."""
+        error = self._error
+        if error is not None:
+            raise error
+
     def _begin(self, generation: int, bound: int) -> None:
         """Open a new block whose first record is `generation`."""
         needed = BLOCK_HEADER_SIZE + bound + _BLOCK_SLACK + CRC_SIZE
-        spare, self._spare = self._spare, None
-        if spare is not None and len(spare) >= needed:
-            buffer = spare
-        else:
-            size = max(
-                self.buffer_bytes, 2 * needed if needed > self.buffer_bytes else 0
-            )
-            buffer = np.zeros(size, np.uint8)
+        buffer = self._take_buffer(needed)
         self._buffer = buffer
         self._limit = len(buffer) - CRC_SIZE
         self._pos = BLOCK_HEADER_SIZE
@@ -554,8 +783,39 @@ class LogWriter:
         self._first_generation = generation
         self._opened_at = self._clock()
 
+    def _take_buffer(self, needed: int) -> np.ndarray:
+        """Return a buffer of at least `needed` bytes, waiting if all are in use."""
+        if self._free is None:
+            spare, self._spare = self._spare, None
+            if spare is not None and len(spare) >= needed:
+                return spare
+            return self._new_buffer(needed)
+        try:
+            buffer = self._free.get_nowait()
+        except queue.Empty:
+            if self._buffers_made < self._buffer_limit:
+                return self._new_buffer(needed)
+            started = self._clock()
+            while True:
+                self._raise_error()
+                try:
+                    buffer = self._free.get(timeout=_POLL_SECONDS)
+                    break
+                except queue.Empty:
+                    continue
+            self.stats.stall_seconds += self._clock() - started
+        if len(buffer) < needed:
+            return self._new_buffer(needed)
+        return buffer
+
+    def _new_buffer(self, needed: int) -> np.ndarray:
+        """Allocate a block buffer big enough for `needed` bytes."""
+        self._buffers_made += 1
+        size = max(self.buffer_bytes, 2 * needed if needed > self.buffer_bytes else 0)
+        return np.zeros(size, np.uint8)
+
     def _seal(self) -> None:
-        """Checksum the open block and write it; it is committed on return."""
+        """Close the open block and commit it (queue it when in the background)."""
         buffer = self._buffer
         assert buffer is not None
         _BLOCK_HEADER.pack_into(
@@ -568,20 +828,76 @@ class LogWriter:
             self._records,
             self._rows,
         )
-        crc = zlib.crc32(memoryview(buffer)[: self._pos], self.chain_crc)
-        _CRC.pack_into(buffer, self._pos, crc)
-        total = self._pos + CRC_SIZE
-        self._write_all(memoryview(buffer)[:total])
-        self.chain_crc = crc
-        self.file_position += total
-        self.committed_generation = self._last_generation
-        self.generations_written += self._records
-        self.rows_written += self._rows
-        self.blocks_written += 1
-        # The write was synchronous, so the buffer can serve the next block.
-        self._spare = buffer
+        sealed = _Sealed(
+            buffer=buffer,
+            length=self._pos,
+            last_generation=self._last_generation,
+            records=self._records,
+            rows=self._rows,
+        )
         self._buffer = None
         self._records = 0
+        if self._work is None:
+            self._commit(sealed)
+        else:
+            self._raise_error()
+            self._work.put(sealed)
+
+    def _commit(self, sealed: _Sealed) -> None:
+        """Checksum and write one sealed block, then sync if it is time."""
+        buffer = sealed.buffer
+        crc = zlib.crc32(memoryview(buffer)[: sealed.length], self.chain_crc)
+        _CRC.pack_into(buffer, sealed.length, crc)
+        total = sealed.length + CRC_SIZE
+        self._write_block(memoryview(buffer)[:total])
+        with self._state_lock:
+            self.chain_crc = crc
+            self.file_position += total
+            self.committed_generation = sealed.last_generation
+            self.generations_written += sealed.records
+            self.rows_written += sealed.rows
+            self.blocks_written += 1
+        self.stats.blocks += 1
+        self.stats.generations += sealed.records
+        self.stats.rows += sealed.rows
+        self.stats.bytes += total
+        if self._free is not None:
+            self._free.put(buffer)
+        else:
+            self._spare = buffer
+        if self.sync != "none" and self._clock() - self._last_sync >= self.sync_seconds:
+            self._sync_now()
+
+    def _write_block(self, data: memoryview) -> None:
+        """Write one sealed block, honoring the fault hook."""
+        size = len(data)
+        if self._fault is not None:
+            allowed = self._fault("before_write", size)
+            if allowed is not None and allowed < size:
+                self._write_all(data[:allowed])
+                raise InjectedFaultError(
+                    f"write cut short after {allowed} of {size} bytes"
+                )
+        self._write_all(data)
+        if self._fault is not None:
+            self._fault("after_write", size)
+
+    def _sync_now(self) -> None:
+        """Make everything committed so far durable; honor the fault hook.
+
+        Does nothing when the sync mode is `"none"` or when everything
+        committed is already durable (a periodic sync may have just run).
+        """
+        if self.sync == "none" or self._synced_generation == self.committed_generation:
+            return
+        if self._fault is not None:
+            self._fault("before_sync", 0)
+        self._sync_function(self._fd, self.sync)
+        self._last_sync = self._clock()
+        self._synced_generation = self.committed_generation
+        self.stats.syncs += 1
+        if self._fault is not None:
+            self._fault("after_sync", 0)
 
     def _write_all(self, data: bytes | memoryview) -> None:
         """Write every byte of `data`, retrying short writes."""
@@ -589,6 +905,27 @@ class LogWriter:
         done = 0
         while done < len(view):
             done += os.write(self._fd, view[done:])
+
+    def _run(self) -> None:
+        """Writer thread: commit queued blocks and honor sync requests."""
+        assert self._work is not None
+        failed = False
+        while True:
+            item = self._work.get()
+            try:
+                if item is _STOP:
+                    return
+                if failed:
+                    continue
+                if item is _SYNC:
+                    self._sync_now()
+                elif isinstance(item, _Sealed):
+                    self._commit(item)
+            except BaseException as error:  # re-raised on the producer
+                self._error = error
+                failed = True
+            finally:
+                self._work.task_done()
 
 
 _O_BINARY: Final = getattr(os, "O_BINARY", 0)
