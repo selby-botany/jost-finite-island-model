@@ -37,6 +37,7 @@ from fim.persistence.frame import (
 )
 from fim.persistence.jsonl_store import JSONLTrajectoryStore
 from fim.persistence.store import TrajectoryRow, TrajectoryStore
+from fim.persistence.tlog_reader import LogReader
 
 logger = logging.getLogger(__name__)
 
@@ -262,6 +263,19 @@ class BinaryLogStore:
         if not self.path.is_file():
             raise FileNotFoundError(f"trajectory does not exist: {self.path}")
         return tlog.iter_frames(self.path)
+
+    def frame_at(self, generation: int) -> TrajectoryFrame:
+        """Rebuild one committed generation as a frame, without reading the rest.
+
+        Everything written so far is committed first (a flush barrier).
+
+        Raises:
+            FileNotFoundError: If there is no log file.
+            KeyError: If the generation was not recorded.
+        """
+        self.flush()
+        with LogReader(self.path) as reader:
+            return reader.frame_at(generation)
 
     def discard(self, run_id: str) -> None:
         """Remove the log if it holds `run_id`; a no-op otherwise.

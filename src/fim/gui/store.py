@@ -54,6 +54,7 @@ from fim.persistence.store import (
     equilibrium_store_for,
     store_wants_frames,
 )
+from fim.persistence.tlog import TlogError
 from fim.reanalyze import group_rows_by_generation
 
 logger = logging.getLogger(__name__)
@@ -426,8 +427,10 @@ def read_live_state(
         never an error to raise partway through a still-running batch.
     """
     try:
-        grouped = group_rows_by_generation(trajectory_path, run_id)
-    except (FileNotFoundError, ValueError):
+        grouped = group_rows_by_generation(
+            trajectory_path, run_id, generations=[generation]
+        )
+    except (FileNotFoundError, ValueError, TlogError):
         # `FileNotFoundError`: the replicate has not created its own
         # directory/file yet. `ValueError`: a malformed *complete* line
         # (`JSONLTrajectoryStore.read`'s own distinct case from a

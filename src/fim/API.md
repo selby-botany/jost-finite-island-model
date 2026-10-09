@@ -583,6 +583,7 @@ Return to the [source-tree orientation](../README.md) or the [developer guide](.
     * [write\_generation](#fim.persistence.binary_store.BinaryLogStore.write_generation)
     * [read](#fim.persistence.binary_store.BinaryLogStore.read)
     * [frames](#fim.persistence.binary_store.BinaryLogStore.frames)
+    * [frame\_at](#fim.persistence.binary_store.BinaryLogStore.frame_at)
     * [discard](#fim.persistence.binary_store.BinaryLogStore.discard)
     * [flush](#fim.persistence.binary_store.BinaryLogStore.flush)
     * [snapshot](#fim.persistence.binary_store.BinaryLogStore.snapshot)
@@ -792,6 +793,7 @@ Return to the [source-tree orientation](../README.md) or the [developer guide](.
   * [build\_header](#fim.persistence.tlog.build_header)
   * [parse\_header](#fim.persistence.tlog.parse_header)
   * [scan\_blocks](#fim.persistence.tlog.scan_blocks)
+  * [prefix\_still\_holds](#fim.persistence.tlog.prefix_still_holds)
   * [recover](#fim.persistence.tlog.recover)
   * [InjectedFaultError](#fim.persistence.tlog.InjectedFaultError)
   * [FaultHook](#fim.persistence.tlog.FaultHook)
@@ -821,10 +823,12 @@ Return to the [source-tree orientation](../README.md) or the [developer guide](.
   * [get\_pair](#fim.persistence.tlog_codec.get_pair)
   * [apply\_record](#fim.persistence.tlog_codec.apply_record)
   * [state\_to\_csr](#fim.persistence.tlog_codec.state_to_csr)
+  * [record\_deltas](#fim.persistence.tlog_codec.record_deltas)
   * [DecodedState](#fim.persistence.tlog_codec.DecodedState)
     * [\_\_init\_\_](#fim.persistence.tlog_codec.DecodedState.__init__)
     * [grow](#fim.persistence.tlog_codec.DecodedState.grow)
     * [frame\_arrays](#fim.persistence.tlog_codec.DecodedState.frame_arrays)
+  * [decode\_record](#fim.persistence.tlog_codec.decode_record)
 * [fim.persistence.tlog\_export](#fim.persistence.tlog_export)
   * [LUT\_MAX\_SIZE](#fim.persistence.tlog_export.LUT_MAX_SIZE)
   * [DEFAULT\_EXPORT\_WORKERS](#fim.persistence.tlog_export.DEFAULT_EXPORT_WORKERS)
@@ -849,6 +853,26 @@ Return to the [source-tree orientation](../README.md) or the [developer guide](.
   * [ExportReceipt](#fim.persistence.tlog_export.ExportReceipt)
   * [resolve\_log](#fim.persistence.tlog_export.resolve_log)
   * [export\_trajectory](#fim.persistence.tlog_export.export_trajectory)
+* [fim.persistence.tlog\_reader](#fim.persistence.tlog_reader)
+  * [forget\_cached\_scans](#fim.persistence.tlog_reader.forget_cached_scans)
+  * [LogReader](#fim.persistence.tlog_reader.LogReader)
+    * [\_\_init\_\_](#fim.persistence.tlog_reader.LogReader.__init__)
+    * [\_\_enter\_\_](#fim.persistence.tlog_reader.LogReader.__enter__)
+    * [\_\_exit\_\_](#fim.persistence.tlog_reader.LogReader.__exit__)
+    * [scan](#fim.persistence.tlog_reader.LogReader.scan)
+    * [run\_id](#fim.persistence.tlog_reader.LogReader.run_id)
+    * [layout](#fim.persistence.tlog_reader.LogReader.layout)
+    * [blocks](#fim.persistence.tlog_reader.LogReader.blocks)
+    * [generation\_count](#fim.persistence.tlog_reader.LogReader.generation_count)
+    * [rows](#fim.persistence.tlog_reader.LogReader.rows)
+    * [last\_generation](#fim.persistence.tlog_reader.LogReader.last_generation)
+    * [refresh](#fim.persistence.tlog_reader.LogReader.refresh)
+    * [close](#fim.persistence.tlog_reader.LogReader.close)
+    * [generation\_numbers](#fim.persistence.tlog_reader.LogReader.generation_numbers)
+    * [frame\_at](#fim.persistence.tlog_reader.LogReader.frame_at)
+    * [frames](#fim.persistence.tlog_reader.LogReader.frames)
+    * [rows\_at](#fim.persistence.tlog_reader.LogReader.rows_at)
+  * [read\_rows](#fim.persistence.tlog_reader.read_rows)
 * [fim.reanalyze](#fim.reanalyze)
   * [ReanalyzedGeneration](#fim.reanalyze.ReanalyzedGeneration)
   * [differentiation\_q\_for\_state](#fim.reanalyze.differentiation_q_for_state)
@@ -17064,6 +17088,23 @@ Yield every committed generation as a frame, oldest first.
 
 - `FileNotFoundError` - If there is no log file.
 
+<a id="fim.persistence.binary_store.BinaryLogStore.frame_at"></a>
+
+#### frame\_at
+
+```python
+def frame_at(generation: int) -> TrajectoryFrame
+```
+
+Rebuild one committed generation as a frame, without reading the rest.
+
+Everything written so far is committed first (a flush barrier).
+
+**Raises**:
+
+- `FileNotFoundError` - If there is no log file.
+- `KeyError` - If the generation was not recorded.
+
 <a id="fim.persistence.binary_store.BinaryLogStore.discard"></a>
 
 #### discard
@@ -21087,7 +21128,9 @@ Parse and verify a log's file header.
 
 ```python
 def scan_blocks(data: bytes | mmap.mmap | memoryview,
-                header: LogHeader | None = None) -> ScanResult
+                header: LogHeader | None = None,
+                *,
+                resume: ScanResult | None = None) -> ScanResult
 ```
 
 Walk the chained blocks of a log and return the committed prefix.
@@ -21099,11 +21142,44 @@ corrupt; everything before it is committed, everything from it on is not.
 
 - `data` - The whole file.
 - `header` - Its parsed header, if already known.
+- `resume` - An earlier scan of the same file (a prefix of it). Scanning
+  continues from where that one stopped instead of from the start,
+  so following a log that is still being written costs only the
+  new blocks. The caller must have checked that the earlier prefix
+  still holds (`prefix_still_holds`).
 
 
 **Returns**:
 
   The committed blocks and why scanning stopped.
+
+<a id="fim.persistence.tlog.prefix_still_holds"></a>
+
+#### prefix\_still\_holds
+
+```python
+def prefix_still_holds(data: bytes | mmap.mmap | memoryview,
+                       scan: ScanResult) -> bool
+```
+
+Whether an earlier scan's committed prefix is still the start of this file.
+
+A cheap check, not a verification: the file must be at least as long as
+the prefix, its header must be the same, and the chain checksum stored at
+the end of the prefix must still be the one the scan recorded. A log that
+is only ever appended to (a run in progress) always passes; a file that
+was replaced fails with overwhelming probability. Whole-file integrity
+is the manifest digest's job.
+
+**Arguments**:
+
+- `data` - The file as it is now.
+- `scan` - The earlier scan.
+
+
+**Returns**:
+
+  `True` if scanning may resume from `scan.valid_end`.
 
 <a id="fim.persistence.tlog.recover"></a>
 
@@ -21688,6 +21764,32 @@ Flatten the decoded per-pair state into a CSR frame.
 
   The number of entries written.
 
+<a id="fim.persistence.tlog_codec.record_deltas"></a>
+
+#### record\_deltas
+
+```python
+@kernel
+def record_deltas(buf, pos, count, out)
+```
+
+Read the generation delta of each of `count` records, skipping the bodies.
+
+Walks the records of one block by their lengths, so it costs a few
+operations per record however large a record is.
+
+**Arguments**:
+
+- `buf` - The file bytes.
+- `pos` - Where the block's first record starts.
+- `count` - Records in the block.
+- `out` - `int64[count]` output, the generation delta of each record.
+
+
+**Returns**:
+
+  The position after the last record.
+
 <a id="fim.persistence.tlog_codec.DecodedState"></a>
 
 ## DecodedState Objects
@@ -21733,6 +21835,32 @@ def frame_arrays() -> tuple[np.ndarray, np.ndarray, np.ndarray]
 ```
 
 Return the state as CSR arrays `(counts, allele_ids, frequencies)`.
+
+<a id="fim.persistence.tlog_codec.decode_record"></a>
+
+#### decode\_record
+
+```python
+def decode_record(buffer: np.ndarray, position: int, demes: int, loci: int,
+                  sizes: np.ndarray,
+                  state: DecodedState) -> tuple[int, int, int, int]
+```
+
+Apply the record at `position` to `state`, widening the state as needed.
+
+**Arguments**:
+
+- `buffer` - The file bytes.
+- `position` - Where the record starts.
+- `demes` - Number of demes.
+- `loci` - Number of loci.
+- `sizes` - `int64[demes]` gene copies.
+- `state` - The decoded per-pair state (a delta applies to it).
+
+
+**Returns**:
+
+  `(end position, rows, kind, generation delta)`.
 
 <a id="fim.persistence.tlog_export"></a>
 
@@ -22158,6 +22286,314 @@ leaves a receipt recording both digests next to it.
 - `OSError` - If the disk does not have room for the file.
 - `ValueError` - If the log does not match its manifest.
 - `TlogError` - If the log is unusable.
+
+<a id="fim.persistence.tlog_reader"></a>
+
+# fim.persistence.tlog\_reader
+
+Random access to a binary trajectory log.
+
+`LogReader` answers "what did generation G look like?" without reading the
+whole file. It scans the block headers once (verifying the chained
+checksums), then rebuilds any generation by starting at the nearest keyframe
+block at or before it and applying the records forward: at most `key_every`
+records for a sparse log, one for a dense one. The scrubber, the history
+graphs, the animation and re-analysis all read through it.
+
+Following a run in progress is cheap: a process-wide cache keeps the last
+scan of each log, and a new reader (or `refresh`) resumes scanning at the
+end of the committed prefix, so each poll costs only the blocks written since
+the last. Only committed blocks are ever visible, so a reader never sees half
+a generation.
+
+A reader holds the file open and mapped; `close` (or a `with` block)
+releases both.
+
+<a id="fim.persistence.tlog_reader.forget_cached_scans"></a>
+
+#### forget\_cached\_scans
+
+```python
+def forget_cached_scans() -> None
+```
+
+Drop every cached scan (for tests, and after files are replaced).
+
+<a id="fim.persistence.tlog_reader.LogReader"></a>
+
+## LogReader Objects
+
+```python
+class LogReader()
+```
+
+Read-only, memory-mapped access to the committed generations of a log.
+
+**Arguments**:
+
+- `path` - The log file.
+- `use_cache` - Whether to resume from the process-wide cache of scans.
+
+
+**Raises**:
+
+- `FileNotFoundError` - If the file does not exist.
+- `TlogError` - If it is not a usable log.
+
+<a id="fim.persistence.tlog_reader.LogReader.__init__"></a>
+
+#### \_\_init\_\_
+
+```python
+def __init__(path: Path | str, *, use_cache: bool = True) -> None
+```
+
+Open and map the file and scan its committed blocks.
+
+<a id="fim.persistence.tlog_reader.LogReader.__enter__"></a>
+
+#### \_\_enter\_\_
+
+```python
+def __enter__() -> LogReader
+```
+
+Return this reader, for use as a context manager.
+
+<a id="fim.persistence.tlog_reader.LogReader.__exit__"></a>
+
+#### \_\_exit\_\_
+
+```python
+def __exit__(exc_type: type[BaseException] | None,
+             exc_value: BaseException | None,
+             traceback: TracebackType | None) -> None
+```
+
+Release the file and its mapping.
+
+<a id="fim.persistence.tlog_reader.LogReader.scan"></a>
+
+#### scan
+
+```python
+@property
+def scan() -> ScanResult
+```
+
+The scan of the committed prefix, as of the last refresh.
+
+<a id="fim.persistence.tlog_reader.LogReader.run_id"></a>
+
+#### run\_id
+
+```python
+@property
+def run_id() -> str
+```
+
+The run the log holds.
+
+<a id="fim.persistence.tlog_reader.LogReader.layout"></a>
+
+#### layout
+
+```python
+@property
+def layout() -> FrameLayout
+```
+
+The frame layout of the log.
+
+<a id="fim.persistence.tlog_reader.LogReader.blocks"></a>
+
+#### blocks
+
+```python
+@property
+def blocks() -> list[BlockInfo]
+```
+
+The committed blocks.
+
+<a id="fim.persistence.tlog_reader.LogReader.generation_count"></a>
+
+#### generation\_count
+
+```python
+@property
+def generation_count() -> int
+```
+
+Generations (records) committed.
+
+<a id="fim.persistence.tlog_reader.LogReader.rows"></a>
+
+#### rows
+
+```python
+@property
+def rows() -> int
+```
+
+Trajectory rows committed.
+
+<a id="fim.persistence.tlog_reader.LogReader.last_generation"></a>
+
+#### last\_generation
+
+```python
+@property
+def last_generation() -> int
+```
+
+The last committed generation, or `-1` for none.
+
+<a id="fim.persistence.tlog_reader.LogReader.refresh"></a>
+
+#### refresh
+
+```python
+def refresh() -> int
+```
+
+Pick up blocks committed since the last scan.
+
+**Returns**:
+
+  The number of generations committed now.
+
+<a id="fim.persistence.tlog_reader.LogReader.close"></a>
+
+#### close
+
+```python
+def close() -> None
+```
+
+Release the mapping and the file; safe to call twice.
+
+<a id="fim.persistence.tlog_reader.LogReader.generation_numbers"></a>
+
+#### generation\_numbers
+
+```python
+def generation_numbers() -> list[int]
+```
+
+Return every recorded generation number, in order.
+
+A block whose records are consecutive (the usual case) is expanded
+without looking at it; a block with gaps (a thinned run) has its
+record headers read, which costs a few operations per record.
+
+<a id="fim.persistence.tlog_reader.LogReader.frame_at"></a>
+
+#### frame\_at
+
+```python
+def frame_at(generation: int) -> TrajectoryFrame
+```
+
+Rebuild one generation as a frame.
+
+Starts at the nearest keyframe block at or before the generation and
+applies the records forward.
+
+**Arguments**:
+
+- `generation` - A recorded generation number.
+
+
+**Returns**:
+
+  The frame.
+
+
+**Raises**:
+
+- `KeyError` - If the generation was not recorded (never reached, or
+  thinned away).
+
+<a id="fim.persistence.tlog_reader.LogReader.frames"></a>
+
+#### frames
+
+```python
+def frames(generations: Iterable[int] | None = None,
+           *,
+           skip_missing: bool = False) -> Iterator[TrajectoryFrame]
+```
+
+Yield frames for the given generations (default: all), in order.
+
+A single forward pass: the decoder state carries across the targets,
+and jumps to a nearer keyframe block when a target is far ahead, so
+asking for a few spread-out generations costs a few short replays.
+
+**Arguments**:
+
+- `generations` - The generations wanted; duplicates are ignored and
+  the order given does not matter.
+- `skip_missing` - Leave out a generation that was not recorded
+  instead of raising.
+
+
+**Yields**:
+
+  The frames of the recorded generations among those asked for,
+  ascending.
+
+
+**Raises**:
+
+- `KeyError` - If a requested generation was not recorded and
+  `skip_missing` is false.
+
+<a id="fim.persistence.tlog_reader.LogReader.rows_at"></a>
+
+#### rows\_at
+
+```python
+def rows_at(generation: int) -> list[TrajectoryRow]
+```
+
+Return one generation's trajectory rows.
+
+**Raises**:
+
+- `KeyError` - If the generation was not recorded.
+
+<a id="fim.persistence.tlog_reader.read_rows"></a>
+
+#### read\_rows
+
+```python
+def read_rows(path: Path | str,
+              run_id: str,
+              generations: Sequence[int] | None = None
+              ) -> dict[int, list[TrajectoryRow]]
+```
+
+Return a log's rows grouped by generation.
+
+**Arguments**:
+
+- `path` - The log file.
+- `run_id` - The run the rows must belong to (another run has none here).
+- `generations` - Only these generations; default every committed one. A
+  generation the log does not hold is simply absent from the result.
+
+
+**Returns**:
+
+- ``{generation` - rows}`; a log of another run gives `{}`.
+
+
+**Raises**:
+
+- `FileNotFoundError` - If the file does not exist.
+- `TlogError` - If the file is not a usable log.
 
 <a id="fim.reanalyze"></a>
 

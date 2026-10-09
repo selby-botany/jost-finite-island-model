@@ -27,6 +27,7 @@ Every test module, fixture, and test function documented here in full; `doc/fim-
   - [`test_sweep`](#test.test_sweep)
   - [`test_sweep_run`](#test.test_sweep_run)
   - [`test_update`](#test.test_update)
+  - [`tlog_support`](#test.tlog_support)
   - [`vector_support`](#test.vector_support)
 - [`test/cli/`](#group-cli)
   - [`conftest`](#cli.conftest)
@@ -138,6 +139,7 @@ Every test module, fixture, and test function documented here in full; `doc/fim-
   - [`test_tlog`](#persistence.test_tlog)
   - [`test_tlog_codec`](#persistence.test_tlog_codec)
   - [`test_tlog_export`](#persistence.test_tlog_export)
+  - [`test_tlog_reader`](#persistence.test_tlog_reader)
   - [`test_tlog_sparse`](#persistence.test_tlog_sparse)
   - [`test_tlog_writer`](#persistence.test_tlog_writer)
   - [`test_validation`](#persistence.test_validation)
@@ -2640,10 +2642,29 @@ The default ("final generation") path is equally memory-bounded.
 
 `generation=None` cannot know which generation is the maximum until
 the stream ends (`reanalyze_trajectory`'s own docstring on
-`BinaryLogStore.read`'s ordering guarantee), so this exercises
+`JSONLTrajectoryStore.read`'s ordering guarantee), so this exercises
 the rolling running-max buffer specifically: every earlier
 generation's buffered rows must be dropped, not accumulated, each
 time a higher generation number is seen.
+
+<a id="test.test_reanalyze.test_a_binary_log_materializes_only_the_generation_it_is_asked_for"></a>
+
+#### test\_a\_binary\_log\_materializes\_only\_the\_generation\_it\_is\_asked\_for
+
+```python
+@pytest.mark.parametrize("generation", [0, 123, None])
+def test_a_binary_log_materializes_only_the_generation_it_is_asked_for(
+        tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+        generation: int | None) -> None
+```
+
+Re-analyzing from a log never builds rows for any other generation.
+
+The log's block headers say how many generations and rows it holds (the
+consistency check), and the one wanted generation is rebuilt from the
+nearest keyframe, so memory and time do not grow with the run's length.
+Counted deterministically: every row the reader builds goes through
+`frame_to_rows`, which is wrapped here.
 
 <a id="test.test_reanalyze.test_reanalyze_trajectory_matches_the_live_report"></a>
 
@@ -3265,6 +3286,52 @@ def test_version_parser_rejects_non_semantic_values(value: str) -> None
 ```
 
 Release version parsing requires exactly three non-negative integers.
+
+<a id="test.tlog_support"></a>
+
+# test.tlog\_support
+
+Shared frame generators and checks for the binary log's tests.
+
+Test modules import this with `from tlog_support import ...`, as they import
+`conftest` and `vector_support`.
+
+<a id="test.tlog_support.fresh_pair"></a>
+
+#### fresh\_pair
+
+```python
+def fresh_pair(rng: np.random.Generator, size: int,
+               wide: bool) -> tuple[list[int], list[float]]
+```
+
+Alleles (ids, frequencies) of one pair; `wide` allows many alleles.
+
+<a id="test.tlog_support.walk"></a>
+
+#### walk
+
+```python
+def walk(count: int,
+         *,
+         change: float,
+         seed: int,
+         step: int = 1,
+         wide: bool = False) -> list[TrajectoryFrame]
+```
+
+Frames where each generation changes about `change` of the pairs.
+
+<a id="test.tlog_support.same_frames"></a>
+
+#### same\_frames
+
+```python
+def same_frames(got: list[TrajectoryFrame],
+                want: list[TrajectoryFrame]) -> None
+```
+
+Require two frame lists to be equal, with exact frequency bits.
 
 <a id="test.vector_support"></a>
 
@@ -32356,6 +32423,164 @@ def test_a_real_equilibrium_split_run_derives_both_files_byte_for_byte(
 ```
 
 The ancestral companion (one deme of every deme's copies) is exact too.
+
+<a id="persistence.test_tlog_reader"></a>
+
+# persistence.test\_tlog\_reader
+
+Tests of `LogReader`: random access, listing, following a live log.
+
+The reader must return, for any generation, exactly the frame the writer was
+given, whatever the log's shape: dense or sparse, blocks cut between
+keyframes, thinned generations. The strongest check is exhaustive: for every
+generation of several logs, `frame_at` equals the frame written. The rest
+cover the generation listing, subsets in any order, absent generations, the
+resumable scan that makes following a run cheap, and the file errors.
+
+<a id="persistence.test_tlog_reader.test_frame_at_equals_the_frame_written_for_every_generation"></a>
+
+#### test\_frame\_at\_equals\_the\_frame\_written\_for\_every\_generation
+
+```python
+@pytest.mark.parametrize("shape", list(SHAPES))
+@pytest.mark.parametrize("step", [1, 5])
+def test_frame_at_equals_the_frame_written_for_every_generation(
+        tmp_path: Path, shape: str, step: int) -> None
+```
+
+Exhaustive: each recorded generation rebuilds exactly, thinned or not.
+
+<a id="persistence.test_tlog_reader.test_a_subset_comes_back_ascending_whatever_order_it_was_asked_in"></a>
+
+#### test\_a\_subset\_comes\_back\_ascending\_whatever\_order\_it\_was\_asked\_in
+
+```python
+def test_a_subset_comes_back_ascending_whatever_order_it_was_asked_in(
+        tmp_path: Path) -> None
+```
+
+Targets are sorted and de-duplicated; far-apart ones jump keyframes.
+
+<a id="persistence.test_tlog_reader.test_all_frames_equal_the_sequential_decode"></a>
+
+#### test\_all\_frames\_equal\_the\_sequential\_decode
+
+```python
+def test_all_frames_equal_the_sequential_decode(tmp_path: Path) -> None
+```
+
+`frames()` with no argument walks everything once.
+
+<a id="persistence.test_tlog_reader.test_an_unrecorded_generation_is_a_key_error"></a>
+
+#### test\_an\_unrecorded\_generation\_is\_a\_key\_error
+
+```python
+@pytest.mark.parametrize("missing", [-1, 1, 2, 64, 10_000])
+def test_an_unrecorded_generation_is_a_key_error(tmp_path: Path,
+                                                 missing: int) -> None
+```
+
+Thinned-away, never reached and negative generations are not found.
+
+<a id="persistence.test_tlog_reader.test_generation_numbers_expand_contiguous_blocks_and_read_thinned_ones"></a>
+
+#### test\_generation\_numbers\_expand\_contiguous\_blocks\_and\_read\_thinned\_ones
+
+```python
+def test_generation_numbers_expand_contiguous_blocks_and_read_thinned_ones(
+        tmp_path: Path) -> None
+```
+
+The listing is exact for a plain run and for one with gaps.
+
+<a id="persistence.test_tlog_reader.test_rows_at_and_read_rows_give_the_trajectory_rows"></a>
+
+#### test\_rows\_at\_and\_read\_rows\_give\_the\_trajectory\_rows
+
+```python
+def test_rows_at_and_read_rows_give_the_trajectory_rows(
+        tmp_path: Path) -> None
+```
+
+Rows come back in the engine's order with the log's run id.
+
+<a id="persistence.test_tlog_reader.test_a_real_run_reads_back_by_generation_exactly_like_the_memory_store"></a>
+
+#### test\_a\_real\_run\_reads\_back\_by\_generation\_exactly\_like\_the\_memory\_store
+
+```python
+def test_a_real_run_reads_back_by_generation_exactly_like_the_memory_store(
+        tmp_path: Path) -> None
+```
+
+Engine output, sparse log, random access: identical rows per generation.
+
+<a id="persistence.test_tlog_reader.test_a_reader_follows_a_log_that_is_still_being_written"></a>
+
+#### test\_a\_reader\_follows\_a\_log\_that\_is\_still\_being\_written
+
+```python
+def test_a_reader_follows_a_log_that_is_still_being_written(
+        tmp_path: Path) -> None
+```
+
+Only committed blocks are visible, and `refresh` picks up new ones.
+
+<a id="persistence.test_tlog_reader.test_a_refresh_scans_only_the_new_blocks"></a>
+
+#### test\_a\_refresh\_scans\_only\_the\_new\_blocks
+
+```python
+def test_a_refresh_scans_only_the_new_blocks(
+        tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None
+```
+
+Following a log resumes from the end of the committed prefix.
+
+<a id="persistence.test_tlog_reader.test_a_second_reader_resumes_from_the_cached_scan_until_the_file_changes"></a>
+
+#### test\_a\_second\_reader\_resumes\_from\_the\_cached\_scan\_until\_the\_file\_changes
+
+```python
+def test_a_second_reader_resumes_from_the_cached_scan_until_the_file_changes(
+        tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None
+```
+
+The cache saves the rescan for an unchanged log, and is ignored for a new one.
+
+<a id="persistence.test_tlog_reader.test_the_reader_sees_only_committed_blocks"></a>
+
+#### test\_the\_reader\_sees\_only\_committed\_blocks
+
+```python
+def test_the_reader_sees_only_committed_blocks(tmp_path: Path) -> None
+```
+
+Trailing garbage or a torn block is never part of the log.
+
+<a id="persistence.test_tlog_reader.test_file_errors"></a>
+
+#### test\_file\_errors
+
+```python
+def test_file_errors(tmp_path: Path) -> None
+```
+
+Missing, empty and foreign files; a closed reader.
+
+<a id="persistence.test_tlog_reader.test_skipping_missing_generations_never_loses_a_later_one"></a>
+
+#### test\_skipping\_missing\_generations\_never\_loses\_a\_later\_one
+
+```python
+def test_skipping_missing_generations_never_loses_a_later_one(
+        tmp_path: Path) -> None
+```
+
+A thinned log asked for absent and present generations in one pass.
+
+Asking for 2 overshoots to 3 while looking; 3 must still be found.
 
 <a id="persistence.test_tlog_sparse"></a>
 

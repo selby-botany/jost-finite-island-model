@@ -373,6 +373,32 @@ def state_to_csr(pn, pid, pf, nal, out_ids, out_fr):
     return e
 
 
+@kernel
+def record_deltas(buf, pos, count, out):
+    """Read the generation delta of each of `count` records, skipping the bodies.
+
+    Walks the records of one block by their lengths, so it costs a few
+    operations per record however large a record is.
+
+    Args:
+        buf: The file bytes.
+        pos: Where the block's first record starts.
+        count: Records in the block.
+        out: `int64[count]` output, the generation delta of each record.
+
+    Returns:
+        The position after the last record.
+    """
+    for i in range(count):
+        blen, p0 = get_varint(buf, pos)
+        end = p0 + blen
+        _rows, p1 = get_varint(buf, p0)
+        delta, _p2 = get_varint(buf, p1 + 1)
+        out[i] = delta
+        pos = end
+    return pos
+
+
 class DecodedState:
     """The per-pair state a decoder keeps, and what a delta applies to.
 
@@ -409,3 +435,41 @@ class DecodedState:
         frequencies = np.zeros(total, np.float64)
         state_to_csr(self.pn, self.pid, self.pf, counts, ids, frequencies)
         return counts, ids, frequencies
+
+
+def decode_record(
+    buffer: np.ndarray,
+    position: int,
+    demes: int,
+    loci: int,
+    sizes: np.ndarray,
+    state: DecodedState,
+) -> tuple[int, int, int, int]:
+    """Apply the record at `position` to `state`, widening the state as needed.
+
+    Args:
+        buffer: The file bytes.
+        position: Where the record starts.
+        demes: Number of demes.
+        loci: Number of loci.
+        sizes: `int64[demes]` gene copies.
+        state: The decoded per-pair state (a delta applies to it).
+
+    Returns:
+        `(end position, rows, kind, generation delta)`.
+    """
+    while True:
+        end, rows, kind, gen_delta = apply_record(
+            buffer,
+            position,
+            demes,
+            loci,
+            sizes,
+            state.pn,
+            state.pid,
+            state.pc,
+            state.pf,
+        )
+        if end >= 0:
+            return int(end), int(rows), int(kind), int(gen_delta)
+        state.grow()

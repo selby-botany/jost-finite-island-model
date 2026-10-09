@@ -22,7 +22,10 @@ import yaml
 
 from fim import cli, engine, paths, reanalyze
 from fim.engine import report_for_state
+from fim.persistence import tlog_reader
 from fim.persistence.binary_store import BinaryLogStore
+from fim.persistence.frame import frame_to_rows
+from fim.persistence.jsonl_store import JSONLTrajectoryStore
 from fim.persistence.manifest import hash_file, read_manifest, write_manifest
 
 
@@ -97,7 +100,7 @@ def _write_run(tmp_path: Path, **overrides: object) -> Path:
 
 
 def _build_large_synthetic_trajectory(
-    tmp_path: Path, *, generation_count: int
+    tmp_path: Path, *, generation_count: int, kind: str = "log"
 ) -> tuple[Path, Path, int]:
     """Replicate one real generation's own rows across many synthetic generations.
 
@@ -114,6 +117,7 @@ def _build_large_synthetic_trajectory(
     Args:
         tmp_path: Test-owned scratch directory.
         generation_count: How many synthetic generations to write.
+        kind: `"log"` for a binary log, `"jsonl"` for a JSON Lines file.
 
     Returns:
         The synthetic trajectory path, its paired manifest path, and how
@@ -128,8 +132,14 @@ def _build_large_synthetic_trajectory(
     )[0]
 
     run_id = "synthetic-large-trajectory"
-    trajectory_path = tmp_path / "synthetic-trajectory.tlog"
-    store = BinaryLogStore(trajectory_path)
+    trajectory_path = tmp_path / (
+        "synthetic-trajectory.tlog" if kind == "log" else "synthetic-trajectory.jsonl"
+    )
+    store: BinaryLogStore | JSONLTrajectoryStore = (
+        BinaryLogStore(trajectory_path)
+        if kind == "log"
+        else JSONLTrajectoryStore(trajectory_path)
+    )
     for generation_index in range(generation_count):
         store.write_generation(
             run_id,
@@ -158,12 +168,12 @@ def _build_large_synthetic_trajectory(
 def _count_row_liveness(
     monkeypatch: pytest.MonkeyPatch,
 ) -> tuple[list[int], list[int]]:
-    """Patch `BinaryLogStore.read` to track simultaneously live rows.
+    """Patch `JSONLTrajectoryStore.read` to track simultaneously live rows.
 
     Real-issue-9 regression proof (see `doc/20260906-gpt-5.6-open-
     issues.md` item 9): rather than a wall-clock timing measurement
     (non-deterministic across machines, forbidden by this project's own
-    testing discipline), this wraps every row `BinaryLogStore.read`
+    testing discipline), this wraps every row `JSONLTrajectoryStore.read`
     yields in a `dict` subclass (a plain `dict` cannot hold a weak
     reference) and registers a `weakref.finalize` callback on each one.
     CPython frees an object the instant its reference count reaches
@@ -185,12 +195,12 @@ def _count_row_liveness(
     alive = 0
     alive_after_each_row: list[int] = []
     total_yielded: list[int] = []
-    real_read = BinaryLogStore.read
+    real_read = JSONLTrajectoryStore.read
 
     class _TrackedRow(dict[str, object]):
         """A `dict` subclass (plain `dict` instances cannot hold a weakref)."""
 
-    def _tracking_read(self: BinaryLogStore, run_id: str) -> object:
+    def _tracking_read(self: JSONLTrajectoryStore, run_id: str) -> object:
         nonlocal alive
 
         def _mark_collected(_reference: object = None) -> None:
@@ -206,7 +216,7 @@ def _count_row_liveness(
             alive_after_each_row.append(alive)
             total_yielded.append(len(alive_after_each_row))
 
-    monkeypatch.setattr(BinaryLogStore, "read", _tracking_read)
+    monkeypatch.setattr(JSONLTrajectoryStore, "read", _tracking_read)
     return alive_after_each_row, total_yielded
 
 
@@ -224,7 +234,9 @@ def test_reanalyze_trajectory_does_not_hold_every_row_live_for_an_early_generati
     """
     generation_count = 300
     trajectory_path, manifest_path, rows_per_generation = (
-        _build_large_synthetic_trajectory(tmp_path, generation_count=generation_count)
+        _build_large_synthetic_trajectory(
+            tmp_path, generation_count=generation_count, kind="jsonl"
+        )
     )
     alive_after_each_row, total_yielded = _count_row_liveness(monkeypatch)
 
@@ -250,14 +262,16 @@ def test_reanalyze_trajectory_does_not_hold_every_row_live_for_the_final_generat
 
     `generation=None` cannot know which generation is the maximum until
     the stream ends (`reanalyze_trajectory`'s own docstring on
-    `BinaryLogStore.read`'s ordering guarantee), so this exercises
+    `JSONLTrajectoryStore.read`'s ordering guarantee), so this exercises
     the rolling running-max buffer specifically: every earlier
     generation's buffered rows must be dropped, not accumulated, each
     time a higher generation number is seen.
     """
     generation_count = 300
     trajectory_path, manifest_path, rows_per_generation = (
-        _build_large_synthetic_trajectory(tmp_path, generation_count=generation_count)
+        _build_large_synthetic_trajectory(
+            tmp_path, generation_count=generation_count, kind="jsonl"
+        )
     )
     alive_after_each_row, total_yielded = _count_row_liveness(monkeypatch)
 
@@ -271,6 +285,43 @@ def test_reanalyze_trajectory_does_not_hold_every_row_live_for_the_final_generat
     peak_alive = max(alive_after_each_row)
     assert peak_alive <= rows_per_generation + 4
     assert peak_alive < total_rows / 10
+
+
+@pytest.mark.parametrize("generation", [0, 123, None])
+def test_a_binary_log_materializes_only_the_generation_it_is_asked_for(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, generation: int | None
+) -> None:
+    """Re-analyzing from a log never builds rows for any other generation.
+
+    The log's block headers say how many generations and rows it holds (the
+    consistency check), and the one wanted generation is rebuilt from the
+    nearest keyframe, so memory and time do not grow with the run's length.
+    Counted deterministically: every row the reader builds goes through
+    `frame_to_rows`, which is wrapped here.
+    """
+    generation_count = 300
+    trajectory_path, manifest_path, rows_per_generation = (
+        _build_large_synthetic_trajectory(tmp_path, generation_count=generation_count)
+    )
+    built: list[int] = []
+    real = frame_to_rows
+
+    def counting(*args: object, **kwargs: object) -> object:
+        """Record how many rows each conversion produced."""
+        rows = real(*args, **kwargs)  # type: ignore[arg-type]
+        built.append(len(rows))
+        return rows
+
+    monkeypatch.setattr(tlog_reader, "frame_to_rows", counting)
+
+    result = reanalyze.reanalyze_trajectory(
+        trajectory_path, manifest_path=manifest_path, generation=generation
+    )
+
+    assert result.state.generation == (
+        generation if generation is not None else generation_count - 1
+    )
+    assert built == [rows_per_generation]
 
 
 def test_reanalyze_trajectory_matches_the_live_report(tmp_path: Path) -> None:

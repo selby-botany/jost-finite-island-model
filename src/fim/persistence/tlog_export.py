@@ -424,21 +424,10 @@ def _apply(
         `(end position, rows, generation delta)`.
     """
     layout = scan.header.layout
-    while True:
-        end, rows, _kind, gen_delta = codec.apply_record(
-            buffer,
-            position,
-            layout.demes,
-            layout.loci,
-            sizes,
-            state.pn,
-            state.pid,
-            state.pc,
-            state.pf,
-        )
-        if end >= 0:
-            return int(end), int(rows), int(gen_delta)
-        state.grow()
+    end, rows, _kind, gen_delta = codec.decode_record(
+        buffer, position, layout.demes, layout.loci, sizes, state
+    )
+    return end, rows, gen_delta
 
 
 def _walk(

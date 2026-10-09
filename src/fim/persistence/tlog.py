@@ -303,7 +303,10 @@ def parse_header(data: bytes | mmap.mmap | memoryview) -> LogHeader:
 
 
 def scan_blocks(
-    data: bytes | mmap.mmap | memoryview, header: LogHeader | None = None
+    data: bytes | mmap.mmap | memoryview,
+    header: LogHeader | None = None,
+    *,
+    resume: ScanResult | None = None,
 ) -> ScanResult:
     """Walk the chained blocks of a log and return the committed prefix.
 
@@ -313,16 +316,21 @@ def scan_blocks(
     Args:
         data: The whole file.
         header: Its parsed header, if already known.
+        resume: An earlier scan of the same file (a prefix of it). Scanning
+            continues from where that one stopped instead of from the start,
+            so following a log that is still being written costs only the
+            new blocks. The caller must have checked that the earlier prefix
+            still holds (`prefix_still_holds`).
 
     Returns:
         The committed blocks and why scanning stopped.
     """
-    header = header or parse_header(data)
+    header = header or (resume.header if resume is not None else parse_header(data))
     size = len(data)
     view = memoryview(data)
-    pos = header.header_len
-    chain = header.crc
-    blocks: list[BlockInfo] = []
+    pos = resume.valid_end if resume is not None else header.header_len
+    chain = resume.chain_crc if resume is not None else header.crc
+    blocks: list[BlockInfo] = list(resume.blocks) if resume is not None else []
     reason = "end of file"
     while pos < size:
         if pos + BLOCK_HEADER_SIZE + CRC_SIZE > size:
@@ -372,6 +380,36 @@ def scan_blocks(
         reason=reason,
         chain_crc=chain,
     )
+
+
+def prefix_still_holds(data: bytes | mmap.mmap | memoryview, scan: ScanResult) -> bool:
+    """Whether an earlier scan's committed prefix is still the start of this file.
+
+    A cheap check, not a verification: the file must be at least as long as
+    the prefix, its header must be the same, and the chain checksum stored at
+    the end of the prefix must still be the one the scan recorded. A log that
+    is only ever appended to (a run in progress) always passes; a file that
+    was replaced fails with overwhelming probability. Whole-file integrity
+    is the manifest digest's job.
+
+    Args:
+        data: The file as it is now.
+        scan: The earlier scan.
+
+    Returns:
+        `True` if scanning may resume from `scan.valid_end`.
+    """
+    if len(data) < scan.valid_end:
+        return False
+    try:
+        if parse_header(data).crc != scan.header.crc:
+            return False
+    except TlogError:
+        return False
+    if not scan.blocks:
+        return True
+    (stored,) = _CRC.unpack_from(data, scan.valid_end - CRC_SIZE)
+    return bool(stored == scan.chain_crc)
 
 
 def recover(path: Path | str, *, truncate: bool = True) -> ScanResult:
@@ -1049,24 +1087,16 @@ def iter_frames(
                     position = block.offset + BLOCK_HEADER_SIZE
                     generation = block.first_generation
                     for index in range(block.n_records):
-                        while True:
-                            end, _rows, _kind, gen_delta = codec.apply_record(
-                                buffer,
-                                position,
-                                layout.demes,
-                                layout.loci,
-                                sizes,
-                                state.pn,
-                                state.pid,
-                                state.pc,
-                                state.pf,
-                            )
-                            if end >= 0:
-                                break
-                            state.grow()
-                        position = int(end)
+                        position, _rows, _kind, gen_delta = codec.decode_record(
+                            buffer,
+                            position,
+                            layout.demes,
+                            layout.loci,
+                            sizes,
+                            state,
+                        )
                         if index:
-                            generation += int(gen_delta)
+                            generation += gen_delta
                         counts, ids, frequencies = state.frame_arrays()
                         yield TrajectoryFrame(
                             generation=generation,
