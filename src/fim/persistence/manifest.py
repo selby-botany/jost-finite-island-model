@@ -389,7 +389,9 @@ def write_manifest(path: Path | str, manifest: RunManifest) -> None:
     logger.debug("wrote manifest: %s", manifest_path)
 
 
-def verify_trajectory_integrity(trajectory_path: Path, manifest: RunManifest) -> None:
+def verify_trajectory_integrity(
+    trajectory_path: Path, manifest: RunManifest, *, artifact: str = "trajectory"
+) -> None:
     """Refuse to analyze a trajectory that no longer matches its manifest.
 
     Called by `fim.reanalyze.reanalyze_trajectory` before it trusts
@@ -413,19 +415,22 @@ def verify_trajectory_integrity(trajectory_path: Path, manifest: RunManifest) ->
     Args:
         trajectory_path: The trajectory file about to be read.
         manifest: Its companion manifest.
+        artifact: The manifest key of the file's digest: `"trajectory"` (the
+            default) or `"equilibrium_trajectory"` for an equilibrium-split
+            run's ancestral phase.
 
     Raises:
         ValueError: If the manifest has no recorded trajectory digest
             (written before this check existed), or the file no longer
             matches the digest it does have.
     """
-    if manifest.artifacts is None or "trajectory" not in manifest.artifacts:
+    if manifest.artifacts is None or artifact not in manifest.artifacts:
         raise ValueError(
-            f"manifest for {manifest.run_id!r} has no recorded trajectory "
+            f"manifest for {manifest.run_id!r} has no recorded {artifact} "
             "digest to verify against (written by a version of fim "
             "predating this integrity check)"
         )
-    expected = manifest.artifacts["trajectory"]
+    expected = manifest.artifacts[artifact]
     actual = hash_file(trajectory_path)
     if actual != expected:
         logger.warning(

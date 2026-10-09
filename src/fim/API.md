@@ -19340,7 +19340,9 @@ else in the project works with the in-memory `RunManifest` object.
 
 ```python
 def verify_trajectory_integrity(trajectory_path: Path,
-                                manifest: RunManifest) -> None
+                                manifest: RunManifest,
+                                *,
+                                artifact: str = "trajectory") -> None
 ```
 
 Refuse to analyze a trajectory that no longer matches its manifest.
@@ -19367,6 +19369,9 @@ truncation, or replacement since.
 
 - `trajectory_path` - The trajectory file about to be read.
 - `manifest` - Its companion manifest.
+- `artifact` - The manifest key of the file's digest: `"trajectory"` (the
+  default) or `"equilibrium_trajectory"` for an equilibrium-split
+  run's ancestral phase.
 
 
 **Raises**:

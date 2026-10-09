@@ -119,6 +119,7 @@ from fim.persistence.run_metadata import (
     run_metadata_path,
     write_run_labels,
 )
+from fim.persistence.tlog_export import DEFAULT_EXPORT_WORKERS, export_trajectory
 from fim.statistics.catalog import DEFAULT_PAIRWISE_MAX_DEMES
 from fim.viz.scatter import plot_frequency_scatter
 
@@ -344,6 +345,7 @@ def _dispatch_command(
         "experiment": lambda: _command_experiment(arguments, parser),
         "sweep": lambda: command_sweep(arguments, parser),
         "stats": lambda: _command_stats(arguments),
+        "export": lambda: _command_export(arguments),
         "update": lambda: _command_update(arguments, parser),
     }
     handler = handlers.get(arguments.command)
@@ -910,6 +912,28 @@ def _print_experiments(experiments: Sequence[ExperimentManifest]) -> None:
             f"{experiment.study_count:>8}  "
             f"{experiment.created_at:<28}  {experiment.name}"
         )
+
+
+def _command_export(arguments: argparse.Namespace) -> int:
+    """Export a run's binary trajectory log as the canonical `trajectory.jsonl`.
+
+    A thin wrapper over `fim.persistence.tlog_export.export_trajectory`,
+    which checks the log against its manifest, checks the free space, writes
+    the file atomically and leaves a receipt with both SHA-256 digests.
+    """
+    receipt = export_trajectory(
+        arguments.trajectory,
+        arguments.output,
+        workers=arguments.workers,
+        overwrite=arguments.force,
+    )
+    print(
+        f"Exported {receipt.generations} generations ({receipt.rows} rows) "
+        f"-> {receipt.output}"
+    )
+    print(f"  {receipt.size} bytes, sha256 {receipt.sha256}")
+    print(f"  receipt -> {receipt.receipt}")
+    return 0
 
 
 def _command_stats(arguments: argparse.Namespace) -> int:
@@ -1576,6 +1600,40 @@ def _parser() -> argparse.ArgumentParser:
         "--output",
         metavar="PATH",
         help="also write the JSON result",
+    )
+
+    export_parser = subcommands.add_parser(
+        "export",
+        help="write a run's trajectory log as trajectory.jsonl",
+        description=(
+            "Write the canonical trajectory.jsonl (one JSON object per allele "
+            "frequency per generation) from a run's binary trajectory log. "
+            "The file can be very large: it is checked against the free "
+            "space first, and a receipt with its SHA-256 is written beside it."
+        ),
+    )
+    export_parser.add_argument(
+        "trajectory",
+        metavar="RUN",
+        help="a run directory, or its trajectory.tlog",
+    )
+    export_parser.add_argument(
+        "-o",
+        "--output",
+        metavar="PATH",
+        help="JSON Lines file to write (default: beside the log)",
+    )
+    export_parser.add_argument(
+        "--workers",
+        type=_positive_integer,
+        default=DEFAULT_EXPORT_WORKERS,
+        metavar="N",
+        help="processes to format with (default: %(default)s)",
+    )
+    export_parser.add_argument(
+        "--force",
+        action="store_true",
+        help="replace an existing output file",
     )
 
     update_parser = subcommands.add_parser(

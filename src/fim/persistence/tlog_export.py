@@ -41,6 +41,7 @@ more slowly.
 from __future__ import annotations
 
 import hashlib
+import json
 import json.encoder
 import mmap
 import os
@@ -54,7 +55,13 @@ from typing import Final
 
 import numpy as np
 
+from fim import paths
 from fim.persistence import tlog_codec as codec
+from fim.persistence.manifest import (
+    hash_file,
+    read_manifest,
+    verify_trajectory_integrity,
+)
 from fim.persistence.tlog import (
     BLOCK_HEADER_SIZE,
     BlockInfo,
@@ -69,7 +76,8 @@ _CHUNK_BYTES: Final = 16 * 1024 * 1024
 _MAX_FLOAT_TEXT: Final = 25
 _MAX_INT_TEXT: Final = 20
 _GENERATION_FIELD: Final = ',"generation":'
-_DEFAULT_WORKERS: Final = 4
+DEFAULT_EXPORT_WORKERS: Final = min(4, os.cpu_count() or 1)
+"""Processes an export formats with unless told otherwise."""
 _MIN_BLOCKS_PER_SHARD: Final = 1
 _SHARD_TARGET_BLOCKS: Final = 64
 
@@ -759,3 +767,171 @@ def check_free_space(log_path: Path | str, directory: Path | str) -> tuple[int, 
     """
     needed = free_space_needed(log_path)
     return needed, shutil.disk_usage(directory).free
+
+
+RECEIPT_SCHEMA: Final = "fim-trajectory-export/1"
+"""The `schema` field of an export receipt."""
+
+_LOG_NAME: Final = "trajectory.tlog"
+_EQUILIBRIUM_LOG_NAME: Final = "equilibrium_trajectory.tlog"
+
+
+@dataclass(frozen=True, slots=True)
+class ExportReceipt:
+    """What an export produced, as recorded in its receipt file.
+
+    Args:
+        run_id: The run the log holds.
+        source: The binary log that was exported.
+        source_sha256: The log file's SHA-256.
+        source_bytes: The log file's size.
+        output: The JSON Lines file written.
+        sha256: The JSON Lines file's SHA-256.
+        size: The JSON Lines file's size.
+        generations: Generations exported.
+        rows: Rows (lines) exported.
+        receipt: The receipt file written beside the output.
+    """
+
+    run_id: str
+    source: Path
+    source_sha256: str
+    source_bytes: int
+    output: Path
+    sha256: str
+    size: int
+    generations: int
+    rows: int
+    receipt: Path
+
+
+def resolve_log(path: Path | str) -> Path:
+    """Return the log file a path names: the file itself, or a run directory's.
+
+    Args:
+        path: A `.tlog` file, or a run directory holding `trajectory.tlog`.
+
+    Returns:
+        The log file.
+
+    Raises:
+        FileNotFoundError: If neither exists.
+    """
+    given = Path(path)
+    if given.is_dir():
+        given = given / _LOG_NAME
+    if not given.is_file():
+        raise FileNotFoundError(f"trajectory log does not exist: {given}")
+    return given
+
+
+def _verify_against_manifest(log: Path) -> None:
+    """Check a log against the manifest beside it, when there is one.
+
+    A log whose bytes no longer match the digest its run recorded must not be
+    exported as if it were that run's trajectory.
+
+    Raises:
+        ValueError: If the manifest records a digest that the file fails.
+    """
+    manifest_path = log.with_name("manifest.json")
+    if not manifest_path.is_file():
+        return
+    artifact = (
+        "equilibrium_trajectory" if log.name == _EQUILIBRIUM_LOG_NAME else "trajectory"
+    )
+    manifest = read_manifest(manifest_path)
+    if manifest.artifacts is not None and artifact in manifest.artifacts:
+        verify_trajectory_integrity(log, manifest, artifact=artifact)
+
+
+def export_trajectory(
+    path: Path | str,
+    output: Path | str | None = None,
+    *,
+    workers: int = DEFAULT_EXPORT_WORKERS,
+    overwrite: bool = False,
+) -> ExportReceipt:
+    """Export a run's trajectory log as the canonical `trajectory.jsonl`.
+
+    Checks the log against its run's manifest, refuses when the disk cannot
+    hold the file (the exact size is known first, from the size pass),
+    writes the JSON Lines to a partial file and renames it into place, and
+    leaves a receipt recording both digests next to it.
+
+    Args:
+        path: A `.tlog` file or a run directory.
+        output: The JSON Lines file to write; by default the log's own name
+            with `.jsonl` beside it.
+        workers: Processes to format with (`derive_jsonl`).
+        overwrite: Replace an existing output.
+
+    Returns:
+        The receipt, which has also been written to
+        `<output>.export.json`.
+
+    Raises:
+        FileNotFoundError: If the log does not exist.
+        FileExistsError: If the output exists and `overwrite` is false.
+        OSError: If the disk does not have room for the file.
+        ValueError: If the log does not match its manifest.
+        TlogError: If the log is unusable.
+    """
+    log = resolve_log(path)
+    target = Path(output) if output is not None else log.with_suffix(".jsonl")
+    if target.exists() and not overwrite:
+        raise FileExistsError(
+            f"{target} already exists; choose another output or allow overwriting"
+        )
+    _verify_against_manifest(log)
+    target.parent.mkdir(parents=True, exist_ok=True)
+    needed, free = check_free_space(log, target.parent)
+    if needed > free:
+        raise OSError(
+            f"not enough free space to export {log.name}: it needs {needed:,} "
+            f"bytes and {target.parent} has {free:,} free"
+        )
+    partial = target.with_name(target.name + ".partial")
+    try:
+        derived = derive_jsonl(log, partial, workers=workers)
+        partial.replace(target)
+    finally:
+        partial.unlink(missing_ok=True)
+    source = hash_file(log)
+    receipt_path = target.with_name(target.name + ".export.json")
+    receipt = ExportReceipt(
+        run_id=derived.run_id,
+        source=log,
+        source_sha256=source["sha256"],
+        source_bytes=source["bytes"],
+        output=target,
+        sha256=derived.sha256,
+        size=derived.size,
+        generations=derived.generations,
+        rows=derived.rows,
+        receipt=receipt_path,
+    )
+    document = {
+        "schema": RECEIPT_SCHEMA,
+        "run_id": receipt.run_id,
+        "source": {
+            "file": log.name,
+            "sha256": receipt.source_sha256,
+            "bytes": receipt.source_bytes,
+            "generations": receipt.generations,
+            "rows": receipt.rows,
+        },
+        "jsonl": {
+            "file": target.name,
+            "sha256": receipt.sha256,
+            "bytes": receipt.size,
+            "generations": receipt.generations,
+            "rows": receipt.rows,
+        },
+    }
+    paths.write_text_atomically(
+        receipt_path,
+        json.dumps(document, sort_keys=True, indent=2, allow_nan=False) + "\n",
+        prefix=".export-",
+    )
+    return receipt
