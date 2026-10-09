@@ -230,6 +230,10 @@ ignore = [
 # bit; `_migrate` carries one branch per migration kind and one per case
 # of the arithmetic, and splitting it would only scatter that mirror.
 "src/fim/model/vector_kernels.py" = ["PLR0912"]
+# The binary log's record codec is the same kind of code: byte-level
+# loops over arrays, compiled when numba is present, with the varint
+# constants (`128`, `127`) being the format itself.
+"src/fim/persistence/tlog_codec.py" = ["PLR0912", "PLR2004"]
 "test/**/*.py" = ["ARG001", "PLR2004", "S101"]
 
 [tool.mypy]
@@ -280,7 +284,7 @@ ignore_missing_imports = true
 # exempt from the strict function-signature checks; every caller in
 # `fim.model.vector_block` is fully typed.
 [[tool.mypy.overrides]]
-module = "fim.model.vector_kernels"
+module = ["fim.model.vector_kernels", "fim.persistence.tlog_codec"]
 disallow_untyped_defs = false
 disallow_untyped_decorators = false
 disallow_incomplete_defs = false
@@ -331,7 +335,16 @@ skip_covered = true
 # `test/engine/test_vector_parity.py` compare complete row streams with
 # Backends L and G bit for bit. The Python around them (`vector_block`) is
 # measured as usual.
-omit = ["src/fim/model/vector_kernels.py", "*/fim/model/vector_kernels.py"]
+# The binary log's record codec (`fim.persistence.tlog_codec`) is compiled
+# the same way, and is proven the same way: `test/persistence/
+# test_tlog_codec.py` round-trips every kind of record bit for bit and
+# compares the pure-Python and compiled versions byte for byte.
+omit = [
+    "src/fim/model/vector_kernels.py",
+    "*/fim/model/vector_kernels.py",
+    "src/fim/persistence/tlog_codec.py",
+    "*/fim/persistence/tlog_codec.py",
+]
 exclude_also = [
     "if TYPE_CHECKING:",
     "if __name__ == .__main__.:",

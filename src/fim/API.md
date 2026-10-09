@@ -741,6 +741,23 @@ Return to the [source-tree orientation](../README.md) or the [developer guide](.
     * [close\_run](#fim.persistence.store.ReplicateFanoutStore.close_run)
     * [equilibrium\_store](#fim.persistence.store.ReplicateFanoutStore.equilibrium_store)
   * [normalize\_row](#fim.persistence.store.normalize_row)
+* [fim.persistence.tlog\_codec](#fim.persistence.tlog_codec)
+  * [PAD4](#fim.persistence.tlog_codec.PAD4)
+  * [kernel](#fim.persistence.tlog_codec.kernel)
+  * [put\_varint](#fim.persistence.tlog_codec.put_varint)
+  * [put\_padded4](#fim.persistence.tlog_codec.put_padded4)
+  * [get\_varint](#fim.persistence.tlog_codec.get_varint)
+  * [put\_pair](#fim.persistence.tlog_codec.put_pair)
+  * [enc\_full](#fim.persistence.tlog_codec.enc_full)
+  * [enc\_delta](#fim.persistence.tlog_codec.enc_delta)
+  * [load\_state\_from\_csr](#fim.persistence.tlog_codec.load_state_from_csr)
+  * [get\_pair](#fim.persistence.tlog_codec.get_pair)
+  * [apply\_record](#fim.persistence.tlog_codec.apply_record)
+  * [state\_to\_csr](#fim.persistence.tlog_codec.state_to_csr)
+  * [DecodedState](#fim.persistence.tlog_codec.DecodedState)
+    * [\_\_init\_\_](#fim.persistence.tlog_codec.DecodedState.__init__)
+    * [grow](#fim.persistence.tlog_codec.DecodedState.grow)
+    * [frame\_arrays](#fim.persistence.tlog_codec.DecodedState.frame_arrays)
 * [fim.reanalyze](#fim.reanalyze)
   * [ReanalyzedGeneration](#fim.reanalyze.ReanalyzedGeneration)
   * [differentiation\_q\_for\_state](#fim.reanalyze.differentiation_q_for_state)
@@ -20275,6 +20292,297 @@ handed in).
 **Returns**:
 
   A typed row with primitive values.
+
+<a id="fim.persistence.tlog_codec"></a>
+
+# fim.persistence.tlog\_codec
+
+Record codec of the binary trajectory log.
+
+The log (`fim.persistence.tlog`) is a sequence of blocks; a block holds
+generation records; this module encodes and decodes one record. Every
+function works on plain NumPy arrays and integers, so each one can be
+compiled by Numba (`nogil`, cached) when Numba is installed and runs
+unchanged, only more slowly, when it is not. Importing `fim` never needs
+Numba.
+
+A record:
+
+```text
+padded-4 varint  body_len   bytes after this field
+padded-4 varint  rows       rows of the whole generation (not only a delta)
+u8               kind       0 = full frame, 1 = delta (changed pairs only)
+body
+```
+
+A full body is one *pair body* per (deme, locus) pair, in pair order. A
+delta body is `varint n_changed`, then `n_changed` times
+`(varint pair - previous changed pair, pair body)`.
+
+A pair body is `varint h`:
+
+- `h == 1`: one allele at frequency exactly `1.0`; its `varint` id follows;
+- `h >= 2`: `n = h >> 1` alleles and `esc = h & 1`; then for each allele
+  its `varint` id and, when `esc == 0`, a `varint` count `c` meaning
+  frequency `c / size`, or, when `esc == 1`, the eight bytes of the
+  little-endian float64.
+
+Count coding is lossless because the encoder checks it: it stores `c` only
+when `float(c) / float(size)` equals the frequency bit for bit, and
+otherwise (or when the deme size is unknown, `0`) stores every frequency of
+that pair as the raw float64. No frequency is ever rounded.
+
+<a id="fim.persistence.tlog_codec.PAD4"></a>
+
+#### PAD4
+
+Bytes of a padded varint: a length written before it is known.
+
+<a id="fim.persistence.tlog_codec.kernel"></a>
+
+#### kernel
+
+```python
+def kernel(function: Callable[..., Any]) -> Callable[..., Any]
+```
+
+Compile `function` with Numba (`nogil`, cached) when it is available.
+
+**Arguments**:
+
+- `function` - A function written in the Numba-compatible subset.
+
+
+**Returns**:
+
+  The compiled function, or `function` itself without Numba.
+
+<a id="fim.persistence.tlog_codec.put_varint"></a>
+
+#### put\_varint
+
+```python
+@kernel
+def put_varint(out, pos, v)
+```
+
+Write `v` as a little-endian base-128 varint; return the new position.
+
+<a id="fim.persistence.tlog_codec.put_padded4"></a>
+
+#### put\_padded4
+
+```python
+@kernel
+def put_padded4(out, pos, v)
+```
+
+Write `v` (below 2**28) as a four-byte padded varint; return the end.
+
+<a id="fim.persistence.tlog_codec.get_varint"></a>
+
+#### get\_varint
+
+```python
+@kernel
+def get_varint(buf, pos)
+```
+
+Read a varint at `pos`; return `(value, position after it)`.
+
+<a id="fim.persistence.tlog_codec.put_pair"></a>
+
+#### put\_pair
+
+```python
+@kernel
+def put_pair(out, pos, n, ids, fr, base, size, tmp8)
+```
+
+Write one pair body from the entries `ids/fr[base:base + n]`.
+
+**Arguments**:
+
+- `out` - The output byte buffer.
+- `pos` - Where to write.
+- `n` - Alleles in the pair (at least 1).
+- `ids` - Allele ids of the frame.
+- `fr` - Frequencies of the frame.
+- `base` - Index of the pair's first entry.
+- `size` - The deme's gene copies, or `0` when unknown.
+- `tmp8` - One-element float64 scratch for the raw form.
+
+
+**Returns**:
+
+  The position after the pair body.
+
+<a id="fim.persistence.tlog_codec.enc_full"></a>
+
+#### enc\_full
+
+```python
+@kernel
+def enc_full(out, pos, nal, ids, fr, demes, loci, sizes, tmp8)
+```
+
+Append one full-frame record built from a CSR frame.
+
+**Arguments**:
+
+- `out` - The block buffer.
+- `pos` - Where the record starts.
+- `nal` - `int32[pairs]` alleles per pair.
+- `ids` - Allele ids, pair 0 first.
+- `fr` - Frequencies, same order.
+- `demes` - Number of demes.
+- `loci` - Number of loci.
+- `sizes` - `int64[demes]` gene copies (`0` unknown).
+- `tmp8` - One-element float64 scratch.
+
+
+**Returns**:
+
+  `(new position, rows)`.
+
+<a id="fim.persistence.tlog_codec.enc_delta"></a>
+
+#### enc\_delta
+
+```python
+@kernel
+def enc_delta(out, pos, nal, ids, fr, demes, loci, sizes, pn, pid, pf, tmp8)
+```
+
+Append a delta record against `pn/pid/pf` and update that state.
+
+Only pairs whose alleles or frequency bits differ from the previous
+frame are written. Every `nal[p]` must be at most `pid.shape[1]`
+(the caller grows the state first).
+
+**Arguments**:
+
+- `out` - The block buffer.
+- `pos` - Where the record starts.
+- `nal` - `int32[pairs]` alleles per pair.
+- `ids` - Allele ids, pair 0 first.
+- `fr` - Frequencies, same order.
+- `demes` - Number of demes.
+- `loci` - Number of loci.
+- `sizes` - `int64[demes]` gene copies (`0` unknown).
+- `pn` - `int32[pairs]` previous alleles per pair, updated.
+- `pid` - `int64[pairs, width]` previous ids, updated.
+- `pf` - `float64[pairs, width]` previous frequencies, updated.
+- `tmp8` - One-element float64 scratch.
+
+
+**Returns**:
+
+  `(new position, rows, pairs changed)`.
+
+<a id="fim.persistence.tlog_codec.load_state_from_csr"></a>
+
+#### load\_state\_from\_csr
+
+```python
+@kernel
+def load_state_from_csr(nal, ids, fr, pn, pid, pf)
+```
+
+Set an encoder's previous-frame state from a CSR frame.
+
+<a id="fim.persistence.tlog_codec.get_pair"></a>
+
+#### get\_pair
+
+```python
+@kernel
+def get_pair(buf, pos, size, p, pn, pid, pc, pf)
+```
+
+Decode one pair body into the state arrays.
+
+**Returns**:
+
+  The position after the body, or `-1` when the pair has more
+  alleles than the state is wide (the caller widens and retries).
+
+<a id="fim.persistence.tlog_codec.apply_record"></a>
+
+#### apply\_record
+
+```python
+@kernel
+def apply_record(buf, pos, demes, loci, sizes, pn, pid, pc, pf)
+```
+
+Apply the record at `pos` to the decoded state.
+
+**Returns**:
+
+  `(end position, rows, kind)`. An end position of `-1` means the
+  state is too narrow: widen it and call again.
+
+<a id="fim.persistence.tlog_codec.state_to_csr"></a>
+
+#### state\_to\_csr
+
+```python
+@kernel
+def state_to_csr(pn, pid, pf, nal, out_ids, out_fr)
+```
+
+Flatten the decoded per-pair state into a CSR frame.
+
+**Returns**:
+
+  The number of entries written.
+
+<a id="fim.persistence.tlog_codec.DecodedState"></a>
+
+## DecodedState Objects
+
+```python
+class DecodedState()
+```
+
+The per-pair state a decoder keeps, and what a delta applies to.
+
+**Arguments**:
+
+- `pairs` - Number of (deme, locus) pairs.
+- `width` - Initial number of alleles each pair can hold; it doubles on
+  demand.
+
+<a id="fim.persistence.tlog_codec.DecodedState.__init__"></a>
+
+#### \_\_init\_\_
+
+```python
+def __init__(pairs: int, width: int = 16) -> None
+```
+
+Allocate the arrays.
+
+<a id="fim.persistence.tlog_codec.DecodedState.grow"></a>
+
+#### grow
+
+```python
+def grow() -> None
+```
+
+Double the width, keeping every value.
+
+<a id="fim.persistence.tlog_codec.DecodedState.frame_arrays"></a>
+
+#### frame\_arrays
+
+```python
+def frame_arrays() -> tuple[np.ndarray, np.ndarray, np.ndarray]
+```
+
+Return the state as CSR arrays `(counts, allele_ids, frequencies)`.
 
 <a id="fim.reanalyze"></a>
 

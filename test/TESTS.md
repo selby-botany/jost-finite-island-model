@@ -133,6 +133,7 @@ Every test module, fixture, and test function documented here in full; `doc/fim-
   - [`test_run_classes`](#persistence.test_run_classes)
   - [`test_run_metadata`](#persistence.test_run_metadata)
   - [`test_store`](#persistence.test_store)
+  - [`test_tlog_codec`](#persistence.test_tlog_codec)
   - [`test_validation`](#persistence.test_validation)
 - [`test/statistics/`](#group-statistics)
   - [`test_catalog`](#statistics.test_catalog)
@@ -31374,6 +31375,172 @@ def test_manifest_round_trip_reconstructs_several_convergence_statistics(
 ```
 
 A manifest watching several statistics is a lossless replay too.
+
+<a id="persistence.test_tlog_codec"></a>
+
+# persistence.test\_tlog\_codec
+
+Round-trip tests of the binary log's record codec.
+
+The codec is lossless by construction (count coding is used only when it
+reproduces the frequency bit for bit), so the central property is: any
+frame, encoded and decoded, returns the same counts, ids and frequency
+bits. The cases cover count-coded, raw and mixed pairs, unknown deme
+sizes, empty pairs, large identifiers, widening beyond the initial state,
+delta records against a long random walk, and the pure-Python versions
+of every kernel against the compiled ones. All seeded; no timing.
+
+<a id="persistence.test_tlog_codec.test_a_full_record_round_trips_counted_and_raw_pairs"></a>
+
+#### test\_a\_full\_record\_round\_trips\_counted\_and\_raw\_pairs
+
+```python
+@pytest.mark.parametrize("seed", range(12))
+def test_a_full_record_round_trips_counted_and_raw_pairs(seed: int) -> None
+```
+
+Mixed count-coded and raw pairs come back with identical float bits.
+
+<a id="persistence.test_tlog_codec.test_counted_pairs_are_much_smaller_than_raw_pairs"></a>
+
+#### test\_counted\_pairs\_are\_much\_smaller\_than\_raw\_pairs
+
+```python
+def test_counted_pairs_are_much_smaller_than_raw_pairs() -> None
+```
+
+Count coding is what makes the log small: about 2 bytes a row at N=100.
+
+<a id="persistence.test_tlog_codec.test_an_unknown_deme_size_stores_every_frequency_raw_and_exactly"></a>
+
+#### test\_an\_unknown\_deme\_size\_stores\_every\_frequency\_raw\_and\_exactly
+
+```python
+def test_an_unknown_deme_size_stores_every_frequency_raw_and_exactly() -> None
+```
+
+Size 0 (unknown) disables count coding; the floats still round-trip.
+
+<a id="persistence.test_tlog_codec.test_large_allele_identifiers_round_trip"></a>
+
+#### test\_large\_allele\_identifiers\_round\_trip
+
+```python
+@pytest.mark.parametrize("id_base", [0, 2**32, 2**40 - 20_000])
+def test_large_allele_identifiers_round_trip(id_base: int) -> None
+```
+
+Minted identifiers start at 2**32; the varint carries them exactly.
+
+<a id="persistence.test_tlog_codec.test_a_single_allele_at_frequency_one_costs_two_bytes_plus_the_id"></a>
+
+#### test\_a\_single\_allele\_at\_frequency\_one\_costs\_two\_bytes\_plus\_the\_id
+
+```python
+def test_a_single_allele_at_frequency_one_costs_two_bytes_plus_the_id(
+) -> None
+```
+
+The fixed state of a deme is the common case and the cheapest.
+
+<a id="persistence.test_tlog_codec.test_a_frequency_that_is_not_a_count_falls_back_to_raw_for_its_pair"></a>
+
+#### test\_a\_frequency\_that\_is\_not\_a\_count\_falls\_back\_to\_raw\_for\_its\_pair
+
+```python
+def test_a_frequency_that_is_not_a_count_falls_back_to_raw_for_its_pair(
+) -> None
+```
+
+One non-count frequency makes the pair raw; neighbours stay counted.
+
+<a id="persistence.test_tlog_codec.test_pairs_with_no_allele_are_kept_empty"></a>
+
+#### test\_pairs\_with\_no\_allele\_are\_kept\_empty
+
+```python
+def test_pairs_with_no_allele_are_kept_empty() -> None
+```
+
+A pair with no entries round-trips as empty (partial frames exist).
+
+<a id="persistence.test_tlog_codec.test_the_state_widens_when_a_pair_has_more_alleles_than_it_holds"></a>
+
+#### test\_the\_state\_widens\_when\_a\_pair\_has\_more\_alleles\_than\_it\_holds
+
+```python
+def test_the_state_widens_when_a_pair_has_more_alleles_than_it_holds() -> None
+```
+
+More than the initial 16 alleles in a pair widens the state and retries.
+
+<a id="persistence.test_tlog_codec.test_varints_round_trip"></a>
+
+#### test\_varints\_round\_trip
+
+```python
+@pytest.mark.parametrize(
+    "value", [0, 1, 127, 128, 16_383, 16_384, 2**32, 2**40 + 17, 2**62])
+def test_varints_round_trip(value: int) -> None
+```
+
+Base-128 varints carry any non-negative 63-bit value.
+
+<a id="persistence.test_tlog_codec.test_a_padded_length_has_four_bytes_whatever_its_value"></a>
+
+#### test\_a\_padded\_length\_has\_four\_bytes\_whatever\_its\_value
+
+```python
+def test_a_padded_length_has_four_bytes_whatever_its_value() -> None
+```
+
+Lengths are written before they are known, so they are fixed-width.
+
+<a id="persistence.test_tlog_codec.test_a_long_random_walk_of_delta_records_reproduces_every_frame"></a>
+
+#### test\_a\_long\_random\_walk\_of\_delta\_records\_reproduces\_every\_frame
+
+```python
+def test_a_long_random_walk_of_delta_records_reproduces_every_frame() -> None
+```
+
+Deltas against the previous frame decode to the full frame every step.
+
+<a id="persistence.test_tlog_codec.test_an_unchanged_generation_is_a_short_delta"></a>
+
+#### test\_an\_unchanged\_generation\_is\_a\_short\_delta
+
+```python
+def test_an_unchanged_generation_is_a_short_delta() -> None
+```
+
+The common case in a quiet run: nothing changed, a dozen bytes.
+
+<a id="persistence.test_tlog_codec.test_the_pure_python_kernels_produce_the_compiled_bytes"></a>
+
+#### test\_the\_pure\_python\_kernels\_produce\_the\_compiled\_bytes
+
+```python
+@pytest.mark.skipif(not codec.HAVE_NUMBA,
+                    reason="needs numba to compare against")
+def test_the_pure_python_kernels_produce_the_compiled_bytes() -> None
+```
+
+Without numba the same code runs; its output must be identical.
+
+<a id="persistence.test_tlog_codec.test_the_codec_runs_without_numba"></a>
+
+#### test\_the\_codec\_runs\_without\_numba
+
+```python
+def test_the_codec_runs_without_numba() -> None
+```
+
+With numba absent the same code runs as plain Python and round-trips.
+
+A fresh interpreter hides numba (`sys.modules["numba"] = None` makes
+its import fail), so this proves the optional dependency really is
+optional for the module every default store uses.
 
 <a id="persistence.test_validation"></a>
 
