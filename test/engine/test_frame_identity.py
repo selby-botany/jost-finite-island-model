@@ -8,7 +8,7 @@ checked on the complete stream of a real run, never on a summary:
    frequency bits, every generation) and the same layout.
 2. A frame equals the frame rebuilt from the rows the engine writes on
    the rows path, so the two paths cannot disagree.
-3. A JSON Lines store fed frames writes the same bytes as one fed rows,
+3. A binary log fed frames writes the same bytes as one fed rows,
    including the ancestral companion of an equilibrium-split run.
 
 No test depends on timing; every run is seeded.
@@ -24,13 +24,13 @@ import pytest
 
 from fim.engine import fim
 from fim.model.params import SimulationParams
+from fim.persistence.binary_store import BinaryLogStore
 from fim.persistence.frame import (
     FrameLayout,
     TrajectoryFrame,
     frame_to_rows,
     rows_to_frame,
 )
-from fim.persistence.jsonl_store import JSONLTrajectoryStore
 from fim.persistence.store import InMemoryTrajectoryStore, TrajectoryStore
 
 RUN_ID = "run-frames"
@@ -85,21 +85,22 @@ class _FrameRecorder:
         return self.companion
 
 
-class _FrameJsonlStore(JSONLTrajectoryStore):
-    """A JSON Lines store that asks the engine for frames."""
+class _RowLogStore(BinaryLogStore):
+    """A binary log that declines frames, so the engine writes it rows."""
 
     def wants_frames(self, run_id: str) -> bool:
-        """Ask for frames, so the engine takes the frame path."""
+        """Decline frames, so the engine takes the rows path."""
         del run_id
-        return True
+        return False
 
-    def equilibrium_store(self, run_id: str) -> JSONLTrajectoryStore:
-        """Return a frame-asking companion beside this file."""
+    def equilibrium_store(self, run_id: str) -> BinaryLogStore:
+        """Return a rows-fed companion beside this file."""
         del run_id
         with self._lock:
             if self._equilibrium is None:
-                self._equilibrium = _FrameJsonlStore(
-                    self.path.with_name("equilibrium_trajectory.jsonl")
+                self._equilibrium = _RowLogStore(
+                    self.path.with_name("equilibrium_trajectory.tlog"),
+                    **self._options,
                 )
             return self._equilibrium
 
@@ -213,9 +214,9 @@ def _run_to_file(
     path: Path,
     params: SimulationParams,
     backend: str,
-    store_type: type[JSONLTrajectoryStore],
-) -> JSONLTrajectoryStore:
-    """Run into a JSON Lines store of `store_type` and close it."""
+    store_type: type[BinaryLogStore],
+) -> None:
+    """Run into a binary log of `store_type` and close it."""
     store = store_type(path)
     fim(
         params.gene_copies,
@@ -228,22 +229,21 @@ def _run_to_file(
         engine_backend=backend,  # type: ignore[arg-type]
     )
     store.close()
-    return store
 
 
 @pytest.mark.parametrize("backend", ["lineal", "generational-vector"])
-def test_jsonl_fed_frames_writes_the_same_bytes_as_jsonl_fed_rows(
+def test_a_log_fed_frames_writes_the_same_bytes_as_a_log_fed_rows(
     tmp_path: Path, backend: str
 ) -> None:
-    """The frame path and the row path produce byte-identical files."""
+    """The frame path and the row path produce byte-identical logs."""
     pytest.importorskip("numba")
     params = CASES["infinite alleles"]()
-    _run_to_file(tmp_path / "rows.jsonl", params, backend, JSONLTrajectoryStore)
-    _run_to_file(tmp_path / "frames.jsonl", params, backend, _FrameJsonlStore)
-    assert (tmp_path / "rows.jsonl").read_bytes() == (
-        tmp_path / "frames.jsonl"
+    _run_to_file(tmp_path / "rows.tlog", params, backend, _RowLogStore)
+    _run_to_file(tmp_path / "frames.tlog", params, backend, BinaryLogStore)
+    assert (tmp_path / "rows.tlog").read_bytes() == (
+        tmp_path / "frames.tlog"
     ).read_bytes()
-    assert (tmp_path / "rows.jsonl").stat().st_size > 0
+    assert (tmp_path / "rows.tlog").stat().st_size > 0
 
 
 def test_equilibrium_split_companion_gets_frames_of_one_ancestral_deme(
@@ -261,14 +261,14 @@ def test_equilibrium_split_companion_gets_frames_of_one_ancestral_deme(
     assert layout.deme_sizes == (sum(params.population_sizes),)
     assert layout.locus_ids == recorder.layouts[RUN_ID].locus_ids
     assert len(companion.frames[RUN_ID]) > 1
-    # The ancestral file's bytes agree between the two paths as well.
+    # The ancestral log's bytes agree between the two paths as well.
     for kind, store_type in (
-        ("rows", JSONLTrajectoryStore),
-        ("frames", _FrameJsonlStore),
+        ("rows", _RowLogStore),
+        ("frames", BinaryLogStore),
     ):
         (tmp_path / kind).mkdir()
-        _run_to_file(tmp_path / kind / "trajectory.jsonl", params, "lineal", store_type)
-    for name in ("trajectory.jsonl", "equilibrium_trajectory.jsonl"):
+        _run_to_file(tmp_path / kind / "trajectory.tlog", params, "lineal", store_type)
+    for name in ("trajectory.tlog", "equilibrium_trajectory.tlog"):
         rows_bytes = (tmp_path / "rows" / name).read_bytes()
         assert rows_bytes
         assert rows_bytes == (tmp_path / "frames" / name).read_bytes()
@@ -316,9 +316,9 @@ def test_write_frame_requires_begin_run(tmp_path: Path) -> None:
         allele_ids=np.array([1], dtype=np.int64),
         frequencies=np.array([1.0]),
     )
-    stores: tuple[InMemoryTrajectoryStore | JSONLTrajectoryStore, ...] = (
+    stores: tuple[InMemoryTrajectoryStore | BinaryLogStore, ...] = (
         InMemoryTrajectoryStore(),
-        JSONLTrajectoryStore(tmp_path / "t.jsonl"),
+        BinaryLogStore(tmp_path / "t.tlog"),
     )
     for store in stores:
         with pytest.raises(ValueError, match="begin_run"):

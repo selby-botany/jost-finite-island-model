@@ -53,7 +53,6 @@ from fim import paths
 from fim.model.locus import LocusSpec
 from fim.model.params import SimulationParams
 from fim.persistence.binary_store import BinaryLogStore
-from fim.persistence.jsonl_store import JSONLTrajectoryStore
 
 settings.register_profile(
     "deterministic",
@@ -439,43 +438,16 @@ def rng() -> Callable[[int], np.random.Generator]:
 
 
 @pytest.fixture
-def tracked_jsonl_stores(
-    monkeypatch: pytest.MonkeyPatch,
-) -> list[JSONLTrajectoryStore]:
-    """Record every `JSONLTrajectoryStore` the test (or code under test) builds.
-
-    The leak check for the kept-open trajectory handle: a test runs a real
-    entry point in this process, then asserts through `assert_none_open`
-    that no store it created still holds a file open. Counts the
-    ancestral-phase companions too, which are built through the same
-    constructor. Only stores built in this process are seen, so a test of a
-    worker-process path checks the stores that come back instead.
-
-    Returns:
-        The list that fills with each store as it is constructed.
-    """
-    stores: list[JSONLTrajectoryStore] = []
-    original_init = JSONLTrajectoryStore.__init__
-
-    def recording_init(self: JSONLTrajectoryStore, path: Path | str) -> None:
-        original_init(self, path)
-        stores.append(self)
-
-    monkeypatch.setattr(JSONLTrajectoryStore, "__init__", recording_init)
-    return stores
-
-
-@pytest.fixture
 def tracked_log_stores(
     monkeypatch: pytest.MonkeyPatch,
 ) -> list[BinaryLogStore]:
     """Record every `BinaryLogStore` the test (or code under test) builds.
 
-    The leak check for the binary log's writer thread and file descriptor,
-    the counterpart of `tracked_jsonl_stores`: a test runs a real entry
-    point in this process, then asserts through `assert_none_open` that no
-    store it created still has a writer open. Counts the ancestral-phase
-    companions too, which are built through the same constructor.
+    The leak check for the binary log's writer thread and file descriptor:
+    a test runs a real entry point in this process, then asserts through
+    `assert_none_open` that no store it created still has a writer open.
+    Counts the ancestral-phase companions too, which are built through the
+    same constructor.
 
     Returns:
         The list that fills with each store as it is constructed.
@@ -491,11 +463,11 @@ def tracked_log_stores(
     return stores
 
 
-def assert_none_open(stores: Sequence[BinaryLogStore | JSONLTrajectoryStore]) -> None:
+def assert_none_open(stores: Sequence[BinaryLogStore]) -> None:
     """Assert `stores` is non-empty and none of them holds a file open.
 
     Args:
-        stores: What `tracked_jsonl_stores` or `tracked_log_stores` collected.
+        stores: What `tracked_log_stores` collected.
 
     Raises:
         AssertionError: If no store was built (the check would prove

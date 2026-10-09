@@ -251,7 +251,7 @@ jost-finite-island-model/
 │       │   └── interval.py        # across-replicate confidence intervals
 │       ├── persistence/
 │       │   ├── store.py           # TrajectoryStore protocol
-│       │   ├── jsonl_store.py     # JSONLTrajectoryStore — the only backend
+│       │   ├── binary_store.py    # BinaryLogStore — the file-backed store
 │       │   └── manifest.py
 │       ├── viz/
 │       │   ├── scatter.py         # canonical d-dimensional frequency scatter

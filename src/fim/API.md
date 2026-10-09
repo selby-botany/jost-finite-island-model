@@ -593,7 +593,6 @@ Return to the [source-tree orientation](../README.md) or the [developer guide](.
     * [close](#fim.persistence.binary_store.BinaryLogStore.close)
     * [equilibrium\_store](#fim.persistence.binary_store.BinaryLogStore.equilibrium_store)
     * [exists](#fim.persistence.binary_store.BinaryLogStore.exists)
-  * [open\_trajectory](#fim.persistence.binary_store.open_trajectory)
 * [fim.persistence.frame](#fim.persistence.frame)
   * [UNKNOWN\_DEME\_SIZE](#fim.persistence.frame.UNKNOWN_DEME_SIZE)
   * [FrameLayout](#fim.persistence.frame.FrameLayout)
@@ -666,25 +665,6 @@ Return to the [source-tree orientation](../README.md) or the [developer guide](.
   * [run\_id\_of](#fim.persistence.groups.run_id_of)
   * [run\_identity\_of](#fim.persistence.groups.run_identity_of)
   * [supersede\_run](#fim.persistence.groups.supersede_run)
-* [fim.persistence.jsonl\_store](#fim.persistence.jsonl_store)
-  * [EQUILIBRIUM\_TRAJECTORY\_FILENAME](#fim.persistence.jsonl_store.EQUILIBRIUM_TRAJECTORY_FILENAME)
-  * [encode\_rows](#fim.persistence.jsonl_store.encode_rows)
-  * [JSONLTrajectoryStore](#fim.persistence.jsonl_store.JSONLTrajectoryStore)
-    * [\_\_init\_\_](#fim.persistence.jsonl_store.JSONLTrajectoryStore.__init__)
-    * [\_\_enter\_\_](#fim.persistence.jsonl_store.JSONLTrajectoryStore.__enter__)
-    * [\_\_exit\_\_](#fim.persistence.jsonl_store.JSONLTrajectoryStore.__exit__)
-    * [\_\_del\_\_](#fim.persistence.jsonl_store.JSONLTrajectoryStore.__del__)
-    * [\_\_getstate\_\_](#fim.persistence.jsonl_store.JSONLTrajectoryStore.__getstate__)
-    * [\_\_setstate\_\_](#fim.persistence.jsonl_store.JSONLTrajectoryStore.__setstate__)
-    * [write\_generation](#fim.persistence.jsonl_store.JSONLTrajectoryStore.write_generation)
-    * [begin\_run](#fim.persistence.jsonl_store.JSONLTrajectoryStore.begin_run)
-    * [wants\_frames](#fim.persistence.jsonl_store.JSONLTrajectoryStore.wants_frames)
-    * [write\_frame](#fim.persistence.jsonl_store.JSONLTrajectoryStore.write_frame)
-    * [close](#fim.persistence.jsonl_store.JSONLTrajectoryStore.close)
-    * [is\_open](#fim.persistence.jsonl_store.JSONLTrajectoryStore.is_open)
-    * [discard](#fim.persistence.jsonl_store.JSONLTrajectoryStore.discard)
-    * [equilibrium\_store](#fim.persistence.jsonl_store.JSONLTrajectoryStore.equilibrium_store)
-    * [read](#fim.persistence.jsonl_store.JSONLTrajectoryStore.read)
 * [fim.persistence.manifest](#fim.persistence.manifest)
   * [ArtifactDigest](#fim.persistence.manifest.ArtifactDigest)
   * [hash\_file](#fim.persistence.manifest.hash_file)
@@ -3033,7 +3013,7 @@ threads ever touch the same lane's own state, RNG, or allele
 registry at once; the one thing genuinely shared across threads is
 `store`, made safe by the `threading.Lock` both
 `fim.persistence.store.InMemoryTrajectoryStore` and
-`fim.persistence.jsonl_store.JSONLTrajectoryStore` now hold around
+`fim.persistence.binary_store.BinaryLogStore` now hold around
 their own `write_generation`.
 
 Whether this delivers real wall-clock speedup over
@@ -11225,7 +11205,7 @@ Decorate a `TrajectoryStore` with progress reporting and cancellation.
 
 Structurally satisfies `TrajectoryStore` (a `Protocol`), so it drops
 into `fim.engine.fim(..., store=...)` exactly where the real
-`JSONLTrajectoryStore` would — the run loop cannot tell the
+`BinaryLogStore` would — the run loop cannot tell the
 difference.
 
 <a id="fim.gui.store.GuiProgressStore.__init__"></a>
@@ -11275,7 +11255,7 @@ cancellation — only the generations already written before it.
 
 `rows` is materialized into a plain `list` before delegating,
 not passed through as whatever `Iterable` the caller handed in:
-`self._inner.write_generation` (a real `JSONLTrajectoryStore`)
+`self._inner.write_generation` (a real `BinaryLogStore`)
 already fully consumes it to write the file, and only a concrete,
 already-realized `list` is safe to hand to `on_generation`
 *afterward* — a one-shot iterator would come back empty on this
@@ -16829,11 +16809,12 @@ read back from) disk. A run persists two kinds of file:
 
 - A "trajectory" — every generation's own allele frequencies, written
   one generation at a time as it happens (`fim.persistence.
-  jsonl_store.JSONLTrajectoryStore`), so a run's history survives even
-  if it is interrupted partway through and so it can later be re-
-  analyzed at any earlier generation (see `fim.reanalyze`). `fim.
-  persistence.store` defines the row schema and store interface both
-  the real file-backed store and an in-memory test double implement.
+  binary_store.BinaryLogStore`, a compact binary log; see
+  `doc/trajectory-log.md`), so a run's history survives even if it is
+  interrupted partway through and so it can later be re-analyzed at
+  any earlier generation (see `fim.reanalyze`). `fim.persistence.store`
+  defines the row schema and store interface both the real file-backed
+  store and an in-memory test double implement.
 - A "manifest" — the run's own bookkeeping recorded once, at
   completion: its parameters, how it stopped, and a checksum of its
   trajectory file (`fim.persistence.manifest`), used to detect if the
@@ -16854,8 +16835,7 @@ The trajectory store backed by the binary log.
 
 `BinaryLogStore` is what a run uses to keep its trajectory: one compact,
 checksummed log file per run (`fim.persistence.tlog`), written by a
-background thread, in place of one JSON line per allele frequency. It
-implements the same protocols as the JSON Lines store
+background thread. It implements the store protocols
 (`fim.persistence.store.TrajectoryStore`, the companion store of an
 equilibrium-split run, closing) and also `FrameStore`: the engine hands it
 whole generations as `TrajectoryFrame`s, which is what makes it fast.
@@ -16864,8 +16844,8 @@ A store holds exactly one run. The log's header names the run, the demes'
 gene copies and the loci, so the first frame (or `begin_run`) fixes them; a
 second run id is refused with an explanation (a batch uses one store per
 replicate, through a store factory). `read` yields the run's rows exactly as
-the JSON Lines store would, so every reader of rows keeps working; the
-canonical `trajectory.tlog` is something to *export*
+the in-memory store holds them, so every reader of rows keeps working; the
+canonical `trajectory.jsonl` text is something to *export*
 (`fim.persistence.tlog_export`).
 
 <a id="fim.persistence.binary_store.TRAJECTORY_LOG_FILENAME"></a>
@@ -17251,29 +17231,6 @@ def exists() -> bool
 ```
 
 Whether the log file exists on disk.
-
-<a id="fim.persistence.binary_store.open_trajectory"></a>
-
-#### open\_trajectory
-
-```python
-def open_trajectory(path: Path | str) -> TrajectoryStore
-```
-
-Open a trajectory file for reading, whichever form it is in.
-
-A `.tlog` file is a binary log (a run's own trajectory); anything else
-is read as JSON Lines (an export, or a file from elsewhere). Both give
-the same rows through `read`.
-
-**Arguments**:
-
-- `path` - The trajectory file.
-
-
-**Returns**:
-
-  A store whose `read(run_id)` yields the file's rows.
 
 <a id="fim.persistence.frame"></a>
 
@@ -18826,371 +18783,6 @@ every Study that held it now holds the new one.
 - `ReadOnlyError` - `old` is a read-only Run, which is never deleted;
   nothing is changed.
 
-<a id="fim.persistence.jsonl_store"></a>
-
-# fim.persistence.jsonl\_store
-
-Human-readable incremental JSON Lines trajectory storage.
-
-"JSON Lines" (the ``.jsonl`` extension) is a simple file format where
-each line of the file is its own complete, independent JSON object —
-unlike a single big JSON array, a new line can be appended to the end
-of the file at any time without rewriting anything already there, and
-a reader can process the file one line at a time without first loading
-the whole thing into memory. That is exactly what a running simulation
-needs: `write_generation`, below, appends one generation's own rows to
-the file the moment that generation finishes, so the trajectory
-survives on disk even if the run is later interrupted, and a very long
-run's trajectory file never needs to be held entirely in memory at
-once, either to write it or to read it back.
-
-<a id="fim.persistence.jsonl_store.EQUILIBRIUM_TRAJECTORY_FILENAME"></a>
-
-#### EQUILIBRIUM\_TRAJECTORY\_FILENAME
-
-The ancestral-phase trajectory of an equilibrium-split run.
-
-Written beside the run's own `trajectory.jsonl` (`JSONLTrajectoryStore.
-equilibrium_store`), in the same row schema, numbered by the ancestral
-phase's own generation counter.
-
-<a id="fim.persistence.jsonl_store.encode_rows"></a>
-
-#### encode\_rows
-
-```python
-def encode_rows(rows: Iterable[Mapping[str, Any]]) -> str
-```
-
-Return the JSON Lines text for ``rows``, byte for byte what `json.dumps` gives.
-
-Every line is ``json.dumps(row, sort_keys=True, separators=(",", ":"),
-allow_nan=False)`` followed by a newline. For a trajectory row (exactly
-the keys ``allele_id``, ``deme``, ``frequency``, ``generation``,
-``locus_id`` and ``run_id``, each integer a plain `int` and the frequency
-a finite `float`) the line is built directly, with the keys already in
-sorted order: `json.dumps` costs about 30 microseconds per locus
-generation of a 400-locus model, 74 percent of the write cost once the
-file is kept open, and this costs about a sixth of that. The pieces are
-the ones `json` itself uses (`int.__repr__`, `float.__repr__`, and its
-own ASCII string encoder, so escapes, non-ASCII text and lone surrogates
-come out identical).
-
-Any other row falls back to `json.dumps`: a different key set, a `bool`
-or a numpy integer where an `int` belongs, a non-finite frequency (which
-then raises the same ``ValueError`` as before). The fast path therefore
-never changes what is written, only how quickly; the property tests in
-`test/persistence/test_jsonl_encoder.py` pin that.
-
-**Arguments**:
-
-- `rows` - The rows of one generation.
-
-
-**Returns**:
-
-  All lines, each ending in a newline.
-
-
-**Raises**:
-
-- `ValueError` - If a frequency is not finite.
-- `TypeError` - If a value is not JSON serializable.
-
-<a id="fim.persistence.jsonl_store.JSONLTrajectoryStore"></a>
-
-## JSONLTrajectoryStore Objects
-
-```python
-class JSONLTrajectoryStore()
-```
-
-Append and read validated trajectory rows in JSON Lines format.
-
-This is the real, file-backed implementation of the
-`fim.persistence.store.TrajectoryStore` protocol — the one actually
-used by `fim.engine` for a real run (as opposed to
-`fim.persistence.store.InMemoryTrajectoryStore`, a lighter-weight
-stand-in used by library calls and unit tests that never need a
-file on disk at all).
-
-The store keeps one append handle open between generations, opened
-on the first write. Re-opening a just-written file costs several
-milliseconds on some filesystems — more than encoding a whole
-generation of a small model — so `write_generation` writes through
-the kept handle and still flushes once per generation. `close`
-(also run by leaving a `with` block) releases the handle. A closed
-store is not finished: the next write quietly re-opens the file in
-append mode, so closing is always safe and never loses data. Every
-owner of a store that writes to a directory later renamed into place
-(`fim.paths.atomic_directory`) must close it first, because an open
-handle blocks a rename on Windows.
-
-<a id="fim.persistence.jsonl_store.JSONLTrajectoryStore.__init__"></a>
-
-#### \_\_init\_\_
-
-```python
-def __init__(path: Path | str) -> None
-```
-
-Bind the store to one trajectory file.
-
-**Arguments**:
-
-- `path` - JSON Lines file path. Its parent is created on first write.
-
-<a id="fim.persistence.jsonl_store.JSONLTrajectoryStore.__enter__"></a>
-
-#### \_\_enter\_\_
-
-```python
-def __enter__() -> JSONLTrajectoryStore
-```
-
-Return this store, for use as a context manager.
-
-<a id="fim.persistence.jsonl_store.JSONLTrajectoryStore.__exit__"></a>
-
-#### \_\_exit\_\_
-
-```python
-def __exit__(exc_type: type[BaseException] | None,
-             exc_value: BaseException | None,
-             traceback: TracebackType | None) -> None
-```
-
-Close the store's file handles when the `with` block ends.
-
-<a id="fim.persistence.jsonl_store.JSONLTrajectoryStore.__del__"></a>
-
-#### \_\_del\_\_
-
-```python
-def __del__() -> None
-```
-
-Release a handle its owner forgot to close, without a warning.
-
-A safety net only: every flushed generation is already on disk,
-so nothing is lost either way. It keeps a forgotten `close` from
-surfacing as a `ResourceWarning` from the file object itself.
-
-<a id="fim.persistence.jsonl_store.JSONLTrajectoryStore.__getstate__"></a>
-
-#### \_\_getstate\_\_
-
-```python
-def __getstate__() -> dict[str, Any]
-```
-
-Drop `_lock` and the open handle before pickling.
-
-`RunResult.store` crosses a real process boundary under
-`fim.engine.LinealBackend`'s own `max_workers` path
-(`ProcessPoolExecutor` pickles a worker's returned `RunResult`,
-store included, to send it back to the parent process) — a
-`threading.Lock` cannot be pickled at all, and would not mean
-anything in a different process even if it could be.
-`__setstate__` rebuilds a fresh lock on the other side instead.
-
-<a id="fim.persistence.jsonl_store.JSONLTrajectoryStore.__setstate__"></a>
-
-#### \_\_setstate\_\_
-
-```python
-def __setstate__(state: dict[str, Any]) -> None
-```
-
-Restore everything but `_lock`, then rebuild a fresh one.
-
-<a id="fim.persistence.jsonl_store.JSONLTrajectoryStore.write_generation"></a>
-
-#### write\_generation
-
-```python
-def write_generation(run_id: str,
-                     generation: int,
-                     rows: Iterable[Mapping[str, Any]],
-                     *,
-                     validate: bool = True) -> None
-```
-
-Append and flush all rows for one generation.
-
-Every row is validated (via `fim.persistence.store.
-normalize_row`) before anything is written by default, so a
-malformed row is rejected up front rather than partially
-written to disk — `validate=False` skips that for a caller
-that already vouches for its own rows (`fim.persistence.store`'s
-own top docstring has the full reasoning and which callers this
-applies to; the encoder (`encode_rows`, whose ``allow_nan=False``
-rule is `json.dumps`'s own) still catches a non-finite frequency
-either way, as a last resort, not a substitute for real
-validation on an untrusted row).
-``handle.flush()`` hands this generation's bytes from Python's
-own internal buffer to the operating system right away, rather
-than leaving them sitting in memory until the file is
-eventually closed — this generation is written to disk as soon
-as this call returns, instead of remaining vulnerable to being
-lost entirely if the process is interrupted or crashes before
-the file handle would otherwise have been closed. The handle
-itself stays open for the next generation (see this class's own
-docstring); a reader of the file sees every generation already
-flushed.
-
-Every line is encoded before the first byte is written, so a
-row that cannot be encoded (a non-finite frequency) leaves the
-file untouched instead of holding a partial generation.
-
-<a id="fim.persistence.jsonl_store.JSONLTrajectoryStore.begin_run"></a>
-
-#### begin\_run
-
-```python
-def begin_run(run_id: str, layout: FrameLayout) -> None
-```
-
-Record `run_id`'s layout so `write_frame` can turn frames into rows.
-
-**Raises**:
-
-- `ValueError` - If `run_id` was already begun with another layout.
-
-<a id="fim.persistence.jsonl_store.JSONLTrajectoryStore.wants_frames"></a>
-
-#### wants\_frames
-
-```python
-def wants_frames(run_id: str) -> bool
-```
-
-Return `False`: JSON Lines is made of rows, so rows are cheaper.
-
-<a id="fim.persistence.jsonl_store.JSONLTrajectoryStore.write_frame"></a>
-
-#### write\_frame
-
-```python
-def write_frame(run_id: str, frame: TrajectoryFrame) -> None
-```
-
-Append one generation given as a frame, through the row encoder.
-
-The frame becomes the rows it stands for, which then go through
-`write_generation` exactly as if the engine had built them, so the
-file bytes are the same either way.
-
-**Raises**:
-
-- `ValueError` - If `begin_run` was not called for `run_id`, or the
-  frame does not fit the layout.
-
-<a id="fim.persistence.jsonl_store.JSONLTrajectoryStore.close"></a>
-
-#### close
-
-```python
-def close() -> None
-```
-
-Release this store's open file handles; safe to call repeatedly.
-
-Closes the handle of this file and of its ancestral-phase
-companion (`equilibrium_store`), if either is open. The store is
-not unusable afterwards: the next `write_generation` re-opens
-the file in append mode, and `read`/`discard` never needed the
-handle. Every generation is flushed as it is written, so closing
-loses nothing; it exists so a directory can be renamed or removed
-(an open handle blocks both on Windows) and so no file descriptor
-outlives its run.
-
-<a id="fim.persistence.jsonl_store.JSONLTrajectoryStore.is_open"></a>
-
-#### is\_open
-
-```python
-def is_open() -> bool
-```
-
-Whether this file's own append handle is currently open.
-
-Reports this file only, not its ancestral-phase companion. For
-diagnostics and for tests that prove no run leaves a file open.
-
-<a id="fim.persistence.jsonl_store.JSONLTrajectoryStore.discard"></a>
-
-#### discard
-
-```python
-def discard(run_id: str) -> None
-```
-
-Rewrite this file without ``run_id``'s own rows; a no-op if there are none.
-
-See `fim.persistence.store.TrajectoryStore.discard`'s own
-docstring for why this exists at all. A plain, whole-file
-read-filter-rewrite under `_lock` — this store's own file can in
-principle hold more than one run's rows (`write_generation`/
-`read` both filter by `run_id` rather than assuming one file,
-one run), so discarding one run's own rows cannot simply be
-"delete the file." If nothing survives the filter, the file is
-removed entirely rather than left behind empty — matching this
-project's own "a published run directory is complete or absent,
-never empty" precedent (`_atomic_directory`, `fim.engine`)
-applied here to one file instead of one directory.
-
-A missing file, or a file that already has none of ``run_id``'s
-own rows, is a no-op either way — this is "make sure this run's
-data is gone," not "assert it was there first."
-
-<a id="fim.persistence.jsonl_store.JSONLTrajectoryStore.equilibrium_store"></a>
-
-#### equilibrium\_store
-
-```python
-def equilibrium_store(run_id: str) -> JSONLTrajectoryStore
-```
-
-Return the store for this run's ancestral phase, beside this file.
-
-`EQUILIBRIUM_TRAJECTORY_FILENAME` in this file's own directory,
-so it is staged and published with the rest of the run's
-artifacts (`fim.paths.atomic_directory`). Like this file, it can
-hold several runs' rows, told apart by `run_id`
-(`fim.persistence.store.EquilibriumStoreProvider`). One instance
-per store, built on first use, so every writer of that file
-shares its one lock.
-
-<a id="fim.persistence.jsonl_store.JSONLTrajectoryStore.read"></a>
-
-#### read
-
-```python
-def read(run_id: str) -> Iterator[TrajectoryRow]
-```
-
-Yield complete rows matching ``run_id``, oldest first.
-
-A generator (built via the inner `iterate` function, below,
-rather than returning a plain list) so a large trajectory file
-is streamed one row at a time instead of being fully loaded
-into memory before the caller sees any of it.
-
-A final partial line from an interrupted append is ignored. Any malformed
-complete line is reported as corruption.
-
-This tolerance is a deliberate scope boundary, not a completeness
-guarantee: this method alone cannot tell an interrupted-append
-trailing partial line from a trajectory that is simply short a
-generation for some other reason, since it has no manifest to
-compare against. Detecting that a trajectory doesn't have as
-many generations as it claims to is a manifest-level guarantee —
-`fim.persistence.manifest.verify_trajectory_integrity`'s SHA-256
-digest check, and `fim.reanalyze.reanalyze_trajectory`'s own
-generation-count cross-check against `RunManifest.
-generation_count` — not one this store makes on its own.
-
 <a id="fim.persistence.manifest"></a>
 
 # fim.persistence.manifest
@@ -19825,11 +19417,10 @@ def write_jsonl_rows(path: Path | str,
 
 Write a sequence of small JSON objects as one deterministic JSON Lines artifact.
 
-One compact JSON object per line (`fim.persistence.jsonl_store.
-JSONLTrajectoryStore.write_generation`'s own `sort_keys=True,
-separators=(",", ":")` convention, applied here to an artifact
-written once, all at once, rather than appended generation by
-generation) — the exact same bytes for the exact same `rows`, for
+One compact JSON object per line (the same `sort_keys=True,
+separators=(",", ":")` convention as the exported trajectory text
+(`fim.persistence.tlog_export`), applied here to an artifact
+written once, all at once) — the exact same bytes for the exact same `rows`, for
 the identical "a plain `diff` shows a real change, never a
 formatting difference" reason `write_report` documents.
 
@@ -20185,8 +19776,8 @@ Backend-independent trajectory row schema and store protocol.
 `TrajectoryRow` is the one, single-observation record shape every
 persisted trajectory row uses (see `fim.model.state.ModelState.to_rows`
 for how a state turns into a batch of these), and `TrajectoryStore` is
-the shared interface both `fim.persistence.jsonl_store.
-JSONLTrajectoryStore` (the real, file-backed store) and
+the shared interface both `fim.persistence.binary_store.
+BinaryLogStore` (the real, file-backed store) and
 `InMemoryTrajectoryStore`, below (a lighter-weight stand-in for
 library calls and tests that never need an actual file), implement —
 so `fim.engine`'s run loop can write to either without knowing which
@@ -20200,7 +19791,7 @@ every row of every generation — as the single largest cost center in
 the whole run, ~36% of wall clock, ahead of the actual migrate/mutate/
 drift step. That check earns its cost for a row `normalize_row` cannot
 otherwise vouch for: a hand-edited or externally-produced row, or one
-`JSONLTrajectoryStore.read` is parsing back off disk. It earns nothing
+`BinaryLogStore.read` is decoding back off disk. It earns nothing
 for a row `fim.engine`'s own run loop just built, in the same
 expression, from `ModelState.to_rows`/`fim.model.vectorized.
 vectorized_state_to_rows` — both of which construct every field
@@ -20249,7 +19840,7 @@ Incrementally persist and iterate long-form trajectory rows.
 
 A "protocol" here means any object with these two methods — this
 class is never instantiated itself; both `InMemoryTrajectoryStore`,
-below, and `fim.persistence.jsonl_store.JSONLTrajectoryStore`
+below, and `fim.persistence.binary_store.BinaryLogStore`
 satisfy it, so a caller can be written against this one shared
 interface regardless of which concrete store it is actually given.
 
@@ -20338,8 +19929,8 @@ is persisted separately from the main one — the
 `TrajectoryRow` schema, with its own generation counter starting at
 zero, so it can never be mistaken for the main run's own
 generations. A store implementing this method names the companion
-store those rows belong in: a sibling file for
-`fim.persistence.jsonl_store.JSONLTrajectoryStore`, a second
+store those rows belong in: a sibling log file for
+`fim.persistence.binary_store.BinaryLogStore`, a second
 in-memory store for `InMemoryTrajectoryStore`. Optional — `fim.
 engine` falls back to a fresh `InMemoryTrajectoryStore` for a store
 without it (`equilibrium_store_for`).
@@ -20487,7 +20078,7 @@ A trajectory store that holds an open resource until it is closed.
 
 Optional, like `EquilibriumStoreProvider`: `TrajectoryStore` itself
 needs no `close` (a custom store, or a test double, can omit it).
-`fim.persistence.jsonl_store.JSONLTrajectoryStore` keeps its file open
+`fim.persistence.binary_store.BinaryLogStore` keeps its file open
 between generations and implements it; closing is idempotent, and a
 closed store re-opens itself if written to again.
 
@@ -20541,8 +20132,8 @@ class InMemoryTrajectoryStore()
 
 Store trajectories in memory for library calls and focused tests.
 
-Implements the same `TrajectoryStore` protocol as `fim.persistence.
-jsonl_store.JSONLTrajectoryStore`, but keeps every row in an
+Implements the same `TrajectoryStore` protocol as
+`fim.persistence.binary_store.BinaryLogStore`, but keeps every row in an
 ordinary Python list rather than writing to a file — used whenever
 a caller (a unit test, or a library user who only wants the final
 result and does not care about a persisted trajectory file) has no
@@ -20741,7 +20332,7 @@ Thread-safe at the one point it needs to be: `_lock` guards only the
 lazy get-or-create step below. Once a child store exists for a given
 `run_id`, every further call for that `run_id` delegates straight to
 it, and each concrete `TrajectoryStore` implementation
-(`JSONLTrajectoryStore`, `InMemoryTrajectoryStore`) is already safe
+(`BinaryLogStore`, `InMemoryTrajectoryStore`) is already safe
 under concurrent `write_generation` calls in its own right
 (`ThreadedAdvancer`'s own docstring) — this class adds no new
 contention beyond the one-time creation, and never itself calls two
@@ -20916,10 +20507,10 @@ produced row is checked against the identical rules a row
 generated by the simulator itself already satisfies. When `run_id`
 and/or `generation` are supplied, the row's own values for those
 fields are additionally cross-checked against them (used by
-`write_generation`, below, and by `fim.persistence.jsonl_store.
-JSONLTrajectoryStore.write_generation`, to catch a row that claims
-to belong to a different run or generation than the batch it was
-handed in).
+`write_generation`, below, and by
+`fim.persistence.binary_store.BinaryLogStore.write_generation`, to
+catch a row that claims to belong to a different run or generation
+than the batch it was handed in).
 
 **Arguments**:
 

@@ -9,7 +9,7 @@ ran. These tests compare complete row streams and complete outputs, never
 summaries alone, over the shared configuration matrix in
 `test/vector_support.py`, and also through batches, adaptive batches, a
 sigma-band extension, a convergence-stopped run, the expensive opt-in
-statistics and a JSONL trajectory file (byte for byte).
+statistics and a trajectory log (byte for byte).
 
 Same-platform identity is the contract: the compiled kernels use Numba's
 `lgamma`, `log`, `log1p` and `exp`, which are verified to match CPython's
@@ -44,7 +44,7 @@ from fim.engine import (
 )
 from fim.model.params import SimulationParams
 from fim.model.vector_block import VectorBlock, VectorMemoryCeilingError
-from fim.persistence.jsonl_store import JSONLTrajectoryStore
+from fim.persistence.binary_store import BinaryLogStore
 from fim.persistence.store import InMemoryTrajectoryStore
 
 RUN_ID = "run"
@@ -188,16 +188,16 @@ def test_stochastic_dear_nolan_low_matches_lineal_for_thousands_of_generations()
     assert _assert_vector_matches(params) == 3001
 
 
-def test_stochastic_jsonl_trajectory_file_is_byte_identical(
-    tmp_path: Path, tracked_jsonl_stores: list[JSONLTrajectoryStore]
+def test_stochastic_trajectory_log_is_byte_identical(
+    tmp_path: Path, tracked_log_stores: list[BinaryLogStore]
 ) -> None:
-    """The JSONL file V writes under stochastic counts equals L's, byte for byte."""
+    """The log V writes under stochastic counts equals L's, byte for byte."""
     params = make_params(
         25, loci=loci(2), mu=0.02, m=0.05, migrant_sampling="stochastic"
     )
     paths = {}
     for backend in ("lineal", "generational-vector"):
-        path = tmp_path / f"{backend}.jsonl"
+        path = tmp_path / f"{backend}.tlog"
         paths[backend] = path
         output = fim(
             params.gene_copies,
@@ -205,14 +205,14 @@ def test_stochastic_jsonl_trajectory_file_is_byte_identical(
             params.mu,
             params.d,
             params=params,
-            store=JSONLTrajectoryStore(path),
+            store=BinaryLogStore(path),
             run_id=RUN_ID,
             clock=_clock,
             engine_backend=backend,
         )
         assert isinstance(output, RunResult)
     assert paths["lineal"].read_bytes() == paths["generational-vector"].read_bytes()
-    assert_none_open(tracked_jsonl_stores)
+    assert_none_open(tracked_log_stores)
     assert paths["lineal"].stat().st_size > 0
 
 
@@ -342,14 +342,14 @@ def test_window_of_concurrent_replicates_matches_lineal() -> None:
     _assert_vector_matches(params)
 
 
-def test_jsonl_trajectory_file_is_byte_identical(
-    tmp_path: Path, tracked_jsonl_stores: list[JSONLTrajectoryStore]
+def test_trajectory_log_is_byte_identical(
+    tmp_path: Path, tracked_log_stores: list[BinaryLogStore]
 ) -> None:
-    """The JSONL file V writes equals Backend L's, byte for byte."""
+    """The log V writes equals Backend L's, byte for byte."""
     params = make_params(25, loci=loci(2), mu=0.02, m=0.05)
     paths = {}
     for backend in ("lineal", "generational-vector"):
-        path = tmp_path / f"{backend}.jsonl"
+        path = tmp_path / f"{backend}.tlog"
         paths[backend] = path
         output = fim(
             params.gene_copies,
@@ -357,15 +357,15 @@ def test_jsonl_trajectory_file_is_byte_identical(
             params.mu,
             params.d,
             params=params,
-            store=JSONLTrajectoryStore(path),
+            store=BinaryLogStore(path),
             run_id=RUN_ID,
             clock=_clock,
             engine_backend=backend,
         )
         assert isinstance(output, RunResult)
     assert paths["lineal"].read_bytes() == paths["generational-vector"].read_bytes()
-    # The vector lane's trajectory handle is released when the run ends.
-    assert_none_open(tracked_jsonl_stores)
+    # The vector lane's trajectory log is released when the run ends.
+    assert_none_open(tracked_log_stores)
     assert paths["lineal"].stat().st_size > 0
 
 
@@ -521,16 +521,16 @@ def test_finite_alleles_sigma_band_extension_matches_lineal() -> None:
     _assert_identical(vector, vector_store, lineal, lineal_store)
 
 
-def test_finite_alleles_jsonl_trajectory_file_is_byte_identical(
-    tmp_path: Path, tracked_jsonl_stores: list[JSONLTrajectoryStore]
+def test_finite_alleles_trajectory_log_is_byte_identical(
+    tmp_path: Path, tracked_log_stores: list[BinaryLogStore]
 ) -> None:
-    """The finite-alleles JSONL file V writes equals Backend L's, byte for byte."""
+    """The finite-alleles log V writes equals Backend L's, byte for byte."""
     params = make_params(
         25, loci=loci(2, 3), mu=0.03, m=0.05, mutation_model="finite_alleles"
     )
     paths = {}
     for backend in ("lineal", "generational-vector"):
-        path = tmp_path / f"{backend}.jsonl"
+        path = tmp_path / f"{backend}.tlog"
         paths[backend] = path
         output = fim(
             params.gene_copies,
@@ -538,15 +538,15 @@ def test_finite_alleles_jsonl_trajectory_file_is_byte_identical(
             params.mu,
             params.d,
             params=params,
-            store=JSONLTrajectoryStore(path),
+            store=BinaryLogStore(path),
             run_id=RUN_ID,
             clock=_clock,
             engine_backend=backend,
         )
         assert isinstance(output, RunResult)
     assert paths["lineal"].read_bytes() == paths["generational-vector"].read_bytes()
-    # The vector lane's trajectory handle is released when the run ends.
-    assert_none_open(tracked_jsonl_stores)
+    # The vector lane's trajectory log is released when the run ends.
+    assert_none_open(tracked_log_stores)
 
 
 @pytest.mark.parametrize("name", ["multi-locus with migration", "migration matrix"])

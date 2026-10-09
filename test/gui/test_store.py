@@ -26,7 +26,7 @@ from fim.gui.store import (
 )
 from fim.model.locus import LocusSpec
 from fim.model.state import ModelState
-from fim.persistence.jsonl_store import JSONLTrajectoryStore
+from fim.persistence.binary_store import BinaryLogStore
 from fim.persistence.store import InMemoryTrajectoryStore
 
 
@@ -42,6 +42,17 @@ def _rows(generation: int) -> list[dict[str, object]]:
             "frequency": 1.0,
         }
     ]
+
+
+def _write_committed(path: Path, generations: int) -> None:
+    """Write `generations` of run-1 to a log at `path` and commit them.
+
+    A reader sees only committed blocks; closing the log commits the last.
+    """
+    store = BinaryLogStore(path, background=False)
+    for generation in range(generations):
+        store.write_generation("run-1", generation, _rows(generation))
+    store.close()
 
 
 def test_gui_progress_store_calls_on_generation_once_per_write() -> None:
@@ -292,11 +303,11 @@ def test_progress_stores_hand_out_the_inner_ancestral_store_undecorated(
     """The ancestral phase is not progress: no callback, sidecar, or cancel check.
 
     Both decorators return the wrapped store's own companion, so an
-    equilibrium-split run's `equilibrium_trajectory.jsonl` lands beside
-    its `trajectory.jsonl` while live progress reports only the split
+    equilibrium-split run's `equilibrium_trajectory.tlog` lands beside
+    its `trajectory.tlog` while live progress reports only the split
     run's own generations.
     """
-    inner = JSONLTrajectoryStore(tmp_path / "trajectory.jsonl")
+    inner = BinaryLogStore(tmp_path / "trajectory.tlog")
     calls: list[int] = []
     cancel_event = threading.Event()
     cancel_event.set()
@@ -315,7 +326,7 @@ def test_progress_stores_hand_out_the_inner_ancestral_store_undecorated(
     assert live.equilibrium_store("run-1") is inner.equilibrium_store("run-1")
     assert calls == []
     assert not (tmp_path / ".progress").exists()
-    assert (tmp_path / "equilibrium_trajectory.jsonl").is_file()
+    assert (tmp_path / "equilibrium_trajectory.tlog").is_file()
 
 
 def test_live_progress_store_is_picklable(tmp_path: Path) -> None:
@@ -341,20 +352,20 @@ def test_live_progress_store_is_picklable(tmp_path: Path) -> None:
 
 
 def test_progress_stores_close_delegates_to_the_inner_store(tmp_path: Path) -> None:
-    """Closing either decorator releases the wrapped file's handle.
+    """Closing either decorator releases the wrapped log's writer.
 
     The run owners close the store they built (`GuiProgressStore` around a
-    `JSONLTrajectoryStore`) before `fim.paths.atomic_directory` renames the
-    directory; the decorator must pass that through, or the handle stays
+    `BinaryLogStore`) before `fim.paths.atomic_directory` renames the
+    directory; the decorator must pass that through, or the writer stays
     open behind it.
     """
-    gui_inner = JSONLTrajectoryStore(tmp_path / "gui.jsonl")
+    gui_inner = BinaryLogStore(tmp_path / "gui.tlog")
     gui_store = GuiProgressStore(
         gui_inner,
         on_generation=lambda _generation, _rows: None,
         cancel_event=threading.Event(),
     )
-    live_inner = JSONLTrajectoryStore(tmp_path / "live.jsonl")
+    live_inner = BinaryLogStore(tmp_path / "live.tlog")
     live_store = LiveProgressStore(
         live_inner,
         progress_path=tmp_path / ".progress",
@@ -411,10 +422,8 @@ def test_read_live_state_reconstructs_a_sidecar_confirmed_generation(
     tmp_path: Path,
 ) -> None:
     """A generation already written and flushed is safely readable mid-run."""
-    trajectory_path = tmp_path / "trajectory.jsonl"
-    store = JSONLTrajectoryStore(trajectory_path)
-    store.write_generation("run-1", 0, _rows(0))
-    store.write_generation("run-1", 1, _rows(1))
+    trajectory_path = tmp_path / "trajectory.tlog"
+    _write_committed(trajectory_path, 2)
 
     state = read_live_state(trajectory_path, "run-1", 1, (LocusSpec(1, 200),))
 
@@ -425,7 +434,7 @@ def test_read_live_state_returns_none_for_a_not_yet_created_trajectory(
     tmp_path: Path,
 ) -> None:
     """A replicate that has not created its own directory yet is not an error."""
-    never_written = tmp_path / "trajectory.jsonl"
+    never_written = tmp_path / "trajectory.tlog"
 
     assert read_live_state(never_written, "run-1", 0, (LocusSpec(1, 200),)) is None
 
@@ -441,8 +450,8 @@ def test_read_live_state_returns_none_for_a_generation_not_yet_written(
     written" case never actually applies there); this is the true
     "haven't gotten there yet" case instead.
     """
-    trajectory_path = tmp_path / "trajectory.jsonl"
-    JSONLTrajectoryStore(trajectory_path).write_generation("run-1", 0, _rows(0))
+    trajectory_path = tmp_path / "trajectory.tlog"
+    _write_committed(trajectory_path, 1)
 
     result = read_live_state(trajectory_path, "run-1", 5, (LocusSpec(1, 200),))
 
@@ -451,8 +460,8 @@ def test_read_live_state_returns_none_for_a_generation_not_yet_written(
 
 def test_read_live_state_returns_none_for_a_different_run_id(tmp_path: Path) -> None:
     """Rows from a different run id are never mistaken for this replicate's own."""
-    trajectory_path = tmp_path / "trajectory.jsonl"
-    JSONLTrajectoryStore(trajectory_path).write_generation("run-1", 0, _rows(0))
+    trajectory_path = tmp_path / "trajectory.tlog"
+    _write_committed(trajectory_path, 1)
 
     result = read_live_state(trajectory_path, "run-2", 0, (LocusSpec(1, 200),))
 

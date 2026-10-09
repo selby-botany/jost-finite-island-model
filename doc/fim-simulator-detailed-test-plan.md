@@ -484,9 +484,11 @@ without the engine:
 - `TrajectoryStore` round-trip: write_generation then `read` returns rows
   byte-faithful to the schema, for a multi-generation, multi-deme,
   multi-locus run, including the in-memory store used by fast tests.
-- `JSONLTrajectoryStore` appends incrementally (each generation is a
-  flushed set of lines; a truncated file still parses every complete line
-  and reports a missing or corrupt complete line precisely).
+- `BinaryLogStore` appends incrementally (blocks with chained checksums; a
+  truncated or damaged file reads up to its last complete block and reports
+  the damage precisely), reads back exactly the rows the in-memory store
+  holds for the same seeded run, and its derived JSON Lines equals the plain
+  `json.dumps` text of those rows (`doc/trajectory-log.md`, Tests).
 - Rows carry only nonzero frequencies (sparse — design §6).
 - Manifest captures the full `SimulationParams` incl. seed, convergence
   outcome, and version; a test reconstructs `SimulationParams` from the

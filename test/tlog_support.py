@@ -6,6 +6,10 @@ Test modules import this with `from tlog_support import ...`, as they import
 
 from __future__ import annotations
 
+import json
+from collections.abc import Iterable, Mapping
+from typing import Any
+
 import numpy as np
 
 from fim.persistence.frame import FrameLayout, TrajectoryFrame
@@ -62,3 +66,22 @@ def same_frames(got: list[TrajectoryFrame], want: list[TrajectoryFrame]) -> None
         assert np.array_equal(left.counts, right.counts)
         assert np.array_equal(left.allele_ids, right.allele_ids)
         assert left.frequencies.tobytes() == right.frequencies.tobytes()
+
+
+def canonical_jsonl(rows: Iterable[Mapping[str, Any]]) -> bytes:
+    """Return the canonical JSON Lines text of `rows`, built the plain way.
+
+    One `json.dumps` line per row (sorted keys, compact separators, no
+    NaN), each ending in a newline: the oracle the export's hand-built text
+    must equal byte for byte.
+
+    Args:
+        rows: Trajectory rows in stored order.
+
+    Returns:
+        The UTF-8 text.
+    """
+    return "".join(
+        json.dumps(row, sort_keys=True, separators=(",", ":"), allow_nan=False) + "\n"
+        for row in rows
+    ).encode()

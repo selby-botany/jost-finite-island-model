@@ -2,8 +2,7 @@
 
 `BinaryLogStore` is what a run uses to keep its trajectory: one compact,
 checksummed log file per run (`fim.persistence.tlog`), written by a
-background thread, in place of one JSON line per allele frequency. It
-implements the same protocols as the JSON Lines store
+background thread. It implements the store protocols
 (`fim.persistence.store.TrajectoryStore`, the companion store of an
 equilibrium-split run, closing) and also `FrameStore`: the engine hands it
 whole generations as `TrajectoryFrame`s, which is what makes it fast.
@@ -12,8 +11,8 @@ A store holds exactly one run. The log's header names the run, the demes'
 gene copies and the loci, so the first frame (or `begin_run`) fixes them; a
 second run id is refused with an explanation (a batch uses one store per
 replicate, through a store factory). `read` yields the run's rows exactly as
-the JSON Lines store would, so every reader of rows keeps working; the
-canonical `trajectory.tlog` is something to *export*
+the in-memory store holds them, so every reader of rows keeps working; the
+canonical `trajectory.jsonl` text is something to *export*
 (`fim.persistence.tlog_export`).
 """
 
@@ -35,8 +34,7 @@ from fim.persistence.frame import (
     frame_to_rows,
     rows_to_frame,
 )
-from fim.persistence.jsonl_store import JSONLTrajectoryStore
-from fim.persistence.store import TrajectoryRow, TrajectoryStore
+from fim.persistence.store import TrajectoryRow
 from fim.persistence.tlog_reader import LogReader
 
 logger = logging.getLogger(__name__)
@@ -460,21 +458,3 @@ class BinaryLogStore:
     def exists(self) -> bool:
         """Whether the log file exists on disk."""
         return self.path.is_file()
-
-
-def open_trajectory(path: Path | str) -> TrajectoryStore:
-    """Open a trajectory file for reading, whichever form it is in.
-
-    A `.tlog` file is a binary log (a run's own trajectory); anything else
-    is read as JSON Lines (an export, or a file from elsewhere). Both give
-    the same rows through `read`.
-
-    Args:
-        path: The trajectory file.
-
-    Returns:
-        A store whose `read(run_id)` yields the file's rows.
-    """
-    if Path(path).suffix == ".tlog":
-        return BinaryLogStore(path)
-    return JSONLTrajectoryStore(path)

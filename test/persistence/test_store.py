@@ -1,6 +1,5 @@
 """Tests for incremental trajectory and manifest persistence."""
 
-import json
 import threading
 from collections.abc import Iterator
 from pathlib import Path
@@ -11,9 +10,9 @@ from fim.model.allele import AlleleId
 from fim.model.locus import LocusSpec
 from fim.model.params import SimulationParams
 from fim.model.state import ModelState
-from fim.persistence.jsonl_store import (
-    EQUILIBRIUM_TRAJECTORY_FILENAME,
-    JSONLTrajectoryStore,
+from fim.persistence.binary_store import (
+    EQUILIBRIUM_LOG_FILENAME,
+    BinaryLogStore,
 )
 from fim.persistence.manifest import RunManifest, read_manifest, write_manifest
 from fim.persistence.store import (
@@ -75,57 +74,7 @@ def test_in_memory_store_discard_is_a_no_op_for_an_unknown_run() -> None:
     assert len(list(store.read("run-a"))) == 3
 
 
-def test_jsonl_store_discard_removes_only_the_named_run(tmp_path: Path) -> None:
-    """`discard` rewrites the file without one run's rows, keeping every other run's.
-
-    One file can hold more than one run's rows (`write_generation`/
-    `read` both filter by `run_id` rather than assuming one file, one
-    run) — this is the case that actually exercises the read-filter-
-    rewrite, not merely deleting the file.
-    """
-    path = tmp_path / "trajectory.jsonl"
-    store = JSONLTrajectoryStore(path)
-    store.write_generation("run-a", 0, _state(0).to_rows("run-a"))
-    store.write_generation("run-b", 0, _state(0).to_rows("run-b"))
-
-    store.discard("run-a")
-
-    assert path.is_file()
-    assert list(store.read("run-b")) == _state(0).to_rows("run-b")
-    with path.open("r", encoding="utf-8") as handle:
-        assert all('"run_id":"run-a"' not in line for line in handle)
-
-
-def test_jsonl_store_discard_removes_the_file_when_nothing_survives(
-    tmp_path: Path,
-) -> None:
-    """The file itself is removed, not left behind empty, once its only run is gone.
-
-    Matches this project's own "a published run directory is complete
-    or absent, never empty" precedent (`_atomic_directory`, `fim.
-    engine`), applied here to one file instead of one directory.
-    """
-    path = tmp_path / "trajectory.jsonl"
-    store = JSONLTrajectoryStore(path)
-    store.write_generation("run-a", 0, _state(0).to_rows("run-a"))
-
-    store.discard("run-a")
-
-    assert not path.exists()
-
-
-def test_jsonl_store_discard_is_a_no_op_for_a_missing_file(tmp_path: Path) -> None:
-    """Discarding from a store whose file was never written raises nothing."""
-    store = JSONLTrajectoryStore(tmp_path / "trajectory.jsonl")
-
-    store.discard("run-never-written")
-
-    assert not (tmp_path / "trajectory.jsonl").exists()
-
-
-def _write_concurrently(
-    store: InMemoryTrajectoryStore | JSONLTrajectoryStore, generation_count: int
-) -> None:
+def _write_concurrently(store: InMemoryTrajectoryStore, generation_count: int) -> None:
     """Write `generation_count` distinct generations to `store`, all at once.
 
     A `threading.Barrier` holds every thread at the starting line until
@@ -171,37 +120,6 @@ def test_in_memory_store_write_generation_is_thread_safe() -> None:
     rows = list(store.read("run-a"))
     assert len(rows) == generation_count * 3  # 3 nonzero-frequency rows/generation
     assert {row["generation"] for row in rows} == set(range(generation_count))
-
-
-def test_jsonl_store_write_generation_is_thread_safe(tmp_path: Path) -> None:
-    """Concurrent `write_generation` calls never interleave or corrupt JSON Lines.
-
-    `JSONLTrajectoryStore._lock` is what this test is actually proving
-    exists and works — without it, two threads' own `handle.write()`
-    calls on the same file descriptor could interleave mid-line,
-    producing a line that is not valid JSON at all (a real corruption,
-    not just a lost row).
-    """
-    store = JSONLTrajectoryStore(tmp_path / "trajectory.jsonl")
-    generation_count = 20
-
-    _write_concurrently(store, generation_count)
-
-    rows = list(store.read("run-a"))
-    assert len(rows) == generation_count * 3
-    assert {row["generation"] for row in rows} == set(range(generation_count))
-    # The kept-open handle is shared by every writer: still the one open
-    # handle, and no generation's lines are interleaved with another's —
-    # each generation's three lines are adjacent, and every line is whole
-    # JSON.
-    assert store.is_open()
-    lines = (tmp_path / "trajectory.jsonl").read_text().splitlines()
-    generations = [json.loads(line)["generation"] for line in lines]
-    assert len(generations) == generation_count * 3
-    for start in range(0, len(generations), 3):
-        assert len(set(generations[start : start + 3])) == 1
-    store.close()
-    assert not store.is_open()
 
 
 def test_replicate_fanout_store_routes_each_run_id_to_its_own_store() -> None:
@@ -334,42 +252,6 @@ def test_replicate_fanout_store_is_thread_safe_across_concurrent_run_ids() -> No
         assert len(list(fanout.read(run_id))) == 3  # 3 nonzero-frequency rows
 
 
-def test_jsonl_store_appends_generations_and_ignores_partial_tail(
-    tmp_path: Path,
-) -> None:
-    """Every complete flushed row remains readable after interruption."""
-    path = tmp_path / "trajectory.jsonl"
-    store = JSONLTrajectoryStore(path)
-    for generation in range(2):
-        state = _state(generation)
-        store.write_generation("run-a", generation, state.to_rows("run-a"))
-    with path.open("a", encoding="utf-8") as handle:
-        handle.write('{"run_id":"run-a"')
-
-    rows = list(store.read("run-a"))
-
-    assert {row["generation"] for row in rows} == {0, 1}
-    assert len(rows) == 6
-
-
-def test_jsonl_store_equilibrium_store_is_one_sibling_file(tmp_path: Path) -> None:
-    """The ancestral-phase companion is `equilibrium_trajectory.jsonl` beside it.
-
-    One instance per store, whichever run asks, so every writer of that
-    file shares one lock; a reader of the main file never sees its rows.
-    """
-    store = JSONLTrajectoryStore(tmp_path / "trajectory.jsonl")
-
-    companion = store.equilibrium_store("run-a")
-    companion.write_generation("run-a", 0, _state(0).to_rows("run-a"))
-
-    assert isinstance(companion, JSONLTrajectoryStore)
-    assert companion.path == tmp_path / EQUILIBRIUM_TRAJECTORY_FILENAME
-    assert store.equilibrium_store("run-b") is companion
-    assert not store.path.exists()
-    assert len(list(companion.read("run-a"))) == 3
-
-
 def test_in_memory_store_equilibrium_store_is_a_separate_store() -> None:
     """In memory, the companion is a second store, shared across runs."""
     store = InMemoryTrajectoryStore()
@@ -387,13 +269,13 @@ def test_replicate_fanout_store_equilibrium_store_follows_each_run(
 ) -> None:
     """Each replicate's ancestral rows land beside that replicate's own file."""
     fanout = ReplicateFanoutStore(
-        lambda run_id: JSONLTrajectoryStore(tmp_path / run_id / "trajectory.jsonl")
+        lambda run_id: BinaryLogStore(tmp_path / run_id / "trajectory.tlog")
     )
 
     companion = fanout.equilibrium_store("run-b")
 
-    assert isinstance(companion, JSONLTrajectoryStore)
-    assert companion.path == tmp_path / "run-b" / EQUILIBRIUM_TRAJECTORY_FILENAME
+    assert isinstance(companion, BinaryLogStore)
+    assert companion.path == tmp_path / "run-b" / EQUILIBRIUM_LOG_FILENAME
 
 
 def test_equilibrium_store_for_falls_back_to_memory_for_other_stores() -> None:

@@ -2,7 +2,7 @@
 
 The export is the one producer of `trajectory.jsonl`, so its guarantees are
 tested end to end on real runs made by `fim run`: the file is the canonical
-bytes (equal to what the JSON Lines store writes for the same run), the log is
+bytes (equal to the plain `json.dumps` text of the same run's rows), the log is
 checked against its manifest first, a full disk and an existing file are
 refused with clear messages, nothing partial is left behind, and a receipt
 records both SHA-256 digests.
@@ -17,11 +17,12 @@ from pathlib import Path
 
 import pytest
 import yaml
+from tlog_support import canonical_jsonl
 
 from fim import cli
 from fim.engine import fim
 from fim.model.params import SimulationParams
-from fim.persistence.jsonl_store import JSONLTrajectoryStore
+from fim.persistence.store import InMemoryTrajectoryStore
 from fim.persistence.tlog_export import RECEIPT_SCHEMA, export_trajectory, resolve_log
 
 
@@ -56,13 +57,11 @@ def _run(tmp_path: Path, **updates: object) -> Path:
 
 
 def _reference_jsonl(tmp_path: Path, **updates: object) -> bytes:
-    """The bytes the JSON Lines store writes for the same configuration."""
+    """The plain `json.dumps` text of the rows of the same configuration."""
     config = tmp_path / "ref.yaml"
     _config(config, **updates)
     params = SimulationParams.from_mapping(yaml.safe_load(config.read_text()))
-    directory = tmp_path / "reference"
-    directory.mkdir()
-    store = JSONLTrajectoryStore(directory / "trajectory.jsonl")
+    store = InMemoryTrajectoryStore()
     result = fim(
         params.gene_copies,
         params.m,
@@ -73,12 +72,11 @@ def _reference_jsonl(tmp_path: Path, **updates: object) -> bytes:
         run_id=json.loads((tmp_path / "run" / "manifest.json").read_text())["run_id"],
     )
     assert not isinstance(result, tuple)
-    store.close()
-    return (directory / "trajectory.jsonl").read_bytes()
+    return canonical_jsonl(store.read(result.run_id))
 
 
 def test_export_writes_the_canonical_file_and_a_receipt(tmp_path: Path) -> None:
-    """The exported file is what the JSON Lines store writes; the receipt says so."""
+    """The exported file is the canonical text; the receipt says so."""
     run = _run(tmp_path)
     receipt = export_trajectory(run)
     reference = _reference_jsonl(tmp_path)

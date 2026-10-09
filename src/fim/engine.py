@@ -823,7 +823,7 @@ class ThreadedAdvancer:
     registry at once; the one thing genuinely shared across threads is
     `store`, made safe by the `threading.Lock` both
     `fim.persistence.store.InMemoryTrajectoryStore` and
-    `fim.persistence.jsonl_store.JSONLTrajectoryStore` now hold around
+    `fim.persistence.binary_store.BinaryLogStore` now hold around
     their own `write_generation`.
 
     Whether this delivers real wall-clock speedup over

@@ -7,9 +7,10 @@ independently from the frames that were written (never from the decoded
 log), over adversarial inputs: arbitrary floats from subnormal to huge,
 mixed counted and raw pairs, uneven deme sizes including one above the
 table cap and one unknown, large allele identifiers, and a run id that
-needs escaping. They then check real runs against the JSON Lines store's own
-file, sharded against single-process derivation, and the size pass against
-the written size. All seeded; nothing depends on timing.
+needs escaping. They then check real runs against the plain `json.dumps`
+text of the rows the engine produces, sharded against single-process
+derivation, and the size pass against the written size. All seeded; nothing
+depends on timing.
 """
 
 from __future__ import annotations
@@ -21,12 +22,12 @@ from pathlib import Path
 
 import numpy as np
 import pytest
+from tlog_support import canonical_jsonl
 
 from fim.engine import fim
 from fim.model.params import SimulationParams
 from fim.persistence.frame import FrameLayout, TrajectoryFrame, frame_to_rows
-from fim.persistence.jsonl_store import JSONLTrajectoryStore
-from fim.persistence.store import TrajectoryRow
+from fim.persistence.store import InMemoryTrajectoryStore, TrajectoryRow
 from fim.persistence.tlog import LogWriter, TlogError, recover
 from fim.persistence.tlog_export import (
     LUT_MAX_SIZE,
@@ -300,22 +301,30 @@ def _params(**updates: object) -> SimulationParams:
 
 
 def _run_both(
-    tmp_path: Path, params: SimulationParams, backend: str
-) -> tuple[_FrameTap, Path]:
-    """Run once into the JSON Lines store and once into a frame tap (same seed)."""
-    (tmp_path / "rows").mkdir()
-    store = JSONLTrajectoryStore(tmp_path / "rows" / "trajectory.jsonl")
+    params: SimulationParams, backend: str
+) -> tuple[_FrameTap, dict[str, bytes]]:
+    """Run once into a memory store and once into a frame tap (same seed).
+
+    Returns:
+        The tap, and the plain `json.dumps` text of each phase's rows: the
+        main run under `"trajectory"`, the ancestral phase under
+        `"equilibrium_trajectory"` when the run has one.
+    """
+    memory = InMemoryTrajectoryStore()
     fim(
         params.gene_copies,
         params.m,
         params.mu,
         params.d,
         params=params,
-        store=store,
+        store=memory,
         run_id="run-real",
         engine_backend=backend,  # type: ignore[arg-type]
     )
-    store.close()
+    reference = {"trajectory": canonical_jsonl(memory.read("run-real"))}
+    ancestral = list(memory.equilibrium_store("run-real").read("run-real"))
+    if ancestral:
+        reference["equilibrium_trajectory"] = canonical_jsonl(ancestral)
     tap = _FrameTap()
     fim(
         params.gene_copies,
@@ -327,21 +336,21 @@ def _run_both(
         run_id="run-real",
         engine_backend=backend,  # type: ignore[arg-type]
     )
-    return tap, tmp_path / "rows"
+    return tap, reference
 
 
 @pytest.mark.parametrize("backend", ["lineal", "generational-vector"])
-def test_a_real_run_derives_the_jsonl_store_file_byte_for_byte(
+def test_a_real_run_derives_the_plain_json_dumps_text_byte_for_byte(
     tmp_path: Path, backend: str
 ) -> None:
-    """The log of a run, derived, is the file the JSON Lines store wrote."""
+    """The log of a run, derived, is the text `json.dumps` gives for its rows."""
     pytest.importorskip("numba")
     params = _params()
-    tap, rows_dir = _run_both(tmp_path, params, backend)
+    tap, expected = _run_both(params, backend)
     log = tmp_path / "t.tlog"
     _write(log, tap.frames, tap.layouts["run-real"], "run-real")
     derived = derive_jsonl(log, tmp_path / "derived.jsonl")
-    reference = (rows_dir / "trajectory.jsonl").read_bytes()
+    reference = expected["trajectory"]
     assert (tmp_path / "derived.jsonl").read_bytes() == reference
     assert derived.sha256 == hashlib.sha256(reference).hexdigest()
 
@@ -355,16 +364,14 @@ def test_a_real_equilibrium_split_run_derives_both_files_byte_for_byte(
         equilibrium_convergence_tolerance=0.5,
         equilibrium_max_generations=200,
     )
-    tap, rows_dir = _run_both(tmp_path, params, "lineal")
+    tap, expected = _run_both(params, "lineal")
     companion = tap.equilibrium_store("run-real")
     assert companion.frames
     for name, source in (
-        ("trajectory.jsonl", tap),
-        ("equilibrium_trajectory.jsonl", companion),
+        ("trajectory", tap),
+        ("equilibrium_trajectory", companion),
     ):
         log = tmp_path / f"{name}.tlog"
         _write(log, source.frames, source.layouts["run-real"], "run-real")
         derive_jsonl(log, tmp_path / f"derived-{name}")
-        assert (tmp_path / f"derived-{name}").read_bytes() == (
-            rows_dir / name
-        ).read_bytes()
+        assert (tmp_path / f"derived-{name}").read_bytes() == expected[name]

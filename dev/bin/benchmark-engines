@@ -160,8 +160,12 @@ from fim.engine import (  # noqa: E402
 )
 from fim.model.locus import LocusSpec  # noqa: E402
 from fim.model.params import SimulationParams  # noqa: E402
-from fim.persistence.jsonl_store import JSONLTrajectoryStore  # noqa: E402
-from fim.persistence.store import InMemoryTrajectoryStore, TrajectoryStore  # noqa: E402
+from fim.persistence.binary_store import BinaryLogStore  # noqa: E402
+from fim.persistence.store import (  # noqa: E402
+    InMemoryTrajectoryStore,
+    ReplicateFanoutStore,
+    TrajectoryStore,
+)
 
 SweepField = str  # one of "d", "N", "mu", "m", "loci-length", "replicates"
 
@@ -328,10 +332,11 @@ def _run_once(
     I/O cost this tool's own reported numbers are not supposed to
     include, and this tool measures thousands of runs across a typical
     sweep, most of them never looked at again. Pass a real
-    `JSONLTrajectoryStore` explicitly (`--save-trajectories`, below) for
-    the rare point worth keeping -- as a genuinely separate, untimed
-    run, never as this function's own default, so the reported timing
-    numbers are never silently contaminated by disk I/O.
+    `ReplicateFanoutStore` of `BinaryLogStore`s explicitly
+    (`--save-trajectories`, below) for the rare point worth keeping -- as
+    a genuinely separate, untimed run, never as this function's own
+    default, so the reported timing numbers are never silently
+    contaminated by disk I/O.
     """
     backend = build_engine_backend(engine_backend, jit=jit)
     if store is None:
@@ -465,7 +470,7 @@ def _save_trajectory(
     params: SimulationParams,
     *,
     jit: JitOption = "off",
-    output_path: Path,
+    output_directory: Path,
 ) -> None:
     """Run one extra, untimed batch, persisting its own trajectory to disk.
 
@@ -475,14 +480,21 @@ def _save_trajectory(
     this way costs one additional full batch run on top of whatever
     `--trials` (and `--measure-rss`) already paid, but the numbers this
     tool reports stay exactly as clean as before `--save-trajectories`
-    existed. Uses `fim.persistence.jsonl_store.JSONLTrajectoryStore` —
+    existed. Uses `fim.persistence.binary_store.BinaryLogStore` —
     this project's own real, on-disk trajectory format (the same one
     `fim run` itself writes), not `InMemoryTrajectoryStore`'s own
     every-other-call default, which discards its own trajectory the
-    moment the call returns.
+    moment the call returns. A log holds one run, so every replicate
+    gets its own `<run id>.tlog` file in `output_directory`.
     """
-    store = JSONLTrajectoryStore(output_path)
-    _run_once(engine_backend, params, jit=jit, store=store)
+    output_directory.mkdir(parents=True, exist_ok=True)
+    store = ReplicateFanoutStore(
+        lambda run_id: BinaryLogStore(output_directory / f"{run_id}.tlog")
+    )
+    try:
+        _run_once(engine_backend, params, jit=jit, store=store)
+    finally:
+        store.close()
 
 
 def _save_point_trajectories(
@@ -496,37 +508,37 @@ def _save_point_trajectories(
 ) -> None:
     """`_measure_point`'s own `--save-trajectories` step, factored out.
 
-    One `.jsonl` file per backend that was actually available at this
-    point (skipping `"generational"` with `jit="numba"`/`"generational-
-    vector"` exactly where `_measure_point`'s own timed measurement
-    already skipped them, for the identical reason — an unavailable
-    backend has nothing to persist) named `<field>-<value>-<backend>
-    .jsonl`, e.g. `d-35-vector.jsonl`.
+    One directory of `.tlog` files (one per replicate) per backend that
+    was actually available at this point (skipping `"generational"` with
+    `jit="numba"`/`"generational-vector"` exactly where
+    `_measure_point`'s own timed measurement already skipped them, for the
+    identical reason — an unavailable backend has nothing to persist)
+    named `<field>-<value>-<backend>`, e.g. `d-35-vector`.
     """
     save_trajectories_dir.mkdir(parents=True, exist_ok=True)
     value_tag = f"{field}-{value:g}"
     _save_trajectory(
         "lineal",
         batch_params,
-        output_path=save_trajectories_dir / f"{value_tag}-lineal.jsonl",
+        output_directory=save_trajectories_dir / f"{value_tag}-lineal",
     )
     _save_trajectory(
         "generational",
         batch_params,
-        output_path=save_trajectories_dir / f"{value_tag}-generational-off.jsonl",
+        output_directory=save_trajectories_dir / f"{value_tag}-generational-off",
     )
     if generational_jit_numba_available:
         _save_trajectory(
             "generational",
             batch_params,
             jit="numba",
-            output_path=save_trajectories_dir / f"{value_tag}-generational-numba.jsonl",
+            output_directory=save_trajectories_dir / f"{value_tag}-generational-numba",
         )
     if vector_available:
         _save_trajectory(
             "generational-vector",
             batch_params,
-            output_path=save_trajectories_dir / f"{value_tag}-vector.jsonl",
+            output_directory=save_trajectories_dir / f"{value_tag}-vector",
         )
 
 
@@ -567,14 +579,14 @@ def _measure_point(
         save_trajectories_dir: When given, run one further, untimed,
             trajectory-persisting batch per available backend
             (`_save_trajectory`) after every timed measurement above,
-            writing each to its own `.jsonl` file under this directory
+            writing each to its own directory of `.tlog` files under this directory
             -- a real, on-disk record of this point's own simulated
             trajectory, for a caller who wants to inspect what a
             benchmarked configuration actually produced (allele
             frequencies, differentiation statistics over time), not
             only how long it took. Adds up to four full extra batch
-            runs per point (`fim.persistence.jsonl_store.
-            JSONLTrajectoryStore` writes real, potentially large files
+            runs per point (`fim.persistence.binary_store.
+            BinaryLogStore` writes real, potentially large files
             for a high-capacity/many-generation/many-replicate
             configuration) -- left opt-in, and best aimed at a handful
             of specific points of interest, not an entire dense sweep.
@@ -1011,7 +1023,7 @@ def main(argv: list[str] | None = None) -> int:
         "--save-trajectories",
         type=Path,
         default=None,
-        help="Directory to persist one real, on-disk .jsonl trajectory per "
+        help="Directory to persist one real, on-disk .tlog trajectory log per "
         "available backend per point (an extra, untimed batch run each -- "
         "never contaminates the reported timing/RSS numbers, but adds up "
         "to four full extra runs per point). Off by default -- every "

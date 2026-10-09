@@ -30,8 +30,7 @@ project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   file is a pure function of the run, so its digest in `manifest.json` is
   reproducible; the app asks for its open block to be written every second
   so a live view is never stale. A log can be checkpointed and resumed (the
-  engine does not write run checkpoints yet). `trajectory.jsonl` files from
-  earlier runs can still be opened and analyzed. See
+  engine does not write run checkpoints yet). See
   [the trajectory log](doc/trajectory-log.md).
 - **The array engine runs the default model, and gives the same numbers.**
   `engine_backend: generational-vector` now runs `infinite_alleles` (it used
@@ -58,8 +57,8 @@ project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   destination deme per generation, shared by every locus and ahead of
   drift, in the same order as `lineal`, so the numbers are identical for
   the same seed on the same machine (every trajectory row, the report, the
-  final state, with a scalar or matrix `m`, in batches, and a JSONL
-  trajectory file byte for byte). The shipped `stochastic-migrant-counts`
+  final state, with a scalar or matrix `m`, in batches, and a trajectory
+  log byte for byte). The shipped `stochastic-migrant-counts`
   example reproduces its committed output on `auto` and runs about 3.5
   times faster. A run on `generational-vector` that asked for stochastic
   sampling used to be rejected; it now runs. See
@@ -1316,6 +1315,15 @@ project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Removed
 
+- **The JSON Lines trajectory store is gone.** `JSONLTrajectoryStore` and its
+  hand-built row encoder (`fim.persistence.jsonl_store`) are removed, and
+  `fim.persistence` now exports `BinaryLogStore` in its place. A trajectory is
+  always a `trajectory.tlog`; run folders that hold only a
+  `trajectory.jsonl` from an earlier version are no longer read, so rerun them
+  or keep the older release for them. Text is made on request with
+  `fim export`. The stores' tests and the benchmark tool follow:
+  `dev/bin/benchmark-engines --save-trajectories` now writes one `.tlog` per
+  replicate in a directory per backend.
 - `fim.convergence.criteria.AnyCriterion`/`AllCriterion`, the two
   criterion-combinator classes for stacking several stability *rules*
   over one shared statistic's history. They were exported publicly

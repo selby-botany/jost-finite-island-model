@@ -24,7 +24,7 @@ use the [generated API reference](../src/fim/API.md) for exact signatures.
 | `fim.model` | Allele/locus/state values, parameter validation, initialization, update operators |
 | `fim.statistics` | Pure diversity/differentiation functions, and across-replicate confidence intervals |
 | `fim.convergence` | Trailing-window and confidence-interval criteria, and the hard-cap monitor |
-| `fim.persistence` | Store protocol, JSON Lines backend, replayable manifest |
+| `fim.persistence` | Store protocol, binary trajectory log, replayable manifest |
 | `fim.engine` | Public run loop and final report assembly, behind three interchangeable backend implementations (`LinealBackend`/`GenerationalBackend` + `Advancer`) — see [Engine backends](#engine-backends) |
 | `fim.viz` | Headless scatter and diagnostic plots |
 | `fim.cli` | YAML and command-line front end |
@@ -330,29 +330,26 @@ statistics, or visualizations. A store may also take a generation as a
 frames only to a store that asks for them (`wants_frames`) and keeps handing
 rows to any other.
 
-**The default store is the binary log.** `BinaryLogStore` writes
+**The store is the binary log.** `BinaryLogStore` writes
 `trajectory.tlog` (and `equilibrium_trajectory.tlog`): a chained-checksum
 block log with sparse delta records, written by a background thread, read
 back with random access (`LogReader`), exported to the canonical
 `trajectory.jsonl` on request (`fim export`), and resumable from a
 checkpoint. [The trajectory log](trajectory-log.md) describes the format, the
-modules, the determinism rules and the tests. The JSON Lines backend
-(`JSONLTrajectoryStore`) remains for library use and as the test oracle for
-the export: it flushes each generation so an interrupted file retains every
-complete line.
+modules, the determinism rules and the tests. There is no other file-backed
+store: `InMemoryTrajectoryStore` serves library calls and tests that need no
+file, and the export's expected text in the tests is built from its rows with
+plain `json.dumps`.
 
-`JSONLTrajectoryStore` keeps one append handle open between generations
-(opened on the first write) instead of re-opening the file for every
-generation, which costs several milliseconds on some filesystems, more than
-encoding a generation of a small model. Each `write_generation` call still
-flushes, so "on disk once the call returns" holds at the operating-system
-level and a reader (`read`, the live GUI view) sees every flushed generation
-while the run is in progress. The lifecycle rules:
+A store holds one run, so a batch gives every replicate its own
+(`ReplicateFanoutStore` with a store factory). Its writer thread and file
+descriptor live from the first frame to `close`, so the lifecycle rules matter:
 
-- `close()` (also the `with` form) releases the handle and the ancestral-phase
-  companion's. It is idempotent and never ends the store's life: the next
-  write re-opens the file in append mode, and `read`/`discard` do not need
-  the handle. `close` is optional on the protocol (`ClosableStore`,
+- `close()` (also the `with` form) commits the last block and releases the
+  writer and the ancestral-phase companion's. It is idempotent and ends the
+  store's life: writing again raises. `read`, `frames` and `discard` do not
+  need the writer; a reader sees every committed block while the run is in
+  progress. `close` is optional on the protocol (`ClosableStore`,
   `fim.persistence.store.close_store`); `InMemoryTrajectoryStore` has a
   no-op one.
 - The engine closes what it writes: `fim.engine._run_one` closes the store
@@ -363,30 +360,17 @@ while the run is in progress. The lifecycle rules:
   (`fim run`, the GUI runner) also close in a `with`/`closing` block.
 - Close before the directory is renamed or removed. A run directory is built
   in a hidden sibling and renamed into place by `fim.paths.atomic_directory`;
-  on POSIX an open handle follows the file through the rename, but Windows
+  on POSIX an open descriptor follows the file through the rename, but Windows
   refuses to rename or delete a directory holding an open file. Any new owner
   of a store inside an `atomic_directory` block must close it before the
   block ends.
 - A pickled store (a `RunResult.store` returned from a worker process) is
-  sent without its handle and re-opens lazily in append mode.
-- `discard(run_id)` closes the handle before it rewrites or removes the file;
-  a file deleted from under an open handle is re-created by the next write.
+  sent closed, without its writer, and reads from the file in the receiving
+  process.
+- `discard(run_id)` closes the writer and removes the file.
 - Tests prove a real entry point leaves nothing open with
-  `conftest.tracked_jsonl_stores` and `assert_none_open`.
-
-Rows are encoded by `fim.persistence.jsonl_store.encode_rows`, not by a
-`json.dumps` call per row (about 30 microseconds per locus generation at 400
-loci, against about 5). For a row with exactly the six trajectory keys, plain
-`int` ids and a finite `float` frequency it builds the line directly, keys
-already sorted, using the pieces `json` itself uses (`int.__repr__`,
-`float.__repr__` and `json.encoder.encode_basestring_ascii`). Any other row, or
-a non-finite frequency, goes through `json.dumps(row, sort_keys=True,
-separators=(",", ":"), allow_nan=False)`, so the file and every error are
-unchanged. If the row schema changes (a field, a key, a type), update
-`encode_rows` or its fast path will quietly stop applying; the byte-identity
-tests in `test/persistence/test_jsonl_encoder.py` (a property test, a seeded
-bulk comparison, and the whole row streams of real runs) fail on any
-difference from `json.dumps`.
+  `conftest.tracked_log_stores` and `assert_none_open`
+  (`test/persistence/test_store_lifecycle.py`).
 
 A replicate batch needs one store *per replicate*, not one shared instance —
 mandatory once max_workers is set, since a single store object cannot

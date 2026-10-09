@@ -35,7 +35,6 @@ from fim.engine import report_for_state, tracked_statistic_values
 from fim.examples.artifacts import materialize_outputs
 from fim.model.params import SimulationParams
 from fim.model.state import ModelState
-from fim.persistence.binary_store import open_trajectory
 from fim.persistence.manifest import (
     RunManifest,
     hash_file,
@@ -160,25 +159,14 @@ def group_rows_by_generation(
     Returns:
         Every persisted generation's rows, keyed by generation number.
     """
-    if trajectory_path.suffix == ".tlog":
-        return read_rows(trajectory_path, run_id, generations)
-    grouped: dict[int, list[TrajectoryRow]] = {}
-    selected = set(generations) if generations is not None else None
-    for row in open_trajectory(trajectory_path).read(run_id):
-        if selected is None or row["generation"] in selected:
-            grouped.setdefault(row["generation"], []).append(row)
-    return grouped
+    return read_rows(trajectory_path, run_id, generations)
 
 
 def trajectory_generations(trajectory_path: Path, run_id: str) -> list[int]:
     """List persisted generations without retaining their population rows."""
     materialize_outputs(trajectory_path.parent)
-    if trajectory_path.suffix == ".tlog":
-        with LogReader(trajectory_path) as reader:
-            return reader.generation_numbers() if reader.run_id == run_id else []
-    return sorted(
-        {row["generation"] for row in open_trajectory(trajectory_path).read(run_id)}
-    )
+    with LogReader(trajectory_path) as reader:
+        return reader.generation_numbers() if reader.run_id == run_id else []
 
 
 def _cached_final_report(
@@ -324,13 +312,11 @@ def _select_generation_rows(
 ) -> tuple[int | None, list[TrajectoryRow], int]:
     """Pick one generation's rows out of a trajectory, and count its generations.
 
-    A binary log answers from its block headers and rebuilds only the
-    generation asked for; a JSON Lines file has to be streamed once, and
-    keeps only the generation it ends up wanting in memory (the highest
-    generation seen, when none was named, found as the stream goes by).
+    The log answers from its block headers and rebuilds only the
+    generation asked for.
 
     Args:
-        trajectory_path: The `trajectory.tlog` (or JSON Lines file).
+        trajectory_path: The `trajectory.tlog`.
         run_id: The run every row must belong to.
         generation: The generation wanted, or `None` for the final one.
 
@@ -342,36 +328,16 @@ def _select_generation_rows(
     Raises:
         ValueError: If the file holds no rows for `run_id`.
     """
-    if trajectory_path.suffix == ".tlog":
-        with LogReader(trajectory_path) as reader:
-            if reader.run_id != run_id or reader.generation_count == 0:
-                raise ValueError(f"trajectory has no rows for {run_id}")
-            final = reader.last_generation
-            wanted = final if generation is None else generation
-            try:
-                rows = reader.rows_at(wanted)
-            except KeyError:
-                rows = []
-            return final, rows, reader.generation_count
-    running_max: int | None = None
-    generation_rows: list[TrajectoryRow] = []
-    seen_generations: set[int] = set()
-    row_count = 0
-    for row in open_trajectory(trajectory_path).read(run_id):
-        row_count += 1
-        row_generation = row["generation"]
-        seen_generations.add(row_generation)
-        if generation is not None:
-            if row_generation == generation:
-                generation_rows.append(row)
-        elif running_max is None or row_generation > running_max:
-            running_max = row_generation
-            generation_rows = [row]
-        elif row_generation == running_max:
-            generation_rows.append(row)
-    if row_count == 0:
-        raise ValueError(f"trajectory has no rows for {run_id}")
-    return running_max, generation_rows, len(seen_generations)
+    with LogReader(trajectory_path) as reader:
+        if reader.run_id != run_id or reader.generation_count == 0:
+            raise ValueError(f"trajectory has no rows for {run_id}")
+        final = reader.last_generation
+        wanted = final if generation is None else generation
+        try:
+            rows = reader.rows_at(wanted)
+        except KeyError:
+            rows = []
+        return final, rows, reader.generation_count
 
 
 def reanalyze_trajectory(

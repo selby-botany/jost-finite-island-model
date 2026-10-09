@@ -127,8 +127,6 @@ Every test module, fixture, and test function documented here in full; `doc/fim-
   - [`test_binary_store`](#persistence.test_binary_store)
   - [`test_frame`](#persistence.test_frame)
   - [`test_groups`](#persistence.test_groups)
-  - [`test_jsonl_encoder`](#persistence.test_jsonl_encoder)
-  - [`test_jsonl_lifecycle`](#persistence.test_jsonl_lifecycle)
   - [`test_manifest`](#persistence.test_manifest)
   - [`test_pairwise_file`](#persistence.test_pairwise_file)
   - [`test_read_only`](#persistence.test_read_only)
@@ -136,6 +134,7 @@ Every test module, fixture, and test function documented here in full; `doc/fim-
   - [`test_run_classes`](#persistence.test_run_classes)
   - [`test_run_metadata`](#persistence.test_run_metadata)
   - [`test_store`](#persistence.test_store)
+  - [`test_store_lifecycle`](#persistence.test_store_lifecycle)
   - [`test_tlog`](#persistence.test_tlog)
   - [`test_tlog_codec`](#persistence.test_tlog_codec)
   - [`test_tlog_export`](#persistence.test_tlog_export)
@@ -584,29 +583,6 @@ def rng() -> Callable[[int], np.random.Generator]
 
 Return the only sanctioned deterministic RNG factory for tests.
 
-<a id="test.conftest.tracked_jsonl_stores"></a>
-
-#### tracked\_jsonl\_stores
-
-```python
-@pytest.fixture
-def tracked_jsonl_stores(
-        monkeypatch: pytest.MonkeyPatch) -> list[JSONLTrajectoryStore]
-```
-
-Record every `JSONLTrajectoryStore` the test (or code under test) builds.
-
-The leak check for the kept-open trajectory handle: a test runs a real
-entry point in this process, then asserts through `assert_none_open`
-that no store it created still holds a file open. Counts the
-ancestral-phase companions too, which are built through the same
-constructor. Only stores built in this process are seen, so a test of a
-worker-process path checks the stores that come back instead.
-
-**Returns**:
-
-  The list that fills with each store as it is constructed.
-
 <a id="test.conftest.tracked_log_stores"></a>
 
 #### tracked\_log\_stores
@@ -619,11 +595,11 @@ def tracked_log_stores(
 
 Record every `BinaryLogStore` the test (or code under test) builds.
 
-The leak check for the binary log's writer thread and file descriptor,
-the counterpart of `tracked_jsonl_stores`: a test runs a real entry
-point in this process, then asserts through `assert_none_open` that no
-store it created still has a writer open. Counts the ancestral-phase
-companions too, which are built through the same constructor.
+The leak check for the binary log's writer thread and file descriptor:
+a test runs a real entry point in this process, then asserts through
+`assert_none_open` that no store it created still has a writer open.
+Counts the ancestral-phase companions too, which are built through the
+same constructor.
 
 **Returns**:
 
@@ -634,15 +610,14 @@ companions too, which are built through the same constructor.
 #### assert\_none\_open
 
 ```python
-def assert_none_open(
-        stores: Sequence[BinaryLogStore | JSONLTrajectoryStore]) -> None
+def assert_none_open(stores: Sequence[BinaryLogStore]) -> None
 ```
 
 Assert `stores` is non-empty and none of them holds a file open.
 
 **Arguments**:
 
-- `stores` - What `tracked_jsonl_stores` or `tracked_log_stores` collected.
+- `stores` - What `tracked_log_stores` collected.
   
 
 **Raises**:
@@ -2612,42 +2587,6 @@ tests instead call `fim.reanalyze` directly, the way `fim.gui`'s
 "open an existing run" and animated-trajectory paths do
 (`doc/fim-gui-design.md` §8, §9).
 
-<a id="test.test_reanalyze.test_reanalyze_trajectory_does_not_hold_every_row_live_for_an_early_generation"></a>
-
-#### test\_reanalyze\_trajectory\_does\_not\_hold\_every\_row\_live\_for\_an\_early\_generation
-
-```python
-def test_reanalyze_trajectory_does_not_hold_every_row_live_for_an_early_generation(
-        tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None
-```
-
-An explicit early generation never keeps later generations' rows alive.
-
-The worst case for a `rows = list(store.read(...))`-style
-implementation: re-analyzing generation 0 out of many still means
-every later generation gets read (the integrity/consistency checks
-require it), so the old code would hold the *entire* trajectory's
-rows live simultaneously even though only generation 0's own rows
-are ever used. This proves the streaming rewrite does not.
-
-<a id="test.test_reanalyze.test_reanalyze_trajectory_does_not_hold_every_row_live_for_the_final_generation"></a>
-
-#### test\_reanalyze\_trajectory\_does\_not\_hold\_every\_row\_live\_for\_the\_final\_generation
-
-```python
-def test_reanalyze_trajectory_does_not_hold_every_row_live_for_the_final_generation(
-        tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None
-```
-
-The default ("final generation") path is equally memory-bounded.
-
-`generation=None` cannot know which generation is the maximum until
-the stream ends (`reanalyze_trajectory`'s own docstring on
-`JSONLTrajectoryStore.read`'s ordering guarantee), so this exercises
-the rolling running-max buffer specifically: every earlier
-generation's buffered rows must be dropped, not accumulated, each
-time a higher generation number is seen.
-
 <a id="test.test_reanalyze.test_a_binary_log_materializes_only_the_generation_it_is_asked_for"></a>
 
 #### test\_a\_binary\_log\_materializes\_only\_the\_generation\_it\_is\_asked\_for
@@ -3333,6 +3272,29 @@ def same_frames(got: list[TrajectoryFrame],
 ```
 
 Require two frame lists to be equal, with exact frequency bits.
+
+<a id="test.tlog_support.canonical_jsonl"></a>
+
+#### canonical\_jsonl
+
+```python
+def canonical_jsonl(rows: Iterable[Mapping[str, Any]]) -> bytes
+```
+
+Return the canonical JSON Lines text of `rows`, built the plain way.
+
+One `json.dumps` line per row (sorted keys, compact separators, no
+NaN), each ending in a newline: the oracle the export's hand-built text
+must equal byte for byte.
+
+**Arguments**:
+
+- `rows` - Trajectory rows in stored order.
+  
+
+**Returns**:
+
+  The UTF-8 text.
 
 <a id="test.vector_support"></a>
 
@@ -4756,7 +4718,7 @@ Write a two-point sweep file and return its path.
 
 The export is the one producer of `trajectory.jsonl`, so its guarantees are
 tested end to end on real runs made by `fim run`: the file is the canonical
-bytes (equal to what the JSON Lines store writes for the same run), the log is
+bytes (equal to the plain `json.dumps` text of the same run's rows), the log is
 checked against its manifest first, a full disk and an existing file are
 refused with clear messages, nothing partial is left behind, and a receipt
 records both SHA-256 digests.
@@ -4770,7 +4732,7 @@ def test_export_writes_the_canonical_file_and_a_receipt(
         tmp_path: Path) -> None
 ```
 
-The exported file is what the JSON Lines store writes; the receipt says so.
+The exported file is the canonical text; the receipt says so.
 
 <a id="cli.test_export_command.test_the_command_exports_a_run_directory_or_a_log_path"></a>
 
@@ -8103,10 +8065,10 @@ def test_fim_streams_the_ancestral_phase_beside_the_trajectory(
         backend: EngineBackend) -> None
 ```
 
-An equilibrium-split run writes `equilibrium_trajectory.jsonl`.
+An equilibrium-split run writes `equilibrium_trajectory.tlog`.
 
 Both engine paths that support equilibrium-split (`_run_one` and
-`_build_replica_lane`) write it, beside `trajectory.jsonl`, in the
+`_build_replica_lane`) write it, beside `trajectory.tlog`, in the
 same row schema: the one ancestral deme at every generation of its
 own counter, `0` through `equilibrium_generation_count`, ending on
 exactly the heterozygosity the manifest records for the split.
@@ -8597,7 +8559,7 @@ checked on the complete stream of a real run, never on a summary:
    frequency bits, every generation) and the same layout.
 2. A frame equals the frame rebuilt from the rows the engine writes on
    the rows path, so the two paths cannot disagree.
-3. A JSON Lines store fed frames writes the same bytes as one fed rows,
+3. A binary log fed frames writes the same bytes as one fed rows,
    including the ancestral companion of an equilibrium-split run.
 
 No test depends on timing; every run is seeded.
@@ -8692,17 +8654,17 @@ def equilibrium_store(run_id: str) -> _FrameRecorder
 
 Return the ancestral-phase recorder.
 
-<a id="engine.test_frame_identity._FrameJsonlStore"></a>
+<a id="engine.test_frame_identity._RowLogStore"></a>
 
-## \_FrameJsonlStore Objects
+## \_RowLogStore Objects
 
 ```python
-class _FrameJsonlStore(JSONLTrajectoryStore)
+class _RowLogStore(BinaryLogStore)
 ```
 
-A JSON Lines store that asks the engine for frames.
+A binary log that declines frames, so the engine writes it rows.
 
-<a id="engine.test_frame_identity._FrameJsonlStore.wants_frames"></a>
+<a id="engine.test_frame_identity._RowLogStore.wants_frames"></a>
 
 #### wants\_frames
 
@@ -8710,17 +8672,17 @@ A JSON Lines store that asks the engine for frames.
 def wants_frames(run_id: str) -> bool
 ```
 
-Ask for frames, so the engine takes the frame path.
+Decline frames, so the engine takes the rows path.
 
-<a id="engine.test_frame_identity._FrameJsonlStore.equilibrium_store"></a>
+<a id="engine.test_frame_identity._RowLogStore.equilibrium_store"></a>
 
 #### equilibrium\_store
 
 ```python
-def equilibrium_store(run_id: str) -> JSONLTrajectoryStore
+def equilibrium_store(run_id: str) -> BinaryLogStore
 ```
 
-Return a frame-asking companion beside this file.
+Return a rows-fed companion beside this file.
 
 <a id="engine.test_frame_identity.test_backends_produce_identical_frames_and_layouts"></a>
 
@@ -8744,17 +8706,17 @@ def test_a_frame_equals_the_rows_the_row_path_writes(backend: str) -> None
 
 Every frame equals the frame rebuilt from that generation's rows.
 
-<a id="engine.test_frame_identity.test_jsonl_fed_frames_writes_the_same_bytes_as_jsonl_fed_rows"></a>
+<a id="engine.test_frame_identity.test_a_log_fed_frames_writes_the_same_bytes_as_a_log_fed_rows"></a>
 
-#### test\_jsonl\_fed\_frames\_writes\_the\_same\_bytes\_as\_jsonl\_fed\_rows
+#### test\_a\_log\_fed\_frames\_writes\_the\_same\_bytes\_as\_a\_log\_fed\_rows
 
 ```python
 @pytest.mark.parametrize("backend", ["lineal", "generational-vector"])
-def test_jsonl_fed_frames_writes_the_same_bytes_as_jsonl_fed_rows(
+def test_a_log_fed_frames_writes_the_same_bytes_as_a_log_fed_rows(
         tmp_path: Path, backend: str) -> None
 ```
 
-The frame path and the row path produce byte-identical files.
+The frame path and the row path produce byte-identical logs.
 
 <a id="engine.test_frame_identity.test_equilibrium_split_companion_gets_frames_of_one_ancestral_deme"></a>
 
@@ -8812,7 +8774,7 @@ ran. These tests compare complete row streams and complete outputs, never
 summaries alone, over the shared configuration matrix in
 `test/vector_support.py`, and also through batches, adaptive batches, a
 sigma-band extension, a convergence-stopped run, the expensive opt-in
-statistics and a JSONL trajectory file (byte for byte).
+statistics and a trajectory log (byte for byte).
 
 Same-platform identity is the contract: the compiled kernels use Numba's
 `lgamma`, `log`, `log1p` and `exp`, which are verified to match CPython's
@@ -8893,17 +8855,16 @@ def test_stochastic_dear_nolan_low_matches_lineal_for_thousands_of_generations(
 
 Stochastic counts at the dear-nolan-low shape, 3,000 generations.
 
-<a id="engine.test_vector_parity.test_stochastic_jsonl_trajectory_file_is_byte_identical"></a>
+<a id="engine.test_vector_parity.test_stochastic_trajectory_log_is_byte_identical"></a>
 
-#### test\_stochastic\_jsonl\_trajectory\_file\_is\_byte\_identical
+#### test\_stochastic\_trajectory\_log\_is\_byte\_identical
 
 ```python
-def test_stochastic_jsonl_trajectory_file_is_byte_identical(
-        tmp_path: Path,
-        tracked_jsonl_stores: list[JSONLTrajectoryStore]) -> None
+def test_stochastic_trajectory_log_is_byte_identical(
+        tmp_path: Path, tracked_log_stores: list[BinaryLogStore]) -> None
 ```
 
-The JSONL file V writes under stochastic counts equals L's, byte for byte.
+The log V writes under stochastic counts equals L's, byte for byte.
 
 <a id="engine.test_vector_parity.test_infinite_alleles_vector_matches_generational_through_fim"></a>
 
@@ -8998,17 +8959,16 @@ def test_window_of_concurrent_replicates_matches_lineal() -> None
 
 `max_concurrent_replicates` changes scheduling, never results.
 
-<a id="engine.test_vector_parity.test_jsonl_trajectory_file_is_byte_identical"></a>
+<a id="engine.test_vector_parity.test_trajectory_log_is_byte_identical"></a>
 
-#### test\_jsonl\_trajectory\_file\_is\_byte\_identical
+#### test\_trajectory\_log\_is\_byte\_identical
 
 ```python
-def test_jsonl_trajectory_file_is_byte_identical(
-        tmp_path: Path,
-        tracked_jsonl_stores: list[JSONLTrajectoryStore]) -> None
+def test_trajectory_log_is_byte_identical(
+        tmp_path: Path, tracked_log_stores: list[BinaryLogStore]) -> None
 ```
 
-The JSONL file V writes equals Backend L's, byte for byte.
+The log V writes equals Backend L's, byte for byte.
 
 <a id="engine.test_vector_parity.test_fim_records_the_resolved_backend_in_the_manifest"></a>
 
@@ -9115,17 +9075,16 @@ The extension continues the minted bookkeeping exactly as L does.
 A 16-state locus makes alleles go extinct and reappear within the
 window, which is what a forgotten-minted-identity bug would mishandle.
 
-<a id="engine.test_vector_parity.test_finite_alleles_jsonl_trajectory_file_is_byte_identical"></a>
+<a id="engine.test_vector_parity.test_finite_alleles_trajectory_log_is_byte_identical"></a>
 
-#### test\_finite\_alleles\_jsonl\_trajectory\_file\_is\_byte\_identical
+#### test\_finite\_alleles\_trajectory\_log\_is\_byte\_identical
 
 ```python
-def test_finite_alleles_jsonl_trajectory_file_is_byte_identical(
-        tmp_path: Path,
-        tracked_jsonl_stores: list[JSONLTrajectoryStore]) -> None
+def test_finite_alleles_trajectory_log_is_byte_identical(
+        tmp_path: Path, tracked_log_stores: list[BinaryLogStore]) -> None
 ```
 
-The finite-alleles JSONL file V writes equals Backend L's, byte for byte.
+The finite-alleles log V writes equals Backend L's, byte for byte.
 
 <a id="engine.test_vector_parity.test_auto_resolves_to_vector_and_matches_lineal"></a>
 
@@ -23273,8 +23232,8 @@ def test_progress_stores_hand_out_the_inner_ancestral_store_undecorated(
 The ancestral phase is not progress: no callback, sidecar, or cancel check.
 
 Both decorators return the wrapped store's own companion, so an
-equilibrium-split run's `equilibrium_trajectory.jsonl` lands beside
-its `trajectory.jsonl` while live progress reports only the split
+equilibrium-split run's `equilibrium_trajectory.tlog` lands beside
+its `trajectory.tlog` while live progress reports only the split
 run's own generations.
 
 <a id="gui.test_store.test_live_progress_store_is_picklable"></a>
@@ -23303,11 +23262,11 @@ def test_progress_stores_close_delegates_to_the_inner_store(
         tmp_path: Path) -> None
 ```
 
-Closing either decorator releases the wrapped file's handle.
+Closing either decorator releases the wrapped log's writer.
 
 The run owners close the store they built (`GuiProgressStore` around a
-`JSONLTrajectoryStore`) before `fim.paths.atomic_directory` renames the
-directory; the decorator must pass that through, or the handle stays
+`BinaryLogStore`) before `fim.paths.atomic_directory` renames the
+directory; the decorator must pass that through, or the writer stays
 open behind it.
 
 <a id="gui.test_store.test_read_progress_sidecar_returns_none_for_a_missing_file"></a>
@@ -28825,13 +28784,13 @@ Every deme's own frequencies sum to 1 after a full fused generation.
 
 Tests of `BinaryLogStore`: the log behind the `TrajectoryStore` protocols.
 
-The store must be a drop-in for the JSON Lines store as far as every
-reader of rows is concerned, so the central tests run real simulations into
-it and compare what `read` returns with what the in-memory store holds for
-the same seeded run: every row, in order, with identical float bits. The
-rest pin its own rules: one run per store, the flush barrier, discard, the
-equilibrium companion, closing, pickling across a process boundary, and
-the derived JSON Lines equalling the JSON Lines store's own file.
+The store must satisfy every row reader's contract, so the central tests
+run real simulations into it and compare what `read` returns with what
+the in-memory store holds for the same seeded run: every row, in order,
+with identical float bits. The rest pin its own rules: one run per store,
+the flush barrier, discard, the equilibrium companion, closing, pickling
+across a process boundary, and the derived JSON Lines equalling the plain
+`json.dumps` text of the rows.
 
 <a id="persistence.test_binary_store.test_the_store_satisfies_every_store_protocol"></a>
 
@@ -28980,7 +28939,7 @@ A reader mid-run sees every generation already submitted.
 def test_reading_a_log_that_does_not_exist_raises(tmp_path: Path) -> None
 ```
 
-Like the JSON Lines store, a missing trajectory is an error.
+A missing trajectory is an error, not an empty run.
 
 <a id="persistence.test_binary_store.test_discard_removes_only_the_run_it_holds"></a>
 
@@ -29003,16 +28962,16 @@ def test_a_store_pickles_as_its_closed_log_and_reads_in_another_process(
 
 The copy that crosses a process boundary reads the finished file.
 
-<a id="persistence.test_binary_store.test_the_derived_jsonl_of_a_real_run_is_the_jsonl_stores_file"></a>
+<a id="persistence.test_binary_store.test_the_derived_jsonl_of_a_real_run_is_the_plain_json_dumps_text"></a>
 
-#### test\_the\_derived\_jsonl\_of\_a\_real\_run\_is\_the\_jsonl\_stores\_file
+#### test\_the\_derived\_jsonl\_of\_a\_real\_run\_is\_the\_plain\_json\_dumps\_text
 
 ```python
-def test_the_derived_jsonl_of_a_real_run_is_the_jsonl_stores_file(
+def test_the_derived_jsonl_of_a_real_run_is_the_plain_json_dumps_text(
         tmp_path: Path) -> None
 ```
 
-Export of the run's log equals the file the JSON Lines store wrote.
+Export of the run's log equals `json.dumps` of the rows the run produced.
 
 <a id="persistence.test_binary_store.test_the_log_is_far_smaller_than_the_jsonl"></a>
 
@@ -29867,571 +29826,6 @@ def test_experiments_containing_study_lists_each_holder(
 ```
 
 Every Experiment listing the Study is returned, and no other.
-
-<a id="persistence.test_jsonl_encoder"></a>
-
-# persistence.test\_jsonl\_encoder
-
-Byte-identity tests for `fim.persistence.jsonl_store.encode_rows`.
-
-`encode_rows` builds a trajectory row's JSON line by hand instead of
-calling `json.dumps` (about six times faster). It is only acceptable if
-the file is byte for byte what `json.dumps(row, sort_keys=True,
-separators=(",", ":"), allow_nan=False)` always wrote. Three independent
-bodies of evidence pin that, none of which depends on the clock or the
-machine:
-
-- a Hypothesis property (derandomized by this suite's profile) over rows
-  with edge-case floats, integers, and run ids;
-- a seeded bulk comparison of tens of thousands of rows, including every
-  float bit pattern class (subnormals, huge, tiny, negative zero);
-- the complete row streams of real runs (a single lineal run, an
-  equilibrium-split run with its companion store, batches on two engines,
-  and Backend V), compared against `json.dumps` of the very rows the
-  engine handed to the store.
-
-Rows that are not the known shape must fall back to `json.dumps`, so every
-outcome, including its exception, matches; that is tested too.
-
-<a id="persistence.test_jsonl_encoder.EDGE_FLOATS"></a>
-
-#### EDGE\_FLOATS
-
-Floats whose `repr` is a known hazard: exponent form, rounding, signs.
-
-<a id="persistence.test_jsonl_encoder.EDGE_RUN_IDS"></a>
-
-#### EDGE\_RUN\_IDS
-
-Run ids that exercise every escape `json` makes (it escapes non-ASCII).
-
-<a id="persistence.test_jsonl_encoder.test_property_encode_rows_is_byte_identical_to_json_dumps"></a>
-
-#### test\_property\_encode\_rows\_is\_byte\_identical\_to\_json\_dumps
-
-```python
-@settings(max_examples=600)
-@given(_rows())
-def test_property_encode_rows_is_byte_identical_to_json_dumps(
-        rows: list[dict[str, Any]]) -> None
-```
-
-For any known-shape generation the bytes equal `json.dumps`'s.
-
-<a id="persistence.test_jsonl_encoder.test_property_encode_rows_handles_alternating_run_ids"></a>
-
-#### test\_property\_encode\_rows\_handles\_alternating\_run\_ids
-
-```python
-def test_property_encode_rows_handles_alternating_run_ids() -> None
-```
-
-The per-call run-id cache never leaks one row's id into the next.
-
-<a id="persistence.test_jsonl_encoder.BULK_ROW_COUNT"></a>
-
-#### BULK\_ROW\_COUNT
-
-Rows compared in `test_seeded_bulk_rows_are_byte_identical`.
-
-<a id="persistence.test_jsonl_encoder.test_seeded_bulk_rows_are_byte_identical"></a>
-
-#### test\_seeded\_bulk\_rows\_are\_byte\_identical
-
-```python
-def test_seeded_bulk_rows_are_byte_identical() -> None
-```
-
-Tens of thousands of seeded random rows encode exactly as `json.dumps`.
-
-Seeded with a literal, so the same commit always compares the same rows.
-
-<a id="persistence.test_jsonl_encoder.test_validated_rows_round_trip_through_normalize_row"></a>
-
-#### test\_validated\_rows\_round\_trip\_through\_normalize\_row
-
-```python
-def test_validated_rows_round_trip_through_normalize_row() -> None
-```
-
-`validate=True` output equals `json.dumps` of the normalized rows.
-
-<a id="persistence.test_jsonl_encoder._Weight"></a>
-
-## \_Weight Objects
-
-```python
-class _Weight(float)
-```
-
-A `float` subclass with its own `repr`, as numpy's floats have.
-
-<a id="persistence.test_jsonl_encoder._Weight.__repr__"></a>
-
-#### \_\_repr\_\_
-
-```python
-def __repr__() -> str
-```
-
-Differ from `float.__repr__`, which is what `json` uses.
-
-<a id="persistence.test_jsonl_encoder.test_unrecognized_rows_fall_back_with_json_dumps_own_outcome"></a>
-
-#### test\_unrecognized\_rows\_fall\_back\_with\_json\_dumps\_own\_outcome
-
-```python
-@pytest.mark.parametrize(
-    "row",
-    [
-        _row(allele_id=True),
-        _row(deme=False),
-        _row(generation=_Color.RED),
-        _row(allele_id=np.int64(5)),  # type: ignore[arg-type]
-        _row(frequency=np.float64(0.25)),
-        _row(frequency=_Weight(0.25)),
-        _row(frequency=1),  # an int where a float belongs
-        _row(frequency=float("nan")),
-        _row(frequency=float("inf")),
-        _row(frequency=float("-inf")),
-        _row(run_id=_Name("named")),
-        _row(run_id=7),  # type: ignore[arg-type]
-        {
-            **_row(), "extra": 1
-        },
-        {
-            key: value
-            for key, value in _row().items() if key != "deme"
-        },
-        {},
-        {
-            **_row(), "deme": None
-        },
-    ],
-    ids=[
-        "bool-int",
-        "bool-int-false",
-        "int-enum",
-        "numpy-int",
-        "numpy-float",
-        "float-subclass",
-        "int-frequency",
-        "nan",
-        "inf",
-        "-inf",
-        "str-subclass",
-        "int-run-id",
-        "extra-key",
-        "missing-key",
-        "empty-row",
-        "none-value",
-    ],
-)
-def test_unrecognized_rows_fall_back_with_json_dumps_own_outcome(
-        row: dict[str, Any]) -> None
-```
-
-Anything off the known shape yields what `json.dumps` yields, errors too.
-
-<a id="persistence.test_jsonl_encoder.test_non_finite_frequency_raises_the_same_error_as_before"></a>
-
-#### test\_non\_finite\_frequency\_raises\_the\_same\_error\_as\_before
-
-```python
-def test_non_finite_frequency_raises_the_same_error_as_before() -> None
-```
-
-`allow_nan=False` still rejects a non-finite frequency, with its text.
-
-<a id="persistence.test_jsonl_encoder.test_a_non_dict_mapping_is_not_encoded_as_a_row"></a>
-
-#### test\_a\_non\_dict\_mapping\_is\_not\_encoded\_as\_a\_row
-
-```python
-def test_a_non_dict_mapping_is_not_encoded_as_a_row() -> None
-```
-
-A `Mapping` that is not a `dict` is left to `json.dumps` (a `TypeError`).
-
-<a id="persistence.test_jsonl_encoder.test_an_empty_iterable_encodes_to_nothing"></a>
-
-#### test\_an\_empty\_iterable\_encodes\_to\_nothing
-
-```python
-def test_an_empty_iterable_encodes_to_nothing() -> None
-```
-
-No rows, no bytes (the store rejects an empty generation itself).
-
-<a id="persistence.test_jsonl_encoder._RecordingStore"></a>
-
-## \_RecordingStore Objects
-
-```python
-class _RecordingStore(JSONLTrajectoryStore)
-```
-
-A real store that also keeps a copy of every row it was handed.
-
-The rows are captured before the store encodes them, so they are
-exactly the dicts `encode_rows` receives from the engine.
-
-<a id="persistence.test_jsonl_encoder._RecordingStore.__init__"></a>
-
-#### \_\_init\_\_
-
-```python
-def __init__(path: Path | str) -> None
-```
-
-Bind to `path` with an empty capture list.
-
-<a id="persistence.test_jsonl_encoder._RecordingStore.write_generation"></a>
-
-#### write\_generation
-
-```python
-def write_generation(run_id: str,
-                     generation: int,
-                     rows: Iterable[Mapping[str, Any]],
-                     *,
-                     validate: bool = True) -> None
-```
-
-Capture the generation's rows, then write them as usual.
-
-<a id="persistence.test_jsonl_encoder._RecordingStore.equilibrium_store"></a>
-
-#### equilibrium\_store
-
-```python
-def equilibrium_store(run_id: str) -> JSONLTrajectoryStore
-```
-
-Return a recording companion, so the ancestral stream is checked too.
-
-<a id="persistence.test_jsonl_encoder.test_real_single_lineal_run_stream_is_byte_identical"></a>
-
-#### test\_real\_single\_lineal\_run\_stream\_is\_byte\_identical
-
-```python
-def test_real_single_lineal_run_stream_is_byte_identical(
-        tmp_path: Path) -> None
-```
-
-A whole single run's trajectory file equals `json.dumps` of its rows.
-
-<a id="persistence.test_jsonl_encoder.test_real_equilibrium_split_streams_are_byte_identical"></a>
-
-#### test\_real\_equilibrium\_split\_streams\_are\_byte\_identical
-
-```python
-def test_real_equilibrium_split_streams_are_byte_identical(
-        tmp_path: Path) -> None
-```
-
-Both files of an equilibrium-split run, the companion's included.
-
-<a id="persistence.test_jsonl_encoder.test_real_batch_streams_are_byte_identical"></a>
-
-#### test\_real\_batch\_streams\_are\_byte\_identical
-
-```python
-@pytest.mark.parametrize("backend", ["lineal", "generational"])
-def test_real_batch_streams_are_byte_identical(tmp_path: Path,
-                                               backend: str) -> None
-```
-
-Every replicate's file in a batch, on both in-process engine paths.
-
-<a id="persistence.test_jsonl_encoder.test_real_backend_v_stream_is_byte_identical"></a>
-
-#### test\_real\_backend\_v\_stream\_is\_byte\_identical
-
-```python
-def test_real_backend_v_stream_is_byte_identical(tmp_path: Path) -> None
-```
-
-Backend V builds its rows another way; its file is identical too.
-
-<a id="persistence.test_jsonl_encoder.test_store_with_validation_writes_identical_bytes"></a>
-
-#### test\_store\_with\_validation\_writes\_identical\_bytes
-
-```python
-def test_store_with_validation_writes_identical_bytes(tmp_path: Path) -> None
-```
-
-The default `validate=True` path writes `json.dumps`'s bytes as well.
-
-<a id="persistence.test_jsonl_lifecycle"></a>
-
-# persistence.test\_jsonl\_lifecycle
-
-Lifecycle tests for the kept-open `JSONLTrajectoryStore` append handle.
-
-`JSONLTrajectoryStore.write_generation` keeps one append handle open
-between generations (re-opening a just-written file costs milliseconds)
-and flushes once per generation. These tests pin the contract that makes
-that safe: a reader sees every flushed generation while the handle is
-open, `close` is idempotent and never ends a store's life, a pickled copy
-re-opens by itself, `discard` and an external delete stay consistent, a
-directory renamed into place by `fim.paths.atomic_directory` loses
-nothing, and no real entry point leaves a file open.
-
-Everything is deterministic: no test waits on a timing budget, and the
-only waits (threads) are bounded by `conftest.join_or_fail`.
-
-<a id="persistence.test_jsonl_lifecycle.test_a_reader_sees_every_flushed_generation_while_the_handle_is_open"></a>
-
-#### test\_a\_reader\_sees\_every\_flushed\_generation\_while\_the\_handle\_is\_open
-
-```python
-def test_a_reader_sees_every_flushed_generation_while_the_handle_is_open(
-        tmp_path: Path) -> None
-```
-
-Reading mid-run needs no close: each generation is flushed on return.
-
-<a id="persistence.test_jsonl_lifecycle.test_the_handle_is_opened_once_and_reused_across_generations"></a>
-
-#### test\_the\_handle\_is\_opened\_once\_and\_reused\_across\_generations
-
-```python
-def test_the_handle_is_opened_once_and_reused_across_generations(
-        tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None
-```
-
-Ten generations cost one `open`, the point of keeping the handle.
-
-<a id="persistence.test_jsonl_lifecycle.test_close_is_idempotent_and_the_next_write_appends"></a>
-
-#### test\_close\_is\_idempotent\_and\_the\_next\_write\_appends
-
-```python
-def test_close_is_idempotent_and_the_next_write_appends(
-        tmp_path: Path) -> None
-```
-
-A closed store is not finished: it re-opens in append mode, losing nothing.
-
-<a id="persistence.test_jsonl_lifecycle.test_close_before_any_write_is_a_no_op"></a>
-
-#### test\_close\_before\_any\_write\_is\_a\_no\_op
-
-```python
-def test_close_before_any_write_is_a_no_op(tmp_path: Path) -> None
-```
-
-Closing a store that never wrote creates no file and raises nothing.
-
-<a id="persistence.test_jsonl_lifecycle.test_context_manager_closes_on_exit_and_on_error"></a>
-
-#### test\_context\_manager\_closes\_on\_exit\_and\_on\_error
-
-```python
-def test_context_manager_closes_on_exit_and_on_error(tmp_path: Path) -> None
-```
-
-Leaving a `with` block releases the handle, even through an exception.
-
-<a id="persistence.test_jsonl_lifecycle.test_close_also_closes_the_ancestral_phase_companion"></a>
-
-#### test\_close\_also\_closes\_the\_ancestral\_phase\_companion
-
-```python
-def test_close_also_closes_the_ancestral_phase_companion(
-        tmp_path: Path) -> None
-```
-
-`close` reaches the sibling `equilibrium_trajectory.jsonl` handle too.
-
-<a id="persistence.test_jsonl_lifecycle.test_pickle_drops_the_handle_and_the_copy_appends_on_its_own"></a>
-
-#### test\_pickle\_drops\_the\_handle\_and\_the\_copy\_appends\_on\_its\_own
-
-```python
-def test_pickle_drops_the_handle_and_the_copy_appends_on_its_own(
-        tmp_path: Path) -> None
-```
-
-A pickled store crosses a process boundary without its open handle.
-
-`RunResult.store` is pickled back from a worker process while a store
-may still be open. The original keeps its handle; the copy re-opens
-the file lazily, in append mode, on its first write.
-
-<a id="persistence.test_jsonl_lifecycle.test_discard_then_write_re_creates_the_file_consistently"></a>
-
-#### test\_discard\_then\_write\_re\_creates\_the\_file\_consistently
-
-```python
-def test_discard_then_write_re_creates_the_file_consistently(
-        tmp_path: Path) -> None
-```
-
-`discard` closes the handle; the next write starts a fresh, correct file.
-
-<a id="persistence.test_jsonl_lifecycle.test_discard_of_an_unknown_run_still_releases_the_handle"></a>
-
-#### test\_discard\_of\_an\_unknown\_run\_still\_releases\_the\_handle
-
-```python
-def test_discard_of_an_unknown_run_still_releases_the_handle(
-        tmp_path: Path) -> None
-```
-
-A no-op discard leaves the rows alone; the store stays usable.
-
-<a id="persistence.test_jsonl_lifecycle.test_a_file_deleted_under_an_open_handle_is_re_created_by_the_next_write"></a>
-
-#### test\_a\_file\_deleted\_under\_an\_open\_handle\_is\_re\_created\_by\_the\_next\_write
-
-```python
-@pytest.mark.skipif(
-    sys.platform == "win32",
-    reason="Windows refuses to delete a file that is held open",
-)
-def test_a_file_deleted_under_an_open_handle_is_re_created_by_the_next_write(
-        tmp_path: Path) -> None
-```
-
-Writing on to an unlinked file would lose data; the file is re-created.
-
-The open-per-generation writer this replaced re-created a deleted
-file; the kept handle notices its link count dropped to zero and does
-the same.
-
-<a id="persistence.test_jsonl_lifecycle.test_a_failed_write_drops_the_handle_so_no_partial_bytes_follow"></a>
-
-#### test\_a\_failed\_write\_drops\_the\_handle\_so\_no\_partial\_bytes\_follow
-
-```python
-def test_a_failed_write_drops_the_handle_so_no_partial_bytes_follow(
-        tmp_path: Path) -> None
-```
-
-An I/O error mid-write must not leave buffered bytes for a retry to append.
-
-<a id="persistence.test_jsonl_lifecycle.test_an_unencodable_row_leaves_the_file_untouched"></a>
-
-#### test\_an\_unencodable\_row\_leaves\_the\_file\_untouched
-
-```python
-def test_an_unencodable_row_leaves_the_file_untouched(tmp_path: Path) -> None
-```
-
-Every line is encoded before the first byte is written.
-
-`validate=False` skips `normalize_row`, so a non-finite frequency is
-caught only by the encoder; the generation must not be half-written.
-
-<a id="persistence.test_jsonl_lifecycle.test_an_empty_generation_is_still_rejected_before_any_file_is_opened"></a>
-
-#### test\_an\_empty\_generation\_is\_still\_rejected\_before\_any\_file\_is\_opened
-
-```python
-def test_an_empty_generation_is_still_rejected_before_any_file_is_opened(
-        tmp_path: Path) -> None
-```
-
-Behavior kept from the open-per-generation writer.
-
-<a id="persistence.test_jsonl_lifecycle.test_atomic_directory_publishes_a_closed_store_intact"></a>
-
-#### test\_atomic\_directory\_publishes\_a\_closed\_store\_intact
-
-```python
-def test_atomic_directory_publishes_a_closed_store_intact(
-        tmp_path: Path) -> None
-```
-
-Closing before the rename (the owners' rule) publishes every byte.
-
-<a id="persistence.test_jsonl_lifecycle.test_a_rename_under_an_open_handle_loses_nothing_on_posix"></a>
-
-#### test\_a\_rename\_under\_an\_open\_handle\_loses\_nothing\_on\_posix
-
-```python
-@pytest.mark.skipif(
-    sys.platform == "win32",
-    reason="Windows refuses to rename a directory holding an open file",
-)
-def test_a_rename_under_an_open_handle_loses_nothing_on_posix(
-        tmp_path: Path) -> None
-```
-
-The handle follows the file through a rename (POSIX); no data is lost.
-
-Documents why the owners still close first: this only holds where the
-platform allows the rename at all, and it leaves `store.path` stale.
-
-<a id="persistence.test_jsonl_lifecycle.test_fanout_close_run_closes_only_that_child"></a>
-
-#### test\_fanout\_close\_run\_closes\_only\_that\_child
-
-```python
-def test_fanout_close_run_closes_only_that_child(tmp_path: Path) -> None
-```
-
-`close_run` releases one replicate's file; `close` releases the rest.
-
-<a id="persistence.test_jsonl_lifecycle.test_close_helpers_ignore_stores_without_a_close_method"></a>
-
-#### test\_close\_helpers\_ignore\_stores\_without\_a\_close\_method
-
-```python
-def test_close_helpers_ignore_stores_without_a_close_method() -> None
-```
-
-`close_store`/`close_run_store` accept any `TrajectoryStore`.
-
-<a id="persistence.test_jsonl_lifecycle.test_engine_closes_the_store_it_was_given_and_the_result_still_reads"></a>
-
-#### test\_engine\_closes\_the\_store\_it\_was\_given\_and\_the\_result\_still\_reads
-
-```python
-def test_engine_closes_the_store_it_was_given_and_the_result_still_reads(
-        tmp_path: Path,
-        tracked_jsonl_stores: list[JSONLTrajectoryStore]) -> None
-```
-
-`fim(store=...)` closes the store when the run ends, even on `fim` alone.
-
-<a id="persistence.test_jsonl_lifecycle.test_engine_closes_the_store_when_the_run_raises"></a>
-
-#### test\_engine\_closes\_the\_store\_when\_the\_run\_raises
-
-```python
-def test_engine_closes_the_store_when_the_run_raises(tmp_path: Path) -> None
-```
-
-A run that fails partway still releases its file (a cancelled GUI run).
-
-<a id="persistence.test_jsonl_lifecycle.store_run_id"></a>
-
-#### store\_run\_id
-
-```python
-def store_run_id(store: JSONLTrajectoryStore) -> str
-```
-
-Return the single run id found in `store`'s file.
-
-<a id="persistence.test_jsonl_lifecycle.test_generational_batch_holds_open_only_the_running_lanes"></a>
-
-#### test\_generational\_batch\_holds\_open\_only\_the\_running\_lanes
-
-```python
-def test_generational_batch_holds_open_only_the_running_lanes(
-        tmp_path: Path) -> None
-```
-
-With a window of one, a finished replicate's file is closed before the next.
-
-Without per-lane closing a batch of N replicates would hold N files
-open for its whole run, which exhausts the descriptor limit on a large
-batch.
 
 <a id="persistence.test_manifest"></a>
 
@@ -31572,48 +30966,6 @@ def test_in_memory_store_discard_is_a_no_op_for_an_unknown_run() -> None
 
 Discarding a run that was never written raises nothing and changes nothing.
 
-<a id="persistence.test_store.test_jsonl_store_discard_removes_only_the_named_run"></a>
-
-#### test\_jsonl\_store\_discard\_removes\_only\_the\_named\_run
-
-```python
-def test_jsonl_store_discard_removes_only_the_named_run(
-        tmp_path: Path) -> None
-```
-
-`discard` rewrites the file without one run's rows, keeping every other run's.
-
-One file can hold more than one run's rows (`write_generation`/
-`read` both filter by `run_id` rather than assuming one file, one
-run) — this is the case that actually exercises the read-filter-
-rewrite, not merely deleting the file.
-
-<a id="persistence.test_store.test_jsonl_store_discard_removes_the_file_when_nothing_survives"></a>
-
-#### test\_jsonl\_store\_discard\_removes\_the\_file\_when\_nothing\_survives
-
-```python
-def test_jsonl_store_discard_removes_the_file_when_nothing_survives(
-        tmp_path: Path) -> None
-```
-
-The file itself is removed, not left behind empty, once its only run is gone.
-
-Matches this project's own "a published run directory is complete
-or absent, never empty" precedent (`_atomic_directory`, `fim.
-engine`), applied here to one file instead of one directory.
-
-<a id="persistence.test_store.test_jsonl_store_discard_is_a_no_op_for_a_missing_file"></a>
-
-#### test\_jsonl\_store\_discard\_is\_a\_no\_op\_for\_a\_missing\_file
-
-```python
-def test_jsonl_store_discard_is_a_no_op_for_a_missing_file(
-        tmp_path: Path) -> None
-```
-
-Discarding from a store whose file was never written raises nothing.
-
 <a id="persistence.test_store.test_in_memory_store_write_generation_is_thread_safe"></a>
 
 #### test\_in\_memory\_store\_write\_generation\_is\_thread\_safe
@@ -31629,22 +30981,6 @@ proving exists and works — without it, `list.extend` calls from
 several threads racing on `_rows` risk a lost update, not merely a
 theoretical concern once a free-threaded (no-GIL) CPython build is
 in the picture.
-
-<a id="persistence.test_store.test_jsonl_store_write_generation_is_thread_safe"></a>
-
-#### test\_jsonl\_store\_write\_generation\_is\_thread\_safe
-
-```python
-def test_jsonl_store_write_generation_is_thread_safe(tmp_path: Path) -> None
-```
-
-Concurrent `write_generation` calls never interleave or corrupt JSON Lines.
-
-`JSONLTrajectoryStore._lock` is what this test is actually proving
-exists and works — without it, two threads' own `handle.write()`
-calls on the same file descriptor could interleave mid-line,
-producing a line that is not valid JSON at all (a real corruption,
-not just a lost row).
 
 <a id="persistence.test_store.test_replicate_fanout_store_routes_each_run_id_to_its_own_store"></a>
 
@@ -31723,31 +31059,6 @@ threads. Without `_lock`, two threads racing on the same run_id
 could each build and register their own child store, silently
 losing whichever write lost the race.
 
-<a id="persistence.test_store.test_jsonl_store_appends_generations_and_ignores_partial_tail"></a>
-
-#### test\_jsonl\_store\_appends\_generations\_and\_ignores\_partial\_tail
-
-```python
-def test_jsonl_store_appends_generations_and_ignores_partial_tail(
-        tmp_path: Path) -> None
-```
-
-Every complete flushed row remains readable after interruption.
-
-<a id="persistence.test_store.test_jsonl_store_equilibrium_store_is_one_sibling_file"></a>
-
-#### test\_jsonl\_store\_equilibrium\_store\_is\_one\_sibling\_file
-
-```python
-def test_jsonl_store_equilibrium_store_is_one_sibling_file(
-        tmp_path: Path) -> None
-```
-
-The ancestral-phase companion is `equilibrium_trajectory.jsonl` beside it.
-
-One instance per store, whichever run asks, so every writer of that
-file shares one lock; a reader of the main file never sees its rows.
-
 <a id="persistence.test_store.test_in_memory_store_equilibrium_store_is_a_separate_store"></a>
 
 #### test\_in\_memory\_store\_equilibrium\_store\_is\_a\_separate\_store
@@ -31799,6 +31110,109 @@ def test_manifest_round_trip_reconstructs_several_convergence_statistics(
 ```
 
 A manifest watching several statistics is a lossless replay too.
+
+<a id="persistence.test_store_lifecycle"></a>
+
+# persistence.test\_store\_lifecycle
+
+Lifecycle tests for the trajectory store contract, on the binary log.
+
+These pin what the engine and its owners rely on whichever store they are
+given: a directory renamed into place by `fim.paths.atomic_directory` loses
+nothing once its store is closed, a fan-out closes one replicate's log
+without touching the others, the close helpers accept any store, and no real
+entry point leaves a writer open, even when a run fails partway.
+
+Everything is deterministic: no test waits on a timing budget.
+
+<a id="persistence.test_store_lifecycle.test_atomic_directory_publishes_a_closed_store_intact"></a>
+
+#### test\_atomic\_directory\_publishes\_a\_closed\_store\_intact
+
+```python
+def test_atomic_directory_publishes_a_closed_store_intact(
+        tmp_path: Path) -> None
+```
+
+Closing before the rename (the owners' rule) publishes every byte.
+
+<a id="persistence.test_store_lifecycle.test_a_rename_under_an_open_log_loses_nothing_on_posix"></a>
+
+#### test\_a\_rename\_under\_an\_open\_log\_loses\_nothing\_on\_posix
+
+```python
+@pytest.mark.skipif(
+    sys.platform == "win32",
+    reason="Windows refuses to rename a directory holding an open file",
+)
+def test_a_rename_under_an_open_log_loses_nothing_on_posix(
+        tmp_path: Path) -> None
+```
+
+The open descriptor follows the file through a rename (POSIX).
+
+Documents why the owners still close first: this only holds where the
+platform allows the rename at all, and it leaves `store.path` stale.
+
+<a id="persistence.test_store_lifecycle.test_fanout_close_run_closes_only_that_child"></a>
+
+#### test\_fanout\_close\_run\_closes\_only\_that\_child
+
+```python
+def test_fanout_close_run_closes_only_that_child(tmp_path: Path) -> None
+```
+
+`close_run` releases one replicate's log; `close` releases the rest.
+
+<a id="persistence.test_store_lifecycle.test_close_helpers_ignore_stores_without_a_close_method"></a>
+
+#### test\_close\_helpers\_ignore\_stores\_without\_a\_close\_method
+
+```python
+def test_close_helpers_ignore_stores_without_a_close_method() -> None
+```
+
+`close_store`/`close_run_store` accept any `TrajectoryStore`.
+
+<a id="persistence.test_store_lifecycle.test_engine_closes_the_store_it_was_given_and_the_result_still_reads"></a>
+
+#### test\_engine\_closes\_the\_store\_it\_was\_given\_and\_the\_result\_still\_reads
+
+```python
+def test_engine_closes_the_store_it_was_given_and_the_result_still_reads(
+        tmp_path: Path, tracked_log_stores: list[BinaryLogStore]) -> None
+```
+
+`fim(store=...)` closes the store when the run ends, even on `fim` alone.
+
+<a id="persistence.test_store_lifecycle.test_engine_closes_the_store_when_the_run_raises"></a>
+
+#### test\_engine\_closes\_the\_store\_when\_the\_run\_raises
+
+```python
+@pytest.mark.parametrize("backend",
+                         ["lineal", "generational", "generational-vector"])
+def test_engine_closes_the_store_when_the_run_raises(tmp_path: Path,
+                                                     backend: str) -> None
+```
+
+A run that fails partway still releases its log (a cancelled GUI run).
+
+Every generation before the failure stays committed.
+
+<a id="persistence.test_store_lifecycle.test_generational_batch_holds_open_only_the_running_lanes"></a>
+
+#### test\_generational\_batch\_holds\_open\_only\_the\_running\_lanes
+
+```python
+def test_generational_batch_holds_open_only_the_running_lanes(
+        tmp_path: Path) -> None
+```
+
+With a window of one, a finished replicate's log is closed before the next.
+
+Without per-lane closing a batch of N replicates would hold N writers
+(each with a thread and a descriptor) open for its whole run.
 
 <a id="persistence.test_tlog"></a>
 
@@ -32225,9 +31639,10 @@ independently from the frames that were written (never from the decoded
 log), over adversarial inputs: arbitrary floats from subnormal to huge,
 mixed counted and raw pairs, uneven deme sizes including one above the
 table cap and one unknown, large allele identifiers, and a run id that
-needs escaping. They then check real runs against the JSON Lines store's own
-file, sharded against single-process derivation, and the size pass against
-the written size. All seeded; nothing depends on timing.
+needs escaping. They then check real runs against the plain `json.dumps`
+text of the rows the engine produces, sharded against single-process
+derivation, and the size pass against the written size. All seeded; nothing
+depends on timing.
 
 <a id="persistence.test_tlog_export.test_derived_jsonl_is_what_json_dumps_gives"></a>
 
@@ -32402,17 +31817,17 @@ def equilibrium_store(run_id: str) -> _FrameTap
 
 Return the ancestral-phase tap.
 
-<a id="persistence.test_tlog_export.test_a_real_run_derives_the_jsonl_store_file_byte_for_byte"></a>
+<a id="persistence.test_tlog_export.test_a_real_run_derives_the_plain_json_dumps_text_byte_for_byte"></a>
 
-#### test\_a\_real\_run\_derives\_the\_jsonl\_store\_file\_byte\_for\_byte
+#### test\_a\_real\_run\_derives\_the\_plain\_json\_dumps\_text\_byte\_for\_byte
 
 ```python
 @pytest.mark.parametrize("backend", ["lineal", "generational-vector"])
-def test_a_real_run_derives_the_jsonl_store_file_byte_for_byte(
+def test_a_real_run_derives_the_plain_json_dumps_text_byte_for_byte(
         tmp_path: Path, backend: str) -> None
 ```
 
-The log of a run, derived, is the file the JSON Lines store wrote.
+The log of a run, derived, is the text `json.dumps` gives for its rows.
 
 <a id="persistence.test_tlog_export.test_a_real_equilibrium_split_run_derives_both_files_byte_for_byte"></a>
 
@@ -33170,16 +32585,8 @@ def test_stores_reject_empty_generations_and_filter_run_ids(
 
 Both storage backends enforce nonempty appends and run filtering.
 
-<a id="persistence.test_validation.test_jsonl_store_reports_missing_and_corrupt_complete_lines"></a>
-
-#### test\_jsonl\_store\_reports\_missing\_and\_corrupt\_complete\_lines
-
-```python
-def test_jsonl_store_reports_missing_and_corrupt_complete_lines(
-        tmp_path: Path) -> None
-```
-
-Unreadable files and malformed complete lines are distinct failures.
+A log holds one run, so it answers only for that run and refuses a second;
+the in-memory store holds several and filters by run id.
 
 <a id="persistence.test_validation.test_manifest_constructor_validates_identity_fields"></a>
 

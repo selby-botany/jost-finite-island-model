@@ -722,7 +722,7 @@ jost-finite-island-model/
 │       │   └── interval.py        # across-replicate confidence intervals
 │       ├── persistence/
 │       │   ├── store.py           # TrajectoryStore protocol (backend-agnostic)
-│       │   ├── jsonl_store.py     # JSONLTrajectoryStore — the only backend
+│       │   ├── binary_store.py    # BinaryLogStore — the file-backed store (tlog*.py)
 │       │   └── manifest.py
 │       ├── viz/
 │       │   ├── scatter.py         # canonical d-dimensional frequency scatter
@@ -882,7 +882,7 @@ function, keeping the statistical surface under outside review small and
 the dependency footprint at the standard library. This is what
 `ConfidenceIntervalCriterion` and the batch summary (§9) both report.
 
-**`persistence/store.py`**, **jsonl_store.py**, and **`manifest.py`** —
+**`persistence/store.py`**, **`binary_store.py`**, and **`manifest.py`** —
 see §6.
 
 **`viz/scatter.py`** and **`viz/diagnostics.py`** — see §8.
@@ -940,16 +940,15 @@ system depends on — `engine.py`, the statistics module, and the
 visualization module all talk to a `TrajectoryStore`, never to a file
 format directly.
 
-**`JSONLTrajectoryStore` (persistence/jsonl_store.py) is the only
-implementation**: one JSON object per line, one line per row, appended as
-each generation is produced. Human-readable with no extra tooling to open
-(reinforcing §4.5's packaging constraint), trivial to append to
-incrementally without rewriting the file, and zero-dependency to read
-from R or Python. Run sizes large enough for JSONL's lack of compression
-or columnar structure to matter should get a second backend (Parquet is
-the obvious candidate) implementing the same protocol, selected by
-configuration, not by changing any caller. Nothing downstream of
-`TrajectoryStore` needs to know which backend is in use.
+**`BinaryLogStore` (persistence/binary_store.py) is the file-backed
+implementation**: one compact, checksummed binary log per run
+(`trajectory.tlog`), appended block by block as generations are produced.
+The original design wrote one JSON object per line, which is human-readable
+but grew to tens of gigabytes for the large examples, so the log replaced
+it; `fim export` writes the same canonical JSON Lines text on request for
+R, Python or a spreadsheet. See [the trajectory log](trajectory-log.md).
+Nothing downstream of `TrajectoryStore` needs to know which backend is in
+use.
 
 A **run manifest** is written alongside the trajectory: the full
 `SimulationParams` (including seed — this is what makes a run exactly

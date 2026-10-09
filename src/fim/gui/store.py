@@ -89,7 +89,7 @@ class GuiProgressStore:
 
     Structurally satisfies `TrajectoryStore` (a `Protocol`), so it drops
     into `fim.engine.fim(..., store=...)` exactly where the real
-    `JSONLTrajectoryStore` would — the run loop cannot tell the
+    `BinaryLogStore` would — the run loop cannot tell the
     difference.
     """
 
@@ -136,7 +136,7 @@ class GuiProgressStore:
 
         `rows` is materialized into a plain `list` before delegating,
         not passed through as whatever `Iterable` the caller handed in:
-        `self._inner.write_generation` (a real `JSONLTrajectoryStore`)
+        `self._inner.write_generation` (a real `BinaryLogStore`)
         already fully consumes it to write the file, and only a concrete,
         already-realized `list` is safe to hand to `on_generation`
         *afterward* — a one-shot iterator would come back empty on this
@@ -353,7 +353,7 @@ def write_progress_sidecar(progress_path: Path, generation: int) -> None:
     """
     payload = json.dumps({"generation": generation, "written_at": _iso_now()})
     write_text_atomically(progress_path, payload, prefix=".progress-")
-    # Guarded like `fim.persistence.jsonl_store.JSONLTrajectoryStore.
+    # Guarded like `fim.persistence.binary_store.BinaryLogStore.
     # write_generation` (`doc/fim-logging-design.md` §9): called once
     # per generation for the life of a replicate. This runs inside a
     # `ProcessPoolExecutor` worker process for a batch replicate — see
@@ -432,13 +432,13 @@ def read_live_state(
         )
     except (FileNotFoundError, ValueError, TlogError):
         # `FileNotFoundError`: the replicate has not created its own
-        # directory/file yet. `ValueError`: a malformed *complete* line
-        # (`JSONLTrajectoryStore.read`'s own distinct case from a
-        # tolerated trailing partial one) — vanishingly unlikely against
-        # a store this project's own code writes, but this function's
-        # whole contract is "never interrupt a still-running batch's
-        # live display over a read glitch," so it is treated the same
-        # as any other transient failure here.
+        # directory/file yet. `ValueError`: a damaged block
+        # (`TlogError`, distinct from a log that is merely still being
+        # written, which reads up to its last committed block) —
+        # vanishingly unlikely against a store this project's own code
+        # writes, but this function's whole contract is "never interrupt
+        # a still-running batch's live display over a read glitch," so it
+        # is treated the same as any other transient failure here.
         return None
     rows = grouped.get(generation)
     if not rows:

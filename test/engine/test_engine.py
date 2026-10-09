@@ -52,7 +52,7 @@ from fim.model.vector_block import (
     VectorBlock,
     VectorMigration,
 )
-from fim.persistence.jsonl_store import JSONLTrajectoryStore
+from fim.persistence.binary_store import BinaryLogStore
 from fim.persistence.store import (
     InMemoryTrajectoryStore,
     TrajectoryRow,
@@ -1554,11 +1554,11 @@ def test_single_replicate_run_uses_store_factory(tmp_path: Path) -> None:
         params.mu,
         params.d,
         params=params,
-        store_factory=functools.partial(_jsonl_store_factory, tmp_path),
+        store_factory=functools.partial(_log_store_factory, tmp_path),
     )
 
     assert isinstance(output, RunResult)
-    assert (tmp_path / f"{output.run_id}.jsonl").exists()
+    assert (tmp_path / f"{output.run_id}.tlog").exists()
 
 
 def test_max_workers_rejects_an_unpicklable_clock() -> None:
@@ -1624,7 +1624,7 @@ def test_max_workers_respects_adaptive_stopping_in_batches() -> None:
     assert 3 <= len(output) <= 4
 
 
-def _jsonl_store_factory(directory: Path, run_id: str) -> JSONLTrajectoryStore:
+def _log_store_factory(directory: Path, run_id: str) -> BinaryLogStore:
     """Module-level, `functools.partial`-bindable `store_factory` for FIM-50.
 
     A worker process must be able to pickle a reference to `store_
@@ -1635,7 +1635,7 @@ def _jsonl_store_factory(directory: Path, run_id: str) -> JSONLTrajectoryStore:
     ignores `run_id` entirely and cannot show whether a specific run's
     own artifacts survived).
     """
-    return JSONLTrajectoryStore(directory / f"{run_id}.jsonl")
+    return BinaryLogStore(directory / f"{run_id}.tlog")
 
 
 def test_parallel_batch_adaptive_stop_discards_overshoot_replicates_artifacts(
@@ -1666,13 +1666,13 @@ def test_parallel_batch_adaptive_stop_discards_overshoot_replicates_artifacts(
         params.d,
         params=params,
         max_workers=2,
-        store_factory=functools.partial(_jsonl_store_factory, tmp_path),
+        store_factory=functools.partial(_log_store_factory, tmp_path),
     )
 
     assert isinstance(output, tuple)
     assert 3 <= len(output) <= 4
     returned_run_ids = {result.run_id for result in output}
-    surviving_run_ids = {path.stem for path in tmp_path.glob("*.jsonl")}
+    surviving_run_ids = {path.stem for path in tmp_path.glob("*.tlog")}
     assert surviving_run_ids == returned_run_ids
 
 
@@ -1731,14 +1731,14 @@ def test_non_lineal_batch_uses_store_factory_per_replicate(
         params.mu,
         params.d,
         params=params,
-        store_factory=functools.partial(_jsonl_store_factory, tmp_path),
+        store_factory=functools.partial(_log_store_factory, tmp_path),
     )
 
     assert isinstance(output, tuple)
     assert len(output) == 2
     assert output[0].run_id != output[1].run_id
     for result in output:
-        assert (tmp_path / f"{result.run_id}.jsonl").exists()
+        assert (tmp_path / f"{result.run_id}.tlog").exists()
         assert list(result.store.read(result.run_id))
 
 
@@ -1763,11 +1763,11 @@ def test_non_lineal_single_replicate_run_uses_store_factory(tmp_path: Path) -> N
         params.mu,
         params.d,
         params=params,
-        store_factory=functools.partial(_jsonl_store_factory, tmp_path),
+        store_factory=functools.partial(_log_store_factory, tmp_path),
     )
 
     assert isinstance(output, RunResult)
-    assert (tmp_path / f"{output.run_id}.jsonl").exists()
+    assert (tmp_path / f"{output.run_id}.tlog").exists()
 
 
 def test_replicate_summary_requires_at_least_two_results(
@@ -4604,16 +4604,16 @@ def _equilibrium_split(params: SimulationParams) -> SimulationParams:
 def test_fim_streams_the_ancestral_phase_beside_the_trajectory(
     tiny_params: SimulationParams, tmp_path: Path, backend: EngineBackend
 ) -> None:
-    """An equilibrium-split run writes `equilibrium_trajectory.jsonl`.
+    """An equilibrium-split run writes `equilibrium_trajectory.tlog`.
 
     Both engine paths that support equilibrium-split (`_run_one` and
-    `_build_replica_lane`) write it, beside `trajectory.jsonl`, in the
+    `_build_replica_lane`) write it, beside `trajectory.tlog`, in the
     same row schema: the one ancestral deme at every generation of its
     own counter, `0` through `equilibrium_generation_count`, ending on
     exactly the heterozygosity the manifest records for the split.
     """
     params = _equilibrium_split(tiny_params)
-    store = JSONLTrajectoryStore(tmp_path / "trajectory.jsonl")
+    store = BinaryLogStore(tmp_path / "trajectory.tlog")
 
     result = fim(
         params.gene_copies,
@@ -4627,10 +4627,10 @@ def test_fim_streams_the_ancestral_phase_beside_the_trajectory(
     )
 
     assert isinstance(result, RunResult)
-    path = tmp_path / "equilibrium_trajectory.jsonl"
-    assert isinstance(result.equilibrium_store, JSONLTrajectoryStore)
+    path = tmp_path / "equilibrium_trajectory.tlog"
+    assert isinstance(result.equilibrium_store, BinaryLogStore)
     assert result.equilibrium_store.path == path
-    rows = list(JSONLTrajectoryStore(path).read(result.run_id))
+    rows = list(BinaryLogStore(path).read(result.run_id))
     count = result.manifest.equilibrium_generation_count
     assert count is not None
     assert count > 2
@@ -4660,12 +4660,12 @@ def test_fim_equilibrium_trajectory_is_identical_across_backends(
             params.mu,
             params.d,
             params=params,
-            store=JSONLTrajectoryStore(directory / "trajectory.jsonl"),
+            store=BinaryLogStore(directory / "trajectory.tlog"),
             run_id="run-same",
             clock=_clock,
             engine_backend=backend,
         )
-        paths[backend] = directory / "equilibrium_trajectory.jsonl"
+        paths[backend] = directory / "equilibrium_trajectory.tlog"
     assert paths["lineal"].read_bytes() == paths["generational"].read_bytes()
 
 
@@ -4705,13 +4705,13 @@ def test_fim_dirichlet_run_writes_no_ancestral_trajectory(
         tiny_params.mu,
         tiny_params.d,
         params=tiny_params,
-        store=JSONLTrajectoryStore(tmp_path / "trajectory.jsonl"),
+        store=BinaryLogStore(tmp_path / "trajectory.tlog"),
         clock=_clock,
     )
 
     assert isinstance(result, RunResult)
     assert result.equilibrium_store is None
-    assert not (tmp_path / "equilibrium_trajectory.jsonl").exists()
+    assert not (tmp_path / "equilibrium_trajectory.tlog").exists()
 
 
 def test_fim_dirichlet_run_leaves_equilibrium_manifest_fields_none(

@@ -8,7 +8,7 @@ from pathlib import Path
 
 import pytest
 
-from fim.persistence.jsonl_store import JSONLTrajectoryStore
+from fim.persistence.binary_store import BinaryLogStore
 from fim.persistence.manifest import (
     BatchManifest,
     RunManifest,
@@ -74,32 +74,25 @@ def test_normalize_row_reports_missing_extra_and_context_mismatches() -> None:
 
 
 def test_stores_reject_empty_generations_and_filter_run_ids(tmp_path: Path) -> None:
-    """Both storage backends enforce nonempty appends and run filtering."""
+    """Both storage backends enforce nonempty appends and run filtering.
+
+    A log holds one run, so it answers only for that run and refuses a second;
+    the in-memory store holds several and filters by run id.
+    """
     memory = InMemoryTrajectoryStore()
-    jsonl = JSONLTrajectoryStore(tmp_path / "nested" / "trajectory.tlog")
-    for store in (memory, jsonl):
+    log = BinaryLogStore(tmp_path / "nested" / "trajectory.tlog")
+    for store in (memory, log):
         with pytest.raises(ValueError, match="at least one row"):
             store.write_generation("run-a", 0, [])
         store.write_generation("run-a", 0, [_row()])
-        store.write_generation("run-b", 0, [_row(run_id="run-b")])
         assert list(store.read("run-a")) == [_row()]
-        assert list(store.read("run-b")) == [_row(run_id="run-b")]
-
-
-def test_jsonl_store_reports_missing_and_corrupt_complete_lines(tmp_path: Path) -> None:
-    """Unreadable files and malformed complete lines are distinct failures."""
-    missing = JSONLTrajectoryStore(tmp_path / "missing.jsonl")
-    with pytest.raises(FileNotFoundError, match="does not exist"):
-        list(missing.read("run-a"))
-
-    path = tmp_path / "corrupt.jsonl"
-    path.write_text("{not-json}\n", encoding="utf-8")
-    with pytest.raises(ValueError, match="invalid JSON"):
-        list(JSONLTrajectoryStore(path).read("run-a"))
-
-    path.write_text("[]\n", encoding="utf-8")
-    with pytest.raises(ValueError, match="not an object"):
-        list(JSONLTrajectoryStore(path).read("run-a"))
+        assert list(store.read("run-other")) == []
+    memory.write_generation("run-b", 0, [_row(run_id="run-b")])
+    assert list(memory.read("run-b")) == [_row(run_id="run-b")]
+    assert list(memory.read("run-a")) == [_row()]
+    with pytest.raises(ValueError, match="cannot also hold"):
+        log.write_generation("run-b", 0, [_row(run_id="run-b")])
+    log.close()
 
 
 def _manifest() -> RunManifest:

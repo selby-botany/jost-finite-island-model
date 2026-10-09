@@ -11,7 +11,7 @@ monitoring, headless plots, and a thin command-line boundary.
   across-replicate confidence intervals
 - `fim/convergence/` — stability and confidence-interval criteria, the
   monitor, and stop outcomes
-- `fim/persistence/` — trajectory protocol, JSON Lines store, manifests
+- `fim/persistence/` — trajectory protocol, binary trajectory log, manifests
 - `fim/engine.py` — deterministic run loop
 - `fim/viz/` — botanist-facing and diagnostic plots
 - `fim/cli.py` — YAML and command dispatch

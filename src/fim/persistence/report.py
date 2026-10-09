@@ -68,11 +68,10 @@ def write_report(path: Path | str, value: Mapping[str, object]) -> None:
 def write_jsonl_rows(path: Path | str, rows: Iterable[Mapping[str, object]]) -> None:
     """Write a sequence of small JSON objects as one deterministic JSON Lines artifact.
 
-    One compact JSON object per line (`fim.persistence.jsonl_store.
-    JSONLTrajectoryStore.write_generation`'s own `sort_keys=True,
-    separators=(",", ":")` convention, applied here to an artifact
-    written once, all at once, rather than appended generation by
-    generation) — the exact same bytes for the exact same `rows`, for
+    One compact JSON object per line (the same `sort_keys=True,
+    separators=(",", ":")` convention as the exported trajectory text
+    (`fim.persistence.tlog_export`), applied here to an artifact
+    written once, all at once) — the exact same bytes for the exact same `rows`, for
     the identical "a plain `diff` shows a real change, never a
     formatting difference" reason `write_report` documents.
 

@@ -11,7 +11,6 @@ tests instead call `fim.reanalyze` directly, the way `fim.gui`'s
 from __future__ import annotations
 
 import json
-import weakref
 from dataclasses import replace
 from pathlib import Path
 from types import SimpleNamespace
@@ -25,7 +24,6 @@ from fim.engine import report_for_state
 from fim.persistence import tlog_reader
 from fim.persistence.binary_store import BinaryLogStore
 from fim.persistence.frame import frame_to_rows
-from fim.persistence.jsonl_store import JSONLTrajectoryStore
 from fim.persistence.manifest import hash_file, read_manifest, write_manifest
 
 
@@ -100,13 +98,13 @@ def _write_run(tmp_path: Path, **overrides: object) -> Path:
 
 
 def _build_large_synthetic_trajectory(
-    tmp_path: Path, *, generation_count: int, kind: str = "log"
+    tmp_path: Path, *, generation_count: int
 ) -> tuple[Path, Path, int]:
     """Replicate one real generation's own rows across many synthetic generations.
 
     Re-analyzing a single generation never needs to care which
     generation's own frequencies it is looking at to prove the
-    memory-liveness claim below — only that the row *shapes* are real,
+    memory claim below — only that the row *shapes* are real,
     schema-valid `TrajectoryRow`s, and that the manifest they are paired
     with matches the file's real digest and generation count exactly
     (the two checks `reanalyze_trajectory` must never skip). Taking one
@@ -117,7 +115,6 @@ def _build_large_synthetic_trajectory(
     Args:
         tmp_path: Test-owned scratch directory.
         generation_count: How many synthetic generations to write.
-        kind: `"log"` for a binary log, `"jsonl"` for a JSON Lines file.
 
     Returns:
         The synthetic trajectory path, its paired manifest path, and how
@@ -132,14 +129,8 @@ def _build_large_synthetic_trajectory(
     )[0]
 
     run_id = "synthetic-large-trajectory"
-    trajectory_path = tmp_path / (
-        "synthetic-trajectory.tlog" if kind == "log" else "synthetic-trajectory.jsonl"
-    )
-    store: BinaryLogStore | JSONLTrajectoryStore = (
-        BinaryLogStore(trajectory_path)
-        if kind == "log"
-        else JSONLTrajectoryStore(trajectory_path)
-    )
+    trajectory_path = tmp_path / "synthetic-trajectory.tlog"
+    store = BinaryLogStore(trajectory_path)
     for generation_index in range(generation_count):
         store.write_generation(
             run_id,
@@ -163,128 +154,6 @@ def _build_large_synthetic_trajectory(
         ),
     )
     return trajectory_path, manifest_path, len(template_rows)
-
-
-def _count_row_liveness(
-    monkeypatch: pytest.MonkeyPatch,
-) -> tuple[list[int], list[int]]:
-    """Patch `JSONLTrajectoryStore.read` to track simultaneously live rows.
-
-    Real-issue-9 regression proof (see `doc/20260906-gpt-5.6-open-
-    issues.md` item 9): rather than a wall-clock timing measurement
-    (non-deterministic across machines, forbidden by this project's own
-    testing discipline), this wraps every row `JSONLTrajectoryStore.read`
-    yields in a `dict` subclass (a plain `dict` cannot hold a weak
-    reference) and registers a `weakref.finalize` callback on each one.
-    CPython frees an object the instant its reference count reaches
-    zero — no `gc.collect()` needed — so `alive_after_each_row[i]`
-    deterministically reflects exactly how many rows were still
-    reachable immediately after the `i`-th row was yielded, for any
-    given commit of the code under test: a real, reproducible
-    allocation-liveness measurement, not a timing one, matching this
-    project's own `b12679b` precedent for this kind of performance claim.
-
-    Returns:
-        Two same-length lists, appended to live as rows are read:
-        ``alive_after_each_row`` (a running snapshot of how many
-        tracked rows are still alive right after each row is yielded)
-        and ``total_yielded`` (just a 1, 2, 3, ... counter, so a test
-        can report how many rows were actually read without needing a
-        separate counter of its own).
-    """
-    alive = 0
-    alive_after_each_row: list[int] = []
-    total_yielded: list[int] = []
-    real_read = JSONLTrajectoryStore.read
-
-    class _TrackedRow(dict[str, object]):
-        """A `dict` subclass (plain `dict` instances cannot hold a weakref)."""
-
-    def _tracking_read(self: JSONLTrajectoryStore, run_id: str) -> object:
-        nonlocal alive
-
-        def _mark_collected(_reference: object = None) -> None:
-            nonlocal alive
-            alive -= 1
-
-        for row in real_read(self, run_id):
-            wrapped = _TrackedRow(row)
-            weakref.finalize(wrapped, _mark_collected)
-            alive += 1
-            yield wrapped
-            del wrapped
-            alive_after_each_row.append(alive)
-            total_yielded.append(len(alive_after_each_row))
-
-    monkeypatch.setattr(JSONLTrajectoryStore, "read", _tracking_read)
-    return alive_after_each_row, total_yielded
-
-
-def test_reanalyze_trajectory_does_not_hold_every_row_live_for_an_early_generation(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    """An explicit early generation never keeps later generations' rows alive.
-
-    The worst case for a `rows = list(store.read(...))`-style
-    implementation: re-analyzing generation 0 out of many still means
-    every later generation gets read (the integrity/consistency checks
-    require it), so the old code would hold the *entire* trajectory's
-    rows live simultaneously even though only generation 0's own rows
-    are ever used. This proves the streaming rewrite does not.
-    """
-    generation_count = 300
-    trajectory_path, manifest_path, rows_per_generation = (
-        _build_large_synthetic_trajectory(
-            tmp_path, generation_count=generation_count, kind="jsonl"
-        )
-    )
-    alive_after_each_row, total_yielded = _count_row_liveness(monkeypatch)
-
-    result = reanalyze.reanalyze_trajectory(
-        trajectory_path, manifest_path=manifest_path, generation=0
-    )
-
-    assert result.state.generation == 0
-    total_rows = generation_count * rows_per_generation
-    assert total_yielded[-1] == total_rows
-    # The real claim: peak simultaneous liveness stays near one
-    # generation's own row count, not anywhere near the trajectory's
-    # total row count -- proving every row is never materialized at once.
-    peak_alive = max(alive_after_each_row)
-    assert peak_alive <= rows_per_generation + 4
-    assert peak_alive < total_rows / 10
-
-
-def test_reanalyze_trajectory_does_not_hold_every_row_live_for_the_final_generation(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    """The default ("final generation") path is equally memory-bounded.
-
-    `generation=None` cannot know which generation is the maximum until
-    the stream ends (`reanalyze_trajectory`'s own docstring on
-    `JSONLTrajectoryStore.read`'s ordering guarantee), so this exercises
-    the rolling running-max buffer specifically: every earlier
-    generation's buffered rows must be dropped, not accumulated, each
-    time a higher generation number is seen.
-    """
-    generation_count = 300
-    trajectory_path, manifest_path, rows_per_generation = (
-        _build_large_synthetic_trajectory(
-            tmp_path, generation_count=generation_count, kind="jsonl"
-        )
-    )
-    alive_after_each_row, total_yielded = _count_row_liveness(monkeypatch)
-
-    result = reanalyze.reanalyze_trajectory(
-        trajectory_path, manifest_path=manifest_path
-    )
-
-    assert result.state.generation == generation_count - 1
-    total_rows = generation_count * rows_per_generation
-    assert total_yielded[-1] == total_rows
-    peak_alive = max(alive_after_each_row)
-    assert peak_alive <= rows_per_generation + 4
-    assert peak_alive < total_rows / 10
 
 
 @pytest.mark.parametrize("generation", [0, 123, None])

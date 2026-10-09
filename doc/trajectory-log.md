@@ -173,8 +173,8 @@ record        padded-4 varint body_len | padded-4 varint rows | u8 kind
 
 The engine hands a store a frame when the store asks for frames
 (`wants_frames`): Backend V builds one with a compiled call, Backends L and G
-walk their dictionaries once. A store that prefers rows (the JSON Lines and
-in-memory stores) keeps getting rows.
+walk their dictionaries once. A store that prefers rows (the in-memory store)
+keeps getting rows.
 
 ### Rules that keep it correct
 
@@ -210,7 +210,7 @@ design is not implemented); this is the log's half of that work.
 back-pressure, sync order, faults, a killed child process),
 `test_tlog_sparse.py`, `test_tlog_reader.py` (exhaustive random access),
 `test_tlog_export.py` and `test/cli/test_export_command.py` (byte identity
-with `json.dumps` and with the JSON Lines store), `test_tlog_resume.py`
+with plain `json.dumps` text), `test_tlog_resume.py`
 (kill and resume), `test_binary_store.py`, and `test/engine/
 test_frame_identity.py` (all three backends produce identical frames).
 

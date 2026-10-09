@@ -326,11 +326,11 @@ directly from a frequency table instead of from a live simulation.
 ## 6. `fim.persistence` — reading and writing run results
 
 - **`TrajectoryStore`** (the interface) and its two implementations,
-  **`JSONLTrajectoryStore`** (the real, file-backed store — one
-  generation written and flushed at a time through one kept-open handle,
-  so a run's history survives an interruption; `close()` or a `with`
-  block releases the handle, and a closed store re-opens on its next
-  write) and **`InMemoryTrajectoryStore`** (a test double with
+  **`BinaryLogStore`** (the real, file-backed store — a compact binary
+  log written by a background thread, so a run's history survives an
+  interruption up to its last complete block; `close()` or a `with`
+  block commits and releases it, and a closed store accepts no more
+  writes) and **`InMemoryTrajectoryStore`** (a test double with
   the same interface, nothing touches disk). **`TrajectoryRow`** is one
   row of that per-generation history.
 - **`RunManifest`**, **`read_manifest`**, **`write_manifest`** — a

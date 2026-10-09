@@ -1,12 +1,12 @@
 """Tests of `BinaryLogStore`: the log behind the `TrajectoryStore` protocols.
 
-The store must be a drop-in for the JSON Lines store as far as every
-reader of rows is concerned, so the central tests run real simulations into
-it and compare what `read` returns with what the in-memory store holds for
-the same seeded run: every row, in order, with identical float bits. The
-rest pin its own rules: one run per store, the flush barrier, discard, the
-equilibrium companion, closing, pickling across a process boundary, and
-the derived JSON Lines equalling the JSON Lines store's own file.
+The store must satisfy every row reader's contract, so the central tests
+run real simulations into it and compare what `read` returns with what
+the in-memory store holds for the same seeded run: every row, in order,
+with identical float bits. The rest pin its own rules: one run per store,
+the flush barrier, discard, the equilibrium companion, closing, pickling
+across a process boundary, and the derived JSON Lines equalling the plain
+`json.dumps` text of the rows.
 """
 
 from __future__ import annotations
@@ -17,6 +17,7 @@ from pathlib import Path
 
 import numpy as np
 import pytest
+from tlog_support import canonical_jsonl
 
 from fim.engine import fim
 from fim.model.params import SimulationParams
@@ -26,7 +27,6 @@ from fim.persistence.binary_store import (
     BinaryLogStore,
 )
 from fim.persistence.frame import FrameLayout, TrajectoryFrame
-from fim.persistence.jsonl_store import JSONLTrajectoryStore
 from fim.persistence.store import (
     ClosableStore,
     EquilibriumStoreProvider,
@@ -294,7 +294,7 @@ def test_read_is_a_barrier_that_sees_everything_written(tmp_path: Path) -> None:
 
 
 def test_reading_a_log_that_does_not_exist_raises(tmp_path: Path) -> None:
-    """Like the JSON Lines store, a missing trajectory is an error."""
+    """A missing trajectory is an error, not an empty run."""
     store = BinaryLogStore(tmp_path / "nothing.tlog")
     with pytest.raises(FileNotFoundError):
         store.read(RUN_ID)
@@ -337,20 +337,18 @@ def test_a_store_pickles_as_its_closed_log_and_reads_in_another_process(
     assert list(copy.read(RUN_ID)) == expected
 
 
-def test_the_derived_jsonl_of_a_real_run_is_the_jsonl_stores_file(
+def test_the_derived_jsonl_of_a_real_run_is_the_plain_json_dumps_text(
     tmp_path: Path,
 ) -> None:
-    """Export of the run's log equals the file the JSON Lines store wrote."""
+    """Export of the run's log equals `json.dumps` of the rows the run produced."""
     params = _params()
-    (tmp_path / "rows").mkdir()
-    jsonl = JSONLTrajectoryStore(tmp_path / "rows" / "trajectory.jsonl")
-    _run(params, jsonl, "lineal")
-    jsonl.close()
+    memory = InMemoryTrajectoryStore()
+    _run(params, memory, "lineal")
     store = BinaryLogStore(tmp_path / "t.tlog")
     _run(params, store, "lineal")
     store.close()
     derived = derive_jsonl(tmp_path / "t.tlog", tmp_path / "derived.jsonl")
-    reference = (tmp_path / "rows" / "trajectory.jsonl").read_bytes()
+    reference = canonical_jsonl(memory.read(RUN_ID))
     assert (tmp_path / "derived.jsonl").read_bytes() == reference
     assert derived.sha256 == hashlib.sha256(reference).hexdigest()
 
@@ -358,16 +356,13 @@ def test_the_derived_jsonl_of_a_real_run_is_the_jsonl_stores_file(
 def test_the_log_is_far_smaller_than_the_jsonl(tmp_path: Path) -> None:
     """Count coding and binary records: at least ten times smaller here."""
     params = _params(max_generations=60)
-    (tmp_path / "rows").mkdir()
-    jsonl = JSONLTrajectoryStore(tmp_path / "rows" / "trajectory.jsonl")
-    _run(params, jsonl, "lineal")
-    jsonl.close()
+    memory = InMemoryTrajectoryStore()
+    _run(params, memory, "lineal")
     store = BinaryLogStore(tmp_path / "t.tlog")
     _run(params, store, "lineal")
     store.close()
     log_bytes = (tmp_path / "t.tlog").stat().st_size
-    jsonl_bytes = (tmp_path / "rows" / "trajectory.jsonl").stat().st_size
-    assert log_bytes * 10 < jsonl_bytes
+    assert log_bytes * 10 < len(canonical_jsonl(memory.read(RUN_ID)))
 
 
 def test_a_run_writes_the_same_log_bytes_every_time(tmp_path: Path) -> None:
