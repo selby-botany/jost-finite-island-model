@@ -154,14 +154,18 @@ from fim.model.params import EngineBackend as ModelEngineBackend
 from fim.model.params import Jit as ModelJit
 from fim.model.state import ModelState
 from fim.model.vector_block import VectorBlock, VectorMigration
+from fim.persistence.frame import FrameLayout, state_to_frame
 from fim.persistence.manifest import CURRENT_SCHEMA_VERSION, RunManifest
 from fim.persistence.store import (
+    FrameStore,
     InMemoryTrajectoryStore,
     ReplicateFanoutStore,
     TrajectoryStore,
+    begin_store_run,
     close_run_store,
     close_store,
     equilibrium_store_for,
+    store_wants_frames,
 )
 from fim.statistics.catalog import history_keys, nei_key, report_keys
 from fim.statistics.catalog import spec as catalog_spec
@@ -766,12 +770,7 @@ class SequentialAdvancer:
                 finite_alleles=lane.finite_alleles,
                 jit=self._jit,
             )
-            store.write_generation(
-                lane.run_id,
-                lane.state.generation,
-                lane.state.to_rows(lane.run_id),
-                validate=False,
-            )
+            _persist_state(store, lane.run_id, lane.state)
             values = _convergence_values(lane.state, lane.params)
             lane.monitor.record(lane.state.generation, values)
             if debug_enabled:
@@ -1046,12 +1045,7 @@ class VectorizedAdvancer:
                 )
                 lane.vectorized_state = block
             block.advance(lane.rng)
-            store.write_generation(
-                lane.run_id,
-                block.generation,
-                block.rows(lane.run_id),
-                validate=False,
-            )
+            _persist_block(store, lane.run_id, block)
             lane.monitor.record(
                 block.generation, _convergence_values_vectorized(block, lane.params)
             )
@@ -1064,6 +1058,60 @@ class VectorizedAdvancer:
                 block.sync_registry(lane.registry)
                 newly_stopped.append(lane)
         return newly_stopped
+
+
+def _frame_layout(params: SimulationParams) -> FrameLayout:
+    """Return the frame layout of a run: its locus ids and gene copies per deme.
+
+    Args:
+        params: The run's parameters.
+
+    Returns:
+        The layout a `FrameStore` is told through `begin_store_run`.
+    """
+    return FrameLayout(
+        locus_ids=tuple(locus.locus_id for locus in params.loci),
+        deme_sizes=tuple(int(size) for size in params.population_sizes),
+    )
+
+
+def _persist_block(store: TrajectoryStore, run_id: str, block: VectorBlock) -> None:
+    """Write Backend V's current generation to `store`.
+
+    A store that prefers frames (`store_wants_frames`) gets the block's
+    frame, built by one compiled call. Any other store gets the rows, as
+    always, so a custom store is unaffected.
+
+    Args:
+        store: The run's store.
+        run_id: The run being written.
+        block: The array-native state, already advanced.
+    """
+    if store_wants_frames(store, run_id):
+        cast("FrameStore", store).write_frame(run_id, block.frame())
+    else:
+        store.write_generation(
+            run_id, block.generation, block.rows(run_id), validate=False
+        )
+
+
+def _persist_state(store: TrajectoryStore, run_id: str, state: ModelState) -> None:
+    """Write a `ModelState` generation (Backends L and G) to `store`.
+
+    The rows or frame are built by this module, from a state whose own
+    construction validated every value, so they are written unvalidated.
+
+    Args:
+        store: The run's store.
+        run_id: The run being written.
+        state: The generation.
+    """
+    if store_wants_frames(store, run_id):
+        cast("FrameStore", store).write_frame(run_id, state_to_frame(state))
+    else:
+        store.write_generation(
+            run_id, state.generation, state.to_rows(run_id), validate=False
+        )
 
 
 def _build_replica_lane(
@@ -1134,9 +1182,8 @@ def _build_replica_lane(
         if lane_params.mutation_model == "finite_alleles"
         else None
     )
-    store.write_generation(
-        lane_run_id, state.generation, state.to_rows(lane_run_id), validate=False
-    )
+    begin_store_run(store, lane_run_id, _frame_layout(lane_params))
+    _persist_state(store, lane_run_id, state)
     monitor.record(state.generation, _convergence_values(state, lane_params))
     return ReplicaLane(
         replica_index=replica_index,
@@ -3123,16 +3170,22 @@ def _generate_initial_state_with_outcome(
             max_generations=params.equilibrium_max_generations,
         )
         equilibrium_store = equilibrium_store_for(store, run_id)
+        # One panmictic ancestral population of every deme's gene copies
+        # together (`EquilibriumSplitInitialCondition`), so its frames
+        # have one deme of that size.
+        begin_store_run(
+            equilibrium_store,
+            run_id,
+            FrameLayout(
+                locus_ids=tuple(locus.locus_id for locus in params.loci),
+                deme_sizes=(sum(int(size) for size in params.population_sizes),),
+            ),
+        )
 
         def write_ancestral_generation(ancestral: ModelState) -> None:
-            # Rows built by `ModelState.to_rows` from a valid state need
-            # no re-validation (`fim.persistence.store`'s top docstring).
-            equilibrium_store.write_generation(
-                run_id,
-                ancestral.generation,
-                ancestral.to_rows(run_id),
-                validate=False,
-            )
+            # Rows or frames built from a valid state need no re-validation
+            # (`fim.persistence.store`'s top docstring).
+            _persist_state(equilibrium_store, run_id, ancestral)
 
         state, outcome = generator.generate_with_outcome(
             params, rng, on_generation=write_ancestral_generation
@@ -3591,9 +3644,8 @@ def _simulate_one(
     # criterion at the very start still gets a correctly recorded
     # generation-zero observation, and a later replay of the persisted
     # trajectory always has a real starting frame to show, not a gap.
-    store.write_generation(
-        run_id, state.generation, state.to_rows(run_id), validate=False
-    )
+    begin_store_run(store, run_id, _frame_layout(params))
+    _persist_state(store, run_id, state)
     monitor.record(
         state.generation,
         _convergence_values(state, params),
@@ -3613,9 +3665,7 @@ def _simulate_one(
     debug_enabled = logger.isEnabledFor(logging.DEBUG)
     while not monitor.should_stop():
         state = step(state, params, registry, rng, finite_alleles=finite_alleles)
-        store.write_generation(
-            run_id, state.generation, state.to_rows(run_id), validate=False
-        )
+        _persist_state(store, run_id, state)
         values = _convergence_values(state, params)
         monitor.record(state.generation, values)
         if debug_enabled:

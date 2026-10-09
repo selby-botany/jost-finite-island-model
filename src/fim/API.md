@@ -643,6 +643,9 @@ Return to the [source-tree orientation](../README.md) or the [developer guide](.
     * [\_\_getstate\_\_](#fim.persistence.jsonl_store.JSONLTrajectoryStore.__getstate__)
     * [\_\_setstate\_\_](#fim.persistence.jsonl_store.JSONLTrajectoryStore.__setstate__)
     * [write\_generation](#fim.persistence.jsonl_store.JSONLTrajectoryStore.write_generation)
+    * [begin\_run](#fim.persistence.jsonl_store.JSONLTrajectoryStore.begin_run)
+    * [wants\_frames](#fim.persistence.jsonl_store.JSONLTrajectoryStore.wants_frames)
+    * [write\_frame](#fim.persistence.jsonl_store.JSONLTrajectoryStore.write_frame)
     * [close](#fim.persistence.jsonl_store.JSONLTrajectoryStore.close)
     * [is\_open](#fim.persistence.jsonl_store.JSONLTrajectoryStore.is_open)
     * [discard](#fim.persistence.jsonl_store.JSONLTrajectoryStore.discard)
@@ -702,6 +705,12 @@ Return to the [source-tree orientation](../README.md) or the [developer guide](.
   * [EquilibriumStoreProvider](#fim.persistence.store.EquilibriumStoreProvider)
     * [equilibrium\_store](#fim.persistence.store.EquilibriumStoreProvider.equilibrium_store)
   * [equilibrium\_store\_for](#fim.persistence.store.equilibrium_store_for)
+  * [FrameStore](#fim.persistence.store.FrameStore)
+    * [begin\_run](#fim.persistence.store.FrameStore.begin_run)
+    * [write\_frame](#fim.persistence.store.FrameStore.write_frame)
+    * [wants\_frames](#fim.persistence.store.FrameStore.wants_frames)
+  * [begin\_store\_run](#fim.persistence.store.begin_store_run)
+  * [store\_wants\_frames](#fim.persistence.store.store_wants_frames)
   * [ClosableStore](#fim.persistence.store.ClosableStore)
     * [close](#fim.persistence.store.ClosableStore.close)
   * [close\_run\_store](#fim.persistence.store.close_run_store)
@@ -711,6 +720,9 @@ Return to the [source-tree orientation](../README.md) or the [developer guide](.
     * [\_\_getstate\_\_](#fim.persistence.store.InMemoryTrajectoryStore.__getstate__)
     * [\_\_setstate\_\_](#fim.persistence.store.InMemoryTrajectoryStore.__setstate__)
     * [write\_generation](#fim.persistence.store.InMemoryTrajectoryStore.write_generation)
+    * [begin\_run](#fim.persistence.store.InMemoryTrajectoryStore.begin_run)
+    * [wants\_frames](#fim.persistence.store.InMemoryTrajectoryStore.wants_frames)
+    * [write\_frame](#fim.persistence.store.InMemoryTrajectoryStore.write_frame)
     * [read](#fim.persistence.store.InMemoryTrajectoryStore.read)
     * [discard](#fim.persistence.store.InMemoryTrajectoryStore.discard)
     * [close](#fim.persistence.store.InMemoryTrajectoryStore.close)
@@ -720,6 +732,9 @@ Return to the [source-tree orientation](../README.md) or the [developer guide](.
     * [\_\_getstate\_\_](#fim.persistence.store.ReplicateFanoutStore.__getstate__)
     * [\_\_setstate\_\_](#fim.persistence.store.ReplicateFanoutStore.__setstate__)
     * [write\_generation](#fim.persistence.store.ReplicateFanoutStore.write_generation)
+    * [begin\_run](#fim.persistence.store.ReplicateFanoutStore.begin_run)
+    * [wants\_frames](#fim.persistence.store.ReplicateFanoutStore.wants_frames)
+    * [write\_frame](#fim.persistence.store.ReplicateFanoutStore.write_frame)
     * [read](#fim.persistence.store.ReplicateFanoutStore.read)
     * [discard](#fim.persistence.store.ReplicateFanoutStore.discard)
     * [close](#fim.persistence.store.ReplicateFanoutStore.close)
@@ -18377,6 +18392,49 @@ Every line is encoded before the first byte is written, so a
 row that cannot be encoded (a non-finite frequency) leaves the
 file untouched instead of holding a partial generation.
 
+<a id="fim.persistence.jsonl_store.JSONLTrajectoryStore.begin_run"></a>
+
+#### begin\_run
+
+```python
+def begin_run(run_id: str, layout: FrameLayout) -> None
+```
+
+Record `run_id`'s layout so `write_frame` can turn frames into rows.
+
+**Raises**:
+
+- `ValueError` - If `run_id` was already begun with another layout.
+
+<a id="fim.persistence.jsonl_store.JSONLTrajectoryStore.wants_frames"></a>
+
+#### wants\_frames
+
+```python
+def wants_frames(run_id: str) -> bool
+```
+
+Return `False`: JSON Lines is made of rows, so rows are cheaper.
+
+<a id="fim.persistence.jsonl_store.JSONLTrajectoryStore.write_frame"></a>
+
+#### write\_frame
+
+```python
+def write_frame(run_id: str, frame: TrajectoryFrame) -> None
+```
+
+Append one generation given as a frame, through the row encoder.
+
+The frame becomes the rows it stands for, which then go through
+`write_generation` exactly as if the engine had built them, so the
+file bytes are the same either way.
+
+**Raises**:
+
+- `ValueError` - If `begin_run` was not called for `run_id`, or the
+  frame does not fit the layout.
+
 <a id="fim.persistence.jsonl_store.JSONLTrajectoryStore.close"></a>
 
 #### close
@@ -19665,6 +19723,101 @@ Return the ancestral-phase companion of `store` for one run.
   readable ancestral trajectory on `fim.engine.RunResult.
   equilibrium_store`, just not a file.
 
+<a id="fim.persistence.store.FrameStore"></a>
+
+## FrameStore Objects
+
+```python
+@runtime_checkable
+class FrameStore(Protocol)
+```
+
+A trajectory store that can take a generation as a `TrajectoryFrame`.
+
+Optional, like `EquilibriumStoreProvider`. A frame is the flat-array
+form of one generation (`fim.persistence.frame`); a store that keeps
+its data in a compact form (the binary log) can take it without a
+dictionary ever being built per row. `begin_run` tells the store the
+run's shape once; `write_frame` then takes each generation.
+
+`wants_frames` says whether the engine should *prefer* handing this
+store frames. Every `FrameStore` accepts them (the JSON Lines and
+in-memory stores turn a frame back into rows), but only a store that
+gains from them says `True`; for the others the engine keeps handing
+over rows, which is cheaper than converting to a frame and back.
+
+<a id="fim.persistence.store.FrameStore.begin_run"></a>
+
+#### begin\_run
+
+```python
+def begin_run(run_id: str, layout: FrameLayout) -> None
+```
+
+Record the shape of `run_id`'s frames; repeating it is harmless.
+
+**Raises**:
+
+- `ValueError` - If `run_id` was already begun with another layout.
+
+<a id="fim.persistence.store.FrameStore.write_frame"></a>
+
+#### write\_frame
+
+```python
+def write_frame(run_id: str, frame: TrajectoryFrame) -> None
+```
+
+Persist one generation given as a frame, after `begin_run`.
+
+<a id="fim.persistence.store.FrameStore.wants_frames"></a>
+
+#### wants\_frames
+
+```python
+def wants_frames(run_id: str) -> bool
+```
+
+Whether the engine should hand `run_id`'s generations over as frames.
+
+<a id="fim.persistence.store.begin_store_run"></a>
+
+#### begin\_store\_run
+
+```python
+def begin_store_run(store: TrajectoryStore, run_id: str,
+                    layout: FrameLayout) -> None
+```
+
+Tell `store` the shape of `run_id`'s frames, when it is a `FrameStore`.
+
+**Arguments**:
+
+- `store` - Any `TrajectoryStore`; one that is not a `FrameStore` is
+  left alone.
+- `run_id` - The run about to be written.
+- `layout` - Its layout.
+
+<a id="fim.persistence.store.store_wants_frames"></a>
+
+#### store\_wants\_frames
+
+```python
+def store_wants_frames(store: TrajectoryStore, run_id: str) -> bool
+```
+
+Whether the engine should hand `run_id`'s generations to `store` as frames.
+
+**Arguments**:
+
+- `store` - Any `TrajectoryStore`.
+- `run_id` - The run being written.
+
+
+**Returns**:
+
+  `True` only for a `FrameStore` that answers `True` for the run.
+
 <a id="fim.persistence.store.ClosableStore"></a>
 
 ## ClosableStore Objects
@@ -19805,6 +19958,45 @@ Append one generation, validated unless the caller vouches for it.
 See this module's own top docstring for exactly what
 `validate=False` skips, and why it is safe only for the two
 internal row producers named there.
+
+<a id="fim.persistence.store.InMemoryTrajectoryStore.begin_run"></a>
+
+#### begin\_run
+
+```python
+def begin_run(run_id: str, layout: FrameLayout) -> None
+```
+
+Record `run_id`'s layout so `write_frame` can turn frames into rows.
+
+**Raises**:
+
+- `ValueError` - If `run_id` was already begun with another layout.
+
+<a id="fim.persistence.store.InMemoryTrajectoryStore.wants_frames"></a>
+
+#### wants\_frames
+
+```python
+def wants_frames(run_id: str) -> bool
+```
+
+Return `False`: rows are what this store keeps, so rows are cheaper.
+
+<a id="fim.persistence.store.InMemoryTrajectoryStore.write_frame"></a>
+
+#### write\_frame
+
+```python
+def write_frame(run_id: str, frame: TrajectoryFrame) -> None
+```
+
+Append one generation given as a frame, as the rows it stands for.
+
+**Raises**:
+
+- `ValueError` - If `begin_run` was not called for `run_id`, or the
+  frame does not fit the layout.
 
 <a id="fim.persistence.store.InMemoryTrajectoryStore.read"></a>
 
@@ -19949,6 +20141,40 @@ def write_generation(run_id: str,
 ```
 
 Delegate to `run_id`'s own child store; see `TrajectoryStore`.
+
+<a id="fim.persistence.store.ReplicateFanoutStore.begin_run"></a>
+
+#### begin\_run
+
+```python
+def begin_run(run_id: str, layout: FrameLayout) -> None
+```
+
+Tell `run_id`'s own child store its layout (`FrameStore`).
+
+<a id="fim.persistence.store.ReplicateFanoutStore.wants_frames"></a>
+
+#### wants\_frames
+
+```python
+def wants_frames(run_id: str) -> bool
+```
+
+Whether `run_id`'s own child store prefers frames (`FrameStore`).
+
+<a id="fim.persistence.store.ReplicateFanoutStore.write_frame"></a>
+
+#### write\_frame
+
+```python
+def write_frame(run_id: str, frame: TrajectoryFrame) -> None
+```
+
+Delegate a frame to `run_id`'s own child store (`FrameStore`).
+
+**Raises**:
+
+- `TypeError` - If the child store cannot take frames.
 
 <a id="fim.persistence.store.ReplicateFanoutStore.read"></a>
 

@@ -26,6 +26,7 @@ from pathlib import Path
 from types import TracebackType
 from typing import Any, Final, TextIO, cast
 
+from fim.persistence.frame import FrameLayout, TrajectoryFrame, frame_to_rows
 from fim.persistence.store import TrajectoryRow, normalize_row
 
 logger = logging.getLogger(__name__)
@@ -184,6 +185,7 @@ class JSONLTrajectoryStore:
         # calls on the same underlying file descriptor, garbling lines.
         self._lock = threading.Lock()
         self._equilibrium: JSONLTrajectoryStore | None = None
+        self._layouts: dict[str, FrameLayout] = {}
         # The kept-open append handle; `None` until the first write and
         # again after `close`. Guarded by `_lock`.
         self._handle: TextIO | None = None
@@ -305,6 +307,43 @@ class JSONLTrajectoryStore:
                 generation,
                 self.path,
             )
+
+    def begin_run(self, run_id: str, layout: FrameLayout) -> None:
+        """Record `run_id`'s layout so `write_frame` can turn frames into rows.
+
+        Raises:
+            ValueError: If `run_id` was already begun with another layout.
+        """
+        with self._lock:
+            known = self._layouts.setdefault(run_id, layout)
+        if known != layout:
+            raise ValueError(f"run {run_id!r} was already begun with another layout")
+
+    def wants_frames(self, run_id: str) -> bool:
+        """Return `False`: JSON Lines is made of rows, so rows are cheaper."""
+        del run_id
+        return False
+
+    def write_frame(self, run_id: str, frame: TrajectoryFrame) -> None:
+        """Append one generation given as a frame, through the row encoder.
+
+        The frame becomes the rows it stands for, which then go through
+        `write_generation` exactly as if the engine had built them, so the
+        file bytes are the same either way.
+
+        Raises:
+            ValueError: If `begin_run` was not called for `run_id`, or the
+                frame does not fit the layout.
+        """
+        layout = self._layouts.get(run_id)
+        if layout is None:
+            raise ValueError(f"begin_run was not called for run {run_id!r}")
+        self.write_generation(
+            run_id,
+            frame.generation,
+            frame_to_rows(frame, layout, run_id),
+            validate=False,
+        )
 
     def close(self) -> None:
         """Release this store's open file handles; safe to call repeatedly.

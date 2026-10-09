@@ -41,9 +41,12 @@ from __future__ import annotations
 
 import threading
 from collections.abc import Callable, Iterable, Iterator, Mapping
-from typing import Any, Protocol, TypedDict, cast, runtime_checkable
+from typing import TYPE_CHECKING, Any, Protocol, TypedDict, cast, runtime_checkable
 
 from fim.model.identifiers import parse_bounded_frequency
+
+if TYPE_CHECKING:
+    from fim.persistence.frame import FrameLayout, TrajectoryFrame
 
 
 class TrajectoryRow(TypedDict):
@@ -173,6 +176,67 @@ def equilibrium_store_for(store: TrajectoryStore, run_id: str) -> TrajectoryStor
 
 
 @runtime_checkable
+class FrameStore(Protocol):
+    """A trajectory store that can take a generation as a `TrajectoryFrame`.
+
+    Optional, like `EquilibriumStoreProvider`. A frame is the flat-array
+    form of one generation (`fim.persistence.frame`); a store that keeps
+    its data in a compact form (the binary log) can take it without a
+    dictionary ever being built per row. `begin_run` tells the store the
+    run's shape once; `write_frame` then takes each generation.
+
+    `wants_frames` says whether the engine should *prefer* handing this
+    store frames. Every `FrameStore` accepts them (the JSON Lines and
+    in-memory stores turn a frame back into rows), but only a store that
+    gains from them says `True`; for the others the engine keeps handing
+    over rows, which is cheaper than converting to a frame and back.
+    """
+
+    def begin_run(self, run_id: str, layout: FrameLayout) -> None:
+        """Record the shape of `run_id`'s frames; repeating it is harmless.
+
+        Raises:
+            ValueError: If `run_id` was already begun with another layout.
+        """
+        ...
+
+    def write_frame(self, run_id: str, frame: TrajectoryFrame) -> None:
+        """Persist one generation given as a frame, after `begin_run`."""
+        ...
+
+    def wants_frames(self, run_id: str) -> bool:
+        """Whether the engine should hand `run_id`'s generations over as frames."""
+        ...
+
+
+def begin_store_run(store: TrajectoryStore, run_id: str, layout: FrameLayout) -> None:
+    """Tell `store` the shape of `run_id`'s frames, when it is a `FrameStore`.
+
+    Args:
+        store: Any `TrajectoryStore`; one that is not a `FrameStore` is
+            left alone.
+        run_id: The run about to be written.
+        layout: Its layout.
+    """
+    if isinstance(store, FrameStore):
+        store.begin_run(run_id, layout)
+
+
+def store_wants_frames(store: TrajectoryStore, run_id: str) -> bool:
+    """Whether the engine should hand `run_id`'s generations to `store` as frames.
+
+    Args:
+        store: Any `TrajectoryStore`.
+        run_id: The run being written.
+
+    Returns:
+        `True` only for a `FrameStore` that answers `True` for the run.
+    """
+    wants = getattr(store, "wants_frames", None)
+    return bool(wants(run_id)) if callable(wants) else False
+
+
+@runtime_checkable
 class ClosableStore(Protocol):
     """A trajectory store that holds an open resource until it is closed.
 
@@ -238,6 +302,7 @@ class InMemoryTrajectoryStore:
         self._rows: list[TrajectoryRow] = []
         self._lock = threading.Lock()
         self._equilibrium: InMemoryTrajectoryStore | None = None
+        self._layouts: dict[str, FrameLayout] = {}
 
     def __getstate__(self) -> dict[str, Any]:
         """Drop `_lock` before pickling.
@@ -283,6 +348,38 @@ class InMemoryTrajectoryStore:
             raise ValueError("a generation must contain at least one row")
         with self._lock:
             self._rows.extend(generation_rows)
+
+    def begin_run(self, run_id: str, layout: FrameLayout) -> None:
+        """Record `run_id`'s layout so `write_frame` can turn frames into rows.
+
+        Raises:
+            ValueError: If `run_id` was already begun with another layout.
+        """
+        with self._lock:
+            known = self._layouts.setdefault(run_id, layout)
+        if known != layout:
+            raise ValueError(f"run {run_id!r} was already begun with another layout")
+
+    def wants_frames(self, run_id: str) -> bool:
+        """Return `False`: rows are what this store keeps, so rows are cheaper."""
+        del run_id
+        return False
+
+    def write_frame(self, run_id: str, frame: TrajectoryFrame) -> None:
+        """Append one generation given as a frame, as the rows it stands for.
+
+        Raises:
+            ValueError: If `begin_run` was not called for `run_id`, or the
+                frame does not fit the layout.
+        """
+        from fim.persistence.frame import frame_to_rows  # noqa: PLC0415
+
+        layout = self._layouts.get(run_id)
+        if layout is None:
+            raise ValueError(f"begin_run was not called for run {run_id!r}")
+        rows = frame_to_rows(frame, layout, run_id)
+        with self._lock:
+            self._rows.extend(rows)
 
     def read(self, run_id: str) -> Iterator[TrajectoryRow]:
         """Yield rows matching ``run_id`` in insertion order.
@@ -403,6 +500,25 @@ class ReplicateFanoutStore:
         self._store_for(run_id).write_generation(
             run_id, generation, rows, validate=validate
         )
+
+    def begin_run(self, run_id: str, layout: FrameLayout) -> None:
+        """Tell `run_id`'s own child store its layout (`FrameStore`)."""
+        begin_store_run(self._store_for(run_id), run_id, layout)
+
+    def wants_frames(self, run_id: str) -> bool:
+        """Whether `run_id`'s own child store prefers frames (`FrameStore`)."""
+        return store_wants_frames(self._store_for(run_id), run_id)
+
+    def write_frame(self, run_id: str, frame: TrajectoryFrame) -> None:
+        """Delegate a frame to `run_id`'s own child store (`FrameStore`).
+
+        Raises:
+            TypeError: If the child store cannot take frames.
+        """
+        child = self._store_for(run_id)
+        if not isinstance(child, FrameStore):
+            raise TypeError(f"{type(child).__name__} cannot take frames")
+        child.write_frame(run_id, frame)
 
     def read(self, run_id: str) -> Iterator[TrajectoryRow]:
         """Delegate to `run_id`'s own child store; see `TrajectoryStore`."""

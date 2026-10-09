@@ -43,6 +43,7 @@ Every test module, fixture, and test function documented here in full; `doc/fim-
   - [`test_window_statistics`](#convergence.test_window_statistics)
 - [`test/engine/`](#group-engine)
   - [`test_engine`](#engine.test_engine)
+  - [`test_frame_identity`](#engine.test_frame_identity)
   - [`test_vector_parity`](#engine.test_vector_parity)
 - [`test/gui/`](#group-gui)
   - [`conftest`](#gui.conftest)
@@ -8386,6 +8387,220 @@ assertion says so directly instead of comparing whatever each one
 happened to do. A backend that converged early would fail loudly
 here rather than quietly being compared against a different-length
 run.
+
+<a id="engine.test_frame_identity"></a>
+
+# engine.test\_frame\_identity
+
+The engine hands a store the same generation whichever way it is spelled.
+
+Stage 1 of the trajectory writer: a store may take a generation as a
+`TrajectoryFrame` instead of rows. Three things must hold, and each is
+checked on the complete stream of a real run, never on a summary:
+
+1. Backends L, G and V produce identical frames (counts, allele ids and
+   frequency bits, every generation) and the same layout.
+2. A frame equals the frame rebuilt from the rows the engine writes on
+   the rows path, so the two paths cannot disagree.
+3. A JSON Lines store fed frames writes the same bytes as one fed rows,
+   including the ancestral companion of an equilibrium-split run.
+
+No test depends on timing; every run is seeded.
+
+<a id="engine.test_frame_identity._FrameRecorder"></a>
+
+## \_FrameRecorder Objects
+
+```python
+class _FrameRecorder()
+```
+
+A store that wants frames and keeps a copy of each one it is given.
+
+<a id="engine.test_frame_identity._FrameRecorder.__init__"></a>
+
+#### \_\_init\_\_
+
+```python
+def __init__() -> None
+```
+
+Start empty.
+
+<a id="engine.test_frame_identity._FrameRecorder.begin_run"></a>
+
+#### begin\_run
+
+```python
+def begin_run(run_id: str, layout: FrameLayout) -> None
+```
+
+Record the layout, refusing a second, different one.
+
+<a id="engine.test_frame_identity._FrameRecorder.wants_frames"></a>
+
+#### wants\_frames
+
+```python
+def wants_frames(run_id: str) -> bool
+```
+
+Ask for frames.
+
+<a id="engine.test_frame_identity._FrameRecorder.write_frame"></a>
+
+#### write\_frame
+
+```python
+def write_frame(run_id: str, frame: TrajectoryFrame) -> None
+```
+
+Keep a copy (a frame is a view of a backend's own arrays).
+
+<a id="engine.test_frame_identity._FrameRecorder.write_generation"></a>
+
+#### write\_generation
+
+```python
+def write_generation(*_args: object, **_kwargs: object) -> None
+```
+
+Fail: a store that wants frames must not be given rows.
+
+<a id="engine.test_frame_identity._FrameRecorder.read"></a>
+
+#### read
+
+```python
+def read(run_id: str) -> object
+```
+
+Unused.
+
+<a id="engine.test_frame_identity._FrameRecorder.discard"></a>
+
+#### discard
+
+```python
+def discard(run_id: str) -> None
+```
+
+Unused.
+
+<a id="engine.test_frame_identity._FrameRecorder.equilibrium_store"></a>
+
+#### equilibrium\_store
+
+```python
+def equilibrium_store(run_id: str) -> _FrameRecorder
+```
+
+Return the ancestral-phase recorder.
+
+<a id="engine.test_frame_identity._FrameJsonlStore"></a>
+
+## \_FrameJsonlStore Objects
+
+```python
+class _FrameJsonlStore(JSONLTrajectoryStore)
+```
+
+A JSON Lines store that asks the engine for frames.
+
+<a id="engine.test_frame_identity._FrameJsonlStore.wants_frames"></a>
+
+#### wants\_frames
+
+```python
+def wants_frames(run_id: str) -> bool
+```
+
+Ask for frames, so the engine takes the frame path.
+
+<a id="engine.test_frame_identity._FrameJsonlStore.equilibrium_store"></a>
+
+#### equilibrium\_store
+
+```python
+def equilibrium_store(run_id: str) -> JSONLTrajectoryStore
+```
+
+Return a frame-asking companion beside this file.
+
+<a id="engine.test_frame_identity.test_backends_produce_identical_frames_and_layouts"></a>
+
+#### test\_backends\_produce\_identical\_frames\_and\_layouts
+
+```python
+@pytest.mark.parametrize("name", list(CASES))
+def test_backends_produce_identical_frames_and_layouts(name: str) -> None
+```
+
+L, G and V write the same frames, generation by generation.
+
+<a id="engine.test_frame_identity.test_a_frame_equals_the_rows_the_row_path_writes"></a>
+
+#### test\_a\_frame\_equals\_the\_rows\_the\_row\_path\_writes
+
+```python
+@pytest.mark.parametrize("backend", ["lineal", "generational-vector"])
+def test_a_frame_equals_the_rows_the_row_path_writes(backend: str) -> None
+```
+
+Every frame equals the frame rebuilt from that generation's rows.
+
+<a id="engine.test_frame_identity.test_jsonl_fed_frames_writes_the_same_bytes_as_jsonl_fed_rows"></a>
+
+#### test\_jsonl\_fed\_frames\_writes\_the\_same\_bytes\_as\_jsonl\_fed\_rows
+
+```python
+@pytest.mark.parametrize("backend", ["lineal", "generational-vector"])
+def test_jsonl_fed_frames_writes_the_same_bytes_as_jsonl_fed_rows(
+        tmp_path: Path, backend: str) -> None
+```
+
+The frame path and the row path produce byte-identical files.
+
+<a id="engine.test_frame_identity.test_equilibrium_split_companion_gets_frames_of_one_ancestral_deme"></a>
+
+#### test\_equilibrium\_split\_companion\_gets\_frames\_of\_one\_ancestral\_deme
+
+```python
+def test_equilibrium_split_companion_gets_frames_of_one_ancestral_deme(
+        tmp_path: Path) -> None
+```
+
+The ancestral phase is one deme of every deme's gene copies together.
+
+<a id="engine.test_frame_identity.test_a_batch_gives_every_replicate_its_own_frames"></a>
+
+#### test\_a\_batch\_gives\_every\_replicate\_its\_own\_frames
+
+```python
+def test_a_batch_gives_every_replicate_its_own_frames() -> None
+```
+
+With a store factory, each replicate's recorder gets its own stream.
+
+<a id="engine.test_frame_identity.test_begin_run_refuses_a_second_different_layout"></a>
+
+#### test\_begin\_run\_refuses\_a\_second\_different\_layout
+
+```python
+def test_begin_run_refuses_a_second_different_layout() -> None
+```
+
+A run's layout is fixed once told.
+
+<a id="engine.test_frame_identity.test_write_frame_requires_begin_run"></a>
+
+#### test\_write\_frame\_requires\_begin\_run
+
+```python
+def test_write_frame_requires_begin_run(tmp_path: Path) -> None
+```
+
+Frames cannot become rows without a layout.
 
 <a id="engine.test_vector_parity"></a>
 
