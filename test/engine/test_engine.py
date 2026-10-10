@@ -16,6 +16,7 @@ import pytest
 from conftest import FAST_CONVERGENCE, FAST_EXPERT_SETTINGS
 
 from fim import engine
+from fim.config.expert import ExpertSettings
 from fim.convergence import StopReason
 from fim.engine import (
     Clock,
@@ -62,7 +63,10 @@ from fim.persistence.store import (
 )
 from fim.statistics import differentiation
 from fim.statistics.catalog import report_keys
-from fim.statistics.differentiation import derived_differentiation
+from fim.statistics.differentiation import (
+    _jost_d_from_within_and_total,
+    derived_differentiation,
+)
 from fim.statistics.genetic_distance import (
     NEI_DENOMINATORS,
     NEI_LOCUS_RULES,
@@ -642,10 +646,10 @@ def test_sigma_band_extensions_never_interleave_with_batch_ticks() -> None:
     deferred post-pass cannot: every extension must happen after the
     final tick.
 
-    The configuration is deliberately staggered (one replicate runs far
-    longer than the other three), so inline and deferred would genuinely
-    differ here — with every lane converging on the same generation the
-    two orderings would be indistinguishable and this test would prove
+    The configuration is deliberately staggered (two lanes at a time, so the
+    last two start only when the first two finish), so inline and deferred
+    would genuinely differ here — with every lane stopping on the same tick
+    the two orderings would be indistinguishable and this test would prove
     nothing.
     """
     events: list[str] = []
@@ -671,6 +675,7 @@ def test_sigma_band_extensions_never_interleave_with_batch_ticks() -> None:
         {
             **_tiny_config(),
             "n_replicates": 4,
+            "max_concurrent_replicates": 2,
             "precision": 0.1,
             "max_generations": 300,
             "sigma_band_multiplier": 2.0,
@@ -686,8 +691,8 @@ def test_sigma_band_extensions_never_interleave_with_batch_ticks() -> None:
             params, InMemoryTrajectoryStore(), None, _clock, RecordingAdvancer()
         )
 
-    # The batch really is staggered: lanes stopped on different generations.
-    assert len({result.manifest.generation for result in results}) > 1
+    # The batch really is staggered: more ticks than any one lane's length.
+    assert events.count("tick") > max(result.manifest.generation for result in results)
     # Every lane got an extension...
     assert events.count("extension") == len(results) == 4
     # ...and not one of them ran before the batch's final tick.
@@ -792,8 +797,12 @@ def test_a_batch_without_a_sigma_band_still_releases_caches_at_finalization() ->
 def test_replicates_are_independently_reproducible(
     tiny_params: SimulationParams,
 ) -> None:
-    """Batching derives stable per-replicate seeds without changing scalar runs."""
-    scalar = _run(tiny_params)
+    """Each replicate is the single run its own parameters describe.
+
+    A replicate of a batch is an independent run with seed `seed + index`
+    that averages for the window the batch assigned it; its recorded
+    parameters (`n_replicates` one, the window explicit) reproduce it exactly.
+    """
     batched_params = SimulationParams.from_mapping(
         {**tiny_params.to_dict(), "n_replicates": 2}
     )
@@ -811,7 +820,9 @@ def test_replicates_are_independently_reproducible(
 
     assert isinstance(output, tuple)
     assert len(output) == 2
-    assert output[0].final_state == scalar.final_state
+    assert output[0].params.replicate_averaging_window > 0
+    assert _run(output[0].params).final_state == output[0].final_state
+    assert _run(output[1].params).final_state == output[1].final_state
     assert output[0].params.seed == tiny_params.seed
     assert output[1].params.seed == tiny_params.seed + 1
 
@@ -970,9 +981,10 @@ def test_run_batch_bounds_concurrently_active_lanes_to_the_configured_window(
         run_id: str | None,
         store: TrajectoryStore,
         clock: Clock,
+        planner: object = None,
     ) -> ReplicaLane:
         nonlocal concurrently_active, peak_concurrently_active, build_call_count
-        lane = real_build(params, replica_index, run_id, store, clock)
+        lane = real_build(params, replica_index, run_id, store, clock, planner)  # type: ignore[arg-type]
         build_call_count += 1
         concurrently_active += 1
         peak_concurrently_active = max(peak_concurrently_active, concurrently_active)
@@ -1184,10 +1196,11 @@ def test_replicate_summary_reports_a_real_sample_standard_deviation(
         sample_std = interval["sample_std"]
         assert sample_std is not None, name
         assert sample_std >= 0.0, name
-    # Recomputed straight from the same replicates' own `D` draws, so
-    # this pins the reported number against the sample it claims to
-    # describe rather than against the implementation's own expression.
-    draws = [result.report["D"] for result in output]
+    # Recomputed straight from the same replicates' own window means of `D`
+    # (what each replicate measured), so this pins the reported number against
+    # the sample it claims to describe rather than against the
+    # implementation's own expression.
+    draws = [result.report["window_statistics"]["D"]["mean"] for result in output]
     mean = statistics.fmean(draws)
     variance = sum((value - mean) ** 2 for value in draws) / (len(draws) - 1)
     assert summary["D"]["sample_std"] == pytest.approx(math.sqrt(variance))
@@ -1258,12 +1271,13 @@ def test_pooled_convergence_histories_carries_a_stopped_replicates_value_forward
     does not depend on that stochastic detail beyond the fixed seed
     already making it reproducible.
 
-    Not built from `tiny_params`: its own tight, fast-converging
-    defaults have every replicate stop at the identical generation
-    (confirmed live -- the whole reason this test needs staggered
-    stops), so this test picks its own `seed`/`precision`/
-    `max_generations` specifically to produce real spread (`[19, 39, 39,
-    79, 159]`, confirmed live for this exact configuration) instead.
+    Not built from `tiny_params`: replicates of a batch average for an
+    assigned window, so they stop together unless the windows differ. This
+    test uses a first wave of two replicates (the Expert Setting
+    `batch_width`), which average for the first-wave guess, while the other
+    three average for the window matched to them, so the stops are staggered
+    (`[120, 120, 120, 300, 300]`, confirmed live for this exact
+    configuration).
     """
     params = SimulationParams(
         gene_copies=20,
@@ -1273,7 +1287,8 @@ def test_pooled_convergence_histories_carries_a_stopped_replicates_value_forward
         seed=42,
         loci=(LocusSpec(1, 200),),
         precision=0.1,
-        **FAST_CONVERGENCE,
+        convergence_burn_in=1,
+        expert=ExpertSettings(**{**FAST_EXPERT_SETTINGS, "batch_width": 2}),
         max_generations=300,
         n_replicates=5,
         stop_batch_early=False,
@@ -3840,12 +3855,16 @@ def test_generational_adaptive_batch_keeps_the_replicate_order_prefix(
 def test_generational_adaptive_batch_matches_lineal_under_real_timing() -> None:
     """With real convergence times, `generational` keeps lineal's replicates.
 
-    No artificial delay: replicate 2 really does converge later than
-    replicates after it (asserted below from a fixed-count batch of the
-    same seeds), so this is the worked example's own situation in
-    miniature, through the public `fim()` entry point.
+    No artificial delay: the first wave of two replicates really does run
+    longer than the replicates after it, which average for the shorter
+    matched window (asserted below from a fixed-count batch of the same
+    seeds), so this is the worked example's own situation in miniature,
+    through the public `fim()` entry point.
     """
-    params = _adaptive_dict_params()
+    params = _adaptive_dict_params(
+        max_generations=300,
+        expert=ExpertSettings(**{**FAST_EXPERT_SETTINGS, "batch_width": 2}),
+    )
     fixed = fim(
         params.gene_copies,
         params.m,
@@ -5737,3 +5756,183 @@ def test_a_short_run_reports_no_geweke_z(tiny_params: SimulationParams) -> None:
     result = _run(tiny_params)
 
     assert all("geweke_z" not in e for e in result.report["window_statistics"].values())
+
+
+def _matched_batch_params(**changes: object) -> SimulationParams:
+    """A six-replicate batch whose first wave is two, so windows are matched."""
+    config: dict[str, object] = {
+        **_tiny_config(),
+        "precision": 0.05,
+        "max_generations": 400,
+        "n_replicates": 6,
+        "expert": {**FAST_EXPERT_SETTINGS, "batch_width": 2},
+    }
+    config.update(changes)
+    return SimulationParams.from_mapping(config)
+
+
+def test_a_batch_matches_each_replicates_window_to_the_first_wave() -> None:
+    """The first wave averages for the guess; the rest for the matched window."""
+    params = _matched_batch_params()
+    output = fim(
+        params.gene_copies, params.m, params.mu, params.d, params=params, clock=_clock
+    )
+    assert isinstance(output, tuple)
+
+    windows = [result.params.replicate_averaging_window for result in output]
+    guess = math.ceil(
+        params.expert.first_wave_averaging_multiple * params.relaxation_time
+    )
+    assert windows[:2] == [min(guess, 399)] * 2
+    assert len(set(windows[2:])) == 1
+    assert windows[2] != windows[0]
+    for result, window in zip(output, windows, strict=True):
+        assert result.report["reason"] == "averaging window complete"
+        assert result.report["generation"] == result.params.convergence_burn_in + window
+        entry = result.report["window_statistics"]["D"]
+        assert entry["window_start"] == result.params.convergence_burn_in
+        assert entry["window_end"] == result.report["generation"]
+
+
+def test_every_backend_gives_the_same_matched_batch() -> None:
+    """Windows come from the configuration, so no backend can change them."""
+    params = _matched_batch_params()
+    lineal = LinealBackend().run(params, InMemoryTrajectoryStore(), None, _clock)
+    sequential = GenerationalBackend(SequentialAdvancer()).run(
+        params, InMemoryTrajectoryStore(), None, _clock
+    )
+    threaded = GenerationalBackend(ThreadedAdvancer(max_workers=3)).run(
+        params, InMemoryTrajectoryStore(), None, _clock
+    )
+    assert isinstance(lineal, tuple)
+    assert isinstance(sequential, tuple)
+    assert isinstance(threaded, tuple)
+
+    for other in (sequential, threaded):
+        assert len(other) == len(lineal) == 6
+        for actual, expected in zip(other, lineal, strict=True):
+            assert actual.run_id == expected.run_id
+            assert actual.params == expected.params
+            assert actual.final_state == expected.final_state
+            assert actual.report == expected.report
+    assert replicate_summary(sequential) == replicate_summary(lineal)
+
+
+def test_a_limit_on_concurrent_replicates_is_the_first_wave_too() -> None:
+    """`max_concurrent_replicates` sets the wave; results match the lineal batch."""
+    params = _matched_batch_params(max_concurrent_replicates=2)
+    lineal = LinealBackend().run(params, InMemoryTrajectoryStore(), None, _clock)
+    generational = GenerationalBackend(SequentialAdvancer()).run(
+        params, InMemoryTrajectoryStore(), None, _clock
+    )
+    assert isinstance(lineal, tuple)
+    assert isinstance(generational, tuple)
+
+    assert [r.final_state for r in generational] == [r.final_state for r in lineal]
+    assert [r.report for r in generational] == [r.report for r in lineal]
+
+
+def test_the_parallel_worker_path_matches_the_sequential_batch() -> None:
+    """Worker processes get the same windows, in waves, as the sequential loop."""
+    params = _matched_batch_params()
+    sequential = LinealBackend().run(params, InMemoryTrajectoryStore(), None, _clock)
+    parallel = LinealBackend(max_workers=3).run(params, None, None, _clock)
+    assert isinstance(sequential, tuple)
+    assert isinstance(parallel, tuple)
+
+    assert [r.final_state for r in parallel] == [r.final_state for r in sequential]
+    assert [r.report for r in parallel] == [r.report for r in sequential]
+
+
+def test_a_fixed_window_is_the_same_for_every_replicate_and_for_a_single_run(
+    tiny_params: SimulationParams,
+) -> None:
+    """An explicit window is a fixed-window run, alone or in a batch."""
+    batch = replace(
+        tiny_params, n_replicates=3, replicate_averaging_window=17, max_generations=100
+    )
+    output = fim(
+        batch.gene_copies, batch.m, batch.mu, batch.d, params=batch, clock=_clock
+    )
+    assert isinstance(output, tuple)
+
+    for result in output:
+        assert result.params.replicate_averaging_window == 17
+        assert result.report["generation"] == 1 + 17
+    alone = _run(output[1].params)
+    assert alone.final_state == output[1].final_state
+
+
+def test_a_batch_summary_is_the_mean_of_the_replicates_window_means() -> None:
+    """Each replicate contributes what it measured over its window."""
+    params = _matched_batch_params()
+    output = fim(
+        params.gene_copies, params.m, params.mu, params.d, params=params, clock=_clock
+    )
+    assert isinstance(output, tuple)
+
+    summary = replicate_summary(output)
+
+    means = [r.report["window_statistics"]["D"]["mean"] for r in output]
+    assert summary["D"]["mean"] == pytest.approx(statistics.fmean(means))
+    final_values = [r.report["D"] for r in output]
+    assert statistics.fmean(final_values) != pytest.approx(summary["D"]["mean"])
+
+
+def test_a_value_of_means_batch_pools_the_identities_before_the_statistic() -> None:
+    """Form two for a batch: `f` of the pooled `H_S`/`H_T`, delta-method interval."""
+    params = _matched_batch_params(convergence_estimate="value_of_means")
+    output = fim(
+        params.gene_copies, params.m, params.mu, params.d, params=params, clock=_clock
+    )
+    assert isinstance(output, tuple)
+
+    summary = replicate_summary(output)
+
+    windows = [r.report["window_statistics"] for r in output]
+    mean_s = statistics.fmean(w["H_S"]["mean"] for w in windows)
+    mean_t = statistics.fmean(w["H_T"]["mean"] for w in windows)
+    expected = _jost_d_from_within_and_total(2, mean_s, mean_t)
+    assert summary["D"]["mean"] == pytest.approx(expected, abs=1e-12)
+    per_replicate = statistics.fmean(w["D"]["value_of_means"]["mean"] for w in windows)
+    assert summary["D"]["mean"] != pytest.approx(per_replicate, abs=1e-15)
+    assert summary["D"]["half_width"] > 0.0
+    assert summary["D"]["low"] < summary["D"]["mean"] < summary["D"]["high"]
+
+
+def test_planned_replicates_runs_every_replicate_without_an_early_stop() -> None:
+    """`planned_replicates` ignores `stop_batch_early` and keeps all replicates."""
+    params = _matched_batch_params(
+        precision_method="planned_replicates", stop_batch_early=True, precision=0.5
+    )
+    output = fim(
+        params.gene_copies, params.m, params.mu, params.d, params=params, clock=_clock
+    )
+    assert isinstance(output, tuple)
+
+    assert len(output) == 6
+    assert all(r.params.precision_method == "interval" for r in output)
+
+
+def test_a_replicate_with_no_burn_in_keeps_the_within_run_rule() -> None:
+    """With no relaxation time the fractional burn-in leaves no window to match."""
+    params = SimulationParams.from_mapping(
+        {
+            **_tiny_config(),
+            "mu": 0.0,
+            "m": 0.0,
+            "convergence_burn_in": "auto",
+            "max_generations": 60,
+            "n_replicates": 3,
+            "precision": 1.0,
+            "initial_allele_count": 2,
+        }
+    )
+    assert params.convergence_burn_in == 0
+
+    output = fim(
+        params.gene_copies, params.m, params.mu, params.d, params=params, clock=_clock
+    )
+
+    assert isinstance(output, tuple)
+    assert all(r.report["reason"] != "averaging window complete" for r in output)

@@ -12,6 +12,7 @@ generation cap are derived from your model instead of being fixed numbers.
 - [How the numbers are derived](#how-the-numbers-are-derived)
 - [Where the formula comes from](#where-the-formula-comes-from)
 - [How precise is the reported value?](#how-precise-is-the-reported-value)
+- [Batches: replicates that average](#batches-replicates-that-average)
 - [Which average? Two forms for `D` and `G_ST`](#which-average-two-forms-for-d-and-g_st)
 - [Checking the numbers yourself](#checking-the-numbers-yourself)
 - [Limits](#limits)
@@ -228,6 +229,47 @@ averaging may have begun before the model forgot its starting state, so the
 burn-in may have been too short. It is a diagnostic only: it never stops or
 continues a run, and it is absent for a window too short to split. The CLI prints the watched statistic's own line after
 every run; the GUI's Run card tooltip shows the same numbers.
+
+## Batches: replicates that average
+
+*For everyone.* A batch (`n_replicates` above 1) reaches the precision by
+averaging twice: each replicate averages over time after its own burn-in, and
+the batch then averages across replicates. A replicate has no precision check
+of its own. It burns in, averages for its window, and stops; its window mean is
+the number it contributes. The last generation's value, one noisy draw, no
+longer stands in for the replicate.
+
+*For analysts.* How long a replicate should average is a trade. A long window
+makes each replicate precise and needs few replicates; a short one needs many.
+`fim` matches the window to the batch
+([`replicate_averaging_window`](configuration.md#replicate_averaging_window)):
+
+1. The first wave (8 replicates by default) averages for a guess, 20
+   relaxation times.
+2. The wave's windows give `sigma`, the standard deviation of a watched
+   statistic, and `tau_int`, its integrated autocorrelation time.
+3. The standard error one replicate needs is `precision * sqrt(R) / t(R - 1)`
+   for the `R` replicates the batch aims for (twice the wave width, or
+   `replicate_minimum` if larger). The window that reaches it is
+   `tau_int * (sigma / SE)^2`, set by the slowest watched statistic and held
+   between 5 and 100 relaxation times.
+4. Every later replicate averages for that window. A later replicate runs up to
+   the shortest window it could receive and waits for step 3, so the result is
+   the same on every backend. The wave width is a number in the configuration,
+   not the processor count, so it is the same on every machine too.
+
+Each replicate's window is recorded in its manifest. With
+[`precision_method: planned_replicates`](configuration.md#precision_method) the
+batch runs exactly `n_replicates` replicates and the window is sized so their
+interval is plus or minus the precision.
+
+`summary.json` is the mean of the replicates' window means with its Student's-t
+interval. For `D` and `G_ST` under the value of means, the replicates' window
+means of `H_S` and `H_T` are pooled first and the statistic is taken once;
+averaging the statistic inside each replicate and then across replicates would
+give a number that depends on the window length. The interval then comes from
+the delta method over replicates. The early stop of a batch judges the
+per-replicate values, a close approximation of the same interval.
 
 ## Which average? Two forms for `D` and `G_ST`
 

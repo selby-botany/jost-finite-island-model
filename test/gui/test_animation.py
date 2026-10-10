@@ -53,10 +53,12 @@ def _write_run(tmp_path: Path, **overrides: object) -> Path:
 def _write_batch_run(tmp_path: Path, **overrides: object) -> Path:
     """Write a small, staggered-stopping batch and return its output directory.
 
-    `seed=42`/`precision=0.1` with the fast test settings matches
-    `test/engine/test_engine.py`'s own identical configuration, confirmed
-    live to produce real, staggered stopping generations (`[19, 39, 39, 79,
-    159]`) rather than every replicate converging together.
+    Replicates of a batch average for an assigned window, so they stop together
+    unless the windows differ. A first wave of two replicates (the Expert
+    Setting `batch_width`) averages for the first-wave guess and the other three
+    for the matched window, which matches `test/engine/test_engine.py`'s
+    identical configuration and gives real, staggered stopping generations
+    (`[120, 120, 120, 300, 300]`).
     """
     config: dict[str, object] = {
         "N": 20,
@@ -68,7 +70,7 @@ def _write_batch_run(tmp_path: Path, **overrides: object) -> Path:
         "loci": [{"locus_id": 1, "length": 200}],
         "precision": 0.1,
         "convergence_burn_in": 1,
-        "expert": dict(FAST_EXPERT_SETTINGS),
+        "expert": {**FAST_EXPERT_SETTINGS, "batch_width": 2},
         "max_generations": 300,
         "n_replicates": 5,
         "stop_batch_early": False,

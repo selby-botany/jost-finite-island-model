@@ -1655,6 +1655,15 @@ def test_expert_settings_change_the_run_id_but_defaults_do_not() -> None:
         ({"start_drift_alert_z": -1}, "greater than 0"),
         ({"estimate_auto_denominator": 0}, "greater than 0"),
         ({"estimate_auto_fraction": 1.0}, "below 1"),
+        ({"batch_width": 0}, "at least 1"),
+        ({"batch_width": 2.5}, "whole number"),
+        ({"replicate_wave_multiple": 0}, "greater than 0"),
+        ({"averaging_multiple_minimum": 0}, "greater than 0"),
+        (
+            {"averaging_multiple_minimum": 10, "averaging_multiple_maximum": 5},
+            "averaging_multiple_maximum",
+        ),
+        ({"first_wave_averaging_multiple": -1}, "greater than 0"),
         ({"check_growth": "fast"}, "check_growth"),
         ("everything", "mapping"),
     ],
@@ -1711,3 +1720,71 @@ def test_convergence_estimate_rejects_an_unknown_form_and_changes_the_run_id() -
         {**_valid_config(), "convergence_estimate": "value_of_means"}
     )
     assert deterministic_run_id(other) != deterministic_run_id(base)
+
+
+def test_batch_settings_default_to_the_matched_interval_method_and_round_trip() -> None:
+    """`auto` window and `interval` method by default; both survive `to_dict`."""
+    default = SimulationParams.from_mapping(_valid_config())
+    assert default.precision_method == "interval"
+    assert default.replicate_averaging_window == 0
+    written = default.to_dict()
+    assert written["precision_method"] == "interval"
+    assert written["replicate_averaging_window"] == "auto"
+    params = SimulationParams.from_mapping(
+        {
+            **_valid_config(),
+            "n_replicates": 4,
+            "precision_method": "planned_replicates",
+            "replicate_averaging_window": 1500,
+            "convergence_burn_in": 100,
+        }
+    )
+    again = SimulationParams.from_mapping(params.to_dict())
+    assert again.precision_method == "planned_replicates"
+    assert again.replicate_averaging_window == 1500
+    assert deterministic_run_id(again) == deterministic_run_id(params)
+
+
+def test_planned_replicates_switches_the_early_stop_off() -> None:
+    """The planned method always runs every replicate."""
+    interval = SimulationParams.from_mapping({**_valid_config(), "n_replicates": 4})
+    planned = SimulationParams.from_mapping(
+        {**_valid_config(), "n_replicates": 4, "precision_method": "planned_replicates"}
+    )
+    assert interval.batch_precision == interval.precision
+    assert planned.batch_precision is None
+
+
+@pytest.mark.parametrize(
+    ("changes", "message"),
+    [
+        ({"precision_method": "sometimes"}, "precision_method must be"),
+        (
+            {"precision_method": "planned_replicates", "n_replicates": 1},
+            "needs n_replicates of at least 2",
+        ),
+        ({"replicate_averaging_window": 0}, "positive integer or 'auto'"),
+        ({"replicate_averaging_window": -5}, "positive integer or 'auto'"),
+        ({"replicate_averaging_window": "long"}, "replicate_averaging_window"),
+    ],
+)
+def test_invalid_batch_settings_are_refused(
+    changes: dict[str, object], message: str
+) -> None:
+    """Unknown methods, a one-replicate plan and bad windows are rejected."""
+    with pytest.raises(ValueError, match=message):
+        SimulationParams.from_mapping({**_valid_config(), **changes})
+
+
+def test_a_fixed_window_needs_a_burn_in() -> None:
+    """With no relaxation time and no explicit burn-in, there is nothing to follow."""
+    config = {
+        **_valid_config(),
+        "mu": 0.0,
+        "m": 0.0,
+        "max_generations": 500,
+        "replicate_averaging_window": 50,
+    }
+    with pytest.raises(ValueError, match="needs a burn-in"):
+        SimulationParams.from_mapping(config)
+    SimulationParams.from_mapping({**config, "convergence_burn_in": 10})

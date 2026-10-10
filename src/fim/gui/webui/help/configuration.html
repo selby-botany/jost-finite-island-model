@@ -746,6 +746,36 @@ run that changes one is a different run (its auto-generated <code>run_id</code> 
 <td>between 0 and 1, exclusive</td>
 <td>Share of window generations that may be degenerate before <code>auto</code> uses the value of means</td>
 </tr>
+<tr>
+<td><code>batch_width</code></td>
+<td><code>8</code></td>
+<td>whole number, at least 1</td>
+<td>Replicates assumed to run at once when <code>max_concurrent_replicates</code> is unset: the width of the first wave a batch matches its windows from</td>
+</tr>
+<tr>
+<td><code>replicate_wave_multiple</code></td>
+<td><code>2</code></td>
+<td>greater than 0</td>
+<td>Replicate waves a batch aims for: the matched window is sized for <code>max(replicate_minimum, multiple * width)</code> replicates</td>
+</tr>
+<tr>
+<td><code>averaging_multiple_minimum</code></td>
+<td><code>5</code></td>
+<td>greater than 0</td>
+<td>Shortest matched replicate window, in relaxation times</td>
+</tr>
+<tr>
+<td><code>averaging_multiple_maximum</code></td>
+<td><code>100</code></td>
+<td>at least <code>averaging_multiple_minimum</code></td>
+<td>Longest matched replicate window, in relaxation times</td>
+</tr>
+<tr>
+<td><code>first_wave_averaging_multiple</code></td>
+<td><code>20</code></td>
+<td>greater than 0</td>
+<td>Window of the first wave of replicates, in relaxation times</td>
+</tr>
 </tbody>
 </table>
 <pre><code class="language-yaml">expert:
@@ -819,8 +849,9 @@ either way).</p>
 <p>Early stopping for a replicate batch (n<sub>replicates</sub> greater than one):
 once at least replicate_minimum replicates have run, stop as soon as
 every statistic named in convergence_statistic has an across-replicate
-Student's-t confidence interval (mean of that statistic's own final value
-across replicates so far) with a half-width at most precision — combined
+Student's-t confidence interval (mean of each replicate's own window mean
+of that statistic, over the replicates so far) with a half-width at most
+precision — combined
 across several watched statistics by convergence_combinator, exactly like
 within-run convergence. n<sub>replicates</sub> is still the hard cap:
 reaching it without tightening ends the batch anyway, a valid,
@@ -846,6 +877,59 @@ replicate_minimum: 20
 </code></pre>
 <pre><code class="language-yaml">n_replicates: 16
 stop_batch_early: false    # always run all 16
+</code></pre>
+<h3 id="replicate_averaging_window">replicate_averaging_window</h3>
+<ul>
+<li><strong>Type:</strong> positive integer, or <code>auto</code></li>
+<li><strong>Default:</strong> <code>auto</code></li>
+</ul>
+<p>How many generations each replicate of a batch averages, after its burn-in.
+A replicate of a batch burns in, averages for its window, and stops; it has
+no precision check of its own, because the batch reaches the precision across
+replicates. Each replicate contributes its window mean to the interval, in
+the form <code>convergence_estimate</code> selects.</p>
+<p><code>auto</code> matches the window to the batch. The first wave of replicates (as many
+as run at once: <code>max_concurrent_replicates</code>, else the Expert Setting
+<code>batch_width</code>, 8 by default) averages for <code>first_wave_averaging_multiple</code>
+relaxation times, 20 by default. When the wave ends, its windows give each
+watched statistic's standard deviation <code>sigma</code> and integrated autocorrelation
+time <code>tau_int</code>. The window that gives one replicate the standard error
+<code>SE = precision * sqrt(R) / t(R - 1)</code>, where <code>R</code> is the number of replicates
+the batch aims for (the larger of <code>replicate_minimum</code> and <code>replicate_wave_multiple</code>
+times the wave width), is <code>tau_int * (sigma / SE)^2</code>. The slowest watched
+statistic decides, and the window is held between <code>averaging_multiple_minimum</code>
+and <code>averaging_multiple_maximum</code> relaxation times (5 and 100). Every later
+replicate uses it; replicates with different windows are pooled with equal
+weight. A later replicate runs until the shortest window it could receive and
+then waits for the wave to be measured, so the result never depends on which
+backend ran it. The wave width is a number in the configuration, not the
+machine's processor count, so the same configuration gives the same windows
+and the same results everywhere.</p>
+<p>A positive number is used by every replicate and nothing is measured. A model
+with no relaxation time (and so no burn-in) keeps the within-run rule in every
+replicate.</p>
+<p>A single run (<code>n_replicates: 1</code>) ignores <code>auto</code> and judges itself by the
+within-run rule. A single run with a positive number is a <em>fixed-window run</em>:
+it burns in, averages that many generations, and stops, with no precision
+check. Each replicate of a batch records its own window in its parameters, so
+the replicate's manifest reproduces it exactly.</p>
+<pre><code class="language-yaml">replicate_averaging_window: auto     # match the window to the batch
+replicate_averaging_window: 20000    # or: every replicate averages 20,000
+</code></pre>
+<h3 id="precision_method">precision_method</h3>
+<ul>
+<li><strong>Type:</strong> <code>interval</code> or <code>planned_replicates</code></li>
+<li><strong>Default:</strong> <code>interval</code></li>
+</ul>
+<p>How a batch reaches its precision. <code>interval</code> adds replicates until the
+interval across them is plus or minus <code>precision</code> (with stop_batch_early on),
+each replicate averaging for a window matched to the batch. <code>planned_replicates</code>
+runs exactly n<sub>replicates</sub>, with no early stop, and sizes every
+replicate's window so that their interval is plus or minus <code>precision</code>: you
+choose the number of replicates, the engine chooses how long each one averages.
+It needs n<sub>replicates</sub> of at least 2.</p>
+<pre><code class="language-yaml">n_replicates: 16
+precision_method: planned_replicates   # 16 replicates, each long enough for +/- precision
 </code></pre>
 <h3 id="replicate_minimum">replicate_minimum</h3>
 <ul>
@@ -1284,6 +1368,22 @@ existed.</p>
 </tr>
 <tr>
 <td>stop_batch_early not a boolean</td>
+<td>rejected</td>
+</tr>
+<tr>
+<td>precision_method not <code>interval</code> or <code>planned_replicates</code></td>
+<td>rejected</td>
+</tr>
+<tr>
+<td>precision_method <code>planned_replicates</code> with n<sub>replicates</sub> <code>1</code></td>
+<td>rejected</td>
+</tr>
+<tr>
+<td>replicate_averaging_window not a positive integer or <code>auto</code></td>
+<td>rejected</td>
+</tr>
+<tr>
+<td>replicate_averaging_window set for a model with no burn-in</td>
 <td>rejected</td>
 </tr>
 <tr>

@@ -73,6 +73,7 @@ LocusAggregation = Literal["ratio_of_means", "mean_of_ratios"]
 ConvergenceStatistic = str | tuple[str, ...]
 ConvergenceCombinator = Literal["any", "all"]
 ConvergenceEstimate = Literal["mean_of_values", "value_of_means", "auto"]
+PrecisionMethod = Literal["interval", "planned_replicates"]
 MigrantSampling = Literal["continuous", "stochastic"]
 MutationModel = Literal["infinite_alleles", "finite_alleles"]
 EngineBackend = Literal["lineal", "generational", "generational-vector", "auto"]
@@ -107,6 +108,8 @@ PARAMETER_DEFAULTS: Final[dict[str, object]] = {
     "max_generations": None,  # None means "auto": derive it
     "n_replicates": DEFAULT_N_REPLICATES,
     "stop_batch_early": True,
+    "precision_method": "interval",
+    "replicate_averaging_window": None,  # None means "auto": match the batch
     "replicate_minimum": 10,
     "confidence": 0.95,
     "migrant_sampling": "continuous",
@@ -149,6 +152,8 @@ _CONFIG_KEYS: Final = frozenset(
         "max_generations",
         "n_replicates",
         "stop_batch_early",
+        "precision_method",
+        "replicate_averaging_window",
         "replicate_minimum",
         "confidence",
         "expert",
@@ -382,6 +387,20 @@ class SimulationParams:
             interval, not an uncertainty-free-looking single point, so an
             unconfigured run now behaves that way by default. Set to `1`
             explicitly for the old single-run behavior.
+        precision_method: How a batch reaches `precision`. `"interval"` (the
+            default): add replicates until the across-replicate interval is
+            plus or minus `precision` (`stop_batch_early` allowing), each
+            replicate averaging for a window matched to the batch.
+            `"planned_replicates"`: run exactly `n_replicates`, each long
+            enough that their interval is plus or minus `precision`; no
+            early stop. Needs at least two replicates.
+        replicate_averaging_window: Generations each replicate of a batch
+            averages after its burn-in. `AUTO_CONVERGENCE` (`0`, the
+            default) matches the window to the batch
+            (`fim.convergence.batch_window`); an explicit value is used by
+            every replicate. A single run with an explicit value is a
+            fixed-window run: burn in, average that long, stop, with no
+            precision check.
         stop_batch_early: Whether a replicate batch stops as soon as
             `precision` is reached (the default): every watched
             statistic's across-replicate Student's-t confidence interval
@@ -567,6 +586,8 @@ class SimulationParams:
     max_generations: int = AUTO_CONVERGENCE
     n_replicates: int = DEFAULT_N_REPLICATES
     stop_batch_early: bool = True
+    precision_method: PrecisionMethod = "interval"
+    replicate_averaging_window: int = AUTO_CONVERGENCE
     replicate_minimum: int = 10
     confidence: float = 0.95
     migrant_sampling: MigrantSampling = "continuous"
@@ -673,6 +694,7 @@ class SimulationParams:
             minimum=1,
         )
         _require_integer("n_replicates", self.n_replicates, minimum=1)
+        self._validate_batch_settings()
         _require_bool("stop_batch_early", self.stop_batch_early)
         _require_integer("replicate_minimum", self.replicate_minimum, minimum=2)
         object.__setattr__(
@@ -766,13 +788,50 @@ class SimulationParams:
             return (self.convergence_statistic,)
         return self.convergence_statistic
 
+    def _validate_batch_settings(self) -> None:
+        """Validate how a batch reaches its precision.
+
+        Runs after `_resolve_convergence_defaults`, so `convergence_burn_in`
+        is already the derived integer (zero only for a model with no
+        relaxation time).
+
+        Raises:
+            ValueError: If the precision method is unknown, `planned_replicates`
+                is asked of a single run, or a fixed averaging window has no
+                burn-in to follow.
+        """
+        _require_integer(
+            "replicate_averaging_window", self.replicate_averaging_window, minimum=0
+        )
+        if self.precision_method not in ("interval", "planned_replicates"):
+            raise ValueError(
+                "precision_method must be 'interval' or 'planned_replicates'"
+            )
+        if (
+            self.precision_method == "planned_replicates"
+            and self.n_replicates < MINIMUM_REPLICATE_COUNT
+        ):
+            raise ValueError(
+                "precision_method 'planned_replicates' needs n_replicates of at "
+                "least 2: a single run has no interval across replicates"
+            )
+        if self.replicate_averaging_window and self.convergence_burn_in == 0:
+            raise ValueError(
+                "replicate_averaging_window needs a burn-in: set "
+                "convergence_burn_in, or use a model with a relaxation time"
+            )
+
     @property
     def batch_precision(self) -> float | None:
         """Return the precision a batch stops at, or `None` to run it in full.
 
-        `precision` when `stop_batch_early` is on (the default), `None` when
-        it is off: the single value the batch's stopping rule reads.
+        `precision` when `stop_batch_early` is on (the default) and the
+        precision method is `interval`; `None` otherwise, since the
+        `planned_replicates` method always runs every replicate. The single
+        value the batch's stopping rule reads.
         """
+        if self.precision_method != "interval":
+            return None
         return self.precision if self.stop_batch_early else None
 
     @property
@@ -951,6 +1010,8 @@ class SimulationParams:
             "max_generations": self.max_generations,
             "n_replicates": self.n_replicates,
             "stop_batch_early": self.stop_batch_early,
+            "precision_method": self.precision_method,
+            "replicate_averaging_window": self.replicate_averaging_window or "auto",
             "replicate_minimum": self.replicate_minimum,
             "confidence": self.confidence,
             "migrant_sampling": self.migrant_sampling,
@@ -1123,6 +1184,16 @@ class SimulationParams:
                     "convergence_estimate",
                     PARAMETER_DEFAULTS["convergence_estimate"],
                 )
+            ),
+            precision_method=_parse_precision_method(
+                config.get("precision_method", PARAMETER_DEFAULTS["precision_method"])
+            ),
+            replicate_averaging_window=_parse_auto_int(
+                "replicate_averaging_window",
+                config.get(
+                    "replicate_averaging_window",
+                    PARAMETER_DEFAULTS["replicate_averaging_window"],
+                ),
             ),
             convergence_burn_in=_parse_auto_int(
                 "convergence_burn_in",
@@ -1632,6 +1703,16 @@ def _parse_convergence_estimate(value: Any) -> ConvergenceEstimate:
     raise ValueError(
         "convergence_estimate must be 'mean_of_values', 'value_of_means', or 'auto'"
     )
+
+
+def _parse_precision_method(value: Any) -> PrecisionMethod:
+    """Parse the two supported precision methods."""
+    parsed = _parse_string("precision_method", value)
+    if parsed == "interval":
+        return "interval"
+    if parsed == "planned_replicates":
+        return "planned_replicates"
+    raise ValueError("precision_method must be 'interval' or 'planned_replicates'")
 
 
 def _parse_float(name: str, value: Any) -> float:

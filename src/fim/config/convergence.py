@@ -137,3 +137,55 @@ rate, so it only labels the result (design 6.5).
 
 Kind: policy.
 """
+
+REPLICATE_WAVE_MULTIPLE: Final = 2.0
+"""Replicate waves a batch aims for: `R_target = max(replicate_minimum, m * W)`.
+
+`W` is how many replicates run at once. Sizing the batch to a small multiple
+of `W` keeps every worker busy through whole waves, and the averaging window
+of a replicate is matched to reach the requested precision with that many
+replicates (design 9.1).
+
+Kind: policy.
+"""
+
+BATCH_WIDTH: Final = 8
+"""Replicates assumed to run at once, when `max_concurrent_replicates` is unset.
+
+The first wave of replicates, which measures the noise the later windows are
+matched from, is this wide. It is a fixed number, not the machine's CPU count,
+so a configuration gives the same windows and the same results on every
+machine and under every backend (design 9.1 matched the window to the
+workers; a worker count that changed the results would break reproducibility).
+
+Kind: policy.
+"""
+
+AVERAGING_MULTIPLE_MINIMUM: Final = 5.0
+"""Smallest matched averaging window, in relaxation times.
+
+Below this a replicate's own average is barely better than a snapshot: its
+window holds only a few independent values (design 9).
+
+Kind: policy.
+"""
+
+AVERAGING_MULTIPLE_MAXIMUM: Final = 100.0
+"""Largest matched averaging window, in relaxation times.
+
+Keeps a replicate finite when its statistic is so noisy that the matched
+window would be enormous; more replicates then serve better than a longer
+window.
+
+Kind: policy.
+"""
+
+FIRST_WAVE_AVERAGING_MULTIPLE: Final = 20.0
+"""Averaging window, in relaxation times, of the first wave of replicates.
+
+The first wave runs before anything is known about the statistic's noise, so
+it averages for this guess; the matched window of every later replicate is
+measured from it (design 9.1).
+
+Kind: policy.
+"""

@@ -401,3 +401,70 @@ def test_a_fractional_burn_in_reports_the_window_start_as_its_burn_in() -> None:
 
     assert monitor.window_start_generation == 20
     assert monitor.burn_in_generation == 20
+
+
+def test_a_window_mode_monitor_stops_exactly_when_its_window_is_averaged() -> None:
+    """Burn-in 10 and a window of 25: stop at generation 35, with no checks."""
+    monitor = _monitor(averaging_window=25, precision=0.0)
+
+    stopped = _feed(monitor, [0.5] * 100)
+
+    assert stopped == 35
+    outcome = monitor.outcome()
+    assert outcome.converged is True
+    assert outcome.reason is StopReason.AVERAGING_COMPLETE
+    assert monitor.stable_statistics() == ("value",)
+
+
+def test_a_window_mode_monitor_waits_for_a_window_it_does_not_have_yet() -> None:
+    """Awaiting a window, the monitor never stops; the window then ends it."""
+    monitor = _monitor(awaiting_window=True)
+    assert monitor.awaiting_window is True
+    for generation in range(60):
+        monitor.record(generation, 0.5)
+    assert not monitor.should_stop()
+
+    monitor.set_averaging_window(70)
+    assert monitor.awaiting_window is False
+    assert not monitor.should_stop()
+    for generation in range(60, 90):
+        monitor.record(generation, 0.5)
+        if monitor.should_stop():
+            break
+
+    assert monitor.outcome().generation == 80
+
+
+def test_a_waiting_monitor_stops_at_once_when_the_window_ends_where_it_paused() -> None:
+    """A replicate paused at burn-in + 40 and given a window of 40 is done."""
+    monitor = _monitor(awaiting_window=True)
+    for generation in range(51):
+        monitor.record(generation, 0.5)
+    assert not monitor.should_stop()
+
+    monitor.set_averaging_window(40)
+
+    assert monitor.should_stop()
+    assert monitor.outcome().generation == 50
+    assert monitor.outcome().reason is StopReason.AVERAGING_COMPLETE
+
+
+def test_a_window_mode_monitor_that_reaches_the_cap_first_is_capped() -> None:
+    """A window longer than the room under the cap ends as a capped run."""
+    monitor = _monitor(averaging_window=500, max_generations=100, precision=0.0)
+
+    stopped = _feed(monitor, [0.5] * 200)
+
+    assert stopped == 100
+    assert monitor.outcome().reason is StopReason.MAX_GENERATIONS
+    assert monitor.outcome().converged is False
+
+
+def test_window_mode_needs_a_burn_in_and_a_positive_window() -> None:
+    """The fractional burn-in has no fixed start to average from."""
+    with pytest.raises(ValueError, match="needs a burn-in"):
+        _monitor(burn_in=None, averaging_window=10)
+    with pytest.raises(ValueError, match="at least 1"):
+        _monitor(averaging_window=0)
+    with pytest.raises(RuntimeError, match="window-mode"):
+        _monitor().set_averaging_window(10)

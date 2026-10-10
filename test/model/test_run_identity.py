@@ -90,7 +90,7 @@ def test_a_model_key_still_changes_the_run_id() -> None:
 # `confidence` replaced the three tolerance and confidence settings, and
 # when `convergence_burn_in` replaced `convergence_window` (the parameters a
 # run ID hashes changed names); it was `run-9b48f125d7f8c355` before.
-GOLDEN_RUN_ID = "run-0bca6b1e25910198"
+GOLDEN_RUN_ID = "run-6a9329c6083a879a"
 
 
 def test_a_configuration_without_read_only_keeps_its_golden_run_id() -> None:

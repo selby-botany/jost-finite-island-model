@@ -764,6 +764,11 @@ run that changes one is a different run (its auto-generated `run_id` changes).
 | `start_drift_alert_z` | `3` | greater than 0 | Absolute start-of-window `z` above which the report says the burn-in may have been too short |
 | `estimate_auto_denominator` | `0.01` | between 0 and 1, exclusive | Denominator (`H_T` for `G_ST`, `1 - H_S` for `D`) below which a generation is degenerate for `convergence_estimate: auto` |
 | `estimate_auto_fraction` | `0.01` | between 0 and 1, exclusive | Share of window generations that may be degenerate before `auto` uses the value of means |
+| `batch_width` | `8` | whole number, at least 1 | Replicates assumed to run at once when `max_concurrent_replicates` is unset: the width of the first wave a batch matches its windows from |
+| `replicate_wave_multiple` | `2` | greater than 0 | Replicate waves a batch aims for: the matched window is sized for `max(replicate_minimum, multiple * width)` replicates |
+| `averaging_multiple_minimum` | `5` | greater than 0 | Shortest matched replicate window, in relaxation times |
+| `averaging_multiple_maximum` | `100` | at least `averaging_multiple_minimum` | Longest matched replicate window, in relaxation times |
+| `first_wave_averaging_multiple` | `20` | greater than 0 | Window of the first wave of replicates, in relaxation times |
 
 ```yaml
 expert:
@@ -845,8 +850,9 @@ either way).
 Early stopping for a replicate batch (n<sub>replicates</sub> greater than one):
 once at least replicate_minimum replicates have run, stop as soon as
 every statistic named in convergence_statistic has an across-replicate
-Student's-t confidence interval (mean of that statistic's own final value
-across replicates so far) with a half-width at most precision — combined
+Student's-t confidence interval (mean of each replicate's own window mean
+of that statistic, over the replicates so far) with a half-width at most
+precision — combined
 across several watched statistics by convergence_combinator, exactly like
 within-run convergence. n<sub>replicates</sub> is still the hard cap:
 reaching it without tightening ends the batch anyway, a valid,
@@ -878,6 +884,68 @@ replicate_minimum: 20
 ```yaml
 n_replicates: 16
 stop_batch_early: false    # always run all 16
+```
+
+### replicate_averaging_window
+
+- **Type:** positive integer, or `auto`
+- **Default:** `auto`
+
+How many generations each replicate of a batch averages, after its burn-in.
+A replicate of a batch burns in, averages for its window, and stops; it has
+no precision check of its own, because the batch reaches the precision across
+replicates. Each replicate contributes its window mean to the interval, in
+the form `convergence_estimate` selects.
+
+`auto` matches the window to the batch. The first wave of replicates (as many
+as run at once: `max_concurrent_replicates`, else the Expert Setting
+`batch_width`, 8 by default) averages for `first_wave_averaging_multiple`
+relaxation times, 20 by default. When the wave ends, its windows give each
+watched statistic's standard deviation `sigma` and integrated autocorrelation
+time `tau_int`. The window that gives one replicate the standard error
+`SE = precision * sqrt(R) / t(R - 1)`, where `R` is the number of replicates
+the batch aims for (the larger of `replicate_minimum` and `replicate_wave_multiple`
+times the wave width), is `tau_int * (sigma / SE)^2`. The slowest watched
+statistic decides, and the window is held between `averaging_multiple_minimum`
+and `averaging_multiple_maximum` relaxation times (5 and 100). Every later
+replicate uses it; replicates with different windows are pooled with equal
+weight. A later replicate runs until the shortest window it could receive and
+then waits for the wave to be measured, so the result never depends on which
+backend ran it. The wave width is a number in the configuration, not the
+machine's processor count, so the same configuration gives the same windows
+and the same results everywhere.
+
+A positive number is used by every replicate and nothing is measured. A model
+with no relaxation time (and so no burn-in) keeps the within-run rule in every
+replicate.
+
+A single run (`n_replicates: 1`) ignores `auto` and judges itself by the
+within-run rule. A single run with a positive number is a *fixed-window run*:
+it burns in, averages that many generations, and stops, with no precision
+check. Each replicate of a batch records its own window in its parameters, so
+the replicate's manifest reproduces it exactly.
+
+```yaml
+replicate_averaging_window: auto     # match the window to the batch
+replicate_averaging_window: 20000    # or: every replicate averages 20,000
+```
+
+### precision_method
+
+- **Type:** `interval` or `planned_replicates`
+- **Default:** `interval`
+
+How a batch reaches its precision. `interval` adds replicates until the
+interval across them is plus or minus `precision` (with stop_batch_early on),
+each replicate averaging for a window matched to the batch. `planned_replicates`
+runs exactly n<sub>replicates</sub>, with no early stop, and sizes every
+replicate's window so that their interval is plus or minus `precision`: you
+choose the number of replicates, the engine chooses how long each one averages.
+It needs n<sub>replicates</sub> of at least 2.
+
+```yaml
+n_replicates: 16
+precision_method: planned_replicates   # 16 replicates, each long enough for +/- precision
 ```
 
 ### replicate_minimum
@@ -1275,6 +1343,10 @@ existed.
 | μ<sub>b</sub> outside `[0, 1]` | rejected |
 | precision negative or non-finite | rejected |
 | stop_batch_early not a boolean | rejected |
+| precision_method not `interval` or `planned_replicates` | rejected |
+| precision_method `planned_replicates` with n<sub>replicates</sub> `1` | rejected |
+| replicate_averaging_window not a positive integer or `auto` | rejected |
+| replicate_averaging_window set for a model with no burn-in | rejected |
 | replicate_minimum less than 2 | rejected |
 | convergence_burn_in not a positive integer or `auto` | rejected |
 | track_expensive_statistics not a boolean | rejected |

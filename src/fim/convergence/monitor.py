@@ -57,16 +57,20 @@ logger = logging.getLogger(__name__)
 class StopReason(StrEnum):
     """Reason a simulation stopped.
 
-    A run always stops for exactly one of these two reasons: there is no third
+    A run always stops for exactly one of these reasons: there is no other
     way for the simulation loop to exit. `STATISTIC_CONVERGED` means the
     watched statistic(s) reached the requested precision before the generation
-    cap; `MAX_GENERATIONS` means the cap was hit first. Reaching the cap is
+    cap; `AVERAGING_COMPLETE` means a replicate of a batch averaged for the
+    whole window it was assigned (the precision is the batch's to reach, not
+    the replicate's); `MAX_GENERATIONS` means the cap was hit first. Reaching
+    the cap is
     reported as a valid, non-error outcome (see `ConvergenceOutcome.converged`):
     some parameter combinations genuinely never reach a given precision in any
     reasonable number of generations, and that is itself a useful finding.
     """
 
     STATISTIC_CONVERGED = "statistic converged"
+    AVERAGING_COMPLETE = "averaging window complete"
     MAX_GENERATIONS = "hit the cap"
 
 
@@ -158,6 +162,62 @@ def _check_names(
     return statistic_names, extra_names
 
 
+def _check_settings(
+    *,
+    max_generations: int,
+    precision: float,
+    confidence: float,
+    burn_in: int | None,
+    first_check: int,
+    growth: float,
+    fractional_burn_in: float,
+    minimum_effective_sample_size: float,
+    averaging_window: int | None,
+    awaiting_window: bool,
+    estimate: str,
+) -> None:
+    """Validate a `BurnInMonitor`'s numeric settings.
+
+    Args:
+        max_generations: Hard cap.
+        precision: Requested plus or minus.
+        confidence: Two-tailed confidence level.
+        burn_in: Burn-in generations, or `None` for the fractional burn-in.
+        first_check: Generations after the burn-in before the first check.
+        growth: Factor by which the window grows between checks.
+        fractional_burn_in: Share discarded when `burn_in` is `None`.
+        minimum_effective_sample_size: The effective-sample-size floor.
+        averaging_window: Window-mode window, or `None`.
+        awaiting_window: Whether window mode waits for its window.
+        estimate: The expected-value form choice.
+
+    Raises:
+        ValueError: If any value is out of range.
+    """
+    if max_generations < 1:
+        raise ValueError("max_generations must be at least 1")
+    if not (math.isfinite(precision) and precision >= 0.0):
+        raise ValueError("precision must be finite and non-negative")
+    if confidence not in (0.90, 0.95, 0.99):
+        raise ValueError("confidence must be 0.90, 0.95, or 0.99")
+    if burn_in is not None and burn_in < 1:
+        raise ValueError("burn_in must be at least 1, or None")
+    if averaging_window is not None and averaging_window < 1:
+        raise ValueError("averaging_window must be at least 1")
+    if (averaging_window is not None or awaiting_window) and burn_in is None:
+        raise ValueError("an averaging window needs a burn-in")
+    if first_check < MINIMUM_WINDOW_VALUES:
+        raise ValueError(f"first_check must be at least {MINIMUM_WINDOW_VALUES}")
+    if not growth > 1.0:
+        raise ValueError("growth must be greater than 1")
+    if not 0.0 < fractional_burn_in < 1.0:
+        raise ValueError("fractional_burn_in must be between 0 and 1")
+    if not minimum_effective_sample_size > 0.0:
+        raise ValueError("minimum_effective_sample_size must be positive")
+    if estimate not in ("mean_of_values", "value_of_means", "auto"):
+        raise ValueError(f"unknown estimate {estimate!r}")
+
+
 def _resolve_values(
     value: float | Mapping[str, float],
     watched: Sequence[str],
@@ -210,6 +270,15 @@ class BurnInMonitor:
     never depends on the order the statistics are listed in. Nothing but
     appending to the histories happens between checks.
 
+    A replicate of a batch runs in *window mode* (`averaging_window` given, or
+    `awaiting_window`): no check runs; the replicate stops once it has averaged
+    for its assigned window after the burn-in, and the batch judges precision
+    across replicates (`fim.convergence.batch_window`). A window that is not
+    known yet (a later replicate waiting for the first wave to be measured) is
+    supplied with `set_averaging_window`; if the replicate is already past
+    `burn_in + window` it stops at the next generation, averaging over its
+    longer window.
+
     With no burn-in (`burn_in=None`, for a model with no relaxation time) the
     window starts at `floor(fractional_burn_in * t)` at each check.
 
@@ -243,6 +312,8 @@ class BurnInMonitor:
         estimate: str = "mean_of_values",
         auto_denominator: float = ESTIMATE_AUTO_DENOMINATOR,
         auto_fraction: float = ESTIMATE_AUTO_FRACTION,
+        averaging_window: int | None = None,
+        awaiting_window: bool = False,
     ) -> None:
         """Initialize an empty monitor.
 
@@ -269,34 +340,34 @@ class BurnInMonitor:
                 generation counts as degenerate.
             auto_fraction: Under `"auto"`, the degenerate share above which
                 the value of means is used.
+            averaging_window: Window mode: generations to average after the
+                burn-in before stopping (at least 1). Requires `burn_in`.
+            awaiting_window: Window mode with the window not known yet.
 
         Raises:
             ValueError: If a number is out of range, a name repeats, or an
                 identity statistic's `H_S`/`H_T` are not recorded.
         """
-        if max_generations < 1:
-            raise ValueError("max_generations must be at least 1")
-        if not (math.isfinite(precision) and precision >= 0.0):
-            raise ValueError("precision must be finite and non-negative")
-        if confidence not in (0.90, 0.95, 0.99):
-            raise ValueError("confidence must be 0.90, 0.95, or 0.99")
-        if burn_in is not None and burn_in < 1:
-            raise ValueError("burn_in must be at least 1, or None")
-        if first_check < MINIMUM_WINDOW_VALUES:
-            raise ValueError(f"first_check must be at least {MINIMUM_WINDOW_VALUES}")
-        if not growth > 1.0:
-            raise ValueError("growth must be greater than 1")
-        if not 0.0 < fractional_burn_in < 1.0:
-            raise ValueError("fractional_burn_in must be between 0 and 1")
-        if not minimum_effective_sample_size > 0.0:
-            raise ValueError("minimum_effective_sample_size must be positive")
+        _check_settings(
+            max_generations=max_generations,
+            precision=precision,
+            confidence=confidence,
+            burn_in=burn_in,
+            first_check=first_check,
+            growth=growth,
+            fractional_burn_in=fractional_burn_in,
+            minimum_effective_sample_size=minimum_effective_sample_size,
+            averaging_window=averaging_window,
+            awaiting_window=awaiting_window,
+            estimate=estimate,
+        )
+        self._window_mode = averaging_window is not None or awaiting_window
+        self._averaging_window = averaging_window
         self._statistics, extra_names = _check_names(
             statistics, extra_statistics, combinator
         )
         self._all_statistics = self._statistics + extra_names
         self._identity = dict(identity_statistics or {})
-        if estimate not in ("mean_of_values", "value_of_means", "auto"):
-            raise ValueError(f"unknown estimate {estimate!r}")
         unknown = [name for name in self._identity if name not in self._all_statistics]
         if unknown:
             raise ValueError(f"identity statistics not recorded: {unknown}")
@@ -410,14 +481,16 @@ class BurnInMonitor:
         for statistic, number in values.items():
             self._values[statistic].append(number)
             self._value_generations[statistic].append(generation)
-        if generation >= self._next_check and self._check(generation):
+        if self._window_mode:
+            self._record_window_mode(generation)
+        elif generation >= self._next_check and self._check(generation):
             self._outcome = ConvergenceOutcome(
                 stopped=True,
                 converged=True,
                 reason=StopReason.STATISTIC_CONVERGED,
                 generation=generation,
             )
-        elif generation >= self._max_generations:
+        if not self._outcome.stopped and generation >= self._max_generations:
             # A run that reaches the cap is reported as capped, with the
             # evidence window it did average so far (the caller computes it).
             self._outcome = ConvergenceOutcome(
@@ -430,15 +503,72 @@ class BurnInMonitor:
                 self._window_start = int(self._fractional * generation)
         return self._outcome
 
+    @property
+    def awaiting_window(self) -> bool:
+        """Return whether this window-mode monitor is still waiting for its window."""
+        return self._window_mode and self._averaging_window is None
+
+    @property
+    def averaging_window(self) -> int | None:
+        """Return the window mode's assigned window, or `None` if not known."""
+        return self._averaging_window
+
+    def set_averaging_window(self, window: int) -> None:
+        """Assign the window of a monitor that was waiting for it.
+
+        Args:
+            window: Generations to average after the burn-in (at least 1). If
+                the monitor has already recorded the generation the window
+                ends at, it stops at once.
+
+        Raises:
+            RuntimeError: If the monitor is not in window mode.
+            ValueError: If `window` is below 1.
+        """
+        if not self._window_mode:
+            raise RuntimeError("only a window-mode monitor takes an averaging window")
+        if window < 1:
+            raise ValueError("averaging_window must be at least 1")
+        self._averaging_window = window
+        # A replicate that paused exactly at the end of the window it has just
+        # been given is done: it must not take one more generation.
+        if self._generations and not self._outcome.stopped:
+            self._record_window_mode(int(self._generations[-1]))
+
+    def _record_window_mode(self, generation: int) -> None:
+        """Stop a window-mode monitor once its window has been averaged."""
+        if (
+            self._averaging_window is not None
+            and self._burn_in is not None
+            and generation >= self._burn_in + self._averaging_window
+        ):
+            self._outcome = ConvergenceOutcome(
+                stopped=True,
+                converged=True,
+                reason=StopReason.AVERAGING_COMPLETE,
+                generation=generation,
+            )
+
     def stable_statistics(self) -> tuple[str, ...]:
         """Return the watched statistics that passed at the stopping check.
 
         Empty before any check and for a run that hit its cap. Under `"all"` a
         converged run names every watched statistic; under `"any"`, those that
-        had passed when it stopped.
+        had passed when it stopped. A window-mode replicate names the watched
+        statistics that have a defined window mean.
         """
         if not self._outcome.converged:
             return ()
+        if self._window_mode:
+            # A replicate has no precision gate of its own; the statistics it
+            # "converged on" are the watched ones it measured: those with a
+            # defined window mean.
+            start = self._burn_in or 0
+            return tuple(
+                name
+                for name in self._statistics
+                if self._statistics_over(name, start) is not None
+            )
         return tuple(
             name
             for name, ok in zip(self._statistics, self._last_verdicts, strict=True)

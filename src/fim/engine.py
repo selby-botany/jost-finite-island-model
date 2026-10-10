@@ -122,11 +122,17 @@ from fim.config.defaults import (
     DEFAULT_AUTO_VECTOR_MIN_D,
 )
 from fim.config.numerics import MINIMUM_REPLICATE_COUNT
+from fim.convergence.batch_window import (
+    BatchWindowPlanner,
+    WindowNoise,
+    target_replicate_count,
+)
 from fim.convergence.criteria import ConfidenceIntervalCriterion
 from fim.convergence.monitor import (
     BurnInMonitor,
     ConvergenceMonitor,
     ConvergenceOutcome,
+    StopReason,
 )
 from fim.convergence.window_statistics import EstimateForms, IdentityStatistic
 from fim.model.allele import (
@@ -603,17 +609,14 @@ class LinealBackend:
         # Replicate i is an independent scalar run with seed + i, preserving the
         # scalar trajectory for the first result and deterministic batch ordering.
         results: list[RunResult] = []
+        planner = _batch_window_planner(params)
         for replicate_index in range(params.n_replicates):
-            replicate_params = replace(
+            replicate_params = _replicate_params(
                 params,
-                seed=params.seed + replicate_index,
-                n_replicates=1,
+                replicate_index,
+                planner.window_for(replicate_index) if planner else None,
             )
-            replicate_run_id = (
-                f"{run_id}-r{replicate_index + 1:03}"
-                if run_id is not None
-                else deterministic_run_id(replicate_params)
-            )
+            replicate_run_id = _replicate_run_id(params, replicate_index, run_id)
             # A supplied `store_factory` gives every replicate its own fresh
             # store, exactly like the parallel path's workers; otherwise every
             # replicate reuses the one shared `trajectory_store`, unchanged
@@ -630,6 +633,11 @@ class LinealBackend:
                 clock,
             )
             results.append(result)
+            if planner is not None:
+                planner.record(
+                    replicate_index,
+                    _window_noise(result.report, params.convergence_statistics),
+                )
             if monitor is not None:
                 outcome = monitor.record(
                     replicate_index + 1,
@@ -1130,6 +1138,7 @@ def _build_replica_lane(
     run_id: str | None,
     store: TrajectoryStore,
     clock: Clock,
+    planner: BatchWindowPlanner | None = None,
 ) -> ReplicaLane:
     """Build and seed one replica lane through generation zero.
 
@@ -1142,16 +1151,13 @@ def _build_replica_lane(
     exactly matches `LinealBackend`'s own sequential-batch branch, so the
     two backends' own run ids agree for the same configuration.
     """
+    window = planner.window_for(replica_index) if planner is not None else None
     if params.n_replicates == 1:
         lane_run_id = run_id or deterministic_run_id(params)
         lane_params = params
     else:
-        lane_params = replace(params, seed=params.seed + replica_index, n_replicates=1)
-        lane_run_id = (
-            f"{run_id}-r{replica_index + 1:03}"
-            if run_id is not None
-            else deterministic_run_id(lane_params)
-        )
+        lane_params = _replicate_params(params, replica_index, window)
+        lane_run_id = _replicate_run_id(params, replica_index, run_id)
     logger.info(
         "replicate %s starting (N=%s, d=%s, m=%s, mu=%s, seed=%s, max_generations=%s)",
         lane_run_id,
@@ -1164,7 +1170,11 @@ def _build_replica_lane(
     )
     started_at = _format_timestamp(clock())
     rng = np.random.Generator(np.random.PCG64(lane_params.seed))
-    monitor = _burn_in_monitor(lane_params)
+    # A replicate past the first wave of a batch may not know its window yet:
+    # it averages from the burn-in and waits for the wave to be measured.
+    monitor = _burn_in_monitor(
+        lane_params, awaiting_window=planner is not None and window is None
+    )
     state, equilibration_outcome, equilibrium_store = (
         _generate_initial_state_with_outcome(lane_params, rng, store, lane_run_id)
     )
@@ -1250,6 +1260,19 @@ def _finalize_replica_lane(
         # Unreachable in practice — see `_run_one`'s own identical guard
         # for why this is checked explicitly rather than assumed.
         raise RuntimeError("stopped convergence monitor has no reason")
+    if (
+        outcome.reason is StopReason.AVERAGING_COMPLETE
+        and not lane.params.replicate_averaging_window
+        and outcome.generation is not None
+    ):
+        # A replicate that waited for the batch's window averaged for however
+        # long it took to learn it; record that as the fixed window which
+        # would reproduce the replicate exactly.
+        lane.params = replace(
+            lane.params,
+            replicate_averaging_window=outcome.generation
+            - lane.monitor.burn_in_generation,
+        )
     report = report_for_state(
         lane.state,
         lane.params,
@@ -1533,21 +1556,39 @@ def run_batch(
     """
     window_size = params.max_concurrent_replicates or params.n_replicates
     next_unbuilt_index = min(window_size, params.n_replicates)
+    # The first wave the averaging windows are matched from is a property of
+    # the configuration (`_batch_window_planner`), not of this machine.
+    planner = _batch_window_planner(params)
     # Lanes are only ever built in ascending replica order and appended,
     # so `lanes[i].replica_index == i` throughout: the accepted prefix
     # below is a plain slice.
     lanes = [
-        _build_replica_lane(params, replica_index, run_id, store, clock)
+        _build_replica_lane(params, replica_index, run_id, store, clock, planner)
         for replica_index in range(next_unbuilt_index)
     ]
     cross_monitor = _replicate_monitor(params)
     admitted_count = 0
     while any(lane.active for lane in lanes):
-        active_lanes = [lane for lane in lanes if lane.active]
+        active_lanes = [
+            lane
+            for lane in lanes
+            if lane.active and not _waiting_for_window(lane, planner)
+        ]
         newly_stopped = advancer.advance(active_lanes, store)
         for lane in sorted(newly_stopped, key=lambda lane: lane.replica_index):
             lane.active = False
             lane.result = _finalize_replica_lane(lane, clock, store)
+            if planner is not None:
+                matched = planner.record(
+                    lane.replica_index,
+                    _window_noise(lane.result.report, params.convergence_statistics),
+                )
+                if matched is not None:
+                    # The first wave is measured: every replicate that was
+                    # waiting for its window now knows it.
+                    for waiting in lanes:
+                        if waiting.active and waiting.monitor.awaiting_window:
+                            waiting.monitor.set_averaging_window(matched)
 
         # Admit the accepted prefix: every finished lane whose lower-
         # numbered lanes have all finished too, in replica order — the
@@ -1576,7 +1617,7 @@ def run_batch(
             if next_unbuilt_index < params.n_replicates:
                 lanes.append(
                     _build_replica_lane(
-                        params, next_unbuilt_index, run_id, store, clock
+                        params, next_unbuilt_index, run_id, store, clock, planner
                     )
                 )
                 next_unbuilt_index += 1
@@ -2370,14 +2411,20 @@ def deterministic_run_id(params: SimulationParams) -> str:
     return f"run-{hashlib.sha256(canonical).hexdigest()[:16]}"
 
 
-def _burn_in_monitor(params: SimulationParams) -> BurnInMonitor:
+def _burn_in_monitor(
+    params: SimulationParams, *, awaiting_window: bool = False
+) -> BurnInMonitor:
     """Build the burn-in-then-average monitor one run is judged by.
 
     Args:
         params: The run's own configuration: `convergence_burn_in` (zero means
             the fractional burn-in, for a model with no relaxation time),
             `precision`, `confidence`, the watched statistics and their
-            combinator, `max_generations`, and the Expert Settings.
+            combinator, `max_generations`, and the Expert Settings. A
+            positive `replicate_averaging_window` makes the run a fixed-window
+            run (burn in, average that long, stop).
+        awaiting_window: Build a window-mode monitor whose window is not known
+            yet, for a replicate waiting for its batch's first wave.
 
     Returns:
         An empty monitor.
@@ -2405,10 +2452,24 @@ def _burn_in_monitor(params: SimulationParams) -> BurnInMonitor:
         estimate=params.convergence_estimate,
         auto_denominator=expert.estimate_auto_denominator,
         auto_fraction=expert.estimate_auto_fraction,
+        averaging_window=params.replicate_averaging_window or None,
+        awaiting_window=awaiting_window,
     )
 
 
 def _identity_statistics(params: SimulationParams) -> dict[str, IdentityStatistic]:
+    """Describe `D` and `G_ST` as functions of `H_S` and `H_T` for `params`.
+
+    Args:
+        params: The run's configuration.
+
+    Returns:
+        `_identity_statistics_for` its deme count.
+    """
+    return _identity_statistics_for(len(params.population_sizes))
+
+
+def _identity_statistics_for(deme_count: int) -> dict[str, IdentityStatistic]:
     """Describe `D` and `G_ST` as functions of `H_S` and `H_T` (design 6.11).
 
     The values are the engine's own formulas (`_jost_d_from_within_and_total`,
@@ -2418,12 +2479,12 @@ def _identity_statistics(params: SimulationParams) -> dict[str, IdentityStatisti
     standard error; a test checks them against finite differences.
 
     Args:
-        params: The run's configuration (the deme count sets `D`'s scaling).
+        deme_count: The number of demes, which sets `D`'s scaling.
 
     Returns:
         `{"D": ..., "G_ST": ...}`.
     """
-    demes = len(params.population_sizes)
+    demes = deme_count
     scale = demes / (demes - 1) if demes > 1 else 1.0
 
     def d_value(within: float, total: float) -> float | None:
@@ -2760,6 +2821,7 @@ def reports_summary(
     reports: Sequence[FinalReport],
     *,
     confidence: float = 0.95,
+    deme_count: int | None = None,
 ) -> dict[str, ConfidenceInterval]:
     """Return each named statistic's across-report confidence interval.
 
@@ -2799,6 +2861,12 @@ def reports_summary(
         reports: Zero or more independently seeded reports.
         confidence: Two-tailed confidence level; see
             `fim.statistics.interval.confidence_interval`.
+        deme_count: The number of demes, which `D`'s value of means needs. When
+            given and any replicate selected the value of means for `D` or
+            `G_ST` (`convergence_estimate`), that statistic's interval pools the
+            replicates' window means of `H_S` and `H_T` first
+            (`_pooled_value_of_means`); `None` leaves every statistic as a
+            plain mean of replicate values.
 
     Returns:
         One `ConfidenceInterval` per statistic name in `FinalReport`
@@ -2820,7 +2888,7 @@ def reports_summary(
     # Every global statistic in `fim.statistics.catalog`, so a statistic
     # added there is summarized here with no further edit.
     for statistic in report_keys():
-        raw = [_final_report_statistic(report, statistic) for report in reports]
+        raw = [_replicate_statistic(report, statistic) for report in reports]
         if None in raw and _is_nei_distance(statistic):
             # `None` for a Nei distance means infinite, not undefined: a
             # mean over the finite replicates only would understate it,
@@ -2831,7 +2899,71 @@ def reports_summary(
         if len(values) < MINIMUM_REPLICATE_COUNT:
             continue
         summary[statistic] = confidence_interval(values, confidence=confidence)
+    if deme_count is not None:
+        identity = _identity_statistics_for(deme_count)
+        for statistic, function in identity.items():
+            pooled = _pooled_value_of_means(reports, statistic, function, confidence)
+            if pooled is not None:
+                summary[statistic] = pooled
     return summary
+
+
+def _pooled_value_of_means(
+    reports: Sequence[FinalReport],
+    statistic: str,
+    function: IdentityStatistic,
+    confidence: float,
+) -> ConfidenceInterval | None:
+    """Pool the replicates' identities, then take the statistic (design 6.11).
+
+    Averaging the statistic inside each replicate and then across replicates
+    gives a number whose target depends on the window length; the value of
+    the means does not, so the replicates' window means of `H_S` and `H_T` are
+    averaged first, `f` is applied once, and the interval comes from the
+    delta method over replicates: the spread of
+    `f_S * H_S,r + f_T * H_T,r`, the linearized replicate values.
+
+    Args:
+        reports: The batch's reports.
+        statistic: `"D"` or `"G_ST"`.
+        function: Its `f(H_S, H_T)` with gradient.
+        confidence: Two-tailed confidence level.
+
+    Returns:
+        The interval, or `None` when no replicate selected the value of
+        means for `statistic`, fewer than two replicates have window means of
+        both heterozygosities, or `f` is undefined at the pooled means.
+    """
+    selected = any(
+        report["window_statistics"].get(statistic, {}).get("selected_form")
+        == "value_of_means"
+        for report in reports
+    )
+    if not selected:
+        return None
+    pairs = [
+        (windows["H_S"]["mean"], windows["H_T"]["mean"])
+        for windows in (report["window_statistics"] for report in reports)
+        if "H_S" in windows and "H_T" in windows
+    ]
+    if len(pairs) < MINIMUM_REPLICATE_COUNT:
+        return None
+    mean_s = math.fsum(pair[0] for pair in pairs) / len(pairs)
+    mean_t = math.fsum(pair[1] for pair in pairs) / len(pairs)
+    estimate = function.function(mean_s, mean_t)
+    if estimate is None:
+        return None
+    slope_s, slope_t = function.gradient(mean_s, mean_t)
+    linear = confidence_interval(
+        [slope_s * within + slope_t * total for within, total in pairs],
+        confidence=confidence,
+    )
+    return {
+        **linear,
+        "mean": estimate,
+        "low": estimate - linear["half_width"],
+        "high": estimate + linear["half_width"],
+    }
 
 
 def _is_nei_distance(statistic: str) -> bool:
@@ -2897,7 +3029,11 @@ def replicate_summary(
     """
     if len(results) < MINIMUM_REPLICATE_COUNT:
         raise ValueError("replicate_summary requires at least two results")
-    return reports_summary([result.report for result in results], confidence=confidence)
+    return reports_summary(
+        [result.report for result in results],
+        confidence=confidence,
+        deme_count=len(results[0].params.population_sizes),
+    )
 
 
 def pooled_convergence_histories(
@@ -3472,12 +3608,21 @@ def _run_batch_parallel(
     """
     results: list[RunResult] = []
     replicate_index = 0
+    planner = _batch_window_planner(params)
     with ProcessPoolExecutor(
         max_workers=max_workers,
         mp_context=multiprocessing.get_context("spawn"),
     ) as executor:
         while replicate_index < params.n_replicates:
             batch_end = min(replicate_index + max_workers, params.n_replicates)
+            # A replicate whose window is not known yet cannot start: the first
+            # wave runs alone, then everything after it is matched to it.
+            while (
+                planner is not None
+                and batch_end - 1 > replicate_index
+                and planner.window_for(batch_end - 1) is None
+            ):
+                batch_end -= 1
             logger.debug(
                 "submitting worker batch: replicates %d..%d of %d",
                 replicate_index + 1,
@@ -3487,16 +3632,10 @@ def _run_batch_parallel(
             futures = {}
             batch_run_ids = {}
             for index in range(replicate_index, batch_end):
-                replicate_params = replace(
-                    params,
-                    seed=params.seed + index,
-                    n_replicates=1,
+                replicate_params = _replicate_params(
+                    params, index, planner.window_for(index) if planner else None
                 )
-                replicate_run_id = (
-                    f"{run_id}-r{index + 1:03}"
-                    if run_id is not None
-                    else deterministic_run_id(replicate_params)
-                )
+                replicate_run_id = _replicate_run_id(params, index, run_id)
                 batch_run_ids[index] = replicate_run_id
                 futures[index] = executor.submit(
                     _run_replicate_worker,
@@ -3508,6 +3647,11 @@ def _run_batch_parallel(
             for index in range(replicate_index, batch_end):
                 result = futures[index].result()
                 results.append(result)
+                if planner is not None:
+                    planner.record(
+                        index,
+                        _window_noise(result.report, params.convergence_statistics),
+                    )
                 if monitor is not None:
                     outcome = monitor.record(
                         index + 1,
@@ -4265,6 +4409,169 @@ def _watched_statistic_values(
     return values
 
 
+def _batch_window_planner(params: SimulationParams) -> BatchWindowPlanner | None:
+    """Build the planner that sets each replicate's averaging window.
+
+    A batch's replicates burn in and then average for a window matched to the
+    batch (`fim.convergence.batch_window`). A model with no burn-in (no
+    relaxation time, so only the fractional burn-in exists) cannot do that, and
+    neither can a batch with no relaxation time to size the first wave by; its
+    replicates keep the within-run rule.
+
+    How many replicates "run at once" sets the first wave the windows are
+    matched from. It comes from the configuration (`max_concurrent_replicates`,
+    else the Expert Setting `batch_width`), never from the machine, so the
+    same configuration gives the same windows, and the same results, on any
+    hardware and under every backend.
+
+    Args:
+        params: The batch's configuration.
+
+    Returns:
+        The planner, or `None` for a single run or when the replicates keep
+        the within-run rule.
+    """
+    if params.n_replicates < MINIMUM_REPLICATE_COUNT or params.convergence_burn_in == 0:
+        return None
+    fixed = params.replicate_averaging_window or None
+    if fixed is None and params.relaxation_time is None:
+        return None
+    expert = params.expert
+    width = max(
+        1,
+        min(
+            params.max_concurrent_replicates or expert.batch_width,
+            params.n_replicates,
+        ),
+    )
+    if params.precision_method == "planned_replicates":
+        replicates = params.n_replicates
+    else:
+        replicates = max(
+            MINIMUM_REPLICATE_COUNT,
+            min(
+                params.n_replicates,
+                target_replicate_count(
+                    minimum=params.replicate_minimum,
+                    wave_multiple=expert.replicate_wave_multiple,
+                    width=width,
+                ),
+            ),
+        )
+    return BatchWindowPlanner(
+        relaxation_time=params.relaxation_time or 1.0,
+        statistics=params.convergence_statistics,
+        precision=params.precision,
+        confidence=params.confidence,
+        replicates=replicates,
+        first_wave=width,
+        first_wave_multiple=expert.first_wave_averaging_multiple,
+        multiple_minimum=expert.averaging_multiple_minimum,
+        multiple_maximum=expert.averaging_multiple_maximum,
+        fixed_window=fixed,
+        window_limit=max(1, params.max_generations - params.convergence_burn_in),
+    )
+
+
+def _replicate_params(
+    params: SimulationParams, replicate_index: int, window: int | None = None
+) -> SimulationParams:
+    """Return the configuration of one replicate of a batch.
+
+    The replicate is an independent single run with its own seed. Its
+    `precision_method` is reset (a single run has no interval across
+    replicates, so `planned_replicates` would be refused) and its averaging
+    window, when the batch assigned one, is written into the parameters, so
+    the replicate's manifest says exactly what it ran.
+
+    Args:
+        params: The batch's configuration.
+        replicate_index: The replicate's zero-based index.
+        window: The averaging window the batch assigned, in generations, or
+            `None` to keep the batch's own setting.
+
+    Returns:
+        The replicate's configuration.
+    """
+    return replace(
+        params,
+        seed=params.seed + replicate_index,
+        n_replicates=1,
+        precision_method="interval",
+        replicate_averaging_window=window or params.replicate_averaging_window,
+    )
+
+
+def _waiting_for_window(lane: ReplicaLane, planner: BatchWindowPlanner | None) -> bool:
+    """Return whether a replicate must pause until its window is known.
+
+    A replicate past the first wave learns its averaging window only when the
+    wave has been measured. It may average until the shortest window it could
+    be given, `BatchWindowPlanner.earliest_window`; beyond that it would risk
+    overshooting its window, which would make its result depend on how far it
+    had run when the wave ended, and so on the backend. It pauses there.
+
+    Args:
+        lane: A running lane.
+        planner: The batch's planner, or `None`.
+
+    Returns:
+        `True` when the lane is waiting for its window and has reached the
+        earliest generation it may stop at.
+    """
+    if planner is None or not lane.monitor.awaiting_window:
+        return False
+    reached = lane.monitor.window_end_generation or 0
+    return reached >= lane.monitor.burn_in_generation + planner.earliest_window
+
+
+def _replicate_run_id(
+    params: SimulationParams, replicate_index: int, run_id: str | None
+) -> str:
+    """Return the run ID of one replicate of a batch.
+
+    Args:
+        params: The batch's configuration.
+        replicate_index: The replicate's zero-based index.
+        run_id: The batch's ID, or `None` to derive one from the parameters.
+
+    Returns:
+        `<run_id>-rNNN` for a named batch. Otherwise the deterministic ID of
+        the replicate's configuration *with the batch's own averaging-window
+        setting*, not the window it was assigned: every backend learns that
+        window at a different moment, and the same replicate must get the same
+        ID whichever one runs it.
+    """
+    if run_id is not None:
+        return f"{run_id}-r{replicate_index + 1:03}"
+    return deterministic_run_id(_replicate_params(params, replicate_index))
+
+
+def _window_noise(
+    report: FinalReport, statistics: Sequence[str]
+) -> dict[str, WindowNoise]:
+    """Return how noisy each watched statistic was over a replicate's window.
+
+    Args:
+        report: A finished replicate's report.
+        statistics: The watched statistics.
+
+    Returns:
+        The standard deviation and integrated autocorrelation time per
+        statistic the report has a window for; the planner measures the first
+        wave from these.
+    """
+    noise: dict[str, WindowNoise] = {}
+    for name in statistics:
+        entry = report["window_statistics"].get(name)
+        if entry is not None:
+            noise[name] = WindowNoise(
+                standard_deviation=entry["standard_deviation"],
+                tau_int=entry["window"] / entry["effective_sample_size"],
+            )
+    return noise
+
+
 def _replicate_monitor(params: SimulationParams) -> ConvergenceMonitor | None:
     """Return the adaptive replicate-batch monitor, or ``None`` when unused.
 
@@ -4324,10 +4631,38 @@ def _replicate_stopping_values(
     """
     values: dict[str, float] = {}
     for statistic in statistics:
-        value = _final_report_statistic(result.report, statistic)
+        value = _replicate_statistic(result.report, statistic)
         if value is not None:
             values[statistic] = value
     return values
+
+
+def _replicate_statistic(report: FinalReport, statistic: str) -> float | None:
+    """Read one statistic's value for a replicate of a batch.
+
+    A replicate that averaged contributes its window mean, in the form it
+    selected, not the last generation's value: the last generation is one
+    noisy draw, the window mean is what the replicate measured (design 6.7).
+    For a statistic that is recorded every generation (`D`, `G_ST`, `H_S`,
+    `H_T`, `H_ST` and anything watched) a replicate with a window but no
+    defined window mean contributes nothing, as an undefined replicate always
+    has. Any other statistic, and any report with no window at all (a live
+    progress report), contributes its final-state value.
+
+    Args:
+        report: The replicate's report.
+        statistic: A statistic name.
+
+    Returns:
+        The value, or `None` when the replicate leaves it undefined.
+    """
+    windows = report["window_statistics"]
+    entry = windows.get(statistic)
+    if entry is not None:
+        return cast("float", entry["mean"])
+    if windows and statistic in _ALWAYS_TRACKED_STATISTICS:
+        return None
+    return _final_report_statistic(report, statistic)
 
 
 def _mean_statistic_across_loci(

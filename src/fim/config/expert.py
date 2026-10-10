@@ -21,14 +21,19 @@ from typing import Any, Final
 
 from fim.config.convergence import (
     ABSOLUTE_MAX_GENERATIONS,
+    AVERAGING_MULTIPLE_MAXIMUM,
+    AVERAGING_MULTIPLE_MINIMUM,
+    BATCH_WIDTH,
     BURN_IN_MINIMUM_RELAXATION_TIMES,
     CAP_RELAXATION_MULTIPLE,
     CHECK_GROWTH,
     FIRST_CHECK_MINIMUM,
     FIRST_CHECK_RELAXATION_TIMES,
+    FIRST_WAVE_AVERAGING_MULTIPLE,
     FRACTIONAL_BURN_IN,
     MINIMUM_EFFECTIVE_SAMPLE_SIZE,
     MINIMUM_MAX_GENERATIONS,
+    REPLICATE_WAVE_MULTIPLE,
     START_DRIFT_ALERT_Z,
 )
 from fim.config.numerics import MINIMUM_WINDOW_VALUES
@@ -65,6 +70,17 @@ class ExpertSettings:
         estimate_auto_fraction: Share of window generations that may be
             degenerate before `auto` switches to the value of means (between
             0 and 1, exclusive).
+        batch_width: Replicates assumed to run at once when
+            `max_concurrent_replicates` is unset (at least 1).
+        replicate_wave_multiple: Replicate waves a batch aims for (greater
+            than 0).
+        averaging_multiple_minimum: Smallest matched replicate averaging
+            window, in relaxation times (greater than 0).
+        averaging_multiple_maximum: Largest matched replicate averaging
+            window, in relaxation times (at least
+            `averaging_multiple_minimum`).
+        first_wave_averaging_multiple: Averaging window of the first wave of
+            replicates, in relaxation times (greater than 0).
     """
 
     burn_in_minimum_relaxation_times: float = BURN_IN_MINIMUM_RELAXATION_TIMES
@@ -79,6 +95,11 @@ class ExpertSettings:
     start_drift_alert_z: float = START_DRIFT_ALERT_Z
     estimate_auto_denominator: float = ESTIMATE_AUTO_DENOMINATOR
     estimate_auto_fraction: float = ESTIMATE_AUTO_FRACTION
+    batch_width: int = BATCH_WIDTH
+    replicate_wave_multiple: float = REPLICATE_WAVE_MULTIPLE
+    averaging_multiple_minimum: float = AVERAGING_MULTIPLE_MINIMUM
+    averaging_multiple_maximum: float = AVERAGING_MULTIPLE_MAXIMUM
+    first_wave_averaging_multiple: float = FIRST_WAVE_AVERAGING_MULTIPLE
 
     def __post_init__(self) -> None:
         """Validate every field against its documented range.
@@ -106,6 +127,11 @@ class ExpertSettings:
                 raise ValueError(f"expert setting {name} must be below 1")
         if self.cap_maximum < self.cap_minimum:
             raise ValueError("expert setting cap_maximum must be at least cap_minimum")
+        if self.averaging_multiple_maximum < self.averaging_multiple_minimum:
+            raise ValueError(
+                "expert setting averaging_multiple_maximum must be at least "
+                "averaging_multiple_minimum"
+            )
 
     @classmethod
     def from_mapping(cls, mapping: Mapping[str, Any] | None) -> ExpertSettings:
@@ -166,10 +192,20 @@ _RANGES: Final = (
     ("start_drift_alert_z", 0.0, False),
     ("estimate_auto_denominator", 0.0, False),
     ("estimate_auto_fraction", 0.0, False),
+    ("batch_width", 1.0, True),
+    ("replicate_wave_multiple", 0.0, False),
+    ("averaging_multiple_minimum", 0.0, False),
+    ("averaging_multiple_maximum", 0.0, False),
+    ("first_wave_averaging_multiple", 0.0, False),
 )
 """Each numeric field's lower bound, and whether the bound itself is allowed."""
 
-_INTEGER_FIELDS: Final = ("first_check_minimum", "cap_minimum", "cap_maximum")
+_INTEGER_FIELDS: Final = (
+    "first_check_minimum",
+    "cap_minimum",
+    "cap_maximum",
+    "batch_width",
+)
 """The fields that must be whole numbers."""
 
 
