@@ -58,12 +58,11 @@ validation precedent `form_values` already established (a partial
 on load by merging it over the true starter values rather than trying
 to validate a subset in isolation — `config_form.starter_form_values`'s
 own `overrides` parameter), not a sixth pair of narrowly-typed scalar
-fields: the sigma-band pair was deliberately left out of this set
-(judged a scientific/per-run choice, not an administrative default), as
-was `track_expensive_statistics`, which follows `shown_statistics`
-instead (`Api._merge_default_run_settings`), and any future addition or removal from
-that set only ever changes `config_form.DEFAULT_RUN_SETTING_FIELD_
-NAMES`, never this store's own shape. `None` means "nothing saved yet"
+fields: `track_expensive_statistics` is left out of this set, which
+follows `shown_statistics` instead (`Api._merge_default_run_settings`), and
+any future addition or removal from that set only ever changes
+`config_form.DEFAULT_RUN_SETTING_FIELD_NAMES`, never this store's own
+shape. `None` means "nothing saved yet"
 — `Api.get_default_run_settings` falls back to the starter values for
 exactly this field set in that case, the identical "no saved value yet"
 fallback `significant_digits`/`dark_mode_override` already have their
@@ -182,6 +181,15 @@ and `cumulativeMeanSeries`)."""
 
 DEFAULT_TRAJECTORY_DISPLAY = "every_generation"
 
+TRAJECTORY_BAND_WIDTHS: tuple[int, ...] = (1, 2)
+"""How wide the trajectory graph's bands are, in sigmas or standard errors.
+
+One choice for every band: the sigma band of the "every generation" display
+(the spread of the statistic over the evidence window) and the standard-error
+band of the two averaged displays (design 6.8)."""
+
+DEFAULT_TRAJECTORY_BAND_WIDTH = 2
+
 
 def _parse_shown_statistics(gui: Mapping[str, Any]) -> tuple[str, ...] | None:
     """Read `gui.shown_statistics`: catalog keys, or `None` for the default.
@@ -237,6 +245,14 @@ def _parse_run_graph_columns(gui: Mapping[str, Any]) -> int:
             f"from 1 to {MAX_RUN_GRAPH_COLUMNS}"
         )
     return value
+
+
+def _parse_band_width(gui: Mapping[str, Any]) -> int:
+    """Read `gui.trajectory_band_width`: 1 or 2."""
+    value = gui.get("trajectory_band_width", DEFAULT_TRAJECTORY_BAND_WIDTH)
+    if isinstance(value, bool) or value not in TRAJECTORY_BAND_WIDTHS:
+        raise ValueError("preferences 'gui.trajectory_band_width' must be 1 or 2")
+    return int(value)
 
 
 def _choice(
@@ -303,6 +319,7 @@ class GuiPreferences:
             in (rows follow); 1 to `MAX_RUN_GRAPH_COLUMNS`.
         scatter_style: One of `SCATTER_STYLES`.
         trajectory_display: One of `TRAJECTORY_DISPLAYS`.
+        trajectory_band_width: One of `TRAJECTORY_BAND_WIDTHS`.
         shown_statistics: The statistics shown (Settings, "Statistics
             shown"), as catalog keys in catalog order, or `None` for the
             catalog's own defaults. Every statistic is saved in each
@@ -336,6 +353,7 @@ class GuiPreferences:
     run_graph_columns: int = DEFAULT_RUN_GRAPH_COLUMNS
     scatter_style: str = DEFAULT_SCATTER_STYLE
     trajectory_display: str = DEFAULT_TRAJECTORY_DISPLAY
+    trajectory_band_width: int = DEFAULT_TRAJECTORY_BAND_WIDTH
     shown_statistics: tuple[str, ...] | None = None
     pairwise_max_demes: int = DEFAULT_PAIRWISE_MAX_DEMES
 
@@ -350,6 +368,8 @@ class GuiPreferences:
             result["scatter_style"] = self.scatter_style
         if self.trajectory_display != DEFAULT_TRAJECTORY_DISPLAY:
             result["trajectory_display"] = self.trajectory_display
+        if self.trajectory_band_width != DEFAULT_TRAJECTORY_BAND_WIDTH:
+            result["trajectory_band_width"] = self.trajectory_band_width
         if self.shown_statistics is not None:
             result["shown_statistics"] = list(self.shown_statistics)
         if self.pairwise_max_demes != DEFAULT_PAIRWISE_MAX_DEMES:
@@ -488,6 +508,7 @@ class GuiPreferences:
                 DEFAULT_TRAJECTORY_DISPLAY,
                 TRAJECTORY_DISPLAYS,
             ),
+            trajectory_band_width=_parse_band_width(gui),
             shown_statistics=_parse_shown_statistics(gui),
             pairwise_max_demes=_parse_pairwise_max_demes(gui),
         )
@@ -598,6 +619,7 @@ class GuiPreferences:
         run_graph_columns: int | None = None,
         scatter_style: str | None = None,
         trajectory_display: str | None = None,
+        trajectory_band_width: int | None = None,
     ) -> GuiPreferences:
         """Return a copy with any of the Run card's display choices replaced.
 
@@ -620,6 +642,11 @@ class GuiPreferences:
                 self.trajectory_display
                 if trajectory_display is None
                 else trajectory_display
+            ),
+            trajectory_band_width=(
+                self.trajectory_band_width
+                if trajectory_band_width is None
+                else trajectory_band_width
             ),
         )
 

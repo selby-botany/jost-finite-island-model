@@ -162,7 +162,6 @@ writes these artifacts:
 | `report.json` | Final `H_S`, `H_T`, `G_ST`, Jost's `D`, `E_ST`, and `K_ST` |
 | `pairwise.json` | Every deme pair's Nei identities and pairwise `F_ST` at the final generation |
 | `scatter.png` | Canonical allele-frequency scatter or labeled projection |
-| `sigma_band_trajectory.jsonl` | The post-convergence extension window; written only when a sigma band is requested |
 
 The trajectory is stored as a compact binary log; `fim export` turns it into
 long-format JSON Lines (`trajectory.jsonl`), which can be loaded without a

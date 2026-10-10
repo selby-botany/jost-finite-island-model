@@ -481,6 +481,7 @@
                    band and a window-start indicator.
                    Remembered across sessions (`set_trajectory_display`);
                    hidden for a batch, which draws its own pooled band. -->
+              <div class="run-trajectory-controls">
               <label id="run-trajectory-display-control" class="run-trajectory-display" hidden>
                 Show
                 <select id="run-trajectory-display">
@@ -489,18 +490,21 @@
                   <option value="cumulative_mean">Cumulative mean</option>
                 </select>
               </label>
+              <!-- How wide every band is: the sigma band of the "every
+                   generation" display and the standard-error band of the
+                   two averaged displays. Remembered across sessions
+                   (`set_trajectory_band_width`). -->
+              <label id="run-trajectory-band-width-control" class="run-trajectory-display" hidden
+                     title="Width of every band: standard deviations (σ) around the mean in the every-generation display, standard errors (SE) in the averaged displays.">
+                Band
+                <select id="run-trajectory-band-width">
+                  <option value="1">±1</option>
+                  <option value="2" selected>±2</option>
+                </select>
+              </label>
+              </div>
               <canvas id="run-trajectory-canvas"></canvas>
               <div id="run-trajectory-legend" class="run-trajectory-legend"></div>
-              <!-- Within-run sigma band (design §7.2,
-                   `20260910-claude-sonnet-5-gui-sigma-band-design.md`'s
-                   own approach C1): the shaded region itself is drawn
-                   directly on the canvas above, behind the tail of
-                   whichever statistic's own curve it belongs to; this
-                   is the supplementary caption with the exact numbers,
-                   one line per statistic that has a band -- empty and
-                   hidden whenever the run requested none, or hit the
-                   hard generation cap without converging. -->
-              <ul id="run-trajectory-sigma-band-caption" class="hint" hidden></ul>
             </div>
 
             <!-- Scalar `completed`-only: the three remaining literature-
@@ -1271,9 +1275,8 @@
        runs," not what experiment this form asks, and moved into the
        Settings dialog (`#modal-settings`) as global defaults instead --
        Settings' own comment has the full field-by-field account.
-       `stop_batch_early`/`replicate_minimum` and the sigma-band pair
-       stayed here -- real per-run, scientific/batch-tuning choices, not
-       administrative defaults. `track_expensive_statistics` has no
+       `stop_batch_early`/`replicate_minimum` stayed here -- real per-run
+       batch-tuning choices, not administrative defaults. `track_expensive_statistics` has no
        control any more: Settings' "Statistics shown" decides it
        (`Api._merge_default_run_settings`). -->
   <section id="screen-configure" class="screen" hidden>
@@ -1557,9 +1560,7 @@
              (`#modal-settings`) only, with no copy here at all: a real,
              reported request to move fields describing "how the
              computation runs" out of this per-run form entirely, while
-             the sigma-band fieldset, below, stays Configure-only --
-             judged a scientific/per-run choice, not an administrative
-             default. `track_expensive_statistics` has no control at all:
+             `track_expensive_statistics` has no control at all:
              it follows Settings' "Statistics shown"
              (`Api._merge_default_run_settings`). -->
         <fieldset class="composite" id="cs-selector">
@@ -1592,37 +1593,6 @@
               any one watched statistic has settled
             </label>
           </fieldset>
-        </fieldset>
-
-        <!-- Within-run σ band (design doc §7.2, `20260910-claude-
-             sonnet-5-gui-sigma-band-design.md`'s own approach A1):
-             "off by default and one toggle away." The checkbox itself
-             is a plain wrapping `<label>` with no `for` attribute
-             (`cs-selector`'s own checkboxes just above use the
-             identical shape) -- `field-help.js`'s own `wireAllField
-             Tooltips` only auto-wires a `<label for="field-...">`, so
-             this group's tooltip is the fieldset's own `<legend
-             data-field-help="sigma_band_group">` instead, the same
-             opt-in `cs-selector`'s legend already uses. -->
-        <fieldset class="composite" id="sigma-band-selector">
-          <legend data-field-help="sigma_band_group">within-run σ band</legend>
-          <label>
-            <input type="checkbox" id="field-sigma_band_enabled" name="sigma_band_enabled" form="input-form">
-            enable
-          </label>
-          <div id="sigma-band-fields" hidden>
-            <div class="field">
-              <label for="field-sigma_band_multiplier">multiplier</label>
-              <select id="field-sigma_band_multiplier" name="sigma_band_multiplier" form="input-form">
-                <option value="2.0">2σ</option>
-                <option value="3.0">3σ</option>
-              </select>
-            </div>
-            <div class="field">
-              <label for="field-sigma_band_window">window (generations)</label>
-              <input type="text" id="field-sigma_band_window" name="sigma_band_window" form="input-form">
-            </div>
-          </div>
         </fieldset>
 
         <!-- `n_replicates`/`engine_backend` (execution engine)/
@@ -2097,9 +2067,7 @@
        unlike startup behavior/significant digits/appearance, which stay
        on their own established "one scalar value, immediate `change`"
        precedent below, this is ~14 fields collected together into one
-       bridge call. The sigma-band pair stays Configure-only -- judged a
-       scientific/per-run choice, not an administrative default, so no
-       counterpart exists here. `track_expensive_statistics` follows
+       bridge call. `track_expensive_statistics` follows
        "Statistics shown", below: showing any expensive statistic turns
        it on for every later run.
 

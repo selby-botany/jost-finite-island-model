@@ -165,7 +165,7 @@ def run_artifact_targets(directory: Path) -> dict[str, Path]:
     """Return every documented scalar-run artifact path in one directory.
 
     Deliberately the same names `cli._run_artifact_targets` uses for a
-    scalar run (it also names the optional sigma-band file) — same
+    scalar run — same
     target filenames, same directory — a direct parallel, not a shared import, since
     `cli._run_artifact_targets` is a private module-level function of
     the CLI's own front end. `equilibrium_trajectory` exists only for

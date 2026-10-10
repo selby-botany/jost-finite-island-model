@@ -889,6 +889,9 @@ async function loadRunCardLayout() {
     if (typeof window.fim.setTrajectoryDisplay === "function") {
         window.fim.setTrajectoryDisplay(layout.trajectoryDisplay);
     }
+    if (typeof window.fim.setTrajectoryBandWidth === "function") {
+        window.fim.setTrajectoryBandWidth(layout.bandWidth);
+    }
     syncRunGraphStage();
 }
 

@@ -133,53 +133,6 @@ def test_pairwise_max_demes_rejects_a_non_positive_value(tmp_path: Path) -> None
         cli.main(["run", str(config), "--quiet", "--pairwise-max-demes", "0"])
 
 
-def test_run_with_sigma_band_writes_the_fifth_trajectory_artifact(
-    tmp_path: Path,
-) -> None:
-    """A real seeded run with the sigma band enabled writes and digests it too.
-
-    `20260907-claude-sonnet-5-within-run-sigma-band-backend-design.md`,
-    v1 step 5 — mirrors `test_run_writes_exactly_four_documented_
-    artifacts`, with the sigma band requested this time.
-    """
-    config = tmp_path / "run.yaml"
-    output = tmp_path / "output"
-    _write_config(config, sigma_band_multiplier=2.0, sigma_band_window=5)
-
-    status = cli.main(["run", str(config), "--output", str(output), "--quiet"])
-
-    assert status == 0
-    assert {path.name for path in output.iterdir()} == {
-        "trajectory.tlog",
-        "manifest.json",
-        "report.json",
-        "scatter.png",
-        "convergence.jsonl",
-        "pairwise.json",
-        "sigma_band_trajectory.jsonl",
-    }
-    rows = [
-        json.loads(line)
-        for line in (output / "sigma_band_trajectory.jsonl")
-        .read_text(encoding="utf-8")
-        .splitlines()
-    ]
-    assert len(rows) == 5
-    assert {row["generation"] for row in rows} == set(
-        range(rows[0]["generation"], rows[0]["generation"] + 5)
-    )
-    assert all("D" in row for row in rows)
-
-    manifest = json.loads((output / "manifest.json").read_text(encoding="utf-8"))
-    assert "sigma_band_trajectory" in manifest["artifacts"]
-    assert manifest["sigma_band_multiplier"] == 2.0
-    assert manifest["sigma_band_window"] == 5
-    assert "D" in manifest["sigma_band"]
-    assert manifest["artifacts"]["sigma_band_trajectory"] == hash_file(
-        output / "sigma_band_trajectory.jsonl"
-    )
-
-
 # A tiny equilibrium-split configuration: the derived burn-in at this
 # loose tolerance is a few dozen generations at most.
 _EQUILIBRIUM_SPLIT = {
@@ -382,7 +335,7 @@ def test_a_capped_run_reports_converged_on_none_and_still_prints_its_window(
 def test_run_lists_only_the_artifacts_it_wrote(
     tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
-    """No sigma-band line for a run without a sigma band; every listed file exists."""
+    """Every artifact the run lists exists; none is listed that it did not write."""
     config = tmp_path / "run.yaml"
     output = tmp_path / "output"
     _write_config(config)
@@ -397,7 +350,6 @@ def test_run_lists_only_the_artifacts_it_wrote(
     ]
     assert listed
     assert all(Path(path).exists() for path in listed)
-    assert not any(path.endswith("sigma_band_trajectory.jsonl") for path in listed)
 
 
 def test_run_accepts_stepping_stone_topology_sugar_for_m(tmp_path: Path) -> None:

@@ -75,12 +75,8 @@ function collectFormValues() {
         values[name] = data.has(name) ? "true" : "false";
     }
     // An unchecked checkbox is simply absent from `FormData`, the same
-    // reason the `cs_*` checkboxes just above need this too --
-    // `sigma_band_to_payload` (`config_form.py`) reads this key
-    // unconditionally, so it must always be present as an explicit
-    // "true"/"false" string, never missing.
-    values.sigma_band_enabled = data.has("sigma_band_enabled") ? "true" : "false";
-    // The same for `stop_batch_early`: a plain checkbox field, always sent.
+    // reason the `cs_*` checkboxes just above need this too: a plain
+    // checkbox field, `stop_batch_early`, is always sent.
     values.stop_batch_early = data.has("stop_batch_early") ? "true" : "false";
     // `track_expensive_statistics` has no control here: it follows
     // Settings' "Statistics shown" (any expensive statistic shown means
@@ -138,9 +134,6 @@ function syncConditionalVisibility() {
 
     document.getElementById("combinator-field").hidden = checkedStatisticCount() < 2;
 
-    document.getElementById("sigma-band-fields").hidden = !form.elements.namedItem(
-        "sigma_band_enabled"
-    ).checked;
     // `batch-only-fields` (`stop_batch_early`/`replicate_minimum`)
     // used to hide behind a live `n_replicates > 1` check -- `n_
     // replicates` moved into Settings entirely (`2026-09-16` revision),
@@ -418,33 +411,7 @@ window.fim.applyEngineBackendAvailability = applyEngineBackendAvailability;
 // `index.html`'s own comment above `#modal-settings` has the full
 // account.
 
-/**
- * Seed the within-run σ band's own window field with a sensible
- * starting value the first time the toggle is ever checked -- design
- * doc §7.2, `20260910-claude-sonnet-5-gui-sigma-band-design.md`'s own
- * approach A1: "pre-filled `100` the first time it is ever checked...
- * but otherwise never overwritten." `syncConditionalVisibility`
- * (wired separately, on every "input"/"change" inside the form)
- * already reveals/hides the two real fields; this listener only ever
- * writes a value, and only when the field is still genuinely empty --
- * unchecking and rechecking never clobbers a value already typed.
- */
-function wireSigmaBandSeedDefault() {
-    document
-        .getElementById("field-sigma_band_enabled")
-        .addEventListener("change", (event) => {
-            if (!event.target.checked) {
-                return;
-            }
-            const windowField = document.getElementById("field-sigma_band_window");
-            if (windowField.value.trim() === "") {
-                windowField.value = DEFAULT_SIGMA_BAND_WINDOW;
-            }
-        });
-}
-
 whenApiReady(wireConfigModalEvents);
-whenApiReady(wireSigmaBandSeedDefault);
 
 /**
  * Fill and show the Help menu's "About fim" dialog (`fim.menu.about()`

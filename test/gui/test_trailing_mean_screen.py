@@ -25,7 +25,7 @@ import webview
 
 from fim.gui.preferences import GuiPreferences, save_preferences
 
-from .conftest import poll_page
+from .conftest import AWAIT_SETTINGS_SAVES, poll_page
 
 pytestmark = pytest.mark.gui
 
@@ -39,20 +39,25 @@ _EN_DASH = "\u2013"
 
 
 @dataclass(frozen=True)
-class _Lag1Window:
-    """The mean and standard error of one window under the lag-1 formula."""
+class _Window:
+    """The mean and standard error of one window, given the run's `tau_int`."""
 
     mean: float
     standard_error: float
 
 
-def window_statistics(values: list[float]) -> _Lag1Window:
-    """Reference for the page's estimator: the lag-1 (AR(1)) standard error.
+# The integrated autocorrelation time the tests hand the page, as the report
+# would serve it (`window / effective_sample_size` of the evidence window).
+_TAU_INT = 3.0
 
-    The trajectory panel still averages with the single-lag formula
-    `tau_int = (1 + rho) / (1 - rho)` (a later change moves it to the run's own
-    evidence window and Geyer's estimator), so this test holds the page equal
-    to that formula, written out here.
+
+def window_statistics(values: list[float], tau_int: float = _TAU_INT) -> _Window:
+    """Reference for the page's estimator: `SD * sqrt(tau_int / n)` (design 6.8).
+
+    The standard error of a window mean uses the run's own integrated
+    autocorrelation time, estimated once over its evidence window by Geyer's
+    method and served with the report, not a guess from this window's lag-1
+    correlation. A flat window is known exactly.
     """
     count = len(values)
     mean = math.fsum(values) / count
@@ -60,11 +65,8 @@ def window_statistics(values: list[float]) -> _Lag1Window:
     sum_squares = math.fsum(value * value for value in centered)
     deviation = math.sqrt(sum_squares / (count - 1))
     if deviation == 0.0:
-        return _Lag1Window(mean, 0.0)
-    cross = math.fsum(centered[i] * centered[i + 1] for i in range(count - 1))
-    lag1 = max(-1.0, min(cross / sum_squares, 1.0 - 1e-9))
-    tau = max((1.0 + lag1) / (1.0 - lag1), 1e-9)
-    return _Lag1Window(mean, deviation / math.sqrt(count / tau))
+        return _Window(mean, 0.0)
+    return _Window(mean, deviation * math.sqrt(max(tau_int, 1.0) / count))
 
 
 def _series() -> dict[str, list[float]]:
@@ -108,9 +110,12 @@ def test_the_page_estimator_matches_window_statistics(
         f"const series = {json.dumps(series)};"
         f"const windows = {json.dumps(_WINDOWS)};"
         "const results = windows.map(([name, start, end]) =>"
-        "    trailingWindowEstimate(windowSums(series[name]), start, end));"
-        "results.push(trailingWindowEstimate(windowSums(series.flat), 0, 6));"
+        "    trailingWindowEstimate("
+        f"windowSums(series[name]), start, end, {_TAU_INT}));"
+        "results.push(trailingWindowEstimate(windowSums(series.flat), 0, 6, 3.0));"
         "results.push(windowSums([0.1, NaN, 0.2]));"
+        "results.push(trailingWindowEstimate("
+        "    windowSums(series.correlated), 0, 99, null));"
         "return results;"
         "})()"
     )
@@ -124,8 +129,15 @@ def test_the_page_estimator_matches_window_statistics(
             expected.standard_error, rel=1e-9, abs=1e-15
         ), (name, start, end)
     # Seven points are too few to estimate; a non-finite value has no sums.
+    assert settled[-3] is None
     assert settled[-2] is None
-    assert settled[-1] is None
+    # Without the run's autocorrelation time (a live run) the mean is
+    # known but its standard error is not: `NaN`, which JSON spells `null`.
+    unknown = settled[-1]
+    assert unknown["mean"] == pytest.approx(
+        math.fsum(series["correlated"][:100]) / 100, abs=1e-12
+    )
+    assert unknown["standardError"] is None
 
 
 _WINDOWING = """
@@ -133,6 +145,9 @@ _WINDOWING = """
     const generations = [0, 5, 10, 11, 12, 20];
     const values = Array.from({length: 12}, (_, index) => 0.1 * (index % 3));
     const series = trailingMeanSeries(
+        Array.from({length: 12}, (_, index) => index), values, 10, 2.0
+    );
+    const unknown = trailingMeanSeries(
         Array.from({length: 12}, (_, index) => index), values, 10
     );
     return {
@@ -142,6 +157,7 @@ _WINDOWING = """
         firstMean: series.mean[7],
         bandBelow: series.low[11] < series.mean[11],
         bandAbove: series.high[11] > series.mean[11],
+        unknownBand: Number.isNaN(unknown.low[11]) && !Number.isNaN(unknown.mean[11]),
         anchors: evidenceWindowAnchors(
             {D: {window: 30}, G_ST: {window: 10}, H_S: {window: 99}}, 40, 10
         ),
@@ -196,6 +212,8 @@ def test_the_trailing_window_counts_generations_and_starts_with_enough_points(
     assert settled["firstMean"] == pytest.approx(0.1 * sum(first_window) / 8)
     assert settled["bandBelow"] is True
     assert settled["bandAbove"] is True
+    # No autocorrelation time (a live run): the mean is drawn, no band.
+    assert settled["unknownBand"] is True
     # Only a window that grew past the convergence window, and fits in
     # the recorded history, is anchored.
     assert settled["anchors"] == {"D": 10}
@@ -275,6 +293,7 @@ _NOTES = f"""
         comparisons,
         convergence: {{window: 8, tolerance}},
         anchors,
+        tauInt: {{D: {_TAU_INT}}},
         sums: {{}},
     }});
     const sparse = values.map((_, index) => 10 * index);
@@ -290,7 +309,16 @@ _NOTES = f"""
             comparisons: {{}},
             convergence: {{window: 75, tolerance: 1.0}},
             anchors: {{}},
+            tauInt: {{D: {_TAU_INT}}},
             sums: null,
+        }}, "D"),
+        live: estimateNote({{
+            generations,
+            histories: {{D: values}},
+            comparisons,
+            convergence: {{window: 8, tolerance: 1.0}},
+            anchors: {{}},
+            sums: {{}},
         }}, "D"),
         noWindow: estimateNote(source({{}}, 1.0), "K_ST"),
         joined: withNotes(["first", "", "second"], "description"),
@@ -333,6 +361,12 @@ def test_the_estimate_note_text(
     assert settled["sparse"] == (
         f"mean {sparse.mean:.4f} ± {sparse.standard_error:.4f} over generations "
         f"40{_EN_DASH}110 (71 generations, 8 recorded; 1 SE)"
+    )
+    # A live run has no autocorrelation time yet: the mean, without an error bar.
+    stats = window_statistics(_VALUES[4:])
+    assert settled["live"] == (
+        f"mean {stats.mean:.4f} over generations 4{_EN_DASH}11 (8 generations; "
+        "standard error known once the run has averaged); predicted 0.2500"
     )
     assert settled["noWindow"] == ""
     assert settled["joined"] == "first — second — description"
@@ -472,3 +506,87 @@ def test_a_completed_run_leads_with_its_estimate_and_offers_the_averages(
     # legend says so instead of naming a generation of its own.
     assert "cumulative mean ± 2 SE (from where averaging began)" in cumulative["legend"]
     assert cumulative["saved"] == "cumulative_mean"
+
+
+_EVIDENCE = """
+(() => {
+    const stats = {
+        D: {mean: 0.5, standard_deviation: 0.1, window: 400,
+            effective_sample_size: 100, window_start: 100, window_end: 499},
+        G_ST: {mean: 0.2, standard_deviation: 0.02, window: 400,
+            effective_sample_size: 400, window_start: 100, window_end: 499},
+        H_S: {mean: NaN, standard_deviation: 0.1, window: 400,
+            effective_sample_size: 40, window_start: 100, window_end: 499},
+    };
+    const one = evidenceSigmaBand(stats, 1);
+    const two = evidenceSigmaBand(stats, 2);
+    return {
+        tau: [tauIntFor(stats, "D"), tauIntFor(stats, "G_ST"),
+              tauIntFor(stats, "missing"), tauIntFor(null, "D"),
+              tauIntFor({X: {window: 10, effective_sample_size: 0}}, "X"),
+              tauIntFor({X: {window: 10, effective_sample_size: 40}}, "X")],
+        one: one,
+        twoD: two.band.D,
+        names: Object.keys(two.band),
+        none: evidenceSigmaBand(null, 2),
+        empty: evidenceSigmaBand({H_S: stats.H_S}, 2),
+        visible: Object.keys(visibleSigmaBand(two, {D: [1]}).band),
+        allVisible: Object.keys(visibleSigmaBand(two, null).band),
+        noneVisible: visibleSigmaBand(two, {X: [1]}),
+        sigmaNote: (() => {
+            completedWindowStatistics = stats;
+            return [sigmaNote("D"), sigmaNote("missing")];
+        })(),
+    };
+})()
+"""
+
+
+def test_the_sigma_display_is_built_from_the_evidence_window(
+    window: webview.Window, drive: Callable[..., Any]
+) -> None:
+    """Band, tau_int and the sigma tooltip clause come from the report's window."""
+    settled = drive(window, ready=_INPUT_SCREEN_READY, trigger="null", read=_EVIDENCE)
+
+    # tau_int is window / effective sample size, at least one; none without a window.
+    assert settled["tau"] == [4.0, 1.0, None, None, None, 1.0]
+    assert settled["one"]["multiplier"] == 1
+    assert settled["one"]["window"] == 399
+    assert settled["twoD"] == pytest.approx(
+        {"mean": 0.5, "sigma": 0.1, "lower": 0.3, "upper": 0.7}
+    )
+    # A statistic whose mean is not finite has no band; no window, no display.
+    assert settled["names"] == ["D", "G_ST"]
+    assert settled["none"] is None
+    assert settled["empty"] is None
+    assert settled["visible"] == ["D"]
+    assert settled["allVisible"] == ["D", "G_ST"]
+    assert settled["noneVisible"] is None
+    assert settled["sigmaNote"] == ["\u03c3 0.1000 per generation", ""]
+
+
+def test_the_band_width_selector_applies_and_is_remembered(
+    window: webview.Window, drive: Callable[..., Any]
+) -> None:
+    """Choosing a width updates the page state and the saved layout."""
+    trigger = (
+        "(async () => {"
+        "window.__bandResult = null;"
+        "const select = document.getElementById('run-trajectory-band-width');"
+        "select.value = '1';"
+        "select.dispatchEvent(new Event('change', {bubbles: true}));"
+        + AWAIT_SETTINGS_SAVES
+        + "window.__bandResult = {"
+        "width: trajectoryBandWidth, "
+        "select: select.value, "
+        "saved: (await window.pywebview.api.get_run_card_layout()).bandWidth};"
+        "})();"
+    )
+    settled = drive(
+        window,
+        ready=_INPUT_SCREEN_READY,
+        trigger=trigger,
+        read="window.__bandResult",
+    )
+
+    assert settled == {"width": 1, "select": "1", "saved": 1}

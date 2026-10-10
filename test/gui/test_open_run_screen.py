@@ -123,14 +123,12 @@ def _write_run(tmp_path: Path, *, study_id: str | None = None) -> Path:
     return output_directory
 
 
-def _write_run_with_sigma_band(tmp_path: Path) -> Path:
-    """Write a small, real completed run requesting a sigma band, return its directory.
+def _write_run_with_evidence_window(tmp_path: Path) -> Path:
+    """Write a small, real completed run with an evidence window; return its directory.
 
-    Sigma-band GUI design doc `20260910-claude-sonnet-5-gui-sigma-band-
-    design.md` (`selby/restricted`) slice 4 — a longer `max_generations`
-    than `_write_run`'s own (so there is real room for the extension
-    window after convergence) and an explicit `sigma_band_window`
-    short enough to keep this test fast.
+    A burn-in of one generation and a long enough `max_generations` give the
+    run a real evidence window, so the report carries the window statistics
+    the reopened run's sigma display is drawn from.
     """
     config = {
         "N": 20,
@@ -145,8 +143,6 @@ def _write_run_with_sigma_band(tmp_path: Path) -> Path:
         "max_generations": 5000,
         "n_replicates": 1,
         "stop_batch_early": False,
-        "sigma_band_multiplier": 3.0,
-        "sigma_band_window": 5,
     }
     config_path = tmp_path / "sigma-run.yaml"
     config_path.write_text(yaml.safe_dump(config, sort_keys=False), encoding="utf-8")
@@ -959,168 +955,6 @@ def test_a_second_click_on_a_loading_study_toggle_is_ignored(
     assert settled["rowCount"] == 1
 
 
-def test_opening_a_run_with_a_sigma_band_shows_it_alongside_the_curve(
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    """A reopened run's own sigma band renders alongside its real curve.
-
-    Sigma-band GUI design doc `20260910-claude-sonnet-5-gui-sigma-band-
-    design.md` (`selby/restricted`) slice 4, updated for `Api.open_run`
-    now carrying `convergenceGenerations`/`convergenceHistories` of its
-    own (`fim.reanalyze.read_persisted_convergence_history`, read back
-    from the run's own persisted `convergence.jsonl` -- no longer "re-
-    analysis recomputes one generation, never a full history"): the
-    trajectory panel shows the real simulated curve, its closed-form
-    companion, and the sigma band together, not the band alone.
-
-    `_write_run_with_sigma_band`'s own `N`/`m`/`mu` (`20`/`0.1`/`0.01`)
-    are all plain scalars, and its sigma band covers `D` (the config's
-    own unset-so-default `convergence_statistic`).
-    """
-    monkeypatch.setattr(paths_module, "results_directory", lambda: tmp_path / "results")
-    _write_run_with_sigma_band(tmp_path)
-
-    window = create_window(hidden=True)
-    outcome: queue.Queue[dict[str, Any] | None] = queue.Queue(maxsize=1)
-
-    def _drive() -> None:
-        try:
-            poll_page(window, _INPUT_SCREEN_READY, lambda value: value is True)
-            window.evaluate_js("window.fim.menu.openRun();")
-            _expand_all_recent_run_groups(window)
-            poll_page(
-                window,
-                f"document.querySelectorAll({_REAL_ROW_SELECTOR}).length",
-                lambda value: value is not None and value > 0,
-            )
-            window.evaluate_js(f"document.querySelector({_REAL_ROW_SELECTOR}).click();")
-            window.evaluate_js(
-                "document.getElementById('open-run-open-button').click();"
-            )
-            settled = poll_page(
-                window,
-                "({"
-                "runViewState: window.fim.getRunViewState(), "
-                "frameHidden: "
-                "document.getElementById('run-trajectory-frame').hidden, "
-                "captionHidden: document.getElementById("
-                "'run-trajectory-sigma-band-caption').hidden, "
-                "captionText: document.getElementById("
-                "'run-trajectory-sigma-band-caption').textContent, "
-                "legendNames: Array.from("
-                "document.querySelectorAll('#run-trajectory-legend span'))"
-                ".map((span) => span.textContent).filter((text) => text), "
-                "canvasNonBlankPixelCount: (() => {"
-                "var c = document.getElementById('run-trajectory-canvas');"
-                "var ctx = c.getContext('2d');"
-                "var data = ctx.getImageData(0, 0, c.width, c.height).data;"
-                "var count = 0;"
-                "for (var i = 3; i < data.length; i += 4) {"
-                "if (data[i] !== 0) { count += 1; }"
-                "}"
-                "return count;"
-                "})()"
-                "})",
-                lambda value: (
-                    value is not None and value.get("runViewState") == "completed"
-                ),
-            )
-            outcome.put(settled)
-        finally:
-            window.destroy()
-
-    webview.start(_drive)
-    settled = outcome.get(timeout=_DRIVE_TIMEOUT_SECONDS)
-
-    assert settled is not None
-    assert settled["runViewState"] == "completed"
-    assert settled["frameHidden"] is False
-    assert settled["captionHidden"] is False
-    assert "3\u03c3" in settled["captionText"]
-    assert "5 generations" in settled["captionText"]
-    # Both non-statistic overlay entries now show: the closed-form D(t)
-    # companion (only drawn alongside a real simulated curve, which a
-    # reopened run now has) and the identity-recovery curve (draws
-    # unconditionally whenever `N`/`m` alone are plain scalars, as
-    # before). Per-statistic legend entries use a different DOM
-    # structure this selector does not capture, so their presence is
-    # not asserted here either way.
-    assert set(settled["legendNames"]) == {
-        "expected trajectory (closed form)",
-        "f₀ (identity recovery, theoretical founder event)",
-    }
-    assert settled["canvasNonBlankPixelCount"] > 0
-
-
-def test_opening_a_run_without_a_sigma_band_shows_the_curve_with_no_band(
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    """A reopened run's own trajectory panel shows without a sigma-band caption.
-
-    Contrasts with `test_opening_a_run_with_a_sigma_band_shows_it_
-    alongside_the_curve`, above: the same real curve now shows either
-    way (`fim.reanalyze.read_persisted_convergence_history`), but only
-    a run that actually requested a sigma band extension gets its own
-    caption/shading -- `_write_run`'s own config never does.
-    """
-    monkeypatch.setattr(paths_module, "results_directory", lambda: tmp_path / "results")
-    _write_run(tmp_path)
-
-    window = create_window(hidden=True)
-    outcome: queue.Queue[dict[str, Any] | None] = queue.Queue(maxsize=1)
-
-    def _drive() -> None:
-        try:
-            poll_page(window, _INPUT_SCREEN_READY, lambda value: value is True)
-            window.evaluate_js("window.fim.menu.openRun();")
-            _expand_all_recent_run_groups(window)
-            poll_page(
-                window,
-                f"document.querySelectorAll({_REAL_ROW_SELECTOR}).length",
-                lambda value: value is not None and value > 0,
-            )
-            window.evaluate_js(f"document.querySelector({_REAL_ROW_SELECTOR}).click();")
-            window.evaluate_js(
-                "document.getElementById('open-run-open-button').click();"
-            )
-            settled = poll_page(
-                window,
-                "({"
-                "runViewState: window.fim.getRunViewState(), "
-                "frameHidden: "
-                "document.getElementById('run-trajectory-frame').hidden, "
-                "captionHidden: document.getElementById("
-                "'run-trajectory-sigma-band-caption').hidden, "
-                "canvasNonBlankPixelCount: (() => {"
-                "var c = document.getElementById('run-trajectory-canvas');"
-                "var ctx = c.getContext('2d');"
-                "var data = ctx.getImageData(0, 0, c.width, c.height).data;"
-                "var count = 0;"
-                "for (var i = 3; i < data.length; i += 4) {"
-                "if (data[i] !== 0) { count += 1; }"
-                "}"
-                "return count;"
-                "})()"
-                "})",
-                lambda value: (
-                    value is not None and value.get("runViewState") == "completed"
-                ),
-            )
-            outcome.put(settled)
-        finally:
-            window.destroy()
-
-    webview.start(_drive)
-    settled = outcome.get(timeout=_DRIVE_TIMEOUT_SECONDS)
-
-    assert settled is not None
-    assert settled["frameHidden"] is False
-    assert settled["captionHidden"] is True
-    assert settled["canvasNonBlankPixelCount"] > 0
-
-
 def test_expanding_a_study_shows_every_run_directly_with_no_date_subgroups(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -1704,7 +1538,7 @@ def test_a_reopened_runs_graphs_repaint_at_the_real_pane_size(
     300px).
     """
     monkeypatch.setattr(paths_module, "results_directory", lambda: tmp_path / "results")
-    output_directory = _write_run_with_sigma_band(tmp_path)
+    output_directory = _write_run_with_evidence_window(tmp_path)
     trajectory_path = output_directory / "trajectory.tlog"
 
     window = create_window(hidden=True)

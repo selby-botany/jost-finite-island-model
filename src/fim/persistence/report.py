@@ -18,9 +18,8 @@ newline-terminated JSON, not just report.json specifically.
 
 `write_jsonl_rows`, below, is the same determinism guarantee applied to
 a *sequence* of small JSON objects, one per line, rather than one large
-object — `sigma_band_trajectory.jsonl`'s own per-generation rows
-(`20260907-claude-sonnet-5-within-run-sigma-band-backend-design.md`
-decision 4), and any future artifact shaped the same way, share this one
+object — `convergence.jsonl`'s own per-generation rows, and any future
+artifact shaped the same way, share this one
 writer rather than each hand-rolling its own line-by-line `json.dumps`
 loop.
 """

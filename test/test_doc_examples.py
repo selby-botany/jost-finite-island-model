@@ -157,7 +157,7 @@ def test_every_example_commits_its_output_files(example: str) -> None:
                 else f"{key}.tlog"
                 if key in {"trajectory", "equilibrium_trajectory"}
                 else f"{key}.jsonl"
-                if key in {"convergence", "sigma_band_trajectory"}
+                if key == "convergence"
                 else f"{key}.json"
             )
             if target.endswith(".jsonl"):

@@ -104,8 +104,6 @@ def _assert_identical(
         assert got.convergence_history == want.convergence_history
         assert got.convergence_histories == want.convergence_histories
         assert _comparable_manifest(got) == _comparable_manifest(want)
-        assert got.manifest.sigma_band == want.manifest.sigma_band
-        assert got.sigma_band_trajectory == want.sigma_band_trajectory
     if len(actual) >= 2:
         assert replicate_summary(actual) == replicate_summary(expected)
 
@@ -282,29 +280,6 @@ def test_convergence_stopped_run_matches_lineal() -> None:
     lineal = _run(params, "lineal", lineal_store)
     assert lineal[0].manifest.converged
     assert lineal[0].manifest.generation < 4000
-    _assert_identical(vector, vector_store, lineal, lineal_store)
-
-
-def test_sigma_band_extension_matches_lineal() -> None:
-    """The extension after convergence (rows aside) gives the same band."""
-    params = make_params(
-        4000,
-        loci=loci(2),
-        gene_copies=30,
-        d=3,
-        mu=0.05,
-        m=0.2,
-        precision=0.1,
-        sigma_band_multiplier=2.0,
-        sigma_band_window=15,
-    )
-    vector_store = InMemoryTrajectoryStore()
-    vector = _run(params, "generational-vector", vector_store)
-    lineal_store = InMemoryTrajectoryStore()
-    lineal = _run(params, "lineal", lineal_store)
-    assert lineal[0].manifest.sigma_band is not None
-    assert lineal[0].sigma_band_trajectory is not None
-    assert len(lineal[0].sigma_band_trajectory) == 15
     _assert_identical(vector, vector_store, lineal, lineal_store)
 
 
@@ -486,33 +461,6 @@ def test_finite_alleles_replicate_batch_and_adaptive_stop_match_lineal() -> None
     lineal_store = InMemoryTrajectoryStore()
     lineal = _run(adaptive, "lineal", lineal_store)
     assert 3 <= len(lineal) < adaptive.n_replicates, "the batch should stop early"
-    _assert_identical(vector, vector_store, lineal, lineal_store)
-
-
-def test_finite_alleles_sigma_band_extension_matches_lineal() -> None:
-    """The extension continues the minted bookkeeping exactly as L does.
-
-    A 16-state locus makes alleles go extinct and reappear within the
-    window, which is what a forgotten-minted-identity bug would mishandle.
-    """
-    params = make_params(
-        4000,
-        loci=loci(1, 2),
-        gene_copies=40,
-        d=3,
-        mu=0.1,
-        m=0.2,
-        precision=0.15,
-        sigma_band_multiplier=2.0,
-        sigma_band_window=15,
-        mutation_model="finite_alleles",
-    )
-    vector_store = InMemoryTrajectoryStore()
-    vector = _run(params, "generational-vector", vector_store)
-    lineal_store = InMemoryTrajectoryStore()
-    lineal = _run(params, "lineal", lineal_store)
-    assert lineal[0].manifest.converged
-    assert lineal[0].manifest.sigma_band is not None
     _assert_identical(vector, vector_store, lineal, lineal_store)
 
 

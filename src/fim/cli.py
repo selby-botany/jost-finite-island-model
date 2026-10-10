@@ -636,9 +636,8 @@ def _command_run_scalar(
         if not output.report["converged"]:
             _print_cap_note(params, output.report)
         # Only what this run wrote: `_run_artifact_targets` names every
-        # artifact a run *can* have (the sigma-band trajectory exists only
-        # for a converged run that asked for one, the equilibrium
-        # trajectory only for an equilibrium-split run).
+        # artifact a run *can* have (the equilibrium trajectory exists only
+        # for an equilibrium-split run).
         for label, path in _run_artifact_targets(output_directory).items():
             if path.exists():
                 print(f"{label.capitalize():10} -> {path}")
@@ -1265,12 +1264,11 @@ def _run_artifact_targets(directory: Path) -> dict[str, Path]:
     `_command_run_scalar` (writing them) and anything checking a
     completed run's own output (reading them back) — so the two can
     never quietly disagree about where a given artifact actually lives.
-    `sigma_band_trajectory`'s own path is always returned, the same way
-    every other key is, regardless of whether a given run actually
-    produced one — this dict names *where a thing would live*, not
+    Every path is returned regardless of whether a given run actually
+    produced it — this dict names *where a thing would live*, not
     which artifacts a particular run happens to have; a caller checks
     on-disk existence (or `manifest.artifacts` membership) for that.
-    `equilibrium_trajectory` is likewise present only for an
+    `equilibrium_trajectory` is present only for an
     equilibrium-split run, streamed by the engine itself beside
     `trajectory.tlog` (`fim.engine.RunResult.equilibrium_store`).
     """
@@ -1280,7 +1278,6 @@ def _run_artifact_targets(directory: Path) -> dict[str, Path]:
         "manifest": directory / "manifest.json",
         "report": directory / "report.json",
         "scatter": directory / "scatter.png",
-        "sigma_band_trajectory": directory / "sigma_band_trajectory.jsonl",
         "convergence": directory / "convergence.jsonl",
         "pairwise": directory / "pairwise.json",
     }
@@ -1289,9 +1286,8 @@ def _run_artifact_targets(directory: Path) -> dict[str, Path]:
 def _convergence_history_rows(result: RunResult) -> list[dict[str, object]]:
     """Return one row per generation, for `convergence.jsonl` (below).
 
-    `{"generation": N, "D": ..., "H_S": ..., ...}` -- the same shape
-    `sigma_band_trajectory.jsonl`'s own rows already use (one small
-    object per generation, `write_jsonl_rows`), rather than a single
+    `{"generation": N, "D": ..., "H_S": ..., ...}` -- one small
+    object per generation (`write_jsonl_rows`), rather than a single
     large object holding a `generations` list alongside a `histories`
     mapping of equal-length lists.
 
@@ -1379,14 +1375,6 @@ def _write_run_artifacts(
         pairwise_payload(result.final_state, max_demes=pairwise_max_demes),
     )
     digested_names = ["trajectory", "report", "scatter", "convergence", "pairwise"]
-    if result.sigma_band_trajectory is not None:
-        # Written — and digested — only when the within-run sigma band
-        # actually ran (`RunResult.sigma_band_trajectory`'s own
-        # docstring); a run that never requested one, or requested one
-        # but only hit the hard cap, produces no such file at all,
-        # exactly like `manifest.sigma_band` itself stays `None`.
-        write_jsonl_rows(targets["sigma_band_trajectory"], result.sigma_band_trajectory)
-        digested_names.append("sigma_band_trajectory")
     if targets["equilibrium_trajectory"].is_file():
         # Streamed, like `trajectory.tlog`, by the engine itself during
         # an equilibrium-split run's ancestral phase

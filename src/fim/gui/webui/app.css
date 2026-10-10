@@ -622,16 +622,6 @@ textarea::placeholder {
     background: var(--fim-error-mark);
 }
 
-/* The within-run sigma band's own supplementary caption (design §7.2,
- * `run-view-completed.js`'s own `renderTrajectory`) -- a plain `<ul>`
- * for `.hint`'s own font/color, with the bullets themselves removed:
- * one short line per statistic reads more like a compact caption than
- * a real list here. */
-#run-trajectory-sigma-band-caption {
-    list-style: none;
-    padding: 0;
-}
-
 fieldset.composite {
     border: 1px solid var(--fim-border);
     border-radius: 4px;
@@ -1298,6 +1288,13 @@ fieldset.combinator-choice label {
     gap: 0.4rem;
     font-size: 0.8rem;
     color: var(--fim-muted);
+}
+
+.run-trajectory-controls {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.2rem 0.9rem;
 }
 
 .run-trajectory-display[hidden] {

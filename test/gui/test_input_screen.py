@@ -13,7 +13,6 @@ elements, which no Python-only test can check.
 
 from __future__ import annotations
 
-import queue
 from collections.abc import Callable
 from pathlib import Path
 from typing import Any
@@ -25,8 +24,6 @@ from fim.gui.app import Api, create_window
 from fim.gui.config_form import form_values_to_payload, starter_form_values
 from fim.gui.preferences import GuiPreferences, save_preferences
 from fim.model.params import SimulationParams
-
-from .conftest import poll_page
 
 pytestmark = pytest.mark.gui
 
@@ -615,85 +612,6 @@ def test_choosing_the_torus_topology_reveals_rows_and_columns(
 
     assert settled["ringHidden"] is True
     assert settled["torusHidden"] is False
-
-
-def test_checking_the_sigma_band_toggle_reveals_and_seeds_its_own_fields(
-    window: webview.Window, drive: Callable[..., Any]
-) -> None:
-    """Checking "within-run sigma band" reveals its two fields, window pre-filled `100`.
-
-    `20260910-claude-sonnet-5-gui-sigma-band-design.md` (`selby/
-    restricted`) approach A1: "off by default and one toggle away," the
-    multiplier defaulting to the `<select>`'s own first `<option>`
-    (`2.0`, no JS needed for that half) and the window seeded by
-    `config-modals.js`'s own `wireSigmaBandSeedDefault`.
-    """
-    settled = drive(
-        window,
-        ready=_INPUT_SCREEN_READY,
-        trigger=(
-            "var cb = document.getElementById('field-sigma_band_enabled'); "
-            "cb.checked = true; "
-            "cb.dispatchEvent(new Event('change', {bubbles: true}));"
-        ),
-        read=(
-            "({"
-            "fieldsHidden: document.getElementById('sigma-band-fields').hidden, "
-            "multiplierValue: "
-            "document.getElementById('field-sigma_band_multiplier').value, "
-            "windowValue: document.getElementById('field-sigma_band_window').value"
-            "})"
-        ),
-        is_ready=lambda value: value is not None and value.get("fieldsHidden") is False,
-    )
-
-    assert settled["fieldsHidden"] is False
-    assert settled["multiplierValue"] == "2.0"
-    assert settled["windowValue"] == "100"
-
-
-def test_unchecking_and_rechecking_the_sigma_band_toggle_keeps_a_typed_window_value(
-    window: webview.Window,
-) -> None:
-    """A window value already typed survives an uncheck/recheck, never reset to `100`.
-
-    Driven manually (`window.fim.showScreen`/`whenApiReady` already
-    settled by the time `_INPUT_SCREEN_READY` is true, so a plain
-    sequence of synchronous `evaluate_js` calls against one window is
-    enough — no background thread involved, matching `test_open_run_
-    screen.py`'s own "plain, synchronous request/response" precedent).
-    """
-    outcome: queue.Queue[str | None] = queue.Queue(maxsize=1)
-
-    def _drive() -> None:
-        try:
-            poll_page(window, _INPUT_SCREEN_READY, lambda value: value is True)
-            window.evaluate_js(
-                "var cb = document.getElementById('field-sigma_band_enabled'); "
-                "cb.checked = true; "
-                "cb.dispatchEvent(new Event('change', {bubbles: true}));"
-            )
-            window.evaluate_js(
-                "document.getElementById('field-sigma_band_window').value = '250';"
-            )
-            window.evaluate_js(
-                "var cb = document.getElementById('field-sigma_band_enabled'); "
-                "cb.checked = false; "
-                "cb.dispatchEvent(new Event('change', {bubbles: true})); "
-                "cb.checked = true; "
-                "cb.dispatchEvent(new Event('change', {bubbles: true}));"
-            )
-            window_value = window.evaluate_js(
-                "document.getElementById('field-sigma_band_window').value"
-            )
-            outcome.put(window_value)
-        finally:
-            window.destroy()
-
-    webview.start(_drive)
-    window_value = outcome.get(timeout=10.0)
-
-    assert window_value == "250"
 
 
 def test_configure_has_no_expensive_statistics_checkbox(

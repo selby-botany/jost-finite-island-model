@@ -9,20 +9,16 @@
       "sha256": "ef3bcd321105d537b2b493312a28b9e4092bd2a72b49181382902ade53b35d27"
     },
     "report": {
-      "bytes": 2586,
-      "sha256": "034b5675273f82c9280f62a272b4be27caf5360ccd4ecd53ebb88df3d91913b7"
+      "bytes": 4635,
+      "sha256": "30a7bcefe5bf2d97b50fe18b337f2cb0ad0cd55268f5040cc8d99a8ab47c96be"
     },
     "scatter": {
       "bytes": 206658,
       "sha256": "e55f260650d6be7ca42c3d6a9485ff2bc94dfa06108e119ef47e4798fc3b5b9f"
     },
-    "sigma_band_trajectory": {
-      "bytes": 1346,
-      "sha256": "1cf3b95994d45fe9910f4cd59e6ad612fe2ea605237a0c9ab6a552d8c00cd358"
-    },
     "trajectory": {
       "bytes": 20529916,
-      "sha256": "0fa49891f8451fefeca23fb9c0e223780ff2d44462bca958c5d113b1323b87f3"
+      "sha256": "59a6db447f74f5e8c6677f566eb1ce9179f8383c973b7b1f91c442aba59e7240"
     }
   },
   "auto_derived": [
@@ -36,7 +32,7 @@
     "reason": "statistic converged",
     "statistic": "D"
   },
-  "ended_at": "2026-10-10T04:07:20.738739Z",
+  "ended_at": "2026-10-10T17:41:37.314536Z",
   "engine_backend": "lineal",
   "equilibrium_final_heterozygosity": null,
   "equilibrium_generation_count": null,
@@ -50,6 +46,7 @@
     "confidence": 0.95,
     "convergence_burn_in": 1522,
     "convergence_combinator": "all",
+    "convergence_estimate": "mean_of_values",
     "convergence_statistic": "D",
     "d": 4,
     "deme_weighting": "equal",
@@ -100,26 +97,16 @@
     "n_replicates": 1,
     "ploidy": "haploid",
     "precision": 0.01,
+    "precision_method": "interval",
+    "replicate_averaging_window": "auto",
     "replicate_minimum": 10,
     "seed": 20260916,
-    "sigma_band_multiplier": 2.0,
-    "sigma_band_window": 30,
     "stop_batch_early": true,
     "track_expensive_statistics": false
   },
   "relaxation_time": 287.2340425531915,
-  "run_id": "run-6b6323aafabcaa0c",
+  "run_id": "run-3884c13da2212881",
   "schema_version": 3,
-  "sigma_band": {
-    "D": {
-      "lower": 0.07715066608985215,
-      "mean": 0.09235642324304254,
-      "sigma": 0.007602878576595193,
-      "upper": 0.10756218039623293
-    }
-  },
-  "sigma_band_multiplier": 2.0,
-  "sigma_band_window": 30,
   "software_version": "1.2.0",
-  "started_at": "2026-10-10T04:06:32.178208Z"
+  "started_at": "2026-10-10T17:40:13.936465Z"
 }

@@ -343,9 +343,10 @@ const runTrajectoryDisplayControl = document.getElementById(
     "run-trajectory-display-control"
 );
 const runTrajectoryDisplay = document.getElementById("run-trajectory-display");
-const runTrajectorySigmaBandCaption = document.getElementById(
-    "run-trajectory-sigma-band-caption"
+const runTrajectoryBandWidthControl = document.getElementById(
+    "run-trajectory-band-width-control"
 );
+const runTrajectoryBandWidth = document.getElementById("run-trajectory-band-width");
 const resultsDifferentiationQ = document.getElementById("results-differentiation-q");
 const resultsDifferentiationQCanvas = document.getElementById(
     "results-differentiation-q-canvas"
@@ -737,20 +738,22 @@ function completedRowNotes(name, index = null) {
     const estimate =
         estimateNote(completedEstimateSource, name, index) ||
         (index === null ? reportEstimateNote(name) : "");
-    return [estimate, closedFormNote(completedClosedFormComparisons, name, index)];
+    return [
+        estimate,
+        sigmaNote(name),
+        closedFormNote(completedClosedFormComparisons, name, index),
+    ];
 }
 
 /**
- * Running sums from which the mean, spread and lag-1 autocorrelation of
- * any contiguous window of `values` follow in constant time.
+ * Running sums from which the mean and spread of any contiguous window of
+ * `values` follow in constant time.
  *
- * Entry `i` of each array covers `values[0]` through `values[i - 1]`;
- * `products` sums neighboring pairs, `values[k] * values[k + 1]`.
+ * Entry `i` of each array covers `values[0]` through `values[i - 1]`.
  *
  * @param {number[]|null|undefined} values
- * @returns {{values: number[], sum: Float64Array, squares: Float64Array,
- *     products: Float64Array}|null} `null` when `values` is missing or
- *     holds a value that is not finite.
+ * @returns {{values: number[], sum: Float64Array, squares: Float64Array}|null}
+ *     `null` when `values` is missing or holds a value that is not finite.
  */
 function windowSums(values) {
     if (!values) {
@@ -759,38 +762,120 @@ function windowSums(values) {
     const count = values.length;
     const sum = new Float64Array(count + 1);
     const squares = new Float64Array(count + 1);
-    const products = new Float64Array(count + 1);
     for (let index = 0; index < count; index += 1) {
         const value = values[index];
         if (!Number.isFinite(value)) {
             return null;
         }
-        const next = index + 1 < count ? values[index + 1] : 0;
         sum[index + 1] = sum[index] + value;
         squares[index + 1] = squares[index] + value * value;
-        products[index + 1] = products[index] + value * next;
     }
-    return { values, sum, squares, products };
+    return { values, sum, squares };
 }
 
 /**
- * The mean of `values[start..end]` and its standard error, allowing for
- * the correlation between neighboring generations.
+ * The integrated autocorrelation time of one statistic over the run's
+ * evidence window, as the report states it (`window / effective_sample_size`).
  *
- * The page-side copy of `fim.convergence.window_statistics` (a test holds
- * the two equal): the window is treated as a first-order autoregressive
- * process, whose integrated autocorrelation time is `(1 + rho) / (1 -
- * rho)` for lag-1 correlation `rho`; the effective sample size is the
- * window length divided by that, and the standard error is the sample
- * standard deviation over its square root.
+ * @param {Object<string, object>|null} windowStatistics `report.window_statistics`.
+ * @param {string} name
+ * @returns {number|null} at least 1, or `null` when the report has no window
+ *     for the statistic (a live run, a batch).
+ */
+function tauIntFor(windowStatistics, name) {
+    const stats = windowStatistics && windowStatistics[name];
+    if (
+        !stats ||
+        !(stats.window > 0) ||
+        !(stats.effective_sample_size > 0) ||
+        !Number.isFinite(stats.effective_sample_size)
+    ) {
+        return null;
+    }
+    return Math.max(1, stats.window / stats.effective_sample_size);
+}
+
+/**
+ * `sigmaBand` restricted to the statistics the graph draws.
+ *
+ * @param {object|null} sigmaBand `evidenceSigmaBand`'s result.
+ * @param {Object<string, *>|null} visible the plotted statistics, or `null`
+ *     for a graph with no curve (every statistic of the band is shown).
+ * @returns {object|null} `null` when nothing is left.
+ */
+function visibleSigmaBand(sigmaBand, visible) {
+    if (!sigmaBand) {
+        return null;
+    }
+    const band = Object.fromEntries(
+        Object.entries(sigmaBand.band).filter(([name]) => !visible || name in visible)
+    );
+    return Object.keys(band).length === 0 ? null : { ...sigmaBand, band };
+}
+
+/**
+ * The sigma display of the "every generation" graph: for each statistic the
+ * run's evidence window gave, a band of `width` standard deviations either
+ * side of the window mean (design 6.8).
+ *
+ * The standard deviation is how much the statistic wanders at equilibrium,
+ * the spread one population sampled at one time would show; it does not
+ * shrink with run length (unlike the standard error of the mean).
+ *
+ * @param {Object<string, object>|null} windowStatistics `report.window_statistics`.
+ * @param {number} width sigmas either side of the mean.
+ * @returns {{multiplier: number, window: number, band: Object<string,
+ *     {mean: number, sigma: number, lower: number, upper: number}>}|null}
+ *     `window` is the evidence window's length in generations; `null` when
+ *     no statistic has one.
+ */
+function evidenceSigmaBand(windowStatistics, width) {
+    if (!windowStatistics) {
+        return null;
+    }
+    const band = {};
+    let span = 0;
+    for (const [name, stats] of Object.entries(windowStatistics)) {
+        if (
+            !Number.isFinite(stats.mean) ||
+            !Number.isFinite(stats.standard_deviation) ||
+            !Number.isFinite(stats.window_start) ||
+            !Number.isFinite(stats.window_end)
+        ) {
+            continue;
+        }
+        band[name] = {
+            mean: stats.mean,
+            sigma: stats.standard_deviation,
+            lower: stats.mean - width * stats.standard_deviation,
+            upper: stats.mean + width * stats.standard_deviation,
+        };
+        span = Math.max(span, stats.window_end - stats.window_start);
+    }
+    return Object.keys(band).length === 0 ? null : { multiplier: width, window: span, band };
+}
+
+/**
+ * The mean of `values[start..end]` and its standard error.
+ *
+ * The standard error is the window's standard deviation times
+ * `sqrt(tauInt / count)`, where `tauInt` is the integrated autocorrelation
+ * time of the statistic, estimated once over the run's evidence window by
+ * Geyer's method and served with the report (`window_statistics`); the
+ * values of neighboring generations are correlated, so `count` of them are
+ * worth `count / tauInt` independent draws (design 6.8). With no `tauInt`
+ * (a live run, before its first check) the standard error is `NaN` and no
+ * band is drawn, rather than a guess from the lag-1 correlation.
  *
  * @param {object|null} sums `windowSums`'s result.
  * @param {number} start first index, inclusive.
  * @param {number} end last index, inclusive.
+ * @param {number|null} tauInt the statistic's integrated autocorrelation
+ *     time, at least 1, or `null` when not known.
  * @returns {{mean: number, standardError: number, count: number}|null}
  *     `null` for a window shorter than `MINIMUM_WINDOW_ESTIMATE_POINTS`.
  */
-function trailingWindowEstimate(sums, start, end) {
+function trailingWindowEstimate(sums, start, end, tauInt = null) {
     const count = end - start + 1;
     if (
         !sums ||
@@ -808,21 +893,13 @@ function trailingWindowEstimate(sums, start, end) {
         // A flat window is known exactly, as in `window_statistics`.
         return { mean, standardError: 0, count };
     }
-    // The centered neighbor products, expanded so they come from the
-    // running sums: sum((x_k - m)(x_k+1 - m)) over the window's pairs.
-    const pairProducts = sums.products[end] - sums.products[start];
-    const pairEnds = 2 * total - sums.values[start] - sums.values[end];
-    const crossProducts = pairProducts - mean * pairEnds + (count - 1) * mean * mean;
-    const lag1 = Math.max(-1, Math.min(crossProducts / sumSquares, MAXIMUM_LAG1_CORRELATION));
-    const autocorrelationTime = Math.max(
-        (1 + lag1) / (1 - lag1),
-        MINIMUM_INTEGRATED_AUTOCORRELATION_TIME
-    );
+    if (tauInt === null || !Number.isFinite(tauInt)) {
+        return { mean, standardError: NaN, count };
+    }
     const standardDeviation = Math.sqrt(sumSquares / (count - 1));
-    const effectiveSampleSize = count / autocorrelationTime;
     return {
         mean,
-        standardError: standardDeviation / Math.sqrt(effectiveSampleSize),
+        standardError: standardDeviation * Math.sqrt(Math.max(tauInt, 1) / count),
         count,
     };
 }
@@ -857,7 +934,7 @@ function trailingWindowStart(generations, index, window) {
 
 /**
  * Each generation's mean over a window that ends there, with a band of
- * `TRAILING_MEAN_BAND_STANDARD_ERRORS` standard errors either side
+ * `trajectoryBandWidth` standard errors either side
  * (`trailingWindowEstimate`).
  *
  * Shared by the trajectory graph's two averaged displays, which differ
@@ -870,12 +947,15 @@ function trailingWindowStart(generations, index, window) {
  * @param {function(number): (number|null)} startFor the first index of
  *     the window ending at an index, or `null` for no window; called once
  *     per index, in order.
+ * @param {number|null} tauInt the statistic's integrated autocorrelation
+ *     time (`trailingWindowEstimate`); with `null` the mean is drawn and
+ *     the band is `NaN`.
  * @returns {{mean: number[], low: number[], high: number[], count:
  *     number[]}|null} per index, the mean, the band, and how many points
  *     it averages (0 where `NaN`); `null` when `values` holds a value that
  *     is not finite.
  */
-function averagedSeries(values, startFor) {
+function averagedSeries(values, startFor, tauInt = null) {
     const sums = windowSums(values);
     if (!sums) {
         return null;
@@ -889,7 +969,7 @@ function averagedSeries(values, startFor) {
         const estimate =
             start === null || start > index
                 ? null
-                : trailingWindowEstimate(sums, start, index);
+                : trailingWindowEstimate(sums, start, index, tauInt);
         if (estimate === null) {
             mean.push(NaN);
             low.push(NaN);
@@ -897,7 +977,7 @@ function averagedSeries(values, startFor) {
             count.push(0);
             continue;
         }
-        const halfWidth = TRAILING_MEAN_BAND_STANDARD_ERRORS * estimate.standardError;
+        const halfWidth = trajectoryBandWidth * estimate.standardError;
         mean.push(estimate.mean);
         low.push(estimate.mean - halfWidth);
         high.push(estimate.mean + halfWidth);
@@ -913,17 +993,22 @@ function averagedSeries(values, startFor) {
  * @param {number[]} generations ascending.
  * @param {number[]} values aligned with `generations`.
  * @param {number} window in generations.
+ * @param {number|null} tauInt `averagedSeries`'s.
  * @returns {{mean: number[], low: number[], high: number[], count:
  *     number[]}|null}
  */
-function trailingMeanSeries(generations, values, window) {
+function trailingMeanSeries(generations, values, window, tauInt = null) {
     let start = 0;
-    return averagedSeries(values, (index) => {
-        while (generations[index] - generations[start] >= window) {
-            start += 1;
-        }
-        return start;
-    });
+    return averagedSeries(
+        values,
+        (index) => {
+            while (generations[index] - generations[start] >= window) {
+                start += 1;
+            }
+            return start;
+        },
+        tauInt
+    );
 }
 
 /**
@@ -934,11 +1019,12 @@ function trailingMeanSeries(generations, values, window) {
  *
  * @param {number[]} values
  * @param {number} start the first index averaged; earlier ones are `NaN`.
+ * @param {number|null} tauInt `averagedSeries`'s.
  * @returns {{mean: number[], low: number[], high: number[], count:
  *     number[]}|null}
  */
-function cumulativeMeanSeries(values, start) {
-    return averagedSeries(values, () => start);
+function cumulativeMeanSeries(values, start, tauInt = null) {
+    return averagedSeries(values, () => start, tauInt);
 }
 
 /**
@@ -1131,7 +1217,12 @@ function estimateNote(source, name, index = null) {
         source.sums[name] = windowSums(values);
     }
     const sums = source.sums ? source.sums[name] : windowSums(values);
-    const estimate = trailingWindowEstimate(sums, start, end);
+    const estimate = trailingWindowEstimate(
+        sums,
+        start,
+        end,
+        source.tauInt ? (source.tauInt[name] ?? null) : null
+    );
     if (estimate === null) {
         return "";
     }
@@ -1139,22 +1230,28 @@ function estimateNote(source, name, index = null) {
     const span = generations[end] - generations[start] + 1;
     const recorded =
         estimate.count === span ? "" : `, ${estimate.count.toLocaleString()} recorded`;
+    const known = Number.isFinite(estimate.standardError);
     const adequate =
+        !known ||
         !Number.isFinite(convergence.tolerance) ||
         estimate.standardError <= convergence.tolerance * NOISE_TOLERANCE_FRACTION;
-    let note =
-        `mean ${estimate.mean.toFixed(decimals)} ± ` +
-        `${estimate.standardError.toFixed(decimals)} over generations ` +
-        `${generations[start].toLocaleString()}–${generations[end].toLocaleString()} ` +
-        `(${span.toLocaleString()} generations${recorded}; 1 SE` +
-        `${adequate ? "" : ", not yet noise-adequate"})`;
+    const range =
+        `over generations ${generations[start].toLocaleString()}–` +
+        `${generations[end].toLocaleString()} ` +
+        `(${span.toLocaleString()} generations${recorded}`;
+    let note = known
+        ? `mean ${estimate.mean.toFixed(decimals)} ± ` +
+          `${estimate.standardError.toFixed(decimals)} ${range}; 1 SE` +
+          `${adequate ? "" : ", not yet noise-adequate"})`
+        : `mean ${estimate.mean.toFixed(decimals)} ${range}; ` +
+          "standard error known once the run has averaged)";
     const entry = comparisons && comparisons[name];
     if (entry && entry.predictedSums) {
         const predicted =
             (entry.predictedSums.sum[end + 1] - entry.predictedSums.sum[start]) /
             estimate.count;
         note += `; predicted ${predicted.toFixed(decimals)}`;
-        if (estimate.standardError > 0) {
+        if (known && estimate.standardError > 0) {
             const distance = (estimate.mean - predicted) / estimate.standardError;
             const sign = distance < 0 ? "−" : "+";
             note += `, ${sign}${Math.abs(distance).toFixed(PREDICTION_DISTANCE_DECIMALS)} SE`;
@@ -1181,6 +1278,22 @@ function reportEstimateNote(name) {
         `${stats.standard_error.toFixed(WINDOW_STATISTIC_DECIMALS)} over the last ` +
         `${stats.window.toLocaleString()} generations (1 SE${precision})`
     );
+}
+
+/**
+ * The spread of one statistic over the run's evidence window, as a tooltip
+ * clause: how much it wanders from generation to generation at equilibrium,
+ * which does not shrink with run length (design 6.8).
+ *
+ * @param {string} name
+ * @returns {string} the clause, or `""` when the report has no window for it.
+ */
+function sigmaNote(name) {
+    const stats = completedWindowStatistics && completedWindowStatistics[name];
+    if (!stats || !Number.isFinite(stats.standard_deviation)) {
+        return "";
+    }
+    return `σ ${stats.standard_deviation.toFixed(WINDOW_STATISTIC_DECIMALS)} per generation`;
 }
 
 /**
@@ -1305,6 +1418,34 @@ window.fim.setTrajectoryDisplay = function setTrajectoryDisplay(display) {
     repaintTrajectory();
 };
 
+// How wide every band on the trajectory graph is, in sigmas (the "every
+// generation" display) or standard errors (the averaged displays); one of
+// `TRAJECTORY_BAND_WIDTHS`. Loaded from preferences by `run-graph-stage.js`'s
+// own `loadRunCardLayout`.
+let trajectoryBandWidth = DEFAULT_TRAJECTORY_BAND_WIDTH;
+
+/**
+ * Apply a band width and repaint the graph with it.
+ *
+ * @param {number} width one of `TRAJECTORY_BAND_WIDTHS`; anything else is
+ *     ignored.
+ * @returns {void}
+ */
+window.fim.setTrajectoryBandWidth = function setTrajectoryBandWidth(width) {
+    if (!TRAJECTORY_BAND_WIDTHS.includes(width)) {
+        return;
+    }
+    trajectoryBandWidth = width;
+    runTrajectoryBandWidth.value = String(width);
+    // The sigma band is `width` sigmas wide, so a retained one is rebuilt;
+    // the cached arguments of a live run carry none.
+    completedSigmaBand = evidenceSigmaBand(completedWindowStatistics, width);
+    if (lastTrajectoryRenderArgs && lastTrajectoryRenderArgs[2]) {
+        lastTrajectoryRenderArgs[2] = completedSigmaBand;
+    }
+    repaintTrajectory();
+};
+
 /**
  * Whether the run can be drawn averaged: it needs a recorded curve and a
  * convergence window to average over.
@@ -1349,10 +1490,10 @@ function shownGenerationIndex(generations, scrubGeneration) {
 
 for (const option of runTrajectoryDisplay.options) {
     if (option.value === "trailing_mean") {
-        option.textContent = `Trailing mean ± ${TRAILING_MEAN_BAND_STANDARD_ERRORS} SE`;
+        option.textContent = "Trailing mean";
     }
     if (option.value === "cumulative_mean") {
-        option.textContent = `Cumulative mean ± ${TRAILING_MEAN_BAND_STANDARD_ERRORS} SE`;
+        option.textContent = "Cumulative mean";
     }
 }
 runTrajectoryDisplay.addEventListener("change", async () => {
@@ -1360,6 +1501,15 @@ runTrajectoryDisplay.addEventListener("change", async () => {
         runTrajectoryDisplay.value
     );
     window.fim.setTrajectoryDisplay(result.ok ? result.display : trajectoryDisplay);
+});
+
+runTrajectoryBandWidth.addEventListener("change", async () => {
+    const result = await trackSettingsSave(
+        window.pywebview.api.set_trajectory_band_width(
+            Number(runTrajectoryBandWidth.value)
+        )
+    );
+    window.fim.setTrajectoryBandWidth(result.ok ? result.width : trajectoryBandWidth);
 });
 
 function toggleTrajectoryStatistic(name) {
@@ -1809,11 +1959,11 @@ function fillBetween(context, generations, low, high, xToPixel, yToPixel) {
  *     each already the same length as `generations` (`renderTrajectory`,
  *     below, filters out any that is not before this ever runs).
  * @param {{multiplier: number, window: number, band: Object<string,
- *     {mean: string, sigma: string, lower: string, upper: string}>}|null|undefined} sigmaBand
- *     design doc §7.2's own within-run sigma band (`20260910-claude-
- *     sonnet-5-gui-sigma-band-design.md`'s own approach C1) — `null`/
- *     `undefined` (a run that never requested one, or a screen with no
- *     band data of its own to show at all) draws nothing extra.
+ *     {mean: number, sigma: number, lower: number, upper: number}>}|null|undefined} sigmaBand
+ *     the sigma display (`evidenceSigmaBand`): a band over the evidence
+ *     window at the mean plus or minus `multiplier` standard deviations,
+ *     per statistic — `null`/`undefined` (an averaged display, a screen
+ *     with no evidence window) draws nothing extra.
  * @param {Object<string, number>} [equilibrium] design §6.2's own
  *     predicted-equilibrium reference line — one already-`Number`-
  *     parsed, already-in-scope value per statistic (`renderTrajectory`,
@@ -2262,7 +2412,7 @@ function setTrajectoryFrameHidden(hidden) {
  * @returns {Array<[string, string]>} `[swatch class, text]` pairs.
  */
 function averagedLegendEntries(mode, window, generations, starts, windowMarker) {
-    const plusMinus = `± ${TRAILING_MEAN_BAND_STANDARD_ERRORS} SE`;
+    const plusMinus = `± ${trajectoryBandWidth} SE`;
     const entries = [];
     if (mode === "trailing_mean") {
         entries.push([
@@ -2297,18 +2447,14 @@ function averagedLegendEntries(mode, window, generations, starts, windowMarker) 
  * `histories` are `undefined` for that path, a real, named scope
  * boundary, not an oversight.
  *
- * `sigmaBand` (design §7.2, sigma-band design doc `20260910-claude-
- * sonnet-5-gui-sigma-band-design.md`'s own approach B1/C1) is `Api.
- * _sigma_band_payload`'s own result, from either payload shape alike —
- * `null`/`undefined` for a run that never requested one, and always
- * `undefined` for a batch (no `sigmaBand` key on that payload shape at
- * all). When a band exists but there is no real curve to anchor it to
- * (a reopened run, slice 4 of that design's own commit schedule), the
- * panel still shows — axes sized to the band's own trailing window
- * alone (`generationCount - sigmaBand.window` through
- * `generationCount`), the shaded region and its caption, simply no
- * line running through it, rather than requiring a curve that does
- * not exist just to show a band that does.
+ * `sigmaBand` (design 6.8) is `evidenceSigmaBand`'s result for the run's
+ * report — `null` for a batch or a run whose report has no evidence
+ * window. It is drawn in the "every generation" display only. When a band
+ * exists but there is no real curve to anchor it to (a reopened run), the
+ * panel still shows — axes sized to the band's own evidence window alone
+ * (`generationCount - sigmaBand.window` through `generationCount`), the
+ * shaded region and its caption, simply no line running through it, rather
+ * than requiring a curve that does not exist just to show a band that does.
  * @param {number[]|undefined} generations
  * @param {Object<string, number[]>|undefined} histories
  * @param {{multiplier: number, window: number, band: object}|null|undefined} sigmaBand
@@ -2380,12 +2526,11 @@ function renderTrajectory(
     ];
     const hasCurve = generations && histories && generations.length > 0;
     runTrajectoryDisplayControl.hidden = !canAverage(hasCurve, averaging);
+    runTrajectoryBandWidthControl.hidden = !(hasCurve || sigmaBand);
     if (!hasCurve && !sigmaBand) {
         activeTrajectoryRenderMode = null;
         setTrajectoryFrameHidden(true);
         runTrajectoryLegend.replaceChildren();
-        runTrajectorySigmaBandCaption.hidden = true;
-        runTrajectorySigmaBandCaption.replaceChildren();
         return;
     }
     activeTrajectoryRenderMode = "scalar";
@@ -2494,11 +2639,13 @@ function renderTrajectory(
             if (start === null) {
                 continue;
             }
+            const tauInt = tauIntFor(completedWindowStatistics, name);
             const average = (series) =>
                 cumulative
-                    ? cumulativeMeanSeries(series, start)
-                    : trailingMeanSeries(effectiveGenerations, series, window);
-            const key = cumulative ? `cumulative:${start}` : `trailing:${window}`;
+                    ? cumulativeMeanSeries(series, start, tauInt)
+                    : trailingMeanSeries(effectiveGenerations, series, window, tauInt);
+            const display = cumulative ? `cumulative:${start}` : `trailing:${window}`;
+            const key = `${display}:${tauInt}:${trajectoryBandWidth}`;
             const series = cachedAveragedSeries(key, effectiveGenerations, values, () =>
                 average(values)
             );
@@ -2517,11 +2664,18 @@ function renderTrajectory(
         }
         windowMarker = averagingWindowMarker(effectiveGenerations, averagedStarts, shownIndex);
     }
+    // The sigma display belongs to the "every generation" graph, and only
+    // for the statistics that graph shows (an averaged display draws
+    // standard-error bands instead).
+    const shownSigmaBand = visibleSigmaBand(
+        averagedMode === null ? sigmaBand : null,
+        hasCurve ? visiblePlottable : null
+    );
     drawTrajectoryCurve(
         canvas,
         effectiveGenerations,
         drawnHistories,
-        sigmaBand,
+        shownSigmaBand,
         visiblePlottableEquilibrium,
         identityRecovery,
         drawnClosedForm,
@@ -2529,18 +2683,6 @@ function renderTrajectory(
         bands,
         windowMarker
     );
-    runTrajectorySigmaBandCaption.replaceChildren();
-    if (sigmaBand) {
-        for (const [name, interval] of Object.entries(sigmaBand.band)) {
-            const item = document.createElement("li");
-            item.textContent =
-                `${name}: ${interval.mean} [${interval.lower}, ${interval.upper}] ` +
-                `(${sigmaBand.multiplier}σ, last ${sigmaBand.window} generations)`;
-            runTrajectorySigmaBandCaption.appendChild(item);
-        }
-    }
-    runTrajectorySigmaBandCaption.hidden =
-        runTrajectorySigmaBandCaption.children.length === 0;
     refreshTrajectoryStatisticRowStates();
     runTrajectoryLegend.replaceChildren();
     if (averagedMode !== null) {
@@ -2823,6 +2965,7 @@ function renderBatchTrajectory(pooledConvergenceHistories, scrubGeneration) {
     // A batch draws its own across-replicate band; the per-run display
     // choice does not apply.
     runTrajectoryDisplayControl.hidden = true;
+    runTrajectoryBandWidthControl.hidden = true;
     const names = pooledConvergenceHistories ? Object.keys(pooledConvergenceHistories) : [];
     if (names.length === 0) {
         activeTrajectoryRenderMode = null;
@@ -3896,6 +4039,12 @@ window.fim.enterCompletedState = function enterCompletedState(payload, isBatch) 
                           payload.convergenceGenerations.length,
                           completedConvergenceWindow
                       ),
+                      tauInt: Object.fromEntries(
+                          Object.keys(report.window_statistics || {}).map((name) => [
+                              name,
+                              tauIntFor(report.window_statistics, name),
+                          ])
+                      ),
                       sums: {},
                   }
                 : null;
@@ -3926,7 +4075,10 @@ window.fim.enterCompletedState = function enterCompletedState(payload, isBatch) 
         // tick with."
         completedTrajectoryGenerations = payload.convergenceGenerations || null;
         completedTrajectoryHistories = payload.convergenceHistories || null;
-        completedSigmaBand = payload.sigmaBand || null;
+        completedSigmaBand = evidenceSigmaBand(
+            completedWindowStatistics,
+            trajectoryBandWidth
+        );
         completedEquilibrium = payload.equilibrium || null;
         completedIdentityRecovery = payload.identityRecovery || null;
         completedClosedForm = payload.closedForm || null;
@@ -3939,7 +4091,7 @@ window.fim.enterCompletedState = function enterCompletedState(payload, isBatch) 
         renderTrajectory(
             payload.convergenceGenerations,
             payload.convergenceHistories,
-            payload.sigmaBand,
+            completedSigmaBand,
             payload.generationCount,
             payload.equilibrium,
             payload.identityRecovery,

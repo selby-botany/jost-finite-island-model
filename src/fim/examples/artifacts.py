@@ -24,7 +24,6 @@ RUN_OUTPUT_NAMES: Final = (
     TRAJECTORY_LOG_FILENAME,
     EQUILIBRIUM_LOG_FILENAME,
     "convergence.jsonl",
-    "sigma_band_trajectory.jsonl",
     "pairwise.json",
     "scatter.png",
 )

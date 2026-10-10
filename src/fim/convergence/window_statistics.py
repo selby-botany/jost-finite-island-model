@@ -41,8 +41,8 @@ class WindowStatistics:
             formula, but `standard_deviation / sqrt(effective_sample_size)`,
             which corrects for the window's autocorrelation.
         standard_deviation: The window's own sample standard deviation
-            (Bessel-corrected), ignoring correlation — the quantity a sigma
-            band already reports (`fim.engine._sigma_band_summary`); kept
+            (Bessel-corrected), ignoring correlation — the spread the sigma
+            display shows (design 6.8); kept
             alongside `standard_error` so a caller never has to choose one
             over the other.
         effective_sample_size: How many independent draws this window's

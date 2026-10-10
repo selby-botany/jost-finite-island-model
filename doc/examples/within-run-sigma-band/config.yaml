@@ -1,7 +1,7 @@
 name: Within-run sigma band
 description: >-
-  Keeps running after convergence to show how much D still varies from one
-  generation to the next.
+  Shows how much D still varies from one generation to the next once the run
+  has settled, as a band over the evidence window.
 class: statistics-and-convergence
 _read_only: true  # marks the shipped copy read-only; delete it in your own copy
 N: 150
@@ -31,6 +31,4 @@ loci:
     length: 100
 engine_backend: lineal
 convergence_statistic: D
-sigma_band_multiplier: 2.0
-sigma_band_window: 30
 n_replicates: 1   # a single scalar run; the default (200) would batch

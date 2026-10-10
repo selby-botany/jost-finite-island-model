@@ -622,17 +622,18 @@ trailing-window mean was already known precisely (0.0660 ± 0.0038) while D's
 was not (0.101 ± 0.010), and <code>any</code> needs only one. A run that reaches its cap
 records <code>null</code>, since it converged on nothing.</p>
 <h3 id="within-run-sigma-band">Within-run sigma band</h3>
-<p>Once a run genuinely converges, keep going for a further window and report
-how much the watched statistic still wobbles, generation to generation,
-immediately after being declared stable — a different question from the
-across-replicate confidence interval in the next example, which asks how
-much independent replicates disagree with each other, not how noisy any one
-of them still is:</p>
+<p>A run burns in and then averages; everything after the burn-in is its
+evidence window. The report gives, for the window, both the precision of the
+average (the standard error) and how much the statistic still wobbles,
+generation to generation (the standard deviation, <code>σ</code>) — a different question
+from the across-replicate confidence interval in the next example, which asks
+how much independent replicates disagree with each other, not how noisy any
+one of them still is:</p>
 <!-- worked-example-config: examples/within-run-sigma-band/config.yaml -->
 <pre><code class="language-yaml">name: Within-run sigma band
 description: &gt;-
-  Keeps running after convergence to show how much D still varies from one
-  generation to the next.
+  Shows how much D still varies from one generation to the next once the run
+  has settled, as a band over the evidence window.
 class: statistics-and-convergence
 _read_only: true  # marks the shipped copy read-only; delete it in your own copy
 N: 150
@@ -662,23 +663,21 @@ loci:
     length: 100
 engine_backend: lineal
 convergence_statistic: D
-sigma_band_multiplier: 2.0
-sigma_band_window: 30
 n_replicates: 1   # a single scalar run; the default (200) would batch
 </code></pre>
 <pre><code class="language-console">fim run sigma-band.yaml --output results/sigma-band --quiet
 </code></pre>
-<p>Converges at generation 13,909, after about three minutes, with D = 0.163; the
-following 30-generation extension reports D = 0.157 ± 0.063 (mean ± 2σ).
-The example pools eight loci: with one locus, a stretch near fixation can
-look steady for the wrong reason (see the
-<a href="#" data-fim-external="https://github.com/selby-botany/jost-finite-island-model/blob/main/doc/examples/within-run-sigma-band/README.md">example's README</a>). The band's own mean
-differs from the converged value itself — it is computed over the
-<em>extension</em> window, not the generations that triggered convergence — and
-is an honest report of how much a single statistic can still wobble over
-just 30 generations, not a sign of anything wrong. <code>results/sigma-band/sigma_band_trajectory.jsonl</code> records
-one <code>D</code> value per extension generation; <code>manifest.json</code>'s own <code>sigma_band</code>
-field holds the summarized band shown here.</p>
+<p>Converges at generation 19,984, after about a minute and a half. The evidence
+window starts at the burn-in (generation 1,522) and holds 18,463 generations:
+D = 0.127 ± 0.004 (one standard error), with <code>σ</code> = 0.035, so a single
+generation's D lies within 0.127 ± 0.071 about 95% of the time (2σ). The example
+pools eight loci: with one locus, a stretch near fixation can look steady for
+the wrong reason (see the
+<a href="#" data-fim-external="https://github.com/selby-botany/jost-finite-island-model/blob/main/doc/examples/within-run-sigma-band/README.md">example's README</a>). In the app, the
+trajectory graph draws <code>σ</code> as a shaded band over the window in the &quot;Every
+generation&quot; display, and the standard error as a band around the running mean
+in the two averaged displays; the Band control chooses ±1 or ±2. The numbers
+are in <code>report.json</code> under <code>window_statistics</code>.</p>
 <h3 id="an-adaptive-replicate-batch-with-a-confidence-interval">An adaptive replicate batch with a confidence interval</h3>
 <p>Rather than guessing how many replicate runs a confidence interval needs,
 set n<sub>replicates</sub> well above the plausible requirement and let
@@ -1010,7 +1009,7 @@ action the matching on-screen control already performs.</p>
 </tr>
 <tr>
 <td>Run view — completed</td>
-<td>A scalar run's summary (all six named statistics, convergence outcome, each shown as a meter against the same <code>[0, 1]</code> scale the confidence-interval bars below use) beside the canonical scatter plot and the same trajectory panel described above — replaced, once the run finishes, by the real persisted trajectory, and showing the within-run σ band (a shaded region plus its own <code>mean [lower, upper]</code> caption) whenever <a href="#" data-fim-help="configuration" data-fim-anchor="sigma_band_multiplier">sigma_band_multiplier</a> was set — or — for a batch — a pooled scatter across every replicate's final state beside a replicate table (status, final generation, every named statistic) and each statistic's across-replicate confidence interval as a meter, explicitly labeled &quot;uncertainty across N independent replicates&quot; so it is never confused with the within-run σ band; either way, one panel (Deme 1 vs. Deme 2 by default) with a labeled, numbered <code>0.0</code>-<code>1.0</code> probability scale on both axes; axis selectors on the plot choose which two demes to compare directly, and selecting Deme 1 vs. Deme 2 again returns to the default panel; the statistics panel's deme-pair rows (Nei distances and pairwise F<sub>ST</sub>, when shown) follow the same choice, live, after the run and while scrubbing; which statistics the panel, the results tables, the trajectory chart and the sweep charts show is a Settings choice (&quot;Statistics shown&quot;, or &quot;Choose…&quot; in the panel's caption) that never changes what is computed or saved — see <a href="#nei-distances">Nei distances</a>; a scalar run with more than one persisted generation auto-populates a play/pause-and-scrub time slider over the persisted trajectory in the background, with no separate button to reach it; each batch replicate row's own &quot;Open&quot; button reaches this same view for that one replicate; &quot;Open output folder&quot; reveals the run's own artifacts (a batch's own <code>summary.json</code> and every replicate subdirectory, for a batch)</td>
+<td>A scalar run's summary (all six named statistics, convergence outcome, each shown as a meter against the same <code>[0, 1]</code> scale the confidence-interval bars below use) beside the canonical scatter plot and the same trajectory panel described above — replaced, once the run finishes, by the real persisted trajectory, and showing the within-run σ band (a shaded region plus its own <code>mean [lower, upper]</code> caption) over the evidence window in the &quot;Every generation&quot; display — or — for a batch — a pooled scatter across every replicate's final state beside a replicate table (status, final generation, every named statistic) and each statistic's across-replicate confidence interval as a meter, explicitly labeled &quot;uncertainty across N independent replicates&quot; so it is never confused with the within-run σ band; either way, one panel (Deme 1 vs. Deme 2 by default) with a labeled, numbered <code>0.0</code>-<code>1.0</code> probability scale on both axes; axis selectors on the plot choose which two demes to compare directly, and selecting Deme 1 vs. Deme 2 again returns to the default panel; the statistics panel's deme-pair rows (Nei distances and pairwise F<sub>ST</sub>, when shown) follow the same choice, live, after the run and while scrubbing; which statistics the panel, the results tables, the trajectory chart and the sweep charts show is a Settings choice (&quot;Statistics shown&quot;, or &quot;Choose…&quot; in the panel's caption) that never changes what is computed or saved — see <a href="#nei-distances">Nei distances</a>; a scalar run with more than one persisted generation auto-populates a play/pause-and-scrub time slider over the persisted trajectory in the background, with no separate button to reach it; each batch replicate row's own &quot;Open&quot; button reaches this same view for that one replicate; &quot;Open output folder&quot; reveals the run's own artifacts (a batch's own <code>summary.json</code> and every replicate subdirectory, for a batch)</td>
 <td><a href="#output-schemas">Output schemas</a>, <a href="#batch-summaryjson-and-manifestjson">Batch <code>summary.json</code> and <code>manifest.json</code></a></td>
 </tr>
 <tr>

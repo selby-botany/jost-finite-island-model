@@ -145,6 +145,7 @@ def test_run_card_layout_defaults_and_persists(tmp_path: Path) -> None:
         "columns": 2,
         "scatterStyle": "color-badge",
         "trajectoryDisplay": "every_generation",
+        "bandWidth": 2,
     }
     assert api.set_run_graphs(["trajectory", "alleleComposition", "nope"]) == {
         "ok": True,
@@ -160,12 +161,14 @@ def test_run_card_layout_defaults_and_persists(tmp_path: Path) -> None:
         "ok": True,
         "display": "trailing_mean",
     }
+    assert api.set_trajectory_band_width(1) == {"ok": True, "width": 1}
 
     assert Api(preferences_path=path).get_run_card_layout() == {
         "graphs": ["trajectory", "alleleComposition"],
         "columns": 3,
         "scatterStyle": "dots",
         "trajectoryDisplay": "trailing_mean",
+        "bandWidth": 1,
     }
 
 
@@ -179,6 +182,10 @@ def test_run_card_layout_rejects_bad_input_and_saves_nothing(tmp_path: Path) -> 
     assert api.set_run_graph_columns(5)["ok"] is False
     assert api.set_scatter_style("pie")["ok"] is False
     assert api.set_trajectory_display("smoothed")["ok"] is False
+    assert api.set_trajectory_band_width(3)["ok"] is False
+    assert api.set_trajectory_band_width(0)["ok"] is False
+    assert api.set_trajectory_band_width(True)["ok"] is False
+    assert api.get_run_card_layout()["bandWidth"] == 2
     assert api.get_run_card_layout()["graphs"] == ["scatter", "trajectory"]
     assert api.get_run_card_layout()["trajectoryDisplay"] == "every_generation"
 
@@ -2210,49 +2217,6 @@ def test_effective_allele_interval_summary_caution_flag_only_above_threshold() -
     assert above["gStCaution"] is True
 
 
-def test_sigma_band_payload_returns_none_when_the_run_requested_no_band(
-    tmp_path: Path,
-) -> None:
-    """No sigma band requested: `_sigma_band_payload` returns `None`, not an empty dict.
-
-    Sigma-band GUI design doc `20260910-claude-sonnet-5-gui-sigma-band-
-    design.md` (`selby/restricted`), approach B1 — the identical
-    "absent means not applicable" shape `convergenceGenerations`/
-    `convergenceHistories` already use for a re-analyzed run.
-    """
-    output = _write_run(tmp_path)
-    manifest = read_manifest(output / "manifest.json")
-
-    assert app_module._sigma_band_payload(manifest, digits=3) is None
-
-
-def test_sigma_band_payload_formats_every_value_for_a_real_band(
-    tmp_path: Path,
-) -> None:
-    """A real sigma band renders `multiplier`/`window` verbatim, `band` formatted."""
-    output = _write_run(
-        tmp_path,
-        precision=1.0,
-        max_generations=200,
-        sigma_band_multiplier=2.0,
-        sigma_band_window=5,
-    )
-    manifest = read_manifest(output / "manifest.json")
-    assert manifest.sigma_band is not None
-
-    payload = app_module._sigma_band_payload(manifest, digits=3)
-
-    assert payload is not None
-    assert payload["multiplier"] == 2.0
-    assert payload["window"] == 5
-    assert set(payload["band"]) == set(manifest.sigma_band)
-    for name, interval in manifest.sigma_band.items():
-        rendered = payload["band"][name]
-        assert set(rendered) == {"mean", "sigma", "lower", "upper"}
-        for key, value in interval.items():
-            assert rendered[key] == format_statistic(value, 3)
-
-
 def test_api_starts_with_the_default_significant_digits() -> None:
     """A fresh `Api()` starts at the GUI's own default, not the CLI's own six."""
     api = Api()
@@ -4197,44 +4161,6 @@ def test_open_run_reanalyzes_the_final_generation_by_default(tmp_path: Path) -> 
         "isolationByDistance",
     }
     assert isinstance(result["panels"], list)
-
-
-def test_open_run_carries_no_sigma_band_for_an_ordinary_run(tmp_path: Path) -> None:
-    """A run that never requested a sigma band reopens with `sigmaBand: None`."""
-    output = _write_run(tmp_path)
-
-    result = Api().open_run({"trajectoryPath": str(output / "trajectory.tlog")})
-
-    assert result["ok"] is True
-    assert result["sigmaBand"] is None
-
-
-def test_open_run_carries_the_real_sigma_band(tmp_path: Path) -> None:
-    """A reopened run's own `sigmaBand` matches `_sigma_band_payload` directly.
-
-    Sigma-band GUI design doc `20260910-claude-sonnet-5-gui-sigma-band-
-    design.md` (`selby/restricted`) slice 4, approach B1: reused
-    unchanged from the live-run path — this proves it, rather than
-    trusting the two call sites stayed in sync by inspection alone.
-    """
-    output = _write_run(
-        tmp_path,
-        precision=1.0,
-        max_generations=200,
-        sigma_band_multiplier=3.0,
-        sigma_band_window=5,
-    )
-    manifest = read_manifest(output / "manifest.json")
-    assert manifest.sigma_band is not None
-    api = Api()
-
-    result = api.open_run({"trajectoryPath": str(output / "trajectory.tlog")})
-
-    assert result["ok"] is True
-    expected = app_module._sigma_band_payload(manifest, api._significant_digits)
-    assert result["sigmaBand"] == expected
-    assert result["sigmaBand"]["multiplier"] == 3.0
-    assert result["sigmaBand"]["window"] == 5
 
 
 def test_open_run_carries_the_real_equilibrium_prediction(tmp_path: Path) -> None:

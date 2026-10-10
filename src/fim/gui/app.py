@@ -117,6 +117,7 @@ from fim.gui.preferences import (
     MAX_RUN_GRAPH_COLUMNS,
     RUN_GRAPH_KEYS,
     SCATTER_STYLES,
+    TRAJECTORY_BAND_WIDTHS,
     TRAJECTORY_DISPLAYS,
     GuiPreferences,
     load_preferences,
@@ -757,57 +758,6 @@ def _effective_allele_interval_summary(
         ),
         "gStCaution": cast("float", within_interval["mean"])
         > _EFFECTIVE_ALLELE_CAUTION_THRESHOLD,
-    }
-
-
-def _sigma_band_payload(manifest: RunManifest, digits: int) -> dict[str, Any] | None:
-    """Build the trajectory panel's own client-ready within-run sigma-band payload.
-
-    Sigma-band GUI design doc `20260910-claude-sonnet-5-gui-sigma-band-
-    design.md` (`selby/restricted`), approach B1: reused unchanged by
-    both a live run's own `"done"` push (`_drain_run_messages`, this
-    function's own first caller) and a reopened run's own bridge
-    methods (that design's own slice 4) — one shared shape, not two
-    independently maintained ones.
-
-    Args:
-        manifest: A run's own manifest — `sigma_band`/`sigma_band_
-            multiplier`/`sigma_band_window` are `None` together
-            whenever the run never requested a band, or requested one
-            but only ever hit the hard generation cap without
-            converging (`RunManifest`'s own docstring, and the sigma-
-            band backend design doc's own decision 3).
-        digits: `Api._significant_digits`, the same display precision
-            every other statistic this bridge sends already uses.
-
-    Returns:
-        `None` when the run has no sigma band at all — the page's own
-        drawing code treats this identically to `convergenceGenerations`
-        being absent (`run-view-completed.js`'s own `renderTrajectory`:
-        no explicit "not available" flag needed, the field's own
-        absence already says so). Otherwise `{"multiplier": ...,
-        "window": ..., "band": {name: {"mean", "sigma", "lower",
-        "upper"}, ...}}` — `multiplier`/`window` are the small, already-
-        exact numbers `SimulationParams` itself validated (no formatting
-        benefit); every value inside `band` is `format_statistic`-
-        formatted, the identical convention every other statistic this
-        bridge sends already follows — the page parses a formatted
-        string back to a number only where it needs to do arithmetic
-        with it (`webui/screens/run-view-running.js`'s own
-        `accumulateLiveTrajectory` already establishes this shape for
-        the ordinary trajectory panel).
-    """
-    if manifest.sigma_band is None:
-        return None
-    return {
-        "multiplier": manifest.sigma_band_multiplier,
-        "window": manifest.sigma_band_window,
-        "band": {
-            name: {
-                key: format_statistic(value, digits) for key, value in interval.items()
-            }
-            for name, interval in manifest.sigma_band.items()
-        },
     }
 
 
@@ -2730,6 +2680,7 @@ class Api:
             "columns": preferences.run_graph_columns,
             "scatterStyle": preferences.scatter_style,
             "trajectoryDisplay": preferences.trajectory_display,
+            "bandWidth": preferences.trajectory_band_width,
         }
 
     @_log_bridge_call
@@ -2819,6 +2770,29 @@ class Api:
         )
         save_preferences(self._preferences_path, self._preferences)
         return {"ok": True, "display": display}
+
+    @_log_bridge_call
+    def set_trajectory_band_width(self, width: int) -> dict[str, Any]:
+        """Choose how wide the trajectory graph's bands are.
+
+        Display only. One choice for every band: the sigma band of the "every
+        generation" display (the spread of the statistic over the evidence
+        window) and the standard-error band of the averaged displays.
+
+        Args:
+            width: 1 or 2 (sigmas or standard errors either side of the mean).
+
+        Returns:
+            `{"ok": True, "width": width}`, or `{"ok": False, "message":
+            ...}`.
+        """
+        if isinstance(width, bool) or width not in TRAJECTORY_BAND_WIDTHS:
+            return {"ok": False, "message": f"unknown band width: {width!r}"}
+        self._preferences = self._preferences.with_run_card_layout(
+            trajectory_band_width=width
+        )
+        save_preferences(self._preferences_path, self._preferences)
+        return {"ok": True, "width": width}
 
     @_log_bridge_call
     def get_default_ploidy(self) -> str:
@@ -5491,7 +5465,7 @@ class Api:
         Returns:
             `{"ok": True, "runId", "directoryName", "convergenceNote",
             "report", "panels", "statistics", "outputDirectory",
-            "trajectoryPath", "generationCount", "demeCount", "sigmaBand",
+            "trajectoryPath", "generationCount", "demeCount",
             "convergenceGenerations", "convergenceHistories",
             "equilibrium", "identityRecovery"}` on success —
             `trajectoryPath` echoes this call's own resolved
@@ -5502,12 +5476,7 @@ class Api:
             history`'s own result (`None`/`None` for a manifest
             predating `convergence.jsonl`), restoring the identical
             trajectory-vs-generation curve a live-just-finished run's
-            own payload already carries, rather than the sigma band
-            alone; `sigmaBand` is `_sigma_band_payload`'s
-            own result (sigma-band GUI design doc `20260910-claude-
-            sonnet-5-gui-sigma-band-design.md`, `selby/restricted`,
-            slice 4), `None` for a run that never requested one;
-            `equilibrium`/`identityRecovery`
+            own payload already carries; `equilibrium`/`identityRecovery`
             are `_equilibrium_reference_payload`'s/`_identity_recovery_
             reference_payload`'s own results (botanist GUI design doc
             §6.2's two predicted-trajectory overlays), computed fresh
@@ -5560,8 +5529,8 @@ class Api:
             )
             # `None` (nothing persisted, or nothing to persist yet for a
             # manifest predating this artifact) leaves the trajectory
-            # panel exactly as it always has for a reopened run: the
-            # sigma band alone, no curve. A genuinely mismatched digest
+            # panel exactly as it always has for a reopened run: no
+            # curve. A genuinely mismatched digest
             # raises here, the identical "surfaced, not silently
             # ignored" tamper handling `reanalyze_trajectory` itself
             # already gives the trajectory and `report.json`.
@@ -5609,15 +5578,6 @@ class Api:
             "trajectoryPath": str(trajectory_path),
             "generationCount": reanalyzed.manifest.generation_count,
             "demeCount": reanalyzed.params.d,
-            # Sigma-band GUI design doc `20260910-claude-sonnet-5-gui-
-            # sigma-band-design.md` (`selby/restricted`) slice 4,
-            # approach B1: `_sigma_band_payload` reused unchanged from
-            # the live-run "done" push (`_drain_run_messages`) — a
-            # reopened run's own manifest already carries this, no new
-            # file read.
-            "sigmaBand": _sigma_band_payload(
-                reanalyzed.manifest, self._significant_digits
-            ),
             # `convergence_history` is `None` for a manifest predating
             # `convergence.jsonl` -- `run-view-completed.js`'s own
             # `renderTrajectory` already treats `undefined` generations/
@@ -6820,13 +6780,6 @@ def _drain_run_messages(
                 # rather than needing an explicit "not available" flag.
                 "convergenceGenerations": result.convergence_generations,
                 "convergenceHistories": result.convergence_histories,
-                # Sigma-band GUI design doc `20260910-claude-sonnet-5-
-                # gui-sigma-band-design.md` (`selby/restricted`) slice
-                # 3, approach B1: already in memory on `result.manifest`
-                # (the engine's own already-shipped extension-run logic,
-                # `8615614`/`8c8da68`) — no new computation, no extra
-                # file read.
-                "sigmaBand": _sigma_band_payload(result.manifest, digits),
                 # The trajectory panel's own predicted-equilibrium overlay
                 # (design doc §6.2, `_equilibrium_reference_payload`'s own
                 # docstring) — `_start_scalar_run`'s own already-computed
@@ -8715,7 +8668,6 @@ def _report_only_run_payload(directory: Path, digits: int) -> dict[str, Any]:
         "trajectoryPath": None,
         "generationCount": manifest.generation_count,
         "demeCount": params.d,
-        "sigmaBand": _sigma_band_payload(manifest, digits),
         "convergenceGenerations": None,
         "convergenceHistories": None,
         "equilibrium": _equilibrium_reference_payload(params, FULL_PRECISION_DIGITS),

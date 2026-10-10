@@ -637,56 +637,6 @@ value?</a>); see
 <a href="#convergence_burn_in">convergence_burn_in</a>. A cap at or below the burn-in ends
 the run before any averaging, and the run logs a warning. Setting only a
 burn-in raises the derived cap to leave <code>15 tau</code> after it.</p>
-<h3 id="sigma_band_multiplier">sigma_band_multiplier</h3>
-<ul>
-<li><strong>Type:</strong> <code>2.0</code> or <code>3.0</code></li>
-<li><strong>Default:</strong> unset (the within-run sigma band is disabled)</li>
-</ul>
-<p>Once the main run genuinely converges (never after merely hitting
-max_generations), the engine continues for sigma_band_window further
-generations and reports each watched statistic (convergence_statistic)
-as mean ± (sigma_band_multiplier × sigma) over that trailing window —
-a measure of how much the statistic still wobbles, generation to
-generation, immediately after being declared stable. This is a
-different question from the cross-replicate confidence interval
-(confidence, n<sub>replicates</sub> &gt; 1 required): that one
-asks how much the average would differ across independent replicate
-runs; this one asks about a single run's own remaining generation-to-
-generation noise. Must be set together with sigma_band_window, or not
-at all — never combined with any other field's own constraints (unlike
-the equilibrium-split fields, this measures the end of a run,
-regardless of how generation 0 was produced).</p>
-<pre><code class="language-yaml">sigma_band_multiplier: 2.0
-sigma_band_window: 100
-</code></pre>
-<p>When enabled, the run writes an additional
-<code>sigma_band_trajectory.jsonl</code> artifact alongside <code>trajectory.tlog</code> —
-one JSON object per extension generation, <code>{&quot;generation&quot;: ..., &quot;D&quot;: ...}</code> (one key per watched statistic, only when that statistic
-was actually defined that generation) — and records the resulting
-band in <code>manifest.json</code>'s own <code>sigma_band_multiplier</code>/
-<code>sigma_band_window</code>/<code>sigma_band</code> fields. A run that requested the band
-but only ever hit max_generations produces neither the artifact nor
-the manifest fields — an unconverged tail is never extended.</p>
-<p>Works under every engine_backend (<code>lineal</code>, <code>generational</code>,
-<code>generational-vector</code>, and <code>auto</code> resolving to either of the latter
-two), and under batches of any size — each replicate gets its own
-independent band, computed from its own converged tail. All three
-engines produce bit-identical bands for the same seed on the same
-machine: <code>lineal</code> and <code>generational</code> continue the run with the same
-per-generation code, and <code>generational-vector</code> continues its own table
-with the same draws in the same order. A replicate that an adaptive
-early stop discarded never gets a band, since its results
-are not kept at all.</p>
-<h3 id="sigma_band_window">sigma_band_window</h3>
-<ul>
-<li><strong>Type:</strong> integer at least 2</li>
-<li><strong>Default:</strong> unset (the within-run sigma band is disabled)</li>
-</ul>
-<p>The extension's own trailing-window length, independent of
-the burn-in — the two describe different things (whether the
-run has settled, versus how much it still wobbles once settled), so
-there is no principled reason to share one number between them. See
-sigma_band_multiplier, above, for the full mechanism.</p>
 <h3 id="expert">expert</h3>
 <ul>
 <li><strong>Type:</strong> mapping of Expert Setting names to values</li>
@@ -1515,22 +1465,6 @@ existed.</p>
 <tr>
 <td>max_concurrent_replicates greater than n<sub>replicates</sub></td>
 <td>silently capped at n<sub>replicates</sub></td>
-</tr>
-<tr>
-<td>sigma_band_multiplier and sigma_band_window not both given, or neither</td>
-<td>rejected</td>
-</tr>
-<tr>
-<td>sigma_band_multiplier not <code>2.0</code> or <code>3.0</code></td>
-<td>rejected</td>
-</tr>
-<tr>
-<td>sigma_band_window less than 2</td>
-<td>rejected</td>
-</tr>
-<tr>
-<td>sigma_band_multiplier/sigma_band_window with any engine_backend</td>
-<td>accepted</td>
 </tr>
 <tr>
 <td>one or two of the three equilibrium_ keys given instead of all three</td>

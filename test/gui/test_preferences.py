@@ -838,3 +838,33 @@ def test_a_non_positive_pairwise_limit_is_quarantined(tmp_path: Path) -> None:
     loaded, warning = load_preferences(path)
     assert loaded == GuiPreferences()
     assert warning is not None
+
+
+def test_the_band_width_defaults_to_two_and_writes_nothing_until_changed() -> None:
+    """Width 2 is the default and stays off disk; 1 is written and survives a reload."""
+    assert GuiPreferences().trajectory_band_width == 2
+    assert "trajectory_band_width" not in GuiPreferences().to_dict()["gui"]
+    changed = GuiPreferences().with_run_card_layout(trajectory_band_width=1)
+    assert changed.to_dict()["gui"]["trajectory_band_width"] == 1
+    assert (
+        changed.with_run_card_layout(run_graphs=("scatter",)).trajectory_band_width == 1
+    )
+
+
+def test_the_band_width_round_trips_and_rejects_anything_but_one_or_two(
+    tmp_path: Path,
+) -> None:
+    """Saved widths 1 and 2 load; 3, 0, text and booleans are refused."""
+    path = tmp_path / "preferences.json"
+    for width in (1, 2):
+        save_preferences(path, GuiPreferences(trajectory_band_width=width))
+        loaded, warning = load_preferences(path)
+        assert warning is None
+        assert loaded.trajectory_band_width == width
+    for bad in (3, 0, "2", True):
+        path.write_text(
+            json.dumps({"gui": {"trajectory_band_width": bad}}), encoding="utf-8"
+        )
+        loaded, warning = load_preferences(path)
+        assert warning is not None, bad
+        assert loaded.trajectory_band_width == 2

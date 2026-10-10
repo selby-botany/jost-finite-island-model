@@ -131,7 +131,6 @@ from fim.convergence.criteria import ConfidenceIntervalCriterion
 from fim.convergence.monitor import (
     BurnInMonitor,
     ConvergenceMonitor,
-    ConvergenceOutcome,
     StopReason,
 )
 from fim.convergence.window_statistics import EstimateForms, IdentityStatistic
@@ -431,18 +430,6 @@ class RunResult:
             analyze an earlier generation) already has a handle to it,
             without needing to separately track down which store this
             particular run used.
-        sigma_band_trajectory: The within-run sigma band's own raw
-            per-generation values (`20260907-claude-sonnet-5-within-run-
-            sigma-band-backend-design.md` decision 4), one row per
-            extension generation — `{"generation": int, "<statistic
-            name>": float, ...}`, only the watched statistics that were
-            actually defined that generation present in a given row.
-            `None` whenever the sigma band was not requested, or was
-            requested but the run only ever hit the hard cap (`manifest.
-            sigma_band` is `None` under the identical two conditions).
-            A caller that persists this run's own files (`fim.cli.
-            _write_run_artifacts`) writes this as the `sigma_band_
-            trajectory.jsonl` sibling artifact when present.
         equilibrium_store: Where an equilibrium-split run streamed its
             ancestral phase (`fim.model.initial.
             EquilibriumSplitInitialCondition`): every generation of the
@@ -466,7 +453,6 @@ class RunResult:
     convergence_histories: Mapping[str, tuple[float, ...]]
     manifest: RunManifest
     store: TrajectoryStore
-    sigma_band_trajectory: tuple[dict[str, object], ...] | None = None
     equilibrium_store: TrajectoryStore | None = None
 
 
@@ -1237,16 +1223,6 @@ def _finalize_replica_lane(
     independent of whether a window is configured at all. A no-op for
     every other `Advancer`, whose lanes never populate either field to
     begin with.
-
-    The one exception to that release is a sigma-band-eligible lane
-    (`_lane_is_sigma_band_eligible`): `_apply_sigma_band_extensions`
-    still needs this lane's own live, correctly-up-to-date
-    `vectorized_state` after the whole batch finishes, and rebuilding one
-    from `lane.state` instead would silently forget every allele identity
-    already minted and since driven extinct (design doc decision 7/8).
-    Those lanes' caches are released by that post-pass itself, the
-    instant each one's own extension finishes — the named, temporary
-    peak-memory cost decision 9 accepts explicitly.
     """
     # This lane has written its last generation: release its trajectory
     # file now, so a batch holds open only the files of the lanes still
@@ -1254,8 +1230,7 @@ def _finalize_replica_lane(
     # replicate for the whole batch.
     close_run_store(store, lane.run_id)
     outcome = lane.monitor.outcome()
-    if not _lane_is_sigma_band_eligible(lane, outcome):
-        lane.vectorized_state = None
+    lane.vectorized_state = None
     if outcome.reason is None:
         # Unreachable in practice — see `_run_one`'s own identical guard
         # for why this is checked explicitly rather than assumed.
@@ -1333,129 +1308,6 @@ def _finalize_replica_lane(
         store=store,
         equilibrium_store=lane.equilibrium_store,
     )
-
-
-def _lane_is_sigma_band_eligible(
-    lane: ReplicaLane, outcome: ConvergenceOutcome
-) -> bool:
-    """Report whether this lane should get a sigma-band extension.
-
-    The single definition of that eligibility, deliberately shared by the
-    two places that must agree on it exactly: `_finalize_replica_lane`
-    (deciding whether to *keep* this lane's `VectorizedAdvancer` caches
-    alive for the post-pass) and `_apply_sigma_band_extensions` (deciding
-    whether to actually run one). Two copies of this test that drifted
-    apart would either release a cache the extension still needs or hold
-    every lane's cache for a batch that never extends any — so there is
-    one.
-
-    Args:
-        lane: The lane to test.
-        outcome: That lane's own monitor outcome, passed in rather than
-            re-read so a caller that already has it does not recompute
-            it.
-
-    Returns:
-        `True` only when this lane's run genuinely converged *and* its
-        own `params` requested a band. A run that merely hit the hard
-        generation cap is never extended — extending it would compute a
-        "stability" band from generations the run's own criterion already
-        judged not yet stable (design doc decision 3).
-    """
-    return (
-        outcome.converged
-        and lane.params.sigma_band_multiplier is not None
-        and lane.params.sigma_band_window is not None
-    )
-
-
-def _apply_sigma_band_extensions(
-    lanes: Sequence[ReplicaLane], advancer: Advancer
-) -> None:
-    """Run every eligible lane's own sigma-band extension, after the batch.
-
-    A deferred post-pass over a batch's own already-finalized lanes, not
-    work done inline the instant one lane is found to have stopped —
-    `20260907-claude-sonnet-5-within-run-sigma-band-backend-design.md`
-    decision 8. Running it inline would synchronously step
-    `sigma_band_window` further generations for the just-stopped lane
-    *before* the batch's next tick ever advanced any other still-active
-    lane, so a single fast-converging replicate would stall the whole
-    batch's visible per-tick progress — a real regression precisely for
-    the live-progress and wall-clock cases `"generational"`/
-    `"generational-vector"` exist to serve. The other rejected
-    alternative, releasing each lane's cache on schedule and rebuilding a
-    `VectorBlock` later from `lane.state`, would instead reintroduce
-    decision 7's forgotten-minted-identity bug (finite alleles) and lose
-    the identity counter (infinite alleles). Deferring while *keeping*
-    the cache (`_finalize_replica_lane`'s own conditional release) costs
-    neither.
-
-    Which implementation runs is keyed on the advancer actually driving
-    this batch (decision 7): `VectorizedAdvancer` lanes keep their
-    minted bookkeeping inside `VectorBlock` and must stay array-
-    native; every other `Advancer` drives lanes with the identical
-    dict-based machinery `_run_one` uses and shares that helper
-    unchanged.
-
-    Mutates each extended lane's own `result` in place — both `RunResult`
-    and `RunManifest` are frozen dataclasses, so the extended manifest is
-    attached with `dataclasses.replace`, the same mechanism
-    `fim.cli._write_run_artifacts` already uses to patch a built
-    manifest's own `artifacts` field after the fact. A lane with no
-    `result` at all is skipped: those are an adaptive `replicate_
-    tolerance` stop's own abandoned lanes, already discarded from the
-    store, so a band is never computed from — or persisted for — a
-    replicate the adaptive stop chose not to keep.
-
-    Args:
-        lanes: Every lane this batch built, finalized or not.
-        advancer: The advancer that drove this batch, read only to pick
-            the matching extension implementation.
-
-    Returns:
-        `None`; each eligible lane's own `result` is replaced in place.
-    """
-    for lane in lanes:
-        if lane.result is None:
-            continue
-        outcome = lane.monitor.outcome()
-        if not _lane_is_sigma_band_eligible(lane, outcome):
-            continue
-        # Narrowing for the type checker only — `_lane_is_sigma_band_
-        # eligible` already established both are set.
-        multiplier = lane.params.sigma_band_multiplier
-        window = lane.params.sigma_band_window
-        assert multiplier is not None and window is not None
-        if isinstance(advancer, VectorizedAdvancer):
-            sigma_band, sigma_band_trajectory = _run_vectorized_sigma_band_extension(
-                lane, multiplier=multiplier, window=window
-            )
-        else:
-            sigma_band, sigma_band_trajectory = _run_dict_based_sigma_band_extension(
-                lane.state,
-                lane.params,
-                lane.registry,
-                lane.rng,
-                lane.finite_alleles,
-                multiplier=multiplier,
-                window=window,
-            )
-        lane.result = replace(
-            lane.result,
-            manifest=replace(
-                lane.result.manifest,
-                sigma_band_multiplier=multiplier,
-                sigma_band_window=window,
-                sigma_band=sigma_band,
-            ),
-            sigma_band_trajectory=sigma_band_trajectory,
-        )
-        # Released here, the instant *this* lane's own extension is done,
-        # rather than once the whole post-pass finishes — what keeps
-        # decision 9's accepted worst case a temporary peak during this
-        # pass instead of a sustained one after it.
-        lane.vectorized_state = None
 
 
 def _require_lane_result(lane: ReplicaLane) -> RunResult:
@@ -1609,7 +1461,7 @@ def run_batch(
                         admitted_count,
                         params.n_replicates,
                     )
-                    return _finish_adaptive_stop(lanes, admitted_count, store, advancer)
+                    return _finish_adaptive_stop(lanes, admitted_count, store)
 
         # Refill freed window slots only once the stop is ruled out, so
         # no lane is ever built just to be discarded.
@@ -1621,7 +1473,6 @@ def run_batch(
                     )
                 )
                 next_unbuilt_index += 1
-    _apply_sigma_band_extensions(lanes, advancer)
     return tuple(_require_lane_result(lane) for lane in lanes)
 
 
@@ -1629,15 +1480,13 @@ def _finish_adaptive_stop(
     lanes: Sequence[ReplicaLane],
     accepted_count: int,
     store: TrajectoryStore,
-    advancer: Advancer,
 ) -> tuple[RunResult, ...]:
     """Keep the accepted prefix of an adaptively stopped batch; discard the rest.
 
     Split out of `run_batch` so its loop reads as one sequence of steps.
     Every lane past the stopping replicate is discarded, whether it is
     still running or already finished ahead of the prefix: its rows
-    leave `store` (`FIM-49`), its `result` is dropped so no band is ever
-    computed for it (`_apply_sigma_band_extensions` skips it), and any
+    leave `store` (`FIM-49`), its `result` is dropped, and any
     `VectorizedAdvancer` cache it still holds is released.
 
     Args:
@@ -1645,7 +1494,6 @@ def _finish_adaptive_stop(
         accepted_count: How many leading lanes the stop accepted; the
             stopping replicate is `lanes[accepted_count - 1]`.
         store: The batch's shared trajectory store.
-        advancer: The advancer that drove the batch, for the band pass.
 
     Returns:
         The accepted lanes' results, in replica order.
@@ -1664,7 +1512,6 @@ def _finish_adaptive_stop(
         accepted_count,
         len(lanes) - accepted_count,
     )
-    _apply_sigma_band_extensions(accepted, advancer)
     return tuple(_require_lane_result(lane) for lane in accepted)
 
 
@@ -2333,17 +2180,6 @@ def fim(
     # afterward (`RunManifest.engine_backend`'s own docstring; design doc
     # §7.4), rather than recomputed a second time after `backend.run`
     # already returned.
-    #
-    # No sigma-band backend restriction is checked here any more. v1 of
-    # `20260907-claude-sonnet-5-within-run-sigma-band-backend-design.md`
-    # raised `ValueError` at this point for any resolved backend other
-    # than `"lineal"`, because only `_run_one` could extend a converged
-    # run; v2 (decisions 7-9, its own step 7) gave `run_batch` the same
-    # ability, so `"generational"`/`"generational-vector"`/`"auto"` are
-    # now all genuinely supported — which matters because `"auto"`, this
-    # project's own recommended default, never resolves to `"lineal"` at
-    # all (`_resolve_auto_engine_backend`), so the v1 restriction left
-    # the feature unreachable for the great majority of real runs.
     resolved_engine_backend = (
         _resolve_auto_engine_backend(
             params, auto_vector_min_d, auto_vector_max_capacity, jit
@@ -3963,46 +3799,6 @@ def _simulate_one(
         window_statistics=_window_statistics_payload(monitor),
         converged_statistics=monitor.stable_statistics(),
     )
-    # The within-run sigma band (`20260907-claude-sonnet-5-within-run-
-    # sigma-band-backend-design.md`): once the main run has genuinely
-    # converged (never after merely hitting the hard cap — decision 3's
-    # own "extending an unconverged run would misrepresent stability
-    # that was never reached"), continue for `sigma_band_window` further
-    # generations, buffering each watched statistic's own value, then
-    # reduce that buffer to a mean/sigma/bounds summary. `report`/
-    # `RunResult.final_state` above are already built from the converged
-    # `state` itself; the extension advances its own separate
-    # `extension_state` variable instead of reassigning `state`, so
-    # neither one is affected by whether an extension runs at all — the
-    # single invariant this design most depends on (decision 4's own
-    # "the extension is strictly additive, never a revision of the
-    # primary answer"). `registry`/`rng`/`finite_alleles` are the same
-    # mutable bookkeeping objects the main loop already advanced, and
-    # the extension legitimately continues updating them (a mutation
-    # minted during the extension still needs a real, non-colliding
-    # id) — no new seeded stream, unlike the equilibrium-split ancestral
-    # phase's own decorrelated one.
-    # The extension body itself lives in `_run_dict_based_sigma_band_
-    # extension`, shared with `"generational"`'s own lanes (design doc
-    # decision 7) rather than duplicated there — this call site keeps
-    # only the eligibility decision, which differs between the two (here,
-    # one run's own `outcome`; there, a whole batch's worth of lanes).
-    sigma_band: dict[str, dict[str, float]] | None = None
-    sigma_band_trajectory: tuple[dict[str, object], ...] | None = None
-    if (
-        params.sigma_band_multiplier is not None
-        and params.sigma_band_window is not None
-        and outcome.converged
-    ):
-        sigma_band, sigma_band_trajectory = _run_dict_based_sigma_band_extension(
-            state,
-            params,
-            registry,
-            rng,
-            finite_alleles,
-            multiplier=params.sigma_band_multiplier,
-            window=params.sigma_band_window,
-        )
     ended_at = _format_timestamp(clock())
     logger.info(
         "replicate %s finished: %s at generation %d (converged=%s)",
@@ -4045,13 +3841,6 @@ def _simulate_one(
             if equilibration_outcome is not None
             else None
         ),
-        sigma_band_multiplier=(
-            params.sigma_band_multiplier if sigma_band is not None else None
-        ),
-        sigma_band_window=(
-            params.sigma_band_window if sigma_band is not None else None
-        ),
-        sigma_band=sigma_band,
         auto_derived=tuple(sorted(params.auto_derived)),
         relaxation_time=params.relaxation_time,
     )
@@ -4065,7 +3854,6 @@ def _simulate_one(
         convergence_histories=monitor.histories,
         manifest=manifest,
         store=store,
-        sigma_band_trajectory=sigma_band_trajectory,
         equilibrium_store=equilibrium_store,
     )
 
@@ -4980,242 +4768,6 @@ def _mean(values: Sequence[float]) -> float:
     if not values:
         raise ValueError("cannot average no values")
     return math.fsum(values) / len(values)
-
-
-def _sigma_band_summary(
-    values: Mapping[str, Sequence[float]], multiplier: float
-) -> dict[str, dict[str, float]]:
-    """Reduce the within-run sigma band's own buffered values to mean/sigma/bounds.
-
-    Called once, after `_run_one`'s own extension loop finishes buffering
-    every watched statistic's per-generation value over the configured
-    trailing window (`20260907-claude-sonnet-5-within-run-sigma-band-
-    backend-design.md` decision 3) — never per generation, since the
-    band is a property of the whole window, not any one point in it.
-
-    Args:
-        values: One list per watched statistic, each entry that
-            statistic's own value for one generation of the extension
-            (`fim.engine._convergence_values`'s own per-generation
-            output, accumulated across the whole window) — possibly
-            shorter than the window itself, or altogether empty, for a
-            statistic undefined on some or all of those generations
-            (only `G_ST`, at a currently-monomorphic locus; the same
-            "omitted, not substituted" convention `ConvergenceMonitor`
-            itself already uses).
-        multiplier: The configured sigma multiplier (`SimulationParams.
-            sigma_band_multiplier`, always `2.0` or `3.0`).
-
-    Returns:
-        One entry per statistic that had at least one defined value,
-        each `{"mean", "sigma", "lower", "upper"}` — `sigma` is the
-        *population* standard deviation of the window that actually ran
-        (dividing by the window size itself, not `window - 1`), since
-        this describes the observed spread of that specific window, not
-        an estimate extrapolated from a smaller sample of some larger
-        population; `lower`/`upper` are `mean -/+ multiplier * sigma`,
-        precomputed so a reader never has to also know the multiplier
-        convention to interpret the band. A statistic with no defined
-        values at all (every generation of the extension left it
-        undefined) is omitted entirely, matching `_convergence_values`'s
-        own convention for the identical situation.
-    """
-    summary: dict[str, dict[str, float]] = {}
-    for name, series in values.items():
-        if not series:
-            continue
-        mean = _mean(series)
-        variance = math.fsum((value - mean) ** 2 for value in series) / len(series)
-        sigma = math.sqrt(variance)
-        summary[name] = {
-            "mean": mean,
-            "sigma": sigma,
-            "lower": mean - multiplier * sigma,
-            "upper": mean + multiplier * sigma,
-        }
-    return summary
-
-
-def _watched_sigma_band_values(
-    raw_values: Mapping[str, float], watched: Collection[str]
-) -> dict[str, float]:
-    """Narrow one extension generation's statistics to the watched set.
-
-    `_convergence_values`/`_convergence_values_vectorized` both also
-    return `_ALWAYS_TRACKED_STATISTICS`/`track_expensive_statistics`'s own
-    display-only extras (`_watched_statistic_values`'s own docstring). The
-    sigma band stays scoped to exactly `params.convergence_statistics` —
-    its own documented contract (`doc/configuration.md`'s
-    `sigma_band_multiplier` entry: "reports each watched statistic") — so
-    only those names survive here, rather than every name the raw mapping
-    now happens to carry. Shared by both extension implementations
-    specifically so the two cannot drift apart on this rule.
-
-    Args:
-        raw_values: One generation's own statistics, as either
-            `_convergence_values` flavor returns them.
-        watched: The watched statistic names to keep.
-
-    Returns:
-        A new mapping holding only the watched names that were actually
-        defined this generation — a statistic undefined now is absent,
-        never substituted (`_convergence_values`'s own convention).
-    """
-    return {name: value for name, value in raw_values.items() if name in watched}
-
-
-def _run_dict_based_sigma_band_extension(
-    state: ModelState,
-    params: SimulationParams,
-    registry: AlleleRegistry,
-    rng: np.random.Generator,
-    finite_alleles: FiniteAlleleRegistry | None,
-    *,
-    multiplier: float,
-    window: int,
-) -> tuple[dict[str, dict[str, float]], tuple[dict[str, object], ...]]:
-    """Run a converged run's own sigma-band extension, dict-based.
-
-    The `ModelState`/`FiniteAlleleRegistry`/`step` implementation of
-    `20260907-claude-sonnet-5-within-run-sigma-band-backend-design.md`
-    decision 3, shared verbatim by every backend that drives generations
-    with that same dict-based machinery (decision 7): `"lineal"` (via
-    `_run_one`, this helper's original and still a caller) and
-    `"generational"` — `SequentialAdvancer.advance` and, through its own
-    cached `SequentialAdvancer`, `ThreadedAdvancer` both step a lane with
-    exactly the `step(...)` call `_run_one` itself uses, so a lane
-    produced by either already carries `state`/`registry`/
-    `finite_alleles` in precisely the shape this function expects, with
-    no reconciliation needed. `"generational-vector"` is the one backend
-    that genuinely cannot share this — see
-    `_run_vectorized_sigma_band_extension`.
-
-    Never advances the caller's own `state`: the extension steps its own
-    separate local instead, so the converged `report`/`final_state` the
-    caller already built from that state stay exactly what they would
-    have been with no extension at all (decision 4's own "strictly
-    additive, never a revision of the primary answer"). `registry`/`rng`/
-    `finite_alleles` *are* deliberately shared and mutated onward — a
-    mutation minted during the extension still needs a real,
-    non-colliding id — and the extension is a plain continuation of the
-    same seeded stream, with no new `SeedSequence` spawn.
-
-    Writes nothing to any `TrajectoryStore` and records nothing to any
-    `ConvergenceMonitor`: the extension needs only each watched
-    statistic's own scalar value, so the run's own `trajectory.tlog`/
-    `final_state`/`report.json` stay byte-for-byte what an otherwise
-    identical run without a sigma band would have produced (decision 3).
-
-    Args:
-        state: The converged `ModelState` to continue from, left
-            untouched.
-        params: The run's own configuration, read for
-            `convergence_statistics` and every `step` input.
-        registry: The run's own live allele registry, carried onward.
-        rng: The run's own generator, continued rather than respawned.
-        finite_alleles: The run's own finite-alleles bookkeeping, or
-            `None` under the default infinite-alleles model.
-        multiplier: The configured sigma multiplier (`2.0` or `3.0`).
-        window: How many further generations to run.
-
-    Returns:
-        `(sigma_band, sigma_band_trajectory)` — the reduced per-statistic
-        mean/sigma/bounds summary, and one raw row per extension
-        generation.
-    """
-    band_values: dict[str, list[float]] = {
-        name: [] for name in params.convergence_statistics
-    }
-    band_rows: list[dict[str, object]] = []
-    extension_state = state
-    for _ in range(window):
-        extension_state = step(
-            extension_state, params, registry, rng, finite_alleles=finite_alleles
-        )
-        values = _watched_sigma_band_values(
-            _convergence_values(extension_state, params), band_values
-        )
-        for name, value in values.items():
-            band_values[name].append(value)
-        band_rows.append({"generation": extension_state.generation, **values})
-    return _sigma_band_summary(band_values, multiplier), tuple(band_rows)
-
-
-def _run_vectorized_sigma_band_extension(
-    lane: ReplicaLane,
-    *,
-    multiplier: float,
-    window: int,
-) -> tuple[dict[str, dict[str, float]], tuple[dict[str, object], ...]]:
-    """Run a converged `"generational-vector"` lane's own sigma-band extension.
-
-    `VectorizedAdvancer`'s array-native counterpart to
-    `_run_dict_based_sigma_band_extension`, and a genuinely separate
-    implementation rather than a reuse — `20260907-claude-sonnet-5-
-    within-run-sigma-band-backend-design.md` decision 7's own central
-    finding. A V-lane keeps everything the continuation needs inside its
-    `VectorBlock`: under finite alleles each locus's minted-state
-    bookkeeping (which of its fixed identity space has actually been used
-    yet), under infinite alleles the counter that mints new identities.
-    Neither lives in `lane.finite_alleles` or (until the lane stops) in
-    `lane.registry` at all — `VectorizedAdvancer.advance` never reads or
-    writes them. Continuing such a lane with the plain dict-based
-    `step`/`lane.finite_alleles` would therefore operate on bookkeeping
-    that has sat frozen at generation zero for this lane's entire main
-    run: already-minted-but-since-extinct identities forgotten, ids the
-    run had permanently retired minted again. So this extension keeps
-    advancing the lane's own still-live block, and reads statistics from
-    it with `_convergence_values_vectorized`.
-
-    The block is advanced in place: the lane has stopped, and nothing else
-    reads its table. The converged report/`final_state` were built from
-    `lane.state` before this runs and stay unrevised, as with the
-    dict-based helper. The lane's registry counter is brought up to the
-    identities the extension minted (a no-op under finite alleles).
-
-    Mirrors `VectorizedAdvancer.advance`'s own per-tick body minus the
-    `store.write_generation`/`monitor.record`/`newly_stopped` pieces
-    decision 3 already ruled out for every backend's extension alike.
-    Requires `lane.vectorized_state` to still be populated, which is
-    `_finalize_replica_lane`'s own conditional-release job (decision 8).
-
-    Args:
-        lane: The converged, still-cached lane to continue. Its
-            `vectorized_state`/`rng` are read and carried onward;
-            `state` is left untouched.
-        multiplier: The configured sigma multiplier (`2.0` or `3.0`).
-        window: How many further generations to run.
-
-    Returns:
-        `(sigma_band, sigma_band_trajectory)`, the identical shape
-        `_run_dict_based_sigma_band_extension` returns.
-
-    Raises:
-        RuntimeError: If `lane.vectorized_state` was already released —
-            unreachable while `_finalize_replica_lane`'s own eligibility
-            test and this function's own caller agree, guarded
-            explicitly so a future divergence between the two surfaces
-            here rather than as a silently skipped band.
-    """
-    block = lane.vectorized_state
-    if block is None:
-        raise RuntimeError(
-            f"replicate {lane.run_id} has no cached vectorized state to extend"
-        )
-    band_values: dict[str, list[float]] = {
-        name: [] for name in lane.params.convergence_statistics
-    }
-    band_rows: list[dict[str, object]] = []
-    for _ in range(window):
-        block.advance(lane.rng)
-        values = _watched_sigma_band_values(
-            _convergence_values_vectorized(block, lane.params), band_values
-        )
-        for name, value in values.items():
-            band_values[name].append(value)
-        band_rows.append({"generation": block.generation, **values})
-    block.sync_registry(lane.registry)
-    return _sigma_band_summary(band_values, multiplier), tuple(band_rows)
 
 
 def _mean_g_st_across_loci(

@@ -41,13 +41,6 @@ logger = logging.getLogger(__name__)
 # manifest written before this schema version, the same backward-
 # compatible shape `engine_backend`/`jit` already established.
 #
-# 3 (from 2): adds `sigma_band_multiplier`/`sigma_band_window`/
-# `sigma_band` (`20260907-claude-sonnet-5-within-run-sigma-band-backend-
-# design.md`, decision 4) — every one `None` on a manifest written
-# before this schema version, or whenever the run did not request the
-# extension (or requested one but only hit the hard cap, never
-# genuinely converging — decision 3), the same backward-compatible
-# shape every prior additive field already established.
 CURRENT_SCHEMA_VERSION = 3
 
 # Bumped whenever BatchManifest's on-disk shape changes incompatibly —
@@ -154,22 +147,6 @@ class RunManifest:
     fields have no meaning outside `"equilibrium_split"` and are never
     populated for either of the other two.
 
-    `sigma_band_multiplier`/`sigma_band_window`/`sigma_band` record the
-    within-run sigma band's own configuration and result
-    (`20260907-claude-sonnet-5-within-run-sigma-band-backend-design.md`,
-    decision 4): once the main run converges, `fim.engine._run_one`
-    continues for `sigma_band_window` further generations and reports
-    each watched statistic as a mean/sigma/bounds summary over that
-    trailing window. All three are `None` for a manifest written before
-    this field existed, whenever the run did not request the extension
-    at all, or whenever it was requested but the run only ever hit the
-    hard cap, never genuinely converging (decision 3: an unconverged
-    tail is never extended). `sigma_band` itself is one entry per
-    watched statistic that had at least one defined value during the
-    extension, each `{"mean", "sigma", "lower", "upper"}` — see
-    `fim.engine._sigma_band_summary`'s own docstring for exactly how
-    those four numbers are computed.
-
     `auto_derived`/`relaxation_time` record whether this run's own
     `convergence_burn_in`/`max_generations` were auto-derived from the
     model's own relaxation time rather than given explicitly
@@ -203,9 +180,6 @@ class RunManifest:
     initial_condition_mode: str | None = None
     equilibrium_generation_count: int | None = None
     equilibrium_final_heterozygosity: float | None = None
-    sigma_band_multiplier: float | None = None
-    sigma_band_window: int | None = None
-    sigma_band: Mapping[str, Mapping[str, float]] | None = None
     auto_derived: tuple[str, ...] | None = None
     relaxation_time: float | None = None
 
@@ -277,13 +251,6 @@ class RunManifest:
             "initial_condition_mode": self.initial_condition_mode,
             "equilibrium_generation_count": self.equilibrium_generation_count,
             "equilibrium_final_heterozygosity": self.equilibrium_final_heterozygosity,
-            "sigma_band_multiplier": self.sigma_band_multiplier,
-            "sigma_band_window": self.sigma_band_window,
-            "sigma_band": (
-                {name: dict(stats) for name, stats in self.sigma_band.items()}
-                if self.sigma_band is not None
-                else None
-            ),
             "auto_derived": (
                 list(self.auto_derived) if self.auto_derived is not None else None
             ),
@@ -340,9 +307,6 @@ class RunManifest:
             equilibrium_final_heterozygosity=_optional_float(
                 value, "equilibrium_final_heterozygosity"
             ),
-            sigma_band_multiplier=_optional_float(value, "sigma_band_multiplier"),
-            sigma_band_window=_optional_int(value, "sigma_band_window"),
-            sigma_band=_optional_sigma_band(value.get("sigma_band")),
             auto_derived=_optional_string_tuple(value, "auto_derived"),
             relaxation_time=_optional_float(value, "relaxation_time"),
         )
@@ -628,41 +592,6 @@ def _optional_artifacts(
     return digests
 
 
-def _optional_sigma_band(raw_value: Any) -> Mapping[str, Mapping[str, float]] | None:
-    """Parse the optional `sigma_band` mapping, or `None` when absent/null.
-
-    Mirrors `_optional_artifacts`'s own nested-mapping shape: one entry
-    per watched statistic, each itself a small mapping of finite floats
-    (`fim.engine._sigma_band_summary`'s own `{"mean", "sigma", "lower",
-    "upper"}`, though the exact key set is not enforced here — a
-    manifest should stay readable even if a future revision adds or
-    renames one of those four).
-    """
-    if raw_value is None:
-        return None
-    if not isinstance(raw_value, Mapping):
-        raise ValueError("manifest field 'sigma_band' must be an object or null")
-    summary: dict[str, dict[str, float]] = {}
-    for name, raw_stats in raw_value.items():
-        if not isinstance(raw_stats, Mapping):
-            raise ValueError(f"manifest sigma_band entry {name!r} must be an object")
-        stats: dict[str, float] = {}
-        for stat_name, raw_number in raw_stats.items():
-            if isinstance(raw_number, bool) or not isinstance(raw_number, int | float):
-                raise ValueError(
-                    f"manifest sigma_band entry {name!r} field {stat_name!r} "
-                    "must be a number"
-                )
-            if not math.isfinite(raw_number):
-                raise ValueError(
-                    f"manifest sigma_band entry {name!r} field {stat_name!r} "
-                    "must be finite"
-                )
-            stats[stat_name] = float(raw_number)
-        summary[name] = stats
-    return summary
-
-
 def _raise_missing_manifest_fields(
     value: Mapping[str, Any],
     missing: set[str],
@@ -857,14 +786,10 @@ def _validate_run_manifest_optional_numeric_fields(manifest: RunManifest) -> Non
         0.0 <= manifest.equilibrium_final_heterozygosity < 1.0
     ):
         raise ValueError("manifest equilibrium_final_heterozygosity must be in [0, 1)")
-    for value, name in (
-        (manifest.sigma_band_multiplier, "sigma_band_multiplier"),
-        (manifest.relaxation_time, "relaxation_time"),
+    if manifest.relaxation_time is not None and not math.isfinite(
+        manifest.relaxation_time
     ):
-        if value is not None and not math.isfinite(value):
-            raise ValueError(f"manifest {name} must be finite")
-    if manifest.sigma_band_window is not None and manifest.sigma_band_window < 0:
-        raise ValueError("manifest sigma_band_window must be non-negative")
+        raise ValueError("manifest relaxation_time must be finite")
 
 
 def _validate_artifact_digest(name: str, digest: ArtifactDigest) -> None:

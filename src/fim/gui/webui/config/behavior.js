@@ -169,10 +169,14 @@ const WINDOW_STATISTIC_DECIMALS = 4;
 // prediction ("+1.2 SE"): one is enough to read "inside or outside two".
 const PREDICTION_DISTANCE_DECIMALS = 1;
 
-// Half-width of the band around the trajectory graph's trailing mean, in
-// standard errors of that mean: two, so a prediction outside the band is
-// worth a second look, while one inside it is consistent with the run.
-const TRAILING_MEAN_BAND_STANDARD_ERRORS = 2;
+// Half-width of every band on the trajectory graph (the sigma band of the
+// "every generation" display and the standard-error bands of the averaged
+// displays), in sigmas or standard errors, and the choices offered
+// (`fim.gui.preferences.TRAJECTORY_BAND_WIDTHS`). Two is the default, so a
+// prediction outside the band is worth a second look, while one inside it
+// is consistent with the run.
+const DEFAULT_TRAJECTORY_BAND_WIDTH = 2;
+const TRAJECTORY_BAND_WIDTHS = [1, 2];
 
 // A trajectory band point averaging fewer points than this does not
 // stretch the graph's value axis: with so few points the standard error

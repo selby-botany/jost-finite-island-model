@@ -3621,21 +3621,6 @@ def test_pairwise_max_demes_rejects_a_non_positive_value(
 
 A zero limit is a usage error, not a traceback.
 
-<a id="cli.test_cli.test_run_with_sigma_band_writes_the_fifth_trajectory_artifact"></a>
-
-#### test\_run\_with\_sigma\_band\_writes\_the\_fifth\_trajectory\_artifact
-
-```python
-def test_run_with_sigma_band_writes_the_fifth_trajectory_artifact(
-        tmp_path: Path) -> None
-```
-
-A real seeded run with the sigma band enabled writes and digests it too.
-
-`20260907-claude-sonnet-5-within-run-sigma-band-backend-design.md`,
-v1 step 5 — mirrors `test_run_writes_exactly_four_documented_
-artifacts`, with the sigma band requested this time.
-
 <a id="cli.test_cli.test_equilibrium_split_run_writes_and_digests_its_ancestral_trajectory"></a>
 
 #### test\_equilibrium\_split\_run\_writes\_and\_digests\_its\_ancestral\_trajectory
@@ -3736,7 +3721,7 @@ def test_run_lists_only_the_artifacts_it_wrote(
         tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None
 ```
 
-No sigma-band line for a run without a sigma band; every listed file exists.
+Every artifact the run lists exists; none is listed that it did not write.
 
 <a id="cli.test_cli.test_run_accepts_stepping_stone_topology_sugar_for_m"></a>
 
@@ -6549,301 +6534,6 @@ test_post_init_validation_covers_all_scalar_contracts`);
 match exactly, which a real drifting `D` trajectory essentially never
 does in two generations.
 
-<a id="engine.test_engine.test_sigma_band_summary_matches_a_hand_computed_mean_and_sigma"></a>
-
-#### test\_sigma\_band\_summary\_matches\_a\_hand\_computed\_mean\_and\_sigma
-
-```python
-def test_sigma_band_summary_matches_a_hand_computed_mean_and_sigma() -> None
-```
-
-`_sigma_band_summary` computes a population mean/sigma, not a sample one.
-
-Hand-computed against `[0.1, 0.2, 0.3]`: mean `0.2`, population
-variance `((0.1)**2 + 0**2 + (0.1)**2) / 3`, sigma the square root
-of that — dividing by the window size itself (`3`), not `3 - 1`
-(design doc decision 3's own "describes the observed spread of the
-window that ran, not an estimate extrapolated from a sample").
-
-<a id="engine.test_engine.test_sigma_band_summary_omits_a_statistic_with_no_defined_values"></a>
-
-#### test\_sigma\_band\_summary\_omits\_a\_statistic\_with\_no\_defined\_values
-
-```python
-def test_sigma_band_summary_omits_a_statistic_with_no_defined_values() -> None
-```
-
-A statistic undefined for the whole window is dropped, not fabricated.
-
-<a id="engine.test_engine.test_sigma_band_extension_leaves_the_primary_report_and_final_state_unchanged"></a>
-
-#### test\_sigma\_band\_extension\_leaves\_the\_primary\_report\_and\_final\_state\_unchanged
-
-```python
-def test_sigma_band_extension_leaves_the_primary_report_and_final_state_unchanged(
-        tiny_params: SimulationParams) -> None
-```
-
-The extension is strictly additive — decision 4's own core invariant.
-
-An otherwise-identical run with the sigma band enabled reports the
-identical `report`/`final_state`/`generation` a plain run without it
-would — the extension's own further generations never surface there
-at all, only in `manifest.sigma_band`.
-
-<a id="engine.test_engine.test_sigma_band_is_none_when_the_run_only_hits_the_cap"></a>
-
-#### test\_sigma\_band\_is\_none\_when\_the\_run\_only\_hits\_the\_cap
-
-```python
-def test_sigma_band_is_none_when_the_run_only_hits_the_cap() -> None
-```
-
-An unconverged (capped) run is never extended, even with the band configured.
-
-Mirrors `test_cap_is_a_valid_nonconverged_result`'s own capped
-configuration, with a sigma band also requested — decision 3's own
-"extending an unconverged run would misrepresent stability that was
-never reached."
-
-<a id="engine.test_engine.test_sigma_band_window_length_changes_the_computed_band"></a>
-
-#### test\_sigma\_band\_window\_length\_changes\_the\_computed\_band
-
-```python
-def test_sigma_band_window_length_changes_the_computed_band(
-        tiny_params: SimulationParams) -> None
-```
-
-A longer extension window genuinely runs further generations.
-
-Externally observable proof the extension loop actually iterates
-`sigma_band_window` times, not a fixed or ignored count: two window
-lengths, same seed otherwise, produce different bands (a different
-number of real, seeded-random generations were stepped through).
-
-<a id="engine.test_engine.test_sigma_band_is_reproducible_for_the_same_seed"></a>
-
-#### test\_sigma\_band\_is\_reproducible\_for\_the\_same\_seed
-
-```python
-def test_sigma_band_is_reproducible_for_the_same_seed(
-        tiny_params: SimulationParams) -> None
-```
-
-The same seed and configuration reproduce a byte-identical band.
-
-<a id="engine.test_engine.test_sigma_band_is_supported_under_every_resolved_backend"></a>
-
-#### test\_sigma\_band\_is\_supported\_under\_every\_resolved\_backend
-
-```python
-@pytest.mark.parametrize(
-    "backend_changes",
-    [
-        {
-            "engine_backend": "lineal"
-        },
-        {
-            "engine_backend": "generational"
-        },
-        # `"auto"`, with the default `mutation_model="infinite_alleles"`,
-        # always resolves to `"generational"`
-        # (`_resolve_auto_engine_backend`) — never `"lineal"`, which is
-        # exactly why v1's own `"lineal"`-only restriction left this
-        # feature unreachable for this project's recommended default.
-        {
-            "engine_backend": "auto"
-        },
-    ],
-)
-def test_sigma_band_is_supported_under_every_resolved_backend(
-        tiny_params: SimulationParams, backend_changes: dict[str,
-                                                             object]) -> None
-```
-
-v2 lifted v1's `"lineal"`-only restriction — design doc decision 7.
-
-The direct replacement for this test's own v1 predecessor
-(`test_sigma_band_rejects_every_non_lineal_backend`), which asserted
-a `ValueError` here. v2's own step 7 removes that guard deliberately,
-so the assertion inverts: every one of these resolved backends now
-computes a real band rather than refusing the request.
-`"generational-vector"` needs a bounded finite-alleles capacity and
-so is covered separately, below.
-
-<a id="engine.test_engine.test_sigma_band_under_generational_matches_lineal_exactly"></a>
-
-#### test\_sigma\_band\_under\_generational\_matches\_lineal\_exactly
-
-```python
-def test_sigma_band_under_generational_matches_lineal_exactly(
-        tiny_params: SimulationParams) -> None
-```
-
-`"generational"` reuses v1's extension helper, so its band is identical.
-
-Decision 7's own reasoning for sharing one dict-based implementation
-between the two backends, turned into an assertion: `Sequential
-Advancer` steps a lane with exactly the `step(...)` call `_run_one`
-itself uses and is bit-identical to `LinealBackend` for the same seed,
-so sharing `_run_dict_based_sigma_band_extension` must leave the two
-backends' bands bit-identical too — not merely statistically close.
-A future change that accidentally gave `"generational"` its own
-divergent extension path would fail here.
-
-<a id="engine.test_engine.test_sigma_band_is_none_under_generational_when_the_run_only_hits_the_cap"></a>
-
-#### test\_sigma\_band\_is\_none\_under\_generational\_when\_the\_run\_only\_hits\_the\_cap
-
-```python
-def test_sigma_band_is_none_under_generational_when_the_run_only_hits_the_cap(
-) -> None
-```
-
-A capped `"generational"` lane is never extended either — decision 3, batch-side.
-
-The batch-path counterpart to `test_sigma_band_is_none_when_the_run_
-only_hits_the_cap`: `_lane_is_sigma_band_eligible` gates on the
-lane's own `outcome.converged`, so an unconverged lane gets no band
-no matter which backend drove it.
-
-<a id="engine.test_engine.test_sigma_band_extends_every_replicate_of_a_generational_batch"></a>
-
-#### test\_sigma\_band\_extends\_every\_replicate\_of\_a\_generational\_batch
-
-```python
-def test_sigma_band_extends_every_replicate_of_a_generational_batch() -> None
-```
-
-A real batch gets one band per replicate, not just the first.
-
-`_apply_sigma_band_extensions` walks every finalized lane, so a
-multi-replicate batch's own manifests come out the same shape v1's
-`"lineal"` scalar case already produced — the v2 enforcement
-inventory's own "identical in shape to v1's `"lineal"` case".
-
-<a id="engine.test_engine.test_sigma_band_is_never_computed_for_an_adaptively_abandoned_lane"></a>
-
-#### test\_sigma\_band\_is\_never\_computed\_for\_an\_adaptively\_abandoned\_lane
-
-```python
-def test_sigma_band_is_never_computed_for_an_adaptively_abandoned_lane(
-) -> None
-```
-
-An adaptive stop's abandoned lanes get no band — decision 8's closing note.
-
-`_apply_sigma_band_extensions` skips any lane with no `result` at
-all, which is exactly the set an adaptive early stop
-discarded from the store just above `run_batch`'s own early return.
-A band is therefore never computed from, or persisted for, a
-replicate the adaptive stop chose not to keep.
-
-<a id="engine.test_engine.test_vectorized_sigma_band_matches_its_own_trajectory_rows"></a>
-
-#### test\_vectorized\_sigma\_band\_matches\_its\_own\_trajectory\_rows
-
-```python
-def test_vectorized_sigma_band_matches_its_own_trajectory_rows() -> None
-```
-
-`_run_vectorized_sigma_band_extension`'s band reduces exactly its own rows.
-
-The array-native mirror of `test_sigma_band_summary_matches_a_hand_
-computed_mean_and_sigma`, checked against a real
-`"generational-vector"` run rather than an injected series: the
-reported band must be the population mean/sigma of precisely the
-per-generation values the same extension recorded, so a helper that
-buffered one set of numbers and summarized another would fail here.
-
-<a id="engine.test_engine.test_vectorized_extension_keeps_minted_identities_through_extinction"></a>
-
-#### test\_vectorized\_extension\_keeps\_minted\_identities\_through\_extinction
-
-```python
-def test_vectorized_extension_keeps_minted_identities_through_extinction(
-) -> None
-```
-
-The extension never forgets an allele minted and since driven extinct.
-
-Decision 7's own named bug, guarded directly. A V-lane's minted
-bookkeeping lives inside `VectorBlock`, never in
-`lane.finite_alleles`, so continuing such a lane by rebuilding a
-state from `lane.state` alone (or by switching to the dict-based
-`step`) would treat only the currently-*present* alleles as the
-whole minted set — re-minting identities the run had permanently
-retired and undercounting `minted_count`.
-
-Asserted in three parts: that rebuilding really would lose
-information (otherwise this test would pass for the wrong reason, on
-a run where nothing had gone extinct yet); that the extension window
-genuinely spans an extinction *and* a later reappearance (so the
-scenario is actually exercised); and that the real extension's own
-bookkeeping only ever advances.
-
-<a id="engine.test_engine.test_sigma_band_extensions_never_interleave_with_batch_ticks"></a>
-
-#### test\_sigma\_band\_extensions\_never\_interleave\_with\_batch\_ticks
-
-```python
-def test_sigma_band_extensions_never_interleave_with_batch_ticks() -> None
-```
-
-No lane's own advancement is delayed by another lane's extension.
-
-Decision 8's rejected inline alternative, turned into a regression
-test. Running each extension the instant its lane was found in
-`newly_stopped` would step `sigma_band_window` further generations
-for that lane *before* the batch's next tick advanced any other
-still-active lane — stalling a live batch's visible progress. The
-deferred post-pass cannot: every extension must happen after the
-final tick.
-
-The configuration is deliberately staggered (two lanes at a time, so the
-last two start only when the first two finish), so inline and deferred
-would genuinely differ here — with every lane stopping on the same tick
-the two orderings would be indistinguishable and this test would prove
-nothing.
-
-<a id="engine.test_engine.test_vectorized_sigma_band_caches_peak_in_the_post_pass_then_release"></a>
-
-#### test\_vectorized\_sigma\_band\_caches\_peak\_in\_the\_post\_pass\_then\_release
-
-```python
-def test_vectorized_sigma_band_caches_peak_in_the_post_pass_then_release(
-) -> None
-```
-
-Deferred caches peak during the post-pass and are all released by its end.
-
-Decision 9's accepted worst case, measured rather than merely
-asserted: with the band enabled, every eligible lane defers its
-`VectorBlock` release (reopening the growth `FIM-48` closed), so
-all of them are alive when the post-pass begins. The cost stays a
-*temporary* peak because the pass releases each lane's own cache the
-instant that lane's extension finishes — so the live count falls
-monotonically through the pass and reaches zero by its end, rather
-than persisting after the batch returns.
-
-<a id="engine.test_engine.test_a_batch_without_a_sigma_band_still_releases_caches_at_finalization"></a>
-
-#### test\_a\_batch\_without\_a\_sigma\_band\_still\_releases\_caches\_at\_finalization
-
-```python
-def test_a_batch_without_a_sigma_band_still_releases_caches_at_finalization(
-) -> None
-```
-
-Decision 9's own "opt-in" half: no band requested, `FIM-48` unchanged.
-
-The control for the test above. `_finalize_replica_lane` only skips
-its release for a sigma-band-eligible lane, so a batch that never
-asked for a band must still release every `VectorBlock` the
-instant its lane stops — exactly `FIM-48`'s own guarantee, not
-weakened by v2 having made a conditional out of it.
-
 <a id="engine.test_engine.test_replicates_are_independently_reproducible"></a>
 
 #### test\_replicates\_are\_independently\_reproducible
@@ -8031,22 +7721,6 @@ Same run as above, only with the opt-in set — `E_ST`/`K_ST`/
 `A_CGD`/`Delta`/`MI` now join the always-tracked five in `RunResult.
 convergence_histories`, each with a real per-generation history the
 same length as every other tracked statistic's own.
-
-<a id="engine.test_engine.test_sigma_band_stays_scoped_to_watched_statistics_only"></a>
-
-#### test\_sigma\_band\_stays\_scoped\_to\_watched\_statistics\_only
-
-```python
-def test_sigma_band_stays_scoped_to_watched_statistics_only() -> None
-```
-
-The within-run sigma band never picks up the new always-tracked extras.
-
-`_run_one`'s own sigma-band extension buffers `_convergence_values`'
-now-richer per-generation output — this confirms it still only ever
-keeps what `doc/configuration.md`'s own `sigma_band_multiplier` entry
-documents ("reports each watched statistic"), not every name
-`_convergence_values` now happens to also return.
 
 <a id="engine.test_engine.test_locus_length_does_not_affect_the_report"></a>
 
@@ -9853,16 +9527,6 @@ def test_convergence_stopped_run_matches_lineal() -> None
 
 A run that converges (not one cut off by the cap) stops identically.
 
-<a id="engine.test_vector_parity.test_sigma_band_extension_matches_lineal"></a>
-
-#### test\_sigma\_band\_extension\_matches\_lineal
-
-```python
-def test_sigma_band_extension_matches_lineal() -> None
-```
-
-The extension after convergence (rows aside) gives the same band.
-
 <a id="engine.test_vector_parity.test_expensive_statistics_and_aggregation_choices_match_lineal"></a>
 
 #### test\_expensive\_statistics\_and\_aggregation\_choices\_match\_lineal
@@ -9987,19 +9651,6 @@ def test_finite_alleles_replicate_batch_and_adaptive_stop_match_lineal(
 ```
 
 Finite alleles through a 3-replicate batch and an adaptive batch.
-
-<a id="engine.test_vector_parity.test_finite_alleles_sigma_band_extension_matches_lineal"></a>
-
-#### test\_finite\_alleles\_sigma\_band\_extension\_matches\_lineal
-
-```python
-def test_finite_alleles_sigma_band_extension_matches_lineal() -> None
-```
-
-The extension continues the minted bookkeeping exactly as L does.
-
-A 16-state locus makes alleles go extinct and reappear within the
-window, which is what a forgotten-minted-identity bug would mishandle.
 
 <a id="engine.test_vector_parity.test_finite_alleles_trajectory_log_is_byte_identical"></a>
 
@@ -12590,33 +12241,6 @@ def test_effective_allele_interval_summary_caution_flag_only_above_threshold(
 
 `gStCaution` fires only once `H_S`'s own interval mean exceeds the cutover.
 
-<a id="gui.test_app_api.test_sigma_band_payload_returns_none_when_the_run_requested_no_band"></a>
-
-#### test\_sigma\_band\_payload\_returns\_none\_when\_the\_run\_requested\_no\_band
-
-```python
-def test_sigma_band_payload_returns_none_when_the_run_requested_no_band(
-        tmp_path: Path) -> None
-```
-
-No sigma band requested: `_sigma_band_payload` returns `None`, not an empty dict.
-
-Sigma-band GUI design doc `20260910-claude-sonnet-5-gui-sigma-band-
-design.md` (`selby/restricted`), approach B1 — the identical
-"absent means not applicable" shape `convergenceGenerations`/
-`convergenceHistories` already use for a re-analyzed run.
-
-<a id="gui.test_app_api.test_sigma_band_payload_formats_every_value_for_a_real_band"></a>
-
-#### test\_sigma\_band\_payload\_formats\_every\_value\_for\_a\_real\_band
-
-```python
-def test_sigma_band_payload_formats_every_value_for_a_real_band(
-        tmp_path: Path) -> None
-```
-
-A real sigma band renders `multiplier`/`window` verbatim, `band` formatted.
-
 <a id="gui.test_app_api.test_api_starts_with_the_default_significant_digits"></a>
 
 #### test\_api\_starts\_with\_the\_default\_significant\_digits
@@ -13790,32 +13414,6 @@ def test_open_run_reanalyzes_the_final_generation_by_default(
 ```
 
 A bare "final" open reproduces the run's own terminal report.
-
-<a id="gui.test_app_api.test_open_run_carries_no_sigma_band_for_an_ordinary_run"></a>
-
-#### test\_open\_run\_carries\_no\_sigma\_band\_for\_an\_ordinary\_run
-
-```python
-def test_open_run_carries_no_sigma_band_for_an_ordinary_run(
-        tmp_path: Path) -> None
-```
-
-A run that never requested a sigma band reopens with `sigmaBand: None`.
-
-<a id="gui.test_app_api.test_open_run_carries_the_real_sigma_band"></a>
-
-#### test\_open\_run\_carries\_the\_real\_sigma\_band
-
-```python
-def test_open_run_carries_the_real_sigma_band(tmp_path: Path) -> None
-```
-
-A reopened run's own `sigmaBand` matches `_sigma_band_payload` directly.
-
-Sigma-band GUI design doc `20260910-claude-sonnet-5-gui-sigma-band-
-design.md` (`selby/restricted`) slice 4, approach B1: reused
-unchanged from the live-run path — this proves it, rather than
-trusting the two call sites stayed in sync by inspection alone.
 
 <a id="gui.test_app_api.test_open_run_carries_the_real_equilibrium_prediction"></a>
 
@@ -16017,7 +15615,7 @@ def test_form_values_to_payload_coerces_a_bool_field_from_true_false_text(
 A "bool" field coerces the literal "true"/"false" text a checkbox writes.
 
 `track_expensive_statistics` is this form's first plain "bool"
-`FormField` — unlike `sigma_band_enabled`, it needs no dedicated
+`FormField`, so it needs no dedicated
 `*_to_payload` function of its own; the generic `all_fields()`
 dispatch loop in `form_values_to_payload` handles it directly.
 
@@ -16707,82 +16305,6 @@ def test_convergence_statistic_from_params_checks_only_the_watched_names(
 ```
 
 `convergence_statistic_from_params` checks exactly the watched statistics.
-
-<a id="gui.test_config_form.test_sigma_band_to_payload_omits_both_fields_when_disabled"></a>
-
-#### test\_sigma\_band\_to\_payload\_omits\_both\_fields\_when\_disabled
-
-```python
-def test_sigma_band_to_payload_omits_both_fields_when_disabled() -> None
-```
-
-Unchecked toggle: neither field reaches the payload at all.
-
-`20260910-claude-sonnet-5-gui-sigma-band-design.md` (`selby/
-restricted`) approach A1 -- the identical "set together or not at
-all" contract `SimulationParams` itself already enforces for this
-pair.
-
-<a id="gui.test_config_form.test_sigma_band_to_payload_parses_both_fields_when_enabled"></a>
-
-#### test\_sigma\_band\_to\_payload\_parses\_both\_fields\_when\_enabled
-
-```python
-def test_sigma_band_to_payload_parses_both_fields_when_enabled() -> None
-```
-
-Checked toggle: both fields parse to their declared types.
-
-<a id="gui.test_config_form.test_sigma_band_to_payload_rejects_a_non_integer_window"></a>
-
-#### test\_sigma\_band\_to\_payload\_rejects\_a\_non\_integer\_window
-
-```python
-def test_sigma_band_to_payload_rejects_a_non_integer_window() -> None
-```
-
-A malformed window is a clear, field-named error, not a silent coercion.
-
-<a id="gui.test_config_form.test_sigma_band_from_params_disabled_seeds_suggested_defaults"></a>
-
-#### test\_sigma\_band\_from\_params\_disabled\_seeds\_suggested\_defaults
-
-```python
-def test_sigma_band_from_params_disabled_seeds_suggested_defaults() -> None
-```
-
-`sigma_band_multiplier is None` renders the toggle off, GUI defaults seeded.
-
-<a id="gui.test_config_form.test_sigma_band_from_params_enabled_round_trips_the_real_values"></a>
-
-#### test\_sigma\_band\_from\_params\_enabled\_round\_trips\_the\_real\_values
-
-```python
-def test_sigma_band_from_params_enabled_round_trips_the_real_values() -> None
-```
-
-A real sigma-band configuration renders back enabled, with its own values.
-
-<a id="gui.test_config_form.test_sigma_band_round_trips_through_form_values_to_payload_and_back"></a>
-
-#### test\_sigma\_band\_round\_trips\_through\_form\_values\_to\_payload\_and\_back
-
-```python
-def test_sigma_band_round_trips_through_form_values_to_payload_and_back(
-) -> None
-```
-
-`sigma_band_to_payload`/`from_params` agree, all the way around the loop.
-
-<a id="gui.test_config_form.test_field_for_error_locates_a_sigma_band_error"></a>
-
-#### test\_field\_for\_error\_locates\_a\_sigma\_band\_error
-
-```python
-def test_field_for_error_locates_a_sigma_band_error() -> None
-```
-
-A sigma-band validation error routes to the field, then the convergence tab.
 
 <a id="gui.test_config_form.test_loci_from_params_sequential_ids_render_lengths_mode"></a>
 
@@ -17986,8 +17508,7 @@ def test_sweep_curve_draws_axis_titles(window: webview.Window) -> None
 
 The canvas draws a real x-axis title (the swept field) and y-axis title.
 
-Checked the same way `test_results_screen.py`'s own sigma-band test
-checks a canvas fill actually happened: the alpha channel of a small
+Checked by looking at the canvas itself: the alpha channel of a small
 rectangle in each title's own drawn region, non-zero only if
 something was actually painted there (a canvas starts fully
 transparent) -- not by trying to read the text back out of raster
@@ -19133,40 +18654,6 @@ linear chain it needs a grid shape, revealed by
 the selected topology. (Whether a given shape is valid for `d` is the
 model's own check, covered by `test_topology.py`.)
 
-<a id="gui.test_input_screen.test_checking_the_sigma_band_toggle_reveals_and_seeds_its_own_fields"></a>
-
-#### test\_checking\_the\_sigma\_band\_toggle\_reveals\_and\_seeds\_its\_own\_fields
-
-```python
-def test_checking_the_sigma_band_toggle_reveals_and_seeds_its_own_fields(
-        window: webview.Window, drive: Callable[..., Any]) -> None
-```
-
-Checking "within-run sigma band" reveals its two fields, window pre-filled `100`.
-
-`20260910-claude-sonnet-5-gui-sigma-band-design.md` (`selby/
-restricted`) approach A1: "off by default and one toggle away," the
-multiplier defaulting to the `<select>`'s own first `<option>`
-(`2.0`, no JS needed for that half) and the window seeded by
-`config-modals.js`'s own `wireSigmaBandSeedDefault`.
-
-<a id="gui.test_input_screen.test_unchecking_and_rechecking_the_sigma_band_toggle_keeps_a_typed_window_value"></a>
-
-#### test\_unchecking\_and\_rechecking\_the\_sigma\_band\_toggle\_keeps\_a\_typed\_window\_value
-
-```python
-def test_unchecking_and_rechecking_the_sigma_band_toggle_keeps_a_typed_window_value(
-        window: webview.Window) -> None
-```
-
-A window value already typed survives an uncheck/recheck, never reset to `100`.
-
-Driven manually (`window.fim.showScreen`/`whenApiReady` already
-settled by the time `_INPUT_SCREEN_READY` is true, so a plain
-sequence of synchronous `evaluate_js` calls against one window is
-enough — no background thread involved, matching `test_open_run_
-screen.py`'s own "plain, synchronous request/response" precedent).
-
 <a id="gui.test_input_screen.test_configure_has_no_expensive_statistics_checkbox"></a>
 
 #### test\_configure\_has\_no\_expensive\_statistics\_checkbox
@@ -20081,47 +19568,6 @@ replicate_list` failed that way). Both clicks are made in one
 `evaluate_js` call, so the second always lands while the first fetch
 is in flight; the count of real bridge calls then shows whether it
 was ignored.
-
-<a id="gui.test_open_run_screen.test_opening_a_run_with_a_sigma_band_shows_it_alongside_the_curve"></a>
-
-#### test\_opening\_a\_run\_with\_a\_sigma\_band\_shows\_it\_alongside\_the\_curve
-
-```python
-def test_opening_a_run_with_a_sigma_band_shows_it_alongside_the_curve(
-        tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None
-```
-
-A reopened run's own sigma band renders alongside its real curve.
-
-Sigma-band GUI design doc `20260910-claude-sonnet-5-gui-sigma-band-
-design.md` (`selby/restricted`) slice 4, updated for `Api.open_run`
-now carrying `convergenceGenerations`/`convergenceHistories` of its
-own (`fim.reanalyze.read_persisted_convergence_history`, read back
-from the run's own persisted `convergence.jsonl` -- no longer "re-
-analysis recomputes one generation, never a full history"): the
-trajectory panel shows the real simulated curve, its closed-form
-companion, and the sigma band together, not the band alone.
-
-`_write_run_with_sigma_band`'s own `N`/`m`/`mu` (`20`/`0.1`/`0.01`)
-are all plain scalars, and its sigma band covers `D` (the config's
-own unset-so-default `convergence_statistic`).
-
-<a id="gui.test_open_run_screen.test_opening_a_run_without_a_sigma_band_shows_the_curve_with_no_band"></a>
-
-#### test\_opening\_a\_run\_without\_a\_sigma\_band\_shows\_the\_curve\_with\_no\_band
-
-```python
-def test_opening_a_run_without_a_sigma_band_shows_the_curve_with_no_band(
-        tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None
-```
-
-A reopened run's own trajectory panel shows without a sigma-band caption.
-
-Contrasts with `test_opening_a_run_with_a_sigma_band_shows_it_
-alongside_the_curve`, above: the same real curve now shows either
-way (`fim.reanalyze.read_persisted_convergence_history`), but only
-a run that actually requested a sigma band extension gets its own
-caption/shading -- `_write_run`'s own config never does.
 
 <a id="gui.test_open_run_screen.test_expanding_a_study_shows_every_run_directly_with_no_date_subgroups"></a>
 
@@ -21098,6 +20544,28 @@ def test_a_non_positive_pairwise_limit_is_quarantined(tmp_path: Path) -> None
 ```
 
 A hand-edited zero limit is rejected like any malformed field.
+
+<a id="gui.test_preferences.test_the_band_width_defaults_to_two_and_writes_nothing_until_changed"></a>
+
+#### test\_the\_band\_width\_defaults\_to\_two\_and\_writes\_nothing\_until\_changed
+
+```python
+def test_the_band_width_defaults_to_two_and_writes_nothing_until_changed(
+) -> None
+```
+
+Width 2 is the default and stays off disk; 1 is written and survives a reload.
+
+<a id="gui.test_preferences.test_the_band_width_round_trips_and_rejects_anything_but_one_or_two"></a>
+
+#### test\_the\_band\_width\_round\_trips\_and\_rejects\_anything\_but\_one\_or\_two
+
+```python
+def test_the_band_width_round_trips_and_rejects_anything_but_one_or_two(
+        tmp_path: Path) -> None
+```
+
+Saved widths 1 and 2 load; 3, 0, text and booleans are refused.
 
 <a id="gui.test_presets"></a>
 
@@ -22140,26 +21608,6 @@ there via `sample <pid>` on a `git push`'s own hung pre-push
 run is the actual regression proof; the injected opener's own
 recorded path is the icing.
 
-<a id="gui.test_results_screen.test_a_completed_run_with_a_sigma_band_draws_it_and_shows_the_caption"></a>
-
-#### test\_a\_completed\_run\_with\_a\_sigma\_band\_draws\_it\_and\_shows\_the\_caption
-
-```python
-def test_a_completed_run_with_a_sigma_band_draws_it_and_shows_the_caption(
-        fast_scalar_run_settings: Path, window: webview.Window,
-        drive: Callable[..., Any]) -> None
-```
-
-A run started with the sigma-band toggle on draws a real band and caption.
-
-Sigma-band GUI design doc `20260910-claude-sonnet-5-gui-sigma-band-
-design.md` (`selby/restricted`) slice 3, approach C1 — checked via
-the canvas's own alpha channel (every stroke/fill this page draws
-is fully opaque; a canvas starts fully transparent), the identical
-check `test_compare_screen.py`'s own `_canvas_has_nonblank_pixels_
-script` already established for an unrelated canvas, not
-independently reinvented here.
-
 <a id="gui.test_results_screen.test_run_view_fits_the_default_window_without_excess_scrolling"></a>
 
 #### test\_run\_view\_fits\_the\_default\_window\_without\_excess\_scrolling
@@ -22919,7 +22367,7 @@ by the statistics panel instead of a separate color key, so
 this proves the *canvas* changes (`run-view-completed.js`'s own
 `hiddenTrajectoryStatistics`), not just
 that a CSS class toggled — the same "count non-blank pixels" idiom
-`test_open_run_screen.py`'s own sigma-band test already established.
+`test_open_run_screen.py`'s own pixel test already established.
 Clicking "G_ST" must also hide its own "G_ST (predicted
 equilibrium)" companion (this feature's own scope), while every
 other statistic's own row (including the identity-recovery curve,
@@ -22984,11 +22432,11 @@ def test_completed_row_tooltip_shows_the_trailing_window_mean(
 
 A statistic row's own hover title leads with its window mean and SE.
 
-Needs a window at least `MINIMUM_NOISE_CHECK_WINDOW` long -- shorter
-than that, `report_for_state` has nothing to report
-(`fim.convergence.window_statistics`'s own docstring) -- so this uses
-its own Settings override rather than `fast_scalar_run_settings`
-(window 4).
+Needs an evidence window of at least `MINIMUM_WINDOW_VALUES` values --
+shorter than that, `report_for_state` has nothing to report
+(`fim.convergence.window_statistics`'s own docstring), and the run's
+own integrated autocorrelation time, which the standard error needs, is
+unknown -- so this uses its own Settings override (burn-in 1).
 
 <a id="gui.test_running_screen.test_trajectory_panel_updates_live_while_a_run_is_still_going"></a>
 
@@ -24566,15 +24014,16 @@ page computes both with its own copy of
 #### window\_statistics
 
 ```python
-def window_statistics(values: list[float]) -> _Lag1Window
+def window_statistics(values: list[float],
+                      tau_int: float = _TAU_INT) -> _Window
 ```
 
-Reference for the page's estimator: the lag-1 (AR(1)) standard error.
+Reference for the page's estimator: `SD * sqrt(tau_int / n)` (design 6.8).
 
-The trajectory panel still averages with the single-lag formula
-`tau_int = (1 + rho) / (1 - rho)` (a later change moves it to the run's own
-evidence window and Geyer's estimator), so this test holds the page equal
-to that formula, written out here.
+The standard error of a window mean uses the run's own integrated
+autocorrelation time, estimated once over its evidence window by Geyer's
+method and served with the report, not a guess from this window's lag-1
+correlation. A flat window is known exactly.
 
 <a id="gui.test_trailing_mean_screen.test_the_page_estimator_matches_window_statistics"></a>
 
@@ -24648,6 +24097,28 @@ def test_a_completed_run_leads_with_its_estimate_and_offers_the_averages(
 ```
 
 D's tooltip leads with its mean ± SE; each display redraws and persists.
+
+<a id="gui.test_trailing_mean_screen.test_the_sigma_display_is_built_from_the_evidence_window"></a>
+
+#### test\_the\_sigma\_display\_is\_built\_from\_the\_evidence\_window
+
+```python
+def test_the_sigma_display_is_built_from_the_evidence_window(
+        window: webview.Window, drive: Callable[..., Any]) -> None
+```
+
+Band, tau_int and the sigma tooltip clause come from the report's window.
+
+<a id="gui.test_trailing_mean_screen.test_the_band_width_selector_applies_and_is_remembered"></a>
+
+#### test\_the\_band\_width\_selector\_applies\_and\_is\_remembered
+
+```python
+def test_the_band_width_selector_applies_and_is_remembered(
+        window: webview.Window, drive: Callable[..., Any]) -> None
+```
+
+Choosing a width updates the page state and the saved layout.
 
 <a id="gui.test_trajectory_history"></a>
 
@@ -27696,85 +27167,6 @@ def test_equilibrium_convergence_window_cannot_exceed_max_generations(
 ```
 
 The ancestral phase runs at least the window, so it must fit the cap.
-
-<a id="model.test_params.test_sigma_band_fields_default_to_none_and_round_trip"></a>
-
-#### test\_sigma\_band\_fields\_default\_to\_none\_and\_round\_trip
-
-```python
-def test_sigma_band_fields_default_to_none_and_round_trip() -> None
-```
-
-Both fields are `None` by default, omitted from `to_dict()`.
-
-Matches `equilibrium_*`'s own round-trip contract
-(`test_equilibrium_split_fields_default_to_none_and_round_trip`): an
-absent key and an explicit `None` mean the same thing here, so
-omitting them keeps `from_mapping(to_dict())` lossless.
-
-<a id="model.test_params.test_sigma_band_fields_must_be_set_together"></a>
-
-#### test\_sigma\_band\_fields\_must\_be\_set\_together
-
-```python
-@pytest.mark.parametrize("omit",
-                         ["sigma_band_multiplier", "sigma_band_window"])
-def test_sigma_band_fields_must_be_set_together(omit: str) -> None
-```
-
-Setting only one of the two fields is rejected, not guessed at.
-
-<a id="model.test_params.test_sigma_band_multiplier_rejects_anything_but_two_or_three"></a>
-
-#### test\_sigma\_band\_multiplier\_rejects\_anything\_but\_two\_or\_three
-
-```python
-@pytest.mark.parametrize("multiplier", [1.0, 2.5, 4.0, 0.0, -2.0])
-def test_sigma_band_multiplier_rejects_anything_but_two_or_three(
-        multiplier: float) -> None
-```
-
-The multiplier is a closed set, not merely a suggestion.
-
-<a id="model.test_params.test_sigma_band_multiplier_accepts_three"></a>
-
-#### test\_sigma\_band\_multiplier\_accepts\_three
-
-```python
-def test_sigma_band_multiplier_accepts_three() -> None
-```
-
-3.0 is the other half of the closed set, not merely 2.0 alone.
-
-<a id="model.test_params.test_sigma_band_window_rejects_below_two"></a>
-
-#### test\_sigma\_band\_window\_rejects\_below\_two
-
-```python
-def test_sigma_band_window_rejects_below_two() -> None
-```
-
-`sigma_band_window` needs at least two points to show a spread.
-
-<a id="model.test_params.test_sigma_band_fields_do_not_conflict_with_equilibrium_split"></a>
-
-#### test\_sigma\_band\_fields\_do\_not\_conflict\_with\_equilibrium\_split
-
-```python
-def test_sigma_band_fields_do_not_conflict_with_equilibrium_split() -> None
-```
-
-Unlike equilibrium_*, the sigma band is never mutually exclusive.
-
-<a id="model.test_params.test_sigma_band_fields_do_not_conflict_with_explicit_p_0"></a>
-
-#### test\_sigma\_band\_fields\_do\_not\_conflict\_with\_explicit\_p\_0
-
-```python
-def test_sigma_band_fields_do_not_conflict_with_explicit_p_0() -> None
-```
-
-The sigma band is also never mutually exclusive with an explicit p_0.
 
 <a id="model.test_params.test_every_accepted_config_key_appears_in_configuration_md"></a>
 
@@ -34231,36 +33623,6 @@ def test_manifest_equilibrium_final_heterozygosity_rejects_out_of_range(
 
 `equilibrium_final_heterozygosity` shares `heterozygosity`'s `[0, 1)` domain.
 
-<a id="persistence.test_validation.test_manifest_sigma_band_fields_default_to_none_and_round_trip"></a>
-
-#### test\_manifest\_sigma\_band\_fields\_default\_to\_none\_and\_round\_trip
-
-```python
-def test_manifest_sigma_band_fields_default_to_none_and_round_trip(
-        tmp_path: Path) -> None
-```
-
-The three within-run sigma-band fields round-trip, `None` otherwise.
-
-Mirrors `test_manifest_equilibrium_fields_default_to_none_and_
-round_trip` -- same pattern, for the three fields `fim.engine._run_
-one` stamps only when the sigma band was actually requested and the
-run genuinely converged (`20260907-claude-sonnet-5-within-run-
-sigma-band-backend-design.md`, decision 4).
-
-<a id="persistence.test_validation.test_manifest_from_dict_tolerates_missing_sigma_band_fields"></a>
-
-#### test\_manifest\_from\_dict\_tolerates\_missing\_sigma\_band\_fields
-
-```python
-def test_manifest_from_dict_tolerates_missing_sigma_band_fields() -> None
-```
-
-A manifest written before these fields existed (schema_version < 3) still parses.
-
-Backward compatibility, checked directly, mirroring `test_manifest_
-from_dict_tolerates_missing_equilibrium_fields`.
-
 <a id="persistence.test_validation.test_manifest_auto_derived_fields_default_to_none_and_round_trip"></a>
 
 #### test\_manifest\_auto\_derived\_fields\_default\_to\_none\_and\_round\_trip
@@ -34272,8 +33634,7 @@ def test_manifest_auto_derived_fields_default_to_none_and_round_trip(
 
 `auto_derived`/`relaxation_time` round-trip, `None` for an older manifest.
 
-Mirrors `test_manifest_sigma_band_fields_default_to_none_and_round_
-trip` -- same pattern, for the two fields `fim.engine._run_one`/
+For the two fields `fim.engine._run_one`/
 `_finalize_replica_lane` stamp from `SimulationParams.auto_derived`/
 `relaxation_time` so a reopened run can recover whether its own
 `convergence_window`/`max_generations` were auto-derived
@@ -34293,43 +33654,7 @@ def test_manifest_from_dict_tolerates_missing_auto_derived_fields() -> None
 
 A manifest written before these fields existed still parses.
 
-Backward compatibility, checked directly, mirroring `test_manifest_
-from_dict_tolerates_missing_sigma_band_fields`.
-
-<a id="persistence.test_validation.test_manifest_sigma_band_shape_is_validated"></a>
-
-#### test\_manifest\_sigma\_band\_shape\_is\_validated
-
-```python
-@pytest.mark.parametrize(
-    ("sigma_band", "message"),
-    [
-        ("not-an-object", "must be an object or null"),
-        ({
-            "D": "not-an-object"
-        }, "must be an object"),
-        ({
-            "D": {
-                "mean": "0.5"
-            }
-        }, "must be a number"),
-        ({
-            "D": {
-                "mean": float("nan")
-            }
-        }, "must be finite"),
-        ({
-            "D": {
-                "mean": True
-            }
-        }, "must be a number"),
-    ],
-)
-def test_manifest_sigma_band_shape_is_validated(sigma_band: object,
-                                                message: str) -> None
-```
-
-A malformed `sigma_band` mapping is rejected with a specific message.
+Backward compatibility, checked directly.
 
 <a id="persistence.test_validation.test_manifest_artifact_digests_are_validated"></a>
 

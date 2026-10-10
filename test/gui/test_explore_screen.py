@@ -218,8 +218,7 @@ def test_sweep_curve_has_a_legend_matching_the_shared_statistic_color_palette(
 def test_sweep_curve_draws_axis_titles(window: webview.Window) -> None:
     """The canvas draws a real x-axis title (the swept field) and y-axis title.
 
-    Checked the same way `test_results_screen.py`'s own sigma-band test
-    checks a canvas fill actually happened: the alpha channel of a small
+    Checked by looking at the canvas itself: the alpha channel of a small
     rectangle in each title's own drawn region, non-zero only if
     something was actually painted there (a canvas starts fully
     transparent) -- not by trying to read the text back out of raster

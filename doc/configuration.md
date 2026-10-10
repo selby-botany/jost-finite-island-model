@@ -722,63 +722,6 @@ value?](convergence.md#how-precise-is-the-reported-value)); see
 the run before any averaging, and the run logs a warning. Setting only a
 burn-in raises the derived cap to leave `15 tau` after it.
 
-### sigma_band_multiplier
-
-- **Type:** `2.0` or `3.0`
-- **Default:** unset (the within-run sigma band is disabled)
-
-Once the main run genuinely converges (never after merely hitting
-max_generations), the engine continues for sigma_band_window further
-generations and reports each watched statistic (convergence_statistic)
-as mean ± (sigma_band_multiplier × sigma) over that trailing window —
-a measure of how much the statistic still wobbles, generation to
-generation, immediately after being declared stable. This is a
-different question from the cross-replicate confidence interval
-(confidence, n<sub>replicates</sub> > 1 required): that one
-asks how much the average would differ across independent replicate
-runs; this one asks about a single run's own remaining generation-to-
-generation noise. Must be set together with sigma_band_window, or not
-at all — never combined with any other field's own constraints (unlike
-the equilibrium-split fields, this measures the end of a run,
-regardless of how generation 0 was produced).
-
-```yaml
-sigma_band_multiplier: 2.0
-sigma_band_window: 100
-```
-
-When enabled, the run writes an additional
-`sigma_band_trajectory.jsonl` artifact alongside `trajectory.tlog` —
-one JSON object per extension generation, `{"generation": ...,
-"D": ...}` (one key per watched statistic, only when that statistic
-was actually defined that generation) — and records the resulting
-band in `manifest.json`'s own `sigma_band_multiplier`/
-`sigma_band_window`/`sigma_band` fields. A run that requested the band
-but only ever hit max_generations produces neither the artifact nor
-the manifest fields — an unconverged tail is never extended.
-
-Works under every engine_backend (`lineal`, `generational`,
-`generational-vector`, and `auto` resolving to either of the latter
-two), and under batches of any size — each replicate gets its own
-independent band, computed from its own converged tail. All three
-engines produce bit-identical bands for the same seed on the same
-machine: `lineal` and `generational` continue the run with the same
-per-generation code, and `generational-vector` continues its own table
-with the same draws in the same order. A replicate that an adaptive
-early stop discarded never gets a band, since its results
-are not kept at all.
-
-### sigma_band_window
-
-- **Type:** integer at least 2
-- **Default:** unset (the within-run sigma band is disabled)
-
-The extension's own trailing-window length, independent of
-the burn-in — the two describe different things (whether the
-run has settled, versus how much it still wobbles once settled), so
-there is no principled reason to share one number between them. See
-sigma_band_multiplier, above, for the full mechanism.
-
 ### expert
 
 - **Type:** mapping of Expert Setting names to values
@@ -1418,10 +1361,6 @@ existed.
 | engine_backend: generational-vector with either mutation_model, scalar or matrix `m`, either migrant_sampling | accepted |
 | max_concurrent_replicates less than 1 | rejected |
 | max_concurrent_replicates greater than n<sub>replicates</sub> | silently capped at n<sub>replicates</sub> |
-| sigma_band_multiplier and sigma_band_window not both given, or neither | rejected |
-| sigma_band_multiplier not `2.0` or `3.0` | rejected |
-| sigma_band_window less than 2 | rejected |
-| sigma_band_multiplier/sigma_band_window with any engine_backend | accepted |
 | one or two of the three equilibrium\_ keys given instead of all three | rejected |
 | any equilibrium\_ key given together with p<sub>0</sub> | rejected |
 | equilibrium_convergence_window less than 2 | rejected |

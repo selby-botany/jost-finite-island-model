@@ -31,8 +31,6 @@ SCANNED = (
 
 ALLOWED: dict[str, str] = {
     "AUTO_CONVERGENCE": "a sentinel for 'derive it', not a tunable value",
-    "_MINIMUM_SIGMA_BAND_WINDOW": "retired with the sigma band",
-    "_SIGMA_BAND_FIELD_COUNT": "retired with the sigma band",
 }
 """Module-level numeric constants allowed outside `fim/config/`, with why."""
 

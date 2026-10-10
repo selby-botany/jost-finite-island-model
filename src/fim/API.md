@@ -263,6 +263,7 @@ Return to the [source-tree orientation](../README.md) or the [developer guide](.
     * [set\_run\_graph\_columns](#fim.gui.app.Api.set_run_graph_columns)
     * [set\_scatter\_style](#fim.gui.app.Api.set_scatter_style)
     * [set\_trajectory\_display](#fim.gui.app.Api.set_trajectory_display)
+    * [set\_trajectory\_band\_width](#fim.gui.app.Api.set_trajectory_band_width)
     * [get\_default\_ploidy](#fim.gui.app.Api.get_default_ploidy)
     * [set\_default\_ploidy](#fim.gui.app.Api.set_default_ploidy)
     * [validate\_form](#fim.gui.app.Api.validate_form)
@@ -392,8 +393,6 @@ Return to the [source-tree orientation](../README.md) or the [developer guide](.
   * [loci\_from\_params](#fim.gui.config_form.loci_from_params)
   * [convergence\_statistic\_to\_payload](#fim.gui.config_form.convergence_statistic_to_payload)
   * [convergence\_statistic\_from\_params](#fim.gui.config_form.convergence_statistic_from_params)
-  * [sigma\_band\_to\_payload](#fim.gui.config_form.sigma_band_to_payload)
-  * [sigma\_band\_from\_params](#fim.gui.config_form.sigma_band_from_params)
   * [params\_to\_form\_values](#fim.gui.config_form.params_to_form_values)
   * [DEFAULT\_RUN\_SETTING\_FIELD\_NAMES](#fim.gui.config_form.DEFAULT_RUN_SETTING_FIELD_NAMES)
   * [RUN\_SETTING\_LABELS](#fim.gui.config_form.RUN_SETTING_LABELS)
@@ -416,6 +415,7 @@ Return to the [source-tree orientation](../README.md) or the [developer guide](.
   * [DEFAULT\_RUN\_GRAPHS](#fim.gui.preferences.DEFAULT_RUN_GRAPHS)
   * [SCATTER\_STYLES](#fim.gui.preferences.SCATTER_STYLES)
   * [TRAJECTORY\_DISPLAYS](#fim.gui.preferences.TRAJECTORY_DISPLAYS)
+  * [TRAJECTORY\_BAND\_WIDTHS](#fim.gui.preferences.TRAJECTORY_BAND_WIDTHS)
   * [GuiPreferences](#fim.gui.preferences.GuiPreferences)
     * [to\_dict](#fim.gui.preferences.GuiPreferences.to_dict)
     * [from\_dict](#fim.gui.preferences.GuiPreferences.from_dict)
@@ -3810,8 +3810,8 @@ How well a window's own mean is known, given its internal correlation.
   formula, but `standard_deviation / sqrt(effective_sample_size)`,
   which corrects for the window's autocorrelation.
 - `standard_deviation` - The window's own sample standard deviation
-  (Bessel-corrected), ignoring correlation — the quantity a sigma
-  band already reports (`fim.engine._sigma_band_summary`); kept
+  (Bessel-corrected), ignoring correlation — the spread the sigma
+  display shows (design 6.8); kept
   alongside `standard_error` so a caller never has to choose one
   over the other.
 - `effective_sample_size` - How many independent draws this window's
@@ -4403,18 +4403,6 @@ Fields:
         analyze an earlier generation) already has a handle to it,
         without needing to separately track down which store this
         particular run used.
-    sigma_band_trajectory: The within-run sigma band's own raw
-        per-generation values (`20260907-claude-sonnet-5-within-run-
-        sigma-band-backend-design.md` decision 4), one row per
-        extension generation — `{"generation": int, "<statistic
-        name>": float, ...}`, only the watched statistics that were
-        actually defined that generation present in a given row.
-        `None` whenever the sigma band was not requested, or was
-        requested but the run only ever hit the hard cap (`manifest.
-        sigma_band` is `None` under the identical two conditions).
-        A caller that persists this run's own files (`fim.cli.
-        _write_run_artifacts`) writes this as the `sigma_band_
-        trajectory.jsonl` sibling artifact when present.
     equilibrium_store: Where an equilibrium-split run streamed its
         ancestral phase (`fim.model.initial.
         EquilibriumSplitInitialCondition`): every generation of the
@@ -7439,6 +7427,31 @@ either way.
 - ``{"ok"` - True, "display": display}`, or `{"ok": False,
 - `"message"` - ...}`.
 
+<a id="fim.gui.app.Api.set_trajectory_band_width"></a>
+
+#### set\_trajectory\_band\_width
+
+```python
+@_log_bridge_call
+def set_trajectory_band_width(width: int) -> dict[str, Any]
+```
+
+Choose how wide the trajectory graph's bands are.
+
+Display only. One choice for every band: the sigma band of the "every
+generation" display (the spread of the statistic over the evidence
+window) and the standard-error band of the averaged displays.
+
+**Arguments**:
+
+- `width` - 1 or 2 (sigmas or standard errors either side of the mean).
+
+
+**Returns**:
+
+- ``{"ok"` - True, "width": width}`, or `{"ok": False, "message":
+  ...}`.
+
 <a id="fim.gui.app.Api.get_default_ploidy"></a>
 
 #### get\_default\_ploidy
@@ -9531,7 +9544,7 @@ reuse, not a second rendering path.
 
 - ``{"ok"` - True, "runId", "directoryName", "convergenceNote",
   "report", "panels", "statistics", "outputDirectory",
-  "trajectoryPath", "generationCount", "demeCount", "sigmaBand",
+  "trajectoryPath", "generationCount", "demeCount",
   "convergenceGenerations", "convergenceHistories",
   "equilibrium", "identityRecovery"}` on success —
   `trajectoryPath` echoes this call's own resolved
@@ -9542,12 +9555,7 @@ reuse, not a second rendering path.
   history`'s own result (`None`/`None` for a manifest
   predating `convergence.jsonl`), restoring the identical
   trajectory-vs-generation curve a live-just-finished run's
-  own payload already carries, rather than the sigma band
-  alone; `sigmaBand` is `_sigma_band_payload`'s
-  own result (sigma-band GUI design doc `20260910-claude-
-  sonnet-5-gui-sigma-band-design.md`, `selby/restricted`,
-  slice 4), `None` for a run that never requested one;
-  `equilibrium`/`identityRecovery`
+  own payload already carries; `equilibrium`/`identityRecovery`
   are `_equilibrium_reference_payload`'s/`_identity_recovery_
   reference_payload`'s own results (botanist GUI design doc
   §6.2's two predicted-trajectory overlays), computed fresh
@@ -10559,9 +10567,7 @@ One model-input screen field's config key, label, and value kind.
   "float_choice" is "choice" restricted to a fixed set of numbers rather than
   tokens (`confidence`) — `from_mapping` requires an actual
   `float`, not its string spelling. "bool" is a plain, always-present checkbox
-  (unlike the sigma-band toggle's own `sigma_band_enabled`,
-  which gates a *second*, conditionally-present field pair
-  and so is not a plain `FormField` at all) — its text is the
+  — its text is the
   literal `"true"`/`"false"` `collectFormValues`
   (`config-modals.js`) always writes for a checkbox field,
   coerced to a real Python `bool` here, matching a
@@ -11186,77 +11192,6 @@ def convergence_statistic_from_params(
 
 Render `params.convergence_statistic` back into the checkbox keys.
 
-<a id="fim.gui.config_form.sigma_band_to_payload"></a>
-
-#### sigma\_band\_to\_payload
-
-```python
-def sigma_band_to_payload(values: Mapping[str, str]) -> dict[str, object]
-```
-
-Build the `sigma_band_*` payload keys from the toggle's own checked state.
-
-**Arguments**:
-
-- `values` - The full form-values mapping; only `sigma_band_enabled`,
-  `sigma_band_multiplier`, and `sigma_band_window` are read.
-
-
-**Returns**:
-
-  An empty mapping when the toggle is unchecked — both real
-  fields simply absent from the payload, the identical "set
-  together or not at all" shape `SimulationParams` itself already
-  enforces for this exact pair, and the same by-omission
-  convention an optional field already uses. `{"sigma_band_
-- `multiplier"` - ..., "sigma_band_window": ...}`, parsed to their
-  declared types, when checked.
-
-
-**Raises**:
-
-- `ValueError` - If the toggle is checked and either field's text
-  does not parse as its declared type (`field_for_error`
-  locates each of the two individually, the identical
-  treatment the three equilibrium-split fields already get
-  for the same "conditionally present" reason). This only
-  coerces text into the right Python type — `SimulationParams.
-  __post_init__` still enforces the closed multiplier set
-  (`{2.0, 3.0}`) and the minimum window size (`>= 2`), the
-  same "GUI coerces, the model validates" division every
-  other field here already follows.
-
-<a id="fim.gui.config_form.sigma_band_from_params"></a>
-
-#### sigma\_band\_from\_params
-
-```python
-def sigma_band_from_params(params: SimulationParams) -> dict[str, str]
-```
-
-Render `params`'s own sigma-band fields into the toggle's form-value keys.
-
-**Arguments**:
-
-- `params` - A validated configuration.
-
-
-**Returns**:
-
-  `sigma_band_enabled`/`sigma_band_multiplier`/`sigma_band_window`.
-  `sigma_band_enabled` is `"true"` exactly when `params.sigma_
-  band_multiplier is not None` (`SimulationParams`'s own
-  all-or-none validation guarantees `sigma_band_window` agrees
-  whenever it does) — the real fields then render `params`'s own
-  values; otherwise both render this module's own suggested
-  starting values (`_DEFAULT_SIGMA_BAND_MULTIPLIER`/`_WINDOW`)
-  rather than an empty string, so the toggle's own revealed
-  fields already hold a sensible starting point the first time a
-  user checks it, mirroring `initial_conditions_from_params`'s
-  own `fixed_per_deme_choice` precedent (a field that never
-  round-trips a "the user's own last choice" value, so it always
-  renders one fixed default instead).
-
 <a id="fim.gui.config_form.params_to_form_values"></a>
 
 #### params\_to\_form\_values
@@ -11325,10 +11260,7 @@ docstring / `Api`'s own submission-time merge). `confidence`/
 fields` the same way. `jit`/`auto_vector_min_d`/`auto_vector_max_
 capacity` are new here — "expert-level settings" with no prior GUI
 representation at all (`BATCH_FIELDS`'s own comment on the three).
-The sigma-band pair (`sigma_band_enabled`/`sigma_band_multiplier`/
-`sigma_band_window`) stays Configure-only throughout, judged a
-scientific/per-run choice rather than an administrative default — never
-a member of this tuple. Neither is `track_expensive_statistics`: it is
+`track_expensive_statistics` is not a member either: it is
 derived from Settings' "Statistics shown", not saved as a run default
 (`Api._merge_default_run_settings`).
 
@@ -11804,12 +11736,11 @@ validation precedent `form_values` already established (a partial
 on load by merging it over the true starter values rather than trying
 to validate a subset in isolation — `config_form.starter_form_values`'s
 own `overrides` parameter), not a sixth pair of narrowly-typed scalar
-fields: the sigma-band pair was deliberately left out of this set
-(judged a scientific/per-run choice, not an administrative default), as
-was `track_expensive_statistics`, which follows `shown_statistics`
-instead (`Api._merge_default_run_settings`), and any future addition or removal from
-that set only ever changes `config_form.DEFAULT_RUN_SETTING_FIELD_
-NAMES`, never this store's own shape. `None` means "nothing saved yet"
+fields: `track_expensive_statistics` is left out of this set, which
+follows `shown_statistics` instead (`Api._merge_default_run_settings`), and
+any future addition or removal from that set only ever changes
+`config_form.DEFAULT_RUN_SETTING_FIELD_NAMES`, never this store's own
+shape. `None` means "nothing saved yet"
 — `Api.get_default_run_settings` falls back to the starter values for
 exactly this field set in that case, the identical "no saved value yet"
 fallback `significant_digits`/`dark_mode_override` already have their
@@ -11866,6 +11797,16 @@ the convergence window, or its cumulative mean from where averaging began
 (the run's own estimate as it accumulates), both means with a
 standard-error band (`run-view-completed.js`'s own `trailingMeanSeries`
 and `cumulativeMeanSeries`).
+
+<a id="fim.gui.preferences.TRAJECTORY_BAND_WIDTHS"></a>
+
+#### TRAJECTORY\_BAND\_WIDTHS
+
+How wide the trajectory graph's bands are, in sigmas or standard errors.
+
+One choice for every band: the sigma band of the "every generation" display
+(the spread of the statistic over the evidence window) and the standard-error
+band of the two averaged displays (design 6.8).
 
 <a id="fim.gui.preferences.GuiPreferences"></a>
 
@@ -11928,6 +11869,7 @@ One loaded (or default) snapshot of the GUI's own preferences.
   in (rows follow); 1 to `MAX_RUN_GRAPH_COLUMNS`.
 - `scatter_style` - One of `SCATTER_STYLES`.
 - `trajectory_display` - One of `TRAJECTORY_DISPLAYS`.
+- `trajectory_band_width` - One of `TRAJECTORY_BAND_WIDTHS`.
 - `shown_statistics` - The statistics shown (Settings, "Statistics
   shown"), as catalog keys in catalog order, or `None` for the
   catalog's own defaults. Every statistic is saved in each
@@ -12127,7 +12069,8 @@ def with_run_card_layout(
         run_graphs: tuple[str, ...] | None = None,
         run_graph_columns: int | None = None,
         scatter_style: str | None = None,
-        trajectory_display: str | None = None) -> GuiPreferences
+        trajectory_display: str | None = None,
+        trajectory_band_width: int | None = None) -> GuiPreferences
 ```
 
 Return a copy with any of the Run card's display choices replaced.
@@ -12748,7 +12691,7 @@ def run_artifact_targets(directory: Path) -> dict[str, Path]
 Return every documented scalar-run artifact path in one directory.
 
 Deliberately the same names `cli._run_artifact_targets` uses for a
-scalar run (it also names the optional sigma-band file) — same
+scalar run — same
 target filenames, same directory — a direct parallel, not a shared import, since
 `cli._run_artifact_targets` is a private module-level function of
 the CLI's own front end. `equilibrium_trajectory` exists only for
@@ -15612,25 +15555,6 @@ functions that actually use each one.
   outcome — see
   `fim.model.initial.EquilibriumSplitInitialCondition`'s own
   docstring for why.
-- `sigma_band_multiplier` - Sigma multiplier (`2.0` or `3.0` — a
-  closed set, not merely a suggestion) for the within-run
-  sigma band: once the main run converges, the engine
-  continues for `sigma_band_window` further generations and
-  reports each watched statistic as "mean plus or minus
-  (sigma_band_multiplier times sigma)" over that trailing
-  window (`20260907-claude-sonnet-5-within-run-sigma-band-
-  backend-design.md`). `None` (the default) disables the
-  extension entirely — a plain converged run costs nothing
-  extra. Set together with `sigma_band_window`, or not at
-  all; unlike `equilibrium_*` above, this is never mutually
-  exclusive with any other field — the sigma band measures
-  the *end* of a run, regardless of how generation 0 was
-  produced.
-- `sigma_band_window` - Trailing-window length (at least 2, the same
-  "a single point cannot establish spread" reasoning) for the
-  same extension — independent of the burn-in, since the two
-  describe different things (whether the run has settled, versus how
-  much it still wobbles once settled).
 - `ploidy` - Gene copies per individual: 1 (haploid, the default when a
   `SimulationParams` is built directly) through 4 (tetraploid).
   The dynamics run on `gene_copies` and never read it. It is
@@ -20496,22 +20420,6 @@ written before this field existed, or whenever the run used
 fields have no meaning outside `"equilibrium_split"` and are never
 populated for either of the other two.
 
-`sigma_band_multiplier`/`sigma_band_window`/`sigma_band` record the
-within-run sigma band's own configuration and result
-(`20260907-claude-sonnet-5-within-run-sigma-band-backend-design.md`,
-decision 4): once the main run converges, `fim.engine._run_one`
-continues for `sigma_band_window` further generations and reports
-each watched statistic as a mean/sigma/bounds summary over that
-trailing window. All three are `None` for a manifest written before
-this field existed, whenever the run did not request the extension
-at all, or whenever it was requested but the run only ever hit the
-hard cap, never genuinely converging (decision 3: an unconverged
-tail is never extended). `sigma_band` itself is one entry per
-watched statistic that had at least one defined value during the
-extension, each `{"mean", "sigma", "lower", "upper"}` — see
-`fim.engine._sigma_band_summary`'s own docstring for exactly how
-those four numbers are computed.
-
 `auto_derived`/`relaxation_time` record whether this run's own
 `convergence_burn_in`/`max_generations` were auto-derived from the
 model's own relaxation time rather than given explicitly
@@ -20959,9 +20867,8 @@ newline-terminated JSON, not just report.json specifically.
 
 `write_jsonl_rows`, below, is the same determinism guarantee applied to
 a *sequence* of small JSON objects, one per line, rather than one large
-object — `sigma_band_trajectory.jsonl`'s own per-generation rows
-(`20260907-claude-sonnet-5-within-run-sigma-band-backend-design.md`
-decision 4), and any future artifact shaped the same way, share this one
+object — `convergence.jsonl`'s own per-generation rows, and any future
+artifact shaped the same way, share this one
 writer rather than each hand-rolling its own line-by-line `json.dumps`
 loop.
 

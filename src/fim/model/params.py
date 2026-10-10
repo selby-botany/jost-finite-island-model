@@ -126,8 +126,6 @@ PARAMETER_DEFAULTS: Final[dict[str, object]] = {
     "equilibrium_convergence_window": None,
     "equilibrium_convergence_tolerance": None,
     "equilibrium_max_generations": None,
-    "sigma_band_multiplier": None,
-    "sigma_band_window": None,
     "ploidy": None,  # required: no default (see `_parse_ploidy`)
 }
 
@@ -173,8 +171,6 @@ _CONFIG_KEYS: Final = frozenset(
         "equilibrium_convergence_window",
         "equilibrium_convergence_tolerance",
         "equilibrium_max_generations",
-        "sigma_band_multiplier",
-        "sigma_band_window",
     }
 )
 
@@ -534,25 +530,6 @@ class SimulationParams:
             outcome — see
             `fim.model.initial.EquilibriumSplitInitialCondition`'s own
             docstring for why.
-        sigma_band_multiplier: Sigma multiplier (`2.0` or `3.0` — a
-            closed set, not merely a suggestion) for the within-run
-            sigma band: once the main run converges, the engine
-            continues for `sigma_band_window` further generations and
-            reports each watched statistic as "mean plus or minus
-            (sigma_band_multiplier times sigma)" over that trailing
-            window (`20260907-claude-sonnet-5-within-run-sigma-band-
-            backend-design.md`). `None` (the default) disables the
-            extension entirely — a plain converged run costs nothing
-            extra. Set together with `sigma_band_window`, or not at
-            all; unlike `equilibrium_*` above, this is never mutually
-            exclusive with any other field — the sigma band measures
-            the *end* of a run, regardless of how generation 0 was
-            produced.
-        sigma_band_window: Trailing-window length (at least 2, the same
-            "a single point cannot establish spread" reasoning) for the
-            same extension — independent of the burn-in, since the two
-            describe different things (whether the run has settled, versus how
-            much it still wobbles once settled).
         ploidy: Gene copies per individual: 1 (haploid, the default when a
             `SimulationParams` is built directly) through 4 (tetraploid).
             The dynamics run on `gene_copies` and never read it. It is
@@ -606,8 +583,6 @@ class SimulationParams:
     equilibrium_convergence_window: int | None = None
     equilibrium_convergence_tolerance: float | None = None
     equilibrium_max_generations: int | None = None
-    sigma_band_multiplier: float | None = None
-    sigma_band_window: int | None = None
     ploidy: int = 1
     read_only: bool = False
     expert: ExpertSettings = field(default_factory=ExpertSettings)
@@ -741,10 +716,6 @@ class SimulationParams:
             equilibrium_convergence_tolerance=self.equilibrium_convergence_tolerance,
             equilibrium_max_generations=self.equilibrium_max_generations,
             initial_frequencies=self.initial_frequencies,
-        )
-        _validate_sigma_band_config(
-            sigma_band_multiplier=self.sigma_band_multiplier,
-            sigma_band_window=self.sigma_band_window,
         )
 
         initial_frequencies = _normalize_initial_frequencies(
@@ -1084,17 +1055,6 @@ class SimulationParams:
                 self.equilibrium_convergence_tolerance
             )
             result["equilibrium_max_generations"] = self.equilibrium_max_generations
-        if self.sigma_band_multiplier is not None:
-            # Omitted rather than always written, for the identical
-            # reason `equilibrium_*`/`max_concurrent_replicates` are,
-            # just above: this field's own default is already `None`,
-            # so an absent key and an explicit `None` mean the same
-            # thing to `from_mapping`, and `__post_init__`'s own
-            # both-or-neither check (`_validate_sigma_band_config`)
-            # guarantees `sigma_band_window` is set here too whenever
-            # this one is.
-            result["sigma_band_multiplier"] = self.sigma_band_multiplier
-            result["sigma_band_window"] = self.sigma_band_window
         # Always written, as a word: `N` above counts individuals, so the
         # ploidy is part of what it means.
         result["ploidy"] = PLOIDY_WORDS[self.ploidy]
@@ -1346,20 +1306,6 @@ class SimulationParams:
                 config.get(
                     "equilibrium_max_generations",
                     PARAMETER_DEFAULTS["equilibrium_max_generations"],
-                ),
-            ),
-            sigma_band_multiplier=_parse_optional_float(
-                "sigma_band_multiplier",
-                config.get(
-                    "sigma_band_multiplier",
-                    PARAMETER_DEFAULTS["sigma_band_multiplier"],
-                ),
-            ),
-            sigma_band_window=_parse_optional_int(
-                "sigma_band_window",
-                config.get(
-                    "sigma_band_window",
-                    PARAMETER_DEFAULTS["sigma_band_window"],
                 ),
             ),
             ploidy=ploidy,
@@ -2398,74 +2344,6 @@ def _validate_equilibrium_split_config(
             "equilibrium_max_generations (the ancestral phase always runs at "
             "least equilibrium_convergence_window generations, so it could "
             "never finish within the cap)"
-        )
-
-
-# The window minimum the within-run sigma band's own trailing window
-# must meet — the identical "a single point cannot establish stability
-# or spread" reasoning, not a separately chosen number.
-_MINIMUM_SIGMA_BAND_WINDOW: Final = 2
-
-# The only two sigma multipliers the within-run sigma band accepts
-# (`20260907-claude-sonnet-5-within-run-sigma-band-backend-design.md`
-# decision 1) — a closed set enforced here, not merely suggested by the
-# GUI, the identical shape `confidence`'s own closed set
-# (`__post_init__`, above) already uses.
-_SIGMA_BAND_MULTIPLIERS: Final = frozenset({2.0, 3.0})
-
-# Both `sigma_band_multiplier` and `sigma_band_window` must be set
-# together, or neither — the "presence selects the strategy" pattern
-# `_validate_sigma_band_config` (below) checks by counting how many of
-# the two are set at once.
-_SIGMA_BAND_FIELD_COUNT: Final = 2
-
-
-def _validate_sigma_band_config(
-    *,
-    sigma_band_multiplier: float | None,
-    sigma_band_window: int | None,
-) -> None:
-    """Reject a partial or out-of-range within-run sigma-band configuration.
-
-    The two fields are triggered by their own joint presence, the
-    identical "presence selects the strategy" pattern
-    `_validate_equilibrium_split_config` (above) already established for
-    the equilibrium-split fields — so a caller who sets only one of the
-    two has made a mistake this rejects directly. Unlike the equilibrium
-    fields, this is never checked against `initial_frequencies` (or any
-    other field): the sigma band measures the *end* of a run, orthogonal
-    to how generation 0 was produced
-    (`20260907-claude-sonnet-5-within-run-sigma-band-backend-design.md`
-    decision 1).
-
-    Args:
-        sigma_band_multiplier: See `SimulationParams`'s own docstring.
-        sigma_band_window: See `SimulationParams`'s own docstring.
-
-    Raises:
-        ValueError: If exactly one of the two fields is set, the
-            multiplier is set but not one of the two accepted values, or
-            the window is set but below its own minimum.
-    """
-    set_count = sum(
-        value is not None for value in (sigma_band_multiplier, sigma_band_window)
-    )
-    if set_count == 0:
-        return
-    if set_count != _SIGMA_BAND_FIELD_COUNT:
-        raise ValueError(
-            "sigma_band_multiplier and sigma_band_window must be set "
-            "together, or not at all"
-        )
-    if sigma_band_multiplier not in _SIGMA_BAND_MULTIPLIERS:
-        raise ValueError("sigma_band_multiplier must be 2.0 or 3.0")
-    if sigma_band_window is not None:
-        # Always true here (`set_count == _SIGMA_BAND_FIELD_COUNT` above
-        # already guarantees it) — narrowed explicitly anyway, since
-        # mypy cannot infer non-`None`-ness from a separate variable's
-        # own earlier count check.
-        _require_integer(
-            "sigma_band_window", sigma_band_window, minimum=_MINIMUM_SIGMA_BAND_WINDOW
         )
 
 

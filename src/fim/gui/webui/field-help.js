@@ -147,15 +147,6 @@ const FIELD_HELP = {
         "app sets it to a comfortable multiple of the time this " +
         "population needs to settle. Reaching it without converging is " +
         "still reported as a valid, non-converged outcome.",
-    sigma_band_group: "Once converged, continue for a further window and " +
-        "report each watched statistic's own mean ± (multiplier × sigma) " +
-        "over that trailing window — a within-run stability check, " +
-        "distinct from the cross-replicate confidence interval below.",
-    sigma_band_multiplier: "How many standard deviations the shaded band " +
-        "extends on either side of the trailing window's own mean.",
-    sigma_band_window: "How many further generations to run, after " +
-        "convergence, before computing the band — independent of the " +
-        "convergence window above.",
     // A native `<select>` has nowhere to hang a per-option tooltip, so
     // all four options' one-line descriptions live in this one field
     // help string -- the same "one shared help string per field" shape

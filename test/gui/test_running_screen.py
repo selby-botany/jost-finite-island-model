@@ -469,7 +469,7 @@ def test_trajectory_row_toggle_hides_and_restores_a_curves_own_pixels(
     this proves the *canvas* changes (`run-view-completed.js`'s own
     `hiddenTrajectoryStatistics`), not just
     that a CSS class toggled — the same "count non-blank pixels" idiom
-    `test_open_run_screen.py`'s own sigma-band test already established.
+    `test_open_run_screen.py`'s own pixel test already established.
     Clicking "G_ST" must also hide its own "G_ST (predicted
     equilibrium)" companion (this feature's own scope), while every
     other statistic's own row (including the identity-recovery curve,
@@ -752,11 +752,11 @@ def test_completed_row_tooltip_shows_the_trailing_window_mean(
 ) -> None:
     """A statistic row's own hover title leads with its window mean and SE.
 
-    Needs a window at least `MINIMUM_NOISE_CHECK_WINDOW` long -- shorter
-    than that, `report_for_state` has nothing to report
-    (`fim.convergence.window_statistics`'s own docstring) -- so this uses
-    its own Settings override rather than `fast_scalar_run_settings`
-    (window 4).
+    Needs an evidence window of at least `MINIMUM_WINDOW_VALUES` values --
+    shorter than that, `report_for_state` has nothing to report
+    (`fim.convergence.window_statistics`'s own docstring), and the run's
+    own integrated autocorrelation time, which the standard error needs, is
+    unknown -- so this uses its own Settings override (burn-in 1).
     """
     save_preferences(
         _isolate_gui_preferences,
@@ -766,6 +766,7 @@ def test_completed_row_tooltip_shows_the_trailing_window_mean(
             default_run_settings={
                 "n_replicates": "1",
                 "max_generations": "40",
+                "convergence_burn_in": "1",
                 "precision": "0.5",
             },
         ),

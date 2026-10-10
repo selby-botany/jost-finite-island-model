@@ -53,30 +53,17 @@ const P0_CELL_SUM_TOLERANCE = 1e-6;
 
 /* ---- Other values mirrored from Python ------------------------------- */
 
-// The sigma-band window filled in when the band is switched on with the
-// field empty (`fim.gui.config_form._DEFAULT_SIGMA_BAND_WINDOW`, which
-// is text because it goes straight into a form field).
-const DEFAULT_SIGMA_BAND_WINDOW = "100";
-
 // Prefix of a user-saved preset's id, which distinguishes it from a
 // built-in one (`fim.gui.app._USER_PRESET_ID_PREFIX`).
 const USER_PRESET_ID_PREFIX = "user:";
 
-// The trailing-window mean estimator (`trailingWindowEstimate`) repeats
-// `fim.convergence.window_statistics` exactly, so the page's mean and
-// standard error match the monitor's. Fewer points than this give no
-// estimate (`MINIMUM_NOISE_CHECK_WINDOW`); a mean is noise-adequate once
-// its standard error is at most this fraction of the tolerance
-// (`NOISE_TOLERANCE_FRACTION`); and the lag-1 correlation is clamped
-// just below 1 so a window that has not decorrelated at all gets a very
-// large, finite standard error (`_MAXIMUM_LAG1_CORRELATION`).
+// The trailing-window mean estimator (`trailingWindowEstimate`): fewer points
+// than this give no estimate (`MINIMUM_NOISE_CHECK_WINDOW`), and a mean is
+// noise-adequate once its standard error is at most this fraction of the
+// precision (about `1 / z` at the usual 95% confidence,
+// `NOISE_TOLERANCE_FRACTION`).
 const MINIMUM_WINDOW_ESTIMATE_POINTS = 8;
 const NOISE_TOLERANCE_FRACTION = 0.5;
-const MAXIMUM_LAG1_CORRELATION = 1 - 1e-9;
-// The floor on the integrated autocorrelation time, so a perfectly
-// anticorrelated window (lag-1 correlation -1) does not divide by zero
-// (the `1e-9` in `window_statistics`'s own `tau_int`).
-const MINIMUM_INTEGRATED_AUTOCORRELATION_TIME = 1e-9;
 
 // How the trajectory graph can draw each statistic, and the one a fresh
 // install uses (`fim.gui.preferences.TRAJECTORY_DISPLAYS` and
