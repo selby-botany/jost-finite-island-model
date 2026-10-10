@@ -9,6 +9,7 @@ Every test module, fixture, and test function documented here in full; `doc/fim-
 - [`test/`](#group-test)
   - [`conftest`](#test.conftest)
   - [`test_build_ci_parallel`](#test.test_build_ci_parallel)
+  - [`test_ci_workflows`](#test.test_ci_workflows)
   - [`test_constants`](#test.test_constants)
   - [`test_convergence_docs`](#test.test_convergence_docs)
   - [`test_doc_examples`](#test.test_doc_examples)
@@ -38,6 +39,7 @@ Every test module, fixture, and test function documented here in full; `doc/fim-
   - [`test_export_command`](#cli.test_export_command)
   - [`test_trajectory_handles`](#cli.test_trajectory_handles)
 - [`test/convergence/`](#group-convergence)
+  - [`test_batch_window`](#convergence.test_batch_window)
   - [`test_burn_in_monitor`](#convergence.test_burn_in_monitor)
   - [`test_criteria_validation`](#convergence.test_criteria_validation)
   - [`test_defaults`](#convergence.test_defaults)
@@ -711,6 +713,30 @@ def test_ci_build_runs_non_gui_parallel_and_gui_serially() -> None
 ```
 
 `--ci` keeps stateful tests out of xdist while parallelizing the rest.
+
+<a id="test.test_ci_workflows"></a>
+
+# test.test\_ci\_workflows
+
+Static checks of the CI workflow files.
+
+A job that installs the project on an Ubuntu runner builds PyGObject (through
+`pywebview[gtk]`), which needs the GTK build packages first. The nightly
+`slow-tests` job once lacked them and failed in `pip install` for days before
+anyone noticed, so this invariant is checked on the workflow text, with no
+network and no runner.
+
+<a id="test.test_ci_workflows.test_every_ubuntu_job_that_installs_the_project_installs_the_gtk_build_packages"></a>
+
+#### test\_every\_ubuntu\_job\_that\_installs\_the\_project\_installs\_the\_gtk\_build\_packages
+
+```python
+@pytest.mark.parametrize("workflow", ["ci.yml", "beta.yml"])
+def test_every_ubuntu_job_that_installs_the_project_installs_the_gtk_build_packages(
+        workflow: str) -> None
+```
+
+`pip install -e .[...]` on Ubuntu is preceded by the PyGObject build packages.
 
 <a id="test.test_constants"></a>
 
@@ -4954,6 +4980,151 @@ engine-level tests in `test/persistence/test_jsonl_lifecycle.py` cover.
 
 ## `test/convergence/`
 
+<a id="convergence.test_batch_window"></a>
+
+# convergence.test\_batch\_window
+
+Tests of the matched replicate averaging window (design 9.1).
+
+Every expected number is worked out in the test from the formulas of the
+module, never from a run.
+
+<a id="convergence.test_batch_window.test_the_target_replicate_count_is_a_multiple_of_the_width_above_the_minimum"></a>
+
+#### test\_the\_target\_replicate\_count\_is\_a\_multiple\_of\_the\_width\_above\_the\_minimum
+
+```python
+def test_the_target_replicate_count_is_a_multiple_of_the_width_above_the_minimum(
+) -> (None)
+```
+
+`max(minimum, ceil(multiple * width))`.
+
+<a id="convergence.test_batch_window.test_the_lane_standard_error_is_the_interval_target_per_replicate"></a>
+
+#### test\_the\_lane\_standard\_error\_is\_the\_interval\_target\_per\_replicate
+
+```python
+def test_the_lane_standard_error_is_the_interval_target_per_replicate(
+) -> None
+```
+
+`SE = precision * sqrt(R) / t(R - 1)`; zero precision needs zero error.
+
+<a id="convergence.test_batch_window.test_the_matched_multiple_is_tau_int_times_the_variance_ratio"></a>
+
+#### test\_the\_matched\_multiple\_is\_tau\_int\_times\_the\_variance\_ratio
+
+```python
+def test_the_matched_multiple_is_tau_int_times_the_variance_ratio() -> None
+```
+
+`A = tau_int * (sigma / SE)^2`, in relaxation times, pooled over the wave.
+
+<a id="convergence.test_batch_window.test_the_slowest_statistic_decides_and_the_result_is_clamped"></a>
+
+#### test\_the\_slowest\_statistic\_decides\_and\_the\_result\_is\_clamped
+
+```python
+def test_the_slowest_statistic_decides_and_the_result_is_clamped() -> None
+```
+
+The largest window among the watched statistics, held to the clamp.
+
+<a id="convergence.test_batch_window.test_zero_error_asks_for_the_longest_window_and_exact_statistics_the_shortest"></a>
+
+#### test\_zero\_error\_asks\_for\_the\_longest\_window\_and\_exact\_statistics\_the\_shortest
+
+```python
+def test_zero_error_asks_for_the_longest_window_and_exact_statistics_the_shortest(
+) -> (None)
+```
+
+No precision is the maximum; a flat statistic needs only the minimum.
+
+<a id="convergence.test_batch_window.test_the_first_wave_gets_the_guess_and_later_replicates_wait_for_the_match"></a>
+
+#### test\_the\_first\_wave\_gets\_the\_guess\_and\_later\_replicates\_wait\_for\_the\_match
+
+```python
+def test_the_first_wave_gets_the_guess_and_later_replicates_wait_for_the_match(
+) -> (None)
+```
+
+Indices below the wave width get `a_0 * tau`; the rest, `None` until measured.
+
+<a id="convergence.test_batch_window.test_the_match_does_not_depend_on_the_order_the_wave_is_recorded_in"></a>
+
+#### test\_the\_match\_does\_not\_depend\_on\_the\_order\_the\_wave\_is\_recorded\_in
+
+```python
+def test_the_match_does_not_depend_on_the_order_the_wave_is_recorded_in(
+) -> None
+```
+
+Replicates finish in any order; the matched window is the same.
+
+<a id="convergence.test_batch_window.test_a_fixed_window_is_used_for_everyone_and_nothing_is_measured"></a>
+
+#### test\_a\_fixed\_window\_is\_used\_for\_everyone\_and\_nothing\_is\_measured
+
+```python
+def test_a_fixed_window_is_used_for_everyone_and_nothing_is_measured() -> None
+```
+
+The user's window is never matched, guessed, or clamped.
+
+<a id="convergence.test_batch_window.test_the_window_limit_clamps_the_guess_and_the_match"></a>
+
+#### test\_the\_window\_limit\_clamps\_the\_guess\_and\_the\_match
+
+```python
+def test_the_window_limit_clamps_the_guess_and_the_match() -> None
+```
+
+A guessed or matched window never runs past the generation cap.
+
+<a id="convergence.test_batch_window.test_the_earliest_window_is_the_minimum_multiple"></a>
+
+#### test\_the\_earliest\_window\_is\_the\_minimum\_multiple
+
+```python
+def test_the_earliest_window_is_the_minimum_multiple() -> None
+```
+
+A waiting replicate may average this long without overshooting.
+
+<a id="convergence.test_batch_window.test_the_planner_rejects_out_of_range_settings"></a>
+
+#### test\_the\_planner\_rejects\_out\_of\_range\_settings
+
+```python
+@pytest.mark.parametrize(
+    ("changes", "message"),
+    [
+        ({
+            "first_wave": 0
+        }, "first_wave"),
+        ({
+            "relaxation_time": 0.0
+        }, "relaxation_time"),
+        ({
+            "fixed_window": 0
+        }, "fixed_window"),
+        ({
+            "window_limit": 0
+        }, "window_limit"),
+        ({
+            "replicates": 1
+        }, "at least 2"),
+    ],
+)
+def test_the_planner_rejects_out_of_range_settings(changes: dict[str, object],
+                                                   message: str) -> None
+```
+
+Out-of-range counts are refused by name.
+
 <a id="convergence.test_burn_in_monitor"></a>
 
 # convergence.test\_burn\_in\_monitor
@@ -5289,6 +5460,59 @@ def test_a_fractional_burn_in_reports_the_window_start_as_its_burn_in(
 ```
 
 With no relaxation time the burn-in is wherever the window started.
+
+<a id="convergence.test_burn_in_monitor.test_a_window_mode_monitor_stops_exactly_when_its_window_is_averaged"></a>
+
+#### test\_a\_window\_mode\_monitor\_stops\_exactly\_when\_its\_window\_is\_averaged
+
+```python
+def test_a_window_mode_monitor_stops_exactly_when_its_window_is_averaged(
+) -> None
+```
+
+Burn-in 10 and a window of 25: stop at generation 35, with no checks.
+
+<a id="convergence.test_burn_in_monitor.test_a_window_mode_monitor_waits_for_a_window_it_does_not_have_yet"></a>
+
+#### test\_a\_window\_mode\_monitor\_waits\_for\_a\_window\_it\_does\_not\_have\_yet
+
+```python
+def test_a_window_mode_monitor_waits_for_a_window_it_does_not_have_yet(
+) -> None
+```
+
+Awaiting a window, the monitor never stops; the window then ends it.
+
+<a id="convergence.test_burn_in_monitor.test_a_waiting_monitor_stops_at_once_when_the_window_ends_where_it_paused"></a>
+
+#### test\_a\_waiting\_monitor\_stops\_at\_once\_when\_the\_window\_ends\_where\_it\_paused
+
+```python
+def test_a_waiting_monitor_stops_at_once_when_the_window_ends_where_it_paused(
+) -> None
+```
+
+A replicate paused at burn-in + 40 and given a window of 40 is done.
+
+<a id="convergence.test_burn_in_monitor.test_a_window_mode_monitor_that_reaches_the_cap_first_is_capped"></a>
+
+#### test\_a\_window\_mode\_monitor\_that\_reaches\_the\_cap\_first\_is\_capped
+
+```python
+def test_a_window_mode_monitor_that_reaches_the_cap_first_is_capped() -> None
+```
+
+A window longer than the room under the cap ends as a capped run.
+
+<a id="convergence.test_burn_in_monitor.test_window_mode_needs_a_burn_in_and_a_positive_window"></a>
+
+#### test\_window\_mode\_needs\_a\_burn\_in\_and\_a\_positive\_window
+
+```python
+def test_window_mode_needs_a_burn_in_and_a_positive_window() -> None
+```
+
+The fractional burn-in has no fixed start to average from.
 
 <a id="convergence.test_criteria_validation"></a>
 
@@ -6401,10 +6625,10 @@ still-active lane — stalling a live batch's visible progress. The
 deferred post-pass cannot: every extension must happen after the
 final tick.
 
-The configuration is deliberately staggered (one replicate runs far
-longer than the other three), so inline and deferred would genuinely
-differ here — with every lane converging on the same generation the
-two orderings would be indistinguishable and this test would prove
+The configuration is deliberately staggered (two lanes at a time, so the
+last two start only when the first two finish), so inline and deferred
+would genuinely differ here — with every lane stopping on the same tick
+the two orderings would be indistinguishable and this test would prove
 nothing.
 
 <a id="engine.test_engine.test_vectorized_sigma_band_caches_peak_in_the_post_pass_then_release"></a>
@@ -6453,7 +6677,11 @@ def test_replicates_are_independently_reproducible(
         tiny_params: SimulationParams) -> None
 ```
 
-Batching derives stable per-replicate seeds without changing scalar runs.
+Each replicate is the single run its own parameters describe.
+
+A replicate of a batch is an independent run with seed `seed + index`
+that averages for the window the batch assigned it; its recorded
+parameters (`n_replicates` one, the window explicit) reproduce it exactly.
 
 <a id="engine.test_engine.test_public_signature_mismatches_are_reported"></a>
 
@@ -6693,12 +6921,13 @@ finish -- structural invariants below hold regardless of exactly
 does not depend on that stochastic detail beyond the fixed seed
 already making it reproducible.
 
-Not built from `tiny_params`: its own tight, fast-converging
-defaults have every replicate stop at the identical generation
-(confirmed live -- the whole reason this test needs staggered
-stops), so this test picks its own `seed`/`precision`/
-`max_generations` specifically to produce real spread (`[19, 39, 39,
-79, 159]`, confirmed live for this exact configuration) instead.
+Not built from `tiny_params`: replicates of a batch average for an
+assigned window, so they stop together unless the windows differ. This
+test uses a first wave of two replicates (the Expert Setting
+`batch_width`), which average for the first-wave guess, while the other
+three average for the window matched to them, so the stops are staggered
+(`[120, 120, 120, 300, 300]`, confirmed live for this exact
+configuration).
 
 <a id="engine.test_engine.test_pooled_convergence_histories_requires_at_least_two_results"></a>
 
@@ -7900,10 +8129,11 @@ def test_generational_adaptive_batch_matches_lineal_under_real_timing(
 
 With real convergence times, `generational` keeps lineal's replicates.
 
-No artificial delay: replicate 2 really does converge later than
-replicates after it (asserted below from a fixed-count batch of the
-same seeds), so this is the worked example's own situation in
-miniature, through the public `fim()` entry point.
+No artificial delay: the first wave of two replicates really does run
+longer than the replicates after it, which average for the shorter
+matched window (asserted below from a fixed-count batch of the same
+seeds), so this is the worked example's own situation in miniature,
+through the public `fim()` entry point.
 
 <a id="engine.test_engine.test_vector_adaptive_batch_keeps_the_replicate_order_prefix"></a>
 
@@ -8903,6 +9133,99 @@ def test_a_short_run_reports_no_geweke_z(
 ```
 
 A window too short for two segments has no start-against-end diagnostic.
+
+<a id="engine.test_engine.test_a_batch_matches_each_replicates_window_to_the_first_wave"></a>
+
+#### test\_a\_batch\_matches\_each\_replicates\_window\_to\_the\_first\_wave
+
+```python
+def test_a_batch_matches_each_replicates_window_to_the_first_wave() -> None
+```
+
+The first wave averages for the guess; the rest for the matched window.
+
+<a id="engine.test_engine.test_every_backend_gives_the_same_matched_batch"></a>
+
+#### test\_every\_backend\_gives\_the\_same\_matched\_batch
+
+```python
+def test_every_backend_gives_the_same_matched_batch() -> None
+```
+
+Windows come from the configuration, so no backend can change them.
+
+<a id="engine.test_engine.test_a_limit_on_concurrent_replicates_is_the_first_wave_too"></a>
+
+#### test\_a\_limit\_on\_concurrent\_replicates\_is\_the\_first\_wave\_too
+
+```python
+def test_a_limit_on_concurrent_replicates_is_the_first_wave_too() -> None
+```
+
+`max_concurrent_replicates` sets the wave; results match the lineal batch.
+
+<a id="engine.test_engine.test_the_parallel_worker_path_matches_the_sequential_batch"></a>
+
+#### test\_the\_parallel\_worker\_path\_matches\_the\_sequential\_batch
+
+```python
+def test_the_parallel_worker_path_matches_the_sequential_batch() -> None
+```
+
+Worker processes get the same windows, in waves, as the sequential loop.
+
+<a id="engine.test_engine.test_a_fixed_window_is_the_same_for_every_replicate_and_for_a_single_run"></a>
+
+#### test\_a\_fixed\_window\_is\_the\_same\_for\_every\_replicate\_and\_for\_a\_single\_run
+
+```python
+def test_a_fixed_window_is_the_same_for_every_replicate_and_for_a_single_run(
+        tiny_params: SimulationParams) -> None
+```
+
+An explicit window is a fixed-window run, alone or in a batch.
+
+<a id="engine.test_engine.test_a_batch_summary_is_the_mean_of_the_replicates_window_means"></a>
+
+#### test\_a\_batch\_summary\_is\_the\_mean\_of\_the\_replicates\_window\_means
+
+```python
+def test_a_batch_summary_is_the_mean_of_the_replicates_window_means() -> None
+```
+
+Each replicate contributes what it measured over its window.
+
+<a id="engine.test_engine.test_a_value_of_means_batch_pools_the_identities_before_the_statistic"></a>
+
+#### test\_a\_value\_of\_means\_batch\_pools\_the\_identities\_before\_the\_statistic
+
+```python
+def test_a_value_of_means_batch_pools_the_identities_before_the_statistic(
+) -> None
+```
+
+Form two for a batch: `f` of the pooled `H_S`/`H_T`, delta-method interval.
+
+<a id="engine.test_engine.test_planned_replicates_runs_every_replicate_without_an_early_stop"></a>
+
+#### test\_planned\_replicates\_runs\_every\_replicate\_without\_an\_early\_stop
+
+```python
+def test_planned_replicates_runs_every_replicate_without_an_early_stop(
+) -> None
+```
+
+`planned_replicates` ignores `stop_batch_early` and keeps all replicates.
+
+<a id="engine.test_engine.test_a_replicate_with_no_burn_in_keeps_the_within_run_rule"></a>
+
+#### test\_a\_replicate\_with\_no\_burn\_in\_keeps\_the\_within\_run\_rule
+
+```python
+def test_a_replicate_with_no_burn_in_keeps_the_within_run_rule() -> None
+```
+
+With no relaxation time the fractional burn-in leaves no window to match.
 
 <a id="engine.test_frame_identity"></a>
 
@@ -27504,6 +27827,28 @@ A run that changes an Expert Setting is a different run.
             "estimate_auto_fraction": 1.0
         }, "below 1"),
         ({
+            "batch_width": 0
+        }, "at least 1"),
+        ({
+            "batch_width": 2.5
+        }, "whole number"),
+        ({
+            "replicate_wave_multiple": 0
+        }, "greater than 0"),
+        ({
+            "averaging_multiple_minimum": 0
+        }, "greater than 0"),
+        (
+            {
+                "averaging_multiple_minimum": 10,
+                "averaging_multiple_maximum": 5
+            },
+            "averaging_multiple_maximum",
+        ),
+        ({
+            "first_wave_averaging_multiple": -1
+        }, "greater than 0"),
+        ({
             "check_growth": "fast"
         }, "check_growth"),
         ("everything", "mapping"),
@@ -27546,6 +27891,72 @@ def test_convergence_estimate_rejects_an_unknown_form_and_changes_the_run_id(
 ```
 
 Only the three documented words are accepted, and the choice is identity.
+
+<a id="model.test_params.test_batch_settings_default_to_the_matched_interval_method_and_round_trip"></a>
+
+#### test\_batch\_settings\_default\_to\_the\_matched\_interval\_method\_and\_round\_trip
+
+```python
+def test_batch_settings_default_to_the_matched_interval_method_and_round_trip(
+) -> None
+```
+
+`auto` window and `interval` method by default; both survive `to_dict`.
+
+<a id="model.test_params.test_planned_replicates_switches_the_early_stop_off"></a>
+
+#### test\_planned\_replicates\_switches\_the\_early\_stop\_off
+
+```python
+def test_planned_replicates_switches_the_early_stop_off() -> None
+```
+
+The planned method always runs every replicate.
+
+<a id="model.test_params.test_invalid_batch_settings_are_refused"></a>
+
+#### test\_invalid\_batch\_settings\_are\_refused
+
+```python
+@pytest.mark.parametrize(
+    ("changes", "message"),
+    [
+        ({
+            "precision_method": "sometimes"
+        }, "precision_method must be"),
+        (
+            {
+                "precision_method": "planned_replicates",
+                "n_replicates": 1
+            },
+            "needs n_replicates of at least 2",
+        ),
+        ({
+            "replicate_averaging_window": 0
+        }, "positive integer or 'auto'"),
+        ({
+            "replicate_averaging_window": -5
+        }, "positive integer or 'auto'"),
+        ({
+            "replicate_averaging_window": "long"
+        }, "replicate_averaging_window"),
+    ],
+)
+def test_invalid_batch_settings_are_refused(changes: dict[str, object],
+                                            message: str) -> None
+```
+
+Unknown methods, a one-replicate plan and bad windows are rejected.
+
+<a id="model.test_params.test_a_fixed_window_needs_a_burn_in"></a>
+
+#### test\_a\_fixed\_window\_needs\_a\_burn\_in
+
+```python
+def test_a_fixed_window_needs_a_burn_in() -> None
+```
+
+With no relaxation time and no explicit burn-in, there is nothing to follow.
 
 <a id="model.test_run_identity"></a>
 

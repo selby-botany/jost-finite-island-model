@@ -27,6 +27,11 @@ Return to the [source-tree orientation](../README.md) or the [developer guide](.
   * [GEWEKE\_FIRST\_FRACTION](#fim.config.convergence.GEWEKE_FIRST_FRACTION)
   * [GEWEKE\_LAST\_FRACTION](#fim.config.convergence.GEWEKE_LAST_FRACTION)
   * [START\_DRIFT\_ALERT\_Z](#fim.config.convergence.START_DRIFT_ALERT_Z)
+  * [REPLICATE\_WAVE\_MULTIPLE](#fim.config.convergence.REPLICATE_WAVE_MULTIPLE)
+  * [BATCH\_WIDTH](#fim.config.convergence.BATCH_WIDTH)
+  * [AVERAGING\_MULTIPLE\_MINIMUM](#fim.config.convergence.AVERAGING_MULTIPLE_MINIMUM)
+  * [AVERAGING\_MULTIPLE\_MAXIMUM](#fim.config.convergence.AVERAGING_MULTIPLE_MAXIMUM)
+  * [FIRST\_WAVE\_AVERAGING\_MULTIPLE](#fim.config.convergence.FIRST_WAVE_AVERAGING_MULTIPLE)
 * [fim.config.defaults](#fim.config.defaults)
   * [DEFAULT\_LOCUS\_LENGTH](#fim.config.defaults.DEFAULT_LOCUS_LENGTH)
   * [DEFAULT\_AUTO\_VECTOR\_MIN\_D](#fim.config.defaults.DEFAULT_AUTO_VECTOR_MIN_D)
@@ -63,6 +68,18 @@ Return to the [source-tree orientation](../README.md) or the [developer guide](.
   * [ESTIMATE\_AUTO\_DENOMINATOR](#fim.config.statistics.ESTIMATE_AUTO_DENOMINATOR)
   * [ESTIMATE\_AUTO\_FRACTION](#fim.config.statistics.ESTIMATE_AUTO_FRACTION)
 * [fim.convergence](#fim.convergence)
+* [fim.convergence.batch\_window](#fim.convergence.batch_window)
+  * [WindowNoise](#fim.convergence.batch_window.WindowNoise)
+  * [target\_replicate\_count](#fim.convergence.batch_window.target_replicate_count)
+  * [lane\_standard\_error](#fim.convergence.batch_window.lane_standard_error)
+  * [matched\_averaging\_multiple](#fim.convergence.batch_window.matched_averaging_multiple)
+  * [BatchWindowPlanner](#fim.convergence.batch_window.BatchWindowPlanner)
+    * [\_\_init\_\_](#fim.convergence.batch_window.BatchWindowPlanner.__init__)
+    * [first\_wave](#fim.convergence.batch_window.BatchWindowPlanner.first_wave)
+    * [matched\_window](#fim.convergence.batch_window.BatchWindowPlanner.matched_window)
+    * [earliest\_window](#fim.convergence.batch_window.BatchWindowPlanner.earliest_window)
+    * [window\_for](#fim.convergence.batch_window.BatchWindowPlanner.window_for)
+    * [record](#fim.convergence.batch_window.BatchWindowPlanner.record)
 * [fim.convergence.criteria](#fim.convergence.criteria)
   * [ConvergenceCriterion](#fim.convergence.criteria.ConvergenceCriterion)
     * [is\_stable](#fim.convergence.criteria.ConvergenceCriterion.is_stable)
@@ -95,6 +112,9 @@ Return to the [source-tree orientation](../README.md) or the [developer guide](.
     * [reason](#fim.convergence.monitor.BurnInMonitor.reason)
     * [should\_stop](#fim.convergence.monitor.BurnInMonitor.should_stop)
     * [record](#fim.convergence.monitor.BurnInMonitor.record)
+    * [awaiting\_window](#fim.convergence.monitor.BurnInMonitor.awaiting_window)
+    * [averaging\_window](#fim.convergence.monitor.BurnInMonitor.averaging_window)
+    * [set\_averaging\_window](#fim.convergence.monitor.BurnInMonitor.set_averaging_window)
     * [stable\_statistics](#fim.convergence.monitor.BurnInMonitor.stable_statistics)
     * [target\_standard\_error](#fim.convergence.monitor.BurnInMonitor.target_standard_error)
     * [minimum\_effective\_sample\_size](#fim.convergence.monitor.BurnInMonitor.minimum_effective_sample_size)
@@ -1447,6 +1467,68 @@ rate, so it only labels the result (design 6.5).
 
 Kind: policy.
 
+<a id="fim.config.convergence.REPLICATE_WAVE_MULTIPLE"></a>
+
+#### REPLICATE\_WAVE\_MULTIPLE
+
+Replicate waves a batch aims for: `R_target = max(replicate_minimum, m * W)`.
+
+`W` is how many replicates run at once. Sizing the batch to a small multiple
+of `W` keeps every worker busy through whole waves, and the averaging window
+of a replicate is matched to reach the requested precision with that many
+replicates (design 9.1).
+
+Kind: policy.
+
+<a id="fim.config.convergence.BATCH_WIDTH"></a>
+
+#### BATCH\_WIDTH
+
+Replicates assumed to run at once, when `max_concurrent_replicates` is unset.
+
+The first wave of replicates, which measures the noise the later windows are
+matched from, is this wide. It is a fixed number, not the machine's CPU count,
+so a configuration gives the same windows and the same results on every
+machine and under every backend (design 9.1 matched the window to the
+workers; a worker count that changed the results would break reproducibility).
+
+Kind: policy.
+
+<a id="fim.config.convergence.AVERAGING_MULTIPLE_MINIMUM"></a>
+
+#### AVERAGING\_MULTIPLE\_MINIMUM
+
+Smallest matched averaging window, in relaxation times.
+
+Below this a replicate's own average is barely better than a snapshot: its
+window holds only a few independent values (design 9).
+
+Kind: policy.
+
+<a id="fim.config.convergence.AVERAGING_MULTIPLE_MAXIMUM"></a>
+
+#### AVERAGING\_MULTIPLE\_MAXIMUM
+
+Largest matched averaging window, in relaxation times.
+
+Keeps a replicate finite when its statistic is so noisy that the matched
+window would be enormous; more replicates then serve better than a longer
+window.
+
+Kind: policy.
+
+<a id="fim.config.convergence.FIRST_WAVE_AVERAGING_MULTIPLE"></a>
+
+#### FIRST\_WAVE\_AVERAGING\_MULTIPLE
+
+Averaging window, in relaxation times, of the first wave of replicates.
+
+The first wave runs before anything is known about the statistic's noise, so
+it averages for this guess; the matched window of every later replicate is
+measured from it (design 9.1).
+
+Kind: policy.
+
 <a id="fim.config.defaults"></a>
 
 # fim.config.defaults
@@ -1763,6 +1845,17 @@ The convergence policy constants one run uses.
 - `estimate_auto_fraction` - Share of window generations that may be
   degenerate before `auto` switches to the value of means (between
   0 and 1, exclusive).
+- `batch_width` - Replicates assumed to run at once when
+  `max_concurrent_replicates` is unset (at least 1).
+- `replicate_wave_multiple` - Replicate waves a batch aims for (greater
+  than 0).
+- `averaging_multiple_minimum` - Smallest matched replicate averaging
+  window, in relaxation times (greater than 0).
+- `averaging_multiple_maximum` - Largest matched replicate averaging
+  window, in relaxation times (at least
+  `averaging_multiple_minimum`).
+- `first_wave_averaging_multiple` - Averaging window of the first wave of
+  replicates, in relaxation times (greater than 0).
 
 <a id="fim.config.expert.ExpertSettings.__post_init__"></a>
 
@@ -2046,6 +2139,278 @@ enough?" It is organized into four modules:
   describe the result.
 
 The public names from the modules are re-exported here.
+
+<a id="fim.convergence.batch_window"></a>
+
+# fim.convergence.batch\_window
+
+How long each replicate of a batch averages: the matched window.
+
+A batch of replicates reaches a requested precision by averaging each
+replicate over time after its burn-in and then across replicates. How long a
+replicate should average is a trade: a long window makes each replicate's own
+mean precise, a short one needs more replicates. The window here is *matched*
+to the batch (design 9.1): sized so that the number of replicates the batch
+will run anyway, a small multiple of how many run at once, reaches the
+precision.
+
+The first wave of replicates runs before anything is known about the noise, so
+it averages for a guess. When that wave ends, its windows give the statistic's
+standard deviation `sigma` and integrated autocorrelation time `tau_int`; the
+standard error of one replicate's window mean is `sigma * sqrt(tau_int / A)`
+for a window of `A` generations, so the window that reaches a per-replicate
+standard error `SE` is `A = tau_int * (sigma / SE)**2`. Every later replicate
+uses it. Replicates with different windows are pooled with equal weight: each
+window mean estimates the same long-run value after the burn-in.
+
+<a id="fim.convergence.batch_window.WindowNoise"></a>
+
+## WindowNoise Objects
+
+```python
+@dataclass(frozen=True, slots=True)
+class WindowNoise()
+```
+
+The noise of one statistic over one replicate's averaging window.
+
+**Attributes**:
+
+- `standard_deviation` - The window's sample standard deviation.
+- `tau_int` - The window's integrated autocorrelation time (at least 1).
+
+<a id="fim.convergence.batch_window.target_replicate_count"></a>
+
+#### target\_replicate\_count
+
+```python
+def target_replicate_count(*, minimum: int, wave_multiple: float,
+                           width: int) -> int
+```
+
+Return how many replicates the matched window is sized for.
+
+`max(minimum, ceil(wave_multiple * width))`: a small multiple of how many
+replicates run at once, never below the fewest a batch may stop at.
+
+**Arguments**:
+
+- `minimum` - `replicate_minimum`.
+- `wave_multiple` - The Expert Setting `replicate_wave_multiple`.
+- `width` - How many replicates run at once.
+
+
+**Returns**:
+
+  The target replicate count.
+
+<a id="fim.convergence.batch_window.lane_standard_error"></a>
+
+#### lane\_standard\_error
+
+```python
+def lane_standard_error(*, precision: float, confidence: float,
+                        replicates: int) -> float
+```
+
+Return the standard error each replicate's mean needs.
+
+With `R` replicates of equal standard error `SE`, the across-replicate
+interval has half-width `t(R - 1) * SE / sqrt(R)`; setting that to
+`precision` gives `SE = precision * sqrt(R) / t(R - 1)`.
+
+**Arguments**:
+
+- `precision` - The requested plus or minus, in the statistic's units.
+- `confidence` - Two-tailed confidence level (0.90, 0.95 or 0.99).
+- `replicates` - The number of replicates the batch will run (at least 2).
+
+
+**Returns**:
+
+  The per-replicate standard error, zero when `precision` is zero.
+
+
+**Raises**:
+
+- `ValueError` - If `replicates` is below 2.
+
+<a id="fim.convergence.batch_window.matched_averaging_multiple"></a>
+
+#### matched\_averaging\_multiple
+
+```python
+def matched_averaging_multiple(wave: Sequence[Mapping[str, WindowNoise]], *,
+                               statistics: Sequence[str], lane_error: float,
+                               multiple_minimum: float,
+                               multiple_maximum: float,
+                               relaxation_time: float) -> float
+```
+
+Return the averaging window, in relaxation times, the first wave implies.
+
+For each watched statistic the wave's windows are pooled with equal
+weight (`sigma**2` and `tau_int` each averaged over the wave), the window
+that reaches `lane_error` is computed, and the slowest statistic decides.
+The result is clamped to `[multiple_minimum, multiple_maximum]`.
+
+**Arguments**:
+
+- `wave` - One mapping per first-wave replicate, statistic to its noise.
+  A replicate that lacks a statistic does not count for it.
+- `statistics` - The watched statistics.
+- `lane_error` - Target standard error of one replicate's mean.
+- `multiple_minimum` - Lower clamp, in relaxation times.
+- `multiple_maximum` - Upper clamp, in relaxation times.
+- `relaxation_time` - The model's relaxation time, in generations.
+
+
+**Returns**:
+
+  The clamped window, in relaxation times. The upper clamp when
+  `lane_error` is zero; the lower when every statistic is exactly known.
+
+<a id="fim.convergence.batch_window.BatchWindowPlanner"></a>
+
+## BatchWindowPlanner Objects
+
+```python
+class BatchWindowPlanner()
+```
+
+Decide each replicate's averaging window, measuring the first wave.
+
+One planner serves one batch. `window_for(index)` gives the window of
+replicate `index` (zero-based): the first-wave guess for the first
+`first_wave` replicates and the matched window afterwards, or `None` for a
+later replicate until the first wave has been recorded. A fixed window,
+chosen by the user, is returned for every replicate and nothing is
+measured.
+
+<a id="fim.convergence.batch_window.BatchWindowPlanner.__init__"></a>
+
+#### \_\_init\_\_
+
+```python
+def __init__(*,
+             relaxation_time: float,
+             statistics: Sequence[str],
+             precision: float,
+             confidence: float,
+             replicates: int,
+             first_wave: int,
+             first_wave_multiple: float,
+             multiple_minimum: float,
+             multiple_maximum: float,
+             fixed_window: int | None = None,
+             window_limit: int | None = None) -> None
+```
+
+Initialize a planner.
+
+**Arguments**:
+
+- `relaxation_time` - The model's relaxation time, in generations.
+- `statistics` - The watched statistics.
+- `precision` - The requested batch precision.
+- `confidence` - Two-tailed confidence level.
+- `replicates` - The replicate count the matched window targets (at
+  least 2).
+- `first_wave` - How many replicates run before anything is measured
+  (at least 1).
+- `first_wave_multiple` - The first wave's window, in relaxation times.
+- `multiple_minimum` - Lower clamp of the matched window, in
+  relaxation times.
+- `multiple_maximum` - Upper clamp, in relaxation times.
+- `fixed_window` - A user-chosen window in generations, used for every
+  replicate; `None` to match.
+- `window_limit` - The longest window a guessed or matched window may
+  be, in generations (the room the generation cap leaves after
+  the burn-in); `None` for no limit. A fixed window is never
+- `clamped` - it is the user's choice, and a replicate that
+  reaches the cap first reports it.
+
+
+**Raises**:
+
+- `ValueError` - If a count is out of range.
+
+<a id="fim.convergence.batch_window.BatchWindowPlanner.first_wave"></a>
+
+#### first\_wave
+
+```python
+@property
+def first_wave() -> int
+```
+
+Return how many replicates form the first wave.
+
+<a id="fim.convergence.batch_window.BatchWindowPlanner.matched_window"></a>
+
+#### matched\_window
+
+```python
+@property
+def matched_window() -> int | None
+```
+
+Return the matched window in generations, once the wave is recorded.
+
+<a id="fim.convergence.batch_window.BatchWindowPlanner.earliest_window"></a>
+
+#### earliest\_window
+
+```python
+@property
+def earliest_window() -> int
+```
+
+Return the shortest window any replicate can be assigned.
+
+A matched window is at least `multiple_minimum` relaxation times
+(or the limit, if lower), so a replicate that is still waiting for
+its window can safely average this long without overshooting it.
+
+<a id="fim.convergence.batch_window.BatchWindowPlanner.window_for"></a>
+
+#### window\_for
+
+```python
+def window_for(index: int) -> int | None
+```
+
+Return the averaging window of replicate `index`, in generations.
+
+**Arguments**:
+
+- `index` - The replicate's zero-based index.
+
+
+**Returns**:
+
+  The window, or `None` when the replicate is past the first wave
+  and the wave has not been fully recorded yet.
+
+<a id="fim.convergence.batch_window.BatchWindowPlanner.record"></a>
+
+#### record
+
+```python
+def record(index: int, noise: Mapping[str, WindowNoise]) -> int | None
+```
+
+Record one first-wave replicate's noise.
+
+**Arguments**:
+
+- `index` - The replicate's zero-based index; ignored past the wave.
+- `noise` - Its watched statistics' noise over its window.
+
+
+**Returns**:
+
+  The matched window if this record completed the wave, else `None`.
 
 <a id="fim.convergence.criteria"></a>
 
@@ -2564,10 +2929,13 @@ class StopReason(StrEnum)
 
 Reason a simulation stopped.
 
-A run always stops for exactly one of these two reasons: there is no third
+A run always stops for exactly one of these reasons: there is no other
 way for the simulation loop to exit. `STATISTIC_CONVERGED` means the
 watched statistic(s) reached the requested precision before the generation
-cap; `MAX_GENERATIONS` means the cap was hit first. Reaching the cap is
+cap; `AVERAGING_COMPLETE` means a replicate of a batch averaged for the
+whole window it was assigned (the precision is the batch's to reach, not
+the replicate's); `MAX_GENERATIONS` means the cap was hit first. Reaching
+the cap is
 reported as a valid, non-error outcome (see `ConvergenceOutcome.converged`):
 some parameter combinations genuinely never reach a given precision in any
 reasonable number of generations, and that is itself a useful finding.
@@ -2626,6 +2994,15 @@ Every watched statistic is judged at every check, so the stop generation
 never depends on the order the statistics are listed in. Nothing but
 appending to the histories happens between checks.
 
+A replicate of a batch runs in *window mode* (`averaging_window` given, or
+`awaiting_window`): no check runs; the replicate stops once it has averaged
+for its assigned window after the burn-in, and the batch judges precision
+across replicates (`fim.convergence.batch_window`). A window that is not
+known yet (a later replicate waiting for the first wave to be measured) is
+supplied with `set_averaging_window`; if the replicate is already past
+`burn_in + window` it stops at the next generation, averaging over its
+longer window.
+
 With no burn-in (`burn_in=None`, for a model with no relaxation time) the
 window starts at `floor(fractional_burn_in * t)` at each check.
 
@@ -2661,7 +3038,9 @@ def __init__(
         identity_statistics: Mapping[str, IdentityStatistic] | None = None,
         estimate: str = "mean_of_values",
         auto_denominator: float = ESTIMATE_AUTO_DENOMINATOR,
-        auto_fraction: float = ESTIMATE_AUTO_FRACTION) -> None
+        auto_fraction: float = ESTIMATE_AUTO_FRACTION,
+        averaging_window: int | None = None,
+        awaiting_window: bool = False) -> None
 ```
 
 Initialize an empty monitor.
@@ -2690,6 +3069,9 @@ Initialize an empty monitor.
   generation counts as degenerate.
 - `auto_fraction` - Under `"auto"`, the degenerate share above which
   the value of means is used.
+- `averaging_window` - Window mode: generations to average after the
+  burn-in before stopping (at least 1). Requires `burn_in`.
+- `awaiting_window` - Window mode with the window not known yet.
 
 
 **Raises**:
@@ -2824,6 +3206,50 @@ Record one generation's value(s) and update the stop decision.
 - `RuntimeError` - If called after the monitor already stopped.
 - `ValueError` - If `generation` or a value is invalid.
 
+<a id="fim.convergence.monitor.BurnInMonitor.awaiting_window"></a>
+
+#### awaiting\_window
+
+```python
+@property
+def awaiting_window() -> bool
+```
+
+Return whether this window-mode monitor is still waiting for its window.
+
+<a id="fim.convergence.monitor.BurnInMonitor.averaging_window"></a>
+
+#### averaging\_window
+
+```python
+@property
+def averaging_window() -> int | None
+```
+
+Return the window mode's assigned window, or `None` if not known.
+
+<a id="fim.convergence.monitor.BurnInMonitor.set_averaging_window"></a>
+
+#### set\_averaging\_window
+
+```python
+def set_averaging_window(window: int) -> None
+```
+
+Assign the window of a monitor that was waiting for it.
+
+**Arguments**:
+
+- `window` - Generations to average after the burn-in (at least 1). If
+  the monitor has already recorded the generation the window
+  ends at, it stops at once.
+
+
+**Raises**:
+
+- `RuntimeError` - If the monitor is not in window mode.
+- `ValueError` - If `window` is below 1.
+
 <a id="fim.convergence.monitor.BurnInMonitor.stable_statistics"></a>
 
 #### stable\_statistics
@@ -2836,7 +3262,8 @@ Return the watched statistics that passed at the stopping check.
 
 Empty before any check and for a run that hit its cap. Under `"all"` a
 converged run names every watched statistic; under `"any"`, those that
-had passed when it stopped.
+had passed when it stopped. A window-mode replicate names the watched
+statistics that have a defined window mean.
 
 <a id="fim.convergence.monitor.BurnInMonitor.target_standard_error"></a>
 
@@ -4840,9 +5267,11 @@ that produced it, not a whole run in progress.
 #### reports\_summary
 
 ```python
-def reports_summary(reports: Sequence[FinalReport],
-                    *,
-                    confidence: float = 0.95) -> dict[str, ConfidenceInterval]
+def reports_summary(
+        reports: Sequence[FinalReport],
+        *,
+        confidence: float = 0.95,
+        deme_count: int | None = None) -> dict[str, ConfidenceInterval]
 ```
 
 Return each named statistic's across-report confidence interval.
@@ -4884,6 +5313,12 @@ at all" case too.
 - `reports` - Zero or more independently seeded reports.
 - `confidence` - Two-tailed confidence level; see
   `fim.statistics.interval.confidence_interval`.
+- `deme_count` - The number of demes, which `D`'s value of means needs. When
+  given and any replicate selected the value of means for `D` or
+  `G_ST` (`convergence_estimate`), that statistic's interval pools the
+  replicates' window means of `H_S` and `H_T` first
+  (`_pooled_value_of_means`); `None` leaves every statistic as a
+  plain mean of replicate values.
 
 
 **Returns**:
@@ -14733,6 +15168,20 @@ functions that actually use each one.
   interval, not an uncertainty-free-looking single point, so an
   unconfigured run now behaves that way by default. Set to `1`
   explicitly for the old single-run behavior.
+- `precision_method` - How a batch reaches `precision`. `"interval"` (the
+- `default)` - add replicates until the across-replicate interval is
+  plus or minus `precision` (`stop_batch_early` allowing), each
+  replicate averaging for a window matched to the batch.
+- ``"planned_replicates"`` - run exactly `n_replicates`, each long
+  enough that their interval is plus or minus `precision`; no
+  early stop. Needs at least two replicates.
+- `replicate_averaging_window` - Generations each replicate of a batch
+  averages after its burn-in. `AUTO_CONVERGENCE` (`0`, the
+  default) matches the window to the batch
+  (`fim.convergence.batch_window`); an explicit value is used by
+  every replicate. A single run with an explicit value is a
+  fixed-window run: burn in, average that long, stop, with no
+  precision check.
 - `stop_batch_early` - Whether a replicate batch stops as soon as
   `precision` is reached (the default): every watched
   statistic's across-replicate Student's-t confidence interval
@@ -14943,8 +15392,10 @@ def batch_precision() -> float | None
 
 Return the precision a batch stops at, or `None` to run it in full.
 
-`precision` when `stop_batch_early` is on (the default), `None` when
-it is off: the single value the batch's stopping rule reads.
+`precision` when `stop_batch_early` is on (the default) and the
+precision method is `interval`; `None` otherwise, since the
+`planned_replicates` method always runs every replicate. The single
+value the batch's stopping rule reads.
 
 <a id="fim.model.params.SimulationParams.population_sizes"></a>
 

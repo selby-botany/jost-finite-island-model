@@ -218,6 +218,20 @@ jobs:
         with:
           python-version: "3.12"
           cache: pip
+      # The same Linux GTK/WebKit packages the `build` job installs, and for
+      # the same reason: `pip install` below builds PyGObject (via
+      # `pywebview[gtk]`), which needs `libgirepository1.0-dev`,
+      # `libcairo2-dev` and `pkg-config` at build time, and the `gui`-marked
+      # slow tests need `xvfb` and the typelibs at run time. Without this
+      # step the nightly run failed in `pip install` ("Dependency cairo not
+      # found"), before any test ran.
+      - name: Install pywebview's Linux GTK/WebKit runtime dependencies
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -qq -y --no-install-recommends \
+              xvfb gir1.2-gtk-3.0 gir1.2-webkit2-4.1 gir1.2-soup-3.0 \
+              libwebkit2gtk-4.1-0 libgirepository1.0-dev libcairo2-dev \
+              pkg-config
       - run: python -m pip install -e ".[dev]"
       - name: Run the slow engine-scenario suite
         run: ./build --slow-only
