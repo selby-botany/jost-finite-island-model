@@ -13,11 +13,13 @@ below reruns every example exactly as that script does and compares.
 A run is a pure function of its configuration, so the comparison is
 exact, except for the few manifest fields that record the moment or the
 machine rather than the model (`VOLATILE_MANIFEST_KEYS`, and the
-artifact digests listed in `_comparable_manifest`).
+artifact digests listed in `_comparable_manifest`), and tightly bounded
+platform rounding in archived evidence-window floats.
 """
 
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 import subprocess
@@ -26,6 +28,7 @@ from pathlib import Path
 from typing import Any
 
 import pytest
+from example_support import archived_report_equal
 
 from fim.examples.artifacts import archive_target, output_files
 
@@ -50,15 +53,34 @@ EXAMPLE_IDS = tuple(
 )
 
 
+def _assert_report_receipt(directory: Path, manifest: dict[str, Any]) -> None:
+    """Verify a report's bytes against its own manifest before comparing data.
+
+    Args:
+        directory: The archived or fresh run directory.
+        manifest: Its decoded manifest.
+    """
+    receipt = manifest["artifacts"].get("report")
+    if receipt is None:
+        return
+    data = (directory / "report.json").read_bytes()
+    assert receipt == {
+        "bytes": len(data),
+        "sha256": hashlib.sha256(data).hexdigest(),
+    }, f"{directory}: report receipt does not match report.json"
+
+
 def _comparable_manifest(manifest: dict[str, Any]) -> dict[str, Any]:
     """Return a manifest without the fields a rerun legitimately changes.
 
     Besides `VOLATILE_MANIFEST_KEYS`, two artifact digests are dropped: a
     batch manifest's digest of each replicate's manifest (which holds that
     replicate's own time stamps), and the scatter plot's (a PNG whose
-    bytes depend on the plotting library's version and fonts). The
-    trajectory, convergence, pairwise, and report digests stay, so the
-    comparison still covers every generation of every run.
+    bytes depend on the plotting library's version and fonts).
+    The report digest is excluded because its FFT-derived window floats
+    can round differently across platforms; the report is compared directly
+    with tightly bounded rounding instead. Trajectory, convergence, and
+    pairwise digests stay, covering every generation of every run.
 
     Args:
         manifest: A parsed `manifest.json`.
@@ -76,7 +98,7 @@ def _comparable_manifest(manifest: dict[str, Any]) -> dict[str, Any]:
         comparable["artifacts"] = {
             name: digest
             for name, digest in artifacts.items()
-            if name != "scatter" and not name.startswith("replicate-")
+            if name not in {"scatter", "report"} and not name.startswith("replicate-")
         }
     return comparable
 
@@ -147,6 +169,7 @@ def test_every_example_commits_its_output_files(example: str) -> None:
     assert not list(directory.rglob("convergence.jsonl"))
     for manifest_path in directory.rglob("manifest.json"):
         manifest = _read_json(manifest_path)
+        _assert_report_receipt(manifest_path.parent, manifest)
         names = {path.name for path in output_files(manifest_path.parent, batch=False)}
         for key in manifest["artifacts"]:
             if key.startswith("replicate-"):
@@ -201,6 +224,47 @@ def test_regeneration_uses_only_the_configuration(tmp_path: Path) -> None:
         assert command[7:] == ["--quiet"]
 
 
+def test_manifest_excludes_report_rounding_but_keeps_model_digests() -> None:
+    """Reports are checked directly; trajectory and convergence stay exact."""
+    manifest = {
+        "artifacts": {
+            "report": "platform-specific-report",
+            "scatter": "platform-specific-plot",
+            "replicate-001": "timestamped-manifest",
+            "trajectory": "exact-trajectory",
+            "convergence": "exact-convergence",
+            "pairwise": "exact-pairwise",
+        }
+    }
+    assert _comparable_manifest(manifest) == {
+        "artifacts": {
+            "trajectory": "exact-trajectory",
+            "convergence": "exact-convergence",
+            "pairwise": "exact-pairwise",
+        }
+    }
+    assert "report" in manifest["artifacts"]
+
+
+def test_report_receipt_still_detects_archive_corruption(tmp_path: Path) -> None:
+    """Ignoring cross-platform report digests does not skip receipt integrity."""
+    data = b'{"D": 0.3}'
+    report = tmp_path / "report.json"
+    report.write_bytes(data)
+    manifest = {
+        "artifacts": {
+            "report": {
+                "bytes": len(data),
+                "sha256": hashlib.sha256(data).hexdigest(),
+            }
+        }
+    }
+    _assert_report_receipt(tmp_path, manifest)
+    report.write_bytes(b'{"D": 0.4}')
+    with pytest.raises(AssertionError, match="report receipt"):
+        _assert_report_receipt(tmp_path, manifest)
+
+
 @pytest.mark.slow
 @pytest.mark.parametrize("example", EXAMPLE_IDS)
 def test_example_outputs_match_a_fresh_run(example: str, tmp_path: Path) -> None:
@@ -236,6 +300,11 @@ def test_example_outputs_match_a_fresh_run(example: str, tmp_path: Path) -> None
         fresh = _read_json(output / relative)
         committed = _read_json(directory / relative)
         if Path(relative).name == "manifest.json":
+            _assert_report_receipt((output / relative).parent, fresh)
+            _assert_report_receipt((directory / relative).parent, committed)
             fresh = _comparable_manifest(fresh)
             committed = _comparable_manifest(committed)
+        if Path(relative).name == "report.json":
+            assert archived_report_equal(committed, fresh), relative
+            continue
         assert fresh == committed, relative

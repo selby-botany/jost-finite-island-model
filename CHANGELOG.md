@@ -1395,6 +1395,12 @@ project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+- Worked-example archive checks tolerate only platform rounding in
+  FFT/BLAS-derived evidence-window floats, on every engine backend. Other
+  report fields and local configured/`auto` parity remain exact. This fixes
+  Linux CI failures against examples generated on macOS without widening
+  statistical bounds or changing simulation outputs.
+
 - **Mutation follows the textbook Wright-Fisher model.** Each generation now
   runs migration, then drift (drawing the `N` new gene copies), then
   mutation, with every new gene copy mutating independently with

@@ -24,9 +24,13 @@ fim run doc/examples/<example>/config.yaml \
 ```
 
 The `report.json` (or `summary.json`) you get matches the reference for
-the same backend and numerical environment. Vector results can differ
-across platforms because of BLAS reduction rounding; their statistical
-comparison is described in the vector example's README.
+the same backend and numerical environment. On every backend, FFT/BLAS
+reductions used for evidence-window diagnostics can round differently
+across platforms. Archive checks allow only tightly bounded rounding in
+`window_statistics` floats (relative `1e-12`, absolute `1e-14`); keys,
+discrete values, other report fields, and local backend parity remain exact.
+Older vector archives can also use a different random stream; their
+statistical comparison is described in the vector example's README.
 Most examples finish in a few seconds to
 about eight minutes. The calibration examples take longer: Dear-Nolan low
 about half an hour, Golden Part VI about two and a half minutes, and

@@ -8,6 +8,7 @@ Every test module, fixture, and test function documented here in full; `doc/fim-
 
 - [`test/`](#group-test)
   - [`conftest`](#test.conftest)
+  - [`example_support`](#test.example_support)
   - [`test_build_ci_parallel`](#test.test_build_ci_parallel)
   - [`test_ci_workflows`](#test.test_ci_workflows)
   - [`test_constants`](#test.test_constants)
@@ -15,6 +16,7 @@ Every test module, fixture, and test function documented here in full; `doc/fim-
   - [`test_doc_examples`](#test.test_doc_examples)
   - [`test_doc_snippets`](#test.test_doc_snippets)
   - [`test_example_artifacts`](#test.test_example_artifacts)
+  - [`test_example_support`](#test.test_example_support)
   - [`test_examples_catalog`](#test.test_examples_catalog)
   - [`test_examples_seed`](#test.test_examples_seed)
   - [`test_expert_info`](#test.test_expert_info)
@@ -700,6 +702,35 @@ with its own thin autouse wrapper depending on this fixture:
 launcher.py` (no subdirectory of its own to scope a conftest.py
 to), and `test/gui/conftest.py` (`doc/fim-logging-design.md` §12).
 
+<a id="test.example_support"></a>
+
+# test.example\_support
+
+Compare archived reports without requiring platform-specific FFT rounding.
+
+<a id="test.example_support.archived_report_equal"></a>
+
+#### archived\_report\_equal
+
+```python
+def archived_report_equal(expected: dict[str, Any], actual: dict[str,
+                                                                 Any]) -> bool
+```
+
+Require exact report data except rounded evidence-window floats.
+
+**Arguments**:
+
+- `expected` - The archived report, with caller-specific exclusions applied.
+- `actual` - The fresh report, with the same exclusions applied.
+  
+
+**Returns**:
+
+  Whether all fields agree, allowing only numerical rounding in
+  `window_statistics` (relative `1e-12`, absolute `1e-14`).
+  Keys, types, integers, booleans, and non-window fields remain exact.
+
 <a id="test.test_build_ci_parallel"></a>
 
 # test.test\_build\_ci\_parallel
@@ -850,7 +881,8 @@ below reruns every example exactly as that script does and compares.
 A run is a pure function of its configuration, so the comparison is
 exact, except for the few manifest fields that record the moment or the
 machine rather than the model (`VOLATILE_MANIFEST_KEYS`, and the
-artifact digests listed in `_comparable_manifest`).
+artifact digests listed in `_comparable_manifest`), and tightly bounded
+platform rounding in archived evidence-window floats.
 
 <a id="test.test_doc_examples.test_dear_nolan_high_configuration_matches_its_derivation"></a>
 
@@ -894,6 +926,27 @@ The regeneration command overrides nothing: out-of-the-box defaults.
 Every example is run as `fim run CONFIG --output DIR --quiet`, so each
 setting its configuration leaves out takes `fim run`'s own default,
 and the committed outputs are what a user gets from the same file.
+
+<a id="test.test_doc_examples.test_manifest_excludes_report_rounding_but_keeps_model_digests"></a>
+
+#### test\_manifest\_excludes\_report\_rounding\_but\_keeps\_model\_digests
+
+```python
+def test_manifest_excludes_report_rounding_but_keeps_model_digests() -> None
+```
+
+Reports are checked directly; trajectory and convergence stay exact.
+
+<a id="test.test_doc_examples.test_report_receipt_still_detects_archive_corruption"></a>
+
+#### test\_report\_receipt\_still\_detects\_archive\_corruption
+
+```python
+def test_report_receipt_still_detects_archive_corruption(
+        tmp_path: Path) -> None
+```
+
+Ignoring cross-platform report digests does not skip receipt integrity.
 
 <a id="test.test_doc_examples.test_example_outputs_match_a_fresh_run"></a>
 
@@ -1046,6 +1099,79 @@ def test_opening_a_study_restores_its_archived_members(tmp_path: Path) -> None
 ```
 
 Opening a Study directly must not require opening its example runs first.
+
+<a id="test.test_example_support"></a>
+
+# test.test\_example\_support
+
+Regression tests for portable, structurally strict example archives.
+
+<a id="test.test_example_support.test_archive_accepts_only_window_rounding"></a>
+
+#### test\_archive\_accepts\_only\_window\_rounding
+
+```python
+def test_archive_accepts_only_window_rounding() -> None
+```
+
+One-ULP and near-zero FFT rounding preserve archive agreement.
+
+<a id="test.test_example_support.test_archive_rejects_changes_beyond_rounding"></a>
+
+#### test\_archive\_rejects\_changes\_beyond\_rounding
+
+```python
+@pytest.mark.parametrize(
+    ("field", "value"),
+    [
+        ("mean", 0.300000000001),
+        ("standard_error", 0.008000000001),
+        ("geweke_z", 2e-14),
+        ("window", 41),
+        ("window", 40.0),
+        ("noise_adequate", False),
+        ("noise_adequate", 1),
+        ("mean", None),
+        ("mean", math.inf),
+        ("mean", math.nan),
+    ],
+)
+def test_archive_rejects_changes_beyond_rounding(field: str,
+                                                 value: Any) -> None
+```
+
+Numerical drift, type changes, and discrete decisions still fail.
+
+<a id="test.test_example_support.test_archive_requires_identical_keys"></a>
+
+#### test\_archive\_requires\_identical\_keys
+
+```python
+@pytest.mark.parametrize("level", ["report", "statistic", "window", "form"])
+def test_archive_requires_identical_keys(level: str) -> None
+```
+
+Missing data cannot masquerade as matching nulls or rounded values.
+
+<a id="test.test_example_support.test_reports_without_windows_still_require_exact_agreement"></a>
+
+#### test\_reports\_without\_windows\_still\_require\_exact\_agreement
+
+```python
+def test_reports_without_windows_still_require_exact_agreement() -> None
+```
+
+Short runs are not granted statistical or numerical tolerance.
+
+<a id="test.test_example_support.test_window_lists_preserve_length_and_values"></a>
+
+#### test\_window\_lists\_preserve\_length\_and\_values
+
+```python
+def test_window_lists_preserve_length_and_values() -> None
+```
+
+A sequence may round floats, but cannot lose or change entries.
 
 <a id="test.test_examples_catalog"></a>
 
@@ -37081,6 +37207,11 @@ from the fresh run's own manifest, not predicted here:
   watched statistic, the two `summary.json` across-replicate means must
   agree within the sum of the two confidence-interval half-widths.
 
+Archived evidence-window floats allow numerical rounding (relative `1e-12`,
+absolute `1e-14`): FFT and BLAS reductions need not round identically across
+platforms, even for identical histories. Structure, discrete values, other
+report fields, and same-host configured/auto comparisons remain exact.
+
 Fields excluded from "identical": only `run_id`, in each report. A run ID
 is a digest of the configuration (`fim.model.params`), and the two
 configurations legitimately differ in `engine_backend` (`auto` against
@@ -37144,6 +37275,19 @@ A batch, adaptive or not, must keep the same replicates to agree.
 An adaptive batch on the same random stream keeps the same replicates
 on every backend, so a different kept set is a failure even when the
 summaries happen to match.
+
+<a id="validation.test_examples_auto_backend.test_rounded_archive_still_requires_exact_local_parity"></a>
+
+#### test\_rounded\_archive\_still\_requires\_exact\_local\_parity
+
+```python
+@pytest.mark.parametrize("local_difference", [False, True])
+def test_rounded_archive_still_requires_exact_local_parity(
+        tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+        local_difference: bool) -> None
+```
+
+Archive rounding cannot hide even one ULP of local backend drift.
 
 <a id="validation.test_examples_auto_backend.test_scalar_rule_uses_three_combined_standard_errors"></a>
 

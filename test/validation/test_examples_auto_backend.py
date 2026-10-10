@@ -41,6 +41,11 @@ from the fresh run's own manifest, not predicted here:
   watched statistic, the two `summary.json` across-replicate means must
   agree within the sum of the two confidence-interval half-widths.
 
+Archived evidence-window floats allow numerical rounding (relative `1e-12`,
+absolute `1e-14`): FFT and BLAS reductions need not round identically across
+platforms, even for identical histories. Structure, discrete values, other
+report fields, and same-host configured/auto comparisons remain exact.
+
 Fields excluded from "identical": only `run_id`, in each report. A run ID
 is a digest of the configuration (`fim.model.params`), and the two
 configurations legitimately differ in `engine_backend` (`auto` against
@@ -79,6 +84,7 @@ from typing import Any
 
 import pytest
 import yaml
+from example_support import archived_report_equal
 
 ROOT = Path(__file__).resolve().parents[2]
 EXAMPLES_DIR = ROOT / "doc" / "examples"
@@ -167,12 +173,15 @@ def _compare_batch_statistically(
     return problems
 
 
-def _compare_identical(committed: Path, fresh: Path) -> list[str]:
+def _compare_identical(
+    committed: Path, fresh: Path, *, archive: bool = False
+) -> list[str]:
     """Require identical reports, and for a batch an identical summary.
 
     Args:
         committed: The committed example directory.
         fresh: The fresh run's output directory.
+        archive: Allow platform rounding in archived evidence-window floats.
 
     Returns:
         One message per differing file; empty when all agree.
@@ -192,7 +201,10 @@ def _compare_identical(committed: Path, fresh: Path) -> list[str]:
     for report in reports:
         expected = _without_excluded(_load(committed / report))
         actual = _without_excluded(_load(fresh / report))
-        if expected != actual:
+        equal = (
+            archived_report_equal(expected, actual) if archive else expected == actual
+        )
+        if not equal:
             keys = sorted(
                 key
                 for key in expected.keys() | actual.keys()
@@ -445,6 +457,47 @@ def test_identity_rule_requires_the_same_kept_replicates(tmp_path: Path) -> None
     ]
 
 
+@pytest.mark.parametrize("local_difference", [False, True])
+def test_rounded_archive_still_requires_exact_local_parity(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, local_difference: bool
+) -> None:
+    """Archive rounding cannot hide even one ULP of local backend drift."""
+    example = "rounded-fixture"
+    examples = tmp_path / "examples"
+    committed, fresh, reference = (
+        examples / example,
+        tmp_path / "fresh",
+        tmp_path / "reference",
+    )
+    for directory, mean, backend in (
+        (committed, 0.3, "generational"),
+        (fresh, math.nextafter(0.3, math.inf), "generational"),
+        (
+            reference,
+            0.3 if local_difference else math.nextafter(0.3, math.inf),
+            "generational",
+        ),
+    ):
+        _write(directory / "manifest.json", {"engine_backend": backend})
+        _write(
+            directory / "report.json",
+            {"D": 0.3, "window_statistics": {"D": {"mean": mean}}},
+        )
+
+    def run_example(example: str, tmp_path: Path, *, backend: str = "auto") -> Path:
+        """Return controlled archive, auto, and configured outputs."""
+        return fresh if backend == "auto" else reference
+
+    module = sys.modules[__name__]
+    monkeypatch.setattr(module, "EXAMPLES_DIR", examples)
+    monkeypatch.setattr(module, "_run_example", run_example)
+    if local_difference:
+        with pytest.raises(AssertionError, match="local configured backend"):
+            test_example_on_auto_agrees_with_its_committed_output(example, tmp_path)
+    else:
+        test_example_on_auto_agrees_with_its_committed_output(example, tmp_path)
+
+
 def test_scalar_rule_uses_three_combined_standard_errors(tmp_path: Path) -> None:
     """A single-run disagreement is beyond `3 * sqrt(se_L**2 + se_auto**2)`.
 
@@ -570,7 +623,14 @@ def test_example_on_auto_agrees_with_its_committed_output(
         same_stream = False
 
     if same_stream:
-        problems = _compare_identical(committed, fresh)
+        problems = _compare_identical(committed, fresh, archive=True)
+        # When the archive differs only by platform rounding, still prove
+        # that the configured backend and auto are bit-identical locally.
+        if not problems and _compare_identical(committed, fresh):
+            reference = _run_example(
+                example, tmp_path / "configured", backend=backend_l
+            )
+            local_problems = _compare_identical(reference, fresh)
     elif batch:
         problems = _compare_batch_statistically(committed, fresh, _watched(committed))
     else:
