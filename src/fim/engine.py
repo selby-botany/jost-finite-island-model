@@ -2569,6 +2569,11 @@ def _window_statistics_payload(
         # spelling, so it is left out rather than written as a non-number.
         if geweke is not None and math.isfinite(geweke):
             payload[name]["geweke_z"] = geweke
+        # A capped run says how long it would have needed (design 6.10).
+        if not monitor.outcome().converged:
+            projected = monitor.projected_generations_for(name)
+            if projected is not None:
+                payload[name]["projected_generations"] = projected
         if forms is not None:
             payload[name].update(_estimate_forms_payload(forms))
     return payload

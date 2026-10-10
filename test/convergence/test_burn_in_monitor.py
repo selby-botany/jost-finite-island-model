@@ -468,3 +468,112 @@ def test_window_mode_needs_a_burn_in_and_a_positive_window() -> None:
         _monitor(averaging_window=0)
     with pytest.raises(RuntimeError, match="window-mode"):
         _monitor().set_averaging_window(10)
+
+
+def _noisy_monitor(**changes: object) -> tuple[BurnInMonitor, list[float]]:
+    """A monitor on a seeded AR(1) series that is too noisy to stop quickly."""
+    series = _noise(3000, phi=0.5, seed=4)
+    monitor = _monitor(precision=0.001, minimum_effective_sample_size=10.0, **changes)
+    return monitor, series
+
+
+def test_the_projection_is_the_window_start_plus_the_scaled_window() -> None:
+    """`start + L * (SE / target)**2` from the window as it stands (design 6.10)."""
+    monitor, series = _noisy_monitor()
+    for generation, value in enumerate(series[:200]):
+        monitor.record(generation, value)
+
+    # Generations 0 to 199 are recorded and the burn-in is 10, so the window
+    # holds series[10:200]: 190 values.
+    stats = geyer_window_statistics(series[10:200])
+    target = monitor.target_standard_error
+    scaled = 190 * (stats.standard_error / target) ** 2
+    expected = 10 + math.ceil(max(scaled, 10.0 * stats.tau_int))
+    assert monitor.projected_generations_for("value") == expected
+    assert expected > 200
+    # The projection kept from the latest check is for a shorter window, so
+    # it is a different (earlier-data) number, but of the same order.
+    assert monitor.projected_generations is not None
+    assert monitor.projected_generations > 200
+
+
+def test_a_met_precision_projects_the_window_end_and_zero_precision_none() -> None:
+    """Nothing is projected for a statistic that already meets the target."""
+    monitor = _monitor(precision=0.5)
+    for generation in range(25):
+        monitor.record(generation, 0.5 + (generation % 2) * 0.001)
+    assert monitor.projected_generations_for("value") == 24
+
+    exact = _monitor(precision=0.0)
+    for generation in range(25):
+        exact.record(generation, 0.5 + (generation % 3) * 0.01)
+    assert exact.projected_generations_for("value") is None
+    assert exact.projected_generations is None
+
+
+def test_a_projection_beyond_the_cap_is_logged_once(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """The cap warning appears once, naming the projected generations."""
+    monitor, series = _noisy_monitor(max_generations=500)
+    with caplog.at_level("WARNING", logger="fim.convergence.monitor"):
+        for generation, value in enumerate(series[:400]):
+            monitor.record(generation, value)
+
+    warnings = [r for r in caplog.records if "reach its cap" in r.getMessage()]
+    assert len(warnings) == 1
+    assert str(monitor.projected_generations) in warnings[0].getMessage() or (
+        "generations needed" in warnings[0].getMessage()
+    )
+    assert monitor.projected_generations is not None
+    assert monitor.projected_generations > 500
+
+
+def test_no_cap_warning_when_the_projection_fits_under_the_cap(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """A run that will finish in time says nothing."""
+    monitor = _monitor(precision=0.02, max_generations=100_000)
+    with caplog.at_level("WARNING", logger="fim.convergence.monitor"):
+        for generation, value in enumerate(_noise(2000, phi=0.3, seed=2)):
+            if monitor.record(generation, value).stopped:
+                break
+    assert not [r for r in caplog.records if "reach its cap" in r.getMessage()]
+
+
+def test_any_projects_the_soonest_statistic_and_all_the_latest() -> None:
+    """Under `any` one statistic is enough; under `all` the slowest decides."""
+    quiet = _noise(400, phi=0.2, seed=8)
+    noisy = _noise(400, phi=0.6, seed=9)
+    projections = {}
+    for combinator in ("all", "any"):
+        monitor = BurnInMonitor(
+            max_generations=100_000,
+            precision=0.002,
+            burn_in=10,
+            first_check=20,
+            statistics=("quiet", "noisy"),
+            combinator=combinator,  # type: ignore[arg-type]
+            minimum_effective_sample_size=10.0,
+        )
+        for generation in range(300):
+            monitor.record(
+                generation,
+                {
+                    "quiet": quiet[generation] * 0.1 + 0.5,
+                    "noisy": noisy[generation] + 0.5,
+                },
+            )
+            if monitor.should_stop():
+                break
+        projections[combinator] = (
+            monitor.projected_generations_for("quiet"),
+            monitor.projected_generations_for("noisy"),
+            monitor.projected_generations,
+        )
+    quiet_all, noisy_all, overall_all = projections["all"]
+    overall_any = projections["any"][2]
+    assert quiet_all is not None and noisy_all is not None
+    assert noisy_all > quiet_all
+    assert overall_all is not None and overall_any is not None
+    assert overall_any <= overall_all

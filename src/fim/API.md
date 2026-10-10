@@ -122,6 +122,8 @@ Return to the [source-tree orientation](../README.md) or the [developer guide](.
     * [burn\_in\_generation](#fim.convergence.monitor.BurnInMonitor.burn_in_generation)
     * [window\_end\_generation](#fim.convergence.monitor.BurnInMonitor.window_end_generation)
     * [evidence\_geweke\_z](#fim.convergence.monitor.BurnInMonitor.evidence_geweke_z)
+    * [projected\_generations](#fim.convergence.monitor.BurnInMonitor.projected_generations)
+    * [projected\_generations\_for](#fim.convergence.monitor.BurnInMonitor.projected_generations_for)
     * [estimate\_forms](#fim.convergence.monitor.BurnInMonitor.estimate_forms)
   * [ConvergenceMonitor](#fim.convergence.monitor.ConvergenceMonitor)
     * [\_\_init\_\_](#fim.convergence.monitor.ConvergenceMonitor.__init__)
@@ -3360,6 +3362,50 @@ own per-generation values, whichever expected-value form is selected.
 
   `None` when the window is too short for both segments to hold
   `MINIMUM_WINDOW_VALUES` values.
+
+<a id="fim.convergence.monitor.BurnInMonitor.projected_generations"></a>
+
+#### projected\_generations
+
+```python
+@property
+def projected_generations() -> int | None
+```
+
+Return the run length projected at the latest failed check.
+
+The generation at which the watched statistics are projected to meet
+the precision (`projected_generations_for`): the latest of the failing
+statistics under `"all"`, the earliest of all under `"any"`. `None`
+before the first check, when a check passed, or when no projection
+exists (zero precision, or a window with too few values).
+
+<a id="fim.convergence.monitor.BurnInMonitor.projected_generations_for"></a>
+
+#### projected\_generations\_for
+
+```python
+def projected_generations_for(name: str) -> int | None
+```
+
+Return the generation at which `name` would meet the precision.
+
+From the evidence window as it stands: the standard error falls as
+one over the square root of the window length, so a window of `L`
+generations with standard error `SE` needs `L * (SE / target)**2` to
+reach `target` (design 6.10); the effective-sample-size floor needs
+`minimum_ess * tau_int`. The longer of the two decides.
+
+**Arguments**:
+
+- `name` - A configured statistic name.
+
+
+**Returns**:
+
+  The window end if the statistic already meets the precision; the
+  projected generation otherwise; `None` when the window is too
+  short, or the target is zero (no length reaches it).
 
 <a id="fim.convergence.monitor.BurnInMonitor.estimate_forms"></a>
 

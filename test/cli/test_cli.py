@@ -2088,3 +2088,17 @@ def test_study_and_experiment_create_record_documentation(
         "Why: ring vs island.",
     )
     assert (experiment["description"], experiment["documentation"]) == (None, "Goal.")
+
+
+def test_a_capped_run_says_how_many_generations_the_precision_needs(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """A tight, unreachable-in-time precision prints the projected length."""
+    config = tmp_path / "config.yaml"
+    _write_config(config, max_generations=200, precision=0.0005)
+
+    assert cli.main(["run", str(config), "--output", str(tmp_path / "out")]) == 0
+
+    output = capsys.readouterr().out
+    assert "needs about" in output
+    assert "more loci or more replicates reach it faster" in output

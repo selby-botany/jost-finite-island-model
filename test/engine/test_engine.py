@@ -5936,3 +5936,31 @@ def test_a_replicate_with_no_burn_in_keeps_the_within_run_rule() -> None:
 
     assert isinstance(output, tuple)
     assert all(r.report["reason"] != "averaging window complete" for r in output)
+
+
+def test_a_capped_run_reports_how_long_it_would_have_needed(
+    tiny_params: SimulationParams,
+) -> None:
+    """A run that hits the cap records `projected_generations` per statistic."""
+    params = replace(
+        tiny_params, precision=0.001, max_generations=300, stop_batch_early=False
+    )
+    result = _run(params)
+
+    assert result.report["converged"] is False
+    entry = result.report["window_statistics"]["D"]
+    assert entry["projected_generations"] > params.max_generations
+    json.dumps(result.report, allow_nan=False)
+
+
+def test_a_run_that_converged_reports_no_projection(
+    tiny_params: SimulationParams,
+) -> None:
+    """Only a capped run has a projection."""
+    result = _run(tiny_params)
+
+    assert result.report["converged"] is True
+    assert all(
+        "projected_generations" not in e
+        for e in result.report["window_statistics"].values()
+    )

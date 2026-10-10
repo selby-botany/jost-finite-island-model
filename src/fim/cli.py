@@ -1080,6 +1080,12 @@ def _print_cap_note(params: SimulationParams, report: FinalReport) -> None:
             f"{stats['window']:,} generations) against a requested ±"
             f"{params.precision / 2:.4g}"
         )
+        projected = stats.get("projected_generations")
+        if projected is not None:
+            print(
+                f"At this precision {name} needs about {projected:,} "
+                "generations; more loci or more replicates reach it faster"
+            )
 
 
 def _print_derived_convergence(params: SimulationParams) -> None:

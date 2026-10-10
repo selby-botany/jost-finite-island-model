@@ -4700,6 +4700,17 @@ def test_study_and_experiment_create_record_documentation(
 
 `--documentation` is stored beside the one-line `--description`.
 
+<a id="cli.test_cli.test_a_capped_run_says_how_many_generations_the_precision_needs"></a>
+
+#### test\_a\_capped\_run\_says\_how\_many\_generations\_the\_precision\_needs
+
+```python
+def test_a_capped_run_says_how_many_generations_the_precision_needs(
+        tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None
+```
+
+A tight, unreachable-in-time precision prints the projected length.
+
 <a id="cli.test_cli_labels"></a>
 
 # cli.test\_cli\_labels
@@ -5513,6 +5524,59 @@ def test_window_mode_needs_a_burn_in_and_a_positive_window() -> None
 ```
 
 The fractional burn-in has no fixed start to average from.
+
+<a id="convergence.test_burn_in_monitor.test_the_projection_is_the_window_start_plus_the_scaled_window"></a>
+
+#### test\_the\_projection\_is\_the\_window\_start\_plus\_the\_scaled\_window
+
+```python
+def test_the_projection_is_the_window_start_plus_the_scaled_window() -> None
+```
+
+`start + L * (SE / target)**2` from the window as it stands (design 6.10).
+
+<a id="convergence.test_burn_in_monitor.test_a_met_precision_projects_the_window_end_and_zero_precision_none"></a>
+
+#### test\_a\_met\_precision\_projects\_the\_window\_end\_and\_zero\_precision\_none
+
+```python
+def test_a_met_precision_projects_the_window_end_and_zero_precision_none(
+) -> None
+```
+
+Nothing is projected for a statistic that already meets the target.
+
+<a id="convergence.test_burn_in_monitor.test_a_projection_beyond_the_cap_is_logged_once"></a>
+
+#### test\_a\_projection\_beyond\_the\_cap\_is\_logged\_once
+
+```python
+def test_a_projection_beyond_the_cap_is_logged_once(
+        caplog: pytest.LogCaptureFixture) -> None
+```
+
+The cap warning appears once, naming the projected generations.
+
+<a id="convergence.test_burn_in_monitor.test_no_cap_warning_when_the_projection_fits_under_the_cap"></a>
+
+#### test\_no\_cap\_warning\_when\_the\_projection\_fits\_under\_the\_cap
+
+```python
+def test_no_cap_warning_when_the_projection_fits_under_the_cap(
+        caplog: pytest.LogCaptureFixture) -> None
+```
+
+A run that will finish in time says nothing.
+
+<a id="convergence.test_burn_in_monitor.test_any_projects_the_soonest_statistic_and_all_the_latest"></a>
+
+#### test\_any\_projects\_the\_soonest\_statistic\_and\_all\_the\_latest
+
+```python
+def test_any_projects_the_soonest_statistic_and_all_the_latest() -> None
+```
+
+Under `any` one statistic is enough; under `all` the slowest decides.
 
 <a id="convergence.test_criteria_validation"></a>
 
@@ -9226,6 +9290,28 @@ def test_a_replicate_with_no_burn_in_keeps_the_within_run_rule() -> None
 ```
 
 With no relaxation time the fractional burn-in leaves no window to match.
+
+<a id="engine.test_engine.test_a_capped_run_reports_how_long_it_would_have_needed"></a>
+
+#### test\_a\_capped\_run\_reports\_how\_long\_it\_would\_have\_needed
+
+```python
+def test_a_capped_run_reports_how_long_it_would_have_needed(
+        tiny_params: SimulationParams) -> None
+```
+
+A run that hits the cap records `projected_generations` per statistic.
+
+<a id="engine.test_engine.test_a_run_that_converged_reports_no_projection"></a>
+
+#### test\_a\_run\_that\_converged\_reports\_no\_projection
+
+```python
+def test_a_run_that_converged_reports_no_projection(
+        tiny_params: SimulationParams) -> None
+```
+
+Only a capped run has a projection.
 
 <a id="engine.test_frame_identity"></a>
 

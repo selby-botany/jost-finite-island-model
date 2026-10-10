@@ -396,6 +396,8 @@ class BurnInMonitor:
         self._next_check = (burn_in or 0) + first_check
         self._window_start = burn_in
         self._last_verdicts: tuple[bool, ...] = tuple(False for _ in self._statistics)
+        self._projection: int | None = None
+        self._cap_warned = False
         self._outcome = ConvergenceOutcome(False, False, None, None)
 
     @property
@@ -646,6 +648,79 @@ class BurnInMonitor:
         except ValueError:
             return None
 
+    @property
+    def projected_generations(self) -> int | None:
+        """Return the run length projected at the latest failed check.
+
+        The generation at which the watched statistics are projected to meet
+        the precision (`projected_generations_for`): the latest of the failing
+        statistics under `"all"`, the earliest of all under `"any"`. `None`
+        before the first check, when a check passed, or when no projection
+        exists (zero precision, or a window with too few values).
+        """
+        return self._projection
+
+    def projected_generations_for(self, name: str) -> int | None:
+        """Return the generation at which `name` would meet the precision.
+
+        From the evidence window as it stands: the standard error falls as
+        one over the square root of the window length, so a window of `L`
+        generations with standard error `SE` needs `L * (SE / target)**2` to
+        reach `target` (design 6.10); the effective-sample-size floor needs
+        `minimum_ess * tau_int`. The longer of the two decides.
+
+        Args:
+            name: A configured statistic name.
+
+        Returns:
+            The window end if the statistic already meets the precision; the
+            projected generation otherwise; `None` when the window is too
+            short, or the target is zero (no length reaches it).
+        """
+        start = self._window_start
+        if start is None:
+            start = int(self._fractional * (self.window_end_generation or 0))
+        end = self.window_end_generation
+        stats = self._statistics_over(name, start)
+        if stats is None or end is None:
+            return None
+        if stats.meets(self._target_standard_error, self._minimum_ess):
+            return end
+        if self._target_standard_error == 0.0:
+            return None
+        window = end + 1 - start
+        precision_length = (
+            window * (stats.standard_error / self._target_standard_error) ** 2
+        )
+        ess_length = self._minimum_ess * stats.tau_int
+        return start + math.ceil(max(precision_length, ess_length))
+
+    def _note_projection(self, start: int) -> None:
+        """Project the needed length after a check and warn once about the cap."""
+        projections = [
+            self.projected_generations_for(name) for name in self._statistics
+        ]
+        known = [value for value in projections if value is not None]
+        if self._combinator == "all":
+            # One statistic with no projection (zero precision) leaves the
+            # whole projection unknown.
+            self._projection = max(known) if len(known) == len(projections) else None
+        else:
+            self._projection = min(known) if known else None
+        if (
+            self._projection is not None
+            and self._projection > self._max_generations
+            and not self._cap_warned
+        ):
+            self._cap_warned = True
+            logger.warning(
+                "at this precision the run will probably reach its cap: about "
+                "%d generations needed, cap %d (window starts at generation %d)",
+                self._projection,
+                self._max_generations,
+                start,
+            )
+
     def estimate_forms(self, name: str) -> EstimateForms | None:
         """Return `name`'s expected-value forms over the evidence window.
 
@@ -682,6 +757,7 @@ class BurnInMonitor:
                 continue
             verdicts.append(stats.meets(self._target_standard_error, self._minimum_ess))
         self._last_verdicts = tuple(verdicts)
+        self._note_projection(start)
         length = generation + 1 - start
         self._next_check = max(generation + 1, start + math.ceil(self._growth * length))
         if logger.isEnabledFor(logging.DEBUG):

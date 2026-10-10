@@ -227,7 +227,19 @@ of the window with its end in units of their combined standard error; an
 absolute value above 3 (the Expert Setting `start_drift_alert_z`) means the
 averaging may have begun before the model forgot its starting state, so the
 burn-in may have been too short. It is a diagnostic only: it never stops or
-continues a run, and it is absent for a window too short to split. The CLI prints the watched statistic's own line after
+continues a run, and it is absent for a window too short to split.
+
+A run that reaches its cap without the requested precision also reports
+`projected_generations`: how long the run would have needed. The standard error
+of a mean falls as one over the square root of the window length, so a window of
+`L` generations with standard error `SE` needs `L * (SE / target)^2` to reach the
+`target`; the effective-sample-size floor needs `minimum_ess * tau_int`, and the
+longer of the two is reported (added to the window start). The monitor makes
+the same projection after every check that fails and logs a warning once, as soon
+as the projection passes the cap, so a run that cannot finish in time says so
+long before it ends. The command line repeats it in the cap note: "At this
+precision D needs about N generations; more loci or more replicates reach it
+faster". The CLI prints the watched statistic's own line after
 every run; the GUI's Run card tooltip shows the same numbers.
 
 ## Batches: replicates that average
