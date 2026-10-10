@@ -468,36 +468,36 @@ def test_initial_launch_falls_back_to_starter_values_for_an_invalid_saved_form(
     assert field_n == starter_form_values()["N"]
 
 
-def test_checking_a_second_convergence_statistic_reveals_the_combinator(
+def test_the_combinator_follows_how_many_statistics_are_watched(
     window: webview.Window, drive: Callable[..., Any]
 ) -> None:
-    """Checking a second statistic reveals the combinator field.
+    """The combinator shows for two or more watched statistics, and hides for one.
 
-    The starter form has only `cs_D` checked; `syncConditionalVisibility`
-    (`config-modals.js`) reveals `combinator-field` only once two or more
-    are checked. Driven as a direct DOM click on the checkbox itself,
-    the field's own real interaction now that the native Configure
-    menu's own `toggleConvergenceStatistic` quick-toggle no longer
-    exists — every field is reachable the same way regardless of how
-    quick a toggle it used to be (design §3.3).
+    The starter form watches `D` and `G_ST`, so the field is visible from the
+    start; unchecking `G_ST` leaves one statistic and hides it
+    (`syncConditionalVisibility`, `config-modals.js`), checking it again
+    brings it back. Driven as a direct DOM click on the checkbox itself.
     """
+    state = (
+        "({"
+        "d: document.querySelector('input[name=\"cs_D\"]').checked, "
+        "gSt: document.querySelector('input[name=\"cs_G_ST\"]').checked, "
+        "combinatorHidden: document.getElementById('combinator-field').hidden"
+        "})"
+    )
     settled = drive(
         window,
         ready=_INPUT_SCREEN_READY,
-        trigger="document.querySelector('input[name=\"cs_G_ST\"]').click();",
-        read=(
-            "({"
-            "d: document.querySelector('input[name=\"cs_D\"]').checked, "
-            "gSt: document.querySelector('input[name=\"cs_G_ST\"]').checked, "
-            "combinatorHidden: document.getElementById('combinator-field').hidden"
-            "})"
+        trigger=(
+            f"window.__initialState = {state};"
+            "document.querySelector('input[name=\"cs_G_ST\"]').click();"
         ),
-        is_ready=lambda value: value is not None and value.get("gSt") is True,
+        read=f"({{initial: window.__initialState, after: {state}}})",
+        is_ready=lambda value: value is not None and value["after"]["gSt"] is False,
     )
 
-    assert settled["d"] is True
-    assert settled["gSt"] is True
-    assert settled["combinatorHidden"] is False
+    assert settled["initial"] == {"d": True, "gSt": True, "combinatorHidden": False}
+    assert settled["after"] == {"d": True, "gSt": False, "combinatorHidden": True}
 
 
 def test_combinator_is_two_radio_buttons_at_the_foot_of_the_statistics_panel(
@@ -547,7 +547,7 @@ def test_submitting_each_combinator_radio_yields_that_configuration(
         window,
         ready=_INPUT_SCREEN_READY,
         trigger=(
-            "document.querySelector('input[name=\"cs_G_ST\"]').click();"
+            "document.querySelector('input[name=\"cs_H_S\"]').click();"
             f"document.getElementById('field-convergence_combinator-{choice}')"
             ".click();"
         ),
@@ -564,7 +564,7 @@ def test_submitting_each_combinator_radio_yields_that_configuration(
 
     assert values["convergence_combinator"] == choice
     assert params.convergence_combinator == choice
-    assert params.convergence_statistics == ("D", "G_ST")
+    assert params.convergence_statistics == ("D", "G_ST", "H_S")
 
 
 def test_choosing_the_torus_topology_reveals_rows_and_columns(

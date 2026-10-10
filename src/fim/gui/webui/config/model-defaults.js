@@ -53,6 +53,10 @@ const P0_CELL_SUM_TOLERANCE = 1e-6;
 
 /* ---- Other values mirrored from Python ------------------------------- */
 
+// The statistics a configuration watches when none is chosen
+// (`fim.model.params.PARAMETER_DEFAULTS["convergence_statistic"]`).
+const DEFAULT_CONVERGENCE_STATISTICS = ["D", "G_ST"];
+
 // Prefix of a user-saved preset's id, which distinguishes it from a
 // built-in one (`fim.gui.app._USER_PRESET_ID_PREFIX`).
 const USER_PRESET_ID_PREFIX = "user:";

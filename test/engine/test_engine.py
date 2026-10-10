@@ -1561,7 +1561,7 @@ def test_single_statistic_report_shape_is_the_multi_statistic_special_case(
     Design §9: the ordinary single-statistic run is the several-statistic
     combinator's one-element special case, not a differently shaped result.
     """
-    result = _run(tiny_params)
+    result = _run(replace(tiny_params, convergence_statistic="D"))
 
     assert result.report["converged_on"] == "D"
     assert isinstance(result.report["converged_on"], str)
@@ -1734,7 +1734,8 @@ def test_report_for_state_without_a_monitor_counts_every_watched_statistic(
     Exact for one statistic or `all`; a state that did not converge
     (a preview, a progress tick) reports `None`.
     """
-    state = generate_initial_state(tiny_params)
+    single = replace(tiny_params, convergence_statistic="D")
+    state = generate_initial_state(single)
     multi = replace(tiny_params, convergence_statistic=("D", "G_ST"))
 
     def converged_on(params: SimulationParams, *, converged: bool) -> object:
@@ -1742,9 +1743,9 @@ def test_report_for_state_without_a_monitor_counts_every_watched_statistic(
             state, params, run_id="r", converged=converged, reason="x"
         )["converged_on"]
 
-    assert converged_on(tiny_params, converged=True) == "D"
+    assert converged_on(single, converged=True) == "D"
     assert converged_on(multi, converged=True) == ["D", "G_ST"]
-    assert converged_on(tiny_params, converged=False) is None
+    assert converged_on(single, converged=False) is None
     assert converged_on(multi, converged=False) is None
 
 
@@ -5380,7 +5381,11 @@ def test_a_statistic_precision_override_reaches_the_monitor(
 ) -> None:
     """A loose override lets a run stop where the run precision never would."""
     strict = replace(
-        tiny_params, precision=0.0005, max_generations=200, stop_batch_early=False
+        tiny_params,
+        convergence_statistic="D",
+        precision=0.0005,
+        max_generations=200,
+        stop_batch_early=False,
     )
     loose = replace(strict, statistic_precision=(("D", 0.9),))
 

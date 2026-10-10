@@ -52,7 +52,7 @@ def test_scalar_parameters_construct_with_documented_defaults() -> None:
     # so `E_ST` follows one convention unless `size` is asked for.
     assert params.deme_weighting == "equal"
     assert params.convergence_statistic == PARAMETER_DEFAULTS["convergence_statistic"]
-    assert params.convergence_statistics == ("D",)
+    assert params.convergence_statistics == ("D", "G_ST")
     assert params.convergence_combinator == PARAMETER_DEFAULTS["convergence_combinator"]
     # Unset means "derive it": the defaults table holds None, and the
     # constructed params hold the derived integers (see the derivation tests
@@ -1881,3 +1881,16 @@ def test_invalid_retention_settings_are_refused(
     """Unknown retention, a stride below 1 and a bad start are rejected by name."""
     with pytest.raises(ValueError, match=message):
         SimulationParams.from_mapping({**_valid_config(), **changes})
+
+
+def test_a_configuration_watches_d_and_g_st_by_default() -> None:
+    """The default watched set is `D` and `G_ST`, stopping when both have settled."""
+    params = SimulationParams.from_mapping(_valid_config())
+
+    assert params.convergence_statistics == ("D", "G_ST")
+    assert params.convergence_combinator == "all"
+    assert params.to_dict()["convergence_statistic"] == ["D", "G_ST"]
+    single = SimulationParams.from_mapping(
+        {**_valid_config(), "convergence_statistic": "D"}
+    )
+    assert single.convergence_statistics == ("D",)

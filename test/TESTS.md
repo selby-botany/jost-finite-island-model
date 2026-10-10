@@ -18680,24 +18680,21 @@ docstring) -- a hand-edited or stale file that fails it falls all
 the way back to `starter_form_values()`, the same as a first-ever
 launch with nothing saved at all.
 
-<a id="gui.test_input_screen.test_checking_a_second_convergence_statistic_reveals_the_combinator"></a>
+<a id="gui.test_input_screen.test_the_combinator_follows_how_many_statistics_are_watched"></a>
 
-#### test\_checking\_a\_second\_convergence\_statistic\_reveals\_the\_combinator
+#### test\_the\_combinator\_follows\_how\_many\_statistics\_are\_watched
 
 ```python
-def test_checking_a_second_convergence_statistic_reveals_the_combinator(
+def test_the_combinator_follows_how_many_statistics_are_watched(
         window: webview.Window, drive: Callable[..., Any]) -> None
 ```
 
-Checking a second statistic reveals the combinator field.
+The combinator shows for two or more watched statistics, and hides for one.
 
-The starter form has only `cs_D` checked; `syncConditionalVisibility`
-(`config-modals.js`) reveals `combinator-field` only once two or more
-are checked. Driven as a direct DOM click on the checkbox itself,
-the field's own real interaction now that the native Configure
-menu's own `toggleConvergenceStatistic` quick-toggle no longer
-exists — every field is reachable the same way regardless of how
-quick a toggle it used to be (design §3.3).
+The starter form watches `D` and `G_ST`, so the field is visible from the
+start; unchecking `G_ST` leaves one statistic and hides it
+(`syncConditionalVisibility`, `config-modals.js`), checking it again
+brings it back. Driven as a direct DOM click on the checkbox itself.
 
 <a id="gui.test_input_screen.test_combinator_is_two_radio_buttons_at_the_foot_of_the_statistics_panel"></a>
 
@@ -28004,6 +28001,16 @@ def test_invalid_retention_settings_are_refused(changes: dict[str, object],
 ```
 
 Unknown retention, a stride below 1 and a bad start are rejected by name.
+
+<a id="model.test_params.test_a_configuration_watches_d_and_g_st_by_default"></a>
+
+#### test\_a\_configuration\_watches\_d\_and\_g\_st\_by\_default
+
+```python
+def test_a_configuration_watches_d_and_g_st_by_default() -> None
+```
+
+The default watched set is `D` and `G_ST`, stopping when both have settled.
 
 <a id="model.test_run_identity"></a>
 

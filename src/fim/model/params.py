@@ -104,7 +104,7 @@ PARAMETER_DEFAULTS: Final[dict[str, object]] = {
     "initial_concentration": 1.0,
     "deme_weighting": "equal",
     "locus_aggregation": "ratio_of_means",
-    "convergence_statistic": "D",
+    "convergence_statistic": ("D", "G_ST"),
     "convergence_combinator": "all",
     "convergence_estimate": "mean_of_values",
     "convergence_burn_in": None,  # None means "auto": derive it
@@ -583,7 +583,7 @@ class SimulationParams:
     initial_concentration: float = 1.0
     deme_weighting: DemeWeighting = "equal"
     locus_aggregation: LocusAggregation = "ratio_of_means"
-    convergence_statistic: ConvergenceStatistic = "D"
+    convergence_statistic: ConvergenceStatistic = ("D", "G_ST")
     convergence_combinator: ConvergenceCombinator = "all"
     convergence_estimate: ConvergenceEstimate = "mean_of_values"
     convergence_burn_in: int = AUTO_CONVERGENCE

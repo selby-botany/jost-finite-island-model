@@ -434,8 +434,13 @@ per-pair ones). Identity statistics: <code>D</code>, <code>G_ST</code>, <code>H_
 all-demes Nei identities and distances (<code>NEI_I_ALL_GEO</code>, <code>NEI_D_ALL_ARITH</code>,
 and so on). Allele-spectrum statistics: <code>E_ST</code>, <code>K_ST</code>, <code>A_CGD</code>, <code>Delta</code>
 (Gregorius's δ), <code>MI</code> (Sherwin mutual information).</li>
-<li><strong>Default:</strong> <code>D</code></li>
+<li><strong>Default:</strong> <code>[D, G_ST]</code></li>
 </ul>
+<p>By default a run watches both and stops when both have settled
+(convergence_combinator <code>all</code>): <code>D</code> is the statistic most studies report, and
+<code>G_ST</code> is the one that is slowest and noisiest at low diversity, so a run that
+has settled on <code>D</code> alone can still be imprecise on <code>G_ST</code>. Name one statistic
+(<code>convergence_statistic: D</code>) to judge the run on it alone.</p>
 <p>Every watched statistic is computed every generation, whatever the display
 settings say. The allele-spectrum statistics are expensive (a pass over every
 allele per locus per generation) and are not covered by the relaxation time,

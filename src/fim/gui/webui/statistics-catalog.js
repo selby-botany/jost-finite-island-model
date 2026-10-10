@@ -303,8 +303,9 @@ function _buildStatisticSlots() {
             input.name = `cs_${key}`;
             input.value = "true";
             input.setAttribute("form", "input-form");
-            // `D` is the configuration's own default watched statistic.
-            input.checked = key === "D";
+            // `D` and `G_ST` are the configuration's own default watched
+            // statistics (`PARAMETER_DEFAULTS["convergence_statistic"]`).
+            input.checked = DEFAULT_CONVERGENCE_STATISTICS.includes(key);
             label.append(input, " ");
             label.insertAdjacentHTML("beforeend", formatStatisticLabel(key));
             if (statisticSpec(key).history === "opt_in") {

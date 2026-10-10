@@ -143,7 +143,7 @@ loci:
 initial_allele_count: 2
 initial_concentration: 1.0
 deme_weighting: equal
-convergence_statistic: D
+convergence_statistic: [D, G_ST]
 # `auto` derives the burn-in and the generation cap from how fast this
 # population forgets its starting state (its migration, mutation and size).
 # Write a whole number instead to choose your own.

@@ -504,7 +504,13 @@ equilibrium_max_generations: 5000
   all-demes Nei identities and distances (`NEI_I_ALL_GEO`, `NEI_D_ALL_ARITH`,
   and so on). Allele-spectrum statistics: `E_ST`, `K_ST`, `A_CGD`, `Delta`
   (Gregorius's δ), `MI` (Sherwin mutual information).
-- **Default:** `D`
+- **Default:** `[D, G_ST]`
+
+By default a run watches both and stops when both have settled
+(convergence_combinator `all`): `D` is the statistic most studies report, and
+`G_ST` is the one that is slowest and noisiest at low diversity, so a run that
+has settled on `D` alone can still be imprecise on `G_ST`. Name one statistic
+(`convergence_statistic: D`) to judge the run on it alone.
 
 Every watched statistic is computed every generation, whatever the display
 settings say. The allele-spectrum statistics are expensive (a pass over every
