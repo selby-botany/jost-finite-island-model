@@ -62,6 +62,7 @@ from fim.persistence.binary_store import (
     EQUILIBRIUM_LOG_FILENAME,
     TRAJECTORY_LOG_FILENAME,
     BinaryLogStore,
+    log_options,
 )
 from fim.persistence.manifest import hash_file, write_manifest
 from fim.persistence.pairwise import (
@@ -333,7 +334,9 @@ def _run_worker(
             with contextlib.closing(
                 GuiProgressStore(
                     BinaryLogStore(
-                        targets["trajectory"], block_seconds=LIVE_BLOCK_SECONDS
+                        targets["trajectory"],
+                        block_seconds=LIVE_BLOCK_SECONDS,
+                        **log_options(params.expert),
                     ),
                     on_generation=on_generation,
                     cancel_event=cancel_event,

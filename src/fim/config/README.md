@@ -80,6 +80,9 @@ package and fails on one that is not on its short allow list.
 | `GUI_ANIMATION_MAX_FRAMES` | `display.py` | policy (display) | `GUI_ANIMATION_MAX_FRAMES`. |
 | `ESTIMATE_AUTO_DENOMINATOR` | `statistics.py` | policy | Denominator below which a generation counts as degenerate for `auto`. |
 | `ESTIMATE_AUTO_FRACTION` | `statistics.py` | policy | Share of window generations that may be degenerate before `auto` switches. |
+| `LOG_KEY_EVERY` | `storage.py` | policy | Generations between keyframes in a sparse trajectory log. |
+| `LOG_SYNC_SECONDS` | `storage.py` | policy | Seconds between the log's group-commit syncs to disk. |
+| `LOG_BLOCK_GENERATIONS` | `storage.py` | policy | Generations after which the open block of the log is sealed and written. |
 
 ## Adding a constant
 

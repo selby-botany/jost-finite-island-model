@@ -47,6 +47,7 @@ Return to the [source-tree orientation](../README.md) or the [developer guide](.
     * [\_\_post\_init\_\_](#fim.config.expert.ExpertSettings.__post_init__)
     * [from\_mapping](#fim.config.expert.ExpertSettings.from_mapping)
     * [changes](#fim.config.expert.ExpertSettings.changes)
+  * [expert\_template](#fim.config.expert.expert_template)
 * [fim.config.limits](#fim.config.limits)
   * [MAXIMUM\_RECURSION\_DEMES](#fim.config.limits.MAXIMUM_RECURSION_DEMES)
 * [fim.config.numerics](#fim.config.numerics)
@@ -68,6 +69,10 @@ Return to the [source-tree orientation](../README.md) or the [developer guide](.
 * [fim.config.statistics](#fim.config.statistics)
   * [ESTIMATE\_AUTO\_DENOMINATOR](#fim.config.statistics.ESTIMATE_AUTO_DENOMINATOR)
   * [ESTIMATE\_AUTO\_FRACTION](#fim.config.statistics.ESTIMATE_AUTO_FRACTION)
+* [fim.config.storage](#fim.config.storage)
+  * [LOG\_KEY\_EVERY](#fim.config.storage.LOG_KEY_EVERY)
+  * [LOG\_SYNC\_SECONDS](#fim.config.storage.LOG_SYNC_SECONDS)
+  * [LOG\_BLOCK\_GENERATIONS](#fim.config.storage.LOG_BLOCK_GENERATIONS)
 * [fim.convergence](#fim.convergence)
 * [fim.convergence.batch\_window](#fim.convergence.batch_window)
   * [WindowNoise](#fim.convergence.batch_window.WindowNoise)
@@ -654,6 +659,7 @@ Return to the [source-tree orientation](../README.md) or the [developer guide](.
 * [fim.persistence.binary\_store](#fim.persistence.binary_store)
   * [TRAJECTORY\_LOG\_FILENAME](#fim.persistence.binary_store.TRAJECTORY_LOG_FILENAME)
   * [EQUILIBRIUM\_LOG\_FILENAME](#fim.persistence.binary_store.EQUILIBRIUM_LOG_FILENAME)
+  * [log\_options](#fim.persistence.binary_store.log_options)
   * [BinaryLogStore](#fim.persistence.binary_store.BinaryLogStore)
     * [\_\_init\_\_](#fim.persistence.binary_store.BinaryLogStore.__init__)
     * [\_\_enter\_\_](#fim.persistence.binary_store.BinaryLogStore.__enter__)
@@ -1304,10 +1310,10 @@ Dispatch one `fim sweep` subcommand and return its exit status.
 
 Named constants for convergence, statistics, limits and defaults.
 
-One module per subject: `convergence`, `limits`, `numerics`, `defaults` and
-`display`. Nothing else under `src/fim` defines a policy constant; see
-`README.md` for the table and `test/test_constants.py` for the scan that
-enforces it.
+One module per subject: `convergence`, `limits`, `numerics`, `defaults`,
+`display`, `statistics` and `storage`. Nothing else under `src/fim` defines a
+policy constant; see `README.md` for the table and `test/test_constants.py`
+for the scan that enforces it.
 
 <a id="fim.config.convergence"></a>
 
@@ -1867,6 +1873,12 @@ The convergence policy constants one run uses.
   `max_concurrent_replicates` is unset (at least 1).
 - `spectrum_burn_in_multiplier` - Factor on the burn-in when an
   allele-spectrum statistic is watched (at least 1).
+- `log_key_every` - Generations between keyframes in a sparse trajectory
+  log (at least 1).
+- `log_sync_seconds` - Seconds between the trajectory log's disk syncs
+  (greater than 0).
+- `log_block_generations` - Generations per trajectory-log block (at least
+  1).
 - `replicate_wave_multiple` - Replicate waves a batch aims for (greater
   than 0).
 - `averaging_multiple_minimum` - Smallest matched replicate averaging
@@ -1930,6 +1942,24 @@ Return the fields that differ from their defaults, by name.
 **Returns**:
 
   An empty mapping when every setting is at its default.
+
+<a id="fim.config.expert.expert_template"></a>
+
+#### expert\_template
+
+```python
+def expert_template() -> str
+```
+
+Return the commented `expert:` block `fim init` writes.
+
+Every Expert Setting appears with its default and its range, commented out,
+so a reader of the starter configuration sees every knob without any of
+them taking effect.
+
+**Returns**:
+
+  YAML comment lines, ending with a newline.
 
 <a id="fim.config.limits"></a>
 
@@ -2131,6 +2161,53 @@ Kind: policy.
 #### ESTIMATE\_AUTO\_FRACTION
 
 Share of window generations that may be degenerate before `auto` switches.
+
+Kind: policy.
+
+<a id="fim.config.storage"></a>
+
+# fim.config.storage
+
+Trajectory-log policy constants.
+
+How the binary trajectory log (`fim.persistence.tlog`) groups and syncs what it
+writes. None of them changes a simulated number; they change the log's size,
+how fast it can be read back, and how much of a run a crash can lose.
+
+See `README.md` in this directory for the table of every constant.
+
+<a id="fim.config.storage.LOG_KEY_EVERY"></a>
+
+#### LOG\_KEY\_EVERY
+
+Generations between keyframes in a sparse trajectory log.
+
+A keyframe stores every deme's allele frequencies in full; the generations
+between keyframes store only what changed. A smaller interval makes the log
+larger and seeking to a generation faster; a larger one the reverse.
+
+Kind: policy.
+
+<a id="fim.config.storage.LOG_SYNC_SECONDS"></a>
+
+#### LOG\_SYNC\_SECONDS
+
+Seconds between the log's group-commit syncs to disk.
+
+Bounds how much of a running trajectory a power loss can take: at most this
+many seconds of written blocks. A shorter interval costs more disk syncs.
+
+Kind: policy.
+
+<a id="fim.config.storage.LOG_BLOCK_GENERATIONS"></a>
+
+#### LOG\_BLOCK\_GENERATIONS
+
+Generations after which the open block of the log is sealed and written.
+
+A block is the unit that is checksummed and written, and the unit a reader can
+skip to. Larger blocks compress and write more efficiently; smaller ones lose
+less when a run is cut off and make a live view fresher.
 
 Kind: policy.
 
@@ -18225,6 +18302,26 @@ The log of a run's own trajectory, in the run's directory.
 #### EQUILIBRIUM\_LOG\_FILENAME
 
 The log of an equilibrium-split run's ancestral phase, beside the main one.
+
+<a id="fim.persistence.binary_store.log_options"></a>
+
+#### log\_options
+
+```python
+def log_options(expert: ExpertSettings) -> dict[str, Any]
+```
+
+Return the `BinaryLogStore` options a run's Expert Settings choose.
+
+**Arguments**:
+
+- `expert` - The run's Expert Settings.
+
+
+**Returns**:
+
+  Keyword arguments for `BinaryLogStore`: the keyframe interval, the
+  sync period and the block size.
 
 <a id="fim.persistence.binary_store.BinaryLogStore"></a>
 

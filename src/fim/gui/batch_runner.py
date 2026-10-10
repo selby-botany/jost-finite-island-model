@@ -54,6 +54,7 @@ from typing import Final, Literal
 
 from fim import __version__, paths
 from fim.config.defaults import DEFAULT_PAIRWISE_MAX_DEMES
+from fim.config.expert import ExpertSettings
 from fim.engine import RunResult, deterministic_run_id, fim, replicate_summary
 from fim.gui.runner import (
     pairwise_status_text,
@@ -62,7 +63,11 @@ from fim.gui.runner import (
 )
 from fim.gui.store import LIVE_BLOCK_SECONDS, LiveProgressStore, RunCancelledError
 from fim.model.params import SimulationParams
-from fim.persistence.binary_store import TRAJECTORY_LOG_FILENAME, BinaryLogStore
+from fim.persistence.binary_store import (
+    TRAJECTORY_LOG_FILENAME,
+    BinaryLogStore,
+    log_options,
+)
 from fim.persistence.manifest import (
     CURRENT_BATCH_SCHEMA_VERSION,
     ArtifactDigest,
@@ -289,7 +294,11 @@ def _batch_worker(
                 run_id=run_id,
                 max_workers=max_workers if params.engine_backend == "lineal" else None,
                 store_factory=functools.partial(
-                    _replicate_store_factory, working_directory, run_id, cancel_path
+                    _replicate_store_factory,
+                    working_directory,
+                    run_id,
+                    cancel_path,
+                    params.expert,
                 ),
             )
             if not isinstance(results, tuple):
@@ -372,6 +381,7 @@ def _replicate_store_factory(
     working_directory: Path,
     batch_run_id: str,
     cancel_path: Path,
+    expert: ExpertSettings,
     replicate_run_id: str,
 ) -> LiveProgressStore:
     """Build one replicate's real, file-backed progress store.
@@ -389,7 +399,9 @@ def _replicate_store_factory(
     directory.mkdir(parents=True, exist_ok=True)
     return LiveProgressStore(
         BinaryLogStore(
-            directory / TRAJECTORY_LOG_FILENAME, block_seconds=LIVE_BLOCK_SECONDS
+            directory / TRAJECTORY_LOG_FILENAME,
+            block_seconds=LIVE_BLOCK_SECONDS,
+            **log_options(expert),
         ),
         progress_path=directory / ".progress",
         cancel_path=cancel_path,

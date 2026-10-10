@@ -4711,6 +4711,49 @@ def test_a_capped_run_says_how_many_generations_the_precision_needs(
 
 A tight, unreachable-in-time precision prints the projected length.
 
+<a id="cli.test_cli.test_the_starter_config_lists_every_expert_setting_commented_out"></a>
+
+#### test\_the\_starter\_config\_lists\_every\_expert\_setting\_commented\_out
+
+```python
+def test_the_starter_config_lists_every_expert_setting_commented_out() -> None
+```
+
+`fim init` shows every knob; uncommenting the block changes nothing.
+
+<a id="cli.test_cli.test_a_run_with_changed_expert_settings_says_so"></a>
+
+#### test\_a\_run\_with\_changed\_expert\_settings\_says\_so
+
+```python
+def test_a_run_with_changed_expert_settings_says_so(
+        tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None
+```
+
+The changes are listed on the console, and recorded in the manifest.
+
+<a id="cli.test_cli.test_a_run_with_default_expert_settings_prints_no_expert_line"></a>
+
+#### test\_a\_run\_with\_default\_expert\_settings\_prints\_no\_expert\_line
+
+```python
+def test_a_run_with_default_expert_settings_prints_no_expert_line(
+        tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None
+```
+
+Nothing is announced when every Expert Setting is at its default.
+
+<a id="cli.test_cli.test_the_log_expert_settings_reach_the_trajectory_log_header"></a>
+
+#### test\_the\_log\_expert\_settings\_reach\_the\_trajectory\_log\_header
+
+```python
+def test_the_log_expert_settings_reach_the_trajectory_log_header(
+        tmp_path: Path) -> None
+```
+
+`log_key_every` is written into the log's header, where a reader sees it.
+
 <a id="cli.test_cli_labels"></a>
 
 # cli.test\_cli\_labels
@@ -28179,6 +28222,17 @@ def test_watching_an_allele_spectrum_statistic_lengthens_the_derived_burn_in(
 
 `spectrum_burn_in_multiplier` scales the derived burn-in, only then.
 
+<a id="model.test_params.test_the_log_expert_settings_default_to_the_log_constants_and_validate"></a>
+
+#### test\_the\_log\_expert\_settings\_default\_to\_the\_log\_constants\_and\_validate
+
+```python
+def test_the_log_expert_settings_default_to_the_log_constants_and_validate(
+) -> None
+```
+
+The three log tunables are Expert Settings with the writer's defaults.
+
 <a id="model.test_run_identity"></a>
 
 # model.test\_run\_identity
@@ -32373,6 +32427,16 @@ With a window of one, a finished replicate's log is closed before the next.
 
 Without per-lane closing a batch of N replicates would hold N writers
 (each with a thread and a descriptor) open for its whole run.
+
+<a id="persistence.test_store_lifecycle.test_log_options_carry_the_expert_log_settings_to_the_store"></a>
+
+#### test\_log\_options\_carry\_the\_expert\_log\_settings\_to\_the\_store
+
+```python
+def test_log_options_carry_the_expert_log_settings_to_the_store() -> None
+```
+
+`log_options` maps the Expert Settings onto `BinaryLogStore`'s options.
 
 <a id="persistence.test_tlog"></a>
 

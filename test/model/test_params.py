@@ -6,6 +6,7 @@ from pathlib import Path
 import pytest
 
 from fim.config.expert import ExpertSettings
+from fim.config.storage import LOG_BLOCK_GENERATIONS, LOG_KEY_EVERY, LOG_SYNC_SECONDS
 from fim.engine import deterministic_run_id
 from fim.model.locus import LocusSpec
 from fim.model.params import (
@@ -17,6 +18,7 @@ from fim.model.params import (
     describe_population,
     validate_execution_settings,
 )
+from fim.persistence import tlog
 
 
 def _valid_config() -> dict[str, object]:
@@ -1851,4 +1853,34 @@ def test_watching_an_allele_spectrum_statistic_lengthens_the_derived_burn_in() -
     assert plain.convergence_burn_in == identity.convergence_burn_in
     assert spectrum.convergence_burn_in == pytest.approx(
         2 * plain.convergence_burn_in, abs=1
+    )
+
+
+def test_the_log_expert_settings_default_to_the_log_constants_and_validate() -> None:
+    """The three log tunables are Expert Settings with the writer's defaults."""
+    expert = ExpertSettings()
+    assert expert.log_key_every == LOG_KEY_EVERY == tlog.DEFAULT_KEY_EVERY
+    assert expert.log_sync_seconds == LOG_SYNC_SECONDS == tlog.DEFAULT_SYNC_SECONDS
+    assert (
+        expert.log_block_generations
+        == LOG_BLOCK_GENERATIONS
+        == tlog.DEFAULT_BLOCK_GENERATIONS
+    )
+    for bad, message in (
+        ({"log_key_every": 0}, "at least 1"),
+        ({"log_key_every": 2.5}, "whole number"),
+        ({"log_sync_seconds": 0}, "greater than 0"),
+        ({"log_block_generations": 0}, "at least 1"),
+    ):
+        with pytest.raises(ValueError, match=message):
+            SimulationParams.from_mapping({**_valid_config(), "expert": bad})
+    changed = SimulationParams.from_mapping(
+        {**_valid_config(), "expert": {"log_key_every": 1024, "log_sync_seconds": 5}}
+    )
+    assert changed.to_dict()["expert"] == {
+        "log_key_every": 1024,
+        "log_sync_seconds": 5.0,
+    }
+    assert deterministic_run_id(changed) != deterministic_run_id(
+        SimulationParams.from_mapping(_valid_config())
     )

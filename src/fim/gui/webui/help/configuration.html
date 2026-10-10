@@ -789,6 +789,24 @@ run that changes one is a different run (its auto-generated <code>run_id</code> 
 <td>Factor on the burn-in when an allele-spectrum statistic (<code>E_ST</code>, <code>K_ST</code>, <code>A_CGD</code>, <code>Delta</code>, <code>MI</code>) is watched</td>
 </tr>
 <tr>
+<td><code>log_key_every</code></td>
+<td><code>256</code></td>
+<td>whole number, at least 1</td>
+<td>Generations between keyframes in the trajectory log: smaller makes the log larger and seeking faster</td>
+</tr>
+<tr>
+<td><code>log_sync_seconds</code></td>
+<td><code>2</code></td>
+<td>greater than 0</td>
+<td>Seconds between the trajectory log's disk syncs: the most a power loss can take</td>
+</tr>
+<tr>
+<td><code>log_block_generations</code></td>
+<td><code>512</code></td>
+<td>whole number, at least 1</td>
+<td>Generations per trajectory-log block: larger writes more efficiently, smaller loses less when a run is cut off</td>
+</tr>
+<tr>
 <td><code>replicate_wave_multiple</code></td>
 <td><code>2</code></td>
 <td>greater than 0</td>

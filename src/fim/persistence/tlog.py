@@ -48,6 +48,11 @@ from typing import BinaryIO, Final, Literal, Protocol
 
 import numpy as np
 
+from fim.config.storage import (
+    LOG_BLOCK_GENERATIONS,
+    LOG_KEY_EVERY,
+    LOG_SYNC_SECONDS,
+)
 from fim.persistence import tlog_codec as codec
 from fim.persistence.frame import FrameLayout, TrajectoryFrame
 
@@ -72,7 +77,7 @@ BLOCK_HEADER_SIZE: Final = _BLOCK_HEADER.size
 _CRC: Final = struct.Struct("<I")
 CRC_SIZE: Final = _CRC.size
 
-DEFAULT_BLOCK_GENERATIONS: Final = 512
+DEFAULT_BLOCK_GENERATIONS: Final = LOG_BLOCK_GENERATIONS
 """Generations after which the open block is sealed and written."""
 
 DEFAULT_BLOCK_SECONDS: Final[float | None] = None
@@ -87,7 +92,7 @@ a moment stale opts in with a number of seconds; when such a writer closes it
 rewrites the log with the canonical block boundaries (see
 `LogWriter.canonical_on_close`), so the finished file is the same either way."""
 
-DEFAULT_KEY_EVERY: Final = 256
+DEFAULT_KEY_EVERY: Final = LOG_KEY_EVERY
 """Generations between keyframes in sparse mode."""
 
 DEFAULT_BUFFER_BYTES: Final = 4 * 1024 * 1024
@@ -96,7 +101,7 @@ DEFAULT_BUFFER_BYTES: Final = 4 * 1024 * 1024
 DEFAULT_QUEUE_DEPTH: Final = 4
 """Sealed blocks that may wait for the writer thread."""
 
-DEFAULT_SYNC_SECONDS: Final = 2.0
+DEFAULT_SYNC_SECONDS: Final = LOG_SYNC_SECONDS
 """Seconds between group-commit syncs."""
 
 _POLL_SECONDS: Final = 0.05

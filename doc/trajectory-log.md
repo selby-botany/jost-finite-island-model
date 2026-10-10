@@ -86,6 +86,14 @@ directory is only published when the run finishes, so an interrupted
 matter to code that keeps a log open for long (the desktop app's live runs, and
 the run checkpoints that are still to come).
 
+**Tuning.** The snapshot interval (256), the block size (512 generations) and
+the sync period (two seconds) are the Expert Settings `log_key_every`,
+`log_block_generations` and `log_sync_seconds`
+([configuration](configuration.md#expert)). They change the log's size, how fast
+it can be read back, and how much a crash can take; they never change a
+simulated number. A run that changes one is recorded as such in its manifest
+and is a different run (its run ID changes).
+
 **Durability.** A background thread writes the blocks and asks the operating
 system to flush them to the disk every two seconds, and when the log is
 closed. On macOS that uses the full-flush call (`F_FULLFSYNC`), because the

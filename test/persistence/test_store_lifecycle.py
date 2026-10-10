@@ -22,12 +22,13 @@ import pytest
 from conftest import assert_none_open
 
 from fim import paths
+from fim.config.expert import ExpertSettings
 from fim.engine import SequentialAdvancer, fim, run_batch
 from fim.model.allele import AlleleId
 from fim.model.locus import LocusSpec
 from fim.model.params import SimulationParams
 from fim.model.state import ModelState
-from fim.persistence.binary_store import BinaryLogStore
+from fim.persistence.binary_store import BinaryLogStore, log_options
 from fim.persistence.frame import TrajectoryFrame
 from fim.persistence.store import (
     InMemoryTrajectoryStore,
@@ -273,3 +274,16 @@ def test_generational_batch_holds_open_only_the_running_lanes(
     assert open_when_built == [0, 0, 0, 0]
     fanout.close()
     assert not any(store.is_open() for store in built)
+
+
+def test_log_options_carry_the_expert_log_settings_to_the_store() -> None:
+    """`log_options` maps the Expert Settings onto `BinaryLogStore`'s options."""
+    expert = ExpertSettings(
+        log_key_every=64, log_sync_seconds=0.5, log_block_generations=32
+    )
+
+    assert log_options(expert) == {
+        "key_every": 64,
+        "sync_seconds": 0.5,
+        "block_generations": 32,
+    }

@@ -801,6 +801,9 @@ run that changes one is a different run (its auto-generated `run_id` changes).
 | `estimate_auto_fraction` | `0.01` | between 0 and 1, exclusive | Share of window generations that may be degenerate before `auto` uses the value of means |
 | `batch_width` | `8` | whole number, at least 1 | Replicates assumed to run at once when `max_concurrent_replicates` is unset: the width of the first wave a batch matches its windows from |
 | `spectrum_burn_in_multiplier` | `1` | at least 1 | Factor on the burn-in when an allele-spectrum statistic (`E_ST`, `K_ST`, `A_CGD`, `Delta`, `MI`) is watched |
+| `log_key_every` | `256` | whole number, at least 1 | Generations between keyframes in the trajectory log: smaller makes the log larger and seeking faster |
+| `log_sync_seconds` | `2` | greater than 0 | Seconds between the trajectory log's disk syncs: the most a power loss can take |
+| `log_block_generations` | `512` | whole number, at least 1 | Generations per trajectory-log block: larger writes more efficiently, smaller loses less when a run is cut off |
 | `replicate_wave_multiple` | `2` | greater than 0 | Replicate waves a batch aims for: the matched window is sized for `max(replicate_minimum, multiple * width)` replicates |
 | `averaging_multiple_minimum` | `5` | greater than 0 | Shortest matched replicate window, in relaxation times |
 | `averaging_multiple_maximum` | `100` | at least `averaging_multiple_minimum` | Longest matched replicate window, in relaxation times |

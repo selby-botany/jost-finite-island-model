@@ -27,6 +27,7 @@ from pathlib import Path
 from types import TracebackType
 from typing import Any, Final
 
+from fim.config.expert import ExpertSettings
 from fim.persistence import tlog
 from fim.persistence.frame import (
     FrameLayout,
@@ -44,6 +45,23 @@ TRAJECTORY_LOG_FILENAME: Final = "trajectory.tlog"
 
 EQUILIBRIUM_LOG_FILENAME: Final = "equilibrium_trajectory.tlog"
 """The log of an equilibrium-split run's ancestral phase, beside the main one."""
+
+
+def log_options(expert: ExpertSettings) -> dict[str, Any]:
+    """Return the `BinaryLogStore` options a run's Expert Settings choose.
+
+    Args:
+        expert: The run's Expert Settings.
+
+    Returns:
+        Keyword arguments for `BinaryLogStore`: the keyframe interval, the
+        sync period and the block size.
+    """
+    return {
+        "key_every": expert.log_key_every,
+        "sync_seconds": expert.log_sync_seconds,
+        "block_generations": expert.log_block_generations,
+    }
 
 
 class BinaryLogStore:

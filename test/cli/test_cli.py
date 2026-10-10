@@ -5,6 +5,7 @@ from __future__ import annotations
 import ast
 import json
 from collections.abc import Mapping
+from dataclasses import fields
 from pathlib import Path
 from typing import Any
 
@@ -13,9 +14,12 @@ import yaml
 from conftest import FAST_EXPERT_SETTINGS
 
 from fim import __version__, cli, paths, update
+from fim.config.expert import ExpertSettings
 from fim.gui.preferences import preferences_file_override
+from fim.model.params import SimulationParams
 from fim.persistence.binary_store import BinaryLogStore
 from fim.persistence.manifest import hash_file, read_batch_manifest
+from fim.persistence.tlog import parse_header
 
 
 def _write_config(path: Path, **updates: object) -> None:
@@ -2102,3 +2106,69 @@ def test_a_capped_run_says_how_many_generations_the_precision_needs(
     output = capsys.readouterr().out
     assert "needs about" in output
     assert "more loci or more replicates reach it faster" in output
+
+
+def test_the_starter_config_lists_every_expert_setting_commented_out() -> None:
+    """`fim init` shows every knob; uncommenting the block changes nothing."""
+    text = cli.STARTER_CONFIG
+    for field_ in fields(ExpertSettings):
+        assert f"#   {field_.name}: " in text, field_.name
+    params = SimulationParams.from_mapping(yaml.safe_load(text))
+    assert params.expert == ExpertSettings()
+    uncommented = "\n".join(
+        line[2:] if line.startswith("#   ") or line == "# expert:" else line
+        for line in text.splitlines()
+    )
+    again = SimulationParams.from_mapping(yaml.safe_load(uncommented))
+    assert again.expert == ExpertSettings()
+    assert "expert" not in again.to_dict()
+
+
+def test_a_run_with_changed_expert_settings_says_so(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """The changes are listed on the console, and recorded in the manifest."""
+    config = tmp_path / "config.yaml"
+    _write_config(
+        config,
+        expert={**FAST_EXPERT_SETTINGS, "log_key_every": 8},
+    )
+
+    assert cli.main(["run", str(config), "--output", str(tmp_path / "out")]) == 0
+
+    output = capsys.readouterr().out
+    assert "Expert settings changed:" in output
+    assert "log_key_every=8" in output
+    manifest = json.loads((tmp_path / "out" / "manifest.json").read_text())
+    assert manifest["parameters"]["expert"]["log_key_every"] == 8
+
+
+def test_a_run_with_default_expert_settings_prints_no_expert_line(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """Nothing is announced when every Expert Setting is at its default."""
+    config = tmp_path / "config.yaml"
+    _write_config(config, expert={})
+
+    assert cli.main(["run", str(config), "--output", str(tmp_path / "out")]) == 0
+
+    assert "Expert settings changed" not in capsys.readouterr().out
+
+
+def test_the_log_expert_settings_reach_the_trajectory_log_header(
+    tmp_path: Path,
+) -> None:
+    """`log_key_every` is written into the log's header, where a reader sees it."""
+    config = tmp_path / "config.yaml"
+    _write_config(
+        config,
+        expert={**FAST_EXPERT_SETTINGS, "log_key_every": 16},
+    )
+
+    assert (
+        cli.main(["run", str(config), "--output", str(tmp_path / "out"), "--quiet"])
+        == 0
+    )
+
+    header = parse_header((tmp_path / "out" / "trajectory.tlog").read_bytes())
+    assert header.key_every == 16

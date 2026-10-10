@@ -39,6 +39,7 @@ from fim.config.convergence import (
 )
 from fim.config.numerics import MINIMUM_WINDOW_VALUES
 from fim.config.statistics import ESTIMATE_AUTO_DENOMINATOR, ESTIMATE_AUTO_FRACTION
+from fim.config.storage import LOG_BLOCK_GENERATIONS, LOG_KEY_EVERY, LOG_SYNC_SECONDS
 
 
 @dataclass(frozen=True, slots=True)
@@ -75,6 +76,12 @@ class ExpertSettings:
             `max_concurrent_replicates` is unset (at least 1).
         spectrum_burn_in_multiplier: Factor on the burn-in when an
             allele-spectrum statistic is watched (at least 1).
+        log_key_every: Generations between keyframes in a sparse trajectory
+            log (at least 1).
+        log_sync_seconds: Seconds between the trajectory log's disk syncs
+            (greater than 0).
+        log_block_generations: Generations per trajectory-log block (at least
+            1).
         replicate_wave_multiple: Replicate waves a batch aims for (greater
             than 0).
         averaging_multiple_minimum: Smallest matched replicate averaging
@@ -100,6 +107,9 @@ class ExpertSettings:
     estimate_auto_fraction: float = ESTIMATE_AUTO_FRACTION
     batch_width: int = BATCH_WIDTH
     spectrum_burn_in_multiplier: float = SPECTRUM_BURN_IN_MULTIPLIER
+    log_key_every: int = LOG_KEY_EVERY
+    log_sync_seconds: float = LOG_SYNC_SECONDS
+    log_block_generations: int = LOG_BLOCK_GENERATIONS
     replicate_wave_multiple: float = REPLICATE_WAVE_MULTIPLE
     averaging_multiple_minimum: float = AVERAGING_MULTIPLE_MINIMUM
     averaging_multiple_maximum: float = AVERAGING_MULTIPLE_MAXIMUM
@@ -183,6 +193,31 @@ class ExpertSettings:
         }
 
 
+def expert_template() -> str:
+    """Return the commented `expert:` block `fim init` writes.
+
+    Every Expert Setting appears with its default and its range, commented out,
+    so a reader of the starter configuration sees every knob without any of
+    them taking effect.
+
+    Returns:
+        YAML comment lines, ending with a newline.
+    """
+    lines = [
+        "# Expert settings: policy constants of the convergence rule and the",
+        "# trajectory log. The defaults are measured choices (doc/convergence.md);",
+        "# a run that changes one is a different run. Uncomment a line to change it.",
+        "# expert:",
+    ]
+    defaults = ExpertSettings()
+    ranges = {name: (low, inclusive) for name, low, inclusive in _RANGES}
+    for field_ in fields(ExpertSettings):
+        low, inclusive = ranges[field_.name]
+        bound = f"at least {low:g}" if inclusive else f"greater than {low:g}"
+        lines.append(f"#   {field_.name}: {getattr(defaults, field_.name)}  # {bound}")
+    return "\n".join(lines) + "\n"
+
+
 _RANGES: Final = (
     ("burn_in_minimum_relaxation_times", 1.0, True),
     ("first_check_relaxation_times", 0.0, False),
@@ -198,6 +233,9 @@ _RANGES: Final = (
     ("estimate_auto_fraction", 0.0, False),
     ("batch_width", 1.0, True),
     ("spectrum_burn_in_multiplier", 1.0, True),
+    ("log_key_every", 1.0, True),
+    ("log_sync_seconds", 0.0, False),
+    ("log_block_generations", 1.0, True),
     ("replicate_wave_multiple", 0.0, False),
     ("averaging_multiple_minimum", 0.0, False),
     ("averaging_multiple_maximum", 0.0, False),
@@ -210,6 +248,8 @@ _INTEGER_FIELDS: Final = (
     "cap_minimum",
     "cap_maximum",
     "batch_width",
+    "log_key_every",
+    "log_block_generations",
 )
 """The fields that must be whole numbers."""
 

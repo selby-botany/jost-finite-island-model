@@ -68,6 +68,7 @@ from matplotlib import pyplot as plt
 from fim import __version__, logging_setup, paths, reanalyze, update
 from fim.cli_sweep import add_sweep_subcommands, command_sweep
 from fim.config.defaults import DEFAULT_PAIRWISE_MAX_DEMES
+from fim.config.expert import ExpertSettings, expert_template
 from fim.convergence.defaults import describe_derived_convergence
 from fim.engine import (
     FinalReport,
@@ -81,6 +82,7 @@ from fim.persistence.binary_store import (
     EQUILIBRIUM_LOG_FILENAME,
     TRAJECTORY_LOG_FILENAME,
     BinaryLogStore,
+    log_options,
 )
 from fim.persistence.groups import (
     ExperimentManifest,
@@ -182,7 +184,7 @@ n_replicates: 200
 # confusing, unrelated-looking error, and briefly failed with a clearer
 # but still overly broad one before that gap was actually closed.
 engine_backend: auto
-"""
+""" + expert_template()
 
 
 def load_config(path: Path | str) -> SimulationParams:
@@ -598,7 +600,9 @@ def _command_run_scalar(
         # Closed here as well as by the engine, before `atomic_directory`
         # renames (or, on failure, removes) the directory: an open handle
         # blocks both on Windows.
-        with BinaryLogStore(targets["trajectory"]) as store:
+        with BinaryLogStore(
+            targets["trajectory"], **log_options(params.expert)
+        ) as store:
             output = fim(
                 params.gene_copies,
                 params.m,
@@ -737,7 +741,10 @@ def _command_run_batch(
             run_id=run_id,
             max_workers=max_workers,
             store_factory=functools.partial(
-                _replicate_store_factory, working_directory, run_id
+                _replicate_store_factory,
+                working_directory,
+                run_id,
+                params.expert,
             ),
         )
         if not isinstance(output, tuple):
@@ -1094,9 +1101,17 @@ def _print_derived_convergence(params: SimulationParams) -> None:
     Args:
         params: The run's configuration.
 
+    A run whose Expert Settings differ from their defaults says so, listing the
+    changes, so a number is never read without knowing what shaped it.
+
     Returns:
-        None. Prints nothing when both values were given explicitly.
+        None. Prints nothing when both values were given explicitly and no
+        Expert Setting was changed.
     """
+    changes = params.expert.changes()
+    if changes:
+        listed = ", ".join(f"{name}={value}" for name, value in sorted(changes.items()))
+        print(f"Expert settings changed: {listed}")
     if not params.auto_derived:
         return
     print(
@@ -1220,6 +1235,7 @@ def _replicate_output_directory(
 def _replicate_store_factory(
     output_directory: Path,
     batch_run_id: str,
+    expert: ExpertSettings,
     replicate_run_id: str,
 ) -> BinaryLogStore:
     """Build one replicate's real on-disk trajectory store.
@@ -1239,7 +1255,7 @@ def _replicate_store_factory(
         output_directory, batch_run_id, replicate_run_id
     )
     directory.mkdir(parents=True, exist_ok=True)
-    return BinaryLogStore(directory / TRAJECTORY_LOG_FILENAME)
+    return BinaryLogStore(directory / TRAJECTORY_LOG_FILENAME, **log_options(expert))
 
 
 def _run_artifact_targets(directory: Path) -> dict[str, Path]:
