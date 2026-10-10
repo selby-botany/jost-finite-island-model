@@ -1037,8 +1037,32 @@ def fast_scalar_run_settings(_isolate_gui_preferences: Path) -> Path:
             default_ploidy="1",
             default_run_settings={
                 "n_replicates": "1",
-                "max_generations": "10",
-                "convergence_window": "4",
+                "max_generations": "3000",
+                "convergence_burn_in": "1",
+                "precision": "1.0",
+            },
+        ),
+    )
+    return _isolate_gui_preferences
+
+
+@pytest.fixture
+def short_scalar_run_settings(_isolate_gui_preferences: Path) -> Path:
+    """Pre-seed Settings for a scalar run that ends at a short cap, unconverged.
+
+    For a test that needs a finished run but not a converged one, and a short
+    trajectory (`fast_scalar_run_settings` lets the run converge, which takes
+    a few thousand generations): the cap is a few hundred generations.
+    """
+    save_preferences(
+        _isolate_gui_preferences,
+        GuiPreferences(
+            welcome_dismissed=True,
+            default_ploidy="1",
+            default_run_settings={
+                "n_replicates": "1",
+                "max_generations": "300",
+                "convergence_burn_in": "1",
                 "precision": "1.0",
             },
         ),
@@ -1086,7 +1110,6 @@ def unreachable_convergence_run_settings(_isolate_gui_preferences: Path) -> Path
             default_ploidy="1",
             default_run_settings={
                 "n_replicates": "1",
-                "convergence_window": "10000",
             },
         ),
     )
@@ -1110,8 +1133,8 @@ def fast_batch_run_settings(_isolate_gui_preferences: Path) -> Path:
             default_ploidy="1",
             default_run_settings={
                 "n_replicates": "2",
-                "max_generations": "10",
-                "convergence_window": "4",
+                "max_generations": "3000",
+                "convergence_burn_in": "1",
                 "precision": "1.0",
                 "max_workers": "2",
             },
@@ -1143,7 +1166,6 @@ def unreachable_batch_run_settings(_isolate_gui_preferences: Path) -> Path:
             default_run_settings={
                 "n_replicates": "2",
                 "max_generations": "10000",
-                "convergence_window": "10000",
                 "max_workers": "2",
             },
         ),
@@ -1170,9 +1192,9 @@ def staggered_batch_run_settings(_isolate_gui_preferences: Path) -> Path:
             default_ploidy="1",
             default_run_settings={
                 "n_replicates": "5",
-                "max_generations": "30",
-                "convergence_window": "4",
-                "precision": "0.02",
+                "max_generations": "3000",
+                "convergence_burn_in": "1",
+                "precision": "0.1",
                 "max_workers": "3",
             },
         ),

@@ -1,6 +1,6 @@
-# Convergence defaults
+# Convergence: burn in, then average
 
-How `fim` decides when a run is finished, and why the default window and
+How `fim` decides when a run is finished, and why the burn-in and the
 generation cap are derived from your model instead of being fixed numbers.
 
 ## Contents
@@ -8,19 +8,24 @@ generation cap are derived from your model instead of being fixed numbers.
 - [If you only read one section](#if-you-only-read-one-section)
 - [Why does my run take so long?](#why-does-my-run-take-so-long)
 - [Quick reference](#quick-reference)
+- [How a run decides it is finished](#how-a-run-decides-it-is-finished)
 - [How the numbers are derived](#how-the-numbers-are-derived)
 - [Where the formula comes from](#where-the-formula-comes-from)
-- [Why the window is three relaxation times](#why-the-window-is-three-relaxation-times)
+- [How precise is the reported value?](#how-precise-is-the-reported-value)
 - [Checking the numbers yourself](#checking-the-numbers-yourself)
 - [Limits](#limits)
 
 ## If you only read one section
 
-A finished run is one where the statistic has stayed steady for as long as the
-population needs to forget where it started. That time can be tens of
-thousands of generations. If a run finishes in a hundred generations, the
-result is almost certainly not the equilibrium you wanted; check the
-`convergence_window` and `max_generations` values.
+A run first waits out a **burn-in**: the time the population needs to forget
+where it started. Only then does it start **averaging**, and it keeps
+averaging until the average is known to the precision you asked for (plus or
+minus `precision`, at `confidence`). The result is the average, with its error
+bar. If the run reaches its generation cap before the average is that
+precise, it says so ("hit the cap") and still reports the average it has,
+with the error bar it really has. A run that finishes in a hundred
+generations is almost certainly not the equilibrium you wanted; check
+`convergence_burn_in` and `max_generations`.
 
 ## Why does my run take so long?
 
@@ -29,18 +34,21 @@ result is almost certainly not the equilibrium you wanted; check the
 A simulated population does not settle at once. When several islands begin
 with different genes, it takes a long time for gene flow and mutation to shape
 what you finally see. With very little migration between islands, "a long
-time" means tens of thousands of generations.
+time" means tens of thousands of generations. After that the numbers still
+wobble from generation to generation by drift, so `fim` averages them over a
+long stretch until the average is steady to the precision you chose.
 
-`fim` waits until the numbers have stayed steady for a stretch of generations
-that matches how slowly your population changes. You do not have to choose
-that stretch: leave the setting on `auto`. The app shows the expected length
-next to the **Run simulation** button before you start, for example:
+You do not have to choose the lengths: leave the settings on `auto`. The app
+shows the expected burn-in next to the **Run simulation** button before you
+start, for example:
 
-> Convergence: window 59,078 generations, cap 295,390 (derived; this model
+> Convergence: burn-in 104,400 generations, cap 399,000 (derived; this model
 > needs about 19,693 generations to forget its starting state)
 
-If a run stops at the cap without settling, the message says how long the
-model needs, so you can decide whether to allow more generations.
+If a run stops at the cap without reaching the precision, the report says how
+precise the average is, so you can decide whether to allow more generations,
+ask for less precision, use more loci, or run several replicates (a batch
+reaches a given precision sooner than one long run).
 
 ## Quick reference
 
@@ -48,25 +56,64 @@ model needs, so you can decide whether to allow more generations.
 
 | Setting | Default | Meaning |
 |---|---|---|
-| `convergence_window` | `auto` | Generations the statistic must stay steady: `max(50, ceil(3 tau))` — the *starting* size of the evidence window; it grows past this on its own if the trend flattens before the mean is precise (see below) |
-| `max_generations` | `auto` | Safety cap: `max(200000, ceil(15 tau))`, at most 10,000,000 |
-| `precision` | `0.01` | How much the two halves of the window may differ, and (halved) how precisely the window's own mean must be known |
+| `precision` | `0.01` | Plus or minus, in each watched statistic's own units, at `confidence` |
+| `confidence` | `0.95` | How sure the plus-or-minus is (0.90, 0.95 or 0.99) |
+| `convergence_burn_in` | `auto` | Generations discarded before averaging: `ceil(k tau)` with `k = max(5, ln(2 / precision))` |
+| `max_generations` | `auto` | Safety cap: `max(200000, burn_in + ceil(15 tau))`, at most 10,000,000 |
 
-`tau` is the relaxation time. Any whole number you write replaces the derived
-value. If you set only one of the two, the other adapts: a derived window is
-clamped to an explicit cap, and a derived cap is raised to five windows.
+`tau` is the relaxation time of the slowest locus. Any whole number you write
+replaces the derived value. If you set only one of the two, the other adapts: a
+derived cap is raised to leave `15 tau` after an explicit burn-in. The
+`expert:` mapping changes the policy constants (the floor of 5, the factor
+15, the first check, the effective-sample-size floor and the rest; see
+[configuration.md](configuration.md#expert)).
 
 Symptoms of a bad value:
 
-- **Window too short:** the run ends quickly and D is still falling at the end
-  of the trajectory plot.
-- **Cap too small:** the run ends "hit the cap" and the message names a
-  relaxation time larger than the cap.
-- **Cap too large:** only a run that never settles takes longer to end.
+- **Burn-in too short:** the average starts inside the transient and is
+  biased.
+- **Cap too small:** the run ends "hit the cap", possibly before the burn-in
+  even ends (then there is no average at all); the run logs a warning.
+- **Cap too large:** only a run that never reaches its precision takes longer
+  to end.
 
 `fim run` prints the derived values unless `--quiet`. They are also written as
 plain integers to `manifest.json`, so any run can be reproduced exactly by
 passing those integers.
+
+## How a run decides it is finished
+
+*For sysops, technicians and developers.*
+
+```text
+burn_in = ceil(k * tau)                  # k = max(5, ln(2 / precision))
+start   = burn_in                        # the evidence window is [start, t]
+first check at start + max(50, ceil(2 tau))
+at each check, for every watched statistic:
+    mean, SE, ESS = Geyer's estimate over the window [start, t]
+    pass if SE <= precision / z(confidence) and ESS >= 50
+stop if all (or any, under `convergence_combinator: any`) pass
+next check after the window has doubled
+stop as capped at max_generations
+```
+
+- Nothing is averaged before the burn-in, and generation 0 is never in an
+  average.
+- `z` is the normal quantile of the confidence (1.96 at 95%), so `precision`
+  keeps the meaning "plus or minus this much".
+- `ESS`, the effective sample size, is how many independent values the
+  window's correlated generations are worth; a standard error from fewer than
+  50 is not trusted. Geyer's initial positive sequence estimator sums the whole
+  autocorrelation function, so a slow second mode is seen (see
+  [How precise is the reported value?](#how-precise-is-the-reported-value)).
+- Every watched statistic is judged at every check, so the stop generation
+  never depends on the order they are listed in.
+- With no relaxation time (no migration and no mutation, or an explicit
+  matrix beyond 24 demes) and `convergence_burn_in: auto`, the window starts
+  at the first tenth of the run at each check.
+- At the stop, every recorded statistic, watched or not, gets its mean and
+  standard error over the same window, in `report.json`'s
+  `window_statistics`.
 
 ## How the numbers are derived
 
@@ -82,18 +129,26 @@ tau = 1 / (2 mu + 1 / T)
 `N_total` is the sum of all deme sizes and `mu` is the smallest mutation rate
 over loci: the slowest locus is the last to forget its starting state, so it
 sets the time. The relaxation time is computed whenever the model has one, not
-only when a window or cap is derived. Explicit migration matrices and unequal deme sizes use the slowest mode
-of the identity recursion (next section), a `d² × d²` eigenproblem limited to
-24 demes. No migration and no mutation has no relaxation time, and `auto` is
-refused. The code is `fim.convergence.defaults`.
+only when a burn-in or cap is derived. Explicit migration matrices and unequal
+deme sizes use the slowest mode of the identity recursion (next section), a
+`d² × d²` eigenproblem limited to 24 demes. No migration and no mutation has no
+relaxation time, and a derived cap is refused. The code is
+`fim.convergence.defaults`.
+
+The burn-in multiple is `k = max(5, ln(2 / precision))`: the slowest mode's
+leftover from a worst-case unit offset is `e^-k`, so `k >= ln(2 / precision)`
+leaves at most `precision / 2` of bias, and a tighter precision lengthens the
+burn-in on its own. The floor of 5 keeps a loose precision from shortening it
+below what a measured two-mode model needed (the average's bias at 5.3 `tau`
+was -0.00016).
 
 The `200000` floor on `max_generations` is not derived from `tau` at all —
-it comes from measuring how long the evidence window (above) actually needs
-to grow for a single locus's own noise to average out, in two scenarios
-whose relaxation times sit two orders of magnitude apart (`tau` 85 and
-19,693) yet which both needed close to 130,000 generations regardless. A
-model that genuinely needs longer than that (a very large `d` or very slow
-mutation) still gets `15 tau` once that exceeds the floor.
+it comes from measuring how many generations a single locus's `D` needs before
+its average is known to 0.01, in two scenarios whose relaxation times sit two
+orders of magnitude apart (`tau` 85 and 19,693) yet which both needed close to
+130,000 generations. A model that genuinely needs longer than that (a very
+large `d` or very slow mutation) still gets the burn-in plus `15 tau` once
+that exceeds the floor.
 
 ## Where the formula comes from
 
@@ -137,76 +192,33 @@ time: `T = N_total + (d − 1) / (2m)`. Mutation destroys identity at an
 independent rate `2 mu`, and independent rates add, giving
 `tau = 1 / (2 mu + 1 / T)`.
 
-## Why the window is three relaxation times
+## How precise is the reported value?
 
-The stopping rule takes the last `w` generations, compares the mean of the
-first half with the mean of the second half, and stops when they differ by at
-most the tolerance `tol`. Near equilibrium a statistic behaves as
-`x* + Δ e^(−t/τ)`. If `R` is the true remaining distance from `x*` at the end
-of the window, the halves differ by `R · f(w/τ)` with
-`f(r) = e^r · (2/r) · (1 − e^(−r/2))²`, so the rule accepts any `R` up to
-`tol / f(w/τ)`:
+*For everyone.* A statistic that has stopped trending still wobbles from
+generation to generation, and neighboring generations are almost the same
+population, so they are not independent draws. Averaging `W` such values does
+not shrink the uncertainty by `1 / sqrt(W)`; it shrinks by
+`1 / sqrt(W / tau_int)`, where the *integrated autocorrelation time* `tau_int`
+says how many consecutive generations are worth one independent draw. `fim`
+estimates `tau_int` from the window itself and reports the standard error
+that follows.
 
-| `w / τ` | Remaining distance accepted, in units of `tol` |
-|---|---|
-| 0.0026 (the old fixed window of 50 at `d=5`, `m=0.0001`) | 768 |
-| 0.25 | 7.1 |
-| 0.5 | 3.1 |
-| 1 | 1.19 |
-| 2 | 0.34 |
-| 3 | 0.12 |
-
-With the old window the rule accepted a distance larger than the whole range of
-D, so runs stopped after about a hundred generations. A window of one `tau`
-makes the tolerance mean roughly what it says. One stochastic run also carries
-sampling noise, so the multiple was measured, not only derived: at three
-relaxation times the mean stopping D is within 0.05 of the analytic
-equilibrium in every regime tested (Golden Part VI, Dear-Nolan low, a ring, and
-unequal mutation rates), and the slowest run stopped after 9.0 `tau`, so the
-cap is 15 `tau`. The data are in
-`test/validation/convergence-defaults-evidence.json`.
-
-## Is the reported value actually precise enough?
-
-*For everyone.* The trend check above answers "has this stopped moving in
-one direction." It does not answer "is the number I am about to read
-actually known to the tolerance I asked for" — a statistic that has
-genuinely stopped trending can still wobble, generation to generation, by
-more than the tolerance, and two neighboring halves of a window can land
-close together by chance long before that wobble has been averaged away.
-A single locus watched by a single replicate is the case this bites
-hardest: `doc/examples/golden-part-vi`'s own README shows a real run that
-did exactly this — "converged" at generation 400 on a lucky half-window
-match, at a value that was not actually close to the model's long-run
-average.
-
-`fim` now checks for this directly. Alongside the trend check, it asks
-whether the trailing window's own mean is known to half the configured
-tolerance, correcting for how correlated consecutive generations are (an
-effective-sample-size estimate from the window's own lag-1
-autocorrelation — `fim.convergence.window_statistics`). A run only stops
-with `"statistic converged"` once **both** checks pass.
-
-The derived `3 tau` window is only ever the *starting* point for that
-second check, not its final size: once the trend has genuinely flattened,
-`fim` keeps that same window growing, generation by generation, for as
-long as it takes to become precise — a single locus can need a window
-many times longer than `3 tau` to know its own mean to a tight tolerance,
-and no fixed multiple of `tau` predicts how much longer in advance (two
-real scenarios needing close to 130,000 generations despite their own
-relaxation times sitting two orders of magnitude apart — see
-[How the numbers are derived](#how-the-numbers-are-derived)). A run that
-still hits `max_generations` without ever reaching that precision reports
-`"hit the cap"` honestly, the same as a run that never stopped trending —
-now meaning the growing window itself ran out of room, not merely that
-the original small one was never rechecked.
+The estimator matters. A single-lag estimate (the correlation of neighboring
+values) is exact only for a first-order process. A statistic with two
+relaxation times, a fast mode and a slow one, looks nearly decorrelated at lag
+1 and is badly underestimated: on a seeded two-mode series whose true
+`tau_int` is 469, the single-lag formula gives about 75 and Geyer's estimator
+gives 438. That is why the error bars of earlier versions read too small.
+`fim.convergence.window_statistics` implements Geyer's (1992) initial positive
+sequence estimator.
 
 Every scalar run's `report.json` carries the evidence either way, in
-`window_statistics`, one entry per statistic recorded — `mean` (the
-window average, a better estimate than the single reported point value
-even when not yet precise enough), `standard_error`, `effective_sample_size`,
-`window`, and `noise_adequate`. The CLI prints the watched statistic's own
-line after every run; the GUI's Run card tooltip shows the same numbers.
+`window_statistics`, one entry per statistic recorded: `mean` (the window
+average, the estimate to read), `standard_error`, `standard_deviation`,
+`effective_sample_size`, `window` (its length), `window_start` (the generation
+it begins at), `estimator`, and `noise_adequate` (whether the requested
+precision was reached). The CLI prints the watched statistic's own line after
+every run; the GUI's Run card tooltip shows the same numbers.
 
 ## Checking the numbers yourself
 
@@ -214,27 +226,27 @@ line after every run; the GUI's Run card tooltip shows the same numbers.
   recursion beside the closed form and the migration gap, for six reference
   models. The unit tests in `test/convergence/test_defaults.py` fail if the
   closed form is off by more than 5%.
-- `dev/bin/calibrate-convergence-defaults REGIME --k K --c C` reruns the
-  measurement that chose the multiples.
+- `test/convergence/test_burn_in_monitor.py` pins the schedule (burn-in, first
+  check, doubling) and the stop rule on exact series, and
+  `test/convergence/test_window_statistics.py` checks the estimator against
+  hand-worked values and known autoregressive series.
 - `test/validation/test_convergence_defaults.py` (slow) runs Golden Part VI and
   Dear-Nolan low with the shipped defaults.
 
 ## Limits
 
 - The closed form is exact for the symmetric island model only.
-- Unequal mutation rates use their mean and unequal deme sizes use their sum,
-  which are approximations.
+- Unequal deme sizes use their sum, an approximation; the slowest locus (the
+  smallest mutation rate) sets `tau`.
 - The `200000` floor is measured from two regimes, not derived from first
-  principles — a third, faster-mixing regime needed far less (12,000), so
-  the floor has real margin, but a configuration this project has not yet
-  measured could plausibly still need more before `noise_adequate` is
-  reached, in which case it reports the cap honestly rather than a false
-  convergence (see [Is the reported value actually precise
-  enough?](#is-the-reported-value-actually-precise-enough)).
-- The window's own growth is throttled (checked at doubling intervals, not
-  every generation) to keep the check itself cheap — a run can therefore
-  run a little past the generation it first became precise enough before
-  that is actually confirmed and reported.
+  principles. A third, faster-mixing regime needed far less (12,000), so the
+  floor has real margin, but a configuration not yet measured could need more
+  before its precision is reached, in which case the run reports the cap
+  honestly, with the average and error bar it has, rather than a false
+  convergence.
+- Checks happen when the window has doubled, not every generation, to keep the
+  checking cheap; a run can therefore run up to a doubling past the length it
+  first needed (typically 1.4 times, at most 2 times).
 - The Dear-Nolan high-migration scenario (100 demes of 2,000 gene copies) is
   not covered by the replicated measurement because a run costs about 0.4
   seconds per generation. Its relaxation time is dominated by mutation

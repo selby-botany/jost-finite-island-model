@@ -17,10 +17,10 @@ loci:
     length: 5
 engine_backend: generational-vector
 convergence_statistic: D
-# A fixed 100-generation horizon: a 101-generation window can never fill
-# within 100 generations, so every replicate runs exactly to the cap.
-convergence_window: 101
-precision: 0.02
+# A fixed 100-generation horizon: a precision of zero can never be reached, so
+# every replicate runs exactly to the cap (a burn-in of 1 keeps the cap above it).
+precision: 0.0
+convergence_burn_in: 1
 max_generations: 100
 n_replicates: 16
 stop_batch_early: false   # always run all 16 replicates

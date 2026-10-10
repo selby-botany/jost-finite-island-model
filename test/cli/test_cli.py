@@ -10,6 +10,7 @@ from typing import Any
 
 import pytest
 import yaml
+from conftest import FAST_EXPERT_SETTINGS
 
 from fim import __version__, cli, paths, update
 from fim.gui.preferences import preferences_file_override
@@ -31,9 +32,10 @@ def _write_config(path: Path, **updates: object) -> None:
         "initial_concentration": 1.0,
         "deme_weighting": "size",
         "convergence_statistic": "D",
-        "convergence_window": 4,
         "precision": 1.0,
-        "max_generations": 10,
+        "convergence_burn_in": 1,
+        "expert": dict(FAST_EXPERT_SETTINGS),
+        "max_generations": 40,
         "n_replicates": 1,
         # Off, not omitted: an omitted `stop_batch_early` means "on"
         # (the default). This fixture's own small, explicit `n_replicates`
@@ -346,9 +348,9 @@ def test_run_accepts_several_convergence_statistics(tmp_path: Path) -> None:
     report = json.loads((output / "report.json").read_text(encoding="utf-8"))
     # Under `any`, `converged_on` names whichever watched statistics had
     # settled when the run stopped -- a property of this seeded
-    # realization: only `D` since the textbook per-copy mutation step
-    # changed the random stream (both, before it).
-    assert report["converged_on"] == ["D"]
+    # realization: both are known to the (loose) precision at the first check
+    # the effective-sample-size floor allows.
+    assert report["converged_on"] == ["D", "G_ST"]
     assert (output / "scatter.png").exists()
 
 
@@ -362,7 +364,7 @@ def test_a_capped_run_reports_converged_on_none_and_still_prints_its_window(
     """
     config = tmp_path / "run.yaml"
     output = tmp_path / "output"
-    _write_config(config, convergence_window=10, precision=0.0, max_generations=12)
+    _write_config(config, precision=0.0, max_generations=12)
 
     status = cli.main(["run", str(config), "--output", str(output)])
 
@@ -490,7 +492,6 @@ def test_run_accepts_a_per_base_mutation_rate(tmp_path: Path) -> None:
             {"locus_id": 1, "length": 5},
             {"locus_id": 2, "length": 50},
         ],
-        "convergence_window": 4,
         "precision": 1.0,
         "max_generations": 10,
         "n_replicates": 1,
@@ -1987,24 +1988,24 @@ def test_init_writes_derived_convergence_settings(tmp_path: Path) -> None:
     assert cli.main(["init", "--output", str(output)]) == 0
 
     text = output.read_text(encoding="utf-8")
-    assert "convergence_window: auto" in text
+    assert "convergence_burn_in: auto" in text
     assert "max_generations: auto" in text
     params = cli.load_config(output)
-    assert params.auto_derived == {"convergence_window", "max_generations"}
-    assert params.convergence_window > 50
+    assert params.auto_derived == {"convergence_burn_in", "max_generations"}
+    assert params.convergence_burn_in > 50
 
 
 def test_a_run_with_derived_settings_announces_them(
     tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
-    """A derived window and cap are printed before the run starts."""
+    """A derived cap (and burn-in) are printed before the run starts."""
     config = tmp_path / "config.yaml"
-    _write_config(config, convergence_window="auto", max_generations="auto")
+    _write_config(config, max_generations="auto", convergence_burn_in="auto")
 
     assert cli.main(["run", str(config), "--output", str(tmp_path / "out")]) == 0
 
     output = capsys.readouterr().out
-    assert "Convergence: window" in output
+    assert "Convergence: burn-in" in output
     assert "(derived; this model needs about" in output
 
 
@@ -2028,7 +2029,6 @@ def test_a_derived_run_that_hits_its_cap_names_the_relaxation_time(
     # Tolerance 0 can never be met, so the run always ends at the cap.
     _write_config(
         config,
-        convergence_window="auto",
         max_generations=200,
         precision=0.0,
     )

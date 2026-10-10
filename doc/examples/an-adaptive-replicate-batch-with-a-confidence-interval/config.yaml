@@ -32,6 +32,7 @@ loci:
     length: 100
 engine_backend: lineal
 convergence_statistic: D
-precision: 0.03   # plus or minus: each replicate and the batch's interval
+precision: 0.08   # plus or minus: each replicate and the batch's interval
+max_generations: 5000   # a cap: the run reports the precision it reached by then
 n_replicates: 50
 replicate_minimum: 10

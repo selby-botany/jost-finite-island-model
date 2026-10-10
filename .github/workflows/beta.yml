@@ -142,7 +142,6 @@ jobs:
           (Get-Content tiny.yaml) `
             -replace 'N: 450', 'N: 20' `
             -replace 'd: 20', 'd: 2' `
-            -replace 'convergence_window: auto', 'convergence_window: 4' `
             -replace 'precision: 0.01', 'precision: 1.0' `
             -replace 'max_generations: auto', 'max_generations: 10' `
             | Set-Content tiny.yaml
@@ -234,7 +233,6 @@ jobs:
           (Get-Content tiny.yaml) `
             -replace 'N: 450', 'N: 20' `
             -replace 'd: 20', 'd: 2' `
-            -replace 'convergence_window: auto', 'convergence_window: 4' `
             -replace 'precision: 0.01', 'precision: 1.0' `
             -replace 'max_generations: auto', 'max_generations: 10' `
             | Set-Content tiny.yaml
@@ -306,13 +304,12 @@ jobs:
           sed -i '' \
             -e 's/N: 450/N: 20/' \
             -e 's/d: 20/d: 2/' \
-            -e 's/convergence_window: auto/convergence_window: 4/' \
             -e 's/precision: 0.01/precision: 1.0/' \
             -e 's/max_generations: auto/max_generations: 10/' \
             -e 's/n_replicates: 200/n_replicates: 1/' \
             tiny.yaml
           dist/fim.app/Contents/MacOS/fim run tiny.yaml --output smoke --quiet
-          for artifact in manifest.json report.json scatter.png trajectory.jsonl; do
+          for artifact in manifest.json report.json scatter.png trajectory.tlog; do
             if [[ ! -s "smoke/${artifact}" ]]; then
               echo "::error::Executable smoke artifact '${artifact}' missing or empty"
               exit 1
@@ -384,13 +381,12 @@ jobs:
           sed -i '' \
             -e 's/N: 450/N: 20/' \
             -e 's/d: 20/d: 2/' \
-            -e 's/convergence_window: auto/convergence_window: 4/' \
             -e 's/precision: 0.01/precision: 1.0/' \
             -e 's/max_generations: auto/max_generations: 10/' \
             -e 's/n_replicates: 200/n_replicates: 1/' \
             tiny.yaml
           dist/fim.app/Contents/MacOS/fim run tiny.yaml --output smoke --quiet
-          for artifact in manifest.json report.json scatter.png trajectory.jsonl; do
+          for artifact in manifest.json report.json scatter.png trajectory.tlog; do
             if [[ ! -s "smoke/${artifact}" ]]; then
               echo "::error::Executable smoke artifact '${artifact}' missing or empty"
               exit 1
@@ -498,13 +494,12 @@ jobs:
           sed -i \
             -e 's/N: 450/N: 20/' \
             -e 's/d: 20/d: 2/' \
-            -e 's/convergence_window: auto/convergence_window: 4/' \
             -e 's/precision: 0.01/precision: 1.0/' \
             -e 's/max_generations: auto/max_generations: 10/' \
             -e 's/n_replicates: 200/n_replicates: 1/' \
             tiny.yaml
           dist/fim run tiny.yaml --output smoke --quiet
-          for artifact in manifest.json report.json scatter.png trajectory.jsonl; do
+          for artifact in manifest.json report.json scatter.png trajectory.tlog; do
             if [[ ! -s "smoke/${artifact}" ]]; then
               echo "::error::Executable smoke artifact '${artifact}' missing or empty"
               exit 1

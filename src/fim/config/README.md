@@ -30,20 +30,23 @@ package and fails on one that is not on its short allow list.
 | `numerics.py` | Numerical guards and derivable constants |
 | `defaults.py` | Default values of regular settings |
 | `display.py` | Limits that shape what the app draws |
+| `expert.py` | `ExpertSettings`: the policy constants a run's configuration may change in its `expert:` mapping |
 
 ## Constants
 
 | Name | Module | Kind | Controls |
 | --- | --- | --- | --- |
-| `WINDOW_RELAXATION_MULTIPLE` | `convergence.py` | policy | Default `convergence_window`, in units of the relaxation time `tau`. |
-| `CAP_RELAXATION_MULTIPLE` | `convergence.py` | policy | Default `max_generations`, in units of `tau`. |
-| `MINIMUM_WINDOW` | `convergence.py` | policy | Smallest derived window: the historical default, kept as a floor. |
+| `BURN_IN_MINIMUM_RELAXATION_TIMES` | `convergence.py` | policy | Fewest relaxation times `tau` the burn-in lasts: the floor of `k`. |
+| `FIRST_CHECK_RELAXATION_TIMES` | `convergence.py` | policy | First check, in relaxation times after the burn-in ends. |
+| `FIRST_CHECK_MINIMUM` | `convergence.py` | policy | Fewest generations after the burn-in before the first check. |
+| `MINIMUM_EFFECTIVE_SAMPLE_SIZE` | `convergence.py` | policy | Smallest effective sample size an evidence window must hold to be trusted. |
+| `CHECK_GROWTH` | `convergence.py` | policy | Factor by which the evidence window grows between checks (doubling). |
+| `FRACTIONAL_BURN_IN` | `convergence.py` | policy | Share of a run discarded as burn-in when no relaxation time is available. |
+| `CAP_RELAXATION_MULTIPLE` | `convergence.py` | policy | Default `max_generations`, in relaxation times, beyond the burn-in. |
 | `MINIMUM_MAX_GENERATIONS` | `convergence.py` | policy | Smallest derived cap. |
 | `ABSOLUTE_MAX_GENERATIONS` | `convergence.py` | policy (safety) | Ceiling on a derived cap, so a nearly isolated system stays finite. |
-| `NOISE_TOLERANCE_FRACTION` | `convergence.py` | policy | A window's own trailing-window mean is only judged noise-adequate once its standard error is at most this ... |
-| `MINIMUM_NOISE_CHECK_WINDOW` | `convergence.py` | policy | Below this many values, a lag-1 correlation estimate is too noisy itself to trust (a handful of points can ... |
-| `GEWEKE_FIRST_FRACTION` | `convergence.py` | convention | Share of an evidence window, from its start, that Geweke's `z` compares. |
-| `GEWEKE_LAST_FRACTION` | `convergence.py` | convention | Share of an evidence window, from its end, that Geweke's `z` compares. |
+| `GEWEKE_FIRST_FRACTION` | `convergence.py` | convention (Geweke 1992: the first 10% against the last 50%) | Share of an evidence window, from its start, that Geweke's `z` compares. |
+| `GEWEKE_LAST_FRACTION` | `convergence.py` | convention (Geweke 1992: the first 10% against the last 50%) | Share of an evidence window, from its end, that Geweke's `z` compares. |
 | `START_DRIFT_ALERT_Z` | `convergence.py` | policy | Absolute Geweke `z` above which the report says the burn-in may be too short. |
 | `MAXIMUM_RECURSION_DEMES` | `limits.py` | policy (run time) | Largest `d` for which the `d² by d²` eigenvalue route is used. |
 | `MAXIMUM_LAG1_CORRELATION` | `numerics.py` | numerical guard | A lag-1 correlation this close to 1 makes `tau_int` (below) blow up numerically for a reason that is ... |

@@ -267,7 +267,6 @@ def test_engine_agrees_with_the_payload_for_every_example(
             **base,
             "seed": base["seed"] + offset,
             "n_replicates": 1,
-            "convergence_window": horizon,
             "precision": 1e-12,
             "max_generations": horizon,
             "loci": [

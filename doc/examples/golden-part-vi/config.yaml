@@ -17,7 +17,6 @@ initial_concentration: 1.0
 deme_weighting: size
 engine_backend: lineal
 convergence_statistic: D
-convergence_window: auto
 precision: 0.01
-max_generations: auto
+max_generations: 10000   # a cap: the run reports the precision it reached by then
 n_replicates: 1

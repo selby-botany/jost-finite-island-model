@@ -138,7 +138,6 @@ def main() -> None:
         loci=loci,
         initial_allele_count=2,
         convergence_statistic="D",
-        convergence_window=window,
         precision=TOLERANCE,
         max_generations=cap,
         n_replicates=args.replicates,

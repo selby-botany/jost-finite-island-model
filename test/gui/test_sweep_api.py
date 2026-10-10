@@ -84,9 +84,7 @@ def api(tmp_path: Path, results: Path) -> Api:
         for key, value in starter_form_values().items()
         if key in api.get_default_run_settings()
     }
-    defaults.update(
-        {"n_replicates": "1", "convergence_window": "3", "max_generations": "10"}
-    )
+    defaults.update({"n_replicates": "1", "max_generations": "10"})
     assert api.set_default_run_settings(defaults)["ok"] is True
     api.set_default_ploidy("1")
     return api

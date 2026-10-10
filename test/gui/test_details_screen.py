@@ -263,7 +263,6 @@ def test_a_runs_details_dialog_names_it_without_documentation(
                 "mu": 0.01,
                 "seed": 3,
                 "loci": [{"locus_id": 1, "length": 200}],
-                "convergence_window": 4,
                 "max_generations": 10,
                 # One run, not the default batch of up to 200 replicates:
                 # the batch took most of a minute alone, and over two

@@ -18,6 +18,7 @@ from typing import cast
 
 import pytest
 import yaml
+from conftest import FAST_EXPERT_SETTINGS
 
 from fim import cli, engine, paths, reanalyze
 from fim.engine import report_for_state
@@ -81,9 +82,10 @@ def _write_run(tmp_path: Path, **overrides: object) -> Path:
         "mu": 0.01,
         "seed": 20260814,
         "loci": [{"locus_id": 1, "length": 200}],
-        "convergence_window": 4,
         "precision": 1.0,
-        "max_generations": 10,
+        "convergence_burn_in": 1,
+        "expert": dict(FAST_EXPERT_SETTINGS),
+        "max_generations": 40,
         "n_replicates": 1,
         "stop_batch_early": False,
     }
@@ -516,9 +518,10 @@ def test_a_rebuilt_convergence_history_matches_the_live_one(tmp_path: Path) -> N
         "mu": 0.01,
         "seed": 14,
         "loci": [{"locus_id": 1, "length": 200}],
-        "convergence_window": 4,
-        "precision": 0.02,
-        "max_generations": 20,
+        "precision": 0.1,
+        "convergence_burn_in": 1,
+        "expert": dict(FAST_EXPERT_SETTINGS),
+        "max_generations": 300,
         "n_replicates": 3,
         "stop_batch_early": False,
     }

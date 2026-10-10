@@ -9,11 +9,11 @@ The finite-alleles model uses a five-base locus.
 
 Two settings fix the amount of work:
 
-- `convergence_window: 101` is one more generation than the 100-generation
-  cap can record, so no replicate can stop early by converging. Each one
-  ends "at the cap", which is expected here.
+- `precision: 0.0` can never be reached, so no replicate can stop early by
+  converging, and `convergence_burn_in: 1` keeps the 100-generation cap above
+  the burn-in. Each replicate ends "at the cap", which is expected here.
 - `stop_batch_early: false` turns off the adaptive replicate stop, so all
-  16 replicates always run. Without it, the default tolerance of 0.01 stops
+  16 replicates always run. Without it, a precision above zero would stop
   the batch at the 10-replicate minimum.
 
 The run takes about 40 seconds on a busy development machine. The

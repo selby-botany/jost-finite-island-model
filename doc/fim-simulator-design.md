@@ -457,17 +457,14 @@ starting scenario than an arbitrary guess:
 | Higher migration, higher mutation | `2000` | `100` | `0.01` | `0.001` | `20` | `0.02` | `0.91` |
 
 **A stopping rule must be reachable, not just well-typed.**
-convergence_window and replicate_minimum are each individually
-bounds-checked (above; §9), but a value can pass that check and still
-describe a rule the engine could never satisfy: a convergence_window
-larger than max_generations + 1 (the most generations a run can ever
-record — generation 0 plus max_generations steps) can never fill
-before the generation cap ends the run, and a replicate_minimum
-larger than n<sub>replicates</sub> can never be reached before the batch's own
-replicate cap ends it. `SimulationParams.__post_init__` rejects both
-at construction rather than letting the run complete and report an
-ordinary-looking capped result with no indication the configured
-stopping rule was unreachable from the start.
+replicate_minimum is bounds-checked (above; §9), but a value can pass
+that check and still describe a rule the engine could never satisfy: a
+replicate_minimum larger than n<sub>replicates</sub> can never be
+reached before the batch's own replicate cap ends it.
+`SimulationParams.__post_init__` clamps it to n<sub>replicates</sub>. A
+burn-in at or above max_generations likewise ends the run before any
+averaging starts; that one is allowed (a fixed-horizon run may want it) but
+logs a warning, and the run is reported as capped with no average.
 
 Both scenarios are explicitly **haploid** in the letter ("`N=100` haploid
 reproductive individuals," "`100` demes of `2000` haploid reproductive
@@ -1253,7 +1250,6 @@ initial_allele_count: 2
 initial_concentration: 1.0
 deme_weighting: size
 convergence_statistic: D
-convergence_window: 50
 precision: 0.01
 max_generations: 10000
 n_replicates: 1            # explicit: the library default is 200, batched

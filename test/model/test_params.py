@@ -1,9 +1,11 @@
 """Tests for validated and replayable simulation parameters."""
 
+import math
 from pathlib import Path
 
 import pytest
 
+from fim.config.expert import ExpertSettings
 from fim.engine import deterministic_run_id
 from fim.model.locus import LocusSpec
 from fim.model.params import (
@@ -53,9 +55,9 @@ def test_scalar_parameters_construct_with_documented_defaults() -> None:
     # Unset means "derive it": the defaults table holds None, and the
     # constructed params hold the derived integers (see the derivation tests
     # at the end of this file).
-    assert PARAMETER_DEFAULTS["convergence_window"] is None
+    assert PARAMETER_DEFAULTS["convergence_burn_in"] is None
     assert PARAMETER_DEFAULTS["max_generations"] is None
-    assert params.auto_derived == {"convergence_window", "max_generations"}
+    assert params.auto_derived == {"convergence_burn_in", "max_generations"}
     assert params.precision == PARAMETER_DEFAULTS["precision"]
     assert params.n_replicates == PARAMETER_DEFAULTS["n_replicates"]
     assert params.n_replicates == 200
@@ -89,7 +91,7 @@ def test_scalar_parameters_construct_with_documented_defaults() -> None:
         ("d", 1, "d must be at least 2"),
         ("N", 0, "N must be at least 1"),
         ("deme_weighting", "wrong", "deme_weighting"),
-        ("convergence_window", 1, "convergence_window"),
+        ("convergence_burn_in", 0, "convergence_burn_in"),
         ("auto_vector_max_capacity", 0, "auto_vector_max_capacity"),
     ],
 )
@@ -253,7 +255,6 @@ def test_mapping_round_trip_is_lossless() -> None:
         {
             **_valid_config(),
             "loci": [{"locus_id": 3, "length": 500}],
-            "convergence_window": 6,
         }
     )
 
@@ -513,15 +514,6 @@ def test_mu_and_mu_b_are_mutually_exclusive_and_one_is_required() -> None:
         ({"precision": -1.0}, "non-negative"),
         ({"precision": float("nan")}, "finite"),
         ({"max_generations": 0}, "max_generations"),
-        (
-            # An explicit window of 50 with max_generations capped to 5
-            # leaves room for only 6 possible records (generation 0 plus 5
-            # steps), so the window could never fill before the cap stops
-            # the run. (A derived window is clamped to an explicit cap
-            # instead; see `test_a_derived_window_is_clamped_to_an_explicit_cap`.)
-            {"convergence_window": 50, "max_generations": 5},
-            "convergence_window cannot exceed max_generations",
-        ),
         ({"n_replicates": 0}, "n_replicates"),
         ({"precision": -1.0}, "non-negative"),
         ({"precision": float("nan")}, "finite"),
@@ -895,7 +887,7 @@ def test_migration_topology_and_sparse_map_are_validated(
         ("deme_weighting", False, "nonempty"),
         ("convergence_statistic", "", "nonempty"),
         ("convergence_statistic", 1, "string or a list of strings"),
-        ("convergence_window", 1.5, "must be an integer"),
+        ("convergence_burn_in", 1.5, "must be an integer"),
         ("max_generations", True, "must be an integer"),
     ],
 )
@@ -1145,7 +1137,7 @@ def test_sigma_band_multiplier_accepts_three() -> None:
 
 
 def test_sigma_band_window_rejects_below_two() -> None:
-    """`sigma_band_window` shares `convergence_window`'s own minimum."""
+    """`sigma_band_window` needs at least two points to show a spread."""
     config = _sigma_band_config(sigma_band_window=1)
     with pytest.raises(ValueError, match="sigma_band_window must be at least 2"):
         SimulationParams.from_mapping(config)
@@ -1385,30 +1377,36 @@ def test_describe_population_reads_the_way_a_botanist_does() -> None:
     assert describe_population(direct) == "20 haploid individuals per deme"
 
 
-def test_unset_window_and_cap_are_derived_from_the_model() -> None:
-    """Unset window and cap take the derived values, recorded as derived."""
+def test_unset_burn_in_and_cap_are_derived_from_the_model() -> None:
+    """Unset burn-in and cap take the derived values, recorded as derived."""
     params = SimulationParams.from_mapping(
         {"N": 100, "ploidy": "haploid", "d": 5, "m": 0.0001, "mu": 0.000001, "seed": 1}
     )
-    assert params.auto_derived == {"convergence_window", "max_generations"}
-    assert params.relaxation_time == pytest.approx(19_700, rel=0.01)
-    assert params.convergence_window == 59_078
-    assert params.max_generations == 295_390
+    tau = params.relaxation_time
+    assert params.auto_derived == {"convergence_burn_in", "max_generations"}
+    assert tau == pytest.approx(19_700, rel=0.01)
+    assert tau is not None
+    assert params.convergence_burn_in == math.ceil(math.log(200.0) * tau)
+    assert params.max_generations == params.convergence_burn_in + math.ceil(15 * tau)
 
 
 @pytest.mark.parametrize("auto", [None, "auto", "AUTO", " auto "])
 def test_auto_spellings_all_mean_derive(auto: object) -> None:
     """`null` and `auto` (any case) request derivation."""
-    config = {**_valid_config(), "convergence_window": auto, "max_generations": auto}
+    config = {
+        **_valid_config(),
+        "convergence_burn_in": auto,
+        "max_generations": auto,
+    }
     params = SimulationParams.from_mapping(config)
-    assert params.auto_derived == {"convergence_window", "max_generations"}
+    assert params.auto_derived == {"convergence_burn_in", "max_generations"}
 
 
 @pytest.mark.parametrize("bad", [0, -5, "many", 1.5, True])
-def test_a_bad_window_or_cap_is_rejected_not_read_as_auto(bad: object) -> None:
+def test_a_bad_burn_in_or_cap_is_rejected_not_read_as_auto(bad: object) -> None:
     """A bare zero (the internal sentinel) and other junk are errors."""
-    with pytest.raises(ValueError, match="convergence_window"):
-        SimulationParams.from_mapping({**_valid_config(), "convergence_window": bad})
+    with pytest.raises(ValueError, match="convergence_burn_in"):
+        SimulationParams.from_mapping({**_valid_config(), "convergence_burn_in": bad})
     with pytest.raises(ValueError, match="max_generations"):
         SimulationParams.from_mapping({**_valid_config(), "max_generations": bad})
 
@@ -1416,9 +1414,9 @@ def test_a_bad_window_or_cap_is_rejected_not_read_as_auto(bad: object) -> None:
 def test_explicit_values_win_and_are_not_recorded_as_derived() -> None:
     """Both explicit: nothing derived, but the relaxation time is still known."""
     params = SimulationParams.from_mapping(
-        {**_valid_config(), "convergence_window": 60, "max_generations": 900}
+        {**_valid_config(), "convergence_burn_in": 60, "max_generations": 900}
     )
-    assert (params.convergence_window, params.max_generations) == (60, 900)
+    assert (params.convergence_burn_in, params.max_generations) == (60, 900)
     assert params.auto_derived == frozenset()
     derived = SimulationParams.from_mapping(_valid_config())
     assert params.relaxation_time == derived.relaxation_time
@@ -1432,7 +1430,7 @@ def test_a_model_without_a_relaxation_time_runs_with_explicit_values() -> None:
             **_valid_config(),
             "m": 0.0,
             "mu": 0.0,
-            "convergence_window": 60,
+            "convergence_burn_in": 60,
             "max_generations": 900,
         }
     )
@@ -1451,33 +1449,27 @@ def test_the_relaxation_time_follows_the_slowest_locus() -> None:
     )
     slow = SimulationParams.from_mapping({**config, "mu": 1e-5})
     assert mixed.relaxation_time == slow.relaxation_time
+    assert mixed.convergence_burn_in == slow.convergence_burn_in
 
 
-def test_a_derived_window_is_clamped_to_an_explicit_cap() -> None:
-    """A derived window never exceeds an explicit cap."""
+def test_a_derived_burn_in_follows_the_precision() -> None:
+    """A tighter precision derives a longer burn-in (`k = ln(2 / precision)`)."""
+    loose = SimulationParams.from_mapping({**_valid_config(), "precision": 0.1})
+    tight = SimulationParams.from_mapping({**_valid_config(), "precision": 0.0001})
+    tau = loose.relaxation_time
+    assert tau is not None
+    assert tau == tight.relaxation_time
+    assert loose.convergence_burn_in == math.ceil(5.0 * tau)
+    assert tight.convergence_burn_in == math.ceil(math.log(20_000.0) * tau)
+
+
+def test_a_derived_cap_includes_an_explicit_burn_in() -> None:
+    """A long explicit burn-in raises the derived cap with it."""
     params = SimulationParams.from_mapping(
-        {
-            "N": 100,
-            "ploidy": "haploid",
-            "d": 5,
-            "m": 0.0001,
-            "mu": 0.000001,
-            "seed": 1,
-            "max_generations": 1000,
-        }
+        {**_valid_config(), "convergence_burn_in": 500_000}
     )
-    assert params.max_generations == 1000
-    assert params.convergence_window == 1000
-    assert params.auto_derived == {"convergence_window"}
-
-
-def test_a_derived_cap_is_raised_to_fit_an_explicit_window() -> None:
-    """A derived cap leaves an explicit window the usual headroom."""
-    params = SimulationParams.from_mapping(
-        {**_valid_config(), "convergence_window": 40_000}
-    )
-    # 15 / 3 = 5 windows of headroom, the ratio the derived defaults use.
-    assert params.max_generations == 200_000
+    assert params.relaxation_time is not None
+    assert params.max_generations == 500_000 + math.ceil(15 * params.relaxation_time)
     assert params.auto_derived == {"max_generations"}
 
 
@@ -1487,21 +1479,26 @@ def test_derived_values_round_trip_as_concrete_integers() -> None:
     again = SimulationParams.from_mapping(original.to_dict())
     assert again == original
     assert again.auto_derived == frozenset()
-    assert original.to_dict()["convergence_window"] == original.convergence_window
+    assert original.to_dict()["convergence_burn_in"] == original.convergence_burn_in
 
 
-def test_no_migration_and_no_mutation_needs_explicit_values() -> None:
-    """Nothing to wait for: derivation is refused, explicit values work."""
+def test_no_migration_and_no_mutation_needs_an_explicit_cap() -> None:
+    """Nothing to wait for: a derived cap is refused, an explicit one works.
+
+    The burn-in then falls back to the first tenth of the run: `auto` stays
+    `auto` (zero inside) and round-trips as such.
+    """
     config = {"N": 20, "ploidy": "haploid", "d": 2, "m": 0.0, "mu": 0.0, "seed": 1}
-    with pytest.raises(ValueError, match="cannot derive convergence_window"):
+    with pytest.raises(ValueError, match="cannot derive max_generations"):
         SimulationParams.from_mapping(config)
-    params = SimulationParams.from_mapping(
-        {**config, "convergence_window": 50, "max_generations": 500}
-    )
-    assert params.convergence_window == 50
+    params = SimulationParams.from_mapping({**config, "max_generations": 500})
+    assert params.convergence_burn_in == 0
+    assert params.auto_derived == {"convergence_burn_in"}
+    assert params.to_dict()["convergence_burn_in"] == "auto"
+    assert SimulationParams.from_mapping(params.to_dict()) == params
 
 
-def test_a_large_explicit_matrix_needs_explicit_values() -> None:
+def test_a_large_explicit_matrix_needs_an_explicit_cap() -> None:
     """An explicit matrix beyond the eigenvalue route's size is refused."""
     d = 30
     matrix = [
@@ -1511,12 +1508,9 @@ def test_a_large_explicit_matrix_needs_explicit_values() -> None:
     config = {"N": 20, "ploidy": "haploid", "d": d, "m": matrix, "mu": 0.001, "seed": 1}
     with pytest.raises(ValueError, match="explicit"):
         SimulationParams.from_mapping(config)
-    assert (
-        SimulationParams.from_mapping(
-            {**config, "convergence_window": 60, "max_generations": 600}
-        ).convergence_window
-        == 60
-    )
+    params = SimulationParams.from_mapping({**config, "max_generations": 600})
+    assert params.relaxation_time is None
+    assert params.convergence_burn_in == 0
 
 
 @pytest.mark.parametrize("model", ["infinite_alleles", "finite_alleles"])
@@ -1568,7 +1562,6 @@ def test_validate_execution_settings_accepts_a_vector_backend_without_a_model() 
             "jit": "off",
             "n_replicates": 16,
             "max_generations": 100,
-            "convergence_window": 10,
             "precision": 0.02,
             "confidence": 0.95,
             "auto_vector_min_d": 2,
@@ -1576,9 +1569,7 @@ def test_validate_execution_settings_accepts_a_vector_backend_without_a_model() 
             "max_concurrent_replicates": None,
         }
     )
-    validate_execution_settings(
-        {"max_generations": "auto", "convergence_window": "auto"}
-    )
+    validate_execution_settings({"max_generations": "auto"})
 
 
 @pytest.mark.parametrize(
@@ -1586,7 +1577,6 @@ def test_validate_execution_settings_accepts_a_vector_backend_without_a_model() 
     [
         ({"n_replicates": 0}, "n_replicates must be at least 1"),
         ({"max_generations": 0}, "max_generations must be at least 1"),
-        ({"convergence_window": 1}, "convergence_window must be at least 2"),
         ({"precision": -0.1}, "precision must be non-negative"),
         ({"confidence": 0.5}, "confidence must be 0.90"),
         ({"engine_backend": "fast"}, "engine_backend must be"),
@@ -1594,10 +1584,6 @@ def test_validate_execution_settings_accepts_a_vector_backend_without_a_model() 
         ({"auto_vector_min_d": 0}, "auto_vector_min_d must be at least 1"),
         ({"max_concurrent_replicates": 0}, "max_concurrent_replicates must be"),
         ({"engine_backend": "lineal", "jit": "numba"}, "only accepts jit='off'"),
-        (
-            {"convergence_window": 50, "max_generations": 10},
-            "convergence_window cannot exceed max_generations",
-        ),
     ],
 )
 def test_validate_execution_settings_rejects_with_simulation_params_wording(
@@ -1617,3 +1603,82 @@ def test_validate_execution_settings_matches_simulation_params_on_the_same_value
     with pytest.raises(ValueError, match="confidence") as from_settings:
         validate_execution_settings({"confidence": 0.5})
     assert str(from_params.value) == str(from_settings.value)
+
+
+def test_expert_settings_default_to_the_policy_constants_and_are_not_written() -> None:
+    """With no `expert:` mapping every setting is its default and none is emitted."""
+    params = SimulationParams.from_mapping(_valid_config())
+    assert params.expert == ExpertSettings()
+    assert "expert" not in params.to_dict()
+
+
+def test_expert_settings_round_trip_and_only_changes_are_written() -> None:
+    """A changed Expert Setting is copied into the parameters and round-trips."""
+    params = SimulationParams.from_mapping(
+        {
+            **_valid_config(),
+            "expert": {"minimum_effective_sample_size": 20, "first_check_minimum": 5},
+        }
+    )
+    assert params.expert.minimum_effective_sample_size == 20.0
+    assert params.expert.first_check_minimum == 5
+    assert params.to_dict()["expert"] == {
+        "minimum_effective_sample_size": 20.0,
+        "first_check_minimum": 5,
+    }
+    assert SimulationParams.from_mapping(params.to_dict()) == params
+
+
+def test_expert_settings_change_the_run_id_but_defaults_do_not() -> None:
+    """A run that changes an Expert Setting is a different run."""
+    base = SimulationParams.from_mapping(_valid_config())
+    same = SimulationParams.from_mapping({**_valid_config(), "expert": {}})
+    other = SimulationParams.from_mapping(
+        {**_valid_config(), "expert": {"check_growth": 1.5}}
+    )
+    assert deterministic_run_id(same) == deterministic_run_id(base)
+    assert deterministic_run_id(other) != deterministic_run_id(base)
+
+
+@pytest.mark.parametrize(
+    ("expert", "message"),
+    [
+        ({"no_such_setting": 1}, "unknown expert setting"),
+        ({"burn_in_minimum_relaxation_times": 0.5}, "at least 1"),
+        ({"first_check_relaxation_times": 0}, "greater than 0"),
+        ({"first_check_minimum": 2}, "at least 3"),
+        ({"first_check_minimum": 5.5}, "whole number"),
+        ({"minimum_effective_sample_size": 9}, "at least 10"),
+        ({"check_growth": 1.0}, "greater than 1"),
+        ({"fractional_burn_in": 1.0}, "below 1"),
+        ({"cap_minimum": 100, "cap_maximum": 50}, "cap_maximum"),
+        ({"start_drift_alert_z": -1}, "greater than 0"),
+        ({"check_growth": "fast"}, "check_growth"),
+        ("everything", "mapping"),
+    ],
+)
+def test_an_invalid_expert_setting_is_refused_by_name(
+    expert: object, message: str
+) -> None:
+    """Unknown names and out-of-range values are rejected with a clear message."""
+    with pytest.raises(ValueError, match=message):
+        SimulationParams.from_mapping({**_valid_config(), "expert": expert})
+
+
+def test_expert_settings_change_the_derived_burn_in_and_cap() -> None:
+    """The burn-in floor and cap multiple reach the derivation."""
+    base = SimulationParams.from_mapping(_valid_config())
+    changed = SimulationParams.from_mapping(
+        {
+            **_valid_config(),
+            "expert": {
+                "burn_in_minimum_relaxation_times": 40,
+                "cap_relaxation_multiple": 100,
+                "cap_minimum": 1000,
+            },
+        }
+    )
+    tau = base.relaxation_time
+    assert tau is not None
+    assert changed.convergence_burn_in == math.ceil(40 * tau)
+    assert changed.max_generations == changed.convergence_burn_in + math.ceil(100 * tau)

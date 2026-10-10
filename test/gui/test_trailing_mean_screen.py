@@ -12,16 +12,17 @@ page computes both with its own copy of
 from __future__ import annotations
 
 import json
+import math
 import queue
 import random
 from collections.abc import Callable
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
 import pytest
 import webview
 
-from fim.convergence.window_statistics import window_statistics
 from fim.gui.preferences import GuiPreferences, save_preferences
 
 from .conftest import poll_page
@@ -35,6 +36,35 @@ _MINUS = "\u2212"
 
 # Generation ranges are written with an en dash (U+2013).
 _EN_DASH = "\u2013"
+
+
+@dataclass(frozen=True)
+class _Lag1Window:
+    """The mean and standard error of one window under the lag-1 formula."""
+
+    mean: float
+    standard_error: float
+
+
+def window_statistics(values: list[float]) -> _Lag1Window:
+    """Reference for the page's estimator: the lag-1 (AR(1)) standard error.
+
+    The trajectory panel still averages with the single-lag formula
+    `tau_int = (1 + rho) / (1 - rho)` (a later change moves it to the run's own
+    evidence window and Geyer's estimator), so this test holds the page equal
+    to that formula, written out here.
+    """
+    count = len(values)
+    mean = math.fsum(values) / count
+    centered = [value - mean for value in values]
+    sum_squares = math.fsum(value * value for value in centered)
+    deviation = math.sqrt(sum_squares / (count - 1))
+    if deviation == 0.0:
+        return _Lag1Window(mean, 0.0)
+    cross = math.fsum(centered[i] * centered[i + 1] for i in range(count - 1))
+    lag1 = max(-1.0, min(cross / sum_squares, 1.0 - 1e-9))
+    tau = max((1.0 + lag1) / (1.0 - lag1), 1e-9)
+    return _Lag1Window(mean, deviation / math.sqrt(count / tau))
 
 
 def _series() -> dict[str, list[float]]:
@@ -325,7 +355,6 @@ def estimable_run_settings(_isolate_gui_preferences: Path) -> Path:
             default_run_settings={
                 "n_replicates": "1",
                 "max_generations": "40",
-                "convergence_window": "8",
                 "precision": "1e-06",
             },
         ),
@@ -436,11 +465,10 @@ def test_a_completed_run_leads_with_its_estimate_and_offers_the_averages(
     )
     assert before["chooserHidden"] is False
     assert "trailing mean" not in before["legend"]
-    assert "trailing mean ± 2 SE (last 8 generations)" in trailing["legend"]
+    assert "trailing mean ± 2 SE (last 50 generations)" in trailing["legend"]
     assert "trailing window start" in trailing["legend"]
     assert trailing["saved"] == "trailing_mean"
-    # No grown evidence window here, so averaging starts after one
-    # window of burn-in, at generation 8.
-    assert "cumulative mean ± 2 SE (from generation 8)" in cumulative["legend"]
-    assert "averaging start" in cumulative["legend"]
+    # The run records where the monitor began averaging (its burn-in), so the
+    # legend says so instead of naming a generation of its own.
+    assert "cumulative mean ± 2 SE (from where averaging began)" in cumulative["legend"]
     assert cumulative["saved"] == "cumulative_mean"

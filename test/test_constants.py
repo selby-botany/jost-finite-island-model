@@ -71,7 +71,7 @@ def _config_constants() -> dict[str, tuple[str, str | None]]:
     """Every constant in `fim/config/`: name -> (module, its docstring)."""
     found: dict[str, tuple[str, str | None]] = {}
     for path in sorted(CONFIG.glob("*.py")):
-        if path.name == "__init__.py":
+        if path.name in {"__init__.py", "expert.py"}:
             continue
         body = ast.parse(path.read_text(encoding="utf-8")).body
         for index, node in enumerate(body):

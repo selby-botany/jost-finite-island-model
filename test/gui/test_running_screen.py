@@ -460,7 +460,7 @@ def test_run_button_shows_the_trajectory_panel_for_the_watched_statistic(
 
 
 def test_trajectory_row_toggle_hides_and_restores_a_curves_own_pixels(
-    fast_scalar_run_settings: Path,
+    short_scalar_run_settings: Path,
 ) -> None:
     """Clicking a statistic row hides that statistic's own drawn pixels.
 
@@ -500,10 +500,13 @@ def test_trajectory_row_toggle_hides_and_restores_a_curves_own_pixels(
         "var ctx = c.getContext('2d');"
         "var data = ctx.getImageData(0, 0, c.width, c.height).data;"
         "var count = 0;"
+        "var signature = 0;"
         "for (var i = 3; i < data.length; i += 4) {"
         "if (data[i] !== 0) { count += 1; }"
+        "signature = (signature * 31 + data[i - 3] * 7 + data[i - 2] * 3"
+        " + data[i - 1] + data[i]) % 1000000007;"
         "}"
-        "return count;"
+        "return {count: count, signature: signature};"
         "})()"
     )
     row_state_script = (
@@ -529,15 +532,25 @@ def test_trajectory_row_toggle_hides_and_restores_a_curves_own_pixels(
             row_before = window.evaluate_js(row_state_script)
             window.evaluate_js(
                 "document.querySelector("
-                "'#results-stats tr[data-trajectory-statistic=\"G_ST\"]').click();"
+                "'#results-stats tr[data-trajectory-statistic=\"D\"]').click();"
             )
-            after_hide_pixels = window.evaluate_js(non_blank_pixel_count_script)
+            after_hide_pixels = poll_or_fail(
+                lambda: window.evaluate_js(non_blank_pixel_count_script),
+                lambda picture: picture != before_pixels,
+                "the trajectory canvas redrawn without the hidden curve",
+                interval=0.05,
+            )
             row_after_hide = window.evaluate_js(row_state_script)
             window.evaluate_js(
                 "document.querySelector("
-                "'#results-stats tr[data-trajectory-statistic=\"G_ST\"]').click();"
+                "'#results-stats tr[data-trajectory-statistic=\"D\"]').click();"
             )
-            after_restore_pixels = window.evaluate_js(non_blank_pixel_count_script)
+            after_restore_pixels = poll_or_fail(
+                lambda: window.evaluate_js(non_blank_pixel_count_script),
+                lambda picture: picture == before_pixels,
+                "the trajectory canvas redrawn with the curve restored",
+                interval=0.05,
+            )
             outcome.put(
                 {
                     "before_pixels": before_pixels,
@@ -554,26 +567,29 @@ def test_trajectory_row_toggle_hides_and_restores_a_curves_own_pixels(
     settled = outcome.get(timeout=_OUTCOME_TIMEOUT_SECONDS)
 
     assert settled is not None
-    assert settled["before_pixels"] > 0
+    assert settled["before_pixels"]["count"] > 0
     # Hiding a real, actually-drawn curve (plus its dashed equilibrium
-    # companion) must draw strictly fewer non-blank pixels than before.
-    assert settled["after_hide_pixels"] < settled["before_pixels"]
+    # companion) must change the drawn pixels: never more non-blank pixels
+    # than before, and (a long run draws curves over one another, so a
+    # count alone can stay equal) a different picture.
+    assert settled["after_hide_pixels"]["count"] <= settled["before_pixels"]["count"]
+    assert settled["after_hide_pixels"] != settled["before_pixels"]
     # Clicking the identical entry again restores the exact original
-    # pixel count -- a pure, reversible display filter.
+    # picture -- a pure, reversible display filter.
     assert settled["after_restore_pixels"] == settled["before_pixels"]
 
     def _entry(entries: list[dict[str, Any]], text: str) -> dict[str, Any]:
         return next(entry for entry in entries if entry["text"] == text)
 
-    before_g_st = _entry(settled["row_before"], "G_ST")
-    assert before_g_st["hiddenClass"] is False
-    assert before_g_st["ariaPressed"] == "true"
+    before_d = _entry(settled["row_before"], "D")
+    assert before_d["hiddenClass"] is False
+    assert before_d["ariaPressed"] == "true"
 
-    after_g_st = _entry(settled["row_after_hide"], "G_ST")
-    assert after_g_st["hiddenClass"] is True
-    assert after_g_st["ariaPressed"] == "false"
+    after_d = _entry(settled["row_after_hide"], "D")
+    assert after_d["hiddenClass"] is True
+    assert after_d["ariaPressed"] == "false"
     # Every other statistic's own entry is untouched by this one click.
-    for text in ("D", "E_ST", "H_S", "H_T", "K_ST"):
+    for text in ("G_ST", "E_ST", "H_S", "H_T", "K_ST"):
         entry = _entry(settled["row_after_hide"], text)
         assert entry["hiddenClass"] is False
         assert entry["ariaPressed"] == "true"
@@ -750,7 +766,6 @@ def test_completed_row_tooltip_shows_the_trailing_window_mean(
             default_run_settings={
                 "n_replicates": "1",
                 "max_generations": "40",
-                "convergence_window": "20",
                 "precision": "0.5",
             },
         ),

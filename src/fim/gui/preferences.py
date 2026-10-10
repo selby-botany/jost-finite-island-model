@@ -48,7 +48,7 @@ never any saved run artifact.
 A sixth field — `default_run_settings` — is the Settings dialog's own
 "execution/convergence-selection defaults" (`engine_backend`,
 `n_replicates`, `convergence_statistic`/`convergence_combinator`/
-`convergence_window`/`precision`), a real, reported request
+`precision`), a real, reported request
 to move fields the user judged "applicable pretty universally" out of
 the per-run Configure form and into one global-default home, while an
 individual run's own Configure form can still override any of them for
@@ -116,12 +116,12 @@ logger = logging.getLogger(__name__)
 # CURRENT_SCHEMA_VERSION` already uses for run manifests.
 CURRENT_SCHEMA_VERSION: Final = 2
 
-# Version 1 files saved `convergence_window` and `max_generations` as the
-# explicit numbers the fixed defaults were (50 and 10000), in the last form,
+# Version 1 files saved `max_generations` (and a since-retired window) as the
+# explicit numbers the fixed defaults were (10000), in the last form,
 # the Settings defaults and every named preset. Those defaults are now
 # derived from the model ("auto"), and a saved 50 would silently override the
 # derivation for every later run. A version 1 file is therefore read with
-# exactly those two fields set to `auto` wherever they were saved (a saved
+# that field set to `auto` wherever it was saved (a saved
 # form must stay complete, or the whole form would be discarded); nothing
 # else in the file is touched and nothing is quarantined.
 LEGACY_SCHEMA_VERSION: Final = 1
@@ -130,7 +130,7 @@ LEGACY_SCHEMA_VERSION: Final = 1
 # because that is what the botanists studying these plants have: a blank
 # default blocked every first run until a ploidy was chosen.
 DEFAULT_PLOIDY: Final = "2"
-_DERIVED_FIELDS: Final = ("convergence_window", "max_generations")
+_DERIVED_FIELDS: Final = ("max_generations",)
 
 # Injectable so a test can supply a fixed instant for the quarantine
 # filename, matching `fim.paths.default_output_directory`'s own `Clock`
@@ -658,7 +658,7 @@ def _with_derived_fields_reset(data: Mapping[str, Any]) -> dict[str, Any]:
         data: The parsed version 1 preferences document.
 
     Returns:
-        A copy with `convergence_window` and `max_generations` set to
+        A copy with `max_generations` set to
         `auto` wherever they were saved: the `form`, `default_run_settings`
         and every named `presets` entry.
         Sections of the wrong shape are left for `from_dict`'s own

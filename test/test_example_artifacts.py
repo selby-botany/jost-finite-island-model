@@ -48,7 +48,6 @@ def _saved_run(
         "seed": 42,
         "loci": [{"locus_id": 1, "length": 5}],
         "mutation_model": "finite_alleles",
-        "convergence_window": 11,
         "max_generations": 10,
         "n_replicates": replicates,
         "stop_batch_early": False,

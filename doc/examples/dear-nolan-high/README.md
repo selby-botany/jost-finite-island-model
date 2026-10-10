@@ -28,7 +28,6 @@ loci:
   - locus_id: 1
     length: 200
 convergence_statistic: G_ST
-convergence_window: 50
 precision: 0.01
 max_generations: 3000
 ```
@@ -178,9 +177,9 @@ and 22 alleles private to each patch, each at frequency 0.0317.
 The rest of `config.yaml` sets up the validation experiment itself: five
 independently seeded replicates (`n_replicates: 5`, with
 `stop_batch_early: false` so all five always run), each run for exactly 30
-generations. A 30-generation cap with a 31-generation convergence window
-makes that horizon fixed: the window can never fill, so no replicate stops
-early, and each one ends "at the cap" by design. That is the right reading
+generations. A 30-generation cap with `precision: 0.0` (never reached) and a
+burn-in of 1 makes that horizon fixed: no replicate stops early, and each one
+ends "at the cap" by design. That is the right reading
 here, because the question is whether the state *stays* at equilibrium, not
 whether it settles.
 

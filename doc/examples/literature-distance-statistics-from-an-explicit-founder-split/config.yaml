@@ -19,7 +19,6 @@ p_0:
   - - 2: 1.0
 engine_backend: lineal
 convergence_statistic: D
-convergence_window: 2
 precision: 0.000001
 max_generations: 1
 track_expensive_statistics: true

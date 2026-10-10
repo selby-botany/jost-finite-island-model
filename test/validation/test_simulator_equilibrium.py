@@ -993,7 +993,6 @@ def _run_engine_replicates(
         loci=loci,
         initial_allele_count=2,
         precision=0.0,
-        convergence_window=horizon + 1,
         max_generations=horizon,
         n_replicates=replicates,
         stop_batch_early=False,
@@ -2247,7 +2246,6 @@ def test_engine_trajectory_matches_the_identity_recursion_gs_and_gd() -> None:
         loci=tuple(LocusSpec(index + 1, 200) for index in range(n_loci)),
         mutation_model="infinite_alleles",
         max_generations=horizon,
-        convergence_window=4,
         # Never actually satisfied by real stochastic data -- every
         # replicate must run the full horizon so a row exists at every
         # sampled generation, not stop early via the trailing-window
@@ -2382,7 +2380,6 @@ def test_engine_reproduces_ryman_leimar_ancestral_heterozygosity_effect() -> Non
             loci=tuple(LocusSpec(index + 1, 200) for index in range(n_loci)),
             mutation_model="infinite_alleles",
             max_generations=horizon,
-            convergence_window=4,
             precision=0.0,
             n_replicates=replicates,
             stop_batch_early=False,

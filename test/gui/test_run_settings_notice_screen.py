@@ -39,7 +39,7 @@ from fim.model.params import SimulationParams
 pytestmark = pytest.mark.gui
 
 _POLL_INTERVAL_SECONDS = 0.1
-_EXAMPLE_ID = "unequal-island-sizes-with-a-migration-hub"
+_EXAMPLE_ID = "several-convergence-statistics"
 _REFUSED = "captured for this test, not run"
 
 _OPEN_DIALOG = (

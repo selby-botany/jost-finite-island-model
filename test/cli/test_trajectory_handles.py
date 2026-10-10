@@ -34,7 +34,6 @@ def _write_config(path: Path, **updates: object) -> None:
         "initial_concentration": 1.0,
         "deme_weighting": "size",
         "convergence_statistic": "D",
-        "convergence_window": 4,
         "precision": 1.0,
         "max_generations": 10,
         "n_replicates": 1,

@@ -18,7 +18,6 @@ mu: 0.01
 seed: 7
 n_replicates: 1
 max_generations: 10
-convergence_window: 3
 sweep:
   name: Demes
   axes:

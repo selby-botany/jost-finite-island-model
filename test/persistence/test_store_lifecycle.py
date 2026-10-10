@@ -159,7 +159,6 @@ def _params(**updates: Any) -> SimulationParams:
             d=2,
             seed=20260814,
             loci=(LocusSpec(1, 200),),
-            convergence_window=4,
             precision=1.0,
             max_generations=10,
             n_replicates=1,

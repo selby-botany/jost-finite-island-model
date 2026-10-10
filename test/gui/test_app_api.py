@@ -24,6 +24,7 @@ import numpy as np
 import pytest
 import webview
 import yaml
+from conftest import FAST_EXPERT_SETTINGS
 from webview.menu import Menu, MenuAction, MenuSeparator
 
 from fim import __version__ as fim_version
@@ -456,14 +457,9 @@ def test_set_default_run_settings_rejects_contradicting_run_settings() -> None:
     before = api.get_default_run_settings()
 
     jit = api.set_default_run_settings({"engine_backend": "lineal", "jit": "numba"})
-    window = api.set_default_run_settings(
-        {"convergence_window": "50", "max_generations": "10"}
-    )
 
     assert jit["ok"] is False
     assert "jit" in jit["message"]
-    assert window["ok"] is False
-    assert "convergence_window" in window["message"]
     assert api.get_default_run_settings() == before
 
 
@@ -523,7 +519,6 @@ def test_interval_payload_omits_the_summary_for_a_bootstrap_interval() -> None:
             "stop_batch_early": False,
             "replicate_minimum": 2,
             "max_generations": 60,
-            "convergence_window": 5,
         }
     )
     output = engine_fim(
@@ -898,13 +893,13 @@ def test_load_example_leaves_settings_unchanged() -> None:
 def test_load_example_lists_exactly_the_differing_run_settings() -> None:
     """A lineal, one-replicate example against auto/200 Settings differs in both.
 
-    `unequal-island-sizes-with-a-migration-hub` names `engine_backend:
+    `several-convergence-statistics` names `engine_backend:
     lineal` and one replicate and leaves every other run setting at its
     library default, which the starter Settings share.
     """
     api = Api()
 
-    result = api.load_example("unequal-island-sizes-with-a-migration-hub")
+    result = api.load_example("several-convergence-statistics")
 
     assert result["ok"] is True, result.get("message")
     settings = api.get_default_run_settings()
@@ -1004,7 +999,7 @@ def test_start_run_after_a_load_uses_the_loaded_run_settings(
 
     monkeypatch.setattr(Api, "_start_scalar_run", capture)
     api = Api()
-    loaded = api.load_example("unequal-island-sizes-with-a-migration-hub")
+    loaded = api.load_example("several-convergence-statistics")
     assert loaded["ok"] is True, loaded.get("message")
 
     started = api.start_run(_page_submission(loaded))
@@ -1026,7 +1021,7 @@ def test_making_loaded_run_settings_my_settings_updates_settings() -> None:
     """
     api = Api()
     assert api.set_default_run_settings({"max_workers": "3"}) == {"ok": True}
-    loaded = api.load_example("unequal-island-sizes-with-a-migration-hub")
+    loaded = api.load_example("several-convergence-statistics")
     assert loaded["runSettingDifferences"] != []
 
     saved = api.set_default_run_settings(
@@ -1043,7 +1038,7 @@ def test_making_loaded_run_settings_my_settings_updates_settings() -> None:
 def test_get_run_setting_differences_follows_saved_settings() -> None:
     """After Settings change, the comparison is made against the new Settings."""
     api = Api()
-    loaded = api.load_example("unequal-island-sizes-with-a-migration-hub")
+    loaded = api.load_example("several-convergence-statistics")
     assert api.set_default_run_settings({"engine_backend": "lineal"}) == {"ok": True}
 
     differences = api.get_run_setting_differences(loaded["runSettings"])
@@ -1054,7 +1049,7 @@ def test_get_run_setting_differences_follows_saved_settings() -> None:
 def test_new_configuration_after_a_load_uses_saved_settings() -> None:
     """A fresh form after a load carries Settings' run settings, not the load's."""
     api = Api()
-    loaded = api.load_example("unequal-island-sizes-with-a-migration-hub")
+    loaded = api.load_example("several-convergence-statistics")
     assert loaded["runSettings"]["engine_backend"] == "lineal"
 
     fresh = api.get_starter_form()
@@ -1474,21 +1469,24 @@ def test_validate_form_accepts_the_starter_values() -> None:
     result = Api().validate_form(_submittable_starter())
 
     assert result["ok"] is True
-    # The starter asks for a derived window and cap, so the form says how
+    # The starter asks for a derived burn-in and cap, so the form says how
     # long the run is expected to take.
-    assert result["note"].startswith("Convergence: window ")
+    assert result["note"].startswith("Convergence: burn-in ")
     assert "(derived; this model needs about" in result["note"]
 
 
-def test_validate_form_has_no_note_when_window_and_cap_are_explicit() -> None:
-    """Explicit values are the user's own; nothing is announced."""
+def test_validate_form_names_only_the_burn_in_when_the_cap_is_explicit() -> None:
+    """An explicit cap is the user's own; only the derived burn-in is announced."""
     values = {
         **_submittable_starter(),
-        "convergence_window": "60",
         "max_generations": "900",
     }
 
-    assert Api().validate_form(values) == {"ok": True, "note": ""}
+    result = Api().validate_form(values)
+
+    assert result["ok"] is True
+    assert result["note"].startswith("Convergence: burn-in ")
+    assert "cap 900 (burn-in derived; this model needs about" in result["note"]
 
 
 def test_validate_form_rejects_and_locates_an_invalid_population_field() -> None:
@@ -1855,7 +1853,6 @@ def test_sampled_closed_form_starts_where_the_real_run_starts(tmp_path: Path) ->
         "mu": 0.001,
         "seed": 20260819,
         "loci": [{"locus_id": 1, "length": 50}, {"locus_id": 2, "length": 50}],
-        "convergence_window": 4,
         "precision": 1.0,
         "max_generations": 10,
         "n_replicates": 1,
@@ -2230,7 +2227,7 @@ def test_sigma_band_payload_formats_every_value_for_a_real_band(
     output = _write_run(
         tmp_path,
         precision=1.0,
-        max_generations=30,
+        max_generations=200,
         sigma_band_multiplier=2.0,
         sigma_band_window=5,
     )
@@ -3284,7 +3281,6 @@ def test_drain_run_messages_includes_a_live_deme_pair_panel_when_selected() -> N
         d=3,
         seed=20260814,
         loci=(LocusSpec(1, 200),),
-        convergence_window=4,
         precision=1.0,
         max_generations=10,
         n_replicates=1,
@@ -3486,8 +3482,9 @@ def _write_run(
         "mu": 0.01,
         "seed": 1,
         "loci": [{"locus_id": 1, "length": 200}],
-        "convergence_window": 8,
         "precision": 1e-6,
+        "convergence_burn_in": 1,
+        "expert": dict(FAST_EXPERT_SETTINGS),
         "max_generations": 12,
         "n_replicates": 1,
         "stop_batch_early": False,
@@ -4217,7 +4214,7 @@ def test_open_run_carries_the_real_sigma_band(tmp_path: Path) -> None:
     output = _write_run(
         tmp_path,
         precision=1.0,
-        max_generations=30,
+        max_generations=200,
         sigma_band_multiplier=3.0,
         sigma_band_window=5,
     )
@@ -4286,14 +4283,14 @@ def test_open_run_carries_the_derived_convergence_note(tmp_path: Path) -> None:
     own consolidated message area, `webui/screens/run-view-completed.js`'s
     `renderRunMessages`), the empty half of its own two real cases.
 
-    `_write_run`'s own config gives `convergence_window`/`max_generations`
+    `_write_run`'s own config gives `convergence_burn_in`/`max_generations`
     explicitly, so `app_module._derived_convergence_note_from_manifest`
     -- the function computing this key for a reopened run, reading
     `manifest.auto_derived`/`relaxation_time` rather than `reanalyzed.
     params`'s own (always empty for a reconstructed `SimulationParams`,
     that function's own docstring) -- returns `""` here;
-    `test_validate_form_has_no_note_when_window_and_cap_are_explicit`
-    already covers that same "both given explicitly" case directly, and
+    `test_validate_form_names_only_the_burn_in_when_the_cap_is_explicit`
+    covers the form's side of that, and
     `test/convergence/test_defaults.py` already covers `describe_
     derived_convergence`'s own non-empty sentence. What only this test
     proves: `open_run`'s payload actually carries the key this function
@@ -4324,12 +4321,12 @@ def test_open_run_carries_a_real_convergence_note_and_trajectory_curve(
     (`RunManifest`) and `convergence.jsonl` (`fim.reanalyze.read_
     persisted_convergence_history`) close both gaps at once; this is
     the one test that drives a genuinely auto-derived run (no explicit
-    `convergence_window`/`max_generations`/`precision` at
+    `convergence_burn_in`/`max_generations`/`precision` at
     all, unlike every other `_write_run`-based test in this file) all
     the way through `cli.main(["run", ...])` and back through `Api.
     open_run` to prove it.
 
-    Strong migration (`m=0.9`) and a small `N` keep the derived window/
+    Strong migration (`m=0.9`) and a small `N` keep the derived burn-in/
     cap themselves small, so this still runs in well under a second --
     `island_relaxation_time` shrinks with migration strength, not
     population size alone.
@@ -4354,7 +4351,7 @@ def test_open_run_carries_a_real_convergence_note_and_trajectory_curve(
     result = Api().open_run({"trajectoryPath": trajectory_path})
 
     assert result["ok"] is True
-    assert result["convergenceNote"].startswith("Convergence: window ")
+    assert result["convergenceNote"].startswith("Convergence: burn-in ")
     assert "(derived; this model needs about" in result["convergenceNote"]
     assert result["convergenceGenerations"] is not None
     assert len(result["convergenceGenerations"]) > 1
@@ -4394,12 +4391,14 @@ def test_open_run_carries_the_real_closed_form_trajectory(tmp_path: Path) -> Non
 
 def test_open_run_carries_the_convergence_window_and_tolerance(tmp_path: Path) -> None:
     """The trailing mean averages over the run's own window, judged by its tolerance."""
-    output = _write_run(tmp_path, convergence_window=10, precision=0.02)
+    output = _write_run(tmp_path, precision=0.02)
 
     result = Api().open_run({"trajectoryPath": str(output / "trajectory.tlog")})
 
     assert result["ok"] is True
-    assert result["convergence"] == {"window": 10, "tolerance": 0.02}
+    # The page averages over the span of the monitor's first check: three
+    # generations under the fast test settings.
+    assert result["convergence"] == {"window": 3, "tolerance": 0.02}
 
 
 def test_open_run_choose_reanalyzes_an_earlier_generation_as_re_analysis(

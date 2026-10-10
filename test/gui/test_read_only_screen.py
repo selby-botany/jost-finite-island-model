@@ -96,7 +96,6 @@ def _write_run(results: Path, folder: str, **overrides: object) -> Path:
         "mu": 0.01,
         "seed": 3,
         "loci": [{"locus_id": 1, "length": 200}],
-        "convergence_window": 4,
         "precision": 1.0,
         "max_generations": 10,
         "n_replicates": 1,

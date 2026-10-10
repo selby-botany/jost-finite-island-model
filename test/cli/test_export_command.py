@@ -37,7 +37,6 @@ def _config(path: Path, **updates: object) -> None:
         "seed": 20261009,
         "loci": [{"locus_id": 1, "length": 200}, {"locus_id": 2, "length": 200}],
         "initial_allele_count": 3,
-        "convergence_window": 4,
         "precision": 1e-12,
         "max_generations": 30,
         "n_replicates": 1,

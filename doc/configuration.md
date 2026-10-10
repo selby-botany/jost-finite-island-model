@@ -35,7 +35,6 @@ initial_concentration: 1.0
 deme_weighting: equal
 convergence_statistic: D
 convergence_combinator: all
-convergence_window: auto   # derived from the model; see below
 precision: 0.01
 max_generations: auto      # derived from the model; see below
 n_replicates: 1   # opt-in single scalar run; the library default is 200
@@ -461,7 +460,7 @@ The three keys control only the first phase:
   0.05 about 3. It must be greater than 0.
 - **equilibrium_convergence_window** — the fewest generations the first phase
   runs, however quickly the model says it equilibrates. It is deliberately
-  separate from convergence_window, because this phase runs at a different
+  separate from the main run's burn-in, because this phase runs at a different
   population size than your real run. It cannot exceed
   equilibrium_max_generations.
 - **equilibrium_max_generations** — the safety limit on the first phase.
@@ -504,7 +503,7 @@ equilibrium_max_generations: 5000
 - **Default:** `D`
 
 A list watches several statistics at once — each keeps its own independent
-trailing-window history against the same convergence_window and
+history, judged over the same burn-in and evidence window against the same
 precision — combined by convergence_combinator. A name may
 not repeat.
 
@@ -525,57 +524,52 @@ of them is. With a single statistic — the default — the two are the same
 value by construction, so this key has no effect and needs no attention.
 
 Under `any`, the statistics that did not trigger the stop may still be
-trending or imprecise when the run ends: their reported values and
-trailing-window means are not converged estimates. `report.json`'s
+imprecise when the run ends: their reported window means are not converged
+estimates. `report.json`'s
 `converged_on` names the statistics that had settled. Use `all` when
 every watched statistic's value matters.
 
-### convergence_window
+### convergence_burn_in
 
-- **Type:** integer at least 2, or `auto`
+- **Type:** positive integer, or `auto`
 - **Default:** `auto`
 
-The monitor compares the means of the first and second halves of the trailing
-window. An odd window splits as \lfloor{window / 2\rfloor observations in the first half
-and one more in the second (a window of `5` compares `2` against `3`) — legal,
-but the two halves are then unevenly sized, unlike an even window. Rejected
-if it exceeds max_generations + 1 — generation 0 is
-always recorded before the run loop's first step, so a run watching
-max_generations records at most that many generations; a window
-larger than that could never fill before the hard cap stops the run,
-so convergence could never be detected.
+The generations discarded before averaging starts: the time the population
+needs to forget where it started. Nothing can stop a run before its burn-in
+ends (except the cap), and generation 0 is never averaged.
 
-**`auto` (the default) derives the window from the model.** A short fixed
-window cannot tell "the statistic has stopped changing" from "the statistic is
-changing too slowly to see in that window". How long a run must be watched
-depends on how fast the population forgets its starting state, its
-*relaxation time* `tau`:
+**`auto` (the default) derives the burn-in from the model.** How long a run
+must be watched depends on how fast the population forgets its starting
+state, its *relaxation time* `tau`:
 
 ```text
 T   = N_total + (d - 1) / (2 m)      # mean time for two gene copies to coalesce
 tau = 1 / (2 mu + 1 / T)             # mutation is a second way to lose identity
-window          = max(50, ceil(3 tau))
-max_generations = max(200000, ceil(15 tau))
+burn_in         = ceil(k tau), k = max(5, ln(2 / precision))
+max_generations = max(200000, burn_in + ceil(15 tau))
 ```
 
-`N_total` is the sum of every deme's gene copies and `mu` is the mean over
-loci. That closed form is for the symmetric island model (scalar `m`, equal
-deme sizes). An explicit migration matrix or unequal sizes use the slowest
-mode of the identity recursion instead, computed for up to 24 demes; above
-that, `auto` is refused and you must give both values. With no migration and
-no mutation there is nothing to wait for, so `auto` is refused there too.
+`N_total` is the sum of every deme's gene copies and `mu` is the smallest
+mutation rate over loci (the slowest locus sets the time). That closed form is
+for the symmetric island model (scalar `m`, equal deme sizes). An explicit
+migration matrix or unequal sizes use the slowest mode of the identity
+recursion instead, computed for up to 24 demes. Above that, or with no
+migration and no mutation, there is no `tau`: `auto` then discards the first
+tenth of the run at each check, and a derived `max_generations` is refused, so
+give it explicitly.
 
 For example, five demes of 100 gene copies with `m: 0.0001` and `mu: 0.000001`
-have `tau` of about 19,700 generations, so the derived window is about 59,000
-and the cap about 295,000. A run that finishes in a hundred generations there
-would be a warning sign, not good news: the population is still far from its
-equilibrium.
+have `tau` of about 19,700 generations, so at the default precision the burn-in
+is about 104,000 generations and the cap about 399,000. A run that finishes in a
+hundred generations there would be a warning sign, not good news.
 
-Choose your own whole number to override. Too short a window stops a run while
-the statistic is still moving (look for D still falling at the end of the
-trajectory); too long a cap only delays a run that never settles. Why the
-formula has this form, and how its multiples were chosen, is in
-[Convergence defaults](convergence.md).
+Choose your own whole number to override. Too short a burn-in starts averaging
+inside the transient and biases the average. Why the formula has this form,
+and how its numbers were chosen, is in [Convergence](convergence.md).
+
+```yaml
+convergence_burn_in: 5000
+```
 
 ### precision
 
@@ -586,9 +580,11 @@ How precisely to estimate each watched statistic: plus or minus this amount,
 in the statistic's own units, at the `confidence` level. One number answers
 "how precise?" for a single run and a batch alike.
 
-- A single run stops once its trailing-window mean is known to within about
-  this much (its standard error is at most half of it) and the two halves of
-  the window differ by at most this much.
+- A single run burns in and then averages each watched statistic over a
+  growing window until the average's standard error is at most
+  `precision / z` (`z` is 1.96 at 95% confidence) and the window holds at least
+  50 effective independent values. The burn-in also lengthens as the precision
+  tightens (see convergence_burn_in).
 - A replicate batch stops early once every watched statistic's
   across-replicate confidence interval is this narrow (see
   stop_batch_early).
@@ -650,13 +646,14 @@ and `fim sweep` use the file's own value, as written.
 - **Default:** `auto`
 
 This safety cap always ends a run. Reaching it is reported as a valid
-non-converged outcome. `auto` derives it as 15 relaxation times (at least
-200,000, so a single locus has room to average its own noise down to the
-configured tolerance — see [Is the reported value actually precise
-enough?](convergence.md#is-the-reported-value-actually-precise-enough));
-see [convergence_window](#convergence_window). Setting only this value
-below the derived window clamps the window to fit; setting only the
-window raises the derived cap to five windows.
+outcome that did not reach the requested precision, with the average and error
+bar the run has. `auto` derives it as `max(200000, burn_in + ceil(15 tau))`, at
+most 10,000,000 (at least 200,000, so a single locus has room to average its
+own noise down to the configured precision — see [How precise is the reported
+value?](convergence.md#how-precise-is-the-reported-value)); see
+[convergence_burn_in](#convergence_burn_in). A cap at or below the burn-in ends
+the run before any averaging, and the run logs a warning. Setting only a
+burn-in raises the derived cap to leave `15 tau` after it.
 
 ### sigma_band_multiplier
 
@@ -710,10 +707,43 @@ are not kept at all.
 - **Default:** unset (the within-run sigma band is disabled)
 
 The extension's own trailing-window length, independent of
-convergence_window — the two describe different things (whether the
+the burn-in — the two describe different things (whether the
 run has settled, versus how much it still wobbles once settled), so
 there is no principled reason to share one number between them. See
 sigma_band_multiplier, above, for the full mechanism.
+
+### expert
+
+- **Type:** mapping of Expert Setting names to values
+- **Default:** empty (every Expert Setting at its default)
+
+The policy constants of the convergence rule that a careful person could
+choose differently. Leave it out unless you know why you want to change one:
+the defaults are the measured, documented choices (see
+[Convergence](convergence.md)). Only settings that differ from their default
+are written to `manifest.json`, so the manifest says exactly what ran, and a
+run that changes one is a different run (its auto-generated `run_id` changes).
+
+| Setting | Default | Range | Controls |
+|---|---|---|---|
+| `burn_in_minimum_relaxation_times` | `5` | at least 1 | Floor of the burn-in multiple `k = max(floor, ln(2 / precision))` |
+| `first_check_relaxation_times` | `2` | greater than 0 | First check, in relaxation times after the burn-in |
+| `first_check_minimum` | `50` | whole number, at least 3 | Fewest generations after the burn-in before the first check |
+| `minimum_effective_sample_size` | `50` | at least 10 | Effective independent values a window needs before its standard error is trusted |
+| `check_growth` | `2` | greater than 1 | Factor by which the window grows between checks |
+| `fractional_burn_in` | `0.1` | between 0 and 1, exclusive | Share of the run discarded when there is no relaxation time |
+| `cap_relaxation_multiple` | `15` | greater than 0 | Cap beyond the burn-in, in relaxation times |
+| `cap_minimum` | `200000` | whole number, at least 1 | Smallest derived `max_generations` |
+| `cap_maximum` | `10000000` | whole number, at least `cap_minimum` | Largest derived `max_generations` |
+| `start_drift_alert_z` | `3` | greater than 0 | Absolute start-of-window `z` above which the report says the burn-in may have been too short |
+
+```yaml
+expert:
+  minimum_effective_sample_size: 100   # a more cautious standard error
+  check_growth: 1.5                    # check more often
+```
+
+An unknown name or a value outside its range is refused by name.
 
 ## Analysis and execution
 
@@ -828,7 +858,7 @@ stop_batch_early: false    # always run all 16
 - **Default:** `10`
 
 The fewest replicates before the batch may stop early — the
-replicate-layer analog of convergence_window, guarding against a
+replicate-layer analog of the within-run first check, guarding against a
 lucky-early-tight fluke from too small a sample. Only meaningful when
 stop_batch_early is on. A value larger than n<sub>replicates</sub> is
 silently capped at n<sub>replicates</sub> rather than rejected — setting
@@ -1218,7 +1248,7 @@ existed.
 | precision negative or non-finite | rejected |
 | stop_batch_early not a boolean | rejected |
 | replicate_minimum less than 2 | rejected |
-| convergence_window greater than max_generations + 1 | rejected |
+| convergence_burn_in not a positive integer or `auto` | rejected |
 | track_expensive_statistics not a boolean | rejected |
 | replicate_minimum greater than n<sub>replicates</sub> | silently capped at n<sub>replicates</sub> |
 | confidence not `0.90`, `0.95`, or `0.99` | rejected |

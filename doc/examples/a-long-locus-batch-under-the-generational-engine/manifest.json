@@ -1,84 +1,84 @@
 {
   "artifacts": {
     "replicate-001": {
-      "bytes": 2208,
-      "sha256": "a1d7a60c42962576f69483663bd2b9a15604203f894bcbdd5ffe4be26151f800"
+      "bytes": 2206,
+      "sha256": "ca995e11d5f80269f3d35577c0e401fd0c3035e4d3909eaa6958599296007872"
     },
     "replicate-002": {
-      "bytes": 2208,
-      "sha256": "d2dd51715b176efb91fc172354eda7dc6536fef258011b85001d13060c96c9e1"
+      "bytes": 2206,
+      "sha256": "eba4e683cbff33ff715a52c068c136b8a494a45039c4e0376517a5f127c4229d"
     },
     "replicate-003": {
-      "bytes": 2208,
-      "sha256": "6d97e3ee25edc696ae1c794e2d65e647c18a97858727c0af85eda127760bba7c"
+      "bytes": 2206,
+      "sha256": "2e9c8bc1485fe0e9558110f99813b06205fe05bf195964d2aa80137bb94eb4f2"
     },
     "replicate-004": {
-      "bytes": 2208,
-      "sha256": "24755faa76ead94e74e7fe7f0ca13442f091d44f733b5db90d224918428f2600"
+      "bytes": 2206,
+      "sha256": "7e307718c2e7aa6c7b1759eecf505908fae061301e144ea5237333d5900a635b"
     },
     "replicate-005": {
-      "bytes": 2208,
-      "sha256": "e9108c1de5b858574e2194806894c0ebb0d617640a533c899ff8c7e04cdd6ffa"
+      "bytes": 2206,
+      "sha256": "b9fc007c1fe657d80ff016571d6d6f9b253aed304cc56db6bf33ff2988974d29"
     },
     "replicate-006": {
-      "bytes": 2208,
-      "sha256": "0e728970f21b7ed74eb9c0c13404bbfd5167804a4827cf7e18d8580f9d0ca486"
+      "bytes": 2206,
+      "sha256": "c683b60c694cd7774b554ab0ae473f1572ad82d210d862b6ccec9751fee5c81e"
     },
     "replicate-007": {
-      "bytes": 2208,
-      "sha256": "ce8cfb3edd926d2645ce6f2cb091980848961bb35126ab68d7f07e299bff6312"
+      "bytes": 2206,
+      "sha256": "e0457e98af8dc9bd52d528bb4f54f11e71aaabff42480a3133707dab9e1bc00b"
     },
     "replicate-008": {
-      "bytes": 2208,
-      "sha256": "a7cb3aab4cde205e938f33d336f9cbf857bb45327150506afce61d4cc13042d1"
+      "bytes": 2206,
+      "sha256": "9095cbb76730881ae074ab9e016f0e026e65b3e39c17a206397272015cdd89e1"
     },
     "replicate-009": {
-      "bytes": 2207,
-      "sha256": "18dacd79b431b6f5c6c19a9d56d97567943ebd3980b30c0e473173e57a98263b"
+      "bytes": 2205,
+      "sha256": "192762ad8e0e4b491314345df51f9615346cc1153f1f43cdbf13d451c7b33ace"
     },
     "replicate-010": {
-      "bytes": 2207,
-      "sha256": "7fb97a32d5b6253ceeb977cbd15ada973ee638afc2ef58bf03e8031f3fb0a372"
+      "bytes": 2205,
+      "sha256": "983d9be592781e097fa892acc0d59f15ab9a7eecc49509568dec630f95da0904"
     },
     "replicate-011": {
-      "bytes": 2208,
-      "sha256": "8fb546ce326092e6e18fc7adf22ace57cbf799b1d929c65b46b92b6ac29d0406"
+      "bytes": 2206,
+      "sha256": "8cbfefc23a8633576154b94ccf686cd7185bac478a848d0f3278ffeaa9824cc8"
     },
     "replicate-012": {
-      "bytes": 2208,
-      "sha256": "fc0c228e450169ea8cf48099904529d623f4804bbb1b1648c7a817b5c525943b"
+      "bytes": 2206,
+      "sha256": "da0591cbdb370ffd95dc339427ac56cf528c3628d389b4f38512db9448c7d7db"
     },
     "replicate-013": {
-      "bytes": 2208,
-      "sha256": "b90f3c993dc26c7d6f62fdec0037ae2815854c8d32c063dc94eed472f470c2d1"
+      "bytes": 2206,
+      "sha256": "981f3a31a95847ff6c8ec3eda3c733d24cf14c93231ec533fd8ad55ab8fa84fb"
     },
     "replicate-014": {
-      "bytes": 2208,
-      "sha256": "2d5807b6b9884fe3230495913f2b83e38d42b1ec60dc0679a137537be465ce92"
+      "bytes": 2206,
+      "sha256": "ecca9c10e4090150654711d1500e0ae78c8bd48ee98421cdac705aa9710766cc"
     },
     "replicate-015": {
-      "bytes": 2207,
-      "sha256": "b5ba296274bde94f0b221fb22db3aed009d49e62cc1ec341cb5122c39b1f2cf0"
+      "bytes": 2205,
+      "sha256": "01e1440099c1d0ddb2ba735bb4e14acf6a0c9249c22bb860e61c8a1aedb6aba1"
     },
     "replicate-016": {
-      "bytes": 2208,
-      "sha256": "0f16f8aeccdc118ac3b8ccf6f73ce86dd1f409c04bd65f8bae08f55f9d962785"
+      "bytes": 2206,
+      "sha256": "4ed86f61fcb298ca8a560f859dbce59e01e5fdc1256e8ab757555760f2c0d406"
     },
     "summary": {
       "bytes": 6169,
       "sha256": "17371acb0131081d27745c5429abd29e9525c2a8989a9eb5f5f260f723ca54f4"
     }
   },
-  "ended_at": "2026-10-10T01:38:09.112998Z",
+  "ended_at": "2026-10-10T03:09:46.297694Z",
   "parameters": {
     "N": 500,
     "_read_only": true,
     "auto_vector_max_capacity": 4096,
     "auto_vector_min_d": 2,
     "confidence": 0.95,
+    "convergence_burn_in": 1,
     "convergence_combinator": "all",
     "convergence_statistic": "D",
-    "convergence_window": 101,
     "d": 35,
     "deme_weighting": "equal",
     "engine_backend": "generational",
@@ -99,7 +99,7 @@
     "mutation_model": "finite_alleles",
     "n_replicates": 16,
     "ploidy": "haploid",
-    "precision": 0.02,
+    "precision": 0.0,
     "replicate_minimum": 10,
     "seed": 20260916,
     "stop_batch_early": false,
@@ -107,25 +107,25 @@
   },
   "replicate_count": 16,
   "replicate_run_ids": [
-    "run-d36527cabc373f02-r001",
-    "run-d36527cabc373f02-r002",
-    "run-d36527cabc373f02-r003",
-    "run-d36527cabc373f02-r004",
-    "run-d36527cabc373f02-r005",
-    "run-d36527cabc373f02-r006",
-    "run-d36527cabc373f02-r007",
-    "run-d36527cabc373f02-r008",
-    "run-d36527cabc373f02-r009",
-    "run-d36527cabc373f02-r010",
-    "run-d36527cabc373f02-r011",
-    "run-d36527cabc373f02-r012",
-    "run-d36527cabc373f02-r013",
-    "run-d36527cabc373f02-r014",
-    "run-d36527cabc373f02-r015",
-    "run-d36527cabc373f02-r016"
+    "run-5dd7490b14250c75-r001",
+    "run-5dd7490b14250c75-r002",
+    "run-5dd7490b14250c75-r003",
+    "run-5dd7490b14250c75-r004",
+    "run-5dd7490b14250c75-r005",
+    "run-5dd7490b14250c75-r006",
+    "run-5dd7490b14250c75-r007",
+    "run-5dd7490b14250c75-r008",
+    "run-5dd7490b14250c75-r009",
+    "run-5dd7490b14250c75-r010",
+    "run-5dd7490b14250c75-r011",
+    "run-5dd7490b14250c75-r012",
+    "run-5dd7490b14250c75-r013",
+    "run-5dd7490b14250c75-r014",
+    "run-5dd7490b14250c75-r015",
+    "run-5dd7490b14250c75-r016"
   ],
-  "run_id": "run-d36527cabc373f02",
+  "run_id": "run-5dd7490b14250c75",
   "schema_version": 1,
   "software_version": "1.2.0",
-  "started_at": "2026-10-10T01:37:17.856398Z"
+  "started_at": "2026-10-10T03:08:57.752919Z"
 }

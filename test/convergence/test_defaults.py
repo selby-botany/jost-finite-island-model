@@ -1,4 +1,4 @@
-"""Tests for `fim.convergence.defaults`: derived window and cap."""
+"""Tests for `fim.convergence.defaults`: the derived burn-in and cap."""
 
 from __future__ import annotations
 
@@ -8,13 +8,15 @@ import pytest
 
 from fim.config.convergence import (
     ABSOLUTE_MAX_GENERATIONS,
+    BURN_IN_MINIMUM_RELAXATION_TIMES,
     CAP_RELAXATION_MULTIPLE,
     MINIMUM_MAX_GENERATIONS,
-    MINIMUM_WINDOW,
-    WINDOW_RELAXATION_MULTIPLE,
 )
+from fim.config.expert import ExpertSettings
 from fim.config.limits import MAXIMUM_RECURSION_DEMES
 from fim.convergence.defaults import (
+    burn_in_multiple,
+    derive_burn_in,
     derive_convergence_defaults,
     describe_derived_convergence,
     island_relaxation_time,
@@ -71,49 +73,101 @@ def test_dear_nolan_low_relaxation_time_is_about_twenty_thousand() -> None:
     assert tau == pytest.approx(19_700, rel=0.01)
 
 
-def test_derived_defaults_are_multiples_of_the_relaxation_time() -> None:
-    """Window and cap are the documented multiples of `tau`."""
+def test_the_burn_in_multiple_follows_the_precision_with_a_floor() -> None:
+    """`k = max(5, ln(2 / precision))`: 5.30 at 0.01, 7.6 at 0.001, 5 at 0.1."""
+    floor = BURN_IN_MINIMUM_RELAXATION_TIMES
+    assert burn_in_multiple(0.01, floor) == pytest.approx(math.log(200.0))
+    assert burn_in_multiple(0.001, floor) == pytest.approx(math.log(2000.0))
+    assert burn_in_multiple(0.1, floor) == floor
+    assert burn_in_multiple(5.0, floor) == floor
+    assert burn_in_multiple(0.0, floor) == math.inf
+    assert burn_in_multiple(0.01, 7.0) == 7.0
+
+
+def test_the_burn_in_is_ceil_k_tau_and_never_zero() -> None:
+    """`ceil(k tau)`, at least 1 so generation 0 is never averaged."""
+    expert = ExpertSettings()
+    assert derive_burn_in(100.0, 0.01, expert) == math.ceil(math.log(200.0) * 100.0)
+    assert derive_burn_in(0.01, 0.01, expert) == 1
+    assert derive_burn_in(100.0, 0.0, expert) == expert.cap_maximum
+    assert derive_burn_in(1e12, 0.01, expert) == expert.cap_maximum
+
+
+def test_derived_defaults_follow_the_burn_in_and_the_cap_rule() -> None:
+    """Burn-in is `ceil(k tau)`; the cap adds `15 tau` to the burn-in."""
     derived = derive_convergence_defaults(
-        deme_sizes=[100] * 5, migration=1e-4, mutation_rates=[1e-6]
+        deme_sizes=[100] * 5, migration=1e-4, mutation_rates=[1e-6], precision=0.01
     )
-    assert derived.window == math.ceil(
-        WINDOW_RELAXATION_MULTIPLE * derived.relaxation_time
-    )
-    assert derived.max_generations == math.ceil(
-        CAP_RELAXATION_MULTIPLE * derived.relaxation_time
+    tau = derived.relaxation_time
+    assert derived.burn_in == math.ceil(math.log(200.0) * tau)
+    assert derived.max_generations == derived.burn_in + math.ceil(
+        CAP_RELAXATION_MULTIPLE * tau
     )
 
 
-def test_fast_models_keep_the_historical_floors() -> None:
-    """A quickly relaxing model never gets a window or cap below their own floors."""
+def test_fast_models_keep_the_cap_floor() -> None:
+    """A quickly relaxing model never gets a cap below the floor."""
     derived = derive_convergence_defaults(
-        deme_sizes=[10] * 3, migration=0.5, mutation_rates=[0.1]
+        deme_sizes=[10] * 3, migration=0.5, mutation_rates=[0.1], precision=0.01
     )
-    assert derived.window == MINIMUM_WINDOW
     assert derived.max_generations == MINIMUM_MAX_GENERATIONS
+    assert derived.burn_in < derived.max_generations
 
 
-def test_window_never_exceeds_the_cap_when_the_cap_is_clamped() -> None:
-    """A nearly isolated system stays finite and keeps window <= cap."""
+def test_a_nearly_isolated_system_stays_finite() -> None:
+    """The cap is clamped at the ceiling and the burn-in cannot exceed it."""
     derived = derive_convergence_defaults(
-        deme_sizes=[100] * 3, migration=1e-12, mutation_rates=[1e-12]
+        deme_sizes=[100] * 3, migration=1e-12, mutation_rates=[1e-12], precision=0.01
     )
     assert derived.max_generations == ABSOLUTE_MAX_GENERATIONS
-    assert derived.window <= derived.max_generations
+    assert derived.burn_in <= derived.max_generations
+
+
+def test_the_cap_is_never_inside_the_burn_in() -> None:
+    """A slow model's cap includes its burn-in, so the burn-in always ends first."""
+    derived = derive_convergence_defaults(
+        deme_sizes=[100] * 5, migration=1e-4, mutation_rates=[1e-6], precision=0.001
+    )
+    assert derived.max_generations > derived.burn_in
+
+
+def test_expert_settings_change_the_derived_values() -> None:
+    """The burn-in floor, the cap multiple and the cap floor are Expert Settings."""
+    expert = ExpertSettings(
+        burn_in_minimum_relaxation_times=20.0,
+        cap_relaxation_multiple=30.0,
+        cap_minimum=1000,
+    )
+    derived = derive_convergence_defaults(
+        deme_sizes=[100] * 5,
+        migration=1e-4,
+        mutation_rates=[1e-6],
+        precision=0.01,
+        expert=expert,
+    )
+    tau = derived.relaxation_time
+    assert derived.burn_in == math.ceil(20.0 * tau)
+    assert derived.max_generations == derived.burn_in + math.ceil(30.0 * tau)
 
 
 @pytest.mark.parametrize(("smaller", "larger"), [(1e-3, 1e-4), (1e-4, 1e-5)])
-def test_lower_migration_never_shortens_the_window(
+def test_lower_migration_never_shortens_the_burn_in(
     smaller: float, larger: float
 ) -> None:
-    """Monotonicity: less migration means a longer (or equal) window."""
+    """Monotonicity: less migration means a longer (or equal) burn-in."""
     fast = derive_convergence_defaults(
-        deme_sizes=[100] * 5, migration=smaller, mutation_rates=[1e-6]
+        deme_sizes=[100] * 5,
+        migration=smaller,
+        mutation_rates=[1e-6],
+        precision=0.01,
     )
     slow = derive_convergence_defaults(
-        deme_sizes=[100] * 5, migration=larger, mutation_rates=[1e-6]
+        deme_sizes=[100] * 5,
+        migration=larger,
+        mutation_rates=[1e-6],
+        precision=0.01,
     )
-    assert slow.window >= fast.window
+    assert slow.burn_in >= fast.burn_in
 
 
 def test_mutation_dominates_at_high_migration() -> None:
@@ -189,7 +243,10 @@ def test_no_migration_and_no_mutation_has_no_relaxation_time() -> None:
     """Nothing to wait for: reject rather than guess."""
     with pytest.raises(ValueError, match="no relaxation time"):
         derive_convergence_defaults(
-            deme_sizes=[100] * 3, migration=0.0, mutation_rates=[0.0]
+            deme_sizes=[100] * 3,
+            migration=0.0,
+            mutation_rates=[0.0],
+            precision=0.01,
         )
 
 
@@ -282,13 +339,23 @@ def test_panmictic_burn_in_follows_the_slowest_locus_and_rejects_bad_input() -> 
         panmictic_equilibration(total_size=100, mutation_rates=[0.01], tolerance=0.0)
 
 
-def test_derived_convergence_sentence_names_window_cap_and_time() -> None:
+def test_derived_convergence_sentence_names_burn_in_cap_and_time() -> None:
     """The shared sentence carries all three numbers, with thousands separators."""
     text = describe_derived_convergence(
-        window=59_078, max_generations=295_390, relaxation_time=19_693.4
+        burn_in=104_400, max_generations=295_390, relaxation_time=19_693.4
     )
 
     assert text == (
-        "Convergence: window 59,078 generations, cap 295,390 (derived; this "
+        "Convergence: burn-in 104,400 generations, cap 295,390 (derived; this "
         "model needs about 19,693 generations to forget its starting state)"
     )
+
+
+def test_the_sentence_says_so_when_there_is_no_relaxation_time() -> None:
+    """A fractional burn-in is described without inventing a relaxation time."""
+    text = describe_derived_convergence(
+        burn_in=None, max_generations=50_000, relaxation_time=None
+    )
+
+    assert "first 10% of the run" in text
+    assert "50,000" in text

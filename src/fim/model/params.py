@@ -22,7 +22,6 @@ independent of this file's own more code-oriented documentation.
 
 from __future__ import annotations
 
-import contextlib
 import logging
 import math
 from collections.abc import Mapping, Sequence
@@ -30,7 +29,6 @@ from dataclasses import dataclass, field
 from types import MappingProxyType
 from typing import Any, Final, Literal, cast
 
-from fim.config.convergence import CAP_RELAXATION_MULTIPLE, WINDOW_RELAXATION_MULTIPLE
 from fim.config.defaults import (
     DEFAULT_AUTO_VECTOR_MAX_CAPACITY,
     DEFAULT_AUTO_VECTOR_MIN_D,
@@ -38,6 +36,7 @@ from fim.config.defaults import (
     DEFAULT_N_REPLICATES,
     DEFAULT_PRECISION,
 )
+from fim.config.expert import ExpertSettings
 from fim.config.numerics import MINIMUM_REPLICATE_COUNT
 from fim.convergence.defaults import derive_convergence_defaults
 from fim.convergence.defaults import relaxation_time as estimate_relaxation_time
@@ -82,7 +81,7 @@ InitialFrequencies = tuple[tuple[Mapping[AlleleId, float], ...], ...]
 logger = logging.getLogger(__name__)
 
 AUTO_CONVERGENCE: Final = 0
-"""`convergence_window`/`max_generations` value meaning "derive it".
+"""`convergence_burn_in`/`max_generations` value meaning "derive it".
 
 `SimulationParams.__post_init__` replaces it with the derived integer, so
 every consumer of a constructed `SimulationParams` still reads a plain
@@ -100,7 +99,7 @@ PARAMETER_DEFAULTS: Final[dict[str, object]] = {
     "locus_aggregation": "ratio_of_means",
     "convergence_statistic": "D",
     "convergence_combinator": "all",
-    "convergence_window": None,  # None means "auto": derive it
+    "convergence_burn_in": None,  # None means "auto": derive it
     "precision": DEFAULT_PRECISION,
     "track_expensive_statistics": False,
     "max_generations": None,  # None means "auto": derive it
@@ -141,7 +140,7 @@ _CONFIG_KEYS: Final = frozenset(
         "ploidy",
         "convergence_statistic",
         "convergence_combinator",
-        "convergence_window",
+        "convergence_burn_in",
         "precision",
         "track_expensive_statistics",
         "max_generations",
@@ -149,6 +148,7 @@ _CONFIG_KEYS: Final = frozenset(
         "stop_batch_early",
         "replicate_minimum",
         "confidence",
+        "expert",
         "engine_backend",
         "jit",
         "auto_vector_min_d",
@@ -305,10 +305,12 @@ class SimulationParams:
         convergence_combinator: How several watched statistics combine —
             "all" (every one stable) or "any" (at least one stable).
             A single statistic makes this a no-op special case.
-        convergence_window: Trailing stability-window length, in
-            generations. `AUTO_CONVERGENCE` (`0`, the default) derives it
-            from the model's relaxation time
-            (`fim.convergence.defaults`); an explicit value always wins.
+        convergence_burn_in: Generations discarded before averaging starts.
+            `AUTO_CONVERGENCE` (`0`, the default) derives it from the
+            model's relaxation time and `precision`
+            (`fim.convergence.defaults`), or, for a model with no
+            relaxation time, uses the first 10% of the run at each check;
+            an explicit value always wins.
         precision: How precisely to estimate each watched statistic: plus
             or minus this amount, in the statistic's own units, at
             `confidence`. A single run averages over time until its mean is
@@ -356,7 +358,7 @@ class SimulationParams:
             existed.
         max_generations: Hard generation safety cap. `AUTO_CONVERGENCE`
             (`0`, the default) derives it from the model's relaxation
-            time, as for `convergence_window`.
+            time and the burn-in, as for `convergence_burn_in`.
         n_replicates: Number of independently seeded runs — the hard cap
             a replicate batch runs up to. Defaults to
             `DEFAULT_N_REPLICATES` (`200`), not `1`: the ordinary useful
@@ -374,7 +376,7 @@ class SimulationParams:
             stop.
         replicate_minimum: Fewest replicates before tightness is even
             checked, guarding against a lucky-early-tight fluke — the
-            replicate-layer analog of `convergence_window`. Only
+            replicate-layer analog of the within-run first check. Only
             meaningful when `stop_batch_early` is set; silently
             clamped down to `n_replicates` if given larger, rather than
             rejected (`__post_init__`'s own comment has the reasoning).
@@ -464,7 +466,7 @@ class SimulationParams:
         equilibrium_convergence_window: The fewest generations the
             equilibrium-split ancestral phase runs, however quickly the
             model says that population equilibrates — independent of
-            `convergence_window` above, since that phase runs at a
+            the main run's burn-in, since that phase runs at a
             different population scale (`sum(population_sizes)` in one
             deme) with no principled reason to share a threshold with
             the real `d`-deme run. Called a window for the trailing-
@@ -507,10 +509,9 @@ class SimulationParams:
             the *end* of a run, regardless of how generation 0 was
             produced.
         sigma_band_window: Trailing-window length (at least 2, the same
-            "a single point cannot establish spread" reasoning
-            `convergence_window` itself uses) for the same extension —
-            independent of `convergence_window`, since the two describe
-            different things (whether the run has settled, versus how
+            "a single point cannot establish spread" reasoning) for the
+            same extension — independent of the burn-in, since the two
+            describe different things (whether the run has settled, versus how
             much it still wobbles once settled).
         ploidy: Gene copies per individual: 1 (haploid, the default when a
             `SimulationParams` is built directly) through 4 (tetraploid).
@@ -543,7 +544,7 @@ class SimulationParams:
     locus_aggregation: LocusAggregation = "ratio_of_means"
     convergence_statistic: ConvergenceStatistic = "D"
     convergence_combinator: ConvergenceCombinator = "all"
-    convergence_window: int = AUTO_CONVERGENCE
+    convergence_burn_in: int = AUTO_CONVERGENCE
     precision: float = DEFAULT_PRECISION
     track_expensive_statistics: bool = False
     max_generations: int = AUTO_CONVERGENCE
@@ -566,6 +567,7 @@ class SimulationParams:
     sigma_band_window: int | None = None
     ploidy: int = 1
     read_only: bool = False
+    expert: ExpertSettings = field(default_factory=ExpertSettings)
     auto_derived: frozenset[str] = field(
         default=frozenset(), init=False, compare=False, repr=False
     )
@@ -630,13 +632,13 @@ class SimulationParams:
         )
         if self.convergence_combinator not in {"any", "all"}:
             raise ValueError("convergence_combinator must be 'any' or 'all'")
-        self._resolve_convergence_defaults(population_sizes, migration, mutation_rates)
-        _require_integer(
-            "convergence_window",
-            self.convergence_window,
-            minimum=2,
-        )
         _validate_precision(self.precision)
+        if not isinstance(self.expert, ExpertSettings):
+            raise ValueError(
+                "expert must be ExpertSettings (or a mapping, in a config)"
+            )
+        self._resolve_convergence_defaults(population_sizes, migration, mutation_rates)
+        _require_integer("convergence_burn_in", self.convergence_burn_in, minimum=0)
         _require_bool("track_expensive_statistics", self.track_expensive_statistics)
         _require_bool("read_only", self.read_only)
         _require_integer(
@@ -647,10 +649,6 @@ class SimulationParams:
         _require_integer("n_replicates", self.n_replicates, minimum=1)
         _require_bool("stop_batch_early", self.stop_batch_early)
         _require_integer("replicate_minimum", self.replicate_minimum, minimum=2)
-        _validate_stopping_rules(
-            convergence_window=self.convergence_window,
-            max_generations=self.max_generations,
-        )
         object.__setattr__(
             self,
             "replicate_minimum",
@@ -794,21 +792,19 @@ class SimulationParams:
         migration: Migration,
         mutation_rates: tuple[float, ...],
     ) -> None:
-        """Replace an `AUTO_CONVERGENCE` window and cap with derived values.
+        """Replace an `AUTO_CONVERGENCE` burn-in and cap with derived values.
 
-        Nothing is derived when both are explicit, so a model with no
-        relaxation time (no migration and no mutation) or an explicit
-        migration matrix too large for the eigenvalue route still runs when
-        the caller states both numbers. `auto_derived` records which fields
-        were derived; `relaxation_time` records the estimate of the slowest
-        locus, whether or not anything was derived, and stays `None` for a
-        model that has none. Neither takes part in equality, so a run and
-        its reproduction from concrete integers compare equal.
+        Always records the relaxation time `tau` of the slowest locus when the
+        model has one (the report and the burn-in use it), even when both
+        values are explicit. A model with no relaxation time (no migration and
+        no mutation, or an explicit migration matrix too large for the
+        eigenvalue route) still runs: an `auto` burn-in then stays
+        `AUTO_CONVERGENCE`, which the monitor reads as the fractional burn-in,
+        but an `auto` cap needs `tau` and is refused.
 
-        A derived window is clamped to an explicit cap, and a derived cap is
-        raised to fit an explicit window (the same multiples of the window
-        that the defaults use), so mixing one explicit value with one
-        derived value never produces an unreachable stopping rule.
+        `auto_derived` records which fields were derived. Neither it nor
+        `relaxation_time` takes part in equality, so a run and its
+        reproduction from concrete integers compare equal.
 
         Args:
             population_sizes: Normalized gene-copy count per deme.
@@ -816,59 +812,47 @@ class SimulationParams:
             mutation_rates: Normalized per-locus mutation rates.
 
         Raises:
-            ValueError: If a value must be derived but the model has no
+            ValueError: If the cap must be derived but the model has no
                 relaxation time or is too large for the eigenvalue route.
         """
-        window_auto = self.convergence_window == AUTO_CONVERGENCE
+        burn_in_auto = self.convergence_burn_in == AUTO_CONVERGENCE
         cap_auto = self.max_generations == AUTO_CONVERGENCE
-        if not (window_auto or cap_auto):
-            # Nothing to derive, but `tau` is still wanted (the report and
-            # the burn-in use it) whenever the model has one.
-            with contextlib.suppress(ValueError):
-                object.__setattr__(
-                    self,
-                    "relaxation_time",
-                    estimate_relaxation_time(
-                        deme_sizes=population_sizes,
-                        migration=migration,
-                        mutation_rates=mutation_rates,
-                    ),
-                )
-            return
         try:
-            derived = derive_convergence_defaults(
+            tau: float | None = estimate_relaxation_time(
                 deme_sizes=population_sizes,
                 migration=migration,
                 mutation_rates=mutation_rates,
             )
+            failure = ""
         except ValueError as error:
-            raise ValueError(
-                f"cannot derive convergence_window/max_generations: {error}"
-            ) from error
-        window, cap = self.convergence_window, self.max_generations
-        if cap_auto:
-            cap = derived.max_generations
-            if not window_auto:
-                # An explicit window needs the same headroom a derived one
-                # gets; scale the derived cap by the window ratio.
-                cap = max(
-                    cap,
-                    math.ceil(
-                        CAP_RELAXATION_MULTIPLE / WINDOW_RELAXATION_MULTIPLE * window
+            tau, failure = None, str(error)
+        if tau is None and cap_auto:
+            raise ValueError(f"cannot derive max_generations: {failure}")
+        object.__setattr__(self, "relaxation_time", tau)
+        if not (burn_in_auto or cap_auto):
+            return
+        burn_in, cap = self.convergence_burn_in, self.max_generations
+        if tau is not None:
+            derived = derive_convergence_defaults(
+                deme_sizes=population_sizes,
+                migration=migration,
+                mutation_rates=mutation_rates,
+                precision=self.precision,
+                expert=self.expert,
+            )
+            if burn_in_auto:
+                burn_in = derived.burn_in
+            if cap_auto:
+                # An explicit burn-in raises the derived cap with it, so the
+                # run is never capped inside its own burn-in.
+                cap = min(
+                    self.expert.cap_maximum,
+                    max(
+                        derived.max_generations,
+                        burn_in + math.ceil(self.expert.cap_relaxation_multiple * tau),
                     ),
                 )
-        if window_auto:
-            window = derived.window
-            if window > cap:
-                logger.info(
-                    "derived convergence_window %d exceeds max_generations %d; "
-                    "using %d",
-                    window,
-                    cap,
-                    cap,
-                )
-                window = cap
-        object.__setattr__(self, "convergence_window", window)
+        object.__setattr__(self, "convergence_burn_in", burn_in)
         object.__setattr__(self, "max_generations", cap)
         object.__setattr__(
             self,
@@ -876,13 +860,12 @@ class SimulationParams:
             frozenset(
                 name
                 for name, is_auto in (
-                    ("convergence_window", window_auto),
+                    ("convergence_burn_in", burn_in_auto),
                     ("max_generations", cap_auto),
                 )
                 if is_auto
             ),
         )
-        object.__setattr__(self, "relaxation_time", derived.relaxation_time)
 
     def to_dict(self) -> dict[str, object]:
         """Return a JSON/YAML-serializable, lossless configuration mapping.
@@ -935,7 +918,7 @@ class SimulationParams:
                 else list(self.convergence_statistic)
             ),
             "convergence_combinator": self.convergence_combinator,
-            "convergence_window": self.convergence_window,
+            "convergence_burn_in": self.convergence_burn_in or "auto",
             "precision": self.precision,
             "track_expensive_statistics": self.track_expensive_statistics,
             "max_generations": self.max_generations,
@@ -950,6 +933,12 @@ class SimulationParams:
             "auto_vector_min_d": self.auto_vector_min_d,
             "auto_vector_max_capacity": self.auto_vector_max_capacity,
         }
+        if changes := self.expert.changes():
+            # Only the settings that differ from their defaults are written, so
+            # a run with default Expert Settings keeps the parameters (and the
+            # run ID) it would have had without the mapping, and a run that
+            # changes one says exactly which.
+            result["expert"] = changes
         if self.max_concurrent_replicates is not None:
             # Omitted rather than always written: this field's own
             # default is already `None`, so an absent key and an explicit
@@ -1102,13 +1091,14 @@ class SimulationParams:
                     PARAMETER_DEFAULTS["convergence_combinator"],
                 ),
             ),
-            convergence_window=_parse_auto_int(
-                "convergence_window",
+            convergence_burn_in=_parse_auto_int(
+                "convergence_burn_in",
                 config.get(
-                    "convergence_window",
-                    PARAMETER_DEFAULTS["convergence_window"],
+                    "convergence_burn_in",
+                    PARAMETER_DEFAULTS["convergence_burn_in"],
                 ),
             ),
+            expert=ExpertSettings.from_mapping(config.get("expert")),
             precision=_parse_float(
                 "precision",
                 config.get("precision", PARAMETER_DEFAULTS["precision"]),
@@ -2017,7 +2007,7 @@ EXECUTION_SETTING_NAMES: Final[tuple[str, ...]] = (
     "engine_backend",
     "n_replicates",
     "max_generations",
-    "convergence_window",
+    "convergence_burn_in",
     "precision",
     "confidence",
     "jit",
@@ -2052,24 +2042,22 @@ def validate_execution_settings(settings: Mapping[str, object]) -> None:
         settings: Any subset of `EXECUTION_SETTING_NAMES`, typed as a
             configuration file types them: whole numbers as `int`,
             `precision`/`confidence` as `float`,
-            `max_generations`/`convergence_window` as an `int` or the
-            string `"auto"`, and `max_concurrent_replicates` as an `int`
-            or `None`. A key outside `EXECUTION_SETTING_NAMES` is
-            ignored.
+            `max_generations`/`convergence_burn_in` as an `int` or the string
+            `"auto"`, and `max_concurrent_replicates` as an `int` or `None`. A key
+            outside `EXECUTION_SETTING_NAMES` is ignored.
 
     Raises:
         ValueError: For the first invalid setting, or for two present
             settings that contradict each other (`jit` with a backend
-            that refuses it, or a window that could never fill before
-            the cap).
+            that refuses it).
     """
     # Each field on its own.
     for name in ("n_replicates", "auto_vector_min_d", "auto_vector_max_capacity"):
         if name in settings:
             _require_integer(name, settings[name], minimum=1)
-    for name, minimum in (("max_generations", 1), ("convergence_window", 2)):
+    for name in ("max_generations", "convergence_burn_in"):
         if name in settings and settings[name] != "auto":
-            _require_integer(name, settings[name], minimum=minimum)
+            _require_integer(name, settings[name], minimum=1)
     if "precision" in settings:
         _validate_precision(settings["precision"])
     if "confidence" in settings:
@@ -2088,10 +2076,6 @@ def validate_execution_settings(settings: Mapping[str, object]) -> None:
         auto_vector_min_d=settings.get("auto_vector_min_d", 1),
         auto_vector_max_capacity=settings.get("auto_vector_max_capacity", 1),
     )
-    window = settings.get("convergence_window")
-    cap = settings.get("max_generations")
-    if isinstance(window, int) and isinstance(cap, int):
-        _validate_stopping_rules(convergence_window=window, max_generations=cap)
 
 
 def _validate_precision(precision: object) -> None:
@@ -2123,57 +2107,6 @@ def _validate_confidence(confidence: object) -> None:
     """
     if isinstance(confidence, bool) or confidence not in {0.90, 0.95, 0.99}:
         raise ValueError("confidence must be 0.90, 0.95, or 0.99")
-
-
-def _validate_stopping_rules(
-    *,
-    convergence_window: int,
-    max_generations: int,
-) -> None:
-    """Reject a within-run stopping rule that structurally can never fire.
-
-    Compares the trailing-window size against the largest sample that
-    criterion could ever see — not whether convergence is *likely*,
-    only whether it is *possible* at all. Accepting the misconfiguration
-    would silently and permanently change nothing about the run's own
-    actual behavior (it already always hits its cap), while reporting
-    that outcome as an ordinary, unremarkable non-convergence rather
-    than the unreachable stopping condition it actually is.
-
-    The replicate-layer analog of this check (`replicate_minimum`
-    exceeding `n_replicates`) used to live here too, as a hard
-    rejection — removed (`__post_init__` now silently clamps
-    `replicate_minimum` down to `n_replicates` instead, see its own
-    comment there) once an unconfigured run started stopping its batch
-    early: rejecting became a landmine for any caller who set a small
-    `n_replicates` without separately thinking about `replicate_
-    minimum` at all, not just the deliberate-opt-in misconfiguration it
-    was built to catch — found live, not assumed (every GUI batch test
-    that only ever sets `n_replicates` failed exactly this way in CI,
-    `jost-finite-island-model` run 33656031751, the first time this
-    code path ran anywhere other than this project's own test suite,
-    which had — by then — already been taught to set every relevant
-    field explicitly everywhere it cared about batch size).
-
-    Args:
-        convergence_window: Trailing within-run stability-window length.
-        max_generations: Hard generation safety cap.
-
-    Raises:
-        ValueError: If the window could never fill before the cap.
-    """
-    # Generation 0 is always recorded before the run loop's first step, so
-    # a run watching `max_generations` records at most `max_generations +
-    # 1` generations (0 .. max_generations inclusive) before the hard cap
-    # stops it -- one more than `max_generations` itself, not equal to
-    # it. A trailing window needing more observations than that can never
-    # fill, so `TrailingWindowCriterion.is_stable` can never return True.
-    if convergence_window > max_generations + 1:
-        raise ValueError(
-            "convergence_window cannot exceed max_generations + 1 (a "
-            "window this large can never fill before the generation cap "
-            "stops the run, so convergence could never be detected)"
-        )
 
 
 def _validate_equilibrium_split_config(
@@ -2213,9 +2146,7 @@ def _validate_equilibrium_split_config(
         ValueError: If exactly one or two of the three fields are set,
             any is set together with `initial_frequencies`, a set
             field's own value is out of range, or the window could
-            structurally never fill before the cap (the identical
-            reasoning `_validate_stopping_rules` already applies to the
-            main run's own `convergence_window`/`max_generations`).
+            structurally never fill before the cap.
     """
     values = (
         equilibrium_convergence_window,
@@ -2269,9 +2200,7 @@ def _validate_equilibrium_split_config(
 
 # The window minimum the within-run sigma band's own trailing window
 # must meet — the identical "a single point cannot establish stability
-# or spread" reasoning `convergence_window`'s own minimum uses
-# (`_require_integer("convergence_window", ..., minimum=2)`, above), not
-# a separately chosen number.
+# or spread" reasoning, not a separately chosen number.
 _MINIMUM_SIGMA_BAND_WINDOW: Final = 2
 
 # The only two sigma multipliers the within-run sigma band accepts

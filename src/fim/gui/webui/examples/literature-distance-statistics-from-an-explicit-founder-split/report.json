@@ -24,10 +24,10 @@
   "NEI_I_ALL_GEO": 0.0,
   "NEI_I_ALL_GEO_LOCUS_MEAN": 0.0,
   "R_ST": null,
-  "converged": true,
-  "converged_on": "D",
+  "converged": false,
+  "converged_on": null,
   "generation": 1,
-  "reason": "statistic converged",
-  "run_id": "run-e13b4f73d14dfedb",
+  "reason": "hit the cap",
+  "run_id": "run-13577e1307ffcc08",
   "window_statistics": {}
 }

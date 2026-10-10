@@ -13,6 +13,7 @@ from pathlib import Path
 import numpy as np
 import pytest
 import yaml
+from conftest import FAST_EXPERT_SETTINGS
 
 from fim import cli
 from fim.gui import animation, batch_runner
@@ -34,7 +35,6 @@ def _write_run(tmp_path: Path, **overrides: object) -> Path:
         "mu": 0.01,
         "seed": 1,
         "loci": [{"locus_id": 1, "length": 200}],
-        "convergence_window": 8,
         "precision": 1e-6,
         "max_generations": 12,
         "n_replicates": 1,
@@ -53,10 +53,10 @@ def _write_run(tmp_path: Path, **overrides: object) -> Path:
 def _write_batch_run(tmp_path: Path, **overrides: object) -> Path:
     """Write a small, staggered-stopping batch and return its output directory.
 
-    `seed=42`/`precision=0.02` matches `test/engine/
-    test_engine.py`'s own identical configuration, confirmed live to
-    produce real, staggered stopping generations (`[3, 5, 6, 12, 15]`)
-    rather than every replicate converging together.
+    `seed=42`/`precision=0.1` with the fast test settings matches
+    `test/engine/test_engine.py`'s own identical configuration, confirmed
+    live to produce real, staggered stopping generations (`[19, 39, 39, 79,
+    159]`) rather than every replicate converging together.
     """
     config: dict[str, object] = {
         "N": 20,
@@ -66,9 +66,10 @@ def _write_batch_run(tmp_path: Path, **overrides: object) -> Path:
         "mu": 0.01,
         "seed": 42,
         "loci": [{"locus_id": 1, "length": 200}],
-        "convergence_window": 4,
-        "precision": 0.02,
-        "max_generations": 30,
+        "precision": 0.1,
+        "convergence_burn_in": 1,
+        "expert": dict(FAST_EXPERT_SETTINGS),
+        "max_generations": 300,
         "n_replicates": 5,
         "stop_batch_early": False,
     }

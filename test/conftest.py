@@ -43,13 +43,14 @@ import threading
 import time
 from collections.abc import Callable, Iterator, Sequence
 from pathlib import Path
-from typing import Any, Protocol
+from typing import Any, Final, Protocol
 
 import numpy as np
 import pytest
 from hypothesis import settings
 
 from fim import paths
+from fim.config.expert import ExpertSettings
 from fim.model.locus import LocusSpec
 from fim.model.params import SimulationParams
 from fim.persistence.binary_store import BinaryLogStore
@@ -478,6 +479,28 @@ def assert_none_open(stores: Sequence[BinaryLogStore]) -> None:
     assert not leaked, f"trajectory files left open: {leaked}"
 
 
+FAST_EXPERT_SETTINGS: Final[dict[str, Any]] = {
+    "first_check_minimum": 3,
+    "first_check_relaxation_times": 0.01,
+    "minimum_effective_sample_size": 10.0,
+}
+"""Expert Settings that let a tiny test run converge within a few dozen generations.
+
+The shipped rule waits out a burn-in of several relaxation times and then
+for 50 effective samples, which a test of an engine path cannot afford. With
+these settings (and `convergence_burn_in` of 1) the first check comes three
+generations after the burn-in, the window doubles from there, and the floor is
+the smallest the validation allows.
+"""
+
+
+FAST_CONVERGENCE: Final[dict[str, Any]] = {
+    "convergence_burn_in": 1,
+    "expert": ExpertSettings(**FAST_EXPERT_SETTINGS),
+}
+"""Keyword arguments for a directly built `SimulationParams` that converges fast."""
+
+
 @pytest.fixture
 def tiny_params() -> SimulationParams:
     """Return a small, fast, single-run configuration for integration tests.
@@ -496,9 +519,9 @@ def tiny_params() -> SimulationParams:
         d=2,
         seed=20260814,
         loci=(LocusSpec(1, 200),),
-        convergence_window=4,
         precision=1.0,
-        max_generations=10,
+        **FAST_CONVERGENCE,
+        max_generations=40,
         n_replicates=1,
         stop_batch_early=False,
     )

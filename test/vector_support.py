@@ -54,7 +54,6 @@ def make_params(generations: int, **overrides: object) -> SimulationParams:
         "d": 5,
         "seed": 20261008,
         "loci": loci(3),
-        "convergence_window": max(2, generations // 4),
         "precision": 1e-15,
         "max_generations": generations,
         "n_replicates": 1,

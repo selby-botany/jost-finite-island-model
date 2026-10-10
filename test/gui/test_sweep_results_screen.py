@@ -223,7 +223,6 @@ def test_home_offers_sweep_results_and_continue_only_for_a_sweep_study(
             "seed": 7,
             "n_replicates": 1,
             "max_generations": 10,
-            "convergence_window": 3,
         },
         axes=(expand_axis("d", [2, 3]),),
     )

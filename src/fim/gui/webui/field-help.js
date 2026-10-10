@@ -106,13 +106,12 @@ const FIELD_HELP = {
         "still be trending or imprecise when the run ends: their reported " +
         "values and window means are not converged estimates. With one " +
         "watched statistic the two are the same.",
-    convergence_window: "Trailing window, in generations, whose first and " +
-        "second halves are compared for stability. Leave it as auto and " +
-        "the app sets it from how slowly this population forgets its " +
-        "starting state (its migration, mutation and size), so a run is " +
-        "only called finished once it has stayed steady for that long. A " +
-        "run that finishes in a hundred generations is a warning sign, " +
-        "not good news.",
+    convergence_burn_in: "Generations discarded before averaging starts: " +
+        "the time the population needs to forget where it started. Leave it " +
+        "as auto and the app sets it from how slowly this population " +
+        "forgets its starting state (its migration, mutation and size) and " +
+        "the precision. A run that finishes in a hundred generations is a " +
+        "warning sign, not good news.",
     precision: "How precisely to estimate each watched statistic: plus or " +
         "minus this amount, in the statistic's own units, at the " +
         "confidence level. A single run averages over time until it gets " +

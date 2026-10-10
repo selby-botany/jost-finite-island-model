@@ -352,7 +352,7 @@ def test_a_point_with_no_relaxation_time_is_invalid_not_fatal() -> None:
     plan = enumerate_points(spec)
 
     assert len(plan.points) == 1
-    assert "cannot derive convergence_window" in plan.invalid[0].reason
+    assert "cannot derive max_generations" in plan.invalid[0].reason
 
 
 def test_a_point_run_name_is_the_study_name_and_its_coordinates() -> None:

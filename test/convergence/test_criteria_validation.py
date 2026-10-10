@@ -6,60 +6,8 @@ import math
 
 import pytest
 
-from fim.convergence.criteria import (
-    ConfidenceIntervalCriterion,
-    TrailingWindowCriterion,
-    trailing_window_stable,
-)
+from fim.convergence.criteria import ConfidenceIntervalCriterion
 from fim.convergence.monitor import ConvergenceMonitor
-
-
-@pytest.mark.parametrize(
-    ("window", "tolerance", "message"),
-    [
-        (1, 0.0, "window must be at least"),
-        (2, -1.0, "finite and non-negative"),
-        (2, math.inf, "finite and non-negative"),
-    ],
-)
-def test_trailing_window_rejects_invalid_configuration(
-    window: int,
-    tolerance: float,
-    message: str,
-) -> None:
-    """The functional criterion validates both public numeric arguments."""
-    with pytest.raises(ValueError, match=message):
-        trailing_window_stable([1.0, 1.0], window, tolerance)
-
-
-def test_trailing_window_requires_a_complete_window() -> None:
-    """A partial history is never reported as stable."""
-    assert not trailing_window_stable([1.0], 2, 0.0)
-
-
-def test_trailing_window_criterion_constructor_validates_configuration() -> None:
-    """The configured criterion rejects an invalid window or tolerance."""
-    with pytest.raises(ValueError, match="window"):
-        TrailingWindowCriterion(1, 0.0)
-    with pytest.raises(ValueError, match="tolerance"):
-        TrailingWindowCriterion(2, -1.0)
-
-
-def test_monitor_rejects_invalid_records_and_records_history() -> None:
-    """Monitor inputs are ordered, finite, and immutable after stopping."""
-    monitor = ConvergenceMonitor(TrailingWindowCriterion(4, 0.0), max_generations=4)
-    with pytest.raises(ValueError, match="max_generations"):
-        ConvergenceMonitor(TrailingWindowCriterion(2, 0.0), max_generations=0)
-    with pytest.raises(ValueError, match="non-negative"):
-        monitor.record(-1, 1.0)
-    monitor.record(0, 1.0)
-    with pytest.raises(ValueError, match="increasing"):
-        monitor.record(0, 1.0)
-    with pytest.raises(ValueError, match="finite"):
-        monitor.record(1, math.nan)
-    assert monitor.generations == (0,)
-    assert monitor.history == (1.0,)
-    assert not monitor.should_stop()
 
 
 @pytest.mark.parametrize(
@@ -110,7 +58,9 @@ def test_confidence_interval_criterion_composes_with_the_monitor() -> None:
 
 def test_monitor_rejects_records_after_convergence() -> None:
     """A terminal monitor cannot accept observations after its decision."""
-    monitor = ConvergenceMonitor(TrailingWindowCriterion(2, 0.0), max_generations=2)
+    monitor = ConvergenceMonitor(
+        ConfidenceIntervalCriterion(minimum_count=2, tolerance=0.0), max_generations=5
+    )
     monitor.record(0, 1.0)
     outcome = monitor.record(1, 1.0)
     assert outcome.stopped

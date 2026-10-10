@@ -1,38 +1,38 @@
 {
   "artifacts": {
     "convergence": {
-      "bytes": 459506,
-      "sha256": "9bed3174cfde6e983037fa68c432498965c4501278f8a5a7314ffc76f117e382"
+      "bytes": 2554035,
+      "sha256": "f44e967fe949a6ec91c7941e953c605a06d5de6eaf02524555f67c7f924695ec"
     },
     "pairwise": {
-      "bytes": 523,
-      "sha256": "0b98715b968b41d3c9f0206d6306b5068ff48380c6040eaf43a67421a70ff9c2"
+      "bytes": 524,
+      "sha256": "4ad1739b7cfe13e16133f2698fb70d5026860c2f9bac91148a0cad947e93f7fe"
     },
     "report": {
-      "bytes": 2306,
-      "sha256": "74c17e895e9df7d2ec784ae8824220253fe9cf3abec83b2867215997d0e521b1"
+      "bytes": 2600,
+      "sha256": "e7dc73e7d7fc368627709b4c1d9aa91cbf140fa52dee8d21554eafeed8f91ffa"
     },
     "scatter": {
-      "bytes": 130614,
-      "sha256": "bce1dd9b4f0a7da9e8ac5b534e350c4a5bed5af374ad227277ccade72ce5b477"
+      "bytes": 130082,
+      "sha256": "70efe881bf2729de7b03ff31decfed7dca41905cc7bb62a5c258216e736553e5"
     },
     "trajectory": {
-      "bytes": 1386360,
-      "sha256": "af6b0fcd0ad1c1bfe855e927f3bb64c44e131d4fd302e0ff56a8b77dfcc89059"
+      "bytes": 7754034,
+      "sha256": "841d43bb00e1e05fffae134e2b7fff8a67f0e696a9a09a4d40d5e5ce9ac30473"
     }
   },
   "auto_derived": [
-    "convergence_window",
+    "convergence_burn_in",
     "max_generations"
   ],
   "convergence": {
     "converged": true,
-    "generation": 3136,
-    "generation_count": 3137,
+    "generation": 17345,
+    "generation_count": 17346,
     "reason": "statistic converged",
     "statistic": "D"
   },
-  "ended_at": "2026-10-10T01:40:10.386848Z",
+  "ended_at": "2026-10-10T03:34:16.921582Z",
   "engine_backend": "lineal",
   "equilibrium_final_heterozygosity": null,
   "equilibrium_generation_count": null,
@@ -44,9 +44,9 @@
     "auto_vector_max_capacity": 4096,
     "auto_vector_min_d": 2,
     "confidence": 0.95,
+    "convergence_burn_in": 1251,
     "convergence_combinator": "all",
     "convergence_statistic": "D",
-    "convergence_window": 751,
     "d": 3,
     "deme_weighting": "equal",
     "engine_backend": "lineal",
@@ -81,11 +81,11 @@
     "track_expensive_statistics": false
   },
   "relaxation_time": 250.06124540480633,
-  "run_id": "run-f33e988c74c4f73e",
+  "run_id": "run-bc197ac86f3e2354",
   "schema_version": 3,
   "sigma_band": null,
   "sigma_band_multiplier": null,
   "sigma_band_window": null,
   "software_version": "1.2.0",
-  "started_at": "2026-10-10T01:40:05.772447Z"
+  "started_at": "2026-10-10T03:33:20.182385Z"
 }

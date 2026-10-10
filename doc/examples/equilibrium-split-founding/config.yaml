@@ -35,4 +35,5 @@ equilibrium_max_generations: 2000   # the derived burn-in is 1,256 generations
 engine_backend: lineal
 convergence_statistic: D
 precision: 0.03
+max_generations: 10000   # a cap: the run reports the precision it reached by then
 n_replicates: 1   # a single scalar run; the default (200) would batch

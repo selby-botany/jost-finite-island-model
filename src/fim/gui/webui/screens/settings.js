@@ -49,8 +49,8 @@ const settingsMaxWorkersInput = document.getElementById("settings-max_workers");
 const settingsMaxConcurrentReplicatesInput = document.getElementById(
     "settings-max_concurrent_replicates"
 );
-const settingsConvergenceWindowInput = document.getElementById(
-    "settings-convergence_window"
+const settingsConvergenceBurnInInput = document.getElementById(
+    "settings-convergence_burn_in"
 );
 const settingsPrecisionInput = document.getElementById(
     "settings-precision"
@@ -117,7 +117,7 @@ function collectDefaultRunSettingsValues() {
         engine_backend: settingsEngineBackendSelect.value,
         n_replicates: settingsNReplicatesInput.value,
         max_generations: settingsMaxGenerationsInput.value,
-        convergence_window: settingsConvergenceWindowInput.value,
+        convergence_burn_in: settingsConvergenceBurnInInput.value,
         precision: settingsPrecisionInput.value,
         confidence: settingsConfidenceSelect.value,
         jit: settingsJitSelect.value,
@@ -138,7 +138,7 @@ function applyDefaultRunSettingsValues(values) {
     settingsEngineBackendSelect.value = values.engine_backend;
     settingsNReplicatesInput.value = values.n_replicates;
     settingsMaxGenerationsInput.value = values.max_generations;
-    settingsConvergenceWindowInput.value = values.convergence_window;
+    settingsConvergenceBurnInInput.value = values.convergence_burn_in;
     settingsPrecisionInput.value = values.precision;
     settingsConfidenceSelect.value = values.confidence;
     settingsJitSelect.value = values.jit;

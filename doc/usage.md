@@ -68,18 +68,18 @@ non-converged result.
 
 A simulated population does not settle at once. With little migration between
 islands, gene flow and mutation take tens of thousands of generations to shape
-what you finally see, so a run is only finished once its statistics have stayed
-steady for about that long. You do not choose that stretch: `convergence_window`
-and `max_generations` default to `auto`, derived from your migration, mutation
-and population sizes.
+what you finally see, so a run first waits out a burn-in of about that long and
+then averages until the average is known to the precision you asked for. You do
+not choose those lengths: `convergence_burn_in` and `max_generations` default to
+`auto`, derived from your migration, mutation and population sizes.
 
 `fim run` prints the derived values unless `--quiet`, and the desktop app shows
 them next to **Run simulation** before you start. For five islands of 100 gene
-copies with `m: 0.0001` and `mu: 0.000001` that is a window of about 59,000
+copies with `m: 0.0001` and `mu: 0.000001` that is a burn-in of about 104,000
 generations. A run that finishes in a hundred generations is a warning sign,
 not good news. The derivation and its evidence are in
-[Convergence defaults](convergence.md); the settings are in
-[configuration.md](configuration.md#convergence_window).
+[Convergence](convergence.md); the settings are in
+[configuration.md](configuration.md#convergence_burn_in).
 
 ### Batches (n<sub>replicates</sub> greater than one)
 
@@ -141,11 +141,11 @@ Each example below is a complete config and the command that runs it: save
 the YAML, run the command, and the reported values match those shown here,
 because the same seed, parameters, and version always give the same
 `report.json` (see [Reproduce a run](#reproduce-a-run)). Each example uses
-a small `N` and `d`, and lets [convergence_window and
+a small `N` and `d`, and lets [convergence_burn_in and
 max_generations](convergence.md) be derived from the model (the default), so
-each run goes on until its statistic has stopped trending *and* its
-trailing-window mean is known to half of precision. With one
-locus that second condition can take tens of thousands of generations, so
+each run burns in and then averages until its statistic's mean is known to the
+requested `precision`. With one
+locus that can take tens of thousands of generations, so
 several examples set a looser precision (0.02 to 0.05) or pool
 eight loci, and each one's README says what that costs. Every example
 here finishes in a few seconds to about three minutes of wall-clock
@@ -228,6 +228,7 @@ loci:
     length: 100
 engine_backend: lineal
 convergence_statistic: D
+max_generations: 10000   # a cap: the run reports the precision it reached by then
 n_replicates: 1   # a single scalar run; the default (200) would batch
 ```
 
@@ -338,7 +339,6 @@ p_0:
   - - 2: 1.0
 engine_backend: lineal
 convergence_statistic: D
-convergence_window: 2
 precision: 0.000001
 max_generations: 1
 track_expensive_statistics: true
@@ -408,6 +408,7 @@ equilibrium_max_generations: 2000   # the derived burn-in is 1,256 generations
 engine_backend: lineal
 convergence_statistic: D
 precision: 0.03
+max_generations: 10000   # a cap: the run reports the precision it reached by then
 n_replicates: 1   # a single scalar run; the default (200) would batch
 ```
 
@@ -605,6 +606,7 @@ loci:
 engine_backend: lineal
 convergence_statistic: D
 precision: 0.05   # looser than the 0.01 default: seconds, not hours
+max_generations: 10000   # a cap: the run reports the precision it reached by then
 n_replicates: 1   # a single scalar run; the default (200) would batch
 ```
 
@@ -823,7 +825,8 @@ loci:
     length: 100
 engine_backend: lineal
 convergence_statistic: D
-precision: 0.03   # plus or minus: each replicate and the batch's interval
+precision: 0.08   # plus or minus: each replicate and the batch's interval
+max_generations: 5000   # a cap: the run reports the precision it reached by then
 n_replicates: 50
 replicate_minimum: 10
 ```
@@ -861,8 +864,9 @@ engine backend and runs a real, moderately long batch (a few seconds, not
 instant) large enough for that backend's own advantage to actually show.
 They are also the exception to the derived convergence defaults: each pins a
 fixed amount of work, 16 replicates of exactly 100 generations
-(`max_generations: 100` with a `convergence_window: 101` that can never
-fill, and `stop_batch_early: false` so no replicate is skipped), so a
+(`max_generations: 100` with `precision: 0.0`, which can never be reached,
+and `convergence_burn_in: 1`, and `stop_batch_early: false` so no replicate is
+skipped), so a
 timing comparison always does the same work. The population is nowhere
 near equilibrium when it stops, so read these two as timing workloads, not
 as results.
@@ -893,10 +897,10 @@ loci:
     length: 5
 engine_backend: generational-vector
 convergence_statistic: D
-# A fixed 100-generation horizon: a 101-generation window can never fill
-# within 100 generations, so every replicate runs exactly to the cap.
-convergence_window: 101
-precision: 0.02
+# A fixed 100-generation horizon: a precision of zero can never be reached, so
+# every replicate runs exactly to the cap (a burn-in of 1 keeps the cap above it).
+precision: 0.0
+convergence_burn_in: 1
 max_generations: 100
 n_replicates: 16
 stop_batch_early: false   # always run all 16 replicates
@@ -945,10 +949,10 @@ loci:
     length: 7
 engine_backend: generational
 convergence_statistic: D
-# A fixed 100-generation horizon: a 101-generation window can never fill
-# within 100 generations, so every replicate runs exactly to the cap.
-convergence_window: 101
-precision: 0.02
+# A fixed 100-generation horizon: a precision of zero can never be reached, so
+# every replicate runs exactly to the cap (a burn-in of 1 keeps the cap above it).
+precision: 0.0
+convergence_burn_in: 1
 max_generations: 100
 n_replicates: 16
 stop_batch_early: false   # always run all 16 replicates
@@ -1311,7 +1315,7 @@ FIM_GUI_SHUTDOWN_TIMEOUT=0 fim --graphical
 ### Loading a configuration does not change your Settings
 
 The run settings — execution engine, n<sub>replicates</sub>,
-max_generations, convergence window and tolerance, replicate confidence,
+max_generations, convergence burn-in, precision, confidence,
 JIT, the `auto` engine's two thresholds, and max concurrent replicates —
 live in Settings, not on the Configure form. A configuration you load can
 name its own values for them. Every way of loading one works the same:
@@ -1805,7 +1809,7 @@ Manifest timestamps may differ.
   increase max_generations, relax the tolerance, or select another
   convergence statistic based on the study's needs.
 - **A run finished in a few hundred generations:** check whether
-  convergence_window and max_generations were set to small fixed numbers.
+  convergence_burn_in and max_generations were set to small fixed numbers.
   Leave them on `auto`; see
   [Why does my run take so long?](#why-does-my-run-take-so-long).
 - **Windows warning:** verify the release checksum before running the unsigned

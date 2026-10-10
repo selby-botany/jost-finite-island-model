@@ -256,7 +256,6 @@ def test_adaptive_replicate_batch_keeps_the_same_replicates() -> None:
         replicate_minimum=3,
         precision=0.5,
         stop_batch_early=True,
-        convergence_window=10,
     )
     vector_store = InMemoryTrajectoryStore()
     vector = _run(params, "generational-vector", vector_store)
@@ -275,7 +274,6 @@ def test_convergence_stopped_run_matches_lineal() -> None:
         d=3,
         mu=0.05,
         m=0.2,
-        convergence_window=20,
         precision=0.1,
     )
     vector_store = InMemoryTrajectoryStore()
@@ -296,7 +294,6 @@ def test_sigma_band_extension_matches_lineal() -> None:
         d=3,
         mu=0.05,
         m=0.2,
-        convergence_window=20,
         precision=0.1,
         sigma_band_multiplier=2.0,
         sigma_band_window=15,
@@ -482,7 +479,6 @@ def test_finite_alleles_replicate_batch_and_adaptive_stop_match_lineal() -> None
         replicate_minimum=3,
         precision=0.5,
         stop_batch_early=True,
-        convergence_window=10,
         mutation_model="finite_alleles",
     )
     vector_store = InMemoryTrajectoryStore()
@@ -506,7 +502,6 @@ def test_finite_alleles_sigma_band_extension_matches_lineal() -> None:
         d=3,
         mu=0.1,
         m=0.2,
-        convergence_window=20,
         precision=0.15,
         sigma_band_multiplier=2.0,
         sigma_band_window=15,

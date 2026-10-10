@@ -313,7 +313,7 @@ def _base_params(
         n_replicates=n_replicates,
         stop_batch_early=False,
         precision=0.0,
-        convergence_window=max_generations + 1,
+        convergence_burn_in=1,
     )
 
 

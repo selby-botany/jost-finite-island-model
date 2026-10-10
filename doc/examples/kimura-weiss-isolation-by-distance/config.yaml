@@ -18,4 +18,5 @@ loci:
 engine_backend: lineal
 convergence_statistic: D
 precision: 0.05   # looser than the 0.01 default: seconds, not hours
+max_generations: 10000   # a cap: the run reports the precision it reached by then
 n_replicates: 1   # a single scalar run; the default (200) would batch

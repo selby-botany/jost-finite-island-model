@@ -38,11 +38,10 @@ Every test module, fixture, and test function documented here in full; `doc/fim-
   - [`test_export_command`](#cli.test_export_command)
   - [`test_trajectory_handles`](#cli.test_trajectory_handles)
 - [`test/convergence/`](#group-convergence)
+  - [`test_burn_in_monitor`](#convergence.test_burn_in_monitor)
   - [`test_criteria_validation`](#convergence.test_criteria_validation)
   - [`test_defaults`](#convergence.test_defaults)
-  - [`test_monitor`](#convergence.test_monitor)
-  - [`test_noise_gate`](#convergence.test_noise_gate)
-  - [`test_tracker`](#convergence.test_tracker)
+  - [`test_replicate_monitor`](#convergence.test_replicate_monitor)
   - [`test_window_statistics`](#convergence.test_window_statistics)
 - [`test/engine/`](#group-engine)
   - [`test_engine`](#engine.test_engine)
@@ -626,6 +625,24 @@ Assert `stores` is non-empty and none of them holds a file open.
 - `AssertionError` - If no store was built (the check would prove
   nothing) or any store still has an open file or writer.
 
+<a id="test.conftest.FAST_EXPERT_SETTINGS"></a>
+
+#### FAST\_EXPERT\_SETTINGS
+
+Expert Settings that let a tiny test run converge within a few dozen generations.
+
+The shipped rule waits out a burn-in of several relaxation times and then
+for 50 effective samples, which a test of an engine path cannot afford. With
+these settings (and `convergence_burn_in` of 1) the first check comes three
+generations after the burn-in, the window doubles from there, and the floor is
+the smallest the validation allows.
+
+<a id="test.conftest.FAST_CONVERGENCE"></a>
+
+#### FAST\_CONVERGENCE
+
+Keyword arguments for a directly built `SimulationParams` that converges fast.
+
 <a id="test.conftest.tiny_params"></a>
 
 #### tiny\_params
@@ -773,13 +790,14 @@ A renamed module must not silently drop out of the scan.
 
 Static checks that the documentation states the shipped convergence multiples.
 
-<a id="test.test_convergence_docs.test_docs_state_the_shipped_window_and_cap_formulas"></a>
+<a id="test.test_convergence_docs.test_docs_state_the_shipped_burn_in_and_cap_formulas"></a>
 
-#### test\_docs\_state\_the\_shipped\_window\_and\_cap\_formulas
+#### test\_docs\_state\_the\_shipped\_burn\_in\_and\_cap\_formulas
 
 ```python
 @pytest.mark.parametrize("relative", DOCS)
-def test_docs_state_the_shipped_window_and_cap_formulas(relative: str) -> None
+def test_docs_state_the_shipped_burn_in_and_cap_formulas(
+        relative: str) -> None
 ```
 
 The formulas in the docs match `fim.convergence.defaults`.
@@ -909,9 +927,9 @@ def test_worked_examples_use_derived_convergence_unless_deliberately_pinned(
 
 A pinned window or generation cap makes a run stop long before it settles.
 
-Every worked example lets `convergence_window` and `max_generations` be
+Every worked example lets `convergence_burn_in` and `max_generations` be
 derived from the model, except the few that name a reason to pin them.
-Pinning `convergence_window: 10` was what made the hub example stop at
+Pinning a burn-in of 10 was what made the hub example stop at
 generation 19 with a meaningless result.
 
 <a id="test.test_example_artifacts"></a>
@@ -4609,7 +4627,7 @@ def test_a_run_with_derived_settings_announces_them(
         tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None
 ```
 
-A derived window and cap are printed before the run starts.
+A derived cap (and burn-in) are printed before the run starts.
 
 <a id="cli.test_cli.test_a_run_with_explicit_settings_prints_no_derivation_line"></a>
 
@@ -4935,62 +4953,325 @@ engine-level tests in `test/persistence/test_jsonl_lifecycle.py` cover.
 
 ## `test/convergence/`
 
+<a id="convergence.test_burn_in_monitor"></a>
+
+# convergence.test\_burn\_in\_monitor
+
+Tests of `BurnInMonitor`, the burn-in-then-average rule of a single run.
+
+Every test is a pure function of its commit: fixed inputs, fixed seeds, and
+exact expected generations worked out from the schedule (burn-in, first check,
+doubling) or computed in the test with the Geyer estimator on the same data.
+
+<a id="convergence.test_burn_in_monitor.test_it_never_stops_inside_the_burn_in_even_for_a_constant_series"></a>
+
+#### test\_it\_never\_stops\_inside\_the\_burn\_in\_even\_for\_a\_constant\_series
+
+```python
+def test_it_never_stops_inside_the_burn_in_even_for_a_constant_series(
+) -> None
+```
+
+A flat series is exactly known, yet nothing can stop before the first check.
+
+<a id="convergence.test_burn_in_monitor.test_a_constant_series_stops_at_the_first_check_when_the_floor_holds"></a>
+
+#### test\_a\_constant\_series\_stops\_at\_the\_first\_check\_when\_the\_floor\_holds
+
+```python
+def test_a_constant_series_stops_at_the_first_check_when_the_floor_holds(
+) -> None
+```
+
+Window `[10, 30]` has 21 values, so ESS is 21, above the floor of 10.
+
+<a id="convergence.test_burn_in_monitor.test_generation_zero_is_never_in_an_evidence_window"></a>
+
+#### test\_generation\_zero\_is\_never\_in\_an\_evidence\_window
+
+```python
+def test_generation_zero_is_never_in_an_evidence_window() -> None
+```
+
+A start-state outlier at generation 0 does not touch the window mean.
+
+<a id="convergence.test_burn_in_monitor.test_a_floor_above_the_first_window_waits_for_the_doubling_check"></a>
+
+#### test\_a\_floor\_above\_the\_first\_window\_waits\_for\_the\_doubling\_check
+
+```python
+def test_a_floor_above_the_first_window_waits_for_the_doubling_check() -> None
+```
+
+Floor 30: 21 values at generation 30 fail; the next check is at 10 + 2 * 21.
+
+The schedule after a check at `t` with start `s` is
+`next = s + ceil(growth * (t + 1 - s))`: here `10 + 42 = 52`, whose window
+`[10, 52]` has 43 values, at least the floor of 30.
+
+<a id="convergence.test_burn_in_monitor.test_a_low_standard_error_with_too_few_effective_values_does_not_stop"></a>
+
+#### test\_a\_low\_standard\_error\_with\_too\_few\_effective\_values\_does\_not\_stop
+
+```python
+def test_a_low_standard_error_with_too_few_effective_values_does_not_stop(
+) -> None
+```
+
+A strongly autocorrelated series with a small SE still waits for its ESS.
+
+<a id="convergence.test_burn_in_monitor.test_the_precision_target_is_precision_over_the_normal_quantile"></a>
+
+#### test\_the\_precision\_target\_is\_precision\_over\_the\_normal\_quantile
+
+```python
+def test_the_precision_target_is_precision_over_the_normal_quantile() -> None
+```
+
+`SE <= precision / z`: 0.01 / 1.96 at 95%, wider at 99%.
+
+<a id="convergence.test_burn_in_monitor.test_a_noisy_series_stops_at_the_first_check_meeting_both_conditions"></a>
+
+#### test\_a\_noisy\_series\_stops\_at\_the\_first\_check\_meeting\_both\_conditions
+
+```python
+def test_a_noisy_series_stops_at_the_first_check_meeting_both_conditions(
+) -> None
+```
+
+The stop is the first scheduled check with SE and ESS both satisfied.
+
+<a id="convergence.test_burn_in_monitor.test_a_run_that_never_reaches_the_precision_is_capped_honestly"></a>
+
+#### test\_a\_run\_that\_never\_reaches\_the\_precision\_is\_capped\_honestly
+
+```python
+def test_a_run_that_never_reaches_the_precision_is_capped_honestly() -> None
+```
+
+At the cap the run is reported as capped, with the window it averaged.
+
+<a id="convergence.test_burn_in_monitor.test_a_cap_inside_the_burn_in_has_no_evidence_window"></a>
+
+#### test\_a\_cap\_inside\_the\_burn\_in\_has\_no\_evidence\_window
+
+```python
+def test_a_cap_inside_the_burn_in_has_no_evidence_window() -> None
+```
+
+A run capped before its burn-in ends reports no window at all.
+
+<a id="convergence.test_burn_in_monitor.test_every_watched_statistic_is_judged_at_every_check"></a>
+
+#### test\_every\_watched\_statistic\_is\_judged\_at\_every\_check
+
+```python
+def test_every_watched_statistic_is_judged_at_every_check() -> None
+```
+
+The stop does not depend on the order the statistics are listed in.
+
+<a id="convergence.test_burn_in_monitor.test_all_waits_for_the_noisier_statistic_and_any_does_not"></a>
+
+#### test\_all\_waits\_for\_the\_noisier\_statistic\_and\_any\_does\_not
+
+```python
+def test_all_waits_for_the_noisier_statistic_and_any_does_not() -> None
+```
+
+`all` needs both statistics to pass; `any` stops when one does.
+
+<a id="convergence.test_burn_in_monitor.test_stable_statistics_names_those_that_passed_at_the_stopping_check"></a>
+
+#### test\_stable\_statistics\_names\_those\_that\_passed\_at\_the\_stopping\_check
+
+```python
+def test_stable_statistics_names_those_that_passed_at_the_stopping_check(
+) -> None
+```
+
+Under `any` only the passing statistics are named; under `all` every one.
+
+<a id="convergence.test_burn_in_monitor.test_the_fractional_burn_in_discards_the_first_tenth_at_each_check"></a>
+
+#### test\_the\_fractional\_burn\_in\_discards\_the\_first\_tenth\_at\_each\_check
+
+```python
+def test_the_fractional_burn_in_discards_the_first_tenth_at_each_check(
+) -> None
+```
+
+With no burn-in the window starts at `floor(0.1 t)` at the stopping check.
+
+<a id="convergence.test_burn_in_monitor.test_extra_statistics_are_recorded_but_never_decide"></a>
+
+#### test\_extra\_statistics\_are\_recorded\_but\_never\_decide
+
+```python
+def test_extra_statistics_are_recorded_but_never_decide() -> None
+```
+
+A display-only statistic that never settles does not hold the run.
+
+<a id="convergence.test_burn_in_monitor.test_a_statistic_undefined_in_some_generations_keeps_its_own_window"></a>
+
+#### test\_a\_statistic\_undefined\_in\_some\_generations\_keeps\_its\_own\_window
+
+```python
+def test_a_statistic_undefined_in_some_generations_keeps_its_own_window(
+) -> None
+```
+
+Gaps shorten a statistic's history, and its window follows generations.
+
+<a id="convergence.test_burn_in_monitor.test_a_statistic_with_too_few_defined_values_is_not_judged"></a>
+
+#### test\_a\_statistic\_with\_too\_few\_defined\_values\_is\_not\_judged
+
+```python
+def test_a_statistic_with_too_few_defined_values_is_not_judged() -> None
+```
+
+Fewer than three defined values in the window cannot pass.
+
+<a id="convergence.test_burn_in_monitor.test_the_first_check_is_not_before_the_first_window_value_floor"></a>
+
+#### test\_the\_first\_check\_is\_not\_before\_the\_first\_window\_value\_floor
+
+```python
+def test_the_first_check_is_not_before_the_first_window_value_floor() -> None
+```
+
+`first_check` must give the estimator at least three values.
+
+<a id="convergence.test_burn_in_monitor.test_the_constructor_validates_its_arguments"></a>
+
+#### test\_the\_constructor\_validates\_its\_arguments
+
+```python
+@pytest.mark.parametrize(
+    ("changes", "message"),
+    [
+        ({
+            "max_generations": 0
+        }, "max_generations"),
+        ({
+            "precision": -1.0
+        }, "precision"),
+        ({
+            "precision": float("nan")
+        }, "precision"),
+        ({
+            "confidence": 0.8
+        }, "confidence"),
+        ({
+            "burn_in": 0
+        }, "burn_in"),
+        ({
+            "growth": 1.0
+        }, "growth"),
+        ({
+            "fractional_burn_in": 0.0
+        }, "fractional_burn_in"),
+        ({
+            "fractional_burn_in": 1.0
+        }, "fractional_burn_in"),
+        ({
+            "minimum_effective_sample_size": 0.0
+        }, "minimum_effective_sample_size"),
+        ({
+            "statistics": ()
+        }, "statistics must not be empty"),
+        ({
+            "statistics": ("D", "D")
+        }, "must not repeat a name"),
+        ({
+            "statistics": ("D", ),
+            "extra_statistics": ("D", )
+        }, "must not repeat a name"),
+        ({
+            "combinator": "either"
+        }, "combinator must be"),
+    ],
+)
+def test_the_constructor_validates_its_arguments(changes: dict[str, object],
+                                                 message: str) -> None
+```
+
+Each invalid argument is refused by name.
+
+<a id="convergence.test_burn_in_monitor.test_record_rejects_a_non_integer_generation"></a>
+
+#### test\_record\_rejects\_a\_non\_integer\_generation
+
+```python
+@pytest.mark.parametrize(
+    "generation",
+    [True, False, 1.5, "1", None],
+    ids=["True", "False", "1.5", "'1'", "None"],
+)
+def test_record_rejects_a_non_integer_generation(generation: object) -> None
+```
+
+A non-integer generation, a `bool` included, raises `ValueError`.
+
+<a id="convergence.test_burn_in_monitor.test_record_rejects_a_non_numeric_value"></a>
+
+#### test\_record\_rejects\_a\_non\_numeric\_value
+
+```python
+@pytest.mark.parametrize("value", [True, "0.5", None],
+                         ids=["True", "'0.5'", "None"])
+def test_record_rejects_a_non_numeric_value(value: object) -> None
+```
+
+A non-numeric value raises `ValueError`, not a raw `TypeError`.
+
+<a id="convergence.test_burn_in_monitor.test_record_rejects_non_finite_negative_and_unordered_input"></a>
+
+#### test\_record\_rejects\_non\_finite\_negative\_and\_unordered\_input
+
+```python
+def test_record_rejects_non_finite_negative_and_unordered_input() -> None
+```
+
+Infinity, a negative generation and a repeated generation are refused.
+
+<a id="convergence.test_burn_in_monitor.test_several_statistics_need_a_mapping_and_accept_a_partial_one"></a>
+
+#### test\_several\_statistics\_need\_a\_mapping\_and\_accept\_a\_partial\_one
+
+```python
+def test_several_statistics_need_a_mapping_and_accept_a_partial_one() -> None
+```
+
+A bare float needs one watched statistic; a mapping may omit a statistic.
+
+<a id="convergence.test_burn_in_monitor.test_it_refuses_a_record_after_it_stopped"></a>
+
+#### test\_it\_refuses\_a\_record\_after\_it\_stopped
+
+```python
+def test_it_refuses_a_record_after_it_stopped() -> None
+```
+
+A stopped monitor is finished.
+
+<a id="convergence.test_burn_in_monitor.test_the_recorded_series_are_exposed_in_order"></a>
+
+#### test\_the\_recorded\_series\_are\_exposed\_in\_order
+
+```python
+def test_the_recorded_series_are_exposed_in_order() -> None
+```
+
+`generations`, `history` and `histories` mirror what was recorded.
+
 <a id="convergence.test_criteria_validation"></a>
 
 # convergence.test\_criteria\_validation
 
 Validation tests for convergence criteria.
-
-<a id="convergence.test_criteria_validation.test_trailing_window_rejects_invalid_configuration"></a>
-
-#### test\_trailing\_window\_rejects\_invalid\_configuration
-
-```python
-@pytest.mark.parametrize(
-    ("window", "tolerance", "message"),
-    [
-        (1, 0.0, "window must be at least"),
-        (2, -1.0, "finite and non-negative"),
-        (2, math.inf, "finite and non-negative"),
-    ],
-)
-def test_trailing_window_rejects_invalid_configuration(window: int,
-                                                       tolerance: float,
-                                                       message: str) -> None
-```
-
-The functional criterion validates both public numeric arguments.
-
-<a id="convergence.test_criteria_validation.test_trailing_window_requires_a_complete_window"></a>
-
-#### test\_trailing\_window\_requires\_a\_complete\_window
-
-```python
-def test_trailing_window_requires_a_complete_window() -> None
-```
-
-A partial history is never reported as stable.
-
-<a id="convergence.test_criteria_validation.test_trailing_window_criterion_constructor_validates_configuration"></a>
-
-#### test\_trailing\_window\_criterion\_constructor\_validates\_configuration
-
-```python
-def test_trailing_window_criterion_constructor_validates_configuration(
-) -> None
-```
-
-The configured criterion rejects an invalid window or tolerance.
-
-<a id="convergence.test_criteria_validation.test_monitor_rejects_invalid_records_and_records_history"></a>
-
-#### test\_monitor\_rejects\_invalid\_records\_and\_records\_history
-
-```python
-def test_monitor_rejects_invalid_records_and_records_history() -> None
-```
-
-Monitor inputs are ordered, finite, and immutable after stopping.
 
 <a id="convergence.test_criteria_validation.test_confidence_interval_criterion_rejects_invalid_configuration"></a>
 
@@ -5058,7 +5339,7 @@ A terminal monitor cannot accept observations after its decision.
 
 # convergence.test\_defaults
 
-Tests for `fim.convergence.defaults`: derived window and cap.
+Tests for `fim.convergence.defaults`: the derived burn-in and cap.
 
 <a id="convergence.test_defaults.test_closed_form_matches_the_recursion_eigenvalue"></a>
 
@@ -5082,47 +5363,87 @@ def test_dear_nolan_low_relaxation_time_is_about_twenty_thousand() -> None
 
 The source scenario relaxes over about 20,000 generations.
 
-<a id="convergence.test_defaults.test_derived_defaults_are_multiples_of_the_relaxation_time"></a>
+<a id="convergence.test_defaults.test_the_burn_in_multiple_follows_the_precision_with_a_floor"></a>
 
-#### test\_derived\_defaults\_are\_multiples\_of\_the\_relaxation\_time
-
-```python
-def test_derived_defaults_are_multiples_of_the_relaxation_time() -> None
-```
-
-Window and cap are the documented multiples of `tau`.
-
-<a id="convergence.test_defaults.test_fast_models_keep_the_historical_floors"></a>
-
-#### test\_fast\_models\_keep\_the\_historical\_floors
+#### test\_the\_burn\_in\_multiple\_follows\_the\_precision\_with\_a\_floor
 
 ```python
-def test_fast_models_keep_the_historical_floors() -> None
+def test_the_burn_in_multiple_follows_the_precision_with_a_floor() -> None
 ```
 
-A quickly relaxing model never gets a window or cap below their own floors.
+`k = max(5, ln(2 / precision))`: 5.30 at 0.01, 7.6 at 0.001, 5 at 0.1.
 
-<a id="convergence.test_defaults.test_window_never_exceeds_the_cap_when_the_cap_is_clamped"></a>
+<a id="convergence.test_defaults.test_the_burn_in_is_ceil_k_tau_and_never_zero"></a>
 
-#### test\_window\_never\_exceeds\_the\_cap\_when\_the\_cap\_is\_clamped
+#### test\_the\_burn\_in\_is\_ceil\_k\_tau\_and\_never\_zero
 
 ```python
-def test_window_never_exceeds_the_cap_when_the_cap_is_clamped() -> None
+def test_the_burn_in_is_ceil_k_tau_and_never_zero() -> None
 ```
 
-A nearly isolated system stays finite and keeps window <= cap.
+`ceil(k tau)`, at least 1 so generation 0 is never averaged.
 
-<a id="convergence.test_defaults.test_lower_migration_never_shortens_the_window"></a>
+<a id="convergence.test_defaults.test_derived_defaults_follow_the_burn_in_and_the_cap_rule"></a>
 
-#### test\_lower\_migration\_never\_shortens\_the\_window
+#### test\_derived\_defaults\_follow\_the\_burn\_in\_and\_the\_cap\_rule
+
+```python
+def test_derived_defaults_follow_the_burn_in_and_the_cap_rule() -> None
+```
+
+Burn-in is `ceil(k tau)`; the cap adds `15 tau` to the burn-in.
+
+<a id="convergence.test_defaults.test_fast_models_keep_the_cap_floor"></a>
+
+#### test\_fast\_models\_keep\_the\_cap\_floor
+
+```python
+def test_fast_models_keep_the_cap_floor() -> None
+```
+
+A quickly relaxing model never gets a cap below the floor.
+
+<a id="convergence.test_defaults.test_a_nearly_isolated_system_stays_finite"></a>
+
+#### test\_a\_nearly\_isolated\_system\_stays\_finite
+
+```python
+def test_a_nearly_isolated_system_stays_finite() -> None
+```
+
+The cap is clamped at the ceiling and the burn-in cannot exceed it.
+
+<a id="convergence.test_defaults.test_the_cap_is_never_inside_the_burn_in"></a>
+
+#### test\_the\_cap\_is\_never\_inside\_the\_burn\_in
+
+```python
+def test_the_cap_is_never_inside_the_burn_in() -> None
+```
+
+A slow model's cap includes its burn-in, so the burn-in always ends first.
+
+<a id="convergence.test_defaults.test_expert_settings_change_the_derived_values"></a>
+
+#### test\_expert\_settings\_change\_the\_derived\_values
+
+```python
+def test_expert_settings_change_the_derived_values() -> None
+```
+
+The burn-in floor, the cap multiple and the cap floor are Expert Settings.
+
+<a id="convergence.test_defaults.test_lower_migration_never_shortens_the_burn_in"></a>
+
+#### test\_lower\_migration\_never\_shortens\_the\_burn\_in
 
 ```python
 @pytest.mark.parametrize(("smaller", "larger"), [(1e-3, 1e-4), (1e-4, 1e-5)])
-def test_lower_migration_never_shortens_the_window(smaller: float,
-                                                   larger: float) -> None
+def test_lower_migration_never_shortens_the_burn_in(smaller: float,
+                                                    larger: float) -> None
 ```
 
-Monotonicity: less migration means a longer (or equal) window.
+Monotonicity: less migration means a longer (or equal) burn-in.
 
 <a id="convergence.test_defaults.test_mutation_dominates_at_high_migration"></a>
 
@@ -5276,191 +5597,76 @@ def test_panmictic_burn_in_follows_the_slowest_locus_and_rejects_bad_input(
 
 The smallest rate sets the burn-in; a zero tolerance is refused.
 
-<a id="convergence.test_defaults.test_derived_convergence_sentence_names_window_cap_and_time"></a>
+<a id="convergence.test_defaults.test_derived_convergence_sentence_names_burn_in_cap_and_time"></a>
 
-#### test\_derived\_convergence\_sentence\_names\_window\_cap\_and\_time
+#### test\_derived\_convergence\_sentence\_names\_burn\_in\_cap\_and\_time
 
 ```python
-def test_derived_convergence_sentence_names_window_cap_and_time() -> None
+def test_derived_convergence_sentence_names_burn_in_cap_and_time() -> None
 ```
 
 The shared sentence carries all three numbers, with thousands separators.
 
-<a id="convergence.test_monitor"></a>
+<a id="convergence.test_defaults.test_the_sentence_says_so_when_there_is_no_relaxation_time"></a>
 
-# convergence.test\_monitor
-
-Tests for operational stochastic-equilibrium detection.
-
-<a id="convergence.test_monitor.test_constant_sequence_is_stable_when_window_fills"></a>
-
-#### test\_constant\_sequence\_is\_stable\_when\_window\_fills
+#### test\_the\_sentence\_says\_so\_when\_there\_is\_no\_relaxation\_time
 
 ```python
-def test_constant_sequence_is_stable_when_window_fills() -> None
+def test_the_sentence_says_so_when_there_is_no_relaxation_time() -> None
 ```
 
-A fixed statistic converges at the first full window.
+A fractional burn-in is described without inventing a relaxation time.
 
-<a id="convergence.test_monitor.test_linear_drift_is_not_stable"></a>
+<a id="convergence.test_replicate_monitor"></a>
 
-#### test\_linear\_drift\_is\_not\_stable
+# convergence.test\_replicate\_monitor
+
+Tests of `ConvergenceMonitor`, the replicate batch's across-replicate monitor.
+
+The monitor remembers one value per completed replicate and asks a
+`ConfidenceIntervalCriterion` whether the interval is tight enough.
+
+<a id="convergence.test_replicate_monitor.test_it_distinguishes_convergence_from_the_cap"></a>
+
+#### test\_it\_distinguishes\_convergence\_from\_the\_cap
 
 ```python
-def test_linear_drift_is_not_stable() -> None
+def test_it_distinguishes_convergence_from_the_cap() -> None
 ```
 
-A moving half-window mean does not converge.
+A tight sample is converged; one that never tightens hits the cap.
 
-<a id="convergence.test_monitor.test_oscillation_uses_half_window_means"></a>
+<a id="convergence.test_replicate_monitor.test_several_statistics_need_a_mapping_and_accept_a_partial_one"></a>
 
-#### test\_oscillation\_uses\_half\_window\_means
+#### test\_several\_statistics\_need\_a\_mapping\_and\_accept\_a\_partial\_one
 
 ```python
-@pytest.mark.parametrize(
-    ("history", "tolerance", "expected"),
-    [
-        ([0.9, 1.1, 0.9, 1.1], 0.0, True),
-        ([0.0, 0.0, 1.0, 1.0], 0.9, False),
-    ],
-)
-def test_oscillation_uses_half_window_means(history: list[float],
-                                            tolerance: float,
-                                            expected: bool) -> None
+def test_several_statistics_need_a_mapping_and_accept_a_partial_one() -> None
 ```
 
-Oscillation is judged by the documented half-mean rule.
+A bare float needs one statistic; a mapping may omit one this round.
 
-<a id="convergence.test_monitor.test_monitor_distinguishes_convergence_from_cap"></a>
+<a id="convergence.test_replicate_monitor.test_all_needs_every_statistic_and_any_needs_one"></a>
 
-#### test\_monitor\_distinguishes\_convergence\_from\_cap
+#### test\_all\_needs\_every\_statistic\_and\_any\_needs\_one
 
 ```python
-def test_monitor_distinguishes_convergence_from_cap() -> None
+def test_all_needs_every_statistic_and_any_needs_one() -> None
 ```
 
-Terminal outcomes remain valid and explain why the run stopped.
+`all` waits for the loose statistic; `any` stops on the tight one.
 
-<a id="convergence.test_monitor.test_record_rejects_a_non_integer_generation"></a>
+<a id="convergence.test_replicate_monitor.test_stable_statistics_names_those_that_passed_on_the_last_round"></a>
 
-#### test\_record\_rejects\_a\_non\_integer\_generation
+#### test\_stable\_statistics\_names\_those\_that\_passed\_on\_the\_last\_round
 
 ```python
-@pytest.mark.parametrize(
-    "generation",
-    [True, False, 1.5, "1", None],
-    ids=["True", "False", "1.5", "'1'", "None"],
-)
-def test_record_rejects_a_non_integer_generation(generation: object) -> None
+def test_stable_statistics_names_those_that_passed_on_the_last_round() -> None
 ```
 
-A non-integer `generation` (including `bool`) raises `ValueError`.
+Under `any`, only the passing statistic is named.
 
-Regression test for FIM-06: `generation < 0` used to run directly
-against whatever `generation` actually was — a raw `TypeError` for
-anything not orderable against `0` (`None`, a string), and a
-*silent, wrong* pass for `bool` (`True`/`False` compare as `1`/`0`
-in Python, and `bool` is an `int` subclass, so an isolated `not
-isinstance(generation, int)` check alone would not have caught it
-either).
-
-<a id="convergence.test_monitor.test_record_rejects_a_non_numeric_value"></a>
-
-#### test\_record\_rejects\_a\_non\_numeric\_value
-
-```python
-@pytest.mark.parametrize("value", [True, "0.5", None],
-                         ids=["True", "'0.5'", "None"])
-def test_record_rejects_a_non_numeric_value(value: object) -> None
-```
-
-A non-numeric watched value raises `ValueError`, not a raw `TypeError`.
-
-Regression test for FIM-06: a non-numeric `value` used to reach
-`math.isfinite(number)` directly, which raises Python's own generic
-`TypeError` for anything it cannot accept at all, rather than this
-method's own documented `ValueError`. `bool` is rejected too, the
-same `bool`-is-not-really-a-number discipline `generation`, above,
-already applies — `True`/`False` are technically valid `int`s, but
-not a meaningful watched statistic value.
-
-<a id="convergence.test_monitor.test_multi_statistic_monitor_requires_a_mapping_but_accepts_a_partial_one"></a>
-
-#### test\_multi\_statistic\_monitor\_requires\_a\_mapping\_but\_accepts\_a\_partial\_one
-
-```python
-def test_multi_statistic_monitor_requires_a_mapping_but_accepts_a_partial_one(
-) -> None
-```
-
-Watching several statistics rejects a bare float, not a partial mapping.
-
-Regression test: a mapping that omits a configured statistic
-(its value is undefined this round) is now valid — that statistic
-simply does not advance this round — but a name outside the
-configured set is still almost certainly a typo and still raises.
-
-<a id="convergence.test_monitor.test_all_combinator_requires_every_statistic_stable"></a>
-
-#### test\_all\_combinator\_requires\_every\_statistic\_stable
-
-```python
-def test_all_combinator_requires_every_statistic_stable() -> None
-```
-
-The all combinator stops only once every statistic's history is stable.
-
-<a id="convergence.test_monitor.test_any_combinator_stops_as_soon_as_one_statistic_is_stable"></a>
-
-#### test\_any\_combinator\_stops\_as\_soon\_as\_one\_statistic\_is\_stable
-
-```python
-def test_any_combinator_stops_as_soon_as_one_statistic_is_stable() -> None
-```
-
-The any combinator stops as soon as one statistic's history is stable.
-
-<a id="convergence.test_monitor.test_stable_statistics_names_only_the_statistics_that_passed"></a>
-
-#### test\_stable\_statistics\_names\_only\_the\_statistics\_that\_passed
-
-```python
-def test_stable_statistics_names_only_the_statistics_that_passed() -> None
-```
-
-Under `any`, the stop names the statistic that passed, not every one watched.
-
-<a id="convergence.test_monitor.test_stable_statistics_names_every_statistic_under_all"></a>
-
-#### test\_stable\_statistics\_names\_every\_statistic\_under\_all
-
-```python
-def test_stable_statistics_names_every_statistic_under_all() -> None
-```
-
-Under `all`, a converged run passed on every watched statistic, in order.
-
-<a id="convergence.test_monitor.test_stable_statistics_is_empty_for_a_run_that_hit_the_cap"></a>
-
-#### test\_stable\_statistics\_is\_empty\_for\_a\_run\_that\_hit\_the\_cap
-
-```python
-def test_stable_statistics_is_empty_for_a_run_that_hit_the_cap() -> None
-```
-
-A capped run converged on nothing, even if one statistic had settled.
-
-<a id="convergence.test_monitor.test_monitor_constructor_validates_statistics_and_combinator"></a>
-
-#### test\_monitor\_constructor\_validates\_statistics\_and\_combinator
-
-```python
-def test_monitor_constructor_validates_statistics_and_combinator() -> None
-```
-
-Statistic names and the combinator are validated at construction.
-
-<a id="convergence.test_monitor.test_extra_statistics_are_recorded_but_never_gate_stopping"></a>
+<a id="convergence.test_replicate_monitor.test_extra_statistics_are_recorded_but_never_gate_stopping"></a>
 
 #### test\_extra\_statistics\_are\_recorded\_but\_never\_gate\_stopping
 
@@ -5468,310 +5674,39 @@ Statistic names and the combinator are validated at construction.
 def test_extra_statistics_are_recorded_but_never_gate_stopping() -> None
 ```
 
-`extra_statistics` histories are kept, but only `statistics` decides stopping.
+A display-only statistic that never settles does not hold the batch.
 
-`fim.engine._watched_statistic_values`'s own "D/G_ST/H_S/H_T always
-present for display, only the watched subset gates stopping" design
-depends on this: a monitor watching only `D` (immediately stable)
-with `H_S` as an `extra_statistic` that never stabilizes must still
-stop as soon as `D` does — `H_S` riding along in `histories`, never
-once consulted by the stop decision.
+<a id="convergence.test_replicate_monitor.test_the_constructor_validates_its_arguments"></a>
 
-<a id="convergence.test_monitor.test_extra_statistics_accepts_a_partial_mapping_like_watched_statistics"></a>
-
-#### test\_extra\_statistics\_accepts\_a\_partial\_mapping\_like\_watched\_statistics
+#### test\_the\_constructor\_validates\_its\_arguments
 
 ```python
-def test_extra_statistics_accepts_a_partial_mapping_like_watched_statistics(
-) -> None
+@pytest.mark.parametrize(
+    ("changes", "message"),
+    [
+        ({
+            "max_generations": 0
+        }, "max_generations"),
+        ({
+            "statistics": ()
+        }, "statistics must not be empty"),
+        ({
+            "statistics": ("D", "D")
+        }, "must not repeat a name"),
+        ({
+            "statistics": ("D", ),
+            "extra_statistics": ("D", )
+        }, "must not repeat a name"),
+        ({
+            "combinator": "either"
+        }, "combinator must be"),
+    ],
+)
+def test_the_constructor_validates_its_arguments(changes: dict[str, object],
+                                                 message: str) -> None
 ```
 
-An extra statistic can be legitimately undefined on a given round too.
-
-<a id="convergence.test_monitor.test_extra_statistics_name_still_rejects_a_genuinely_unknown_name"></a>
-
-#### test\_extra\_statistics\_name\_still\_rejects\_a\_genuinely\_unknown\_name
-
-```python
-def test_extra_statistics_name_still_rejects_a_genuinely_unknown_name(
-) -> None
-```
-
-A name outside both `statistics` and `extra_statistics` still raises.
-
-<a id="convergence.test_monitor.test_extra_statistics_constructor_rejects_a_name_repeated_across_the_two_sets"></a>
-
-#### test\_extra\_statistics\_constructor\_rejects\_a\_name\_repeated\_across\_the\_two\_sets
-
-```python
-def test_extra_statistics_constructor_rejects_a_name_repeated_across_the_two_sets(
-) -> (None)
-```
-
-A name cannot appear in both `statistics` and `extra_statistics`.
-
-<a id="convergence.test_noise_gate"></a>
-
-# convergence.test\_noise\_gate
-
-`ConvergenceMonitor`'s noise-adequacy gate: `_gated_stable`.
-
-`trailing_window_stable` alone answers "has this stopped trending," which a
-noisy-but-flat series can satisfy by chance long before its own trailing-
-window mean is actually known to the configured tolerance — the real defect
-these tests were written against (a botanist-reported worked example whose
-"converged" `D` was a single noisy generation, nowhere near the model's own
-expectation). These tests prove the gate actually delays a stop until the
-window's own standard error is noise-adequate, that it still stops promptly
-once the process is genuinely precise, and that a run capped without ever
-reaching noise-adequacy reports that honestly.
-
-<a id="convergence.test_noise_gate.test_the_noise_gate_delays_a_stop_the_trend_check_alone_would_have_taken"></a>
-
-#### test\_the\_noise\_gate\_delays\_a\_stop\_the\_trend\_check\_alone\_would\_have\_taken
-
-```python
-def test_the_noise_gate_delays_a_stop_the_trend_check_alone_would_have_taken(
-) -> None
-```
-
-Correlated noise that fools the trend check does not fool the gate.
-
-`phi=0.85` positive correlation, `window=24`, `tolerance=0.03`: two
-neighboring 12-value halves of a correlated series land close together
-(`trailing_window_stable` alone -- the old, ungated behavior -- passes
-by generation 23, confirmed below, not assumed) long before the window's
-own correlation-corrected standard error has actually shrunk enough. The
-gated monitor must not stop that early, and must eventually stop once it
-genuinely has (`stats.noise_adequate`).
-
-<a id="convergence.test_noise_gate.test_a_genuinely_precise_series_still_stops_promptly"></a>
-
-#### test\_a\_genuinely\_precise\_series\_still\_stops\_promptly
-
-```python
-def test_a_genuinely_precise_series_still_stops_promptly() -> None
-```
-
-Tiny noise relative to tolerance costs (almost) no extra generations.
-
-Regression guard: the gate must not meaningfully delay the easy,
-already-well-served case (a multi-locus or multi-replicate mean whose
-own noise is already far below the requested tolerance).
-
-<a id="convergence.test_noise_gate.test_a_run_that_never_reaches_noise_adequacy_is_honestly_capped"></a>
-
-#### test\_a\_run\_that\_never\_reaches\_noise\_adequacy\_is\_honestly\_capped
-
-```python
-def test_a_run_that_never_reaches_noise_adequacy_is_honestly_capped() -> None
-```
-
-Hitting the cap without a noise-adequate window reports `converged=False`.
-
-Persistent noise (`sigma` large relative to `tolerance`, a window too
-short to average enough of it away) never satisfies the gate — the run
-must report the cap, not a false convergence, and `window_statistics`
-must still be available so a caller can say how far off the estimate is.
-
-<a id="convergence.test_noise_gate.test_window_statistics_is_none_before_any_check_has_run"></a>
-
-#### test\_window\_statistics\_is\_none\_before\_any\_check\_has\_run
-
-```python
-def test_window_statistics_is_none_before_any_check_has_run() -> None
-```
-
-A fresh monitor, or one whose trend never stabilized, has nothing yet.
-
-<a id="convergence.test_noise_gate.test_a_window_shorter_than_the_noise_check_minimum_is_never_gated"></a>
-
-#### test\_a\_window\_shorter\_than\_the\_noise\_check\_minimum\_is\_never\_gated
-
-```python
-@pytest.mark.parametrize("window", [2, MINIMUM_NOISE_CHECK_WINDOW - 1])
-def test_a_window_shorter_than_the_noise_check_minimum_is_never_gated(
-        window: int) -> None
-```
-
-Below `MINIMUM_NOISE_CHECK_WINDOW`, the trend check alone decides.
-
-Matches the trend-only check's own original behavior for a window too
-short to estimate a lag-1 autocorrelation from at all
-(`fim.convergence.window_statistics`'s own docstring).
-
-<a id="convergence.test_noise_gate.test_a_criterion_without_a_window_or_tolerance_is_never_gated"></a>
-
-#### test\_a\_criterion\_without\_a\_window\_or\_tolerance\_is\_never\_gated
-
-```python
-def test_a_criterion_without_a_window_or_tolerance_is_never_gated() -> None
-```
-
-A non-`TrailingWindowCriterion`-shaped criterion passes through unchanged.
-
-<a id="convergence.test_noise_gate.test_the_evidence_window_grows_past_a_flickering_trend_check"></a>
-
-#### test\_the\_evidence\_window\_grows\_past\_a\_flickering\_trend\_check
-
-```python
-def test_the_evidence_window_grows_past_a_flickering_trend_check() -> None
-```
-
-A flickering (but genuinely stationary) trend check must not reset growth.
-
-The first version of this gate reset its accumulated evidence every
-time the fast trend check next read `False` for even one generation --
-confirmed directly to never grow past the base `window` at all on a
-real 200,000-generation engine run, because real noisy data flickers
-the trend check more often than the doubling interval allows. This
-seeds one such flickering series and checks the window really did grow
-beyond its own base length by the time the run stopped.
-
-<a id="convergence.test_noise_gate.test_the_stop_decision_does_not_depend_on_statistic_order"></a>
-
-#### test\_the\_stop\_decision\_does\_not\_depend\_on\_statistic\_order
-
-```python
-@pytest.mark.parametrize("combinator", ["any", "all"])
-def test_the_stop_decision_does_not_depend_on_statistic_order(
-        combinator: Literal["any", "all"]) -> None
-```
-
-Every ordering of the same statistics stops identically.
-
-`record` once handed a generator to `all`/`any`, which short-circuit:
-a statistic listed after the one that decided a round was never
-judged that round, so its evidence window was anchored late (or never)
-and its noise checks fell on a different schedule. Measured on exactly
-these histories, the old code stopped `"all"` at generation 456 in one
-order and 129 in another. Every permutation must now agree on the
-stop generation and on every statistic's `window_statistics` (whether
-available at all, and its exact value when it is).
-
-<a id="convergence.test_noise_gate.test_all_anchors_a_statistic_that_is_not_deciding_the_outcome"></a>
-
-#### test\_all\_anchors\_a\_statistic\_that\_is\_not\_deciding\_the\_outcome
-
-```python
-def test_all_anchors_a_statistic_that_is_not_deciding_the_outcome() -> None
-```
-
-Under `"all"`, a statistic waited on by others is still gated each round.
-
-`slow` is listed first and is still far from noise-adequate at
-generation 23, so it alone decides that `"all"` is not yet satisfied.
-`precise` is trend-stable from its first full window, and must have its
-own evidence window anchored and checked right then — not deferred
-until `slow` happens to read `True`, as the short-circuiting `all()`
-once did (leaving `precise` with no `window_statistics` at all here).
-
-<a id="convergence.test_noise_gate.test_an_already_adequate_statistic_is_not_rechecked_while_waiting"></a>
-
-#### test\_an\_already\_adequate\_statistic\_is\_not\_rechecked\_while\_waiting
-
-```python
-def test_an_already_adequate_statistic_is_not_rechecked_while_waiting(
-        monkeypatch: pytest.MonkeyPatch) -> None
-```
-
-Once noise-adequate, a statistic's cached verdict is reused, not recomputed.
-
-Under `"all"`, `precise` is noise-adequate at its first check (generation
-23), while `drifting` keeps falling for 200 generations before it
-levels off — so `"all"` cannot fire for a long while after `precise` has
-already passed. `_gated_stable`'s own docstring promises that a
-statistic in that position stops growing and keeps returning its one
-cached verdict; the `O(window)` `window_statistics` computation must
-therefore run exactly once for `precise` over the whole run (it was
-once recomputed every generation, over an ever-growing window), and
-that cached `True` must still be what lets the run converge once
-`drifting` settles.
-
-<a id="convergence.test_tracker"></a>
-
-# convergence.test\_tracker
-
-Tests for `TrailingWindowTracker`: the O(1) form of the trailing check.
-
-<a id="convergence.test_tracker.test_tracker_decides_identically_to_the_reference_at_every_step"></a>
-
-#### test\_tracker\_decides\_identically\_to\_the\_reference\_at\_every\_step
-
-```python
-@pytest.mark.parametrize("kind", ["uniform", "decay", "cancellation", "tiny"])
-@pytest.mark.parametrize("window", [2, 3, 7, 50, 51])
-def test_tracker_decides_identically_to_the_reference_at_every_step(
-        kind: str, window: int) -> None
-```
-
-Every step's decision equals `trailing_window_stable`'s, exactly.
-
-<a id="convergence.test_tracker.test_tracker_is_false_until_the_window_fills"></a>
-
-#### test\_tracker\_is\_false\_until\_the\_window\_fills
-
-```python
-def test_tracker_is_false_until_the_window_fills() -> None
-```
-
-A window that has not filled is never stable.
-
-<a id="convergence.test_tracker.test_tracker_accepts_integers"></a>
-
-#### test\_tracker\_accepts\_integers
-
-```python
-def test_tracker_accepts_integers() -> None
-```
-
-The monitor may be given ints; they are exact too.
-
-<a id="convergence.test_tracker.test_tracker_validates_its_arguments"></a>
-
-#### test\_tracker\_validates\_its\_arguments
-
-```python
-@pytest.mark.parametrize(("window", "tolerance"), [(1, 0.1), (5, -0.1)])
-def test_tracker_validates_its_arguments(window: int,
-                                         tolerance: float) -> None
-```
-
-Bad arguments are rejected at construction, like the criterion.
-
-<a id="convergence.test_tracker._PlainCriterion"></a>
-
-## \_PlainCriterion Objects
-
-```python
-class _PlainCriterion()
-```
-
-A trailing-window rule that is not a `TrailingWindowCriterion`.
-
-Forces the monitor's full-history path, the reference behavior.
-
-<a id="convergence.test_tracker._PlainCriterion.is_stable"></a>
-
-#### is\_stable
-
-```python
-def is_stable(history: Sequence[float]) -> bool
-```
-
-Delegate to the reference function.
-
-<a id="convergence.test_tracker.test_monitor_stops_at_the_same_generation_on_either_path"></a>
-
-#### test\_monitor\_stops\_at\_the\_same\_generation\_on\_either\_path
-
-```python
-@pytest.mark.parametrize("window", [2, 5, 40, 41])
-def test_monitor_stops_at_the_same_generation_on_either_path(
-        window: int) -> None
-```
-
-The tracker path and the full-history path stop together.
+Each invalid argument is refused by name.
 
 <a id="convergence.test_window_statistics"></a>
 
@@ -5794,75 +5729,37 @@ def test_independent_draws_give_the_ordinary_standard_error() -> None
 #### test\_correlated\_draws\_match\_the\_known\_ar1\_standard\_error
 
 ```python
-@pytest.mark.parametrize("phi", [0.5, 0.8, 0.95, -0.4])
+@pytest.mark.parametrize("phi", [0.5, 0.8, 0.95])
 def test_correlated_draws_match_the_known_ar1_standard_error(
         phi: float) -> None
 ```
 
 A known AR(1) process's asymptotic `Var(mean) = sigma_x^2/n * (1+phi)/(1-phi)`.
 
-The textbook result for the variance of the sample mean of `n`
-consecutive draws from a stationary AR(1) process, `n` large — this
-module's own `tau_int = (1 + rho) / (1 - rho)` (with `rho` the sample
-lag-1 correlation, estimating `phi`) reproduces exactly this factor, so
-the estimated standard error should track the true one for large `n`.
+The textbook variance of the sample mean of `n` consecutive draws from a
+stationary AR(1) process, `n` large: the estimated standard error tracks
+the true one, within the estimator's own asymptotic spread.
 
-<a id="convergence.test_window_statistics.test_constant_window_is_exactly_known"></a>
+<a id="convergence.test_window_statistics.test_a_flat_window_is_exactly_known_even_when_its_mean_rounds"></a>
 
-#### test\_constant\_window\_is\_exactly\_known
+#### test\_a\_flat\_window\_is\_exactly\_known\_even\_when\_its\_mean\_rounds
 
 ```python
-def test_constant_window_is_exactly_known() -> None
+def test_a_flat_window_is_exactly_known_even_when_its_mean_rounds() -> None
 ```
 
-No variation at all means no uncertainty, not a division by zero.
+Forty-three copies of 0.4 have no spread, however the mean rounds.
 
-<a id="convergence.test_window_statistics.test_perfectly_alternating_window_is_known_better_than_its_own_length"></a>
+<a id="convergence.test_window_statistics.test_meets_needs_both_a_small_enough_error_and_enough_effective_values"></a>
 
-#### test\_perfectly\_alternating\_window\_is\_known\_better\_than\_its\_own\_length
+#### test\_meets\_needs\_both\_a\_small\_enough\_error\_and\_enough\_effective\_values
 
 ```python
-def test_perfectly_alternating_window_is_known_better_than_its_own_length(
+def test_meets_needs_both_a_small_enough_error_and_enough_effective_values(
 ) -> None
 ```
 
-An oscillating (anticorrelated) window's mean is better known than i.i.d.
-
-Two neighboring points nearly cancel each other's noise, so the standard
-error of the mean is *smaller* than `sd / sqrt(n)`, the independent-draws
-baseline -- a negative `lag1_autocorrelation` correctly reports more
-effective samples than raw observations, not fewer.
-
-<a id="convergence.test_window_statistics.test_noise_adequate_uses_half_the_tolerance"></a>
-
-#### test\_noise\_adequate\_uses\_half\_the\_tolerance
-
-```python
-def test_noise_adequate_uses_half_the_tolerance() -> None
-```
-
-`noise_adequate` is `standard_error <= tolerance * NOISE_TOLERANCE_FRACTION`.
-
-<a id="convergence.test_window_statistics.test_too_few_values_is_refused"></a>
-
-#### test\_too\_few\_values\_is\_refused
-
-```python
-@pytest.mark.parametrize("values", [[], [0.1], [0.1, 0.2]])
-def test_too_few_values_is_refused(values: list[float]) -> None
-```
-
-Fewer than three values leaves no lag-1 correlation to estimate.
-
-<a id="convergence.test_window_statistics.test_minimum_noise_check_window_is_at_least_three"></a>
-
-#### test\_minimum\_noise\_check\_window\_is\_at\_least\_three
-
-```python
-def test_minimum_noise_check_window_is_at_least_three() -> None
-```
-
-The monitor's own skip threshold must not be shorter than this module needs.
+`meets` is `standard_error <= target` and `ESS >= floor`.
 
 <a id="convergence.test_window_statistics.test_geyer_flat_window_is_exactly_known"></a>
 
@@ -6636,8 +6533,8 @@ Not built from `tiny_params`: its own tight, fast-converging
 defaults have every replicate stop at the identical generation
 (confirmed live -- the whole reason this test needs staggered
 stops), so this test picks its own `seed`/`precision`/
-`max_generations` specifically to produce real spread (`[3, 5, 6,
-12, 15]`, confirmed live for this exact configuration) instead.
+`max_generations` specifically to produce real spread (`[19, 39, 39,
+79, 159]`, confirmed live for this exact configuration) instead.
 
 <a id="engine.test_engine.test_pooled_convergence_histories_requires_at_least_two_results"></a>
 
@@ -7752,16 +7649,14 @@ The adaptive replicate stop fires once enough of the accepted
 prefix has finished, admitting simultaneous stops in ascending
 `replica_index`, deterministically across repeated runs.
 
-`precision` is set
-astronomically large so every criterion is satisfied the instant it
-has *enough* observations, regardless of their actual values — this
-makes every one of the five lanes stop on the identical tick
-(generation `convergence_window - 1 == 2`), simultaneously, by
-construction rather than by chance, so the tie-break itself is what
-is under test, not real convergence timing. With `replicate_minimum
-== 2`, the batch-wide stop then fires while processing the *second*
-lane in ascending order — exactly replicates 0 and 1 — leaving
-replicates 2-4 never even reached.
+`precision` is set astronomically large so every criterion is
+satisfied the instant a window has enough effective observations,
+regardless of their actual values: the lanes then stop within a few
+ticks of each other, so what is under test is the order the batch
+accepts them in, not real convergence timing. With `replicate_minimum
+== 2`, the batch-wide stop fires on the *second* replicate in
+ascending order, exactly replicates 0 and 1, leaving replicates 2-4
+never even reached.
 
 <a id="engine.test_engine._ReversedFinishAdvancer"></a>
 
@@ -9857,6 +9752,21 @@ one) in a test's own parameter list -- pytest sets up same-scope
 fixtures in request order, and the override must land on disk
 before `Api()`/`create_window()` ever reads it.
 
+<a id="gui.conftest.short_scalar_run_settings"></a>
+
+#### short\_scalar\_run\_settings
+
+```python
+@pytest.fixture
+def short_scalar_run_settings(_isolate_gui_preferences: Path) -> Path
+```
+
+Pre-seed Settings for a scalar run that ends at a short cap, unconverged.
+
+For a test that needs a finished run but not a converged one, and a short
+trajectory (`fast_scalar_run_settings` lets the run converge, which takes
+a few thousand generations): the cap is a few hundred generations.
+
 <a id="gui.conftest.unreachable_convergence_run_settings"></a>
 
 #### unreachable\_convergence\_run\_settings
@@ -10985,7 +10895,7 @@ def test_load_example_lists_exactly_the_differing_run_settings() -> None
 
 A lineal, one-replicate example against auto/200 Settings differs in both.
 
-`unequal-island-sizes-with-a-migration-hub` names `engine_backend:
+`several-convergence-statistics` names `engine_backend:
 lineal` and one replicate and leaves every other run setting at its
 library default, which the starter Settings share.
 
@@ -11365,15 +11275,16 @@ def test_validate_form_accepts_the_starter_values() -> None
 
 The starter form is valid on its own — no field left in a rejecting state.
 
-<a id="gui.test_app_api.test_validate_form_has_no_note_when_window_and_cap_are_explicit"></a>
+<a id="gui.test_app_api.test_validate_form_names_only_the_burn_in_when_the_cap_is_explicit"></a>
 
-#### test\_validate\_form\_has\_no\_note\_when\_window\_and\_cap\_are\_explicit
+#### test\_validate\_form\_names\_only\_the\_burn\_in\_when\_the\_cap\_is\_explicit
 
 ```python
-def test_validate_form_has_no_note_when_window_and_cap_are_explicit() -> None
+def test_validate_form_names_only_the_burn_in_when_the_cap_is_explicit(
+) -> None
 ```
 
-Explicit values are the user's own; nothing is announced.
+An explicit cap is the user's own; only the derived burn-in is announced.
 
 <a id="gui.test_app_api.test_validate_form_rejects_and_locates_an_invalid_population_field"></a>
 
@@ -13173,14 +13084,14 @@ def test_open_run_carries_the_derived_convergence_note(tmp_path: Path) -> None
 own consolidated message area, `webui/screens/run-view-completed.js`'s
 `renderRunMessages`), the empty half of its own two real cases.
 
-`_write_run`'s own config gives `convergence_window`/`max_generations`
+`_write_run`'s own config gives `convergence_burn_in`/`max_generations`
 explicitly, so `app_module._derived_convergence_note_from_manifest`
 -- the function computing this key for a reopened run, reading
 `manifest.auto_derived`/`relaxation_time` rather than `reanalyzed.
 params`'s own (always empty for a reconstructed `SimulationParams`,
 that function's own docstring) -- returns `""` here;
-`test_validate_form_has_no_note_when_window_and_cap_are_explicit`
-already covers that same "both given explicitly" case directly, and
+`test_validate_form_names_only_the_burn_in_when_the_cap_is_explicit`
+covers the form's side of that, and
 `test/convergence/test_defaults.py` already covers `describe_
 derived_convergence`'s own non-empty sentence. What only this test
 proves: `open_run`'s payload actually carries the key this function
@@ -13208,12 +13119,12 @@ simply never persisted anywhere. `auto_derived`/`relaxation_time`
 (`RunManifest`) and `convergence.jsonl` (`fim.reanalyze.read_
 persisted_convergence_history`) close both gaps at once; this is
 the one test that drives a genuinely auto-derived run (no explicit
-`convergence_window`/`max_generations`/`precision` at
+`convergence_burn_in`/`max_generations`/`precision` at
 all, unlike every other `_write_run`-based test in this file) all
 the way through `cli.main(["run", ...])` and back through `Api.
 open_run` to prove it.
 
-Strong migration (`m=0.9`) and a small `N` keep the derived window/
+Strong migration (`m=0.9`) and a small `N` keep the derived burn-in/
 cap themselves small, so this still runs in well under a second --
 `island_relaxation_time` shrinks with migration strength, not
 population size alone.
@@ -16187,7 +16098,6 @@ A round-tripped params object populates every composite's own keys too.
         ("d", "population"),
         ("locus_lengths", "mutation"),
         ("initial_allele_count", "initial_conditions"),
-        ("convergence_window", "convergence"),
         ("n_replicates", "batch"),
         ("m", "migration"),
         ("mu", "mutation"),
@@ -16375,22 +16285,22 @@ def test_starter_form_values_overlay_may_choose_the_ploidy() -> None
 
 A saved default ploidy arrives as an override and makes the starter valid.
 
-<a id="gui.test_config_form.test_a_derived_window_and_cap_are_shown_as_auto_not_as_numbers"></a>
+<a id="gui.test_config_form.test_a_derived_burn_in_and_cap_are_shown_as_auto_not_as_numbers"></a>
 
-#### test\_a\_derived\_window\_and\_cap\_are\_shown\_as\_auto\_not\_as\_numbers
+#### test\_a\_derived\_burn\_in\_and\_cap\_are\_shown\_as\_auto\_not\_as\_numbers
 
 ```python
-def test_a_derived_window_and_cap_are_shown_as_auto_not_as_numbers() -> None
+def test_a_derived_burn_in_and_cap_are_shown_as_auto_not_as_numbers() -> None
 ```
 
 A derived value is never frozen into the form as if it were typed.
 
-<a id="gui.test_config_form.test_an_explicit_window_and_cap_are_shown_as_numbers"></a>
+<a id="gui.test_config_form.test_an_explicit_burn_in_and_cap_are_shown_as_numbers"></a>
 
-#### test\_an\_explicit\_window\_and\_cap\_are\_shown\_as\_numbers
+#### test\_an\_explicit\_burn\_in\_and\_cap\_are\_shown\_as\_numbers
 
 ```python
-def test_an_explicit_window_and_cap_are_shown_as_numbers() -> None
+def test_an_explicit_burn_in_and_cap_are_shown_as_numbers() -> None
 ```
 
 Explicit values stay explicit in the form.
@@ -22095,7 +22005,7 @@ coverage of that).
 
 ```python
 def test_trajectory_row_toggle_hides_and_restores_a_curves_own_pixels(
-        fast_scalar_run_settings: Path) -> None
+        short_scalar_run_settings: Path) -> None
 ```
 
 Clicking a statistic row hides that statistic's own drawn pixels.
@@ -22750,7 +22660,7 @@ def test_the_convergence_section_is_titled_convergence(
         window: webview.Window, drive: Callable[..., Any]) -> None
 ```
 
-The section holding the convergence window and tolerance reads "Convergence".
+The section holding the convergence burn-in and precision reads "Convergence".
 
 <a id="gui.test_shutdown_deadman"></a>
 
@@ -23692,6 +23602,21 @@ prediction. The trajectory graph can draw each statistic's trailing mean
 with a standard-error band instead of its value at every generation. The
 page computes both with its own copy of
 `fim.convergence.window_statistics`, held equal to the Python here.
+
+<a id="gui.test_trailing_mean_screen.window_statistics"></a>
+
+#### window\_statistics
+
+```python
+def window_statistics(values: list[float]) -> _Lag1Window
+```
+
+Reference for the page's estimator: the lag-1 (AR(1)) standard error.
+
+The trajectory panel still averages with the single-lag formula
+`tau_int = (1 + rho) / (1 - rho)` (a later change moves it to the run's own
+evidence window and Geyer's estimator), so this test holds the page equal
+to that formula, written out here.
 
 <a id="gui.test_trailing_mean_screen.test_the_page_estimator_matches_window_statistics"></a>
 
@@ -25888,7 +25813,7 @@ The public P-bag defaults remain synchronized with the design.
         ("d", 1, "d must be at least 2"),
         ("N", 0, "N must be at least 1"),
         ("deme_weighting", "wrong", "deme_weighting"),
-        ("convergence_window", 1, "convergence_window"),
+        ("convergence_burn_in", 0, "convergence_burn_in"),
         ("auto_vector_max_capacity", 0, "auto_vector_max_capacity"),
     ],
 )
@@ -26232,18 +26157,6 @@ Exactly one of `mu`/`mu_b` must be given — never both, never neither.
         ({
             "max_generations": 0
         }, "max_generations"),
-        (
-            # An explicit window of 50 with max_generations capped to 5
-            # leaves room for only 6 possible records (generation 0 plus 5
-            # steps), so the window could never fill before the cap stops
-            # the run. (A derived window is clamped to an explicit cap
-            # instead; see `test_a_derived_window_is_clamped_to_an_explicit_cap`.)
-            {
-                "convergence_window": 50,
-                "max_generations": 5
-            },
-            "convergence_window cannot exceed max_generations",
-        ),
         ({
             "n_replicates": 0
         }, "n_replicates"),
@@ -26631,7 +26544,7 @@ Every documented sparse-map and topology-sugar rule is enforced.
         ("deme_weighting", False, "nonempty"),
         ("convergence_statistic", "", "nonempty"),
         ("convergence_statistic", 1, "string or a list of strings"),
-        ("convergence_window", 1.5, "must be an integer"),
+        ("convergence_burn_in", 1.5, "must be an integer"),
         ("max_generations", True, "must be an integer"),
     ],
 )
@@ -26883,7 +26796,7 @@ def test_sigma_band_multiplier_accepts_three() -> None
 def test_sigma_band_window_rejects_below_two() -> None
 ```
 
-`sigma_band_window` shares `convergence_window`'s own minimum.
+`sigma_band_window` needs at least two points to show a spread.
 
 <a id="model.test_params.test_sigma_band_fields_do_not_conflict_with_equilibrium_split"></a>
 
@@ -27100,15 +27013,15 @@ def test_describe_population_reads_the_way_a_botanist_does() -> None
 
 One formatter for every surface that shows the population size.
 
-<a id="model.test_params.test_unset_window_and_cap_are_derived_from_the_model"></a>
+<a id="model.test_params.test_unset_burn_in_and_cap_are_derived_from_the_model"></a>
 
-#### test\_unset\_window\_and\_cap\_are\_derived\_from\_the\_model
+#### test\_unset\_burn\_in\_and\_cap\_are\_derived\_from\_the\_model
 
 ```python
-def test_unset_window_and_cap_are_derived_from_the_model() -> None
+def test_unset_burn_in_and_cap_are_derived_from_the_model() -> None
 ```
 
-Unset window and cap take the derived values, recorded as derived.
+Unset burn-in and cap take the derived values, recorded as derived.
 
 <a id="model.test_params.test_auto_spellings_all_mean_derive"></a>
 
@@ -27121,13 +27034,14 @@ def test_auto_spellings_all_mean_derive(auto: object) -> None
 
 `null` and `auto` (any case) request derivation.
 
-<a id="model.test_params.test_a_bad_window_or_cap_is_rejected_not_read_as_auto"></a>
+<a id="model.test_params.test_a_bad_burn_in_or_cap_is_rejected_not_read_as_auto"></a>
 
-#### test\_a\_bad\_window\_or\_cap\_is\_rejected\_not\_read\_as\_auto
+#### test\_a\_bad\_burn\_in\_or\_cap\_is\_rejected\_not\_read\_as\_auto
 
 ```python
 @pytest.mark.parametrize("bad", [0, -5, "many", 1.5, True])
-def test_a_bad_window_or_cap_is_rejected_not_read_as_auto(bad: object) -> None
+def test_a_bad_burn_in_or_cap_is_rejected_not_read_as_auto(
+        bad: object) -> None
 ```
 
 A bare zero (the internal sentinel) and other junk are errors.
@@ -27162,25 +27076,25 @@ def test_the_relaxation_time_follows_the_slowest_locus() -> None
 
 Per-locus mutation rates `[1e-3, 1e-5]` give the `1e-5` locus's `tau`.
 
-<a id="model.test_params.test_a_derived_window_is_clamped_to_an_explicit_cap"></a>
+<a id="model.test_params.test_a_derived_burn_in_follows_the_precision"></a>
 
-#### test\_a\_derived\_window\_is\_clamped\_to\_an\_explicit\_cap
-
-```python
-def test_a_derived_window_is_clamped_to_an_explicit_cap() -> None
-```
-
-A derived window never exceeds an explicit cap.
-
-<a id="model.test_params.test_a_derived_cap_is_raised_to_fit_an_explicit_window"></a>
-
-#### test\_a\_derived\_cap\_is\_raised\_to\_fit\_an\_explicit\_window
+#### test\_a\_derived\_burn\_in\_follows\_the\_precision
 
 ```python
-def test_a_derived_cap_is_raised_to_fit_an_explicit_window() -> None
+def test_a_derived_burn_in_follows_the_precision() -> None
 ```
 
-A derived cap leaves an explicit window the usual headroom.
+A tighter precision derives a longer burn-in (`k = ln(2 / precision)`).
+
+<a id="model.test_params.test_a_derived_cap_includes_an_explicit_burn_in"></a>
+
+#### test\_a\_derived\_cap\_includes\_an\_explicit\_burn\_in
+
+```python
+def test_a_derived_cap_includes_an_explicit_burn_in() -> None
+```
+
+A long explicit burn-in raises the derived cap with it.
 
 <a id="model.test_params.test_derived_values_round_trip_as_concrete_integers"></a>
 
@@ -27192,22 +27106,25 @@ def test_derived_values_round_trip_as_concrete_integers() -> None
 
 The round trip yields an equal, fully explicit configuration.
 
-<a id="model.test_params.test_no_migration_and_no_mutation_needs_explicit_values"></a>
+<a id="model.test_params.test_no_migration_and_no_mutation_needs_an_explicit_cap"></a>
 
-#### test\_no\_migration\_and\_no\_mutation\_needs\_explicit\_values
+#### test\_no\_migration\_and\_no\_mutation\_needs\_an\_explicit\_cap
 
 ```python
-def test_no_migration_and_no_mutation_needs_explicit_values() -> None
+def test_no_migration_and_no_mutation_needs_an_explicit_cap() -> None
 ```
 
-Nothing to wait for: derivation is refused, explicit values work.
+Nothing to wait for: a derived cap is refused, an explicit one works.
 
-<a id="model.test_params.test_a_large_explicit_matrix_needs_explicit_values"></a>
+The burn-in then falls back to the first tenth of the run: `auto` stays
+`auto` (zero inside) and round-trips as such.
 
-#### test\_a\_large\_explicit\_matrix\_needs\_explicit\_values
+<a id="model.test_params.test_a_large_explicit_matrix_needs_an_explicit_cap"></a>
+
+#### test\_a\_large\_explicit\_matrix\_needs\_an\_explicit\_cap
 
 ```python
-def test_a_large_explicit_matrix_needs_explicit_values() -> None
+def test_a_large_explicit_matrix_needs_an_explicit_cap() -> None
 ```
 
 An explicit matrix beyond the eigenvalue route's size is refused.
@@ -27262,9 +27179,6 @@ enough to allocate) is decided when the backend is built.
             "max_generations": 0
         }, "max_generations must be at least 1"),
         ({
-            "convergence_window": 1
-        }, "convergence_window must be at least 2"),
-        ({
             "precision": -0.1
         }, "precision must be non-negative"),
         ({
@@ -27286,13 +27200,6 @@ enough to allocate) is decided when the backend is built.
             "engine_backend": "lineal",
             "jit": "numba"
         }, "only accepts jit='off'"),
-        (
-            {
-                "convergence_window": 50,
-                "max_generations": 10
-            },
-            "convergence_window cannot exceed max_generations",
-        ),
     ],
 )
 def test_validate_execution_settings_rejects_with_simulation_params_wording(
@@ -27311,6 +27218,98 @@ def test_validate_execution_settings_matches_simulation_params_on_the_same_value
 ```
 
 A value `validate_execution_settings` refuses, `SimulationParams` refuses too.
+
+<a id="model.test_params.test_expert_settings_default_to_the_policy_constants_and_are_not_written"></a>
+
+#### test\_expert\_settings\_default\_to\_the\_policy\_constants\_and\_are\_not\_written
+
+```python
+def test_expert_settings_default_to_the_policy_constants_and_are_not_written(
+) -> None
+```
+
+With no `expert:` mapping every setting is its default and none is emitted.
+
+<a id="model.test_params.test_expert_settings_round_trip_and_only_changes_are_written"></a>
+
+#### test\_expert\_settings\_round\_trip\_and\_only\_changes\_are\_written
+
+```python
+def test_expert_settings_round_trip_and_only_changes_are_written() -> None
+```
+
+A changed Expert Setting is copied into the parameters and round-trips.
+
+<a id="model.test_params.test_expert_settings_change_the_run_id_but_defaults_do_not"></a>
+
+#### test\_expert\_settings\_change\_the\_run\_id\_but\_defaults\_do\_not
+
+```python
+def test_expert_settings_change_the_run_id_but_defaults_do_not() -> None
+```
+
+A run that changes an Expert Setting is a different run.
+
+<a id="model.test_params.test_an_invalid_expert_setting_is_refused_by_name"></a>
+
+#### test\_an\_invalid\_expert\_setting\_is\_refused\_by\_name
+
+```python
+@pytest.mark.parametrize(
+    ("expert", "message"),
+    [
+        ({
+            "no_such_setting": 1
+        }, "unknown expert setting"),
+        ({
+            "burn_in_minimum_relaxation_times": 0.5
+        }, "at least 1"),
+        ({
+            "first_check_relaxation_times": 0
+        }, "greater than 0"),
+        ({
+            "first_check_minimum": 2
+        }, "at least 3"),
+        ({
+            "first_check_minimum": 5.5
+        }, "whole number"),
+        ({
+            "minimum_effective_sample_size": 9
+        }, "at least 10"),
+        ({
+            "check_growth": 1.0
+        }, "greater than 1"),
+        ({
+            "fractional_burn_in": 1.0
+        }, "below 1"),
+        ({
+            "cap_minimum": 100,
+            "cap_maximum": 50
+        }, "cap_maximum"),
+        ({
+            "start_drift_alert_z": -1
+        }, "greater than 0"),
+        ({
+            "check_growth": "fast"
+        }, "check_growth"),
+        ("everything", "mapping"),
+    ],
+)
+def test_an_invalid_expert_setting_is_refused_by_name(expert: object,
+                                                      message: str) -> None
+```
+
+Unknown names and out-of-range values are rejected with a clear message.
+
+<a id="model.test_params.test_expert_settings_change_the_derived_burn_in_and_cap"></a>
+
+#### test\_expert\_settings\_change\_the\_derived\_burn\_in\_and\_cap
+
+```python
+def test_expert_settings_change_the_derived_burn_in_and_cap() -> None
+```
+
+The burn-in floor and cap multiple reach the derivation.
 
 <a id="model.test_run_identity"></a>
 

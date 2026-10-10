@@ -1,25 +1,14 @@
-"""Pluggable criteria for statistic-history stability.
+"""Pluggable criteria for statistic-history stability across replicates.
 
-A finite-island simulation cannot know in advance how many generations
-it will take for its statistics (D, G_ST, and so on) to stop drifting
-and settle down — that number depends on the parameters of the
-specific run (population sizes, migration and mutation rates) in a way
-that is not known ahead of time. Rather than guessing a fixed number of
-generations and hoping it is enough, this module defines "convergence
-criteria": small, swappable rules that look at a statistic's history so
-far and answer one yes/no question — "has this settled down enough to
-stop now?" — every generation, so a run can stop exactly when its own
-answer is actually stable, whether that takes 50 generations or 5,000.
+A replicate batch cannot know in advance how many replicates a confidence
+interval needs. This module defines the rule the batch loop applies after each
+completed replicate: a `ConvergenceCriterion` answers one yes/no question,
+"is this history tight enough to stop now?", so `fim.convergence.monitor.
+ConvergenceMonitor` never needs to know which rule it is applying. The one
+concrete rule is `ConfidenceIntervalCriterion`.
 
-Every criterion in this file implements the same `ConvergenceCriterion`
-protocol (a single `is_stable` method), so `fim.convergence.monitor.
-ConvergenceMonitor` — the class that actually drives a run's stop
-decision — never needs to know *which* rule it is applying, only that
-whatever object it was given can answer that one question. This module
-provides two concrete rules: `TrailingWindowCriterion`, the ordinary
-within-run default, and `ConfidenceIntervalCriterion`, used for
-replicate batches — see each class's own docstring for when to use
-which.
+A single run is not judged by a criterion at all: it burns in and then
+averages (`fim.convergence.monitor.BurnInMonitor`).
 """
 
 from __future__ import annotations
@@ -29,11 +18,7 @@ from collections.abc import Sequence
 from dataclasses import dataclass
 from typing import Protocol
 
-from fim.config.numerics import (
-    EXACT_SCALE_BITS,
-    MINIMUM_CRITERION_WINDOW,
-    MINIMUM_REPLICATE_COUNT,
-)
+from fim.config.numerics import MINIMUM_REPLICATE_COUNT
 from fim.statistics.interval import confidence_interval
 
 
@@ -45,8 +30,7 @@ class ConvergenceCriterion(Protocol):
     no behavior of its own; it exists purely so that
     `fim.convergence.monitor.ConvergenceMonitor` can accept *any*
     object that answers `is_stable` the same way, whether that object
-    is `TrailingWindowCriterion`, `ConfidenceIntervalCriterion`, or
-    something built elsewhere entirely.
+    is `ConfidenceIntervalCriterion` or something built elsewhere entirely.
     """
 
     def is_stable(self, history: Sequence[float]) -> bool:
@@ -67,211 +51,17 @@ class ConvergenceCriterion(Protocol):
         ...
 
 
-def trailing_window_stable(
-    history: Sequence[float],
-    window: int,
-    tolerance: float,
-) -> bool:
-    """Compare the means of the two halves of a trailing window.
-
-    This is the plain, direct way to ask "has this number stopped
-    changing?" without any statistical machinery: look at the most
-    recent `window` values, split that block in half, average each
-    half separately, and see how close the two averages are to each
-    other. A statistic that is still trending up or down noticeably
-    generation to generation will show a real gap between its earlier
-    and later half; one that has settled into its long-run value will
-    not, since both halves are then just noisy samples of the same
-    underlying number. `tolerance` is how close counts as "close
-    enough," in the watched statistic's own units (for example, 0.01
-    on a statistic that itself ranges from 0 to 1).
-
-    An odd `window` splits as `window // 2` observations in the first
-    half and one more in the second (e.g. a window of 5 compares 2
-    against 3) — a legal configuration, not an error, but it means the
-    tolerance is being compared against unevenly sized samples for an
-    odd window and evenly sized ones for an even window.
-
-    Args:
-        history: Ordered statistic values, oldest first.
-        window: Number of trailing (most recent) observations to
-            inspect; must be at least 2, since splitting anything
-            smaller in half leaves an empty side to average.
-        tolerance: Maximum absolute difference between half-window
-            means that still counts as "stable."
-
-    Returns:
-        ``True`` only once `history` holds at least `window` values
-        *and* the two halves' means are within `tolerance` of each
-        other; ``False`` beforehand, however small `tolerance` is —
-        a window that has not yet fully filled cannot be judged stable
-        or unstable at all.
-
-    Raises:
-        ValueError: If `window` is smaller than 2, or `tolerance` is
-            negative or not a finite number (``NaN`` or infinity).
-    """
-    if window < MINIMUM_CRITERION_WINDOW:
-        raise ValueError("window must be at least 2")
-    if not math.isfinite(tolerance) or tolerance < 0.0:
-        raise ValueError("tolerance must be finite and non-negative")
-    if len(history) < window:
-        return False
-    trailing = history[-window:]
-    midpoint = window // 2
-    first = trailing[:midpoint]
-    second = trailing[midpoint:]
-    first_mean = math.fsum(first) / len(first)
-    second_mean = math.fsum(second) / len(second)
-    return abs(first_mean - second_mean) <= tolerance
-
-
-@dataclass(frozen=True, slots=True)
-class TrailingWindowCriterion:
-    """Detect stability by comparing two halves of a trailing window.
-
-    This is the ordinary, default convergence rule used *within* one
-    simulation run (as opposed to `ConfidenceIntervalCriterion`, used
-    *across* several replicate runs of the same parameters) — the
-    `convergence_window`/`precision` configuration fields
-    documented in `doc/configuration.md` configure exactly this class.
-    A thin, `ConvergenceCriterion`-shaped wrapper around
-    `trailing_window_stable`, above — see that function's own
-    docstring for what "stable" actually means here and why it is
-    judged this way; this class exists only so a caller can hold one
-    pre-configured object (with `window`/`tolerance` already fixed)
-    and call `is_stable(history)` on it repeatedly, rather than passing
-    all three arguments to the bare function every time.
-    """
-
-    window: int
-    tolerance: float
-
-    def __post_init__(self) -> None:
-        """Validate criterion configuration on construction.
-
-        Dataclass field validation cannot happen in the field
-        declarations themselves, so `__post_init__` (a hook the
-        `dataclass` decorator calls automatically right after every
-        field is set) is where it happens instead — the same reason
-        `ConfidenceIntervalCriterion`, below, defines one too. Rejecting
-        an invalid `window`/`tolerance` here, at construction time,
-        surfaces a configuration mistake immediately rather than
-        letting it silently produce a criterion that can never
-        actually detect stability once a run is already under way.
-        """
-        if self.window < MINIMUM_CRITERION_WINDOW:
-            raise ValueError("window must be at least 2")
-        if not math.isfinite(self.tolerance) or self.tolerance < 0.0:
-            raise ValueError("tolerance must be finite and non-negative")
-
-    def is_stable(self, history: Sequence[float]) -> bool:
-        """Return whether the configured trailing window is stable."""
-        return trailing_window_stable(history, self.window, self.tolerance)
-
-    def tracker(self) -> TrailingWindowTracker:
-        """Return an O(1)-per-observation tracker with this configuration."""
-        return TrailingWindowTracker(self.window, self.tolerance)
-
-
-_EXACT_SCALE = 1 << EXACT_SCALE_BITS
-
-
-def _to_exact(value: float) -> int:
-    """Return `value` as an exact integer multiple of `2 ** -1074`.
-
-    Args:
-        value: A finite double.
-
-    Returns:
-        The integer `value * 2 ** 1074`, exactly.
-    """
-    numerator, denominator = value.as_integer_ratio()
-    return numerator << (EXACT_SCALE_BITS - (denominator.bit_length() - 1))
-
-
-class TrailingWindowTracker:
-    """Judge `trailing_window_stable` in O(1) per observation.
-
-    `trailing_window_stable` copies and sums the whole trailing window on
-    every call, which costs `O(window)` per generation: negligible at a
-    window of 50, but a real fraction of a generation's cost at the tens of
-    thousands a slowly relaxing model needs. This tracker keeps the running
-    prefix sums of the window instead.
-
-    The sums are exact integers (each double scaled by `2 ** 1074`), and the
-    two half means are formed by correctly rounded true division of that
-    exact sum. `math.fsum` also returns the correctly rounded exact sum, so
-    this tracker returns the identical decision to `trailing_window_stable`
-    on every input, not merely a close one. A test pins that equivalence.
-    """
-
-    def __init__(self, window: int, tolerance: float) -> None:
-        """Start an empty tracker.
-
-        Args:
-            window: Trailing window length; at least 2.
-            tolerance: Maximum half-window mean difference counted stable.
-
-        Raises:
-            ValueError: If `window` is smaller than 2, or `tolerance` is
-                negative or not finite.
-        """
-        if window < MINIMUM_CRITERION_WINDOW:
-            raise ValueError("window must be at least 2")
-        if not math.isfinite(tolerance) or tolerance < 0.0:
-            raise ValueError("tolerance must be finite and non-negative")
-        self._window = window
-        self._tolerance = tolerance
-        # Ring buffer of the last `window + 1` prefix sums; prefix sum `k`
-        # (the exact sum of the first `k` observations) lives at `k % size`.
-        self._size = window + 1
-        self._prefix = [0] * self._size
-        self._count = 0
-
-    def push(self, value: float) -> None:
-        """Record one more observation.
-
-        Args:
-            value: The next finite statistic value.
-        """
-        total = self._prefix[self._count % self._size] + _to_exact(value)
-        self._count += 1
-        self._prefix[self._count % self._size] = total
-
-    def is_stable(self) -> bool:
-        """Return whether the trailing window is currently stable.
-
-        Returns:
-            `False` until `window` observations exist; afterward whether the
-            two half-window means are within the tolerance.
-        """
-        if self._count < self._window:
-            return False
-        midpoint = self._window // 2
-        start = self._count - self._window
-        low = self._prefix[start % self._size]
-        middle = self._prefix[(start + midpoint) % self._size]
-        high = self._prefix[self._count % self._size]
-        first_mean = ((middle - low) / _EXACT_SCALE) / midpoint
-        second_mean = ((high - middle) / _EXACT_SCALE) / (self._window - midpoint)
-        return abs(first_mean - second_mean) <= self._tolerance
-
-
 @dataclass(frozen=True, slots=True)
 class ConfidenceIntervalCriterion:
     """Detect a tight-enough confidence interval on a growing sample.
 
-    Unlike `TrailingWindowCriterion`, which compares two halves of a
-    trailing window of near-instantaneous values, this criterion treats
+    This criterion treats
     the *entire* supplied history as one growing i.i.d. sample — each
     entry is one independently seeded replicate run's own final scalar
     outcome — and asks whether that sample's Student's-t confidence
     interval has tightened to at most `tolerance`, an absolute
-    half-width in the same units as the watched statistic, exactly like
-    `TrailingWindowCriterion.tolerance`. `minimum_count` guards against a
-    lucky-early-tight fluke the same way `TrailingWindowCriterion.window`
-    guards a single-generation coincidence: stability is never declared
+    half-width in the same units as the watched statistic. `minimum_count`
+    guards against a lucky-early-tight fluke: stability is never declared
     from fewer than `minimum_count` observations.
     """
 
@@ -282,8 +72,7 @@ class ConfidenceIntervalCriterion:
     def __post_init__(self) -> None:
         """Validate criterion configuration on construction.
 
-        See `TrailingWindowCriterion.__post_init__` for why validation
-        lives in this hook rather than in the field declarations
+        Validation lives in this hook rather than in the field declarations
         themselves.
         """
         if self.minimum_count < MINIMUM_REPLICATE_COUNT:

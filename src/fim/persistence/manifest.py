@@ -171,7 +171,7 @@ class RunManifest:
     those four numbers are computed.
 
     `auto_derived`/`relaxation_time` record whether this run's own
-    `convergence_window`/`max_generations` were auto-derived from the
+    `convergence_burn_in`/`max_generations` were auto-derived from the
     model's own relaxation time rather than given explicitly
     (`SimulationParams._resolve_convergence_defaults`'s own identically
     named fields, copied here at manifest-construction time) --
@@ -180,7 +180,7 @@ class RunManifest:
     reconstructing from it must reproduce an equal `SimulationParams`,
     and `auto_derived`/`relaxation_time` deliberately take no part in
     that equality), so without a dedicated field of its own here, a
-    reopened run could never tell a `convergence_window` the botanist
+    reopened run could never tell a `convergence_burn_in` the botanist
     typed from one this project chose on its own. `auto_derived` is
     empty (not `None`) whenever both were given explicitly; `None` for
     either field only means a manifest written before they existed.

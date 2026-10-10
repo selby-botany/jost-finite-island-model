@@ -2319,13 +2319,12 @@
     <fieldset class="composite">
       <legend>Convergence</legend>
       <p class="hint">
-        How long a run watches for stability before declaring
-        convergence -- not which statistic it watches for
-        (Configure's own per-run, experimental choice).
+        How precisely a run estimates each statistic it watches -- not which
+        statistics it watches (Configure's own per-run, experimental choice).
       </p>
       <div class="field">
-        <label for="settings-convergence_window" data-field-help="convergence_window">convergence window</label>
-        <input type="text" id="settings-convergence_window">
+        <label for="settings-convergence_burn_in" data-field-help="convergence_burn_in">convergence burn-in</label>
+        <input type="text" id="settings-convergence_burn_in">
       </div>
       <div class="field">
         <label for="settings-precision" data-field-help="precision">precision</label>

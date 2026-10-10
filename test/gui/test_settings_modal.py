@@ -152,7 +152,6 @@ def test_settings_dialog_seeds_execution_and_convergence_defaults_from_saved(
             default_run_settings={
                 "engine_backend": "generational",
                 "n_replicates": "16",
-                "convergence_window": "10",
                 "precision": "0.02",
             }
         ),
@@ -635,14 +634,14 @@ def test_every_settings_section_separates_its_hint_from_its_first_field(
 def test_the_convergence_section_is_titled_convergence(
     window: webview.Window, drive: Callable[..., Any]
 ) -> None:
-    """The section holding the convergence window and tolerance reads "Convergence"."""
+    """The section holding the convergence burn-in and precision reads "Convergence"."""
     settled = drive(
         window,
         ready=_INPUT_SCREEN_READY,
         trigger="window.fim.openStatisticsSettings();",
         read=(
             "document.getElementById('modal-settings').open ? "
-            "document.getElementById('settings-convergence_window')"
+            "document.getElementById('settings-convergence_burn_in')"
             ".closest('fieldset').querySelector('legend').textContent : null"
         ),
     )

@@ -703,7 +703,7 @@ def test_malformed_run_card_values_are_quarantined(tmp_path: Path) -> None:
 
 def _version_one_file(path: Path) -> None:
     """Write a version 1 file that saved the old fixed convergence numbers."""
-    saved = {"N": "225", "convergence_window": "50", "max_generations": "10000"}
+    saved = {"N": "225", "max_generations": "10000"}
     path.write_text(
         json.dumps(
             {
@@ -731,18 +731,14 @@ def test_a_version_one_file_has_its_saved_window_and_cap_reset_to_auto(
     assert path.exists()
     assert loaded.form_values == {
         "N": "225",
-        "convergence_window": "auto",
         "max_generations": "auto",
     }
     assert loaded.default_run_settings == {
         "N": "225",
-        "convergence_window": "auto",
         "max_generations": "auto",
         "n_replicates": "3",
     }
-    assert loaded.named_presets == {
-        "mine": {"N": "225", "convergence_window": "auto", "max_generations": "auto"}
-    }
+    assert loaded.named_presets == {"mine": {"N": "225", "max_generations": "auto"}}
 
 
 def test_a_version_one_file_keeps_every_other_preference(tmp_path: Path) -> None:

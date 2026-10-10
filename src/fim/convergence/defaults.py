@@ -1,12 +1,9 @@
 """Derive convergence defaults from the modeled population's own timescale.
 
-A fixed trailing window (say 50 generations) cannot tell "the statistic has
-stopped changing" from "the statistic is changing too slowly to see in 50
-generations". How long a run must be watched depends on how fast the
-population forgets its starting state: its *relaxation time*, `tau`. This
-module estimates `tau` from the migration, mutation and deme-size
-parameters and turns it into a default `convergence_window` and
-`max_generations`.
+How long a run must be watched depends on how fast the population forgets its
+starting state: its *relaxation time*, `tau`. This module estimates `tau` from
+the migration, mutation and deme-size parameters (the slowest locus sets it)
+and turns it into a default burn-in and `max_generations`.
 
 Why `tau` has this form, and the numerical check behind it, is written up in
 the design document `20260925-claude-sonnet-5-convergence-defaults-derived-
@@ -32,13 +29,7 @@ from dataclasses import dataclass
 
 import numpy as np
 
-from fim.config.convergence import (
-    ABSOLUTE_MAX_GENERATIONS,
-    CAP_RELAXATION_MULTIPLE,
-    MINIMUM_MAX_GENERATIONS,
-    MINIMUM_WINDOW,
-    WINDOW_RELAXATION_MULTIPLE,
-)
+from fim.config.expert import ExpertSettings
 from fim.config.limits import MAXIMUM_RECURSION_DEMES
 
 MigrationInput = float | Sequence[Sequence[float]]
@@ -49,14 +40,54 @@ class DerivedConvergence:
     """Convergence settings derived from a model's relaxation time.
 
     Args:
-        window: Trailing stability-window length, in generations.
+        burn_in: Generations discarded before averaging starts.
         max_generations: Hard generation cap.
         relaxation_time: The estimated `tau`, in generations, for display.
     """
 
-    window: int
+    burn_in: int
     max_generations: int
     relaxation_time: float
+
+
+def burn_in_multiple(precision: float, minimum: float) -> float:
+    """Return `k`, the burn-in length in relaxation times, for a precision.
+
+    `max(minimum, ln(2 / precision))`: the slowest mode's leftover from a
+    worst-case unit offset is `e^-k`, so `k >= ln(2 / precision)` leaves at
+    most `precision / 2` of bias, and a tighter precision lengthens the
+    burn-in on its own. A precision of zero asks for an unbounded burn-in.
+
+    Args:
+        precision: Plus or minus, in the statistic's own units.
+        minimum: The floor (`burn_in_minimum_relaxation_times`).
+
+    Returns:
+        The multiple of `tau`.
+    """
+    if precision <= 0.0:
+        return math.inf
+    return max(minimum, math.log(2.0 / precision))
+
+
+def derive_burn_in(
+    relaxation_time: float, precision: float, expert: ExpertSettings
+) -> int:
+    """Return the burn-in, in generations, for a relaxation time and precision.
+
+    Args:
+        relaxation_time: `tau`, in generations.
+        precision: The requested precision.
+        expert: The run's Expert Settings (the multiple's floor).
+
+    Returns:
+        `ceil(k * tau)`, at least 1 so generation 0 is never averaged, and at
+        most `expert.cap_maximum`.
+    """
+    multiple = burn_in_multiple(precision, expert.burn_in_minimum_relaxation_times)
+    if math.isinf(multiple):
+        return expert.cap_maximum
+    return max(1, min(expert.cap_maximum, math.ceil(multiple * relaxation_time)))
 
 
 def derive_convergence_defaults(
@@ -64,40 +95,54 @@ def derive_convergence_defaults(
     deme_sizes: Sequence[int],
     migration: MigrationInput,
     mutation_rates: Sequence[float],
+    precision: float,
+    expert: ExpertSettings | None = None,
 ) -> DerivedConvergence:
-    """Return the default window and cap for one model.
+    """Return the default burn-in and cap for one model.
+
+    The cap is `max(cap_minimum, burn_in + ceil(15 tau))`, at most
+    `cap_maximum`: the burn-in is added so a slow model is never capped inside
+    its own burn-in.
 
     Args:
         deme_sizes: Gene-copy count of every deme, so `d` values.
         migration: A scalar symmetric rate `m`, or a `d` by `d`
             row-stochastic matrix.
         mutation_rates: Per-locus mutation probabilities.
+        precision: The requested precision (it sets the burn-in multiple).
+        expert: The run's Expert Settings (default values when omitted).
 
     Returns:
-        The derived window, cap and relaxation time.
+        The derived burn-in, cap and relaxation time.
 
     Raises:
         ValueError: If the model has no relaxation time (no migration and
             no mutation), or is an explicit matrix with more than
             `MAXIMUM_RECURSION_DEMES` demes.
     """
+    settings = expert or ExpertSettings()
     tau = relaxation_time(
         deme_sizes=deme_sizes,
         migration=migration,
         mutation_rates=mutation_rates,
     )
+    burn_in = derive_burn_in(tau, precision, settings)
     cap = min(
-        ABSOLUTE_MAX_GENERATIONS,
-        max(MINIMUM_MAX_GENERATIONS, math.ceil(CAP_RELAXATION_MULTIPLE * tau)),
+        settings.cap_maximum,
+        max(
+            settings.cap_minimum,
+            burn_in + math.ceil(settings.cap_relaxation_multiple * tau),
+        ),
     )
-    # The monitor rejects a window larger than `max_generations + 1`, so the
-    # window can never exceed the cap even when the cap is clamped.
-    window = min(cap, max(MINIMUM_WINDOW, math.ceil(WINDOW_RELAXATION_MULTIPLE * tau)))
-    return DerivedConvergence(window=window, max_generations=cap, relaxation_time=tau)
+    return DerivedConvergence(burn_in=burn_in, max_generations=cap, relaxation_time=tau)
 
 
 def describe_derived_convergence(
-    *, window: int, max_generations: int, relaxation_time: float
+    *,
+    burn_in: int | None,
+    max_generations: int,
+    relaxation_time: float | None,
+    derived: frozenset[str] = frozenset({"convergence_burn_in", "max_generations"}),
 ) -> str:
     """Return the one-line, plain-language statement of derived settings.
 
@@ -105,18 +150,35 @@ def describe_derived_convergence(
     thing.
 
     Args:
-        window: The derived trailing window, in generations.
-        max_generations: The derived generation cap.
-        relaxation_time: The estimated relaxation time, in generations.
+        burn_in: The burn-in, in generations, or `None` for the fractional
+            burn-in (no relaxation time).
+        max_generations: The generation cap.
+        relaxation_time: The estimated relaxation time, or `None`.
+        derived: Which of `convergence_burn_in` and `max_generations` were
+            derived rather than given (`SimulationParams.auto_derived`).
 
     Returns:
-        A sentence such as "Convergence: window 59,078 generations, cap
+        A sentence such as "Convergence: burn-in 104,400 generations, cap
         295,390 (derived; this model needs about 19,693 generations to
-        forget its starting state)".
+        forget its starting state)". When only one of the two was derived
+        the parenthesis says which ("burn-in derived; ...").
     """
+    if burn_in is None or relaxation_time is None:
+        return (
+            f"Convergence: burn-in is the first 10% of the run, cap "
+            f"{max_generations:,} (this model has no relaxation time to derive "
+            "it from)"
+        )
+    which = (
+        "derived"
+        if derived >= {"convergence_burn_in", "max_generations"}
+        else "burn-in derived"
+        if "convergence_burn_in" in derived
+        else "cap derived"
+    )
     return (
-        f"Convergence: window {window:,} generations, cap {max_generations:,} "
-        f"(derived; this model needs about {relaxation_time:,.0f} generations "
+        f"Convergence: burn-in {burn_in:,} generations, cap {max_generations:,} "
+        f"({which}; this model needs about {relaxation_time:,.0f} generations "
         "to forget its starting state)"
     )
 
@@ -186,7 +248,7 @@ def recursion_relaxation_time(
         raise ValueError(
             f"convergence defaults cannot be derived for an explicit migration "
             f"matrix with more than {MAXIMUM_RECURSION_DEMES} demes; set "
-            f"convergence_window and max_generations explicitly"
+            f"max_generations explicitly"
         )
     matrix = np.asarray(migration, dtype=np.float64)
     # Linear part of the recursion, acting on the flattened identity matrix.
@@ -387,7 +449,7 @@ def _time_from_rate(rate: float) -> float:
     if not rate > 0.0:
         raise ValueError(
             "no relaxation time: the model has no migration and no mutation "
-            "(or too little of either to measure); set convergence_window "
-            "and max_generations explicitly"
+            "(or too little of either to measure); set max_generations "
+            "explicitly"
         )
     return 1.0 / rate

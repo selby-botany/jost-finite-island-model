@@ -15,6 +15,7 @@ from pathlib import Path
 
 import pytest
 import yaml
+from conftest import FAST_EXPERT_SETTINGS
 
 from fim import cli, paths
 from fim.gui import recent_runs
@@ -30,9 +31,10 @@ def _write_run(tmp_path: Path, name: str, **overrides: object) -> Path:
         "mu": 0.01,
         "seed": 1,
         "loci": [{"locus_id": 1, "length": 200}],
-        "convergence_window": 4,
         "precision": 1.0,
-        "max_generations": 5,
+        "convergence_burn_in": 1,
+        "expert": dict(FAST_EXPERT_SETTINGS),
+        "max_generations": 200,
         "n_replicates": 1,
         "stop_batch_early": False,
     }

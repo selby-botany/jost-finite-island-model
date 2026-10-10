@@ -55,17 +55,17 @@ non-converged result.</p>
 <h3 id="why-does-my-run-take-so-long">Why does my run take so long?</h3>
 <p>A simulated population does not settle at once. With little migration between
 islands, gene flow and mutation take tens of thousands of generations to shape
-what you finally see, so a run is only finished once its statistics have stayed
-steady for about that long. You do not choose that stretch: <code>convergence_window</code>
-and <code>max_generations</code> default to <code>auto</code>, derived from your migration, mutation
-and population sizes.</p>
+what you finally see, so a run first waits out a burn-in of about that long and
+then averages until the average is known to the precision you asked for. You do
+not choose those lengths: <code>convergence_burn_in</code> and <code>max_generations</code> default to
+<code>auto</code>, derived from your migration, mutation and population sizes.</p>
 <p><code>fim run</code> prints the derived values unless <code>--quiet</code>, and the desktop app shows
 them next to <strong>Run simulation</strong> before you start. For five islands of 100 gene
-copies with <code>m: 0.0001</code> and <code>mu: 0.000001</code> that is a window of about 59,000
+copies with <code>m: 0.0001</code> and <code>mu: 0.000001</code> that is a burn-in of about 104,000
 generations. A run that finishes in a hundred generations is a warning sign,
 not good news. The derivation and its evidence are in
-<a href="#" data-fim-external="https://github.com/selby-botany/jost-finite-island-model/blob/main/doc/convergence.md">Convergence defaults</a>; the settings are in
-<a href="#" data-fim-help="configuration" data-fim-anchor="convergence_window">configuration.md</a>.</p>
+<a href="#" data-fim-external="https://github.com/selby-botany/jost-finite-island-model/blob/main/doc/convergence.md">Convergence</a>; the settings are in
+<a href="#" data-fim-help="configuration" data-fim-anchor="convergence_burn_in">configuration.md</a>.</p>
 <h3 id="batches-nreplicates-greater-than-one">Batches (n<sub>replicates</sub> greater than one)</h3>
 <p>A config's n<sub>replicates</sub> (see <a href="#" data-fim-help="configuration" data-fim-anchor="nreplicates">configuration.md</a>)
 controls whether one run or a whole batch executes:</p>
@@ -119,11 +119,11 @@ statistic's across-replicate confidence interval has tightened enough (see
 the YAML, run the command, and the reported values match those shown here,
 because the same seed, parameters, and version always give the same
 <code>report.json</code> (see <a href="#reproduce-a-run">Reproduce a run</a>). Each example uses
-a small <code>N</code> and <code>d</code>, and lets <a href="#" data-fim-external="https://github.com/selby-botany/jost-finite-island-model/blob/main/doc/convergence.md">convergence_window and
+a small <code>N</code> and <code>d</code>, and lets <a href="#" data-fim-external="https://github.com/selby-botany/jost-finite-island-model/blob/main/doc/convergence.md">convergence_burn_in and
 max_generations</a> be derived from the model (the default), so
-each run goes on until its statistic has stopped trending <em>and</em> its
-trailing-window mean is known to half of precision. With one
-locus that second condition can take tens of thousands of generations, so
+each run burns in and then averages until its statistic's mean is known to the
+requested <code>precision</code>. With one
+locus that can take tens of thousands of generations, so
 several examples set a looser precision (0.02 to 0.05) or pool
 eight loci, and each one's README says what that costs. Every example
 here finishes in a few seconds to about three minutes of wall-clock
@@ -201,6 +201,7 @@ loci:
     length: 100
 engine_backend: lineal
 convergence_statistic: D
+max_generations: 10000   # a cap: the run reports the precision it reached by then
 n_replicates: 1   # a single scalar run; the default (200) would batch
 </code></pre>
 <pre><code class="language-console">fim run hub-island.yaml --output results/hub-island --quiet
@@ -296,7 +297,6 @@ p_0:
   - - 2: 1.0
 engine_backend: lineal
 convergence_statistic: D
-convergence_window: 2
 precision: 0.000001
 max_generations: 1
 track_expensive_statistics: true
@@ -359,6 +359,7 @@ equilibrium_max_generations: 2000   # the derived burn-in is 1,256 generations
 engine_backend: lineal
 convergence_statistic: D
 precision: 0.03
+max_generations: 10000   # a cap: the run reports the precision it reached by then
 n_replicates: 1   # a single scalar run; the default (200) would batch
 </code></pre>
 <pre><code class="language-console">fim run equilibrium-split.yaml --output results/equilibrium-split --quiet
@@ -528,6 +529,7 @@ loci:
 engine_backend: lineal
 convergence_statistic: D
 precision: 0.05   # looser than the 0.01 default: seconds, not hours
+max_generations: 10000   # a cap: the run reports the precision it reached by then
 n_replicates: 1   # a single scalar run; the default (200) would batch
 </code></pre>
 <pre><code class="language-console">fim run kimura-weiss-isolation-by-distance.yaml \
@@ -717,7 +719,8 @@ loci:
     length: 100
 engine_backend: lineal
 convergence_statistic: D
-precision: 0.03   # plus or minus: each replicate and the batch's interval
+precision: 0.08   # plus or minus: each replicate and the batch's interval
+max_generations: 5000   # a cap: the run reports the precision it reached by then
 n_replicates: 50
 replicate_minimum: 10
 </code></pre>
@@ -750,8 +753,9 @@ engine backend and runs a real, moderately long batch (a few seconds, not
 instant) large enough for that backend's own advantage to actually show.
 They are also the exception to the derived convergence defaults: each pins a
 fixed amount of work, 16 replicates of exactly 100 generations
-(<code>max_generations: 100</code> with a <code>convergence_window: 101</code> that can never
-fill, and <code>stop_batch_early: false</code> so no replicate is skipped), so a
+(<code>max_generations: 100</code> with <code>precision: 0.0</code>, which can never be reached,
+and <code>convergence_burn_in: 1</code>, and <code>stop_batch_early: false</code> so no replicate is
+skipped), so a
 timing comparison always does the same work. The population is nowhere
 near equilibrium when it stops, so read these two as timing workloads, not
 as results.
@@ -780,10 +784,10 @@ loci:
     length: 5
 engine_backend: generational-vector
 convergence_statistic: D
-# A fixed 100-generation horizon: a 101-generation window can never fill
-# within 100 generations, so every replicate runs exactly to the cap.
-convergence_window: 101
-precision: 0.02
+# A fixed 100-generation horizon: a precision of zero can never be reached, so
+# every replicate runs exactly to the cap (a burn-in of 1 keeps the cap above it).
+precision: 0.0
+convergence_burn_in: 1
 max_generations: 100
 n_replicates: 16
 stop_batch_early: false   # always run all 16 replicates
@@ -825,10 +829,10 @@ loci:
     length: 7
 engine_backend: generational
 convergence_statistic: D
-# A fixed 100-generation horizon: a 101-generation window can never fill
-# within 100 generations, so every replicate runs exactly to the cap.
-convergence_window: 101
-precision: 0.02
+# A fixed 100-generation horizon: a precision of zero can never be reached, so
+# every replicate runs exactly to the cap (a burn-in of 1 keeps the cap above it).
+precision: 0.0
+convergence_burn_in: 1
 max_generations: 100
 n_replicates: 16
 stop_batch_early: false   # always run all 16 replicates
@@ -1193,7 +1197,7 @@ the number of seconds to allow, or to <code>0</code> to wait indefinitely:</p>
 </code></pre>
 <h3 id="loading-a-configuration-does-not-change-your-settings">Loading a configuration does not change your Settings</h3>
 <p>The run settings — execution engine, n<sub>replicates</sub>,
-max_generations, convergence window and tolerance, replicate confidence,
+max_generations, convergence burn-in, precision, confidence,
 JIT, the <code>auto</code> engine's two thresholds, and max concurrent replicates —
 live in Settings, not on the Configure form. A configuration you load can
 name its own values for them. Every way of loading one works the same:</p>
@@ -1712,7 +1716,7 @@ needs to forget its starting state. Inspect the trajectory and report, then
 increase max_generations, relax the tolerance, or select another
 convergence statistic based on the study's needs.</li>
 <li><strong>A run finished in a few hundred generations:</strong> check whether
-convergence_window and max_generations were set to small fixed numbers.
+convergence_burn_in and max_generations were set to small fixed numbers.
 Leave them on <code>auto</code>; see
 <a href="#why-does-my-run-take-so-long">Why does my run take so long?</a>.</li>
 <li><strong>Windows warning:</strong> verify the release checksum before running the unsigned

@@ -12,6 +12,7 @@ from typing import Literal, cast
 
 import numpy as np
 import pytest
+from conftest import FAST_CONVERGENCE, FAST_EXPERT_SETTINGS
 
 from fim import engine
 from fim.convergence import StopReason
@@ -89,9 +90,10 @@ def _tiny_config() -> dict[str, object]:
         "d": 2,
         "seed": 20260814,
         "loci": [{"locus_id": 1, "length": 200}],
-        "convergence_window": 4,
         "precision": 1.0,
-        "max_generations": 10,
+        "convergence_burn_in": 1,
+        "expert": dict(FAST_EXPERT_SETTINGS),
+        "max_generations": 40,
         "n_replicates": 1,
         "stop_batch_early": False,
     }
@@ -135,6 +137,8 @@ def test_live_and_recomputed_reports_match(
         run_id=result.run_id,
         converged=result.report["converged"],
         reason=result.report["reason"],
+        # The one part of a report only the run's own monitor can supply.
+        window_statistics=result.report["window_statistics"],
     )
 
     assert recomputed == result.report
@@ -156,7 +160,6 @@ def test_cap_is_a_valid_nonconverged_result(
     params = SimulationParams.from_mapping(
         {
             **tiny_params.to_dict(),
-            "convergence_window": 2,
             "precision": 0.0,
             "max_generations": 2,
         }
@@ -249,7 +252,6 @@ def test_sigma_band_is_none_when_the_run_only_hits_the_cap() -> None:
     params = SimulationParams.from_mapping(
         {
             **_tiny_config(),
-            "convergence_window": 2,
             "precision": 0.0,
             "max_generations": 2,
             "sigma_band_multiplier": 2.0,
@@ -364,7 +366,6 @@ def test_sigma_band_is_none_under_generational_when_the_run_only_hits_the_cap() 
     params = SimulationParams.from_mapping(
         {
             **_tiny_config(),
-            "convergence_window": 2,
             "precision": 0.0,
             "max_generations": 2,
             "sigma_band_multiplier": 2.0,
@@ -471,9 +472,9 @@ def _sigma_band_vector_params(**overrides: object) -> SimulationParams:
         seed=20260901,
         loci=(LocusSpec(1, 2),),  # capacity 16
         mutation_model="finite_alleles",
-        convergence_window=4,
         precision=1.0,
-        max_generations=10,
+        **FAST_CONVERGENCE,
+        max_generations=40,
         n_replicates=1,
         stop_batch_early=False,
         sigma_band_multiplier=2.0,
@@ -669,8 +670,8 @@ def test_sigma_band_extensions_never_interleave_with_batch_ticks() -> None:
         {
             **_tiny_config(),
             "n_replicates": 4,
-            "precision": 0.02,
-            "max_generations": 40,
+            "precision": 0.1,
+            "max_generations": 300,
             "sigma_band_multiplier": 2.0,
             "sigma_band_window": 5,
         }
@@ -707,7 +708,7 @@ def test_vectorized_sigma_band_caches_peak_in_the_post_pass_then_release() -> No
     """
     pytest.importorskip("numba")
     params = _sigma_band_vector_params(
-        n_replicates=4, precision=0.02, max_generations=40
+        n_replicates=4, precision=0.1, max_generations=300
     )
     live_counts: list[int] = []
     observed: dict[str, int] = {}
@@ -1119,7 +1120,6 @@ def test_replicate_tolerance_never_stops_on_a_permanently_undefined_statistic() 
         seed=7,
         loci=(LocusSpec(1, 100),),
         convergence_statistic="G_ST",
-        convergence_window=2,
         max_generations=2,
         n_replicates=5,
         replicate_minimum=2,
@@ -1261,8 +1261,8 @@ def test_pooled_convergence_histories_carries_a_stopped_replicates_value_forward
     defaults have every replicate stop at the identical generation
     (confirmed live -- the whole reason this test needs staggered
     stops), so this test picks its own `seed`/`precision`/
-    `max_generations` specifically to produce real spread (`[3, 5, 6,
-    12, 15]`, confirmed live for this exact configuration) instead.
+    `max_generations` specifically to produce real spread (`[19, 39, 39,
+    79, 159]`, confirmed live for this exact configuration) instead.
     """
     params = SimulationParams(
         gene_copies=20,
@@ -1271,9 +1271,9 @@ def test_pooled_convergence_histories_carries_a_stopped_replicates_value_forward
         d=2,
         seed=42,
         loci=(LocusSpec(1, 200),),
-        convergence_window=4,
-        precision=0.02,
-        max_generations=30,
+        precision=0.1,
+        **FAST_CONVERGENCE,
+        max_generations=300,
         n_replicates=5,
         stop_batch_early=False,
     )
@@ -1313,11 +1313,22 @@ def test_pooled_convergence_histories_carries_a_stopped_replicates_value_forward
         sample_counts = [point["sample_count"] for point in points]
         # The whole point of carrying a value forward: every replicate
         # still counts everywhere, so this never drops below 5, unlike
-        # the pre-fix behavior this test's own docstring describes.
-        assert all(count == 5 for count in sample_counts), (
-            f"{name}: sample_count dropped below the full replicate "
-            f"count somewhere -- carry-forward is not working"
+        # the pre-fix behavior this test's own docstring describes. A
+        # statistic a replicate has no value for in some generation (`G_ST`
+        # is undefined while a replicate has lost all its variation) has
+        # fewer, never more, and only that statistic.
+        always_defined = all(
+            len(result.convergence_histories[name])
+            == len(result.convergence_generations)
+            for result in output
         )
+        if always_defined:
+            assert all(count == 5 for count in sample_counts), (
+                f"{name}: sample_count dropped below the full replicate "
+                f"count somewhere -- carry-forward is not working"
+            )
+        else:
+            assert all(count <= 5 for count in sample_counts)
         assert all(point["low"] <= point["mean"] <= point["high"] for point in points)
     assert pooled["D"][0]["generation"] == 0
     # The generation right after the earliest replicate stops is
@@ -2028,7 +2039,6 @@ def test_g_st_convergence_falls_back_to_the_cap_at_total_fixation() -> None:
         seed=7,
         loci=(LocusSpec(1, 100),),
         convergence_statistic="G_ST",
-        convergence_window=2,
         precision=0.0,
         max_generations=2,
         n_replicates=1,
@@ -2082,7 +2092,6 @@ def test_adaptive_g_st_batch_survives_partial_monomorphism() -> None:
         # this test is about replicate-batch behavior, not within-run
         # convergence, so the minimum legal window keeps max_generations=1
         # valid without changing what the test actually verifies.
-        convergence_window=2,
         max_generations=1,
         n_replicates=3,
         replicate_minimum=2,
@@ -2126,7 +2135,6 @@ def test_adaptive_batch_drops_replicates_where_g_st_is_undefined() -> None:
         # this test is about replicate-batch behavior, not within-run
         # convergence, so the minimum legal window keeps max_generations=1
         # valid without changing what the test actually verifies.
-        convergence_window=2,
         max_generations=1,
         n_replicates=3,
         replicate_minimum=2,
@@ -2178,9 +2186,9 @@ def test_multi_statistic_run_watches_and_reports_every_statistic() -> None:
         loci=(LocusSpec(1, 100),),
         convergence_statistic=("D", "G_ST"),
         convergence_combinator="all",
-        convergence_window=6,
-        precision=0.02,
-        max_generations=60,
+        precision=0.1,
+        **FAST_CONVERGENCE,
+        max_generations=300,
         n_replicates=1,
         stop_batch_early=False,
     )
@@ -2223,9 +2231,9 @@ def test_any_combinator_can_stop_earlier_than_all() -> None:
             loci=(LocusSpec(1, 100),),
             convergence_statistic=("D", "G_ST"),
             convergence_combinator=combinator,
-            convergence_window=6,
-            precision=0.02,
-            max_generations=60,
+            precision=0.1,
+            **FAST_CONVERGENCE,
+            max_generations=300,
             n_replicates=1,
             stop_batch_early=False,
         )
@@ -2238,14 +2246,12 @@ def test_any_combinator_can_stop_earlier_than_all() -> None:
 
     assert any_result.report["converged"]
     assert all_result.report["converged"]
-    # 9 and 35, not 5 and 20: the textbook per-copy mutation step (drift,
-    # then each sampled copy mutates) draws a different stream than the
-    # earlier proportional-mass step did, so this seed's own trajectory
-    # changed. 20 itself replaced a pre-Stage-F8 15 (`_inversion_
-    # binomial` drift, design doc §5.4's own "accept the break").
-    # Deterministic: re-run in isolation before updating the values.
-    assert any_result.report["generation"] == 9
-    assert all_result.report["generation"] == 35
+    # The checks fall at generations 4, 9, 19, 39, 79, 159 (burn-in 1, first
+    # check 3 after it, window doubling): `D` is known well enough at the check
+    # at 19, `G_ST` only at the one at 159. Deterministic: re-run in isolation
+    # before updating the values.
+    assert any_result.report["generation"] == 19
+    assert all_result.report["generation"] == 159
     assert any_result.report["generation"] < all_result.report["generation"]
 
 
@@ -2267,8 +2273,8 @@ def _monomorphic_any_params(engine_backend: EngineBackend) -> SimulationParams:
         mutation_model="finite_alleles",
         convergence_statistic=("D", "G_ST"),
         convergence_combinator="any",
-        convergence_window=4,
         precision=0.0,
+        **FAST_CONVERGENCE,
         max_generations=50,
         n_replicates=2,
         stop_batch_early=False,
@@ -2309,7 +2315,6 @@ def test_converged_on_is_none_for_a_run_that_hit_the_cap() -> None:
         d=3,
         seed=7,
         loci=(LocusSpec(1, 100),),
-        convergence_window=40,
         precision=0.0,
         max_generations=60,
         n_replicates=1,
@@ -2355,7 +2360,6 @@ def test_mutation_ids_follow_high_explicit_initial_id() -> None:
         seed=7,
         loci=(LocusSpec(1, 100),),
         initial_allele_count=1,
-        convergence_window=2,
         max_generations=1,
         n_replicates=1,
         stop_batch_early=False,
@@ -2386,7 +2390,6 @@ def test_unequal_deme_sizes_run_is_reproducible_and_bounds_support() -> None:
         d=2,
         seed=20260817,
         loci=(LocusSpec(1, 100),),
-        convergence_window=4,
         precision=1.0,
         max_generations=8,
         n_replicates=1,
@@ -2472,7 +2475,6 @@ def test_asymmetric_migration_matrix_run_is_reproducible() -> None:
         d=3,
         seed=20260817,
         loci=(LocusSpec(1, 100),),
-        convergence_window=4,
         precision=1.0,
         max_generations=8,
         n_replicates=1,
@@ -3200,7 +3202,6 @@ def test_run_result_convergence_histories_include_always_tracked_statistics() ->
         seed=99,
         loci=(LocusSpec(1, 50),),
         convergence_statistic="D",
-        convergence_window=4,
         precision=0.02,
         max_generations=20,
         n_replicates=1,
@@ -3232,7 +3233,6 @@ def test_run_result_convergence_histories_include_e_st_k_st_when_opted_in() -> N
         seed=99,
         loci=(LocusSpec(1, 50),),
         convergence_statistic="D",
-        convergence_window=4,
         precision=0.02,
         max_generations=20,
         n_replicates=1,
@@ -3277,7 +3277,6 @@ def test_sigma_band_stays_scoped_to_watched_statistics_only() -> None:
         seed=99,
         loci=(LocusSpec(1, 50),),
         convergence_statistic="D",
-        convergence_window=4,
         precision=0.02,
         max_generations=20,
         n_replicates=1,
@@ -3341,7 +3340,6 @@ def test_multi_locus_run_with_unequal_lengths_is_reproducible() -> None:
         d=2,
         seed=20260818,
         loci=(LocusSpec(1, 50), LocusSpec(2, 8_000)),
-        convergence_window=4,
         precision=1.0,
         max_generations=8,
         n_replicates=1,
@@ -3374,7 +3372,6 @@ def test_stepping_stone_topology_run_is_reproducible() -> None:
             "m": {"topology": "ring", "rate": 0.2},
             "mu": 0.02,
             "seed": 20260821,
-            "convergence_window": 4,
             "precision": 1.0,
             "max_generations": 8,
             "n_replicates": 1,
@@ -3409,7 +3406,6 @@ def test_stochastic_migrant_sampling_run_is_reproducible() -> None:
             "mu": 0.02,
             "seed": 20260818,
             "migrant_sampling": "stochastic",
-            "convergence_window": 4,
             "precision": 1.0,
             "max_generations": 8,
             "n_replicates": 1,
@@ -3441,7 +3437,6 @@ def test_default_migrant_sampling_is_unaffected_by_the_stochastic_option() -> No
         "m": 0.2,
         "mu": 0.02,
         "seed": 20260818,
-        "convergence_window": 4,
         "precision": 1.0,
         "max_generations": 8,
         "n_replicates": 1,
@@ -3479,7 +3474,6 @@ def test_finite_alleles_run_is_reproducible_and_bounds_capacity() -> None:
             "seed": 20260821,
             "loci": [{"locus_id": 1, "length": 1}],
             "mutation_model": "finite_alleles",
-            "convergence_window": 4,
             "precision": 1.0,
             "max_generations": 10,
             "n_replicates": 1,
@@ -3512,7 +3506,6 @@ def test_default_mutation_model_is_unaffected_by_the_finite_alleles_option() -> 
         "m": 0.2,
         "mu": 0.02,
         "seed": 20260821,
-        "convergence_window": 4,
         "precision": 1.0,
         "max_generations": 8,
         "n_replicates": 1,
@@ -3550,7 +3543,6 @@ def test_mu_b_run_matches_the_equivalent_explicit_per_locus_mu() -> None:
         "m": 0.2,
         "seed": 20260822,
         "loci": loci,
-        "convergence_window": 4,
         "precision": 1.0,
         "max_generations": 8,
         "n_replicates": 1,
@@ -3588,7 +3580,6 @@ def test_mu_b_combines_with_finite_alleles() -> None:
             "seed": 20260822,
             "loci": [{"locus_id": 1, "length": 1}],
             "mutation_model": "finite_alleles",
-            "convergence_window": 4,
             "precision": 1.0,
             "max_generations": 10,
             "n_replicates": 1,
@@ -3682,16 +3673,14 @@ def test_run_batch_cross_replica_stop_fires_at_deterministic_ordinal() -> None:
     prefix has finished, admitting simultaneous stops in ascending
     `replica_index`, deterministically across repeated runs.
 
-    `precision` is set
-    astronomically large so every criterion is satisfied the instant it
-    has *enough* observations, regardless of their actual values — this
-    makes every one of the five lanes stop on the identical tick
-    (generation `convergence_window - 1 == 2`), simultaneously, by
-    construction rather than by chance, so the tie-break itself is what
-    is under test, not real convergence timing. With `replicate_minimum
-    == 2`, the batch-wide stop then fires while processing the *second*
-    lane in ascending order — exactly replicates 0 and 1 — leaving
-    replicates 2-4 never even reached.
+    `precision` is set astronomically large so every criterion is
+    satisfied the instant a window has enough effective observations,
+    regardless of their actual values: the lanes then stop within a few
+    ticks of each other, so what is under test is the order the batch
+    accepts them in, not real convergence timing. With `replicate_minimum
+    == 2`, the batch-wide stop fires on the *second* replicate in
+    ascending order, exactly replicates 0 and 1, leaving replicates 2-4
+    never even reached.
     """
     params = SimulationParams(
         gene_copies=20,
@@ -3700,10 +3689,10 @@ def test_run_batch_cross_replica_stop_fires_at_deterministic_ordinal() -> None:
         d=2,
         seed=20260901,
         loci=(LocusSpec(1, 200),),
-        convergence_window=3,
         max_generations=50,
         n_replicates=5,
         precision=1e12,
+        **FAST_CONVERGENCE,
         stop_batch_early=True,
         replicate_minimum=2,
     )
@@ -3722,7 +3711,9 @@ def test_run_batch_cross_replica_stop_fires_at_deterministic_ordinal() -> None:
     # confirmation that ties broke in ascending `replica_index` order:
     # only replicates 0 and 1 (`-r001`/`-r002`) ever got processed.
     assert [result.run_id for result in first] == ["batch-r001", "batch-r002"]
-    assert all(result.report["generation"] == 2 for result in first)
+    assert [result.report["generation"] for result in first] == [
+        result.report["generation"] for result in second
+    ]
 
 
 class _ReversedFinishAdvancer:
@@ -3909,7 +3900,6 @@ def test_vector_adaptive_batch_keeps_the_replicate_order_prefix() -> None:
         loci=(LocusSpec(1, 2),),  # capacity 16
         mutation_model="finite_alleles",
         convergence_statistic="D",
-        convergence_window=4,
         max_generations=60,
         n_replicates=12,
         replicate_minimum=3,
@@ -5178,7 +5168,6 @@ def _finite_alleles_vector_params(**overrides: object) -> SimulationParams:
         seed=20260901,
         loci=(LocusSpec(1, 2),),  # capacity 16
         mutation_model="finite_alleles",
-        convergence_window=4,
         precision=1.0,
         max_generations=10,
         n_replicates=1,
@@ -5485,9 +5474,7 @@ def test_vectorized_advancer_builds_a_migration_plan_once_per_lane() -> None:
     """
     pytest.importorskip("numba")
     matrix = ((0.8, 0.1, 0.1), (0.1, 0.8, 0.1), (0.1, 0.1, 0.8))
-    params = _finite_alleles_vector_params(
-        m=matrix, max_generations=3, convergence_window=3
-    )
+    params = _finite_alleles_vector_params(m=matrix, max_generations=3)
     store = InMemoryTrajectoryStore()
     lane = _build_replica_lane(params, 0, None, store, _clock)
     advancer = VectorizedAdvancer()
@@ -5513,7 +5500,7 @@ def test_vectorized_advancer_builds_no_matrix_for_a_scalar_rate() -> None:
     the first tick.
     """
     pytest.importorskip("numba")
-    params = _finite_alleles_vector_params(max_generations=3, convergence_window=3)
+    params = _finite_alleles_vector_params(max_generations=3)
     store = InMemoryTrajectoryStore()
     lane = _build_replica_lane(params, 0, None, store, _clock)
     advancer = VectorizedAdvancer()
@@ -5615,7 +5602,6 @@ def test_every_engine_backend_visits_the_same_generations_and_output_shape() -> 
         seed=20260901,
         loci=(LocusSpec(1, 2), LocusSpec(2, 2)),
         mutation_model="finite_alleles",
-        convergence_window=4,
         precision=0.0,
         max_generations=6,
         n_replicates=1,

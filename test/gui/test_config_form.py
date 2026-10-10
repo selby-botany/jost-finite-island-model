@@ -43,7 +43,7 @@ def test_starter_form_values_reflects_the_cli_starter_config() -> None:
     assert values["seed"] == "20260814"
     assert values["deme_weighting"] == "equal"
     assert values["max_generations"] == "auto"
-    assert values["convergence_window"] == "auto"
+    assert values["convergence_burn_in"] == "auto"
     assert values["migrant_sampling"] == "continuous"
     assert values["m_mode"] == "scalar"
     assert values["m_rate"] == "0.001"
@@ -90,7 +90,7 @@ def test_default_run_setting_field_names_excludes_scientific_per_run_fields() ->
     assert "engine_backend" in names
     assert "n_replicates" in names
     assert "max_generations" in names
-    assert "convergence_window" in names
+    assert "convergence_burn_in" in names
     assert "precision" in names
     assert "confidence" in names
     assert "jit" in names
@@ -122,7 +122,7 @@ def test_all_fields_covers_every_tabs_plain_fields() -> None:
         "initial_allele_count",
         "initial_concentration",
         "convergence_combinator",
-        "convergence_window",
+        "convergence_burn_in",
         "precision",
         "track_expensive_statistics",
         "n_replicates",
@@ -1228,7 +1228,6 @@ def test_params_to_form_values_includes_every_composite_fields_keys() -> None:
         ("d", "population"),
         ("locus_lengths", "mutation"),
         ("initial_allele_count", "initial_conditions"),
-        ("convergence_window", "convergence"),
         ("n_replicates", "batch"),
         ("m", "migration"),
         ("mu", "mutation"),
@@ -1424,7 +1423,7 @@ def test_starter_form_values_overlay_may_choose_the_ploidy() -> None:
     assert payload["ploidy"] == "triploid"
 
 
-def test_a_derived_window_and_cap_are_shown_as_auto_not_as_numbers() -> None:
+def test_a_derived_burn_in_and_cap_are_shown_as_auto_not_as_numbers() -> None:
     """A derived value is never frozen into the form as if it were typed."""
     params = SimulationParams.from_mapping(
         {"N": 100, "ploidy": "haploid", "d": 5, "m": 0.0001, "mu": 0.000001, "seed": 1}
@@ -1432,11 +1431,11 @@ def test_a_derived_window_and_cap_are_shown_as_auto_not_as_numbers() -> None:
 
     values = config_form.params_to_form_values(params)
 
-    assert values["convergence_window"] == "auto"
+    assert values["convergence_burn_in"] == "auto"
     assert values["max_generations"] == "auto"
 
 
-def test_an_explicit_window_and_cap_are_shown_as_numbers() -> None:
+def test_an_explicit_burn_in_and_cap_are_shown_as_numbers() -> None:
     """Explicit values stay explicit in the form."""
     params = SimulationParams.from_mapping(
         {
@@ -1446,15 +1445,15 @@ def test_an_explicit_window_and_cap_are_shown_as_numbers() -> None:
             "m": 0.0001,
             "mu": 0.000001,
             "seed": 1,
-            "convergence_window": 60,
             "max_generations": 900,
+            "convergence_burn_in": 60,
         }
     )
 
     values = config_form.params_to_form_values(params)
 
-    assert values["convergence_window"] == "60"
     assert values["max_generations"] == "900"
+    assert values["convergence_burn_in"] == "60"
 
 
 @pytest.mark.parametrize(
@@ -1465,11 +1464,16 @@ def test_the_form_accepts_auto_blank_or_a_whole_number(
     text: str, expected: object
 ) -> None:
     """Both derivable fields parse the same way."""
-    values = {**config_form.starter_form_values(), "convergence_window": text}
+    values = {
+        **config_form.starter_form_values(),
+        "max_generations": text,
+        "convergence_burn_in": text,
+    }
 
     payload = config_form.form_values_to_payload({**values, "ploidy": "1"})
 
-    assert payload["convergence_window"] == expected
+    assert payload["max_generations"] == expected
+    assert payload["convergence_burn_in"] == expected
 
 
 @pytest.mark.parametrize("text", ["many", "1.5", "12abc"])
@@ -1491,12 +1495,11 @@ def test_a_form_showing_auto_round_trips_through_the_params() -> None:
     """auto in the form derives on validation and shows as auto again."""
     values = {
         **config_form.starter_form_values(),
-        "convergence_window": "auto",
         "ploidy": "1",
     }
     params = SimulationParams.from_mapping(config_form.form_values_to_payload(values))
 
-    assert config_form.params_to_form_values(params)["convergence_window"] == "auto"
+    assert config_form.params_to_form_values(params)["max_generations"] == "auto"
 
 
 def test_validate_run_settings_accepts_every_engine_backend_the_form_offers() -> None:
@@ -1516,7 +1519,6 @@ def test_validate_run_settings_parses_text_as_a_submitted_form_would() -> None:
     config_form.validate_run_settings(
         {
             "max_generations": "",
-            "convergence_window": "auto",
             "max_concurrent_replicates": "",
             "confidence": "0.99",
             "max_workers": "not validated here",
@@ -1535,7 +1537,7 @@ def test_run_setting_error_names_the_problem_of_one_field_only() -> None:
     )
     # A field valid alone is valid here even if another field it could
     # contradict is not given.
-    assert config_form.run_setting_error("convergence_window", "500") is None
+    assert config_form.run_setting_error("max_generations", "500") is None
 
 
 def test_every_run_setting_has_a_plain_language_label() -> None:

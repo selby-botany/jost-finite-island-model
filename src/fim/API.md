@@ -15,13 +15,15 @@ Return to the [source-tree orientation](../README.md) or the [developer guide](.
   * [command\_sweep](#fim.cli_sweep.command_sweep)
 * [fim.config](#fim.config)
 * [fim.config.convergence](#fim.config.convergence)
-  * [WINDOW\_RELAXATION\_MULTIPLE](#fim.config.convergence.WINDOW_RELAXATION_MULTIPLE)
+  * [BURN\_IN\_MINIMUM\_RELAXATION\_TIMES](#fim.config.convergence.BURN_IN_MINIMUM_RELAXATION_TIMES)
+  * [FIRST\_CHECK\_RELAXATION\_TIMES](#fim.config.convergence.FIRST_CHECK_RELAXATION_TIMES)
+  * [FIRST\_CHECK\_MINIMUM](#fim.config.convergence.FIRST_CHECK_MINIMUM)
+  * [MINIMUM\_EFFECTIVE\_SAMPLE\_SIZE](#fim.config.convergence.MINIMUM_EFFECTIVE_SAMPLE_SIZE)
+  * [CHECK\_GROWTH](#fim.config.convergence.CHECK_GROWTH)
+  * [FRACTIONAL\_BURN\_IN](#fim.config.convergence.FRACTIONAL_BURN_IN)
   * [CAP\_RELAXATION\_MULTIPLE](#fim.config.convergence.CAP_RELAXATION_MULTIPLE)
-  * [MINIMUM\_WINDOW](#fim.config.convergence.MINIMUM_WINDOW)
   * [MINIMUM\_MAX\_GENERATIONS](#fim.config.convergence.MINIMUM_MAX_GENERATIONS)
   * [ABSOLUTE\_MAX\_GENERATIONS](#fim.config.convergence.ABSOLUTE_MAX_GENERATIONS)
-  * [NOISE\_TOLERANCE\_FRACTION](#fim.config.convergence.NOISE_TOLERANCE_FRACTION)
-  * [MINIMUM\_NOISE\_CHECK\_WINDOW](#fim.config.convergence.MINIMUM_NOISE_CHECK_WINDOW)
   * [GEWEKE\_FIRST\_FRACTION](#fim.config.convergence.GEWEKE_FIRST_FRACTION)
   * [GEWEKE\_LAST\_FRACTION](#fim.config.convergence.GEWEKE_LAST_FRACTION)
   * [START\_DRIFT\_ALERT\_Z](#fim.config.convergence.START_DRIFT_ALERT_Z)
@@ -34,6 +36,11 @@ Return to the [source-tree orientation](../README.md) or the [developer guide](.
   * [DEFAULT\_PAIRWISE\_MAX\_DEMES](#fim.config.defaults.DEFAULT_PAIRWISE_MAX_DEMES)
 * [fim.config.display](#fim.config.display)
   * [GUI\_ANIMATION\_MAX\_FRAMES](#fim.config.display.GUI_ANIMATION_MAX_FRAMES)
+* [fim.config.expert](#fim.config.expert)
+  * [ExpertSettings](#fim.config.expert.ExpertSettings)
+    * [\_\_post\_init\_\_](#fim.config.expert.ExpertSettings.__post_init__)
+    * [from\_mapping](#fim.config.expert.ExpertSettings.from_mapping)
+    * [changes](#fim.config.expert.ExpertSettings.changes)
 * [fim.config.limits](#fim.config.limits)
   * [MAXIMUM\_RECURSION\_DEMES](#fim.config.limits.MAXIMUM_RECURSION_DEMES)
 * [fim.config.numerics](#fim.config.numerics)
@@ -56,20 +63,13 @@ Return to the [source-tree orientation](../README.md) or the [developer guide](.
 * [fim.convergence.criteria](#fim.convergence.criteria)
   * [ConvergenceCriterion](#fim.convergence.criteria.ConvergenceCriterion)
     * [is\_stable](#fim.convergence.criteria.ConvergenceCriterion.is_stable)
-  * [trailing\_window\_stable](#fim.convergence.criteria.trailing_window_stable)
-  * [TrailingWindowCriterion](#fim.convergence.criteria.TrailingWindowCriterion)
-    * [\_\_post\_init\_\_](#fim.convergence.criteria.TrailingWindowCriterion.__post_init__)
-    * [is\_stable](#fim.convergence.criteria.TrailingWindowCriterion.is_stable)
-    * [tracker](#fim.convergence.criteria.TrailingWindowCriterion.tracker)
-  * [TrailingWindowTracker](#fim.convergence.criteria.TrailingWindowTracker)
-    * [\_\_init\_\_](#fim.convergence.criteria.TrailingWindowTracker.__init__)
-    * [push](#fim.convergence.criteria.TrailingWindowTracker.push)
-    * [is\_stable](#fim.convergence.criteria.TrailingWindowTracker.is_stable)
   * [ConfidenceIntervalCriterion](#fim.convergence.criteria.ConfidenceIntervalCriterion)
     * [\_\_post\_init\_\_](#fim.convergence.criteria.ConfidenceIntervalCriterion.__post_init__)
     * [is\_stable](#fim.convergence.criteria.ConfidenceIntervalCriterion.is_stable)
 * [fim.convergence.defaults](#fim.convergence.defaults)
   * [DerivedConvergence](#fim.convergence.defaults.DerivedConvergence)
+  * [burn\_in\_multiple](#fim.convergence.defaults.burn_in_multiple)
+  * [derive\_burn\_in](#fim.convergence.defaults.derive_burn_in)
   * [derive\_convergence\_defaults](#fim.convergence.defaults.derive_convergence_defaults)
   * [describe\_derived\_convergence](#fim.convergence.defaults.describe_derived_convergence)
   * [island\_relaxation\_time](#fim.convergence.defaults.island_relaxation_time)
@@ -81,6 +81,21 @@ Return to the [source-tree orientation](../README.md) or the [developer guide](.
 * [fim.convergence.monitor](#fim.convergence.monitor)
   * [StopReason](#fim.convergence.monitor.StopReason)
   * [ConvergenceOutcome](#fim.convergence.monitor.ConvergenceOutcome)
+  * [BurnInMonitor](#fim.convergence.monitor.BurnInMonitor)
+    * [\_\_init\_\_](#fim.convergence.monitor.BurnInMonitor.__init__)
+    * [generations](#fim.convergence.monitor.BurnInMonitor.generations)
+    * [history](#fim.convergence.monitor.BurnInMonitor.history)
+    * [histories](#fim.convergence.monitor.BurnInMonitor.histories)
+    * [value\_generations](#fim.convergence.monitor.BurnInMonitor.value_generations)
+    * [window\_start\_generation](#fim.convergence.monitor.BurnInMonitor.window_start_generation)
+    * [outcome](#fim.convergence.monitor.BurnInMonitor.outcome)
+    * [reason](#fim.convergence.monitor.BurnInMonitor.reason)
+    * [should\_stop](#fim.convergence.monitor.BurnInMonitor.should_stop)
+    * [record](#fim.convergence.monitor.BurnInMonitor.record)
+    * [stable\_statistics](#fim.convergence.monitor.BurnInMonitor.stable_statistics)
+    * [target\_standard\_error](#fim.convergence.monitor.BurnInMonitor.target_standard_error)
+    * [minimum\_effective\_sample\_size](#fim.convergence.monitor.BurnInMonitor.minimum_effective_sample_size)
+    * [evidence\_statistics](#fim.convergence.monitor.BurnInMonitor.evidence_statistics)
   * [ConvergenceMonitor](#fim.convergence.monitor.ConvergenceMonitor)
     * [\_\_init\_\_](#fim.convergence.monitor.ConvergenceMonitor.__init__)
     * [generations](#fim.convergence.monitor.ConvergenceMonitor.generations)
@@ -88,15 +103,13 @@ Return to the [source-tree orientation](../README.md) or the [developer guide](.
     * [histories](#fim.convergence.monitor.ConvergenceMonitor.histories)
     * [outcome](#fim.convergence.monitor.ConvergenceMonitor.outcome)
     * [reason](#fim.convergence.monitor.ConvergenceMonitor.reason)
+    * [should\_stop](#fim.convergence.monitor.ConvergenceMonitor.should_stop)
     * [record](#fim.convergence.monitor.ConvergenceMonitor.record)
     * [stable\_statistics](#fim.convergence.monitor.ConvergenceMonitor.stable_statistics)
-    * [should\_stop](#fim.convergence.monitor.ConvergenceMonitor.should_stop)
-    * [window\_statistics](#fim.convergence.monitor.ConvergenceMonitor.window_statistics)
 * [fim.convergence.window\_statistics](#fim.convergence.window_statistics)
   * [WindowStatistics](#fim.convergence.window_statistics.WindowStatistics)
     * [tau\_int](#fim.convergence.window_statistics.WindowStatistics.tau_int)
-    * [noise\_adequate](#fim.convergence.window_statistics.WindowStatistics.noise_adequate)
-  * [window\_statistics](#fim.convergence.window_statistics.window_statistics)
+    * [meets](#fim.convergence.window_statistics.WindowStatistics.meets)
   * [geyer\_window\_statistics](#fim.convergence.window_statistics.geyer_window_statistics)
   * [geweke\_z](#fim.convergence.window_statistics.geweke_z)
 * [fim.engine](#fim.engine)
@@ -1264,29 +1277,91 @@ enforces it.
 Convergence policy constants.
 
 Every value here is a choice a careful person could make differently, so
-each is a policy constant: named, documented with its evidence, and (once
-Expert Settings exist) adjustable. Retired constants stay until the rule
-that uses them is replaced.
+each is a policy constant: named, documented with its evidence, and an
+Expert Setting (`fim.config.expert`) a run's configuration can change.
+
+The rule these constants steer is "burn in, then average" (design
+`20261005-claude-opus-5-5-simplified-convergence-rule-design.md`,
+`selby/restricted`): wait out the burn-in, then average each watched
+statistic over an evidence window that grows until its standard error is
+small enough and its effective sample size large enough.
 
 See `README.md` in this directory for the table of every constant.
 
-<a id="fim.config.convergence.WINDOW_RELAXATION_MULTIPLE"></a>
+<a id="fim.config.convergence.BURN_IN_MINIMUM_RELAXATION_TIMES"></a>
 
-#### WINDOW\_RELAXATION\_MULTIPLE
+#### BURN\_IN\_MINIMUM\_RELAXATION\_TIMES
 
-Default `convergence_window`, in units of the relaxation time `tau`.
+Fewest relaxation times `tau` the burn-in lasts: the floor of `k`.
 
-Set by `dev/bin/calibrate-convergence-defaults` and recorded in
-`test/validation/convergence-defaults-evidence.json`. The noise-free
-analysis (design Appendix A.6) already accepts a residual of a third of
-`precision` at `2 tau`, but a single stochastic run also
-carries sampling noise. Golden Part VI (60 replicates, 8 loci) stops
-0.14 below its analytic D at `1 tau`, 0.060 at `2 tau` (outside the 0.05
-acceptance) and 0.040 at `3 tau`; a longer window does not improve on that
-(0.039 at `4 tau`), because the remaining offset comes from estimating D
-over a finite number of loci, not from stopping early. The slower regimes
-measured (Dear-Nolan low, ring, unequal mutation rates) are within 0.025
-at `2 tau` and within 0.01 at `4 tau`.
+The burn-in is `ceil(k * tau)` generations with
+`k = max(BURN_IN_MINIMUM_RELAXATION_TIMES, ln(2 / precision))`. The slowest
+mode's leftover from a worst-case unit offset is `e^-k`, so `k >= ln(2 /
+precision)` leaves at most `precision / 2` of bias; the floor of 5 keeps a
+loose precision from shortening the burn-in below what Run B needed (the
+average's bias at `5.3 tau` was -0.00016; design 3.5). The equilibrium-split
+ancestral phase already uses the same shape, `tau ln(1 / tolerance)`.
+
+Kind: policy.
+
+<a id="fim.config.convergence.FIRST_CHECK_RELAXATION_TIMES"></a>
+
+#### FIRST\_CHECK\_RELAXATION\_TIMES
+
+First check, in relaxation times after the burn-in ends.
+
+About one integrated autocorrelation time of `D`: an earlier check cannot
+pass the effective-sample-size floor, so it would only waste work.
+
+Kind: policy.
+
+<a id="fim.config.convergence.FIRST_CHECK_MINIMUM"></a>
+
+#### FIRST\_CHECK\_MINIMUM
+
+Fewest generations after the burn-in before the first check.
+
+The historical default window, kept as a floor for models whose `tau` is
+tiny.
+
+Kind: policy.
+
+<a id="fim.config.convergence.MINIMUM_EFFECTIVE_SAMPLE_SIZE"></a>
+
+#### MINIMUM\_EFFECTIVE\_SAMPLE\_SIZE
+
+Smallest effective sample size an evidence window must hold to be trusted.
+
+A low standard-error estimate from a window with few independent values is
+itself unreliable (design 3.4: floors of 30 gave 1% to 21% misses, 50 gave 0%
+to 2%, 100 gave 0% but doubled the run). The floor sets a minimum run of
+`50 * tau_int` generations after the burn-in for every statistic, whatever
+the precision.
+
+Kind: policy.
+
+<a id="fim.config.convergence.CHECK_GROWTH"></a>
+
+#### CHECK\_GROWTH
+
+Factor by which the evidence window grows between checks (doubling).
+
+Doubling had the lowest miss rate measured (design 8.3, 8.5) and costs
+`O(L log L)` in total. Its overshoot past the length actually needed is at
+most 2x and typically 1.44x.
+
+Kind: policy.
+
+<a id="fim.config.convergence.FRACTIONAL_BURN_IN"></a>
+
+#### FRACTIONAL\_BURN\_IN
+
+Share of a run discarded as burn-in when no relaxation time is available.
+
+A standard practice in Markov-chain output analysis: the evidence window
+starts at `floor(0.1 * t)` at each check. Used only for a model with no
+migration and no mutation, or an explicit migration matrix beyond the
+eigenvalue route, when `convergence_burn_in` is `auto` (design 6.4).
 
 Kind: policy.
 
@@ -1294,25 +1369,13 @@ Kind: policy.
 
 #### CAP\_RELAXATION\_MULTIPLE
 
-Default `max_generations`, in units of `tau`.
+Default `max_generations`, in relaxation times, beyond the burn-in.
 
-A run needs its window plus the time to settle. The slowest stop measured
-was `10.2 tau` (Golden Part VI at a window of `4 tau`; `9.0 tau` at the
-shipped `3 tau`), so `15 tau` leaves a margin of about 1.5 and no measured
-run ended at the cap. Only binding once `15 tau` exceeds `MINIMUM_MAX_
-GENERATIONS`'s own floor (its own docstring has why that floor is now
-large) -- a fast-relaxing model's cap is set by the floor instead, since
-`15 tau` alone was never a measurement of how long a single-locus run's
-own noise takes to average out, only of how long the *trend* takes to
-settle.
-
-Kind: policy.
-
-<a id="fim.config.convergence.MINIMUM_WINDOW"></a>
-
-#### MINIMUM\_WINDOW
-
-Smallest derived window: the historical default, kept as a floor.
+`max_generations` is `max(MINIMUM_MAX_GENERATIONS, burn_in + ceil(15 tau))`,
+so a slow model is never capped inside its own burn-in. Only binding once
+`15 tau` exceeds `MINIMUM_MAX_GENERATIONS`; a fast-relaxing model's cap is set
+by that floor, since `15 tau` was never a measurement of how long a
+single-locus run's own noise takes to average out.
 
 Kind: policy.
 
@@ -1322,26 +1385,15 @@ Kind: policy.
 
 Smallest derived cap.
 
-Set by the same evidence as `WINDOW_RELAXATION_MULTIPLE`'s own docstring,
-extended: `fim.convergence.monitor.ConvergenceMonitor`'s noise-adequacy
-gate lets the evidence window actually used to judge stability grow past
-`convergence_window` on its own, generation by generation, whenever a
-single, fast-relaxing (small `tau`) model's own per-generation noise
-still leaves the trailing-window mean short of the requested tolerance --
-the single-locus case the original `10_000` floor (this project's own
-pre-derived-defaults historical default) was never measured against. Two
-independent single-locus, single-replicate regimes (Golden Part VI,
-`tau = 85`; Dear-Nolan low, `tau = 19,693` -- two orders of magnitude
-apart in `tau`) both needed close to 130,000 generations for their own
-`D` to become genuinely noise-adequate, despite that wide spread in
-`tau`: this floor is a small multiple of that measured need, not derived
-from `tau` at all (a third, well-resolved regime, a 10-deme ring, settled
-at 12,000, comfortably under this floor on its own). A model that settles
-long before this floor is unaffected -- the adaptive window still stops
-the instant it is genuinely adequate, this floor only raises how long a
-run is *allowed* to keep growing that window before giving up
-honestly. See `20260927-claude-sonnet-5-noise-aware-convergence-design.md`
-(`selby/restricted`) for the full measurement.
+Two independent single-locus regimes (Golden Part VI, `tau = 85`; Dear-Nolan
+low, `tau = 19,693`, two orders of magnitude apart) both needed close to
+130,000 generations for their own `D` to become known to 0.01, despite that
+spread in `tau`: this floor is a small multiple of that measured need, not
+derived from `tau` at all. A model that settles sooner is unaffected, since
+the run stops when its precision is reached; the floor only raises how long
+a run may keep averaging before it is reported as not having reached the
+precision. See `20260927-claude-sonnet-5-noise-aware-convergence-design.md`
+(`selby/restricted`) for the measurement.
 
 Kind: policy.
 
@@ -1352,32 +1404,6 @@ Kind: policy.
 Ceiling on a derived cap, so a nearly isolated system stays finite.
 
 Kind: policy (safety).
-
-<a id="fim.config.convergence.NOISE_TOLERANCE_FRACTION"></a>
-
-#### NOISE\_TOLERANCE\_FRACTION
-
-A window's own trailing-window mean is only judged noise-adequate once its
-standard error is at most this fraction of the configured tolerance — half,
-so that a mean landing anywhere within one standard error of the true value
-is still within tolerance of it (a one-sigma bound, not a five- or
-ninety-five-percent one; see the design note this module implements,
-`20260927-...-noise-aware-convergence-design.md`, `selby/restricted`, for
-why a stricter multiple was not chosen).
-
-Kind: policy.
-
-<a id="fim.config.convergence.MINIMUM_NOISE_CHECK_WINDOW"></a>
-
-#### MINIMUM\_NOISE\_CHECK\_WINDOW
-
-Below this many values, a lag-1 correlation estimate is too noisy itself to
-trust (a handful of points can look arbitrarily correlated or
-anticorrelated by chance) — `fim.convergence.monitor.ConvergenceMonitor`
-skips the noise-adequacy gate entirely under this window length, matching
-the trend-only check's own original behavior for a short window.
-
-Kind: policy.
 
 <a id="fim.config.convergence.GEWEKE_FIRST_FRACTION"></a>
 
@@ -1668,6 +1694,110 @@ See `README.md` in this directory for the table of every constant.
 
 Kind: policy (display).
 
+<a id="fim.config.expert"></a>
+
+# fim.config.expert
+
+Expert Settings: the policy constants a run's configuration may change.
+
+Each field is the run-specific form of a policy constant in
+`fim.config.convergence`; its default is that constant. A run's configuration
+can carry an `expert:` mapping of the fields it changes. `SimulationParams`
+validates the mapping here, copies it into the run's parameters (so the
+manifest says exactly what ran, and the run ID changes with it), and only
+non-default entries are written back out, so a run with default Expert Settings
+is byte-for-byte the run it was before the mapping existed.
+
+Numerical guards and derivable constants are not Expert Settings (design
+`20261005-claude-opus-5-5-simplified-convergence-rule-design.md`, 11.1).
+
+<a id="fim.config.expert.ExpertSettings"></a>
+
+## ExpertSettings Objects
+
+```python
+@dataclass(frozen=True, slots=True)
+class ExpertSettings()
+```
+
+The convergence policy constants one run uses.
+
+**Attributes**:
+
+- `burn_in_minimum_relaxation_times` - Floor of the burn-in multiple `k`
+  (at least 1).
+- `first_check_relaxation_times` - First check, in relaxation times after
+  the burn-in (greater than 0).
+- `first_check_minimum` - Fewest generations after the burn-in before the
+  first check (at least `MINIMUM_WINDOW_VALUES`).
+- `minimum_effective_sample_size` - Effective-sample-size floor (at least
+  10).
+- `check_growth` - Factor by which the window grows between checks
+  (greater than 1).
+- `fractional_burn_in` - Burn-in share when no relaxation time exists
+  (between 0 and 1, exclusive).
+- `cap_relaxation_multiple` - Cap beyond the burn-in, in relaxation times
+  (greater than 0).
+- `cap_minimum` - Smallest derived `max_generations` (at least 1).
+- `cap_maximum` - Largest derived `max_generations` (at least
+  `cap_minimum`).
+- `start_drift_alert_z` - Absolute Geweke `z` above which the report says
+  the burn-in may have been too short (greater than 0).
+
+<a id="fim.config.expert.ExpertSettings.__post_init__"></a>
+
+#### \_\_post\_init\_\_
+
+```python
+def __post_init__() -> None
+```
+
+Validate every field against its documented range.
+
+**Raises**:
+
+- `ValueError` - Naming the first field that is out of range.
+
+<a id="fim.config.expert.ExpertSettings.from_mapping"></a>
+
+#### from\_mapping
+
+```python
+@classmethod
+def from_mapping(cls, mapping: Mapping[str, Any] | None) -> ExpertSettings
+```
+
+Build the settings a configuration's `expert:` mapping asks for.
+
+**Arguments**:
+
+- `mapping` - The mapping, or `None` for all defaults.
+
+
+**Returns**:
+
+  The settings, with every unnamed field at its default.
+
+
+**Raises**:
+
+- `ValueError` - If `mapping` is not a mapping, names an unknown
+  setting, or a value is out of range.
+
+<a id="fim.config.expert.ExpertSettings.changes"></a>
+
+#### changes
+
+```python
+def changes() -> dict[str, float | int]
+```
+
+Return the fields that differ from their defaults, by name.
+
+**Returns**:
+
+  An empty mapping when every setting is at its default.
+
 <a id="fim.config.limits"></a>
 
 # fim.config.limits
@@ -1842,55 +1972,43 @@ Kind: numerical guard, derivable.
 
 # fim.convergence
 
-Convergence criteria and run-loop monitoring.
+Convergence rules and run-loop monitoring.
 
 This package answers "when has this simulation run been going on long
-enough?" It is organized into three modules:
+enough?" It is organized into four modules:
 
-- `fim.convergence.defaults` — derives a default window and generation
-  cap from the model's own relaxation time, since no fixed number is right
-  for every migration and mutation regime.
-- `fim.convergence.criteria` — the individual, swappable *rules* for
-  judging whether a statistic's history has settled down (a trailing-
-  window comparison for a single run, and a confidence-interval check
-  across replicates). See that module's own docstring for why no
-  single fixed generation count could work for every run.
-- `fim.convergence.monitor` — the stateful class (`ConvergenceMonitor`)
-  that actually drives a run using one of those rules: it accumulates
-  the watched statistic's history generation by generation, asks the
-  configured rule whether to stop, and separately enforces a hard
-  generation safety cap so a run that genuinely never settles still
-  cannot run forever. `ConvergenceOutcome` and `StopReason` describe
-  its result.
+- `fim.convergence.defaults` — derives a default burn-in and generation cap
+  from the model's own relaxation time (the slowest locus sets it), since no
+  fixed number is right for every migration and mutation regime.
+- `fim.convergence.window_statistics` — how precisely an evidence window's
+  mean is known, allowing for the correlation between neighboring
+  generations (Geyer's estimator), and Geweke's start-versus-end check.
+- `fim.convergence.criteria` — the rule a replicate batch applies across
+  replicates (a confidence interval tight enough).
+- `fim.convergence.monitor` — the stateful classes that drive a run:
+  `BurnInMonitor` (burn in, then average a single run until its watched
+  statistics reach the requested precision) and `ConvergenceMonitor` (the
+  replicate batch). Both enforce a hard cap so a run that never reaches the
+  precision still cannot run forever. `ConvergenceOutcome` and `StopReason`
+  describe the result.
 
-The public names from all three modules are re-exported here.
+The public names from the modules are re-exported here.
 
 <a id="fim.convergence.criteria"></a>
 
 # fim.convergence.criteria
 
-Pluggable criteria for statistic-history stability.
+Pluggable criteria for statistic-history stability across replicates.
 
-A finite-island simulation cannot know in advance how many generations
-it will take for its statistics (D, G_ST, and so on) to stop drifting
-and settle down — that number depends on the parameters of the
-specific run (population sizes, migration and mutation rates) in a way
-that is not known ahead of time. Rather than guessing a fixed number of
-generations and hoping it is enough, this module defines "convergence
-criteria": small, swappable rules that look at a statistic's history so
-far and answer one yes/no question — "has this settled down enough to
-stop now?" — every generation, so a run can stop exactly when its own
-answer is actually stable, whether that takes 50 generations or 5,000.
+A replicate batch cannot know in advance how many replicates a confidence
+interval needs. This module defines the rule the batch loop applies after each
+completed replicate: a `ConvergenceCriterion` answers one yes/no question,
+"is this history tight enough to stop now?", so `fim.convergence.monitor.
+ConvergenceMonitor` never needs to know which rule it is applying. The one
+concrete rule is `ConfidenceIntervalCriterion`.
 
-Every criterion in this file implements the same `ConvergenceCriterion`
-protocol (a single `is_stable` method), so `fim.convergence.monitor.
-ConvergenceMonitor` — the class that actually drives a run's stop
-decision — never needs to know *which* rule it is applying, only that
-whatever object it was given can answer that one question. This module
-provides two concrete rules: `TrailingWindowCriterion`, the ordinary
-within-run default, and `ConfidenceIntervalCriterion`, used for
-replicate batches — see each class's own docstring for when to use
-which.
+A single run is not judged by a criterion at all: it burns in and then
+averages (`fim.convergence.monitor.BurnInMonitor`).
 
 <a id="fim.convergence.criteria.ConvergenceCriterion"></a>
 
@@ -1907,8 +2025,7 @@ one method" — this class is never instantiated directly and defines
 no behavior of its own; it exists purely so that
 `fim.convergence.monitor.ConvergenceMonitor` can accept *any*
 object that answers `is_stable` the same way, whether that object
-is `TrailingWindowCriterion`, `ConfidenceIntervalCriterion`, or
-something built elsewhere entirely.
+is `ConfidenceIntervalCriterion` or something built elsewhere entirely.
 
 <a id="fim.convergence.criteria.ConvergenceCriterion.is_stable"></a>
 
@@ -1935,195 +2052,6 @@ Return whether the supplied history satisfies this criterion.
   history has settled down enough to justify stopping;
   ``False`` while it should keep collecting more values.
 
-<a id="fim.convergence.criteria.trailing_window_stable"></a>
-
-#### trailing\_window\_stable
-
-```python
-def trailing_window_stable(history: Sequence[float], window: int,
-                           tolerance: float) -> bool
-```
-
-Compare the means of the two halves of a trailing window.
-
-This is the plain, direct way to ask "has this number stopped
-changing?" without any statistical machinery: look at the most
-recent `window` values, split that block in half, average each
-half separately, and see how close the two averages are to each
-other. A statistic that is still trending up or down noticeably
-generation to generation will show a real gap between its earlier
-and later half; one that has settled into its long-run value will
-not, since both halves are then just noisy samples of the same
-underlying number. `tolerance` is how close counts as "close
-enough," in the watched statistic's own units (for example, 0.01
-on a statistic that itself ranges from 0 to 1).
-
-An odd `window` splits as `window // 2` observations in the first
-half and one more in the second (e.g. a window of 5 compares 2
-against 3) — a legal configuration, not an error, but it means the
-tolerance is being compared against unevenly sized samples for an
-odd window and evenly sized ones for an even window.
-
-**Arguments**:
-
-- `history` - Ordered statistic values, oldest first.
-- `window` - Number of trailing (most recent) observations to
-  inspect; must be at least 2, since splitting anything
-  smaller in half leaves an empty side to average.
-- `tolerance` - Maximum absolute difference between half-window
-  means that still counts as "stable."
-
-
-**Returns**:
-
-  ``True`` only once `history` holds at least `window` values
-  *and* the two halves' means are within `tolerance` of each
-  other; ``False`` beforehand, however small `tolerance` is —
-  a window that has not yet fully filled cannot be judged stable
-  or unstable at all.
-
-
-**Raises**:
-
-- `ValueError` - If `window` is smaller than 2, or `tolerance` is
-  negative or not a finite number (``NaN`` or infinity).
-
-<a id="fim.convergence.criteria.TrailingWindowCriterion"></a>
-
-## TrailingWindowCriterion Objects
-
-```python
-@dataclass(frozen=True, slots=True)
-class TrailingWindowCriterion()
-```
-
-Detect stability by comparing two halves of a trailing window.
-
-This is the ordinary, default convergence rule used *within* one
-simulation run (as opposed to `ConfidenceIntervalCriterion`, used
-*across* several replicate runs of the same parameters) — the
-`convergence_window`/`precision` configuration fields
-documented in `doc/configuration.md` configure exactly this class.
-A thin, `ConvergenceCriterion`-shaped wrapper around
-`trailing_window_stable`, above — see that function's own
-docstring for what "stable" actually means here and why it is
-judged this way; this class exists only so a caller can hold one
-pre-configured object (with `window`/`tolerance` already fixed)
-and call `is_stable(history)` on it repeatedly, rather than passing
-all three arguments to the bare function every time.
-
-<a id="fim.convergence.criteria.TrailingWindowCriterion.__post_init__"></a>
-
-#### \_\_post\_init\_\_
-
-```python
-def __post_init__() -> None
-```
-
-Validate criterion configuration on construction.
-
-Dataclass field validation cannot happen in the field
-declarations themselves, so `__post_init__` (a hook the
-`dataclass` decorator calls automatically right after every
-field is set) is where it happens instead — the same reason
-`ConfidenceIntervalCriterion`, below, defines one too. Rejecting
-an invalid `window`/`tolerance` here, at construction time,
-surfaces a configuration mistake immediately rather than
-letting it silently produce a criterion that can never
-actually detect stability once a run is already under way.
-
-<a id="fim.convergence.criteria.TrailingWindowCriterion.is_stable"></a>
-
-#### is\_stable
-
-```python
-def is_stable(history: Sequence[float]) -> bool
-```
-
-Return whether the configured trailing window is stable.
-
-<a id="fim.convergence.criteria.TrailingWindowCriterion.tracker"></a>
-
-#### tracker
-
-```python
-def tracker() -> TrailingWindowTracker
-```
-
-Return an O(1)-per-observation tracker with this configuration.
-
-<a id="fim.convergence.criteria.TrailingWindowTracker"></a>
-
-## TrailingWindowTracker Objects
-
-```python
-class TrailingWindowTracker()
-```
-
-Judge `trailing_window_stable` in O(1) per observation.
-
-`trailing_window_stable` copies and sums the whole trailing window on
-every call, which costs `O(window)` per generation: negligible at a
-window of 50, but a real fraction of a generation's cost at the tens of
-thousands a slowly relaxing model needs. This tracker keeps the running
-prefix sums of the window instead.
-
-The sums are exact integers (each double scaled by `2 ** 1074`), and the
-two half means are formed by correctly rounded true division of that
-exact sum. `math.fsum` also returns the correctly rounded exact sum, so
-this tracker returns the identical decision to `trailing_window_stable`
-on every input, not merely a close one. A test pins that equivalence.
-
-<a id="fim.convergence.criteria.TrailingWindowTracker.__init__"></a>
-
-#### \_\_init\_\_
-
-```python
-def __init__(window: int, tolerance: float) -> None
-```
-
-Start an empty tracker.
-
-**Arguments**:
-
-- `window` - Trailing window length; at least 2.
-- `tolerance` - Maximum half-window mean difference counted stable.
-
-
-**Raises**:
-
-- `ValueError` - If `window` is smaller than 2, or `tolerance` is
-  negative or not finite.
-
-<a id="fim.convergence.criteria.TrailingWindowTracker.push"></a>
-
-#### push
-
-```python
-def push(value: float) -> None
-```
-
-Record one more observation.
-
-**Arguments**:
-
-- `value` - The next finite statistic value.
-
-<a id="fim.convergence.criteria.TrailingWindowTracker.is_stable"></a>
-
-#### is\_stable
-
-```python
-def is_stable() -> bool
-```
-
-Return whether the trailing window is currently stable.
-
-**Returns**:
-
-  `False` until `window` observations exist; afterward whether the
-  two half-window means are within the tolerance.
-
 <a id="fim.convergence.criteria.ConfidenceIntervalCriterion"></a>
 
 ## ConfidenceIntervalCriterion Objects
@@ -2135,16 +2063,13 @@ class ConfidenceIntervalCriterion()
 
 Detect a tight-enough confidence interval on a growing sample.
 
-Unlike `TrailingWindowCriterion`, which compares two halves of a
-trailing window of near-instantaneous values, this criterion treats
+This criterion treats
 the *entire* supplied history as one growing i.i.d. sample — each
 entry is one independently seeded replicate run's own final scalar
 outcome — and asks whether that sample's Student's-t confidence
 interval has tightened to at most `tolerance`, an absolute
-half-width in the same units as the watched statistic, exactly like
-`TrailingWindowCriterion.tolerance`. `minimum_count` guards against a
-lucky-early-tight fluke the same way `TrailingWindowCriterion.window`
-guards a single-generation coincidence: stability is never declared
+half-width in the same units as the watched statistic. `minimum_count`
+guards against a lucky-early-tight fluke: stability is never declared
 from fewer than `minimum_count` observations.
 
 <a id="fim.convergence.criteria.ConfidenceIntervalCriterion.__post_init__"></a>
@@ -2157,8 +2082,7 @@ def __post_init__() -> None
 
 Validate criterion configuration on construction.
 
-See `TrailingWindowCriterion.__post_init__` for why validation
-lives in this hook rather than in the field declarations
+Validation lives in this hook rather than in the field declarations
 themselves.
 
 <a id="fim.convergence.criteria.ConfidenceIntervalCriterion.is_stable"></a>
@@ -2183,13 +2107,10 @@ method's whole job is deciding whether that computed interval
 
 Derive convergence defaults from the modeled population's own timescale.
 
-A fixed trailing window (say 50 generations) cannot tell "the statistic has
-stopped changing" from "the statistic is changing too slowly to see in 50
-generations". How long a run must be watched depends on how fast the
-population forgets its starting state: its *relaxation time*, `tau`. This
-module estimates `tau` from the migration, mutation and deme-size
-parameters and turns it into a default `convergence_window` and
-`max_generations`.
+How long a run must be watched depends on how fast the population forgets its
+starting state: its *relaxation time*, `tau`. This module estimates `tau` from
+the migration, mutation and deme-size parameters (the slowest locus sets it)
+and turns it into a default burn-in and `max_generations`.
 
 Why `tau` has this form, and the numerical check behind it, is written up in
 the design document `20260925-claude-sonnet-5-convergence-defaults-derived-
@@ -2219,9 +2140,57 @@ Convergence settings derived from a model's relaxation time.
 
 **Arguments**:
 
-- `window` - Trailing stability-window length, in generations.
+- `burn_in` - Generations discarded before averaging starts.
 - `max_generations` - Hard generation cap.
 - `relaxation_time` - The estimated `tau`, in generations, for display.
+
+<a id="fim.convergence.defaults.burn_in_multiple"></a>
+
+#### burn\_in\_multiple
+
+```python
+def burn_in_multiple(precision: float, minimum: float) -> float
+```
+
+Return `k`, the burn-in length in relaxation times, for a precision.
+
+`max(minimum, ln(2 / precision))`: the slowest mode's leftover from a
+worst-case unit offset is `e^-k`, so `k >= ln(2 / precision)` leaves at
+most `precision / 2` of bias, and a tighter precision lengthens the
+burn-in on its own. A precision of zero asks for an unbounded burn-in.
+
+**Arguments**:
+
+- `precision` - Plus or minus, in the statistic's own units.
+- `minimum` - The floor (`burn_in_minimum_relaxation_times`).
+
+
+**Returns**:
+
+  The multiple of `tau`.
+
+<a id="fim.convergence.defaults.derive_burn_in"></a>
+
+#### derive\_burn\_in
+
+```python
+def derive_burn_in(relaxation_time: float, precision: float,
+                   expert: ExpertSettings) -> int
+```
+
+Return the burn-in, in generations, for a relaxation time and precision.
+
+**Arguments**:
+
+- `relaxation_time` - `tau`, in generations.
+- `precision` - The requested precision.
+- `expert` - The run's Expert Settings (the multiple's floor).
+
+
+**Returns**:
+
+  `ceil(k * tau)`, at least 1 so generation 0 is never averaged, and at
+  most `expert.cap_maximum`.
 
 <a id="fim.convergence.defaults.derive_convergence_defaults"></a>
 
@@ -2229,11 +2198,19 @@ Convergence settings derived from a model's relaxation time.
 
 ```python
 def derive_convergence_defaults(
-        *, deme_sizes: Sequence[int], migration: MigrationInput,
-        mutation_rates: Sequence[float]) -> DerivedConvergence
+        *,
+        deme_sizes: Sequence[int],
+        migration: MigrationInput,
+        mutation_rates: Sequence[float],
+        precision: float,
+        expert: ExpertSettings | None = None) -> DerivedConvergence
 ```
 
-Return the default window and cap for one model.
+Return the default burn-in and cap for one model.
+
+The cap is `max(cap_minimum, burn_in + ceil(15 tau))`, at most
+`cap_maximum`: the burn-in is added so a slow model is never capped inside
+its own burn-in.
 
 **Arguments**:
 
@@ -2241,11 +2218,13 @@ Return the default window and cap for one model.
 - `migration` - A scalar symmetric rate `m`, or a `d` by `d`
   row-stochastic matrix.
 - `mutation_rates` - Per-locus mutation probabilities.
+- `precision` - The requested precision (it sets the burn-in multiple).
+- `expert` - The run's Expert Settings (default values when omitted).
 
 
 **Returns**:
 
-  The derived window, cap and relaxation time.
+  The derived burn-in, cap and relaxation time.
 
 
 **Raises**:
@@ -2259,8 +2238,14 @@ Return the default window and cap for one model.
 #### describe\_derived\_convergence
 
 ```python
-def describe_derived_convergence(*, window: int, max_generations: int,
-                                 relaxation_time: float) -> str
+def describe_derived_convergence(
+    *,
+    burn_in: int | None,
+    max_generations: int,
+    relaxation_time: float | None,
+    derived: frozenset[str] = frozenset(
+        {"convergence_burn_in", "max_generations"})
+) -> str
 ```
 
 Return the one-line, plain-language statement of derived settings.
@@ -2270,16 +2255,20 @@ thing.
 
 **Arguments**:
 
-- `window` - The derived trailing window, in generations.
-- `max_generations` - The derived generation cap.
-- `relaxation_time` - The estimated relaxation time, in generations.
+- `burn_in` - The burn-in, in generations, or `None` for the fractional
+  burn-in (no relaxation time).
+- `max_generations` - The generation cap.
+- `relaxation_time` - The estimated relaxation time, or `None`.
+- `derived` - Which of `convergence_burn_in` and `max_generations` were
+  derived rather than given (`SimulationParams.auto_derived`).
 
 
 **Returns**:
 
-  A sentence such as "Convergence: window 59,078 generations, cap
+  A sentence such as "Convergence: burn-in 104,400 generations, cap
   295,390 (derived; this model needs about 19,693 generations to
-  forget its starting state)".
+  forget its starting state)". When only one of the two was derived
+  the parenthesis says which ("burn-in derived; ...").
 
 <a id="fim.convergence.defaults.island_relaxation_time"></a>
 
@@ -2498,18 +2487,19 @@ form.
 
 Stateful convergence monitoring with an explicit hard-cap outcome.
 
-`fim.convergence.criteria` defines the individual *rules* for deciding
-whether a statistic's history has settled down; this module is the
-class that actually drives a run using one of those rules, generation
-by generation (or replicate by replicate, for a batch): it remembers
-every value recorded so far, asks the configured criterion whether
-things have stabilized after each new one arrives, and — separately —
-always enforces a hard generation cap regardless of what the criterion
-says, so that a statistic that genuinely never settles (a legitimate,
-if unwanted, outcome for some parameter combinations) still cannot
-run a simulation forever. `ConvergenceOutcome` is the small, immutable
-record this class hands back describing which of those two things
-happened, if either yet has.
+Two monitors share one result type. `BurnInMonitor` drives a single run: it
+waits out the burn-in, then averages each watched statistic over an evidence
+window that grows until its standard error is small enough and its effective
+sample size large enough (design `20261005-claude-opus-5-5-simplified-
+convergence-rule-design.md`, `selby/restricted`, 6.1). `ConvergenceMonitor`
+drives the replicate batch: it remembers one value per completed replicate
+and asks a `fim.convergence.criteria.ConvergenceCriterion` whether the
+across-replicate interval is tight enough.
+
+Both always enforce a hard generation (or replicate) cap, so a statistic that
+genuinely never settles still cannot run a simulation forever.
+`ConvergenceOutcome` is the small, immutable record they hand back describing
+which of the two things happened, if either yet has.
 
 <a id="fim.convergence.monitor.StopReason"></a>
 
@@ -2521,16 +2511,13 @@ class StopReason(StrEnum)
 
 Reason a simulation stopped.
 
-A run always stops for exactly one of these two reasons — there is
-no third way for the simulation loop to exit. `STATISTIC_CONVERGED`
-means the watched statistic(s) satisfied the configured
-`fim.convergence.criteria.ConvergenceCriterion` before the
-generation cap was reached; `MAX_GENERATIONS` means the cap was hit
-first. Reaching the cap is reported as a valid, non-error outcome
-(see `ConvergenceOutcome.converged`) — some parameter combinations
-genuinely never settle within any reasonable number of generations,
-and that is itself a real, useful finding about those parameters,
-not a failure of the tool.
+A run always stops for exactly one of these two reasons: there is no third
+way for the simulation loop to exit. `STATISTIC_CONVERGED` means the
+watched statistic(s) reached the requested precision before the generation
+cap; `MAX_GENERATIONS` means the cap was hit first. Reaching the cap is
+reported as a valid, non-error outcome (see `ConvergenceOutcome.converged`):
+some parameter combinations genuinely never reach a given precision in any
+reasonable number of generations, and that is itself a useful finding.
 
 <a id="fim.convergence.monitor.ConvergenceOutcome"></a>
 
@@ -2543,28 +2530,287 @@ class ConvergenceOutcome()
 
 Describe a monitor's terminal decision.
 
-Returned by `ConvergenceMonitor.record` after every observation,
-and retrievable at any time via `ConvergenceMonitor.outcome`. While
-a run is still in progress (neither converged nor capped yet) this
-is a "not stopped" placeholder with every other field `None`/
-`False`; once the run does stop, the four fields together are its
-complete, permanent answer to "why, and at which generation."
+Returned by `record` after every observation and retrievable at any time
+via `outcome`. While a run is in progress this is a "not stopped"
+placeholder with every other field `None`/`False`; once the run stops, the
+four fields together are its complete, permanent answer to "why, and at
+which generation."
 
 **Arguments**:
 
-- `stopped` - Whether the monitor has reached a terminal decision at
-  all (``False`` for every observation until the run
-  actually stops; once ``True``, it stays ``True`` and no
-  further observations can be recorded — see
-  `ConvergenceMonitor.record`).
-- `converged` - Whether the watched statistic(s) actually stabilized
-  (``True``), as opposed to the run instead being stopped by
-  the hard generation cap (``False``). Only meaningful once
-  `stopped` is ``True``.
-- `reason` - Which of the two `StopReason` values applies, or
-  ``None`` while the run is still in progress.
-- `generation` - The generation number at which the run stopped, or
-  ``None`` while still in progress.
+- `stopped` - Whether the monitor has reached a terminal decision at all
+  (once `True` it stays `True` and no further observation can be
+  recorded).
+- `converged` - Whether the watched statistic(s) reached the requested
+  precision (`True`), as opposed to the hard cap stopping the run
+  (`False`). Only meaningful once `stopped` is `True`.
+- `reason` - Which of the two `StopReason` values applies, or `None` while
+  the run is still in progress.
+- `generation` - The generation number at which the run stopped, or `None`
+  while still in progress.
+
+<a id="fim.convergence.monitor.BurnInMonitor"></a>
+
+## BurnInMonitor Objects
+
+```python
+class BurnInMonitor()
+```
+
+Burn in, then average: the stopping rule of a single run.
+
+Until the burn-in generation nothing can stop the run (except the cap).
+From then on the evidence window is `[start, t]`, where `start` is the
+burn-in. The first check comes `first_check` generations after `start`;
+at each check every watched statistic's window mean gets a standard error
+from `geyer_window_statistics`, and a statistic passes when that standard
+error is at most `precision / z(confidence)` and its effective sample size
+is at least `minimum_effective_sample_size`. The run stops when the
+watched statistics pass under the combinator. The next check comes when
+the window has grown by `growth` (doubling by default).
+
+Every watched statistic is judged at every check, so the stop generation
+never depends on the order the statistics are listed in. Nothing but
+appending to the histories happens between checks.
+
+With no burn-in (`burn_in=None`, for a model with no relaxation time) the
+window starts at `floor(fractional_burn_in * t)` at each check.
+
+`extra_statistics` are recorded for display and reporting but never decide
+the stop.
+
+<a id="fim.convergence.monitor.BurnInMonitor.__init__"></a>
+
+#### \_\_init\_\_
+
+```python
+def __init__(
+        *,
+        max_generations: int,
+        precision: float,
+        confidence: float = 0.95,
+        burn_in: int | None,
+        first_check: int,
+        statistics: Sequence[str] = ("value", ),
+        combinator: Combinator = "all",
+        extra_statistics: Sequence[str] = (),
+        minimum_effective_sample_size: float = MINIMUM_EFFECTIVE_SAMPLE_SIZE,
+        growth: float = CHECK_GROWTH,
+        fractional_burn_in: float = FRACTIONAL_BURN_IN) -> None
+```
+
+Initialize an empty monitor.
+
+**Arguments**:
+
+- `max_generations` - Hard generation cap.
+- `precision` - Plus or minus, in each statistic's own units.
+- `confidence` - Two-tailed confidence level of `precision`.
+- `burn_in` - Generations discarded before averaging starts (at least
+  1, so generation 0 is never averaged), or `None` for the
+  fractional burn-in.
+- `first_check` - Generations after the burn-in before the first check.
+- `statistics` - The watched statistics, which decide the stop.
+- `combinator` - `"all"` requires every watched statistic to pass;
+  `"any"` only one.
+- `extra_statistics` - Statistics recorded without ever deciding.
+- `minimum_effective_sample_size` - The effective-sample-size floor.
+- `growth` - Factor by which the window grows between checks.
+- `fractional_burn_in` - Share of the run discarded when `burn_in` is
+  `None`.
+
+
+**Raises**:
+
+- `ValueError` - If a number is out of range or a name repeats.
+
+<a id="fim.convergence.monitor.BurnInMonitor.generations"></a>
+
+#### generations
+
+```python
+@property
+def generations() -> tuple[int, ...]
+```
+
+Return recorded generations in order, parallel to `histories`' rounds.
+
+<a id="fim.convergence.monitor.BurnInMonitor.history"></a>
+
+#### history
+
+```python
+@property
+def history() -> tuple[float, ...]
+```
+
+Return the first watched statistic's recorded values.
+
+<a id="fim.convergence.monitor.BurnInMonitor.histories"></a>
+
+#### histories
+
+```python
+@property
+def histories() -> Mapping[str, tuple[float, ...]]
+```
+
+Return every recorded statistic's values, by name.
+
+Covers the watched statistics and the display-only extras alike.
+
+<a id="fim.convergence.monitor.BurnInMonitor.value_generations"></a>
+
+#### value\_generations
+
+```python
+@property
+def value_generations() -> Mapping[str, tuple[int, ...]]
+```
+
+Return the generation each recorded value belongs to, by statistic.
+
+A statistic can be undefined in a generation (it then has no value for
+it), so its history can be shorter than `generations`.
+
+<a id="fim.convergence.monitor.BurnInMonitor.window_start_generation"></a>
+
+#### window\_start\_generation
+
+```python
+@property
+def window_start_generation() -> int | None
+```
+
+Return the generation the evidence window starts at.
+
+The burn-in for a fixed burn-in; for the fractional burn-in, the start
+used at the latest check (or `None` before the first check). It is the
+start of the window the stop was judged on once the run has stopped.
+
+<a id="fim.convergence.monitor.BurnInMonitor.outcome"></a>
+
+#### outcome
+
+```python
+def outcome() -> ConvergenceOutcome
+```
+
+Return the current terminal or running outcome.
+
+Safe to call at any time; never changes anything.
+
+<a id="fim.convergence.monitor.BurnInMonitor.reason"></a>
+
+#### reason
+
+```python
+def reason() -> StopReason | None
+```
+
+Return the terminal reason, or `None` while running.
+
+<a id="fim.convergence.monitor.BurnInMonitor.should_stop"></a>
+
+#### should\_stop
+
+```python
+def should_stop() -> bool
+```
+
+Return whether the precision was reached or the cap hit.
+
+<a id="fim.convergence.monitor.BurnInMonitor.record"></a>
+
+#### record
+
+```python
+def record(generation: int,
+           value: float | Mapping[str, float]) -> ConvergenceOutcome
+```
+
+Record one generation's value(s) and update the stop decision.
+
+**Arguments**:
+
+- `generation` - Non-negative generation number, above the last one.
+- `value` - A bare float (only while watching one statistic) or a
+  mapping of statistic name to finite value. A statistic the
+  mapping omits has no defined value this generation and
+  contributes nothing to its history. Every key must name a
+  configured statistic.
+
+
+**Returns**:
+
+  The updated outcome.
+
+
+**Raises**:
+
+- `RuntimeError` - If called after the monitor already stopped.
+- `ValueError` - If `generation` or a value is invalid.
+
+<a id="fim.convergence.monitor.BurnInMonitor.stable_statistics"></a>
+
+#### stable\_statistics
+
+```python
+def stable_statistics() -> tuple[str, ...]
+```
+
+Return the watched statistics that passed at the stopping check.
+
+Empty before any check and for a run that hit its cap. Under `"all"` a
+converged run names every watched statistic; under `"any"`, those that
+had passed when it stopped.
+
+<a id="fim.convergence.monitor.BurnInMonitor.target_standard_error"></a>
+
+#### target\_standard\_error
+
+```python
+@property
+def target_standard_error() -> float
+```
+
+Return the largest standard error that meets the requested precision.
+
+<a id="fim.convergence.monitor.BurnInMonitor.minimum_effective_sample_size"></a>
+
+#### minimum\_effective\_sample\_size
+
+```python
+@property
+def minimum_effective_sample_size() -> float
+```
+
+Return the effective-sample-size floor a window must meet.
+
+<a id="fim.convergence.monitor.BurnInMonitor.evidence_statistics"></a>
+
+#### evidence\_statistics
+
+```python
+def evidence_statistics(name: str) -> WindowStatistics | None
+```
+
+Return `name`'s statistics over the evidence window, as it stands.
+
+The window runs from `window_start_generation` to the last recorded
+generation, so once the run has stopped it is the window the report
+describes, for a watched statistic and a display-only one alike.
+
+**Arguments**:
+
+- `name` - A configured statistic name.
+
+
+**Returns**:
+
+  `None` when the window holds fewer than three defined values (the
+  run ended inside its burn-in, or the statistic was mostly
+  undefined).
 
 <a id="fim.convergence.monitor.ConvergenceMonitor"></a>
 
@@ -2574,46 +2820,19 @@ complete, permanent answer to "why, and at which generation."
 class ConvergenceMonitor()
 ```
 
-Record one or more watched statistics and report why a run should stop.
+Record one or more watched statistics and report why a batch should stop.
 
-This is the class the run loop actually calls, once per generation
-(or, for a replicate batch, once per completed replicate): give it
-the newest value(s) via `record`, and it remembers the whole
-history, asks the configured `fim.convergence.criteria.
-ConvergenceCriterion` whether things have settled, and separately
-checks the hard generation cap — see this module's own docstring
-for that split of responsibility. Everything the caller needs to
-know about the result of that decision (whether the run should
-stop yet, and if so why) comes back as a `ConvergenceOutcome`.
+The replicate batch's own monitor: give it each completed replicate's
+value(s) via `record`, and it remembers the whole history, asks the
+configured `fim.convergence.criteria.ConvergenceCriterion` whether the
+sample has settled, and separately enforces the hard cap
+(`max_generations`, the replicate cap here).
 
-A single statistic (the default) is this class's ordinary mode: every
-method behaves exactly as it did before several-statistic support
-existed. Passing more than one name in ``statistics`` is additive —
-each statistic keeps its own independent history, the same criterion is
-applied to each one separately, and ``combinator`` decides whether
-stopping requires every statistic to be simultaneously stable
-(``"all"``, design §9's "several statistics needed to agree") or just
-one of them (``"any"``). With exactly one statistic, ``all`` and
-``any`` of a single Boolean are the same value, so the combinator is a
-genuine no-op in that case rather than a separately tested path.
-
-A statistic can be legitimately undefined on a given round (see
-`record`'s ``value`` argument): rather than raise or invent a
-substitute number, that round simply contributes nothing to that
-statistic's own history, so its stability is judged once enough
-*defined* rounds have accumulated — never sooner, from a padded
-history, and never blocked by a round where a different statistic
-happened to have no value.
-
-``extra_statistics`` (constructor-only) names statistics this monitor
-also records a history for, alongside ``statistics``, without ever
-letting them affect the stop decision — this class does not need to
-know, and a caller never has to tell it twice, which of its own
-recorded histories is the subset actually deciding convergence versus
-which are merely along for the ride (recorded for display purposes
-only). ``history``/``histories`` return every recorded statistic's
-values either way; only the internal stability check (`record`,
-below) ever distinguishes the two groups.
+With several statistics each keeps its own history, the same criterion is
+judged on each, and `combinator` decides whether stopping needs every one
+(`"all"`) or one (`"any"`). A statistic can be undefined in a round (see
+`record`): that round contributes nothing to its history. `extra_statistics`
+are recorded without ever affecting the stop.
 
 <a id="fim.convergence.monitor.ConvergenceMonitor.__init__"></a>
 
@@ -2631,42 +2850,19 @@ def __init__(
 
 Initialize an empty monitor.
 
-Nothing has been recorded yet immediately after construction —
-`outcome()` returns a "still running" placeholder, and
-`record()` must be called at least once before any stop
-decision can be made.
-
 **Arguments**:
 
-- `criterion` - Statistical stability rule, applied independently to
-  each watched statistic's own history.
-- `max_generations` - Hard generation safety cap.
-- `statistics` - Names of the statistic(s) to watch — these, and
-  only these, drive the stop decision (see `combinator`).
-  Defaults to one unnamed statistic, matching ``record()``'s
-  bare-float form.
-- `combinator` - ``"all"`` requires every statistic to be stable
-  before stopping; ``"any"`` requires only one.
-- `extra_statistics` - Names of additional statistics to record a
-  history for, alongside ``statistics``, without those
-  names ever influencing the stop decision — this monitor
-  does not need to know, and never needs to be told again,
-  which of its own recorded histories is the subset
-  actually deciding convergence versus which are merely
-  along for the ride (`fim.engine._watched_statistic_
-  values`'s own "D/G_ST/H_S/H_T always present for display,
-  only the watched subset gates stopping" design is exactly
-  what this parameter exists to carry). Empty by default —
-  every existing caller, unaffected. A name repeated
-  between ``statistics`` and ``extra_statistics`` (or
-  within either one) is rejected, the same as a repeat
-  within ``statistics`` alone always has been.
+- `criterion` - The stability rule, applied to each watched history.
+- `max_generations` - Hard cap on recorded rounds.
+- `statistics` - The watched statistics, which decide the stop.
+- `combinator` - `"all"` or `"any"`.
+- `extra_statistics` - Statistics recorded without ever deciding.
 
 
 **Raises**:
 
-- `ValueError` - If ``max_generations``, ``statistics``,
-  ``extra_statistics``, or ``combinator`` is invalid.
+- `ValueError` - If `max_generations`, a name or the combinator is
+  invalid.
 
 <a id="fim.convergence.monitor.ConvergenceMonitor.generations"></a>
 
@@ -2677,13 +2873,7 @@ decision can be made.
 def generations() -> tuple[int, ...]
 ```
 
-Return recorded generations in order.
-
-The generation number recorded alongside each `record()` call,
-in the same order they were recorded — parallel to `history`
-(or each series in `histories`), so pairing up
-``zip(monitor.generations, monitor.history)`` reconstructs
-exactly what was passed to `record` each round.
+Return the number recorded alongside each `record` call, in order.
 
 <a id="fim.convergence.monitor.ConvergenceMonitor.history"></a>
 
@@ -2694,11 +2884,7 @@ exactly what was passed to `record` each round.
 def history() -> tuple[float, ...]
 ```
 
-Return the primary (first-configured) statistic's recorded values.
-
-With one watched statistic — the ordinary case — this is that
-statistic's complete history. With several, it is only the first
-one named in ``statistics``; use ``histories`` for every statistic.
+Return the first watched statistic's recorded values.
 
 <a id="fim.convergence.monitor.ConvergenceMonitor.histories"></a>
 
@@ -2711,13 +2897,6 @@ def histories() -> Mapping[str, tuple[float, ...]]
 
 Return every recorded statistic's values, by name.
 
-Covers both ``statistics`` (the watched subset actually deciding
-convergence) and ``extra_statistics`` (recorded for display only,
-never gating the stop decision) — the two are indistinguishable
-from this property alone, by design; a caller that needs to know
-which is which already has that answer from its own configured
-``statistics``/``extra_statistics``, not from this monitor.
-
 <a id="fim.convergence.monitor.ConvergenceMonitor.outcome"></a>
 
 #### outcome
@@ -2726,13 +2905,7 @@ which is which already has that answer from its own configured
 def outcome() -> ConvergenceOutcome
 ```
 
-Return the current terminal or running outcome.
-
-Safe to call at any time, including before the first `record`
-call (see `ConvergenceOutcome`'s own docstring for what the
-"still running" placeholder looks like) and any number of
-times after the monitor has stopped — unlike `record`, calling
-this again never raises and never changes anything.
+Return the current terminal or running outcome; never changes anything.
 
 <a id="fim.convergence.monitor.ConvergenceMonitor.reason"></a>
 
@@ -2742,11 +2915,17 @@ this again never raises and never changes anything.
 def reason() -> StopReason | None
 ```
 
-Return the terminal reason, or ``None`` while running.
+Return the terminal reason, or `None` while running.
 
-A convenience for reading just `outcome().reason` without
-needing the rest of the outcome — used, for example, when only
-the human-readable stop reason is needed for a report.
+<a id="fim.convergence.monitor.ConvergenceMonitor.should_stop"></a>
+
+#### should\_stop
+
+```python
+def should_stop() -> bool
+```
+
+Return whether the criterion was met or the cap hit.
 
 <a id="fim.convergence.monitor.ConvergenceMonitor.record"></a>
 
@@ -2761,19 +2940,10 @@ Record one ordered observation and update the stop decision.
 
 **Arguments**:
 
-- `generation` - Non-negative generation number.
-- `value` - The watched statistic's finite value. A bare float is
-  only accepted while watching exactly one statistic; with
-  several, pass a mapping. The mapping need not cover every
-  configured name: a statistic it omits simply is not
-  appended to that statistic's own history this round —
-  the caller's way of reporting "this statistic has no
-  defined value for this round" without fabricating one or
-  blocking the round's other, defined statistics. Every
-  key the mapping *does* include, however, must name a
-  configured statistic; an unrecognized name is far more
-  likely a typo than an intentional omission, so it still
-  raises.
+- `generation` - Non-negative number, above the last one.
+- `value` - A bare float (only while watching one statistic) or a
+  mapping of statistic name to finite value; a statistic the
+  mapping omits is undefined this round.
 
 
 **Returns**:
@@ -2784,7 +2954,7 @@ Record one ordered observation and update the stop decision.
 **Raises**:
 
 - `RuntimeError` - If called after the monitor already stopped.
-- `ValueError` - If ``generation`` or ``value`` is invalid.
+- `ValueError` - If `generation` or a value is invalid.
 
 <a id="fim.convergence.monitor.ConvergenceMonitor.stable_statistics"></a>
 
@@ -2796,116 +2966,26 @@ def stable_statistics() -> tuple[str, ...]
 
 Return the watched statistics that passed on the most recent round.
 
-Every watched statistic is judged every round (`record`), so this
-is complete: under ``combinator="all"`` a converged run names
-every watched statistic; under ``"any"`` it names only the ones
-that had actually passed when the run stopped — one or more. A
-statistic that passed on an earlier round and is cached as
-noise-adequate (`_gated_stable`) still counts. Before any
-`record` call, or on a round where nothing passed (every round of
-a run that hit its cap), it is empty. `extra_statistics` are never
-judged and so never appear.
-
-**Returns**:
-
-  The passing statistic names, in configured (``statistics``)
-  order.
-
-<a id="fim.convergence.monitor.ConvergenceMonitor.should_stop"></a>
-
-#### should\_stop
-
-```python
-def should_stop() -> bool
-```
-
-Return whether statistical convergence or the hard cap fired.
-
-A convenience for the run loop's own stop check — equivalent to
-`outcome().stopped`, without needing `converged`/`reason` too.
-
-<a id="fim.convergence.monitor.ConvergenceMonitor.window_statistics"></a>
-
-#### window\_statistics
-
-```python
-def window_statistics(name: str) -> WindowStatistics | None
-```
-
-Return the most recent noise-adequacy check computed for `name`.
-
-Set only as a side effect of `_gated_stable` actually running the
-expensive check (below) — for a statistic that reached
-noise-adequate, at the generation it first did so, after which
-its verdict is cached and this value no longer changes. For the
-statistic(s) that decided the stop, that is the stop generation
-itself (`record`'s own `is_stable` branch fires in the same call
-that just set this); under ``combinator="all"``, a statistic that
-passed before the others keeps the window it passed with while
-the run waits on the rest (`_gated_stable`'s own docstring). A
-statistic that never reached noise-adequate holds its most recent,
-inadequate check instead.
-
-A caller building a final report reads this once, after the run
-has stopped, to say not just *that* a statistic converged but how
-precisely its own (possibly grown well past the criterion's own
-configured `window`) trailing evidence window was actually known
-— `WindowStatistics.window` carries however long that evidence
-window actually ended up being, not the configured one.
-
-**Arguments**:
-
-- `name` - A configured statistic name (watched or extra).
-
-
-**Returns**:
-
-  `None` when no check has run yet for `name` — the monitor never
-  reached a trend-stable candidate at all (most commonly: the run
-  hit `max_generations` while `name`'s own trailing window was
-  still visibly trending), `name`'s own criterion is not a
-  `TrailingWindowCriterion`-shaped one, or its configured window
-  is shorter than `fim.convergence.window_statistics.
-  MINIMUM_NOISE_CHECK_WINDOW`.
-
 <a id="fim.convergence.window_statistics"></a>
 
 # fim.convergence.window\_statistics
 
-How precisely a trailing window's own mean is known, given correlated noise.
+How precisely an evidence window's own mean is known, given correlated noise.
 
-`fim.convergence.criteria.trailing_window_stable` answers "has this stopped
-*trending*" by comparing the two halves of a window — a good, cheap proxy for
-"the transient has died out," but it says nothing about whether the window's
-own mean is actually known to the requested tolerance once that transient is
-gone. A single-locus, single-replicate run's per-generation statistic keeps
-wobbling by drift alone, generation after generation, at an amplitude that
-does not shrink just because the population has relaxed — two neighboring
-windows drawn from the *same* stationary process can land on opposite sides
-of a small tolerance purely by chance. This module answers the question the
-window criterion does not: given a window of correlated values, how precise
-is their mean, actually?
+A run that has burned in is judged by the mean of each watched statistic over
+an evidence window, and by how well that mean is known. A window's values are
+not independent draws: generation `t` and generation `t + 1` share almost the
+whole population that produced them, so they are strongly correlated at short
+lag, and the correlation fades only over roughly `tau`, the model's
+relaxation time (`fim.convergence.defaults`). Averaging `W` correlated values
+does not shrink the uncertainty by `1 / sqrt(W)`; it shrinks by
+`1 / sqrt(W / tau_int)`, where the *integrated autocorrelation time*
+`tau_int` counts how many of those `W` values are worth one independent draw.
 
-The complication is that a window's own values are not independent draws —
-generation `t` and generation `t + 1` share almost the entire population
-that produced them, so they are strongly correlated at short lag and that
-correlation only fades over roughly `tau` (the model's own relaxation time,
-`fim.convergence.defaults`). Averaging `W` correlated values does not shrink
-the uncertainty by `1 / sqrt(W)` the way averaging `W` independent ones
-would; it shrinks by `1 / sqrt(W / tau_int)`, where `tau_int` (the
-*integrated autocorrelation time*) counts how many of those `W` values are
-worth, in information, one independent draw. This module estimates
-`tau_int` from the window itself, from its lag-1 autocorrelation alone: a
-window is well-approximated, over a short enough span, as a first-order
-autoregressive (AR(1)) process, for which `tau_int = (1 + rho) / (1 - rho)`
-is exact (`rho` the lag-1 correlation) — the standard "effective sample
-size" formula for a first-order process (see, for instance, the "batch
-means"/spectral-variance literature on Markov-chain output analysis; a
-single-lag estimate is the simplest member of that family, not the most
-precise one — Geyer's 1992 initial-sequence estimators sum many lags for a
-tighter bound, at a cost this module's own O(1)-per-generation budget
-(`fim.convergence.monitor.ConvergenceMonitor`) cannot afford every
-generation of a run that may need millions).
+`geyer_window_statistics` estimates `tau_int` from the whole autocorrelation
+function with Geyer's (1992) initial positive sequence, which sees a slow
+second mode that a single-lag estimate misses. `geweke_z` compares the start
+of a window with its end as a check that the burn-in was long enough.
 
 <a id="fim.convergence.window_statistics.WindowStatistics"></a>
 
@@ -2921,10 +3001,10 @@ How well a window's own mean is known, given its internal correlation.
 **Attributes**:
 
 - `mean` - The window's own sample mean.
-- `standard_error` - The estimated standard error of `mean` — not
+- `standard_error` - The estimated standard error of `mean`: not
   `standard_deviation / sqrt(len(window))`, the independent-draws
-  formula, but the same divided by `sqrt(effective_sample_size /
-  len(window))` instead, correcting for `lag1_autocorrelation`.
+  formula, but `standard_deviation / sqrt(effective_sample_size)`,
+  which corrects for the window's autocorrelation.
 - `standard_deviation` - The window's own sample standard deviation
   (Bessel-corrected), ignoring correlation — the quantity a sigma
   band already reports (`fim.engine._sigma_band_summary`); kept
@@ -2933,7 +3013,7 @@ How well a window's own mean is known, given its internal correlation.
 - `effective_sample_size` - How many independent draws this window's
   `len(window)` correlated values are worth, in information.
 - `lag1_autocorrelation` - The estimated correlation between neighboring
-  values, clamped to `MAXIMUM_LAG1_CORRELATION`.
+  values.
 - `window` - `len(window)` this was computed from, carried along so a
   caller does not have to keep the original sequence around too.
 
@@ -2948,63 +3028,36 @@ def tau_int() -> float
 
 The integrated autocorrelation time: `window / effective_sample_size`.
 
-<a id="fim.convergence.window_statistics.WindowStatistics.noise_adequate"></a>
+<a id="fim.convergence.window_statistics.WindowStatistics.meets"></a>
 
-#### noise\_adequate
+#### meets
 
 ```python
-def noise_adequate(tolerance: float) -> bool
+def meets(target_standard_error: float,
+          minimum_effective_sample_size: float) -> bool
 ```
 
-Return whether `mean` is known to within `tolerance`.
+Return whether the mean is known well enough to stop on.
 
 **Arguments**:
 
-- `tolerance` - The statistic's own configured convergence
-  tolerance (`SimulationParams.precision`).
+- `target_standard_error` - The largest acceptable standard error.
+- `minimum_effective_sample_size` - The smallest effective sample size
+  that makes the standard error itself trustworthy.
 
 
 **Returns**:
 
-  `True` when `standard_error` is at most
-  `NOISE_TOLERANCE_FRACTION` of `tolerance`.
-
-<a id="fim.convergence.window_statistics.window_statistics"></a>
-
-#### window\_statistics
-
-```python
-def window_statistics(values: Sequence[float]) -> WindowStatistics
-```
-
-Estimate a window's own mean and its correlation-corrected precision.
-
-**Arguments**:
-
-- `values` - A trailing window of a statistic's own per-generation
-  values, in chronological order. At least
-  `MINIMUM_NOISE_CHECK_WINDOW` long — a caller with a shorter
-  window should not call this at all (see that constant's own
-  docstring), not pass a short one and expect a meaningful answer.
-
-
-**Returns**:
-
-  The window's own mean, standard deviation, correlation-corrected
-  standard error, effective sample size, and lag-1 autocorrelation.
-
-
-**Raises**:
-
-- `ValueError` - If `values` has fewer than 3 entries (an autocorrelation
-  of anything shorter is undefined, not merely unreliable).
+  `True` when `standard_error` is at most the target and
+  `effective_sample_size` is at least the floor.
 
 <a id="fim.convergence.window_statistics.geyer_window_statistics"></a>
 
 #### geyer\_window\_statistics
 
 ```python
-def geyer_window_statistics(values: Sequence[float]) -> WindowStatistics
+def geyer_window_statistics(
+        values: Sequence[float] | npt.NDArray[np.float64]) -> WindowStatistics
 ```
 
 Estimate a window's mean and its standard error by Geyer's method.
@@ -4420,7 +4473,7 @@ def report_for_state(
         run_id: str,
         converged: bool,
         reason: str,
-        window_statistics: Mapping[str, dict[str, float | int | bool]]
+        window_statistics: Mapping[str, dict[str, float | int | bool | str]]
     | None = None,
         converged_statistics: Sequence[str] | None = None) -> FinalReport
 ```
@@ -9514,12 +9567,11 @@ One model-input screen field's config key, label, and value kind.
   `None` (`max_concurrent_replicates`); a bare `int(text)`
   rejects `"3.5"`, as a field `SimulationParams` itself requires
   to be a whole number must. "auto_int" is a whole number or the
-  word `auto` (blank also means `auto`), for `convergence_window`/
-  `max_generations`, which `SimulationParams` derives when
-  unset. "float_choice" is "choice" restricted to a fixed
-  set of numbers rather than tokens (`confidence`)
-  — `from_mapping` requires an actual `float`, not its string
-  spelling. "bool" is a plain, always-present checkbox
+  word `auto` (blank also means `auto`), for `convergence_burn_in`/
+  `max_generations`, which `SimulationParams` derives when unset.
+  "float_choice" is "choice" restricted to a fixed set of numbers rather than
+  tokens (`confidence`) — `from_mapping` requires an actual
+  `float`, not its string spelling. "bool" is a plain, always-present checkbox
   (unlike the sigma-band toggle's own `sigma_band_enabled`,
   which gates a *second*, conditionally-present field pair
   and so is not a plain `FormField` at all) — its text is the
@@ -10219,7 +10271,7 @@ comment on that field explains the distinction), so it cannot appear in
 a special case alongside this tuple instead.
 
 Revised from this tuple's first version, which held `engine_backend`,
-`n_replicates`, `convergence_combinator`, `convergence_window`,
+`n_replicates`, `convergence_combinator`, `convergence_burn_in`,
 `precision`, plus one `f"cs_{name}"` per
 `CONVERGENCE_STATISTIC_NAMES` entry, and left Configure's own identical
 copies of all of them in place as a per-run override. A real, reported
@@ -10229,7 +10281,7 @@ default — a fresh configuration already gets a sensible single-
 statistic default, so their Settings-side duplicates were removed
 entirely (Configure's own sole copy is "parity", not an override of a
 second one). `engine_backend`/`n_replicates`/`max_generations`/
-`convergence_window`/`precision` are not duplicated either
+`precision` are not duplicated either
 in this revision — Configure's own widgets for all five are removed
 outright, not kept as a parallel override UI; `Api.start_run`/
 `validate_form` fill them back in from this tuple's own saved values
@@ -10267,7 +10319,7 @@ def run_setting_display(name: str, text: str) -> str
 Return how one run setting's value reads to a person.
 
 A blank `max_concurrent_replicates` means "no limit", and a blank
-derivable field (`max_generations`, `convergence_window`) means
+derivable field (`max_generations`, `convergence_burn_in`) means
 "worked out from the model"; both are shown as words rather than as
 an empty cell.
 
@@ -10708,7 +10760,7 @@ never any saved run artifact.
 A sixth field — `default_run_settings` — is the Settings dialog's own
 "execution/convergence-selection defaults" (`engine_backend`,
 `n_replicates`, `convergence_statistic`/`convergence_combinator`/
-`convergence_window`/`precision`), a real, reported request
+`precision`), a real, reported request
 to move fields the user judged "applicable pretty universally" out of
 the per-run Configure form and into one global-default home, while an
 individual run's own Configure form can still override any of them for
@@ -14209,7 +14261,7 @@ is refused so such a file fails with an instruction instead of being read as
 
 #### AUTO\_CONVERGENCE
 
-`convergence_window`/`max_generations` value meaning "derive it".
+`convergence_burn_in`/`max_generations` value meaning "derive it".
 
 `SimulationParams.__post_init__` replaces it with the derived integer, so
 every consumer of a constructed `SimulationParams` still reads a plain
@@ -14310,10 +14362,12 @@ functions that actually use each one.
 - `convergence_combinator` - How several watched statistics combine —
   "all" (every one stable) or "any" (at least one stable).
   A single statistic makes this a no-op special case.
-- `convergence_window` - Trailing stability-window length, in
-  generations. `AUTO_CONVERGENCE` (`0`, the default) derives it
-  from the model's relaxation time
-  (`fim.convergence.defaults`); an explicit value always wins.
+- `convergence_burn_in` - Generations discarded before averaging starts.
+  `AUTO_CONVERGENCE` (`0`, the default) derives it from the
+  model's relaxation time and `precision`
+  (`fim.convergence.defaults`), or, for a model with no
+  relaxation time, uses the first 10% of the run at each check;
+  an explicit value always wins.
 - `precision` - How precisely to estimate each watched statistic: plus
   or minus this amount, in the statistic's own units, at
   `confidence`. A single run averages over time until its mean is
@@ -14361,7 +14415,7 @@ functions that actually use each one.
   existed.
 - `max_generations` - Hard generation safety cap. `AUTO_CONVERGENCE`
   (`0`, the default) derives it from the model's relaxation
-  time, as for `convergence_window`.
+  time and the burn-in, as for `convergence_burn_in`.
 - `n_replicates` - Number of independently seeded runs — the hard cap
   a replicate batch runs up to. Defaults to
   `DEFAULT_N_REPLICATES` (`200`), not `1`: the ordinary useful
@@ -14379,7 +14433,7 @@ functions that actually use each one.
   stop.
 - `replicate_minimum` - Fewest replicates before tightness is even
   checked, guarding against a lucky-early-tight fluke — the
-  replicate-layer analog of `convergence_window`. Only
+  replicate-layer analog of the within-run first check. Only
   meaningful when `stop_batch_early` is set; silently
   clamped down to `n_replicates` if given larger, rather than
   rejected (`__post_init__`'s own comment has the reasoning).
@@ -14469,7 +14523,7 @@ functions that actually use each one.
 - `equilibrium_convergence_window` - The fewest generations the
   equilibrium-split ancestral phase runs, however quickly the
   model says that population equilibrates — independent of
-  `convergence_window` above, since that phase runs at a
+  the main run's burn-in, since that phase runs at a
   different population scale (`sum(population_sizes)` in one
   deme) with no principled reason to share a threshold with
   the real `d`-deme run. Called a window for the trailing-
@@ -14512,10 +14566,9 @@ functions that actually use each one.
   the *end* of a run, regardless of how generation 0 was
   produced.
 - `sigma_band_window` - Trailing-window length (at least 2, the same
-  "a single point cannot establish spread" reasoning
-  `convergence_window` itself uses) for the same extension —
-  independent of `convergence_window`, since the two describe
-  different things (whether the run has settled, versus how
+  "a single point cannot establish spread" reasoning) for the
+  same extension — independent of the burn-in, since the two
+  describe different things (whether the run has settled, versus how
   much it still wobbles once settled).
 - `ploidy` - Gene copies per individual: 1 (haploid, the default when a
   `SimulationParams` is built directly) through 4 (tetraploid).
@@ -14754,18 +14807,16 @@ cap's derivation) are left to validating the complete configuration.
 - `settings` - Any subset of `EXECUTION_SETTING_NAMES`, typed as a
   configuration file types them: whole numbers as `int`,
   `precision`/`confidence` as `float`,
-  `max_generations`/`convergence_window` as an `int` or the
-  string `"auto"`, and `max_concurrent_replicates` as an `int`
-  or `None`. A key outside `EXECUTION_SETTING_NAMES` is
-  ignored.
+  `max_generations`/`convergence_burn_in` as an `int` or the string
+  `"auto"`, and `max_concurrent_replicates` as an `int` or `None`. A key
+  outside `EXECUTION_SETTING_NAMES` is ignored.
 
 
 **Raises**:
 
 - `ValueError` - For the first invalid setting, or for two present
   settings that contradict each other (`jit` with a backend
-  that refuses it, or a window that could never fill before
-  the cap).
+  that refuses it).
 
 <a id="fim.model.state"></a>
 
@@ -19379,7 +19430,7 @@ extension, each `{"mean", "sigma", "lower", "upper"}` — see
 those four numbers are computed.
 
 `auto_derived`/`relaxation_time` record whether this run's own
-`convergence_window`/`max_generations` were auto-derived from the
+`convergence_burn_in`/`max_generations` were auto-derived from the
 model's own relaxation time rather than given explicitly
 (`SimulationParams._resolve_convergence_defaults`'s own identically
 named fields, copied here at manifest-construction time) --
@@ -19388,7 +19439,7 @@ either way (`SimulationParams.to_dict`'s own documented contract:
 reconstructing from it must reproduce an equal `SimulationParams`,
 and `auto_derived`/`relaxation_time` deliberately take no part in
 that equality), so without a dedicated field of its own here, a
-reopened run could never tell a `convergence_window` the botanist
+reopened run could never tell a `convergence_burn_in` the botanist
 typed from one this project chose on its own. `auto_derived` is
 empty (not `None`) whenever both were given explicitly; `None` for
 either field only means a manifest written before they existed.

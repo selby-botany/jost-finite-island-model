@@ -46,7 +46,6 @@ _BASE: dict[str, Any] = {
     "seed": 7,
     "n_replicates": 1,
     "max_generations": 10,
-    "convergence_window": 3,
 }
 
 

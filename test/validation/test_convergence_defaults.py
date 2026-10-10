@@ -81,7 +81,10 @@ def _run(
     d, n, migration, mu_for = module.REGIMES[regime]
     mus = mu_for(loci)
     derived = derive_convergence_defaults(
-        deme_sizes=[n] * d, migration=migration, mutation_rates=mus
+        deme_sizes=[n] * d,
+        migration=migration,
+        mutation_rates=mus,
+        precision=module.TOLERANCE,
     )
     expected = module.analytic_d(module._load_oracle(), d, n, migration, mus)
     m = migration if isinstance(migration, float) else tuple(map(tuple, migration))
@@ -94,7 +97,6 @@ def _run(
         loci=tuple(LocusSpec(index + 1, 200) for index in range(loci)),
         initial_allele_count=2,
         convergence_statistic="D",
-        convergence_window=derived.window,
         precision=module.TOLERANCE,
         max_generations=derived.max_generations,
         n_replicates=replicates,

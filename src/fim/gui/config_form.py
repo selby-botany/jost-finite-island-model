@@ -93,12 +93,11 @@ class FormField:
             `None` (`max_concurrent_replicates`); a bare `int(text)`
             rejects `"3.5"`, as a field `SimulationParams` itself requires
             to be a whole number must. "auto_int" is a whole number or the
-            word `auto` (blank also means `auto`), for `convergence_window`/
-            `max_generations`, which `SimulationParams` derives when
-            unset. "float_choice" is "choice" restricted to a fixed
-            set of numbers rather than tokens (`confidence`)
-            — `from_mapping` requires an actual `float`, not its string
-            spelling. "bool" is a plain, always-present checkbox
+            word `auto` (blank also means `auto`), for `convergence_burn_in`/
+            `max_generations`, which `SimulationParams` derives when unset.
+            "float_choice" is "choice" restricted to a fixed set of numbers rather than
+            tokens (`confidence`) — `from_mapping` requires an actual
+            `float`, not its string spelling. "bool" is a plain, always-present checkbox
             (unlike the sigma-band toggle's own `sigma_band_enabled`,
             which gates a *second*, conditionally-present field pair
             and so is not a plain `FormField` at all) — its text is the
@@ -203,7 +202,7 @@ INITIAL_CONDITIONS_FIELDS: Final[tuple[FormField, ...]] = (
 # `params_to_form_values`/`form_values_to_payload`.
 CONVERGENCE_FIELDS: Final[tuple[FormField, ...]] = (
     FormField("convergence_combinator", "combinator", "choice", choices=("any", "all")),
-    FormField("convergence_window", "convergence window", "auto_int"),
+    FormField("convergence_burn_in", "convergence burn-in", "auto_int"),
     FormField("precision", "precision", "float"),
     FormField("track_expensive_statistics", "track expensive statistics", "bool"),
 )
@@ -1358,7 +1357,7 @@ def _auto_or_number(params: SimulationParams, name: str) -> str:
 
     Args:
         params: The configuration being shown in the form.
-        name: `convergence_window` or `max_generations`.
+        name: `convergence_burn_in` or `max_generations`.
 
     Returns:
         The text a form field shows, so a derived value is never frozen into
@@ -1406,7 +1405,7 @@ def params_to_form_values(params: SimulationParams) -> dict[str, str]:
         "initial_allele_count": str(params.initial_allele_count),
         "initial_concentration": str(params.initial_concentration),
         "convergence_combinator": params.convergence_combinator,
-        "convergence_window": _auto_or_number(params, "convergence_window"),
+        "convergence_burn_in": _auto_or_number(params, "convergence_burn_in"),
         "precision": str(params.precision),
         "track_expensive_statistics": (
             "true" if params.track_expensive_statistics else "false"
@@ -1445,7 +1444,7 @@ DEFAULT_RUN_SETTING_FIELD_NAMES: Final[tuple[str, ...]] = (
     "engine_backend",
     "n_replicates",
     "max_generations",
-    "convergence_window",
+    "convergence_burn_in",
     "precision",
     "confidence",
     "jit",
@@ -1466,7 +1465,7 @@ comment on that field explains the distinction), so it cannot appear in
 a special case alongside this tuple instead.
 
 Revised from this tuple's first version, which held `engine_backend`,
-`n_replicates`, `convergence_combinator`, `convergence_window`,
+`n_replicates`, `convergence_combinator`, `convergence_burn_in`,
 `precision`, plus one `f"cs_{name}"` per
 `CONVERGENCE_STATISTIC_NAMES` entry, and left Configure's own identical
 copies of all of them in place as a per-run override. A real, reported
@@ -1476,7 +1475,7 @@ default — a fresh configuration already gets a sensible single-
 statistic default, so their Settings-side duplicates were removed
 entirely (Configure's own sole copy is "parity", not an override of a
 second one). `engine_backend`/`n_replicates`/`max_generations`/
-`convergence_window`/`precision` are not duplicated either
+`precision` are not duplicated either
 in this revision — Configure's own widgets for all five are removed
 outright, not kept as a parallel override UI; `Api.start_run`/
 `validate_form` fill them back in from this tuple's own saved values
@@ -1505,7 +1504,7 @@ RUN_SETTING_LABELS: Final[Mapping[str, str]] = {
     "engine_backend": "Execution engine",
     "n_replicates": "Number of replicates",
     "max_generations": "Maximum generations",
-    "convergence_window": "Convergence window",
+    "convergence_burn_in": "Convergence burn-in",
     "precision": "Precision",
     "confidence": "Confidence",
     "jit": "JIT compilation",
@@ -1524,7 +1523,7 @@ def run_setting_display(name: str, text: str) -> str:
     """Return how one run setting's value reads to a person.
 
     A blank `max_concurrent_replicates` means "no limit", and a blank
-    derivable field (`max_generations`, `convergence_window`) means
+    derivable field (`max_generations`, `convergence_burn_in`) means
     "worked out from the model"; both are shown as words rather than as
     an empty cell.
 
@@ -1677,7 +1676,7 @@ _YAML_KEY_ORDER: Final[tuple[str, ...]] = (
     "deme_weighting",
     "convergence_statistic",
     "convergence_combinator",
-    "convergence_window",
+    "convergence_burn_in",
     "precision",
     "track_expensive_statistics",
     "max_generations",

@@ -116,7 +116,6 @@ def _params(**updates: object) -> SimulationParams:
         "seed": 20261009,
         "loci": [{"locus_id": 4, "length": 200}, {"locus_id": 9, "length": 200}],
         "initial_allele_count": 3,
-        "convergence_window": 4,
         "precision": 1e-12,
         "max_generations": 30,
         "n_replicates": 1,

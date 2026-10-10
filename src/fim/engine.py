@@ -117,19 +117,16 @@ from typing import Any, Final, Literal, Protocol, TypeAlias, TypedDict, cast
 import numpy as np
 
 from fim import __version__
-from fim.config.convergence import MINIMUM_NOISE_CHECK_WINDOW
 from fim.config.defaults import (
     DEFAULT_AUTO_VECTOR_MAX_CAPACITY,
     DEFAULT_AUTO_VECTOR_MIN_D,
 )
 from fim.config.numerics import MINIMUM_REPLICATE_COUNT
-from fim.convergence.criteria import (
-    ConfidenceIntervalCriterion,
-    TrailingWindowCriterion,
-)
-from fim.convergence.monitor import ConvergenceMonitor, ConvergenceOutcome
-from fim.convergence.window_statistics import (
-    window_statistics as _compute_window_statistics,
+from fim.convergence.criteria import ConfidenceIntervalCriterion
+from fim.convergence.monitor import (
+    BurnInMonitor,
+    ConvergenceMonitor,
+    ConvergenceOutcome,
 )
 from fim.model.allele import (
     MINTED_ID_START,
@@ -341,7 +338,7 @@ class FinalReport(TypedDict):
     NEI_I_ALL_GEO_LOCUS_MEAN: float
     NEI_I_ALL_ARITH: float
     NEI_I_ALL_ARITH_LOCUS_MEAN: float
-    window_statistics: dict[str, dict[str, float | int | bool]]
+    window_statistics: dict[str, dict[str, float | int | bool | str]]
 
 
 @dataclass(frozen=True, slots=True)
@@ -684,7 +681,7 @@ class ReplicaLane:
     rng: np.random.Generator
     registry: AlleleRegistry
     finite_alleles: FiniteAlleleRegistry | None
-    monitor: ConvergenceMonitor
+    monitor: BurnInMonitor
     started_at: str
     active: bool = True
     result: RunResult | None = None
@@ -1154,16 +1151,7 @@ def _build_replica_lane(
     )
     started_at = _format_timestamp(clock())
     rng = np.random.Generator(np.random.PCG64(lane_params.seed))
-    monitor = ConvergenceMonitor(
-        TrailingWindowCriterion(
-            lane_params.convergence_window,
-            lane_params.precision,
-        ),
-        max_generations=lane_params.max_generations,
-        statistics=lane_params.convergence_statistics,
-        combinator=lane_params.convergence_combinator,
-        extra_statistics=_extra_tracked_statistics(lane_params),
-    )
+    monitor = _burn_in_monitor(lane_params)
     state, equilibration_outcome, equilibrium_store = (
         _generate_initial_state_with_outcome(lane_params, rng, store, lane_run_id)
     )
@@ -1255,7 +1243,7 @@ def _finalize_replica_lane(
         run_id=lane.run_id,
         converged=outcome.converged,
         reason=outcome.reason.value,
-        window_statistics=_window_statistics_payload(lane.monitor, lane.params),
+        window_statistics=_window_statistics_payload(lane.monitor),
         converged_statistics=lane.monitor.stable_statistics(),
     )
     ended_at = _format_timestamp(clock())
@@ -2276,6 +2264,16 @@ def fim(
             "equivalent concurrency control"
         )
     run_clock = clock if clock is not None else _utc_now
+    if params.convergence_burn_in >= params.max_generations:
+        # Honest, not refused: such a run ends at its cap without ever
+        # averaging, and says so (capped, with no evidence window).
+        logger.warning(
+            "max_generations (%d) is not above the burn-in (%d generations), so "
+            "the run will stop before averaging starts; raise max_generations "
+            "or set a shorter convergence_burn_in",
+            params.max_generations,
+            params.convergence_burn_in,
+        )
     # The *resolved* backend choice — never the literal string "auto" —
     # computed once, up front, for stamping every result's own manifest
     # afterward (`RunManifest.engine_backend`'s own docstring; design doc
@@ -2359,52 +2357,66 @@ def deterministic_run_id(params: SimulationParams) -> str:
     return f"run-{hashlib.sha256(canonical).hexdigest()[:16]}"
 
 
+def _burn_in_monitor(params: SimulationParams) -> BurnInMonitor:
+    """Build the burn-in-then-average monitor one run is judged by.
+
+    Args:
+        params: The run's own configuration: `convergence_burn_in` (zero means
+            the fractional burn-in, for a model with no relaxation time),
+            `precision`, `confidence`, the watched statistics and their
+            combinator, `max_generations`, and the Expert Settings.
+
+    Returns:
+        An empty monitor.
+    """
+    expert = params.expert
+    first_check = expert.first_check_minimum
+    if params.relaxation_time is not None:
+        first_check = max(
+            first_check,
+            math.ceil(expert.first_check_relaxation_times * params.relaxation_time),
+        )
+    return BurnInMonitor(
+        max_generations=params.max_generations,
+        precision=params.precision,
+        confidence=params.confidence,
+        burn_in=params.convergence_burn_in or None,
+        first_check=first_check,
+        statistics=params.convergence_statistics,
+        combinator=params.convergence_combinator,
+        extra_statistics=_extra_tracked_statistics(params),
+        minimum_effective_sample_size=expert.minimum_effective_sample_size,
+        growth=expert.check_growth,
+        fractional_burn_in=expert.fractional_burn_in,
+    )
+
+
 def _window_statistics_payload(
-    monitor: ConvergenceMonitor, params: SimulationParams
-) -> dict[str, dict[str, float | int | bool]]:
+    monitor: BurnInMonitor,
+) -> dict[str, dict[str, float | int | bool | str]]:
     """Compute `report_for_state`'s own `window_statistics` from a stopped monitor.
 
-    For a statistic that gated stopping, `ConvergenceMonitor.window_
-    statistics` already holds the *exact* evidence the gate itself last
-    checked — including any growth past `params.convergence_window` the
-    noise-adequacy check needed (`ConvergenceMonitor._gated_stable`'s own
-    docstring) — so that is used verbatim, not recomputed. A statistic that
-    never gated stopping (`D`/`G_ST`/`H_S`/`H_T`/`H_ST` are always recorded,
-    `fim.engine._ALWAYS_TRACKED_STATISTICS`, whether or not any one of them
-    is the actual `convergence_statistic`) has no such value; for those,
-    this computes one post-hoc, directly from `monitor.histories`, over the
-    plain configured `window` — the best available answer for a statistic
-    the gate was never asked about, even though it is not the grown window
-    a gated statistic might have earned.
+    Every recorded statistic, watched or not, gets its statistics over the
+    same evidence window, from the monitor's window start to the stop (design
+    6.1), so the report is consistent whichever statistic decided the stop.
 
     Args:
         monitor: The just-stopped monitor driving this run.
-        params: The run's own configuration (`convergence_window`/
-            `precision`).
 
     Returns:
-        One entry per statistic with at least `params.convergence_window`
-        recorded values, keyed by name — a statistic recorded for fewer
-        generations than that (only possible for `extra_statistics`, since
-        every watched statistic's own history is at least `window` long by
-        the time the monitor stops) is simply omitted, the same "nothing
-        to show, don't fabricate a value" precedent `G_ST` itself already
-        sets when undefined. Empty when `params.convergence_window` is
-        shorter than `MINIMUM_NOISE_CHECK_WINDOW` (a configuration too
-        short to estimate a lag-1 autocorrelation from at all).
+        One entry per statistic whose evidence window held at least three
+        defined values, keyed by name: the window mean, standard error,
+        standard deviation, effective sample size, length, the generation the
+        window starts at, the estimator that produced it, and
+        `noise_adequate` (whether the requested precision was reached). A
+        statistic with no such window (the run ended inside its burn-in) is
+        simply omitted: nothing to show, nothing fabricated.
     """
-    window = params.convergence_window
-    if window < MINIMUM_NOISE_CHECK_WINDOW:
-        return {}
-    tolerance = params.precision
-    payload: dict[str, dict[str, float | int | bool]] = {}
-    for name, history in monitor.histories.items():
-        gated = monitor.window_statistics(name)
-        if gated is not None:
-            stats = gated
-        elif len(history) >= window:
-            stats = _compute_window_statistics(history[-window:])
-        else:
+    payload: dict[str, dict[str, float | int | bool | str]] = {}
+    start = monitor.window_start_generation
+    for name in monitor.histories:
+        stats = monitor.evidence_statistics(name)
+        if stats is None:
             continue
         payload[name] = {
             "mean": stats.mean,
@@ -2412,7 +2424,11 @@ def _window_statistics_payload(
             "standard_deviation": stats.standard_deviation,
             "effective_sample_size": stats.effective_sample_size,
             "window": stats.window,
-            "noise_adequate": stats.noise_adequate(tolerance),
+            "window_start": start if start is not None else 0,
+            "estimator": "geyer",
+            "noise_adequate": stats.meets(
+                monitor.target_standard_error, monitor.minimum_effective_sample_size
+            ),
         }
     return payload
 
@@ -2424,7 +2440,7 @@ def report_for_state(
     run_id: str,
     converged: bool,
     reason: str,
-    window_statistics: Mapping[str, dict[str, float | int | bool]] | None = None,
+    window_statistics: Mapping[str, dict[str, float | int | bool | str]] | None = None,
     converged_statistics: Sequence[str] | None = None,
 ) -> FinalReport:
     """Compute the final report independently of the run loop.
@@ -3595,16 +3611,7 @@ def _simulate_one(
     # generation's own migration/mutation/drift outcomes) fully
     # reproducible from that one seed alone.
     rng = np.random.Generator(np.random.PCG64(params.seed))
-    monitor = ConvergenceMonitor(
-        TrailingWindowCriterion(
-            params.convergence_window,
-            params.precision,
-        ),
-        max_generations=params.max_generations,
-        statistics=params.convergence_statistics,
-        combinator=params.convergence_combinator,
-        extra_statistics=_extra_tracked_statistics(params),
-    )
+    monitor = _burn_in_monitor(params)
 
     # Generation zero: the starting population before any migration,
     # mutation, or drift has happened. Every allele already present here
@@ -3690,7 +3697,7 @@ def _simulate_one(
         run_id=run_id,
         converged=outcome.converged,
         reason=outcome.reason.value,
-        window_statistics=_window_statistics_payload(monitor, params),
+        window_statistics=_window_statistics_payload(monitor),
         converged_statistics=monitor.stable_statistics(),
     )
     # The within-run sigma band (`20260907-claude-sonnet-5-within-run-

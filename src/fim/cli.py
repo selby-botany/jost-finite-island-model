@@ -142,10 +142,10 @@ initial_allele_count: 2
 initial_concentration: 1.0
 deme_weighting: equal
 convergence_statistic: D
-# `auto` derives the window and the generation cap from how fast this
+# `auto` derives the burn-in and the generation cap from how fast this
 # population forgets its starting state (its migration, mutation and size).
 # Write a whole number instead to choose your own.
-convergence_window: auto
+convergence_burn_in: auto
 precision: 0.01
 max_generations: auto
 # Explicit, not merely `DEFAULT_N_REPLICATES`'s own value (200) --
@@ -1091,13 +1091,14 @@ def _print_derived_convergence(params: SimulationParams) -> None:
     Returns:
         None. Prints nothing when both values were given explicitly.
     """
-    if not params.auto_derived or params.relaxation_time is None:
+    if not params.auto_derived:
         return
     print(
         describe_derived_convergence(
-            window=params.convergence_window,
+            burn_in=params.convergence_burn_in or None,
             max_generations=params.max_generations,
             relaxation_time=params.relaxation_time,
+            derived=params.auto_derived,
         )
     )
 

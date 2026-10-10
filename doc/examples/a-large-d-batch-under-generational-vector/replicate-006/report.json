@@ -28,47 +28,57 @@
   "converged_on": null,
   "generation": 100,
   "reason": "hit the cap",
-  "run_id": "run-0eed83898d8e0ca9-r006",
+  "run_id": "run-8600a0c297d07454-r006",
   "window_statistics": {
     "D": {
-      "effective_sample_size": 4.760412519421075,
-      "mean": 0.04917342719571131,
+      "effective_sample_size": 6.140575086488898,
+      "estimator": "geyer",
+      "mean": 0.0470254746218555,
       "noise_adequate": false,
-      "standard_deviation": 0.05246729685471368,
-      "standard_error": 0.02404730409279779,
-      "window": 101
+      "standard_deviation": 0.04806176069852371,
+      "standard_error": 0.019395239803909586,
+      "window": 100,
+      "window_start": 1
     },
     "G_ST": {
-      "effective_sample_size": 5.676631192576443,
-      "mean": 0.050009945501217165,
+      "effective_sample_size": 6.50322447641952,
+      "estimator": "geyer",
+      "mean": 0.04697188493787205,
       "noise_adequate": false,
-      "standard_deviation": 0.06842638717026933,
-      "standard_error": 0.02871959232128842,
-      "window": 101
+      "standard_deviation": 0.06154541273581631,
+      "standard_error": 0.02413411156054719,
+      "window": 100,
+      "window_start": 1
     },
     "H_S": {
-      "effective_sample_size": 3.503371100859344,
-      "mean": 0.5203162004964813,
+      "effective_sample_size": 3.7248125924985445,
+      "estimator": "geyer",
+      "mean": 0.5222980754285714,
       "noise_adequate": false,
-      "standard_deviation": 0.05775454816841082,
-      "standard_error": 0.030856248183495444,
-      "window": 101
+      "standard_deviation": 0.054484518987869324,
+      "standard_error": 0.0282306519474889,
+      "window": 100,
+      "window_start": 1
     },
     "H_ST": {
-      "effective_sample_size": 4.760412519421081,
-      "mean": 0.048470949664343996,
+      "effective_sample_size": 6.140575086488897,
+      "estimator": "geyer",
+      "mean": 0.046353682127257566,
       "noise_adequate": false,
-      "standard_deviation": 0.05171776404250348,
-      "standard_error": 0.023703771177186375,
-      "window": 101
+      "standard_deviation": 0.047375164117116224,
+      "standard_error": 0.019118164949568018,
+      "window": 100,
+      "window_start": 1
     },
     "H_T": {
-      "effective_sample_size": 1.3223307163068097,
-      "mean": 0.5463143405821083,
+      "effective_sample_size": 2.8081433033512297,
+      "estimator": "geyer",
+      "mean": 0.5467923913795919,
       "noise_adequate": false,
-      "standard_deviation": 0.029624862110673524,
-      "standard_error": 0.02576239854370092,
-      "window": 101
+      "standard_deviation": 0.029379967510587933,
+      "standard_error": 0.017532412409123347,
+      "window": 100,
+      "window_start": 1
     }
   }
 }

@@ -50,7 +50,6 @@ def _write_config(path: Path, **updates: object) -> None:
         "m": 0.1,
         "mu": 0.01,
         "seed": 20261005,
-        "convergence_window": 4,
         "precision": 1.0,
         "max_generations": 10,
         "n_replicates": 1,

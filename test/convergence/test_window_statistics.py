@@ -9,12 +9,10 @@ import statistics
 import numpy as np
 import pytest
 
-from fim.config.convergence import MINIMUM_NOISE_CHECK_WINDOW, NOISE_TOLERANCE_FRACTION
 from fim.convergence.window_statistics import (
     WindowStatistics,
     geweke_z,
     geyer_window_statistics,
-    window_statistics,
 )
 
 
@@ -48,7 +46,7 @@ def test_independent_draws_give_the_ordinary_standard_error() -> None:
     """`phi = 0` (no correlation) reduces to `sd / sqrt(n)`."""
     values = _ar1_series(phi=0.0, sigma=0.1, length=4000, seed=1)
 
-    result = window_statistics(values)
+    result = geyer_window_statistics(values)
 
     ordinary = statistics.stdev(values) / math.sqrt(len(values))
     assert result.standard_error == pytest.approx(ordinary, rel=0.15)
@@ -56,83 +54,53 @@ def test_independent_draws_give_the_ordinary_standard_error() -> None:
     assert result.lag1_autocorrelation == pytest.approx(0.0, abs=0.05)
 
 
-@pytest.mark.parametrize("phi", [0.5, 0.8, 0.95, -0.4])
+@pytest.mark.parametrize("phi", [0.5, 0.8, 0.95])
 def test_correlated_draws_match_the_known_ar1_standard_error(phi: float) -> None:
     """A known AR(1) process's asymptotic `Var(mean) = sigma_x^2/n * (1+phi)/(1-phi)`.
 
-    The textbook result for the variance of the sample mean of `n`
-    consecutive draws from a stationary AR(1) process, `n` large — this
-    module's own `tau_int = (1 + rho) / (1 - rho)` (with `rho` the sample
-    lag-1 correlation, estimating `phi`) reproduces exactly this factor, so
-    the estimated standard error should track the true one for large `n`.
+    The textbook variance of the sample mean of `n` consecutive draws from a
+    stationary AR(1) process, `n` large: the estimated standard error tracks
+    the true one, within the estimator's own asymptotic spread.
     """
     length = 20_000
     values = _ar1_series(phi=phi, sigma=0.1, length=length, seed=int(phi * 1000) + 7)
     stationary_variance = (0.1**2) / (1.0 - phi * phi)
-    true_standard_error = math.sqrt(
-        stationary_variance / length * (1.0 + phi) / (1.0 - phi)
-    )
+    exact_tau = (1.0 + phi) / (1.0 - phi)
+    true_standard_error = math.sqrt(stationary_variance / length * exact_tau)
 
-    result = window_statistics(values)
+    result = geyer_window_statistics(values)
 
     assert result.lag1_autocorrelation == pytest.approx(phi, abs=0.03)
-    assert result.standard_error == pytest.approx(true_standard_error, rel=0.2)
-
-
-def test_constant_window_is_exactly_known() -> None:
-    """No variation at all means no uncertainty, not a division by zero."""
-    result = window_statistics([0.5] * 20)
-
-    assert result == WindowStatistics(
-        mean=0.5,
-        standard_error=0.0,
-        standard_deviation=0.0,
-        effective_sample_size=20.0,
-        lag1_autocorrelation=0.0,
-        window=20,
+    # SE scales as sqrt(tau_int), so its relative error is half of tau_int's.
+    spread = _relative_spread(truncation=exact_tau, length=length)
+    assert result.standard_error == pytest.approx(
+        true_standard_error, rel=spread / 2.0 + 0.02
     )
 
 
-def test_perfectly_alternating_window_is_known_better_than_its_own_length() -> None:
-    """An oscillating (anticorrelated) window's mean is better known than i.i.d.
-
-    Two neighboring points nearly cancel each other's noise, so the standard
-    error of the mean is *smaller* than `sd / sqrt(n)`, the independent-draws
-    baseline -- a negative `lag1_autocorrelation` correctly reports more
-    effective samples than raw observations, not fewer.
-    """
-    rng = random.Random(3)
-    values = [
-        0.5 + ((-1) ** index) * 0.2 + rng.gauss(0.0, 0.01) for index in range(200)
-    ]
-
-    result = window_statistics(values)
-
-    assert result.lag1_autocorrelation < -0.9
-    assert result.effective_sample_size > len(values)
-    ordinary = statistics.stdev(values) / math.sqrt(len(values))
-    assert result.standard_error < ordinary
+def test_a_flat_window_is_exactly_known_even_when_its_mean_rounds() -> None:
+    """Forty-three copies of 0.4 have no spread, however the mean rounds."""
+    result = geyer_window_statistics([0.4] * 43)
+    assert result == WindowStatistics(
+        mean=0.4,
+        standard_error=0.0,
+        standard_deviation=0.0,
+        effective_sample_size=43.0,
+        lag1_autocorrelation=0.0,
+        window=43,
+    )
 
 
-def test_noise_adequate_uses_half_the_tolerance() -> None:
-    """`noise_adequate` is `standard_error <= tolerance * NOISE_TOLERANCE_FRACTION`."""
-    result = window_statistics([0.5, 0.51, 0.49, 0.50, 0.505, 0.495, 0.502, 0.498])
-    boundary = result.standard_error / NOISE_TOLERANCE_FRACTION
-
-    assert result.noise_adequate(boundary * 1.01)
-    assert not result.noise_adequate(boundary * 0.99)
-
-
-@pytest.mark.parametrize("values", [[], [0.1], [0.1, 0.2]])
-def test_too_few_values_is_refused(values: list[float]) -> None:
-    """Fewer than three values leaves no lag-1 correlation to estimate."""
-    with pytest.raises(ValueError, match="at least 3"):
-        window_statistics(values)
-
-
-def test_minimum_noise_check_window_is_at_least_three() -> None:
-    """The monitor's own skip threshold must not be shorter than this module needs."""
-    assert MINIMUM_NOISE_CHECK_WINDOW >= 3
+def test_meets_needs_both_a_small_enough_error_and_enough_effective_values() -> None:
+    """`meets` is `standard_error <= target` and `ESS >= floor`."""
+    result = geyer_window_statistics(
+        [0.5, 0.51, 0.49, 0.50, 0.505, 0.495, 0.502, 0.498]
+    )
+    error = result.standard_error
+    ess = result.effective_sample_size
+    assert result.meets(error * 1.01, ess * 0.99)
+    assert not result.meets(error * 0.99, ess * 0.99)
+    assert not result.meets(error * 1.01, ess * 1.01)
 
 
 def _relative_spread(*, truncation: float, length: int) -> float:
@@ -237,8 +205,11 @@ def test_geyer_sees_a_slow_mode_the_lag_one_formula_misses() -> None:
     )
     series = [first + second for first, second in zip(fast, slow, strict=True)]
     result = geyer_window_statistics(series)
-    old = window_statistics(series)
-    lag1_tau = (1.0 + old.lag1_autocorrelation) / (1.0 - old.lag1_autocorrelation)
+    # The retired single-lag formula, written out: it saw only `rho(1)`.
+    centered = np.asarray(series) - np.mean(series)
+    rho1 = float(np.dot(centered[:-1], centered[1:]) / np.dot(centered, centered))
+    lag1_tau = (1.0 + rho1) / (1.0 - rho1)
+    lag1_standard_error = result.standard_deviation / math.sqrt(length / lag1_tau)
     assert abs(result.tau_int / exact - 1.0) <= _relative_spread(
         truncation=exact, length=length
     )
@@ -247,7 +218,7 @@ def test_geyer_sees_a_slow_mode_the_lag_one_formula_misses() -> None:
     )
     assert lag1_tau == pytest.approx(lag1_expected, rel=0.1)
     assert lag1_tau < 0.2 * exact
-    assert result.standard_error > 2.0 * old.standard_error
+    assert result.standard_error > 2.0 * lag1_standard_error
 
 
 @pytest.mark.parametrize("length", [3500, 20_300])

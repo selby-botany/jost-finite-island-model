@@ -9,8 +9,8 @@
       "sha256": "57ae40bfecf0360a957a568e08a0b94f5c1b9a5a7594875e5dc11dba0e18b7d2"
     },
     "report": {
-      "bytes": 2311,
-      "sha256": "56f25326f0e52db22f176c9b2bbfa5da1153ba6a526b4075c4043f55c29277fb"
+      "bytes": 2578,
+      "sha256": "f2d58d49009ff6c78fa796f794ef5ad054e174e2a98ced7d3d02a1f27ab773ab"
     },
     "scatter": {
       "bytes": 52278,
@@ -18,7 +18,7 @@
     },
     "trajectory": {
       "bytes": 1158506,
-      "sha256": "75f5b91d40913e89dcf90f82939942bb480acedb78af03cc632875e2f449333f"
+      "sha256": "bbb08b3e4bb09cfbca39b238e1acd5cefb597f7520cc1ea409d4af60e51601e2"
     }
   },
   "auto_derived": [],
@@ -29,7 +29,7 @@
     "reason": "hit the cap",
     "statistic": "D"
   },
-  "ended_at": "2026-10-10T01:38:49.739915Z",
+  "ended_at": "2026-10-10T03:14:07.066886Z",
   "engine_backend": "lineal",
   "equilibrium_final_heterozygosity": null,
   "equilibrium_generation_count": null,
@@ -41,9 +41,9 @@
     "auto_vector_max_capacity": 4096,
     "auto_vector_min_d": 2,
     "confidence": 0.95,
+    "convergence_burn_in": 1,
     "convergence_combinator": "all",
     "convergence_statistic": "D",
-    "convergence_window": 31,
     "d": 100,
     "deme_weighting": "equal",
     "engine_backend": "lineal",
@@ -6773,11 +6773,11 @@
     "track_expensive_statistics": false
   },
   "relaxation_time": 498.78315891944516,
-  "run_id": "run-eff94d31d07aef2c-r004",
+  "run_id": "run-f6039e5ec0586aa1-r004",
   "schema_version": 3,
   "sigma_band": null,
   "sigma_band_multiplier": null,
   "sigma_band_window": null,
   "software_version": "1.2.0",
-  "started_at": "2026-10-10T01:37:39.276341Z"
+  "started_at": "2026-10-10T03:12:00.352550Z"
 }

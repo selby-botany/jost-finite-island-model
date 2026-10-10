@@ -272,12 +272,13 @@ def _derived_convergence_note(params: SimulationParams) -> str:
         The shared derived-settings sentence when the window or cap was
         derived; the empty string when both were explicit.
     """
-    if not params.auto_derived or params.relaxation_time is None:
+    if not params.auto_derived:
         return ""
     return describe_derived_convergence(
-        window=params.convergence_window,
+        burn_in=params.convergence_burn_in or None,
         max_generations=params.max_generations,
         relaxation_time=params.relaxation_time,
+        derived=params.auto_derived,
     )
 
 
@@ -295,17 +296,18 @@ def _derived_convergence_note_from_manifest(
     in equality. `manifest.auto_derived`/`manifest.relaxation_time`
     (persisted at manifest-construction time precisely so this is
     recoverable at all -- `RunManifest`'s own docstring on those fields)
-    stand in for them here; `params.convergence_window`/`max_generations`
+    stand in for them here; `params.convergence_burn_in`/`max_generations`
     are still read from `params` itself, identically either way, since
     `to_dict()` always carries the real resolved numbers regardless of
     where they came from.
     """
-    if not manifest.auto_derived or manifest.relaxation_time is None:
+    if not manifest.auto_derived:
         return ""
     return describe_derived_convergence(
-        window=params.convergence_window,
+        burn_in=params.convergence_burn_in or None,
         max_generations=params.max_generations,
         relaxation_time=manifest.relaxation_time,
+        derived=frozenset(manifest.auto_derived),
     )
 
 
@@ -1032,8 +1034,18 @@ def _convergence_reference_payload(params: SimulationParams) -> dict[str, Any]:
     Returns:
         `{"window": generations, "tolerance": tolerance}`.
     """
+    # The page averages over the span the monitor first judged: its first
+    # check, `first_check_relaxation_times` of `tau` (at least the floor).
+    window = params.expert.first_check_minimum
+    if params.relaxation_time is not None:
+        window = max(
+            window,
+            math.ceil(
+                params.expert.first_check_relaxation_times * params.relaxation_time
+            ),
+        )
     return {
-        "window": params.convergence_window,
+        "window": window,
         "tolerance": params.precision,
     }
 
@@ -5823,7 +5835,7 @@ class Api:
         # own members can genuinely disagree (`parameterMismatches`,
         # below), but this field has never tried to average or choose
         # among them, only to answer "was at least the first member's
-        # own convergence_window/max_generations auto-derived."
+        # own convergence_burn_in/max_generations auto-derived."
         first_manifest: RunManifest | None = None
         try:
             for directory in groups.study_run_directories(study):

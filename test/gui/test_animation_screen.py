@@ -78,7 +78,6 @@ def _write_run(tmp_path: Path, *, d: int = 2) -> Path:
         "mu": 0.01,
         "seed": 1,
         "loci": [{"locus_id": 1, "length": 200}],
-        "convergence_window": 8,
         "precision": 1e-6,
         "max_generations": 12,
         "n_replicates": 1,
