@@ -184,9 +184,10 @@ its own `manifest.json`. See [output schemas](doc/usage.md#output-schemas).
   Generation 1, the first `drift` application, is the first generation
   on that `1/N` lattice — treat a generation-0 statistic as describing
   the prior, not a sampled population.
-- Convergence means that a selected statistic's trailing-window half means are
-  within a configured tolerance. Reaching the hard cap is a valid,
-  non-converged result.
+- A run burns in, then averages, and has converged when the average of each
+  watched statistic is known to the requested precision (its standard error
+  over the evidence window is small enough). Reaching the hard cap is a valid,
+  non-converged result, reported with the precision actually reached.
 - Founding alleles use locus-relative IDs. By default (the infinite-alleles
   model), every mutation receives a globally unique ID; the opt-in
   finite-alleles model instead bounds each locus to `4 ** length` states

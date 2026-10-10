@@ -418,10 +418,10 @@ that has to change when a key is added.
 | initial_allele_count | starting allele count per locus | `2` (biallelic/SNP-like) |
 | initial_concentration | Dirichlet concentration for random start | `1.0` (uniform) |
 | deme_weighting | `"equal"` or `"size"` — used only by E<sub>ST</sub>; every other reported statistic (`D`, G<sub>ST</sub>, K<sub>ST</sub>, H<sub>S</sub>, H<sub>T</sub>, H<sub>ST</sub>) always uses equal deme weighting regardless of this setting | `"size"` |
-| convergence_statistic | which statistic(s) the monitor watches | `D` |
-| convergence_window | trailing-window length, generations | `50` |
-| precision | stability tolerance on that window | `0.01` |
-| max_generations | hard safety cap | `10000` |
+| convergence_statistic | which statistic(s) the monitor watches | `D` and G<sub>ST</sub> |
+| convergence_burn_in | generations discarded before averaging starts | derived from the model's relaxation time and precision |
+| precision | plus or minus, in each watched statistic's units, at confidence | `0.01` |
+| max_generations | hard safety cap | derived (burn-in plus fifteen relaxation times, at least 200,000) |
 
 `N` and `m` each accept either a scalar (the symmetric case) or an
 array/matrix (per-deme size, full or sparse migration matrix) — see §9.
@@ -440,10 +440,12 @@ governs E<sub>ST</sub> alone (fim.statistics.differentiation.statistics_report)
 and nothing else, so setting convergence_statistic to anything other
 than E<sub>ST</sub> makes this key a no-op for that run.
 
-**Default values.** convergence_window and precision have
-no botanically-derived default — the values above (`50` generations,
-`0.01`) are generic stability-detection defaults, not a claim about what a
-real study needs; a real study should tune them. For `N`, `m`, μ, and
+**Default values.** precision has no botanically-derived default: `0.01`
+is a generic plus-or-minus, not a claim about what a real study needs; a
+real study should tune it. The burn-in and the generation cap, by contrast,
+are derived from the model itself (its relaxation time, which the migration,
+mutation and deme sizes fix), as [`doc/convergence.md`](convergence.md)
+explains. For `N`, `m`, μ, and
 `d` themselves, Jost's own "Dear Nolan" letter (identified above; see
 [§8](#8-visualization-module) and [§10](#10-validation-and-test-strategy)
 for how it is used there) gives two concrete, real worked scenarios —
@@ -812,27 +814,20 @@ Used only at config-load time (§4.3); `migrate()` itself never knows a
 sparse map was involved.
 
 **`convergence/criteria.py`.** `ConvergenceCriterion` protocol:
-`is_stable(history: Sequence[float], window: int, tolerance: float) ->
-bool`. Built-ins: a trailing-window stability check (compare the mean of
-the window's first half against its second half; stable when the
-difference is within `tolerance`), a fixed-max_generations fallback
-that always eventually fires regardless of statistical behavior — the
-safety valve named in §3.5, since stochastic-equilibrium detection is not
-guaranteed to trigger quickly, or at all, for a badly chosen tolerance —
-and a confidence-interval criterion that reads a sequence of
-across-replicate values rather than a within-run trajectory (§9's adaptive
-replicate batching), stable once the interval's half-width is within
-`tolerance`.
-The **default** run watches a single statistic (𝖯["convergence_statistic"],
-default `"D"`) — the common case, and still the cheapest path through the
-code, exercising exactly one history and one criterion evaluation per
-generation. 𝖯["convergence_statistic"] also accepts a list of several
-statistics, combined by 𝖯["convergence_combinator"] (`"all"`, the
-default — every watched statistic must be simultaneously stable — or
-`"any"` — stopping as soon as one is), landing as §9's "several statistics
-needed to agree before stopping." That combination is handled directly by
-`ConvergenceMonitor` itself (below), since each watched statistic needs
-its own independent history, not a shared one.
+`is_stable(history: Sequence[float]) -> bool`, with one built-in, a
+confidence-interval criterion that reads a sequence of across-replicate
+values rather than a within-run trajectory (§9's adaptive replicate
+batching), stable once the interval's half-width is within the precision. A
+single run is not judged by a criterion at all: it burns in, then averages,
+and stops when the standard error of each watched statistic's average over its
+evidence window is small enough and its effective sample size large enough
+(`convergence/monitor.py`, `BurnInMonitor`; the rule and its measurements are
+in [`doc/convergence.md`](convergence.md)).
+The **default** run watches `D` and G<sub>ST</sub> (𝖯["convergence_statistic"]),
+each with its own history, combined by 𝖯["convergence_combinator"] (`"all"`,
+the default — every watched statistic must have reached the precision — or
+`"any"` — stopping as soon as one has), landing as §9's "several statistics
+needed to agree before stopping." A single name is the one-element case.
 
 An earlier revision of this module also shipped `AnyCriterion`/
 `AllCriterion`, a pair of combinators for stacking several stability
@@ -843,11 +838,13 @@ rather than kept as an unreachable, untested-in-context feature (2026-09-06
 open-issues rollup, item 11). Revisit only if a concrete need for
 multi-rule stacking on a single statistic actually arises.
 
-**`convergence/monitor.py`.** `ConvergenceMonitor` wraps one criterion,
-applied independently to one history per watched statistic, plus a
-combinator over their per-statistic stability results when there is more
-than one; the engine calls `monitor.record(t, values)` once per
-generation and checks monitor.should_stop(). A single watched statistic
+**`convergence/monitor.py`.** `BurnInMonitor` keeps one history per recorded
+statistic; the engine calls `monitor.record(t, values)` once per generation
+and checks monitor.should_stop(). Nothing can stop a run before its burn-in;
+after it, checks at doubling window lengths judge every watched statistic
+(a combinator joins the verdicts). `ConvergenceMonitor` is the replicate
+batch's counterpart, applying the confidence-interval criterion to one value
+per replicate. A single watched statistic
 — the default — is exactly this general mechanism's one-element case: the
 combinator has nothing to combine, and `record()` accepts a bare float
 instead of a per-statistic mapping for convenience. On stop, the monitor
@@ -907,10 +904,14 @@ intervals; `doc/usage.md` is the artifact contract in full.
 
 *Implementer detail — optional for the botanist.*
 
-Every generation is persisted (requirement 5) as it is produced — not
-batched in memory and flushed at the end, since a botanist's own future
-"what if" is likely to include "run it for a lot longer" long before it
-includes "keep less history." Row shape, one row per `(generation, deme,
+Every generation is persisted (requirement 5) by default, as it is produced:
+rows are not batched in memory and flushed at the end, since a botanist's own
+future "what if" is likely to include "run it for a lot longer" long before it
+includes "keep less history." That second case exists as an opt-in
+([trajectory_retention](configuration.md#trajectory_retention-trajectory_stride-trajectory_thinning_start)):
+a very long run may thin its file, keeping the transient whole and one
+generation in every stride after it; the per-generation statistics are never
+thinned. Row shape, one row per `(generation, deme,
 locus, allele)` with nonzero frequency (the sparse representation from
 §3.1/§5 carries straight through to storage — no wasted rows for absent
 alleles):

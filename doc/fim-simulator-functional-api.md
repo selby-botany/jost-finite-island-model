@@ -228,7 +228,7 @@ time, and the pure functions that build a starting one.
   `d`-by-`d` matrix), `mu` (`MutationRate`, a scalar or per-locus
   tuple), `d` (deme count), `seed`, `loci` (a tuple of `LocusSpec`),
   `initial_allele_count`, `initial_concentration`, `deme_weighting`,
-  `convergence_statistic`/`convergence_combinator`/`convergence_window`/
+  `convergence_statistic`/`convergence_combinator`/`convergence_burn_in`/
   `precision`, `max_generations`, `n_replicates`,
   `stop_batch_early`/`replicate_minimum`/`confidence`,
   `migrant_sampling` (`"continuous"` or a stochastic mode),

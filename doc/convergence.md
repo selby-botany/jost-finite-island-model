@@ -70,6 +70,14 @@ derived cap is raised to leave `15 tau` after an explicit burn-in. The
 15, the first check, the effective-sample-size floor and the rest; see
 [configuration.md](configuration.md#expert)).
 
+Related settings, each described in [configuration.md](configuration.md):
+`convergence_statistic` (default `D` and `G_ST`, stopping when both have
+settled; any global statistic may be watched, an unbounded one such as an allele
+count gets a relative precision), `statistic_precision` (a plus-or-minus for one
+statistic), `convergence_estimate` (mean of values or value of means, below),
+`precision_method` and `replicate_averaging_window` (batches, below), and
+`trajectory_retention` (thin a very long run's trajectory file).
+
 Symptoms of a bad value:
 
 - **Burn-in too short:** the average starts inside the transient and is
