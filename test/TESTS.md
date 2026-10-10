@@ -162,7 +162,7 @@ Every test module, fixture, and test function documented here in full; `doc/fim-
   - [`test_beta_workflow`](#validation.test_beta_workflow)
   - [`test_calibration_provenance`](#validation.test_calibration_provenance)
   - [`test_ci_runtime_budget`](#validation.test_ci_runtime_budget)
-  - [`test_convergence_defaults`](#validation.test_convergence_defaults)
+  - [`test_convergence_rule_calibration`](#validation.test_convergence_rule_calibration)
   - [`test_doc_links`](#validation.test_doc_links)
   - [`test_equilibrium`](#validation.test_equilibrium)
   - [`test_examples_auto_backend`](#validation.test_examples_auto_backend)
@@ -36418,98 +36418,173 @@ before writing this assertion, not assumed -- so this reads the
 trigger block back the same way every other test in this file
 already reads the rest of the workflow, through `workflow[True]`.
 
-<a id="validation.test_convergence_defaults"></a>
+<a id="validation.test_convergence_rule_calibration"></a>
 
-# validation.test\_convergence\_defaults
+# validation.test\_convergence\_rule\_calibration
 
-Validate the derived convergence defaults against the analytic equilibrium.
+Seeded calibration of the burn-in-then-average convergence rule.
 
-`fim.convergence.defaults` derives `convergence_window` and `max_generations`
-from the model's relaxation time. These tests run the engine with exactly
-the shipped derivation (no overridden multiples) and check that runs stop
-near the analytic equilibrium D from the identity recursion, and that none
-end at the cap. The measurement that chose the multiples is versioned in
-`test/validation/convergence-defaults-evidence.json`
+The rule stops a run when the average of each watched statistic is known to
+the requested precision, and reports that average with a standard error.
+These tests check the two promises with fixed seeds, so a commit always gives
+the same result:
+
+- the average lands within `precision` of its target, and
+- the standard error is honest: at confidence 0.95 about one run in twenty
+  misses its target by more than 1.96 standard errors.
+
+Form 1 (mean of the per-generation values) is compared with the mean over the
+seeds, because it estimates the expected value of the statistic, which for a
+few loci differs slightly from the analytic ratio. Form 2 (value of the means)
+is compared with the analytic D of the identity recursion. The number of
+misses a regime may have is a binomial bound, written in the evidence file
+with the observed count: `convergence-rule-calibration-evidence.json`
 (`dev/bin/calibrate-convergence-defaults`).
 
-Acceptance is on the mean over replicates, not on each replicate: a single
-stochastic run scatters around equilibrium by its own sampling noise, which
-no stopping rule can remove. Seeds are fixed, so a given commit always gives
-the same result.
+The same evidence file records how fast the allele-spectrum statistics settle
+next to `D`, which keeps `spectrum_burn_in_multiplier` at 1, and the
+Dear-Nolan low scenario, whose seeded run is the committed example report.
 
-<a id="validation.test_convergence_defaults.MAX_MEAN_STOP_D"></a>
+<a id="validation.test_convergence_rule_calibration.RUNS"></a>
 
-#### MAX\_MEAN\_STOP\_D
+#### RUNS
 
-Design section 7 item 6: the source scenario never stops above this D.
+Seeded runs per regime.
 
-<a id="validation.test_convergence_defaults._Discard"></a>
+<a id="validation.test_convergence_rule_calibration.LOCI"></a>
 
-## \_Discard Objects
+#### LOCI
 
-```python
-class _Discard()
-```
+Loci pooled in each run.
 
-Trajectory store that keeps nothing.
+<a id="validation.test_convergence_rule_calibration.NOMINAL_MISS_RATE"></a>
 
-<a id="validation.test_convergence_defaults._Discard.write_generation"></a>
+#### NOMINAL\_MISS\_RATE
 
-#### write\_generation
+Misses expected at confidence 0.95, per run.
 
-```python
-def write_generation(*args: object, **kwargs: object) -> None
-```
+<a id="validation.test_convergence_rule_calibration.TAIL_PROBABILITY"></a>
 
-Drop a generation.
+#### TAIL\_PROBABILITY
 
-<a id="validation.test_convergence_defaults._Discard.read"></a>
+Chance, at the nominal rate, that a regime exceeds its bound.
 
-#### read
+<a id="validation.test_convergence_rule_calibration.max_misses"></a>
+
+#### max\_misses
 
 ```python
-def read(run_id: str) -> Iterator[Any]
+def max_misses(runs: int, rate: float, tail: float) -> int
 ```
 
-Yield nothing.
+Return the most misses a regime may show at the nominal rate.
 
-<a id="validation.test_convergence_defaults._Discard.discard"></a>
+The smallest bound `b` such that, if every run misses independently at
+`rate`, more than `b` misses happen with probability at most `tail`.
 
-#### discard
+**Arguments**:
+
+- `runs` - Runs in the regime.
+- `rate` - Probability that one run misses.
+- `tail` - Largest acceptable probability of exceeding the bound.
+  
+
+**Returns**:
+
+  The bound.
+
+<a id="validation.test_convergence_rule_calibration.test_miss_bound_is_the_binomial_tail"></a>
+
+#### test\_miss\_bound\_is\_the\_binomial\_tail
 
 ```python
-def discard(run_id: str) -> None
+def test_miss_bound_is_the_binomial_tail() -> None
 ```
 
-Drop a run.
+Twelve runs at one miss in twenty: three or more misses is a 2% event.
 
-<a id="validation.test_convergence_defaults.test_golden_part_vi_stops_at_its_analytic_equilibrium"></a>
+<a id="validation.test_convergence_rule_calibration.test_evidence_records_the_bound_and_stays_within_it"></a>
 
-#### test\_golden\_part\_vi\_stops\_at\_its\_analytic\_equilibrium
+#### test\_evidence\_records\_the\_bound\_and\_stays\_within\_it
+
+```python
+def test_evidence_records_the_bound_and_stays_within_it() -> None
+```
+
+The evidence file states the bound the tests use and every count obeys it.
+
+<a id="validation.test_convergence_rule_calibration.test_spectrum_statistics_settle_with_the_identity_statistics"></a>
+
+#### test\_spectrum\_statistics\_settle\_with\_the\_identity\_statistics
+
+```python
+def test_spectrum_statistics_settle_with_the_identity_statistics() -> None
+```
+
+The allele-spectrum statistics need no longer burn-in than `D`.
+
+The default `spectrum_burn_in_multiplier` is 1 because, in each measured
+regime, every allele-spectrum statistic settles within the burn-in `D`
+needs (and far inside the five relaxation times the burn-in never drops
+below).
+
+<a id="validation.test_convergence_rule_calibration.test_derived_burn_in_covers_the_settling_time"></a>
+
+#### test\_derived\_burn\_in\_covers\_the\_settling\_time
+
+```python
+def test_derived_burn_in_covers_the_settling_time() -> None
+```
+
+The derived burn-in is at least five relaxation times for these regimes.
+
+<a id="validation.test_convergence_rule_calibration.test_dear_nolan_low_report_matches_its_analytic_value"></a>
+
+#### test\_dear\_nolan\_low\_report\_matches\_its\_analytic\_value
+
+```python
+def test_dear_nolan_low_report_matches_its_analytic_value() -> None
+```
+
+Dear-Nolan low: the committed seeded run is honest about what it knows.
+
+The run reaches its cap without meeting the precision (D's effective
+sample size is far below the floor), reports that, and its average lies
+within two standard errors of the analytic D.
+
+<a id="validation.test_convergence_rule_calibration.test_dear_nolan_low_never_stops_inside_its_burn_in"></a>
+
+#### test\_dear\_nolan\_low\_never\_stops\_inside\_its\_burn\_in
 
 ```python
 @pytest.mark.slow
-@pytest.mark.statistical
-def test_golden_part_vi_stops_at_its_analytic_equilibrium() -> None
+def test_dear_nolan_low_never_stops_inside_its_burn_in() -> None
 ```
 
-Fast regime: the mean stop is within 0.05 of the analytic D.
-
-<a id="validation.test_convergence_defaults.test_dear_nolan_low_never_stops_at_the_transient"></a>
-
-#### test\_dear\_nolan\_low\_never\_stops\_at\_the\_transient
-
-```python
-@pytest.mark.slow
-@pytest.mark.statistical
-def test_dear_nolan_low_never_stops_at_the_transient() -> None
-```
-
-The source scenario runs to equilibrium, not to drift fixation.
+A run whose cap lies inside its burn-in ends at the cap, unconverged.
 
 Regression for the reported failure: the old fixed defaults stopped
-this scenario after about 100 generations with D near 0.4. The
-equilibrium is D near 0.04; the transient state is above 0.3.
+this scenario after about 100 generations with D near 0.4, in the
+transient. The burn-in here is 104,338 generations; a run capped at 5,000
+must not report a converged average.
+
+<a id="validation.test_convergence_rule_calibration.test_rule_lands_on_target_and_reports_an_honest_error_bar"></a>
+
+#### test\_rule\_lands\_on\_target\_and\_reports\_an\_honest\_error\_bar
+
+```python
+@pytest.mark.slow
+@pytest.mark.statistical
+@pytest.mark.parametrize("regime", REGIMES)
+def test_rule_lands_on_target_and_reports_an_honest_error_bar(
+        regime: str) -> None
+```
+
+Twelve seeded runs: few averages miss, and none misses the cap.
+
+Counts, per form: runs whose average is farther than `precision` from its
+target, and runs farther than 1.96 of their own standard errors. Each is
+held to the binomial bound the evidence file records.
 
 <a id="validation.test_doc_links"></a>
 

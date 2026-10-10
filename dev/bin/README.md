@@ -7,6 +7,7 @@
   - [`benchmark-queue`](#benchmark-queue)
   - [`build-examples-catalog`](#build-examples-catalog)
   - [`calibrate-auto-threshold`](#calibrate-auto-threshold)
+  - [`calibrate-convergence-defaults`](#calibrate-convergence-defaults)
   - [`calibrate-statistical-bands`](#calibrate-statistical-bands)
   - [`check-doc-links`](#check-doc-links)
   - [`check-webui-assets`](#check-webui-assets)
@@ -71,6 +72,7 @@ run by hand.
 | [`benchmark-queue`](#benchmark-queue) | Runs a list of `benchmark-engines` (or any other) commands one after another, each one waiting for the machine to be quiet first, so several sweeps can be queued up and left running for hours without their own timing numbers contaminating each other |
 | [`build-examples-catalog`](#build-examples-catalog) | Rebuilds the desktop app's bundled list of examples (`src/fim/gui/webui/examples/`) from `doc/examples/`, so the Examples dialog shows exactly the examples, classes, and explanations the repository holds |
 | [`calibrate-auto-threshold`](#calibrate-auto-threshold) | Measures, on your own machine, the deme count above which `engine_backend: auto` should switch engines — the shipped default was measured on a different machine and this project's own history has already found it can go stale |
+| [`calibrate-convergence-defaults`](#calibrate-convergence-defaults) | Measures, with fixed seeds, how well the burn-in-then-average convergence rule lands on its target and how honest its error bar is, and how fast the allele-spectrum statistics settle next to `D` |
 | [`calibrate-statistical-bands`](#calibrate-statistical-bands) | Re-measures how much random variation is normal for the three published-science validation scenarios, so the tests that check the simulator against them use an honest, evidence-based tolerance |
 | [`check-doc-links`](#check-doc-links) | Confirms every link between documentation pages actually goes somewhere, and that no page is orphaned with nothing linking to it |
 | [`check-webui-assets`](#check-webui-assets) | Confirms the desktop app's styles, links, and icons still line up with each other -- no styling rule nothing uses, no class nothing styles, no link or icon pointing at something that is not there |
@@ -362,6 +364,36 @@ file, cache, or default on your behalf. `--output` is optional, the
 same as `benchmark-engines`'s own — the file it writes is meant for you
 to read, not for this project to commit or for `fim()` to load
 automatically.
+
+## `calibrate-convergence-defaults`
+
+**What it does:** Measures the convergence rule against answers that are
+known. `rule REGIME` runs 12 seeded single runs of a regime (a fast island
+model, Golden Part VI, a ring of six demes) and counts how often a run's
+reported average misses its target by more than the requested precision, or
+by more than 1.96 of its own standard errors. `spectrum REGIME` measures how
+many relaxation times the allele-spectrum statistics need before they settle,
+next to `D`. Each command prints one JSON object; the objects are kept under
+the matching keys of
+`test/validation/convergence-rule-calibration-evidence.json`.
+
+**Why it matters:** An error bar is only worth reporting if it is right about
+one time in twenty. The counts in the evidence file are the permanent record
+that it is, and the bounds the tests enforce come from them. The seeds are
+fixed, so the same commit always prints the same numbers: unlike
+`calibrate-statistical-bands`, the tests may call this script's functions.
+
+**When to run it:** After a change to the convergence rule, the burn-in
+derivation, or a regime's parameters. A `rule` run takes minutes
+(a few minutes for `fast`, up to ten for `ring` on four worker processes).
+
+**Usage:**
+
+```console
+dev/bin/calibrate-convergence-defaults rule golden-part-vi --loci 4 --jobs 4
+dev/bin/calibrate-convergence-defaults spectrum fast --loci 4 --jobs 4
+dev/bin/calibrate-convergence-defaults --list
+```
 
 ## `calibrate-statistical-bands`
 

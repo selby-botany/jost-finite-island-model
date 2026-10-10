@@ -1,30 +1,36 @@
 #!/usr/bin/env python3
-"""Measure how close derived convergence defaults stop to true equilibrium.
+"""Measure the burn-in-then-average convergence rule against known answers.
 
-`fim.convergence.defaults` sets `convergence_window` to `K * tau` and
-`max_generations` to `C * tau`, where `tau` is the model's relaxation time.
-`K` and `C` are provisional (design doc
-`20260925-claude-sonnet-5-convergence-defaults-derived-from-model-design.md`,
-sections 5.1 and 7). This script is the versioned measurement that sets
-them: for each reference regime it runs replicated simulations with the
-window and cap derived at a chosen `K` and `C`, stops each by the ordinary
-convergence rule, and compares the pooled D at the stop with the analytic
-identity-recursion fixed point.
+Two measurements, both with fixed seeds, so a commit always gives the same
+numbers (design `20261005-claude-opus-5-5-simplified-convergence-rule-
+design.md`, sections 6.12 and 14):
 
-Acceptance (design section 7): the mean pooled D over replicates at the stop
-is within 0.05 of the analytic value, and no replicate ends at the cap. The
-criterion is on the mean, not on each replicate: a single stochastic run
-scatters around equilibrium by its own sampling noise (roughly 0.06 to 0.11
-at Golden Part VI with eight loci), which no stopping rule can remove. What
-the window controls is the bias, the systematic distance of the stops from
-equilibrium.
+`rule REGIME`
+    Run many seeded single runs of the rule at a loose precision and count
+    how often the reported average misses its target. Form 1 (mean of the
+    per-generation values) is compared with the mean over the seeds; form 2
+    (value of the means, the delta method) is compared with the analytic D
+    of the identity recursion. Two counts per form: runs whose average
+    misses by more than `precision`, and runs whose average misses by more
+    than `z` of the run's own standard error. The second count is the error
+    bar's coverage: at confidence 0.95 about one run in twenty should miss.
+
+`spectrum REGIME`
+    Measure how fast the allele-spectrum statistics (`K_ST`, `A_CGD`,
+    `Delta`, `MI`, `E_ST`) forget the starting state, in relaxation times,
+    next to `D` and `G_ST`. The burn-in is derived for identity statistics;
+    this shows whether the allele-spectrum statistics need a longer one
+    (`spectrum_burn_in_multiplier`).
 
 Usage:
-    dev/bin/calibrate-convergence-defaults REGIME [--k K] [--c C]
-        [--replicates N] [--loci L] [--seed S]
+    dev/bin/calibrate-convergence-defaults rule REGIME [--seeds N]
+        [--first-seed S] [--loci L] [--precision P] [--jobs J]
+    dev/bin/calibrate-convergence-defaults spectrum REGIME [--jobs J]
     dev/bin/calibrate-convergence-defaults --list
 
-Prints one JSON object with the per-replicate stops and the verdict.
+Prints one JSON object with the per-run rows and the verdict. The
+versioned results are in
+`test/validation/convergence-rule-calibration-evidence.json`.
 """
 
 from __future__ import annotations
@@ -32,10 +38,11 @@ from __future__ import annotations
 import argparse
 import importlib.util
 import json
-import math
 import statistics
 import sys
+from concurrent.futures import ProcessPoolExecutor
 from pathlib import Path
+from typing import Any
 
 import numpy as np
 
@@ -47,12 +54,27 @@ from fim.engine import fim  # noqa: E402
 from fim.model.locus import LocusSpec  # noqa: E402
 from fim.model.params import SimulationParams  # noqa: E402
 
-TOLERANCE = 0.01
-D_ACCEPT = 0.05
+PRECISION = 0.05
+"""The loose precision the calibration runs at, in D units."""
+Z_95 = 1.959964
+"""Two-tailed normal quantile for confidence 0.95."""
+LOCUS_LENGTH = 200
+SPECTRUM_STATISTICS = ("K_ST", "A_CGD", "Delta", "MI", "E_ST")
+SPECTRUM_MULTIPLES = (0.5, 1, 2, 3, 5, 8, 12, 20, 30)
+SETTLED_BAND = 3.0
+"""Combined standard errors within which two averages count as equal."""
 
 
 def _ring(d: int, m: float) -> list[list[float]]:
-    """Return a nearest-neighbor ring migration matrix."""
+    """Return a nearest-neighbor ring migration matrix.
+
+    Args:
+        d: Number of demes.
+        m: Total migration rate out of a deme.
+
+    Returns:
+        A `d` by `d` row-stochastic matrix.
+    """
     matrix = [[0.0] * d for _ in range(d)]
     for i in range(d):
         matrix[i][i] += 1.0 - m
@@ -61,144 +83,321 @@ def _ring(d: int, m: float) -> list[list[float]]:
     return matrix
 
 
-# name -> (d, N, migration, per-locus mutation rates as a function of L)
-REGIMES = {
-    "dear-nolan-low": (5, 100, 1e-4, lambda n: [1e-6] * n),
-    "dear-nolan-high": (100, 2000, 0.01, lambda n: [1e-3] * n),
-    "golden-part-vi": (4, 100, 0.01, lambda n: [0.005] * n),
-    "ring": (10, 100, _ring(10, 0.01), lambda n: [1e-6] * n),
-    "unequal-mu": (5, 100, 1e-3, lambda n: [1e-6, 4e-6] * (n // 2)),
+# name -> (demes, gene copies per deme, migration, mutation rate per locus)
+REGIMES: dict[str, tuple[int, int, float | list[list[float]], float]] = {
+    "fast": (4, 50, 0.1, 0.01),
+    "golden-part-vi": (4, 100, 0.01, 0.005),
+    "ring": (6, 50, _ring(6, 0.2), 0.01),
+    # Too slow for the test suite (about 30 minutes a run); the committed
+    # `doc/examples/dear-nolan-low` report is its seeded run.
+    "dear-nolan-low": (5, 100, 1e-4, 1e-6),
 }
 
 
-def _load_oracle():
-    """Import the analytic identity-recursion helpers from the test suite."""
+class _Discard:
+    """Trajectory store that keeps nothing."""
+
+    def write_generation(self, *args: object, **kwargs: object) -> None:
+        """Drop a generation."""
+
+    def read(self, run_id: str) -> Any:
+        """Yield nothing."""
+        del run_id
+        return iter(())
+
+    def discard(self, run_id: str) -> None:
+        """Drop a run."""
+        del run_id
+
+
+def _load_oracle() -> Any:
+    """Import the analytic identity-recursion helpers from the test suite.
+
+    Returns:
+        The loaded `test_simulator_equilibrium` module.
+    """
     path = ROOT / "test" / "validation" / "test_simulator_equilibrium.py"
     spec = importlib.util.spec_from_file_location("equilibrium_validation", path)
-    module = importlib.util.module_from_spec(spec)
     assert spec is not None and spec.loader is not None
+    module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
     return module
 
 
-def analytic_d(oracle, d: int, n: int, migration, mus: list[float]) -> float:
-    """Return the pooled equilibrium D from the identity recursion.
+def analytic_d(regime: str) -> float:
+    """Return the pooled equilibrium D of a regime from the identity recursion.
 
-    Identities are linear in the identity matrix, so averaging the fixed-
-    point matrix over loci gives the ratio-of-means pooling the engine uses.
+    Identities are linear in the identity matrix, so the fixed point is the
+    same for every locus of one mutation rate and ratio-of-means pooling
+    over loci changes nothing.
+
+    Args:
+        regime: A key of `REGIMES`.
+
+    Returns:
+        The analytic D.
     """
+    d, n, migration, mu = REGIMES[regime]
     matrix = migration
     if isinstance(migration, float):
         matrix = [
             [1.0 - migration if r == c else migration / (d - 1) for c in range(d)]
             for r in range(d)
         ]
-    fixed = np.mean(
-        [
-            oracle._pairwise_identity_fixed_point(
-                population_size=n, migration_matrix=matrix, mu=mu
-            )
-            for mu in sorted(set(mus))
-        ],
-        axis=0,
+    oracle = _load_oracle()
+    fixed = oracle._pairwise_identity_fixed_point(
+        population_size=n, migration_matrix=matrix, mu=mu
     )
     return float(oracle._pooled_statistics_from_identity_matrix(fixed, d)[1])
 
 
+def regime_params(regime: str, **overrides: Any) -> SimulationParams:
+    """Return the run parameters of a regime.
+
+    Args:
+        regime: A key of `REGIMES`.
+        **overrides: `SimulationParams` fields that replace the defaults.
+
+    Returns:
+        The parameters (one replicate, `D` watched, two starting alleles).
+    """
+    d, n, migration, mu = REGIMES[regime]
+    loci = overrides.pop("loci", 8)
+    fields: dict[str, Any] = {
+        "gene_copies": n,
+        "m": migration
+        if isinstance(migration, float)
+        else tuple(map(tuple, migration)),
+        "mu": mu,
+        "d": d,
+        "seed": 920000,
+        "loci": tuple(LocusSpec(index + 1, LOCUS_LENGTH) for index in range(loci)),
+        "initial_allele_count": 2,
+        "convergence_statistic": "D",
+        "precision": PRECISION,
+        "n_replicates": 1,
+    }
+    fields.update(overrides)
+    return SimulationParams(**fields)
+
+
+def run_reports(params: SimulationParams) -> list[dict[str, Any]]:
+    """Run a model and return each replicate's report.
+
+    Args:
+        params: The run parameters.
+
+    Returns:
+        One report per replicate.
+    """
+    results = fim(
+        params.gene_copies,
+        params.m,
+        params.mu,
+        params.d,
+        params=params,
+        store=_Discard(),
+    )
+    results = results if isinstance(results, tuple) else (results,)
+    return [result.report for result in results]
+
+
+def run_seed(task: tuple[str, int, int, float]) -> dict[str, Any]:
+    """Run one seeded single run of a regime and summarize its averages.
+
+    Args:
+        task: `(regime, seed, loci, precision)`.
+
+    Returns:
+        The stop generation, whether the run converged, and each form's
+        average and standard error for `D`.
+    """
+    regime, seed, loci, precision = task
+    params = regime_params(regime, seed=seed, loci=loci, precision=precision)
+    report = run_reports(params)[0]
+    window = report["window_statistics"]["D"]
+    return {
+        "seed": seed,
+        "generation": report["generation"],
+        "converged": bool(report["converged"]),
+        "mean_of_values": window["mean_of_values"],
+        "value_of_means": window["value_of_means"],
+        "effective_sample_size": window["effective_sample_size"],
+    }
+
+
+def rule_verdict(
+    regime: str, rows: list[dict[str, Any]], precision: float
+) -> dict[str, Any]:
+    """Count the misses of the rows' averages against their targets.
+
+    Args:
+        regime: A key of `REGIMES`.
+        rows: The rows `run_seed` returned.
+        precision: The precision the runs asked for.
+
+    Returns:
+        The reference values and the four miss counts.
+    """
+    expected = analytic_d(regime)
+    reference = statistics.fmean(row["mean_of_values"]["mean"] for row in rows)
+
+    def misses(form: str, target: float, *, by_error_bar: bool) -> int:
+        """Count rows whose `form` average misses `target`."""
+        count = 0
+        for row in rows:
+            error = abs(row[form]["mean"] - target)
+            limit = Z_95 * row[form]["standard_error"] if by_error_bar else precision
+            count += error > limit
+        return count
+
+    return {
+        "regime": regime,
+        "runs": len(rows),
+        "precision": precision,
+        "analytic_D": expected,
+        "form_1_reference": reference,
+        "form_1_bias_from_analytic": reference - expected,
+        "not_converged": sum(not row["converged"] for row in rows),
+        "form_1_misses_precision": misses(
+            "mean_of_values", reference, by_error_bar=False
+        ),
+        "form_1_misses_error_bar": misses(
+            "mean_of_values", reference, by_error_bar=True
+        ),
+        "form_2_misses_precision": misses(
+            "value_of_means", expected, by_error_bar=False
+        ),
+        "form_2_misses_error_bar": misses(
+            "value_of_means", expected, by_error_bar=True
+        ),
+        "mean_stop_generation": statistics.fmean(row["generation"] for row in rows),
+        "spread_of_form_1_averages": statistics.stdev(
+            row["mean_of_values"]["mean"] for row in rows
+        ),
+    }
+
+
+def spectrum_row(task: tuple[str, int, int, int]) -> dict[str, Any]:
+    """Run 24 replicates with one fixed burn-in and average their windows.
+
+    Args:
+        task: `(regime, burn_in, seed, loci)`.
+
+    Returns:
+        The across-replicate mean and standard error of each statistic's
+        window average.
+    """
+    regime, burn_in, seed, loci = task
+    statistics_watched = ("D", "G_ST", *SPECTRUM_STATISTICS)
+    params = regime_params(
+        regime,
+        seed=seed,
+        loci=loci,
+        convergence_statistic=statistics_watched,
+        convergence_burn_in=burn_in,
+        replicate_averaging_window=40,
+        n_replicates=24,
+        stop_batch_early=False,
+    )
+    reports = run_reports(params)
+    out: dict[str, Any] = {"burn_in": burn_in}
+    for name in statistics_watched:
+        values = [r["window_statistics"][name]["mean"] for r in reports]
+        out[name] = {
+            "mean": statistics.fmean(values),
+            "standard_error": statistics.stdev(values) / len(values) ** 0.5,
+        }
+    return out
+
+
+def settled_burn_ins(rows: list[dict[str, Any]]) -> dict[str, float | None]:
+    """Return, per statistic, the burn-in multiple after which it has settled.
+
+    A statistic has settled at a burn-in when its average is within
+    `SETTLED_BAND` combined standard errors of its average at the longest
+    burn-in measured, and stays so at every longer burn-in measured.
+
+    Args:
+        rows: The rows `spectrum_row` returned, in `SPECTRUM_MULTIPLES` order.
+
+    Returns:
+        The burn-in, in relaxation times, or `None` if even the longest
+        measured burn-in before the reference had not settled.
+    """
+    reference = rows[-1]
+    settled: dict[str, float | None] = {}
+    for name in ("D", "G_ST", *SPECTRUM_STATISTICS):
+        settled[name] = None
+        for multiple, row in reversed(list(zip(SPECTRUM_MULTIPLES, rows, strict=True))):
+            gap = abs(row[name]["mean"] - reference[name]["mean"])
+            band = SETTLED_BAND * float(
+                np.hypot(row[name]["standard_error"], reference[name]["standard_error"])
+            )
+            if gap > band:
+                break
+            settled[name] = float(multiple)
+    return settled
+
+
+def spectrum_verdict(regime: str, loci: int, jobs: int) -> dict[str, Any]:
+    """Measure the burn-in at which every statistic has settled.
+
+    Args:
+        regime: A key of `REGIMES`.
+        loci: Loci per run.
+        jobs: Worker processes.
+
+    Returns:
+        The rows and, per statistic, the settled burn-in in relaxation times.
+    """
+    d, n, migration, mu = REGIMES[regime]
+    tau = relaxation_time(deme_sizes=[n] * d, migration=migration, mutation_rates=[mu])
+    tasks = [
+        (regime, max(1, round(multiple * tau)), 930000 + index, loci)
+        for index, multiple in enumerate(SPECTRUM_MULTIPLES)
+    ]
+    with ProcessPoolExecutor(jobs) as pool:
+        rows = list(pool.map(spectrum_row, tasks))
+    return {
+        "regime": regime,
+        "loci": loci,
+        "relaxation_time": tau,
+        "multiples": list(SPECTRUM_MULTIPLES),
+        "rows": rows,
+        "settled_after_relaxation_times": settled_burn_ins(rows),
+    }
+
+
 def main() -> None:
-    """Run one regime and print the verdict as JSON."""
+    """Parse the command line, run one measurement, and print JSON."""
     parser = argparse.ArgumentParser(description=__doc__.split("\n")[0])
+    parser.add_argument("command", nargs="?", choices=("rule", "spectrum"))
     parser.add_argument("regime", nargs="?", choices=sorted(REGIMES))
     parser.add_argument("--list", action="store_true")
-    parser.add_argument("--k", type=float, default=2.0)
-    parser.add_argument("--c", type=float, default=10.0)
-    parser.add_argument("--replicates", type=int, default=10)
-    parser.add_argument("--loci", type=int, default=10)
-    parser.add_argument("--seed", type=int, default=910000)
+    parser.add_argument("--seeds", type=int, default=12)
+    parser.add_argument("--first-seed", type=int, default=920000)
+    parser.add_argument("--loci", type=int, default=8)
+    parser.add_argument("--precision", type=float, default=PRECISION)
+    parser.add_argument("--jobs", type=int, default=4)
     args = parser.parse_args()
-    if args.list or args.regime is None:
+    if args.list or args.command is None or args.regime is None:
         print("\n".join(sorted(REGIMES)))
         return
 
-    d, n, migration, mu_for = REGIMES[args.regime]
-    mus = mu_for(args.loci)
-    tau = relaxation_time(deme_sizes=[n] * d, migration=migration, mutation_rates=mus)
-    window = max(50, math.ceil(args.k * tau))
-    cap = max(10_000, math.ceil(args.c * tau))
-    oracle = _load_oracle()
-    expected = analytic_d(oracle, d, n, migration, mus)
-
-    loci = tuple(LocusSpec(index + 1, 200) for index in range(args.loci))
-    params = SimulationParams(
-        gene_copies=n,
-        m=migration if isinstance(migration, float) else tuple(map(tuple, migration)),
-        mu=tuple(mus) if len(set(mus)) > 1 else mus[0],
-        d=d,
-        seed=args.seed,
-        loci=loci,
-        initial_allele_count=2,
-        convergence_statistic="D",
-        precision=TOLERANCE,
-        max_generations=cap,
-        n_replicates=args.replicates,
-        stop_batch_early=False,
-    )
-
-    class Discard:
-        """Trajectory store that keeps nothing."""
-
-        def write_generation(self, *a, **k) -> None:
-            """Drop a generation."""
-
-        def read(self, run_id):
-            """Yield nothing."""
-            del run_id
-            return iter(())
-
-        def discard(self, run_id) -> None:
-            """Drop a run."""
-
-    results = fim(
-        n,
-        migration if isinstance(migration, float) else params.m,
-        params.mu,
-        d,
-        params=params,
-        store=Discard(),
-    )
-    results = results if isinstance(results, tuple) else (results,)
-    rows = [
-        {
-            "generation": r.report["generation"],
-            "converged": bool(r.report["converged"]),
-            "D": r.report["D"],
-            "error": abs(r.report["D"] - expected)
-            if r.report["D"] is not None
-            else None,
-        }
-        for r in results
+    if args.command == "spectrum":
+        print(json.dumps(spectrum_verdict(args.regime, args.loci, args.jobs), indent=2))
+        return
+    tasks = [
+        (args.regime, args.first_seed + index, args.loci, args.precision)
+        for index in range(args.seeds)
     ]
-    observed = [r["D"] for r in rows if r["D"] is not None]
-    mean_d = statistics.fmean(observed)
-    spread = statistics.stdev(observed) if len(observed) > 1 else 0.0
-    verdict = {
-        "regime": args.regime,
-        "k": args.k,
-        "c": args.c,
-        "tau": tau,
-        "window": window,
-        "max_generations": cap,
-        "analytic_D": expected,
-        "replicates": rows,
-        "any_hit_cap": any(not row["converged"] for row in rows),
-        "mean_D": mean_d,
-        "bias": mean_d - expected,
-        "standard_error": spread / math.sqrt(len(observed)),
-        "mean_stop_generation": statistics.fmean(r["generation"] for r in rows),
-    }
-    verdict["accepted"] = (
-        abs(verdict["bias"]) <= D_ACCEPT and not verdict["any_hit_cap"]
-    )
+    with ProcessPoolExecutor(args.jobs) as pool:
+        rows = list(pool.map(run_seed, tasks))
+    verdict = rule_verdict(args.regime, rows, args.precision)
+    verdict["loci"] = args.loci
+    verdict["first_seed"] = args.first_seed
+    verdict["rows"] = rows
     print(json.dumps(verdict, indent=2))
 
 

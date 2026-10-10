@@ -45,16 +45,18 @@ point: `D` swings widely here (a standard deviation of 0.16 from one
 generation to the next), so averaging it to ±0.009 (the 95% interval the
 precision of 0.01 asks for) takes a long window.
 
-## The real calibration: many loci, many replicates
+## The real calibration: many seeds, many loci
 
 The genuine test that `fim`'s own mechanics reproduce Jost's theory is not
-this one single-locus run at all: it is `test/validation/
-test_simulator_equilibrium.py`'s Golden Part VI scenario, averaged over 60
-independently seeded replicates of 8 loci each, which lands within 0.04 of
-the analytic equilibrium D (`test/validation/convergence-defaults-
+this one single-locus run. `test/validation/test_simulator_equilibrium.py`
+checks the Golden Part VI scenario against the analytic equilibrium, and
+`test/validation/test_convergence_rule_calibration.py` runs the convergence
+rule on it for 12 fixed seeds of 4 loci each: the averages scatter by 0.008
+around 0.603, the analytic D is 0.603, and no run misses its target by more
+than its error bar allows (`test/validation/convergence-rule-calibration-
 evidence.json`). This single-locus example exists to show a complete,
-minimal, reproducible configuration whose own D now genuinely converges —
-not to stand in for that calibration.
+minimal, reproducible configuration whose own D genuinely converges, not to
+stand in for that calibration.
 
 ## Parameters
 
