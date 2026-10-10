@@ -39,7 +39,13 @@ from fim.config.convergence import (
 )
 from fim.config.numerics import MINIMUM_WINDOW_VALUES
 from fim.config.statistics import ESTIMATE_AUTO_DENOMINATOR, ESTIMATE_AUTO_FRACTION
-from fim.config.storage import LOG_BLOCK_GENERATIONS, LOG_KEY_EVERY, LOG_SYNC_SECONDS
+from fim.config.storage import (
+    LOG_BLOCK_GENERATIONS,
+    LOG_KEY_EVERY,
+    LOG_SYNC_SECONDS,
+    THINNING_MINIMUM_START,
+    THINNING_TRANSIENT_RELAXATION_TIMES,
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -82,6 +88,10 @@ class ExpertSettings:
             (greater than 0).
         log_block_generations: Generations per trajectory-log block (at least
             1).
+        thinning_transient_relaxation_times: Relaxation times after the burn-in
+            that thinning keeps whole (at least 0).
+        thinning_minimum_start: Generation before which thinning never starts
+            (at least 1).
         replicate_wave_multiple: Replicate waves a batch aims for (greater
             than 0).
         averaging_multiple_minimum: Smallest matched replicate averaging
@@ -110,6 +120,8 @@ class ExpertSettings:
     log_key_every: int = LOG_KEY_EVERY
     log_sync_seconds: float = LOG_SYNC_SECONDS
     log_block_generations: int = LOG_BLOCK_GENERATIONS
+    thinning_transient_relaxation_times: float = THINNING_TRANSIENT_RELAXATION_TIMES
+    thinning_minimum_start: int = THINNING_MINIMUM_START
     replicate_wave_multiple: float = REPLICATE_WAVE_MULTIPLE
     averaging_multiple_minimum: float = AVERAGING_MULTIPLE_MINIMUM
     averaging_multiple_maximum: float = AVERAGING_MULTIPLE_MAXIMUM
@@ -236,6 +248,8 @@ _RANGES: Final = (
     ("log_key_every", 1.0, True),
     ("log_sync_seconds", 0.0, False),
     ("log_block_generations", 1.0, True),
+    ("thinning_transient_relaxation_times", 0.0, True),
+    ("thinning_minimum_start", 1.0, True),
     ("replicate_wave_multiple", 0.0, False),
     ("averaging_multiple_minimum", 0.0, False),
     ("averaging_multiple_maximum", 0.0, False),
@@ -250,6 +264,7 @@ _INTEGER_FIELDS: Final = (
     "batch_width",
     "log_key_every",
     "log_block_generations",
+    "thinning_minimum_start",
 )
 """The fields that must be whole numbers."""
 
@@ -398,6 +413,18 @@ EXPERT_SETTING_INFO: Final[dict[str, ExpertSettingInfo]] = {
         "Log block size (generations)",
         "Generations per saved block of the trajectory log. Larger writes more "
         "efficiently; smaller loses less when a run is cut off.",
+    ),
+    "thinning_transient_relaxation_times": ExpertSettingInfo(
+        "Storage",
+        "Thinning: transient kept whole (relaxation times)",
+        "With thinning on, the run is kept in full until this many "
+        "relaxation times after the burn-in, so the transient is not thinned.",
+    ),
+    "thinning_minimum_start": ExpertSettingInfo(
+        "Storage",
+        "Thinning: earliest start (generations)",
+        "Thinning never starts before this generation, so a shorter run keeps "
+        "every generation even with thinning on.",
     ),
     "log_sync_seconds": ExpertSettingInfo(
         "Storage",

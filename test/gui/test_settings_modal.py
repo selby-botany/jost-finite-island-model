@@ -682,7 +682,7 @@ def test_the_expert_section_lists_every_setting_collapsed_with_its_default(
 
     result = _drive(window, steps)
 
-    assert result["rows"] == 21
+    assert result["rows"] == 23
     assert result["open"] is False
     assert result["groups"] == ["Convergence", "Batches", "Statistics", "Storage"]
     assert result["batchWidth"] == "8"
@@ -825,3 +825,45 @@ def test_settings_holds_the_estimate_method_and_window_defaults(
     assert result["saved"]["convergence_estimate"] == "auto"
     assert result["saved"]["precision_method"] == "planned_replicates"
     assert result["saved"]["replicate_averaging_window"] == "1200"
+
+
+def test_settings_holds_the_storage_defaults(window: webview.Window) -> None:
+    """Retention, stride and thinning start seed, save and reload."""
+
+    def steps(poll_until: Callable[[str, Callable[[Any], bool]], Any]) -> Any:
+        window.evaluate_js(_OPEN_SETTINGS)
+        poll_until("window.__fimSettingsLoaded === true", lambda value: value is True)
+        seeded = window.evaluate_js(
+            "({"
+            "retention: document.getElementById("
+            "'settings-trajectory_retention').value, "
+            "stride: document.getElementById('settings-trajectory_stride').value, "
+            "start: document.getElementById("
+            "'settings-trajectory_thinning_start').value"
+            "})"
+        )
+        window.evaluate_js(
+            "document.getElementById('settings-trajectory_retention').value = "
+            "'thinned';"
+            "document.getElementById('settings-trajectory_stride').value = '20';"
+            "document.getElementById('settings-trajectory_thinning_start').value = "
+            "'5000';"
+            "window.__fimSettingsSaveResult = null;"
+            "document.getElementById('settings-save-button').click();"
+            "(async () => {"
+            + AWAIT_SETTINGS_SAVES
+            + "window.__fimSettingsSaveResult = "
+            "await window.pywebview.api.get_default_run_settings();"
+            "})();"
+        )
+        saved = poll_until(
+            "window.__fimSettingsSaveResult", lambda value: value is not None
+        )
+        return {"seeded": seeded, "saved": saved}
+
+    result = _drive(window, steps)
+
+    assert result["seeded"] == {"retention": "full", "stride": "10", "start": "auto"}
+    assert result["saved"]["trajectory_retention"] == "thinned"
+    assert result["saved"]["trajectory_stride"] == "20"
+    assert result["saved"]["trajectory_thinning_start"] == "5000"

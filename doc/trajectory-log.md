@@ -86,6 +86,16 @@ directory is only published when the run finishes, so an interrupted
 matter to code that keeps a log open for long (the desktop app's live runs, and
 the run checkpoints that are still to come).
 
+**Thinning.** A long run can write only some of its generations
+([`trajectory_retention`](configuration.md#trajectory_retention-trajectory_stride-trajectory_thinning_start)):
+generation 0, everything before the thinning start, one in every stride
+after it, the last burn-in generation and the final generation. The log format
+already allows gaps in the generation numbers; a reader lists exactly the
+generations that were written, `frame_at` raises `KeyError` for a skipped one,
+and `fim stats` and the app say the run was thinned. The count of generations
+in a thinned file is a function of the settings and the final generation, so
+the integrity check still catches a file that was cut or edited.
+
 **Tuning.** The snapshot interval (256), the block size (512 generations) and
 the sync period (two seconds) are the Expert Settings `log_key_every`,
 `log_block_generations` and `log_sync_seconds`

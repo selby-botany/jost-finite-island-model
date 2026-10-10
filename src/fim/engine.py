@@ -110,7 +110,7 @@ import os
 import pickle
 from collections.abc import Callable, Collection, Mapping, Sequence
 from concurrent.futures import Future, ProcessPoolExecutor, ThreadPoolExecutor
-from dataclasses import dataclass, replace
+from dataclasses import dataclass, field, replace
 from datetime import UTC, datetime
 from typing import Any, Final, Literal, Protocol, TypeAlias, TypedDict, cast
 
@@ -160,6 +160,7 @@ from fim.model.state import ModelState
 from fim.model.vector_block import VectorBlock, VectorMigration
 from fim.persistence.frame import FrameLayout, state_to_frame
 from fim.persistence.manifest import CURRENT_SCHEMA_VERSION, RunManifest
+from fim.persistence.retention import TrajectoryRetention
 from fim.persistence.store import (
     FrameStore,
     InMemoryTrajectoryStore,
@@ -695,6 +696,7 @@ class ReplicaLane:
     vectorized_state: VectorBlock | None = None
     equilibration_outcome: EquilibrationOutcome | None = None
     equilibrium_store: TrajectoryStore | None = None
+    retention: TrajectoryRetention = field(default_factory=TrajectoryRetention)
 
 
 class Advancer(Protocol):
@@ -774,9 +776,13 @@ class SequentialAdvancer:
                 finite_alleles=lane.finite_alleles,
                 jit=self._jit,
             )
-            _persist_state(store, lane.run_id, lane.state)
             values = _convergence_values(lane.state, lane.params)
             lane.monitor.record(lane.state.generation, values)
+            if (
+                lane.retention.keeps(lane.state.generation)
+                or lane.monitor.should_stop()
+            ):
+                _persist_state(store, lane.run_id, lane.state)
             if debug_enabled:
                 logger.debug(
                     "replicate %s generation %d: %s",
@@ -1049,10 +1055,11 @@ class VectorizedAdvancer:
                 )
                 lane.vectorized_state = block
             block.advance(lane.rng)
-            _persist_block(store, lane.run_id, block)
             lane.monitor.record(
                 block.generation, _convergence_values_vectorized(block, lane.params)
             )
+            if lane.retention.keeps(block.generation) or lane.monitor.should_stop():
+                _persist_block(store, lane.run_id, block)
             if lane.monitor.should_stop():
                 # `lane.state` has been left stale, at generation zero,
                 # this whole time: materialize the real final state now,
@@ -1194,6 +1201,7 @@ def _build_replica_lane(
         started_at=started_at,
         equilibration_outcome=equilibration_outcome,
         equilibrium_store=equilibrium_store,
+        retention=TrajectoryRetention.from_params(lane_params),
     )
 
 
@@ -3769,11 +3777,15 @@ def _simulate_one(
     # (up to `max_generations`, by default 10000), is where that discipline
     # matters most in this whole codebase.
     debug_enabled = logger.isEnabledFor(logging.DEBUG)
+    retention = TrajectoryRetention.from_params(params)
     while not monitor.should_stop():
         state = step(state, params, registry, rng, finite_alleles=finite_alleles)
-        _persist_state(store, run_id, state)
         values = _convergence_values(state, params)
         monitor.record(state.generation, values)
+        # The stop generation is only known after `record`, so it is the one
+        # generation thinning cannot decide in advance; it is always written.
+        if retention.keeps(state.generation) or monitor.should_stop():
+            _persist_state(store, run_id, state)
         if debug_enabled:
             logger.debug(
                 "replicate %s generation %d: %s", run_id, state.generation, values

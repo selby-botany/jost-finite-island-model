@@ -142,6 +142,9 @@ def test_all_fields_covers_every_tabs_plain_fields() -> None:
         "stop_batch_early",
         "precision_method",
         "replicate_averaging_window",
+        "trajectory_retention",
+        "trajectory_stride",
+        "trajectory_thinning_start",
         "replicate_minimum",
         "confidence",
         "engine_backend",
@@ -1680,4 +1683,40 @@ def test_the_new_run_defaults_are_validated_on_their_own() -> None:
     assert run_setting_error("replicate_averaging_window", "800") is None
     assert "replicate_averaging_window" in (
         run_setting_error("replicate_averaging_window", "0") or ""
+    )
+
+
+def test_the_retention_fields_round_trip_through_the_payload() -> None:
+    """Retention, stride and thinning start survive the form; derived stays auto."""
+    values = starter_form_values()
+    values["ploidy"] = "1"
+    assert values["trajectory_retention"] == "full"
+    assert values["trajectory_stride"] == "10"
+    assert values["trajectory_thinning_start"] == "auto"
+
+    values["trajectory_retention"] = "thinned"
+    values["trajectory_stride"] = "25"
+    params = SimulationParams.from_mapping(form_values_to_payload(values))
+    again = params_to_form_values(params)
+    assert params.trajectory_retention == "thinned"
+    assert again["trajectory_stride"] == "25"
+    # A derived start shows as `auto` again, never frozen into the form.
+    assert again["trajectory_thinning_start"] == "auto"
+
+    values["trajectory_thinning_start"] = "4321"
+    typed = SimulationParams.from_mapping(form_values_to_payload(values))
+    assert params_to_form_values(typed)["trajectory_thinning_start"] == "4321"
+
+
+def test_the_retention_defaults_are_validated_on_their_own() -> None:
+    """Settings refuses a bad retention, stride or start by name."""
+    assert run_setting_error("trajectory_retention", "thinned") is None
+    assert "trajectory_retention" in (
+        run_setting_error("trajectory_retention", "x") or ""
+    )
+    assert run_setting_error("trajectory_stride", "5") is None
+    assert "trajectory_stride" in (run_setting_error("trajectory_stride", "0") or "")
+    assert run_setting_error("trajectory_thinning_start", "auto") is None
+    assert "trajectory_thinning_start" in (
+        run_setting_error("trajectory_thinning_start", "-1") or ""
     )

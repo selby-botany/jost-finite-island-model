@@ -39,3 +39,31 @@ less when a run is cut off and make a live view fresher.
 
 Kind: policy.
 """
+
+TRAJECTORY_STRIDE: Final = 10
+"""Default `trajectory_stride`: with thinning on, one generation in this many is kept.
+
+A stride of 10 cuts a long run's trajectory file to about a tenth while the
+scrubber and animation, which show at most a hundred frames, are unaffected.
+
+Kind: policy.
+"""
+
+THINNING_TRANSIENT_RELAXATION_TIMES: Final = 2.0
+"""Relaxation times after the burn-in that thinning keeps whole.
+
+The transient is where the interesting history is, so thinning starts only
+once the run has averaged for this long (design 6.13).
+
+Kind: policy.
+"""
+
+THINNING_MINIMUM_START: Final = 100_000
+"""Generation before which thinning never starts.
+
+A run shorter than this keeps every generation even with thinning on, which
+is what makes it safe to leave on: only runs long enough for the file to
+matter lose frames.
+
+Kind: policy.
+"""

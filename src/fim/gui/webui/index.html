@@ -2352,6 +2352,34 @@
       </div>
     </fieldset>
 
+    <!-- Storage: how much of a run's trajectory is kept. The default keeps
+         every generation; thinning cuts a long run's file to a fraction while
+         the statistics, the graph and the report are unaffected
+         (`fim.persistence.retention`). Run defaults like the fields above. -->
+    <fieldset class="composite">
+      <legend>Storage</legend>
+      <p class="hint">
+        The trajectory file of a long run can be very large. Thinning keeps
+        every generation until the run has been averaging for a while, then
+        one in every <em>stride</em>; nothing else changes.
+      </p>
+      <div class="field">
+        <label for="settings-trajectory_retention" data-field-help="trajectory_retention">trajectory retention</label>
+        <select id="settings-trajectory_retention">
+          <option value="full">full: every generation</option>
+          <option value="thinned">thinned: one in every stride</option>
+        </select>
+      </div>
+      <div class="field">
+        <label for="settings-trajectory_stride" data-field-help="trajectory_stride">trajectory stride</label>
+        <input type="text" id="settings-trajectory_stride">
+      </div>
+      <div class="field">
+        <label for="settings-trajectory_thinning_start" data-field-help="trajectory_thinning_start">thinning start</label>
+        <input type="text" id="settings-trajectory_thinning_start" placeholder="auto">
+      </div>
+    </fieldset>
+
     <!-- Expert Settings (`fim.config.expert`): the policy constants of the
          convergence rule, the batch windows, the statistics forms and the
          trajectory log. Collapsed: rarely changed, and a run that changes one

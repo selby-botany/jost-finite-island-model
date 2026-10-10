@@ -250,6 +250,14 @@ BATCH_FIELDS: Final[tuple[FormField, ...]] = (
         choices=("interval", "planned_replicates"),
     ),
     FormField("replicate_averaging_window", "replicate averaging window", "auto_int"),
+    FormField(
+        "trajectory_retention",
+        "trajectory retention",
+        "choice",
+        choices=("full", "thinned"),
+    ),
+    FormField("trajectory_stride", "trajectory stride", "int"),
+    FormField("trajectory_thinning_start", "thinning start", "auto_int"),
     FormField("replicate_minimum", "replicate minimum", "int"),
     FormField(
         "confidence",
@@ -1385,6 +1393,14 @@ def params_to_form_values(params: SimulationParams) -> dict[str, str]:
             f"{name}={value!r}" for name, value in params.statistic_precision
         ),
         "precision_method": params.precision_method,
+        "trajectory_retention": params.trajectory_retention,
+        "trajectory_stride": str(params.trajectory_stride),
+        "trajectory_thinning_start": (
+            "auto"
+            if params.trajectory_thinning_start == 0
+            or params.trajectory_thinning_start == params.derived_thinning_start()
+            else str(params.trajectory_thinning_start)
+        ),
         "replicate_averaging_window": (
             str(params.replicate_averaging_window)
             if params.replicate_averaging_window
@@ -1439,6 +1455,9 @@ DEFAULT_RUN_SETTING_FIELD_NAMES: Final[tuple[str, ...]] = (
     "confidence",
     "precision_method",
     "replicate_averaging_window",
+    "trajectory_retention",
+    "trajectory_stride",
+    "trajectory_thinning_start",
     "jit",
     "auto_vector_min_d",
     "auto_vector_max_capacity",
@@ -1500,6 +1519,9 @@ RUN_SETTING_LABELS: Final[Mapping[str, str]] = {
     "confidence": "Confidence",
     "precision_method": "Precision method",
     "replicate_averaging_window": "Replicate averaging window",
+    "trajectory_retention": "Trajectory retention",
+    "trajectory_stride": "Trajectory stride",
+    "trajectory_thinning_start": "Thinning start",
     "jit": "JIT compilation",
     "auto_vector_min_d": "Auto-vector minimum demes",
     "auto_vector_max_capacity": "Auto-vector maximum capacity",
@@ -1680,6 +1702,9 @@ _YAML_KEY_ORDER: Final[tuple[str, ...]] = (
     "stop_batch_early",
     "precision_method",
     "replicate_averaging_window",
+    "trajectory_retention",
+    "trajectory_stride",
+    "trajectory_thinning_start",
     "replicate_minimum",
     "confidence",
     "migrant_sampling",

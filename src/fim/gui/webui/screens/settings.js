@@ -54,6 +54,15 @@ const settingsPrecisionMethodSelect = document.getElementById(
 const settingsReplicateAveragingWindowInput = document.getElementById(
     "settings-replicate_averaging_window"
 );
+const settingsTrajectoryRetentionSelect = document.getElementById(
+    "settings-trajectory_retention"
+);
+const settingsTrajectoryStrideInput = document.getElementById(
+    "settings-trajectory_stride"
+);
+const settingsTrajectoryThinningStartInput = document.getElementById(
+    "settings-trajectory_thinning_start"
+);
 const settingsJitField = document.getElementById("settings-jit-field");
 const settingsJitSelect = document.getElementById("settings-jit");
 const settingsAutoVectorFields = document.getElementById("settings-auto-vector-fields");
@@ -127,6 +136,9 @@ function collectDefaultRunSettingsValues() {
         convergence_estimate: settingsConvergenceEstimateSelect.value,
         precision_method: settingsPrecisionMethodSelect.value,
         replicate_averaging_window: settingsReplicateAveragingWindowInput.value,
+        trajectory_retention: settingsTrajectoryRetentionSelect.value,
+        trajectory_stride: settingsTrajectoryStrideInput.value,
+        trajectory_thinning_start: settingsTrajectoryThinningStartInput.value,
         confidence: settingsConfidenceSelect.value,
         jit: settingsJitSelect.value,
         auto_vector_min_d: settingsAutoVectorMinDInput.value,
@@ -251,6 +263,9 @@ function applyDefaultRunSettingsValues(values) {
     settingsConvergenceEstimateSelect.value = values.convergence_estimate;
     settingsPrecisionMethodSelect.value = values.precision_method;
     settingsReplicateAveragingWindowInput.value = values.replicate_averaging_window;
+    settingsTrajectoryRetentionSelect.value = values.trajectory_retention;
+    settingsTrajectoryStrideInput.value = values.trajectory_stride;
+    settingsTrajectoryThinningStartInput.value = values.trajectory_thinning_start;
     settingsConfidenceSelect.value = values.confidence;
     settingsJitSelect.value = values.jit;
     settingsAutoVectorMinDInput.value = values.auto_vector_min_d;

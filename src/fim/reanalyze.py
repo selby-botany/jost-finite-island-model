@@ -41,6 +41,7 @@ from fim.persistence.manifest import (
     read_manifest,
     verify_trajectory_integrity,
 )
+from fim.persistence.retention import TrajectoryRetention
 from fim.persistence.store import TrajectoryRow
 from fim.persistence.tlog_reader import LogReader, read_rows
 from fim.statistics.catalog import report_keys
@@ -407,14 +408,27 @@ def reanalyze_trajectory(
     running_max, generation_rows, observed_generation_count = _select_generation_rows(
         trajectory_path, manifest.run_id, generation
     )
-    if observed_generation_count != manifest.generation_count:
+    retention = TrajectoryRetention.from_params(params)
+    expected_count = (
+        retention.count_through(manifest.generation)
+        if retention.thinned
+        else manifest.generation_count
+    )
+    if observed_generation_count != expected_count:
         raise ValueError(
             f"trajectory has {observed_generation_count} generation(s), "
-            f"manifest records {manifest.generation_count} — the file may "
+            f"manifest records {expected_count} — the file may "
             "have been edited since the run completed"
         )
     resolved_generation = generation if generation is not None else running_max
     if not generation_rows:
+        if retention.thinned:
+            raise ValueError(
+                f"trajectory has no generation {resolved_generation}: this run "
+                f"was thinned (every generation before {retention.start}, then "
+                f"every {retention.stride}th, plus the last burn-in and final "
+                "generations)"
+            )
         raise ValueError(f"trajectory has no generation {resolved_generation}")
     state = ModelState.from_rows(generation_rows, params.loci)
     # Whether this is the run's own *final* generation matters for how

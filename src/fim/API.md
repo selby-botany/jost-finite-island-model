@@ -77,6 +77,9 @@ Return to the [source-tree orientation](../README.md) or the [developer guide](.
   * [LOG\_KEY\_EVERY](#fim.config.storage.LOG_KEY_EVERY)
   * [LOG\_SYNC\_SECONDS](#fim.config.storage.LOG_SYNC_SECONDS)
   * [LOG\_BLOCK\_GENERATIONS](#fim.config.storage.LOG_BLOCK_GENERATIONS)
+  * [TRAJECTORY\_STRIDE](#fim.config.storage.TRAJECTORY_STRIDE)
+  * [THINNING\_TRANSIENT\_RELAXATION\_TIMES](#fim.config.storage.THINNING_TRANSIENT_RELAXATION_TIMES)
+  * [THINNING\_MINIMUM\_START](#fim.config.storage.THINNING_MINIMUM_START)
 * [fim.convergence](#fim.convergence)
 * [fim.convergence.batch\_window](#fim.convergence.batch_window)
   * [WindowNoise](#fim.convergence.batch_window.WindowNoise)
@@ -557,6 +560,7 @@ Return to the [source-tree orientation](../README.md) or the [developer guide](.
   * [SimulationParams](#fim.model.params.SimulationParams)
     * [\_\_post\_init\_\_](#fim.model.params.SimulationParams.__post_init__)
     * [convergence\_statistics](#fim.model.params.SimulationParams.convergence_statistics)
+    * [derived\_thinning\_start](#fim.model.params.SimulationParams.derived_thinning_start)
     * [batch\_precision](#fim.model.params.SimulationParams.batch_precision)
     * [population\_sizes](#fim.model.params.SimulationParams.population_sizes)
     * [individuals](#fim.model.params.SimulationParams.individuals)
@@ -792,6 +796,11 @@ Return to the [source-tree orientation](../README.md) or the [developer guide](.
 * [fim.persistence.report](#fim.persistence.report)
   * [write\_report](#fim.persistence.report.write_report)
   * [write\_jsonl\_rows](#fim.persistence.report.write_jsonl_rows)
+* [fim.persistence.retention](#fim.persistence.retention)
+  * [TrajectoryRetention](#fim.persistence.retention.TrajectoryRetention)
+    * [from\_params](#fim.persistence.retention.TrajectoryRetention.from_params)
+    * [keeps](#fim.persistence.retention.TrajectoryRetention.keeps)
+    * [count\_through](#fim.persistence.retention.TrajectoryRetention.count_through)
 * [fim.persistence.run\_metadata](#fim.persistence.run_metadata)
   * [\_KeepClass](#fim.persistence.run_metadata._KeepClass)
     * [\_\_repr\_\_](#fim.persistence.run_metadata._KeepClass.__repr__)
@@ -1887,6 +1896,10 @@ The convergence policy constants one run uses.
   (greater than 0).
 - `log_block_generations` - Generations per trajectory-log block (at least
   1).
+- `thinning_transient_relaxation_times` - Relaxation times after the burn-in
+  that thinning keeps whole (at least 0).
+- `thinning_minimum_start` - Generation before which thinning never starts
+  (at least 1).
 - `replicate_wave_multiple` - Replicate waves a batch aims for (greater
   than 0).
 - `averaging_multiple_minimum` - Smallest matched replicate averaging
@@ -2262,6 +2275,40 @@ Generations after which the open block of the log is sealed and written.
 A block is the unit that is checksummed and written, and the unit a reader can
 skip to. Larger blocks compress and write more efficiently; smaller ones lose
 less when a run is cut off and make a live view fresher.
+
+Kind: policy.
+
+<a id="fim.config.storage.TRAJECTORY_STRIDE"></a>
+
+#### TRAJECTORY\_STRIDE
+
+Default `trajectory_stride`: with thinning on, one generation in this many is kept.
+
+A stride of 10 cuts a long run's trajectory file to about a tenth while the
+scrubber and animation, which show at most a hundred frames, are unaffected.
+
+Kind: policy.
+
+<a id="fim.config.storage.THINNING_TRANSIENT_RELAXATION_TIMES"></a>
+
+#### THINNING\_TRANSIENT\_RELAXATION\_TIMES
+
+Relaxation times after the burn-in that thinning keeps whole.
+
+The transient is where the interesting history is, so thinning starts only
+once the run has averaged for this long (design 6.13).
+
+Kind: policy.
+
+<a id="fim.config.storage.THINNING_MINIMUM_START"></a>
+
+#### THINNING\_MINIMUM\_START
+
+Generation before which thinning never starts.
+
+A run shorter than this keeps every generation even with thinning on, which
+is what makes it safe to leave on: only runs long enough for the file to
+matter lose frames.
 
 Kind: policy.
 
@@ -15420,6 +15467,22 @@ functions that actually use each one.
 - ``"planned_replicates"`` - run exactly `n_replicates`, each long
   enough that their interval is plus or minus `precision`; no
   early stop. Needs at least two replicates.
+- `trajectory_retention` - Which generations of the trajectory are written
+  to disk. `"full"` (the default): every generation. `"thinned"`:
+  generation 0, every generation before `trajectory_thinning_start`,
+  every `trajectory_stride`-th generation from it on, the last
+  burn-in generation and the final generation
+  (`fim.persistence.retention`). Per-generation statistics are
+  never thinned, so the graph, the bands and every number in the
+  report are unaffected; reanalysis and the scrubber see only the
+  kept generations.
+- `trajectory_stride` - With thinning on, one generation in this many is
+  kept from the thinning start on (at least 1).
+- `trajectory_thinning_start` - First generation thinning may skip.
+  `AUTO_CONVERGENCE` (`0`, the default) derives it as the later of
+  the Expert Setting `thinning_minimum_start` and the burn-in plus
+  `thinning_transient_relaxation_times` relaxation times, so a
+  short run keeps every generation and the transient is kept whole.
 - `replicate_averaging_window` - Generations each replicate of a batch
   averages after its burn-in. `AUTO_CONVERGENCE` (`0`, the
   default) matches the window to the batch
@@ -15606,6 +15669,26 @@ string (the common case) or a tuple of several — this property
 is the convenient, always-a-tuple form every caller that just
 wants to iterate over "whichever statistics are being watched"
 actually uses, instead of handling both shapes itself.
+
+<a id="fim.model.params.SimulationParams.derived_thinning_start"></a>
+
+#### derived\_thinning\_start
+
+```python
+def derived_thinning_start() -> int
+```
+
+Return the thinning start an `auto` setting derives.
+
+The later of `thinning_minimum_start` and the burn-in plus
+`thinning_transient_relaxation_times` relaxation times, so a short
+run is never thinned and the transient is kept whole. A function of
+the configuration alone, so a form can tell a derived start from one
+the user typed.
+
+**Returns**:
+
+  The generation thinning would start at.
 
 <a id="fim.model.params.SimulationParams.batch_precision"></a>
 
@@ -20924,6 +21007,105 @@ formatting difference" reason `write_report` documents.
 
 - `path` - Destination file path. Parent directories are created.
 - `rows` - JSON-serializable mappings, one per line, in order.
+
+<a id="fim.persistence.retention"></a>
+
+# fim.persistence.retention
+
+Which generations of a trajectory are written to disk.
+
+A long run's trajectory file is dominated by per-generation allele
+frequencies (about 27 KB a generation for the largest examples). The app's
+purpose is trajectories, so the default keeps every generation; a user can
+thin a run instead. What is kept is a function of the generation number alone
+(design 6.13): never of disk space or time, so a rerun keeps the same frames
+and the replicates of a batch align.
+
+Kept under thinning: generation 0, every generation before the thinning
+start, every `stride`-th generation from the start on (counted from the
+start), the last burn-in generation, and the final generation. The per-
+generation statistics (`convergence.jsonl`) are never thinned: the monitor,
+the trajectory graph and every number in the report come from them.
+
+<a id="fim.persistence.retention.TrajectoryRetention"></a>
+
+## TrajectoryRetention Objects
+
+```python
+@dataclass(frozen=True, slots=True)
+class TrajectoryRetention()
+```
+
+The rule for which generations a run writes.
+
+**Attributes**:
+
+- `thinned` - Whether any generation is skipped.
+- `start` - First generation that thinning may skip (at least 1).
+- `stride` - From `start` on, one generation in this many is kept.
+- `burn_in` - The last burn-in generation, always kept; 0 when the run has
+  no fixed burn-in.
+
+<a id="fim.persistence.retention.TrajectoryRetention.from_params"></a>
+
+#### from\_params
+
+```python
+@classmethod
+def from_params(cls, params: SimulationParams) -> TrajectoryRetention
+```
+
+Build the rule a configuration asks for.
+
+**Arguments**:
+
+- `params` - The run's configuration; `trajectory_thinning_start` has
+  already been resolved from `auto` by `SimulationParams`.
+
+
+**Returns**:
+
+  A rule that keeps everything unless `trajectory_retention` is
+  `"thinned"`.
+
+<a id="fim.persistence.retention.TrajectoryRetention.keeps"></a>
+
+#### keeps
+
+```python
+def keeps(generation: int) -> bool
+```
+
+Return whether `generation` is written (the final one always is, too).
+
+**Arguments**:
+
+- `generation` - A generation number.
+
+
+**Returns**:
+
+  `True` unless thinning skips it. The caller also writes the stop
+  generation, which this rule cannot know in advance.
+
+<a id="fim.persistence.retention.TrajectoryRetention.count_through"></a>
+
+#### count\_through
+
+```python
+def count_through(final: int) -> int
+```
+
+Return how many generations a run that ended at `final` wrote.
+
+**Arguments**:
+
+- `final` - The final generation, which is always written.
+
+
+**Returns**:
+
+  The number of distinct kept generations among `0..final`.
 
 <a id="fim.persistence.run_metadata"></a>
 

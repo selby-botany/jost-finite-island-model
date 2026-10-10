@@ -1798,3 +1798,86 @@ def test_the_log_expert_settings_default_to_the_log_constants_and_validate() -> 
     assert deterministic_run_id(changed) != deterministic_run_id(
         SimulationParams.from_mapping(_valid_config())
     )
+
+
+def test_trajectory_retention_defaults_to_full_and_writes_nothing() -> None:
+    """A default run keeps every generation and its parameters name no retention."""
+    params = SimulationParams.from_mapping(_valid_config())
+
+    assert params.trajectory_retention == "full"
+    assert params.trajectory_stride == 10
+    written = params.to_dict()
+    assert "trajectory_retention" not in written
+    assert "trajectory_stride" not in written
+    assert "trajectory_thinning_start" not in written
+
+
+def test_thinning_derives_its_start_from_the_burn_in_and_the_minimum() -> None:
+    """`auto` is the later of the minimum start and burn-in plus two tau."""
+    short = SimulationParams.from_mapping(
+        {**_valid_config(), "trajectory_retention": "thinned"}
+    )
+    assert short.trajectory_thinning_start == 100_000
+    assert short.derived_thinning_start() == 100_000
+    slow = SimulationParams.from_mapping(
+        {
+            **_valid_config(),
+            "trajectory_retention": "thinned",
+            "convergence_burn_in": 90_000,
+            "m": 0.0001,
+            "mu": 0.0001,
+            "expert": {"thinning_minimum_start": 1000},
+        }
+    )
+    assert slow.relaxation_time is not None
+    expected = max(1000, 90_000 + math.ceil(2.0 * slow.relaxation_time))
+    assert slow.trajectory_thinning_start == expected
+    explicit = SimulationParams.from_mapping(
+        {
+            **_valid_config(),
+            "trajectory_retention": "thinned",
+            "trajectory_thinning_start": 500,
+        }
+    )
+    assert explicit.trajectory_thinning_start == 500
+
+
+def test_thinned_settings_are_written_and_round_trip() -> None:
+    """Thinning is part of the run's parameters, with its resolved start."""
+    params = SimulationParams.from_mapping(
+        {
+            **_valid_config(),
+            "trajectory_retention": "thinned",
+            "trajectory_stride": 25,
+            "trajectory_thinning_start": 777,
+        }
+    )
+    written = params.to_dict()
+    assert written["trajectory_retention"] == "thinned"
+    assert written["trajectory_stride"] == 25
+    assert written["trajectory_thinning_start"] == 777
+    again = SimulationParams.from_mapping(written)
+    assert (again.trajectory_retention, again.trajectory_stride) == ("thinned", 25)
+    assert again.trajectory_thinning_start == 777
+    assert deterministic_run_id(again) == deterministic_run_id(params)
+    assert deterministic_run_id(params) != deterministic_run_id(
+        SimulationParams.from_mapping(_valid_config())
+    )
+
+
+@pytest.mark.parametrize(
+    ("changes", "message"),
+    [
+        ({"trajectory_retention": "some"}, "trajectory_retention must be"),
+        ({"trajectory_stride": 0}, "trajectory_stride"),
+        ({"trajectory_stride": 2.5}, "trajectory_stride"),
+        ({"trajectory_thinning_start": -3}, "positive integer or 'auto'"),
+        ({"expert": {"thinning_minimum_start": 0}}, "at least 1"),
+    ],
+)
+def test_invalid_retention_settings_are_refused(
+    changes: dict[str, object], message: str
+) -> None:
+    """Unknown retention, a stride below 1 and a bad start are rejected by name."""
+    with pytest.raises(ValueError, match=message):
+        SimulationParams.from_mapping({**_valid_config(), **changes})

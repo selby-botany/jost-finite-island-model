@@ -5406,3 +5406,77 @@ def test_the_unbounded_statistic_uses_a_relative_target(
     z = 1.959963984540054
     expected = 0.05 * max(1.0, abs(entry["mean"])) / z
     assert entry["target_standard_error"] == pytest.approx(expected)
+
+
+def _thinned_params(**changes: object) -> SimulationParams:
+    """A single run that thins every 5th generation from generation 8 on."""
+    config: dict[str, object] = {
+        **_tiny_config(),
+        "precision": 0.0,
+        "max_generations": 40,
+        "trajectory_retention": "thinned",
+        "trajectory_stride": 5,
+        "trajectory_thinning_start": 8,
+    }
+    config.update(changes)
+    return SimulationParams.from_mapping(config)
+
+
+def _written_generations(result: RunResult) -> list[int]:
+    """Distinct generation numbers a run wrote to its in-memory store, ascending."""
+    return sorted({row["generation"] for row in result.store.read(result.run_id)})
+
+
+def test_a_thinned_run_writes_the_kept_generations_only() -> None:
+    """Generation 0, the head, every 5th from 8, the burn-in, and the final one."""
+    result = _run(_thinned_params())
+
+    expected = sorted({*range(8), *range(8, 41, 5), 1, 40})
+    assert _written_generations(result) == expected
+    assert result.report["generation"] == 40
+
+
+def test_thinning_changes_no_statistic_and_no_final_state() -> None:
+    """Same seed, same report and final state, whether or not frames are skipped."""
+    thinned = _run(_thinned_params())
+    full = _run(_thinned_params(trajectory_retention="full"))
+
+    assert thinned.final_state == full.final_state
+    assert thinned.convergence_histories == full.convergence_histories
+    assert {k: v for k, v in thinned.report.items() if k != "run_id"} == {
+        k: v for k, v in full.report.items() if k != "run_id"
+    }
+
+
+@pytest.mark.parametrize("backend", ["generational", "generational-vector"])
+def test_every_backend_thins_to_the_same_generations(backend: EngineBackend) -> None:
+    """Lanes of the generation-first drivers keep the same frames as a lineal run."""
+    if backend == "generational-vector":
+        pytest.importorskip("numba")
+    base = _thinned_params(
+        mutation_model="finite_alleles", loci=[{"locus_id": 1, "length": 4}]
+    )
+    reference = _run(base)
+    other = _run(replace(base, engine_backend=backend))
+
+    assert _written_generations(other) == _written_generations(reference)
+    assert other.final_state == reference.final_state
+
+
+def test_a_batch_replicate_stops_on_a_generation_thinning_would_skip() -> None:
+    """The stop generation is always written, whatever the stride says."""
+    params = _thinned_params(
+        n_replicates=3,
+        replicate_averaging_window=23,
+        trajectory_stride=50,
+        trajectory_thinning_start=4,
+    )
+    output = fim(
+        params.gene_copies, params.m, params.mu, params.d, params=params, clock=_clock
+    )
+    assert isinstance(output, tuple)
+
+    for result in output:
+        generations = _written_generations(result)
+        assert generations[-1] == result.report["generation"] == 1 + 23
+        assert generations[:4] == [0, 1, 2, 3]

@@ -637,6 +637,32 @@ value?</a>); see
 <a href="#convergence_burn_in">convergence_burn_in</a>. A cap at or below the burn-in ends
 the run before any averaging, and the run logs a warning. Setting only a
 burn-in raises the derived cap to leave <code>15 tau</code> after it.</p>
+<h3 id="trajectory_retention-trajectory_stride-trajectory_thinning_start">trajectory_retention, trajectory_stride, trajectory_thinning_start</h3>
+<ul>
+<li><strong>trajectory_retention:</strong> <code>full</code> or <code>thinned</code>; default <code>full</code></li>
+<li><strong>trajectory_stride:</strong> integer at least 1; default <code>10</code></li>
+<li><strong>trajectory_thinning_start:</strong> positive integer, or <code>auto</code>; default <code>auto</code></li>
+</ul>
+<p>A long run's trajectory file (the per-generation allele frequencies) is the
+largest thing it writes: about 27 KB a generation for the biggest examples. The
+default keeps every generation. <code>thinned</code> keeps generation 0, every generation
+before <code>trajectory_thinning_start</code>, then one generation in every
+<code>trajectory_stride</code> counted from the start, plus the last burn-in generation
+and the final generation. <code>auto</code> starts thinning at the later of 100,000
+generations (the Expert Setting <code>thinning_minimum_start</code>) and the burn-in plus
+two relaxation times (<code>thinning_transient_relaxation_times</code>), so a shorter run
+keeps everything even with thinning on, and the transient is never thinned.</p>
+<p>Only the trajectory file is thinned. The per-generation statistics
+(<code>convergence.jsonl</code>), the graph and its bands, and every number in the report
+are unaffected. Which generations are kept depends only on the generation
+number, so a rerun keeps the same frames and the replicates of a batch align.
+The scrubber and animation, which show at most a hundred frames, snap to the
+nearest kept generation; re-analysis (<code>fim stats</code>, opening a run) works at the
+kept generations and says so for a skipped one. The settings are recorded in
+<code>manifest.json</code> only for a thinned run. In the app they are Settings, Storage.</p>
+<pre><code class="language-yaml">trajectory_retention: thinned
+trajectory_stride: 20
+</code></pre>
 <h3 id="expert">expert</h3>
 <ul>
 <li><strong>Type:</strong> mapping of Expert Setting names to values</li>
@@ -741,6 +767,18 @@ run that changes one is a different run (its auto-generated <code>run_id</code> 
 <td><code>1</code></td>
 <td>at least 1</td>
 <td>Factor on the burn-in when an allele-spectrum statistic (<code>E_ST</code>, <code>K_ST</code>, <code>A_CGD</code>, <code>Delta</code>, <code>MI</code>) is watched</td>
+</tr>
+<tr>
+<td><code>thinning_transient_relaxation_times</code></td>
+<td><code>2</code></td>
+<td>at least 0</td>
+<td>With thinning on, the run is kept in full until this many relaxation times after the burn-in</td>
+</tr>
+<tr>
+<td><code>thinning_minimum_start</code></td>
+<td><code>100000</code></td>
+<td>whole number, at least 1</td>
+<td>Thinning never starts before this generation, so shorter runs keep every generation</td>
 </tr>
 <tr>
 <td><code>log_key_every</code></td>
@@ -1388,6 +1426,18 @@ existed.</p>
 </tr>
 <tr>
 <td>stop_batch_early not a boolean</td>
+<td>rejected</td>
+</tr>
+<tr>
+<td>trajectory_retention not <code>full</code> or <code>thinned</code></td>
+<td>rejected</td>
+</tr>
+<tr>
+<td>trajectory_stride less than 1 or not a whole number</td>
+<td>rejected</td>
+</tr>
+<tr>
+<td>trajectory_thinning_start not a positive integer or <code>auto</code></td>
 <td>rejected</td>
 </tr>
 <tr>

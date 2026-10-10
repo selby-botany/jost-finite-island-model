@@ -560,3 +560,77 @@ def test_a_rebuilt_convergence_history_matches_the_live_one(tmp_path: Path) -> N
             if len(live_values) != len(generations):
                 saw_an_interior_gap = True
     assert saw_an_interior_gap, "fixture no longer exercises the interior-gap shape"
+
+
+_THIN = {
+    "trajectory_retention": "thinned",
+    "trajectory_stride": 7,
+    "trajectory_thinning_start": 10,
+    "convergence_burn_in": 3,
+    "precision": 0.0,
+    "max_generations": 60,
+}
+
+
+def test_a_thinned_run_writes_only_the_kept_generations_and_nothing_else_changes(
+    tmp_path: Path,
+) -> None:
+    """The kept frames follow the rule; the report and final state are unchanged."""
+    (tmp_path / "full").mkdir()
+    (tmp_path / "thinned").mkdir()
+    full = _write_run(tmp_path / "full", precision=0.0, max_generations=60)
+    thinned = _write_run(tmp_path / "thinned", **_THIN)
+
+    with tlog_reader.LogReader(thinned / "trajectory.tlog") as reader:
+        recorded = reader.generation_numbers()
+    expected = sorted(
+        {
+            *range(10),
+            *range(10, 61, 7),
+            3,
+            60,
+        }
+    )
+    assert recorded == expected
+    # Thinning is storage only: the statistics, the report and the final state
+    # are those of the full run.
+    full_report = json.loads((full / "report.json").read_text())
+    thinned_report = json.loads((thinned / "report.json").read_text())
+    for key in ("D", "G_ST", "H_S", "H_T", "generation", "reason"):
+        assert thinned_report[key] == full_report[key], key
+    assert (full / "convergence.jsonl").read_bytes() == (
+        thinned / "convergence.jsonl"
+    ).read_bytes()
+    assert (
+        read_manifest(thinned / "manifest.json").parameters["trajectory_retention"]
+        == "thinned"
+    )
+
+
+def test_a_thinned_run_reanalyzes_its_kept_generations_and_names_the_rest(
+    tmp_path: Path,
+) -> None:
+    """Reanalysis works at a kept generation and explains a skipped one."""
+    output = _write_run(tmp_path, **_THIN)
+    trajectory = output / "trajectory.tlog"
+
+    final = reanalyze.reanalyze_trajectory(trajectory)
+    assert final.state.generation == 60
+    kept = reanalyze.reanalyze_trajectory(trajectory, generation=17)
+    assert kept.state.generation == 17
+    with pytest.raises(ValueError, match=r"thinned.*every 7th"):
+        reanalyze.reanalyze_trajectory(trajectory, generation=18)
+
+
+def test_a_thinned_run_with_a_high_start_keeps_every_generation(
+    tmp_path: Path,
+) -> None:
+    """A run that ends before the thinning start is not thinned at all."""
+    output = _write_run(tmp_path, **{**_THIN, "trajectory_thinning_start": 1000})
+
+    with tlog_reader.LogReader(output / "trajectory.tlog") as reader:
+        assert reader.generation_numbers() == list(range(61))
+    assert (
+        reanalyze.reanalyze_trajectory(output / "trajectory.tlog").state.generation
+        == 60
+    )

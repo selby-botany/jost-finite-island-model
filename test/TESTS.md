@@ -135,6 +135,7 @@ Every test module, fixture, and test function documented here in full; `doc/fim-
   - [`test_pairwise_file`](#persistence.test_pairwise_file)
   - [`test_read_only`](#persistence.test_read_only)
   - [`test_report`](#persistence.test_report)
+  - [`test_retention`](#persistence.test_retention)
   - [`test_run_classes`](#persistence.test_run_classes)
   - [`test_run_metadata`](#persistence.test_run_metadata)
   - [`test_store`](#persistence.test_store)
@@ -3003,6 +3004,39 @@ drop-rather-than-guess rule off. Whether a gap occurs is a property
 of the seeded realization: seed 14, since the textbook per-copy
 mutation step (mutants recorded before the next drift) changed the
 stream and seed 7 no longer produces one.
+
+<a id="test.test_reanalyze.test_a_thinned_run_writes_only_the_kept_generations_and_nothing_else_changes"></a>
+
+#### test\_a\_thinned\_run\_writes\_only\_the\_kept\_generations\_and\_nothing\_else\_changes
+
+```python
+def test_a_thinned_run_writes_only_the_kept_generations_and_nothing_else_changes(
+        tmp_path: Path) -> None
+```
+
+The kept frames follow the rule; the report and final state are unchanged.
+
+<a id="test.test_reanalyze.test_a_thinned_run_reanalyzes_its_kept_generations_and_names_the_rest"></a>
+
+#### test\_a\_thinned\_run\_reanalyzes\_its\_kept\_generations\_and\_names\_the\_rest
+
+```python
+def test_a_thinned_run_reanalyzes_its_kept_generations_and_names_the_rest(
+        tmp_path: Path) -> None
+```
+
+Reanalysis works at a kept generation and explains a skipped one.
+
+<a id="test.test_reanalyze.test_a_thinned_run_with_a_high_start_keeps_every_generation"></a>
+
+#### test\_a\_thinned\_run\_with\_a\_high\_start\_keeps\_every\_generation
+
+```python
+def test_a_thinned_run_with_a_high_start_keeps_every_generation(
+        tmp_path: Path) -> None
+```
+
+A run that ends before the thinning start is not thinned at all.
 
 <a id="test.test_reproducibility"></a>
 
@@ -9144,6 +9178,48 @@ def test_the_unbounded_statistic_uses_a_relative_target(
 ```
 
 `A_CGD` counts alleles: its target scales with its mean, not the precision.
+
+<a id="engine.test_engine.test_a_thinned_run_writes_the_kept_generations_only"></a>
+
+#### test\_a\_thinned\_run\_writes\_the\_kept\_generations\_only
+
+```python
+def test_a_thinned_run_writes_the_kept_generations_only() -> None
+```
+
+Generation 0, the head, every 5th from 8, the burn-in, and the final one.
+
+<a id="engine.test_engine.test_thinning_changes_no_statistic_and_no_final_state"></a>
+
+#### test\_thinning\_changes\_no\_statistic\_and\_no\_final\_state
+
+```python
+def test_thinning_changes_no_statistic_and_no_final_state() -> None
+```
+
+Same seed, same report and final state, whether or not frames are skipped.
+
+<a id="engine.test_engine.test_every_backend_thins_to_the_same_generations"></a>
+
+#### test\_every\_backend\_thins\_to\_the\_same\_generations
+
+```python
+@pytest.mark.parametrize("backend", ["generational", "generational-vector"])
+def test_every_backend_thins_to_the_same_generations(
+        backend: EngineBackend) -> None
+```
+
+Lanes of the generation-first drivers keep the same frames as a lineal run.
+
+<a id="engine.test_engine.test_a_batch_replicate_stops_on_a_generation_thinning_would_skip"></a>
+
+#### test\_a\_batch\_replicate\_stops\_on\_a\_generation\_thinning\_would\_skip
+
+```python
+def test_a_batch_replicate_stops_on_a_generation_thinning_would_skip() -> None
+```
+
+The stop generation is always written, whatever the stride says.
 
 <a id="engine.test_frame_identity"></a>
 
@@ -16825,6 +16901,26 @@ def test_the_new_run_defaults_are_validated_on_their_own() -> None
 
 Settings refuses a bad estimate, method or window by name.
 
+<a id="gui.test_config_form.test_the_retention_fields_round_trip_through_the_payload"></a>
+
+#### test\_the\_retention\_fields\_round\_trip\_through\_the\_payload
+
+```python
+def test_the_retention_fields_round_trip_through_the_payload() -> None
+```
+
+Retention, stride and thinning start survive the form; derived stays auto.
+
+<a id="gui.test_config_form.test_the_retention_defaults_are_validated_on_their_own"></a>
+
+#### test\_the\_retention\_defaults\_are\_validated\_on\_their\_own
+
+```python
+def test_the_retention_defaults_are_validated_on_their_own() -> None
+```
+
+Settings refuses a bad retention, stride or start by name.
+
 <a id="gui.test_config_modal_dialogs"></a>
 
 # gui.test\_config\_modal\_dialogs
@@ -23068,6 +23164,16 @@ def test_settings_holds_the_estimate_method_and_window_defaults(
 
 Estimate, precision method and replicate window seed, save and reload.
 
+<a id="gui.test_settings_modal.test_settings_holds_the_storage_defaults"></a>
+
+#### test\_settings\_holds\_the\_storage\_defaults
+
+```python
+def test_settings_holds_the_storage_defaults(window: webview.Window) -> None
+```
+
+Retention, stride and thinning start seed, save and reload.
+
 <a id="gui.test_shutdown_deadman"></a>
 
 # gui.test\_shutdown\_deadman
@@ -27836,6 +27942,69 @@ def test_the_log_expert_settings_default_to_the_log_constants_and_validate(
 
 The three log tunables are Expert Settings with the writer's defaults.
 
+<a id="model.test_params.test_trajectory_retention_defaults_to_full_and_writes_nothing"></a>
+
+#### test\_trajectory\_retention\_defaults\_to\_full\_and\_writes\_nothing
+
+```python
+def test_trajectory_retention_defaults_to_full_and_writes_nothing() -> None
+```
+
+A default run keeps every generation and its parameters name no retention.
+
+<a id="model.test_params.test_thinning_derives_its_start_from_the_burn_in_and_the_minimum"></a>
+
+#### test\_thinning\_derives\_its\_start\_from\_the\_burn\_in\_and\_the\_minimum
+
+```python
+def test_thinning_derives_its_start_from_the_burn_in_and_the_minimum() -> None
+```
+
+`auto` is the later of the minimum start and burn-in plus two tau.
+
+<a id="model.test_params.test_thinned_settings_are_written_and_round_trip"></a>
+
+#### test\_thinned\_settings\_are\_written\_and\_round\_trip
+
+```python
+def test_thinned_settings_are_written_and_round_trip() -> None
+```
+
+Thinning is part of the run's parameters, with its resolved start.
+
+<a id="model.test_params.test_invalid_retention_settings_are_refused"></a>
+
+#### test\_invalid\_retention\_settings\_are\_refused
+
+```python
+@pytest.mark.parametrize(
+    ("changes", "message"),
+    [
+        ({
+            "trajectory_retention": "some"
+        }, "trajectory_retention must be"),
+        ({
+            "trajectory_stride": 0
+        }, "trajectory_stride"),
+        ({
+            "trajectory_stride": 2.5
+        }, "trajectory_stride"),
+        ({
+            "trajectory_thinning_start": -3
+        }, "positive integer or 'auto'"),
+        ({
+            "expert": {
+                "thinning_minimum_start": 0
+            }
+        }, "at least 1"),
+    ],
+)
+def test_invalid_retention_settings_are_refused(changes: dict[str, object],
+                                                message: str) -> None
+```
+
+Unknown retention, a stride below 1 and a bad start are rejected by name.
+
 <a id="model.test_run_identity"></a>
 
 # model.test\_run\_identity
@@ -31207,6 +31376,61 @@ def test_write_report_creates_parent_directories(tmp_path: Path) -> None
 ```
 
 A missing parent directory is created, matching every prior writer.
+
+<a id="persistence.test_retention"></a>
+
+# persistence.test\_retention
+
+Tests of the trajectory retention rule (design 6.13).
+
+Pure functions of the settings: the kept generations never depend on time,
+disk space or order, so the rule is checked against a brute-force listing.
+
+<a id="persistence.test_retention.test_full_retention_keeps_every_generation"></a>
+
+#### test\_full\_retention\_keeps\_every\_generation
+
+```python
+def test_full_retention_keeps_every_generation() -> None
+```
+
+The default rule skips nothing.
+
+<a id="persistence.test_retention.test_thinning_keeps_the_head_the_stride_the_burn_in_and_the_end"></a>
+
+#### test\_thinning\_keeps\_the\_head\_the\_stride\_the\_burn\_in\_and\_the\_end
+
+```python
+def test_thinning_keeps_the_head_the_stride_the_burn_in_and_the_end() -> None
+```
+
+Generation 0, everything before the start, every stride-th, burn-in, final.
+
+<a id="persistence.test_retention.test_the_count_matches_a_brute_force_listing"></a>
+
+#### test\_the\_count\_matches\_a\_brute\_force\_listing
+
+```python
+@pytest.mark.parametrize("start", [1, 7, 20])
+@pytest.mark.parametrize("stride", [1, 3, 10])
+@pytest.mark.parametrize("burn_in", [0, 5, 21, 40])
+@pytest.mark.parametrize("final", [0, 3, 20, 21, 39, 40, 41, 100])
+def test_the_count_matches_a_brute_force_listing(start: int, stride: int,
+                                                 burn_in: int,
+                                                 final: int) -> None
+```
+
+`count_through` is exact, so a reader can check a thinned file's length.
+
+<a id="persistence.test_retention.test_a_run_shorter_than_the_start_is_not_thinned"></a>
+
+#### test\_a\_run\_shorter\_than\_the\_start\_is\_not\_thinned
+
+```python
+def test_a_run_shorter_than_the_start_is_not_thinned() -> None
+```
+
+Thinning starts at `start`; before it every generation is kept.
 
 <a id="persistence.test_run_classes"></a>
 

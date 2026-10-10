@@ -83,6 +83,9 @@ package and fails on one that is not on its short allow list.
 | `LOG_KEY_EVERY` | `storage.py` | policy | Generations between keyframes in a sparse trajectory log. |
 | `LOG_SYNC_SECONDS` | `storage.py` | policy | Seconds between the log's group-commit syncs to disk. |
 | `LOG_BLOCK_GENERATIONS` | `storage.py` | policy | Generations after which the open block of the log is sealed and written. |
+| `TRAJECTORY_STRIDE` | `storage.py` | policy | Default `trajectory_stride`: with thinning on, one generation in this many is kept. |
+| `THINNING_TRANSIENT_RELAXATION_TIMES` | `storage.py` | policy | Relaxation times after the burn-in that thinning keeps whole. |
+| `THINNING_MINIMUM_START` | `storage.py` | policy | Generation before which thinning never starts. |
 
 ## Adding a constant
 

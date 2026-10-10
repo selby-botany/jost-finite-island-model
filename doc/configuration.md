@@ -722,6 +722,36 @@ value?](convergence.md#how-precise-is-the-reported-value)); see
 the run before any averaging, and the run logs a warning. Setting only a
 burn-in raises the derived cap to leave `15 tau` after it.
 
+### trajectory_retention, trajectory_stride, trajectory_thinning_start
+
+- **trajectory_retention:** `full` or `thinned`; default `full`
+- **trajectory_stride:** integer at least 1; default `10`
+- **trajectory_thinning_start:** positive integer, or `auto`; default `auto`
+
+A long run's trajectory file (the per-generation allele frequencies) is the
+largest thing it writes: about 27 KB a generation for the biggest examples. The
+default keeps every generation. `thinned` keeps generation 0, every generation
+before `trajectory_thinning_start`, then one generation in every
+`trajectory_stride` counted from the start, plus the last burn-in generation
+and the final generation. `auto` starts thinning at the later of 100,000
+generations (the Expert Setting `thinning_minimum_start`) and the burn-in plus
+two relaxation times (`thinning_transient_relaxation_times`), so a shorter run
+keeps everything even with thinning on, and the transient is never thinned.
+
+Only the trajectory file is thinned. The per-generation statistics
+(`convergence.jsonl`), the graph and its bands, and every number in the report
+are unaffected. Which generations are kept depends only on the generation
+number, so a rerun keeps the same frames and the replicates of a batch align.
+The scrubber and animation, which show at most a hundred frames, snap to the
+nearest kept generation; re-analysis (`fim stats`, opening a run) works at the
+kept generations and says so for a skipped one. The settings are recorded in
+`manifest.json` only for a thinned run. In the app they are Settings, Storage.
+
+```yaml
+trajectory_retention: thinned
+trajectory_stride: 20
+```
+
 ### expert
 
 - **Type:** mapping of Expert Setting names to values
@@ -750,6 +780,8 @@ run that changes one is a different run (its auto-generated `run_id` changes).
 | `estimate_auto_fraction` | `0.01` | between 0 and 1, exclusive | Share of window generations that may be degenerate before `auto` uses the value of means |
 | `batch_width` | `8` | whole number, at least 1 | Replicates assumed to run at once when `max_concurrent_replicates` is unset: the width of the first wave a batch matches its windows from |
 | `spectrum_burn_in_multiplier` | `1` | at least 1 | Factor on the burn-in when an allele-spectrum statistic (`E_ST`, `K_ST`, `A_CGD`, `Delta`, `MI`) is watched |
+| `thinning_transient_relaxation_times` | `2` | at least 0 | With thinning on, the run is kept in full until this many relaxation times after the burn-in |
+| `thinning_minimum_start` | `100000` | whole number, at least 1 | Thinning never starts before this generation, so shorter runs keep every generation |
 | `log_key_every` | `256` | whole number, at least 1 | Generations between keyframes in the trajectory log: smaller makes the log larger and seeking faster |
 | `log_sync_seconds` | `2` | greater than 0 | Seconds between the trajectory log's disk syncs: the most a power loss can take |
 | `log_block_generations` | `512` | whole number, at least 1 | Generations per trajectory-log block: larger writes more efficiently, smaller loses less when a run is cut off |
@@ -1342,6 +1374,9 @@ existed.
 | precision negative or non-finite | rejected |
 | statistic_precision naming an unwatched statistic, or a negative value | rejected |
 | stop_batch_early not a boolean | rejected |
+| trajectory_retention not `full` or `thinned` | rejected |
+| trajectory_stride less than 1 or not a whole number | rejected |
+| trajectory_thinning_start not a positive integer or `auto` | rejected |
 | precision_method not `interval` or `planned_replicates` | rejected |
 | precision_method `planned_replicates` with n<sub>replicates</sub> `1` | rejected |
 | replicate_averaging_window not a positive integer or `auto` | rejected |

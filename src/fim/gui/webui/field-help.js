@@ -138,6 +138,19 @@ const FIELD_HELP = {
         "(the first replicates measure the noise, the rest use the window " +
         "that reaches the precision). A number is used by every " +
         "replicate.",
+    trajectory_retention: "Which generations of a run's trajectory are " +
+        "saved. Full keeps every generation (the default). Thinned keeps " +
+        "every generation until the run has been averaging for a while, " +
+        "then one in every stride, plus the first, the last burn-in " +
+        "generation and the last. The statistics, the graph and the report " +
+        "are unaffected; the scrubber and re-analysis see only the kept " +
+        "generations.",
+    trajectory_stride: "With thinning on, one generation in this many is " +
+        "kept once thinning starts.",
+    trajectory_thinning_start: "The first generation thinning may skip. " +
+        "auto keeps every generation until the burn-in plus two relaxation " +
+        "times, and at least the first 100,000, so short runs are never " +
+        "thinned.",
     precision: "How precisely to estimate each watched statistic: plus or " +
         "minus this amount, in the statistic's own units, at the " +
         "confidence level. A single run averages over time until it gets " +

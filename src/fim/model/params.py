@@ -38,6 +38,7 @@ from fim.config.defaults import (
 )
 from fim.config.expert import ExpertSettings
 from fim.config.numerics import MINIMUM_REPLICATE_COUNT
+from fim.config.storage import TRAJECTORY_STRIDE
 from fim.convergence.defaults import derive_convergence_defaults
 from fim.convergence.defaults import relaxation_time as estimate_relaxation_time
 from fim.model.allele import AlleleId
@@ -77,6 +78,7 @@ ConvergenceStatistic = str | tuple[str, ...]
 ConvergenceCombinator = Literal["any", "all"]
 ConvergenceEstimate = Literal["mean_of_values", "value_of_means", "auto"]
 PrecisionMethod = Literal["interval", "planned_replicates"]
+TrajectoryRetentionChoice = Literal["full", "thinned"]
 MigrantSampling = Literal["continuous", "stochastic"]
 MutationModel = Literal["infinite_alleles", "finite_alleles"]
 EngineBackend = Literal["lineal", "generational", "generational-vector", "auto"]
@@ -113,6 +115,9 @@ PARAMETER_DEFAULTS: Final[dict[str, object]] = {
     "stop_batch_early": True,
     "statistic_precision": None,
     "precision_method": "interval",
+    "trajectory_retention": "full",
+    "trajectory_stride": TRAJECTORY_STRIDE,
+    "trajectory_thinning_start": None,  # None means "auto": derive it
     "replicate_averaging_window": None,  # None means "auto": match the batch
     "replicate_minimum": 10,
     "confidence": 0.95,
@@ -156,6 +161,9 @@ _CONFIG_KEYS: Final = frozenset(
         "stop_batch_early",
         "precision_method",
         "statistic_precision",
+        "trajectory_retention",
+        "trajectory_stride",
+        "trajectory_thinning_start",
         "replicate_averaging_window",
         "replicate_minimum",
         "confidence",
@@ -395,6 +403,22 @@ class SimulationParams:
             `"planned_replicates"`: run exactly `n_replicates`, each long
             enough that their interval is plus or minus `precision`; no
             early stop. Needs at least two replicates.
+        trajectory_retention: Which generations of the trajectory are written
+            to disk. `"full"` (the default): every generation. `"thinned"`:
+            generation 0, every generation before `trajectory_thinning_start`,
+            every `trajectory_stride`-th generation from it on, the last
+            burn-in generation and the final generation
+            (`fim.persistence.retention`). Per-generation statistics are
+            never thinned, so the graph, the bands and every number in the
+            report are unaffected; reanalysis and the scrubber see only the
+            kept generations.
+        trajectory_stride: With thinning on, one generation in this many is
+            kept from the thinning start on (at least 1).
+        trajectory_thinning_start: First generation thinning may skip.
+            `AUTO_CONVERGENCE` (`0`, the default) derives it as the later of
+            the Expert Setting `thinning_minimum_start` and the burn-in plus
+            `thinning_transient_relaxation_times` relaxation times, so a
+            short run keeps every generation and the transient is kept whole.
         replicate_averaging_window: Generations each replicate of a batch
             averages after its burn-in. `AUTO_CONVERGENCE` (`0`, the
             default) matches the window to the batch
@@ -569,6 +593,9 @@ class SimulationParams:
     n_replicates: int = DEFAULT_N_REPLICATES
     stop_batch_early: bool = True
     precision_method: PrecisionMethod = "interval"
+    trajectory_retention: TrajectoryRetentionChoice = "full"
+    trajectory_stride: int = TRAJECTORY_STRIDE
+    trajectory_thinning_start: int = AUTO_CONVERGENCE
     replicate_averaging_window: int = AUTO_CONVERGENCE
     replicate_minimum: int = 10
     confidence: float = 0.95
@@ -677,6 +704,7 @@ class SimulationParams:
         )
         _require_integer("n_replicates", self.n_replicates, minimum=1)
         self._validate_batch_settings()
+        self._resolve_trajectory_retention()
         _require_bool("stop_batch_early", self.stop_batch_early)
         _require_integer("replicate_minimum", self.replicate_minimum, minimum=2)
         object.__setattr__(
@@ -786,6 +814,53 @@ class SimulationParams:
                 )
             _validate_precision(precision)
         object.__setattr__(self, "statistic_precision", pairs)
+
+    def derived_thinning_start(self) -> int:
+        """Return the thinning start an `auto` setting derives.
+
+        The later of `thinning_minimum_start` and the burn-in plus
+        `thinning_transient_relaxation_times` relaxation times, so a short
+        run is never thinned and the transient is kept whole. A function of
+        the configuration alone, so a form can tell a derived start from one
+        the user typed.
+
+        Returns:
+            The generation thinning would start at.
+        """
+        transient = 0
+        if self.relaxation_time is not None:
+            transient = math.ceil(
+                self.expert.thinning_transient_relaxation_times * self.relaxation_time
+            )
+        return max(
+            self.expert.thinning_minimum_start, self.convergence_burn_in + transient
+        )
+
+    def _resolve_trajectory_retention(self) -> None:
+        """Validate the retention settings and derive an `auto` thinning start.
+
+        Runs after `_resolve_convergence_defaults`, so the burn-in and the
+        relaxation time are known. The derived start is the later of
+        `thinning_minimum_start` and the burn-in plus
+        `thinning_transient_relaxation_times` relaxation times; it is stored
+        as the integer, as an `auto` burn-in is.
+
+        Raises:
+            ValueError: If the retention is unknown, the stride is below 1 or
+                the start is negative.
+        """
+        if self.trajectory_retention not in ("full", "thinned"):
+            raise ValueError("trajectory_retention must be 'full' or 'thinned'")
+        _require_integer("trajectory_stride", self.trajectory_stride, minimum=1)
+        _require_integer(
+            "trajectory_thinning_start", self.trajectory_thinning_start, minimum=0
+        )
+        if self.trajectory_retention != "thinned":
+            return
+        if self.trajectory_thinning_start == AUTO_CONVERGENCE:
+            object.__setattr__(
+                self, "trajectory_thinning_start", self.derived_thinning_start()
+            )
 
     def _validate_batch_settings(self) -> None:
         """Validate how a batch reaches its precision.
@@ -1027,6 +1102,12 @@ class SimulationParams:
         }
         if self.statistic_precision:
             result["statistic_precision"] = dict(self.statistic_precision)
+        if self.trajectory_retention == "thinned":
+            # Written only when thinning is on, so a default run keeps the
+            # parameters (and the run ID) it had before the setting existed.
+            result["trajectory_retention"] = self.trajectory_retention
+            result["trajectory_stride"] = self.trajectory_stride
+            result["trajectory_thinning_start"] = self.trajectory_thinning_start
         if changes := self.expert.changes():
             # Only the settings that differ from their defaults are written, so
             # a run with default Expert Settings keeps the parameters (and the
@@ -1182,6 +1263,24 @@ class SimulationParams:
             ),
             precision_method=_parse_precision_method(
                 config.get("precision_method", PARAMETER_DEFAULTS["precision_method"])
+            ),
+            trajectory_retention=_parse_trajectory_retention(
+                config.get(
+                    "trajectory_retention", PARAMETER_DEFAULTS["trajectory_retention"]
+                )
+            ),
+            trajectory_stride=_parse_int(
+                "trajectory_stride",
+                config.get(
+                    "trajectory_stride", PARAMETER_DEFAULTS["trajectory_stride"]
+                ),
+            ),
+            trajectory_thinning_start=_parse_auto_int(
+                "trajectory_thinning_start",
+                config.get(
+                    "trajectory_thinning_start",
+                    PARAMETER_DEFAULTS["trajectory_thinning_start"],
+                ),
             ),
             replicate_averaging_window=_parse_auto_int(
                 "replicate_averaging_window",
@@ -1715,6 +1814,16 @@ def _parse_statistic_precision(value: Any) -> tuple[tuple[str, float], ...]:
     return tuple(sorted(pairs))
 
 
+def _parse_trajectory_retention(value: Any) -> TrajectoryRetentionChoice:
+    """Parse the two supported trajectory retention values."""
+    parsed = _parse_string("trajectory_retention", value)
+    if parsed == "full":
+        return "full"
+    if parsed == "thinned":
+        return "thinned"
+    raise ValueError("trajectory_retention must be 'full' or 'thinned'")
+
+
 def _parse_precision_method(value: Any) -> PrecisionMethod:
     """Parse the two supported precision methods."""
     parsed = _parse_string("precision_method", value)
@@ -2151,6 +2260,9 @@ EXECUTION_SETTING_NAMES: Final[tuple[str, ...]] = (
     "confidence",
     "precision_method",
     "replicate_averaging_window",
+    "trajectory_retention",
+    "trajectory_stride",
+    "trajectory_thinning_start",
     "jit",
     "auto_vector_min_d",
     "auto_vector_max_capacity",
@@ -2193,13 +2305,21 @@ def validate_execution_settings(settings: Mapping[str, object]) -> None:
             that refuses it).
     """
     # Each field on its own.
-    for name in ("n_replicates", "auto_vector_min_d", "auto_vector_max_capacity"):
+    for name in (
+        "n_replicates",
+        "auto_vector_min_d",
+        "auto_vector_max_capacity",
+        "trajectory_stride",
+    ):
         if name in settings:
             _require_integer(name, settings[name], minimum=1)
+    if "trajectory_retention" in settings:
+        _parse_trajectory_retention(settings["trajectory_retention"])
     for name in (
         "max_generations",
         "convergence_burn_in",
         "replicate_averaging_window",
+        "trajectory_thinning_start",
     ):
         if name in settings and settings[name] != "auto":
             _require_integer(name, settings[name], minimum=1)
