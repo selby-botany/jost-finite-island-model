@@ -63,6 +63,12 @@ const settingsAutoVectorMaxCapacityInput = document.getElementById(
     "settings-auto_vector_max_capacity"
 );
 const settingsSaveButton = document.getElementById("settings-save-button");
+const settingsExpertFields = document.getElementById("settings-expert-fields");
+const settingsExpertResetAll = document.getElementById("settings-expert-reset-all");
+
+// The Expert Settings, as listed by `Api.get_expert_settings_info`; filled
+// when the dialog opens. Each input's id is `settings-expert_<name>`.
+let expertSettingsInfo = [];
 
 const settingsResultsLocationInput = document.getElementById(
     "settings-results-location"
@@ -125,8 +131,107 @@ function collectDefaultRunSettingsValues() {
         auto_vector_max_capacity: settingsAutoVectorMaxCapacityInput.value,
         max_workers: settingsMaxWorkersInput.value,
         max_concurrent_replicates: settingsMaxConcurrentReplicatesInput.value,
+        ...collectExpertSettingsValues(),
     };
 }
+
+/**
+ * Collect the Expert Settings inputs as `expert_<name>` texts.
+ * @returns {Record<string, string>}
+ */
+function collectExpertSettingsValues() {
+    const values = {};
+    for (const info of expertSettingsInfo) {
+        const input = document.getElementById(`settings-expert_${info.name}`);
+        if (input) {
+            values[`expert_${info.name}`] = input.value;
+        }
+    }
+    return values;
+}
+
+/**
+ * Mark an Expert Setting row as changed when its value differs from the
+ * default, so a changed one is visible at a glance.
+ * @param {HTMLInputElement} input
+ * @param {string} defaultText
+ */
+function markExpertSettingChanged(input, defaultText) {
+    const changed = Number(input.value) !== Number(defaultText);
+    input.closest(".field").classList.toggle("expert-changed", changed);
+}
+
+/**
+ * Build the Expert Settings rows from `Api.get_expert_settings_info`: a
+ * subsection per group, and per setting a labelled input, its default and
+ * range, a tooltip with what it does, and a Reset button.
+ * @param {Array<Record<string, string>>} info
+ */
+function renderExpertSettings(info) {
+    expertSettingsInfo = info;
+    settingsExpertFields.replaceChildren();
+    let groupBody = null;
+    let currentGroup = "";
+    for (const item of info) {
+        if (item.group !== currentGroup) {
+            currentGroup = item.group;
+            const heading = document.createElement("h4");
+            heading.textContent = item.group;
+            groupBody = document.createElement("div");
+            settingsExpertFields.append(heading, groupBody);
+        }
+        const row = document.createElement("div");
+        row.className = "field expert-setting";
+        row.title = item.help;
+        const label = document.createElement("label");
+        label.htmlFor = `settings-expert_${item.name}`;
+        label.textContent = item.label;
+        const input = document.createElement("input");
+        input.type = "text";
+        input.id = `settings-expert_${item.name}`;
+        input.dataset.default = item.default;
+        input.setAttribute("aria-describedby", `settings-expert-note_${item.name}`);
+        const note = document.createElement("span");
+        note.id = `settings-expert-note_${item.name}`;
+        note.className = "hint expert-default-hint";
+        note.textContent = `default ${item.default}; ${item.range}. ${item.help}`;
+        const reset = document.createElement("button");
+        reset.type = "button";
+        reset.className = "expert-reset";
+        reset.textContent = "Reset";
+        reset.addEventListener("click", () => {
+            input.value = item.default;
+            markExpertSettingChanged(input, item.default);
+        });
+        input.addEventListener("input", () =>
+            markExpertSettingChanged(input, item.default)
+        );
+        row.append(label, input, reset, note);
+        groupBody.appendChild(row);
+    }
+}
+
+/**
+ * Show the saved Expert Settings values in their inputs.
+ * @param {Record<string, string>} values - The `expert_<name>` entries of
+ *     `Api.get_default_run_settings`.
+ */
+function applyExpertSettingsValues(values) {
+    for (const info of expertSettingsInfo) {
+        const input = document.getElementById(`settings-expert_${info.name}`);
+        const saved = values[`expert_${info.name}`];
+        input.value = saved === undefined ? info.default : saved;
+        markExpertSettingChanged(input, info.default);
+    }
+}
+
+settingsExpertResetAll.addEventListener("click", () => {
+    for (const info of expertSettingsInfo) {
+        const input = document.getElementById(`settings-expert_${info.name}`);
+        input.value = info.default;
+        markExpertSettingChanged(input, info.default);
+    }
+});
 
 /**
  * Seed Settings' own execution-default fields from `Api.get_default_
@@ -146,6 +251,7 @@ function applyDefaultRunSettingsValues(values) {
     settingsAutoVectorMaxCapacityInput.value = values.auto_vector_max_capacity;
     settingsMaxWorkersInput.value = values.max_workers;
     settingsMaxConcurrentReplicatesInput.value = values.max_concurrent_replicates;
+    applyExpertSettingsValues(values);
     syncSettingsEngineBackendVisibility();
 }
 
@@ -187,6 +293,7 @@ async function loadSettingsDialog() {
     const runCardLayout = await window.pywebview.api.get_run_card_layout();
     runGraphColumnsSelect.value = String(runCardLayout.columns);
     scatterStyleSelect.value = runCardLayout.scatterStyle;
+    renderExpertSettings(await window.pywebview.api.get_expert_settings_info());
     applyDefaultRunSettingsValues(await window.pywebview.api.get_default_run_settings());
     renderStatisticsChooser();
     pairwiseMaxDemesInput.value = String(

@@ -1484,6 +1484,35 @@ fieldset.combinator-choice label {
     color: var(--fim-muted);
 }
 
+/* Expert Settings rows (`settings.js`): label, input, reset, then the default,
+   range and what it does on its own line. A changed value is marked. */
+#settings-expert-fields h4 {
+    margin: 0.8rem 0 0.2rem;
+    font-size: 0.9rem;
+}
+
+.expert-setting .expert-reset {
+    align-self: flex-start;
+}
+
+.expert-default-hint {
+    margin: 0 0 0.2rem;
+    font-size: 0.8rem;
+    color: var(--fim-muted);
+}
+
+.expert-setting.expert-changed label {
+    font-weight: bold;
+}
+
+.expert-setting.expert-changed .expert-reset {
+    visibility: visible;
+}
+
+.expert-setting:not(.expert-changed) .expert-reset {
+    visibility: hidden;
+}
+
 /* The run-time warning under an expensive statistic (`settings.js`). */
 .settings-statistics-cost {
     display: block;

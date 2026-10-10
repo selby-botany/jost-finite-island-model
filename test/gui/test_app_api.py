@@ -979,6 +979,12 @@ def test_loading_the_vector_example_runs_with_its_own_run_settings() -> None:
 
     assert expected.engine_backend == "generational-vector"
     for name in DEFAULT_RUN_SETTING_FIELD_NAMES:
+        if name.startswith("expert_"):
+            setting = name.removeprefix("expert_")
+            assert getattr(effective.expert, setting) == getattr(
+                expected.expert, setting
+            ), name
+            continue
         assert getattr(effective, name) == getattr(expected, name), name
     assert effective.to_dict() == expected.to_dict()
     assert api.get_default_run_settings() == settings_before

@@ -48,6 +48,10 @@ Return to the [source-tree orientation](../README.md) or the [developer guide](.
     * [from\_mapping](#fim.config.expert.ExpertSettings.from_mapping)
     * [changes](#fim.config.expert.ExpertSettings.changes)
   * [expert\_template](#fim.config.expert.expert_template)
+  * [ExpertSettingInfo](#fim.config.expert.ExpertSettingInfo)
+  * [EXPERT\_GROUPS](#fim.config.expert.EXPERT_GROUPS)
+  * [EXPERT\_SETTING\_INFO](#fim.config.expert.EXPERT_SETTING_INFO)
+  * [describe\_expert\_settings](#fim.config.expert.describe_expert_settings)
 * [fim.config.limits](#fim.config.limits)
   * [MAXIMUM\_RECURSION\_DEMES](#fim.config.limits.MAXIMUM_RECURSION_DEMES)
 * [fim.config.numerics](#fim.config.numerics)
@@ -288,6 +292,7 @@ Return to the [source-tree orientation](../README.md) or the [developer guide](.
     * [get\_dark\_mode\_override](#fim.gui.app.Api.get_dark_mode_override)
     * [set\_dark\_mode\_override](#fim.gui.app.Api.set_dark_mode_override)
     * [get\_default\_run\_settings](#fim.gui.app.Api.get_default_run_settings)
+    * [get\_expert\_settings\_info](#fim.gui.app.Api.get_expert_settings_info)
     * [set\_default\_run\_settings](#fim.gui.app.Api.set_default_run_settings)
     * [get\_results\_location](#fim.gui.app.Api.get_results_location)
     * [set\_results\_location](#fim.gui.app.Api.set_results_location)
@@ -365,12 +370,15 @@ Return to the [source-tree orientation](../README.md) or the [developer guide](.
   * [PLOIDY\_NAMES](#fim.gui.config_form.PLOIDY_NAMES)
   * [FormField](#fim.gui.config_form.FormField)
   * [TabSpec](#fim.gui.config_form.TabSpec)
+  * [EXPERT\_PREFIX](#fim.gui.config_form.EXPERT_PREFIX)
+  * [EXPERT\_FIELDS](#fim.gui.config_form.EXPERT_FIELDS)
   * [CONVERGENCE\_STATISTIC\_NAMES](#fim.gui.config_form.CONVERGENCE_STATISTIC_NAMES)
   * [all\_fields](#fim.gui.config_form.all_fields)
   * [tab\_for\_field](#fim.gui.config_form.tab_for_field)
   * [tab\_for\_error](#fim.gui.config_form.tab_for_error)
   * [field\_for\_error](#fim.gui.config_form.field_for_error)
   * [form\_values\_to\_payload](#fim.gui.config_form.form_values_to_payload)
+  * [expert\_to\_payload](#fim.gui.config_form.expert_to_payload)
   * [run\_setting\_error](#fim.gui.config_form.run_setting_error)
   * [validate\_run\_settings](#fim.gui.config_form.validate_run_settings)
   * [m\_to\_payload](#fim.gui.config_form.m_to_payload)
@@ -1960,6 +1968,52 @@ them taking effect.
 **Returns**:
 
   YAML comment lines, ending with a newline.
+
+<a id="fim.config.expert.ExpertSettingInfo"></a>
+
+## ExpertSettingInfo Objects
+
+```python
+@dataclass(frozen=True, slots=True)
+class ExpertSettingInfo()
+```
+
+How the app presents one Expert Setting.
+
+**Attributes**:
+
+- `group` - The Settings subsection it sits in.
+- `label` - Plain-language name.
+- `help` - What it does and why its default is what it is, in a sentence or
+  two a researcher can act on.
+
+<a id="fim.config.expert.EXPERT_GROUPS"></a>
+
+#### EXPERT\_GROUPS
+
+The Settings subsections, in display order.
+
+<a id="fim.config.expert.EXPERT_SETTING_INFO"></a>
+
+#### EXPERT\_SETTING\_INFO
+
+Presentation of every Expert Setting, by name (a test checks the keys).
+
+<a id="fim.config.expert.describe_expert_settings"></a>
+
+#### describe\_expert\_settings
+
+```python
+def describe_expert_settings() -> list[dict[str, str]]
+```
+
+Return every Expert Setting as the app lists it, in display order.
+
+**Returns**:
+
+  One mapping per setting: `name`, `group`, `label`, `help`, `default`
+  (text) and `range` (text), grouped by `EXPERT_GROUPS` and, within a
+  group, in field order.
 
 <a id="fim.config.limits"></a>
 
@@ -8309,6 +8363,26 @@ saved value that is itself invalid is replaced by the starter's
 value for that one field and reported at launch
 (`get_startup_warnings`).
 
+<a id="fim.gui.app.Api.get_expert_settings_info"></a>
+
+#### get\_expert\_settings\_info
+
+```python
+@_log_bridge_call
+def get_expert_settings_info() -> list[dict[str, str]]
+```
+
+Return how Settings lists the Expert Settings.
+
+**Returns**:
+
+  One entry per Expert Setting, grouped and in display order:
+  `name` (the form key is `expert_<name>`), `group`, `label`,
+  `help`, `default` and `range`, all text
+  (`fim.config.expert.describe_expert_settings`). The values
+  themselves travel with the other run defaults
+  (`get_default_run_settings`, keys `expert_<name>`).
+
 <a id="fim.gui.app.Api.set_default_run_settings"></a>
 
 #### set\_default\_run\_settings
@@ -10512,6 +10586,25 @@ its own composite widget (a mode radio plus one or two sub-fields,
 §4.1) — and so is marshaled by the dedicated `m_*` functions below
 instead of appearing in any `TabSpec.fields` tuple.
 
+<a id="fim.gui.config_form.EXPERT_PREFIX"></a>
+
+#### EXPERT\_PREFIX
+
+Prefix of the form-value key of each Expert Setting (`expert_batch_width`).
+
+<a id="fim.gui.config_form.EXPERT_FIELDS"></a>
+
+#### EXPERT\_FIELDS
+
+One field per Expert Setting, for the Settings dialog's Expert section.
+
+Deliberately not in any `TabSpec`: Configure does not render them, and
+`form_values_to_payload` does not copy them into the payload one by one (the
+configuration has no `expert_batch_width` key) but gathers them into the
+`expert` mapping. Each holds the setting's effective value as text, so Settings
+shows the default beside the field; a value equal to its default is not written
+to the manifest.
+
 <a id="fim.gui.config_form.CONVERGENCE_STATISTIC_NAMES"></a>
 
 #### CONVERGENCE\_STATISTIC\_NAMES
@@ -10650,6 +10743,34 @@ Coerce the form's string values into a `from_mapping`-ready payload.
   as nothing happening at all (`ISSUES.md` would be the right
   place for this if it were only mitigated rather than fixed
   at the source).
+
+<a id="fim.gui.config_form.expert_to_payload"></a>
+
+#### expert\_to\_payload
+
+```python
+def expert_to_payload(values: Mapping[str, str]) -> dict[str, object]
+```
+
+Gather the form's `expert_*` values into the configuration's `expert` mapping.
+
+A key the form does not carry (a saved form from before Expert Settings
+existed) is left out, so the setting keeps its default.
+
+**Arguments**:
+
+- `values` - The form values.
+
+
+**Returns**:
+
+  Setting name to parsed value, for each `expert_*` key present.
+
+
+**Raises**:
+
+- `ValueError` - If a value does not parse as its field's kind, worded with
+  the field's own name first.
 
 <a id="fim.gui.config_form.run_setting_error"></a>
 

@@ -1154,9 +1154,14 @@ def unreachable_batch_run_settings(_isolate_gui_preferences: Path) -> Path:
     needed by that file's own live-trajectory tests, which must observe
     at least one real tick with two or more replicates simultaneously
     reporting, not just the batch's own terminal "done"/"cancelled".
-    Sets `max_generations` and `convergence_window` to the same large
-    value, the identical "structural, not probabilistic" guarantee
-    `unreachable_convergence_run_settings`'s own docstring explains.
+    Sets a burn-in of 9,000 generations under a cap of 10,000: a replicate of
+    a batch averages for a window after its burn-in, and the window cannot
+    run past the cap, so every replicate runs the full 10,000 generations
+    whatever the model's noise is -- the same "structural, not
+    probabilistic" guarantee `unreachable_convergence_run_settings`'s own
+    docstring explains. (Without the long burn-in the replicates finish in
+    well under a second and the poll thread may never see two of them
+    reporting.)
     """
     save_preferences(
         _isolate_gui_preferences,
@@ -1166,6 +1171,7 @@ def unreachable_batch_run_settings(_isolate_gui_preferences: Path) -> Path:
             default_run_settings={
                 "n_replicates": "2",
                 "max_generations": "10000",
+                "convergence_burn_in": "9000",
                 "max_workers": "2",
             },
         ),

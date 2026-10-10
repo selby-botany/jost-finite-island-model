@@ -817,6 +817,13 @@ expert:
 
 An unknown name or a value outside its range is refused by name.
 
+In the desktop app, Settings has a collapsed "Expert settings" section with one
+row per setting: its value, its default and range, what it does, and a Reset
+button; a changed row is marked. Save keeps them with the other run defaults,
+so they apply to every new run; a loaded configuration keeps its own `expert:`
+mapping for its run, and the notice that lists how its run settings differ from
+yours lists the expert ones too.
+
 ## Analysis and execution
 
 ### deme_weighting

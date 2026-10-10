@@ -647,3 +647,137 @@ def test_the_convergence_section_is_titled_convergence(
     )
 
     assert settled == "Convergence"
+
+
+_OPEN_SETTINGS = "document.getElementById('settings-button').click();"
+_EXPERT_ROWS = (
+    "document.querySelectorAll('#settings-expert-fields .expert-setting').length"
+)
+
+
+def test_the_expert_section_lists_every_setting_collapsed_with_its_default(
+    window: webview.Window,
+) -> None:
+    """Settings builds a row per Expert Setting from the bridge, collapsed."""
+
+    def steps(poll_until: Callable[[str, Callable[[Any], bool]], Any]) -> Any:
+        window.evaluate_js(_OPEN_SETTINGS)
+        poll_until(
+            "document.getElementById('modal-settings').open",
+            lambda value: value is True,
+        )
+        return poll_until(
+            "({"
+            f"rows: {_EXPERT_ROWS}, "
+            "open: document.getElementById('settings-expert-details').open, "
+            "groups: Array.from(document.querySelectorAll("
+            "'#settings-expert-fields h4'), (h) => h.textContent), "
+            "batchWidth: document.getElementById("
+            "'settings-expert_batch_width')?.value, "
+            "note: document.getElementById("
+            "'settings-expert-note_batch_width')?.textContent"
+            "})",
+            lambda value: value is not None and value["rows"] > 0,
+        )
+
+    result = _drive(window, steps)
+
+    assert result["rows"] == 21
+    assert result["open"] is False
+    assert result["groups"] == ["Convergence", "Batches", "Statistics", "Storage"]
+    assert result["batchWidth"] == "8"
+    assert "default 8" in result["note"]
+    assert "at least 1" in result["note"]
+
+
+def test_a_changed_expert_value_is_marked_saved_and_resettable(
+    window: webview.Window,
+) -> None:
+    """Editing marks the row; Save persists it; Reset restores the default."""
+
+    def steps(poll_until: Callable[[str, Callable[[Any], bool]], Any]) -> Any:
+        window.evaluate_js(_OPEN_SETTINGS)
+        poll_until(f"{_EXPERT_ROWS} > 0", lambda value: value is True)
+        window.evaluate_js(
+            "const input = document.getElementById('settings-expert_batch_width');"
+            "input.value = '3';"
+            "input.dispatchEvent(new Event('input', {bubbles: true}));"
+        )
+        marked = window.evaluate_js(
+            "document.getElementById('settings-expert_batch_width')"
+            ".closest('.field').classList.contains('expert-changed')"
+        )
+        window.evaluate_js(
+            "window.__fimSettingsSaveResult = null;"
+            "document.getElementById('settings-save-button').click();"
+            "(async () => {"
+            + AWAIT_SETTINGS_SAVES
+            + "window.__fimSettingsSaveResult = "
+            "await window.pywebview.api.get_default_run_settings();"
+            "})();"
+        )
+        saved = poll_until(
+            "window.__fimSettingsSaveResult", lambda value: value is not None
+        )
+        window.evaluate_js(_OPEN_SETTINGS)
+        poll_until(
+            "document.getElementById('settings-expert_batch_width').value",
+            lambda value: value == "3",
+        )
+        window.evaluate_js(
+            "document.querySelector("
+            "'#settings-expert_batch_width ~ .expert-reset').click();"
+        )
+        after_reset = window.evaluate_js(
+            "({value: document.getElementById('settings-expert_batch_width').value, "
+            "changed: document.getElementById('settings-expert_batch_width')"
+            ".closest('.field').classList.contains('expert-changed')})"
+        )
+        return {"marked": marked, "saved": saved, "after_reset": after_reset}
+
+    result = _drive(window, steps)
+
+    assert result["marked"] is True
+    assert result["saved"]["expert_batch_width"] == "3"
+    assert result["after_reset"] == {"value": "8", "changed": False}
+
+
+def test_saving_an_invalid_expert_value_shows_the_banner_by_name(
+    window: webview.Window,
+) -> None:
+    """A bad Expert value is refused by name, and nothing is saved."""
+
+    def steps(poll_until: Callable[[str, Callable[[Any], bool]], Any]) -> Any:
+        window.evaluate_js(_OPEN_SETTINGS)
+        poll_until(f"{_EXPERT_ROWS} > 0", lambda value: value is True)
+        window.evaluate_js(
+            "document.getElementById('settings-expert_check_growth').value = '1';"
+            "document.getElementById('settings-save-button').click();"
+        )
+        return poll_until(
+            "document.getElementById('settings-banner').textContent",
+            bool,
+        )
+
+    banner = _drive(window, steps)
+
+    assert "check_growth" in banner
+
+
+def test_reset_all_restores_every_default(window: webview.Window) -> None:
+    """The section's Reset all puts every input back at its default."""
+
+    def steps(poll_until: Callable[[str, Callable[[Any], bool]], Any]) -> Any:
+        window.evaluate_js(_OPEN_SETTINGS)
+        poll_until(f"{_EXPERT_ROWS} > 0", lambda value: value is True)
+        window.evaluate_js(
+            "for (const input of document.querySelectorAll("
+            "'#settings-expert-fields input')) { input.value = '7'; }"
+            "document.getElementById('settings-expert-reset-all').click();"
+        )
+        return window.evaluate_js(
+            "Array.from(document.querySelectorAll('#settings-expert-fields input'),"
+            " (input) => input.value === input.dataset.default).every(Boolean)"
+        )
+
+    assert _drive(window, steps) is True

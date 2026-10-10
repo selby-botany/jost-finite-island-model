@@ -17,6 +17,7 @@ Every test module, fixture, and test function documented here in full; `doc/fim-
   - [`test_example_artifacts`](#test.test_example_artifacts)
   - [`test_examples_catalog`](#test.test_examples_catalog)
   - [`test_examples_seed`](#test.test_examples_seed)
+  - [`test_expert_info`](#test.test_expert_info)
   - [`test_hypothesis_profile`](#test.test_hypothesis_profile)
   - [`test_launcher`](#test.test_launcher)
   - [`test_logging_setup`](#test.test_logging_setup)
@@ -1377,6 +1378,33 @@ def test_the_committed_bundle_seeds_cleanly(results: Path) -> None
 ```
 
 The app's own `webui/examples/` bundle reads and seeds without error.
+
+<a id="test.test_expert_info"></a>
+
+# test.test\_expert\_info
+
+Tests of the presentation metadata of the Expert Settings.
+
+<a id="test.test_expert_info.test_every_expert_setting_has_presentation_and_nothing_else_does"></a>
+
+#### test\_every\_expert\_setting\_has\_presentation\_and\_nothing\_else\_does
+
+```python
+def test_every_expert_setting_has_presentation_and_nothing_else_does() -> None
+```
+
+The info table and the settings can only change together.
+
+<a id="test.test_expert_info.test_the_description_lists_every_setting_grouped_with_default_and_range"></a>
+
+#### test\_the\_description\_lists\_every\_setting\_grouped\_with\_default\_and\_range
+
+```python
+def test_the_description_lists_every_setting_grouped_with_default_and_range(
+) -> None
+```
+
+One entry per setting, grouped in display order, with the real default.
 
 <a id="test.test_hypothesis_profile"></a>
 
@@ -10590,9 +10618,14 @@ keeps reporting real, growing progress until explicitly cancelled,
 needed by that file's own live-trajectory tests, which must observe
 at least one real tick with two or more replicates simultaneously
 reporting, not just the batch's own terminal "done"/"cancelled".
-Sets `max_generations` and `convergence_window` to the same large
-value, the identical "structural, not probabilistic" guarantee
-`unreachable_convergence_run_settings`'s own docstring explains.
+Sets a burn-in of 9,000 generations under a cap of 10,000: a replicate of
+a batch averages for a window after its burn-in, and the window cannot
+run past the cap, so every replicate runs the full 10,000 generations
+whatever the model's noise is -- the same "structural, not
+probabilistic" guarantee `unreachable_convergence_run_settings`'s own
+docstring explains. (Without the long burn-in the replicates finish in
+well under a second and the poll thread may never see two of them
+reporting.)
 
 <a id="gui.conftest.staggered_batch_run_settings"></a>
 
@@ -17168,6 +17201,57 @@ def test_run_setting_differences_skips_fields_missing_from_either_side(
 
 Only fields both sides carry are compared.
 
+<a id="gui.test_config_form.test_every_expert_setting_has_a_settings_field_and_a_form_value"></a>
+
+#### test\_every\_expert\_setting\_has\_a\_settings\_field\_and\_a\_form\_value
+
+```python
+def test_every_expert_setting_has_a_settings_field_and_a_form_value() -> None
+```
+
+Each setting is a run default `expert_<name>`, shown at its effective value.
+
+<a id="gui.test_config_form.test_expert_form_values_round_trip_through_the_payload"></a>
+
+#### test\_expert\_form\_values\_round\_trip\_through\_the\_payload
+
+```python
+def test_expert_form_values_round_trip_through_the_payload() -> None
+```
+
+Changed settings reach `expert`; a default-valued form adds no manifest entry.
+
+<a id="gui.test_config_form.test_a_saved_form_without_expert_keys_still_validates"></a>
+
+#### test\_a\_saved\_form\_without\_expert\_keys\_still\_validates
+
+```python
+def test_a_saved_form_without_expert_keys_still_validates() -> None
+```
+
+A form saved before Expert Settings existed keeps working (defaults).
+
+<a id="gui.test_config_form.test_run_setting_validation_names_the_bad_expert_field"></a>
+
+#### test\_run\_setting\_validation\_names\_the\_bad\_expert\_field
+
+```python
+def test_run_setting_validation_names_the_bad_expert_field() -> None
+```
+
+A bad value or a contradicting pair is refused by name.
+
+<a id="gui.test_config_form.test_a_loaded_configuration_with_a_changed_expert_setting_differs"></a>
+
+#### test\_a\_loaded\_configuration\_with\_a\_changed\_expert\_setting\_differs
+
+```python
+def test_a_loaded_configuration_with_a_changed_expert_setting_differs(
+) -> None
+```
+
+The run-settings notice lists a changed expert setting with its label.
+
 <a id="gui.test_config_modal_dialogs"></a>
 
 # gui.test\_config\_modal\_dialogs
@@ -23408,6 +23492,49 @@ def test_the_convergence_section_is_titled_convergence(
 ```
 
 The section holding the convergence burn-in and precision reads "Convergence".
+
+<a id="gui.test_settings_modal.test_the_expert_section_lists_every_setting_collapsed_with_its_default"></a>
+
+#### test\_the\_expert\_section\_lists\_every\_setting\_collapsed\_with\_its\_default
+
+```python
+def test_the_expert_section_lists_every_setting_collapsed_with_its_default(
+        window: webview.Window) -> None
+```
+
+Settings builds a row per Expert Setting from the bridge, collapsed.
+
+<a id="gui.test_settings_modal.test_a_changed_expert_value_is_marked_saved_and_resettable"></a>
+
+#### test\_a\_changed\_expert\_value\_is\_marked\_saved\_and\_resettable
+
+```python
+def test_a_changed_expert_value_is_marked_saved_and_resettable(
+        window: webview.Window) -> None
+```
+
+Editing marks the row; Save persists it; Reset restores the default.
+
+<a id="gui.test_settings_modal.test_saving_an_invalid_expert_value_shows_the_banner_by_name"></a>
+
+#### test\_saving\_an\_invalid\_expert\_value\_shows\_the\_banner\_by\_name
+
+```python
+def test_saving_an_invalid_expert_value_shows_the_banner_by_name(
+        window: webview.Window) -> None
+```
+
+A bad Expert value is refused by name, and nothing is saved.
+
+<a id="gui.test_settings_modal.test_reset_all_restores_every_default"></a>
+
+#### test\_reset\_all\_restores\_every\_default
+
+```python
+def test_reset_all_restores_every_default(window: webview.Window) -> None
+```
+
+The section's Reset all puts every input back at its default.
 
 <a id="gui.test_shutdown_deadman"></a>
 

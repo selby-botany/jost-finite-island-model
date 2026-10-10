@@ -41,6 +41,7 @@ from typing import Final, Literal
 import yaml
 
 from fim.cli import STARTER_CONFIG
+from fim.config.expert import EXPERT_SETTING_INFO, ExpertSettings
 from fim.model.params import (
     PLOIDY_WORDS,
     SimulationParams,
@@ -276,6 +277,26 @@ BATCH_FIELDS: Final[tuple[FormField, ...]] = (
     FormField("auto_vector_max_capacity", "auto-vector max capacity", "int"),
 )
 
+EXPERT_PREFIX: Final = "expert_"
+"""Prefix of the form-value key of each Expert Setting (`expert_batch_width`)."""
+
+EXPERT_FIELDS: Final[tuple[FormField, ...]] = tuple(
+    FormField(
+        f"{EXPERT_PREFIX}{name}",
+        EXPERT_SETTING_INFO[name].label,
+        "int" if isinstance(getattr(ExpertSettings(), name), int) else "float",
+    )
+    for name in EXPERT_SETTING_INFO
+)
+"""One field per Expert Setting, for the Settings dialog's Expert section.
+
+Deliberately not in any `TabSpec`: Configure does not render them, and
+`form_values_to_payload` does not copy them into the payload one by one (the
+configuration has no `expert_batch_width` key) but gathers them into the
+`expert` mapping. Each holds the setting's effective value as text, so Settings
+shows the default beside the field; a value equal to its default is not written
+to the manifest."""
+
 CONVERGENCE_STATISTIC_NAMES: Final[tuple[str, ...]] = convergence_statistic_keys()
 """Every checkbox the Structure panel's "convergence statistic(s)" group
 offers: every convergence-eligible statistic in `fim.statistics.catalog`,
@@ -490,6 +511,7 @@ def form_values_to_payload(values: Mapping[str, str]) -> dict[str, object]:
             for field in all_fields()
         }
         _ploidy_to_word(payload)
+        payload["expert"] = expert_to_payload(values)
         payload["m"] = m_to_payload(values)
         payload.update(mu_to_payload(values))
         payload.update(initial_conditions_to_payload(values))
@@ -499,6 +521,29 @@ def form_values_to_payload(values: Mapping[str, str]) -> dict[str, object]:
     except KeyError as error:
         raise ValueError(f"missing field: {error}") from error
     return payload
+
+
+def expert_to_payload(values: Mapping[str, str]) -> dict[str, object]:
+    """Gather the form's `expert_*` values into the configuration's `expert` mapping.
+
+    A key the form does not carry (a saved form from before Expert Settings
+    existed) is left out, so the setting keeps its default.
+
+    Args:
+        values: The form values.
+
+    Returns:
+        Setting name to parsed value, for each `expert_*` key present.
+
+    Raises:
+        ValueError: If a value does not parse as its field's kind, worded with
+            the field's own name first.
+    """
+    return {
+        field.name.removeprefix(EXPERT_PREFIX): _parse_field(field, values[field.name])
+        for field in EXPERT_FIELDS
+        if field.name in values
+    }
 
 
 def _parse_field(field: FormField, text: str) -> object:
@@ -549,7 +594,10 @@ def run_setting_error(name: str, text: str) -> str | None:
     """
     try:
         value = _parse_field(_RUN_SETTING_FIELDS[name], text)
-        validate_execution_settings({name: value})
+        if name.startswith(EXPERT_PREFIX):
+            ExpertSettings.from_mapping({name.removeprefix(EXPERT_PREFIX): value})
+        else:
+            validate_execution_settings({name: value})
     except ValueError as error:
         return str(error)
     return None
@@ -582,9 +630,20 @@ def validate_run_settings(values: Mapping[str, str]) -> None:
     settings = {
         name: _parse_field(_RUN_SETTING_FIELDS[name], values[name])
         for name in DEFAULT_RUN_SETTING_FIELD_NAMES
-        if name in values
+        if name in values and not name.startswith(EXPERT_PREFIX)
     }
     validate_execution_settings(settings)
+    # The Expert Settings are judged together, so a pair that contradicts
+    # (a largest cap below the smallest) is caught here by name.
+    ExpertSettings.from_mapping(
+        {
+            name.removeprefix(EXPERT_PREFIX): _parse_field(
+                _RUN_SETTING_FIELDS[name], values[name]
+            )
+            for name in DEFAULT_RUN_SETTING_FIELD_NAMES
+            if name in values and name.startswith(EXPERT_PREFIX)
+        }
+    )
 
 
 def _ploidy_to_word(payload: dict[str, object]) -> None:
@@ -1431,6 +1490,12 @@ def params_to_form_values(params: SimulationParams) -> dict[str, str]:
         "auto_vector_min_d": str(params.auto_vector_min_d),
         "auto_vector_max_capacity": str(params.auto_vector_max_capacity),
     }
+    values.update(
+        {
+            f"{EXPERT_PREFIX}{name}": str(getattr(params.expert, name))
+            for name in EXPERT_SETTING_INFO
+        }
+    )
     values.update(m_from_params(params))
     values.update(mu_from_params(params))
     values.update(initial_conditions_from_params(params))
@@ -1451,6 +1516,7 @@ DEFAULT_RUN_SETTING_FIELD_NAMES: Final[tuple[str, ...]] = (
     "auto_vector_min_d",
     "auto_vector_max_capacity",
     "max_concurrent_replicates",
+    *(field.name for field in EXPERT_FIELDS),
 )
 """Every `SimulationParams`-backed form-value key the Settings dialog's
 own execution defaults cover (`fim.gui.preferences.GuiPreferences.
@@ -1496,7 +1562,7 @@ derived from Settings' "Statistics shown", not saved as a run default
 # saved value exactly as a submitted form would.
 _RUN_SETTING_FIELDS: Final[Mapping[str, FormField]] = {
     field.name: field
-    for field in all_fields()
+    for field in (*all_fields(), *EXPERT_FIELDS)
     if field.name in DEFAULT_RUN_SETTING_FIELD_NAMES
 }
 
@@ -1511,6 +1577,7 @@ RUN_SETTING_LABELS: Final[Mapping[str, str]] = {
     "auto_vector_min_d": "Auto-vector minimum demes",
     "auto_vector_max_capacity": "Auto-vector maximum capacity",
     "max_concurrent_replicates": "Maximum concurrent replicates at once",
+    **{field.name: f"Expert: {field.label}" for field in EXPERT_FIELDS},
 }
 """Plain-language names for `DEFAULT_RUN_SETTING_FIELD_NAMES`, used when
 the GUI tells a user how a loaded configuration's run settings differ

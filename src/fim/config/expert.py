@@ -254,6 +254,194 @@ _INTEGER_FIELDS: Final = (
 """The fields that must be whole numbers."""
 
 
+@dataclass(frozen=True, slots=True)
+class ExpertSettingInfo:
+    """How the app presents one Expert Setting.
+
+    Attributes:
+        group: The Settings subsection it sits in.
+        label: Plain-language name.
+        help: What it does and why its default is what it is, in a sentence or
+            two a researcher can act on.
+    """
+
+    group: str
+    label: str
+    help: str
+
+
+EXPERT_GROUPS: Final = ("Convergence", "Batches", "Statistics", "Storage")
+"""The Settings subsections, in display order."""
+
+EXPERT_SETTING_INFO: Final[dict[str, ExpertSettingInfo]] = {
+    "burn_in_minimum_relaxation_times": ExpertSettingInfo(
+        "Convergence",
+        "Burn-in floor (relaxation times)",
+        "The burn-in is at least this many relaxation times, however loose the "
+        "precision. 5 leaves under 1% of the starting state.",
+    ),
+    "first_check_relaxation_times": ExpertSettingInfo(
+        "Convergence",
+        "First check (relaxation times)",
+        "How long after the burn-in the first precision check comes. Checks "
+        "are cheap; this only avoids judging a window that is too short.",
+    ),
+    "first_check_minimum": ExpertSettingInfo(
+        "Convergence",
+        "First check (generations, at least)",
+        "The first check never comes sooner than this many generations after "
+        "the burn-in, whatever the relaxation time.",
+    ),
+    "minimum_effective_sample_size": ExpertSettingInfo(
+        "Convergence",
+        "Effective sample size needed",
+        "A window must hold this many independent values before its standard "
+        "error is trusted. 50 keeps the error bar honest.",
+    ),
+    "check_growth": ExpertSettingInfo(
+        "Convergence",
+        "Window growth between checks",
+        "After a failed check the window must grow by this factor before the "
+        "next one. 2 doubles it, so a run overshoots its precision by at most "
+        "a factor of 2 in length.",
+    ),
+    "fractional_burn_in": ExpertSettingInfo(
+        "Convergence",
+        "Burn-in share when unknown",
+        "A model with no relaxation time discards this share of the run as "
+        "burn-in at each check.",
+    ),
+    "cap_relaxation_multiple": ExpertSettingInfo(
+        "Convergence",
+        "Cap beyond the burn-in (relaxation times)",
+        "The derived generation cap is the burn-in plus this many relaxation "
+        "times (never below the minimum cap).",
+    ),
+    "cap_minimum": ExpertSettingInfo(
+        "Convergence",
+        "Smallest derived cap",
+        "A derived generation cap is never below this, so a fast model still "
+        "has room to average a noisy statistic.",
+    ),
+    "cap_maximum": ExpertSettingInfo(
+        "Convergence",
+        "Largest derived cap",
+        "A derived generation cap is never above this, so a nearly isolated "
+        "system stays finite.",
+    ),
+    "start_drift_alert_z": ExpertSettingInfo(
+        "Convergence",
+        "Burn-in alert (absolute z)",
+        "When the start of the averaging window differs from its end by more "
+        "than this many standard errors, the report warns that the burn-in "
+        "may have been too short.",
+    ),
+    "spectrum_burn_in_multiplier": ExpertSettingInfo(
+        "Convergence",
+        "Burn-in multiplier for allele statistics",
+        "Lengthens the burn-in when an allele-spectrum statistic (E_ST, K_ST, "
+        "A_CGD, Delta, MI) is watched, because the relaxation time is derived "
+        "for the identity statistics. 1 changes nothing.",
+    ),
+    "batch_width": ExpertSettingInfo(
+        "Batches",
+        "Replicates assumed at once",
+        "The first wave of a batch, which measures the noise the later "
+        "replicate windows are matched from. A number, not your processor "
+        "count, so a configuration gives the same results on every machine.",
+    ),
+    "replicate_wave_multiple": ExpertSettingInfo(
+        "Batches",
+        "Replicate waves aimed for",
+        "The matched replicate window is sized for this many waves of "
+        "replicates (never fewer than the replicate minimum).",
+    ),
+    "first_wave_averaging_multiple": ExpertSettingInfo(
+        "Batches",
+        "First-wave window (relaxation times)",
+        "How long the first wave of replicates averages, before anything is "
+        "known about the noise.",
+    ),
+    "averaging_multiple_minimum": ExpertSettingInfo(
+        "Batches",
+        "Shortest replicate window (relaxation times)",
+        "A matched replicate window is never shorter than this; below it a "
+        "replicate's own average is barely better than a snapshot.",
+    ),
+    "averaging_multiple_maximum": ExpertSettingInfo(
+        "Batches",
+        "Longest replicate window (relaxation times)",
+        "A matched replicate window is never longer than this; more "
+        "replicates then serve better than a longer window.",
+    ),
+    "estimate_auto_denominator": ExpertSettingInfo(
+        "Statistics",
+        "Degenerate denominator",
+        "For the automatic expected-value form: a generation whose "
+        "denominator (H_T for G_ST, 1 - H_S for D) is below this is "
+        "degenerate.",
+    ),
+    "estimate_auto_fraction": ExpertSettingInfo(
+        "Statistics",
+        "Degenerate share allowed",
+        "For the automatic expected-value form: the value of means is used "
+        "when more than this share of the window is degenerate.",
+    ),
+    "log_key_every": ExpertSettingInfo(
+        "Storage",
+        "Keyframe interval (generations)",
+        "The trajectory log stores every deme in full this often and only the "
+        "changes between. Smaller makes the log larger and seeking faster.",
+    ),
+    "log_block_generations": ExpertSettingInfo(
+        "Storage",
+        "Log block size (generations)",
+        "Generations per saved block of the trajectory log. Larger writes more "
+        "efficiently; smaller loses less when a run is cut off.",
+    ),
+    "log_sync_seconds": ExpertSettingInfo(
+        "Storage",
+        "Disk sync period (seconds)",
+        "How often the trajectory log is flushed to disk: the most a power "
+        "loss can take.",
+    ),
+}
+"""Presentation of every Expert Setting, by name (a test checks the keys)."""
+
+
+def describe_expert_settings() -> list[dict[str, str]]:
+    """Return every Expert Setting as the app lists it, in display order.
+
+    Returns:
+        One mapping per setting: `name`, `group`, `label`, `help`, `default`
+        (text) and `range` (text), grouped by `EXPERT_GROUPS` and, within a
+        group, in field order.
+    """
+    defaults = ExpertSettings()
+    ranges = {name: (low, inclusive) for name, low, inclusive in _RANGES}
+    described: list[dict[str, str]] = []
+    for group in EXPERT_GROUPS:
+        for field_ in fields(ExpertSettings):
+            info = EXPERT_SETTING_INFO[field_.name]
+            if info.group != group:
+                continue
+            low, inclusive = ranges[field_.name]
+            bound = f"at least {low:g}" if inclusive else f"greater than {low:g}"
+            if field_.name in _INTEGER_FIELDS:
+                bound = f"whole number, {bound}"
+            described.append(
+                {
+                    "name": field_.name,
+                    "group": group,
+                    "label": info.label,
+                    "help": info.help,
+                    "default": str(getattr(defaults, field_.name)),
+                    "range": bound,
+                }
+            )
+    return described
+
+
 def _typed(default: float | int, value: Any) -> Any:
     """Return `value` as the type of the setting's default, when that is exact.
 

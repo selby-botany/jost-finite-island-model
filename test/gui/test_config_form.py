@@ -10,13 +10,24 @@ from __future__ import annotations
 
 import json
 import math
-from dataclasses import replace
+from dataclasses import fields, replace
 
 import pytest
 import yaml
 
 from fim.cli import STARTER_CONFIG
+from fim.config.expert import ExpertSettings
 from fim.gui import config_form
+from fim.gui.config_form import (
+    DEFAULT_RUN_SETTING_FIELD_NAMES,
+    EXPERT_FIELDS,
+    form_values_to_payload,
+    params_to_form_values,
+    run_setting_differences,
+    run_setting_error,
+    starter_form_values,
+    validate_run_settings,
+)
 from fim.model.locus import LocusSpec
 from fim.model.params import PLOIDY_WORDS, SimulationParams
 
@@ -1604,3 +1615,79 @@ def test_run_setting_differences_skips_fields_missing_from_either_side() -> None
         )
         == []
     )
+
+
+def test_every_expert_setting_has_a_settings_field_and_a_form_value() -> None:
+    """Each setting is a run default `expert_<name>`, shown at its effective value."""
+    names = {field.name for field in fields(ExpertSettings)}
+    assert {field.name for field in EXPERT_FIELDS} == {f"expert_{n}" for n in names}
+    for field in EXPERT_FIELDS:
+        assert field.name in DEFAULT_RUN_SETTING_FIELD_NAMES
+    starter = starter_form_values()
+    defaults = ExpertSettings()
+    for name in names:
+        assert starter[f"expert_{name}"] == str(getattr(defaults, name))
+
+
+def test_expert_form_values_round_trip_through_the_payload() -> None:
+    """Changed settings reach `expert`; a default-valued form adds no manifest entry."""
+    values = starter_form_values()
+    values["ploidy"] = "1"
+    plain = SimulationParams.from_mapping(form_values_to_payload(values))
+    assert plain.expert.changes() == {}
+    assert "expert" not in plain.to_dict()
+
+    values["expert_batch_width"] = "4"
+    values["expert_log_sync_seconds"] = "0.5"
+    params = SimulationParams.from_mapping(form_values_to_payload(values))
+
+    assert params.expert.batch_width == 4
+    assert params.expert.log_sync_seconds == 0.5
+    assert params.to_dict()["expert"] == {"batch_width": 4, "log_sync_seconds": 0.5}
+    again = params_to_form_values(params)
+    assert again["expert_batch_width"] == "4"
+    assert again["expert_log_sync_seconds"] == "0.5"
+
+
+def test_a_saved_form_without_expert_keys_still_validates() -> None:
+    """A form saved before Expert Settings existed keeps working (defaults)."""
+    values = {
+        key: value
+        for key, value in starter_form_values().items()
+        if not key.startswith("expert_")
+    }
+    values["ploidy"] = "1"
+
+    payload = form_values_to_payload(values)
+
+    assert payload["expert"] == {}
+
+
+def test_run_setting_validation_names_the_bad_expert_field() -> None:
+    """A bad value or a contradicting pair is refused by name."""
+    assert run_setting_error("expert_batch_width", "4") is None
+    assert "batch_width" in (run_setting_error("expert_batch_width", "0") or "")
+    assert "integer" in (run_setting_error("expert_batch_width", "2.5") or "")
+    with pytest.raises(ValueError, match="cap_maximum"):
+        validate_run_settings(
+            {"expert_cap_minimum": "1000", "expert_cap_maximum": "10"}
+        )
+    with pytest.raises(ValueError, match="averaging_multiple_maximum"):
+        validate_run_settings(
+            {
+                "expert_averaging_multiple_minimum": "10",
+                "expert_averaging_multiple_maximum": "5",
+            }
+        )
+
+
+def test_a_loaded_configuration_with_a_changed_expert_setting_differs() -> None:
+    """The run-settings notice lists a changed expert setting with its label."""
+    settings = starter_form_values()
+    run = dict(settings, expert_batch_width="2")
+
+    differences = run_setting_differences(run, settings)
+
+    assert [d["field"] for d in differences] == ["expert_batch_width"]
+    assert differences[0]["label"].startswith("Expert: ")
+    assert differences[0]["runText"] == "2"

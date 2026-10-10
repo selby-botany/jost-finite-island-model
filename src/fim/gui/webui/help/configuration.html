@@ -837,6 +837,12 @@ run that changes one is a different run (its auto-generated <code>run_id</code> 
   check_growth: 1.5                    # check more often
 </code></pre>
 <p>An unknown name or a value outside its range is refused by name.</p>
+<p>In the desktop app, Settings has a collapsed &quot;Expert settings&quot; section with one
+row per setting: its value, its default and range, what it does, and a Reset
+button; a changed row is marked. Save keeps them with the other run defaults,
+so they apply to every new run; a loaded configuration keeps its own <code>expert:</code>
+mapping for its run, and the notice that lists how its run settings differ from
+yours lists the expert ones too.</p>
 <h2 id="analysis-and-execution">Analysis and execution</h2>
 <h3 id="deme_weighting">deme_weighting</h3>
 <ul>

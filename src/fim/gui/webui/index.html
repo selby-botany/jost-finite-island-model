@@ -2357,6 +2357,26 @@
       </div>
     </fieldset>
 
+    <!-- Expert Settings (`fim.config.expert`): the policy constants of the
+         convergence rule, the batch windows, the statistics forms and the
+         trajectory log. Collapsed: rarely changed, and a run that changes one
+         is a different run (the manifest records it). The rows are built by
+         `screens/settings.js` from `Api.get_expert_settings_info`, so the
+         list can only change in `fim/config/expert.py`. Each input is a
+         run default like the fields above (`expert_<name>`), saved with them
+         by the same Save button. -->
+    <details class="composite" id="settings-expert-details">
+      <summary>Expert settings</summary>
+      <p class="hint">
+        Defaults are measured choices (see the convergence guide in Help).
+        A run whose expert settings differ is a different run, and says so.
+      </p>
+      <div id="settings-expert-fields"></div>
+      <button type="button" id="settings-expert-reset-all" tabindex="0">
+        Reset all to default
+      </button>
+    </details>
+
     <div class="actions">
       <button type="button" id="settings-save-button" class="primary-action" tabindex="0">
         Save

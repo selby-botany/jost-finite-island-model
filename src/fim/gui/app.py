@@ -68,6 +68,7 @@ from fim import __version__ as fim_version
 from fim import engine as engine_module
 from fim import logging_setup, paths, update
 from fim.cli import load_config
+from fim.config.expert import describe_expert_settings
 from fim.config.limits import MAXIMUM_RECURSION_DEMES
 from fim.convergence.defaults import (
     describe_derived_convergence,
@@ -4042,6 +4043,20 @@ class Api:
             )
         values["max_workers"] = saved.get("max_workers", "")
         return values, problems
+
+    @_log_bridge_call
+    def get_expert_settings_info(self) -> list[dict[str, str]]:
+        """Return how Settings lists the Expert Settings.
+
+        Returns:
+            One entry per Expert Setting, grouped and in display order:
+            `name` (the form key is `expert_<name>`), `group`, `label`,
+            `help`, `default` and `range`, all text
+            (`fim.config.expert.describe_expert_settings`). The values
+            themselves travel with the other run defaults
+            (`get_default_run_settings`, keys `expert_<name>`).
+        """
+        return describe_expert_settings()
 
     @_log_bridge_call
     def set_default_run_settings(self, values: dict[str, str]) -> dict[str, Any]:
