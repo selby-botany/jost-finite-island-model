@@ -32,6 +32,7 @@ from fim.config.convergence import (
     START_DRIFT_ALERT_Z,
 )
 from fim.config.numerics import MINIMUM_WINDOW_VALUES
+from fim.config.statistics import ESTIMATE_AUTO_DENOMINATOR, ESTIMATE_AUTO_FRACTION
 
 
 @dataclass(frozen=True, slots=True)
@@ -58,6 +59,12 @@ class ExpertSettings:
             `cap_minimum`).
         start_drift_alert_z: Absolute Geweke `z` above which the report says
             the burn-in may have been too short (greater than 0).
+        estimate_auto_denominator: Denominator below which a generation counts
+            as degenerate for `convergence_estimate: auto` (between 0 and 1,
+            exclusive).
+        estimate_auto_fraction: Share of window generations that may be
+            degenerate before `auto` switches to the value of means (between
+            0 and 1, exclusive).
     """
 
     burn_in_minimum_relaxation_times: float = BURN_IN_MINIMUM_RELAXATION_TIMES
@@ -70,6 +77,8 @@ class ExpertSettings:
     cap_minimum: int = MINIMUM_MAX_GENERATIONS
     cap_maximum: int = ABSOLUTE_MAX_GENERATIONS
     start_drift_alert_z: float = START_DRIFT_ALERT_Z
+    estimate_auto_denominator: float = ESTIMATE_AUTO_DENOMINATOR
+    estimate_auto_fraction: float = ESTIMATE_AUTO_FRACTION
 
     def __post_init__(self) -> None:
         """Validate every field against its documented range.
@@ -88,8 +97,13 @@ class ExpertSettings:
         for name in _INTEGER_FIELDS:
             if not float(getattr(self, name)).is_integer():
                 raise ValueError(f"expert setting {name} must be a whole number")
-        if not self.fractional_burn_in < 1.0:
-            raise ValueError("expert setting fractional_burn_in must be below 1")
+        for name in (
+            "fractional_burn_in",
+            "estimate_auto_denominator",
+            "estimate_auto_fraction",
+        ):
+            if not getattr(self, name) < 1.0:
+                raise ValueError(f"expert setting {name} must be below 1")
         if self.cap_maximum < self.cap_minimum:
             raise ValueError("expert setting cap_maximum must be at least cap_minimum")
 
@@ -150,6 +164,8 @@ _RANGES: Final = (
     ("cap_minimum", 1.0, True),
     ("cap_maximum", 1.0, True),
     ("start_drift_alert_z", 0.0, False),
+    ("estimate_auto_denominator", 0.0, False),
+    ("estimate_auto_fraction", 0.0, False),
 )
 """Each numeric field's lower bound, and whether the bound itself is allowed."""
 

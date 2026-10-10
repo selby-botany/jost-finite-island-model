@@ -30,6 +30,7 @@ package and fails on one that is not on its short allow list.
 | `numerics.py` | Numerical guards and derivable constants |
 | `defaults.py` | Default values of regular settings |
 | `display.py` | Limits that shape what the app draws |
+| `statistics.py` | How a statistic is estimated from a run (the expected-value form) |
 | `expert.py` | `ExpertSettings`: the policy constants a run's configuration may change in its `expert:` mapping |
 
 ## Constants
@@ -71,6 +72,8 @@ package and fails on one that is not on its short allow list.
 | `DEFAULT_PRECISION` | `defaults.py` | policy; a regular setting | Default `precision`: plus or minus this much, in each statistic's units. |
 | `DEFAULT_PAIRWISE_MAX_DEMES` | `defaults.py` | policy; a regular setting | Largest deme count whose full all-pairs matrices are saved by default. |
 | `GUI_ANIMATION_MAX_FRAMES` | `display.py` | policy (display) | `GUI_ANIMATION_MAX_FRAMES`. |
+| `ESTIMATE_AUTO_DENOMINATOR` | `statistics.py` | policy | Denominator below which a generation counts as degenerate for `auto`. |
+| `ESTIMATE_AUTO_FRACTION` | `statistics.py` | policy | Share of window generations that may be degenerate before `auto` switches. |
 
 ## Adding a constant
 

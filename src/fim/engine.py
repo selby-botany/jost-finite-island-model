@@ -128,6 +128,7 @@ from fim.convergence.monitor import (
     ConvergenceMonitor,
     ConvergenceOutcome,
 )
+from fim.convergence.window_statistics import EstimateForms, IdentityStatistic
 from fim.model.allele import (
     MINTED_ID_START,
     AlleleRegistry,
@@ -290,6 +291,13 @@ class FinalReport(TypedDict):
             "noise_adequate"}}`, one entry per statistic `report_for_state`
             was given a monitor history for (`fim.convergence.window_
             statistics.WindowStatistics`, `_window_statistics_payload`).
+            Each entry also carries `selected_form` (`"mean_of_values"` or
+            `"value_of_means"`, the form the headline `mean` and the stop
+            use), `undefined_generations` (window generations in which the
+            statistic had no value, dropped by the first form), and
+            `mean_of_values`/`value_of_means`, each `{"mean",
+            "standard_error"}` — `value_of_means` only for `D` and `G_ST`,
+            the statistics that are functions of `H_S` and `H_T`.
             Empty for a state with no monitored run behind it at all (a GUI
             preview, a re-analysis) — this is *not* the same thing as `D`/
             `G_ST`/etc. above, which are always this state's own point
@@ -338,7 +346,7 @@ class FinalReport(TypedDict):
     NEI_I_ALL_GEO_LOCUS_MEAN: float
     NEI_I_ALL_ARITH: float
     NEI_I_ALL_ARITH_LOCUS_MEAN: float
-    window_statistics: dict[str, dict[str, float | int | bool | str]]
+    window_statistics: dict[str, dict[str, Any]]
 
 
 @dataclass(frozen=True, slots=True)
@@ -2388,12 +2396,63 @@ def _burn_in_monitor(params: SimulationParams) -> BurnInMonitor:
         minimum_effective_sample_size=expert.minimum_effective_sample_size,
         growth=expert.check_growth,
         fractional_burn_in=expert.fractional_burn_in,
+        identity_statistics=_identity_statistics(params),
+        estimate=params.convergence_estimate,
+        auto_denominator=expert.estimate_auto_denominator,
+        auto_fraction=expert.estimate_auto_fraction,
     )
+
+
+def _identity_statistics(params: SimulationParams) -> dict[str, IdentityStatistic]:
+    """Describe `D` and `G_ST` as functions of `H_S` and `H_T` (design 6.11).
+
+    The values are the engine's own formulas (`_jost_d_from_within_and_total`,
+    `_g_st_from_demes`), so "value of means" is exactly what a generation's own
+    `D`/`G_ST` would be had the window's averaged identities been the state.
+    The gradients are those formulas' derivatives, for the delta-method
+    standard error; a test checks them against finite differences.
+
+    Args:
+        params: The run's configuration (the deme count sets `D`'s scaling).
+
+    Returns:
+        `{"D": ..., "G_ST": ...}`.
+    """
+    demes = len(params.population_sizes)
+    scale = demes / (demes - 1) if demes > 1 else 1.0
+
+    def d_value(within: float, total: float) -> float | None:
+        if within >= 1.0:
+            return None
+        return _jost_d_from_within_and_total(demes, within, total)
+
+    def d_gradient(within: float, total: float) -> tuple[float, float]:
+        spread = 1.0 - within
+        return scale * (total - 1.0) / spread**2, scale / spread
+
+    def d_denominator(within: float, total: float) -> float:
+        del total
+        return 1.0 - within
+
+    def g_denominator(within: float, total: float) -> float:
+        del within
+        return total
+
+    def g_value(within: float, total: float) -> float | None:
+        return _g_st_from_demes(total, within)
+
+    def g_gradient(within: float, total: float) -> tuple[float, float]:
+        return -1.0 / total, within / total**2
+
+    return {
+        "D": IdentityStatistic(d_value, d_gradient, d_denominator),
+        "G_ST": IdentityStatistic(g_value, g_gradient, g_denominator),
+    }
 
 
 def _window_statistics_payload(
     monitor: BurnInMonitor,
-) -> dict[str, dict[str, float | int | bool | str]]:
+) -> dict[str, dict[str, Any]]:
     """Compute `report_for_state`'s own `window_statistics` from a stopped monitor.
 
     Every recorded statistic, watched or not, gets its statistics over the
@@ -2412,12 +2471,13 @@ def _window_statistics_payload(
         statistic with no such window (the run ended inside its burn-in) is
         simply omitted: nothing to show, nothing fabricated.
     """
-    payload: dict[str, dict[str, float | int | bool | str]] = {}
+    payload: dict[str, dict[str, Any]] = {}
     start = monitor.window_start_generation
     for name in monitor.histories:
         stats = monitor.evidence_statistics(name)
         if stats is None:
             continue
+        forms = monitor.estimate_forms(name)
         payload[name] = {
             "mean": stats.mean,
             "standard_error": stats.standard_error,
@@ -2430,6 +2490,33 @@ def _window_statistics_payload(
                 monitor.target_standard_error, monitor.minimum_effective_sample_size
             ),
         }
+        if forms is not None:
+            payload[name].update(_estimate_forms_payload(forms))
+    return payload
+
+
+def _estimate_forms_payload(forms: EstimateForms) -> dict[str, Any]:
+    """Describe both expected-value forms of one statistic for the report.
+
+    Args:
+        forms: The statistic's forms over the evidence window.
+
+    Returns:
+        `selected_form`, `undefined_generations` and, for each form that
+        exists, `{"mean", "standard_error"}` under `mean_of_values` and
+        `value_of_means` (design 6.11).
+    """
+    payload: dict[str, Any] = {
+        "selected_form": forms.selected,
+        "undefined_generations": forms.undefined_generations,
+    }
+    for name in ("mean_of_values", "value_of_means"):
+        stats = getattr(forms, name)
+        if stats is not None:
+            payload[name] = {
+                "mean": stats.mean,
+                "standard_error": stats.standard_error,
+            }
     return payload
 
 
@@ -2440,7 +2527,7 @@ def report_for_state(
     run_id: str,
     converged: bool,
     reason: str,
-    window_statistics: Mapping[str, dict[str, float | int | bool | str]] | None = None,
+    window_statistics: Mapping[str, dict[str, Any]] | None = None,
     converged_statistics: Sequence[str] | None = None,
 ) -> FinalReport:
     """Compute the final report independently of the run loop.

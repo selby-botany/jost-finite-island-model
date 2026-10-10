@@ -72,6 +72,7 @@ DemeWeighting = Literal["equal", "size"]
 LocusAggregation = Literal["ratio_of_means", "mean_of_ratios"]
 ConvergenceStatistic = str | tuple[str, ...]
 ConvergenceCombinator = Literal["any", "all"]
+ConvergenceEstimate = Literal["mean_of_values", "value_of_means", "auto"]
 MigrantSampling = Literal["continuous", "stochastic"]
 MutationModel = Literal["infinite_alleles", "finite_alleles"]
 EngineBackend = Literal["lineal", "generational", "generational-vector", "auto"]
@@ -99,6 +100,7 @@ PARAMETER_DEFAULTS: Final[dict[str, object]] = {
     "locus_aggregation": "ratio_of_means",
     "convergence_statistic": "D",
     "convergence_combinator": "all",
+    "convergence_estimate": "mean_of_values",
     "convergence_burn_in": None,  # None means "auto": derive it
     "precision": DEFAULT_PRECISION,
     "track_expensive_statistics": False,
@@ -140,6 +142,7 @@ _CONFIG_KEYS: Final = frozenset(
         "ploidy",
         "convergence_statistic",
         "convergence_combinator",
+        "convergence_estimate",
         "convergence_burn_in",
         "precision",
         "track_expensive_statistics",
@@ -305,6 +308,19 @@ class SimulationParams:
         convergence_combinator: How several watched statistics combine —
             "all" (every one stable) or "any" (at least one stable).
             A single statistic makes this a no-op special case.
+        convergence_estimate: Which expected value a run estimates for `D`
+            and `G_ST`, the two statistics that are functions of `H_S` and
+            `H_T`. `"mean_of_values"` (the default) averages the statistic
+            itself over the evidence window; `"value_of_means"` computes it
+            from the window's averaged `H_S` and `H_T`, the quantity the
+            closed form predicts; `"auto"` picks the second when the
+            statistic is undefined in a window generation or its denominator
+            is tiny in too many of them (Expert Settings
+            `estimate_auto_denominator`/`estimate_auto_fraction`). The
+            stopping decision, the headline number and the batch interval
+            follow the choice; the report carries both forms either way.
+            Statistics that are not functions of the identities (`E_ST`,
+            `K_ST`, `H_ST`) have one form.
         convergence_burn_in: Generations discarded before averaging starts.
             `AUTO_CONVERGENCE` (`0`, the default) derives it from the
             model's relaxation time and `precision`
@@ -544,6 +560,7 @@ class SimulationParams:
     locus_aggregation: LocusAggregation = "ratio_of_means"
     convergence_statistic: ConvergenceStatistic = "D"
     convergence_combinator: ConvergenceCombinator = "all"
+    convergence_estimate: ConvergenceEstimate = "mean_of_values"
     convergence_burn_in: int = AUTO_CONVERGENCE
     precision: float = DEFAULT_PRECISION
     track_expensive_statistics: bool = False
@@ -632,6 +649,15 @@ class SimulationParams:
         )
         if self.convergence_combinator not in {"any", "all"}:
             raise ValueError("convergence_combinator must be 'any' or 'all'")
+        if self.convergence_estimate not in {
+            "mean_of_values",
+            "value_of_means",
+            "auto",
+        }:
+            raise ValueError(
+                "convergence_estimate must be 'mean_of_values', 'value_of_means', "
+                "or 'auto'"
+            )
         _validate_precision(self.precision)
         if not isinstance(self.expert, ExpertSettings):
             raise ValueError(
@@ -918,6 +944,7 @@ class SimulationParams:
                 else list(self.convergence_statistic)
             ),
             "convergence_combinator": self.convergence_combinator,
+            "convergence_estimate": self.convergence_estimate,
             "convergence_burn_in": self.convergence_burn_in or "auto",
             "precision": self.precision,
             "track_expensive_statistics": self.track_expensive_statistics,
@@ -1090,6 +1117,12 @@ class SimulationParams:
                     "convergence_combinator",
                     PARAMETER_DEFAULTS["convergence_combinator"],
                 ),
+            ),
+            convergence_estimate=_parse_convergence_estimate(
+                config.get(
+                    "convergence_estimate",
+                    PARAMETER_DEFAULTS["convergence_estimate"],
+                )
             ),
             convergence_burn_in=_parse_auto_int(
                 "convergence_burn_in",
@@ -1585,6 +1618,20 @@ def _parse_locus_aggregation(value: Any) -> LocusAggregation:
     if parsed == "mean_of_ratios":
         return "mean_of_ratios"
     raise ValueError("locus_aggregation must be 'ratio_of_means' or 'mean_of_ratios'")
+
+
+def _parse_convergence_estimate(value: Any) -> ConvergenceEstimate:
+    """Parse the three supported expected-value forms."""
+    parsed = _parse_string("convergence_estimate", value)
+    if parsed == "mean_of_values":
+        return "mean_of_values"
+    if parsed == "value_of_means":
+        return "value_of_means"
+    if parsed == "auto":
+        return "auto"
+    raise ValueError(
+        "convergence_estimate must be 'mean_of_values', 'value_of_means', or 'auto'"
+    )
 
 
 def _parse_float(name: str, value: Any) -> float:

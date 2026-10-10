@@ -12,6 +12,7 @@ generation cap are derived from your model instead of being fixed numbers.
 - [How the numbers are derived](#how-the-numbers-are-derived)
 - [Where the formula comes from](#where-the-formula-comes-from)
 - [How precise is the reported value?](#how-precise-is-the-reported-value)
+- [Which average? Two forms for `D` and `G_ST`](#which-average-two-forms-for-d-and-g_st)
 - [Checking the numbers yourself](#checking-the-numbers-yourself)
 - [Limits](#limits)
 
@@ -219,6 +220,35 @@ average, the estimate to read), `standard_error`, `standard_deviation`,
 it begins at), `estimator`, and `noise_adequate` (whether the requested
 precision was reached). The CLI prints the watched statistic's own line after
 every run; the GUI's Run card tooltip shows the same numbers.
+
+## Which average? Two forms for `D` and `G_ST`
+
+*For analysts.* `D` and `G_ST` are functions of two heterozygosities,
+`X = f(H_S, H_T)`, and the average of a function is not the function of the
+averages (Jensen's gap). A run can therefore estimate either of two expected
+values:
+
+- **Mean of values** (default): the average of `X` over the evidence window.
+  It is what a sampled population shows on average, and what published
+  replicate means are.
+- **Value of means**: `f` of the window's average `H_S` and `H_T`. It is what
+  the closed form predicts. Its standard error comes from the delta method,
+  using the covariance and autocorrelation of both heterozygosities.
+
+Choose with [`convergence_estimate`](configuration.md#convergence_estimate):
+`mean_of_values`, `value_of_means` or `auto`. The choice drives the stop, the
+headline `mean` and the interval. Whatever the choice, each of `D` and `G_ST`
+in `window_statistics` also carries `mean_of_values` and `value_of_means` (each
+`{mean, standard_error}`), `selected_form`, and `undefined_generations`: the
+window generations in which the statistic had no value, which the first form
+drops (`G_ST` where `H_T` is zero). Only the value of means stays defined
+there, so `auto` switches to it when any generation is undefined or when more
+than 1% of the window has a denominator below 0.01. Statistics that are not
+functions of the identities have one form.
+
+On one locus the gap is about 0.011 for `D` and 0.0001 for `G_ST`, near the
+default precision for `D`; with many loci it shrinks roughly as one over the
+number of loci pooled.
 
 ## Checking the numbers yourself
 

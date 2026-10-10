@@ -1653,6 +1653,8 @@ def test_expert_settings_change_the_run_id_but_defaults_do_not() -> None:
         ({"fractional_burn_in": 1.0}, "below 1"),
         ({"cap_minimum": 100, "cap_maximum": 50}, "cap_maximum"),
         ({"start_drift_alert_z": -1}, "greater than 0"),
+        ({"estimate_auto_denominator": 0}, "greater than 0"),
+        ({"estimate_auto_fraction": 1.0}, "below 1"),
         ({"check_growth": "fast"}, "check_growth"),
         ("everything", "mapping"),
     ],
@@ -1682,3 +1684,30 @@ def test_expert_settings_change_the_derived_burn_in_and_cap() -> None:
     assert tau is not None
     assert changed.convergence_burn_in == math.ceil(40 * tau)
     assert changed.max_generations == changed.convergence_burn_in + math.ceil(100 * tau)
+
+
+def test_convergence_estimate_defaults_to_mean_of_values_and_round_trips() -> None:
+    """The setting defaults to the mean of values and survives `to_dict`."""
+    default = SimulationParams.from_mapping(_valid_config())
+    assert default.convergence_estimate == "mean_of_values"
+    assert default.to_dict()["convergence_estimate"] == "mean_of_values"
+    for choice in ("mean_of_values", "value_of_means", "auto"):
+        params = SimulationParams.from_mapping(
+            {**_valid_config(), "convergence_estimate": choice}
+        )
+        assert params.convergence_estimate == choice
+        again = SimulationParams.from_mapping(params.to_dict())
+        assert again.convergence_estimate == choice
+
+
+def test_convergence_estimate_rejects_an_unknown_form_and_changes_the_run_id() -> None:
+    """Only the three documented words are accepted, and the choice is identity."""
+    with pytest.raises(ValueError, match="convergence_estimate must be"):
+        SimulationParams.from_mapping(
+            {**_valid_config(), "convergence_estimate": "median"}
+        )
+    base = SimulationParams.from_mapping(_valid_config())
+    other = SimulationParams.from_mapping(
+        {**_valid_config(), "convergence_estimate": "value_of_means"}
+    )
+    assert deterministic_run_id(other) != deterministic_run_id(base)

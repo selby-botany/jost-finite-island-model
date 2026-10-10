@@ -59,6 +59,9 @@ Return to the [source-tree orientation](../README.md) or the [developer guide](.
   * [DIFFERENTIATION\_TOLERANCE](#fim.config.numerics.DIFFERENTIATION_TOLERANCE)
   * [EULER\_GAMMA](#fim.config.numerics.EULER_GAMMA)
   * [DIGAMMA\_ASYMPTOTIC\_THRESHOLD](#fim.config.numerics.DIGAMMA_ASYMPTOTIC_THRESHOLD)
+* [fim.config.statistics](#fim.config.statistics)
+  * [ESTIMATE\_AUTO\_DENOMINATOR](#fim.config.statistics.ESTIMATE_AUTO_DENOMINATOR)
+  * [ESTIMATE\_AUTO\_FRACTION](#fim.config.statistics.ESTIMATE_AUTO_FRACTION)
 * [fim.convergence](#fim.convergence)
 * [fim.convergence.criteria](#fim.convergence.criteria)
   * [ConvergenceCriterion](#fim.convergence.criteria.ConvergenceCriterion)
@@ -96,6 +99,7 @@ Return to the [source-tree orientation](../README.md) or the [developer guide](.
     * [target\_standard\_error](#fim.convergence.monitor.BurnInMonitor.target_standard_error)
     * [minimum\_effective\_sample\_size](#fim.convergence.monitor.BurnInMonitor.minimum_effective_sample_size)
     * [evidence\_statistics](#fim.convergence.monitor.BurnInMonitor.evidence_statistics)
+    * [estimate\_forms](#fim.convergence.monitor.BurnInMonitor.estimate_forms)
   * [ConvergenceMonitor](#fim.convergence.monitor.ConvergenceMonitor)
     * [\_\_init\_\_](#fim.convergence.monitor.ConvergenceMonitor.__init__)
     * [generations](#fim.convergence.monitor.ConvergenceMonitor.generations)
@@ -112,6 +116,13 @@ Return to the [source-tree orientation](../README.md) or the [developer guide](.
     * [meets](#fim.convergence.window_statistics.WindowStatistics.meets)
   * [geyer\_window\_statistics](#fim.convergence.window_statistics.geyer_window_statistics)
   * [geweke\_z](#fim.convergence.window_statistics.geweke_z)
+  * [EstimateForm](#fim.convergence.window_statistics.EstimateForm)
+  * [IdentityStatistic](#fim.convergence.window_statistics.IdentityStatistic)
+  * [EstimateForms](#fim.convergence.window_statistics.EstimateForms)
+    * [selected\_statistics](#fim.convergence.window_statistics.EstimateForms.selected_statistics)
+  * [degenerate\_share](#fim.convergence.window_statistics.degenerate_share)
+  * [select\_form](#fim.convergence.window_statistics.select_form)
+  * [value\_of\_means\_statistics](#fim.convergence.window_statistics.value_of_means_statistics)
 * [fim.engine](#fim.engine)
   * [FinalReport](#fim.engine.FinalReport)
   * [RunResult](#fim.engine.RunResult)
@@ -1743,6 +1754,12 @@ The convergence policy constants one run uses.
   `cap_minimum`).
 - `start_drift_alert_z` - Absolute Geweke `z` above which the report says
   the burn-in may have been too short (greater than 0).
+- `estimate_auto_denominator` - Denominator below which a generation counts
+  as degenerate for `convergence_estimate: auto` (between 0 and 1,
+  exclusive).
+- `estimate_auto_fraction` - Share of window generations that may be
+  degenerate before `auto` switches to the value of means (between
+  0 and 1, exclusive).
 
 <a id="fim.config.expert.ExpertSettings.__post_init__"></a>
 
@@ -1967,6 +1984,39 @@ Appendix cites) is accurate to within machine precision; below it,
 the recurrence psi(x+1) = psi(x) + 1/x shifts the argument up first.
 
 Kind: numerical guard, derivable.
+
+<a id="fim.config.statistics"></a>
+
+# fim.config.statistics
+
+Statistics policy constants.
+
+Choices about how a statistic is estimated from a run, rather than how long
+the run lasts (see `fim.config.convergence` for that).
+
+See `README.md` in this directory for the table of every constant.
+
+<a id="fim.config.statistics.ESTIMATE_AUTO_DENOMINATOR"></a>
+
+#### ESTIMATE\_AUTO\_DENOMINATOR
+
+Denominator below which a generation counts as degenerate for `auto`.
+
+With `convergence_estimate: auto`, an identity statistic (`D`, `G_ST`) is
+estimated as the "value of means" when its denominator (`H_T` for `G_ST`,
+`1 - H_S` for `D`) is below this in more than `ESTIMATE_AUTO_FRACTION` of the
+evidence-window generations: a ratio of tiny numbers is noisy and biases a mean
+of values (design 6.11).
+
+Kind: policy.
+
+<a id="fim.config.statistics.ESTIMATE_AUTO_FRACTION"></a>
+
+#### ESTIMATE\_AUTO\_FRACTION
+
+Share of window generations that may be degenerate before `auto` switches.
+
+Kind: policy.
 
 <a id="fim.convergence"></a>
 
@@ -2579,6 +2629,14 @@ window starts at `floor(fractional_burn_in * t)` at each check.
 `extra_statistics` are recorded for display and reporting but never decide
 the stop.
 
+A statistic named in `identity_statistics` is a function of `H_S` and
+`H_T`, so it has two expected-value forms (design 6.11): the mean of its
+values and the value of the mean identities. `estimate` selects the form
+each check judges and the report headlines; `"auto"` applies its rule to
+the window as it stands at that check, so the form reported at the stop is
+the form the stop was judged on. Such a monitor must record `H_S` and
+`H_T` every generation (as extras or watched).
+
 <a id="fim.convergence.monitor.BurnInMonitor.__init__"></a>
 
 #### \_\_init\_\_
@@ -2596,7 +2654,11 @@ def __init__(
         extra_statistics: Sequence[str] = (),
         minimum_effective_sample_size: float = MINIMUM_EFFECTIVE_SAMPLE_SIZE,
         growth: float = CHECK_GROWTH,
-        fractional_burn_in: float = FRACTIONAL_BURN_IN) -> None
+        fractional_burn_in: float = FRACTIONAL_BURN_IN,
+        identity_statistics: Mapping[str, IdentityStatistic] | None = None,
+        estimate: str = "mean_of_values",
+        auto_denominator: float = ESTIMATE_AUTO_DENOMINATOR,
+        auto_fraction: float = ESTIMATE_AUTO_FRACTION) -> None
 ```
 
 Initialize an empty monitor.
@@ -2618,11 +2680,19 @@ Initialize an empty monitor.
 - `growth` - Factor by which the window grows between checks.
 - `fractional_burn_in` - Share of the run discarded when `burn_in` is
   `None`.
+- `identity_statistics` - Recorded statistics that are functions of
+  `H_S` and `H_T`, by name; they get both expected-value forms.
+- `estimate` - `"mean_of_values"`, `"value_of_means"` or `"auto"`.
+- `auto_denominator` - Under `"auto"`, the denominator below which a
+  generation counts as degenerate.
+- `auto_fraction` - Under `"auto"`, the degenerate share above which
+  the value of means is used.
 
 
 **Raises**:
 
-- `ValueError` - If a number is out of range or a name repeats.
+- `ValueError` - If a number is out of range, a name repeats, or an
+  identity statistic's `H_S`/`H_T` are not recorded.
 
 <a id="fim.convergence.monitor.BurnInMonitor.generations"></a>
 
@@ -2811,6 +2881,26 @@ describes, for a watched statistic and a display-only one alike.
   `None` when the window holds fewer than three defined values (the
   run ended inside its burn-in, or the statistic was mostly
   undefined).
+
+<a id="fim.convergence.monitor.BurnInMonitor.estimate_forms"></a>
+
+#### estimate\_forms
+
+```python
+def estimate_forms(name: str) -> EstimateForms | None
+```
+
+Return `name`'s expected-value forms over the evidence window.
+
+**Arguments**:
+
+- `name` - A configured statistic name.
+
+
+**Returns**:
+
+  `None` when no form has enough defined values. A statistic that is
+  not a function of the identities has only `mean_of_values`.
 
 <a id="fim.convergence.monitor.ConvergenceMonitor"></a>
 
@@ -3136,6 +3226,150 @@ stop or continue a run (design 6.5).
 - `ValueError` - If a fraction is not in `(0, 1]`, or a segment would hold
   fewer than `MINIMUM_WINDOW_VALUES` values.
 
+<a id="fim.convergence.window_statistics.EstimateForm"></a>
+
+#### EstimateForm
+
+The two ways to estimate an identity statistic's expected value.
+
+<a id="fim.convergence.window_statistics.IdentityStatistic"></a>
+
+## IdentityStatistic Objects
+
+```python
+@dataclass(frozen=True, slots=True)
+class IdentityStatistic()
+```
+
+A statistic that is a function `X = f(H_S, H_T)` of the identities.
+
+**Attributes**:
+
+- `function` - `f(H_S, H_T)`, or `None` where `X` is undefined (`G_ST` at
+  `H_T = 0`).
+- `gradient` - `(df/dH_S, df/dH_T)` at a point where `f` is defined: the
+  sensitivities the delta method needs.
+- `denominator` - The quantity `f` divides by (`H_T` for `G_ST`,
+  `1 - H_S` for `D`); a tiny one makes a per-generation value
+  noisy, which `convergence_estimate: auto` looks for.
+
+<a id="fim.convergence.window_statistics.EstimateForms"></a>
+
+## EstimateForms Objects
+
+```python
+@dataclass(frozen=True, slots=True)
+class EstimateForms()
+```
+
+Both expected-value forms of one statistic over one evidence window.
+
+**Attributes**:
+
+- `mean_of_values` - The window mean of the statistic's own values, with
+  its standard error; `None` when fewer than
+  `MINIMUM_WINDOW_VALUES` values are defined.
+- `value_of_means` - `f` of the window means of `H_S` and `H_T`, with a
+  delta-method standard error; `None` for a statistic that is not a
+  function of the identities, or when `f` is undefined at the
+  means.
+- `selected` - The form the stop, the headline and the batch interval use.
+- `undefined_generations` - Window generations in which the statistic had
+  no value; form 1 drops them.
+
+<a id="fim.convergence.window_statistics.EstimateForms.selected_statistics"></a>
+
+#### selected\_statistics
+
+```python
+@property
+def selected_statistics() -> WindowStatistics | None
+```
+
+Return the selected form's statistics.
+
+<a id="fim.convergence.window_statistics.degenerate_share"></a>
+
+#### degenerate\_share
+
+```python
+def degenerate_share(h_s: npt.NDArray[np.float64],
+                     h_t: npt.NDArray[np.float64],
+                     statistic: IdentityStatistic, threshold: float) -> float
+```
+
+Return the share of window generations whose denominator is below `threshold`.
+
+**Arguments**:
+
+- `h_s` - The window's `H_S` values.
+- `h_t` - The window's `H_T` values, parallel to `h_s`.
+- `statistic` - Supplies the denominator.
+- `threshold` - A denominator below this marks a generation degenerate.
+
+
+**Returns**:
+
+  A share in `[0, 1]`; `0.0` for an empty window.
+
+<a id="fim.convergence.window_statistics.select_form"></a>
+
+#### select\_form
+
+```python
+def select_form(choice: str, *, undefined_generations: int, degenerate: float,
+                auto_fraction: float) -> EstimateForm
+```
+
+Return the form `choice` selects for one window.
+
+**Arguments**:
+
+- `choice` - `"mean_of_values"`, `"value_of_means"` or `"auto"`.
+- `undefined_generations` - Window generations with no value.
+- `degenerate` - Share of window generations with a tiny denominator.
+- `auto_fraction` - The share above which `auto` switches.
+
+
+**Returns**:
+
+  Under `"auto"`, `"value_of_means"` when any generation is undefined or
+  the degenerate share exceeds `auto_fraction`, else `"mean_of_values"`
+  (design 6.11).
+
+<a id="fim.convergence.window_statistics.value_of_means_statistics"></a>
+
+#### value\_of\_means\_statistics
+
+```python
+def value_of_means_statistics(
+        h_s: npt.NDArray[np.float64], h_t: npt.NDArray[np.float64],
+        statistic: IdentityStatistic) -> WindowStatistics | None
+```
+
+Return `f(mean H_S, mean H_T)` with a delta-method standard error.
+
+The estimate is `f` of the two window means. Its standard error comes from
+linearizing `f` at those means: the series
+`L_t = f_S * H_S,t + f_T * H_T,t` has the same autocorrelation structure
+as the estimate's error, so the Geyer standard error of `L`'s mean is the
+standard error of `f(mean H_S, mean H_T)`, to first order, with the
+covariance of the two heterozygosities and both autocorrelations
+accounted for.
+
+**Arguments**:
+
+- `h_s` - The window's `H_S` values, in order.
+- `h_t` - The window's `H_T` values, parallel to `h_s`.
+- `statistic` - Supplies `f` and its gradient.
+
+
+**Returns**:
+
+  A `WindowStatistics` whose `mean` is the estimate, or `None` when the
+  window is shorter than `MINIMUM_WINDOW_VALUES`, the series differ in
+  length, or `f` is undefined at the means.
+
 <a id="fim.engine"></a>
 
 # fim.engine
@@ -3348,6 +3582,13 @@ Fields:
         "noise_adequate"}}`, one entry per statistic `report_for_state`
         was given a monitor history for (`fim.convergence.window_
         statistics.WindowStatistics`, `_window_statistics_payload`).
+        Each entry also carries `selected_form` (`"mean_of_values"` or
+        `"value_of_means"`, the form the headline `mean` and the stop
+        use), `undefined_generations` (window generations in which the
+        statistic had no value, dropped by the first form), and
+        `mean_of_values`/`value_of_means`, each `{"mean",
+        "standard_error"}` — `value_of_means` only for `D` and `G_ST`,
+        the statistics that are functions of `H_S` and `H_T`.
         Empty for a state with no monitored run behind it at all (a GUI
         preview, a re-analysis) — this is *not* the same thing as `D`/
         `G_ST`/etc. above, which are always this state's own point
@@ -4473,8 +4714,7 @@ def report_for_state(
         run_id: str,
         converged: bool,
         reason: str,
-        window_statistics: Mapping[str, dict[str, float | int | bool | str]]
-    | None = None,
+        window_statistics: Mapping[str, dict[str, Any]] | None = None,
         converged_statistics: Sequence[str] | None = None) -> FinalReport
 ```
 
@@ -14362,6 +14602,19 @@ functions that actually use each one.
 - `convergence_combinator` - How several watched statistics combine —
   "all" (every one stable) or "any" (at least one stable).
   A single statistic makes this a no-op special case.
+- `convergence_estimate` - Which expected value a run estimates for `D`
+  and `G_ST`, the two statistics that are functions of `H_S` and
+  `H_T`. `"mean_of_values"` (the default) averages the statistic
+  itself over the evidence window; `"value_of_means"` computes it
+  from the window's averaged `H_S` and `H_T`, the quantity the
+  closed form predicts; `"auto"` picks the second when the
+  statistic is undefined in a window generation or its denominator
+  is tiny in too many of them (Expert Settings
+  `estimate_auto_denominator`/`estimate_auto_fraction`). The
+  stopping decision, the headline number and the batch interval
+  follow the choice; the report carries both forms either way.
+  Statistics that are not functions of the identities (`E_ST`,
+  `K_ST`, `H_ST`) have one form.
 - `convergence_burn_in` - Generations discarded before averaging starts.
   `AUTO_CONVERGENCE` (`0`, the default) derives it from the
   model's relaxation time and `precision`

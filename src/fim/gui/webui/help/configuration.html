@@ -487,6 +487,47 @@ inside the transient and biases the average. Why the formula has this form,
 and how its numbers were chosen, is in <a href="#" data-fim-external="https://github.com/selby-botany/jost-finite-island-model/blob/main/doc/convergence.md">Convergence</a>.</p>
 <pre><code class="language-yaml">convergence_burn_in: 5000
 </code></pre>
+<h3 id="convergence_estimate">convergence_estimate</h3>
+<p>Which expected value a run estimates for <code>D</code> and <code>G_ST</code>, the two statistics
+that are functions of the heterozygosities <code>H_S</code> and <code>H_T</code>:</p>
+<table>
+<thead>
+<tr>
+<th>Value</th>
+<th>Estimate</th>
+<th>Use it for</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>mean_of_values</code> (default)</td>
+<td>The average of the statistic's own values over the evidence window</td>
+<td>Comparing with published replicate means</td>
+</tr>
+<tr>
+<td><code>value_of_means</code></td>
+<td>The statistic computed from the window's averaged <code>H_S</code> and <code>H_T</code></td>
+<td>Checking the simulator against the closed form</td>
+</tr>
+<tr>
+<td><code>auto</code></td>
+<td><code>value_of_means</code> when the statistic is undefined in any window generation, or its denominator is tiny in too many of them; otherwise <code>mean_of_values</code></td>
+<td>Runs near fixation</td>
+</tr>
+</tbody>
+</table>
+<p>The two differ by a small, systematic amount (the average of a ratio is not
+the ratio of the averages); one locus at the reference scale shows 0.011 for
+<code>D</code> and 0.0001 for <code>G_ST</code>. The choice drives the stopping decision, the headline
+number and the standard error. The report carries both forms for <code>D</code> and
+<code>G_ST</code> under <code>window_statistics</code>, with <code>selected_form</code> and
+<code>undefined_generations</code>. <code>auto</code> is judged at each check, so the form reported
+at the stop is the form the stop was judged on; it does not default because
+the headline would then change meaning between points of a sweep. The <code>auto</code>
+thresholds are the Expert Settings <code>estimate_auto_denominator</code> and
+<code>estimate_auto_fraction</code>.</p>
+<pre><code class="language-yaml">convergence_estimate: mean_of_values   # or value_of_means, or auto
+</code></pre>
 <h3 id="precision">precision</h3>
 <ul>
 <li><strong>Type:</strong> non-negative finite number</li>
@@ -692,6 +733,18 @@ run that changes one is a different run (its auto-generated <code>run_id</code> 
 <td><code>3</code></td>
 <td>greater than 0</td>
 <td>Absolute start-of-window <code>z</code> above which the report says the burn-in may have been too short</td>
+</tr>
+<tr>
+<td><code>estimate_auto_denominator</code></td>
+<td><code>0.01</code></td>
+<td>between 0 and 1, exclusive</td>
+<td>Denominator (<code>H_T</code> for <code>G_ST</code>, <code>1 - H_S</code> for <code>D</code>) below which a generation is degenerate for <code>convergence_estimate: auto</code></td>
+</tr>
+<tr>
+<td><code>estimate_auto_fraction</code></td>
+<td><code>0.01</code></td>
+<td>between 0 and 1, exclusive</td>
+<td>Share of window generations that may be degenerate before <code>auto</code> uses the value of means</td>
 </tr>
 </tbody>
 </table>

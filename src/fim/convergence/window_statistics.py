@@ -19,8 +19,9 @@ of a window with its end as a check that the burn-in was long enough.
 from __future__ import annotations
 
 import math
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass
+from typing import Literal
 
 import numpy as np
 import numpy.typing as npt
@@ -210,3 +211,160 @@ def geweke_z(
     if spread == 0.0:
         return 0.0 if difference == 0.0 else math.copysign(math.inf, difference)
     return difference / spread
+
+
+# --- Expected-value forms (design 6.11) -------------------------------------
+
+EstimateForm = Literal["mean_of_values", "value_of_means"]
+"""The two ways to estimate an identity statistic's expected value."""
+
+
+@dataclass(frozen=True, slots=True)
+class IdentityStatistic:
+    """A statistic that is a function `X = f(H_S, H_T)` of the identities.
+
+    Attributes:
+        function: `f(H_S, H_T)`, or `None` where `X` is undefined (`G_ST` at
+            `H_T = 0`).
+        gradient: `(df/dH_S, df/dH_T)` at a point where `f` is defined: the
+            sensitivities the delta method needs.
+        denominator: The quantity `f` divides by (`H_T` for `G_ST`,
+            `1 - H_S` for `D`); a tiny one makes a per-generation value
+            noisy, which `convergence_estimate: auto` looks for.
+    """
+
+    function: Callable[[float, float], float | None]
+    gradient: Callable[[float, float], tuple[float, float]]
+    denominator: Callable[[float, float], float]
+
+
+@dataclass(frozen=True, slots=True)
+class EstimateForms:
+    """Both expected-value forms of one statistic over one evidence window.
+
+    Attributes:
+        mean_of_values: The window mean of the statistic's own values, with
+            its standard error; `None` when fewer than
+            `MINIMUM_WINDOW_VALUES` values are defined.
+        value_of_means: `f` of the window means of `H_S` and `H_T`, with a
+            delta-method standard error; `None` for a statistic that is not a
+            function of the identities, or when `f` is undefined at the
+            means.
+        selected: The form the stop, the headline and the batch interval use.
+        undefined_generations: Window generations in which the statistic had
+            no value; form 1 drops them.
+    """
+
+    mean_of_values: WindowStatistics | None
+    value_of_means: WindowStatistics | None
+    selected: EstimateForm
+    undefined_generations: int
+
+    @property
+    def selected_statistics(self) -> WindowStatistics | None:
+        """Return the selected form's statistics."""
+        if self.selected == "value_of_means":
+            return self.value_of_means
+        return self.mean_of_values
+
+
+def degenerate_share(
+    h_s: npt.NDArray[np.float64],
+    h_t: npt.NDArray[np.float64],
+    statistic: IdentityStatistic,
+    threshold: float,
+) -> float:
+    """Return the share of window generations whose denominator is below `threshold`.
+
+    Args:
+        h_s: The window's `H_S` values.
+        h_t: The window's `H_T` values, parallel to `h_s`.
+        statistic: Supplies the denominator.
+        threshold: A denominator below this marks a generation degenerate.
+
+    Returns:
+        A share in `[0, 1]`; `0.0` for an empty window.
+    """
+    if h_s.shape[0] == 0:
+        return 0.0
+    degenerate = [
+        within
+        for within, total in zip(h_s.tolist(), h_t.tolist(), strict=True)
+        if statistic.denominator(within, total) < threshold
+    ]
+    return len(degenerate) / int(h_s.shape[0])
+
+
+def select_form(
+    choice: str,
+    *,
+    undefined_generations: int,
+    degenerate: float,
+    auto_fraction: float,
+) -> EstimateForm:
+    """Return the form `choice` selects for one window.
+
+    Args:
+        choice: `"mean_of_values"`, `"value_of_means"` or `"auto"`.
+        undefined_generations: Window generations with no value.
+        degenerate: Share of window generations with a tiny denominator.
+        auto_fraction: The share above which `auto` switches.
+
+    Returns:
+        Under `"auto"`, `"value_of_means"` when any generation is undefined or
+        the degenerate share exceeds `auto_fraction`, else `"mean_of_values"`
+        (design 6.11).
+    """
+    if choice == "auto":
+        if undefined_generations > 0 or degenerate > auto_fraction:
+            return "value_of_means"
+        return "mean_of_values"
+    if choice == "mean_of_values":
+        return "mean_of_values"
+    if choice == "value_of_means":
+        return "value_of_means"
+    raise ValueError(f"unknown estimate choice {choice!r}")
+
+
+def value_of_means_statistics(
+    h_s: npt.NDArray[np.float64],
+    h_t: npt.NDArray[np.float64],
+    statistic: IdentityStatistic,
+) -> WindowStatistics | None:
+    """Return `f(mean H_S, mean H_T)` with a delta-method standard error.
+
+    The estimate is `f` of the two window means. Its standard error comes from
+    linearizing `f` at those means: the series
+    `L_t = f_S * H_S,t + f_T * H_T,t` has the same autocorrelation structure
+    as the estimate's error, so the Geyer standard error of `L`'s mean is the
+    standard error of `f(mean H_S, mean H_T)`, to first order, with the
+    covariance of the two heterozygosities and both autocorrelations
+    accounted for.
+
+    Args:
+        h_s: The window's `H_S` values, in order.
+        h_t: The window's `H_T` values, parallel to `h_s`.
+        statistic: Supplies `f` and its gradient.
+
+    Returns:
+        A `WindowStatistics` whose `mean` is the estimate, or `None` when the
+        window is shorter than `MINIMUM_WINDOW_VALUES`, the series differ in
+        length, or `f` is undefined at the means.
+    """
+    if h_s.shape != h_t.shape or h_s.shape[0] < MINIMUM_WINDOW_VALUES:
+        return None
+    mean_s = math.fsum(h_s.tolist()) / h_s.shape[0]
+    mean_t = math.fsum(h_t.tolist()) / h_t.shape[0]
+    estimate = statistic.function(mean_s, mean_t)
+    if estimate is None:
+        return None
+    slope_s, slope_t = statistic.gradient(mean_s, mean_t)
+    linear = geyer_window_statistics(slope_s * h_s + slope_t * h_t)
+    return WindowStatistics(
+        mean=estimate,
+        standard_error=linear.standard_error,
+        standard_deviation=linear.standard_deviation,
+        effective_sample_size=linear.effective_sample_size,
+        lag1_autocorrelation=linear.lag1_autocorrelation,
+        window=linear.window,
+    )

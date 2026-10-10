@@ -5670,3 +5670,34 @@ def test_every_engine_backend_visits_the_same_generations_and_output_shape() -> 
         params.max_generations,
         False,
     )
+
+
+def test_the_report_carries_both_expected_value_forms_for_d_and_g_st(
+    tiny_params: SimulationParams,
+) -> None:
+    """`D` and `G_ST` report both forms; a non-identity statistic reports one."""
+    result = _run(tiny_params)
+
+    window = result.report["window_statistics"]
+    for name in ("D", "G_ST"):
+        entry = window[name]
+        assert entry["selected_form"] == "mean_of_values"
+        assert entry["mean"] == entry["mean_of_values"]["mean"]
+        assert set(entry["value_of_means"]) == {"mean", "standard_error"}
+        assert entry["undefined_generations"] >= 0
+    assert "value_of_means" not in window["H_ST"]
+    assert window["H_ST"]["selected_form"] == "mean_of_values"
+
+
+def test_value_of_means_selection_changes_the_headline_not_the_other_form(
+    tiny_params: SimulationParams,
+) -> None:
+    """The setting picks the headline; both forms stay in the report."""
+    chosen = replace(tiny_params, convergence_estimate="value_of_means")
+
+    default_entry = _run(tiny_params).report["window_statistics"]["D"]
+    chosen_entry = _run(chosen).report["window_statistics"]["D"]
+
+    assert chosen_entry["selected_form"] == "value_of_means"
+    assert chosen_entry["mean"] == chosen_entry["value_of_means"]["mean"]
+    assert default_entry["mean"] == default_entry["mean_of_values"]["mean"]

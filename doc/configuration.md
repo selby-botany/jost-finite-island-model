@@ -571,6 +571,32 @@ and how its numbers were chosen, is in [Convergence](convergence.md).
 convergence_burn_in: 5000
 ```
 
+### convergence_estimate
+
+Which expected value a run estimates for `D` and `G_ST`, the two statistics
+that are functions of the heterozygosities `H_S` and `H_T`:
+
+| Value | Estimate | Use it for |
+|---|---|---|
+| `mean_of_values` (default) | The average of the statistic's own values over the evidence window | Comparing with published replicate means |
+| `value_of_means` | The statistic computed from the window's averaged `H_S` and `H_T` | Checking the simulator against the closed form |
+| `auto` | `value_of_means` when the statistic is undefined in any window generation, or its denominator is tiny in too many of them; otherwise `mean_of_values` | Runs near fixation |
+
+The two differ by a small, systematic amount (the average of a ratio is not
+the ratio of the averages); one locus at the reference scale shows 0.011 for
+`D` and 0.0001 for `G_ST`. The choice drives the stopping decision, the headline
+number and the standard error. The report carries both forms for `D` and
+`G_ST` under `window_statistics`, with `selected_form` and
+`undefined_generations`. `auto` is judged at each check, so the form reported
+at the stop is the form the stop was judged on; it does not default because
+the headline would then change meaning between points of a sweep. The `auto`
+thresholds are the Expert Settings `estimate_auto_denominator` and
+`estimate_auto_fraction`.
+
+```yaml
+convergence_estimate: mean_of_values   # or value_of_means, or auto
+```
+
 ### precision
 
 - **Type:** non-negative finite number
@@ -736,6 +762,8 @@ run that changes one is a different run (its auto-generated `run_id` changes).
 | `cap_minimum` | `200000` | whole number, at least 1 | Smallest derived `max_generations` |
 | `cap_maximum` | `10000000` | whole number, at least `cap_minimum` | Largest derived `max_generations` |
 | `start_drift_alert_z` | `3` | greater than 0 | Absolute start-of-window `z` above which the report says the burn-in may have been too short |
+| `estimate_auto_denominator` | `0.01` | between 0 and 1, exclusive | Denominator (`H_T` for `G_ST`, `1 - H_S` for `D`) below which a generation is degenerate for `convergence_estimate: auto` |
+| `estimate_auto_fraction` | `0.01` | between 0 and 1, exclusive | Share of window generations that may be degenerate before `auto` uses the value of means |
 
 ```yaml
 expert:

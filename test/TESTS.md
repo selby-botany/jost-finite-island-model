@@ -41,6 +41,7 @@ Every test module, fixture, and test function documented here in full; `doc/fim-
   - [`test_burn_in_monitor`](#convergence.test_burn_in_monitor)
   - [`test_criteria_validation`](#convergence.test_criteria_validation)
   - [`test_defaults`](#convergence.test_defaults)
+  - [`test_estimate_forms`](#convergence.test_estimate_forms)
   - [`test_replicate_monitor`](#convergence.test_replicate_monitor)
   - [`test_window_statistics`](#convergence.test_window_statistics)
 - [`test/engine/`](#group-engine)
@@ -5617,6 +5618,147 @@ def test_the_sentence_says_so_when_there_is_no_relaxation_time() -> None
 
 A fractional burn-in is described without inventing a relaxation time.
 
+<a id="convergence.test_estimate_forms"></a>
+
+# convergence.test\_estimate\_forms
+
+Tests of the two expected-value forms of `D` and `G_ST` (design 6.11).
+
+Every test is a pure function of its commit: fixed series, fixed seeds, and
+expected numbers computed in the test from the same formulas.
+
+<a id="convergence.test_estimate_forms.identity"></a>
+
+#### identity
+
+```python
+@pytest.fixture
+def identity() -> dict[str, IdentityStatistic]
+```
+
+`D` and `G_ST` for a four-deme model, as the engine builds them.
+
+<a id="convergence.test_estimate_forms.test_form_one_is_the_mean_of_the_values_and_form_two_is_the_value_of_the_means"></a>
+
+#### test\_form\_one\_is\_the\_mean\_of\_the\_values\_and\_form\_two\_is\_the\_value\_of\_the\_means
+
+```python
+def test_form_one_is_the_mean_of_the_values_and_form_two_is_the_value_of_the_means(
+        identity: dict[str, IdentityStatistic]) -> None
+```
+
+The two forms differ exactly as `mean f` and `f(mean)` do.
+
+<a id="convergence.test_estimate_forms.test_the_selected_form_is_the_default_headline"></a>
+
+#### test\_the\_selected\_form\_is\_the\_default\_headline
+
+```python
+def test_the_selected_form_is_the_default_headline(
+        identity: dict[str, IdentityStatistic]) -> None
+```
+
+With no choice made the headline is the mean of values; the other is carried.
+
+<a id="convergence.test_estimate_forms.test_a_statistic_that_is_not_an_identity_function_has_one_form"></a>
+
+#### test\_a\_statistic\_that\_is\_not\_an\_identity\_function\_has\_one\_form
+
+```python
+def test_a_statistic_that_is_not_an_identity_function_has_one_form(
+        identity: dict[str, IdentityStatistic]) -> None
+```
+
+`H_S` is recorded but is no function of the identities: form one only.
+
+<a id="convergence.test_estimate_forms.test_an_undefined_generation_is_dropped_from_form_one_and_counted"></a>
+
+#### test\_an\_undefined\_generation\_is\_dropped\_from\_form\_one\_and\_counted
+
+```python
+def test_an_undefined_generation_is_dropped_from_form_one_and_counted(
+        identity: dict[str, IdentityStatistic]) -> None
+```
+
+`G_ST` is undefined where `H_T` is zero; form two stays defined.
+
+<a id="convergence.test_estimate_forms.test_auto_uses_the_value_of_means_exactly_when_the_rule_says_so"></a>
+
+#### test\_auto\_uses\_the\_value\_of\_means\_exactly\_when\_the\_rule\_says\_so
+
+```python
+def test_auto_uses_the_value_of_means_exactly_when_the_rule_says_so(
+        identity: dict[str, IdentityStatistic]) -> None
+```
+
+Auto: form two if any generation is undefined or too many are degenerate.
+
+<a id="convergence.test_estimate_forms.test_select_form_applies_the_two_thresholds_exactly"></a>
+
+#### test\_select\_form\_applies\_the\_two\_thresholds\_exactly
+
+```python
+def test_select_form_applies_the_two_thresholds_exactly() -> None
+```
+
+The degenerate share must exceed the fraction; any undefined one is enough.
+
+<a id="convergence.test_estimate_forms.test_degenerate_share_counts_denominators_below_the_threshold"></a>
+
+#### test\_degenerate\_share\_counts\_denominators\_below\_the\_threshold
+
+```python
+def test_degenerate_share_counts_denominators_below_the_threshold(
+        identity: dict[str, IdentityStatistic]) -> None
+```
+
+`G_ST` divides by `H_T`; `D` by `1 - H_S`.
+
+<a id="convergence.test_estimate_forms.test_the_gradients_match_finite_differences_of_the_formulas"></a>
+
+#### test\_the\_gradients\_match\_finite\_differences\_of\_the\_formulas
+
+```python
+@pytest.mark.parametrize("name", ["D", "G_ST"])
+def test_the_gradients_match_finite_differences_of_the_formulas(
+        identity: dict[str, IdentityStatistic], name: str) -> None
+```
+
+The delta method's slopes are the derivatives of the engine's own formula.
+
+<a id="convergence.test_estimate_forms.test_the_delta_method_error_of_a_flat_denominator_is_the_scaled_geyer_error"></a>
+
+#### test\_the\_delta\_method\_error\_of\_a\_flat\_denominator\_is\_the\_scaled\_geyer\_error
+
+```python
+def test_the_delta_method_error_of_a_flat_denominator_is_the_scaled_geyer_error(
+        identity: dict[str, IdentityStatistic]) -> None
+```
+
+With `H_T` constant, `G_ST`'s error is `H_S`'s Geyer error times `1 / H_T`.
+
+<a id="convergence.test_estimate_forms.test_value_of_means_is_none_for_a_short_window_and_for_an_undefined_mean"></a>
+
+#### test\_value\_of\_means\_is\_none\_for\_a\_short\_window\_and\_for\_an\_undefined\_mean
+
+```python
+def test_value_of_means_is_none_for_a_short_window_and_for_an_undefined_mean(
+        identity: dict[str, IdentityStatistic]) -> None
+```
+
+No estimate is invented where the function has no value.
+
+<a id="convergence.test_estimate_forms.test_a_monitor_with_identity_statistics_needs_the_heterozygosities"></a>
+
+#### test\_a\_monitor\_with\_identity\_statistics\_needs\_the\_heterozygosities
+
+```python
+def test_a_monitor_with_identity_statistics_needs_the_heterozygosities(
+        identity: dict[str, IdentityStatistic]) -> None
+```
+
+The forms are computed from `H_S` and `H_T`, so both must be recorded.
+
 <a id="convergence.test_replicate_monitor"></a>
 
 # convergence.test\_replicate\_monitor
@@ -8695,6 +8837,28 @@ assertion says so directly instead of comparing whatever each one
 happened to do. A backend that converged early would fail loudly
 here rather than quietly being compared against a different-length
 run.
+
+<a id="engine.test_engine.test_the_report_carries_both_expected_value_forms_for_d_and_g_st"></a>
+
+#### test\_the\_report\_carries\_both\_expected\_value\_forms\_for\_d\_and\_g\_st
+
+```python
+def test_the_report_carries_both_expected_value_forms_for_d_and_g_st(
+        tiny_params: SimulationParams) -> None
+```
+
+`D` and `G_ST` report both forms; a non-identity statistic reports one.
+
+<a id="engine.test_engine.test_value_of_means_selection_changes_the_headline_not_the_other_form"></a>
+
+#### test\_value\_of\_means\_selection\_changes\_the\_headline\_not\_the\_other\_form
+
+```python
+def test_value_of_means_selection_changes_the_headline_not_the_other_form(
+        tiny_params: SimulationParams) -> None
+```
+
+The setting picks the headline; both forms stay in the report.
 
 <a id="engine.test_frame_identity"></a>
 
@@ -27290,6 +27454,12 @@ A run that changes an Expert Setting is a different run.
             "start_drift_alert_z": -1
         }, "greater than 0"),
         ({
+            "estimate_auto_denominator": 0
+        }, "greater than 0"),
+        ({
+            "estimate_auto_fraction": 1.0
+        }, "below 1"),
+        ({
             "check_growth": "fast"
         }, "check_growth"),
         ("everything", "mapping"),
@@ -27310,6 +27480,28 @@ def test_expert_settings_change_the_derived_burn_in_and_cap() -> None
 ```
 
 The burn-in floor and cap multiple reach the derivation.
+
+<a id="model.test_params.test_convergence_estimate_defaults_to_mean_of_values_and_round_trips"></a>
+
+#### test\_convergence\_estimate\_defaults\_to\_mean\_of\_values\_and\_round\_trips
+
+```python
+def test_convergence_estimate_defaults_to_mean_of_values_and_round_trips(
+) -> None
+```
+
+The setting defaults to the mean of values and survives `to_dict`.
+
+<a id="model.test_params.test_convergence_estimate_rejects_an_unknown_form_and_changes_the_run_id"></a>
+
+#### test\_convergence\_estimate\_rejects\_an\_unknown\_form\_and\_changes\_the\_run\_id
+
+```python
+def test_convergence_estimate_rejects_an_unknown_form_and_changes_the_run_id(
+) -> None
+```
+
+Only the three documented words are accepted, and the choice is identity.
 
 <a id="model.test_run_identity"></a>
 

@@ -28,6 +28,7 @@ from statistics import NormalDist
 from typing import Literal
 
 import numpy as np
+import numpy.typing as npt
 
 from fim.config.convergence import (
     CHECK_GROWTH,
@@ -35,8 +36,17 @@ from fim.config.convergence import (
     MINIMUM_EFFECTIVE_SAMPLE_SIZE,
 )
 from fim.config.numerics import MINIMUM_WINDOW_VALUES
+from fim.config.statistics import ESTIMATE_AUTO_DENOMINATOR, ESTIMATE_AUTO_FRACTION
 from fim.convergence.criteria import ConvergenceCriterion
-from fim.convergence.window_statistics import WindowStatistics, geyer_window_statistics
+from fim.convergence.window_statistics import (
+    EstimateForms,
+    IdentityStatistic,
+    WindowStatistics,
+    degenerate_share,
+    geyer_window_statistics,
+    select_form,
+    value_of_means_statistics,
+)
 
 Combinator = Literal["any", "all"]
 
@@ -204,6 +214,14 @@ class BurnInMonitor:
 
     `extra_statistics` are recorded for display and reporting but never decide
     the stop.
+
+    A statistic named in `identity_statistics` is a function of `H_S` and
+    `H_T`, so it has two expected-value forms (design 6.11): the mean of its
+    values and the value of the mean identities. `estimate` selects the form
+    each check judges and the report headlines; `"auto"` applies its rule to
+    the window as it stands at that check, so the form reported at the stop is
+    the form the stop was judged on. Such a monitor must record `H_S` and
+    `H_T` every generation (as extras or watched).
     """
 
     def __init__(
@@ -220,6 +238,10 @@ class BurnInMonitor:
         minimum_effective_sample_size: float = MINIMUM_EFFECTIVE_SAMPLE_SIZE,
         growth: float = CHECK_GROWTH,
         fractional_burn_in: float = FRACTIONAL_BURN_IN,
+        identity_statistics: Mapping[str, IdentityStatistic] | None = None,
+        estimate: str = "mean_of_values",
+        auto_denominator: float = ESTIMATE_AUTO_DENOMINATOR,
+        auto_fraction: float = ESTIMATE_AUTO_FRACTION,
     ) -> None:
         """Initialize an empty monitor.
 
@@ -239,9 +261,17 @@ class BurnInMonitor:
             growth: Factor by which the window grows between checks.
             fractional_burn_in: Share of the run discarded when `burn_in` is
                 `None`.
+            identity_statistics: Recorded statistics that are functions of
+                `H_S` and `H_T`, by name; they get both expected-value forms.
+            estimate: `"mean_of_values"`, `"value_of_means"` or `"auto"`.
+            auto_denominator: Under `"auto"`, the denominator below which a
+                generation counts as degenerate.
+            auto_fraction: Under `"auto"`, the degenerate share above which
+                the value of means is used.
 
         Raises:
-            ValueError: If a number is out of range or a name repeats.
+            ValueError: If a number is out of range, a name repeats, or an
+                identity statistic's `H_S`/`H_T` are not recorded.
         """
         if max_generations < 1:
             raise ValueError("max_generations must be at least 1")
@@ -263,6 +293,17 @@ class BurnInMonitor:
             statistics, extra_statistics, combinator
         )
         self._all_statistics = self._statistics + extra_names
+        self._identity = dict(identity_statistics or {})
+        if estimate not in ("mean_of_values", "value_of_means", "auto"):
+            raise ValueError(f"unknown estimate {estimate!r}")
+        unknown = [name for name in self._identity if name not in self._all_statistics]
+        if unknown:
+            raise ValueError(f"identity statistics not recorded: {unknown}")
+        if self._identity and not {"H_S", "H_T"} <= set(self._all_statistics):
+            raise ValueError("identity statistics need H_S and H_T recorded")
+        self._estimate = estimate
+        self._auto_denominator = auto_denominator
+        self._auto_fraction = auto_fraction
         self._combinator = combinator
         self._max_generations = max_generations
         self._burn_in = burn_in
@@ -435,6 +476,23 @@ class BurnInMonitor:
             )
         return self._statistics_over(name, start)
 
+    def estimate_forms(self, name: str) -> EstimateForms | None:
+        """Return `name`'s expected-value forms over the evidence window.
+
+        Args:
+            name: A configured statistic name.
+
+        Returns:
+            `None` when no form has enough defined values. A statistic that is
+            not a function of the identities has only `mean_of_values`.
+        """
+        start = self._window_start
+        if start is None:
+            start = int(
+                self._fractional * (self._generations[-1] if self._generations else 0)
+            )
+        return self._forms_over(name, start)
+
     def _check(self, generation: int) -> bool:
         """Judge every watched statistic over `[start, generation]`.
 
@@ -465,13 +523,51 @@ class BurnInMonitor:
             )
         return all(verdicts) if self._combinator == "all" else any(verdicts)
 
-    def _statistics_over(self, name: str, start: int) -> WindowStatistics | None:
-        """Return `name`'s window statistics from generation `start`, if enough data."""
+    def _forms_over(self, name: str, start: int) -> EstimateForms | None:
+        """Return `name`'s expected-value forms from generation `start`."""
         first = bisect_left(self._value_generations[name], start)
         window = np.frombuffer(self._values[name], dtype=np.float64)[first:]
-        if window.shape[0] < MINIMUM_WINDOW_VALUES:
+        mean_of_values = (
+            geyer_window_statistics(window)
+            if window.shape[0] >= MINIMUM_WINDOW_VALUES
+            else None
+        )
+        statistic = self._identity.get(name)
+        if statistic is None:
+            if mean_of_values is None:
+                return None
+            return EstimateForms(mean_of_values, None, "mean_of_values", 0)
+        h_s = self._window_values("H_S", start)
+        h_t = self._window_values("H_T", start)
+        undefined = max(0, h_s.shape[0] - window.shape[0])
+        form = select_form(
+            self._estimate,
+            undefined_generations=undefined,
+            degenerate=degenerate_share(h_s, h_t, statistic, self._auto_denominator)
+            if self._estimate == "auto" and h_s.shape == h_t.shape
+            else 0.0,
+            auto_fraction=self._auto_fraction,
+        )
+        value_of_means = value_of_means_statistics(h_s, h_t, statistic)
+        if mean_of_values is None and value_of_means is None:
             return None
-        return geyer_window_statistics(window)
+        # A form with nothing to report cannot decide: fall back to the other,
+        # which the report then names as the selected one.
+        if form == "value_of_means" and value_of_means is None:
+            form = "mean_of_values"
+        elif form == "mean_of_values" and mean_of_values is None:
+            form = "value_of_means"
+        return EstimateForms(mean_of_values, value_of_means, form, undefined)
+
+    def _statistics_over(self, name: str, start: int) -> WindowStatistics | None:
+        """Return `name`'s selected-form statistics from `start`, if enough data."""
+        forms = self._forms_over(name, start)
+        return None if forms is None else forms.selected_statistics
+
+    def _window_values(self, name: str, start: int) -> npt.NDArray[np.float64]:
+        """Return `name`'s recorded values from generation `start` on."""
+        first = bisect_left(self._value_generations[name], start)
+        return np.frombuffer(self._values[name], dtype=np.float64)[first:]
 
 
 class ConvergenceMonitor:
