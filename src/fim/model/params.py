@@ -48,7 +48,10 @@ from fim.model.topology import (
     dense_matrix_from_neighbors,
     stepping_stone_neighbors,
 )
-from fim.statistics.catalog import convergence_statistic_keys
+from fim.statistics.catalog import (
+    convergence_statistic_keys,
+    history_keys,
+)
 
 PopulationSize = int | tuple[int, ...]
 ALLOWED_PLOIDIES: Final = (1, 2, 3, 4)
@@ -108,6 +111,7 @@ PARAMETER_DEFAULTS: Final[dict[str, object]] = {
     "max_generations": None,  # None means "auto": derive it
     "n_replicates": DEFAULT_N_REPLICATES,
     "stop_batch_early": True,
+    "statistic_precision": None,
     "precision_method": "interval",
     "replicate_averaging_window": None,  # None means "auto": match the batch
     "replicate_minimum": 10,
@@ -153,6 +157,7 @@ _CONFIG_KEYS: Final = frozenset(
         "n_replicates",
         "stop_batch_early",
         "precision_method",
+        "statistic_precision",
         "replicate_averaging_window",
         "replicate_minimum",
         "confidence",
@@ -606,6 +611,7 @@ class SimulationParams:
     ploidy: int = 1
     read_only: bool = False
     expert: ExpertSettings = field(default_factory=ExpertSettings)
+    statistic_precision: tuple[tuple[str, float], ...] = ()
     auto_derived: frozenset[str] = field(
         default=frozenset(), init=False, compare=False, repr=False
     )
@@ -680,6 +686,7 @@ class SimulationParams:
                 "or 'auto'"
             )
         _validate_precision(self.precision)
+        self._validate_statistic_precision(convergence_statistics)
         if not isinstance(self.expert, ExpertSettings):
             raise ValueError(
                 "expert must be ExpertSettings (or a mapping, in a config)"
@@ -787,6 +794,27 @@ class SimulationParams:
         if isinstance(self.convergence_statistic, str):
             return (self.convergence_statistic,)
         return self.convergence_statistic
+
+    def _validate_statistic_precision(self, watched: tuple[str, ...]) -> None:
+        """Validate and normalize the per-statistic precision overrides.
+
+        Args:
+            watched: The normalized watched statistics.
+
+        Raises:
+            ValueError: If an override names an unwatched statistic or is
+                negative or not finite.
+        """
+        raw = self.statistic_precision
+        pairs = tuple(sorted(raw.items() if isinstance(raw, Mapping) else raw))
+        for name, precision in pairs:
+            if name not in watched:
+                raise ValueError(
+                    f"statistic_precision names {name}, which is not watched "
+                    "(convergence_statistic)"
+                )
+            _validate_precision(precision)
+        object.__setattr__(self, "statistic_precision", pairs)
 
     def _validate_batch_settings(self) -> None:
         """Validate how a batch reaches its precision.
@@ -924,6 +952,11 @@ class SimulationParams:
                 mutation_rates=mutation_rates,
                 precision=self.precision,
                 expert=self.expert,
+                burn_in_multiplier=(
+                    self.expert.spectrum_burn_in_multiplier
+                    if set(self.convergence_statistics) & set(history_keys("opt_in"))
+                    else 1.0
+                ),
             )
             if burn_in_auto:
                 burn_in = derived.burn_in
@@ -1021,6 +1054,8 @@ class SimulationParams:
             "auto_vector_min_d": self.auto_vector_min_d,
             "auto_vector_max_capacity": self.auto_vector_max_capacity,
         }
+        if self.statistic_precision:
+            result["statistic_precision"] = dict(self.statistic_precision)
         if changes := self.expert.changes():
             # Only the settings that differ from their defaults are written, so
             # a run with default Expert Settings keeps the parameters (and the
@@ -1203,6 +1238,9 @@ class SimulationParams:
                 ),
             ),
             expert=ExpertSettings.from_mapping(config.get("expert")),
+            statistic_precision=_parse_statistic_precision(
+                config.get("statistic_precision")
+            ),
             precision=_parse_float(
                 "precision",
                 config.get("precision", PARAMETER_DEFAULTS["precision"]),
@@ -1703,6 +1741,32 @@ def _parse_convergence_estimate(value: Any) -> ConvergenceEstimate:
     raise ValueError(
         "convergence_estimate must be 'mean_of_values', 'value_of_means', or 'auto'"
     )
+
+
+def _parse_statistic_precision(value: Any) -> tuple[tuple[str, float], ...]:
+    """Parse the per-statistic precision mapping into sorted pairs.
+
+    Args:
+        value: `None`, or a mapping of statistic name to a non-negative
+            number.
+
+    Returns:
+        The pairs, sorted by name, so equal mappings are equal parameters.
+
+    Raises:
+        ValueError: If `value` is not a mapping or a precision is not a
+            non-negative finite number.
+    """
+    if value is None:
+        return ()
+    if not isinstance(value, Mapping):
+        raise ValueError("statistic_precision must be a mapping of name to precision")
+    pairs: list[tuple[str, float]] = []
+    for name, precision in value.items():
+        if not isinstance(name, str):
+            raise ValueError("statistic_precision names must be text")
+        pairs.append((name, _parse_float(f"statistic_precision[{name}]", precision)))
+    return tuple(sorted(pairs))
 
 
 def _parse_precision_method(value: Any) -> PrecisionMethod:

@@ -34,6 +34,7 @@ from fim.config.convergence import (
     MINIMUM_EFFECTIVE_SAMPLE_SIZE,
     MINIMUM_MAX_GENERATIONS,
     REPLICATE_WAVE_MULTIPLE,
+    SPECTRUM_BURN_IN_MULTIPLIER,
     START_DRIFT_ALERT_Z,
 )
 from fim.config.numerics import MINIMUM_WINDOW_VALUES
@@ -72,6 +73,8 @@ class ExpertSettings:
             0 and 1, exclusive).
         batch_width: Replicates assumed to run at once when
             `max_concurrent_replicates` is unset (at least 1).
+        spectrum_burn_in_multiplier: Factor on the burn-in when an
+            allele-spectrum statistic is watched (at least 1).
         replicate_wave_multiple: Replicate waves a batch aims for (greater
             than 0).
         averaging_multiple_minimum: Smallest matched replicate averaging
@@ -96,6 +99,7 @@ class ExpertSettings:
     estimate_auto_denominator: float = ESTIMATE_AUTO_DENOMINATOR
     estimate_auto_fraction: float = ESTIMATE_AUTO_FRACTION
     batch_width: int = BATCH_WIDTH
+    spectrum_burn_in_multiplier: float = SPECTRUM_BURN_IN_MULTIPLIER
     replicate_wave_multiple: float = REPLICATE_WAVE_MULTIPLE
     averaging_multiple_minimum: float = AVERAGING_MULTIPLE_MINIMUM
     averaging_multiple_maximum: float = AVERAGING_MULTIPLE_MAXIMUM
@@ -193,6 +197,7 @@ _RANGES: Final = (
     ("estimate_auto_denominator", 0.0, False),
     ("estimate_auto_fraction", 0.0, False),
     ("batch_width", 1.0, True),
+    ("spectrum_burn_in_multiplier", 1.0, True),
     ("replicate_wave_multiple", 0.0, False),
     ("averaging_multiple_minimum", 0.0, False),
     ("averaging_multiple_maximum", 0.0, False),

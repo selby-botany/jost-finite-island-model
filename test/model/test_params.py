@@ -1655,6 +1655,7 @@ def test_expert_settings_change_the_run_id_but_defaults_do_not() -> None:
         ({"start_drift_alert_z": -1}, "greater than 0"),
         ({"estimate_auto_denominator": 0}, "greater than 0"),
         ({"estimate_auto_fraction": 1.0}, "below 1"),
+        ({"spectrum_burn_in_multiplier": 0.5}, "at least 1"),
         ({"batch_width": 0}, "at least 1"),
         ({"batch_width": 2.5}, "whole number"),
         ({"replicate_wave_multiple": 0}, "greater than 0"),
@@ -1788,3 +1789,66 @@ def test_a_fixed_window_needs_a_burn_in() -> None:
     with pytest.raises(ValueError, match="needs a burn-in"):
         SimulationParams.from_mapping(config)
     SimulationParams.from_mapping({**config, "convergence_burn_in": 10})
+
+
+def test_statistic_precision_round_trips_and_only_names_watched_statistics() -> None:
+    """The mapping is sorted, written only when set, and checked against the watch."""
+    default = SimulationParams.from_mapping(_valid_config())
+    assert default.statistic_precision == ()
+    assert "statistic_precision" not in default.to_dict()
+    params = SimulationParams.from_mapping(
+        {
+            **_valid_config(),
+            "convergence_statistic": ["G_ST", "A_CGD"],
+            "statistic_precision": {"A_CGD": 0.5, "G_ST": 0.02},
+        }
+    )
+    assert params.statistic_precision == (("A_CGD", 0.5), ("G_ST", 0.02))
+    again = SimulationParams.from_mapping(params.to_dict())
+    assert again.statistic_precision == params.statistic_precision
+    assert deterministic_run_id(again) == deterministic_run_id(params)
+    assert deterministic_run_id(params) != deterministic_run_id(
+        SimulationParams.from_mapping(
+            {**_valid_config(), "convergence_statistic": ["G_ST", "A_CGD"]}
+        )
+    )
+
+
+@pytest.mark.parametrize(
+    ("value", "message"),
+    [
+        ({"H_S": 0.1}, "not watched"),
+        ({"D": -0.1}, "non-negative"),
+        ("D", "mapping"),
+    ],
+)
+def test_an_invalid_statistic_precision_is_refused(value: object, message: str) -> None:
+    """An unwatched name, a negative precision and a non-mapping are rejected."""
+    with pytest.raises(ValueError, match=message):
+        SimulationParams.from_mapping({**_valid_config(), "statistic_precision": value})
+
+
+def test_watching_an_allele_spectrum_statistic_lengthens_the_derived_burn_in() -> None:
+    """`spectrum_burn_in_multiplier` scales the derived burn-in, only then."""
+    identity = SimulationParams.from_mapping(
+        {**_valid_config(), "expert": {"spectrum_burn_in_multiplier": 2}}
+    )
+    spectrum = SimulationParams.from_mapping(
+        {
+            **_valid_config(),
+            "convergence_statistic": "A_CGD",
+            "expert": {"spectrum_burn_in_multiplier": 2},
+        }
+    )
+    plain = SimulationParams.from_mapping(
+        {**_valid_config(), "convergence_statistic": "A_CGD"}
+    )
+
+    assert (
+        identity.convergence_burn_in
+        == SimulationParams.from_mapping(_valid_config()).convergence_burn_in
+    )
+    assert plain.convergence_burn_in == identity.convergence_burn_in
+    assert spectrum.convergence_burn_in == pytest.approx(
+        2 * plain.convergence_burn_in, abs=1
+    )

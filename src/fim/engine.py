@@ -172,7 +172,7 @@ from fim.persistence.store import (
     equilibrium_store_for,
     store_wants_frames,
 )
-from fim.statistics.catalog import history_keys, nei_key, report_keys
+from fim.statistics.catalog import history_keys, nei_key, report_keys, unbounded_keys
 from fim.statistics.catalog import spec as catalog_spec
 from fim.statistics.differentiation import (
     DifferentiationReport,
@@ -2454,6 +2454,12 @@ def _burn_in_monitor(
         auto_fraction=expert.estimate_auto_fraction,
         averaging_window=params.replicate_averaging_window or None,
         awaiting_window=awaiting_window,
+        statistic_precision=dict(params.statistic_precision),
+        relative_statistics=[
+            name
+            for name in params.convergence_statistics
+            if name in _UNBOUNDED_STATISTICS
+        ],
     )
 
 
@@ -2559,10 +2565,13 @@ def _window_statistics_payload(
             "window_end": monitor.window_end_generation or 0,
             "burn_in": monitor.burn_in_generation,
             "minimum_ess": monitor.minimum_effective_sample_size,
-            "target_standard_error": monitor.target_standard_error,
+            "target_standard_error": monitor.target_standard_error_for(
+                name, stats.mean
+            ),
             "estimator": "geyer",
             "noise_adequate": stats.meets(
-                monitor.target_standard_error, monitor.minimum_effective_sample_size
+                monitor.target_standard_error_for(name, stats.mean),
+                monitor.minimum_effective_sample_size,
             ),
         }
         # An infinite `z` (two exactly known segments that differ) has no JSON
@@ -4098,6 +4107,33 @@ for those two as well (see `_statistics_to_compute`, below).
 
 
 _EXPENSIVE_OPT_IN_STATISTICS: Final[frozenset[str]] = frozenset(history_keys("opt_in"))
+
+_UNBOUNDED_STATISTICS: Final[frozenset[str]] = frozenset(unbounded_keys())
+"""Statistics with an open end, judged by a relative precision by default."""
+
+_POOLED_STATISTICS: Final[frozenset[str]] = frozenset(
+    {"Gs", "Gd", "D_m", "R_ST", "G_ST_NEI_LOG", "G_ST_HEDRICK", "F_ST"}
+)
+"""Watchable statistics computed from the pooled `H_S`, `H_T` and deme count.
+
+Cheap: no pass over the allele frequencies, only `_derived_fields` and the
+`Gs`/`Gd` identities of the two heterozygosities every generation already has.
+"""
+
+_NEI_ALL_DEMES_STATISTICS: Final[frozenset[str]] = frozenset(
+    key for key in report_keys() if key.startswith(("NEI_D_ALL", "NEI_I_ALL"))
+)
+"""Watchable all-demes Nei identities and distances.
+
+They need the whole state (one pass over every deme's allele frequencies per
+locus), so a vectorized lane rebuilds a `ModelState` each generation it watches
+one.
+"""
+
+_NON_REPORT_WATCHED: Final[frozenset[str]] = (
+    _POOLED_STATISTICS | _NEI_ALL_DEMES_STATISTICS
+)
+"""Watchable statistics that `statistics_report` itself knows nothing about."""
 """Derived from `fim.statistics.catalog` (`history == "opt_in"`).
 
 Statistics `params.track_expensive_statistics` opts into computing.
@@ -4141,7 +4177,7 @@ def _statistics_to_compute(params: SimulationParams) -> frozenset[str]:
     display-only opt-in `SimulationParams.track_expensive_statistics`'s
     own docstring describes.
     """
-    statistics = set(params.convergence_statistics)
+    statistics = set(params.convergence_statistics) - _NON_REPORT_WATCHED
     if params.track_expensive_statistics:
         statistics |= _EXPENSIVE_OPT_IN_STATISTICS
     return frozenset(statistics)
@@ -4221,7 +4257,10 @@ def _convergence_values(
         )
         for locus_index in range(state.locus_count)
     )
-    return _watched_statistic_values(locus_reports, params, deme_count=state.deme_count)
+    values = _watched_statistic_values(
+        locus_reports, params, deme_count=state.deme_count
+    )
+    return _with_watched_extras(values, params, state.deme_count, lambda: state)
 
 
 def tracked_statistic_values(
@@ -4289,14 +4328,75 @@ def _convergence_values_vectorized(
     if not statistics - set(_ALWAYS_TRACKED_STATISTICS):
         table, status = block.locus_statistics()
         if not status.any():
-            return _watched_values_from_table(table, params, block.deme_count)
+            return _with_watched_extras(
+                _watched_values_from_table(table, params, block.deme_count),
+                params,
+                block.deme_count,
+                block.to_model_state,
+            )
     reports = tuple(
         _statistics_for_locus_vectorized(
             block, params, locus_index, statistics=statistics
         )
         for locus_index in range(len(block.loci))
     )
-    return _watched_statistic_values(reports, params, deme_count=block.deme_count)
+    return _with_watched_extras(
+        _watched_statistic_values(reports, params, deme_count=block.deme_count),
+        params,
+        block.deme_count,
+        block.to_model_state,
+    )
+
+
+def _with_watched_extras(
+    values: dict[str, float],
+    params: SimulationParams,
+    deme_count: int,
+    state: Callable[[], ModelState],
+) -> dict[str, float]:
+    """Add the watched statistics that are not per-locus report fields.
+
+    `Gs`, `Gd`, `D_m`, `R_ST`, `G_ST_NEI_LOG`, `G_ST_HEDRICK` and `F_ST` come
+    from the pooled `H_S` and `H_T` already in `values`; the all-demes Nei
+    identities and distances need the state, which `state` supplies only when
+    one is watched. A value that is undefined (a Nei distance between demes
+    that share no allele, or an `R_ST` with no variation) is left out, as an
+    undefined `G_ST` always has been, and the monitor counts the generation.
+
+    Args:
+        values: The mapping `_watched_statistic_values` (or its table form)
+            returned.
+        params: Supplies the watched statistics.
+        deme_count: Number of demes.
+        state: Builds the generation's `ModelState` on demand.
+
+    Returns:
+        `values` with the watched extras added (the same dictionary).
+    """
+    watched = set(params.convergence_statistics)
+    pooled = watched & _POOLED_STATISTICS
+    if pooled:
+        within, total = values["H_S"], values["H_T"]
+        candidates: dict[str, float | None] = {
+            "Gs": 1.0 - within,
+            "Gd": _gd_from_within_and_total(within, total, deme_count),
+            **cast(
+                "Mapping[str, float | None]",
+                _derived_fields(within, total, deme_count),
+            ),
+        }
+        for name in pooled:
+            value = candidates[name]
+            if value is not None:
+                values[name] = value
+    nei = watched & _NEI_ALL_DEMES_STATISTICS
+    if nei:
+        fields = cast("Mapping[str, float | None]", _nei_all_demes_fields(state()))
+        for name in nei:
+            value = fields[name]
+            if value is not None:
+                values[name] = value
+    return values
 
 
 def _watched_values_from_table(

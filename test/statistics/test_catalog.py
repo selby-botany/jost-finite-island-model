@@ -20,6 +20,7 @@ from fim.statistics.catalog import (
     pair_keys,
     report_keys,
     spec,
+    unbounded_keys,
 )
 
 _ORIGINAL_TEN = (
@@ -45,14 +46,15 @@ class CatalogTests(unittest.TestCase):
         self.assertEqual(len(keys), len(set(keys)))
 
     def test_original_statistics_keep_their_order_and_defaults(self) -> None:
-        """The ten long-standing statistics lead and stay eligible.
+        """The ten long-standing statistics lead, and every global one is eligible.
 
         Only the five cheap ones are shown on a fresh install: showing an
         expensive one makes every run compute them each generation
         (`expensive_statistics_requested`), so that cost is opted into.
         """
         self.assertEqual(tuple(entry.key for entry in CATALOG[:10]), _ORIGINAL_TEN)
-        self.assertEqual(convergence_statistic_keys(), _ORIGINAL_TEN)
+        self.assertEqual(convergence_statistic_keys()[:10], _ORIGINAL_TEN)
+        self.assertEqual(convergence_statistic_keys(), report_keys())
         self.assertEqual(default_shown_keys(), ("D", "G_ST", "H_S", "H_T", "H_ST"))
 
     def test_expensive_statistics_are_requested_by_showing_any_one(self) -> None:
@@ -72,7 +74,11 @@ class CatalogTests(unittest.TestCase):
         )
 
     def test_nei_family_is_complete_and_hidden_by_default(self) -> None:
-        """Every measure x scope x denominator x rule exists, hidden, ineligible."""
+        """Every measure x scope x denominator x rule exists and is hidden.
+
+        The all-demes members may stop a run; the pair members may not (the
+        pair is a viewing choice, not a run parameter).
+        """
         measures: tuple[Measure, ...] = ("distance", "identity")
         scopes: tuple[Scope, ...] = ("global", "pair")
         for measure, scope, denominator, locus_rule in itertools.product(
@@ -85,7 +91,16 @@ class CatalogTests(unittest.TestCase):
             self.assertEqual(entry.scope, scope)
             self.assertEqual(entry.nei, (measure, denominator, locus_rule))
             self.assertFalse(entry.default_shown)
-            self.assertFalse(entry.convergence_eligible)
+            self.assertEqual(entry.convergence_eligible, scope == "global")
+
+    def test_unbounded_statistics_are_the_ones_with_an_open_end(self) -> None:
+        """Counts, nats and distances are unbounded; the proportions are not."""
+        unbounded = unbounded_keys()
+        for key in ("A_CGD", "Delta", "MI", "D_m", "R_ST", "NEI_D_ALL_GEO"):
+            self.assertIn(key, unbounded)
+        for key in ("D", "G_ST", "H_S", "E_ST", "K_ST", "Gs", "Gd"):
+            self.assertNotIn(key, unbounded)
+        self.assertTrue(set(unbounded) <= set(report_keys()))
 
     def test_scope_lists(self) -> None:
         """Report keys are the global ones; pair keys: 8 Nei members and F_ST."""

@@ -497,10 +497,28 @@ equilibrium_max_generations: 5000
 
 ### convergence_statistic
 
-- **Type:** one of `D`, G<sub>ST</sub>, E<sub>ST</sub>, K<sub>ST</sub>, H<sub>S</sub>, H<sub>T</sub>,
-  H<sub>ST</sub>, A<sub>CGD</sub>, Delta (Gregorius's δ), MI (Sherwin mutual
-  information), or a list of several of them
+- **Type:** the name of any global statistic, or a list of several of them
+  (the statistics the app lists under "Statistics shown", except the
+  per-pair ones). Identity statistics: `D`, `G_ST`, `H_S`, `H_T`, `H_ST`,
+  `Gs`, `Gd`, `D_m`, `R_ST`, `G_ST_NEI_LOG`, `G_ST_HEDRICK`, `F_ST` and the
+  all-demes Nei identities and distances (`NEI_I_ALL_GEO`, `NEI_D_ALL_ARITH`,
+  and so on). Allele-spectrum statistics: `E_ST`, `K_ST`, `A_CGD`, `Delta`
+  (Gregorius's δ), `MI` (Sherwin mutual information).
 - **Default:** `D`
+
+Every watched statistic is computed every generation, whatever the display
+settings say. The allele-spectrum statistics are expensive (a pass over every
+allele per locus per generation) and are not covered by the relaxation time,
+which is derived for the identity statistics: they depend on allele counts and
+rare alleles, which can relax more slowly. The Expert Setting
+`spectrum_burn_in_multiplier` lengthens the burn-in when one is watched; it is 1
+until the difference is measured. Only `D` and `G_ST` have both expected-value
+forms (convergence_estimate); every other statistic is the mean of values.
+
+A statistic with an open end (`A_CGD`, `Delta`, `MI`, `D_m`, `R_ST` and the Nei
+family) cannot share one absolute precision with the proportions, so its target
+is relative: `precision * max(1, |window mean|)`, a relative precision with an
+absolute floor. statistic_precision overrides it.
 
 A list watches several statistics at once — each keeps its own independent
 history, judged over the same burn-in and evidence window against the same
@@ -510,6 +528,23 @@ not repeat.
 ```yaml
 convergence_statistic: [D, G_ST]
 convergence_combinator: any   # stop once either statistic settles
+```
+
+### statistic_precision
+
+- **Type:** mapping of a watched statistic's name to its precision
+- **Default:** none (every statistic uses `precision`, or the relative
+  precision above)
+
+Gives one watched statistic its own plus-or-minus, in that statistic's own
+units, replacing `precision` for it. The name must be a watched statistic and
+the value non-negative.
+
+```yaml
+convergence_statistic: [D, A_CGD]
+precision: 0.01
+statistic_precision:
+  A_CGD: 0.5            # known to within half an allele
 ```
 
 ### convergence_combinator
@@ -765,6 +800,7 @@ run that changes one is a different run (its auto-generated `run_id` changes).
 | `estimate_auto_denominator` | `0.01` | between 0 and 1, exclusive | Denominator (`H_T` for `G_ST`, `1 - H_S` for `D`) below which a generation is degenerate for `convergence_estimate: auto` |
 | `estimate_auto_fraction` | `0.01` | between 0 and 1, exclusive | Share of window generations that may be degenerate before `auto` uses the value of means |
 | `batch_width` | `8` | whole number, at least 1 | Replicates assumed to run at once when `max_concurrent_replicates` is unset: the width of the first wave a batch matches its windows from |
+| `spectrum_burn_in_multiplier` | `1` | at least 1 | Factor on the burn-in when an allele-spectrum statistic (`E_ST`, `K_ST`, `A_CGD`, `Delta`, `MI`) is watched |
 | `replicate_wave_multiple` | `2` | greater than 0 | Replicate waves a batch aims for: the matched window is sized for `max(replicate_minimum, multiple * width)` replicates |
 | `averaging_multiple_minimum` | `5` | greater than 0 | Shortest matched replicate window, in relaxation times |
 | `averaging_multiple_maximum` | `100` | at least `averaging_multiple_minimum` | Longest matched replicate window, in relaxation times |
@@ -1342,6 +1378,7 @@ existed.
 | `mu` list length not matching the locus count | rejected |
 | μ<sub>b</sub> outside `[0, 1]` | rejected |
 | precision negative or non-finite | rejected |
+| statistic_precision naming an unwatched statistic, or a negative value | rejected |
 | stop_batch_early not a boolean | rejected |
 | precision_method not `interval` or `planned_replicates` | rejected |
 | precision_method `planned_replicates` with n<sub>replicates</sub> `1` | rejected |

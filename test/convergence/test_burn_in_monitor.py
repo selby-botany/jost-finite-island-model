@@ -577,3 +577,85 @@ def test_any_projects_the_soonest_statistic_and_all_the_latest() -> None:
     assert noisy_all > quiet_all
     assert overall_all is not None and overall_any is not None
     assert overall_any <= overall_all
+
+
+def test_a_statistic_precision_override_replaces_the_run_precision() -> None:
+    """A statistic given its own plus-or-minus is judged against that, alone."""
+    series = _noise(600, phi=0.4, seed=21)
+    loose = BurnInMonitor(
+        max_generations=100_000,
+        precision=0.0005,
+        burn_in=10,
+        first_check=20,
+        statistics=("value",),
+        minimum_effective_sample_size=10.0,
+        statistic_precision={"value": 0.5},
+    )
+    strict = _monitor(precision=0.0005)
+
+    assert _feed(loose, series) == 30
+    assert _feed(strict, series) is None
+    assert loose.target_standard_error_for("value", 0.5) == pytest.approx(
+        0.5 / NormalDist().inv_cdf(0.975)
+    )
+
+
+def test_a_relative_statistic_targets_precision_times_max_of_one_and_its_mean() -> None:
+    """`precision * max(1, |mean|)`: absolute below one, relative above."""
+    monitor = BurnInMonitor(
+        max_generations=1000,
+        precision=0.02,
+        burn_in=1,
+        first_check=5,
+        statistics=("count",),
+        relative_statistics=("count",),
+    )
+    z = NormalDist().inv_cdf(0.975)
+
+    assert monitor.target_standard_error_for("count", 0.3) == pytest.approx(0.02 / z)
+    assert monitor.target_standard_error_for("count", 40.0) == pytest.approx(
+        0.02 * 40.0 / z
+    )
+    assert monitor.target_standard_error_for("count", -40.0) == pytest.approx(
+        0.02 * 40.0 / z
+    )
+
+
+def test_a_relative_statistic_stops_where_an_absolute_one_would_not() -> None:
+    """A noisy count of about 40 passes at 2% relative but not at 0.02 absolute."""
+    rng = random.Random(5)
+    series = [40.0 + rng.gauss(0.0, 0.5) for _ in range(2000)]
+    common = {
+        "max_generations": 100_000,
+        "precision": 0.02,
+        "burn_in": 10,
+        "first_check": 20,
+        "statistics": ("count",),
+        "minimum_effective_sample_size": 10.0,
+    }
+    relative = BurnInMonitor(relative_statistics=("count",), **common)  # type: ignore[arg-type]
+    absolute = BurnInMonitor(**common)  # type: ignore[arg-type]
+
+    relative_stop = None
+    for generation, value in enumerate(series):
+        relative.record(generation, value)
+        if relative.should_stop():
+            relative_stop = generation
+            break
+    absolute_stop = None
+    for generation, value in enumerate(series):
+        absolute.record(generation, value)
+        if absolute.should_stop():
+            absolute_stop = generation
+            break
+
+    assert relative_stop is not None
+    assert absolute_stop is None or absolute_stop > relative_stop
+
+
+def test_an_override_for_an_unwatched_statistic_is_refused() -> None:
+    """The override must name a watched statistic and be non-negative."""
+    with pytest.raises(ValueError, match="unwatched"):
+        _monitor(statistic_precision={"other": 0.1})
+    with pytest.raises(ValueError, match="non-negative"):
+        _monitor(statistic_precision={"value": -0.1})

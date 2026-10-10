@@ -314,6 +314,8 @@ class BurnInMonitor:
         auto_fraction: float = ESTIMATE_AUTO_FRACTION,
         averaging_window: int | None = None,
         awaiting_window: bool = False,
+        statistic_precision: Mapping[str, float] | None = None,
+        relative_statistics: Sequence[str] = (),
     ) -> None:
         """Initialize an empty monitor.
 
@@ -343,6 +345,13 @@ class BurnInMonitor:
             averaging_window: Window mode: generations to average after the
                 burn-in before stopping (at least 1). Requires `burn_in`.
             awaiting_window: Window mode with the window not known yet.
+            statistic_precision: Per-statistic precision, in that statistic's
+                own units, replacing `precision` for the statistics named.
+            relative_statistics: Watched statistics that are unbounded and so
+                cannot share an absolute precision: their target is
+                `precision * max(1, |window mean|)`, a relative precision
+                with an absolute floor. A statistic named in
+                `statistic_precision` uses that instead.
 
         Raises:
             ValueError: If a number is out of range, a name repeats, or an
@@ -383,9 +392,18 @@ class BurnInMonitor:
         self._growth = growth
         self._fractional = fractional_burn_in
         self._minimum_ess = minimum_effective_sample_size
-        self._target_standard_error = precision / NormalDist().inv_cdf(
-            0.5 + confidence / 2.0
-        )
+        self._z = NormalDist().inv_cdf(0.5 + confidence / 2.0)
+        self._precision = precision
+        self._target_standard_error = precision / self._z
+        self._overrides = dict(statistic_precision or {})
+        self._relative = frozenset(relative_statistics)
+        for name, override in self._overrides.items():
+            if name not in self._statistics:
+                raise ValueError(
+                    f"statistic_precision names an unwatched statistic: {name}"
+                )
+            if not (math.isfinite(override) and override >= 0.0):
+                raise ValueError("statistic_precision values must be non-negative")
         self._generations = array("q")
         self._values: dict[str, array[float]] = {
             name: array("d") for name in self._all_statistics
@@ -582,6 +600,25 @@ class BurnInMonitor:
         """Return the largest standard error that meets the requested precision."""
         return self._target_standard_error
 
+    def target_standard_error_for(self, name: str, mean: float) -> float:
+        """Return the standard error `name`'s window must reach.
+
+        Args:
+            name: A configured statistic name.
+            mean: The statistic's window mean (the target of a relative
+                statistic scales with it).
+
+        Returns:
+            `precision / z` for an ordinary statistic; the override's
+            `precision / z` for one named in `statistic_precision`; and
+            `precision * max(1, |mean|) / z` for a relative statistic.
+        """
+        if name in self._overrides:
+            return self._overrides[name] / self._z
+        if name in self._relative:
+            return self._precision * max(1.0, abs(mean)) / self._z
+        return self._target_standard_error
+
     @property
     def minimum_effective_sample_size(self) -> float:
         """Return the effective-sample-size floor a window must meet."""
@@ -684,14 +721,13 @@ class BurnInMonitor:
         stats = self._statistics_over(name, start)
         if stats is None or end is None:
             return None
-        if stats.meets(self._target_standard_error, self._minimum_ess):
+        target = self.target_standard_error_for(name, stats.mean)
+        if stats.meets(target, self._minimum_ess):
             return end
-        if self._target_standard_error == 0.0:
+        if target == 0.0:
             return None
         window = end + 1 - start
-        precision_length = (
-            window * (stats.standard_error / self._target_standard_error) ** 2
-        )
+        precision_length = window * (stats.standard_error / target) ** 2
         ess_length = self._minimum_ess * stats.tau_int
         return start + math.ceil(max(precision_length, ess_length))
 
@@ -755,7 +791,12 @@ class BurnInMonitor:
             if stats is None:
                 verdicts.append(False)
                 continue
-            verdicts.append(stats.meets(self._target_standard_error, self._minimum_ess))
+            verdicts.append(
+                stats.meets(
+                    self.target_standard_error_for(name, stats.mean),
+                    self._minimum_ess,
+                )
+            )
         self._last_verdicts = tuple(verdicts)
         self._note_projection(start)
         length = generation + 1 - start

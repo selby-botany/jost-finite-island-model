@@ -65,6 +65,7 @@ __all__ = [
     "pair_keys",
     "report_keys",
     "spec",
+    "unbounded_keys",
 ]
 
 Scope: TypeAlias = Literal["global", "pair"]
@@ -95,8 +96,9 @@ class StatisticSpec:
             docstring).
         bounds: ``(lower, upper)``; ``None`` for an open end. A
             ``(0, 1)`` statistic is drawn on a fixed proportion axis.
-        convergence_eligible: Whether a run may stop on it. Only measures
-            the convergence monitor was designed for are eligible.
+        convergence_eligible: Whether a run may stop on it. Every
+            global statistic is eligible; a pair statistic is not (the pair
+            is a viewing choice, not a run parameter).
         default_shown: Whether a fresh install shows it.
         default_plotted: Whether its trajectory curve starts visible
             (only meaningful for a statistic with a per-generation
@@ -261,7 +263,7 @@ _IDENTITIES: Final[tuple[StatisticSpec, ...]] = (
         scope="global",
         history="none",
         bounds=_PROPORTION,
-        convergence_eligible=False,
+        convergence_eligible=True,
         default_shown=False,
     ),
     StatisticSpec(
@@ -274,7 +276,7 @@ _IDENTITIES: Final[tuple[StatisticSpec, ...]] = (
         scope="global",
         history="none",
         bounds=_PROPORTION,
-        convergence_eligible=False,
+        convergence_eligible=True,
         default_shown=False,
     ),
 )
@@ -375,7 +377,7 @@ def _nei_spec(
         scope=scope,
         history="none",
         bounds=bounds,
-        convergence_eligible=False,
+        convergence_eligible=scope == "global",
         default_shown=False,
         nei=(measure, denominator, locus_rule),
     )
@@ -412,7 +414,7 @@ def _derived(
         scope=scope,
         history="none",
         bounds=bounds,
-        convergence_eligible=False,
+        convergence_eligible=scope == "global",
         default_shown=False,
     )
 
@@ -519,6 +521,19 @@ def pair_keys() -> tuple[str, ...]:
 def convergence_statistic_keys() -> tuple[str, ...]:
     """Return every statistic a run may stop on, in catalog order."""
     return _keys(entry for entry in CATALOG if entry.convergence_eligible)
+
+
+def unbounded_keys() -> tuple[str, ...]:
+    """Return the global statistics with an open end, in catalog order.
+
+    They cannot share one absolute precision with the proportions: an allele
+    count or a distance in nats has no natural scale, so the convergence rule
+    gives them a relative precision (`SimulationParams.statistic_precision`
+    overrides it).
+    """
+    return _keys(
+        entry for entry in CATALOG if entry.scope == "global" and None in entry.bounds
+    )
 
 
 def default_shown_keys() -> tuple[str, ...]:

@@ -427,17 +427,47 @@ equilibrium_max_generations: 5000
 <h2 id="convergence">Convergence</h2>
 <h3 id="convergence_statistic">convergence_statistic</h3>
 <ul>
-<li><strong>Type:</strong> one of <code>D</code>, G<sub>ST</sub>, E<sub>ST</sub>, K<sub>ST</sub>, H<sub>S</sub>, H<sub>T</sub>,
-H<sub>ST</sub>, A<sub>CGD</sub>, Delta (Gregorius's δ), MI (Sherwin mutual
-information), or a list of several of them</li>
+<li><strong>Type:</strong> the name of any global statistic, or a list of several of them
+(the statistics the app lists under &quot;Statistics shown&quot;, except the
+per-pair ones). Identity statistics: <code>D</code>, <code>G_ST</code>, <code>H_S</code>, <code>H_T</code>, <code>H_ST</code>,
+<code>Gs</code>, <code>Gd</code>, <code>D_m</code>, <code>R_ST</code>, <code>G_ST_NEI_LOG</code>, <code>G_ST_HEDRICK</code>, <code>F_ST</code> and the
+all-demes Nei identities and distances (<code>NEI_I_ALL_GEO</code>, <code>NEI_D_ALL_ARITH</code>,
+and so on). Allele-spectrum statistics: <code>E_ST</code>, <code>K_ST</code>, <code>A_CGD</code>, <code>Delta</code>
+(Gregorius's δ), <code>MI</code> (Sherwin mutual information).</li>
 <li><strong>Default:</strong> <code>D</code></li>
 </ul>
+<p>Every watched statistic is computed every generation, whatever the display
+settings say. The allele-spectrum statistics are expensive (a pass over every
+allele per locus per generation) and are not covered by the relaxation time,
+which is derived for the identity statistics: they depend on allele counts and
+rare alleles, which can relax more slowly. The Expert Setting
+<code>spectrum_burn_in_multiplier</code> lengthens the burn-in when one is watched; it is 1
+until the difference is measured. Only <code>D</code> and <code>G_ST</code> have both expected-value
+forms (convergence_estimate); every other statistic is the mean of values.</p>
+<p>A statistic with an open end (<code>A_CGD</code>, <code>Delta</code>, <code>MI</code>, <code>D_m</code>, <code>R_ST</code> and the Nei
+family) cannot share one absolute precision with the proportions, so its target
+is relative: <code>precision * max(1, |window mean|)</code>, a relative precision with an
+absolute floor. statistic_precision overrides it.</p>
 <p>A list watches several statistics at once — each keeps its own independent
 history, judged over the same burn-in and evidence window against the same
 precision — combined by convergence_combinator. A name may
 not repeat.</p>
 <pre><code class="language-yaml">convergence_statistic: [D, G_ST]
 convergence_combinator: any   # stop once either statistic settles
+</code></pre>
+<h3 id="statistic_precision">statistic_precision</h3>
+<ul>
+<li><strong>Type:</strong> mapping of a watched statistic's name to its precision</li>
+<li><strong>Default:</strong> none (every statistic uses <code>precision</code>, or the relative
+precision above)</li>
+</ul>
+<p>Gives one watched statistic its own plus-or-minus, in that statistic's own
+units, replacing <code>precision</code> for it. The name must be a watched statistic and
+the value non-negative.</p>
+<pre><code class="language-yaml">convergence_statistic: [D, A_CGD]
+precision: 0.01
+statistic_precision:
+  A_CGD: 0.5            # known to within half an allele
 </code></pre>
 <h3 id="convergence_combinator">convergence_combinator</h3>
 <ul>
@@ -751,6 +781,12 @@ run that changes one is a different run (its auto-generated <code>run_id</code> 
 <td><code>8</code></td>
 <td>whole number, at least 1</td>
 <td>Replicates assumed to run at once when <code>max_concurrent_replicates</code> is unset: the width of the first wave a batch matches its windows from</td>
+</tr>
+<tr>
+<td><code>spectrum_burn_in_multiplier</code></td>
+<td><code>1</code></td>
+<td>at least 1</td>
+<td>Factor on the burn-in when an allele-spectrum statistic (<code>E_ST</code>, <code>K_ST</code>, <code>A_CGD</code>, <code>Delta</code>, <code>MI</code>) is watched</td>
 </tr>
 <tr>
 <td><code>replicate_wave_multiple</code></td>
@@ -1364,6 +1400,10 @@ existed.</p>
 </tr>
 <tr>
 <td>precision negative or non-finite</td>
+<td>rejected</td>
+</tr>
+<tr>
+<td>statistic_precision naming an unwatched statistic, or a negative value</td>
 <td>rejected</td>
 </tr>
 <tr>

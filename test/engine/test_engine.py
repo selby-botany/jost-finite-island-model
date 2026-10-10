@@ -5964,3 +5964,96 @@ def test_a_run_that_converged_reports_no_projection(
         "projected_generations" not in e
         for e in result.report["window_statistics"].values()
     )
+
+
+_POOLED_WATCHED = ("Gs", "Gd", "D_m", "R_ST", "G_ST_NEI_LOG", "G_ST_HEDRICK", "F_ST")
+_NEI_WATCHED = (
+    "NEI_I_ALL_GEO",
+    "NEI_I_ALL_ARITH",
+    "NEI_I_ALL_GEO_LOCUS_MEAN",
+    "NEI_I_ALL_ARITH_LOCUS_MEAN",
+    "NEI_D_ALL_GEO",
+    "NEI_D_ALL_ARITH",
+)
+
+
+@pytest.mark.parametrize("statistic", [*_POOLED_WATCHED, *_NEI_WATCHED])
+def test_a_run_can_watch_any_global_statistic_and_records_its_history(
+    tiny_params: SimulationParams, statistic: str
+) -> None:
+    """The watched statistic's per-generation history ends at its report value."""
+    params = replace(
+        tiny_params,
+        convergence_statistic=statistic,
+        precision=0.0,
+        max_generations=30,
+        loci=(LocusSpec(1, 200), LocusSpec(2, 200)),
+        mu=(0.01, 0.01),
+    )
+    result = _run(params)
+
+    history = result.convergence_histories[statistic]
+    assert len(history) > 5
+    final = result.report[statistic]  # type: ignore[literal-required]
+    if final is not None:
+        assert history[-1] == pytest.approx(final, rel=1e-12, abs=1e-12)
+    assert statistic in result.report["window_statistics"] or len(history) < 3
+
+
+@pytest.mark.parametrize("backend", ["generational", "generational-vector"])
+def test_watched_extra_statistics_agree_across_backends(
+    tiny_params: SimulationParams, backend: EngineBackend
+) -> None:
+    """`Gs`, `D_m` and a Nei identity have the same history under every kernel."""
+    if backend == "generational-vector":
+        pytest.importorskip("numba")
+    watched = ("Gs", "D_m", "NEI_I_ALL_GEO")
+    base = replace(
+        tiny_params,
+        convergence_statistic=watched,
+        convergence_combinator="all",
+        precision=0.0,
+        max_generations=25,
+        mutation_model="finite_alleles",
+        loci=(LocusSpec(1, 4),),
+    )
+    reference = _run(base)
+    other = _run(replace(base, engine_backend=backend))
+
+    for name in watched:
+        assert other.convergence_histories[name] == pytest.approx(
+            reference.convergence_histories[name], rel=1e-12, abs=1e-12
+        )
+
+
+def test_a_statistic_precision_override_reaches_the_monitor(
+    tiny_params: SimulationParams,
+) -> None:
+    """A loose override lets a run stop where the run precision never would."""
+    strict = replace(
+        tiny_params, precision=0.0005, max_generations=200, stop_batch_early=False
+    )
+    loose = replace(strict, statistic_precision=(("D", 0.9),))
+
+    assert _run(strict).report["converged"] is False
+    result = _run(loose)
+    assert result.report["converged"] is True
+    assert result.report["window_statistics"]["D"]["target_standard_error"] > 0.4
+
+
+def test_the_unbounded_statistic_uses_a_relative_target(
+    tiny_params: SimulationParams,
+) -> None:
+    """`A_CGD` counts alleles: its target scales with its mean, not the precision."""
+    params = replace(
+        tiny_params,
+        convergence_statistic="A_CGD",
+        precision=0.05,
+        max_generations=40,
+    )
+    result = _run(params)
+
+    entry = result.report["window_statistics"]["A_CGD"]
+    z = 1.959963984540054
+    expected = 0.05 * max(1.0, abs(entry["mean"])) / z
+    assert entry["target_standard_error"] == pytest.approx(expected)

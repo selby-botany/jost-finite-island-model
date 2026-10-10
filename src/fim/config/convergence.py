@@ -138,6 +138,17 @@ rate, so it only labels the result (design 6.5).
 Kind: policy.
 """
 
+SPECTRUM_BURN_IN_MULTIPLIER: Final = 1.0
+"""Factor on the burn-in when an allele-spectrum statistic is watched.
+
+The relaxation time `tau` is derived for the identity statistics. The
+allele-spectrum statistics (`E_ST`, `K_ST`, `A_CGD`, `Delta`, `MI`) depend on
+allele counts and rare alleles, which can relax more slowly. The default of 1
+changes nothing until the difference is measured (design 6.12).
+
+Kind: policy.
+"""
+
 REPLICATE_WAVE_MULTIPLE: Final = 2.0
 """Replicate waves a batch aims for: `R_target = max(replicate_minimum, m * W)`.
 

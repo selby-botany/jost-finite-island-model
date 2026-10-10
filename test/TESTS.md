@@ -5578,6 +5578,47 @@ def test_any_projects_the_soonest_statistic_and_all_the_latest() -> None
 
 Under `any` one statistic is enough; under `all` the slowest decides.
 
+<a id="convergence.test_burn_in_monitor.test_a_statistic_precision_override_replaces_the_run_precision"></a>
+
+#### test\_a\_statistic\_precision\_override\_replaces\_the\_run\_precision
+
+```python
+def test_a_statistic_precision_override_replaces_the_run_precision() -> None
+```
+
+A statistic given its own plus-or-minus is judged against that, alone.
+
+<a id="convergence.test_burn_in_monitor.test_a_relative_statistic_targets_precision_times_max_of_one_and_its_mean"></a>
+
+#### test\_a\_relative\_statistic\_targets\_precision\_times\_max\_of\_one\_and\_its\_mean
+
+```python
+def test_a_relative_statistic_targets_precision_times_max_of_one_and_its_mean(
+) -> None
+```
+
+`precision * max(1, |mean|)`: absolute below one, relative above.
+
+<a id="convergence.test_burn_in_monitor.test_a_relative_statistic_stops_where_an_absolute_one_would_not"></a>
+
+#### test\_a\_relative\_statistic\_stops\_where\_an\_absolute\_one\_would\_not
+
+```python
+def test_a_relative_statistic_stops_where_an_absolute_one_would_not() -> None
+```
+
+A noisy count of about 40 passes at 2% relative but not at 0.02 absolute.
+
+<a id="convergence.test_burn_in_monitor.test_an_override_for_an_unwatched_statistic_is_refused"></a>
+
+#### test\_an\_override\_for\_an\_unwatched\_statistic\_is\_refused
+
+```python
+def test_an_override_for_an_unwatched_statistic_is_refused() -> None
+```
+
+The override must name a watched statistic and be non-negative.
+
 <a id="convergence.test_criteria_validation"></a>
 
 # convergence.test\_criteria\_validation
@@ -9312,6 +9353,52 @@ def test_a_run_that_converged_reports_no_projection(
 ```
 
 Only a capped run has a projection.
+
+<a id="engine.test_engine.test_a_run_can_watch_any_global_statistic_and_records_its_history"></a>
+
+#### test\_a\_run\_can\_watch\_any\_global\_statistic\_and\_records\_its\_history
+
+```python
+@pytest.mark.parametrize("statistic", [*_POOLED_WATCHED, *_NEI_WATCHED])
+def test_a_run_can_watch_any_global_statistic_and_records_its_history(
+        tiny_params: SimulationParams, statistic: str) -> None
+```
+
+The watched statistic's per-generation history ends at its report value.
+
+<a id="engine.test_engine.test_watched_extra_statistics_agree_across_backends"></a>
+
+#### test\_watched\_extra\_statistics\_agree\_across\_backends
+
+```python
+@pytest.mark.parametrize("backend", ["generational", "generational-vector"])
+def test_watched_extra_statistics_agree_across_backends(
+        tiny_params: SimulationParams, backend: EngineBackend) -> None
+```
+
+`Gs`, `D_m` and a Nei identity have the same history under every kernel.
+
+<a id="engine.test_engine.test_a_statistic_precision_override_reaches_the_monitor"></a>
+
+#### test\_a\_statistic\_precision\_override\_reaches\_the\_monitor
+
+```python
+def test_a_statistic_precision_override_reaches_the_monitor(
+        tiny_params: SimulationParams) -> None
+```
+
+A loose override lets a run stop where the run precision never would.
+
+<a id="engine.test_engine.test_the_unbounded_statistic_uses_a_relative_target"></a>
+
+#### test\_the\_unbounded\_statistic\_uses\_a\_relative\_target
+
+```python
+def test_the_unbounded_statistic_uses_a_relative_target(
+        tiny_params: SimulationParams) -> None
+```
+
+`A_CGD` counts alleles: its target scales with its mean, not the precision.
 
 <a id="engine.test_frame_identity"></a>
 
@@ -27913,6 +28000,9 @@ A run that changes an Expert Setting is a different run.
             "estimate_auto_fraction": 1.0
         }, "below 1"),
         ({
+            "spectrum_burn_in_multiplier": 0.5
+        }, "at least 1"),
+        ({
             "batch_width": 0
         }, "at least 1"),
         ({
@@ -28043,6 +28133,51 @@ def test_a_fixed_window_needs_a_burn_in() -> None
 ```
 
 With no relaxation time and no explicit burn-in, there is nothing to follow.
+
+<a id="model.test_params.test_statistic_precision_round_trips_and_only_names_watched_statistics"></a>
+
+#### test\_statistic\_precision\_round\_trips\_and\_only\_names\_watched\_statistics
+
+```python
+def test_statistic_precision_round_trips_and_only_names_watched_statistics(
+) -> None
+```
+
+The mapping is sorted, written only when set, and checked against the watch.
+
+<a id="model.test_params.test_an_invalid_statistic_precision_is_refused"></a>
+
+#### test\_an\_invalid\_statistic\_precision\_is\_refused
+
+```python
+@pytest.mark.parametrize(
+    ("value", "message"),
+    [
+        ({
+            "H_S": 0.1
+        }, "not watched"),
+        ({
+            "D": -0.1
+        }, "non-negative"),
+        ("D", "mapping"),
+    ],
+)
+def test_an_invalid_statistic_precision_is_refused(value: object,
+                                                   message: str) -> None
+```
+
+An unwatched name, a negative precision and a non-mapping are rejected.
+
+<a id="model.test_params.test_watching_an_allele_spectrum_statistic_lengthens_the_derived_burn_in"></a>
+
+#### test\_watching\_an\_allele\_spectrum\_statistic\_lengthens\_the\_derived\_burn\_in
+
+```python
+def test_watching_an_allele_spectrum_statistic_lengthens_the_derived_burn_in(
+) -> None
+```
+
+`spectrum_burn_in_multiplier` scales the derived burn-in, only then.
 
 <a id="model.test_run_identity"></a>
 
@@ -34101,7 +34236,7 @@ No key appears twice.
 def test_original_statistics_keep_their_order_and_defaults() -> None
 ```
 
-The ten long-standing statistics lead and stay eligible.
+The ten long-standing statistics lead, and every global one is eligible.
 
 Only the five cheap ones are shown on a fresh install: showing an
 expensive one makes every run compute them each generation
@@ -34135,7 +34270,20 @@ Five always tracked, five opt-in; everything new is not tracked.
 def test_nei_family_is_complete_and_hidden_by_default() -> None
 ```
 
-Every measure x scope x denominator x rule exists, hidden, ineligible.
+Every measure x scope x denominator x rule exists and is hidden.
+
+The all-demes members may stop a run; the pair members may not (the
+pair is a viewing choice, not a run parameter).
+
+<a id="statistics.test_catalog.CatalogTests.test_unbounded_statistics_are_the_ones_with_an_open_end"></a>
+
+#### test\_unbounded\_statistics\_are\_the\_ones\_with\_an\_open\_end
+
+```python
+def test_unbounded_statistics_are_the_ones_with_an_open_end() -> None
+```
+
+Counts, nats and distances are unbounded; the proportions are not.
 
 <a id="statistics.test_catalog.CatalogTests.test_scope_lists"></a>
 

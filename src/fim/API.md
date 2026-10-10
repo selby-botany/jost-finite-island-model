@@ -27,6 +27,7 @@ Return to the [source-tree orientation](../README.md) or the [developer guide](.
   * [GEWEKE\_FIRST\_FRACTION](#fim.config.convergence.GEWEKE_FIRST_FRACTION)
   * [GEWEKE\_LAST\_FRACTION](#fim.config.convergence.GEWEKE_LAST_FRACTION)
   * [START\_DRIFT\_ALERT\_Z](#fim.config.convergence.START_DRIFT_ALERT_Z)
+  * [SPECTRUM\_BURN\_IN\_MULTIPLIER](#fim.config.convergence.SPECTRUM_BURN_IN_MULTIPLIER)
   * [REPLICATE\_WAVE\_MULTIPLE](#fim.config.convergence.REPLICATE_WAVE_MULTIPLE)
   * [BATCH\_WIDTH](#fim.config.convergence.BATCH_WIDTH)
   * [AVERAGING\_MULTIPLE\_MINIMUM](#fim.config.convergence.AVERAGING_MULTIPLE_MINIMUM)
@@ -117,6 +118,7 @@ Return to the [source-tree orientation](../README.md) or the [developer guide](.
     * [set\_averaging\_window](#fim.convergence.monitor.BurnInMonitor.set_averaging_window)
     * [stable\_statistics](#fim.convergence.monitor.BurnInMonitor.stable_statistics)
     * [target\_standard\_error](#fim.convergence.monitor.BurnInMonitor.target_standard_error)
+    * [target\_standard\_error\_for](#fim.convergence.monitor.BurnInMonitor.target_standard_error_for)
     * [minimum\_effective\_sample\_size](#fim.convergence.monitor.BurnInMonitor.minimum_effective_sample_size)
     * [evidence\_statistics](#fim.convergence.monitor.BurnInMonitor.evidence_statistics)
     * [burn\_in\_generation](#fim.convergence.monitor.BurnInMonitor.burn_in_generation)
@@ -963,6 +965,7 @@ Return to the [source-tree orientation](../README.md) or the [developer guide](.
   * [report\_keys](#fim.statistics.catalog.report_keys)
   * [pair\_keys](#fim.statistics.catalog.pair_keys)
   * [convergence\_statistic\_keys](#fim.statistics.catalog.convergence_statistic_keys)
+  * [unbounded\_keys](#fim.statistics.catalog.unbounded_keys)
   * [default\_shown\_keys](#fim.statistics.catalog.default_shown_keys)
   * [expensive\_statistics\_requested](#fim.statistics.catalog.expensive_statistics_requested)
   * [catalog\_payload](#fim.statistics.catalog.catalog_payload)
@@ -1469,6 +1472,19 @@ rate, so it only labels the result (design 6.5).
 
 Kind: policy.
 
+<a id="fim.config.convergence.SPECTRUM_BURN_IN_MULTIPLIER"></a>
+
+#### SPECTRUM\_BURN\_IN\_MULTIPLIER
+
+Factor on the burn-in when an allele-spectrum statistic is watched.
+
+The relaxation time `tau` is derived for the identity statistics. The
+allele-spectrum statistics (`E_ST`, `K_ST`, `A_CGD`, `Delta`, `MI`) depend on
+allele counts and rare alleles, which can relax more slowly. The default of 1
+changes nothing until the difference is measured (design 6.12).
+
+Kind: policy.
+
 <a id="fim.config.convergence.REPLICATE_WAVE_MULTIPLE"></a>
 
 #### REPLICATE\_WAVE\_MULTIPLE
@@ -1849,6 +1865,8 @@ The convergence policy constants one run uses.
   0 and 1, exclusive).
 - `batch_width` - Replicates assumed to run at once when
   `max_concurrent_replicates` is unset (at least 1).
+- `spectrum_burn_in_multiplier` - Factor on the burn-in when an
+  allele-spectrum statistic is watched (at least 1).
 - `replicate_wave_multiple` - Replicate waves a batch aims for (greater
   than 0).
 - `averaging_multiple_minimum` - Smallest matched replicate averaging
@@ -2594,8 +2612,10 @@ burn-in on its own. A precision of zero asks for an unbounded burn-in.
 #### derive\_burn\_in
 
 ```python
-def derive_burn_in(relaxation_time: float, precision: float,
-                   expert: ExpertSettings) -> int
+def derive_burn_in(relaxation_time: float,
+                   precision: float,
+                   expert: ExpertSettings,
+                   multiplier: float = 1.0) -> int
 ```
 
 Return the burn-in, in generations, for a relaxation time and precision.
@@ -2605,12 +2625,14 @@ Return the burn-in, in generations, for a relaxation time and precision.
 - `relaxation_time` - `tau`, in generations.
 - `precision` - The requested precision.
 - `expert` - The run's Expert Settings (the multiple's floor).
+- `multiplier` - Factor on `k`, for a run that watches an allele-spectrum
+  statistic (`spectrum_burn_in_multiplier`); 1 otherwise.
 
 
 **Returns**:
 
-  `ceil(k * tau)`, at least 1 so generation 0 is never averaged, and at
-  most `expert.cap_maximum`.
+  `ceil(multiplier * k * tau)`, at least 1 so generation 0 is never
+  averaged, and at most `expert.cap_maximum`.
 
 <a id="fim.convergence.defaults.derive_convergence_defaults"></a>
 
@@ -2623,7 +2645,8 @@ def derive_convergence_defaults(
         migration: MigrationInput,
         mutation_rates: Sequence[float],
         precision: float,
-        expert: ExpertSettings | None = None) -> DerivedConvergence
+        expert: ExpertSettings | None = None,
+        burn_in_multiplier: float = 1.0) -> DerivedConvergence
 ```
 
 Return the default burn-in and cap for one model.
@@ -2640,6 +2663,8 @@ its own burn-in.
 - `mutation_rates` - Per-locus mutation probabilities.
 - `precision` - The requested precision (it sets the burn-in multiple).
 - `expert` - The run's Expert Settings (default values when omitted).
+- `burn_in_multiplier` - Factor on the burn-in multiple (see
+  `derive_burn_in`).
 
 
 **Returns**:
@@ -3025,24 +3050,27 @@ the form the stop was judged on. Such a monitor must record `H_S` and
 
 ```python
 def __init__(
-        *,
-        max_generations: int,
-        precision: float,
-        confidence: float = 0.95,
-        burn_in: int | None,
-        first_check: int,
-        statistics: Sequence[str] = ("value", ),
-        combinator: Combinator = "all",
-        extra_statistics: Sequence[str] = (),
-        minimum_effective_sample_size: float = MINIMUM_EFFECTIVE_SAMPLE_SIZE,
-        growth: float = CHECK_GROWTH,
-        fractional_burn_in: float = FRACTIONAL_BURN_IN,
-        identity_statistics: Mapping[str, IdentityStatistic] | None = None,
-        estimate: str = "mean_of_values",
-        auto_denominator: float = ESTIMATE_AUTO_DENOMINATOR,
-        auto_fraction: float = ESTIMATE_AUTO_FRACTION,
-        averaging_window: int | None = None,
-        awaiting_window: bool = False) -> None
+    *,
+    max_generations: int,
+    precision: float,
+    confidence: float = 0.95,
+    burn_in: int | None,
+    first_check: int,
+    statistics: Sequence[str] = ("value", ),
+    combinator: Combinator = "all",
+    extra_statistics: Sequence[str] = (),
+    minimum_effective_sample_size: float = MINIMUM_EFFECTIVE_SAMPLE_SIZE,
+    growth: float = CHECK_GROWTH,
+    fractional_burn_in: float = FRACTIONAL_BURN_IN,
+    identity_statistics: Mapping[str, IdentityStatistic] | None = None,
+    estimate: str = "mean_of_values",
+    auto_denominator: float = ESTIMATE_AUTO_DENOMINATOR,
+    auto_fraction: float = ESTIMATE_AUTO_FRACTION,
+    averaging_window: int | None = None,
+    awaiting_window: bool = False,
+    statistic_precision: Mapping[str, float] | None = None,
+    relative_statistics: Sequence[str] = ()
+) -> None
 ```
 
 Initialize an empty monitor.
@@ -3074,6 +3102,13 @@ Initialize an empty monitor.
 - `averaging_window` - Window mode: generations to average after the
   burn-in before stopping (at least 1). Requires `burn_in`.
 - `awaiting_window` - Window mode with the window not known yet.
+- `statistic_precision` - Per-statistic precision, in that statistic's
+  own units, replacing `precision` for the statistics named.
+- `relative_statistics` - Watched statistics that are unbounded and so
+  cannot share an absolute precision: their target is
+  `precision * max(1, |window mean|)`, a relative precision
+  with an absolute floor. A statistic named in
+  `statistic_precision` uses that instead.
 
 
 **Raises**:
@@ -3277,6 +3312,29 @@ def target_standard_error() -> float
 ```
 
 Return the largest standard error that meets the requested precision.
+
+<a id="fim.convergence.monitor.BurnInMonitor.target_standard_error_for"></a>
+
+#### target\_standard\_error\_for
+
+```python
+def target_standard_error_for(name: str, mean: float) -> float
+```
+
+Return the standard error `name`'s window must reach.
+
+**Arguments**:
+
+- `name` - A configured statistic name.
+- `mean` - The statistic's window mean (the target of a relative
+  statistic scales with it).
+
+
+**Returns**:
+
+  `precision / z` for an ordinary statistic; the override's
+  `precision / z` for one named in `statistic_precision`; and
+  `precision * max(1, |mean|) / z` for a relative statistic.
 
 <a id="fim.convergence.monitor.BurnInMonitor.minimum_effective_sample_size"></a>
 
@@ -24143,8 +24201,9 @@ One statistic's identity, scope, cost and presentation.
   docstring).
 - `bounds` - ``(lower, upper)``; ``None`` for an open end. A
   ``(0, 1)`` statistic is drawn on a fixed proportion axis.
-- `convergence_eligible` - Whether a run may stop on it. Only measures
-  the convergence monitor was designed for are eligible.
+- `convergence_eligible` - Whether a run may stop on it. Every
+  global statistic is eligible; a pair statistic is not (the pair
+  is a viewing choice, not a run parameter).
 - `default_shown` - Whether a fresh install shows it.
 - `default_plotted` - Whether its trajectory curve starts visible
   (only meaningful for a statistic with a per-generation
@@ -24236,6 +24295,21 @@ def convergence_statistic_keys() -> tuple[str, ...]
 ```
 
 Return every statistic a run may stop on, in catalog order.
+
+<a id="fim.statistics.catalog.unbounded_keys"></a>
+
+#### unbounded\_keys
+
+```python
+def unbounded_keys() -> tuple[str, ...]
+```
+
+Return the global statistics with an open end, in catalog order.
+
+They cannot share one absolute precision with the proportions: an allele
+count or a distance in nats has no natural scale, so the convergence rule
+gives them a relative precision (`SimulationParams.statistic_precision`
+overrides it).
 
 <a id="fim.statistics.catalog.default_shown_keys"></a>
 

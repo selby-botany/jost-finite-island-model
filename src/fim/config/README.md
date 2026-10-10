@@ -49,6 +49,7 @@ package and fails on one that is not on its short allow list.
 | `GEWEKE_FIRST_FRACTION` | `convergence.py` | convention (Geweke 1992: the first 10% against the last 50%) | Share of an evidence window, from its start, that Geweke's `z` compares. |
 | `GEWEKE_LAST_FRACTION` | `convergence.py` | convention (Geweke 1992: the first 10% against the last 50%) | Share of an evidence window, from its end, that Geweke's `z` compares. |
 | `START_DRIFT_ALERT_Z` | `convergence.py` | policy | Absolute Geweke `z` above which the report says the burn-in may be too short. |
+| `SPECTRUM_BURN_IN_MULTIPLIER` | `convergence.py` | policy | Factor on the burn-in when an allele-spectrum statistic is watched. |
 | `REPLICATE_WAVE_MULTIPLE` | `convergence.py` | policy | Replicate waves a batch aims for: `R_target = max(replicate_minimum, m * W)`. |
 | `BATCH_WIDTH` | `convergence.py` | policy | Replicates assumed to run at once, when `max_concurrent_replicates` is unset. |
 | `AVERAGING_MULTIPLE_MINIMUM` | `convergence.py` | policy | Smallest matched averaging window, in relaxation times. |

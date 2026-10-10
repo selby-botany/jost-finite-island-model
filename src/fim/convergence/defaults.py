@@ -71,7 +71,10 @@ def burn_in_multiple(precision: float, minimum: float) -> float:
 
 
 def derive_burn_in(
-    relaxation_time: float, precision: float, expert: ExpertSettings
+    relaxation_time: float,
+    precision: float,
+    expert: ExpertSettings,
+    multiplier: float = 1.0,
 ) -> int:
     """Return the burn-in, in generations, for a relaxation time and precision.
 
@@ -79,15 +82,19 @@ def derive_burn_in(
         relaxation_time: `tau`, in generations.
         precision: The requested precision.
         expert: The run's Expert Settings (the multiple's floor).
+        multiplier: Factor on `k`, for a run that watches an allele-spectrum
+            statistic (`spectrum_burn_in_multiplier`); 1 otherwise.
 
     Returns:
-        `ceil(k * tau)`, at least 1 so generation 0 is never averaged, and at
-        most `expert.cap_maximum`.
+        `ceil(multiplier * k * tau)`, at least 1 so generation 0 is never
+        averaged, and at most `expert.cap_maximum`.
     """
     multiple = burn_in_multiple(precision, expert.burn_in_minimum_relaxation_times)
     if math.isinf(multiple):
         return expert.cap_maximum
-    return max(1, min(expert.cap_maximum, math.ceil(multiple * relaxation_time)))
+    return max(
+        1, min(expert.cap_maximum, math.ceil(multiplier * multiple * relaxation_time))
+    )
 
 
 def derive_convergence_defaults(
@@ -97,6 +104,7 @@ def derive_convergence_defaults(
     mutation_rates: Sequence[float],
     precision: float,
     expert: ExpertSettings | None = None,
+    burn_in_multiplier: float = 1.0,
 ) -> DerivedConvergence:
     """Return the default burn-in and cap for one model.
 
@@ -111,6 +119,8 @@ def derive_convergence_defaults(
         mutation_rates: Per-locus mutation probabilities.
         precision: The requested precision (it sets the burn-in multiple).
         expert: The run's Expert Settings (default values when omitted).
+        burn_in_multiplier: Factor on the burn-in multiple (see
+            `derive_burn_in`).
 
     Returns:
         The derived burn-in, cap and relaxation time.
@@ -126,7 +136,7 @@ def derive_convergence_defaults(
         migration=migration,
         mutation_rates=mutation_rates,
     )
-    burn_in = derive_burn_in(tau, precision, settings)
+    burn_in = derive_burn_in(tau, precision, settings, burn_in_multiplier)
     cap = min(
         settings.cap_maximum,
         max(
