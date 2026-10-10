@@ -8,6 +8,24 @@ project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- **Expert Settings.** The policy constants behind the new rule (the burn-in
+  floor of 5 relaxation times, the cap's 15, the first check, the effective
+  sample size floor, the spectrum burn-in multiplier, and the rest) live in an
+  `expert:` mapping in the configuration, in Settings' Expert section, and in
+  a commented block that `fim init` writes. Each has a tooltip, and a run
+  whose Expert values differ from the defaults says so.
+- **Trajectory thinning.** `trajectory_retention: thinned` keeps every
+  generation before `trajectory_thinning_start`, then one in every
+  `trajectory_stride`, which makes the trajectory file of a very long run a
+  tenth of the size. The convergence statistics and `convergence.jsonl` are
+  never thinned, so reports are unchanged. See
+  [configuration](doc/configuration.md#trajectory_retention-trajectory_stride-trajectory_thinning_start).
+- **Seeded calibration of the rule.** `test/validation/test_convergence_rule_calibration.py`
+  and `dev/bin/calibrate-convergence-defaults` check, with fixed seeds in
+  three regimes, that averages land on their targets and that the error bar
+  misses about one time in twenty; the evidence is in
+  `test/validation/convergence-rule-calibration-evidence.json`. The same
+  measurement shows the allele-spectrum statistics settle as fast as `D`.
 - **A run's trajectory is a compact binary log, and the text is an export.**
   `fim run` and the app now write `trajectory.tlog` (and, for an
   equilibrium-split run, `equilibrium_trajectory.tlog`) instead of
@@ -940,6 +958,53 @@ project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Changed
 
+- **A run stops when its average is known to the precision you asked for:
+  burn in, then average.** The old rule watched a trailing window and stopped
+  when it looked flat, which a short window can do by chance: an earlier
+  version of the Golden Part VI example stopped at generation 400 on a lucky
+  stretch. A run now waits out a burn-in (`convergence_burn_in`, derived as
+  `ceil(k tau)` generations with `k = max(5, ln(2 / precision))`, where `tau`
+  is the model's relaxation time), then averages, and stops only when the
+  average's standard error, corrected for how correlated consecutive
+  generations are (Geyer's estimator), is at most `precision` divided by the
+  normal quantile of `confidence`, with at least 50 effective samples. Checks
+  fall at doubling window lengths. `precision` (default 0.01, plus or minus)
+  and `confidence` (default 0.95) replace `convergence_tolerance` and
+  `convergence_window`; `max_generations` stays a derived safety cap
+  (`burn_in + 15 tau`, never below 200,000). A run that reaches the cap says
+  "hit the cap", reports the average and error bar it really has, and, in
+  `report.json`, projects how many generations the precision would need. The
+  report gains `window_statistics` for every recorded statistic: the average,
+  its standard error, the window, the effective sample size, a Geweke
+  z-score and whether the noise was adequate. Results and run ids differ from
+  earlier versions. See [Convergence](doc/convergence.md).
+- **`D` and `G_ST` are watched together by default.**
+  `convergence_statistic` now defaults to `["D", "G_ST"]` with the `all`
+  combinator, so a run stops only when both are settled. Any global statistic
+  (all 25) can be watched; an unbounded one such as an allele count takes a
+  relative precision, and `statistic_precision` sets a per-statistic
+  plus-or-minus.
+- **Batches average each replicate, then compare the replicates.** Each
+  replicate burns in and averages over a window that all replicates share,
+  so a batch's interval is an across-replicate Student's-t interval of
+  independent averages. The first wave's window is a multiple of `tau`; later
+  replicates use a window measured from the earlier ones
+  (`precision_method: interval`) or from a planned replicate count
+  (`planned_replicates`), and `replicate_averaging_window` fixes it. The
+  window depends only on the configuration, never on the number of CPUs or the
+  engine backend, so a batch gives the same numbers on every machine.
+- **Both ways of averaging `D` and `G_ST` are reported.** `convergence_estimate`
+  chooses between the mean of the per-generation values (`mean_of_values`,
+  the default), the value of the means by the delta method (`value_of_means`),
+  or `auto`, which picks per check. The report records both estimates and the
+  one used.
+- **The worked examples are regenerated under the new rule.** The two
+  engine-timing batches average 100 generations; Golden Part VI converges at
+  generation 176,575 with `D` = 0.608 +/- 0.004; Dear-Nolan low reaches its
+  cap and says so. The temporary 10,000-generation caps are gone; six
+  long examples thin their trajectory files. Every example names its
+  `engine_backend`, so it runs the same way from the command line and from the
+  desktop app.
 - **Trajectory files are written through one open handle.** The JSON Lines
   trajectory writer re-opened `trajectory.jsonl` for every generation, which
   cost several milliseconds per generation on macOS, about three quarters of
@@ -994,22 +1059,6 @@ project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - **Settings sections are easier to read.** Each section's explanatory
   text is now separated from its first field the way the top section's
   fields are, and "Convergence timing" is now "Convergence".
-- **Every worked example runs to completion, in about a minute or less.**
-  Since runs stop only once their trailing-window mean is precise
-  (2026-09), several examples took tens of thousands of generations, and
-  three never finished in practice (the adaptive batch took hours,
-  Kimura-Weiss over an hour with a multi-gigabyte trajectory, and
-  equilibrium-split founding failed outright). Each slow example now sets
-  a looser `convergence_tolerance` (0.02 to 0.05) or pools eight loci,
-  and its README states the trade-off. The migration-hub and within-run
-  sigma band examples pool eight loci because one locus let them stop
-  early at a misleading value. The two engine-timing batches now always
-  run all 16 replicates for exactly 100 generations. The calibration
-  examples (Jost Part VI, Dear-Nolan low and high) keep their scientific
-  configurations; their READMEs give realistic running times (about 10,
-  20 to 25, and 2 minutes). Every example now names `engine_backend: lineal`
-  (or its own engine) so it runs the same way from the command line and
-  from the desktop app, whose fresh-form default is `auto`.
 - **Every example has a name, a description, a class, and its committed
   output.** `doc/examples/classes.yaml` groups the examples for the
   Examples dialog, each `config.yaml` carries its labels and
@@ -1027,28 +1076,6 @@ project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   "Default ploidy", still changeable; "Ask me each time" keeps the blank
   behavior and is remembered). The simulator is unchanged: it counts gene
   copies, so 225 diploid individuals is 450 gene copies.
-
-- **Runs now wait for the population to settle: the convergence window and
-  generation cap are derived from the model.** `convergence_window` and
-  `max_generations` used to default to the fixed numbers 50 and 10,000. A
-  window of 50 cannot tell "steady" from "changing too slowly to see", so the
-  five-island Dear-Nolan low-migration scenario stopped after about 100
-  generations at D near 0.4, when its equilibrium (D near 0.04, as in the
-  source correspondence) needs tens of thousands. The defaults are now
-  `auto`: the window is three relaxation times and the cap fifteen, where the
-  relaxation time comes from migration, mutation and deme sizes (a closed
-  form for the island model; the identity recursion's slowest mode for an
-  explicit migration matrix or unequal sizes, up to 24 demes). An explicit
-  whole number always wins. `fim run` and the desktop app say how long the
-  run is expected to take before it starts, and a run that reaches the cap
-  says how long the model needs. Measured stops are within 0.05 of the
-  analytic equilibrium in every regime tested. The GUI form and Settings
-  accept `auto`; saved preferences from the previous version have their saved
-  window and cap reset to `auto` once. The trailing-window check now costs
-  O(1) per generation instead of O(window), with identical decisions. Runs
-  that omit either key produce different results and run ids than before;
-  runs that state both are unchanged. See
-  [Convergence defaults](doc/convergence.md).
 
 - **The scatter's color key sits under the plot, and the two default graphs
   are the same height.** The key (the ring for the most frequent allele, and
@@ -1317,6 +1344,12 @@ project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Removed
 
+- **The within-run sigma band and the old stopping settings.** The engine's
+  within-run sigma band (and Configure's toggle for it) is gone, because the
+  run view now draws its bands from the evidence window: a standard-deviation
+  band and a standard-error band of the average, `trajectory_band_width` 1 or
+  2. `convergence_tolerance` and `convergence_window` are replaced by
+  `precision` and `convergence_burn_in`.
 - **The JSON Lines trajectory store is gone.** `JSONLTrajectoryStore` and its
   hand-built row encoder (`fim.persistence.jsonl_store`) are removed, and
   `fim.persistence` now exports `BinaryLogStore` in its place. A trajectory is
