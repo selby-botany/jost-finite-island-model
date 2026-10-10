@@ -8,7 +8,6 @@ from __future__ import annotations
 
 import math
 import random
-from dataclasses import replace
 
 import numpy as np
 import pytest
@@ -51,7 +50,9 @@ def _heterozygosities(
     return h_s, h_t
 
 
-def _monitor(identity: dict[str, IdentityStatistic], **changes: object):
+def _monitor(
+    identity: dict[str, IdentityStatistic], **changes: object
+) -> BurnInMonitor:
     """A monitor watching `D` with `G_ST`, `H_S` and `H_T` recorded alongside."""
     settings: dict[str, object] = {
         "max_generations": 100_000,
@@ -271,6 +272,6 @@ def test_a_monitor_with_identity_statistics_needs_the_heterozygosities(
     with pytest.raises(ValueError, match="H_S and H_T"):
         _monitor(identity, extra_statistics=("G_ST",))
     with pytest.raises(ValueError, match="not recorded"):
-        _monitor(replace(identity["D"]) and {"X": identity["D"]})
+        _monitor({"X": identity["D"]})
     with pytest.raises(ValueError, match="unknown estimate"):
         _monitor(identity, estimate="sometimes")

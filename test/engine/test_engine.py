@@ -5130,6 +5130,7 @@ def test_a_batch_matches_each_replicates_window_to_the_first_wave() -> None:
     assert isinstance(output, tuple)
 
     windows = [result.params.replicate_averaging_window for result in output]
+    assert params.relaxation_time is not None
     guess = math.ceil(
         params.expert.first_wave_averaging_multiple * params.relaxation_time
     )

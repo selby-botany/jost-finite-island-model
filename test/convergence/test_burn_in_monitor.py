@@ -419,7 +419,8 @@ def test_a_window_mode_monitor_stops_exactly_when_its_window_is_averaged() -> No
 def test_a_window_mode_monitor_waits_for_a_window_it_does_not_have_yet() -> None:
     """Awaiting a window, the monitor never stops; the window then ends it."""
     monitor = _monitor(awaiting_window=True)
-    assert monitor.awaiting_window is True
+    initially_awaiting = monitor.awaiting_window
+    assert initially_awaiting is True
     for generation in range(60):
         monitor.record(generation, 0.5)
     assert not monitor.should_stop()
@@ -553,7 +554,7 @@ def test_any_projects_the_soonest_statistic_and_all_the_latest() -> None:
             burn_in=10,
             first_check=20,
             statistics=("quiet", "noisy"),
-            combinator=combinator,  # type: ignore[arg-type]
+            combinator=combinator,
             minimum_effective_sample_size=10.0,
         )
         for generation in range(300):

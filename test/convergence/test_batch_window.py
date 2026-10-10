@@ -85,20 +85,30 @@ def test_the_slowest_statistic_decides_and_the_result_is_clamped() -> None:
             "G_ST": WindowNoise(0.1, 200.0),
         }
     ]
-    kwargs = {
-        "statistics": ("D", "G_ST"),
-        "lane_error": 0.05,
-        "relaxation_time": 100.0,
-    }
     exact = 200.0 * (0.1 / 0.05) ** 2 / 100.0
     assert matched_averaging_multiple(
-        wave, multiple_minimum=5.0, multiple_maximum=100.0, **kwargs
+        wave,
+        statistics=("D", "G_ST"),
+        lane_error=0.05,
+        multiple_minimum=5.0,
+        multiple_maximum=100.0,
+        relaxation_time=100.0,
     ) == pytest.approx(exact)
     assert matched_averaging_multiple(
-        wave, multiple_minimum=5.0, multiple_maximum=6.0, **kwargs
+        wave,
+        statistics=("D", "G_ST"),
+        lane_error=0.05,
+        multiple_minimum=5.0,
+        multiple_maximum=6.0,
+        relaxation_time=100.0,
     ) == pytest.approx(6.0)
     assert matched_averaging_multiple(
-        wave, multiple_minimum=20.0, multiple_maximum=100.0, **kwargs
+        wave,
+        statistics=("D", "G_ST"),
+        lane_error=0.05,
+        multiple_minimum=20.0,
+        multiple_maximum=100.0,
+        relaxation_time=100.0,
     ) == pytest.approx(20.0)
 
 
@@ -108,14 +118,28 @@ def test_zero_error_asks_for_the_longest_window_and_exact_statistics_the_shortes
     """No precision is the maximum; a flat statistic needs only the minimum."""
     noisy = [{"D": WindowNoise(0.1, 10.0)}]
     flat = [{"D": WindowNoise(0.0, 1.0)}]
-    kwargs = {
-        "statistics": ("D",),
-        "multiple_minimum": 5.0,
-        "multiple_maximum": 100.0,
-        "relaxation_time": 100.0,
-    }
-    assert matched_averaging_multiple(noisy, lane_error=0.0, **kwargs) == 100.0
-    assert matched_averaging_multiple(flat, lane_error=0.5, **kwargs) == 5.0
+    assert (
+        matched_averaging_multiple(
+            noisy,
+            statistics=("D",),
+            lane_error=0.0,
+            multiple_minimum=5.0,
+            multiple_maximum=100.0,
+            relaxation_time=100.0,
+        )
+        == 100.0
+    )
+    assert (
+        matched_averaging_multiple(
+            flat,
+            statistics=("D",),
+            lane_error=0.5,
+            multiple_minimum=5.0,
+            multiple_maximum=100.0,
+            relaxation_time=100.0,
+        )
+        == 5.0
+    )
 
 
 def test_the_first_wave_gets_the_guess_and_later_replicates_wait_for_the_match() -> (
