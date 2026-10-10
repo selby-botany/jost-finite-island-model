@@ -20,7 +20,7 @@ noisy draw.
 
 ## Why the tolerance is 0.02
 
-The configuration sets `convergence_tolerance: 0.02`, twice the default.
+The configuration sets `precision: 0.02`, twice the default.
 A run stops only once the watched statistic's trailing-window mean is
 known to half the tolerance. At the default 0.01 this single locus needs
 about 40,000 generations and several minutes; at 0.02 the mean is known

@@ -31,10 +31,10 @@ def _write_run(tmp_path: Path, name: str, **overrides: object) -> Path:
         "seed": 1,
         "loci": [{"locus_id": 1, "length": 200}],
         "convergence_window": 4,
-        "convergence_tolerance": 1.0,
+        "precision": 1.0,
         "max_generations": 5,
         "n_replicates": 1,
-        "replicate_tolerance": None,
+        "stop_batch_early": False,
     }
     config.update(overrides)
     config_path = tmp_path / f"{name}.yaml"

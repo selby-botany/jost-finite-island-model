@@ -326,7 +326,7 @@ def estimable_run_settings(_isolate_gui_preferences: Path) -> Path:
                 "n_replicates": "1",
                 "max_generations": "40",
                 "convergence_window": "8",
-                "convergence_tolerance": "1e-06",
+                "precision": "1e-06",
             },
         ),
     )

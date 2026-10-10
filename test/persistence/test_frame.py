@@ -236,10 +236,10 @@ def test_a_real_initial_state_survives_the_round_trip() -> None:
         loci=tuple(LocusSpec(i + 1, 50) for i in range(4)),
         initial_allele_count=3,
         convergence_window=4,
-        convergence_tolerance=1.0,
+        precision=1.0,
         max_generations=5,
         n_replicates=1,
-        replicate_tolerance=None,
+        stop_batch_early=False,
     )
     state = generate_initial_state(params, np.random.Generator(np.random.PCG64(7)))
     layout = layout_for_sizes([locus.locus_id for locus in state.loci], [30, 40, 50])
@@ -259,10 +259,10 @@ def test_state_to_frame_equals_to_rows_for_every_generation_of_a_run() -> None:
         loci=tuple(LocusSpec(i + 1, 50) for i in range(3)),
         initial_allele_count=2,
         convergence_window=4,
-        convergence_tolerance=1e-12,
+        precision=1e-12,
         max_generations=20,
         n_replicates=1,
-        replicate_tolerance=None,
+        stop_batch_early=False,
     )
     store = InMemoryTrajectoryStore()
     result = fim(

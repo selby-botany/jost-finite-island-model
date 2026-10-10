@@ -146,7 +146,7 @@ convergence_statistic: D
 # population forgets its starting state (its migration, mutation and size).
 # Write a whole number instead to choose your own.
 convergence_window: auto
-convergence_tolerance: 0.01
+precision: 0.01
 max_generations: auto
 # Explicit, not merely `DEFAULT_N_REPLICATES`'s own value (200) --
 # a real, reported request: the target default behavior for a new
@@ -669,7 +669,7 @@ def _command_run_batch(
     summary/manifest, leaves no trace at `output_directory` at all.
 
     Under `max_workers` (parallel, the default), an adaptive
-    `replicate_tolerance` stop is only ever applied after a whole
+    early stop is only ever applied after a whole
     concurrent worker batch completes (`fim.engine._run_batch_parallel`),
     so a worker whose replicate is not among the returned results can
     still have fully written its own `replicate-*` directory before the
@@ -1078,7 +1078,7 @@ def _print_cap_note(params: SimulationParams, report: FinalReport) -> None:
             f"requested tolerance: {stats['mean']:.4g} ± "
             f"{stats['standard_error']:.4g} (1 sigma, last "
             f"{stats['window']:,} generations) against a requested ±"
-            f"{params.convergence_tolerance / 2:.4g}"
+            f"{params.precision / 2:.4g}"
         )
 
 
@@ -1113,8 +1113,8 @@ def _batch_description(params: SimulationParams, max_workers: int | None) -> str
     way `_cpu_count()` does for `max_workers`).
     """
     adaptive = (
-        f", replicate_tolerance={params.replicate_tolerance}"
-        if params.replicate_tolerance is not None
+        f", precision={params.precision:g}"
+        if params.batch_precision is not None
         else ""
     )
     if params.engine_backend == "lineal":
@@ -1170,7 +1170,7 @@ def _prune_orphan_replicate_directories(
     cross-reference, not something you need to look up to follow this
     docstring's own explanation: under `max_workers` (parallel, the default),
     `fim.engine._run_batch_parallel` submits a whole worker batch and
-    applies an adaptive `replicate_tolerance` stop only afterward, in
+    applies an adaptive precision stop only afterward, in
     ascending replicate order. A worker beyond the replicate that
     triggered the stop still runs to completion — its `store_factory`
     call has already created its `replicate-NNN/` directory and

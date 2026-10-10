@@ -319,19 +319,16 @@ tested directly, independent of `SimulationParams`'s config-sugar layer
   weight}}`) is accepted directly; both malformed-shape variants are
   validated with field-naming errors.
 - **Replicate-batch keys** (design §9): n<sub>replicates</sub> defaults to
-  `200` and replicate_tolerance to `0.01` (matching convergence_tolerance's
-  own default) — not `1`/unset — so an unconfigured run computes a real
+  `200`, precision to `0.01` and stop_batch_early to on — not `1`/unset —
+  so an unconfigured run computes a real
   confidence interval by default rather than a single point estimate;
-  replicate_minimum and replicate_confidence keep their own documented
+  replicate_minimum and confidence keep their own documented
   defaults (`10`, `0.95`). A zero replicate count, a negative or
-  non-finite replicate_tolerance, a replicate_minimum below 2, and an
+  non-finite precision, a non-boolean stop_batch_early, a replicate_minimum below 2, and an
   unsupported confidence level are each rejected by name.
-  replicate_tolerance always round-trips through to_dict() now
-  (`null` for an explicit `None`, never omitted) — omitting it when
-  `None` was safe only while `None` was also the field's own default;
-  once it stopped being the default, an absent key and an explicit
-  `null` stopped meaning the same thing, so `to_dict()` must say which
-  one it is rather than collapsing them.
+  precision, stop_batch_early and confidence always round-trip through
+  to_dict() (never omitted); the three old names (the two tolerances and
+  the replicate confidence) are refused by name, with no alias kept.
 - **A stopping rule that can never fire**: convergence_window is
   rejected (_validate_stopping_rules) once it exceeds
   max_generations + 1 — the most generations a run can ever record
@@ -343,8 +340,8 @@ tested directly, independent of `SimulationParams`'s config-sugar layer
   rejected**: previously a `_validate_stopping_rules` rejection
   (structurally the same shape as the convergence_window check above —
   the adaptive criterion could never be evaluated before the batch's
-  own n<sub>replicates</sub> cap ends it) — changed once replicate_tolerance
-  stopped defaulting to `None`: the identical combination now arises
+  own n<sub>replicates</sub> cap ends it) — changed once stop_batch_early
+  became the default: the identical combination now arises
   from nothing more deliberate than setting a small n<sub>replicates</sub>
   without separately thinking about replicate_minimum at all, found
   live when every GUI batch test that only ever sets n<sub>replicates</sub>
@@ -522,8 +519,8 @@ without the engine:
   returns a single `RunResult`, not a one-element batch; an explicit
   caller-supplied run_id receives deterministic one-based suffixes
   (`"batch-r001"`, `"batch-r002"`, …).
-- **Adaptive replicate batching** (replicate_tolerance, design §9): with
-  the key unset, exactly n<sub>replicates</sub> replicates run; with a tolerance
+- **Adaptive replicate batching** (precision and stop_batch_early, design §9): with
+  stop_batch_early off, exactly n<sub>replicates</sub> replicates run; with a tolerance
   no bounded statistic can miss, the batch stops at replicate_minimum
   exactly — a deterministic stop, not a lucky one, since every reported
   statistic lies in `[0, 1]`; with an unreachable replicate_minimum, the
@@ -909,7 +906,7 @@ documented separately in `doc/fim-gui-test-plan.md`, not here.
   stray or missing artifact fails rather than passing unnoticed. The
   default worker pool, an explicit `--workers`, and `--sequential` each
   produce that artifact set; a non-empty output directory is rejected
-  before anything is written; and a replicate_tolerance no bounded
+  before anything is written; and a precision no bounded
   statistic can miss writes exactly replicate_minimum replicates,
   proving the adaptive stop reaches the artifacts a user sees rather than
   only the library layer (§4.11).
@@ -1129,7 +1126,7 @@ coverage rather than riding along on the requirements above:
 | Per-locus mutation rate, incl. μ<sub>b</sub> per-base derivation | §4.5 `mu`/μ<sub>b</sub> parsing; §4.7 per-locus mutate; §4.11 engine run; §8 CLI config |
 | Finite-alleles (K-allele) mutation model | §4.1 `FiniteAlleleSpace`/`FiniteAlleleRegistry`; §4.5 capacity validation; §4.7 operator-level checks; §4.11 engine run; §8 CLI config |
 | Several convergence statistics with a combinator | §4.5 convergence_statistic parsing; §4.8 monitor combinator; §4.11 engine run |
-| Adaptive replicate batching on a confidence interval | §4.5 replicate_tolerance/replicate_minimum/replicate_confidence validation; §4.8 `ConfidenceIntervalCriterion`; §4.9 the interval itself; §4.11 adaptive stop and replicate_summary; §8 batch artifacts |
+| Adaptive replicate batching on a confidence interval | §4.5 precision/stop_batch_early/replicate_minimum/confidence validation; §4.8 `ConfidenceIntervalCriterion`; §4.9 the interval itself; §4.11 adaptive stop and replicate_summary; §8 batch artifacts |
 | Parallel replicate execution | §4.11 worker-count equivalence, argument validation, and per-replicate stores; §4.12 CLI flags; §8 batch artifacts under each execution mode |
 
 ## Metadata

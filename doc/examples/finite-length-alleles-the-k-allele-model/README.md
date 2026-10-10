@@ -16,7 +16,7 @@ distance-based stepwise mutation model.
 
 ## Why the tolerance is 0.02
 
-The configuration sets `convergence_tolerance: 0.02`, twice the default.
+The configuration sets `precision: 0.02`, twice the default.
 A run stops only once its trailing-window mean is known to half the
 tolerance. At the default 0.01 this single locus needs about 18,000
 generations and a few minutes; at 0.02 the mean is known to about ±0.01,

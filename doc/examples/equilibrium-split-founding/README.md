@@ -30,7 +30,7 @@ slowly, and a window this short is one draw from those swings.
 
 ## Why eight loci and a tolerance of 0.03
 
-The configuration pools eight loci and sets `convergence_tolerance: 0.03`
+The configuration pools eight loci and sets `precision: 0.03`
 for the main run. With one locus, the main run's `D` swings slowly
 between the three demes, and a run stops only once its trailing-window
 mean is known to half the tolerance: at the default 0.01 it reached the

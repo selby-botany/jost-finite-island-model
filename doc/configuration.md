@@ -36,7 +36,7 @@ deme_weighting: equal
 convergence_statistic: D
 convergence_combinator: all
 convergence_window: auto   # derived from the model; see below
-convergence_tolerance: 0.01
+precision: 0.01
 max_generations: auto      # derived from the model; see below
 n_replicates: 1   # opt-in single scalar run; the library default is 200
 engine_backend: auto   # recommended choice; the library default is lineal
@@ -505,7 +505,7 @@ equilibrium_max_generations: 5000
 
 A list watches several statistics at once — each keeps its own independent
 trailing-window history against the same convergence_window and
-convergence_tolerance — combined by convergence_combinator. A name may
+precision — combined by convergence_combinator. A name may
 not repeat.
 
 ```yaml
@@ -577,13 +577,27 @@ trajectory); too long a cap only delays a run that never settles. Why the
 formula has this form, and how its multiples were chosen, is in
 [Convergence defaults](convergence.md).
 
-### convergence_tolerance
+### precision
 
 - **Type:** non-negative finite number
 - **Default:** `0.01`
 
-The statistic converges when the half-window mean difference is at most this
-value.
+How precisely to estimate each watched statistic: plus or minus this amount,
+in the statistic's own units, at the `confidence` level. One number answers
+"how precise?" for a single run and a batch alike.
+
+- A single run stops once its trailing-window mean is known to within about
+  this much (its standard error is at most half of it) and the two halves of
+  the window differ by at most this much.
+- A replicate batch stops early once every watched statistic's
+  across-replicate confidence interval is this narrow (see
+  stop_batch_early).
+
+Smaller is more precise and takes longer.
+
+```yaml
+precision: 0.02
+```
 
 ### track_expensive_statistics
 
@@ -656,7 +670,7 @@ as mean ± (sigma_band_multiplier × sigma) over that trailing window —
 a measure of how much the statistic still wobbles, generation to
 generation, immediately after being declared stable. This is a
 different question from the cross-replicate confidence interval
-(replicate_confidence, n<sub>replicates</sub> > 1 required): that one
+(confidence, n<sub>replicates</sub> > 1 required): that one
 asks how much the average would differ across independent replicate
 runs; this one asks about a single run's own remaining generation-to-
 generation noise. Must be set together with sigma_band_window, or not
@@ -687,7 +701,7 @@ engines produce bit-identical bands for the same seed on the same
 machine: `lineal` and `generational` continue the run with the same
 per-generation code, and `generational-vector` continues its own table
 with the same draws in the same order. A replicate that an adaptive
-replicate_tolerance stop discarded never gets a band, since its results
+early stop discarded never gets a band, since its results
 are not kept at all.
 
 ### sigma_band_window
@@ -758,25 +772,25 @@ n<sub>replicates</sub> runs that many independently seeded scalar runs — seeds
 (`fim.engine.fim`, returning one `RunResult` per replicate) and the CLI
 (`fim run`, writing one `replicate-NNN/` subdirectory per replicate; see
 [Using `fim`](usage.md#run-a-simulation)). This is a hard cap, not a
-target: replicate_tolerance (below) defaults to a real value too, so an
+target: stop_batch_early (below) is on by default, so an
 unconfigured run stops well short of `200` for most configurations,
 adaptively, once its own confidence interval is tight enough — set
 n<sub>replicates</sub>: `1` explicitly for a single, ordinary scalar run with no
-batching at all (replicate_tolerance is a no-op at n<sub>replicates</sub> `1`
+batching at all (stop_batch_early is a no-op at n<sub>replicates</sub> `1`
 either way).
 
-### replicate_tolerance
+### stop_batch_early
 
-- **Type:** non-negative finite number, or `null` to disable
-- **Default:** `0.01` (matches convergence_tolerance's own default)
+- **Type:** boolean
+- **Default:** `true`
 
 Early stopping for a replicate batch (n<sub>replicates</sub> greater than one):
 once at least replicate_minimum replicates have run, stop as soon as
 every statistic named in convergence_statistic has an across-replicate
 Student's-t confidence interval (mean of that statistic's own final value
-across replicates so far) with a half-width at most replicate_tolerance
-— combined across several watched statistics by convergence_combinator,
-exactly like within-run convergence. n<sub>replicates</sub> is still the hard cap:
+across replicates so far) with a half-width at most precision — combined
+across several watched statistics by convergence_combinator, exactly like
+within-run convergence. n<sub>replicates</sub> is still the hard cap:
 reaching it without tightening ends the batch anyway, a valid,
 non-adaptively-stopped result. This is the mechanism that answers "how many
 replicate runs are needed for a confidence interval" without guessing a
@@ -794,15 +808,18 @@ result. Because of this rule, the same configuration and seed keep the
 same replicates and write the same `summary.json` under `lineal` and
 `generational`.
 
-An **explicit** `replicate_tolerance: null` disables the adaptive stop
-entirely — n<sub>replicates</sub> then always runs in full. This is
-different from simply omitting the key, which means "use the `0.01`
-default," not "disabled."
+`false` disables the adaptive stop entirely — n<sub>replicates</sub> then
+always runs in full.
 
 ```yaml
 n_replicates: 200          # hard cap
-replicate_tolerance: 0.02  # stop once every watched statistic is this tight
+precision: 0.02            # stop once every watched statistic is this tight
 replicate_minimum: 20
+```
+
+```yaml
+n_replicates: 16
+stop_batch_early: false    # always run all 16
 ```
 
 ### replicate_minimum
@@ -810,23 +827,23 @@ replicate_minimum: 20
 - **Type:** integer at least 2
 - **Default:** `10`
 
-The fewest replicates before replicate_tolerance is even checked — the
+The fewest replicates before the batch may stop early — the
 replicate-layer analog of convergence_window, guarding against a
 lucky-early-tight fluke from too small a sample. Only meaningful when
-replicate_tolerance is set. A value larger than n<sub>replicates</sub> is
+stop_batch_early is on. A value larger than n<sub>replicates</sub> is
 silently capped at n<sub>replicates</sub> rather than rejected — setting
 n<sub>replicates</sub> to something small without separately thinking about
 replicate_minimum is an ordinary, common thing to do, not a mistake
 worth an error for.
 
-### replicate_confidence
+### confidence
 
 - **Type:** `0.90`, `0.95`, or `0.99`
 - **Default:** `0.95`
 
-The two-tailed confidence level used by replicate_tolerance's interval,
-and by `summary.json`/replicate_summary's reported intervals. Only
-meaningful when replicate_tolerance is set.
+How sure the plus-or-minus of precision is: the two-tailed confidence level of
+the batch's stopping interval and of the intervals `summary.json` and
+replicate_summary report.
 
 ### migrant_sampling
 
@@ -1198,12 +1215,13 @@ existed.
 | both `mu` and μ<sub>b</sub> given, or neither | rejected |
 | `mu` list length not matching the locus count | rejected |
 | μ<sub>b</sub> outside `[0, 1]` | rejected |
-| replicate_tolerance negative or non-finite | rejected |
+| precision negative or non-finite | rejected |
+| stop_batch_early not a boolean | rejected |
 | replicate_minimum less than 2 | rejected |
 | convergence_window greater than max_generations + 1 | rejected |
 | track_expensive_statistics not a boolean | rejected |
 | replicate_minimum greater than n<sub>replicates</sub> | silently capped at n<sub>replicates</sub> |
-| replicate_confidence not `0.90`, `0.95`, or `0.99` | rejected |
+| confidence not `0.90`, `0.95`, or `0.99` | rejected |
 | deme_weighting not `size` or `equal` | rejected |
 | locus_aggregation not `ratio_of_means` or `mean_of_ratios` | rejected |
 | engine_backend not `lineal`, `generational`, `generational-vector`, or `auto` | rejected |

@@ -199,8 +199,8 @@ its own `manifest.json`. See [output schemas](doc/usage.md#output-schemas).
   need not mutate at an identical, hand-picked rate.
 - `n_replicates` runs that many independently seeded replicates, and
   defaults to `200`, not `1` — set it explicitly to `1` for a single,
-  ordinary run with no batching. With `replicate_tolerance` set (also on
-  by default, at `0.01`), a batch stops as soon as every watched
+  ordinary run with no batching. With `stop_batch_early` on (the default,
+  at the `precision` of `0.01`), a batch stops as soon as every watched
   statistic's across-replicate confidence interval is tight enough,
   rather than requiring a hand-guessed replicate count in advance, or
   running the full `n_replicates` every time.

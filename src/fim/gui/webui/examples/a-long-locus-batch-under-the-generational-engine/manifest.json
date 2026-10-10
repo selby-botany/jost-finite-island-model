@@ -1,83 +1,83 @@
 {
   "artifacts": {
     "replicate-001": {
-      "bytes": 2232,
-      "sha256": "f592ade47c636bd65b91fff42bc6fa316b82f644576d899a1ddf127a459fd593"
+      "bytes": 2208,
+      "sha256": "a1d7a60c42962576f69483663bd2b9a15604203f894bcbdd5ffe4be26151f800"
     },
     "replicate-002": {
-      "bytes": 2232,
-      "sha256": "7122346358d272de4e83316d40cc588910e2ac827ea9aae087aa46c98b945c47"
+      "bytes": 2208,
+      "sha256": "d2dd51715b176efb91fc172354eda7dc6536fef258011b85001d13060c96c9e1"
     },
     "replicate-003": {
-      "bytes": 2232,
-      "sha256": "45b04d103efe70936c81f9bc52b9860f36d788bb9d2e50283c12895418cd68b4"
+      "bytes": 2208,
+      "sha256": "6d97e3ee25edc696ae1c794e2d65e647c18a97858727c0af85eda127760bba7c"
     },
     "replicate-004": {
-      "bytes": 2232,
-      "sha256": "0c54ef93a0e32f53c4bce3b18d0b9ebd573bf2f04c26d0da503715ab9fc76de6"
+      "bytes": 2208,
+      "sha256": "24755faa76ead94e74e7fe7f0ca13442f091d44f733b5db90d224918428f2600"
     },
     "replicate-005": {
-      "bytes": 2232,
-      "sha256": "6a80e341ec412e4be545809cceed4057340d214773679a08e7abf0159520fc22"
+      "bytes": 2208,
+      "sha256": "e9108c1de5b858574e2194806894c0ebb0d617640a533c899ff8c7e04cdd6ffa"
     },
     "replicate-006": {
-      "bytes": 2232,
-      "sha256": "1e3a917e4ddbed4378b7f2b56e122084460c1ffa55f4807c93db4c62440fb1c7"
+      "bytes": 2208,
+      "sha256": "0e728970f21b7ed74eb9c0c13404bbfd5167804a4827cf7e18d8580f9d0ca486"
     },
     "replicate-007": {
-      "bytes": 2232,
-      "sha256": "22fb4aa8ba3c2ce70b96d0798d7a29bfca5715464f8a7257ca7eeaba78e9d25a"
+      "bytes": 2208,
+      "sha256": "ce8cfb3edd926d2645ce6f2cb091980848961bb35126ab68d7f07e299bff6312"
     },
     "replicate-008": {
-      "bytes": 2232,
-      "sha256": "804582d6db97c419d6967704fc1b011b13cf8357a7a713125f0bdccc43022e4b"
+      "bytes": 2208,
+      "sha256": "a7cb3aab4cde205e938f33d336f9cbf857bb45327150506afce61d4cc13042d1"
     },
     "replicate-009": {
-      "bytes": 2231,
-      "sha256": "f32aee1814902e4417b8b7d85a419eedef1012ad091b1eac26df02d73243639d"
+      "bytes": 2207,
+      "sha256": "18dacd79b431b6f5c6c19a9d56d97567943ebd3980b30c0e473173e57a98263b"
     },
     "replicate-010": {
-      "bytes": 2231,
-      "sha256": "ce957baeeecef0514e6724601776017efbdedcbd535922f51ce7b4239709b823"
+      "bytes": 2207,
+      "sha256": "7fb97a32d5b6253ceeb977cbd15ada973ee638afc2ef58bf03e8031f3fb0a372"
     },
     "replicate-011": {
-      "bytes": 2232,
-      "sha256": "776e44d56a57ff592b5849bf8619d9bdcb1a6507f4e0d3936754b8489dd9d991"
+      "bytes": 2208,
+      "sha256": "8fb546ce326092e6e18fc7adf22ace57cbf799b1d929c65b46b92b6ac29d0406"
     },
     "replicate-012": {
-      "bytes": 2232,
-      "sha256": "b80a342f89bb6133af36ca4872408a54dbf13ff16480f6d373648827010017db"
+      "bytes": 2208,
+      "sha256": "fc0c228e450169ea8cf48099904529d623f4804bbb1b1648c7a817b5c525943b"
     },
     "replicate-013": {
-      "bytes": 2232,
-      "sha256": "2f554727711350d0d0ad42c6175062e0fa128862ab2465800b2b86c136fa0dcc"
+      "bytes": 2208,
+      "sha256": "b90f3c993dc26c7d6f62fdec0037ae2815854c8d32c063dc94eed472f470c2d1"
     },
     "replicate-014": {
-      "bytes": 2232,
-      "sha256": "e85fe011597f09253dd71820ecda91ba3eee0cf2f4f173f63f177771734f5868"
+      "bytes": 2208,
+      "sha256": "2d5807b6b9884fe3230495913f2b83e38d42b1ec60dc0679a137537be465ce92"
     },
     "replicate-015": {
-      "bytes": 2231,
-      "sha256": "6cc57a905a1fd8c29f976a18751b75b545c14212262e8bfad05b57b1bbeb31fe"
+      "bytes": 2207,
+      "sha256": "b5ba296274bde94f0b221fb22db3aed009d49e62cc1ec341cb5122c39b1f2cf0"
     },
     "replicate-016": {
-      "bytes": 2232,
-      "sha256": "670464dc498f5ff6e5116b01496d88be38a10f1f6b7f6eae7a8744b1a82fbba2"
+      "bytes": 2208,
+      "sha256": "0f16f8aeccdc118ac3b8ccf6f73ce86dd1f409c04bd65f8bae08f55f9d962785"
     },
     "summary": {
       "bytes": 6169,
       "sha256": "17371acb0131081d27745c5429abd29e9525c2a8989a9eb5f5f260f723ca54f4"
     }
   },
-  "ended_at": "2026-10-10T00:54:17.263074Z",
+  "ended_at": "2026-10-10T01:38:09.112998Z",
   "parameters": {
     "N": 500,
     "_read_only": true,
     "auto_vector_max_capacity": 4096,
     "auto_vector_min_d": 2,
+    "confidence": 0.95,
     "convergence_combinator": "all",
     "convergence_statistic": "D",
-    "convergence_tolerance": 0.02,
     "convergence_window": 101,
     "d": 35,
     "deme_weighting": "equal",
@@ -99,33 +99,33 @@
     "mutation_model": "finite_alleles",
     "n_replicates": 16,
     "ploidy": "haploid",
-    "replicate_confidence": 0.95,
+    "precision": 0.02,
     "replicate_minimum": 10,
-    "replicate_tolerance": null,
     "seed": 20260916,
+    "stop_batch_early": false,
     "track_expensive_statistics": false
   },
   "replicate_count": 16,
   "replicate_run_ids": [
-    "run-5b8be03b9d84478b-r001",
-    "run-5b8be03b9d84478b-r002",
-    "run-5b8be03b9d84478b-r003",
-    "run-5b8be03b9d84478b-r004",
-    "run-5b8be03b9d84478b-r005",
-    "run-5b8be03b9d84478b-r006",
-    "run-5b8be03b9d84478b-r007",
-    "run-5b8be03b9d84478b-r008",
-    "run-5b8be03b9d84478b-r009",
-    "run-5b8be03b9d84478b-r010",
-    "run-5b8be03b9d84478b-r011",
-    "run-5b8be03b9d84478b-r012",
-    "run-5b8be03b9d84478b-r013",
-    "run-5b8be03b9d84478b-r014",
-    "run-5b8be03b9d84478b-r015",
-    "run-5b8be03b9d84478b-r016"
+    "run-d36527cabc373f02-r001",
+    "run-d36527cabc373f02-r002",
+    "run-d36527cabc373f02-r003",
+    "run-d36527cabc373f02-r004",
+    "run-d36527cabc373f02-r005",
+    "run-d36527cabc373f02-r006",
+    "run-d36527cabc373f02-r007",
+    "run-d36527cabc373f02-r008",
+    "run-d36527cabc373f02-r009",
+    "run-d36527cabc373f02-r010",
+    "run-d36527cabc373f02-r011",
+    "run-d36527cabc373f02-r012",
+    "run-d36527cabc373f02-r013",
+    "run-d36527cabc373f02-r014",
+    "run-d36527cabc373f02-r015",
+    "run-d36527cabc373f02-r016"
   ],
-  "run_id": "run-5b8be03b9d84478b",
+  "run_id": "run-d36527cabc373f02",
   "schema_version": 1,
   "software_version": "1.2.0",
-  "started_at": "2026-10-10T00:53:40.031124Z"
+  "started_at": "2026-10-10T01:37:17.856398Z"
 }

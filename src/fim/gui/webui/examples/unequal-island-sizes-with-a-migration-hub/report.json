@@ -28,7 +28,7 @@
   "converged_on": "D",
   "generation": 1006,
   "reason": "statistic converged",
-  "run_id": "run-858eb97b58adba90",
+  "run_id": "run-bc2d0e140ba63e71",
   "window_statistics": {
     "D": {
       "effective_sample_size": 52.27761894732349,

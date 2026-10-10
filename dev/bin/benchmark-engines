@@ -295,7 +295,7 @@ def _base_params(
 ) -> SimulationParams:
     """Build a reference-scale `SimulationParams`, one field at a time overridable.
 
-    `replicate_tolerance=None` explicitly, not `SimulationParams`'s own
+    `stop_batch_early=False` explicitly, not `SimulationParams`'s own
     current default (a real number) -- a benchmark needs every point to
     run an exact, fixed replicate count, never an adaptive early stop
     that would make the very thing being timed vary from run to run.
@@ -311,8 +311,8 @@ def _base_params(
         migrant_sampling="continuous",
         max_generations=max_generations,
         n_replicates=n_replicates,
-        replicate_tolerance=None,
-        convergence_tolerance=0.0,
+        stop_batch_early=False,
+        precision=0.0,
         convergence_window=max_generations + 1,
     )
 

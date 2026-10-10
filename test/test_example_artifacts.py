@@ -51,7 +51,7 @@ def _saved_run(
         "convergence_window": 11,
         "max_generations": 10,
         "n_replicates": replicates,
-        "replicate_tolerance": None,
+        "stop_batch_early": False,
     }
     if equilibrium_split:
         settings.update(

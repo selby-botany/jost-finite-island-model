@@ -430,7 +430,7 @@ may read the GUI's shown set; a test enforces that.
 | Selection | Add a pure `select` operator before drift |
 | Stepwise (distance-based) mutation, e.g. for microsatellites | Add a strategy behind mutation identity assignment — a different, still-unbuilt model from the row above (§3.2 of the design doc explains why) |
 | Several convergence statistics | Pass a list for convergence_statistic plus convergence_combinator |
-| How many replicate runs give a confidence interval | replicate_tolerance stops a batch once every watched statistic's across-replicate CI tightens to it, instead of a hand-guessed n<sub>replicates</sub>; fim.engine.replicate_summary / the CLI's `summary.json` report the realized interval |
+| How many replicate runs give a confidence interval | precision stops a batch (while stop_batch_early is on) once every watched statistic's across-replicate CI tightens to it, instead of a hand-guessed n<sub>replicates</sub>; fim.engine.replicate_summary / the CLI's `summary.json` report the realized interval |
 | Faster replicate batches | max_workers (library) / `--workers`, `--sequential` (CLI): one worker process per replicate batch-slot, opt-in, changes nothing about what is computed |
 | Large trajectories | Implement another `TrajectoryStore` |
 | GUI | Call `fim.engine.fim`; do not duplicate model logic |

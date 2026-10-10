@@ -74,8 +74,9 @@ controls whether one run or a whole batch executes:</p>
 directly in the output directory. Set this explicitly for a single,
 ordinary run with no batching at all.</li>
 <li><strong>n<sub>replicates</sub> greater than one (the default: <code>200</code>, with
-<a href="#" data-fim-help="configuration" data-fim-anchor="replicate_tolerance">replicate_tolerance</a>'s own default
-of <code>0.01</code> usually stopping well short of it)</strong>: each replicate gets its
+<a href="#" data-fim-help="configuration" data-fim-anchor="stop_batch_early">stop_batch_early</a> and a
+<a href="#" data-fim-help="configuration" data-fim-anchor="precision">precision</a> of <code>0.01</code> usually stopping well
+short of it)</strong>: each replicate gets its
 own <code>replicate-NNN/</code> subdirectory, keeping that same four-file contract,
 plus a batch-level <code>manifest.json</code> and <code>summary.json</code> — see
 <a href="#output-schemas">Output schemas</a>.</li>
@@ -108,10 +109,10 @@ for them to mean anything about; use
 <a href="#" data-fim-help="configuration" data-fim-anchor="max_concurrent_replicates">max_concurrent_replicates</a>
 instead (also settable for this run only via <code>--max-concurrent-replicates N</code>, without editing the config file), the <code>generational</code>/
 <code>generational-vector</code> path's own concurrency/memory-bounding control.</p>
-<p>With replicate_tolerance unset in the config, exactly n<sub>replicates</sub>
-replicates run. With it set, the batch can stop earlier, once every watched
+<p>With stop_batch_early off in the config, exactly n<sub>replicates</sub>
+replicates run. With it on (the default), the batch can stop earlier, once every watched
 statistic's across-replicate confidence interval has tightened enough (see
-<a href="#" data-fim-help="configuration" data-fim-anchor="replicate_tolerance">configuration.md</a>) — the number of
+<a href="#" data-fim-help="configuration" data-fim-anchor="stop_batch_early">configuration.md</a>) — the number of
 <code>replicate-NNN/</code> subdirectories written can then be less than n<sub>replicates</sub>.</p>
 <h2 id="worked-examples">Worked examples</h2>
 <p>Each example below is a complete config and the command that runs it: save
@@ -121,9 +122,9 @@ because the same seed, parameters, and version always give the same
 a small <code>N</code> and <code>d</code>, and lets <a href="#" data-fim-external="https://github.com/selby-botany/jost-finite-island-model/blob/main/doc/convergence.md">convergence_window and
 max_generations</a> be derived from the model (the default), so
 each run goes on until its statistic has stopped trending <em>and</em> its
-trailing-window mean is known to half of convergence_tolerance. With one
+trailing-window mean is known to half of precision. With one
 locus that second condition can take tens of thousands of generations, so
-several examples set a looser convergence_tolerance (0.02 to 0.05) or pool
+several examples set a looser precision (0.02 to 0.05) or pool
 eight loci, and each one's README says what that costs. Every example
 here finishes in a few seconds to about three minutes of wall-clock
 time on a busy development machine (an idle one is faster). Most use one locus, so a single run's
@@ -242,13 +243,13 @@ loci:
     length: 100
 engine_backend: lineal
 convergence_statistic: D
-convergence_tolerance: 0.02   # looser than the 0.01 default: about a minute
+precision: 0.02   # looser than the 0.01 default: about a minute
 n_replicates: 1   # a single scalar run; the default (200) would batch
 </code></pre>
 <pre><code class="language-console">fim run stepping-stone.yaml --output results/stepping-stone --quiet
 </code></pre>
 <p>Converges at generation 7,918, after under a minute, with a trailing-window
-mean D of 0.133 ± 0.007. <code>convergence_tolerance: 0.02</code> keeps the run to a
+mean D of 0.133 ± 0.007. <code>precision: 0.02</code> keeps the run to a
 minute; at the default 0.01 one locus needs about 32,000 generations (see
 the <a href="#" data-fim-external="https://github.com/selby-botany/jost-finite-island-model/blob/main/doc/examples/stepping-stone-spatial-migration/README.md">example's README</a>).
 Swap <code>topology: ring</code> for
@@ -296,7 +297,7 @@ p_0:
 engine_backend: lineal
 convergence_statistic: D
 convergence_window: 2
-convergence_tolerance: 0.000001
+precision: 0.000001
 max_generations: 1
 track_expensive_statistics: true
 n_replicates: 1   # a single scalar run; the default (200) would batch
@@ -357,7 +358,7 @@ equilibrium_convergence_tolerance: 0.01
 equilibrium_max_generations: 2000   # the derived burn-in is 1,256 generations
 engine_backend: lineal
 convergence_statistic: D
-convergence_tolerance: 0.03
+precision: 0.03
 n_replicates: 1   # a single scalar run; the default (200) would batch
 </code></pre>
 <pre><code class="language-console">fim run equilibrium-split.yaml --output results/equilibrium-split --quiet
@@ -369,7 +370,7 @@ short window that is one draw from slow swings, which the planned convergence
 redesign addresses) — real differentiation that grew from the
 ancestral-population founder effect, with no explicit <code>p_0</code> anywhere in the
 file. The example pools
-eight loci and sets <code>convergence_tolerance: 0.03</code>, because one locus here
+eight loci and sets <code>precision: 0.03</code>, because one locus here
 needs about 30,000 generations to settle (see the
 <a href="#" data-fim-external="https://github.com/selby-botany/jost-finite-island-model/blob/main/doc/examples/equilibrium-split-founding/README.md">example's README</a>). How long the ancestral phase runs is worked out from
 the model: about ln(1 / equilibrium_convergence_tolerance) times the time the
@@ -447,13 +448,13 @@ loci:
     length: 3
 engine_backend: lineal
 convergence_statistic: D
-convergence_tolerance: 0.02   # looser than the 0.01 default: under a minute
+precision: 0.02   # looser than the 0.01 default: under a minute
 n_replicates: 1   # a single scalar run; the default (200) would batch
 </code></pre>
 <pre><code class="language-console">fim run finite-alleles.yaml --output results/finite-alleles --quiet
 </code></pre>
 <p>Converges at generation 8,977, after about a minute, with a trailing-window
-mean D of 0.611 ± 0.006 (<code>convergence_tolerance: 0.02</code> halves the run's
+mean D of 0.611 ± 0.006 (<code>precision: 0.02</code> halves the run's
 precision target to keep it short; see the
 <a href="#" data-fim-external="https://github.com/selby-botany/jost-finite-island-model/blob/main/doc/examples/finite-length-alleles-the-k-allele-model/README.md">example's README</a>).
 This is the Kimura-Crow
@@ -486,7 +487,7 @@ loci:
     length: 100
 engine_backend: lineal
 convergence_statistic: G_ST
-convergence_tolerance: 0.02   # looser than the 0.01 default: under a minute
+precision: 0.02   # looser than the 0.01 default: under a minute
 n_replicates: 1   # a single scalar run; the default (200) would batch
 </code></pre>
 <pre><code class="language-console">fim run finite-deme-correction.yaml \
@@ -494,7 +495,7 @@ n_replicates: 1   # a single scalar run; the default (200) would batch
 </code></pre>
 <p>Converges (on G<sub>ST</sub>) at generation 10,109, after about two minutes, with
 a trailing-window mean G<sub>ST</sub> of 0.200 ± 0.007
-(<code>convergence_tolerance: 0.02</code> keeps the run short; see the
+(<code>precision: 0.02</code> keeps the run short; see the
 <a href="#" data-fim-external="https://github.com/selby-botany/jost-finite-island-model/blob/main/doc/examples/wright-takahata-finite-deme-correction/README.md">example's README</a>).
 The closed-form finite-deme prediction for these parameters
 is about 0.141, below the corresponding infinite-island approximation of
@@ -526,14 +527,14 @@ loci:
     length: 100
 engine_backend: lineal
 convergence_statistic: D
-convergence_tolerance: 0.05   # looser than the 0.01 default: seconds, not hours
+precision: 0.05   # looser than the 0.01 default: seconds, not hours
 n_replicates: 1   # a single scalar run; the default (200) would batch
 </code></pre>
 <pre><code class="language-console">fim run kimura-weiss-isolation-by-distance.yaml \
   --output results/kimura-weiss-isolation-by-distance --quiet
 </code></pre>
 <p>Converges at generation 2,539, after about a minute, with D = 0.475 and
-G<sub>ST</sub> = 0.093. <code>convergence_tolerance: 0.05</code> is deliberately loose:
+G<sub>ST</sub> = 0.093. <code>precision: 0.05</code> is deliberately loose:
 at the default 0.01 this one-locus ring needs about 175,000 generations,
 well over an hour (see the
 <a href="#" data-fim-external="https://github.com/selby-botany/jost-finite-island-model/blob/main/doc/examples/kimura-weiss-isolation-by-distance/README.md">example's README</a>).
@@ -565,7 +566,7 @@ loci:
     length: 500
 engine_backend: lineal
 convergence_statistic: D
-convergence_tolerance: 0.03   # looser than the 0.01 default: under a minute
+precision: 0.03   # looser than the 0.01 default: under a minute
 n_replicates: 1   # a single scalar run; the default (200) would batch
 </code></pre>
 <pre><code class="language-console">fim run mu-b.yaml --output results/mu-b --quiet
@@ -573,7 +574,7 @@ n_replicates: 1   # a single scalar run; the default (200) would batch
 <p>Converges at generation 3,136, after a few seconds, with a trailing-window
 mean D of 0.222 ± 0.013 (the window is sized from the slowest locus, the
 50-base one, so it is long enough to leave the approach from the starting
-state; <code>convergence_tolerance: 0.03</code> keeps the run short; see the
+state; <code>precision: 0.03</code> keeps the run short; see the
 <a href="#" data-fim-external="https://github.com/selby-botany/jost-finite-island-model/blob/main/doc/examples/per-base-mutation-rate-across-unequal-locus-lengths/README.md">example's README</a>).
 <code>results/mu-b/manifest.json</code>'s
 <code>parameters.mu</code> records the two derived rates — <code>0.0009995</code> for the
@@ -679,7 +680,7 @@ field holds the summarized band shown here.</p>
 <h3 id="an-adaptive-replicate-batch-with-a-confidence-interval">An adaptive replicate batch with a confidence interval</h3>
 <p>Rather than guessing how many replicate runs a confidence interval needs,
 set n<sub>replicates</sub> well above the plausible requirement and let
-<a href="#" data-fim-help="configuration" data-fim-anchor="replicate_tolerance">replicate_tolerance</a> decide when
+<a href="#" data-fim-help="configuration" data-fim-anchor="precision">precision</a> decide when
 enough have run:</p>
 <!-- worked-example-config: examples/an-adaptive-replicate-batch-with-a-confidence-interval/config.yaml -->
 <pre><code class="language-yaml">name: Adaptive replicate batch
@@ -716,24 +717,23 @@ loci:
     length: 100
 engine_backend: lineal
 convergence_statistic: D
-convergence_tolerance: 0.05
+precision: 0.03   # plus or minus: each replicate and the batch's interval
 n_replicates: 50
 replicate_minimum: 10
-replicate_tolerance: 0.03
 </code></pre>
 <pre><code class="language-console">fim run adaptive-batch.yaml --output results/adaptive-batch --sequential --quiet
 </code></pre>
-<p>Stops at 10 replicates, the required minimum — <code>D</code>'s 95% confidence interval
-is already <code>0.287 +/- 0.026</code>, inside the requested <code>0.03</code> half-width, so the
-remaining 40 possible replicates were never needed. (A smaller
-<code>replicate_tolerance</code> makes the batch run past the minimum.) Each replicate pools
-eight loci with <code>convergence_tolerance: 0.05</code>, so it settles in about a
-thousand generations; one-locus replicates at the default tolerance would
-take hours for the whole batch (see the
+<p>Stops at 20 replicates, after the required minimum of 10 — <code>D</code>'s 95%
+confidence interval reaches <code>0.267 +/- 0.029</code>, inside the requested <code>0.03</code>
+half-width (the model's expected <code>D</code> is 0.287), so the remaining 30 possible
+replicates were never needed. (A larger <code>precision</code> stops sooner; a smaller one
+runs more replicates.) Each replicate pools eight loci and is itself averaged to
+<code>precision: 0.03</code>, so most settle within a few thousand generations; one-locus
+replicates would take hours for the whole batch (see the
 <a href="#" data-fim-external="https://github.com/selby-botany/jost-finite-island-model/blob/main/doc/examples/an-adaptive-replicate-batch-with-a-confidence-interval/README.md">example's README</a>).
 <code>results/adaptive-batch/summary.json</code> reports every statistic's own
 interval; <code>results/adaptive-batch/replicate-001/</code> through
-<code>replicate-010/</code> each hold the ordinary scalar-run files for
+<code>replicate-020/</code> each hold the ordinary scalar-run files for
 that one replicate. Drop <code>--sequential</code> to run the same batch across a
 worker process per CPU instead — the computed numbers are identical
 either way (see <a href="#batches-nreplicates-greater-than-one">Batches</a>); only
@@ -751,7 +751,7 @@ instant) large enough for that backend's own advantage to actually show.
 They are also the exception to the derived convergence defaults: each pins a
 fixed amount of work, 16 replicates of exactly 100 generations
 (<code>max_generations: 100</code> with a <code>convergence_window: 101</code> that can never
-fill, and <code>replicate_tolerance: null</code> so no replicate is skipped), so a
+fill, and <code>stop_batch_early: false</code> so no replicate is skipped), so a
 timing comparison always does the same work. The population is nowhere
 near equilibrium when it stops, so read these two as timing workloads, not
 as results.
@@ -783,10 +783,10 @@ convergence_statistic: D
 # A fixed 100-generation horizon: a 101-generation window can never fill
 # within 100 generations, so every replicate runs exactly to the cap.
 convergence_window: 101
-convergence_tolerance: 0.02
+precision: 0.02
 max_generations: 100
 n_replicates: 16
-replicate_tolerance: null   # always run all 16 replicates
+stop_batch_early: false   # always run all 16 replicates
 </code></pre>
 <pre><code class="language-console">fim run vector-showcase.yaml --output results/vector-showcase --quiet
 </code></pre>
@@ -828,10 +828,10 @@ convergence_statistic: D
 # A fixed 100-generation horizon: a 101-generation window can never fill
 # within 100 generations, so every replicate runs exactly to the cap.
 convergence_window: 101
-convergence_tolerance: 0.02
+precision: 0.02
 max_generations: 100
 n_replicates: 16
-replicate_tolerance: null   # always run all 16 replicates
+stop_batch_early: false   # always run all 16 replicates
 </code></pre>
 <pre><code class="language-console">fim run generational-showcase.yaml --output results/generational-showcase --quiet
 </code></pre>
@@ -1672,7 +1672,7 @@ SHA-256 digest and byte count of <code>summary.json</code> and of each replicate
 <code>manifest.json</code> (keyed <code>replicate-NNN</code>), recorded once every one of them is
 flushed, so an edited, truncated, or replaced batch-level artifact is
 detectable the same way a scalar run's is. Under parallel execution — the
-CLI default — an adaptive replicate_tolerance stop can leave a worker that
+CLI default — an adaptive early stop can leave a worker that
 had already started its own <code>replicate-NNN/</code> directory before the stop was
 decided; that directory is pruned before publishing, so the <code>replicate-*</code>
 subdirectories actually present always equal replicate_run_ids exactly.</p>

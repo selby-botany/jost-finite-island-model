@@ -40,10 +40,10 @@ def test_literature_visual_payload_carries_a_wright_beta_overlay() -> None:
         seed=7,
         loci=(LocusSpec(1, 200),),
         convergence_window=4,
-        convergence_tolerance=1.0,
+        precision=1.0,
         max_generations=10,
         n_replicates=1,
-        replicate_tolerance=None,
+        stop_batch_early=False,
     )
 
     payload = literature_visual_payload(_gradient_state(), params)
@@ -87,10 +87,10 @@ def test_literature_visual_payload_remaps_allele_composition_legend_labels() -> 
         seed=7,
         loci=(LocusSpec(1, 200),),
         convergence_window=4,
-        convergence_tolerance=1.0,
+        precision=1.0,
         max_generations=10,
         n_replicates=1,
-        replicate_tolerance=None,
+        stop_batch_early=False,
     )
     state = ModelState(
         loci=(LocusSpec(1, 200),),
@@ -127,10 +127,10 @@ def test_literature_visual_payload_groups_identity_by_stepping_stone_distance() 
             "seed": 7,
             "loci": [{"locus_id": 1, "length": 200}],
             "convergence_window": 4,
-            "convergence_tolerance": 1.0,
+            "precision": 1.0,
             "max_generations": 10,
             "n_replicates": 1,
-            "replicate_tolerance": None,
+            "stop_batch_early": False,
         }
     )
 
@@ -153,10 +153,10 @@ def _base_params(*, d: int = 2) -> SimulationParams:
         seed=7,
         loci=(LocusSpec(1, 200),),
         convergence_window=4,
-        convergence_tolerance=1.0,
+        precision=1.0,
         max_generations=10,
         n_replicates=1,
-        replicate_tolerance=None,
+        stop_batch_early=False,
     )
 
 
@@ -251,10 +251,10 @@ def test_pooled_isolation_by_distance_payload_counts_pairs_across_states() -> No
             "seed": 7,
             "loci": [{"locus_id": 1, "length": 200}],
             "convergence_window": 4,
-            "convergence_tolerance": 1.0,
+            "precision": 1.0,
             "max_generations": 10,
             "n_replicates": 1,
-            "replicate_tolerance": None,
+            "stop_batch_early": False,
         }
     )
     state = _gradient_state()

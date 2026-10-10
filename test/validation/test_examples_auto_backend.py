@@ -17,7 +17,7 @@ from the fresh run's own manifest, not predicted here:
   under either mutation model (`GenerationalBackend`'s own docstring and
   `fim.model.vector_block`, checked by the golden-parity engine tests and
   `test/engine/test_vector_parity.py`). That holds for an adaptive batch
-  (`replicate_tolerance` set) too: every backend judges the adaptive stop
+  (`stop_batch_early` on) too: every backend judges the adaptive stop
   on replicates in replicate order (`fim.engine.run_batch`'s own
   docstring), so all keep the same replicates. So a committed `lineal`
   or `generational` output and a fresh `generational` or
@@ -510,7 +510,7 @@ def test_vector_archive_uses_intervals_but_local_reference_requires_identity(
     for directory, mean in ((committed, 0.3), (fresh, 0.31), (reference, 0.31)):
         _write(
             directory / "manifest.json",
-            {"parameters": {"convergence_statistic": "D", "replicate_tolerance": None}},
+            {"parameters": {"convergence_statistic": "D", "stop_batch_early": False}},
         )
         _write(
             directory / "summary.json",

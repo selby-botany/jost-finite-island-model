@@ -110,10 +110,10 @@ def build_config(module: ModuleType) -> dict[str, Any]:
         "engine_backend": "lineal",
         "convergence_statistic": "D",
         "convergence_window": HORIZON + 1,
-        "convergence_tolerance": 0.0,
+        "precision": 0.0,
         "max_generations": HORIZON,
         "n_replicates": REPLICATES,
-        "replicate_tolerance": None,
+        "stop_batch_early": False,
         "p_0": p_0,
     }
 

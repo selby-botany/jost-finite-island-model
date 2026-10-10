@@ -51,10 +51,10 @@ def _write_config(path: Path, **updates: object) -> None:
         "mu": 0.01,
         "seed": 20261005,
         "convergence_window": 4,
-        "convergence_tolerance": 1.0,
+        "precision": 1.0,
         "max_generations": 10,
         "n_replicates": 1,
-        "replicate_tolerance": None,
+        "stop_batch_early": False,
     }
     config.update(updates)
     path.write_text(yaml.safe_dump(config, sort_keys=False), encoding="utf-8")

@@ -55,10 +55,10 @@ def make_params(generations: int, **overrides: object) -> SimulationParams:
         "seed": 20261008,
         "loci": loci(3),
         "convergence_window": max(2, generations // 4),
-        "convergence_tolerance": 1e-15,
+        "precision": 1e-15,
         "max_generations": generations,
         "n_replicates": 1,
-        "replicate_tolerance": None,
+        "stop_batch_early": False,
     }
     fields.update(overrides)
     return SimulationParams(**fields)  # type: ignore[arg-type]

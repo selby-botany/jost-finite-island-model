@@ -1034,7 +1034,7 @@ def _convergence_reference_payload(params: SimulationParams) -> dict[str, Any]:
     """
     return {
         "window": params.convergence_window,
-        "tolerance": params.convergence_tolerance,
+        "tolerance": params.precision,
     }
 
 
@@ -7114,7 +7114,7 @@ def _batch_done_payload(
     `replicates` is the row data for the completed view's own batch
     table (one row per *published* replicate — `results`' own length,
     not necessarily `params.n_replicates`: an adaptive
-    `replicate_tolerance` stop can end a batch short of its own cap),
+    early stop can end a batch short of its own cap),
     including each row's own `trajectoryPath` — joined here, in Python
     (`batch_runner.replicate_output_directory`), rather than the page
     concatenating `outputDirectory` and a replicate directory name

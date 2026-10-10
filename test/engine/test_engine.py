@@ -90,10 +90,10 @@ def _tiny_config() -> dict[str, object]:
         "seed": 20260814,
         "loci": [{"locus_id": 1, "length": 200}],
         "convergence_window": 4,
-        "convergence_tolerance": 1.0,
+        "precision": 1.0,
         "max_generations": 10,
         "n_replicates": 1,
-        "replicate_tolerance": None,
+        "stop_batch_early": False,
     }
 
 
@@ -149,7 +149,7 @@ def test_cap_is_a_valid_nonconverged_result(
     `max_generations=2 + 1` (validation rejects anything larger — see the
     `convergence_window` case in `test/model/test_params.py::
     test_post_init_validation_covers_all_scalar_contracts`);
-    `convergence_tolerance=0.0` requires the two half-window means to
+    `precision=0.0` requires the two half-window means to
     match exactly, which a real drifting `D` trajectory essentially never
     does in two generations.
     """
@@ -157,7 +157,7 @@ def test_cap_is_a_valid_nonconverged_result(
         {
             **tiny_params.to_dict(),
             "convergence_window": 2,
-            "convergence_tolerance": 0.0,
+            "precision": 0.0,
             "max_generations": 2,
         }
     )
@@ -250,7 +250,7 @@ def test_sigma_band_is_none_when_the_run_only_hits_the_cap() -> None:
         {
             **_tiny_config(),
             "convergence_window": 2,
-            "convergence_tolerance": 0.0,
+            "precision": 0.0,
             "max_generations": 2,
             "sigma_band_multiplier": 2.0,
             "sigma_band_window": 5,
@@ -365,7 +365,7 @@ def test_sigma_band_is_none_under_generational_when_the_run_only_hits_the_cap() 
         {
             **_tiny_config(),
             "convergence_window": 2,
-            "convergence_tolerance": 0.0,
+            "precision": 0.0,
             "max_generations": 2,
             "sigma_band_multiplier": 2.0,
             "sigma_band_window": 5,
@@ -422,7 +422,7 @@ def test_sigma_band_is_never_computed_for_an_adaptively_abandoned_lane() -> None
     """An adaptive stop's abandoned lanes get no band — decision 8's closing note.
 
     `_apply_sigma_band_extensions` skips any lane with no `result` at
-    all, which is exactly the set an adaptive `replicate_tolerance` stop
+    all, which is exactly the set an adaptive early stop
     discarded from the store just above `run_batch`'s own early return.
     A band is therefore never computed from, or persisted for, a
     replicate the adaptive stop chose not to keep.
@@ -432,7 +432,8 @@ def test_sigma_band_is_never_computed_for_an_adaptively_abandoned_lane() -> None
             **_tiny_config(),
             "n_replicates": 10,
             "replicate_minimum": 3,
-            "replicate_tolerance": 1000.0,
+            "precision": 1000.0,
+            "stop_batch_early": True,
             "sigma_band_multiplier": 2.0,
             "sigma_band_window": 5,
             "engine_backend": "generational",
@@ -471,10 +472,10 @@ def _sigma_band_vector_params(**overrides: object) -> SimulationParams:
         loci=(LocusSpec(1, 2),),  # capacity 16
         mutation_model="finite_alleles",
         convergence_window=4,
-        convergence_tolerance=1.0,
+        precision=1.0,
         max_generations=10,
         n_replicates=1,
-        replicate_tolerance=None,
+        stop_batch_early=False,
         sigma_band_multiplier=2.0,
         sigma_band_window=12,
     )
@@ -668,7 +669,7 @@ def test_sigma_band_extensions_never_interleave_with_batch_ticks() -> None:
         {
             **_tiny_config(),
             "n_replicates": 4,
-            "convergence_tolerance": 0.02,
+            "precision": 0.02,
             "max_generations": 40,
             "sigma_band_multiplier": 2.0,
             "sigma_band_window": 5,
@@ -706,7 +707,7 @@ def test_vectorized_sigma_band_caches_peak_in_the_post_pass_then_release() -> No
     """
     pytest.importorskip("numba")
     params = _sigma_band_vector_params(
-        n_replicates=4, convergence_tolerance=0.02, max_generations=40
+        n_replicates=4, precision=0.02, max_generations=40
     )
     live_counts: list[int] = []
     observed: dict[str, int] = {}
@@ -759,7 +760,7 @@ def test_a_batch_without_a_sigma_band_still_releases_caches_at_finalization() ->
     pytest.importorskip("numba")
     params = _sigma_band_vector_params(
         n_replicates=4,
-        convergence_tolerance=0.02,
+        precision=0.02,
         max_generations=40,
         sigma_band_multiplier=None,
         sigma_band_window=None,
@@ -853,12 +854,12 @@ def test_batch_run_uses_explicit_run_id_suffixes(
     assert [result.run_id for result in output] == ["batch-r001", "batch-r002"]
 
 
-def test_replicate_tolerance_unset_is_unaffected_by_the_adaptive_machinery(
+def test_stopping_the_batch_early_off_is_unaffected_by_the_adaptive_machinery(
     tiny_params: SimulationParams,
 ) -> None:
-    """Omitting `replicate_tolerance` keeps the fixed-count batch loop exact."""
+    """`stop_batch_early` off keeps the fixed-count batch loop exact."""
     params = SimulationParams.from_mapping({**tiny_params.to_dict(), "n_replicates": 4})
-    assert params.replicate_tolerance is None
+    assert params.batch_precision is None
     output = fim(
         params.gene_copies, params.m, params.mu, params.d, params=params, clock=_clock
     )
@@ -866,7 +867,7 @@ def test_replicate_tolerance_unset_is_unaffected_by_the_adaptive_machinery(
     assert len(output) == 4
 
 
-def test_replicate_tolerance_can_stop_before_the_cap() -> None:
+def test_a_generous_precision_can_stop_the_batch_before_the_cap() -> None:
     """A generous tolerance stops as soon as `replicate_minimum` is reached."""
     params = SimulationParams.from_mapping(
         {
@@ -876,7 +877,8 @@ def test_replicate_tolerance_can_stop_before_the_cap() -> None:
             # Any statistic this project reports is bounded in [0, 1], so a
             # tolerance this large is always satisfied once the minimum
             # sample is available — the stop is deterministic, not lucky.
-            "replicate_tolerance": 1000.0,
+            "precision": 1000.0,
+            "stop_batch_early": True,
         }
     )
     output = fim(
@@ -902,7 +904,8 @@ def test_generational_adaptive_stop_discards_abandoned_lanes_own_rows() -> None:
             **_tiny_config(),
             "n_replicates": 10,
             "replicate_minimum": 3,
-            "replicate_tolerance": 1000.0,
+            "precision": 1000.0,
+            "stop_batch_early": True,
             "engine_backend": "generational",
         }
     )
@@ -1064,7 +1067,7 @@ def test_replicate_minimum_above_n_replicates_runs_to_completion() -> None:
     `n_replicates=3` used to raise `ValueError` at construction
     (adaptive stopping could never even be evaluated, let alone fire,
     so the config was rejected as describing something structurally
-    impossible). Changed once `replicate_tolerance` stopped defaulting
+    impossible). Changed once `stop_batch_early` became the default
     to `None` (`fim.model.params.SimulationParams.__post_init__`'s own
     comment has the full reasoning): the identical combination now
     arises from nothing more deliberate than setting a small `n_
@@ -1083,7 +1086,8 @@ def test_replicate_minimum_above_n_replicates_runs_to_completion() -> None:
             **_tiny_config(),
             "n_replicates": 3,
             "replicate_minimum": 100,
-            "replicate_tolerance": 1000.0,
+            "precision": 1000.0,
+            "stop_batch_early": True,
         }
     )
     assert params.replicate_minimum == 3
@@ -1103,7 +1107,7 @@ def test_replicate_tolerance_never_stops_on_a_permanently_undefined_statistic() 
     stopping-criterion window never fills. The batch correctly falls back
     to the `n_replicates` cap rather than the prior behavior, where
     substituting `0.0` for every undefined replicate produced a constant
-    zero history that satisfied an exact `replicate_tolerance=0.0`
+    zero history that satisfied an exact `precision=0.0`
     immediately at `replicate_minimum` — a fabricated "convergence" the
     run's actual (complete lack of) data never supported.
     """
@@ -1116,11 +1120,11 @@ def test_replicate_tolerance_never_stops_on_a_permanently_undefined_statistic() 
         loci=(LocusSpec(1, 100),),
         convergence_statistic="G_ST",
         convergence_window=2,
-        convergence_tolerance=0.0,
         max_generations=2,
         n_replicates=5,
         replicate_minimum=2,
-        replicate_tolerance=0.0,
+        precision=0.0,
+        stop_batch_early=True,
         initial_frequencies=(
             ({AlleleId(0): 1.0},),
             ({AlleleId(0): 1.0},),
@@ -1256,7 +1260,7 @@ def test_pooled_convergence_histories_carries_a_stopped_replicates_value_forward
     Not built from `tiny_params`: its own tight, fast-converging
     defaults have every replicate stop at the identical generation
     (confirmed live -- the whole reason this test needs staggered
-    stops), so this test picks its own `seed`/`convergence_tolerance`/
+    stops), so this test picks its own `seed`/`precision`/
     `max_generations` specifically to produce real spread (`[3, 5, 6,
     12, 15]`, confirmed live for this exact configuration) instead.
     """
@@ -1268,10 +1272,10 @@ def test_pooled_convergence_histories_carries_a_stopped_replicates_value_forward
         seed=42,
         loci=(LocusSpec(1, 200),),
         convergence_window=4,
-        convergence_tolerance=0.02,
+        precision=0.02,
         max_generations=30,
         n_replicates=5,
-        replicate_tolerance=None,
+        stop_batch_early=False,
     )
     output = fim(
         params.gene_copies, params.m, params.mu, params.d, params=params, clock=_clock
@@ -1603,7 +1607,7 @@ def test_max_workers_rejects_an_unpicklable_store_factory() -> None:
 
 
 def test_max_workers_respects_adaptive_stopping_in_batches() -> None:
-    """Batched parallel replicates still honor `replicate_tolerance`.
+    """Batched parallel replicates still honor the early stop.
 
     A batch can overshoot the exact minimal replicate count by at most
     ``max_workers - 1``, since the stopping decision is only applied once
@@ -1614,7 +1618,8 @@ def test_max_workers_respects_adaptive_stopping_in_batches() -> None:
             **_tiny_config(),
             "n_replicates": 10,
             "replicate_minimum": 3,
-            "replicate_tolerance": 1000.0,
+            "precision": 1000.0,
+            "stop_batch_early": True,
         }
     )
     output = fim(
@@ -1655,7 +1660,8 @@ def test_parallel_batch_adaptive_stop_discards_overshoot_replicates_artifacts(
             **_tiny_config(),
             "n_replicates": 10,
             "replicate_minimum": 3,
-            "replicate_tolerance": 1000.0,
+            "precision": 1000.0,
+            "stop_batch_early": True,
         }
     )
 
@@ -1795,7 +1801,7 @@ def test_bootstrap_replicate_summary_point_estimate_matches_the_pooled_ratio(
     a real Jensen-gap bias `D`/`G_ST` are the only statistics with).
     """
     params = SimulationParams.from_mapping(
-        {**tiny_params.to_dict(), "n_replicates": 8, "replicate_tolerance": None}
+        {**tiny_params.to_dict(), "n_replicates": 8, "stop_batch_early": False}
     )
     output = fim(
         params.gene_copies, params.m, params.mu, params.d, params=params, clock=_clock
@@ -1823,7 +1829,7 @@ def test_bootstrap_replicate_summary_interval_contains_its_own_point_estimate(
 ) -> None:
     """The reported interval actually brackets the reported point estimate."""
     params = SimulationParams.from_mapping(
-        {**tiny_params.to_dict(), "n_replicates": 8, "replicate_tolerance": None}
+        {**tiny_params.to_dict(), "n_replicates": 8, "stop_batch_early": False}
     )
     output = fim(
         params.gene_copies, params.m, params.mu, params.d, params=params, clock=_clock
@@ -1858,7 +1864,7 @@ def test_bootstrap_replicate_summary_reports_no_sample_standard_deviation(
     bootstrap happened to reproduce a symmetric interval on this batch.
     """
     params = SimulationParams.from_mapping(
-        {**tiny_params.to_dict(), "n_replicates": 8, "replicate_tolerance": None}
+        {**tiny_params.to_dict(), "n_replicates": 8, "stop_batch_early": False}
     )
     output = fim(
         params.gene_copies, params.m, params.mu, params.d, params=params, clock=_clock
@@ -1886,7 +1892,7 @@ def test_bootstrap_replicate_summary_is_deterministic_for_a_given_rng_state(
     the same as every other source of randomness in this project.
     """
     params = SimulationParams.from_mapping(
-        {**tiny_params.to_dict(), "n_replicates": 6, "replicate_tolerance": None}
+        {**tiny_params.to_dict(), "n_replicates": 6, "stop_batch_early": False}
     )
     output = fim(
         params.gene_copies, params.m, params.mu, params.d, params=params, clock=_clock
@@ -1914,7 +1920,7 @@ def test_bootstrap_replicate_summary_rejects_invalid_inputs(
 ) -> None:
     """Every keyword argument is validated, not passed straight to numpy."""
     params = SimulationParams.from_mapping(
-        {**tiny_params.to_dict(), "n_replicates": 4, "replicate_tolerance": None}
+        {**tiny_params.to_dict(), "n_replicates": 4, "stop_batch_early": False}
     )
     output = fim(
         params.gene_copies, params.m, params.mu, params.d, params=params, clock=_clock
@@ -2023,10 +2029,10 @@ def test_g_st_convergence_falls_back_to_the_cap_at_total_fixation() -> None:
         loci=(LocusSpec(1, 100),),
         convergence_statistic="G_ST",
         convergence_window=2,
-        convergence_tolerance=0.0,
+        precision=0.0,
         max_generations=2,
         n_replicates=1,
-        replicate_tolerance=None,
+        stop_batch_early=False,
         initial_frequencies=(
             ({AlleleId(0): 1.0},),
             ({AlleleId(0): 1.0},),
@@ -2080,7 +2086,8 @@ def test_adaptive_g_st_batch_survives_partial_monomorphism() -> None:
         max_generations=1,
         n_replicates=3,
         replicate_minimum=2,
-        replicate_tolerance=1000.0,
+        precision=1000.0,
+        stop_batch_early=True,
         initial_frequencies=(
             ({AlleleId(0): 1.0}, {AlleleId(0): 0.5, AlleleId(1): 0.5}),
             ({AlleleId(0): 1.0}, {AlleleId(0): 0.5, AlleleId(1): 0.5}),
@@ -2123,7 +2130,8 @@ def test_adaptive_batch_drops_replicates_where_g_st_is_undefined() -> None:
         max_generations=1,
         n_replicates=3,
         replicate_minimum=2,
-        replicate_tolerance=1000.0,
+        precision=1000.0,
+        stop_batch_early=True,
         initial_frequencies=(
             ({AlleleId(0): 1.0},),
             ({AlleleId(0): 1.0},),
@@ -2171,10 +2179,10 @@ def test_multi_statistic_run_watches_and_reports_every_statistic() -> None:
         convergence_statistic=("D", "G_ST"),
         convergence_combinator="all",
         convergence_window=6,
-        convergence_tolerance=0.02,
+        precision=0.02,
         max_generations=60,
         n_replicates=1,
-        replicate_tolerance=None,
+        stop_batch_early=False,
     )
 
     first = _run(params)
@@ -2216,10 +2224,10 @@ def test_any_combinator_can_stop_earlier_than_all() -> None:
             convergence_statistic=("D", "G_ST"),
             convergence_combinator=combinator,
             convergence_window=6,
-            convergence_tolerance=0.02,
+            precision=0.02,
             max_generations=60,
             n_replicates=1,
-            replicate_tolerance=None,
+            stop_batch_early=False,
         )
 
     any_params = _params("any")
@@ -2260,10 +2268,10 @@ def _monomorphic_any_params(engine_backend: EngineBackend) -> SimulationParams:
         convergence_statistic=("D", "G_ST"),
         convergence_combinator="any",
         convergence_window=4,
-        convergence_tolerance=0.0,
+        precision=0.0,
         max_generations=50,
         n_replicates=2,
-        replicate_tolerance=None,
+        stop_batch_early=False,
         engine_backend=engine_backend,
     )
 
@@ -2302,10 +2310,10 @@ def test_converged_on_is_none_for_a_run_that_hit_the_cap() -> None:
         seed=7,
         loci=(LocusSpec(1, 100),),
         convergence_window=40,
-        convergence_tolerance=0.0,
+        precision=0.0,
         max_generations=60,
         n_replicates=1,
-        replicate_tolerance=None,
+        stop_batch_early=False,
     )
 
     result = _run(params)
@@ -2350,7 +2358,7 @@ def test_mutation_ids_follow_high_explicit_initial_id() -> None:
         convergence_window=2,
         max_generations=1,
         n_replicates=1,
-        replicate_tolerance=None,
+        stop_batch_early=False,
         initial_frequencies=(
             ({AlleleId(MINTED_ID_START): 1.0},),
             ({AlleleId(MINTED_ID_START): 1.0},),
@@ -2379,10 +2387,10 @@ def test_unequal_deme_sizes_run_is_reproducible_and_bounds_support() -> None:
         seed=20260817,
         loci=(LocusSpec(1, 100),),
         convergence_window=4,
-        convergence_tolerance=1.0,
+        precision=1.0,
         max_generations=8,
         n_replicates=1,
-        replicate_tolerance=None,
+        stop_batch_early=False,
     )
 
     first = _run(params)
@@ -2465,10 +2473,10 @@ def test_asymmetric_migration_matrix_run_is_reproducible() -> None:
         seed=20260817,
         loci=(LocusSpec(1, 100),),
         convergence_window=4,
-        convergence_tolerance=1.0,
+        precision=1.0,
         max_generations=8,
         n_replicates=1,
-        replicate_tolerance=None,
+        stop_batch_early=False,
     )
 
     first = _run(params)
@@ -3193,10 +3201,10 @@ def test_run_result_convergence_histories_include_always_tracked_statistics() ->
         loci=(LocusSpec(1, 50),),
         convergence_statistic="D",
         convergence_window=4,
-        convergence_tolerance=0.02,
+        precision=0.02,
         max_generations=20,
         n_replicates=1,
-        replicate_tolerance=None,
+        stop_batch_early=False,
     )
 
     result = _run(params)
@@ -3225,10 +3233,10 @@ def test_run_result_convergence_histories_include_e_st_k_st_when_opted_in() -> N
         loci=(LocusSpec(1, 50),),
         convergence_statistic="D",
         convergence_window=4,
-        convergence_tolerance=0.02,
+        precision=0.02,
         max_generations=20,
         n_replicates=1,
-        replicate_tolerance=None,
+        stop_batch_early=False,
         track_expensive_statistics=True,
     )
 
@@ -3270,10 +3278,10 @@ def test_sigma_band_stays_scoped_to_watched_statistics_only() -> None:
         loci=(LocusSpec(1, 50),),
         convergence_statistic="D",
         convergence_window=4,
-        convergence_tolerance=0.02,
+        precision=0.02,
         max_generations=20,
         n_replicates=1,
-        replicate_tolerance=None,
+        stop_batch_early=False,
         sigma_band_multiplier=2.0,
         sigma_band_window=5,
         track_expensive_statistics=True,
@@ -3334,10 +3342,10 @@ def test_multi_locus_run_with_unequal_lengths_is_reproducible() -> None:
         seed=20260818,
         loci=(LocusSpec(1, 50), LocusSpec(2, 8_000)),
         convergence_window=4,
-        convergence_tolerance=1.0,
+        precision=1.0,
         max_generations=8,
         n_replicates=1,
-        replicate_tolerance=None,
+        stop_batch_early=False,
     )
 
     first = _run(params)
@@ -3367,10 +3375,10 @@ def test_stepping_stone_topology_run_is_reproducible() -> None:
             "mu": 0.02,
             "seed": 20260821,
             "convergence_window": 4,
-            "convergence_tolerance": 1.0,
+            "precision": 1.0,
             "max_generations": 8,
             "n_replicates": 1,
-            "replicate_tolerance": None,
+            "stop_batch_early": False,
         }
     )
 
@@ -3402,10 +3410,10 @@ def test_stochastic_migrant_sampling_run_is_reproducible() -> None:
             "seed": 20260818,
             "migrant_sampling": "stochastic",
             "convergence_window": 4,
-            "convergence_tolerance": 1.0,
+            "precision": 1.0,
             "max_generations": 8,
             "n_replicates": 1,
-            "replicate_tolerance": None,
+            "stop_batch_early": False,
         }
     )
 
@@ -3434,10 +3442,10 @@ def test_default_migrant_sampling_is_unaffected_by_the_stochastic_option() -> No
         "mu": 0.02,
         "seed": 20260818,
         "convergence_window": 4,
-        "convergence_tolerance": 1.0,
+        "precision": 1.0,
         "max_generations": 8,
         "n_replicates": 1,
-        "replicate_tolerance": None,
+        "stop_batch_early": False,
     }
     implicit = SimulationParams.from_mapping(base_config)
     explicit = SimulationParams.from_mapping(
@@ -3472,10 +3480,10 @@ def test_finite_alleles_run_is_reproducible_and_bounds_capacity() -> None:
             "loci": [{"locus_id": 1, "length": 1}],
             "mutation_model": "finite_alleles",
             "convergence_window": 4,
-            "convergence_tolerance": 1.0,
+            "precision": 1.0,
             "max_generations": 10,
             "n_replicates": 1,
-            "replicate_tolerance": None,
+            "stop_batch_early": False,
         }
     )
 
@@ -3505,10 +3513,10 @@ def test_default_mutation_model_is_unaffected_by_the_finite_alleles_option() -> 
         "mu": 0.02,
         "seed": 20260821,
         "convergence_window": 4,
-        "convergence_tolerance": 1.0,
+        "precision": 1.0,
         "max_generations": 8,
         "n_replicates": 1,
-        "replicate_tolerance": None,
+        "stop_batch_early": False,
     }
     implicit = SimulationParams.from_mapping(base_config)
     explicit = SimulationParams.from_mapping(
@@ -3543,10 +3551,10 @@ def test_mu_b_run_matches_the_equivalent_explicit_per_locus_mu() -> None:
         "seed": 20260822,
         "loci": loci,
         "convergence_window": 4,
-        "convergence_tolerance": 1.0,
+        "precision": 1.0,
         "max_generations": 8,
         "n_replicates": 1,
-        "replicate_tolerance": None,
+        "stop_batch_early": False,
     }
     via_mu_b = SimulationParams.from_mapping({**base_config, "mu_b": mu_b})
     via_expanded_mu = SimulationParams.from_mapping(
@@ -3581,10 +3589,10 @@ def test_mu_b_combines_with_finite_alleles() -> None:
             "loci": [{"locus_id": 1, "length": 1}],
             "mutation_model": "finite_alleles",
             "convergence_window": 4,
-            "convergence_tolerance": 1.0,
+            "precision": 1.0,
             "max_generations": 10,
             "n_replicates": 1,
-            "replicate_tolerance": None,
+            "stop_batch_early": False,
         }
     )
 
@@ -3601,8 +3609,8 @@ def test_mu_b_combines_with_finite_alleles() -> None:
 # generation-first reframing (`ReplicaLane`/`run_batch`/`SequentialAdvancer`)
 # computes exactly what `LinealBackend` already does, for the same seed —
 # see `run_batch`'s own docstring for why reordering *when* a generation is
-# computed never changes *what* it computes. `replicate_tolerance` is
-# deliberately unset in both of these: with it set, the two backends' own
+# computed never changes *what* it computes. `stop_batch_early` is
+# deliberately off in both of these: with it on, the two backends' own
 # cross-replicate stopping *decisions* can legitimately differ (event-driven
 # vs. once-per-completed-replicate — see `test_run_batch_cross_replica_stop_
 # fires_at_deterministic_ordinal`, below, for that behavior's own dedicated
@@ -3674,7 +3682,7 @@ def test_run_batch_cross_replica_stop_fires_at_deterministic_ordinal() -> None:
     prefix has finished, admitting simultaneous stops in ascending
     `replica_index`, deterministically across repeated runs.
 
-    Both `convergence_tolerance` and `replicate_tolerance` are set
+    `precision` is set
     astronomically large so every criterion is satisfied the instant it
     has *enough* observations, regardless of their actual values — this
     makes every one of the five lanes stop on the identical tick
@@ -3693,10 +3701,10 @@ def test_run_batch_cross_replica_stop_fires_at_deterministic_ordinal() -> None:
         seed=20260901,
         loci=(LocusSpec(1, 200),),
         convergence_window=3,
-        convergence_tolerance=1e12,
         max_generations=50,
         n_replicates=5,
-        replicate_tolerance=1e12,
+        precision=1e12,
+        stop_batch_early=True,
         replicate_minimum=2,
     )
 
@@ -3774,11 +3782,11 @@ def _adaptive_dict_params(**overrides: object) -> SimulationParams:
         {
             **_tiny_config(),
             "convergence_statistic": "D",
-            "convergence_tolerance": 0.05,
             "max_generations": 60,
             "n_replicates": 12,
             "replicate_minimum": 3,
-            "replicate_tolerance": 0.2,
+            "precision": 0.2,
+            "stop_batch_early": True,
         }
     )
     return replace(base, **overrides)  # type: ignore[arg-type]
@@ -3851,7 +3859,7 @@ def test_generational_adaptive_batch_matches_lineal_under_real_timing() -> None:
         params.m,
         params.mu,
         params.d,
-        params=replace(params, replicate_tolerance=None),
+        params=replace(params, stop_batch_early=False),
         clock=_clock,
     )
     lineal = fim(
@@ -3902,11 +3910,11 @@ def test_vector_adaptive_batch_keeps_the_replicate_order_prefix() -> None:
         mutation_model="finite_alleles",
         convergence_statistic="D",
         convergence_window=4,
-        convergence_tolerance=0.05,
         max_generations=60,
         n_replicates=12,
         replicate_minimum=3,
-        replicate_tolerance=0.2,
+        precision=0.2,
+        stop_batch_early=True,
     )
     reference = run_batch(
         replace(params, max_concurrent_replicates=1),
@@ -5156,7 +5164,7 @@ def test_fim_engine_backend_generational_with_jit_matches_default(
 def _finite_alleles_vector_params(**overrides: object) -> SimulationParams:
     """A `finite_alleles`/continuous-migration config `VectorizedAdvancer` accepts.
 
-    `n_replicates=1`/`replicate_tolerance=None` explicitly, not
+    `n_replicates=1`/`stop_batch_early=False` explicitly, not
     `SimulationParams`'s own current defaults (`200`/`0.01`) — every
     caller of this helper except one explicit override
     (`test_generational_vector_backend_batch_is_independently_
@@ -5171,10 +5179,10 @@ def _finite_alleles_vector_params(**overrides: object) -> SimulationParams:
         loci=(LocusSpec(1, 2),),  # capacity 16
         mutation_model="finite_alleles",
         convergence_window=4,
-        convergence_tolerance=1.0,
+        precision=1.0,
         max_generations=10,
         n_replicates=1,
-        replicate_tolerance=None,
+        stop_batch_early=False,
     )
     return replace(base, **overrides)  # type: ignore[arg-type]
 
@@ -5589,7 +5597,7 @@ def test_every_engine_backend_visits_the_same_generations_and_output_shape() -> 
     - the persisted row keys and report keys are the same set
       everywhere.
 
-    `convergence_tolerance=0.0` with a real window is what makes the
+    `precision=0.0` with a real window is what makes the
     third invariant meaningful rather than coincidental: an exactly-zero
     half-window mean difference effectively cannot occur here, so every
     backend is expected to stop at the generation cap, and the
@@ -5608,10 +5616,10 @@ def test_every_engine_backend_visits_the_same_generations_and_output_shape() -> 
         loci=(LocusSpec(1, 2), LocusSpec(2, 2)),
         mutation_model="finite_alleles",
         convergence_window=4,
-        convergence_tolerance=0.0,
+        precision=0.0,
         max_generations=6,
         n_replicates=1,
-        replicate_tolerance=None,
+        stop_batch_early=False,
     )
     expected_generations = tuple(range(params.max_generations + 1))
     expected_groups = {

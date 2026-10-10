@@ -77,6 +77,6 @@ deme_weighting: size
 engine_backend: lineal
 convergence_statistic: D
 convergence_window: auto
-convergence_tolerance: 0.01
+precision: 0.01
 max_generations: auto
 n_replicates: 1

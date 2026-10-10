@@ -90,7 +90,7 @@ class WindowStatistics:
 
         Args:
             tolerance: The statistic's own configured convergence
-                tolerance (`SimulationParams.convergence_tolerance`).
+                tolerance (`SimulationParams.precision`).
 
         Returns:
             `True` when `standard_error` is at most

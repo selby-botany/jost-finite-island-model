@@ -35,10 +35,10 @@ def _write_run(tmp_path: Path, **overrides: object) -> Path:
         "seed": 1,
         "loci": [{"locus_id": 1, "length": 200}],
         "convergence_window": 8,
-        "convergence_tolerance": 1e-6,
+        "precision": 1e-6,
         "max_generations": 12,
         "n_replicates": 1,
-        "replicate_tolerance": None,
+        "stop_batch_early": False,
     }
     config.update(overrides)
     config_path = tmp_path / "run.yaml"
@@ -53,7 +53,7 @@ def _write_run(tmp_path: Path, **overrides: object) -> Path:
 def _write_batch_run(tmp_path: Path, **overrides: object) -> Path:
     """Write a small, staggered-stopping batch and return its output directory.
 
-    `seed=42`/`convergence_tolerance=0.02` matches `test/engine/
+    `seed=42`/`precision=0.02` matches `test/engine/
     test_engine.py`'s own identical configuration, confirmed live to
     produce real, staggered stopping generations (`[3, 5, 6, 12, 15]`)
     rather than every replicate converging together.
@@ -67,10 +67,10 @@ def _write_batch_run(tmp_path: Path, **overrides: object) -> Path:
         "seed": 42,
         "loci": [{"locus_id": 1, "length": 200}],
         "convergence_window": 4,
-        "convergence_tolerance": 0.02,
+        "precision": 0.02,
         "max_generations": 30,
         "n_replicates": 5,
-        "replicate_tolerance": None,
+        "stop_batch_early": False,
     }
     config.update(overrides)
     config_path = tmp_path / "batch.yaml"

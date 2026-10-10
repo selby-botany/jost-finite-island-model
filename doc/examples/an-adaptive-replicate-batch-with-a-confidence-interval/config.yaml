@@ -32,7 +32,6 @@ loci:
     length: 100
 engine_backend: lineal
 convergence_statistic: D
-convergence_tolerance: 0.05
+precision: 0.03   # plus or minus: each replicate and the batch's interval
 n_replicates: 50
 replicate_minimum: 10
-replicate_tolerance: 0.03

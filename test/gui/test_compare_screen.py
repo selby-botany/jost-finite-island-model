@@ -50,10 +50,10 @@ def _write_run(results_root: Path, name: str, **overrides: object) -> Path:
         "seed": 1,
         "loci": [{"locus_id": 1, "length": 200}],
         "convergence_window": 4,
-        "convergence_tolerance": 1.0,
+        "precision": 1.0,
         "max_generations": 10,
         "n_replicates": 1,
-        "replicate_tolerance": None,
+        "stop_batch_early": False,
     }
     config.update(overrides)
     results_root.mkdir(parents=True, exist_ok=True)

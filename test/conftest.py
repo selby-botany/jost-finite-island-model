@@ -482,7 +482,7 @@ def assert_none_open(stores: Sequence[BinaryLogStore]) -> None:
 def tiny_params() -> SimulationParams:
     """Return a small, fast, single-run configuration for integration tests.
 
-    `n_replicates=1`/`replicate_tolerance=None` explicitly, not
+    `n_replicates=1`/`stop_batch_early=False` explicitly, not
     `SimulationParams`'s own current defaults (`200`/`0.01`) — this
     fixture's whole point is one small, fast, ordinary scalar run; a
     caller that actually wants to test replicate-batch behavior should
@@ -497,10 +497,10 @@ def tiny_params() -> SimulationParams:
         seed=20260814,
         loci=(LocusSpec(1, 200),),
         convergence_window=4,
-        convergence_tolerance=1.0,
+        precision=1.0,
         max_generations=10,
         n_replicates=1,
-        replicate_tolerance=None,
+        stop_batch_early=False,
     )
 
 

@@ -53,7 +53,6 @@ FieldKind = Literal[
     "float",
     "int_list",
     "choice",
-    "optional_float",
     "optional_int",
     "auto_int",
     "float_choice",
@@ -89,19 +88,15 @@ class FormField:
             accepts either one bare integer or a comma-separated list
             of them (§3.6's O(d)/O(loci) case: a scalar and a per-
             deme/per-locus list are both faithfully representable by
-            the same widget). "optional_float" treats an empty string
-            as `None`, matching a field whose `SimulationParams`
-            default is `None` (`replicate_tolerance`); "optional_int"
-            is its integer counterpart (`max_concurrent_replicates`) —
-            two kinds, not one reused for both, because a bare
-            `int(text)` and `float(text)` disagree on what they accept
-            (`"3.5"` parses as a `float` but must be rejected for a
-            field `SimulationParams` itself requires to be a whole
-            number). "auto_int" is a whole number or the word `auto`
-            (blank also means `auto`), for `convergence_window`/
+            the same widget). "optional_int" treats an empty string as
+            `None`, matching a field whose `SimulationParams` default is
+            `None` (`max_concurrent_replicates`); a bare `int(text)`
+            rejects `"3.5"`, as a field `SimulationParams` itself requires
+            to be a whole number must. "auto_int" is a whole number or the
+            word `auto` (blank also means `auto`), for `convergence_window`/
             `max_generations`, which `SimulationParams` derives when
             unset. "float_choice" is "choice" restricted to a fixed
-            set of numbers rather than tokens (`replicate_confidence`)
+            set of numbers rather than tokens (`confidence`)
             — `from_mapping` requires an actual `float`, not its string
             spelling. "bool" is a plain, always-present checkbox
             (unlike the sigma-band toggle's own `sigma_band_enabled`,
@@ -209,16 +204,14 @@ INITIAL_CONDITIONS_FIELDS: Final[tuple[FormField, ...]] = (
 CONVERGENCE_FIELDS: Final[tuple[FormField, ...]] = (
     FormField("convergence_combinator", "combinator", "choice", choices=("any", "all")),
     FormField("convergence_window", "convergence window", "auto_int"),
-    FormField("convergence_tolerance", "tolerance", "float"),
+    FormField("precision", "precision", "float"),
     FormField("track_expensive_statistics", "track expensive statistics", "bool"),
 )
 
-# `replicate_tolerance`/`replicate_minimum`/`replicate_confidence` are
+# `stop_batch_early`/`replicate_minimum`/`confidence` are
 # shown only once `n_replicates` is greater than 1 (§4.1) — a
 # visibility rule the screen applies, not a different marshaling
-# shape, so they stay plain `FormField`s. `replicate_tolerance` is
-# `float | None`; an empty field means "unset", matching
-# `SimulationParams`'s own default.
+# shape, so they stay plain `FormField`s.
 #
 # `engine_backend` (GUI engine-backend selector design doc
 # `20260911-claude-sonnet-5-gui-engine-backend-selector-design.md`,
@@ -243,11 +236,11 @@ CONVERGENCE_FIELDS: Final[tuple[FormField, ...]] = (
 # which values are legal.
 BATCH_FIELDS: Final[tuple[FormField, ...]] = (
     FormField("n_replicates", "n_replicates", "int"),
-    FormField("replicate_tolerance", "replicate tolerance", "optional_float"),
+    FormField("stop_batch_early", "stop the batch early", "bool"),
     FormField("replicate_minimum", "replicate minimum", "int"),
     FormField(
-        "replicate_confidence",
-        "replicate confidence",
+        "confidence",
+        "confidence",
         "float_choice",
         choices=("0.9", "0.95", "0.99"),
     ),
@@ -525,14 +518,13 @@ def _parse_field(field: FormField, text: str) -> object:
     """
     text = text.strip()
     # An optional kind is blank for "unset", else parsed as its base kind.
-    if field.kind in ("optional_float", "optional_int") and not text:
+    if field.kind == "optional_int" and not text:
         return None
     parsers: dict[str, Callable[[str, str], object]] = {
         "int": _parse_int_named,
         "optional_int": _parse_int_named,
         "float": _parse_float_named,
         "float_choice": _parse_float_named,
-        "optional_float": _parse_float_named,
         "auto_int": _parse_auto_int_named,
         "int_list": _parse_int_list_named,
         "bool": lambda _name, value: value == "true",
@@ -923,7 +915,7 @@ def initial_conditions_to_payload(values: Mapping[str, str]) -> dict[str, object
     Returns:
         An empty mapping in `"dirichlet"` mode (the three equilibrium
         fields and `p_0` are simply absent from the payload, exactly
-        like an unset `replicate_tolerance`'s own `None`-by-omission
+        like an unset optional field's `None`-by-omission
         convention); the three equilibrium fields, parsed to their
         declared types, in `"equilibrium_split"` mode; `{"p_0": ...}`
         in `"explicit_p0"` mode; or `{"p_0": ...}` expanded from `d`,
@@ -1299,8 +1291,7 @@ def sigma_band_to_payload(values: Mapping[str, str]) -> dict[str, object]:
         fields simply absent from the payload, the identical "set
         together or not at all" shape `SimulationParams` itself already
         enforces for this exact pair, and the same by-omission
-        convention `replicate_tolerance`'s own `"optional_float"` kind
-        already uses for a single optional field. `{"sigma_band_
+        convention an optional field already uses. `{"sigma_band_
         multiplier": ..., "sigma_band_window": ...}`, parsed to their
         declared types, when checked.
 
@@ -1416,18 +1407,14 @@ def params_to_form_values(params: SimulationParams) -> dict[str, str]:
         "initial_concentration": str(params.initial_concentration),
         "convergence_combinator": params.convergence_combinator,
         "convergence_window": _auto_or_number(params, "convergence_window"),
-        "convergence_tolerance": str(params.convergence_tolerance),
+        "precision": str(params.precision),
         "track_expensive_statistics": (
             "true" if params.track_expensive_statistics else "false"
         ),
         "n_replicates": str(params.n_replicates),
-        "replicate_tolerance": (
-            ""
-            if params.replicate_tolerance is None
-            else str(params.replicate_tolerance)
-        ),
+        "stop_batch_early": "true" if params.stop_batch_early else "false",
         "replicate_minimum": str(params.replicate_minimum),
-        "replicate_confidence": str(params.replicate_confidence),
+        "confidence": str(params.confidence),
         # The raw stored string, rendered as-is whichever of the four
         # legal values it is — including the two the selector
         # de-emphasizes. A YAML or manifest that deliberately names
@@ -1459,8 +1446,8 @@ DEFAULT_RUN_SETTING_FIELD_NAMES: Final[tuple[str, ...]] = (
     "n_replicates",
     "max_generations",
     "convergence_window",
-    "convergence_tolerance",
-    "replicate_confidence",
+    "precision",
+    "confidence",
     "jit",
     "auto_vector_min_d",
     "auto_vector_max_capacity",
@@ -1480,7 +1467,7 @@ a special case alongside this tuple instead.
 
 Revised from this tuple's first version, which held `engine_backend`,
 `n_replicates`, `convergence_combinator`, `convergence_window`,
-`convergence_tolerance`, plus one `f"cs_{name}"` per
+`precision`, plus one `f"cs_{name}"` per
 `CONVERGENCE_STATISTIC_NAMES` entry, and left Configure's own identical
 copies of all of them in place as a per-run override. A real, reported
 follow-up correction: `convergence_statistic`/`convergence_combinator`
@@ -1489,12 +1476,12 @@ default — a fresh configuration already gets a sensible single-
 statistic default, so their Settings-side duplicates were removed
 entirely (Configure's own sole copy is "parity", not an override of a
 second one). `engine_backend`/`n_replicates`/`max_generations`/
-`convergence_window`/`convergence_tolerance` are not duplicated either
+`convergence_window`/`precision` are not duplicated either
 in this revision — Configure's own widgets for all five are removed
 outright, not kept as a parallel override UI; `Api.start_run`/
 `validate_form` fill them back in from this tuple's own saved values
 before validating a submission (`config_form.py`'s own module
-docstring / `Api`'s own submission-time merge). `replicate_confidence`/
+docstring / `Api`'s own submission-time merge). `confidence`/
 `max_concurrent_replicates` moved out of Configure's own `#batch-only-
 fields` the same way. `jit`/`auto_vector_min_d`/`auto_vector_max_
 capacity` are new here — "expert-level settings" with no prior GUI
@@ -1519,8 +1506,8 @@ RUN_SETTING_LABELS: Final[Mapping[str, str]] = {
     "n_replicates": "Number of replicates",
     "max_generations": "Maximum generations",
     "convergence_window": "Convergence window",
-    "convergence_tolerance": "Convergence tolerance",
-    "replicate_confidence": "Replicate confidence",
+    "precision": "Precision",
+    "confidence": "Confidence",
     "jit": "JIT compilation",
     "auto_vector_min_d": "Auto-vector minimum demes",
     "auto_vector_max_capacity": "Auto-vector maximum capacity",
@@ -1691,13 +1678,13 @@ _YAML_KEY_ORDER: Final[tuple[str, ...]] = (
     "convergence_statistic",
     "convergence_combinator",
     "convergence_window",
-    "convergence_tolerance",
+    "precision",
     "track_expensive_statistics",
     "max_generations",
     "n_replicates",
-    "replicate_tolerance",
+    "stop_batch_early",
     "replicate_minimum",
-    "replicate_confidence",
+    "confidence",
     "migrant_sampling",
     # Matching `configuration.md`'s own section order: its "Engine
     # backend and JIT" section follows "Analysis and execution", of

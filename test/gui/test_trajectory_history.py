@@ -32,10 +32,10 @@ def _write_run(tmp_path: Path, **overrides: object) -> Path:
         "seed": 20260814,
         "loci": [{"locus_id": 1, "length": 200}],
         "convergence_window": 4,
-        "convergence_tolerance": 1.0,
+        "precision": 1.0,
         "max_generations": 10,
         "n_replicates": 1,
-        "replicate_tolerance": None,
+        "stop_batch_early": False,
     }
     config.update(overrides)
     config_path = tmp_path / "run.yaml"
@@ -90,7 +90,7 @@ def test_max_samples_bounds_how_many_generations_are_recomputed(
 ) -> None:
     """A long run's own sample never exceeds `max_samples`, matching animation.
 
-    A tight `convergence_tolerance` (`test_animation.py`'s own `_write_
+    A tight `precision` (`test_animation.py`'s own `_write_
     run` uses the identical value, for the identical reason) keeps this
     run from settling early, so it persists every generation up to
     `max_generations` — a small `max_samples` here genuinely exercises
@@ -98,7 +98,7 @@ def test_max_samples_bounds_how_many_generations_are_recomputed(
     (this module's own default fixture settings above converge almost
     immediately, exactly the opposite of what this one test needs).
     """
-    output = _write_run(tmp_path, convergence_tolerance=1e-6, max_generations=20)
+    output = _write_run(tmp_path, precision=1e-6, max_generations=20)
     live = json.loads((output / "report.json").read_text(encoding="utf-8"))
     assert live["generation"] == 20, "fixture assumption: this run reaches the cap"
 

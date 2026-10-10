@@ -90,8 +90,9 @@ controls whether one run or a whole batch executes:
   directly in the output directory. Set this explicitly for a single,
   ordinary run with no batching at all.
 - **n<sub>replicates</sub> greater than one (the default: `200`, with
-  [replicate_tolerance](configuration.md#replicate_tolerance)'s own default
-  of `0.01` usually stopping well short of it)**: each replicate gets its
+  [stop_batch_early](configuration.md#stop_batch_early) and a
+  [precision](configuration.md#precision) of `0.01` usually stopping well
+  short of it)**: each replicate gets its
   own `replicate-NNN/` subdirectory, keeping that same four-file contract,
   plus a batch-level `manifest.json` and `summary.json` — see
   [Output schemas](#output-schemas).
@@ -128,10 +129,10 @@ instead (also settable for this run only via `--max-concurrent-replicates
 N`, without editing the config file), the `generational`/
 `generational-vector` path's own concurrency/memory-bounding control.
 
-With replicate_tolerance unset in the config, exactly n<sub>replicates</sub>
-replicates run. With it set, the batch can stop earlier, once every watched
+With stop_batch_early off in the config, exactly n<sub>replicates</sub>
+replicates run. With it on (the default), the batch can stop earlier, once every watched
 statistic's across-replicate confidence interval has tightened enough (see
-[configuration.md](configuration.md#replicate_tolerance)) — the number of
+[configuration.md](configuration.md#stop_batch_early)) — the number of
 `replicate-NNN/` subdirectories written can then be less than n<sub>replicates</sub>.
 
 ## Worked examples
@@ -143,9 +144,9 @@ because the same seed, parameters, and version always give the same
 a small `N` and `d`, and lets [convergence_window and
 max_generations](convergence.md) be derived from the model (the default), so
 each run goes on until its statistic has stopped trending *and* its
-trailing-window mean is known to half of convergence_tolerance. With one
+trailing-window mean is known to half of precision. With one
 locus that second condition can take tens of thousands of generations, so
-several examples set a looser convergence_tolerance (0.02 to 0.05) or pool
+several examples set a looser precision (0.02 to 0.05) or pool
 eight loci, and each one's README says what that costs. Every example
 here finishes in a few seconds to about three minutes of wall-clock
 time on a busy development machine (an idle one is faster). Most use one locus, so a single run's
@@ -277,7 +278,7 @@ loci:
     length: 100
 engine_backend: lineal
 convergence_statistic: D
-convergence_tolerance: 0.02   # looser than the 0.01 default: about a minute
+precision: 0.02   # looser than the 0.01 default: about a minute
 n_replicates: 1   # a single scalar run; the default (200) would batch
 ```
 
@@ -286,7 +287,7 @@ fim run stepping-stone.yaml --output results/stepping-stone --quiet
 ```
 
 Converges at generation 7,918, after under a minute, with a trailing-window
-mean D of 0.133 ± 0.007. `convergence_tolerance: 0.02` keeps the run to a
+mean D of 0.133 ± 0.007. `precision: 0.02` keeps the run to a
 minute; at the default 0.01 one locus needs about 32,000 generations (see
 the [example's README](examples/stepping-stone-spatial-migration/README.md)).
 Swap `topology: ring` for
@@ -338,7 +339,7 @@ p_0:
 engine_backend: lineal
 convergence_statistic: D
 convergence_window: 2
-convergence_tolerance: 0.000001
+precision: 0.000001
 max_generations: 1
 track_expensive_statistics: true
 n_replicates: 1   # a single scalar run; the default (200) would batch
@@ -406,7 +407,7 @@ equilibrium_convergence_tolerance: 0.01
 equilibrium_max_generations: 2000   # the derived burn-in is 1,256 generations
 engine_backend: lineal
 convergence_statistic: D
-convergence_tolerance: 0.03
+precision: 0.03
 n_replicates: 1   # a single scalar run; the default (200) would batch
 ```
 
@@ -421,7 +422,7 @@ short window that is one draw from slow swings, which the planned convergence
 redesign addresses) — real differentiation that grew from the
 ancestral-population founder effect, with no explicit `p_0` anywhere in the
 file. The example pools
-eight loci and sets `convergence_tolerance: 0.03`, because one locus here
+eight loci and sets `precision: 0.03`, because one locus here
 needs about 30,000 generations to settle (see the
 [example's README](examples/equilibrium-split-founding/README.md)). How long the ancestral phase runs is worked out from
 the model: about ln(1 / equilibrium_convergence_tolerance) times the time the
@@ -510,7 +511,7 @@ loci:
     length: 3
 engine_backend: lineal
 convergence_statistic: D
-convergence_tolerance: 0.02   # looser than the 0.01 default: under a minute
+precision: 0.02   # looser than the 0.01 default: under a minute
 n_replicates: 1   # a single scalar run; the default (200) would batch
 ```
 
@@ -519,7 +520,7 @@ fim run finite-alleles.yaml --output results/finite-alleles --quiet
 ```
 
 Converges at generation 8,977, after about a minute, with a trailing-window
-mean D of 0.611 ± 0.006 (`convergence_tolerance: 0.02` halves the run's
+mean D of 0.611 ± 0.006 (`precision: 0.02` halves the run's
 precision target to keep it short; see the
 [example's README](examples/finite-length-alleles-the-k-allele-model/README.md)).
 This is the Kimura-Crow
@@ -556,7 +557,7 @@ loci:
     length: 100
 engine_backend: lineal
 convergence_statistic: G_ST
-convergence_tolerance: 0.02   # looser than the 0.01 default: under a minute
+precision: 0.02   # looser than the 0.01 default: under a minute
 n_replicates: 1   # a single scalar run; the default (200) would batch
 ```
 
@@ -567,7 +568,7 @@ fim run finite-deme-correction.yaml \
 
 Converges (on G<sub>ST</sub>) at generation 10,109, after about two minutes, with
 a trailing-window mean G<sub>ST</sub> of 0.200 ± 0.007
-(`convergence_tolerance: 0.02` keeps the run short; see the
+(`precision: 0.02` keeps the run short; see the
 [example's README](examples/wright-takahata-finite-deme-correction/README.md)).
 The closed-form finite-deme prediction for these parameters
 is about 0.141, below the corresponding infinite-island approximation of
@@ -603,7 +604,7 @@ loci:
     length: 100
 engine_backend: lineal
 convergence_statistic: D
-convergence_tolerance: 0.05   # looser than the 0.01 default: seconds, not hours
+precision: 0.05   # looser than the 0.01 default: seconds, not hours
 n_replicates: 1   # a single scalar run; the default (200) would batch
 ```
 
@@ -613,7 +614,7 @@ fim run kimura-weiss-isolation-by-distance.yaml \
 ```
 
 Converges at generation 2,539, after about a minute, with D = 0.475 and
-G<sub>ST</sub> = 0.093. `convergence_tolerance: 0.05` is deliberately loose:
+G<sub>ST</sub> = 0.093. `precision: 0.05` is deliberately loose:
 at the default 0.01 this one-locus ring needs about 175,000 generations,
 well over an hour (see the
 [example's README](examples/kimura-weiss-isolation-by-distance/README.md)).
@@ -649,7 +650,7 @@ loci:
     length: 500
 engine_backend: lineal
 convergence_statistic: D
-convergence_tolerance: 0.03   # looser than the 0.01 default: under a minute
+precision: 0.03   # looser than the 0.01 default: under a minute
 n_replicates: 1   # a single scalar run; the default (200) would batch
 ```
 
@@ -660,7 +661,7 @@ fim run mu-b.yaml --output results/mu-b --quiet
 Converges at generation 3,136, after a few seconds, with a trailing-window
 mean D of 0.222 ± 0.013 (the window is sized from the slowest locus, the
 50-base one, so it is long enough to leave the approach from the starting
-state; `convergence_tolerance: 0.03` keeps the run short; see the
+state; `precision: 0.03` keeps the run short; see the
 [example's README](examples/per-base-mutation-rate-across-unequal-locus-lengths/README.md)).
 `results/mu-b/manifest.json`'s
 `parameters.mu` records the two derived rates — `0.0009995` for the
@@ -783,7 +784,7 @@ field holds the summarized band shown here.
 
 Rather than guessing how many replicate runs a confidence interval needs,
 set n<sub>replicates</sub> well above the plausible requirement and let
-[replicate_tolerance](configuration.md#replicate_tolerance) decide when
+[precision](configuration.md#precision) decide when
 enough have run:
 
 <!-- worked-example-config: examples/an-adaptive-replicate-batch-with-a-confidence-interval/config.yaml -->
@@ -822,27 +823,26 @@ loci:
     length: 100
 engine_backend: lineal
 convergence_statistic: D
-convergence_tolerance: 0.05
+precision: 0.03   # plus or minus: each replicate and the batch's interval
 n_replicates: 50
 replicate_minimum: 10
-replicate_tolerance: 0.03
 ```
 
 ```console
 fim run adaptive-batch.yaml --output results/adaptive-batch --sequential --quiet
 ```
 
-Stops at 10 replicates, the required minimum — `D`'s 95% confidence interval
-is already `0.287 +/- 0.026`, inside the requested `0.03` half-width, so the
-remaining 40 possible replicates were never needed. (A smaller
-`replicate_tolerance` makes the batch run past the minimum.) Each replicate pools
-eight loci with `convergence_tolerance: 0.05`, so it settles in about a
-thousand generations; one-locus replicates at the default tolerance would
-take hours for the whole batch (see the
+Stops at 20 replicates, after the required minimum of 10 — `D`'s 95%
+confidence interval reaches `0.267 +/- 0.029`, inside the requested `0.03`
+half-width (the model's expected `D` is 0.287), so the remaining 30 possible
+replicates were never needed. (A larger `precision` stops sooner; a smaller one
+runs more replicates.) Each replicate pools eight loci and is itself averaged to
+`precision: 0.03`, so most settle within a few thousand generations; one-locus
+replicates would take hours for the whole batch (see the
 [example's README](examples/an-adaptive-replicate-batch-with-a-confidence-interval/README.md)).
 `results/adaptive-batch/summary.json` reports every statistic's own
 interval; `results/adaptive-batch/replicate-001/` through
-`replicate-010/` each hold the ordinary scalar-run files for
+`replicate-020/` each hold the ordinary scalar-run files for
 that one replicate. Drop `--sequential` to run the same batch across a
 worker process per CPU instead — the computed numbers are identical
 either way (see [Batches](#batches-nreplicates-greater-than-one)); only
@@ -862,7 +862,7 @@ instant) large enough for that backend's own advantage to actually show.
 They are also the exception to the derived convergence defaults: each pins a
 fixed amount of work, 16 replicates of exactly 100 generations
 (`max_generations: 100` with a `convergence_window: 101` that can never
-fill, and `replicate_tolerance: null` so no replicate is skipped), so a
+fill, and `stop_batch_early: false` so no replicate is skipped), so a
 timing comparison always does the same work. The population is nowhere
 near equilibrium when it stops, so read these two as timing workloads, not
 as results.
@@ -896,10 +896,10 @@ convergence_statistic: D
 # A fixed 100-generation horizon: a 101-generation window can never fill
 # within 100 generations, so every replicate runs exactly to the cap.
 convergence_window: 101
-convergence_tolerance: 0.02
+precision: 0.02
 max_generations: 100
 n_replicates: 16
-replicate_tolerance: null   # always run all 16 replicates
+stop_batch_early: false   # always run all 16 replicates
 ```
 
 ```console
@@ -948,10 +948,10 @@ convergence_statistic: D
 # A fixed 100-generation horizon: a 101-generation window can never fill
 # within 100 generations, so every replicate runs exactly to the cap.
 convergence_window: 101
-convergence_tolerance: 0.02
+precision: 0.02
 max_generations: 100
 n_replicates: 16
-replicate_tolerance: null   # always run all 16 replicates
+stop_batch_early: false   # always run all 16 replicates
 ```
 
 ```console
@@ -1762,7 +1762,7 @@ SHA-256 digest and byte count of `summary.json` and of each replicate's own
 `manifest.json` (keyed `replicate-NNN`), recorded once every one of them is
 flushed, so an edited, truncated, or replaced batch-level artifact is
 detectable the same way a scalar run's is. Under parallel execution — the
-CLI default — an adaptive replicate_tolerance stop can leave a worker that
+CLI default — an adaptive early stop can leave a worker that
 had already started its own `replicate-NNN/` directory before the stop was
 decided; that directory is pruned before publishing, so the `replicate-*`
 subdirectories actually present always equal replicate_run_ids exactly.

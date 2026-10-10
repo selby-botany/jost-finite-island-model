@@ -520,7 +520,7 @@ def test_interval_payload_omits_the_summary_for_a_bootstrap_interval() -> None:
             "mu": 0.01,
             "seed": 1,
             "n_replicates": 4,
-            "replicate_tolerance": None,
+            "stop_batch_early": False,
             "replicate_minimum": 2,
             "max_generations": 60,
             "convergence_window": 5,
@@ -1856,10 +1856,10 @@ def test_sampled_closed_form_starts_where_the_real_run_starts(tmp_path: Path) ->
         "seed": 20260819,
         "loci": [{"locus_id": 1, "length": 50}, {"locus_id": 2, "length": 50}],
         "convergence_window": 4,
-        "convergence_tolerance": 1.0,
+        "precision": 1.0,
         "max_generations": 10,
         "n_replicates": 1,
-        "replicate_tolerance": None,
+        "stop_batch_early": False,
     }
     config_path = tmp_path / "hub.yaml"
     config_path.write_text(yaml.safe_dump(config, sort_keys=False), encoding="utf-8")
@@ -2229,7 +2229,7 @@ def test_sigma_band_payload_formats_every_value_for_a_real_band(
     """A real sigma band renders `multiplier`/`window` verbatim, `band` formatted."""
     output = _write_run(
         tmp_path,
-        convergence_tolerance=1.0,
+        precision=1.0,
         max_generations=30,
         sigma_band_multiplier=2.0,
         sigma_band_window=5,
@@ -3285,10 +3285,10 @@ def test_drain_run_messages_includes_a_live_deme_pair_panel_when_selected() -> N
         seed=20260814,
         loci=(LocusSpec(1, 200),),
         convergence_window=4,
-        convergence_tolerance=1.0,
+        precision=1.0,
         max_generations=10,
         n_replicates=1,
-        replicate_tolerance=None,
+        stop_batch_early=False,
     )
     report = report_for_state(
         state, params, run_id="run-1", converged=False, reason="in progress"
@@ -3487,10 +3487,10 @@ def _write_run(
         "seed": 1,
         "loci": [{"locus_id": 1, "length": 200}],
         "convergence_window": 8,
-        "convergence_tolerance": 1e-6,
+        "precision": 1e-6,
         "max_generations": 12,
         "n_replicates": 1,
-        "replicate_tolerance": None,
+        "stop_batch_early": False,
     }
     config.update(overrides)
     config_path = tmp_path / "run.yaml"
@@ -4216,7 +4216,7 @@ def test_open_run_carries_the_real_sigma_band(tmp_path: Path) -> None:
     """
     output = _write_run(
         tmp_path,
-        convergence_tolerance=1.0,
+        precision=1.0,
         max_generations=30,
         sigma_band_multiplier=3.0,
         sigma_band_window=5,
@@ -4324,7 +4324,7 @@ def test_open_run_carries_a_real_convergence_note_and_trajectory_curve(
     (`RunManifest`) and `convergence.jsonl` (`fim.reanalyze.read_
     persisted_convergence_history`) close both gaps at once; this is
     the one test that drives a genuinely auto-derived run (no explicit
-    `convergence_window`/`max_generations`/`convergence_tolerance` at
+    `convergence_window`/`max_generations`/`precision` at
     all, unlike every other `_write_run`-based test in this file) all
     the way through `cli.main(["run", ...])` and back through `Api.
     open_run` to prove it.
@@ -4343,7 +4343,7 @@ def test_open_run_carries_a_real_convergence_note_and_trajectory_curve(
         "seed": 20260814,
         "loci": [{"locus_id": 1, "length": 50}],
         "n_replicates": 1,
-        "replicate_tolerance": None,
+        "stop_batch_early": False,
     }
     config_path = tmp_path / "run.yaml"
     config_path.write_text(yaml.safe_dump(config, sort_keys=False), encoding="utf-8")
@@ -4394,7 +4394,7 @@ def test_open_run_carries_the_real_closed_form_trajectory(tmp_path: Path) -> Non
 
 def test_open_run_carries_the_convergence_window_and_tolerance(tmp_path: Path) -> None:
     """The trailing mean averages over the run's own window, judged by its tolerance."""
-    output = _write_run(tmp_path, convergence_window=10, convergence_tolerance=0.02)
+    output = _write_run(tmp_path, convergence_window=10, precision=0.02)
 
     result = Api().open_run({"trajectoryPath": str(output / "trajectory.tlog")})
 

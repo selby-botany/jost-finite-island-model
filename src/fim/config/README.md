@@ -65,7 +65,7 @@ package and fails on one that is not on its short allow list.
 | `DEFAULT_AUTO_VECTOR_MIN_D` | `defaults.py` | policy; already an Expert Setting | `"auto"`'s own default deme-count cutover, below which it never picks `"generational-vector"` even when ... |
 | `DEFAULT_AUTO_VECTOR_MAX_CAPACITY` | `defaults.py` | policy; already an Expert Setting | `"auto"`'s own default per-locus capacity ceiling for `"generational- vector"` — above it, `"auto"` picks ... |
 | `DEFAULT_N_REPLICATES` | `defaults.py` | policy; a regular setting | How many independently seeded replicates a run tries by default. |
-| `DEFAULT_REPLICATE_TOLERANCE` | `defaults.py` | policy; a regular setting | Default early-stopping half-width for a replicate batch. |
+| `DEFAULT_PRECISION` | `defaults.py` | policy; a regular setting | Default `precision`: plus or minus this much, in each statistic's units. |
 | `DEFAULT_PAIRWISE_MAX_DEMES` | `defaults.py` | policy; a regular setting | Largest deme count whose full all-pairs matrices are saved by default. |
 | `GUI_ANIMATION_MAX_FRAMES` | `display.py` | policy (display) | `GUI_ANIMATION_MAX_FRAMES`. |
 

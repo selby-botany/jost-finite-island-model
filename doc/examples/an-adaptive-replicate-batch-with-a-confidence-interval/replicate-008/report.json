@@ -28,7 +28,7 @@
   "converged_on": "D",
   "generation": 874,
   "reason": "statistic converged",
-  "run_id": "run-23f55cf2c98e7afd-r008",
+  "run_id": "run-57c1585a9840deac-r008",
   "window_statistics": {
     "D": {
       "effective_sample_size": 11.897613773399907,
@@ -49,7 +49,7 @@
     "H_S": {
       "effective_sample_size": 5.534248768088515,
       "mean": 0.4252163109956562,
-      "noise_adequate": true,
+      "noise_adequate": false,
       "standard_deviation": 0.04582851831747714,
       "standard_error": 0.01948078609815876,
       "window": 875
@@ -65,7 +65,7 @@
     "H_T": {
       "effective_sample_size": 3.8242009498700757,
       "mean": 0.5562738489684669,
-      "noise_adequate": true,
+      "noise_adequate": false,
       "standard_deviation": 0.04841036513337106,
       "standard_error": 0.024755289286119316,
       "window": 875

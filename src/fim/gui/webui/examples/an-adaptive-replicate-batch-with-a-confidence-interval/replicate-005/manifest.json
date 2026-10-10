@@ -10,7 +10,7 @@
     },
     "report": {
       "bytes": 2278,
-      "sha256": "9b2b95847371094cdcacc377ec3350be5ff0a66aec62d6393fc7a682380a36c8"
+      "sha256": "5c6f16dd6d4ffd9338b6214ef0f7e4310ab4f1947e7fc644df53ae0fa290da50"
     },
     "scatter": {
       "bytes": 341394,
@@ -18,7 +18,7 @@
     },
     "trajectory": {
       "bytes": 603577,
-      "sha256": "8d0730c4bd200734573f8ee9e88e761eec9159963d3388f938a7c0c5f20274a0"
+      "sha256": "6e60d346821459cd71f5ed73c69c5206e33c454ba16a5c13e9a20707f4362d9d"
     }
   },
   "auto_derived": [],
@@ -29,7 +29,7 @@
     "reason": "statistic converged",
     "statistic": "D"
   },
-  "ended_at": "2026-10-10T00:53:48.227177Z",
+  "ended_at": "2026-10-10T01:37:28.068744Z",
   "engine_backend": "lineal",
   "equilibrium_final_heterozygosity": null,
   "equilibrium_generation_count": null,
@@ -40,9 +40,9 @@
     "_read_only": true,
     "auto_vector_max_capacity": 4096,
     "auto_vector_min_d": 2,
+    "confidence": 0.95,
     "convergence_combinator": "all",
     "convergence_statistic": "D",
-    "convergence_tolerance": 0.05,
     "convergence_window": 875,
     "d": 5,
     "deme_weighting": "equal",
@@ -92,18 +92,18 @@
     "mutation_model": "infinite_alleles",
     "n_replicates": 1,
     "ploidy": "haploid",
-    "replicate_confidence": 0.95,
+    "precision": 0.03,
     "replicate_minimum": 10,
-    "replicate_tolerance": 0.03,
     "seed": 20260823,
+    "stop_batch_early": true,
     "track_expensive_statistics": false
   },
   "relaxation_time": 291.6666666666667,
-  "run_id": "run-23f55cf2c98e7afd-r005",
+  "run_id": "run-57c1585a9840deac-r005",
   "schema_version": 3,
   "sigma_band": null,
   "sigma_band_multiplier": null,
   "sigma_band_window": null,
   "software_version": "1.2.0",
-  "started_at": "2026-10-10T00:53:43.122460Z"
+  "started_at": "2026-10-10T01:37:20.994923Z"
 }

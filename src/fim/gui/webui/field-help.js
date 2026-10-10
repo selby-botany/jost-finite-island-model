@@ -113,8 +113,11 @@ const FIELD_HELP = {
         "only called finished once it has stayed steady for that long. A " +
         "run that finishes in a hundred generations is a warning sign, " +
         "not good news.",
-    convergence_tolerance: "The run is considered converged once the " +
-        "trailing window's two half-means differ by at most this much.",
+    precision: "How precisely to estimate each watched statistic: plus or " +
+        "minus this amount, in the statistic's own units, at the " +
+        "confidence level. A single run averages over time until it gets " +
+        "there; a batch adds replicates until it gets there. Smaller is " +
+        "more precise and takes longer.",
     max_generations: "Hard cap on generations. Leave it as auto and the " +
         "app sets it to a comfortable multiple of the time this " +
         "population needs to settle. Reaching it without converging is " +
@@ -145,14 +148,15 @@ const FIELD_HELP = {
         "results for the same seed.",
     n_replicates: "Number of independently seeded replicate runs. 1 means " +
         "a single ordinary run with no batching.",
-    replicate_tolerance: "Stop the batch early once every watched " +
-        "statistic's cross-replicate confidence interval is at most this " +
-        "wide. Blank means the 0.01 default; explicitly cleared disables " +
-        "early stopping.",
-    replicate_minimum: "Fewest replicates run before replicate tolerance " +
-        "is even checked, guarding against an early lucky-tight fluke.",
-    replicate_confidence: "Confidence level for the cross-replicate " +
-        "interval reported once a batch finishes.",
+    stop_batch_early: "Stop adding replicates once the precision is " +
+        "reached: every watched statistic's cross-replicate confidence " +
+        "interval is plus or minus the precision or narrower. Unchecked: " +
+        "always run the full number of replicates.",
+    replicate_minimum: "Fewest replicates run before the batch may stop " +
+        "early, guarding against an early lucky-tight fluke.",
+    confidence: "How sure the plus-or-minus is, and the confidence level " +
+        "of the cross-replicate interval reported once a batch finishes. " +
+        "95% is the usual choice.",
     max_workers: "How many replicates run in parallel. Not a model " +
         "parameter — defaults to this machine's own CPU count.",
     max_concurrent_replicates: "Caps how many replicate lanes run at once " +

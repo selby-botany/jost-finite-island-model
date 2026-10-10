@@ -15,7 +15,7 @@ distance classes for the isolation-by-distance visualization.
 
 ## Why the tolerance is 0.02
 
-The configuration sets `convergence_tolerance: 0.02`, twice the default.
+The configuration sets `precision: 0.02`, twice the default.
 A run stops only once its trailing-window mean is known to half the
 tolerance, and a single locus is noisy, so at the default 0.01 this run
 needs about 32,000 generations and several minutes. At 0.02 the mean is

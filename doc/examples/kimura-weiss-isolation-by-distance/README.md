@@ -14,7 +14,7 @@ and one seeded run, not ensemble estimates.
 
 ## Why the tolerance is 0.05
 
-The configuration sets `convergence_tolerance: 0.05`, five times the
+The configuration sets `precision: 0.05`, five times the
 default. Twenty demes on a ring mix slowly, so a single locus's `D`
 wanders for a long time, and at the default 0.01 the run needs about
 175,000 generations: well over an hour, with a trajectory file of

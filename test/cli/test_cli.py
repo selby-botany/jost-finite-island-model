@@ -32,19 +32,13 @@ def _write_config(path: Path, **updates: object) -> None:
         "deme_weighting": "size",
         "convergence_statistic": "D",
         "convergence_window": 4,
-        "convergence_tolerance": 1.0,
+        "precision": 1.0,
         "max_generations": 10,
         "n_replicates": 1,
-        # `None`, not omitted: an omitted `replicate_tolerance` now means
-        # "use the default" (`DEFAULT_REPLICATE_TOLERANCE`, a real
-        # number), not "disabled" — a caller overriding `n_replicates`
-        # to a small explicit count below `replicate_minimum`'s own
-        # default (`10`) without also disabling the adaptive stop would
-        # otherwise hit `SimulationParams`'s own "replicate_minimum
-        # cannot exceed n_replicates" rejection. This fixture's own
-        # small, explicit `n_replicates` overrides are exact fixed-count
-        # batches, not adaptive ones.
-        "replicate_tolerance": None,
+        # Off, not omitted: an omitted `stop_batch_early` means "on"
+        # (the default). This fixture's own small, explicit `n_replicates`
+        # overrides are exact fixed-count batches, not adaptive ones.
+        "stop_batch_early": False,
     }
     config.update(updates)
     path.write_text(yaml.safe_dump(config, sort_keys=False), encoding="utf-8")
@@ -368,9 +362,7 @@ def test_a_capped_run_reports_converged_on_none_and_still_prints_its_window(
     """
     config = tmp_path / "run.yaml"
     output = tmp_path / "output"
-    _write_config(
-        config, convergence_window=10, convergence_tolerance=0.0, max_generations=12
-    )
+    _write_config(config, convergence_window=10, precision=0.0, max_generations=12)
 
     status = cli.main(["run", str(config), "--output", str(output)])
 
@@ -499,10 +491,10 @@ def test_run_accepts_a_per_base_mutation_rate(tmp_path: Path) -> None:
             {"locus_id": 2, "length": 50},
         ],
         "convergence_window": 4,
-        "convergence_tolerance": 1.0,
+        "precision": 1.0,
         "max_generations": 10,
         "n_replicates": 1,
-        "replicate_tolerance": None,
+        "stop_batch_early": False,
     }
     config.write_text(yaml.safe_dump(config_body, sort_keys=False), encoding="utf-8")
 
@@ -1523,13 +1515,14 @@ def test_run_rejects_workers_combined_with_sequential(
 def test_run_batch_adaptive_tolerance_can_stop_before_n_replicates(
     tmp_path: Path,
 ) -> None:
-    """A generous `replicate_tolerance` writes fewer than `n_replicates` dirs."""
+    """A generous `precision` writes fewer than `n_replicates` dirs."""
     config = tmp_path / "run.yaml"
     _write_config(
         config,
         n_replicates=10,
         replicate_minimum=2,
-        replicate_tolerance=1000.0,
+        precision=1000.0,
+        stop_batch_early=True,
     )
     output = tmp_path / "output"
 
@@ -1548,7 +1541,7 @@ def test_run_batch_parallel_adaptive_stop_leaves_no_orphan_replicate_directories
     """A parallel batch's published `replicate-*` set exactly matches the manifest.
 
     Regression test for S1: `fim.engine._run_batch_parallel` applies an
-    adaptive `replicate_tolerance` stop only after a whole concurrent
+    adaptive early stop only after a whole concurrent
     worker batch completes, in ascending replicate order — a worker
     beyond the replicate that triggered the stop still runs to
     completion and fully writes its own `replicate-*` directory before
@@ -1563,7 +1556,8 @@ def test_run_batch_parallel_adaptive_stop_leaves_no_orphan_replicate_directories
         config,
         n_replicates=10,
         replicate_minimum=2,
-        replicate_tolerance=1000.0,
+        precision=1000.0,
+        stop_batch_early=True,
     )
     output = tmp_path / "output"
 
@@ -2036,7 +2030,7 @@ def test_a_derived_run_that_hits_its_cap_names_the_relaxation_time(
         config,
         convergence_window="auto",
         max_generations=200,
-        convergence_tolerance=0.0,
+        precision=0.0,
     )
 
     assert cli.main(["run", str(config), "--output", str(tmp_path / "out")]) == 0

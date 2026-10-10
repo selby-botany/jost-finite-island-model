@@ -4,40 +4,33 @@
 
 The batch allows up to 50 replicates, requires at least 10, and stops
 when the 95% confidence-interval half-width for the watched statistic
-is within `replicate_tolerance`. The sequential command makes the run
+is within `precision`. The sequential command makes the run
 order explicit; it does not change the computed results.
 
-With this seed, the batch stops at 10 replicates, the required minimum,
-because `D`'s interval already reaches 0.287 ± 0.026, inside the
-requested 0.03. The other 40 possible replicates are not run. The model's
-expected `D` for these parameters is 0.287, inside the interval. This is a
-seeded demonstration of adaptive stopping, not a general prediction of how
-many replicates a different configuration will need: here the interval is
-tight enough at the minimum, so the stop rule never has to wait. A smaller
-`replicate_tolerance` makes the batch run past 10 replicates.
+With this seed, the batch stops at 20 replicates because `D`'s interval
+reaches 0.267 ± 0.029, inside the requested 0.03. The other 30 possible
+replicates are not run. The model's expected `D` for these parameters is
+0.287, inside the interval. This is a seeded demonstration of adaptive
+stopping, not a general prediction of how many replicates a different
+configuration will need: here the interval is still too wide at the
+10-replicate minimum, so the stop rule waits until the twentieth. A
+larger `precision` stops sooner; a smaller one runs more replicates.
 
-The batch takes about a minute and a half with two worker processes on a
-busy development machine, and a few minutes with `--sequential`.
+The batch takes about two to three minutes with a few worker processes
+on a busy development machine, and longer with `--sequential`.
 
-## Why eight loci and a loose per-replicate tolerance
+## Why eight loci and `precision: 0.03`
 
-Each replicate pools eight loci and uses `convergence_tolerance: 0.05`.
-An earlier version used one locus at the default 0.01 per replicate.
-Since the noise-adequacy check (2026-09), a run stops only once its
-trailing-window mean is known to half the tolerance, and a single locus
-is noisy: each replicate then needed tens of thousands of generations,
-and the batch took hours. Even at 0.05, one-locus replicates needed
-about 15,000 generations each, and the replicates disagreed so much
-(standard deviation about 0.15) that the interval needed most of the 50.
-
-Eight loci make each replicate both quicker to settle (most stop near
-the first generation their window can fill, about 875) and much less
-scattered (standard deviation 0.04), so a tighter
-`replicate_tolerance`, 0.03 instead of 0.08, is still reached at the
-10-replicate minimum. The trade-off is per-replicate precision: each
-replicate's own `D` is known only to about ±0.025. That is acceptable
-here because this example is about the across-replicate interval, which
-averages that noise away.
+One `precision` answers "how precise?" twice: each replicate averages
+over time until its own `D` is known to about that, and the batch adds
+replicates until the interval across replicates is that narrow. Each
+replicate pools eight loci. An earlier version used one locus per
+replicate at the default 0.01, and a single locus is noisy: each
+replicate then needed tens of thousands of generations and the batch took
+hours. Eight loci make each replicate both quicker to settle (most stop
+within a few thousand generations; the median is about 1,800, the slowest
+about 14,800) and much less scattered (standard deviation 0.06 across
+replicates), so 0.03 is reached with 20 replicates.
 
 ## Run
 
@@ -47,4 +40,4 @@ fim run doc/examples/an-adaptive-replicate-batch-with-a-confidence-interval/conf
 ```
 
 See the [usage-guide explanation](../../usage.md#an-adaptive-replicate-batch-with-a-confidence-interval)
-and the [configuration reference](../../configuration.md#replicate_tolerance).
+and the [configuration reference](../../configuration.md#stop_batch_early).

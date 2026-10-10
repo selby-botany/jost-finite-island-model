@@ -75,7 +75,7 @@ so they are named distinctly throughout:
   trust a single coin flip to tell them whether a coin is fair. By
   default, a requested number of replicates (`SimulationParams.
   n_replicates`) simply all run. Optionally
-  (`SimulationParams.replicate_tolerance`), the batch instead stops
+  (`SimulationParams.stop_batch_early`), the batch instead stops
   *early*, as soon as enough replicates have run to pin down each
   watched statistic's own across-replicate confidence interval (see
   `fim.statistics.interval`) to within a chosen tolerance — running
@@ -1157,7 +1157,7 @@ def _build_replica_lane(
     monitor = ConvergenceMonitor(
         TrailingWindowCriterion(
             lane_params.convergence_window,
-            lane_params.convergence_tolerance,
+            lane_params.precision,
         ),
         max_generations=lane_params.max_generations,
         statistics=lane_params.convergence_statistics,
@@ -1464,8 +1464,8 @@ def run_batch(
     (via `advancer.advance`), rather than one replica's entire trajectory
     running to completion before the next starts.
 
-    An adaptive `replicate_tolerance` stop (`SimulationParams.
-    replicate_tolerance`; see `_replicate_monitor`) is judged on an
+    An adaptive early stop (`SimulationParams.
+    stop_batch_early`; see `_replicate_monitor`) is judged on an
     *accepted prefix*, in replicate order, exactly as `LinealBackend`'s
     own sequential loop judges it: replicate *i* is fed to the cross-
     replica monitor only once it and every lower-numbered replicate have
@@ -2035,7 +2035,7 @@ def fim(
     `SimulationParams.n_replicates` is more than one, it does that whole
     thing repeatedly, once per independently seeded replicate, either
     running every requested replicate or (with `SimulationParams.
-    replicate_tolerance` set) stopping early once enough replicates have
+    stop_batch_early` set) stopping early once enough replicates have
     run to pin down the answer confidently — see this module's own
     docstring, above, for what "convergence" and "replicate" mean here
     and why both kinds of stopping exist. Everything below this point is
@@ -2108,7 +2108,7 @@ def fim(
             well-known limitation called the Global Interpreter Lock, or
             GIL) — separate *processes*, each with its own interpreter,
             are the only way to get real, simultaneous computation for
-            work shaped like this. An adaptive `replicate_tolerance`
+            work shaped like this. An adaptive `stop_batch_early`
             stop (see this module's own docstring, above) is still
             checked strictly in ascending replicate order after each
             whole batch completes, so a batch can overshoot the exact
@@ -2152,7 +2152,7 @@ def fim(
             computed: for the same seed, its own trajectory is
             bit-identical to ``"lineal"``'s, regardless of thread
             interleaving. That includes an adaptive batch
-            (`replicate_tolerance` set): every backend judges the
+            (`stop_batch_early` set): every backend judges the
             adaptive stop on replicates in replicate order, admitting
             replicate *i* only once replicates 1 to *i* have all
             finished (`run_batch`'s own docstring), so ``"generational"``
@@ -2223,11 +2223,11 @@ def fim(
 
     Returns:
         One result, or one independently seeded result per replicate.
-        With `SimulationParams.replicate_tolerance` unset (the default),
-        exactly `n_replicates` replicates run, exactly as in every prior
-        release. With it set, replicates stop accumulating as soon as
-        every watched statistic's across-replicate confidence interval
-        tightens to at most `replicate_tolerance` (see
+        With `SimulationParams.stop_batch_early` off, exactly
+        `n_replicates` replicates run. With it on (the default),
+        replicates stop accumulating as soon as every watched
+        statistic's across-replicate confidence interval tightens to at
+        most `precision` (see
         `replicate_summary`), or `n_replicates` is reached, whichever
         comes first — so the returned tuple can be shorter than
         `n_replicates`.
@@ -2380,7 +2380,7 @@ def _window_statistics_payload(
     Args:
         monitor: The just-stopped monitor driving this run.
         params: The run's own configuration (`convergence_window`/
-            `convergence_tolerance`).
+            `precision`).
 
     Returns:
         One entry per statistic with at least `params.convergence_window`
@@ -2396,7 +2396,7 @@ def _window_statistics_payload(
     window = params.convergence_window
     if window < MINIMUM_NOISE_CHECK_WINDOW:
         return {}
-    tolerance = params.convergence_tolerance
+    tolerance = params.precision
     payload: dict[str, dict[str, float | int | bool]] = {}
     for name, history in monitor.histories.items():
         gated = monitor.window_statistics(name)
@@ -2798,7 +2798,7 @@ def pooled_convergence_histories(
     `confidence_interval` math `reports_summary` already established.
 
     Replicates stop at different generations by construction (an
-    adaptive `replicate_tolerance` stop, or simply different random
+    adaptive early stop, or simply different random
     walks reaching their own criterion at different times). A first
     version of this function counted, at each generation, only the
     replicates whose own history actually reached that far — reported
@@ -3598,7 +3598,7 @@ def _simulate_one(
     monitor = ConvergenceMonitor(
         TrailingWindowCriterion(
             params.convergence_window,
-            params.convergence_tolerance,
+            params.precision,
         ),
         max_generations=params.max_generations,
         statistics=params.convergence_statistics,
@@ -4166,20 +4166,17 @@ def _replicate_monitor(params: SimulationParams) -> ConvergenceMonitor | None:
     `TrailingWindowCriterion` `_run_one` uses for the first kind — the
     same monitor class, watching a different kind of stability).
 
-    Returns ``None`` whenever `SimulationParams.replicate_tolerance` is
-    left unset — the opt-in sentinel meaning "always run exactly
-    `n_replicates` replicates, never stop early," which is also what
-    every prior release of this project did unconditionally, before the
-    adaptive stop existed at all; `None` here is what keeps that
-    original, simpler behavior exactly unchanged for anyone who has not
-    opted into the newer feature.
+    Returns ``None`` whenever `SimulationParams.stop_batch_early` is off
+    (`SimulationParams.batch_precision` is `None`): always run exactly
+    `n_replicates` replicates, never stop early.
     """
-    if params.replicate_tolerance is None:
+    precision = params.batch_precision
+    if precision is None:
         return None
     criterion = ConfidenceIntervalCriterion(
         minimum_count=params.replicate_minimum,
-        tolerance=params.replicate_tolerance,
-        confidence=params.replicate_confidence,
+        tolerance=precision,
+        confidence=params.confidence,
     )
     return ConvergenceMonitor(
         criterion,

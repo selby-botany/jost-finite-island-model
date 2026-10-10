@@ -1264,14 +1264,14 @@
        The "Advanced: execution & performance" disclosure this comment
        once anticipated building here (`engine_backend`, `n_replicates`,
        `max_generations`, the convergence-loop timing pair,
-       `replicate_confidence`, `jit`, `auto_vector_min_d`,
+       `confidence`, `jit`, `auto_vector_min_d`,
        `auto_vector_max_capacity`, `max_workers`,
        `max_concurrent_replicates`) never was, on a real, reported
        `2026-09-16` revision: all ten describe "how the computation
        runs," not what experiment this form asks, and moved into the
        Settings dialog (`#modal-settings`) as global defaults instead --
        Settings' own comment has the full field-by-field account.
-       `replicate_tolerance`/`replicate_minimum` and the sigma-band pair
+       `stop_batch_early`/`replicate_minimum` and the sigma-band pair
        stayed here -- real per-run, scientific/batch-tuning choices, not
        administrative defaults. `track_expensive_statistics` has no
        control any more: Settings' "Statistics shown" decides it
@@ -1618,7 +1618,7 @@
         </fieldset>
 
         <!-- `n_replicates`/`engine_backend` (execution engine)/
-             `replicate_confidence`/`max_workers`/`max_concurrent_
+             `confidence`/`max_workers`/`max_concurrent_
              replicates` all moved into the Settings dialog entirely
              (`2026-09-16` revision) -- "how the computation runs," not
              what experiment it asks (this form's own remaining scope).
@@ -1635,8 +1635,8 @@
              apply. -->
         <div id="batch-only-fields">
           <div class="field">
-            <label for="field-replicate_tolerance">replicate tolerance (blank = unset)</label>
-            <input type="text" id="field-replicate_tolerance" name="replicate_tolerance" form="input-form">
+            <input type="checkbox" id="field-stop_batch_early" name="stop_batch_early" form="input-form" checked>
+            <label for="field-stop_batch_early" data-field-help="stop_batch_early">stop the batch early</label>
           </div>
           <div class="field">
             <label for="field-replicate_minimum">replicate minimum</label>
@@ -2299,8 +2299,8 @@
         <input type="text" id="settings-max_generations">
       </div>
       <div class="field">
-        <label for="settings-replicate_confidence" data-field-help="replicate_confidence">replicate confidence</label>
-        <select id="settings-replicate_confidence">
+        <label for="settings-confidence" data-field-help="confidence">confidence</label>
+        <select id="settings-confidence">
           <option value="0.9">0.9</option>
           <option value="0.95">0.95</option>
           <option value="0.99">0.99</option>
@@ -2328,8 +2328,8 @@
         <input type="text" id="settings-convergence_window">
       </div>
       <div class="field">
-        <label for="settings-convergence_tolerance" data-field-help="convergence_tolerance">tolerance</label>
-        <input type="text" id="settings-convergence_tolerance">
+        <label for="settings-precision" data-field-help="precision">precision</label>
+        <input type="text" id="settings-precision">
       </div>
     </fieldset>
 

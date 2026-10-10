@@ -80,12 +80,14 @@ function collectFormValues() {
     // unconditionally, so it must always be present as an explicit
     // "true"/"false" string, never missing.
     values.sigma_band_enabled = data.has("sigma_band_enabled") ? "true" : "false";
+    // The same for `stop_batch_early`: a plain checkbox field, always sent.
+    values.stop_batch_early = data.has("stop_batch_early") ? "true" : "false";
     // `track_expensive_statistics` has no control here: it follows
     // Settings' "Statistics shown" (any expensive statistic shown means
     // true), set server-side by `Api._merge_default_run_settings` like
     // the Settings-only fields below.
     // `engine_backend`/`n_replicates`/`max_generations`/the convergence-
-    // loop timing pair/`replicate_confidence`/`max_concurrent_
+    // loop timing pair/`confidence`/`max_concurrent_
     // replicates`/`max_workers` are Settings-only fields now (`2026-09-
     // 16` revision) -- this `<form>` never had, and does not need, a
     // live control for any of them. `Api._merge_default_run_settings`
@@ -139,7 +141,7 @@ function syncConditionalVisibility() {
     document.getElementById("sigma-band-fields").hidden = !form.elements.namedItem(
         "sigma_band_enabled"
     ).checked;
-    // `batch-only-fields` (`replicate_tolerance`/`replicate_minimum`)
+    // `batch-only-fields` (`stop_batch_early`/`replicate_minimum`)
     // used to hide behind a live `n_replicates > 1` check -- `n_
     // replicates` moved into Settings entirely (`2026-09-16` revision),
     // so this form has no live value left to check; that div is simply

@@ -123,7 +123,7 @@ _SET_TINY_FIELDS_SEED_20260815 = _SET_TINY_FIELDS + "setField('seed', '20260815'
 # finishing on its own" within a test's own timeframe -- false on a
 # fast-enough or lightly-loaded machine, confirmed live by watching the
 # starter-default run reach `"done"` in under two seconds. An
-# impossibly tight `convergence_tolerance` was tried first and was
+# impossibly tight `precision` was tried first and was
 # *still* probabilistic, not a real fix: `fim.convergence.criteria.
 # trailing_window_stable` compares two *half-window means*, not an
 # absolute statistic value, so an extremely small but nonzero tolerance
@@ -751,7 +751,7 @@ def test_completed_row_tooltip_shows_the_trailing_window_mean(
                 "n_replicates": "1",
                 "max_generations": "40",
                 "convergence_window": "20",
-                "convergence_tolerance": "0.5",
+                "precision": "0.5",
             },
         ),
     )
@@ -1094,7 +1094,7 @@ def test_cancel_button_stops_the_run_and_shows_the_cancelled_banner(
 
     Deliberately uses the starter form's own (large) `d`/`N`, not
     `_SET_TINY_FIELDS`, plus `_SET_UNREACHABLE_CONVERGENCE` on top — not
-    the starter defaults' own `convergence_tolerance` alone, which a
+    the starter defaults' own `precision` alone, which a
     real, once-reproduced regression showed can legitimately converge
     in well under two seconds on a fast-enough or lightly-loaded
     machine, racing past Cancel and never firing `cancelled_event` at
@@ -1232,7 +1232,7 @@ def test_live_deme_pair_selector_shows_a_chosen_pair_during_a_real_run(
     different from it) and the same reasoning for using it: that
     constant's own comment records a real, confirmed defect an earlier
     version of this test could have hit too (the starter form's own
-    `convergence_tolerance` alone can converge in well under two
+    `precision` alone can converge in well under two
     seconds on a fast-enough machine) even though it was not the one
     that actually surfaced it. `started_event` alone still decides when
     it is safe to interact, Cancel ending the test rather than waiting

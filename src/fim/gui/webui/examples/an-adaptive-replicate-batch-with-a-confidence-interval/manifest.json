@@ -1,59 +1,99 @@
 {
   "artifacts": {
     "replicate-001": {
-      "bytes": 2670,
-      "sha256": "b350eb4886ad33ac7aeac35fcb08ef33bff1275672fd9400dce0c5ceae728503"
+      "bytes": 2646,
+      "sha256": "a547856288a504d2c64b1a72232416ef0ae97a1e1d67f85112a78ef950346723"
     },
     "replicate-002": {
-      "bytes": 2668,
-      "sha256": "734abf7ef8908af02e784a8d79cd210ac8303779ec59f27f8de76e9ff0251a32"
+      "bytes": 2643,
+      "sha256": "956a2e35cb0ad625027cd6c829a86c3a77c65bfaf6f534c45349c19d353e65e7"
     },
     "replicate-003": {
-      "bytes": 2670,
-      "sha256": "06afb4a3d24c9bbc13987ddd09487052cd0c1f7164af85f4c26b3dbd82f12da2"
+      "bytes": 2646,
+      "sha256": "607a41ee338c5d94911f62a23f96a748fc36e6acde371e9781a9e5c652136ef7"
     },
     "replicate-004": {
-      "bytes": 2668,
-      "sha256": "a583829345a251d5b6427d073d6dd94a880abec8bdefc6315528db49f6e40b68"
+      "bytes": 2643,
+      "sha256": "80be7ee637f9071f65f90aec80faef718ead8422ce65635264ccc12d8d2ad722"
     },
     "replicate-005": {
-      "bytes": 2668,
-      "sha256": "90e94ec749a48ef3379f55349b49be17a1c8f9fc9b5b27987ecacf387ab0c48c"
+      "bytes": 2643,
+      "sha256": "bf354c333540017cb69dcc8a957eb14e5bcb1ce2a9e2d22a90bad81641e73c84"
     },
     "replicate-006": {
-      "bytes": 2670,
-      "sha256": "0b35c64c8333d4ff2a9bf896a55752796b654816338b42d28899a42fbabea1a6"
+      "bytes": 2646,
+      "sha256": "5dc9d64390c698e8caa2ce40dcf24dfb419a8119894f12deaf70b73121470db4"
     },
     "replicate-007": {
-      "bytes": 2671,
-      "sha256": "ef05724a4b70ad57b3dd877385586ab3e90f65e07e52788df4199705f83a6130"
+      "bytes": 2646,
+      "sha256": "402cc2b0a51b0f7830de8ef37feb97c9c153fbb4fd5047fc7d0b334ae009bc39"
     },
     "replicate-008": {
-      "bytes": 2668,
-      "sha256": "c65adf48470dac674e86aa67baa11b1ada8f38ce8c1d70d06a6872e3755f715f"
+      "bytes": 2643,
+      "sha256": "67b10fb48806b0b8aa0709d4a5b83bccfad47ad7471fcb40de35abdba96d1559"
     },
     "replicate-009": {
-      "bytes": 2668,
-      "sha256": "98ce99d727816d557024d1473ca3c0654500963ec8f20bf54c992481e9e367a0"
+      "bytes": 2643,
+      "sha256": "0fb3ba217f82f95474c1956f4d209e2edf3f889c3a293ad8272984253b3d4894"
     },
     "replicate-010": {
-      "bytes": 2668,
-      "sha256": "d287460a0508cc7805b62a3a937be76e11d9ab54a744420d884e9de539a48998"
+      "bytes": 2646,
+      "sha256": "6f7cfe252d1bc2e2c622f3e4ce57d7988bb3ab2c080b6c3fab5dd5fdef56363e"
+    },
+    "replicate-011": {
+      "bytes": 2643,
+      "sha256": "962ebcfa9bcaee136b7e5cdcd5f50519ee45fd9876cbd3a290f95b843ab64efa"
+    },
+    "replicate-012": {
+      "bytes": 2643,
+      "sha256": "876fcd76ac57d06fd6f308ee5c5407dfa2e17f41de6a4bd77254b54cd8506ac0"
+    },
+    "replicate-013": {
+      "bytes": 2646,
+      "sha256": "c1d70e73bbaa0effa345a5e0de5f27e20d3a5fed8516bca6cfd89d082871faf0"
+    },
+    "replicate-014": {
+      "bytes": 2646,
+      "sha256": "c3becce6415f0a34f8c74ff615b25f5ba2fb38a9ba5da80335a5a946b4b28aa4"
+    },
+    "replicate-015": {
+      "bytes": 2643,
+      "sha256": "cff6102caa8abeccda218cf05b26e1d7f77df6d8cac5b68c8b90b012bb325d03"
+    },
+    "replicate-016": {
+      "bytes": 2646,
+      "sha256": "f28c9af063420383b8993c34d38e282c1e6e3fa7fc8c195422edfc74fa4fc593"
+    },
+    "replicate-017": {
+      "bytes": 2646,
+      "sha256": "45581358f6aa99af68ad21dd53ebcd9700eede36aa4018a2b9b55bb991576e40"
+    },
+    "replicate-018": {
+      "bytes": 2646,
+      "sha256": "77051fefe742182509fc6e90bd43fb9e2d822471beb352deff75107df87e7666"
+    },
+    "replicate-019": {
+      "bytes": 2646,
+      "sha256": "86d4542e10d7cb882f71180bc8895514fbc1f8b4732c336ffcba38a92163367c"
+    },
+    "replicate-020": {
+      "bytes": 2650,
+      "sha256": "26026c29066018ca626fd749399bbaa7e398fd550c40f250680bcb40043aa5ec"
     },
     "summary": {
-      "bytes": 6057,
-      "sha256": "fe2c72e4f446bbee39d2a25b7b6378855906d39a4966b8fd1d4e2944640c58ec"
+      "bytes": 6078,
+      "sha256": "bc2fa48e8e593e7d4d4fdf11ace111ad237b358b91b2cd0513f993c979219baa"
     }
   },
-  "ended_at": "2026-10-10T00:53:59.774431Z",
+  "ended_at": "2026-10-10T01:39:23.775463Z",
   "parameters": {
     "N": 100,
     "_read_only": true,
     "auto_vector_max_capacity": 4096,
     "auto_vector_min_d": 2,
+    "confidence": 0.95,
     "convergence_combinator": "all",
     "convergence_statistic": "D",
-    "convergence_tolerance": 0.05,
     "convergence_window": 875,
     "d": 5,
     "deme_weighting": "equal",
@@ -103,27 +143,37 @@
     "mutation_model": "infinite_alleles",
     "n_replicates": 50,
     "ploidy": "haploid",
-    "replicate_confidence": 0.95,
+    "precision": 0.03,
     "replicate_minimum": 10,
-    "replicate_tolerance": 0.03,
     "seed": 20260819,
+    "stop_batch_early": true,
     "track_expensive_statistics": false
   },
-  "replicate_count": 10,
+  "replicate_count": 20,
   "replicate_run_ids": [
-    "run-23f55cf2c98e7afd-r001",
-    "run-23f55cf2c98e7afd-r002",
-    "run-23f55cf2c98e7afd-r003",
-    "run-23f55cf2c98e7afd-r004",
-    "run-23f55cf2c98e7afd-r005",
-    "run-23f55cf2c98e7afd-r006",
-    "run-23f55cf2c98e7afd-r007",
-    "run-23f55cf2c98e7afd-r008",
-    "run-23f55cf2c98e7afd-r009",
-    "run-23f55cf2c98e7afd-r010"
+    "run-57c1585a9840deac-r001",
+    "run-57c1585a9840deac-r002",
+    "run-57c1585a9840deac-r003",
+    "run-57c1585a9840deac-r004",
+    "run-57c1585a9840deac-r005",
+    "run-57c1585a9840deac-r006",
+    "run-57c1585a9840deac-r007",
+    "run-57c1585a9840deac-r008",
+    "run-57c1585a9840deac-r009",
+    "run-57c1585a9840deac-r010",
+    "run-57c1585a9840deac-r011",
+    "run-57c1585a9840deac-r012",
+    "run-57c1585a9840deac-r013",
+    "run-57c1585a9840deac-r014",
+    "run-57c1585a9840deac-r015",
+    "run-57c1585a9840deac-r016",
+    "run-57c1585a9840deac-r017",
+    "run-57c1585a9840deac-r018",
+    "run-57c1585a9840deac-r019",
+    "run-57c1585a9840deac-r020"
   ],
-  "run_id": "run-23f55cf2c98e7afd",
+  "run_id": "run-57c1585a9840deac",
   "schema_version": 1,
   "software_version": "1.2.0",
-  "started_at": "2026-10-10T00:53:40.032274Z"
+  "started_at": "2026-10-10T01:37:17.857384Z"
 }

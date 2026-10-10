@@ -1,83 +1,83 @@
 {
   "artifacts": {
     "replicate-001": {
-      "bytes": 2248,
-      "sha256": "bdf877f08d3bf90b18e9a78218e8a18a2d560d44db37f4cad71327721158166e"
+      "bytes": 2224,
+      "sha256": "0d655e22e47eccf574f7275264eea00507b8cfd805b716089e75a02f8bf40cee"
     },
     "replicate-002": {
-      "bytes": 2248,
-      "sha256": "70746d6f71d5bb5df6cc9ae822459830d7e2541e45b3ffa10881a75d2931d1f8"
+      "bytes": 2224,
+      "sha256": "865b48d41246897d4dde8aaeafaaffa417db8869fcb0622f51f6d590a4dd1b7d"
     },
     "replicate-003": {
-      "bytes": 2248,
-      "sha256": "6743cb854bc53c34374dd6e4ccf948a433c581eaf1c4b51bfcb2ed8b636d6105"
+      "bytes": 2224,
+      "sha256": "2045ba77939fe6b539e9e6eea2e366d1b6da2401dbcf5544cfb994613ab544b1"
     },
     "replicate-004": {
-      "bytes": 2248,
-      "sha256": "1e40d6b322a49ace49bad0755d3326131abc4fcdd48e91fbfe5f5c6c43ec399b"
+      "bytes": 2224,
+      "sha256": "590c9f6b54543455539f54ee409e7dea7a1b7f6663d1246a8134836d63e96796"
     },
     "replicate-005": {
-      "bytes": 2248,
-      "sha256": "1af43ff6c00d7aaec8901ffa842075cfa9c1fac329852679982274b885da06a6"
+      "bytes": 2224,
+      "sha256": "d8452ff07cc4197dfbfb433ce203cd702a4371e62a4146c1fa99290f6bdc4aac"
     },
     "replicate-006": {
-      "bytes": 2248,
-      "sha256": "5f164b2bd8d0fb4f501b794d8107cfcfb281320c93eab25325c01f9c9dca2746"
+      "bytes": 2224,
+      "sha256": "4438ed9130fe912451ad240b30b83631238998d4ec47bff0315ffd83e14bd337"
     },
     "replicate-007": {
-      "bytes": 2248,
-      "sha256": "5605adb4f969e658067c14ff087f22026fe6615e4d72421550eef948f3105c93"
+      "bytes": 2224,
+      "sha256": "280a8d5a87931ef0b3c369e87e4dffc19a7454d2214d7a3269d0147134216ed8"
     },
     "replicate-008": {
-      "bytes": 2248,
-      "sha256": "1e7d876b9916713ff5b4fb88ffaea13a496ddd00b251283bd1ef192843e1c119"
+      "bytes": 2224,
+      "sha256": "ba431f0dee7ef19a24e2a67c315e371a30dc9a24b0c8cb7ab055e9337372aa07"
     },
     "replicate-009": {
-      "bytes": 2248,
-      "sha256": "1d9145a1198ca29d7b65320dd6fcba7d87368be17d8065957aa713c4d9ca733f"
+      "bytes": 2224,
+      "sha256": "70252972f8ea389798f60d24bb902e59424f61b0e2098097feacdf458d4eac4d"
     },
     "replicate-010": {
-      "bytes": 2248,
-      "sha256": "cdb7e2bc6dc29f663237e851e63644c159e13d618867f35305e4a81fadc8b1b9"
+      "bytes": 2224,
+      "sha256": "a13a28a5ff3b405b89e91ee0e0e364d09be73a53e7aa9e365d22db65f3b753f2"
     },
     "replicate-011": {
-      "bytes": 2248,
-      "sha256": "775b50a0bf4035bc77cbc45fe807a8eb4c797afcdd78e5404a40cc198e0d7f28"
+      "bytes": 2224,
+      "sha256": "690287af23119c3ce068ce791581b66415a5b41cb1fa3c952e921ee453871b0f"
     },
     "replicate-012": {
-      "bytes": 2248,
-      "sha256": "9d69d01d4c0567a68d227af9b5df67df671f654c1f65cada9bd03052466b845f"
+      "bytes": 2224,
+      "sha256": "398644bdd4de689dbb69739ad8e0d4ce6cea5912083cc2e66025210d2676ed43"
     },
     "replicate-013": {
-      "bytes": 2248,
-      "sha256": "e68f3bc6fac56049c7243cbfdce2d01e35b3263a7b1db3893688e7a69cc1ad99"
+      "bytes": 2224,
+      "sha256": "52b20746c973cfe67a1793d95fb19af3eb387152de2c6c4cec07ac0bee52fad2"
     },
     "replicate-014": {
-      "bytes": 2248,
-      "sha256": "97f373f9cca8d383f7ebb4ccfb3cedaedfb79431f54682e4856dc071be642a74"
+      "bytes": 2224,
+      "sha256": "a3d5b00e5040324f0afd05ace5bc6700d99c1f008113e6db8667cac8279d90cc"
     },
     "replicate-015": {
-      "bytes": 2248,
-      "sha256": "e37be27084c5395a8eadffc147bc8eea096a57cdaa7c4cafbc15ce1c3af6497d"
+      "bytes": 2224,
+      "sha256": "725cef1b393dbd5cdead0c00d3cabc701e78b061450f804755a270c56328f85c"
     },
     "replicate-016": {
-      "bytes": 2248,
-      "sha256": "dcd18d8556644d5e094b30c52e153ce5ec71ad806efd30a06df00f8dc59b1cb0"
+      "bytes": 2224,
+      "sha256": "eb0f3e3643a5dd25f414ecb701970a8cd3d11c595659795a60b64e023b8769cb"
     },
     "summary": {
       "bytes": 6193,
       "sha256": "85d8306c433ef67e45f7544d4c149eb0d42d2e4eafe26ea3440e702388b119b0"
     }
   },
-  "ended_at": "2026-10-10T00:53:46.095428Z",
+  "ended_at": "2026-10-10T01:37:25.280608Z",
   "parameters": {
     "N": 500,
     "_read_only": true,
     "auto_vector_max_capacity": 4096,
     "auto_vector_min_d": 2,
+    "confidence": 0.95,
     "convergence_combinator": "all",
     "convergence_statistic": "D",
-    "convergence_tolerance": 0.02,
     "convergence_window": 101,
     "d": 70,
     "deme_weighting": "equal",
@@ -99,33 +99,33 @@
     "mutation_model": "finite_alleles",
     "n_replicates": 16,
     "ploidy": "haploid",
-    "replicate_confidence": 0.95,
+    "precision": 0.02,
     "replicate_minimum": 10,
-    "replicate_tolerance": null,
     "seed": 20260916,
+    "stop_batch_early": false,
     "track_expensive_statistics": false
   },
   "replicate_count": 16,
   "replicate_run_ids": [
-    "run-3478a6fbc40cd1ed-r001",
-    "run-3478a6fbc40cd1ed-r002",
-    "run-3478a6fbc40cd1ed-r003",
-    "run-3478a6fbc40cd1ed-r004",
-    "run-3478a6fbc40cd1ed-r005",
-    "run-3478a6fbc40cd1ed-r006",
-    "run-3478a6fbc40cd1ed-r007",
-    "run-3478a6fbc40cd1ed-r008",
-    "run-3478a6fbc40cd1ed-r009",
-    "run-3478a6fbc40cd1ed-r010",
-    "run-3478a6fbc40cd1ed-r011",
-    "run-3478a6fbc40cd1ed-r012",
-    "run-3478a6fbc40cd1ed-r013",
-    "run-3478a6fbc40cd1ed-r014",
-    "run-3478a6fbc40cd1ed-r015",
-    "run-3478a6fbc40cd1ed-r016"
+    "run-0eed83898d8e0ca9-r001",
+    "run-0eed83898d8e0ca9-r002",
+    "run-0eed83898d8e0ca9-r003",
+    "run-0eed83898d8e0ca9-r004",
+    "run-0eed83898d8e0ca9-r005",
+    "run-0eed83898d8e0ca9-r006",
+    "run-0eed83898d8e0ca9-r007",
+    "run-0eed83898d8e0ca9-r008",
+    "run-0eed83898d8e0ca9-r009",
+    "run-0eed83898d8e0ca9-r010",
+    "run-0eed83898d8e0ca9-r011",
+    "run-0eed83898d8e0ca9-r012",
+    "run-0eed83898d8e0ca9-r013",
+    "run-0eed83898d8e0ca9-r014",
+    "run-0eed83898d8e0ca9-r015",
+    "run-0eed83898d8e0ca9-r016"
   ],
-  "run_id": "run-3478a6fbc40cd1ed",
+  "run_id": "run-0eed83898d8e0ca9",
   "schema_version": 1,
   "software_version": "1.2.0",
-  "started_at": "2026-10-10T00:53:40.031477Z"
+  "started_at": "2026-10-10T01:37:17.856462Z"
 }

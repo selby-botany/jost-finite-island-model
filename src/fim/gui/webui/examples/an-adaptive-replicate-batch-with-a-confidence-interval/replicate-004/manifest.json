@@ -1,35 +1,35 @@
 {
   "artifacts": {
     "convergence": {
-      "bytes": 119789,
-      "sha256": "8aaccfbd05d5645dfed4d6c6a88b840bcfce8d405f5c458a5c98232be0f85fe5"
+      "bytes": 128766,
+      "sha256": "192590dc0ffd2a16410e8192c9118480eb722459217c86ec46bd5a6993e096ff"
     },
     "pairwise": {
-      "bytes": 1182,
-      "sha256": "baa2da914e75a6f9b285cfcc81a6d1577a1fb0a5046016335cd74422a7ea72f1"
+      "bytes": 1188,
+      "sha256": "b5b0d7f2536ae0b722615751c27bcb366e018abfc5622e4f3fec1260ed55e061"
     },
     "report": {
-      "bytes": 2287,
-      "sha256": "d349690a50dcdeb36a9a754bff545b92d2cc4147d3cdd0cc7bd450c00a9ab72b"
+      "bytes": 2277,
+      "sha256": "7d60cd7efead5eff7f1b4a04063bc783d4c8c905b941e76ecfa077c34b4aeaf0"
     },
     "scatter": {
-      "bytes": 325352,
-      "sha256": "a6aea8e4ee083ea424f45c84ac2014bb2f615fcaeaeab4ee85b48b5e788afee9"
+      "bytes": 340746,
+      "sha256": "e2d78e6be3578629a8d09a6e64e6cceb04e4d9c99215c6b7064f1af77c013398"
     },
     "trajectory": {
-      "bytes": 585968,
-      "sha256": "15320feb67e283b99167b693d8a0b216516696a5e5ee392115622b148c85098c"
+      "bytes": 637835,
+      "sha256": "e5f0cb3ca4918bc011f4f0c8e6d926434930f9663844ac04795a89d0bfc2219d"
     }
   },
   "auto_derived": [],
   "convergence": {
     "converged": true,
-    "generation": 874,
-    "generation_count": 875,
+    "generation": 939,
+    "generation_count": 940,
     "reason": "statistic converged",
     "statistic": "D"
   },
-  "ended_at": "2026-10-10T00:53:47.959708Z",
+  "ended_at": "2026-10-10T01:37:28.064851Z",
   "engine_backend": "lineal",
   "equilibrium_final_heterozygosity": null,
   "equilibrium_generation_count": null,
@@ -40,9 +40,9 @@
     "_read_only": true,
     "auto_vector_max_capacity": 4096,
     "auto_vector_min_d": 2,
+    "confidence": 0.95,
     "convergence_combinator": "all",
     "convergence_statistic": "D",
-    "convergence_tolerance": 0.05,
     "convergence_window": 875,
     "d": 5,
     "deme_weighting": "equal",
@@ -92,18 +92,18 @@
     "mutation_model": "infinite_alleles",
     "n_replicates": 1,
     "ploidy": "haploid",
-    "replicate_confidence": 0.95,
+    "precision": 0.03,
     "replicate_minimum": 10,
-    "replicate_tolerance": 0.03,
     "seed": 20260822,
+    "stop_batch_early": true,
     "track_expensive_statistics": false
   },
   "relaxation_time": 291.6666666666667,
-  "run_id": "run-23f55cf2c98e7afd-r004",
+  "run_id": "run-57c1585a9840deac-r004",
   "schema_version": 3,
   "sigma_band": null,
   "sigma_band_multiplier": null,
   "sigma_band_window": null,
   "software_version": "1.2.0",
-  "started_at": "2026-10-10T00:53:43.042234Z"
+  "started_at": "2026-10-10T01:37:20.979971Z"
 }

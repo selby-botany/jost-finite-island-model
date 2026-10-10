@@ -76,10 +76,10 @@ def _write_batch_run(tmp_path: Path, *, study_id: str | None = None) -> Path:
         "seed": 1,
         "loci": [{"locus_id": 1, "length": 200}],
         "convergence_window": 4,
-        "convergence_tolerance": 1.0,
+        "precision": 1.0,
         "max_generations": 10,
         "n_replicates": 3,
-        "replicate_tolerance": None,
+        "stop_batch_early": False,
     }
     config_path = tmp_path / "batch.yaml"
     config_path.write_text(yaml.safe_dump(config, sort_keys=False), encoding="utf-8")
@@ -110,10 +110,10 @@ def _write_run(tmp_path: Path, *, study_id: str | None = None) -> Path:
         "seed": 1,
         "loci": [{"locus_id": 1, "length": 200}],
         "convergence_window": 4,
-        "convergence_tolerance": 1.0,
+        "precision": 1.0,
         "max_generations": 10,
         "n_replicates": 1,
-        "replicate_tolerance": None,
+        "stop_batch_early": False,
     }
     config_path = tmp_path / "run.yaml"
     config_path.write_text(yaml.safe_dump(config, sort_keys=False), encoding="utf-8")
@@ -143,10 +143,10 @@ def _write_run_with_sigma_band(tmp_path: Path) -> Path:
         "seed": 1,
         "loci": [{"locus_id": 1, "length": 200}],
         "convergence_window": 4,
-        "convergence_tolerance": 1.0,
+        "precision": 1.0,
         "max_generations": 30,
         "n_replicates": 1,
-        "replicate_tolerance": None,
+        "stop_batch_early": False,
         "sigma_band_multiplier": 3.0,
         "sigma_band_window": 5,
     }
@@ -1443,10 +1443,10 @@ def test_clicking_a_column_header_sorts_that_studys_own_runs(
                 "seed": 2,
                 "loci": [{"locus_id": 1, "length": 200}],
                 "convergence_window": 4,
-                "convergence_tolerance": 1.0,
+                "precision": 1.0,
                 "max_generations": 10,
                 "n_replicates": 1,
-                "replicate_tolerance": None,
+                "stop_batch_early": False,
             },
             sort_keys=False,
         ),

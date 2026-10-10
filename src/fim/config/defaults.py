@@ -187,10 +187,10 @@ DEFAULT_N_REPLICATES: Final = 200
 """How many independently seeded replicates a run tries by default.
 
 Not `1` — the most useful ordinary use of this tool is a measurement
-*with* a confidence interval (`replicate_tolerance`, below), not a
+*with* a confidence interval (`precision`, below), not a
 single point estimate, so that is what an unconfigured run now does by
 default: run up to `DEFAULT_N_REPLICATES` replicates, stopping early
-once `DEFAULT_REPLICATE_TOLERANCE` is reached. `200` is a generous cap,
+once `DEFAULT_PRECISION` is reached. `200` is a generous cap,
 not an expectation of always reaching it — chosen to match this
 project's own worked examples and test scenarios that already use a
 comparable count for a real confidence interval, giving the adaptive
@@ -203,15 +203,17 @@ means.
 Kind: policy; a regular setting.
 """
 
-DEFAULT_REPLICATE_TOLERANCE: Final = 0.01
-"""Default early-stopping half-width for a replicate batch.
+DEFAULT_PRECISION: Final = 0.01
+"""Default `precision`: plus or minus this much, in each statistic's units.
 
-Matches `convergence_tolerance`'s own default (`0.01`) deliberately —
-the same tightness applied one layer up, to the across-replicate mean
-instead of the within-run trailing window. Paired with
-`DEFAULT_N_REPLICATES` above: together they make an unconfigured run
-compute a real confidence interval by default rather than a single,
-uncertainty-free-looking point estimate.
+One number answers "how precise?" for a single run and a batch alike: a
+run averages over time until its mean is known to within this at the
+configured confidence, and a batch adds replicates until the interval
+across replicates is this narrow. `0.01` is the default both of the old
+within-run tolerance and of the old replicate tolerance, which this
+setting merged. Paired with `DEFAULT_N_REPLICATES` above, it makes an
+unconfigured run compute a real confidence interval by default rather
+than a single, uncertainty-free-looking point estimate.
 
 Kind: policy; a regular setting.
 """

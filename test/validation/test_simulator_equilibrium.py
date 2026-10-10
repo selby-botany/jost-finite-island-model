@@ -937,7 +937,7 @@ def _run_engine_replicates(
     """Run the real engine and return every replicate's own final state.
 
     The convergence monitor is effectively disabled so the run is a
-    deterministic fixed-horizon integration: ``convergence_tolerance = 0``
+    deterministic fixed-horizon integration: ``precision = 0``
     requires an exact match between the two half-window means, which a live
     drift/migration/mutation trajectory essentially never produces, so the
     run always stops exactly at ``max_generations``. ``convergence_window =
@@ -992,11 +992,11 @@ def _run_engine_replicates(
         seed=seed,
         loci=loci,
         initial_allele_count=2,
-        convergence_tolerance=0.0,
+        precision=0.0,
         convergence_window=horizon + 1,
         max_generations=horizon,
         n_replicates=replicates,
-        replicate_tolerance=None,
+        stop_batch_early=False,
         initial_frequencies=initial_frequencies,
     )
     results = fim(
@@ -2252,9 +2252,9 @@ def test_engine_trajectory_matches_the_identity_recursion_gs_and_gd() -> None:
         # replicate must run the full horizon so a row exists at every
         # sampled generation, not stop early via the trailing-window
         # criterion.
-        convergence_tolerance=0.0,
+        precision=0.0,
         n_replicates=replicates,
-        replicate_tolerance=None,
+        stop_batch_early=False,
         initial_frequencies=initial_frequencies,
     )
     store = InMemoryTrajectoryStore()
@@ -2383,9 +2383,9 @@ def test_engine_reproduces_ryman_leimar_ancestral_heterozygosity_effect() -> Non
             mutation_model="infinite_alleles",
             max_generations=horizon,
             convergence_window=4,
-            convergence_tolerance=0.0,
+            precision=0.0,
             n_replicates=replicates,
-            replicate_tolerance=None,
+            stop_batch_early=False,
             initial_frequencies=initial_frequencies,
         )
         output = fim(params.gene_copies, params.m, params.mu, params.d, params=params)

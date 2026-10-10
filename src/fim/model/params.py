@@ -36,7 +36,7 @@ from fim.config.defaults import (
     DEFAULT_AUTO_VECTOR_MIN_D,
     DEFAULT_LOCUS_LENGTH,
     DEFAULT_N_REPLICATES,
-    DEFAULT_REPLICATE_TOLERANCE,
+    DEFAULT_PRECISION,
 )
 from fim.config.numerics import MINIMUM_REPLICATE_COUNT
 from fim.convergence.defaults import derive_convergence_defaults
@@ -101,13 +101,13 @@ PARAMETER_DEFAULTS: Final[dict[str, object]] = {
     "convergence_statistic": "D",
     "convergence_combinator": "all",
     "convergence_window": None,  # None means "auto": derive it
-    "convergence_tolerance": 0.01,
+    "precision": DEFAULT_PRECISION,
     "track_expensive_statistics": False,
     "max_generations": None,  # None means "auto": derive it
     "n_replicates": DEFAULT_N_REPLICATES,
-    "replicate_tolerance": DEFAULT_REPLICATE_TOLERANCE,
+    "stop_batch_early": True,
     "replicate_minimum": 10,
-    "replicate_confidence": 0.95,
+    "confidence": 0.95,
     "migrant_sampling": "continuous",
     "mutation_model": "infinite_alleles",
     "engine_backend": "lineal",
@@ -142,13 +142,13 @@ _CONFIG_KEYS: Final = frozenset(
         "convergence_statistic",
         "convergence_combinator",
         "convergence_window",
-        "convergence_tolerance",
+        "precision",
         "track_expensive_statistics",
         "max_generations",
         "n_replicates",
-        "replicate_tolerance",
+        "stop_batch_early",
         "replicate_minimum",
-        "replicate_confidence",
+        "confidence",
         "engine_backend",
         "jit",
         "auto_vector_min_d",
@@ -309,7 +309,12 @@ class SimulationParams:
             generations. `AUTO_CONVERGENCE` (`0`, the default) derives it
             from the model's relaxation time
             (`fim.convergence.defaults`); an explicit value always wins.
-        convergence_tolerance: Maximum half-window mean difference.
+        precision: How precisely to estimate each watched statistic: plus
+            or minus this amount, in the statistic's own units, at
+            `confidence`. A single run averages over time until its mean is
+            known to that precision; a batch adds replicates until the
+            interval across replicates is that narrow. Defaults to
+            `DEFAULT_PRECISION` (`0.01`).
         track_expensive_statistics: Whether the per-generation
             convergence check also computes `E_ST`/`K_ST`/`A_CGD`/
             `Delta`/`MI` even when none is actually watched — the
@@ -359,27 +364,22 @@ class SimulationParams:
             interval, not an uncertainty-free-looking single point, so an
             unconfigured run now behaves that way by default. Set to `1`
             explicitly for the old single-run behavior.
-        replicate_tolerance: Early-stopping half-width, in the same units
-            as each watched `convergence_statistic`. Defaults to
-            `DEFAULT_REPLICATE_TOLERANCE` (`0.01`, matching
-            `convergence_tolerance`'s own default) — an unconfigured run
-            stops as soon as every watched statistic's across-replicate
-            Student's-t confidence interval has tightened to at most this
-            half-width (per `convergence_combinator`, exactly like
-            within-run convergence), or `n_replicates` is reached,
-            whichever comes first. Set explicitly to `None` (or, in a
-            YAML/JSON config, simply omitted alongside `n_replicates: 1`)
-            to run a fixed count in full with no adaptive stop.
+        stop_batch_early: Whether a replicate batch stops as soon as
+            `precision` is reached (the default): every watched
+            statistic's across-replicate Student's-t confidence interval
+            has tightened to at most `precision` plus or minus (per
+            `convergence_combinator`, exactly like within-run
+            convergence), or `n_replicates` is reached, whichever comes
+            first. `False` runs `n_replicates` in full with no adaptive
+            stop.
         replicate_minimum: Fewest replicates before tightness is even
             checked, guarding against a lucky-early-tight fluke — the
             replicate-layer analog of `convergence_window`. Only
-            meaningful when `replicate_tolerance` is set; silently
+            meaningful when `stop_batch_early` is set; silently
             clamped down to `n_replicates` if given larger, rather than
             rejected (`__post_init__`'s own comment has the reasoning).
-        replicate_confidence: Two-tailed confidence level for
-            `replicate_tolerance`'s interval — ``0.90``, ``0.95`` (the
-            default), or ``0.99``. Only meaningful when
-            `replicate_tolerance` is set.
+        confidence: Two-tailed confidence level of `precision`: ``0.90``,
+            ``0.95`` (the default), or ``0.99``.
         migrant_sampling: How many gene copies migrate each generation —
             "continuous" (default), the exact ``rate * N`` fraction used by
             every prior release, or the opt-in "stochastic", which draws a
@@ -473,7 +473,7 @@ class SimulationParams:
             replaced by a derived burn-in).
             `None` (the default) selects the ordinary Dirichlet-prior
             initial condition instead. Set together with `equilibrium_
-            convergence_tolerance`/`equilibrium_max_generations`, or not
+            precision`/`equilibrium_max_generations`, or not
             at all — a partial equilibrium configuration is rejected
             (`__post_init__`), and combining any of the three with
             `initial_frequencies` is rejected as ambiguous (a run cannot
@@ -544,13 +544,13 @@ class SimulationParams:
     convergence_statistic: ConvergenceStatistic = "D"
     convergence_combinator: ConvergenceCombinator = "all"
     convergence_window: int = AUTO_CONVERGENCE
-    convergence_tolerance: float = 0.01
+    precision: float = DEFAULT_PRECISION
     track_expensive_statistics: bool = False
     max_generations: int = AUTO_CONVERGENCE
     n_replicates: int = DEFAULT_N_REPLICATES
-    replicate_tolerance: float | None = DEFAULT_REPLICATE_TOLERANCE
+    stop_batch_early: bool = True
     replicate_minimum: int = 10
-    replicate_confidence: float = 0.95
+    confidence: float = 0.95
     migrant_sampling: MigrantSampling = "continuous"
     mutation_model: MutationModel = "infinite_alleles"
     engine_backend: EngineBackend = "lineal"
@@ -636,7 +636,7 @@ class SimulationParams:
             self.convergence_window,
             minimum=2,
         )
-        _validate_convergence_tolerance(self.convergence_tolerance)
+        _validate_precision(self.precision)
         _require_bool("track_expensive_statistics", self.track_expensive_statistics)
         _require_bool("read_only", self.read_only)
         _require_integer(
@@ -645,11 +645,7 @@ class SimulationParams:
             minimum=1,
         )
         _require_integer("n_replicates", self.n_replicates, minimum=1)
-        if self.replicate_tolerance is not None and (
-            not math.isfinite(self.replicate_tolerance)
-            or self.replicate_tolerance < 0.0
-        ):
-            raise ValueError("replicate_tolerance must be finite and non-negative")
+        _require_bool("stop_batch_early", self.stop_batch_early)
         _require_integer("replicate_minimum", self.replicate_minimum, minimum=2)
         _validate_stopping_rules(
             convergence_window=self.convergence_window,
@@ -660,7 +656,7 @@ class SimulationParams:
             "replicate_minimum",
             _clamp_replicate_minimum(self.replicate_minimum, self.n_replicates),
         )
-        _validate_replicate_confidence(self.replicate_confidence)
+        _validate_confidence(self.confidence)
         if self.migrant_sampling not in {"continuous", "stochastic"}:
             raise ValueError("migrant_sampling must be 'continuous' or 'stochastic'")
         if self.mutation_model not in {"infinite_alleles", "finite_alleles"}:
@@ -745,6 +741,15 @@ class SimulationParams:
         if isinstance(self.convergence_statistic, str):
             return (self.convergence_statistic,)
         return self.convergence_statistic
+
+    @property
+    def batch_precision(self) -> float | None:
+        """Return the precision a batch stops at, or `None` to run it in full.
+
+        `precision` when `stop_batch_early` is on (the default), `None` when
+        it is off: the single value the batch's stopping rule reads.
+        """
+        return self.precision if self.stop_batch_early else None
 
     @property
     def population_sizes(self) -> tuple[int, ...]:
@@ -931,25 +936,13 @@ class SimulationParams:
             ),
             "convergence_combinator": self.convergence_combinator,
             "convergence_window": self.convergence_window,
-            "convergence_tolerance": self.convergence_tolerance,
+            "precision": self.precision,
             "track_expensive_statistics": self.track_expensive_statistics,
             "max_generations": self.max_generations,
             "n_replicates": self.n_replicates,
-            # Always present, unlike `initial_frequencies` below (whose
-            # own default is still `None`, so omitting a `None` value
-            # there is still lossless): `replicate_tolerance`'s own
-            # default is a real number now (`DEFAULT_REPLICATE_
-            # TOLERANCE`), so an absent key and an explicit `None` no
-            # longer mean the same thing to `from_mapping` — omitting
-            # `None` here would silently turn a caller's own explicit
-            # "disabled" into "use the default" on the next round trip
-            # through `from_mapping`. Always including it, `null` for
-            # `None`, keeps `from_mapping(params.to_dict()) == params`
-            # true unconditionally, matching this method's own
-            # docstring.
-            "replicate_tolerance": self.replicate_tolerance,
+            "stop_batch_early": self.stop_batch_early,
             "replicate_minimum": self.replicate_minimum,
-            "replicate_confidence": self.replicate_confidence,
+            "confidence": self.confidence,
             "migrant_sampling": self.migrant_sampling,
             "mutation_model": self.mutation_model,
             "engine_backend": self.engine_backend,
@@ -958,13 +951,10 @@ class SimulationParams:
             "auto_vector_max_capacity": self.auto_vector_max_capacity,
         }
         if self.max_concurrent_replicates is not None:
-            # Omitted rather than always written, unlike `replicate_
-            # tolerance` above: this field's own default is already
-            # `None`, so an absent key and an explicit `None` mean
-            # exactly the same thing to `from_mapping` — the round-trip
-            # hazard `replicate_tolerance`'s own comment describes
-            # cannot arise here. Matches `initial_frequencies`, below,
-            # for the same reason.
+            # Omitted rather than always written: this field's own
+            # default is already `None`, so an absent key and an explicit
+            # `None` mean exactly the same thing to `from_mapping`.
+            # Matches `initial_frequencies`, below, for the same reason.
             result["max_concurrent_replicates"] = self.max_concurrent_replicates
         if self.equilibrium_convergence_window is not None:
             # Omitted rather than always written, matching `max_
@@ -1119,12 +1109,9 @@ class SimulationParams:
                     PARAMETER_DEFAULTS["convergence_window"],
                 ),
             ),
-            convergence_tolerance=_parse_float(
-                "convergence_tolerance",
-                config.get(
-                    "convergence_tolerance",
-                    PARAMETER_DEFAULTS["convergence_tolerance"],
-                ),
+            precision=_parse_float(
+                "precision",
+                config.get("precision", PARAMETER_DEFAULTS["precision"]),
             ),
             track_expensive_statistics=_parse_bool(
                 "track_expensive_statistics",
@@ -1147,18 +1134,9 @@ class SimulationParams:
                     PARAMETER_DEFAULTS["n_replicates"],
                 ),
             ),
-            replicate_tolerance=_parse_optional_float(
-                "replicate_tolerance",
-                config["replicate_tolerance"]
-                if "replicate_tolerance" in config
-                # Absent means "use the default", not "disabled" — those
-                # are different things now that the default is a real
-                # number (`DEFAULT_REPLICATE_TOLERANCE`), not `None`.
-                # Write `replicate_tolerance: null` explicitly in a YAML/
-                # JSON config for the old "run n_replicates in full, no
-                # adaptive stop" behavior; omitting the key entirely now
-                # means "use the default tolerance," not "disable it."
-                else PARAMETER_DEFAULTS["replicate_tolerance"],
+            stop_batch_early=_parse_bool(
+                "stop_batch_early",
+                config.get("stop_batch_early", PARAMETER_DEFAULTS["stop_batch_early"]),
             ),
             replicate_minimum=_parse_int(
                 "replicate_minimum",
@@ -1167,12 +1145,9 @@ class SimulationParams:
                     PARAMETER_DEFAULTS["replicate_minimum"],
                 ),
             ),
-            replicate_confidence=_parse_float(
-                "replicate_confidence",
-                config.get(
-                    "replicate_confidence",
-                    PARAMETER_DEFAULTS["replicate_confidence"],
-                ),
+            confidence=_parse_float(
+                "confidence",
+                config.get("confidence", PARAMETER_DEFAULTS["confidence"]),
             ),
             migrant_sampling=_parse_migrant_sampling(
                 config.get(
@@ -2043,8 +2018,8 @@ EXECUTION_SETTING_NAMES: Final[tuple[str, ...]] = (
     "n_replicates",
     "max_generations",
     "convergence_window",
-    "convergence_tolerance",
-    "replicate_confidence",
+    "precision",
+    "confidence",
     "jit",
     "auto_vector_min_d",
     "auto_vector_max_capacity",
@@ -2076,7 +2051,7 @@ def validate_execution_settings(settings: Mapping[str, object]) -> None:
     Args:
         settings: Any subset of `EXECUTION_SETTING_NAMES`, typed as a
             configuration file types them: whole numbers as `int`,
-            `convergence_tolerance`/`replicate_confidence` as `float`,
+            `precision`/`confidence` as `float`,
             `max_generations`/`convergence_window` as an `int` or the
             string `"auto"`, and `max_concurrent_replicates` as an `int`
             or `None`. A key outside `EXECUTION_SETTING_NAMES` is
@@ -2095,10 +2070,10 @@ def validate_execution_settings(settings: Mapping[str, object]) -> None:
     for name, minimum in (("max_generations", 1), ("convergence_window", 2)):
         if name in settings and settings[name] != "auto":
             _require_integer(name, settings[name], minimum=minimum)
-    if "convergence_tolerance" in settings:
-        _validate_convergence_tolerance(settings["convergence_tolerance"])
-    if "replicate_confidence" in settings:
-        _validate_replicate_confidence(settings["replicate_confidence"])
+    if "precision" in settings:
+        _validate_precision(settings["precision"])
+    if "confidence" in settings:
+        _validate_confidence(settings["confidence"])
     if settings.get("max_concurrent_replicates") is not None:
         _require_integer(
             "max_concurrent_replicates",
@@ -2119,26 +2094,26 @@ def validate_execution_settings(settings: Mapping[str, object]) -> None:
         _validate_stopping_rules(convergence_window=window, max_generations=cap)
 
 
-def _validate_convergence_tolerance(tolerance: object) -> None:
-    """Reject a `convergence_tolerance` that is not a finite, non-negative number.
+def _validate_precision(precision: object) -> None:
+    """Reject a `precision` that is not a finite, non-negative number.
 
     Args:
-        tolerance: The candidate value.
+        precision: The candidate value.
 
     Raises:
         ValueError: If it is not a finite real number of at least zero.
     """
     if (
-        isinstance(tolerance, bool)
-        or not isinstance(tolerance, int | float)
-        or not math.isfinite(tolerance)
-        or tolerance < 0.0
+        isinstance(precision, bool)
+        or not isinstance(precision, int | float)
+        or not math.isfinite(precision)
+        or precision < 0.0
     ):
-        raise ValueError("convergence_tolerance must be non-negative")
+        raise ValueError("precision must be non-negative")
 
 
-def _validate_replicate_confidence(confidence: object) -> None:
-    """Reject a `replicate_confidence` other than the three supported levels.
+def _validate_confidence(confidence: object) -> None:
+    """Reject a `confidence` other than the three supported levels.
 
     Args:
         confidence: The candidate value.
@@ -2147,7 +2122,7 @@ def _validate_replicate_confidence(confidence: object) -> None:
         ValueError: If it is not 0.90, 0.95, or 0.99.
     """
     if isinstance(confidence, bool) or confidence not in {0.90, 0.95, 0.99}:
-        raise ValueError("replicate_confidence must be 0.90, 0.95, or 0.99")
+        raise ValueError("confidence must be 0.90, 0.95, or 0.99")
 
 
 def _validate_stopping_rules(
@@ -2169,8 +2144,8 @@ def _validate_stopping_rules(
     exceeding `n_replicates`) used to live here too, as a hard
     rejection — removed (`__post_init__` now silently clamps
     `replicate_minimum` down to `n_replicates` instead, see its own
-    comment there) once `replicate_tolerance` stopped defaulting to
-    `None`: rejecting became a landmine for any caller who set a small
+    comment there) once an unconfigured run started stopping its batch
+    early: rejecting became a landmine for any caller who set a small
     `n_replicates` without separately thinking about `replicate_
     minimum` at all, not just the deliberate-opt-in misconfiguration it
     was built to catch — found live, not assumed (every GUI batch test
@@ -2302,7 +2277,7 @@ _MINIMUM_SIGMA_BAND_WINDOW: Final = 2
 # The only two sigma multipliers the within-run sigma band accepts
 # (`20260907-claude-sonnet-5-within-run-sigma-band-backend-design.md`
 # decision 1) — a closed set enforced here, not merely suggested by the
-# GUI, the identical shape `replicate_confidence`'s own closed set
+# GUI, the identical shape `confidence`'s own closed set
 # (`__post_init__`, above) already uses.
 _SIGMA_BAND_MULTIPLIERS: Final = frozenset({2.0, 3.0})
 
@@ -2375,8 +2350,8 @@ def _clamp_replicate_minimum(replicate_minimum: int, n_replicates: int) -> int:
     `jost-finite-island-model` run 33656031751, the first time this code
     path ran anywhere other than this project's own test suite — which
     had, by then, already been taught to set every relevant field
-    explicitly). The ordinary case now that `replicate_tolerance`
-    defaults to a real value, not `None` — this interaction used to be
+    explicitly). The ordinary case now that `stop_batch_early`
+    defaults to on — this interaction used to be
     a deliberate opt-in combination worth flagging as a likely mistake;
     it no longer reliably is one. A no-op whenever `replicate_minimum`
     is already `<= n_replicates`, and at `n_replicates == 1` regardless

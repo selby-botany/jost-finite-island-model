@@ -50,7 +50,7 @@ model needs, so you can decide whether to allow more generations.
 |---|---|---|
 | `convergence_window` | `auto` | Generations the statistic must stay steady: `max(50, ceil(3 tau))` — the *starting* size of the evidence window; it grows past this on its own if the trend flattens before the mean is precise (see below) |
 | `max_generations` | `auto` | Safety cap: `max(200000, ceil(15 tau))`, at most 10,000,000 |
-| `convergence_tolerance` | `0.01` | How much the two halves of the window may differ, and (halved) how precisely the window's own mean must be known |
+| `precision` | `0.01` | How much the two halves of the window may differ, and (halved) how precisely the window's own mean must be known |
 
 `tau` is the relaxation time. Any whole number you write replaces the derived
 value. If you set only one of the two, the other adapts: a derived window is

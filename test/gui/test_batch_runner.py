@@ -315,7 +315,7 @@ def test_start_batch_run_prunes_orphan_replicate_directories(
     `test_run_batch_parallel_adaptive_stop_leaves_no_orphan_replicate_
     directories`: under real parallelism,
     `fim.engine._run_batch_parallel` applies an adaptive
-    `replicate_tolerance` stop only after a whole concurrent worker wave
+    early stop only after a whole concurrent worker wave
     completes, in ascending replicate order — a worker beyond the
     replicate that triggered the stop still runs to completion and fully
     writes its own `replicate-*` directory before its result is
@@ -330,7 +330,8 @@ def test_start_batch_run_prunes_orphan_replicate_directories(
         tiny_params,
         n_replicates=10,
         replicate_minimum=2,
-        replicate_tolerance=1000.0,
+        precision=1000.0,
+        stop_batch_early=True,
     )
     output_directory = tmp_path / "output"
     message_queue: queue.Queue[batch_runner.BatchMessage] = queue.Queue()

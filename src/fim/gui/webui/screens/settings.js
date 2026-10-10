@@ -42,8 +42,8 @@ const STATISTICS_PRESETS = {
 const settingsEngineBackendSelect = document.getElementById("settings-engine_backend");
 const settingsNReplicatesInput = document.getElementById("settings-n_replicates");
 const settingsMaxGenerationsInput = document.getElementById("settings-max_generations");
-const settingsReplicateConfidenceSelect = document.getElementById(
-    "settings-replicate_confidence"
+const settingsConfidenceSelect = document.getElementById(
+    "settings-confidence"
 );
 const settingsMaxWorkersInput = document.getElementById("settings-max_workers");
 const settingsMaxConcurrentReplicatesInput = document.getElementById(
@@ -52,8 +52,8 @@ const settingsMaxConcurrentReplicatesInput = document.getElementById(
 const settingsConvergenceWindowInput = document.getElementById(
     "settings-convergence_window"
 );
-const settingsConvergenceToleranceInput = document.getElementById(
-    "settings-convergence_tolerance"
+const settingsPrecisionInput = document.getElementById(
+    "settings-precision"
 );
 const settingsJitField = document.getElementById("settings-jit-field");
 const settingsJitSelect = document.getElementById("settings-jit");
@@ -118,8 +118,8 @@ function collectDefaultRunSettingsValues() {
         n_replicates: settingsNReplicatesInput.value,
         max_generations: settingsMaxGenerationsInput.value,
         convergence_window: settingsConvergenceWindowInput.value,
-        convergence_tolerance: settingsConvergenceToleranceInput.value,
-        replicate_confidence: settingsReplicateConfidenceSelect.value,
+        precision: settingsPrecisionInput.value,
+        confidence: settingsConfidenceSelect.value,
         jit: settingsJitSelect.value,
         auto_vector_min_d: settingsAutoVectorMinDInput.value,
         auto_vector_max_capacity: settingsAutoVectorMaxCapacityInput.value,
@@ -139,8 +139,8 @@ function applyDefaultRunSettingsValues(values) {
     settingsNReplicatesInput.value = values.n_replicates;
     settingsMaxGenerationsInput.value = values.max_generations;
     settingsConvergenceWindowInput.value = values.convergence_window;
-    settingsConvergenceToleranceInput.value = values.convergence_tolerance;
-    settingsReplicateConfidenceSelect.value = values.replicate_confidence;
+    settingsPrecisionInput.value = values.precision;
+    settingsConfidenceSelect.value = values.confidence;
     settingsJitSelect.value = values.jit;
     settingsAutoVectorMinDInput.value = values.auto_vector_min_d;
     settingsAutoVectorMaxCapacityInput.value = values.auto_vector_max_capacity;

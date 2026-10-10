@@ -1,39 +1,39 @@
 {
   "artifacts": {
     "replicate-001": {
-      "bytes": 245420,
-      "sha256": "2b5e53aec45d8b07c5c891bec5500f2a25abd8994d5ba152a73fce0c6abf9034"
+      "bytes": 245396,
+      "sha256": "18ee12a2c8755920b06b6829ce5296cce4abeb55cac1c12c0848ad97e99016b8"
     },
     "replicate-002": {
-      "bytes": 245420,
-      "sha256": "1fd21e1436f9360460e1769ad3dc65fbb2fc3f2054cdcc941e9bd5cbf78b879b"
+      "bytes": 245396,
+      "sha256": "4d942ea6e0554625047b2b530b541f2ce588089dfb0d5ee43f2fec19773213c6"
     },
     "replicate-003": {
-      "bytes": 245420,
-      "sha256": "c5bb1f6b666935532915be45883f6c529a30cc796dd08d2c920c8e6f735e4d6d"
+      "bytes": 245396,
+      "sha256": "40b3fb082824f5e5a05b3d9081ddd08c8b06f96968402114c0e2a9511ee80be0"
     },
     "replicate-004": {
-      "bytes": 245420,
-      "sha256": "3b5784eb0bb543fdb138a48859190a109b1fc732fdc0698549845802127a34e6"
+      "bytes": 245396,
+      "sha256": "baf6f2926a55e068a7d92917d88f334cf548bea57e252b493f056a10b1a26f4c"
     },
     "replicate-005": {
-      "bytes": 245420,
-      "sha256": "b5df33b4280491d63fad17ce8aa1308ceb461ea467e6ac113f946789a4289496"
+      "bytes": 245396,
+      "sha256": "fcbb5ba9ed0c749345e8f849c516d8a0dcf80ff1e4e6aeea9a529e0332f4d420"
     },
     "summary": {
       "bytes": 6129,
       "sha256": "28bc984550b201a0ac84edd0237e09ebb786c109d31f22fbcdc35b322ba4ebb0"
     }
   },
-  "ended_at": "2026-10-10T00:54:37.138083Z",
+  "ended_at": "2026-10-10T01:38:50.977296Z",
   "parameters": {
     "N": 2000,
     "_read_only": true,
     "auto_vector_max_capacity": 4096,
     "auto_vector_min_d": 2,
+    "confidence": 0.95,
     "convergence_combinator": "all",
     "convergence_statistic": "D",
-    "convergence_tolerance": 0.0,
     "convergence_window": 31,
     "d": 100,
     "deme_weighting": "equal",
@@ -6757,22 +6757,22 @@
       ]
     ],
     "ploidy": "haploid",
-    "replicate_confidence": 0.95,
+    "precision": 0.0,
     "replicate_minimum": 5,
-    "replicate_tolerance": null,
     "seed": 992000,
+    "stop_batch_early": false,
     "track_expensive_statistics": false
   },
   "replicate_count": 5,
   "replicate_run_ids": [
-    "run-c06980bfd4b59d63-r001",
-    "run-c06980bfd4b59d63-r002",
-    "run-c06980bfd4b59d63-r003",
-    "run-c06980bfd4b59d63-r004",
-    "run-c06980bfd4b59d63-r005"
+    "run-eff94d31d07aef2c-r001",
+    "run-eff94d31d07aef2c-r002",
+    "run-eff94d31d07aef2c-r003",
+    "run-eff94d31d07aef2c-r004",
+    "run-eff94d31d07aef2c-r005"
   ],
-  "run_id": "run-c06980bfd4b59d63",
+  "run_id": "run-eff94d31d07aef2c",
   "schema_version": 1,
   "software_version": "1.2.0",
-  "started_at": "2026-10-10T00:53:53.076910Z"
+  "started_at": "2026-10-10T01:37:35.890104Z"
 }

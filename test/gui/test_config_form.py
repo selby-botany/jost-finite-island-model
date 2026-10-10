@@ -91,8 +91,8 @@ def test_default_run_setting_field_names_excludes_scientific_per_run_fields() ->
     assert "n_replicates" in names
     assert "max_generations" in names
     assert "convergence_window" in names
-    assert "convergence_tolerance" in names
-    assert "replicate_confidence" in names
+    assert "precision" in names
+    assert "confidence" in names
     assert "jit" in names
     assert "auto_vector_min_d" in names
     assert "auto_vector_max_capacity" in names
@@ -123,12 +123,12 @@ def test_all_fields_covers_every_tabs_plain_fields() -> None:
         "initial_concentration",
         "convergence_combinator",
         "convergence_window",
-        "convergence_tolerance",
+        "precision",
         "track_expensive_statistics",
         "n_replicates",
-        "replicate_tolerance",
+        "stop_batch_early",
         "replicate_minimum",
-        "replicate_confidence",
+        "confidence",
         "engine_backend",
         "max_concurrent_replicates",
         "jit",
@@ -419,35 +419,36 @@ def test_form_values_to_payload_derives_n_loci_one_from_a_bare_length() -> None:
     assert payload["n_loci"] == 1
 
 
-def test_form_values_to_payload_treats_replicate_tolerance_empty_as_unset() -> None:
-    """An empty `replicate_tolerance` field submits `None`, not an error."""
+def test_form_values_to_payload_parses_stop_batch_early_as_a_bool() -> None:
+    """The "stop the batch early" checkbox submits a real `bool`."""
+    for text, expected in (("true", True), ("false", False)):
+        values = dict(_starter())
+        values["stop_batch_early"] = text
+
+        payload = config_form.form_values_to_payload(values)
+
+        assert payload["stop_batch_early"] is expected
+
+
+def test_form_values_to_payload_parses_a_set_precision() -> None:
+    """A non-empty `precision` field parses as a float."""
     values = dict(_starter())
-    values["replicate_tolerance"] = ""
+    values["precision"] = "0.05"
 
     payload = config_form.form_values_to_payload(values)
 
-    assert payload["replicate_tolerance"] is None
+    assert payload["precision"] == 0.05
 
 
-def test_form_values_to_payload_parses_a_set_replicate_tolerance() -> None:
-    """A non-empty `replicate_tolerance` field parses as a float."""
+def test_form_values_to_payload_converts_confidence_to_a_float() -> None:
+    """`confidence`'s "float_choice" kind submits a float, not a string."""
     values = dict(_starter())
-    values["replicate_tolerance"] = "0.05"
+    values["confidence"] = "0.99"
 
     payload = config_form.form_values_to_payload(values)
 
-    assert payload["replicate_tolerance"] == 0.05
-
-
-def test_form_values_to_payload_converts_replicate_confidence_to_a_float() -> None:
-    """`replicate_confidence`'s "float_choice" kind submits a float, not a string."""
-    values = dict(_starter())
-    values["replicate_confidence"] = "0.99"
-
-    payload = config_form.form_values_to_payload(values)
-
-    assert payload["replicate_confidence"] == pytest.approx(0.99)
-    assert isinstance(payload["replicate_confidence"], float)
+    assert payload["confidence"] == pytest.approx(0.99)
+    assert isinstance(payload["confidence"], float)
 
 
 def test_form_values_to_payload_treats_max_concurrent_replicates_empty_as_unset() -> (
@@ -455,8 +456,7 @@ def test_form_values_to_payload_treats_max_concurrent_replicates_empty_as_unset(
 ):
     """An empty `max_concurrent_replicates` field submits `None`, not an error.
 
-    The "optional_int" counterpart to `replicate_tolerance`'s own
-    "optional_float" test, above — `20260914-claude-sonnet-5-non-lineal-
+    `20260914-claude-sonnet-5-non-lineal-
     batch-execution-design.md` (`selby/restricted`), §5.5.
     """
     values = dict(_starter())
@@ -483,7 +483,6 @@ def test_form_values_to_payload_rejects_a_non_integer_max_concurrent_replicates(
 ):
     """`"optional_int"` rejects `"3.5"` — `int("3.5")` itself already would.
 
-    The one behavior `"optional_float"` could not give this field:
     `SimulationParams.max_concurrent_replicates` must be a whole number,
     so this field's own kind must reject a fractional value at the form
     layer rather than silently truncating or deferring to a less clear
@@ -559,7 +558,7 @@ def test_initial_conditions_to_payload_dirichlet_omits_equilibrium_fields() -> N
 
     Omitted, not set to `None` or an empty string — `SimulationParams.
     from_mapping`'s own equilibrium fields default to `None` by
-    absence, exactly like `replicate_tolerance`'s own omission
+    absence, exactly like an unset optional field's omission
     convention.
     """
     payload = config_form.initial_conditions_to_payload(
@@ -1519,7 +1518,7 @@ def test_validate_run_settings_parses_text_as_a_submitted_form_would() -> None:
             "max_generations": "",
             "convergence_window": "auto",
             "max_concurrent_replicates": "",
-            "replicate_confidence": "0.99",
+            "confidence": "0.99",
             "max_workers": "not validated here",
         }
     )
@@ -1554,9 +1553,9 @@ def test_run_setting_differences_lists_only_fields_whose_values_differ() -> None
         "engine_backend": "lineal",
         "n_replicates": "1",
         # The same values, spelled differently.
-        "convergence_tolerance": "1e-2",
+        "precision": "1e-2",
         "max_generations": "",
-        "replicate_confidence": "0.950",
+        "confidence": "0.950",
     }
 
     differences = config_form.run_setting_differences(run, settings)

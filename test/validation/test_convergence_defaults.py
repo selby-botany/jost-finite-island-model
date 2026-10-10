@@ -95,10 +95,10 @@ def _run(
         initial_allele_count=2,
         convergence_statistic="D",
         convergence_window=derived.window,
-        convergence_tolerance=module.TOLERANCE,
+        precision=module.TOLERANCE,
         max_generations=derived.max_generations,
         n_replicates=replicates,
-        replicate_tolerance=None,
+        stop_batch_early=False,
     )
     results = fim(n, m, params.mu, d, params=params, store=_Discard())
     results = results if isinstance(results, tuple) else (results,)

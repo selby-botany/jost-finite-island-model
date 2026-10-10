@@ -82,10 +82,10 @@ def _write_run(tmp_path: Path, **overrides: object) -> Path:
         "seed": 20260814,
         "loci": [{"locus_id": 1, "length": 200}],
         "convergence_window": 4,
-        "convergence_tolerance": 1.0,
+        "precision": 1.0,
         "max_generations": 10,
         "n_replicates": 1,
-        "replicate_tolerance": None,
+        "stop_batch_early": False,
     }
     config.update(overrides)
     config_path = tmp_path / "run.yaml"
@@ -517,10 +517,10 @@ def test_a_rebuilt_convergence_history_matches_the_live_one(tmp_path: Path) -> N
         "seed": 14,
         "loci": [{"locus_id": 1, "length": 200}],
         "convergence_window": 4,
-        "convergence_tolerance": 0.02,
+        "precision": 0.02,
         "max_generations": 20,
         "n_replicates": 3,
-        "replicate_tolerance": None,
+        "stop_batch_early": False,
     }
     config_path = tmp_path / "batch.yaml"
     config_path.write_text(yaml.safe_dump(config, sort_keys=False), encoding="utf-8")

@@ -269,7 +269,7 @@ def test_a_runs_details_dialog_names_it_without_documentation(
                 # the batch took most of a minute alone, and over two
                 # under a loaded parallel run, for a test about naming.
                 "n_replicates": 1,
-                "replicate_tolerance": None,
+                "stop_batch_early": False,
             }
         ),
         encoding="utf-8",

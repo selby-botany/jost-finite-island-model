@@ -637,7 +637,7 @@ def tiny_params() -> SimulationParams
 
 Return a small, fast, single-run configuration for integration tests.
 
-`n_replicates=1`/`replicate_tolerance=None` explicitly, not
+`n_replicates=1`/`stop_batch_early=False` explicitly, not
 `SimulationParams`'s own current defaults (`200`/`0.01`) — this
 fixture's whole point is one small, fast, ordinary scalar run; a
 caller that actually wants to test replicate-batch behavior should
@@ -4351,7 +4351,7 @@ def test_run_batch_adaptive_tolerance_can_stop_before_n_replicates(
         tmp_path: Path) -> None
 ```
 
-A generous `replicate_tolerance` writes fewer than `n_replicates` dirs.
+A generous `precision` writes fewer than `n_replicates` dirs.
 
 <a id="cli.test_cli.test_run_batch_parallel_adaptive_stop_leaves_no_orphan_replicate_directories"></a>
 
@@ -4365,7 +4365,7 @@ def test_run_batch_parallel_adaptive_stop_leaves_no_orphan_replicate_directories
 A parallel batch's published `replicate-*` set exactly matches the manifest.
 
 Regression test for S1: `fim.engine._run_batch_parallel` applies an
-adaptive `replicate_tolerance` stop only after a whole concurrent
+adaptive early stop only after a whole concurrent
 worker batch completes, in ascending replicate order — a worker
 beyond the replicate that triggered the stop still runs to
 completion and fully writes its own `replicate-*` directory before
@@ -6084,7 +6084,7 @@ An exact-match tolerance a live drift process cannot satisfy hits the cap.
 `max_generations=2 + 1` (validation rejects anything larger — see the
 `convergence_window` case in `test/model/test_params.py::
 test_post_init_validation_covers_all_scalar_contracts`);
-`convergence_tolerance=0.0` requires the two half-window means to
+`precision=0.0` requires the two half-window means to
 match exactly, which a real drifting `D` trajectory essentially never
 does in two generations.
 
@@ -6274,7 +6274,7 @@ def test_sigma_band_is_never_computed_for_an_adaptively_abandoned_lane(
 An adaptive stop's abandoned lanes get no band — decision 8's closing note.
 
 `_apply_sigma_band_extensions` skips any lane with no `result` at
-all, which is exactly the set an adaptive `replicate_tolerance` stop
+all, which is exactly the set an adaptive early stop
 discarded from the store just above `run_batch`'s own early return.
 A band is therefore never computed from, or persisted for, a
 replicate the adaptive stop chose not to keep.
@@ -6416,23 +6416,23 @@ def test_batch_run_uses_explicit_run_id_suffixes(
 
 Caller-provided batch IDs receive deterministic one-based suffixes.
 
-<a id="engine.test_engine.test_replicate_tolerance_unset_is_unaffected_by_the_adaptive_machinery"></a>
+<a id="engine.test_engine.test_stopping_the_batch_early_off_is_unaffected_by_the_adaptive_machinery"></a>
 
-#### test\_replicate\_tolerance\_unset\_is\_unaffected\_by\_the\_adaptive\_machinery
+#### test\_stopping\_the\_batch\_early\_off\_is\_unaffected\_by\_the\_adaptive\_machinery
 
 ```python
-def test_replicate_tolerance_unset_is_unaffected_by_the_adaptive_machinery(
+def test_stopping_the_batch_early_off_is_unaffected_by_the_adaptive_machinery(
         tiny_params: SimulationParams) -> None
 ```
 
-Omitting `replicate_tolerance` keeps the fixed-count batch loop exact.
+`stop_batch_early` off keeps the fixed-count batch loop exact.
 
-<a id="engine.test_engine.test_replicate_tolerance_can_stop_before_the_cap"></a>
+<a id="engine.test_engine.test_a_generous_precision_can_stop_the_batch_before_the_cap"></a>
 
-#### test\_replicate\_tolerance\_can\_stop\_before\_the\_cap
+#### test\_a\_generous\_precision\_can\_stop\_the\_batch\_before\_the\_cap
 
 ```python
-def test_replicate_tolerance_can_stop_before_the_cap() -> None
+def test_a_generous_precision_can_stop_the_batch_before_the_cap() -> None
 ```
 
 A generous tolerance stops as soon as `replicate_minimum` is reached.
@@ -6515,7 +6515,7 @@ that asserted the *opposite*: `replicate_minimum=100` with
 `n_replicates=3` used to raise `ValueError` at construction
 (adaptive stopping could never even be evaluated, let alone fire,
 so the config was rejected as describing something structurally
-impossible). Changed once `replicate_tolerance` stopped defaulting
+impossible). Changed once `stop_batch_early` became the default
 to `None` (`fim.model.params.SimulationParams.__post_init__`'s own
 comment has the full reasoning): the identical combination now
 arises from nothing more deliberate than setting a small `n_
@@ -6545,7 +6545,7 @@ its one locus, so `G_ST` is undefined for every one of them and its
 stopping-criterion window never fills. The batch correctly falls back
 to the `n_replicates` cap rather than the prior behavior, where
 substituting `0.0` for every undefined replicate produced a constant
-zero history that satisfied an exact `replicate_tolerance=0.0`
+zero history that satisfied an exact `precision=0.0`
 immediately at `replicate_minimum` — a fabricated "convergence" the
 run's actual (complete lack of) data never supported.
 
@@ -6635,7 +6635,7 @@ already making it reproducible.
 Not built from `tiny_params`: its own tight, fast-converging
 defaults have every replicate stop at the identical generation
 (confirmed live -- the whole reason this test needs staggered
-stops), so this test picks its own `seed`/`convergence_tolerance`/
+stops), so this test picks its own `seed`/`precision`/
 `max_generations` specifically to produce real spread (`[3, 5, 6,
 12, 15]`, confirmed live for this exact configuration) instead.
 
@@ -6850,7 +6850,7 @@ Regression test, the `store_factory` counterpart to
 def test_max_workers_respects_adaptive_stopping_in_batches() -> None
 ```
 
-Batched parallel replicates still honor `replicate_tolerance`.
+Batched parallel replicates still honor the early stop.
 
 A batch can overshoot the exact minimal replicate count by at most
 ``max_workers - 1``, since the stopping decision is only applied once
@@ -7752,7 +7752,7 @@ The adaptive replicate stop fires once enough of the accepted
 prefix has finished, admitting simultaneous stops in ascending
 `replica_index`, deterministically across repeated runs.
 
-Both `convergence_tolerance` and `replicate_tolerance` are set
+`precision` is set
 astronomically large so every criterion is satisfied the instant it
 has *enough* observations, regardless of their actual values — this
 makes every one of the five lanes stop on the identical tick
@@ -8792,7 +8792,7 @@ every value:
 - the persisted row keys and report keys are the same set
   everywhere.
 
-`convergence_tolerance=0.0` with a real window is what makes the
+`precision=0.0` with a real window is what makes the
 third invariant meaningful rather than coincidental: an exactly-zero
 half-window mean difference effectively cannot occur here, so every
 backend is expected to stop at the generation cap, and the
@@ -9171,7 +9171,7 @@ Three replicates: every replicate's rows, reports and the batch summary.
 def test_adaptive_replicate_batch_keeps_the_same_replicates() -> None
 ```
 
-An adaptive batch (`replicate_tolerance`) keeps the same replicate prefix.
+An adaptive batch (`precision`) keeps the same replicate prefix.
 
 <a id="engine.test_vector_parity.test_convergence_stopped_run_matches_lineal"></a>
 
@@ -13208,7 +13208,7 @@ simply never persisted anywhere. `auto_derived`/`relaxation_time`
 (`RunManifest`) and `convergence.jsonl` (`fim.reanalyze.read_
 persisted_convergence_history`) close both gaps at once; this is
 the one test that drives a genuinely auto-derived run (no explicit
-`convergence_window`/`max_generations`/`convergence_tolerance` at
+`convergence_window`/`max_generations`/`precision` at
 all, unlike every other `_write_run`-based test in this file) all
 the way through `cli.main(["run", ...])` and back through `Api.
 open_run` to prove it.
@@ -14544,7 +14544,7 @@ Direct mirror of `cli.py`'s own
 `test_run_batch_parallel_adaptive_stop_leaves_no_orphan_replicate_
 directories`: under real parallelism,
 `fim.engine._run_batch_parallel` applies an adaptive
-`replicate_tolerance` stop only after a whole concurrent worker wave
+early stop only after a whole concurrent worker wave
 completes, in ascending replicate order — a worker beyond the
 replicate that triggered the stop still runs to completion and fully
 writes its own `replicate-*` directory before its result is
@@ -15509,37 +15509,35 @@ def test_form_values_to_payload_derives_n_loci_one_from_a_bare_length(
 
 A single, comma-free `locus_lengths` value means `n_loci == 1`.
 
-<a id="gui.test_config_form.test_form_values_to_payload_treats_replicate_tolerance_empty_as_unset"></a>
+<a id="gui.test_config_form.test_form_values_to_payload_parses_stop_batch_early_as_a_bool"></a>
 
-#### test\_form\_values\_to\_payload\_treats\_replicate\_tolerance\_empty\_as\_unset
-
-```python
-def test_form_values_to_payload_treats_replicate_tolerance_empty_as_unset(
-) -> None
-```
-
-An empty `replicate_tolerance` field submits `None`, not an error.
-
-<a id="gui.test_config_form.test_form_values_to_payload_parses_a_set_replicate_tolerance"></a>
-
-#### test\_form\_values\_to\_payload\_parses\_a\_set\_replicate\_tolerance
+#### test\_form\_values\_to\_payload\_parses\_stop\_batch\_early\_as\_a\_bool
 
 ```python
-def test_form_values_to_payload_parses_a_set_replicate_tolerance() -> None
+def test_form_values_to_payload_parses_stop_batch_early_as_a_bool() -> None
 ```
 
-A non-empty `replicate_tolerance` field parses as a float.
+The "stop the batch early" checkbox submits a real `bool`.
 
-<a id="gui.test_config_form.test_form_values_to_payload_converts_replicate_confidence_to_a_float"></a>
+<a id="gui.test_config_form.test_form_values_to_payload_parses_a_set_precision"></a>
 
-#### test\_form\_values\_to\_payload\_converts\_replicate\_confidence\_to\_a\_float
+#### test\_form\_values\_to\_payload\_parses\_a\_set\_precision
 
 ```python
-def test_form_values_to_payload_converts_replicate_confidence_to_a_float(
-) -> None
+def test_form_values_to_payload_parses_a_set_precision() -> None
 ```
 
-`replicate_confidence`'s "float_choice" kind submits a float, not a string.
+A non-empty `precision` field parses as a float.
+
+<a id="gui.test_config_form.test_form_values_to_payload_converts_confidence_to_a_float"></a>
+
+#### test\_form\_values\_to\_payload\_converts\_confidence\_to\_a\_float
+
+```python
+def test_form_values_to_payload_converts_confidence_to_a_float() -> None
+```
+
+`confidence`'s "float_choice" kind submits a float, not a string.
 
 <a id="gui.test_config_form.test_form_values_to_payload_treats_max_concurrent_replicates_empty_as_unset"></a>
 
@@ -15552,8 +15550,7 @@ def test_form_values_to_payload_treats_max_concurrent_replicates_empty_as_unset(
 
 An empty `max_concurrent_replicates` field submits `None`, not an error.
 
-The "optional_int" counterpart to `replicate_tolerance`'s own
-"optional_float" test, above — `20260914-claude-sonnet-5-non-lineal-
+`20260914-claude-sonnet-5-non-lineal-
 batch-execution-design.md` (`selby/restricted`), §5.5.
 
 <a id="gui.test_config_form.test_form_values_to_payload_parses_a_set_max_concurrent_replicates"></a>
@@ -15578,7 +15575,6 @@ def test_form_values_to_payload_rejects_a_non_integer_max_concurrent_replicates(
 
 `"optional_int"` rejects `"3.5"` — `int("3.5")` itself already would.
 
-The one behavior `"optional_float"` could not give this field:
 `SimulationParams.max_concurrent_replicates` must be a whole number,
 so this field's own kind must reject a fractional value at the form
 layer rather than silently truncating or deferring to a less clear
@@ -15658,7 +15654,7 @@ Dirichlet mode's payload has none of the three equilibrium keys at all.
 
 Omitted, not set to `None` or an empty string — `SimulationParams.
 from_mapping`'s own equilibrium fields default to `None` by
-absence, exactly like `replicate_tolerance`'s own omission
+absence, exactly like an unset optional field's omission
 convention.
 
 <a id="gui.test_config_form.test_initial_conditions_to_payload_equilibrium_split_mode_parses_all_three"></a>
@@ -22275,7 +22271,7 @@ to collide with `_drain_run_messages`'s own `evaluate_js` calls.
 
 Deliberately uses the starter form's own (large) `d`/`N`, not
 `_SET_TINY_FIELDS`, plus `_SET_UNREACHABLE_CONVERGENCE` on top — not
-the starter defaults' own `convergence_tolerance` alone, which a
+the starter defaults' own `precision` alone, which a
 real, once-reproduced regression showed can legitimately converge
 in well under two seconds on a fast-enough or lightly-loaded
 machine, racing past Cancel and never firing `cancelled_event` at
@@ -22315,7 +22311,7 @@ default live view is one Deme-1-vs-Deme-2 panel —
 different from it) and the same reasoning for using it: that
 constant's own comment records a real, confirmed defect an earlier
 version of this test could have hit too (the starter form's own
-`convergence_tolerance` alone can converge in well under two
+`precision` alone can converge in well under two
 seconds on a fast-enough machine) even though it was not the one
 that actually surfaced it. `started_event` alone still decides when
 it is safe to interact, Cancel ending the test rather than waiting
@@ -22482,7 +22478,7 @@ default fields and significant-digits field (botanist GUI design doc
 `20260907-claude-sonnet-5-botanist-gui-redesign.md` §4.2/§11.2/§12,
 extended on a real, reported request to also hold execution engine,
 `n_replicates`, `max_generations`, the convergence-loop timing pair,
-`replicate_confidence`, `jit`, `auto_vector_min_d`, `auto_vector_max_
+`confidence`, `jit`, `auto_vector_min_d`, `auto_vector_max_
 capacity`, `max_workers`, and `max_concurrent_replicates` as global
 defaults -- `index.html`'s own comment above ``modal`-settings` has the
 full account). `convergence_statistic`/`convergence_combinator`
@@ -23827,7 +23823,7 @@ def test_max_samples_bounds_how_many_generations_are_recomputed(
 
 A long run's own sample never exceeds `max_samples`, matching animation.
 
-A tight `convergence_tolerance` (`test_animation.py`'s own `_write_
+A tight `precision` (`test_animation.py`'s own `_write_
 run` uses the identical value, for the identical reason) keeps this
 run from settling early, so it persists every generation up to
 `max_generations` — a small `max_samples` here genuinely exercises
@@ -25982,8 +25978,8 @@ def test_max_concurrent_replicates_defaults_to_none_and_round_trips() -> None
 sonnet-5-fim-engine-review-remediations.md`, `FIM-45`/`FIM-48`.
 Omitted from `to_dict()` when `None`, like `initial_frequencies` —
 this field's own default is already `None`, so an absent key and an
-explicit `None` mean the same thing to `from_mapping`, unlike
-`replicate_tolerance` (see that field's own round-trip test).
+explicit `None` mean the same thing to `from_mapping`, unlike the
+always-present fields (`test_precision_and_stop_batch_early_round_trip`).
 
 <a id="model.test_params.test_max_concurrent_replicates_above_n_replicates_is_clamped_not_rejected"></a>
 
@@ -26228,10 +26224,10 @@ Exactly one of `mu`/`mu_b` must be given — never both, never neither.
             "convergence_combinator": "either"
         }, "convergence_combinator"),
         ({
-            "convergence_tolerance": -1.0
+            "precision": -1.0
         }, "non-negative"),
         ({
-            "convergence_tolerance": float("nan")
+            "precision": float("nan")
         }, "finite"),
         ({
             "max_generations": 0
@@ -26252,17 +26248,20 @@ Exactly one of `mu`/`mu_b` must be given — never both, never neither.
             "n_replicates": 0
         }, "n_replicates"),
         ({
-            "replicate_tolerance": -1.0
+            "precision": -1.0
         }, "non-negative"),
         ({
-            "replicate_tolerance": float("nan")
+            "precision": float("nan")
         }, "finite"),
+        ({
+            "stop_batch_early": "yes"
+        }, "stop_batch_early"),
         ({
             "replicate_minimum": 1
         }, "replicate_minimum"),
         ({
-            "replicate_confidence": 0.80
-        }, "replicate_confidence"),
+            "confidence": 0.80
+        }, "confidence"),
         ({
             "migrant_sampling": "binomial"
         }, "migrant_sampling"),
@@ -26346,7 +26345,7 @@ def test_replicate_minimum_above_n_replicates_is_clamped_not_rejected(
 An unreachable replicate_minimum is silently capped at n_replicates.
 
 Previously rejected outright (`ValueError`) — changed once
-`replicate_tolerance` stopped defaulting to `None`: the same
+batches started stopping early by default: the same
 combination now arises from nothing more deliberate than setting a
 small `n_replicates` without separately thinking about `replicate_
 minimum` at all (this project's own CI found every GUI batch test
@@ -26355,29 +26354,32 @@ The engine-flavored regression test for this same behavior lives in
 `test/engine/test_engine.py::
 test_replicate_minimum_above_n_replicates_runs_to_completion`.
 
-<a id="model.test_params.test_replicate_tolerance_round_trips_unconditionally"></a>
+<a id="model.test_params.test_precision_and_stop_batch_early_round_trip"></a>
 
-#### test\_replicate\_tolerance\_round\_trips\_unconditionally
+#### test\_precision\_and\_stop\_batch\_early\_round\_trip
 
 ```python
-def test_replicate_tolerance_round_trips_unconditionally() -> None
+def test_precision_and_stop_batch_early_round_trip() -> None
 ```
 
-`replicate_tolerance` always round-trips exactly, `None` included.
+`precision`, `stop_batch_early` and `confidence` round-trip exactly.
 
-An absent `replicate_tolerance` key means "use the default"
-(`DEFAULT_REPLICATE_TOLERANCE`, `0.01`) now, not "disabled" — that
-default is a real, non-`None` number. `to_dict()` always includes
-`replicate_tolerance` unconditionally (`null` for `None`), unlike
-`initial_frequencies` (still omitted when `None`, since `None` is
-still *that* field's own default): omitting a `None`
-`replicate_tolerance` the same way would silently turn an explicit
-"disabled" into "use the default" the next time the dict round-trips
-through `from_mapping` — a real bug this project's own test suite
-caught directly (several tests build a batch config via
-`{**tiny_params.to_dict(), "n_replicates": N}`, which depends on
-`to_dict()` preserving `tiny_params`'s own explicit `replicate_
-tolerance=None` losslessly).
+`batch_precision` is `precision` while the batch may stop early and
+`None` once `stop_batch_early` is off: the one value the batch's
+stopping rule reads.
+
+<a id="model.test_params.test_the_merged_settings_old_names_are_refused"></a>
+
+#### test\_the\_merged\_settings\_old\_names\_are\_refused
+
+```python
+@pytest.mark.parametrize(
+    "old_key",
+    ["convergence_tolerance", "replicate_tolerance", "replicate_confidence"])
+def test_the_merged_settings_old_names_are_refused(old_key: str) -> None
+```
+
+`precision` and `confidence` replaced three settings; no alias is kept.
 
 <a id="model.test_params.test_required_and_conflicting_configuration_keys_are_named"></a>
 
@@ -26761,7 +26763,7 @@ Matches `max_concurrent_replicates`'s own round-trip contract
 (`test_max_concurrent_replicates_defaults_to_none_and_round_trips`):
 an absent key and an explicit `None` mean the same thing here, so
 omitting them keeps `from_mapping(to_dict())` lossless without
-needing `replicate_tolerance`'s own always-present workaround.
+needing an always-present workaround.
 
 <a id="model.test_params.test_equilibrium_split_fields_must_be_set_together"></a>
 
@@ -27263,11 +27265,11 @@ enough to allocate) is decided when the backend is built.
             "convergence_window": 1
         }, "convergence_window must be at least 2"),
         ({
-            "convergence_tolerance": -0.1
-        }, "convergence_tolerance must be non-negative"),
+            "precision": -0.1
+        }, "precision must be non-negative"),
         ({
-            "replicate_confidence": 0.5
-        }, "replicate_confidence must be 0.90"),
+            "confidence": 0.5
+        }, "confidence must be 0.90"),
         ({
             "engine_backend": "fast"
         }, "engine_backend must be"),
@@ -36269,7 +36271,7 @@ from the fresh run's own manifest, not predicted here:
   under either mutation model (`GenerationalBackend`'s own docstring and
   `fim.model.vector_block`, checked by the golden-parity engine tests and
   `test/engine/test_vector_parity.py`). That holds for an adaptive batch
-  (`replicate_tolerance` set) too: every backend judges the adaptive stop
+  (`stop_batch_early` on) too: every backend judges the adaptive stop
   on replicates in replicate order (`fim.engine.run_batch`'s own
   docstring), so all keep the same replicates. So a committed `lineal`
   or `generational` output and a fresh `generational` or

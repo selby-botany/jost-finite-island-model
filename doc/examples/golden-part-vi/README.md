@@ -33,7 +33,7 @@ unlucky ones nearby.
 
 `fim` now checks for that directly: alongside the trend check, it asks
 whether the trailing window's own mean is actually known to the requested
-[convergence_tolerance](../../configuration.md#convergence_tolerance),
+[precision](../../configuration.md#precision),
 correcting for how correlated consecutive generations are
 (`fim.convergence.window_statistics`,
 [Convergence defaults](../../convergence.md)). Once the trend genuinely

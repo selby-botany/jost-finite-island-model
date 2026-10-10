@@ -320,7 +320,7 @@ jobs:
             -replace 'N: 450', 'N: 20' `
             -replace 'd: 20', 'd: 2' `
             -replace 'convergence_window: auto', 'convergence_window: 4' `
-            -replace 'convergence_tolerance: 0.01', 'convergence_tolerance: 1.0' `
+            -replace 'precision: 0.01', 'precision: 1.0' `
             -replace 'max_generations: auto', 'max_generations: 10' `
             | Set-Content tiny.yaml
           .\dist\fim.exe run tiny.yaml --output smoke --quiet
@@ -409,7 +409,7 @@ jobs:
             -replace 'N: 450', 'N: 20' `
             -replace 'd: 20', 'd: 2' `
             -replace 'convergence_window: auto', 'convergence_window: 4' `
-            -replace 'convergence_tolerance: 0.01', 'convergence_tolerance: 1.0' `
+            -replace 'precision: 0.01', 'precision: 1.0' `
             -replace 'max_generations: auto', 'max_generations: 10' `
             | Set-Content tiny.yaml
           .\dist\fim.exe run tiny.yaml --output smoke --quiet
@@ -505,7 +505,7 @@ jobs:
             -e 's/N: 450/N: 20/' \
             -e 's/d: 20/d: 2/' \
             -e 's/convergence_window: auto/convergence_window: 4/' \
-            -e 's/convergence_tolerance: 0.01/convergence_tolerance: 1.0/' \
+            -e 's/precision: 0.01/precision: 1.0/' \
             -e 's/max_generations: auto/max_generations: 10/' \
             -e 's/n_replicates: 200/n_replicates: 1/' \
             tiny.yaml
@@ -585,7 +585,7 @@ jobs:
             -e 's/N: 450/N: 20/' \
             -e 's/d: 20/d: 2/' \
             -e 's/convergence_window: auto/convergence_window: 4/' \
-            -e 's/convergence_tolerance: 0.01/convergence_tolerance: 1.0/' \
+            -e 's/precision: 0.01/precision: 1.0/' \
             -e 's/max_generations: auto/max_generations: 10/' \
             -e 's/n_replicates: 200/n_replicates: 1/' \
             tiny.yaml
@@ -706,7 +706,7 @@ jobs:
             -e 's/N: 450/N: 20/' \
             -e 's/d: 20/d: 2/' \
             -e 's/convergence_window: auto/convergence_window: 4/' \
-            -e 's/convergence_tolerance: 0.01/convergence_tolerance: 1.0/' \
+            -e 's/precision: 0.01/precision: 1.0/' \
             -e 's/max_generations: auto/max_generations: 10/' \
             -e 's/n_replicates: 200/n_replicates: 1/' \
             tiny.yaml

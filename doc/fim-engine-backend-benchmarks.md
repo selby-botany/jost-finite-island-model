@@ -58,7 +58,7 @@ engines`): `n_replicates=16`, `max_generations=100`,
 (the combination these sweeps were run with, before `"generational-vector"`
 ran the other mutation model and stochastic sampling — see
 [the design document's §4.6](fim-simulator-design.md#46-choosing-an-engine-backend)),
-`replicate_tolerance=None` (every replicate runs to the full
+`stop_batch_early=False` (every replicate runs to the full
 generation count, never stopped early, so what gets timed does not
 itself vary run to run). **B.2 is a separate, standalone script, not
 `benchmark-engines`** — it uses the project's own *default*

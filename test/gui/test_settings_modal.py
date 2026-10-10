@@ -3,7 +3,7 @@ default fields and significant-digits field (botanist GUI design doc
 `20260907-claude-sonnet-5-botanist-gui-redesign.md` §4.2/§11.2/§12,
 extended on a real, reported request to also hold execution engine,
 `n_replicates`, `max_generations`, the convergence-loop timing pair,
-`replicate_confidence`, `jit`, `auto_vector_min_d`, `auto_vector_max_
+`confidence`, `jit`, `auto_vector_min_d`, `auto_vector_max_
 capacity`, `max_workers`, and `max_concurrent_replicates` as global
 defaults -- `index.html`'s own comment above `#modal-settings` has the
 full account). `convergence_statistic`/`convergence_combinator`
@@ -123,7 +123,7 @@ def test_settings_dialog_seeds_execution_and_convergence_defaults_from_starter(
             "maxGenerations: document.getElementById('settings-max_generations')"
             ".value, "
             "replicateConfidence: document.getElementById("
-            "'settings-replicate_confidence').value, "
+            "'settings-confidence').value, "
             "jit: document.getElementById('settings-jit').value, "
             "autoVectorMinD: document.getElementById('settings-auto_vector_min_d')"
             ".value"
@@ -137,7 +137,7 @@ def test_settings_dialog_seeds_execution_and_convergence_defaults_from_starter(
     assert result["engineBackend"] == starter["engine_backend"]
     assert result["nReplicates"] == starter["n_replicates"]
     assert result["maxGenerations"] == starter["max_generations"]
-    assert result["replicateConfidence"] == starter["replicate_confidence"]
+    assert result["replicateConfidence"] == starter["confidence"]
     assert result["jit"] == starter["jit"]
     assert result["autoVectorMinD"] == starter["auto_vector_min_d"]
 
@@ -153,7 +153,7 @@ def test_settings_dialog_seeds_execution_and_convergence_defaults_from_saved(
                 "engine_backend": "generational",
                 "n_replicates": "16",
                 "convergence_window": "10",
-                "convergence_tolerance": "0.02",
+                "precision": "0.02",
             }
         ),
     )

@@ -18,7 +18,7 @@ WINDOW_RELAXATION_MULTIPLE: Final = 3.0
 Set by `dev/bin/calibrate-convergence-defaults` and recorded in
 `test/validation/convergence-defaults-evidence.json`. The noise-free
 analysis (design Appendix A.6) already accepts a residual of a third of
-`convergence_tolerance` at `2 tau`, but a single stochastic run also
+`precision` at `2 tau`, but a single stochastic run also
 carries sampling noise. Golden Part VI (60 replicates, 8 loci) stops
 0.14 below its analytic D at `1 tau`, 0.060 at `2 tau` (outside the 0.05
 acceptance) and 0.040 at `3 tau`; a longer window does not improve on that

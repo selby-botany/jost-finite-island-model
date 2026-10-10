@@ -5,7 +5,7 @@
 This companion timing workload runs 16 replicates with 35 demes and the
 `generational` engine. Its seven-base finite-alleles locus has more
 possible states than the preceding large-deme example. As there, a
-101-generation convergence window and `replicate_tolerance: null` make
+101-generation convergence window and `stop_batch_early: false` make
 every one of the 16 replicates run exactly 100 generations, so the
 amount of work is fixed.
 

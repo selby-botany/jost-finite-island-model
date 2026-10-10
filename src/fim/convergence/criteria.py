@@ -133,7 +133,7 @@ class TrailingWindowCriterion:
     This is the ordinary, default convergence rule used *within* one
     simulation run (as opposed to `ConfidenceIntervalCriterion`, used
     *across* several replicate runs of the same parameters) — the
-    `convergence_window`/`convergence_tolerance` configuration fields
+    `convergence_window`/`precision` configuration fields
     documented in `doc/configuration.md` configure exactly this class.
     A thin, `ConvergenceCriterion`-shaped wrapper around
     `trailing_window_stable`, above — see that function's own

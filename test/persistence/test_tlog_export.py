@@ -291,10 +291,10 @@ def _params(**updates: object) -> SimulationParams:
         "loci": [{"locus_id": 1, "length": 200}, {"locus_id": 2, "length": 200}],
         "initial_allele_count": 3,
         "convergence_window": 4,
-        "convergence_tolerance": 1e-12,
+        "precision": 1e-12,
         "max_generations": 40,
         "n_replicates": 1,
-        "replicate_tolerance": None,
+        "stop_batch_early": False,
     }
     config.update(updates)
     return SimulationParams.from_mapping(config)

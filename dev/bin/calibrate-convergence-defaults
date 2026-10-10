@@ -139,10 +139,10 @@ def main() -> None:
         initial_allele_count=2,
         convergence_statistic="D",
         convergence_window=window,
-        convergence_tolerance=TOLERANCE,
+        precision=TOLERANCE,
         max_generations=cap,
         n_replicates=args.replicates,
-        replicate_tolerance=None,
+        stop_batch_early=False,
     )
 
     class Discard:

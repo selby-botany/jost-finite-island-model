@@ -67,10 +67,10 @@ def _run_history(
         "seed": seed,
         "loci": [{"locus_id": index, "length": 100} for index in range(1, 9)],
         "convergence_window": GENERATIONS,
-        "convergence_tolerance": 1e-9,
+        "precision": 1e-9,
         "max_generations": GENERATIONS,
         "n_replicates": 1,
-        "replicate_tolerance": None,
+        "stop_batch_early": False,
     }
     config_path = tmp_path / f"run-{seed}.yaml"
     config_path.write_text(yaml.safe_dump(config, sort_keys=False), encoding="utf-8")
@@ -140,10 +140,10 @@ HUB_CONFIG = {
     "mu": 0.005,
     "loci": [{"locus_id": index, "length": 100} for index in range(1, 9)],
     "convergence_window": 300,
-    "convergence_tolerance": 1e-9,
+    "precision": 1e-9,
     "max_generations": 300,
     "n_replicates": 1,
-    "replicate_tolerance": None,
+    "stop_batch_early": False,
 }
 
 

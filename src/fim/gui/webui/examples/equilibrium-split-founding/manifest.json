@@ -6,7 +6,7 @@
     },
     "equilibrium_trajectory": {
       "bytes": 459712,
-      "sha256": "ae2f2cb407eca9c988545fd8a68a0cb89d801385d05f358c4830181feaacb93f"
+      "sha256": "6f30373dc516adef58ff209d81ee70ca5439fb2409acb2257863e719ea41d9e6"
     },
     "pairwise": {
       "bytes": 521,
@@ -14,7 +14,7 @@
     },
     "report": {
       "bytes": 2313,
-      "sha256": "c4c89d14c8866719c2767a9d46c465137034b008c0368acb37e48d35bb33f03f"
+      "sha256": "8ac4539be3dda4c4bb78e5226b3e9eb23311e895c6edb93e16782aaef5f2a816"
     },
     "scatter": {
       "bytes": 137847,
@@ -22,7 +22,7 @@
     },
     "trajectory": {
       "bytes": 1031819,
-      "sha256": "7f2e8b41aa7af2126f3855e819ded6d6e99c4b4fdc97921577e36f85c701bb82"
+      "sha256": "b9926f6b3d95da69eb9bcdb0c5074cfa24b4d70fecbd5200a1ce571c62898cc4"
     }
   },
   "auto_derived": [
@@ -36,7 +36,7 @@
     "reason": "statistic converged",
     "statistic": "D"
   },
-  "ended_at": "2026-10-08T15:48:16.924845Z",
+  "ended_at": "2026-10-10T01:39:03.249487Z",
   "engine_backend": "lineal",
   "equilibrium_final_heterozygosity": 0.51351875,
   "equilibrium_generation_count": 1256,
@@ -47,9 +47,9 @@
     "_read_only": true,
     "auto_vector_max_capacity": 4096,
     "auto_vector_min_d": 2,
+    "confidence": 0.95,
     "convergence_combinator": "all",
     "convergence_statistic": "D",
-    "convergence_tolerance": 0.03,
     "convergence_window": 924,
     "d": 3,
     "deme_weighting": "equal",
@@ -102,18 +102,18 @@
     "mutation_model": "infinite_alleles",
     "n_replicates": 1,
     "ploidy": "haploid",
-    "replicate_confidence": 0.95,
+    "precision": 0.03,
     "replicate_minimum": 10,
-    "replicate_tolerance": 0.01,
     "seed": 20260916,
+    "stop_batch_early": true,
     "track_expensive_statistics": false
   },
   "relaxation_time": 307.6923076923077,
-  "run_id": "run-428a08543de80731",
+  "run_id": "run-5c08b8c6144a2726",
   "schema_version": 3,
   "sigma_band": null,
   "sigma_band_multiplier": null,
   "sigma_band_window": null,
   "software_version": "1.2.0",
-  "started_at": "2026-10-08T15:47:51.683142Z"
+  "started_at": "2026-10-10T01:38:55.201298Z"
 }

@@ -21,10 +21,10 @@ loci:
 engine_backend: lineal
 convergence_statistic: D
 convergence_window: 31
-convergence_tolerance: 0.0
+precision: 0.0
 max_generations: 30
 n_replicates: 5
-replicate_tolerance: null
+stop_batch_early: false
 p_0:
 - - {0: 0.007358944245275193, 1: 0.007358944245275193, 2: 0.007358944245275193, 3: 0.007358944245275193,
     4: 0.007358944245275193, 5: 0.007358944245275193, 6: 0.007358944245275193, 7: 0.007358944245275193,

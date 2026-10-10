@@ -84,10 +84,12 @@ def test_a_model_key_still_changes_the_run_id() -> None:
     assert _run_id(_config(seed=20261006)) != _run_id(_config())
 
 
-# `_config()`'s run ID, computed from the code before `_read_only`
-# existed (`dev` at `af9f7fc`, 2026-10-05). Pinned so that adding an
-# internal attribute can never silently re-key every existing run.
-GOLDEN_RUN_ID = "run-9b48f125d7f8c355"
+# `_config()`'s run ID. Pinned so that adding an internal attribute can
+# never silently re-key every existing run. It last moved on 2026-10-09,
+# deliberately, when `precision`, `stop_batch_early` and `confidence`
+# replaced the three tolerance and confidence settings (the parameters a
+# run ID hashes changed names); it was `run-9b48f125d7f8c355` before.
+GOLDEN_RUN_ID = "run-0388e63993e51794"
 
 
 def test_a_configuration_without_read_only_keeps_its_golden_run_id() -> None:

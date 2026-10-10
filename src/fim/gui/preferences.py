@@ -48,7 +48,7 @@ never any saved run artifact.
 A sixth field — `default_run_settings` — is the Settings dialog's own
 "execution/convergence-selection defaults" (`engine_backend`,
 `n_replicates`, `convergence_statistic`/`convergence_combinator`/
-`convergence_window`/`convergence_tolerance`), a real, reported request
+`convergence_window`/`precision`), a real, reported request
 to move fields the user judged "applicable pretty universally" out of
 the per-run Configure form and into one global-default home, while an
 individual run's own Configure form can still override any of them for

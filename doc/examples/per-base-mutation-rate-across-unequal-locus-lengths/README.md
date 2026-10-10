@@ -22,7 +22,7 @@ generation 231 with `D` still on its approach from the starting state.
 
 ## Why the tolerance is 0.03
 
-The configuration sets `convergence_tolerance: 0.03`, three times the
+The configuration sets `precision: 0.03`, three times the
 default. A run stops only once its trailing-window mean is known to half
 the tolerance. The 500-base locus mutates fast enough to hold many
 alleles, which makes each generation slow to simulate, so at the default

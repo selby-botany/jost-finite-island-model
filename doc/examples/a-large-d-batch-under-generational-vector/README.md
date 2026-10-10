@@ -12,7 +12,7 @@ Two settings fix the amount of work:
 - `convergence_window: 101` is one more generation than the 100-generation
   cap can record, so no replicate can stop early by converging. Each one
   ends "at the cap", which is expected here.
-- `replicate_tolerance: null` turns off the adaptive replicate stop, so all
+- `stop_batch_early: false` turns off the adaptive replicate stop, so all
   16 replicates always run. Without it, the default tolerance of 0.01 stops
   the batch at the 10-replicate minimum.
 

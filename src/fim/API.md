@@ -30,7 +30,7 @@ Return to the [source-tree orientation](../README.md) or the [developer guide](.
   * [DEFAULT\_AUTO\_VECTOR\_MIN\_D](#fim.config.defaults.DEFAULT_AUTO_VECTOR_MIN_D)
   * [DEFAULT\_AUTO\_VECTOR\_MAX\_CAPACITY](#fim.config.defaults.DEFAULT_AUTO_VECTOR_MAX_CAPACITY)
   * [DEFAULT\_N\_REPLICATES](#fim.config.defaults.DEFAULT_N_REPLICATES)
-  * [DEFAULT\_REPLICATE\_TOLERANCE](#fim.config.defaults.DEFAULT_REPLICATE_TOLERANCE)
+  * [DEFAULT\_PRECISION](#fim.config.defaults.DEFAULT_PRECISION)
   * [DEFAULT\_PAIRWISE\_MAX\_DEMES](#fim.config.defaults.DEFAULT_PAIRWISE_MAX_DEMES)
 * [fim.config.display](#fim.config.display)
   * [GUI\_ANIMATION\_MAX\_FRAMES](#fim.config.display.GUI_ANIMATION_MAX_FRAMES)
@@ -493,6 +493,7 @@ Return to the [source-tree orientation](../README.md) or the [developer guide](.
   * [SimulationParams](#fim.model.params.SimulationParams)
     * [\_\_post\_init\_\_](#fim.model.params.SimulationParams.__post_init__)
     * [convergence\_statistics](#fim.model.params.SimulationParams.convergence_statistics)
+    * [batch\_precision](#fim.model.params.SimulationParams.batch_precision)
     * [population\_sizes](#fim.model.params.SimulationParams.population_sizes)
     * [individuals](#fim.model.params.SimulationParams.individuals)
     * [mutation\_rates](#fim.model.params.SimulationParams.mutation_rates)
@@ -1278,7 +1279,7 @@ Default `convergence_window`, in units of the relaxation time `tau`.
 Set by `dev/bin/calibrate-convergence-defaults` and recorded in
 `test/validation/convergence-defaults-evidence.json`. The noise-free
 analysis (design Appendix A.6) already accepts a residual of a third of
-`convergence_tolerance` at `2 tau`, but a single stochastic run also
+`precision` at `2 tau`, but a single stochastic run also
 carries sampling noise. Golden Part VI (60 replicates, 8 loci) stops
 0.14 below its analytic D at `1 tau`, 0.060 at `2 tau` (outside the 0.05
 acceptance) and 0.040 at `3 tau`; a longer window does not improve on that
@@ -1603,10 +1604,10 @@ Kind: policy; already an Expert Setting.
 How many independently seeded replicates a run tries by default.
 
 Not `1` — the most useful ordinary use of this tool is a measurement
-*with* a confidence interval (`replicate_tolerance`, below), not a
+*with* a confidence interval (`precision`, below), not a
 single point estimate, so that is what an unconfigured run now does by
 default: run up to `DEFAULT_N_REPLICATES` replicates, stopping early
-once `DEFAULT_REPLICATE_TOLERANCE` is reached. `200` is a generous cap,
+once `DEFAULT_PRECISION` is reached. `200` is a generous cap,
 not an expectation of always reaching it — chosen to match this
 project's own worked examples and test scenarios that already use a
 comparable count for a real confidence interval, giving the adaptive
@@ -1618,18 +1619,20 @@ means.
 
 Kind: policy; a regular setting.
 
-<a id="fim.config.defaults.DEFAULT_REPLICATE_TOLERANCE"></a>
+<a id="fim.config.defaults.DEFAULT_PRECISION"></a>
 
-#### DEFAULT\_REPLICATE\_TOLERANCE
+#### DEFAULT\_PRECISION
 
-Default early-stopping half-width for a replicate batch.
+Default `precision`: plus or minus this much, in each statistic's units.
 
-Matches `convergence_tolerance`'s own default (`0.01`) deliberately —
-the same tightness applied one layer up, to the across-replicate mean
-instead of the within-run trailing window. Paired with
-`DEFAULT_N_REPLICATES` above: together they make an unconfigured run
-compute a real confidence interval by default rather than a single,
-uncertainty-free-looking point estimate.
+One number answers "how precise?" for a single run and a batch alike: a
+run averages over time until its mean is known to within this at the
+configured confidence, and a batch adds replicates until the interval
+across replicates is this narrow. `0.01` is the default both of the old
+within-run tolerance and of the old replicate tolerance, which this
+setting merged. Paired with `DEFAULT_N_REPLICATES` above, it makes an
+unconfigured run compute a real confidence interval by default rather
+than a single, uncertainty-free-looking point estimate.
 
 Kind: policy; a regular setting.
 
@@ -1999,7 +2002,7 @@ Detect stability by comparing two halves of a trailing window.
 This is the ordinary, default convergence rule used *within* one
 simulation run (as opposed to `ConfidenceIntervalCriterion`, used
 *across* several replicate runs of the same parameters) — the
-`convergence_window`/`convergence_tolerance` configuration fields
+`convergence_window`/`precision` configuration fields
 documented in `doc/configuration.md` configure exactly this class.
 A thin, `ConvergenceCriterion`-shaped wrapper around
 `trailing_window_stable`, above — see that function's own
@@ -2958,7 +2961,7 @@ Return whether `mean` is known to within `tolerance`.
 **Arguments**:
 
 - `tolerance` - The statistic's own configured convergence
-  tolerance (`SimulationParams.convergence_tolerance`).
+  tolerance (`SimulationParams.precision`).
 
 
 **Returns**:
@@ -3161,7 +3164,7 @@ so they are named distinctly throughout:
   trust a single coin flip to tell them whether a coin is fair. By
   default, a requested number of replicates (`SimulationParams.
   n_replicates`) simply all run. Optionally
-  (`SimulationParams.replicate_tolerance`), the batch instead stops
+  (`SimulationParams.stop_batch_early`), the batch instead stops
   *early*, as soon as enough replicates have run to pin down each
   watched statistic's own across-replicate confidence interval (see
   `fim.statistics.interval`) to within a chosen tolerance — running
@@ -3852,8 +3855,8 @@ replica-first dispatch: every currently-active lane's own generation
 (via `advancer.advance`), rather than one replica's entire trajectory
 running to completion before the next starts.
 
-An adaptive `replicate_tolerance` stop (`SimulationParams.
-replicate_tolerance`; see `_replicate_monitor`) is judged on an
+An adaptive early stop (`SimulationParams.
+stop_batch_early`; see `_replicate_monitor`) is judged on an
 *accepted prefix*, in replicate order, exactly as `LinealBackend`'s
 own sequential loop judges it: replicate *i* is fed to the cross-
 replica monitor only once it and every lower-numbered replicate have
@@ -4171,7 +4174,7 @@ then returns everything about the finished run. If
 `SimulationParams.n_replicates` is more than one, it does that whole
 thing repeatedly, once per independently seeded replicate, either
 running every requested replicate or (with `SimulationParams.
-replicate_tolerance` set) stopping early once enough replicates have
+stop_batch_early` set) stopping early once enough replicates have
 run to pin down the answer confidently — see this module's own
 docstring, above, for what "convergence" and "replicate" mean here
 and why both kinds of stopping exist. Everything below this point is
@@ -4245,7 +4248,7 @@ silently disagree.
   well-known limitation called the Global Interpreter Lock, or
   GIL) — separate *processes*, each with its own interpreter,
   are the only way to get real, simultaneous computation for
-  work shaped like this. An adaptive `replicate_tolerance`
+  work shaped like this. An adaptive `stop_batch_early`
   stop (see this module's own docstring, above) is still
   checked strictly in ascending replicate order after each
   whole batch completes, so a batch can overshoot the exact
@@ -4289,7 +4292,7 @@ silently disagree.
 - `computed` - for the same seed, its own trajectory is
   bit-identical to ``"lineal"``'s, regardless of thread
   interleaving. That includes an adaptive batch
-  (`replicate_tolerance` set): every backend judges the
+  (`stop_batch_early` set): every backend judges the
   adaptive stop on replicates in replicate order, admitting
   replicate *i* only once replicates 1 to *i* have all
   finished (`run_batch`'s own docstring), so ``"generational"``
@@ -4362,11 +4365,11 @@ silently disagree.
 **Returns**:
 
   One result, or one independently seeded result per replicate.
-  With `SimulationParams.replicate_tolerance` unset (the default),
-  exactly `n_replicates` replicates run, exactly as in every prior
-  release. With it set, replicates stop accumulating as soon as
-  every watched statistic's across-replicate confidence interval
-  tightens to at most `replicate_tolerance` (see
+  With `SimulationParams.stop_batch_early` off, exactly
+  `n_replicates` replicates run. With it on (the default),
+  replicates stop accumulating as soon as every watched
+  statistic's across-replicate confidence interval tightens to at
+  most `precision` (see
   `replicate_summary`), or `n_replicates` is reached, whichever
   comes first — so the returned tuple can be shorter than
   `n_replicates`.
@@ -4641,7 +4644,7 @@ one confidence interval *per generation*, reusing the identical
 `confidence_interval` math `reports_summary` already established.
 
 Replicates stop at different generations by construction (an
-adaptive `replicate_tolerance` stop, or simply different random
+adaptive early stop, or simply different random
 walks reaching their own criterion at different times). A first
 version of this function counted, at each generation, only the
 replicates whose own history actually reached that far — reported
@@ -9318,7 +9321,7 @@ only per-generation progress moved off the queue and onto the filesystem.
 Writes the same artifacts `cli._command_run_batch`'s own default
 (parallel) path does, including the same orphan-replicate-directory
 pruning `cli._prune_orphan_replicate_directories` performs: under
-`max_workers`, an adaptive `replicate_tolerance` stop is applied only
+`max_workers`, an adaptive early stop is applied only
 after a whole concurrent worker batch completes
 (`fim.engine._run_batch_parallel`), so a worker beyond the replicate that
 triggered the stop can still have fully written its own `replicate-NNN/`
@@ -9506,19 +9509,15 @@ One model-input screen field's config key, label, and value kind.
   accepts either one bare integer or a comma-separated list
   of them (§3.6's O(d)/O(loci) case: a scalar and a per-
   deme/per-locus list are both faithfully representable by
-  the same widget). "optional_float" treats an empty string
-  as `None`, matching a field whose `SimulationParams`
-  default is `None` (`replicate_tolerance`); "optional_int"
-  is its integer counterpart (`max_concurrent_replicates`) —
-  two kinds, not one reused for both, because a bare
-  `int(text)` and `float(text)` disagree on what they accept
-  (`"3.5"` parses as a `float` but must be rejected for a
-  field `SimulationParams` itself requires to be a whole
-  number). "auto_int" is a whole number or the word `auto`
-  (blank also means `auto`), for `convergence_window`/
+  the same widget). "optional_int" treats an empty string as
+  `None`, matching a field whose `SimulationParams` default is
+  `None` (`max_concurrent_replicates`); a bare `int(text)`
+  rejects `"3.5"`, as a field `SimulationParams` itself requires
+  to be a whole number must. "auto_int" is a whole number or the
+  word `auto` (blank also means `auto`), for `convergence_window`/
   `max_generations`, which `SimulationParams` derives when
   unset. "float_choice" is "choice" restricted to a fixed
-  set of numbers rather than tokens (`replicate_confidence`)
+  set of numbers rather than tokens (`confidence`)
   — `from_mapping` requires an actual `float`, not its string
   spelling. "bool" is a plain, always-present checkbox
   (unlike the sigma-band toggle's own `sigma_band_enabled`,
@@ -9948,7 +9947,7 @@ Build the `equilibrium_*`/`p_0` payload keys from the selector's mode.
 
   An empty mapping in `"dirichlet"` mode (the three equilibrium
   fields and `p_0` are simply absent from the payload, exactly
-  like an unset `replicate_tolerance`'s own `None`-by-omission
+  like an unset optional field's `None`-by-omission
   convention); the three equilibrium fields, parsed to their
   declared types, in `"equilibrium_split"` mode; `{"p_0": ...}`
   in `"explicit_p0"` mode; or `{"p_0": ...}` expanded from `d`,
@@ -10123,8 +10122,7 @@ Build the `sigma_band_*` payload keys from the toggle's own checked state.
   fields simply absent from the payload, the identical "set
   together or not at all" shape `SimulationParams` itself already
   enforces for this exact pair, and the same by-omission
-  convention `replicate_tolerance`'s own `"optional_float"` kind
-  already uses for a single optional field. `{"sigma_band_
+  convention an optional field already uses. `{"sigma_band_
 - `multiplier"` - ..., "sigma_band_window": ...}`, parsed to their
   declared types, when checked.
 
@@ -10222,7 +10220,7 @@ a special case alongside this tuple instead.
 
 Revised from this tuple's first version, which held `engine_backend`,
 `n_replicates`, `convergence_combinator`, `convergence_window`,
-`convergence_tolerance`, plus one `f"cs_{name}"` per
+`precision`, plus one `f"cs_{name}"` per
 `CONVERGENCE_STATISTIC_NAMES` entry, and left Configure's own identical
 copies of all of them in place as a per-run override. A real, reported
 follow-up correction: `convergence_statistic`/`convergence_combinator`
@@ -10231,12 +10229,12 @@ default — a fresh configuration already gets a sensible single-
 statistic default, so their Settings-side duplicates were removed
 entirely (Configure's own sole copy is "parity", not an override of a
 second one). `engine_backend`/`n_replicates`/`max_generations`/
-`convergence_window`/`convergence_tolerance` are not duplicated either
+`convergence_window`/`precision` are not duplicated either
 in this revision — Configure's own widgets for all five are removed
 outright, not kept as a parallel override UI; `Api.start_run`/
 `validate_form` fill them back in from this tuple's own saved values
 before validating a submission (`config_form.py`'s own module
-docstring / `Api`'s own submission-time merge). `replicate_confidence`/
+docstring / `Api`'s own submission-time merge). `confidence`/
 `max_concurrent_replicates` moved out of Configure's own ``batch`-only-
 fields` the same way. `jit`/`auto_vector_min_d`/`auto_vector_max_
 capacity` are new here — "expert-level settings" with no prior GUI
@@ -10710,7 +10708,7 @@ never any saved run artifact.
 A sixth field — `default_run_settings` — is the Settings dialog's own
 "execution/convergence-selection defaults" (`engine_backend`,
 `n_replicates`, `convergence_statistic`/`convergence_combinator`/
-`convergence_window`/`convergence_tolerance`), a real, reported request
+`convergence_window`/`precision`), a real, reported request
 to move fields the user judged "applicable pretty universally" out of
 the per-run Configure form and into one global-default home, while an
 individual run's own Configure form can still override any of them for
@@ -14316,7 +14314,12 @@ functions that actually use each one.
   generations. `AUTO_CONVERGENCE` (`0`, the default) derives it
   from the model's relaxation time
   (`fim.convergence.defaults`); an explicit value always wins.
-- `convergence_tolerance` - Maximum half-window mean difference.
+- `precision` - How precisely to estimate each watched statistic: plus
+  or minus this amount, in the statistic's own units, at
+  `confidence`. A single run averages over time until its mean is
+  known to that precision; a batch adds replicates until the
+  interval across replicates is that narrow. Defaults to
+  `DEFAULT_PRECISION` (`0.01`).
 - `track_expensive_statistics` - Whether the per-generation
   convergence check also computes `E_ST`/`K_ST`/`A_CGD`/
   `Delta`/`MI` even when none is actually watched — the
@@ -14366,27 +14369,22 @@ functions that actually use each one.
   interval, not an uncertainty-free-looking single point, so an
   unconfigured run now behaves that way by default. Set to `1`
   explicitly for the old single-run behavior.
-- `replicate_tolerance` - Early-stopping half-width, in the same units
-  as each watched `convergence_statistic`. Defaults to
-  `DEFAULT_REPLICATE_TOLERANCE` (`0.01`, matching
-  `convergence_tolerance`'s own default) — an unconfigured run
-  stops as soon as every watched statistic's across-replicate
-  Student's-t confidence interval has tightened to at most this
-  half-width (per `convergence_combinator`, exactly like
-  within-run convergence), or `n_replicates` is reached,
-  whichever comes first. Set explicitly to `None` (or, in a
-  YAML/JSON config, simply omitted alongside `n_replicates: 1`)
-  to run a fixed count in full with no adaptive stop.
+- `stop_batch_early` - Whether a replicate batch stops as soon as
+  `precision` is reached (the default): every watched
+  statistic's across-replicate Student's-t confidence interval
+  has tightened to at most `precision` plus or minus (per
+  `convergence_combinator`, exactly like within-run
+  convergence), or `n_replicates` is reached, whichever comes
+  first. `False` runs `n_replicates` in full with no adaptive
+  stop.
 - `replicate_minimum` - Fewest replicates before tightness is even
   checked, guarding against a lucky-early-tight fluke — the
   replicate-layer analog of `convergence_window`. Only
-  meaningful when `replicate_tolerance` is set; silently
+  meaningful when `stop_batch_early` is set; silently
   clamped down to `n_replicates` if given larger, rather than
   rejected (`__post_init__`'s own comment has the reasoning).
-- `replicate_confidence` - Two-tailed confidence level for
-  `replicate_tolerance`'s interval — ``0.90``, ``0.95`` (the
-  default), or ``0.99``. Only meaningful when
-  `replicate_tolerance` is set.
+- `confidence` - Two-tailed confidence level of `precision`: ``0.90``,
+  ``0.95`` (the default), or ``0.99``.
 - `migrant_sampling` - How many gene copies migrate each generation —
   "continuous" (default), the exact ``rate * N`` fraction used by
   every prior release, or the opt-in "stochastic", which draws a
@@ -14480,7 +14478,7 @@ functions that actually use each one.
   replaced by a derived burn-in).
   `None` (the default) selects the ordinary Dirichlet-prior
   initial condition instead. Set together with `equilibrium_
-  convergence_tolerance`/`equilibrium_max_generations`, or not
+  precision`/`equilibrium_max_generations`, or not
   at all — a partial equilibrium configuration is rejected
   (`__post_init__`), and combining any of the three with
   `initial_frequencies` is rejected as ambiguous (a run cannot
@@ -14570,6 +14568,20 @@ string (the common case) or a tuple of several — this property
 is the convenient, always-a-tuple form every caller that just
 wants to iterate over "whichever statistics are being watched"
 actually uses, instead of handling both shapes itself.
+
+<a id="fim.model.params.SimulationParams.batch_precision"></a>
+
+#### batch\_precision
+
+```python
+@property
+def batch_precision() -> float | None
+```
+
+Return the precision a batch stops at, or `None` to run it in full.
+
+`precision` when `stop_batch_early` is on (the default), `None` when
+it is off: the single value the batch's stopping rule reads.
 
 <a id="fim.model.params.SimulationParams.population_sizes"></a>
 
@@ -14741,7 +14753,7 @@ cap's derivation) are left to validating the complete configuration.
 
 - `settings` - Any subset of `EXECUTION_SETTING_NAMES`, typed as a
   configuration file types them: whole numbers as `int`,
-  `convergence_tolerance`/`replicate_confidence` as `float`,
+  `precision`/`confidence` as `float`,
   `max_generations`/`convergence_window` as an `int` or the
   string `"auto"`, and `max_concurrent_replicates` as an `int`
   or `None`. A key outside `EXECUTION_SETTING_NAMES` is

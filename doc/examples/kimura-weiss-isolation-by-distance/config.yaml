@@ -17,5 +17,5 @@ loci:
     length: 100
 engine_backend: lineal
 convergence_statistic: D
-convergence_tolerance: 0.05   # looser than the 0.01 default: seconds, not hours
+precision: 0.05   # looser than the 0.01 default: seconds, not hours
 n_replicates: 1   # a single scalar run; the default (200) would batch

@@ -68,7 +68,7 @@ The one entry point everything else in this project ultimately calls.
   a genetics paper would state a scenario) rather than reading them out
   of an opaque options object. Returns one `RunResult` when
   `params.n_replicates == 1`, otherwise a tuple of one per replicate (or
-  fewer, if `params.replicate_tolerance` lets the batch stop early once
+  fewer, if `params.stop_batch_early` lets the batch stop early once
   every watched statistic's confidence interval has tightened enough).
   `engine_backend`/`jit`/`auto_vector_min_d`/`auto_vector_max_capacity`
   each default to `None` here, meaning "read `params.engine_backend`/
@@ -229,8 +229,8 @@ time, and the pure functions that build a starting one.
   tuple), `d` (deme count), `seed`, `loci` (a tuple of `LocusSpec`),
   `initial_allele_count`, `initial_concentration`, `deme_weighting`,
   `convergence_statistic`/`convergence_combinator`/`convergence_window`/
-  `convergence_tolerance`, `max_generations`, `n_replicates`,
-  `replicate_tolerance`/`replicate_minimum`/`replicate_confidence`,
+  `precision`, `max_generations`, `n_replicates`,
+  `stop_batch_early`/`replicate_minimum`/`confidence`,
   `migrant_sampling` (`"continuous"` or a stochastic mode),
   `mutation_model` (`"infinite_alleles"` or `"finite_alleles"`), and an
   optional `initial_frequencies` override. Constructing one validates

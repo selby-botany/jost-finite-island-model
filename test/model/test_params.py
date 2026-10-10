@@ -56,13 +56,15 @@ def test_scalar_parameters_construct_with_documented_defaults() -> None:
     assert PARAMETER_DEFAULTS["convergence_window"] is None
     assert PARAMETER_DEFAULTS["max_generations"] is None
     assert params.auto_derived == {"convergence_window", "max_generations"}
-    assert params.convergence_tolerance == PARAMETER_DEFAULTS["convergence_tolerance"]
+    assert params.precision == PARAMETER_DEFAULTS["precision"]
     assert params.n_replicates == PARAMETER_DEFAULTS["n_replicates"]
     assert params.n_replicates == 200
-    assert params.replicate_tolerance == PARAMETER_DEFAULTS["replicate_tolerance"]
-    assert params.replicate_tolerance == 0.01
+    assert params.stop_batch_early is PARAMETER_DEFAULTS["stop_batch_early"]
+    assert params.stop_batch_early is True
+    assert params.precision == 0.01
+    assert params.batch_precision == 0.01
     assert params.replicate_minimum == PARAMETER_DEFAULTS["replicate_minimum"]
-    assert params.replicate_confidence == PARAMETER_DEFAULTS["replicate_confidence"]
+    assert params.confidence == PARAMETER_DEFAULTS["confidence"]
     assert params.migrant_sampling == PARAMETER_DEFAULTS["migrant_sampling"]
     assert params.migrant_sampling == "continuous"
     assert params.mutation_model == PARAMETER_DEFAULTS["mutation_model"]
@@ -200,8 +202,8 @@ def test_max_concurrent_replicates_defaults_to_none_and_round_trips() -> None:
     sonnet-5-fim-engine-review-remediations.md`, `FIM-45`/`FIM-48`.
     Omitted from `to_dict()` when `None`, like `initial_frequencies` —
     this field's own default is already `None`, so an absent key and an
-    explicit `None` mean the same thing to `from_mapping`, unlike
-    `replicate_tolerance` (see that field's own round-trip test).
+    explicit `None` mean the same thing to `from_mapping`, unlike the
+    always-present fields (`test_precision_and_stop_batch_early_round_trip`).
     """
     default_params = SimulationParams.from_mapping(_valid_config())
     assert default_params.max_concurrent_replicates is None
@@ -508,8 +510,8 @@ def test_mu_and_mu_b_are_mutually_exclusive_and_one_is_required() -> None:
         ({"convergence_statistic": ["D", "unknown"]}, "must be one of"),
         ({"convergence_statistic": ["D", "D"]}, "must not repeat"),
         ({"convergence_combinator": "either"}, "convergence_combinator"),
-        ({"convergence_tolerance": -1.0}, "non-negative"),
-        ({"convergence_tolerance": float("nan")}, "finite"),
+        ({"precision": -1.0}, "non-negative"),
+        ({"precision": float("nan")}, "finite"),
         ({"max_generations": 0}, "max_generations"),
         (
             # An explicit window of 50 with max_generations capped to 5
@@ -521,10 +523,11 @@ def test_mu_and_mu_b_are_mutually_exclusive_and_one_is_required() -> None:
             "convergence_window cannot exceed max_generations",
         ),
         ({"n_replicates": 0}, "n_replicates"),
-        ({"replicate_tolerance": -1.0}, "non-negative"),
-        ({"replicate_tolerance": float("nan")}, "finite"),
+        ({"precision": -1.0}, "non-negative"),
+        ({"precision": float("nan")}, "finite"),
+        ({"stop_batch_early": "yes"}, "stop_batch_early"),
         ({"replicate_minimum": 1}, "replicate_minimum"),
-        ({"replicate_confidence": 0.80}, "replicate_confidence"),
+        ({"confidence": 0.80}, "confidence"),
         ({"migrant_sampling": "binomial"}, "migrant_sampling"),
         ({"mutation_model": "stepwise"}, "mutation_model"),
         ({"mu": [0.001, 0.002]}, "one rate per locus"),
@@ -573,7 +576,7 @@ def test_replicate_minimum_above_n_replicates_is_clamped_not_rejected() -> None:
     """An unreachable replicate_minimum is silently capped at n_replicates.
 
     Previously rejected outright (`ValueError`) — changed once
-    `replicate_tolerance` stopped defaulting to `None`: the same
+    batches started stopping early by default: the same
     combination now arises from nothing more deliberate than setting a
     small `n_replicates` without separately thinking about `replicate_
     minimum` at all (this project's own CI found every GUI batch test
@@ -587,7 +590,7 @@ def test_replicate_minimum_above_n_replicates_is_clamped_not_rejected() -> None:
             **_valid_config(),
             "n_replicates": 3,
             "replicate_minimum": 100,
-            "replicate_tolerance": 0.0,
+            "precision": 0.0,
         }
     )
     assert params.n_replicates == 3
@@ -599,7 +602,7 @@ def test_replicate_minimum_above_n_replicates_is_clamped_not_rejected() -> None:
             **_valid_config(),
             "n_replicates": 10,
             "replicate_minimum": 3,
-            "replicate_tolerance": 0.0,
+            "precision": 0.0,
         }
     )
     assert unaffected.replicate_minimum == 3
@@ -614,43 +617,41 @@ def test_replicate_minimum_above_n_replicates_is_clamped_not_rejected() -> None:
     assert scalar.replicate_minimum == 100
 
 
-def test_replicate_tolerance_round_trips_unconditionally() -> None:
-    """`replicate_tolerance` always round-trips exactly, `None` included.
+def test_precision_and_stop_batch_early_round_trip() -> None:
+    """`precision`, `stop_batch_early` and `confidence` round-trip exactly.
 
-    An absent `replicate_tolerance` key means "use the default"
-    (`DEFAULT_REPLICATE_TOLERANCE`, `0.01`) now, not "disabled" — that
-    default is a real, non-`None` number. `to_dict()` always includes
-    `replicate_tolerance` unconditionally (`null` for `None`), unlike
-    `initial_frequencies` (still omitted when `None`, since `None` is
-    still *that* field's own default): omitting a `None`
-    `replicate_tolerance` the same way would silently turn an explicit
-    "disabled" into "use the default" the next time the dict round-trips
-    through `from_mapping` — a real bug this project's own test suite
-    caught directly (several tests build a batch config via
-    `{**tiny_params.to_dict(), "n_replicates": N}`, which depends on
-    `to_dict()` preserving `tiny_params`'s own explicit `replicate_
-    tolerance=None` losslessly).
+    `batch_precision` is `precision` while the batch may stop early and
+    `None` once `stop_batch_early` is off: the one value the batch's
+    stopping rule reads.
     """
     default_params = SimulationParams.from_mapping(_valid_config())
-    assert (
-        default_params.replicate_tolerance == PARAMETER_DEFAULTS["replicate_tolerance"]
-    )
-    assert default_params.to_dict()["replicate_tolerance"] == 0.01
+    assert default_params.to_dict()["precision"] == 0.01
+    assert default_params.to_dict()["stop_batch_early"] is True
+    assert default_params.to_dict()["confidence"] == 0.95
     assert SimulationParams.from_mapping(default_params.to_dict()) == default_params
 
-    tightened = SimulationParams.from_mapping(
-        {**_valid_config(), "replicate_tolerance": 0.02}
-    )
-    assert tightened.replicate_tolerance == 0.02
-    assert tightened.to_dict()["replicate_tolerance"] == 0.02
+    tightened = SimulationParams.from_mapping({**_valid_config(), "precision": 0.02})
+    assert tightened.precision == 0.02
+    assert tightened.batch_precision == 0.02
+    assert tightened.to_dict()["precision"] == 0.02
     assert SimulationParams.from_mapping(tightened.to_dict()) == tightened
 
     disabled = SimulationParams.from_mapping(
-        {**_valid_config(), "replicate_tolerance": None}
+        {**_valid_config(), "stop_batch_early": False}
     )
-    assert disabled.replicate_tolerance is None
-    assert disabled.to_dict()["replicate_tolerance"] is None
+    assert disabled.batch_precision is None
+    assert disabled.precision == 0.01
+    assert disabled.to_dict()["stop_batch_early"] is False
     assert SimulationParams.from_mapping(disabled.to_dict()) == disabled
+
+
+@pytest.mark.parametrize(
+    "old_key", ["convergence_tolerance", "replicate_tolerance", "replicate_confidence"]
+)
+def test_the_merged_settings_old_names_are_refused(old_key: str) -> None:
+    """`precision` and `confidence` replaced three settings; no alias is kept."""
+    with pytest.raises(ValueError, match=old_key):
+        SimulationParams.from_mapping({**_valid_config(), old_key: 0.05})
 
 
 def test_required_and_conflicting_configuration_keys_are_named() -> None:
@@ -996,7 +997,7 @@ def test_equilibrium_split_fields_default_to_none_and_round_trip() -> None:
     (`test_max_concurrent_replicates_defaults_to_none_and_round_trips`):
     an absent key and an explicit `None` mean the same thing here, so
     omitting them keeps `from_mapping(to_dict())` lossless without
-    needing `replicate_tolerance`'s own always-present workaround.
+    needing an always-present workaround.
     """
     default_params = SimulationParams.from_mapping(_valid_config())
     assert default_params.equilibrium_convergence_window is None
@@ -1568,8 +1569,8 @@ def test_validate_execution_settings_accepts_a_vector_backend_without_a_model() 
             "n_replicates": 16,
             "max_generations": 100,
             "convergence_window": 10,
-            "convergence_tolerance": 0.02,
-            "replicate_confidence": 0.95,
+            "precision": 0.02,
+            "confidence": 0.95,
             "auto_vector_min_d": 2,
             "auto_vector_max_capacity": 4096,
             "max_concurrent_replicates": None,
@@ -1586,8 +1587,8 @@ def test_validate_execution_settings_accepts_a_vector_backend_without_a_model() 
         ({"n_replicates": 0}, "n_replicates must be at least 1"),
         ({"max_generations": 0}, "max_generations must be at least 1"),
         ({"convergence_window": 1}, "convergence_window must be at least 2"),
-        ({"convergence_tolerance": -0.1}, "convergence_tolerance must be non-negative"),
-        ({"replicate_confidence": 0.5}, "replicate_confidence must be 0.90"),
+        ({"precision": -0.1}, "precision must be non-negative"),
+        ({"confidence": 0.5}, "confidence must be 0.90"),
         ({"engine_backend": "fast"}, "engine_backend must be"),
         ({"jit": "yes"}, "jit must be 'off' or 'numba'"),
         ({"auto_vector_min_d": 0}, "auto_vector_min_d must be at least 1"),
@@ -1611,8 +1612,8 @@ def test_validate_execution_settings_matches_simulation_params_on_the_same_value
     None
 ):
     """A value `validate_execution_settings` refuses, `SimulationParams` refuses too."""
-    with pytest.raises(ValueError, match="replicate_confidence") as from_params:
-        SimulationParams.from_mapping({**_valid_config(), "replicate_confidence": 0.5})
-    with pytest.raises(ValueError, match="replicate_confidence") as from_settings:
-        validate_execution_settings({"replicate_confidence": 0.5})
+    with pytest.raises(ValueError, match="confidence") as from_params:
+        SimulationParams.from_mapping({**_valid_config(), "confidence": 0.5})
+    with pytest.raises(ValueError, match="confidence") as from_settings:
+        validate_execution_settings({"confidence": 0.5})
     assert str(from_params.value) == str(from_settings.value)

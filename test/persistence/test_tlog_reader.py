@@ -156,10 +156,10 @@ def test_a_real_run_reads_back_by_generation_exactly_like_the_memory_store(
             "loci": [{"locus_id": 4, "length": 200}, {"locus_id": 9, "length": 200}],
             "initial_allele_count": 3,
             "convergence_window": 4,
-            "convergence_tolerance": 1e-12,
+            "precision": 1e-12,
             "max_generations": 60,
             "n_replicates": 1,
-            "replicate_tolerance": None,
+            "stop_batch_early": False,
         }
     )
     reference = InMemoryTrajectoryStore()
