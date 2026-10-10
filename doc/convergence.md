@@ -79,8 +79,10 @@ T   = N_total + (d - 1) / (2 m)
 tau = 1 / (2 mu + 1 / T)
 ```
 
-`N_total` is the sum of all deme sizes and `mu` is the mean mutation rate over
-loci. Explicit migration matrices and unequal deme sizes use the slowest mode
+`N_total` is the sum of all deme sizes and `mu` is the smallest mutation rate
+over loci: the slowest locus is the last to forget its starting state, so it
+sets the time. The relaxation time is computed whenever the model has one, not
+only when a window or cap is derived. Explicit migration matrices and unequal deme sizes use the slowest mode
 of the identity recursion (next section), a `d² × d²` eigenproblem limited to
 24 demes. No migration and no mutation has no relaxation time, and `auto` is
 refused. The code is `fim.convergence.defaults`.

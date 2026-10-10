@@ -29,7 +29,7 @@
     "reason": "statistic converged",
     "statistic": "D"
   },
-  "ended_at": "2026-10-08T15:33:06.294014Z",
+  "ended_at": "2026-10-10T00:53:48.491749Z",
   "engine_backend": "lineal",
   "equilibrium_final_heterozygosity": null,
   "equilibrium_generation_count": null,
@@ -98,12 +98,12 @@
     "seed": 20260827,
     "track_expensive_statistics": false
   },
-  "relaxation_time": null,
+  "relaxation_time": 291.6666666666667,
   "run_id": "run-23f55cf2c98e7afd-r009",
   "schema_version": 3,
   "sigma_band": null,
   "sigma_band_multiplier": null,
   "sigma_band_window": null,
   "software_version": "1.2.0",
-  "started_at": "2026-10-08T15:32:52.151958Z"
+  "started_at": "2026-10-10T00:53:43.198096Z"
 }

@@ -5174,15 +5174,25 @@ def test_unequal_sizes_use_the_recursion_route() -> None
 
 Unequal deme sizes with a scalar `m` still produce a finite `tau`.
 
-<a id="convergence.test_defaults.test_mean_mutation_rate_across_loci_is_used"></a>
+<a id="convergence.test_defaults.test_the_slowest_locus_sets_the_relaxation_time"></a>
 
-#### test\_mean\_mutation\_rate\_across\_loci\_is\_used
+#### test\_the\_slowest\_locus\_sets\_the\_relaxation\_time
 
 ```python
-def test_mean_mutation_rate_across_loci_is_used() -> None
+def test_the_slowest_locus_sets_the_relaxation_time() -> None
 ```
 
-Per-locus rates are averaged.
+The smallest per-locus rate decides, whatever the other loci do.
+
+<a id="convergence.test_defaults.test_the_slowest_locus_also_sets_the_matrix_route"></a>
+
+#### test\_the\_slowest\_locus\_also\_sets\_the\_matrix\_route
+
+```python
+def test_the_slowest_locus_also_sets_the_matrix_route() -> None
+```
+
+Unequal deme sizes take the eigenvalue route; the rule is the same.
 
 <a id="convergence.test_defaults.test_no_migration_and_no_mutation_has_no_relaxation_time"></a>
 
@@ -27128,7 +27138,27 @@ A bare zero (the internal sentinel) and other junk are errors.
 def test_explicit_values_win_and_are_not_recorded_as_derived() -> None
 ```
 
-Both explicit: nothing derived, nothing recorded.
+Both explicit: nothing derived, but the relaxation time is still known.
+
+<a id="model.test_params.test_a_model_without_a_relaxation_time_runs_with_explicit_values"></a>
+
+#### test\_a\_model\_without\_a\_relaxation\_time\_runs\_with\_explicit\_values
+
+```python
+def test_a_model_without_a_relaxation_time_runs_with_explicit_values() -> None
+```
+
+No migration and no mutation: explicit values work and `tau` stays unset.
+
+<a id="model.test_params.test_the_relaxation_time_follows_the_slowest_locus"></a>
+
+#### test\_the\_relaxation\_time\_follows\_the\_slowest\_locus
+
+```python
+def test_the_relaxation_time_follows_the_slowest_locus() -> None
+```
+
+Per-locus mutation rates `[1e-3, 1e-5]` give the `1e-5` locus's `tau`.
 
 <a id="model.test_params.test_a_derived_window_is_clamped_to_an_explicit_cap"></a>
 

@@ -136,7 +136,7 @@ def island_relaxation_time(
         total_size: Sum of every deme's gene-copy count.
         deme_count: Number of demes `d`.
         migration: Scalar migration rate `m`.
-        mutation: Mean per-locus mutation probability.
+        mutation: Per-locus mutation probability (the slowest locus's).
 
     Returns:
         The relaxation time in generations.
@@ -171,7 +171,7 @@ def recursion_relaxation_time(
     Args:
         deme_sizes: Gene-copy count of every deme.
         migration: A `d` by `d` row-stochastic migration matrix.
-        mutation: Mean per-locus mutation probability.
+        mutation: Per-locus mutation probability (the slowest locus's).
 
     Returns:
         The relaxation time in generations.
@@ -208,6 +208,9 @@ def relaxation_time(
 ) -> float:
     """Return the relaxation time `tau` for one model, choosing the route.
 
+    The slowest locus (the smallest mutation rate) sets `tau`, as
+    `panmictic_equilibration` already does for the ancestral phase.
+
     Equal deme sizes with a scalar `m` use the closed form. Everything else
     (an explicit matrix, or unequal sizes, where the scalar `m` is a
     size-weighted migrant pool) uses the recursion's eigenvalue.
@@ -224,7 +227,10 @@ def relaxation_time(
         ValueError: If the model has no relaxation time, or the eigenvalue
             route is needed but `d` is too large.
     """
-    mutation = math.fsum(mutation_rates) / len(mutation_rates)
+    # The slowest locus sets the time the whole run must wait: a locus that
+    # mutates less forgets its starting state later, and a faster one cannot
+    # make up for it (design 6.4). With equal rates this is the common rate.
+    mutation = min(mutation_rates)
     sizes = tuple(deme_sizes)
     if isinstance(migration, int | float) and len(set(sizes)) == 1:
         return island_relaxation_time(

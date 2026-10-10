@@ -161,11 +161,28 @@ def test_unequal_sizes_use_the_recursion_route() -> None:
     assert tau > 0.0
 
 
-def test_mean_mutation_rate_across_loci_is_used() -> None:
-    """Per-locus rates are averaged."""
+def test_the_slowest_locus_sets_the_relaxation_time() -> None:
+    """The smallest per-locus rate decides, whatever the other loci do."""
+    slowest = relaxation_time(
+        deme_sizes=[100] * 5, migration=1e-3, mutation_rates=[1e-5]
+    )
+    assert slowest == relaxation_time(
+        deme_sizes=[100] * 5, migration=1e-3, mutation_rates=[1e-3, 1e-5]
+    )
+    assert slowest == relaxation_time(
+        deme_sizes=[100] * 5, migration=1e-3, mutation_rates=[1e-5, 1e-3, 1e-4]
+    )
+    assert slowest > relaxation_time(
+        deme_sizes=[100] * 5, migration=1e-3, mutation_rates=[1e-3]
+    )
+
+
+def test_the_slowest_locus_also_sets_the_matrix_route() -> None:
+    """Unequal deme sizes take the eigenvalue route; the rule is the same."""
+    sizes = [60, 100, 140]
     assert relaxation_time(
-        deme_sizes=[100] * 5, migration=1e-3, mutation_rates=[1e-6, 3e-6]
-    ) == relaxation_time(deme_sizes=[100] * 5, migration=1e-3, mutation_rates=[2e-6])
+        deme_sizes=sizes, migration=0.05, mutation_rates=[1e-3, 1e-5]
+    ) == relaxation_time(deme_sizes=sizes, migration=0.05, mutation_rates=[1e-5])
 
 
 def test_no_migration_and_no_mutation_has_no_relaxation_time() -> None:

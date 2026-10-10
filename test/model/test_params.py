@@ -1413,13 +1413,43 @@ def test_a_bad_window_or_cap_is_rejected_not_read_as_auto(bad: object) -> None:
 
 
 def test_explicit_values_win_and_are_not_recorded_as_derived() -> None:
-    """Both explicit: nothing derived, nothing recorded."""
+    """Both explicit: nothing derived, but the relaxation time is still known."""
     params = SimulationParams.from_mapping(
         {**_valid_config(), "convergence_window": 60, "max_generations": 900}
     )
     assert (params.convergence_window, params.max_generations) == (60, 900)
     assert params.auto_derived == frozenset()
+    derived = SimulationParams.from_mapping(_valid_config())
+    assert params.relaxation_time == derived.relaxation_time
+    assert params.relaxation_time is not None
+
+
+def test_a_model_without_a_relaxation_time_runs_with_explicit_values() -> None:
+    """No migration and no mutation: explicit values work and `tau` stays unset."""
+    params = SimulationParams.from_mapping(
+        {
+            **_valid_config(),
+            "m": 0.0,
+            "mu": 0.0,
+            "convergence_window": 60,
+            "max_generations": 900,
+        }
+    )
     assert params.relaxation_time is None
+
+
+def test_the_relaxation_time_follows_the_slowest_locus() -> None:
+    """Per-locus mutation rates `[1e-3, 1e-5]` give the `1e-5` locus's `tau`."""
+    config = _valid_config()
+    mixed = SimulationParams.from_mapping(
+        {
+            **config,
+            "loci": [{"locus_id": 1, "length": 10}, {"locus_id": 2, "length": 20}],
+            "mu": [1e-3, 1e-5],
+        }
+    )
+    slow = SimulationParams.from_mapping({**config, "mu": 1e-5})
+    assert mixed.relaxation_time == slow.relaxation_time
 
 
 def test_a_derived_window_is_clamped_to_an_explicit_cap() -> None:

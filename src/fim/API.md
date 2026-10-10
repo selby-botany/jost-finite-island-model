@@ -2300,7 +2300,7 @@ independent rate `2 mu`, and independent rates add, so
 - `total_size` - Sum of every deme's gene-copy count.
 - `deme_count` - Number of demes `d`.
 - `migration` - Scalar migration rate `m`.
-- `mutation` - Mean per-locus mutation probability.
+- `mutation` - Per-locus mutation probability (the slowest locus's).
 
 
 **Returns**:
@@ -2334,7 +2334,7 @@ its spectral radius `rho` gives `tau = 1 / (1 - rho)`.
 
 - `deme_sizes` - Gene-copy count of every deme.
 - `migration` - A `d` by `d` row-stochastic migration matrix.
-- `mutation` - Mean per-locus mutation probability.
+- `mutation` - Per-locus mutation probability (the slowest locus's).
 
 
 **Returns**:
@@ -2357,6 +2357,9 @@ def relaxation_time(*, deme_sizes: Sequence[int], migration: MigrationInput,
 ```
 
 Return the relaxation time `tau` for one model, choosing the route.
+
+The slowest locus (the smallest mutation rate) sets `tau`, as
+`panmictic_equilibration` already does for the ancestral phase.
 
 Equal deme sizes with a scalar `m` use the closed form. Everything else
 (an explicit matrix, or unequal sizes, where the scalar `m` is a

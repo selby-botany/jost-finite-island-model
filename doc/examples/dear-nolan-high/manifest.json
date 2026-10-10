@@ -1,31 +1,31 @@
 {
   "artifacts": {
     "replicate-001": {
-      "bytes": 245406,
-      "sha256": "d0649c4d48d9a6c1898e0a523f8e60b697185d4810cfb51888a3aa08c4733718"
+      "bytes": 245420,
+      "sha256": "2b5e53aec45d8b07c5c891bec5500f2a25abd8994d5ba152a73fce0c6abf9034"
     },
     "replicate-002": {
-      "bytes": 245406,
-      "sha256": "46e23d005e1158c8df964280d5a409204da26d2e8f0f919ddb35993b75827fe7"
+      "bytes": 245420,
+      "sha256": "1fd21e1436f9360460e1769ad3dc65fbb2fc3f2054cdcc941e9bd5cbf78b879b"
     },
     "replicate-003": {
-      "bytes": 245406,
-      "sha256": "67c587ab705b37e01714e7c8d1779e20fd8effa656d5dcf4c0ae454685570085"
+      "bytes": 245420,
+      "sha256": "c5bb1f6b666935532915be45883f6c529a30cc796dd08d2c920c8e6f735e4d6d"
     },
     "replicate-004": {
-      "bytes": 245406,
-      "sha256": "5326c7d1390c8d9214b3e6a6bb86a454cb54bb9cdd5220dec5ce67dc3fa743b1"
+      "bytes": 245420,
+      "sha256": "3b5784eb0bb543fdb138a48859190a109b1fc732fdc0698549845802127a34e6"
     },
     "replicate-005": {
-      "bytes": 245406,
-      "sha256": "13fd1ec900723ca413deca4b341c4d109cd566fb2426a9cb208ff6d426e120e0"
+      "bytes": 245420,
+      "sha256": "b5df33b4280491d63fad17ce8aa1308ceb461ea467e6ac113f946789a4289496"
     },
     "summary": {
       "bytes": 6129,
       "sha256": "28bc984550b201a0ac84edd0237e09ebb786c109d31f22fbcdc35b322ba4ebb0"
     }
   },
-  "ended_at": "2026-10-08T15:39:11.070877Z",
+  "ended_at": "2026-10-10T00:54:37.138083Z",
   "parameters": {
     "N": 2000,
     "_read_only": true,
@@ -6774,5 +6774,5 @@
   "run_id": "run-c06980bfd4b59d63",
   "schema_version": 1,
   "software_version": "1.2.0",
-  "started_at": "2026-10-08T15:33:31.480659Z"
+  "started_at": "2026-10-10T00:53:53.076910Z"
 }

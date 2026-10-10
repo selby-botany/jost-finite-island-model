@@ -29,7 +29,7 @@
     "reason": "hit the cap",
     "statistic": "D"
   },
-  "ended_at": "2026-10-08T15:51:17.857632Z",
+  "ended_at": "2026-10-10T00:54:17.240042Z",
   "engine_backend": "generational",
   "equilibrium_final_heterozygosity": null,
   "equilibrium_generation_count": null,
@@ -70,12 +70,12 @@
     "seed": 20260929,
     "track_expensive_statistics": false
   },
-  "relaxation_time": null,
+  "relaxation_time": 486.3685932388222,
   "run_id": "run-5b8be03b9d84478b-r014",
   "schema_version": 3,
   "sigma_band": null,
   "sigma_band_multiplier": null,
   "sigma_band_window": null,
   "software_version": "1.2.0",
-  "started_at": "2026-10-08T15:50:25.262895Z"
+  "started_at": "2026-10-10T00:53:40.466862Z"
 }

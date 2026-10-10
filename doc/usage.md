@@ -657,11 +657,10 @@ n_replicates: 1   # a single scalar run; the default (200) would batch
 fim run mu-b.yaml --output results/mu-b --quiet
 ```
 
-Converges at generation 231, after a few seconds, with a trailing-window
-mean D of 0.128 ± 0.009 (a premature stop and an early value: the window is the first 232
-generations, still on the approach from the starting state, which the planned
-convergence redesign addresses; `convergence_tolerance: 0.03` keeps the run short;
-see the
+Converges at generation 3,136, after a few seconds, with a trailing-window
+mean D of 0.222 ± 0.013 (the window is sized from the slowest locus, the
+50-base one, so it is long enough to leave the approach from the starting
+state; `convergence_tolerance: 0.03` keeps the run short; see the
 [example's README](examples/per-base-mutation-rate-across-unequal-locus-lengths/README.md)).
 `results/mu-b/manifest.json`'s
 `parameters.mu` records the two derived rates — `0.0009995` for the

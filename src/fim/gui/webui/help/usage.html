@@ -570,11 +570,10 @@ n_replicates: 1   # a single scalar run; the default (200) would batch
 </code></pre>
 <pre><code class="language-console">fim run mu-b.yaml --output results/mu-b --quiet
 </code></pre>
-<p>Converges at generation 231, after a few seconds, with a trailing-window
-mean D of 0.128 ± 0.009 (a premature stop and an early value: the window is the first 232
-generations, still on the approach from the starting state, which the planned
-convergence redesign addresses; <code>convergence_tolerance: 0.03</code> keeps the run short;
-see the
+<p>Converges at generation 3,136, after a few seconds, with a trailing-window
+mean D of 0.222 ± 0.013 (the window is sized from the slowest locus, the
+50-base one, so it is long enough to leave the approach from the starting
+state; <code>convergence_tolerance: 0.03</code> keeps the run short; see the
 <a href="#" data-fim-external="https://github.com/selby-botany/jost-finite-island-model/blob/main/doc/examples/per-base-mutation-rate-across-unequal-locus-lengths/README.md">example's README</a>).
 <code>results/mu-b/manifest.json</code>'s
 <code>parameters.mu</code> records the two derived rates — <code>0.0009995</code> for the

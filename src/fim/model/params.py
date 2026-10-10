@@ -22,6 +22,7 @@ independent of this file's own more code-oriented documentation.
 
 from __future__ import annotations
 
+import contextlib
 import logging
 import math
 from collections.abc import Mapping, Sequence
@@ -39,6 +40,7 @@ from fim.config.defaults import (
 )
 from fim.config.numerics import MINIMUM_REPLICATE_COUNT
 from fim.convergence.defaults import derive_convergence_defaults
+from fim.convergence.defaults import relaxation_time as estimate_relaxation_time
 from fim.model.allele import AlleleId
 from fim.model.identifiers import parse_integer_identifier
 from fim.model.locus import LocusSpec, finite_allele_capacity
@@ -793,9 +795,10 @@ class SimulationParams:
         relaxation time (no migration and no mutation) or an explicit
         migration matrix too large for the eigenvalue route still runs when
         the caller states both numbers. `auto_derived` records which fields
-        were derived; `relaxation_time` records the estimate. Neither takes
-        part in equality, so a run and its reproduction from concrete
-        integers compare equal.
+        were derived; `relaxation_time` records the estimate of the slowest
+        locus, whether or not anything was derived, and stays `None` for a
+        model that has none. Neither takes part in equality, so a run and
+        its reproduction from concrete integers compare equal.
 
         A derived window is clamped to an explicit cap, and a derived cap is
         raised to fit an explicit window (the same multiples of the window
@@ -814,6 +817,18 @@ class SimulationParams:
         window_auto = self.convergence_window == AUTO_CONVERGENCE
         cap_auto = self.max_generations == AUTO_CONVERGENCE
         if not (window_auto or cap_auto):
+            # Nothing to derive, but `tau` is still wanted (the report and
+            # the burn-in use it) whenever the model has one.
+            with contextlib.suppress(ValueError):
+                object.__setattr__(
+                    self,
+                    "relaxation_time",
+                    estimate_relaxation_time(
+                        deme_sizes=population_sizes,
+                        migration=migration,
+                        mutation_rates=mutation_rates,
+                    ),
+                )
             return
         try:
             derived = derive_convergence_defaults(
