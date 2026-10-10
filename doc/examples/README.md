@@ -28,10 +28,12 @@ the same backend and numerical environment. Vector results can differ
 across platforms because of BLAS reduction rounding; their statistical
 comparison is described in the vector example's README.
 Most examples finish in a few seconds to
-about three minutes. The calibration examples take longer: Dear-Nolan low
-about an hour, Golden Part VI about 15 minutes, and Dear-Nolan high about
-two minutes. These times were measured on a busy, shared development machine
-(load average about 15); an idle machine is faster.
+about eight minutes. The calibration examples take longer: Dear-Nolan low
+about half an hour, Golden Part VI about two and a half minutes, and
+Dear-Nolan high about two minutes. These times were measured with several
+examples running at once on a development machine; an idle machine is
+faster. Six examples thin their saved trajectory (every generation to
+5,000, then one in ten) to keep the committed files small.
 
 For maintainers: `dev/bin/regenerate-example-outputs` reruns the examples
 and replaces their committed outputs, and `test/test_doc_examples.py`
@@ -44,26 +46,24 @@ and replaces their committed outputs, and `test/test_doc_examples.py`
 
 **Jost (2008) Part VI** — the primary calibration anchor for `fim`.
 Four demes, N = 100, moderate migration (m = 0.01) and mutation
-(mu = 0.005). D genuinely converges at generation 130,242, its own
-evidence window grown to 130,048 generations to confirm precision — a
-trailing-window D of 0.605 ± 0.004. G_ST is left honestly unconfirmed
-(this example watches D alone), at 0.132 from the un-grown base window.
+(mu = 0.005). D converges at generation 176,575, averaged over a
+176,127-generation window: D = 0.608 ± 0.004 and G_ST = 0.173 ± 0.001.
 Published ensemble values (100 replicates, multi-locus engineered
 start): G_ST ≈ 0.176, D ≈ 0.604 — see the example's own README for why
-D reaches that precision here while G_ST does not, and where the real,
-calibrated multi-locus/multi-replicate agreement lives.
+one locus needs such a long window, and where the real, calibrated
+multi-locus/multi-replicate agreement lives.
 
 ### [dear-nolan-low](dear-nolan-low/README.md)
 
 **Dear-Nolan low-migration botanical scenario** — five isolated plant
 patches, N = 100, very low migration (m = 0.0001) and negligible mutation
-(mu = 0.000001). **This example does not yet converge:** it runs the full
-derived cap, 295,390 generations (about an hour on a busy machine), and
-reports `converged_on: null`, because the convergence window starts inside
-the transient and the lag-1 standard error is too small; a convergence
-redesign and a faster engine are planned. Jost's published targets (200
-runs) are D ≈ 0.04 and G_ST ≈ 0.97; the run's trailing-window means are D
-0.043 (published ≈ 0.04) and G_ST 0.965 (published ≈ 0.97). D and G_ST are
+(mu = 0.000001). **This example does not converge within its cap:** it runs the full
+derived cap, 399,728 generations (about half an hour), and reports
+`converged: false` honestly: D's average is 0.042 ± 0.006 but only about 15
+independent samples back it, and the run projects about 1.1 million
+generations for the requested precision. Jost's published targets (200
+runs) are D ≈ 0.04 and G_ST ≈ 0.97; the run's averages are D 0.042
+(published ≈ 0.04) and G_ST 0.964 (published ≈ 0.97). D and G_ST are
 not equally noisy for this scenario, see its own README.
 
 ### [dear-nolan-high](dear-nolan-high/README.md)
@@ -74,8 +74,8 @@ The test derives a near-equilibrium initial state
 (`_dn2_equilibrium_start`) so the engine is started at the fixed point
 rather than slowly integrating from an undifferentiated state;
 `reproduce.py` writes that state into `config.yaml` as an explicit `p_0`.
-Five replicates of 30 generations land at mean G_ST 0.0219 ± 0.0003 and
-mean D 0.907 ± 0.004, matching the predicted equilibrium (G_ST 0.0220,
+Five replicates of 30 generations land at mean G_ST 0.0219 ± 0.0001 and
+mean D 0.908 ± 0.003, matching the predicted equilibrium (G_ST 0.0220,
 D 0.909) and the published G_ST ≈ 0.02 and D ≈ 0.90.
 
 ## Configure card examples

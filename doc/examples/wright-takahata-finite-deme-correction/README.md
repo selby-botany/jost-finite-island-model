@@ -12,20 +12,22 @@ approximation. The correction depends on finite deme count and is not a
 claim that this stochastic single-locus result must equal the
 expectation.
 
-The run converges on `G_ST` at generation 10,109, after about two minutes
-on a busy development machine. Its trailing-window mean `G_ST` is
-0.200 ± 0.007 (one standard error), close to the model's exact
-expectation of 0.195; the final generation's own value, 0.125, is one
-noisy draw.
+The run converges on `G_ST` at generation 21,910, after about a minute
+on a development machine. The burn-in is 8,424 generations (5 relaxation
+times of 1,685: eight demes with `m` = 0.003 relax slowly), and the average
+over the 13,487-generation window that follows gives `G_ST` = 0.193 ± 0.007
+(one standard error), close to the model's exact expectation of 0.195; the
+final generation's own value, 0.291, is one noisy draw. `D` is not watched
+here, so its own error bar (0.29 ± 0.06) was never required to be small.
 
-## Why the tolerance is 0.02
+## Why the precision is 0.02
 
 The configuration sets `precision: 0.02`, twice the default.
-A run stops only once the watched statistic's trailing-window mean is
-known to half the tolerance. At the default 0.01 this single locus needs
-about 40,000 generations and several minutes; at 0.02 the mean is known
-to about ±0.01, which still separates the finite-deme expectation from
-the infinite-island one.
+A run stops once the watched statistic's average is known to plus or minus
+the precision at 95% confidence (a standard error of at most about 0.010). The
+default 0.01 would take about four times as long; at 0.02 `G_ST` is known to
+about ±0.013, which still separates the finite-deme expectation from the
+infinite-island one.
 
 ## Related literature
 

@@ -1,51 +1,51 @@
 {
   "artifacts": {
     "replicate-001": {
-      "bytes": 2639,
-      "sha256": "bb96800d00afcac7698ffbbe23b90a3e3f094a86b2d1e1b33fd7be7f9d88d7c5"
+      "bytes": 2799,
+      "sha256": "24d9cb1fa0840c0028ff3dc40e6d730efa12e1f4483f81f7ac7548ec14f140cf"
     },
     "replicate-002": {
-      "bytes": 2639,
-      "sha256": "ad393ecfbc646fc6eb4da2f08e75e81bfdcd55521fa70ce42c294e139ab789c5"
+      "bytes": 2799,
+      "sha256": "d4dccf682d933a2232ab72057d56c1f5bf549f50a730c5b4b735245d7ebef2fb"
     },
     "replicate-003": {
-      "bytes": 2639,
-      "sha256": "98a730810f2f89bca56cd3100e21cb1bd8b6d001cfd5cca3133d94d60c918584"
+      "bytes": 2799,
+      "sha256": "9e1b60d7bcdbe1e3e33b6638a50c68de763cb953b1bfe3f8fb8192e6b4e792a1"
     },
     "replicate-004": {
-      "bytes": 2639,
-      "sha256": "e862f6394b38bbd11cb8a50ffa4c0e2a73e2ffa533951ebab924f965b5f203f1"
+      "bytes": 2800,
+      "sha256": "040422e43bd828a8a875282103700d5bbed260f5b92722a74cc2b12ed6f055da"
     },
     "replicate-005": {
-      "bytes": 2639,
-      "sha256": "7bcfb03dca716835e0f739f52048e43490e36e519dd1d25a354e0d1ae12e5e72"
+      "bytes": 2799,
+      "sha256": "c0f7009591e7e145051457b2d829f98dd08cfbd57735a96db178b35dbd4aaa08"
     },
     "replicate-006": {
-      "bytes": 2639,
-      "sha256": "f50ca2b2bcf78f15c2f273d651975563d3969d5251f88166fb19308974c1b3d7"
+      "bytes": 2799,
+      "sha256": "a8c1d05c8e591476c699eb75882cfbe4f8d09fd38eb1141bdda11a9223a04d8f"
     },
     "replicate-007": {
-      "bytes": 2639,
-      "sha256": "bd65d51ff27865f3dd9c49ec992067ff2992517052bf5f53c522b8989617ae3a"
+      "bytes": 2799,
+      "sha256": "25ee8d26e124e29b8461d7b98324180885a8589a1375273e545be0d633dd5d55"
     },
     "replicate-008": {
-      "bytes": 2639,
-      "sha256": "c0d9d6fd1577d198cd9be6356e8ed19f4a4157a499bc5156ef95b954e3c6a5da"
+      "bytes": 2799,
+      "sha256": "d10470100c1a9d39b6feef3b917db3fbe4159749d684aa8151bc881da0136eb6"
     },
     "replicate-009": {
-      "bytes": 2639,
-      "sha256": "816288b9ad6e3d165ead9aa432ee2e1f9791befb78ae160eda4169edc4c102e0"
+      "bytes": 2799,
+      "sha256": "c12d3f4611c853adbf15e489d81c2210a8d916fb0578a2d5b2ceb874ee03c14a"
     },
     "replicate-010": {
-      "bytes": 2639,
-      "sha256": "e168a5f2fda3da3b1784c18759399e9a7d4ecf77b310af4b823996e7fa09678c"
+      "bytes": 2799,
+      "sha256": "819ff30f7b0ed7145cb31b1bd02b8b6f0ab411aa801c708a1b160095081c3a87"
     },
     "summary": {
-      "bytes": 6059,
-      "sha256": "6413643649c085ce3879fce3f186d8476ed7bba528728dcaab0786c3ff641db2"
+      "bytes": 6052,
+      "sha256": "911d189b98c2bc9eefaecc25d5d4a4644f742253f201bc4088867e4dab17528b"
     }
   },
-  "ended_at": "2026-10-10T04:06:08.312042Z",
+  "ended_at": "2026-10-10T19:48:33.441083Z",
   "parameters": {
     "N": 100,
     "_read_only": true,
@@ -54,6 +54,7 @@
     "confidence": 0.95,
     "convergence_burn_in": 1459,
     "convergence_combinator": "all",
+    "convergence_estimate": "mean_of_values",
     "convergence_statistic": "D",
     "d": 5,
     "deme_weighting": "equal",
@@ -97,33 +98,38 @@
     ],
     "locus_aggregation": "ratio_of_means",
     "m": 0.01,
-    "max_generations": 5000,
+    "max_generations": 200000,
     "migrant_sampling": "continuous",
     "mu": 0.001,
     "mutation_model": "infinite_alleles",
     "n_replicates": 50,
     "ploidy": "haploid",
-    "precision": 0.08,
+    "precision": 0.03,
+    "precision_method": "interval",
+    "replicate_averaging_window": "auto",
     "replicate_minimum": 10,
     "seed": 20260819,
     "stop_batch_early": true,
-    "track_expensive_statistics": false
+    "track_expensive_statistics": false,
+    "trajectory_retention": "thinned",
+    "trajectory_stride": 10,
+    "trajectory_thinning_start": 5000
   },
   "replicate_count": 10,
   "replicate_run_ids": [
-    "run-fefb1a2d7e705d9a-r001",
-    "run-fefb1a2d7e705d9a-r002",
-    "run-fefb1a2d7e705d9a-r003",
-    "run-fefb1a2d7e705d9a-r004",
-    "run-fefb1a2d7e705d9a-r005",
-    "run-fefb1a2d7e705d9a-r006",
-    "run-fefb1a2d7e705d9a-r007",
-    "run-fefb1a2d7e705d9a-r008",
-    "run-fefb1a2d7e705d9a-r009",
-    "run-fefb1a2d7e705d9a-r010"
+    "run-672d659a48fb504e-r001",
+    "run-672d659a48fb504e-r002",
+    "run-672d659a48fb504e-r003",
+    "run-672d659a48fb504e-r004",
+    "run-672d659a48fb504e-r005",
+    "run-672d659a48fb504e-r006",
+    "run-672d659a48fb504e-r007",
+    "run-672d659a48fb504e-r008",
+    "run-672d659a48fb504e-r009",
+    "run-672d659a48fb504e-r010"
   ],
-  "run_id": "run-fefb1a2d7e705d9a",
+  "run_id": "run-672d659a48fb504e",
   "schema_version": 1,
   "software_version": "1.2.0",
-  "started_at": "2026-10-10T04:05:29.429802Z"
+  "started_at": "2026-10-10T19:45:42.932498Z"
 }

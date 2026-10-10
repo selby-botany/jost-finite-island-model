@@ -9,15 +9,18 @@ The finite-alleles model uses a five-base locus.
 
 Two settings fix the amount of work:
 
-- `precision: 0.0` can never be reached, so no replicate can stop early by
-  converging, and `convergence_burn_in: 1` keeps the 100-generation cap above
-  the burn-in. Each replicate ends "at the cap", which is expected here.
+- `replicate_averaging_window: 99` with `convergence_burn_in: 1` is a fixed
+  window: each replicate burns in for one generation, averages for 99 more
+  and stops at generation 100, whatever its noise. There is no precision check
+  and no matched window, so every replicate does the same work.
 - `stop_batch_early: false` turns off the adaptive replicate stop, so all
   16 replicates always run. Without it, a precision above zero would stop
   the batch at the 10-replicate minimum.
 
-The run takes about 40 seconds on a busy development machine. The
-across-replicate mean `D` is 0.0275 ± 0.0016 (95% confidence interval).
+The run takes about 10 seconds on a development machine. The
+across-replicate mean `D` is 0.0464 ± 0.0015 (95% confidence interval), the
+mean of the 16 replicates' averages over their 100 generations (not their
+final generations, which are one noisy draw each).
 The configuration is intended to exercise a larger deme count and the
 vector backend. Its short run is not suitable for interpreting
 equilibrium statistics: the population is nowhere near equilibrium after

@@ -18,5 +18,10 @@ loci:
 engine_backend: lineal
 convergence_statistic: D
 precision: 0.05   # looser than the 0.01 default: seconds, not hours
-max_generations: 10000   # a cap: the run reports the precision it reached by then
+# Thinned storage: every generation up to 5,000, then one in ten, so the saved
+# trajectory is a fraction of the size; the statistics and the report are
+# unaffected.
+trajectory_retention: thinned
+trajectory_stride: 10
+trajectory_thinning_start: 5000
 n_replicates: 1   # a single scalar run; the default (200) would batch

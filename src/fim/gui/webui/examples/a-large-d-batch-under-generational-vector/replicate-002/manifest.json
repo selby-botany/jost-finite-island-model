@@ -9,8 +9,8 @@
       "sha256": "3a6c7c6b3a10944bb32cc5a2926188e86954ddb21e9e74db3e0966ae1c065f6c"
     },
     "report": {
-      "bytes": 2587,
-      "sha256": "4c1bbaa44d5b019e6abaf679392189d0fe2f1104726b02f8513b6567a6356ea5"
+      "bytes": 4615,
+      "sha256": "30ecf0e33fc923527fb90ebab8fe56a674356eff14c865138a9918c2de1dc251"
     },
     "scatter": {
       "bytes": 49687,
@@ -18,18 +18,18 @@
     },
     "trajectory": {
       "bytes": 189597,
-      "sha256": "ca204bc9594266844ab60947432bc0031560dd86f11934738a47147152c13f1c"
+      "sha256": "fe62f3dd058603b7cefca29c5ed0d6b476f58caba282e7d8c3742a49e8d70daa"
     }
   },
   "auto_derived": [],
   "convergence": {
-    "converged": false,
+    "converged": true,
     "generation": 100,
     "generation_count": 101,
-    "reason": "hit the cap",
+    "reason": "averaging window complete",
     "statistic": "D"
   },
-  "ended_at": "2026-10-10T03:09:04.796993Z",
+  "ended_at": "2026-10-10T19:15:20.740590Z",
   "engine_backend": "generational-vector",
   "equilibrium_final_heterozygosity": null,
   "equilibrium_generation_count": null,
@@ -43,6 +43,7 @@
     "confidence": 0.95,
     "convergence_burn_in": 1,
     "convergence_combinator": "all",
+    "convergence_estimate": "mean_of_values",
     "convergence_statistic": "D",
     "d": 70,
     "deme_weighting": "equal",
@@ -58,24 +59,23 @@
     ],
     "locus_aggregation": "ratio_of_means",
     "m": 0.05,
-    "max_generations": 100,
+    "max_generations": 200000,
     "migrant_sampling": "continuous",
     "mu": 0.001,
     "mutation_model": "finite_alleles",
     "n_replicates": 1,
     "ploidy": "haploid",
-    "precision": 0.0,
+    "precision": 0.01,
+    "precision_method": "interval",
+    "replicate_averaging_window": 99,
     "replicate_minimum": 10,
     "seed": 20260917,
     "stop_batch_early": false,
     "track_expensive_statistics": false
   },
   "relaxation_time": 493.09201436861014,
-  "run_id": "run-8600a0c297d07454-r002",
+  "run_id": "run-c5dd832408d0650b-r002",
   "schema_version": 3,
-  "sigma_band": null,
-  "sigma_band_multiplier": null,
-  "sigma_band_window": null,
   "software_version": "1.2.0",
-  "started_at": "2026-10-10T03:08:58.116872Z"
+  "started_at": "2026-10-10T19:15:17.307140Z"
 }

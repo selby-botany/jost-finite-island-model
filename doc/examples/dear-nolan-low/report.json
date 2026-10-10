@@ -28,56 +28,124 @@
   "converged_on": null,
   "generation": 399728,
   "reason": "hit the cap",
-  "run_id": "run-574983fba6b77a91",
+  "run_id": "run-0a136c7c85ab55ad",
   "window_statistics": {
     "D": {
+      "burn_in": 104338,
       "effective_sample_size": 14.81222946079856,
       "estimator": "geyer",
+      "geweke_z": 3.99485041785269,
       "mean": 0.04199332710152649,
+      "mean_of_values": {
+        "mean": 0.04199332710152649,
+        "standard_error": 0.0059656816705982016
+      },
+      "minimum_ess": 50.0,
       "noise_adequate": false,
+      "projected_generations": 1101457,
+      "selected_form": "mean_of_values",
       "standard_deviation": 0.02295991581040067,
       "standard_error": 0.0059656816705982016,
+      "target_standard_error": 0.005102134569246541,
+      "undefined_generations": 0,
+      "value_of_means": {
+        "mean": 0.04198408166431551,
+        "standard_error": 0.005962692099424252
+      },
       "window": 295391,
+      "window_end": 399728,
       "window_start": 104338
     },
     "G_ST": {
+      "burn_in": 104338,
       "effective_sample_size": 498.33099792451367,
       "estimator": "geyer",
+      "geweke_z": -0.5262250478393834,
       "mean": 0.9639864876693424,
+      "mean_of_values": {
+        "mean": 0.9639864876693424,
+        "standard_error": 0.0035756415736778514
+      },
+      "minimum_ess": 50.0,
       "noise_adequate": true,
+      "projected_generations": 399728,
+      "selected_form": "mean_of_values",
       "standard_deviation": 0.07982022165614387,
       "standard_error": 0.0035756415736778514,
+      "target_standard_error": 0.005102134569246541,
+      "undefined_generations": 6688,
+      "value_of_means": {
+        "mean": 0.9687462282156521,
+        "standard_error": 0.0012059593250611242
+      },
       "window": 288703,
+      "window_end": 399728,
       "window_start": 104338
     },
     "H_S": {
+      "burn_in": 104338,
       "effective_sample_size": 191.62026705974705,
       "estimator": "geyer",
+      "geweke_z": 5.159619936092681,
       "mean": 0.0010824222538939915,
+      "mean_of_values": {
+        "mean": 0.0010824222538939915,
+        "standard_error": 0.00011823916420210114
+      },
+      "minimum_ess": 50.0,
       "noise_adequate": true,
+      "projected_generations": 399728,
+      "selected_form": "mean_of_values",
       "standard_deviation": 0.0016367489527352433,
       "standard_error": 0.00011823916420210114,
+      "target_standard_error": 0.005102134569246541,
+      "undefined_generations": 0,
       "window": 295391,
+      "window_end": 399728,
       "window_start": 104338
     },
     "H_ST": {
+      "burn_in": 104338,
       "effective_sample_size": 14.801212357487412,
       "estimator": "geyer",
+      "geweke_z": 3.995162039189514,
       "mean": 0.03388376065349878,
+      "mean_of_values": {
+        "mean": 0.03388376065349878,
+        "standard_error": 0.004803828861794507
+      },
+      "minimum_ess": 50.0,
       "noise_adequate": false,
+      "projected_generations": 1102199,
+      "selected_form": "mean_of_values",
       "standard_deviation": 0.01848145554201462,
       "standard_error": 0.004803828861794507,
+      "target_standard_error": 0.005102134569246541,
+      "undefined_generations": 0,
       "window": 295391,
+      "window_end": 399728,
       "window_start": 104338
     },
     "H_T": {
+      "burn_in": 104338,
       "effective_sample_size": 14.743443268876714,
       "estimator": "geyer",
+      "geweke_z": 4.031933876672635,
       "mean": 0.03463333198190419,
+      "mean_of_values": {
+        "mean": 0.03463333198190419,
+        "standard_error": 0.004894127162383669
+      },
+      "minimum_ess": 50.0,
       "noise_adequate": false,
+      "projected_generations": 1106109,
+      "selected_form": "mean_of_values",
       "standard_deviation": 0.018792073863141454,
       "standard_error": 0.004894127162383669,
+      "target_standard_error": 0.005102134569246541,
+      "undefined_generations": 0,
       "window": 295391,
+      "window_end": 399728,
       "window_start": 104338
     }
   }

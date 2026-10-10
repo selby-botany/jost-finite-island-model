@@ -64,23 +64,14 @@ def test_worked_example_configs_are_the_source_of_usage_yaml() -> None:
 
 
 # Worked examples that deliberately pin a run length: a one-generation
-# statistics check, two engine-timing workloads, and the Dear-Nolan
-# high-migration stationarity check (30 generations from its equilibrium).
-# The five further entries are a temporary storage measure, not a design
-# choice: under the burn-in-then-average rule these runs need tens of
-# thousands of generations, and their full trajectories would add hundreds of
-# megabytes to the repository, so each is capped until optional trajectory
-# thinning exists (design commit 16), when the caps are removed again.
+# statistics check, two engine-timing workloads that average over a fixed
+# window, and the Dear-Nolan high-migration stationarity check (30
+# generations from its equilibrium).
 PINNED_CONVERGENCE_EXAMPLES = {
     "literature-distance-statistics-from-an-explicit-founder-split",
     "a-large-d-batch-under-generational-vector",
     "a-long-locus-batch-under-the-generational-engine",
     "dear-nolan-high",
-    "golden-part-vi",
-    "an-adaptive-replicate-batch-with-a-confidence-interval",
-    "kimura-weiss-isolation-by-distance",
-    "equilibrium-split-founding",
-    "unequal-island-sizes-with-a-migration-hub",
 }
 
 

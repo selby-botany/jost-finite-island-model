@@ -10,9 +10,9 @@ d: 5
 m: 0.01
 mu: 0.001
 seed: 20260819
-# Eight independent loci, pooled, and a loose per-replicate tolerance: each
-# replicate settles in about a thousand generations instead of about 15,000
-# (see the README).
+# Eight independent loci, pooled, and a loose precision: a single locus is so
+# noisy that each replicate would need tens of thousands of generations (see
+# the README).
 loci:
   - locus_id: 1
     length: 100
@@ -32,7 +32,12 @@ loci:
     length: 100
 engine_backend: lineal
 convergence_statistic: D
-precision: 0.08   # plus or minus: each replicate and the batch's interval
-max_generations: 5000   # a cap: the run reports the precision it reached by then
+precision: 0.03   # plus or minus, for the batch's interval across replicates
+# Thinned storage: every generation up to 5,000, then one in ten, so the saved
+# trajectory is a fraction of the size; the statistics and the report are
+# unaffected.
+trajectory_retention: thinned
+trajectory_stride: 10
+trajectory_thinning_start: 5000
 n_replicates: 50
 replicate_minimum: 10

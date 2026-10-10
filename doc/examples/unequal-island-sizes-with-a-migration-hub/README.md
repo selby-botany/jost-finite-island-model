@@ -7,31 +7,28 @@ migration matrix. Deme 4 is both the largest deme and a migration hub.
 The example shows that `N` can be a per-deme list and `m` can describe
 each source-to-destination rate rather than one shared migration rate.
 
-The run converges at generation 1,006, after about 20 seconds on a busy
-development machine. Its trailing-window mean `D` is 0.0468 ± 0.0019
-(one standard error); the final generation's own value is 0.0644.
-Compare the recorded `parameters.N` and `parameters.m` in the manifest
-with a uniform-size, uniform-migration run to see the effect of the
-hub. `deme_weighting` changes `E_ST`, but not `D` or `K_ST`: `E_ST` is
-0.0815 with the default equal weighting and 0.0764 with
-`deme_weighting: size`, because the large hub deme pulls the
-size-weighted value down.
+The run converges at generation 44,847, after about seven minutes on a
+development machine (eight loci are slow to simulate). It burns in for 1,777
+generations, then averages over a 43,071-generation window: `D` = 0.0626 ±
+0.0022 (one standard error) and `G_ST` = 0.0245 ± 0.0001; the final
+generation's own `D` is 0.0602. Compare the recorded `parameters.N` and
+`parameters.m` in the manifest with a uniform-size, uniform-migration run to
+see the effect of the hub. `deme_weighting` changes `E_ST`, but not `D` or
+`K_ST`: the final generation's `E_ST` is 0.082 with the default equal
+weighting, and `deme_weighting: size` lowers it, because the large hub deme
+pulls the size-weighted value down.
 
 ## Why eight loci
 
 The example tracks eight independent loci and pools them. An earlier
 version tracked one locus, and that locus's diversity swung widely: its
 within-deme heterozygosity moved between about 0.13 and 0.70 within a
-thousand generations. The convergence check judged its noise from
-generation-to-generation correlation alone, which misses swings that
-slow, so the run stopped at generation 1,006, the first generation its
-window could fill, with a window that still held the starting state.
-Its window mean, 0.025, was about half the value eight loci give. Pooling
-loci averages many of those slow swings away, but this run still stops at
-generation 1,006, the first generation its 1,007-generation window can
-fill, so its window mean is one window's average, not a long-run
-estimate. The convergence rule that allows this is planned for
-redesign.
+thousand generations, so its average over a short window said little about
+the long run. Pooling loci averages many of those slow swings away, and the
+run now averages for as long as its precision needs (43,071 generations here)
+instead of stopping on the first window that fills. The saved trajectory is
+thinned (every generation to 5,000, then one in ten) to keep the example
+small; the statistics and the report are unaffected.
 
 ## Run
 

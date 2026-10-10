@@ -24,60 +24,123 @@
   "NEI_I_ALL_GEO": 0.9733364017309413,
   "NEI_I_ALL_GEO_LOCUS_MEAN": 0.9733364017309413,
   "R_ST": 0.021567128839149248,
-  "converged": false,
-  "converged_on": null,
+  "converged": true,
+  "converged_on": "D",
   "generation": 100,
-  "reason": "hit the cap",
-  "run_id": "run-8600a0c297d07454-r009",
+  "reason": "averaging window complete",
+  "run_id": "run-c5dd832408d0650b-r009",
   "window_statistics": {
     "D": {
+      "burn_in": 1,
       "effective_sample_size": 6.170772115951784,
       "estimator": "geyer",
+      "geweke_z": 6.569973919238723,
       "mean": 0.04520967006487568,
+      "mean_of_values": {
+        "mean": 0.04520967006487568,
+        "standard_error": 0.01592252671046959
+      },
+      "minimum_ess": 50.0,
       "noise_adequate": false,
+      "selected_form": "mean_of_values",
       "standard_deviation": 0.03955321047485066,
       "standard_error": 0.01592252671046959,
+      "target_standard_error": 0.005102134569246541,
+      "undefined_generations": 0,
+      "value_of_means": {
+        "mean": 0.04888082505416241,
+        "standard_error": 0.018359664569161976
+      },
       "window": 100,
+      "window_end": 100,
       "window_start": 1
     },
     "G_ST": {
+      "burn_in": 1,
       "effective_sample_size": 6.357514743077028,
       "estimator": "geyer",
+      "geweke_z": 5.772083164490053,
       "mean": 0.043029037475994826,
+      "mean_of_values": {
+        "mean": 0.043029037475994826,
+        "standard_error": 0.019388310599636253
+      },
+      "minimum_ess": 50.0,
       "noise_adequate": false,
+      "selected_form": "mean_of_values",
       "standard_deviation": 0.048885904662230445,
       "standard_error": 0.019388310599636253,
+      "target_standard_error": 0.005102134569246541,
+      "undefined_generations": 0,
+      "value_of_means": {
+        "mean": 0.04123942049503957,
+        "standard_error": 0.018266541012047458
+      },
       "window": 100,
+      "window_end": 100,
       "window_start": 1
     },
     "H_S": {
+      "burn_in": 1,
       "effective_sample_size": 3.81217960007409,
       "estimator": "geyer",
+      "geweke_z": -8.37446002349707,
       "mean": 0.5283415771428571,
+      "mean_of_values": {
+        "mean": 0.5283415771428571,
+        "standard_error": 0.025193521102859627
+      },
+      "minimum_ess": 50.0,
       "noise_adequate": false,
+      "selected_form": "mean_of_values",
       "standard_deviation": 0.04918985543573221,
       "standard_error": 0.025193521102859627,
+      "target_standard_error": 0.005102134569246541,
+      "undefined_generations": 0,
       "window": 100,
+      "window_end": 100,
       "window_start": 1
     },
     "H_ST": {
+      "burn_in": 1,
       "effective_sample_size": 6.170772115951784,
       "estimator": "geyer",
+      "geweke_z": 6.5699739192387225,
       "mean": 0.04456381763537745,
+      "mean_of_values": {
+        "mean": 0.04456381763537745,
+        "standard_error": 0.015695062043177166
+      },
+      "minimum_ess": 50.0,
       "noise_adequate": false,
+      "selected_form": "mean_of_values",
       "standard_deviation": 0.03898816461092422,
       "standard_error": 0.015695062043177166,
+      "target_standard_error": 0.005102134569246541,
+      "undefined_generations": 0,
       "window": 100,
+      "window_end": 100,
       "window_start": 1
     },
     "H_T": {
+      "burn_in": 1,
       "effective_sample_size": 2.962387829377867,
       "estimator": "geyer",
+      "geweke_z": -7.800472746364003,
       "mean": 0.5510672720979592,
+      "mean_of_values": {
+        "mean": 0.5510672720979592,
+        "standard_error": 0.017059182824561876
+      },
+      "minimum_ess": 50.0,
       "noise_adequate": false,
+      "selected_form": "mean_of_values",
       "standard_deviation": 0.029361563702606192,
       "standard_error": 0.017059182824561876,
+      "target_standard_error": 0.005102134569246541,
+      "undefined_generations": 0,
       "window": 100,
+      "window_end": 100,
       "window_start": 1
     }
   }

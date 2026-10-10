@@ -1,75 +1,75 @@
 {
   "artifacts": {
     "replicate-001": {
-      "bytes": 2222,
-      "sha256": "c2c1c0f57e75d2e6fb4c19d903e1235c03d165153cbdf984b2daf2a109d65768"
+      "bytes": 2275,
+      "sha256": "ed6aee9abb66a65d35de5628d813a1a6deca8a2277aaf11a53dcd3fb5e08b090"
     },
     "replicate-002": {
-      "bytes": 2222,
-      "sha256": "a3b861837d00c07a9d7eef159494baade6be83bd699e0b45256473c9a19fbbb1"
+      "bytes": 2275,
+      "sha256": "25d9ae34c5877ec9ed1e3be6feb8d2b9c2ce9b1012937d55fb2b191219c2c86a"
     },
     "replicate-003": {
-      "bytes": 2222,
-      "sha256": "4cf4993e0cf6e8f13c65e2d13c4f00e4c2ffd0a19e9568a2000ecbf8826cc92a"
+      "bytes": 2275,
+      "sha256": "0c79d970df59428d40a293b82f8e1e834612f55d7e0fb901919b3d5289a4279f"
     },
     "replicate-004": {
-      "bytes": 2222,
-      "sha256": "37e18c2063158f72d016adaf6653bac1864a38b05ee904108797676c605bf6d3"
+      "bytes": 2275,
+      "sha256": "aff9a75ae7a540ce853a0033fbfcfb4a5791d7131ab28be3cb03755a414a10ef"
     },
     "replicate-005": {
-      "bytes": 2222,
-      "sha256": "6a138d8ccba9678dce3cfcf35c523286e9a375e5afb36caa95faab17bbabb344"
+      "bytes": 2275,
+      "sha256": "db7053a0cb18d4af6f8ffc45705229936ffb9c1eca97b49448586010ab14a54e"
     },
     "replicate-006": {
-      "bytes": 2222,
-      "sha256": "5e5bf824197ed11df2ce027e3623545540a4693ec1da0f45bf798bcd35fccdc2"
+      "bytes": 2275,
+      "sha256": "175bbaf4cd774c45d3c3a25fcd8ae5e26ad6eebdea1a7c9f050a275aac4b376c"
     },
     "replicate-007": {
-      "bytes": 2222,
-      "sha256": "7d607a1dbfa12c47e375ef8df278fb99ca92b70d9bc2bb9ee3f1df8175454dae"
+      "bytes": 2275,
+      "sha256": "2c24bbf47d84b7917ebb8f7b07cdee6e0800e6cb424972ff41a466b2cc3e9e21"
     },
     "replicate-008": {
-      "bytes": 2222,
-      "sha256": "dcee6fba876a0a5de058d13a0645af8720d0762d6a4649e7dc1d007d5ed4bf46"
+      "bytes": 2275,
+      "sha256": "6e4a52dc38e3cf15bd5b5e5bb168972a00e1f97f21aadc8aa62e2629d1ab1f87"
     },
     "replicate-009": {
-      "bytes": 2222,
-      "sha256": "28e620d258dd3a1374cf23abf75520cce0df0664f3549a055616cd16c4563f50"
+      "bytes": 2275,
+      "sha256": "42def758967b977ded7567fb0365947e2a85fa1ec716c6007331012381fd809a"
     },
     "replicate-010": {
-      "bytes": 2222,
-      "sha256": "56ba0aecc1a1ee5819fedbd64bd4828e40161724292b3d62d89c635ccf73881c"
+      "bytes": 2275,
+      "sha256": "e39ae7411cf63827749fb55e343e4272c67777c7de63dc075254b8897b1c7bc4"
     },
     "replicate-011": {
-      "bytes": 2222,
-      "sha256": "f6866214a7b8b7b98e8a35a8dc224c8c9354c6ca0478dda5d163b20aa411ffa6"
+      "bytes": 2275,
+      "sha256": "80c12920ee297808b754a8820cfe1aa9faf8e5c3c8062ec416171111851a6f89"
     },
     "replicate-012": {
-      "bytes": 2222,
-      "sha256": "21fc7c07fd10a63f872fc2261d85c14bdb2769aae783d124e6f7bcfb78b1ed58"
+      "bytes": 2275,
+      "sha256": "9485649ad6d79ac676543894eac4121b928ed873d255aacf57bfe357fbace46a"
     },
     "replicate-013": {
-      "bytes": 2222,
-      "sha256": "7e68e662d82a544bd47131fd0a9662e29b4310d91a2624bca72f802d3f8afccd"
+      "bytes": 2275,
+      "sha256": "34b5b47942300c7b3e33debd8526c0917a25a975d500dd399e14a1092530ad7c"
     },
     "replicate-014": {
-      "bytes": 2222,
-      "sha256": "7dd7181381938c1ecead1b70cfe9f4e140a617db945019fc5273c4eb82115682"
+      "bytes": 2275,
+      "sha256": "af48de96d49ae29a604edd72729236f53e051a50da8cde3c2dd8554ccc8ce53f"
     },
     "replicate-015": {
-      "bytes": 2222,
-      "sha256": "9df80c622ccbef7caf9fe9e8fe8989fbec21bc2b3322a78397e12e608fa87388"
+      "bytes": 2275,
+      "sha256": "00e1adb25931a84c390b9964ff9530c1087169b2bd779e2afd761c5103faca2e"
     },
     "replicate-016": {
-      "bytes": 2222,
-      "sha256": "74e793f45954a3f6613cb8a7a032721faf66cd30362eadad39132915a2bc165c"
+      "bytes": 2275,
+      "sha256": "b102ad81187a3d00a1425044af74a3882355558c461f05180afb2e942c324a6b"
     },
     "summary": {
       "bytes": 6193,
-      "sha256": "85d8306c433ef67e45f7544d4c149eb0d42d2e4eafe26ea3440e702388b119b0"
+      "sha256": "72c7d4d327f6a4f444dc342116922ca17bddc2559dbc86ea0ab0e47048c672e5"
     }
   },
-  "ended_at": "2026-10-10T03:09:05.086806Z",
+  "ended_at": "2026-10-10T19:15:20.967195Z",
   "parameters": {
     "N": 500,
     "_read_only": true,
@@ -78,6 +78,7 @@
     "confidence": 0.95,
     "convergence_burn_in": 1,
     "convergence_combinator": "all",
+    "convergence_estimate": "mean_of_values",
     "convergence_statistic": "D",
     "d": 70,
     "deme_weighting": "equal",
@@ -93,13 +94,15 @@
     ],
     "locus_aggregation": "ratio_of_means",
     "m": 0.05,
-    "max_generations": 100,
+    "max_generations": 200000,
     "migrant_sampling": "continuous",
     "mu": 0.001,
     "mutation_model": "finite_alleles",
     "n_replicates": 16,
     "ploidy": "haploid",
-    "precision": 0.0,
+    "precision": 0.01,
+    "precision_method": "interval",
+    "replicate_averaging_window": 99,
     "replicate_minimum": 10,
     "seed": 20260916,
     "stop_batch_early": false,
@@ -107,25 +110,25 @@
   },
   "replicate_count": 16,
   "replicate_run_ids": [
-    "run-8600a0c297d07454-r001",
-    "run-8600a0c297d07454-r002",
-    "run-8600a0c297d07454-r003",
-    "run-8600a0c297d07454-r004",
-    "run-8600a0c297d07454-r005",
-    "run-8600a0c297d07454-r006",
-    "run-8600a0c297d07454-r007",
-    "run-8600a0c297d07454-r008",
-    "run-8600a0c297d07454-r009",
-    "run-8600a0c297d07454-r010",
-    "run-8600a0c297d07454-r011",
-    "run-8600a0c297d07454-r012",
-    "run-8600a0c297d07454-r013",
-    "run-8600a0c297d07454-r014",
-    "run-8600a0c297d07454-r015",
-    "run-8600a0c297d07454-r016"
+    "run-c5dd832408d0650b-r001",
+    "run-c5dd832408d0650b-r002",
+    "run-c5dd832408d0650b-r003",
+    "run-c5dd832408d0650b-r004",
+    "run-c5dd832408d0650b-r005",
+    "run-c5dd832408d0650b-r006",
+    "run-c5dd832408d0650b-r007",
+    "run-c5dd832408d0650b-r008",
+    "run-c5dd832408d0650b-r009",
+    "run-c5dd832408d0650b-r010",
+    "run-c5dd832408d0650b-r011",
+    "run-c5dd832408d0650b-r012",
+    "run-c5dd832408d0650b-r013",
+    "run-c5dd832408d0650b-r014",
+    "run-c5dd832408d0650b-r015",
+    "run-c5dd832408d0650b-r016"
   ],
-  "run_id": "run-8600a0c297d07454",
+  "run_id": "run-c5dd832408d0650b",
   "schema_version": 1,
   "software_version": "1.2.0",
-  "started_at": "2026-10-10T03:08:57.752427Z"
+  "started_at": "2026-10-10T19:15:17.012404Z"
 }

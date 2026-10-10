@@ -7,22 +7,22 @@ neighbors. The `topology: ring` shorthand builds this sparse migration
 graph without writing all 36 matrix entries. Replacing `ring` with
 `linear` removes the wrap-around connection.
 
-The run converges at generation 7,918, after under a minute on ordinary
-development hardware. Its trailing-window mean `D` is 0.133 ± 0.007 (one
-standard error) and its mean `G_ST` 0.057; the final generation's own
-`D`, 0.266, is one noisy draw. In the GUI, the resulting graph has
-distance classes for the isolation-by-distance visualization.
+The run converges at generation 22,761, after about half a minute on a
+development machine. It burns in for 1,643 generations, then averages over a
+21,119-generation window: `D` = 0.156 ± 0.009 (one standard error) and `G_ST`
+= 0.060 ± 0.001; the final generation's own `D`, 0.069, is one noisy draw. In
+the GUI, the resulting graph has distance classes for the isolation-by-distance
+visualization.
 
-## Why the tolerance is 0.02
+## Why the precision is 0.02
 
 The configuration sets `precision: 0.02`, twice the default.
-A run stops only once its trailing-window mean is known to half the
-tolerance, and a single locus is noisy, so at the default 0.01 this run
-needs about 32,000 generations and several minutes. At 0.02 the mean is
-known to about ±0.01 instead of ±0.005, which is enough to show the
-ring's effect. A looser tolerance still, such as 0.05, finishes in
-seconds but stops on a short window whose mean (about 0.18 here) is
-visibly less reliable.
+A run stops once the average of each watched statistic is known to plus or
+minus the precision at 95% confidence, and a single locus is noisy, so the
+default 0.01 would take about four times as long. At 0.02 `D` is known to about
+±0.02 instead of ±0.01, which is enough to show the ring's effect. A looser
+precision still, such as 0.05, finishes in seconds but averages over a short
+window whose mean is visibly less reliable.
 
 ## Related literature
 

@@ -24,60 +24,123 @@
   "NEI_I_ALL_GEO": 0.08935516254740496,
   "NEI_I_ALL_GEO_LOCUS_MEAN": 0.08935516254740494,
   "R_ST": 0.02281333233539525,
-  "converged": false,
-  "converged_on": null,
+  "converged": true,
+  "converged_on": "D",
   "generation": 30,
-  "reason": "hit the cap",
-  "run_id": "run-f6039e5ec0586aa1-r004",
+  "reason": "averaging window complete",
+  "run_id": "run-99168ff0fe003473-r004",
   "window_statistics": {
     "D": {
+      "burn_in": 1,
       "effective_sample_size": 3.6829889256916966,
       "estimator": "geyer",
+      "geweke_z": -3.4732277578679525,
       "mean": 0.9097578381724227,
+      "mean_of_values": {
+        "mean": 0.9097578381724227,
+        "standard_error": 0.0007268748084568687
+      },
+      "minimum_ess": 50.0,
       "noise_adequate": false,
+      "selected_form": "mean_of_values",
       "standard_deviation": 0.0013949537994739365,
       "standard_error": 0.0007268748084568687,
+      "target_standard_error": 0.005102134569246541,
+      "undefined_generations": 0,
+      "value_of_means": {
+        "mean": 0.9097618433651993,
+        "standard_error": 0.0007292736185173462
+      },
       "window": 30,
+      "window_end": 30,
       "window_start": 1
     },
     "G_ST": {
+      "burn_in": 1,
       "effective_sample_size": 4.578070852896509,
       "estimator": "geyer",
+      "geweke_z": 0.2290105569842463,
       "mean": 0.02183805591523287,
+      "mean_of_values": {
+        "mean": 0.02183805591523287,
+        "standard_error": 6.033021883607658e-05
+      },
+      "minimum_ess": 50.0,
       "noise_adequate": false,
+      "selected_form": "mean_of_values",
       "standard_deviation": 0.00012908511188825756,
       "standard_error": 6.033021883607658e-05,
+      "target_standard_error": 0.005102134569246541,
+      "undefined_generations": 0,
+      "value_of_means": {
+        "mean": 0.021838057665766908,
+        "standard_error": 6.033128206798159e-05
+      },
       "window": 30,
+      "window_end": 30,
       "window_start": 1
     },
     "H_S": {
+      "burn_in": 1,
       "effective_sample_size": 5.204020472246233,
       "estimator": "geyer",
+      "geweke_z": -1.0734580038849573,
       "mean": 0.9758116451666667,
+      "mean_of_values": {
+        "mean": 0.9758116451666667,
+        "standard_error": 5.150625244392066e-05
+      },
+      "minimum_ess": 50.0,
       "noise_adequate": false,
+      "selected_form": "mean_of_values",
       "standard_deviation": 0.00011749772295287723,
       "standard_error": 5.150625244392066e-05,
+      "target_standard_error": 0.005102134569246541,
+      "undefined_generations": 0,
       "window": 30,
+      "window_end": 30,
       "window_start": 1
     },
     "H_ST": {
+      "burn_in": 1,
       "effective_sample_size": 3.682988925691719,
       "estimator": "geyer",
+      "geweke_z": -3.4732277578678916,
       "mean": 0.9006602597906984,
+      "mean_of_values": {
+        "mean": 0.9006602597906984,
+        "standard_error": 0.0007196060603722946
+      },
+      "minimum_ess": 50.0,
       "noise_adequate": false,
+      "selected_form": "mean_of_values",
       "standard_deviation": 0.001381004261479191,
       "standard_error": 0.0007196060603722946,
+      "target_standard_error": 0.005102134569246541,
+      "undefined_generations": 0,
       "window": 30,
+      "window_end": 30,
       "window_start": 1
     },
     "H_T": {
+      "burn_in": 1,
       "effective_sample_size": 3.7867622981128197,
       "estimator": "geyer",
+      "geweke_z": -7.223095763841971,
       "mean": 0.9975972310250001,
+      "mean_of_values": {
+        "mean": 0.9975972310250001,
+        "standard_error": 1.4368827103309098e-05
+      },
+      "minimum_ess": 50.0,
       "noise_adequate": false,
+      "selected_form": "mean_of_values",
       "standard_deviation": 2.7961170087167873e-05,
       "standard_error": 1.4368827103309098e-05,
+      "target_standard_error": 0.005102134569246541,
+      "undefined_generations": 0,
       "window": 30,
+      "window_end": 30,
       "window_start": 1
     }
   }

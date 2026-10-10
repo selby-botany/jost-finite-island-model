@@ -148,8 +148,9 @@ requested `precision`. With one
 locus that can take tens of thousands of generations, so
 several examples set a looser precision (0.02 to 0.05) or pool
 eight loci, and each one's README says what that costs. Every example
-here finishes in a few seconds to about three minutes of wall-clock
-time on a busy development machine (an idle one is faster). Most use one locus, so a single run's
+here finishes in a few seconds to about eight minutes of wall-clock
+time on a development machine (an idle one is faster), except Dear-Nolan low,
+which takes about half an hour. Most use one locus, so a single run's
 numbers scatter widely around the model's expectation; use a batch
 (`n_replicates`) when you want a stable value. Each uses a
 seed distinct from [`fim init`](#create-a-configuration)'s starter config.
@@ -228,7 +229,12 @@ loci:
     length: 100
 engine_backend: lineal
 convergence_statistic: D
-max_generations: 10000   # a cap: the run reports the precision it reached by then
+# Thinned storage: every generation up to 5,000, then one in ten, so the saved
+# trajectory is a fraction of the size; the statistics and the report are
+# unaffected.
+trajectory_retention: thinned
+trajectory_stride: 10
+trajectory_thinning_start: 5000
 n_replicates: 1   # a single scalar run; the default (200) would batch
 ```
 
@@ -236,9 +242,10 @@ n_replicates: 1   # a single scalar run; the default (200) would batch
 fim run hub-island.yaml --output results/hub-island --quiet
 ```
 
-Converges at generation 1,006, after about 20 seconds, with D = 0.0644 and a
-trailing-window mean D of 0.0468 ± 0.0019. The example pools eight loci: one
-locus alone swings too widely for its D to settle honestly (see the
+Converges at generation 44,847, after about seven minutes, with D = 0.0602 and
+an average over its 43,071-generation evidence window of 0.0626 ± 0.0022. The
+example pools eight loci: one locus alone swings too widely for its D to settle
+honestly (see the
 [example's README](examples/unequal-island-sizes-with-a-migration-hub/README.md)).
 `manifest.json`'s `parameters.N`
 and `parameters.m` record the exact per-deme sizes and matrix rows used —
@@ -287,9 +294,9 @@ n_replicates: 1   # a single scalar run; the default (200) would batch
 fim run stepping-stone.yaml --output results/stepping-stone --quiet
 ```
 
-Converges at generation 7,918, after under a minute, with a trailing-window
-mean D of 0.133 ± 0.007. `precision: 0.02` keeps the run to a
-minute; at the default 0.01 one locus needs about 32,000 generations (see
+Converges at generation 22,761, after about half a minute, with an average D
+of 0.156 ± 0.009. `precision: 0.02` keeps the run to half a
+minute; the default 0.01 would take about four times as long (see
 the [example's README](examples/stepping-stone-spatial-migration/README.md)).
 Swap `topology: ring` for
 `linear` to remove the wrap-around edge between deme 1 and deme 6. In
@@ -383,7 +390,7 @@ d: 3
 m: 0.005
 mu: 0.001
 seed: 20260916
-# Eight independent loci, pooled, and a looser tolerance for the main run:
+# Eight independent loci, pooled, and a looser precision for the main run:
 # one locus here needs about 30,000 generations to settle (see the README).
 loci:
   - locus_id: 1
@@ -408,7 +415,12 @@ equilibrium_max_generations: 2000   # the derived burn-in is 1,256 generations
 engine_backend: lineal
 convergence_statistic: D
 precision: 0.03
-max_generations: 10000   # a cap: the run reports the precision it reached by then
+# Thinned storage: every generation up to 5,000, then one in ten, so the saved
+# trajectory is a fraction of the size; the statistics and the report are
+# unaffected.
+trajectory_retention: thinned
+trajectory_stride: 10
+trajectory_thinning_start: 5000
 n_replicates: 1   # a single scalar run; the default (200) would batch
 ```
 
@@ -417,10 +429,8 @@ fim run equilibrium-split.yaml --output results/equilibrium-split --quiet
 ```
 
 The ancestral phase runs 1,256 generations; the main run then converges at
-generation 1,374, after about half a minute, with a trailing-window mean D of
-0.241 ± 0.014 (the model's expectation is 0.287; this looks like a premature stop, with a
-short window that is one draw from slow swings, which the planned convergence
-redesign addresses) — real differentiation that grew from the
+generation 41,089, after about two minutes, with an average D of
+0.302 ± 0.009 (the model's expectation is 0.287) — real differentiation that grew from the
 ancestral-population founder effect, with no explicit `p_0` anywhere in the
 file. The example pools
 eight loci and sets `precision: 0.03`, because one locus here
@@ -474,10 +484,9 @@ n_replicates: 1   # a single scalar run; the default (200) would batch
 fim run stochastic-migrants.yaml --output results/stochastic-migrants --quiet
 ```
 
-Converges at generation 11,802, after about a minute, with D = 0.032 and a
-trailing-window mean D of 0.076 ± 0.005 (the model's expectation is 0.059; one
-locus swings slowly, so a single run's window mean can sit this far from it,
-more than its standard error suggests). Re-run with migrant_sampling
+Converges at generation 60,743, after about half a minute, with D = 0.093 and
+an average D of 0.071 ± 0.005 (the model's expectation is 0.059; one locus
+swings slowly, so a single run's average can sit this far from it). Re-run with migrant_sampling
 removed (or set to `continuous`, the default) at the same seed to compare
 against the deterministic-migration baseline directly.
 
@@ -520,9 +529,9 @@ n_replicates: 1   # a single scalar run; the default (200) would batch
 fim run finite-alleles.yaml --output results/finite-alleles --quiet
 ```
 
-Converges at generation 8,977, after about a minute, with a trailing-window
-mean D of 0.611 ± 0.006 (`precision: 0.02` halves the run's
-precision target to keep it short; see the
+Converges at generation 6,771, after about ten seconds, with an average D
+of 0.614 ± 0.009 (`precision: 0.02` is twice the default plus-or-minus, which
+keeps the run short; see the
 [example's README](examples/finite-length-alleles-the-k-allele-model/README.md)).
 This is the Kimura-Crow
 finite-allele setting in miniature: `length: 3` gives 64 possible allele
@@ -567,8 +576,8 @@ fim run finite-deme-correction.yaml \
   --output results/finite-deme-correction --quiet
 ```
 
-Converges (on G<sub>ST</sub>) at generation 10,109, after about two minutes, with
-a trailing-window mean G<sub>ST</sub> of 0.200 ± 0.007
+Converges (on G<sub>ST</sub>) at generation 21,910, after about a minute, with
+an average G<sub>ST</sub> of 0.193 ± 0.007
 (`precision: 0.02` keeps the run short; see the
 [example's README](examples/wright-takahata-finite-deme-correction/README.md)).
 The closed-form finite-deme prediction for these parameters
@@ -606,7 +615,12 @@ loci:
 engine_backend: lineal
 convergence_statistic: D
 precision: 0.05   # looser than the 0.01 default: seconds, not hours
-max_generations: 10000   # a cap: the run reports the precision it reached by then
+# Thinned storage: every generation up to 5,000, then one in ten, so the saved
+# trajectory is a fraction of the size; the statistics and the report are
+# unaffected.
+trajectory_retention: thinned
+trajectory_stride: 10
+trajectory_thinning_start: 5000
 n_replicates: 1   # a single scalar run; the default (200) would batch
 ```
 
@@ -615,10 +629,9 @@ fim run kimura-weiss-isolation-by-distance.yaml \
   --output results/kimura-weiss-isolation-by-distance --quiet
 ```
 
-Converges at generation 2,539, after about a minute, with D = 0.475 and
-G<sub>ST</sub> = 0.093. `precision: 0.05` is deliberately loose:
-at the default 0.01 this one-locus ring needs about 175,000 generations,
-well over an hour (see the
+Converges at generation 31,250, after about five minutes, with averages D =
+0.565 and G<sub>ST</sub> = 0.119. `precision: 0.05` is deliberately loose:
+the default 0.01 would need many times as long, hours (see the
 [example's README](examples/kimura-weiss-isolation-by-distance/README.md)).
 Open the result in `fim-gui` and inspect the Literature visualizations panel:
 the identity-decay plot groups deme pairs by shortest-path distance over the
@@ -660,8 +673,8 @@ n_replicates: 1   # a single scalar run; the default (200) would batch
 fim run mu-b.yaml --output results/mu-b --quiet
 ```
 
-Converges at generation 3,136, after a few seconds, with a trailing-window
-mean D of 0.222 ± 0.013 (the window is sized from the slowest locus, the
+Converges at generation 17,345, after about twenty seconds, with an average
+D of 0.209 ± 0.013 (the window is sized from the slowest locus, the
 50-base one, so it is long enough to leave the approach from the starting
 state; `precision: 0.03` keeps the run short; see the
 [example's README](examples/per-base-mutation-rate-across-unequal-locus-lengths/README.md)).
@@ -710,11 +723,11 @@ n_replicates: 1   # a single scalar run; the default (200) would batch
 fim run multi-statistic.yaml --output results/multi-statistic --quiet
 ```
 
-Converges at generation 6,059, after about half a minute. `report.json`'s
+Converges at generation 2,327, after a few seconds. `report.json`'s
 converged_on lists the watched statistics that had actually settled when the
 run stopped: here ["G<sub>ST</sub>"] alone, because G<sub>ST</sub>'s
-trailing-window mean was already known precisely (0.0660 ± 0.0038) while D's
-was not (0.101 ± 0.010), and `any` needs only one. A run that reaches its cap
+average was already known precisely (0.0606 ± 0.0047) while D's
+was not (0.151 ± 0.020), and `any` needs only one. A run that reaches its cap
 records `null`, since it converged on nothing.
 
 ### Within-run sigma band
@@ -762,6 +775,12 @@ loci:
     length: 100
 engine_backend: lineal
 convergence_statistic: D
+# Thinned storage: every generation up to 5,000, then one in ten, so the saved
+# trajectory is a fraction of the size; the statistics and the report are
+# unaffected.
+trajectory_retention: thinned
+trajectory_stride: 10
+trajectory_thinning_start: 5000
 n_replicates: 1   # a single scalar run; the default (200) would batch
 ```
 
@@ -802,9 +821,9 @@ d: 5
 m: 0.01
 mu: 0.001
 seed: 20260819
-# Eight independent loci, pooled, and a loose per-replicate tolerance: each
-# replicate settles in about a thousand generations instead of about 15,000
-# (see the README).
+# Eight independent loci, pooled, and a loose precision: a single locus is so
+# noisy that each replicate would need tens of thousands of generations (see
+# the README).
 loci:
   - locus_id: 1
     length: 100
@@ -824,8 +843,13 @@ loci:
     length: 100
 engine_backend: lineal
 convergence_statistic: D
-precision: 0.08   # plus or minus: each replicate and the batch's interval
-max_generations: 5000   # a cap: the run reports the precision it reached by then
+precision: 0.03   # plus or minus, for the batch's interval across replicates
+# Thinned storage: every generation up to 5,000, then one in ten, so the saved
+# trajectory is a fraction of the size; the statistics and the report are
+# unaffected.
+trajectory_retention: thinned
+trajectory_stride: 10
+trajectory_thinning_start: 5000
 n_replicates: 50
 replicate_minimum: 10
 ```
@@ -834,9 +858,9 @@ replicate_minimum: 10
 fim run adaptive-batch.yaml --output results/adaptive-batch --sequential --quiet
 ```
 
-Stops at 20 replicates, after the required minimum of 10 — `D`'s 95%
-confidence interval reaches `0.267 +/- 0.029`, inside the requested `0.03`
-half-width (the model's expected `D` is 0.287), so the remaining 30 possible
+Stops at 10 replicates, the required minimum — `D`'s 95%
+confidence interval reaches `0.281 +/- 0.015`, inside the requested `0.03`
+half-width (the model's expected `D` is 0.287), so the remaining 40 possible
 replicates were never needed. (A larger `precision` stops sooner; a smaller one
 runs more replicates.) Each replicate pools eight loci and is itself averaged to
 `precision: 0.03`, so most settle within a few thousand generations; one-locus
@@ -844,7 +868,7 @@ replicates would take hours for the whole batch (see the
 [example's README](examples/an-adaptive-replicate-batch-with-a-confidence-interval/README.md)).
 `results/adaptive-batch/summary.json` reports every statistic's own
 interval; `results/adaptive-batch/replicate-001/` through
-`replicate-020/` each hold the ordinary scalar-run files for
+`replicate-010/` each hold the ordinary scalar-run files for
 that one replicate. Drop `--sequential` to run the same batch across a
 worker process per CPU instead — the computed numbers are identical
 either way (see [Batches](#batches-nreplicates-greater-than-one)); only
@@ -896,11 +920,11 @@ loci:
     length: 5
 engine_backend: generational-vector
 convergence_statistic: D
-# A fixed 100-generation horizon: a precision of zero can never be reached, so
-# every replicate runs exactly to the cap (a burn-in of 1 keeps the cap above it).
-precision: 0.0
+# A fixed 100-generation horizon: each replicate burns in for one generation,
+# averages for 99 more, and stops, whatever its noise (a fixed window, no
+# precision check).
 convergence_burn_in: 1
-max_generations: 100
+replicate_averaging_window: 99
 n_replicates: 16
 stop_batch_early: false   # always run all 16 replicates
 ```
@@ -909,9 +933,9 @@ stop_batch_early: false   # always run all 16 replicates
 fim run vector-showcase.yaml --output results/vector-showcase --quiet
 ```
 
-Ran in about 40 seconds on a busy development machine, all 16 replicates
-to the 100-generation cap, with `D`'s 95% confidence interval at
-`0.0275 +/- 0.0016`. In the desktop
+Ran in about 10 seconds on a development machine, all 16 replicates
+for exactly 100 generations (a fixed averaging window), with `D`'s 95%
+confidence interval at `0.0464 +/- 0.0015`. In the desktop
 app, loading this example runs it with its own `generational-vector`
 engine and 16 replicates, whatever your Settings hold, and leaves your
 Settings unchanged; a notice lists the differences and offers to make
@@ -948,11 +972,11 @@ loci:
     length: 7
 engine_backend: generational
 convergence_statistic: D
-# A fixed 100-generation horizon: a precision of zero can never be reached, so
-# every replicate runs exactly to the cap (a burn-in of 1 keeps the cap above it).
-precision: 0.0
+# A fixed 100-generation horizon: each replicate burns in for one generation,
+# averages for 99 more, and stops, whatever its noise (a fixed window, no
+# precision check).
 convergence_burn_in: 1
-max_generations: 100
+replicate_averaging_window: 99
 n_replicates: 16
 stop_batch_early: false   # always run all 16 replicates
 ```
@@ -961,8 +985,8 @@ stop_batch_early: false   # always run all 16 replicates
 fim run generational-showcase.yaml --output results/generational-showcase --quiet
 ```
 
-Ran in about 55 seconds on the same hardware, with `D`'s 95% confidence
-interval at `0.0262 +/- 0.0030`. That is a little slower than the
+Ran in about 35 seconds on the same hardware, with `D`'s 95% confidence
+interval at `0.0461 +/- 0.0027`. That is a little slower than the
 `generational-vector` example above, although an earlier measurement on a
 less loaded machine found it a little faster: neither backend is
 universally faster, and which one wins depends on where a configuration

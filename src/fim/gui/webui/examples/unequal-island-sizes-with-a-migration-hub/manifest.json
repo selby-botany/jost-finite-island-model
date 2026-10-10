@@ -1,37 +1,38 @@
 {
   "artifacts": {
     "convergence": {
-      "bytes": 1451039,
-      "sha256": "25d6f746e31cefeacbdbad973e8a47c4428d0ac760ac0e50645f2834c1a580c0"
+      "bytes": 6549303,
+      "sha256": "5dae4ab6cdc5d34cffa692ce885456fe52efd2543eff1c8919376ed19051f0a2"
     },
     "pairwise": {
-      "bytes": 810,
-      "sha256": "b87e5e3a773d12bd0680db5707aa68c81f6a6feed2abc098c0bb51a13aebb6f1"
+      "bytes": 811,
+      "sha256": "596332debfc37252b93ed1ef0a65a939e1beb6233674ca084e2ac85eeda2c897"
     },
     "report": {
-      "bytes": 2599,
-      "sha256": "6265aa588fe015205a8daf84619a80bbd68947a499d7ec5fd6ed422b033784ea"
+      "bytes": 4656,
+      "sha256": "590327066e7b4f9ec6939be76bd1947b902b844b7e49de4e5d78dfc48aa7aa69"
     },
     "scatter": {
-      "bytes": 217059,
-      "sha256": "c76621496a31f355e3a4c351aee1dc344e59238628393c1f8aa9a817b60a8b0a"
+      "bytes": 219527,
+      "sha256": "9bb368d975364b58ddf907150b141c59bdf0bf193e7c2da0d5c4b7aa2bba48a1"
     },
     "trajectory": {
-      "bytes": 18899558,
-      "sha256": "33c424448f21ccbf7722fd3961654a3d383e7bcb2e9e22dc57f42fff21a2c979"
+      "bytes": 16655799,
+      "sha256": "37662ad0d397157ff8dbc99f1c858e486d83db656ce4e4b098eae84e17b67bd3"
     }
   },
   "auto_derived": [
-    "convergence_burn_in"
+    "convergence_burn_in",
+    "max_generations"
   ],
   "convergence": {
-    "converged": false,
-    "generation": 10000,
-    "generation_count": 10001,
-    "reason": "hit the cap",
+    "converged": true,
+    "generation": 44847,
+    "generation_count": 44848,
+    "reason": "statistic converged",
     "statistic": "D"
   },
-  "ended_at": "2026-10-10T04:05:50.943649Z",
+  "ended_at": "2026-10-10T19:53:46.014524Z",
   "engine_backend": "lineal",
   "equilibrium_final_heterozygosity": null,
   "equilibrium_generation_count": null,
@@ -50,6 +51,7 @@
     "confidence": 0.95,
     "convergence_burn_in": 1777,
     "convergence_combinator": "all",
+    "convergence_estimate": "mean_of_values",
     "convergence_statistic": "D",
     "d": 4,
     "deme_weighting": "equal",
@@ -118,24 +120,26 @@
         0.97
       ]
     ],
-    "max_generations": 10000,
+    "max_generations": 200000,
     "migrant_sampling": "continuous",
     "mu": 0.001,
     "mutation_model": "infinite_alleles",
     "n_replicates": 1,
     "ploidy": "haploid",
     "precision": 0.01,
+    "precision_method": "interval",
+    "replicate_averaging_window": "auto",
     "replicate_minimum": 10,
     "seed": 20260819,
     "stop_batch_early": true,
-    "track_expensive_statistics": false
+    "track_expensive_statistics": false,
+    "trajectory_retention": "thinned",
+    "trajectory_stride": 10,
+    "trajectory_thinning_start": 5000
   },
   "relaxation_time": 335.34914694897697,
-  "run_id": "run-4d53160c8e1ba5cf",
+  "run_id": "run-a327554acc11e294",
   "schema_version": 3,
-  "sigma_band": null,
-  "sigma_band_multiplier": null,
-  "sigma_band_window": null,
   "software_version": "1.2.0",
-  "started_at": "2026-10-10T04:04:28.816232Z"
+  "started_at": "2026-10-10T19:45:42.934304Z"
 }

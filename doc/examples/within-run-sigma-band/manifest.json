@@ -10,15 +10,15 @@
     },
     "report": {
       "bytes": 4635,
-      "sha256": "30a7bcefe5bf2d97b50fe18b337f2cb0ad0cd55268f5040cc8d99a8ab47c96be"
+      "sha256": "a2ab1fb9de2db9318f9b7887c57355eadcd672e0f78ffaa6cb837fff58c96a87"
     },
     "scatter": {
       "bytes": 206658,
       "sha256": "e55f260650d6be7ca42c3d6a9485ff2bc94dfa06108e119ef47e4798fc3b5b9f"
     },
     "trajectory": {
-      "bytes": 20529916,
-      "sha256": "59a6db447f74f5e8c6677f566eb1ce9179f8383c973b7b1f91c442aba59e7240"
+      "bytes": 6452490,
+      "sha256": "b4d9abfc3eae112b9aef0a553bdd16a8c23932357e0340088e87961a86053747"
     }
   },
   "auto_derived": [
@@ -32,7 +32,7 @@
     "reason": "statistic converged",
     "statistic": "D"
   },
-  "ended_at": "2026-10-10T17:41:37.314536Z",
+  "ended_at": "2026-10-10T19:52:54.211407Z",
   "engine_backend": "lineal",
   "equilibrium_final_heterozygosity": null,
   "equilibrium_generation_count": null,
@@ -102,11 +102,14 @@
     "replicate_minimum": 10,
     "seed": 20260916,
     "stop_batch_early": true,
-    "track_expensive_statistics": false
+    "track_expensive_statistics": false,
+    "trajectory_retention": "thinned",
+    "trajectory_stride": 10,
+    "trajectory_thinning_start": 5000
   },
   "relaxation_time": 287.2340425531915,
-  "run_id": "run-3884c13da2212881",
+  "run_id": "run-9eadf7db4bab25c3",
   "schema_version": 3,
   "software_version": "1.2.0",
-  "started_at": "2026-10-10T17:40:13.936465Z"
+  "started_at": "2026-10-10T19:51:26.094512Z"
 }

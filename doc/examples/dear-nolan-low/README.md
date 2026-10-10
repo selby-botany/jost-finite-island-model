@@ -5,28 +5,37 @@ botanical simulations: five demes of 100 individuals each with very low
 migration and negligible mutation. It is meant to run to the population's
 equilibrium, which takes tens of thousands of generations.
 
-## Status: this example does not yet converge
+## Status: this example reaches its cap, honestly
 
-**This run does not converge under today's convergence rule.** It runs to its
-generation cap (295,390) and reports `converged_on: null` and
-`"reason": "hit the cap"`. The window the rule averages over starts inside
-the transient, before the population has forgotten its starting state. The
-lag-1 standard error the rule uses is too small for a statistic that swings
-this slowly, so the rule keeps growing the window without ever judging `D`
-precise enough.
+**This run does not reach the requested precision for `D` before its cap.** It
+burns in for 104,338 generations, averages for the 295,391 that follow, and
+stops at the cap (399,728 generations) with `converged_on: null` and
+`"reason": "hit the cap"`. It still reports the averages it has, each with the
+error bar it actually has. That is the intended behavior for a scenario this
+slow: a run at this precision needs more than a million generations (the
+report's `projected_generations` for `D` is 1,101,457), and the run says so
+instead of pretending.
+
+`D` is the slow statistic here. At low migration, `D` swings over the
+population's relaxation time (about 19,700 generations), so the 295,391
+generations it averaged hold only about 15 independent draws of it
+(`effective_sample_size` 14.8); the rule wants 50. `G_ST` is far less noisy:
+its average meets the precision. The start of the window also differs from its
+end for `D` (Geweke `z` = 4.0, above the alert level of 3), a sign that the
+slowest tail of the burn-in may not have fully decayed. To reach the precision,
+raise `max_generations`, use more loci, or ask for less precision; the
+[Convergence](../../convergence.md) guide says how.
 
 Jost's published targets for these parameters (d = 5, N = 100, m = 0.0001,
 mu = 0.000001, averaged over 200 runs) are **D ≈ 0.04 and G<sub>ST</sub> ≈
-0.97**. The committed run's window means land close to them (see "Expected
-output"), but the run cannot yet say so on its own authority.
+0.97**. The committed run's averages land close to them (D = 0.0420 ± 0.0060,
+G<sub>ST</sub> = 0.9640 ± 0.0036; see "Expected output"), and the error bars
+say how much to trust each one.
 
 The committed outputs here were generated on the textbook mutation model
 (each gene copy mutates independently; each generation runs migrate, drift,
-then mutate) and still reach the generation cap, by design for now.
-
-A fix is planned: a redesign of the convergence rule, and a faster
-engine, so that this example finishes in minutes and converges. The
-configuration is left unchanged until then.
+then mutate). The configuration thins nothing: the run is long but writes only
+about 10 MB of trajectory.
 
 ## Biological context
 
@@ -61,17 +70,15 @@ demes does D fall toward 0.04. The population needs about 19,700 generations
 to forget its starting state (the relaxation time; see
 [Convergence defaults](../../convergence.md)).
 
-`config.yaml` therefore leaves `convergence_window` and `max_generations` on
-`auto`. `fim run` derives a window of 59,078 generations and a cap of 295,390,
-prints them, and stops once D has stayed steady for that long *and* the
-window's own mean is actually known to the configured tolerance — not just
-flat, but precise (see [Convergence defaults](../../convergence.md)'s own
-"Is the reported value actually precise enough?"). Earlier versions stopped
+`config.yaml` therefore leaves `convergence_burn_in` and `max_generations` on
+`auto`. `fim run` derives a burn-in of 104,338 generations (about 5.3
+relaxation times) and a cap of 399,728, prints them, and averages after the
+burn-in until each watched statistic's average is known to the configured
+precision (see [Convergence](../../convergence.md)). Earlier versions stopped
 this scenario after a few hundred generations, on the plateau, with a large
-D. This run watches **D** specifically, and D never reaches the requested
-precision here: its own evidence window grows to 236,312 generations
-without getting there, and the run ends at the cap instead of converging
-(see "Status," above, and "Expected output," below).
+D. This run watches **D** and **G<sub>ST</sub>** (the default), and `D` never
+reaches the requested precision here: the run ends at the cap instead of
+converging (see "Status," above, and "Expected output," below).
 
 ## Parameters
 
@@ -82,7 +89,7 @@ without getting there, and the run ends at the cap instead of converging
 | m | 0.0001 | Very low symmetric migration rate |
 | &mu; | 0.000001 | Negligible per-locus mutation rate |
 | loci | 30 | Independent loci of length 200 (infinite-alleles model) |
-| convergence | `auto` | Window and cap derived from the model |
+| convergence | `auto` | Burn-in and cap derived from the model |
 | seed | 20260825 | Exact RNG seed |
 
 Thirty independent loci stand in for many separate simulation runs, as in the
@@ -96,11 +103,12 @@ fim run doc/examples/dear-nolan-low/config.yaml \
     --output results/dear-nolan-low --quiet
 ```
 
-Takes about an hour on a busy development machine (295,390 generations — the
-derived cap — of 30 loci; 3,583 s with a load average of about 15), and less
-on an idle one, and writes a trajectory log of about 7 MB (`fim export` turns it into a
-4.8 GB `trajectory.jsonl`). `results/dear-nolan-low/
-report.json` will match `report.json` in this directory exactly.
+Takes about half an hour on a development machine (399,728 generations, the
+derived cap, of 30 loci; 1,653 s with three examples running at once), and
+less on an idle one, and writes a trajectory log of about 10 MB (`fim export`
+turns it into a multi-gigabyte `trajectory.jsonl`).
+`results/dear-nolan-low/report.json` will match `report.json` in this
+directory exactly.
 
 ## Expected output
 
@@ -108,22 +116,26 @@ report.json` will match `report.json` in this directory exactly.
 {
   "converged": false,
   "converged_on": null,
-  "generation": 295390,
-  "G_ST": 0.9896728676778502,
-  "D": 0.046496707389133626,
+  "generation": 399728,
+  "G_ST": 0.9950647563784285,
+  "D": 0.033272391955738154,
   "reason": "hit the cap",
   "window_statistics": {
     "D": {
-      "mean": 0.0426709810456776,
-      "standard_error": 0.008094012422523073,
+      "mean": 0.04199332710152649,
+      "standard_error": 0.0059656816705982016,
       "noise_adequate": false,
-      "window": 236312
+      "window": 295391,
+      "effective_sample_size": 14.81222946079856,
+      "projected_generations": 1101457,
+      "geweke_z": 3.99485041785269
     },
     "G_ST": {
-      "mean": 0.9654562723780273,
-      "standard_error": 0.0033129065168817744,
+      "mean": 0.9639864876693424,
+      "standard_error": 0.0035756415736778514,
       "noise_adequate": true,
-      "window": 59078
+      "window": 288703,
+      "effective_sample_size": 498.33099792451367
     }
   }
 }
@@ -133,26 +145,23 @@ report.json` will match `report.json` in this directory exactly.
 in this directory has every field, every recorded statistic's own
 `window_statistics` entry, and full floating-point precision.)
 
-The run ends at the cap, generation 295,390, so `converged_on` is `null`:
-it converged on nothing. That is because **D** — the statistic this example
-actually watches — never became precise enough for the rule: its evidence
-window grew to 236,312 generations, and its standard error, 0.0081, is still
-about 1.6 times the 0.005 the requested tolerance demands. Its window mean,
-**0.0427**, is nonetheless close to Jost's published D ≈ 0.04. The final
-generation's own value, 0.0465, is near it too, but a single generation is
-one draw, not an averaged estimate.
+The run ends at the cap, generation 399,728, so `converged_on` is `null`: it
+converged on nothing. That is because **D** never became precise enough:
+over its 295,391-generation window (generations 104,338 to 399,728), its
+standard error, 0.0060, is still above the 0.0051 that the requested precision
+(0.01 at 95% confidence) demands, and its 15 effective samples are below the
+floor of 50. Its window mean, **0.0420**, is nonetheless close to Jost's
+published D ≈ 0.04. The final generation's own value, 0.0333, is near it too,
+but a single generation is one draw, not an averaged estimate.
 
-`window_statistics.G_ST` tells a different story, computed the same way
-(the fixed, un-grown 59,078-generation window, since only D gated this
-run's own stop decision) but already `noise_adequate: true`: G<sub>ST</sub>'s
-own mean, **0.965**, is close to Jost's published G<sub>ST</sub> ≈ 0.97, and
-its own noise (`effective_sample_size` near 302, against D's 10.6 at a
-window 4x longer) is far smaller here — D and G<sub>ST</sub> are not equally
-noisy for this scenario, even though both are computed from the same
-identity matrix. H<sub>S</sub> ≈ 0.001 and H<sub>T</sub> ≈ 0.03 (also
-`noise_adequate: true` at the base window) show the same picture as the
-source: nearly every deme is fixed, and nearly all of them on the same
-allele.
+`window_statistics.G_ST` tells a different story: the same window, but
+`noise_adequate: true`. G<sub>ST</sub>'s mean, **0.964**, is close to Jost's
+published G<sub>ST</sub> ≈ 0.97, and its noise (`effective_sample_size` near
+498, against D's 15 over the same window) is far smaller here: D and
+G<sub>ST</sub> are not equally noisy for this scenario, even though both are
+computed from the same identity matrix. H<sub>S</sub> ≈ 0.001 and H<sub>T</sub>
+≈ 0.035 show the same picture as the source: nearly every deme is fixed, and
+nearly all of them on the same allele.
 
 ## Relationship to the published calibration
 

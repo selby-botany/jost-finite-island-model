@@ -4,14 +4,15 @@
 
 This companion timing workload runs 16 replicates with 35 demes and the
 `generational` engine. Its seven-base finite-alleles locus has more
-possible states than the preceding large-deme example. As there, a
-`precision: 0.0` (never reached), a burn-in of 1 and `stop_batch_early:
-false` make every one of the 16 replicates run exactly 100 generations, so
-the amount of work is fixed.
+possible states than the preceding large-deme example. As there, a fixed
+window (`convergence_burn_in: 1` and `replicate_averaging_window: 99`) and
+`stop_batch_early: false` make every one of the 16 replicates run exactly 100
+generations, so the amount of work is fixed.
 
-The run takes about 55 seconds on a busy development machine, a
-little longer than the large-deme example's 40. The across-replicate
-mean `D` is 0.0262 ± 0.0030 (95% confidence interval).
+The run takes about 35 seconds on a development machine, a
+few times longer than the large-deme example's 10. The across-replicate
+mean `D` is 0.0461 ± 0.0027 (95% confidence interval), the mean of the
+replicates' averages over their 100 generations.
 
 This is an engine workload, not an equilibrium result or a universal
 benchmark. Runtime depends on the machine, its load, and the software

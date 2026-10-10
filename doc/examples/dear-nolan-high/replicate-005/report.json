@@ -24,60 +24,123 @@
   "NEI_I_ALL_GEO": 0.09588517933714097,
   "NEI_I_ALL_GEO_LOCUS_MEAN": 0.09588517933714097,
   "R_ST": 0.022166396101377342,
-  "converged": false,
-  "converged_on": null,
+  "converged": true,
+  "converged_on": "D",
   "generation": 30,
-  "reason": "hit the cap",
-  "run_id": "run-f6039e5ec0586aa1-r005",
+  "reason": "averaging window complete",
+  "run_id": "run-99168ff0fe003473-r005",
   "window_statistics": {
     "D": {
+      "burn_in": 1,
       "effective_sample_size": 3.987287453264001,
       "estimator": "geyer",
+      "geweke_z": 1.11637161095963,
       "mean": 0.9106193996935598,
+      "mean_of_values": {
+        "mean": 0.9106193996935598,
+        "standard_error": 0.0012661409729276723
+      },
+      "minimum_ess": 50.0,
       "noise_adequate": false,
+      "selected_form": "mean_of_values",
       "standard_deviation": 0.002528254774510583,
       "standard_error": 0.0012661409729276723,
+      "target_standard_error": 0.005102134569246541,
+      "undefined_generations": 0,
+      "value_of_means": {
+        "mean": 0.9106427140288389,
+        "standard_error": 0.0012560035730176788
+      },
       "window": 30,
+      "window_end": 30,
       "window_start": 1
     },
     "G_ST": {
+      "burn_in": 1,
       "effective_sample_size": 4.231659040171357,
       "estimator": "geyer",
+      "geweke_z": 1.2509667899178956,
       "mean": 0.02206869728946059,
+      "mean_of_values": {
+        "mean": 0.02206869728946059,
+        "standard_error": 0.00013291405809060615
+      },
+      "minimum_ess": 50.0,
       "noise_adequate": false,
+      "selected_form": "mean_of_values",
       "standard_deviation": 0.0002734174646442608,
       "standard_error": 0.00013291405809060615,
+      "target_standard_error": 0.005102134569246541,
+      "undefined_generations": 0,
+      "value_of_means": {
+        "mean": 0.02206870694694649,
+        "standard_error": 0.00013291028173628813
+      },
       "window": 30,
+      "window_end": 30,
       "window_start": 1
     },
     "H_S": {
+      "burn_in": 1,
       "effective_sample_size": 4.345099996274047,
       "estimator": "geyer",
+      "geweke_z": -1.2851610940104181,
       "mean": 0.9755798595,
+      "mean_of_values": {
+        "mean": 0.9755798595,
+        "standard_error": 0.00011384803413777546
+      },
+      "minimum_ess": 50.0,
       "noise_adequate": false,
+      "selected_form": "mean_of_values",
       "standard_deviation": 0.00023731512789941568,
       "standard_error": 0.00011384803413777546,
+      "target_standard_error": 0.005102134569246541,
+      "undefined_generations": 0,
       "window": 30,
+      "window_end": 30,
       "window_start": 1
     },
     "H_ST": {
+      "burn_in": 1,
       "effective_sample_size": 3.9872874532639058,
       "estimator": "geyer",
+      "geweke_z": 1.1163716109596789,
       "mean": 0.9015132056966241,
+      "mean_of_values": {
+        "mean": 0.9015132056966241,
+        "standard_error": 0.0012534795631984133
+      },
+      "minimum_ess": 50.0,
       "noise_adequate": false,
+      "selected_form": "mean_of_values",
       "standard_deviation": 0.002502972226765483,
       "standard_error": 0.0012534795631984133,
+      "target_standard_error": 0.005102134569246541,
+      "undefined_generations": 0,
       "window": 30,
+      "window_end": 30,
       "window_start": 1
     },
     "H_T": {
+      "burn_in": 1,
       "effective_sample_size": 3.9117320405671503,
       "estimator": "geyer",
+      "geweke_z": 0.9801772710712752,
       "mean": 0.9975955022916667,
+      "mean_of_values": {
+        "mean": 0.9975955022916667,
+        "standard_error": 1.9147275679878426e-05
+      },
+      "minimum_ess": 50.0,
       "noise_adequate": false,
+      "selected_form": "mean_of_values",
       "standard_deviation": 3.7869671591454825e-05,
       "standard_error": 1.9147275679878426e-05,
+      "target_standard_error": 0.005102134569246541,
+      "undefined_generations": 0,
       "window": 30,
+      "window_end": 30,
       "window_start": 1
     }
   }

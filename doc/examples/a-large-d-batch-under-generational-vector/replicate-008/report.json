@@ -24,60 +24,123 @@
   "NEI_I_ALL_GEO": 0.9800124030763239,
   "NEI_I_ALL_GEO_LOCUS_MEAN": 0.9800124030763239,
   "R_ST": 0.016371715116839172,
-  "converged": false,
-  "converged_on": null,
+  "converged": true,
+  "converged_on": "D",
   "generation": 100,
-  "reason": "hit the cap",
-  "run_id": "run-8600a0c297d07454-r008",
+  "reason": "averaging window complete",
+  "run_id": "run-c5dd832408d0650b-r008",
   "window_statistics": {
     "D": {
+      "burn_in": 1,
       "effective_sample_size": 5.360264791058499,
       "estimator": "geyer",
+      "geweke_z": 6.132976875676465,
       "mean": 0.046477291887410496,
+      "mean_of_values": {
+        "mean": 0.046477291887410496,
+        "standard_error": 0.019297338931723654
+      },
+      "minimum_ess": 50.0,
       "noise_adequate": false,
+      "selected_form": "mean_of_values",
       "standard_deviation": 0.044677673153357376,
       "standard_error": 0.019297338931723654,
+      "target_standard_error": 0.005102134569246541,
+      "undefined_generations": 0,
+      "value_of_means": {
+        "mean": 0.05093788210121502,
+        "standard_error": 0.021905983106677285
+      },
       "window": 100,
+      "window_end": 100,
       "window_start": 1
     },
     "G_ST": {
+      "burn_in": 1,
       "effective_sample_size": 5.817961169077658,
       "estimator": "geyer",
+      "geweke_z": 5.218294490710879,
       "mean": 0.045026057506638226,
+      "mean_of_values": {
+        "mean": 0.045026057506638226,
+        "standard_error": 0.02283167761928567
+      },
+      "minimum_ess": 50.0,
       "noise_adequate": false,
+      "selected_form": "mean_of_values",
       "standard_deviation": 0.055071034255216776,
       "standard_error": 0.02283167761928567,
+      "target_standard_error": 0.005102134569246541,
+      "undefined_generations": 0,
+      "value_of_means": {
+        "mean": 0.043062393737235104,
+        "standard_error": 0.02172587444735825
+      },
       "window": 100,
+      "window_end": 100,
       "window_start": 1
     },
     "H_S": {
+      "burn_in": 1,
       "effective_sample_size": 3.8026021414214854,
       "estimator": "geyer",
+      "geweke_z": -7.72257669732772,
       "mean": 0.5273603885714285,
+      "mean_of_values": {
+        "mean": 0.5273603885714285,
+        "standard_error": 0.026003855225929278
+      },
+      "minimum_ess": 50.0,
       "noise_adequate": false,
+      "selected_form": "mean_of_values",
       "standard_deviation": 0.050708198729767354,
       "standard_error": 0.026003855225929278,
+      "target_standard_error": 0.005102134569246541,
+      "undefined_generations": 0,
       "window": 100,
+      "window_end": 100,
       "window_start": 1
     },
     "H_ST": {
+      "burn_in": 1,
       "effective_sample_size": 5.3602647910585,
       "estimator": "geyer",
+      "geweke_z": 6.132976875676465,
       "mean": 0.045813330574733205,
+      "mean_of_values": {
+        "mean": 0.045813330574733205,
+        "standard_error": 0.019021662661270457
+      },
+      "minimum_ess": 50.0,
       "noise_adequate": false,
+      "selected_form": "mean_of_values",
       "standard_deviation": 0.04403942067973799,
       "standard_error": 0.019021662661270457,
+      "target_standard_error": 0.005102134569246541,
+      "undefined_generations": 0,
       "window": 100,
+      "window_end": 100,
       "window_start": 1
     },
     "H_T": {
+      "burn_in": 1,
       "effective_sample_size": 3.0185835432414283,
       "estimator": "geyer",
+      "geweke_z": -8.194847492430569,
       "mean": 0.551091717077551,
+      "mean_of_values": {
+        "mean": 0.551091717077551,
+        "standard_error": 0.01554369076859974
+      },
+      "minimum_ess": 50.0,
       "noise_adequate": false,
+      "selected_form": "mean_of_values",
       "standard_deviation": 0.027005719203069548,
       "standard_error": 0.01554369076859974,
+      "target_standard_error": 0.005102134569246541,
+      "undefined_generations": 0,
       "window": 100,
+      "window_end": 100,
       "window_start": 1
     }
   }

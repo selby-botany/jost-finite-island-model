@@ -177,11 +177,11 @@ and 22 alleles private to each patch, each at frequency 0.0317.
 The rest of `config.yaml` sets up the validation experiment itself: five
 independently seeded replicates (`n_replicates: 5`, with
 `stop_batch_early: false` so all five always run), each run for exactly 30
-generations. A 30-generation cap with `precision: 0.0` (never reached) and a
-burn-in of 1 makes that horizon fixed: no replicate stops early, and each one
-ends "at the cap" by design. That is the right reading
-here, because the question is whether the state *stays* at equilibrium, not
-whether it settles.
+generations. A burn-in of 1 and a fixed replicate averaging window of 29
+(`replicate_averaging_window: 29`) make that horizon fixed: each replicate
+averages generations 1 to 30 and stops, whatever its noise. That is the right
+reading here, because the question is whether the state *stays* at
+equilibrium, not whether it settles.
 
 The script never changes anything unless you ask it to:
 
@@ -193,13 +193,13 @@ python3 doc/examples/dear-nolan-high/reproduce.py --write   # rewrite it
 
 ## 7. What the output means biologically
 
-The run writes `summary.json`, the mean of each statistic over the five
-replicates with a 95% confidence interval:
+The run writes `summary.json`, the mean over the five replicates of each
+replicate's average over its 30 generations, with a 95% confidence interval:
 
 | Statistic | Five-replicate mean | Predicted equilibrium |
 |---|---|---|
-| G<sub>ST</sub> | 0.02193 ± 0.00034 | 0.02196 |
-| D | 0.9072 ± 0.0040 | 0.9088 |
+| G<sub>ST</sub> | 0.02194 ± 0.00012 | 0.02196 |
+| D | 0.9082 ± 0.0029 | 0.9088 |
 
 Both predictions lie inside their intervals. This is the published
 high-migration equilibrium: low differentiation between patches, but still
