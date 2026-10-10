@@ -5268,6 +5268,28 @@ def test_the_recorded_series_are_exposed_in_order() -> None
 
 `generations`, `history` and `histories` mirror what was recorded.
 
+<a id="convergence.test_burn_in_monitor.test_the_window_end_burn_in_and_geweke_z_are_exposed_for_the_report"></a>
+
+#### test\_the\_window\_end\_burn\_in\_and\_geweke\_z\_are\_exposed\_for\_the\_report
+
+```python
+def test_the_window_end_burn_in_and_geweke_z_are_exposed_for_the_report(
+) -> None
+```
+
+A step series gives the exact `z`; a short window has none.
+
+<a id="convergence.test_burn_in_monitor.test_a_fractional_burn_in_reports_the_window_start_as_its_burn_in"></a>
+
+#### test\_a\_fractional\_burn\_in\_reports\_the\_window\_start\_as\_its\_burn\_in
+
+```python
+def test_a_fractional_burn_in_reports_the_window_start_as_its_burn_in(
+) -> None
+```
+
+With no relaxation time the burn-in is wherever the window started.
+
 <a id="convergence.test_criteria_validation"></a>
 
 # convergence.test\_criteria\_validation
@@ -8859,6 +8881,28 @@ def test_value_of_means_selection_changes_the_headline_not_the_other_form(
 ```
 
 The setting picks the headline; both forms stay in the report.
+
+<a id="engine.test_engine.test_every_statistic_reports_the_one_shared_evidence_window"></a>
+
+#### test\_every\_statistic\_reports\_the\_one\_shared\_evidence\_window
+
+```python
+def test_every_statistic_reports_the_one_shared_evidence_window(
+        tiny_params: SimulationParams) -> None
+```
+
+All entries share a window, the burn-in, the targets, and a finite `z`.
+
+<a id="engine.test_engine.test_a_short_run_reports_no_geweke_z"></a>
+
+#### test\_a\_short\_run\_reports\_no\_geweke\_z
+
+```python
+def test_a_short_run_reports_no_geweke_z(
+        tiny_params: SimulationParams) -> None
+```
+
+A window too short for two segments has no start-against-end diagnostic.
 
 <a id="engine.test_frame_identity"></a>
 

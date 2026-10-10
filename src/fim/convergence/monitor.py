@@ -43,6 +43,7 @@ from fim.convergence.window_statistics import (
     IdentityStatistic,
     WindowStatistics,
     degenerate_share,
+    geweke_z,
     geyer_window_statistics,
     select_form,
     value_of_means_statistics,
@@ -475,6 +476,45 @@ class BurnInMonitor:
                 self._fractional * (self._generations[-1] if self._generations else 0)
             )
         return self._statistics_over(name, start)
+
+    @property
+    def burn_in_generation(self) -> int:
+        """Return the generation the averaging began at.
+
+        The configured burn-in, or, for the fractional burn-in, the window
+        start the run ended on.
+        """
+        if self._burn_in is not None:
+            return self._burn_in
+        return self._window_start or 0
+
+    @property
+    def window_end_generation(self) -> int | None:
+        """Return the last recorded generation, where the evidence window ends."""
+        return int(self._generations[-1]) if self._generations else None
+
+    def evidence_geweke_z(self, name: str) -> float | None:
+        """Return Geweke's `z` for `name`'s evidence window, as it stands.
+
+        Compares the start of the window with its end (`geweke_z`), the
+        diagnostic for a burn-in that was too short. It reads the statistic's
+        own per-generation values, whichever expected-value form is selected.
+
+        Args:
+            name: A configured statistic name.
+
+        Returns:
+            `None` when the window is too short for both segments to hold
+            `MINIMUM_WINDOW_VALUES` values.
+        """
+        start = self._window_start
+        if start is None:
+            start = int(self._fractional * (self.window_end_generation or 0))
+        window = self._window_values(name, start)
+        try:
+            return geweke_z(window)
+        except ValueError:
+            return None
 
     def estimate_forms(self, name: str) -> EstimateForms | None:
         """Return `name`'s expected-value forms over the evidence window.

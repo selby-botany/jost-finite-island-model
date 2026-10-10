@@ -163,7 +163,7 @@ def geyer_window_statistics(
 
 
 def geweke_z(
-    values: Sequence[float],
+    values: Sequence[float] | npt.NDArray[np.float64],
     *,
     first_fraction: float = GEWEKE_FIRST_FRACTION,
     last_fraction: float = GEWEKE_LAST_FRACTION,

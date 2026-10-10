@@ -2,6 +2,7 @@
 
 import functools
 import itertools
+import json
 import math
 import statistics
 from collections.abc import Mapping, Sequence
@@ -5701,3 +5702,38 @@ def test_value_of_means_selection_changes_the_headline_not_the_other_form(
     assert chosen_entry["selected_form"] == "value_of_means"
     assert chosen_entry["mean"] == chosen_entry["value_of_means"]["mean"]
     assert default_entry["mean"] == default_entry["mean_of_values"]["mean"]
+
+
+def test_every_statistic_reports_the_one_shared_evidence_window(
+    tiny_params: SimulationParams,
+) -> None:
+    """All entries share a window, the burn-in, the targets, and a finite `z`."""
+    params = replace(tiny_params, precision=0.0, max_generations=400)
+    result = _run(params)
+
+    window = result.report["window_statistics"]
+    assert {"D", "G_ST", "H_S", "H_T", "H_ST"} <= set(window)
+    first = window["D"]
+    assert first["burn_in"] == 1
+    assert first["window_start"] == 1
+    assert first["window_end"] == result.report["generation"]
+    assert first["minimum_ess"] == params.expert.minimum_effective_sample_size
+    for name, entry in window.items():
+        for key in (
+            "window_start",
+            "window_end",
+            "burn_in",
+            "minimum_ess",
+            "target_standard_error",
+        ):
+            assert entry[key] == first[key], (name, key)
+        assert math.isfinite(entry["geweke_z"]), name
+    # The report must be strict JSON: no infinity, no NaN.
+    json.dumps(result.report, allow_nan=False)
+
+
+def test_a_short_run_reports_no_geweke_z(tiny_params: SimulationParams) -> None:
+    """A window too short for two segments has no start-against-end diagnostic."""
+    result = _run(tiny_params)
+
+    assert all("geweke_z" not in e for e in result.report["window_statistics"].values())

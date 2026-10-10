@@ -216,9 +216,17 @@ sequence estimator.
 Every scalar run's `report.json` carries the evidence either way, in
 `window_statistics`, one entry per statistic recorded: `mean` (the window
 average, the estimate to read), `standard_error`, `standard_deviation`,
-`effective_sample_size`, `window` (its length), `window_start` (the generation
-it begins at), `estimator`, and `noise_adequate` (whether the requested
-precision was reached). The CLI prints the watched statistic's own line after
+`effective_sample_size`, `window` (its length), `window_start` and
+`window_end` (the generations it spans), `burn_in`, `estimator`,
+`noise_adequate` (whether the requested precision was reached), the
+`target_standard_error` and `minimum_ess` it was judged against, and
+`geweke_z`. Every statistic shares the one window, so the entries are
+consistent whichever statistic decided the stop. `geweke_z` compares the start
+of the window with its end in units of their combined standard error; an
+absolute value above 3 (the Expert Setting `start_drift_alert_z`) means the
+averaging may have begun before the model forgot its starting state, so the
+burn-in may have been too short. It is a diagnostic only: it never stops or
+continues a run, and it is absent for a window too short to split. The CLI prints the watched statistic's own line after
 every run; the GUI's Run card tooltip shows the same numbers.
 
 ## Which average? Two forms for `D` and `G_ST`

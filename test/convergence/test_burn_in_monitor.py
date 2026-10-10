@@ -370,3 +370,34 @@ def test_the_recorded_series_are_exposed_in_order() -> None:
     assert monitor.generations == (0, 1, 2, 3, 4)
     assert monitor.history == (0.0, 0.1, 0.2, 0.3, 0.4)
     assert monitor.histories == {"value": monitor.history}
+
+
+def test_the_window_end_burn_in_and_geweke_z_are_exposed_for_the_report() -> None:
+    """A step series gives the exact `z`; a short window has none."""
+    monitor = _monitor(precision=0.0, max_generations=399)
+    for generation in range(400):
+        step = 0.0 if generation < 100 else 1.0
+        monitor.record(generation, step + (generation % 3) * 0.001)
+        if monitor.should_stop():
+            break
+
+    assert monitor.window_end_generation == 399
+    assert monitor.burn_in_generation == 10
+    z = monitor.evidence_geweke_z("value")
+    assert z is not None and z < -3.0
+    short = _monitor()
+    for generation in range(15):
+        short.record(generation, 0.5)
+    assert short.evidence_geweke_z("value") is None
+
+
+def test_a_fractional_burn_in_reports_the_window_start_as_its_burn_in() -> None:
+    """With no relaxation time the burn-in is wherever the window started."""
+    monitor = _monitor(burn_in=None, precision=0.0, max_generations=200)
+    for generation in range(201):
+        monitor.record(generation, 0.5 + (generation % 5) * 0.01)
+        if monitor.should_stop():
+            break
+
+    assert monitor.window_start_generation == 20
+    assert monitor.burn_in_generation == 20

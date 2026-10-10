@@ -99,6 +99,9 @@ Return to the [source-tree orientation](../README.md) or the [developer guide](.
     * [target\_standard\_error](#fim.convergence.monitor.BurnInMonitor.target_standard_error)
     * [minimum\_effective\_sample\_size](#fim.convergence.monitor.BurnInMonitor.minimum_effective_sample_size)
     * [evidence\_statistics](#fim.convergence.monitor.BurnInMonitor.evidence_statistics)
+    * [burn\_in\_generation](#fim.convergence.monitor.BurnInMonitor.burn_in_generation)
+    * [window\_end\_generation](#fim.convergence.monitor.BurnInMonitor.window_end_generation)
+    * [evidence\_geweke\_z](#fim.convergence.monitor.BurnInMonitor.evidence_geweke_z)
     * [estimate\_forms](#fim.convergence.monitor.BurnInMonitor.estimate_forms)
   * [ConvergenceMonitor](#fim.convergence.monitor.ConvergenceMonitor)
     * [\_\_init\_\_](#fim.convergence.monitor.ConvergenceMonitor.__init__)
@@ -2882,6 +2885,55 @@ describes, for a watched statistic and a display-only one alike.
   run ended inside its burn-in, or the statistic was mostly
   undefined).
 
+<a id="fim.convergence.monitor.BurnInMonitor.burn_in_generation"></a>
+
+#### burn\_in\_generation
+
+```python
+@property
+def burn_in_generation() -> int
+```
+
+Return the generation the averaging began at.
+
+The configured burn-in, or, for the fractional burn-in, the window
+start the run ended on.
+
+<a id="fim.convergence.monitor.BurnInMonitor.window_end_generation"></a>
+
+#### window\_end\_generation
+
+```python
+@property
+def window_end_generation() -> int | None
+```
+
+Return the last recorded generation, where the evidence window ends.
+
+<a id="fim.convergence.monitor.BurnInMonitor.evidence_geweke_z"></a>
+
+#### evidence\_geweke\_z
+
+```python
+def evidence_geweke_z(name: str) -> float | None
+```
+
+Return Geweke's `z` for `name`'s evidence window, as it stands.
+
+Compares the start of the window with its end (`geweke_z`), the
+diagnostic for a burn-in that was too short. It reads the statistic's
+own per-generation values, whichever expected-value form is selected.
+
+**Arguments**:
+
+- `name` - A configured statistic name.
+
+
+**Returns**:
+
+  `None` when the window is too short for both segments to hold
+  `MINIMUM_WINDOW_VALUES` values.
+
 <a id="fim.convergence.monitor.BurnInMonitor.estimate_forms"></a>
 
 #### estimate\_forms
@@ -3190,7 +3242,7 @@ window of `L` values costs `O(L log L)`.
 #### geweke\_z
 
 ```python
-def geweke_z(values: Sequence[float],
+def geweke_z(values: Sequence[float] | npt.NDArray[np.float64],
              *,
              first_fraction: float = GEWEKE_FIRST_FRACTION,
              last_fraction: float = GEWEKE_LAST_FRACTION) -> float
@@ -3588,7 +3640,12 @@ Fields:
         statistic had no value, dropped by the first form), and
         `mean_of_values`/`value_of_means`, each `{"mean",
         "standard_error"}` — `value_of_means` only for `D` and `G_ST`,
-        the statistics that are functions of `H_S` and `H_T`.
+        the statistics that are functions of `H_S` and `H_T`. Every entry
+        describes the one evidence window all statistics share:
+        `window_start`, `window_end`, `burn_in`, the `minimum_ess` floor
+        and `target_standard_error` the window was judged against, and
+        `geweke_z` (start of the window against its end; a large
+        absolute value means the burn-in may have been too short).
         Empty for a state with no monitored run behind it at all (a GUI
         preview, a re-analysis) — this is *not* the same thing as `D`/
         `G_ST`/etc. above, which are always this state's own point

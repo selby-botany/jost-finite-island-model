@@ -297,7 +297,12 @@ class FinalReport(TypedDict):
             statistic had no value, dropped by the first form), and
             `mean_of_values`/`value_of_means`, each `{"mean",
             "standard_error"}` — `value_of_means` only for `D` and `G_ST`,
-            the statistics that are functions of `H_S` and `H_T`.
+            the statistics that are functions of `H_S` and `H_T`. Every entry
+            describes the one evidence window all statistics share:
+            `window_start`, `window_end`, `burn_in`, the `minimum_ess` floor
+            and `target_standard_error` the window was judged against, and
+            `geweke_z` (start of the window against its end; a large
+            absolute value means the burn-in may have been too short).
             Empty for a state with no monitored run behind it at all (a GUI
             preview, a re-analysis) — this is *not* the same thing as `D`/
             `G_ST`/etc. above, which are always this state's own point
@@ -2466,8 +2471,12 @@ def _window_statistics_payload(
         One entry per statistic whose evidence window held at least three
         defined values, keyed by name: the window mean, standard error,
         standard deviation, effective sample size, length, the generation the
-        window starts at, the estimator that produced it, and
-        `noise_adequate` (whether the requested precision was reached). A
+        window starts and ends at, the burn-in, the effective-sample-size
+        floor and standard-error target it was judged against, the estimator
+        that produced it, `noise_adequate` (whether the requested precision
+        was reached), Geweke's `z` for the window's start against its end
+        (when the window is long enough and the `z` finite) and both
+        expected-value forms (`_estimate_forms_payload`). A
         statistic with no such window (the run ended inside its burn-in) is
         simply omitted: nothing to show, nothing fabricated.
     """
@@ -2478,6 +2487,7 @@ def _window_statistics_payload(
         if stats is None:
             continue
         forms = monitor.estimate_forms(name)
+        geweke = monitor.evidence_geweke_z(name)
         payload[name] = {
             "mean": stats.mean,
             "standard_error": stats.standard_error,
@@ -2485,11 +2495,19 @@ def _window_statistics_payload(
             "effective_sample_size": stats.effective_sample_size,
             "window": stats.window,
             "window_start": start if start is not None else 0,
+            "window_end": monitor.window_end_generation or 0,
+            "burn_in": monitor.burn_in_generation,
+            "minimum_ess": monitor.minimum_effective_sample_size,
+            "target_standard_error": monitor.target_standard_error,
             "estimator": "geyer",
             "noise_adequate": stats.meets(
                 monitor.target_standard_error, monitor.minimum_effective_sample_size
             ),
         }
+        # An infinite `z` (two exactly known segments that differ) has no JSON
+        # spelling, so it is left out rather than written as a non-number.
+        if geweke is not None and math.isfinite(geweke):
+            payload[name]["geweke_z"] = geweke
         if forms is not None:
             payload[name].update(_estimate_forms_payload(forms))
     return payload
