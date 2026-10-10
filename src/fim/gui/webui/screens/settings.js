@@ -11,16 +11,6 @@ const statisticsList = document.getElementById("settings-statistics-list");
 const statisticsFilter = document.getElementById("settings-statistics-filter");
 const pairwiseMaxDemesInput = document.getElementById("settings-pairwise-max-demes");
 
-// Section titles for the catalog's `group` values, in display order.
-const STATISTIC_GROUP_TITLES = {
-    differentiation: "Differentiation",
-    diversity: "Diversity",
-    distance: "Distance",
-    identity: "Gene identity",
-    "nei-distance": "Nei distances",
-    "nei-identity": "Nei identities",
-};
-
 // The preset buttons. Each returns the keys it shows; a preset replaces
 // the current choice rather than adding to it.
 const STATISTICS_PRESETS = {
@@ -54,6 +44,15 @@ const settingsConvergenceBurnInInput = document.getElementById(
 );
 const settingsPrecisionInput = document.getElementById(
     "settings-precision"
+);
+const settingsConvergenceEstimateSelect = document.getElementById(
+    "settings-convergence_estimate"
+);
+const settingsPrecisionMethodSelect = document.getElementById(
+    "settings-precision_method"
+);
+const settingsReplicateAveragingWindowInput = document.getElementById(
+    "settings-replicate_averaging_window"
 );
 const settingsJitField = document.getElementById("settings-jit-field");
 const settingsJitSelect = document.getElementById("settings-jit");
@@ -125,6 +124,9 @@ function collectDefaultRunSettingsValues() {
         max_generations: settingsMaxGenerationsInput.value,
         convergence_burn_in: settingsConvergenceBurnInInput.value,
         precision: settingsPrecisionInput.value,
+        convergence_estimate: settingsConvergenceEstimateSelect.value,
+        precision_method: settingsPrecisionMethodSelect.value,
+        replicate_averaging_window: settingsReplicateAveragingWindowInput.value,
         confidence: settingsConfidenceSelect.value,
         jit: settingsJitSelect.value,
         auto_vector_min_d: settingsAutoVectorMinDInput.value,
@@ -190,6 +192,7 @@ function renderExpertSettings(info) {
         input.type = "text";
         input.id = `settings-expert_${item.name}`;
         input.dataset.default = item.default;
+        input.value = item.default;
         input.setAttribute("aria-describedby", `settings-expert-note_${item.name}`);
         const note = document.createElement("span");
         note.id = `settings-expert-note_${item.name}`;
@@ -245,6 +248,9 @@ function applyDefaultRunSettingsValues(values) {
     settingsMaxGenerationsInput.value = values.max_generations;
     settingsConvergenceBurnInInput.value = values.convergence_burn_in;
     settingsPrecisionInput.value = values.precision;
+    settingsConvergenceEstimateSelect.value = values.convergence_estimate;
+    settingsPrecisionMethodSelect.value = values.precision_method;
+    settingsReplicateAveragingWindowInput.value = values.replicate_averaging_window;
     settingsConfidenceSelect.value = values.confidence;
     settingsJitSelect.value = values.jit;
     settingsAutoVectorMinDInput.value = values.auto_vector_min_d;
@@ -286,7 +292,13 @@ settingsResultsLocationChangeButton.addEventListener("click", async () => {
     settingsResultsLocationInput.value = picked.path;
 });
 
+// False while `loadSettingsDialog` is filling the dialog, true once every
+// field shows its saved value: a test (or a keyboard user's script) can wait
+// on it instead of guessing when the bridge calls have landed.
+window.__fimSettingsLoaded = false;
+
 async function loadSettingsDialog() {
+    window.__fimSettingsLoaded = false;
     showSettingsBanner("");
     startupBehaviorSelect.value = await window.pywebview.api.get_startup_behavior();
     defaultPloidySelect.value = await window.pywebview.api.get_default_ploidy();
@@ -300,6 +312,7 @@ async function loadSettingsDialog() {
         await window.pywebview.api.get_pairwise_max_demes()
     );
     await loadSettingsResultsLocation();
+    window.__fimSettingsLoaded = true;
 }
 
 /**

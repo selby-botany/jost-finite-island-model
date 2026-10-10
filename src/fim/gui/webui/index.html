@@ -1573,6 +1573,14 @@
                or more statistics are watched (`syncConditionalVisibility`).
                `all` is the default everywhere (`PARAMETER_DEFAULTS`); the
                submitted value and the YAML key are unchanged. -->
+          <!-- `statistic_precision`: an optional plus-or-minus for single
+               watched statistics, in their own units, replacing the
+               run's precision for them. Unbounded statistics (allele
+               counts, distances) use a relative precision by default. -->
+          <div class="field" id="statistic-precision-field">
+            <label for="field-statistic_precision" data-field-help="statistic_precision">per-statistic precision</label>
+            <input type="text" id="field-statistic_precision" name="statistic_precision" form="input-form" placeholder="optional: A_CGD=0.5, D=0.02">
+          </div>
           <fieldset class="field combinator-choice" id="combinator-field" hidden>
             <legend data-field-help="convergence_combinator">stop the run when</legend>
             <label>
@@ -2329,6 +2337,25 @@
       <div class="field">
         <label for="settings-precision" data-field-help="precision">precision</label>
         <input type="text" id="settings-precision">
+      </div>
+      <div class="field">
+        <label for="settings-convergence_estimate" data-field-help="convergence_estimate">expected value</label>
+        <select id="settings-convergence_estimate">
+          <option value="mean_of_values">mean of values (default)</option>
+          <option value="value_of_means">value of means</option>
+          <option value="auto">automatic</option>
+        </select>
+      </div>
+      <div class="field">
+        <label for="settings-precision_method" data-field-help="precision_method">precision method</label>
+        <select id="settings-precision_method">
+          <option value="interval">interval: add replicates until it is reached</option>
+          <option value="planned_replicates">planned replicates: you choose how many</option>
+        </select>
+      </div>
+      <div class="field">
+        <label for="settings-replicate_averaging_window" data-field-help="replicate_averaging_window">replicate averaging window</label>
+        <input type="text" id="settings-replicate_averaging_window" placeholder="auto">
       </div>
     </fieldset>
 

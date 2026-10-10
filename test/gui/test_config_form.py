@@ -134,10 +134,14 @@ def test_all_fields_covers_every_tabs_plain_fields() -> None:
         "initial_concentration",
         "convergence_combinator",
         "convergence_burn_in",
+        "convergence_estimate",
+        "statistic_precision",
         "precision",
         "track_expensive_statistics",
         "n_replicates",
         "stop_batch_early",
+        "precision_method",
+        "replicate_averaging_window",
         "replicate_minimum",
         "confidence",
         "engine_backend",
@@ -1691,3 +1695,73 @@ def test_a_loaded_configuration_with_a_changed_expert_setting_differs() -> None:
     assert [d["field"] for d in differences] == ["expert_batch_width"]
     assert differences[0]["label"].startswith("Expert: ")
     assert differences[0]["runText"] == "2"
+
+
+def test_the_new_convergence_fields_round_trip_through_the_payload() -> None:
+    """Estimate, method, window and per-statistic precision survive the form."""
+    values = starter_form_values()
+    values["ploidy"] = "1"
+    values["convergence_estimate"] = "auto"
+    values["precision_method"] = "planned_replicates"
+    values["replicate_averaging_window"] = "2500"
+    values["statistic_precision"] = "D=0.02, A_CGD=0.5"
+    values["cs_D"] = "true"
+    values["cs_A_CGD"] = "true"
+
+    params = SimulationParams.from_mapping(form_values_to_payload(values))
+
+    assert params.convergence_estimate == "auto"
+    assert params.precision_method == "planned_replicates"
+    assert params.replicate_averaging_window == 2500
+    assert params.statistic_precision == (("A_CGD", 0.5), ("D", 0.02))
+    again = params_to_form_values(params)
+    assert again["convergence_estimate"] == "auto"
+    assert again["precision_method"] == "planned_replicates"
+    assert again["replicate_averaging_window"] == "2500"
+    assert again["statistic_precision"] == "A_CGD=0.5, D=0.02"
+
+
+def test_the_defaults_of_the_new_fields_are_the_configuration_defaults() -> None:
+    """A fresh form: mean of values, interval, auto window, no overrides."""
+    starter = starter_form_values()
+
+    assert starter["convergence_estimate"] == "mean_of_values"
+    assert starter["precision_method"] == "interval"
+    assert starter["replicate_averaging_window"] == "auto"
+    assert starter["statistic_precision"] == ""
+
+
+@pytest.mark.parametrize(
+    ("text", "message"),
+    [
+        ("D", "NAME=number"),
+        ("=0.5", "NAME=number"),
+        ("D=wide", r"statistic_precision\[D\] must be a number"),
+        ("D=0.1, D=0.2", "names D twice"),
+    ],
+)
+def test_a_malformed_statistic_precision_is_refused_by_name(
+    text: str, message: str
+) -> None:
+    """The text is NAME=number pairs; anything else says what is wrong."""
+    values = starter_form_values()
+    values["ploidy"] = "1"
+    values["statistic_precision"] = text
+
+    with pytest.raises(ValueError, match=message):
+        form_values_to_payload(values)
+
+
+def test_the_new_run_defaults_are_validated_on_their_own() -> None:
+    """Settings refuses a bad estimate, method or window by name."""
+    assert run_setting_error("convergence_estimate", "auto") is None
+    assert "convergence_estimate" in (
+        run_setting_error("convergence_estimate", "x") or ""
+    )
+    assert run_setting_error("precision_method", "planned_replicates") is None
+    assert "precision_method" in (run_setting_error("precision_method", "x") or "")
+    assert run_setting_error("replicate_averaging_window", "auto") is None
+    assert run_setting_error("replicate_averaging_window", "800") is None
+    assert "replicate_averaging_window" in (
+        run_setting_error("replicate_averaging_window", "0") or ""
+    )

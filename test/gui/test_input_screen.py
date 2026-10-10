@@ -891,3 +891,52 @@ def test_ci_tooltip_states_its_symmetric_summary_only_when_one_exists(
         "0.0549477 [0.0323088, 0.0845805] — uncertainty across 2 independent replicates"
         " — nearness to fixation (Nei's G_ST), not a measure of differentiation"
     )
+
+
+def test_every_global_statistic_can_be_watched_and_is_grouped_with_cost_notes(
+    window: webview.Window, drive: Callable[..., Any]
+) -> None:
+    """One checkbox per eligible statistic, under group headings, slow ones marked."""
+    settled = drive(
+        window,
+        ready=_INPUT_SCREEN_READY,
+        trigger="null",
+        read=(
+            "({"
+            "boxes: document.querySelectorAll("
+            "'#cs-selector > label > input[type=checkbox]').length, "
+            "eligible: CONVERGENCE_STATISTIC_KEYS.length, "
+            "headings: Array.from(document.querySelectorAll("
+            "'#cs-selector > .cs-group-title'), (node) => node.textContent), "
+            "slow: Array.from(document.querySelectorAll("
+            "'#cs-selector > label')).filter((label) => "
+            "label.querySelector('.cs-cost-note')).map((label) => "
+            "label.querySelector('input').name)"
+            "})"
+        ),
+    )
+
+    assert settled["boxes"] == settled["eligible"] == 25
+    assert settled["headings"][0] == "Differentiation"
+    assert "Nei identities" in settled["headings"]
+    assert settled["slow"] == [
+        f"cs_{key}" for key in ("E_ST", "K_ST", "A_CGD", "Delta", "MI")
+    ]
+
+
+def test_the_per_statistic_precision_field_is_submitted(
+    window: webview.Window, drive: Callable[..., Any]
+) -> None:
+    """The optional per-statistic precision is part of the submitted form values."""
+    settled = drive(
+        window,
+        ready=_INPUT_SCREEN_READY,
+        trigger=(
+            "const field = document.getElementById('field-statistic_precision');"
+            "field.value = 'D=0.02';"
+            "field.dispatchEvent(new Event('input', {bubbles: true}));"
+        ),
+        read="collectFormValues().statistic_precision",
+    )
+
+    assert settled == "D=0.02"

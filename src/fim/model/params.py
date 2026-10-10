@@ -2200,8 +2200,11 @@ EXECUTION_SETTING_NAMES: Final[tuple[str, ...]] = (
     "n_replicates",
     "max_generations",
     "convergence_burn_in",
+    "convergence_estimate",
     "precision",
     "confidence",
+    "precision_method",
+    "replicate_averaging_window",
     "jit",
     "auto_vector_min_d",
     "auto_vector_max_capacity",
@@ -2247,9 +2250,17 @@ def validate_execution_settings(settings: Mapping[str, object]) -> None:
     for name in ("n_replicates", "auto_vector_min_d", "auto_vector_max_capacity"):
         if name in settings:
             _require_integer(name, settings[name], minimum=1)
-    for name in ("max_generations", "convergence_burn_in"):
+    for name in (
+        "max_generations",
+        "convergence_burn_in",
+        "replicate_averaging_window",
+    ):
         if name in settings and settings[name] != "auto":
             _require_integer(name, settings[name], minimum=1)
+    if "convergence_estimate" in settings:
+        _parse_convergence_estimate(settings["convergence_estimate"])
+    if "precision_method" in settings:
+        _parse_precision_method(settings["precision_method"])
     if "precision" in settings:
         _validate_precision(settings["precision"])
     if "confidence" in settings:

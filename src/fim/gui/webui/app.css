@@ -1484,6 +1484,20 @@ fieldset.combinator-choice label {
     color: var(--fim-muted);
 }
 
+/* Configure's convergence-statistic checkboxes: group headings and the
+   visible cost note on the expensive ones (`statistics-catalog.js`). */
+.cs-group-title {
+    margin: 0.5rem 0 0.1rem;
+    font-size: 0.8rem;
+    font-weight: bold;
+    color: var(--fim-muted);
+}
+
+.cs-cost-note {
+    font-size: 0.8rem;
+    color: var(--fim-warning-mark);
+}
+
 /* Expert Settings rows (`settings.js`): label, input, reset, then the default,
    range and what it does on its own line. A changed value is marked. */
 #settings-expert-fields h4 {

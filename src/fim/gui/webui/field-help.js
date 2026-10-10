@@ -96,10 +96,12 @@ const FIELD_HELP = {
     equilibrium_max_generations: "Safety cap on the ancestral " +
         "population's own pre-run simulation, independent of the main " +
         "run's own max generations. A run needing more stops with an error.",
-    cs_group: "Which statistic(s) to watch for convergence. Checking more " +
-        "than one reveals the choice of when to stop, at the foot of this " +
-        "panel. E_ST, K_ST, A_CGD, δG and I are expensive: watching one " +
-        "computes it every generation and makes the run take longer.",
+    cs_group: "Which statistic(s) to watch for convergence: any global " +
+        "statistic. Checking more than one reveals the choice of when to " +
+        "stop, at the foot of this panel. E_ST, K_ST, A_CGD, Delta and MI " +
+        "(the allele statistics) are slow: watching one computes it every " +
+        "generation, and the burn-in is derived for the identity " +
+        "statistics, so these may need a longer one.",
     convergence_combinator: "With several watched statistics: all (the " +
         "default) keeps the run going until every one is stable and " +
         "precise. any stops as soon as one of them is, so the others may " +
@@ -112,6 +114,30 @@ const FIELD_HELP = {
         "forgets its starting state (its migration, mutation and size) and " +
         "the precision. A run that finishes in a hundred generations is a " +
         "warning sign, not good news.",
+    convergence_estimate: "Which expected value a run estimates for D and " +
+        "G_ST. Mean of values (the default): the average of the statistic " +
+        "itself, which is what published replicate means are. Value of " +
+        "means: the statistic computed from the averaged heterozygosities, " +
+        "which is what the closed form predicts and stays defined near " +
+        "fixation. Automatic: the second when the statistic is undefined " +
+        "or its denominator is tiny in the averaging window. The two " +
+        "differ slightly (about 0.01 for D at one locus); every report " +
+        "carries both.",
+    statistic_precision: "Optional. A plus-or-minus for single watched " +
+        "statistics, written NAME=number and separated by commas, in the " +
+        "statistic's own units. It replaces the run's precision for those " +
+        "statistics. Allele counts and distances have no natural scale, so " +
+        "without an entry they use a relative precision.",
+    precision_method: "How a batch reaches its precision. Interval: add " +
+        "replicates until the interval across them is plus or minus the " +
+        "precision. Planned replicates: run exactly the number of " +
+        "replicates you chose, each long enough that their interval is " +
+        "plus or minus the precision.",
+    replicate_averaging_window: "Generations each replicate of a batch " +
+        "averages after its burn-in. auto matches the window to the batch " +
+        "(the first replicates measure the noise, the rest use the window " +
+        "that reaches the precision). A number is used by every " +
+        "replicate.",
     precision: "How precisely to estimate each watched statistic: plus or " +
         "minus this amount, in the statistic's own units, at the " +
         "confidence level. A single run averages over time until it gets " +

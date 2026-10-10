@@ -58,6 +58,7 @@ FieldKind = Literal[
     "auto_int",
     "float_choice",
     "bool",
+    "name_floats",
 ]
 
 # The two `m` selector modes (a radio between a scalar rate
@@ -204,6 +205,13 @@ INITIAL_CONDITIONS_FIELDS: Final[tuple[FormField, ...]] = (
 CONVERGENCE_FIELDS: Final[tuple[FormField, ...]] = (
     FormField("convergence_combinator", "combinator", "choice", choices=("any", "all")),
     FormField("convergence_burn_in", "convergence burn-in", "auto_int"),
+    FormField(
+        "convergence_estimate",
+        "expected value",
+        "choice",
+        choices=("mean_of_values", "value_of_means", "auto"),
+    ),
+    FormField("statistic_precision", "per-statistic precision", "name_floats"),
     FormField("precision", "precision", "float"),
     FormField("track_expensive_statistics", "track expensive statistics", "bool"),
 )
@@ -237,6 +245,13 @@ CONVERGENCE_FIELDS: Final[tuple[FormField, ...]] = (
 BATCH_FIELDS: Final[tuple[FormField, ...]] = (
     FormField("n_replicates", "n_replicates", "int"),
     FormField("stop_batch_early", "stop the batch early", "bool"),
+    FormField(
+        "precision_method",
+        "precision method",
+        "choice",
+        choices=("interval", "planned_replicates"),
+    ),
+    FormField("replicate_averaging_window", "replicate averaging window", "auto_int"),
     FormField("replicate_minimum", "replicate minimum", "int"),
     FormField(
         "confidence",
@@ -570,6 +585,7 @@ def _parse_field(field: FormField, text: str) -> object:
         "float": _parse_float_named,
         "float_choice": _parse_float_named,
         "auto_int": _parse_auto_int_named,
+        "name_floats": _parse_name_floats_named,
         "int_list": _parse_int_list_named,
         "bool": lambda _name, value: value == "true",
     }
@@ -1465,6 +1481,16 @@ def params_to_form_values(params: SimulationParams) -> dict[str, str]:
         "initial_concentration": str(params.initial_concentration),
         "convergence_combinator": params.convergence_combinator,
         "convergence_burn_in": _auto_or_number(params, "convergence_burn_in"),
+        "convergence_estimate": params.convergence_estimate,
+        "statistic_precision": ", ".join(
+            f"{name}={value!r}" for name, value in params.statistic_precision
+        ),
+        "precision_method": params.precision_method,
+        "replicate_averaging_window": (
+            str(params.replicate_averaging_window)
+            if params.replicate_averaging_window
+            else "auto"
+        ),
         "precision": str(params.precision),
         "track_expensive_statistics": (
             "true" if params.track_expensive_statistics else "false"
@@ -1510,8 +1536,11 @@ DEFAULT_RUN_SETTING_FIELD_NAMES: Final[tuple[str, ...]] = (
     "n_replicates",
     "max_generations",
     "convergence_burn_in",
+    "convergence_estimate",
     "precision",
     "confidence",
+    "precision_method",
+    "replicate_averaging_window",
     "jit",
     "auto_vector_min_d",
     "auto_vector_max_capacity",
@@ -1571,8 +1600,11 @@ RUN_SETTING_LABELS: Final[Mapping[str, str]] = {
     "n_replicates": "Number of replicates",
     "max_generations": "Maximum generations",
     "convergence_burn_in": "Convergence burn-in",
+    "convergence_estimate": "Expected value",
     "precision": "Precision",
     "confidence": "Confidence",
+    "precision_method": "Precision method",
+    "replicate_averaging_window": "Replicate averaging window",
     "jit": "JIT compilation",
     "auto_vector_min_d": "Auto-vector minimum demes",
     "auto_vector_max_capacity": "Auto-vector maximum capacity",
@@ -1744,11 +1776,15 @@ _YAML_KEY_ORDER: Final[tuple[str, ...]] = (
     "convergence_statistic",
     "convergence_combinator",
     "convergence_burn_in",
+    "convergence_estimate",
     "precision",
+    "statistic_precision",
     "track_expensive_statistics",
     "max_generations",
     "n_replicates",
     "stop_batch_early",
+    "precision_method",
+    "replicate_averaging_window",
     "replicate_minimum",
     "confidence",
     "migrant_sampling",
@@ -1785,6 +1821,33 @@ def payload_to_yaml_text(payload: Mapping[str, object]) -> str:
     ordered = {name: payload[name] for name in _YAML_KEY_ORDER if name in payload}
     ordered.update({key: value for key, value in payload.items() if key not in ordered})
     return yaml.safe_dump(ordered, sort_keys=False)
+
+
+def _parse_name_floats_named(name: str, text: str) -> dict[str, float]:
+    """Parse `NAME=number, NAME=number` into a mapping (blank is empty).
+
+    Args:
+        name: The field's name, which starts every error message.
+        text: The field's text.
+
+    Returns:
+        Statistic name to number, in the order written.
+
+    Raises:
+        ValueError: If a part is not `NAME=number` or repeats a name.
+    """
+    result: dict[str, float] = {}
+    for part in (piece.strip() for piece in text.split(",")):
+        if not part:
+            continue
+        key, separator, number = part.partition("=")
+        key = key.strip()
+        if not separator or not key:
+            raise ValueError(f"{name} must be NAME=number pairs, such as A_CGD=0.5")
+        if key in result:
+            raise ValueError(f"{name} names {key} twice")
+        result[key] = _parse_float_named(f"{name}[{key}]", number.strip())
+    return result
 
 
 def _parse_float_named(name: str, text: str) -> float:

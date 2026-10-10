@@ -540,6 +540,9 @@ Gives one watched statistic its own plus-or-minus, in that statistic's own
 units, replacing `precision` for it. The name must be a watched statistic and
 the value non-negative.
 
+In the app this is the optional "per-statistic precision" field under the
+convergence statistics on Configure, written `A_CGD=0.5, D=0.02`.
+
 ```yaml
 convergence_statistic: [D, A_CGD]
 precision: 0.01
@@ -627,6 +630,9 @@ at the stop is the form the stop was judged on; it does not default because
 the headline would then change meaning between points of a sweep. The `auto`
 thresholds are the Expert Settings `estimate_auto_denominator` and
 `estimate_auto_fraction`.
+
+In the app this is a Settings default (Settings, Convergence: "expected
+value"); a loaded configuration keeps its own.
 
 ```yaml
 convergence_estimate: mean_of_values   # or value_of_means, or auto
@@ -988,6 +994,9 @@ runs exactly n<sub>replicates</sub>, with no early stop, and sizes every
 replicate's window so that their interval is plus or minus `precision`: you
 choose the number of replicates, the engine chooses how long each one averages.
 It needs n<sub>replicates</sub> of at least 2.
+
+In the app, precision_method and replicate_averaging_window are Settings
+defaults (Settings, Convergence); a loaded configuration keeps its own.
 
 ```yaml
 n_replicates: 16

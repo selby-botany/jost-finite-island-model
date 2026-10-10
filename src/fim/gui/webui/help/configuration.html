@@ -464,6 +464,8 @@ precision above)</li>
 <p>Gives one watched statistic its own plus-or-minus, in that statistic's own
 units, replacing <code>precision</code> for it. The name must be a watched statistic and
 the value non-negative.</p>
+<p>In the app this is the optional &quot;per-statistic precision&quot; field under the
+convergence statistics on Configure, written <code>A_CGD=0.5, D=0.02</code>.</p>
 <pre><code class="language-yaml">convergence_statistic: [D, A_CGD]
 precision: 0.01
 statistic_precision:
@@ -556,6 +558,8 @@ at the stop is the form the stop was judged on; it does not default because
 the headline would then change meaning between points of a sweep. The <code>auto</code>
 thresholds are the Expert Settings <code>estimate_auto_denominator</code> and
 <code>estimate_auto_fraction</code>.</p>
+<p>In the app this is a Settings default (Settings, Convergence: &quot;expected
+value&quot;); a loaded configuration keeps its own.</p>
 <pre><code class="language-yaml">convergence_estimate: mean_of_values   # or value_of_means, or auto
 </code></pre>
 <h3 id="precision">precision</h3>
@@ -988,6 +992,8 @@ runs exactly n<sub>replicates</sub>, with no early stop, and sizes every
 replicate's window so that their interval is plus or minus <code>precision</code>: you
 choose the number of replicates, the engine chooses how long each one averages.
 It needs n<sub>replicates</sub> of at least 2.</p>
+<p>In the app, precision_method and replicate_averaging_window are Settings
+defaults (Settings, Convergence); a loaded configuration keeps its own.</p>
 <pre><code class="language-yaml">n_replicates: 16
 precision_method: planned_replicates   # 16 replicates, each long enough for +/- precision
 </code></pre>

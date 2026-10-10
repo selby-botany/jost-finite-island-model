@@ -697,7 +697,7 @@ def test_a_changed_expert_value_is_marked_saved_and_resettable(
 
     def steps(poll_until: Callable[[str, Callable[[Any], bool]], Any]) -> Any:
         window.evaluate_js(_OPEN_SETTINGS)
-        poll_until(f"{_EXPERT_ROWS} > 0", lambda value: value is True)
+        poll_until("window.__fimSettingsLoaded === true", lambda value: value is True)
         window.evaluate_js(
             "const input = document.getElementById('settings-expert_batch_width');"
             "input.value = '3';"
@@ -720,10 +720,7 @@ def test_a_changed_expert_value_is_marked_saved_and_resettable(
             "window.__fimSettingsSaveResult", lambda value: value is not None
         )
         window.evaluate_js(_OPEN_SETTINGS)
-        poll_until(
-            "document.getElementById('settings-expert_batch_width').value",
-            lambda value: value == "3",
-        )
+        poll_until("window.__fimSettingsLoaded === true", lambda value: value is True)
         window.evaluate_js(
             "document.querySelector("
             "'#settings-expert_batch_width ~ .expert-reset').click();"
@@ -749,7 +746,7 @@ def test_saving_an_invalid_expert_value_shows_the_banner_by_name(
 
     def steps(poll_until: Callable[[str, Callable[[Any], bool]], Any]) -> Any:
         window.evaluate_js(_OPEN_SETTINGS)
-        poll_until(f"{_EXPERT_ROWS} > 0", lambda value: value is True)
+        poll_until("window.__fimSettingsLoaded === true", lambda value: value is True)
         window.evaluate_js(
             "document.getElementById('settings-expert_check_growth').value = '1';"
             "document.getElementById('settings-save-button').click();"
@@ -769,7 +766,7 @@ def test_reset_all_restores_every_default(window: webview.Window) -> None:
 
     def steps(poll_until: Callable[[str, Callable[[Any], bool]], Any]) -> Any:
         window.evaluate_js(_OPEN_SETTINGS)
-        poll_until(f"{_EXPERT_ROWS} > 0", lambda value: value is True)
+        poll_until("window.__fimSettingsLoaded === true", lambda value: value is True)
         window.evaluate_js(
             "for (const input of document.querySelectorAll("
             "'#settings-expert-fields input')) { input.value = '7'; }"
@@ -781,3 +778,50 @@ def test_reset_all_restores_every_default(window: webview.Window) -> None:
         )
 
     assert _drive(window, steps) is True
+
+
+def test_settings_holds_the_estimate_method_and_window_defaults(
+    window: webview.Window,
+) -> None:
+    """Estimate, precision method and replicate window seed, save and reload."""
+
+    def steps(poll_until: Callable[[str, Callable[[Any], bool]], Any]) -> Any:
+        window.evaluate_js(_OPEN_SETTINGS)
+        poll_until("window.__fimSettingsLoaded === true", lambda value: value is True)
+        seeded = window.evaluate_js(
+            "({"
+            "estimate: document.getElementById('settings-convergence_estimate').value, "
+            "method: document.getElementById('settings-precision_method').value, "
+            "window: document.getElementById("
+            "'settings-replicate_averaging_window').value"
+            "})"
+        )
+        window.evaluate_js(
+            "document.getElementById('settings-convergence_estimate').value = 'auto';"
+            "document.getElementById('settings-precision_method').value = "
+            "'planned_replicates';"
+            "document.getElementById('settings-replicate_averaging_window').value = "
+            "'1200';"
+            "window.__fimSettingsSaveResult = null;"
+            "document.getElementById('settings-save-button').click();"
+            "(async () => {"
+            + AWAIT_SETTINGS_SAVES
+            + "window.__fimSettingsSaveResult = "
+            "await window.pywebview.api.get_default_run_settings();"
+            "})();"
+        )
+        saved = poll_until(
+            "window.__fimSettingsSaveResult", lambda value: value is not None
+        )
+        return {"seeded": seeded, "saved": saved}
+
+    result = _drive(window, steps)
+
+    assert result["seeded"] == {
+        "estimate": "mean_of_values",
+        "method": "interval",
+        "window": "auto",
+    }
+    assert result["saved"]["convergence_estimate"] == "auto"
+    assert result["saved"]["precision_method"] == "planned_replicates"
+    assert result["saved"]["replicate_averaging_window"] == "1200"

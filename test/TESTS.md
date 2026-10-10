@@ -17252,6 +17252,57 @@ def test_a_loaded_configuration_with_a_changed_expert_setting_differs(
 
 The run-settings notice lists a changed expert setting with its label.
 
+<a id="gui.test_config_form.test_the_new_convergence_fields_round_trip_through_the_payload"></a>
+
+#### test\_the\_new\_convergence\_fields\_round\_trip\_through\_the\_payload
+
+```python
+def test_the_new_convergence_fields_round_trip_through_the_payload() -> None
+```
+
+Estimate, method, window and per-statistic precision survive the form.
+
+<a id="gui.test_config_form.test_the_defaults_of_the_new_fields_are_the_configuration_defaults"></a>
+
+#### test\_the\_defaults\_of\_the\_new\_fields\_are\_the\_configuration\_defaults
+
+```python
+def test_the_defaults_of_the_new_fields_are_the_configuration_defaults(
+) -> None
+```
+
+A fresh form: mean of values, interval, auto window, no overrides.
+
+<a id="gui.test_config_form.test_a_malformed_statistic_precision_is_refused_by_name"></a>
+
+#### test\_a\_malformed\_statistic\_precision\_is\_refused\_by\_name
+
+```python
+@pytest.mark.parametrize(
+    ("text", "message"),
+    [
+        ("D", "NAME=number"),
+        ("=0.5", "NAME=number"),
+        ("D=wide", r"statistic_precision\[D\] must be a number"),
+        ("D=0.1, D=0.2", "names D twice"),
+    ],
+)
+def test_a_malformed_statistic_precision_is_refused_by_name(
+        text: str, message: str) -> None
+```
+
+The text is NAME=number pairs; anything else says what is wrong.
+
+<a id="gui.test_config_form.test_the_new_run_defaults_are_validated_on_their_own"></a>
+
+#### test\_the\_new\_run\_defaults\_are\_validated\_on\_their\_own
+
+```python
+def test_the_new_run_defaults_are_validated_on_their_own() -> None
+```
+
+Settings refuses a bad estimate, method or window by name.
+
 <a id="gui.test_config_modal_dialogs"></a>
 
 # gui.test\_config\_modal\_dialogs
@@ -19219,6 +19270,28 @@ same reasoning `test_batch_progress_display_tracks_mean_generation_
 not_replicate_high_water` above applies to its own synthetic calls.
 The positive case is *also* covered against a real batch, end to end, in
 `test_batch_results_screen.py`.
+
+<a id="gui.test_input_screen.test_every_global_statistic_can_be_watched_and_is_grouped_with_cost_notes"></a>
+
+#### test\_every\_global\_statistic\_can\_be\_watched\_and\_is\_grouped\_with\_cost\_notes
+
+```python
+def test_every_global_statistic_can_be_watched_and_is_grouped_with_cost_notes(
+        window: webview.Window, drive: Callable[..., Any]) -> None
+```
+
+One checkbox per eligible statistic, under group headings, slow ones marked.
+
+<a id="gui.test_input_screen.test_the_per_statistic_precision_field_is_submitted"></a>
+
+#### test\_the\_per\_statistic\_precision\_field\_is\_submitted
+
+```python
+def test_the_per_statistic_precision_field_is_submitted(
+        window: webview.Window, drive: Callable[..., Any]) -> None
+```
+
+The optional per-statistic precision is part of the submitted form values.
 
 <a id="gui.test_literature_visuals"></a>
 
@@ -23535,6 +23608,17 @@ def test_reset_all_restores_every_default(window: webview.Window) -> None
 ```
 
 The section's Reset all puts every input back at its default.
+
+<a id="gui.test_settings_modal.test_settings_holds_the_estimate_method_and_window_defaults"></a>
+
+#### test\_settings\_holds\_the\_estimate\_method\_and\_window\_defaults
+
+```python
+def test_settings_holds_the_estimate_method_and_window_defaults(
+        window: webview.Window) -> None
+```
+
+Estimate, precision method and replicate window seed, save and reload.
 
 <a id="gui.test_shutdown_deadman"></a>
 

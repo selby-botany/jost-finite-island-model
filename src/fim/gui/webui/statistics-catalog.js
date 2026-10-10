@@ -35,6 +35,17 @@ const PAIR_STATISTIC_NAMES = [];
 // Statistics a run may stop on: one checkbox each.
 const CONVERGENCE_STATISTIC_KEYS = [];
 
+// Section titles for the catalog's `group` values, in display order: the
+// Settings checklist and Configure's convergence-statistic checkboxes.
+const STATISTIC_GROUP_TITLES = {
+    differentiation: "Differentiation",
+    diversity: "Diversity",
+    distance: "Distance",
+    identity: "Gene identity",
+    "nei-distance": "Nei distances",
+    "nei-identity": "Nei identities",
+};
+
 // Trajectory curves that start hidden (the catalog's `default_plotted`).
 const DEFAULT_HIDDEN_TRAJECTORY_STATISTICS = [];
 
@@ -276,7 +287,16 @@ function _buildStatisticSlots() {
         // Before the combinator radios, which stay at the panel's foot;
         // `null` (no combinator) appends.
         const combinator = document.getElementById("combinator-field");
+        let currentGroup = "";
         for (const key of CONVERGENCE_STATISTIC_KEYS) {
+            const group = statisticSpec(key).group;
+            if (group !== currentGroup) {
+                currentGroup = group;
+                const title = document.createElement("div");
+                title.className = "cs-group-title";
+                title.textContent = STATISTIC_GROUP_TITLES[group] || group;
+                selector.insertBefore(title, combinator);
+            }
             const label = document.createElement("label");
             const input = document.createElement("input");
             input.type = "checkbox";
@@ -289,6 +309,12 @@ function _buildStatisticSlots() {
             label.insertAdjacentHTML("beforeend", formatStatisticLabel(key));
             if (statisticSpec(key).history === "opt_in") {
                 label.title = EXPENSIVE_STATISTIC_NOTE;
+                // Visible, not only a tooltip: watching one makes every
+                // generation slower, which should be known before checking.
+                const cost = document.createElement("span");
+                cost.className = "cs-cost-note";
+                cost.textContent = " (slow)";
+                label.appendChild(cost);
             }
             selector.insertBefore(label, combinator);
         }
