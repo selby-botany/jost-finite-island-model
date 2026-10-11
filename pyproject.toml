@@ -63,7 +63,7 @@ dev = [
     # once at commit time, the same way `pydoc-markdown` below renders
     # `src/fim/API.md` and never ships either.
     "markdown-it-py==4.*",
-    "mypy>=1.11,<2.4",
+    "mypy>=1.11,<2.5",
     "pydoc-markdown==4.*",
     "pyinstaller==6.*",
     "pytest>=8,<10",
