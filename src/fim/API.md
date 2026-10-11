@@ -242,18 +242,26 @@ Return to the [source-tree orientation](../README.md) or the [developer guide](.
   * [read\_bundle](#fim.examples.seed.read_bundle)
   * [seed\_examples](#fim.examples.seed.seed_examples)
 * [fim.execution](#fim.execution)
+  * [SESSION\_CHECKPOINT\_KIND](#fim.execution.SESSION_CHECKPOINT_KIND)
+  * [SESSION\_CHECKPOINT\_VERSION](#fim.execution.SESSION_CHECKPOINT_VERSION)
+  * [EQUILIBRATION\_HISTORY](#fim.execution.EQUILIBRATION_HISTORY)
   * [UnsupportedSessionError](#fim.execution.UnsupportedSessionError)
+  * [SessionRestoreError](#fim.execution.SessionRestoreError)
+  * [SessionCapture](#fim.execution.SessionCapture)
   * [ScalarSession](#fim.execution.ScalarSession)
     * [\_\_init\_\_](#fim.execution.ScalarSession.__init__)
     * [\_\_enter\_\_](#fim.execution.ScalarSession.__enter__)
     * [\_\_exit\_\_](#fim.execution.ScalarSession.__exit__)
     * [create](#fim.execution.ScalarSession.create)
+    * [restore](#fim.execution.ScalarSession.restore)
     * [generation](#fim.execution.ScalarSession.generation)
     * [lane](#fim.execution.ScalarSession.lane)
     * [run\_id](#fim.execution.ScalarSession.run_id)
     * [stopped](#fim.execution.ScalarSession.stopped)
     * [store](#fim.execution.ScalarSession.store)
     * [advance](#fim.execution.ScalarSession.advance)
+    * [capture](#fim.execution.ScalarSession.capture)
+    * [checkpoint](#fim.execution.ScalarSession.checkpoint)
     * [close](#fim.execution.ScalarSession.close)
     * [finalize](#fim.execution.ScalarSession.finalize)
   * [resolve\_scalar\_backend](#fim.execution.resolve_scalar_backend)
@@ -6902,6 +6910,33 @@ bit-identical to the lineal reference loop for the same seed. Only the
 scalar backends (``lineal`` and ``generational``) are supported; the dense
 vector backend gains checkpoint support separately.
 
+At a safe point `ScalarSession.capture` exports everything the run needs
+to continue exactly (population, registries, random state, convergence
+monitor, the committed position of the trajectory log and of the
+ancestral-phase log, and the equilibration outcome);
+`ScalarSession.restore` rebuilds a session from it, cutting the logs back
+to those positions, so the resumed run produces the same generations,
+report and manifest as one that never stopped. `ScalarSession.checkpoint`
+publishes a capture under an execution lease.
+
+<a id="fim.execution.SESSION_CHECKPOINT_KIND"></a>
+
+#### SESSION\_CHECKPOINT\_KIND
+
+The `kind` a scalar session's checkpoint payload carries.
+
+<a id="fim.execution.SESSION_CHECKPOINT_VERSION"></a>
+
+#### SESSION\_CHECKPOINT\_VERSION
+
+Version of the scalar session payload layout inside a checkpoint.
+
+<a id="fim.execution.EQUILIBRATION_HISTORY"></a>
+
+#### EQUILIBRATION\_HISTORY
+
+Array holding the ancestral phase's `H_S` history, when there was one.
+
 <a id="fim.execution.UnsupportedSessionError"></a>
 
 ## UnsupportedSessionError Objects
@@ -6911,6 +6946,36 @@ class UnsupportedSessionError(ValueError)
 ```
 
 Raised when a configuration cannot run as a resumable scalar session.
+
+<a id="fim.execution.SessionRestoreError"></a>
+
+## SessionRestoreError Objects
+
+```python
+class SessionRestoreError(ValueError)
+```
+
+Raised when a checkpoint cannot continue the given configuration.
+
+<a id="fim.execution.SessionCapture"></a>
+
+## SessionCapture Objects
+
+```python
+@dataclass(frozen=True, slots=True)
+class SessionCapture()
+```
+
+Everything a checkpoint of a scalar session holds.
+
+**Arguments**:
+
+- `payload` - JSON-safe metadata; integers that may exceed 2**53 are
+  decimal strings.
+- `arrays` - The population, registry, monitor and equilibration arrays.
+- `committed_generation` - The generation the capture describes.
+- `phase` - `RunPhase.FINALIZING` once the run has stopped, otherwise
+  `RunPhase.SIMULATING`.
 
 <a id="fim.execution.ScalarSession"></a>
 
@@ -7001,6 +7066,48 @@ Build generation zero of a single replicate and persist it.
 - `UnsupportedSessionError` - If `params` asks for more than one
   replicate or resolves to a non-scalar backend.
 
+<a id="fim.execution.ScalarSession.restore"></a>
+
+#### restore
+
+```python
+@classmethod
+def restore(cls,
+            params: SimulationParams,
+            checkpoint: LoadedCheckpoint,
+            store: BinaryLogStore,
+            *,
+            clock: Clock | None = None) -> ScalarSession
+```
+
+Rebuild a session at the safe point a checkpoint describes.
+
+The trajectory log (and the ancestral-phase log, if any) is cut back
+to the position the checkpoint recorded, so generations written
+after it, which belong to a state the checkpoint does not describe,
+are dropped and written again identically.
+
+The backend and JIT option recorded in the checkpoint are used as
+they are: ``auto`` is never resolved again on resume.
+
+**Arguments**:
+
+- `params` - The configuration the run was started with.
+- `checkpoint` - A verified checkpoint (`load_checkpoint`).
+- `store` - The run's trajectory log, not yet written to.
+- `clock` - Timestamp source; the current UTC time when omitted.
+
+
+**Returns**:
+
+  A session at the checkpoint's generation.
+
+
+**Raises**:
+
+- `SessionRestoreError` - If the checkpoint is not a scalar session's,
+  was taken under another configuration, or is inconsistent.
+
 <a id="fim.execution.ScalarSession.generation"></a>
 
 #### generation
@@ -7085,6 +7192,58 @@ session is again at a safe point.
 
 - `ValueError` - If `generations` is negative or the session is
   finalized or closed.
+
+<a id="fim.execution.ScalarSession.capture"></a>
+
+#### capture
+
+```python
+def capture() -> SessionCapture
+```
+
+Export the session's exact state at the current safe point.
+
+Commits and syncs the trajectory log (and the ancestral-phase log)
+first, so the positions recorded name data already on disk.
+
+**Returns**:
+
+  The checkpoint payload and arrays.
+
+
+**Raises**:
+
+- `UnsupportedSessionError` - If the trajectory store is not a binary
+  log, whose committed position a checkpoint can record.
+- `ValueError` - If the session is finalized or closed.
+
+<a id="fim.execution.ScalarSession.checkpoint"></a>
+
+#### checkpoint
+
+```python
+def checkpoint(lease: ExecutionLease,
+               *,
+               fault: FaultHook | None = None) -> CheckpointReference
+```
+
+Capture the session and publish it as the object's latest checkpoint.
+
+**Arguments**:
+
+- `lease` - The owning attempt's execution lease.
+- `fault` - Test hook passed to `commit_checkpoint`.
+
+
+**Returns**:
+
+  The reference now recorded in the object's `run.json`.
+
+
+**Raises**:
+
+- `AttemptMismatchError` - If the lease no longer owns execution.
+- `UnsupportedSessionError` - If the store cannot be checkpointed.
 
 <a id="fim.execution.ScalarSession.close"></a>
 

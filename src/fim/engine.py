@@ -1086,6 +1086,25 @@ def _frame_layout(params: SimulationParams) -> FrameLayout:
     )
 
 
+def _equilibrium_frame_layout(params: SimulationParams) -> FrameLayout:
+    """Return the frame layout of a run's ancestral (equilibrium-split) phase.
+
+    One panmictic ancestral population of every deme's gene copies together
+    (`EquilibriumSplitInitialCondition`), so its frames have one deme of that
+    size.
+
+    Args:
+        params: The run's parameters.
+
+    Returns:
+        The layout the ancestral-phase store is told through `begin_store_run`.
+    """
+    return FrameLayout(
+        locus_ids=tuple(locus.locus_id for locus in params.loci),
+        deme_sizes=(sum(int(size) for size in params.population_sizes),),
+    )
+
+
 def _persist_block(store: TrajectoryStore, run_id: str, block: VectorBlock) -> None:
     """Write Backend V's current generation to `store`.
 
@@ -3285,17 +3304,7 @@ def _generate_initial_state_with_outcome(
             max_generations=params.equilibrium_max_generations,
         )
         equilibrium_store = equilibrium_store_for(store, run_id)
-        # One panmictic ancestral population of every deme's gene copies
-        # together (`EquilibriumSplitInitialCondition`), so its frames
-        # have one deme of that size.
-        begin_store_run(
-            equilibrium_store,
-            run_id,
-            FrameLayout(
-                locus_ids=tuple(locus.locus_id for locus in params.loci),
-                deme_sizes=(sum(int(size) for size in params.population_sizes),),
-            ),
-        )
+        begin_store_run(equilibrium_store, run_id, _equilibrium_frame_layout(params))
 
         def write_ancestral_generation(ancestral: ModelState) -> None:
             # Rows or frames built from a valid state need no re-validation

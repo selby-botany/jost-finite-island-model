@@ -52,6 +52,7 @@ Every test module, fixture, and test function documented here in full; `doc/fim-
   - [`test_window_statistics`](#convergence.test_window_statistics)
 - [`test/engine/`](#group-engine)
   - [`test_engine`](#engine.test_engine)
+  - [`test_execution_checkpoint`](#engine.test_execution_checkpoint)
   - [`test_execution_session`](#engine.test_execution_session)
   - [`test_frame_identity`](#engine.test_frame_identity)
   - [`test_vector_parity`](#engine.test_vector_parity)
@@ -9582,6 +9583,198 @@ def test_a_batch_replicate_stops_on_a_generation_thinning_would_skip() -> None
 ```
 
 The stop generation is always written, whatever the stride says.
+
+<a id="engine.test_execution_checkpoint"></a>
+
+# engine.test\_execution\_checkpoint
+
+Tests for checkpointing and restoring `fim.execution.ScalarSession`.
+
+A run that is checkpointed, abandoned and restored must finish exactly as a
+run that never stopped: the same generations, report, manifest and
+trajectory. Abandoning is simulated in process (the session advances past
+the checkpoint and its log is closed, so the file holds generations the
+checkpoint does not describe) and by a child process that exits without
+closing anything.
+
+<a id="engine.test_execution_checkpoint.test_a_restored_session_finishes_as_the_uninterrupted_run"></a>
+
+#### test\_a\_restored\_session\_finishes\_as\_the\_uninterrupted\_run
+
+```python
+@pytest.mark.parametrize("case", list(_CASES))
+@pytest.mark.parametrize(("checkpoint_at", "lost"), [(0, 3), (7, 5), (13, 9)])
+def test_a_restored_session_finishes_as_the_uninterrupted_run(
+        tmp_path: Path, case: str, checkpoint_at: int, lost: int) -> None
+```
+
+Checkpoint, lose later work, restore: the same run, generation for generation.
+
+<a id="engine.test_execution_checkpoint.test_a_checkpoint_on_a_block_boundary_resumes_to_identical_bytes"></a>
+
+#### test\_a\_checkpoint\_on\_a\_block\_boundary\_resumes\_to\_identical\_bytes
+
+```python
+def test_a_checkpoint_on_a_block_boundary_resumes_to_identical_bytes(
+        tmp_path: Path) -> None
+```
+
+Generations 0-7 fill two blocks exactly, so the bytes match too.
+
+<a id="engine.test_execution_checkpoint.test_an_equilibrium_split_run_resumes_with_its_ancestral_log"></a>
+
+#### test\_an\_equilibrium\_split\_run\_resumes\_with\_its\_ancestral\_log
+
+```python
+@pytest.mark.parametrize("backend", ["lineal", "generational"])
+def test_an_equilibrium_split_run_resumes_with_its_ancestral_log(
+        tmp_path: Path, backend: str) -> None
+```
+
+The ancestral phase is not run again; its log and outcome are kept.
+
+<a id="engine.test_execution_checkpoint.test_a_restored_session_can_be_checkpointed_and_restored_again"></a>
+
+#### test\_a\_restored\_session\_can\_be\_checkpointed\_and\_restored\_again
+
+```python
+def test_a_restored_session_can_be_checkpointed_and_restored_again(
+        tmp_path: Path) -> None
+```
+
+Resuming twice in a row still finishes as the uninterrupted run.
+
+<a id="engine.test_execution_checkpoint.test_a_checkpoint_taken_after_the_stop_resumes_straight_to_finalization"></a>
+
+#### test\_a\_checkpoint\_taken\_after\_the\_stop\_resumes\_straight\_to\_finalization
+
+```python
+def test_a_checkpoint_taken_after_the_stop_resumes_straight_to_finalization(
+        tmp_path: Path) -> None
+```
+
+A run interrupted while finalizing restores stopped and finalizes.
+
+<a id="engine.test_execution_checkpoint.test_a_running_capture_is_in_the_simulating_phase"></a>
+
+#### test\_a\_running\_capture\_is\_in\_the\_simulating\_phase
+
+```python
+def test_a_running_capture_is_in_the_simulating_phase(tmp_path: Path) -> None
+```
+
+Before the stop, a capture names the simulating phase and its generation.
+
+<a id="engine.test_execution_checkpoint.test_capturing_an_in_memory_store_is_refused"></a>
+
+#### test\_capturing\_an\_in\_memory\_store\_is\_refused
+
+```python
+def test_capturing_an_in_memory_store_is_refused() -> None
+```
+
+Only a binary log has a committed position a checkpoint can record.
+
+<a id="engine.test_execution_checkpoint.test_a_finalized_session_cannot_be_captured"></a>
+
+#### test\_a\_finalized\_session\_cannot\_be\_captured
+
+```python
+def test_a_finalized_session_cannot_be_captured(tmp_path: Path) -> None
+```
+
+After `finalize` there is no safe point left to capture.
+
+<a id="engine.test_execution_checkpoint.test_restoring_under_another_configuration_is_refused"></a>
+
+#### test\_restoring\_under\_another\_configuration\_is\_refused
+
+```python
+def test_restoring_under_another_configuration_is_refused(
+        tmp_path: Path) -> None
+```
+
+A run continues only with the configuration it was started with.
+
+<a id="engine.test_execution_checkpoint.test_a_foreign_or_newer_payload_is_refused"></a>
+
+#### test\_a\_foreign\_or\_newer\_payload\_is\_refused
+
+```python
+@pytest.mark.parametrize(
+    ("change", "message"),
+    [
+        ({
+            "kind": "vector-session"
+        }, "not 'scalar-session'"),
+        ({
+            "version": 99
+        }, "version 99"),
+        ({
+            "engine_backend": "vector"
+        }, "is not scalar"),
+    ],
+)
+def test_a_foreign_or_newer_payload_is_refused(tmp_path: Path,
+                                               change: dict[str, Any],
+                                               message: str) -> None
+```
+
+The payload must be a scalar session's, in a version this build reads.
+
+<a id="engine.test_execution_checkpoint.test_a_log_that_does_not_match_the_recorded_position_is_refused"></a>
+
+#### test\_a\_log\_that\_does\_not\_match\_the\_recorded\_position\_is\_refused
+
+```python
+def test_a_log_that_does_not_match_the_recorded_position_is_refused(
+        tmp_path: Path) -> None
+```
+
+A trajectory that is not the one checkpointed cannot be continued.
+
+<a id="engine.test_execution_checkpoint.test_a_payload_whose_generation_disagrees_is_refused"></a>
+
+#### test\_a\_payload\_whose\_generation\_disagrees\_is\_refused
+
+```python
+def test_a_payload_whose_generation_disagrees_is_refused(
+        tmp_path: Path) -> None
+```
+
+The population, monitor and committed generation must agree.
+
+<a id="engine.test_execution_checkpoint.test_checkpoint_publishes_under_the_lease_and_restores"></a>
+
+#### test\_checkpoint\_publishes\_under\_the\_lease\_and\_restores
+
+```python
+def test_checkpoint_publishes_under_the_lease_and_restores(
+        tmp_path: Path) -> None
+```
+
+`checkpoint` records the reference in `run.json`; it restores the run.
+
+<a id="engine.test_execution_checkpoint.test_a_stale_lease_cannot_checkpoint"></a>
+
+#### test\_a\_stale\_lease\_cannot\_checkpoint
+
+```python
+def test_a_stale_lease_cannot_checkpoint(tmp_path: Path) -> None
+```
+
+After ownership is lost, a session's checkpoint is refused and removed.
+
+<a id="engine.test_execution_checkpoint.test_a_process_killed_after_a_checkpoint_resumes_to_the_uninterrupted_run"></a>
+
+#### test\_a\_process\_killed\_after\_a\_checkpoint\_resumes\_to\_the\_uninterrupted\_run
+
+```python
+def test_a_process_killed_after_a_checkpoint_resumes_to_the_uninterrupted_run(
+        tmp_path: Path) -> None
+```
+
+A real abrupt exit past a checkpoint, then restore: the whole run.
 
 <a id="engine.test_execution_session"></a>
 
