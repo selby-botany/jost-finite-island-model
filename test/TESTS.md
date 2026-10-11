@@ -139,6 +139,7 @@ Every test module, fixture, and test function documented here in full; `doc/fim-
   - [`test_report`](#persistence.test_report)
   - [`test_retention`](#persistence.test_retention)
   - [`test_run_classes`](#persistence.test_run_classes)
+  - [`test_run_lifecycle`](#persistence.test_run_lifecycle)
   - [`test_run_metadata`](#persistence.test_run_metadata)
   - [`test_store`](#persistence.test_store)
   - [`test_store_lifecycle`](#persistence.test_store_lifecycle)
@@ -31906,6 +31907,271 @@ def test_default_classes_path_points_into_the_checkout_examples() -> None
 ```
 
 The default path is `doc/examples/classes.yaml` under the checkout root.
+
+<a id="persistence.test_run_lifecycle"></a>
+
+# persistence.test\_run\_lifecycle
+
+Tests for `fim.persistence.run_lifecycle`: states, transitions, records.
+
+Every `(state, event)` pair is checked against the transition table, so a
+change to the table is a deliberate, visible test change. Timestamps are
+fixed; nothing here reads the clock.
+
+<a id="persistence.test_run_lifecycle.test_transition_table_matches_the_design"></a>
+
+#### test\_transition\_table\_matches\_the\_design
+
+```python
+def test_transition_table_matches_the_design() -> None
+```
+
+The table holds exactly the designed transitions, draft included.
+
+<a id="persistence.test_run_lifecycle.test_every_state_event_pair"></a>
+
+#### test\_every\_state\_event\_pair
+
+```python
+@pytest.mark.parametrize(("state", "event"),
+                         list(itertools.product(RunState, RunEvent)))
+def test_every_state_event_pair(state: RunState, event: RunEvent) -> None
+```
+
+Legal pairs reach their target; every other pair is rejected.
+
+<a id="persistence.test_run_lifecycle.test_terminal_states_have_no_exits"></a>
+
+#### test\_terminal\_states\_have\_no\_exits
+
+```python
+def test_terminal_states_have_no_exits() -> None
+```
+
+No event leaves `completed` or `cancelled`.
+
+<a id="persistence.test_run_lifecycle.test_invalid_first_save_creates_a_draft_with_its_issues"></a>
+
+#### test\_invalid\_first\_save\_creates\_a\_draft\_with\_its\_issues
+
+```python
+def test_invalid_first_save_creates_a_draft_with_its_issues() -> None
+```
+
+An invalid configuration persists as a draft, not as an error.
+
+<a id="persistence.test_run_lifecycle.test_draft_and_planned_reclassify_on_each_save"></a>
+
+#### test\_draft\_and\_planned\_reclassify\_on\_each\_save
+
+```python
+def test_draft_and_planned_reclassify_on_each_save() -> None
+```
+
+Saves move back and forth by validity; the object ID never changes.
+
+<a id="persistence.test_run_lifecycle.test_save_event_must_match_its_configuration"></a>
+
+#### test\_save\_event\_must\_match\_its\_configuration
+
+```python
+def test_save_event_must_match_its_configuration() -> None
+```
+
+A valid configuration cannot be saved as invalid, or vice versa.
+
+<a id="persistence.test_run_lifecycle.test_draft_cannot_start"></a>
+
+#### test\_draft\_cannot\_start
+
+```python
+def test_draft_cannot_start() -> None
+```
+
+Start on a draft is an illegal transition naming the draft state.
+
+<a id="persistence.test_run_lifecycle.test_configuration_is_fixed_once_execution_starts"></a>
+
+#### test\_configuration\_is\_fixed\_once\_execution\_starts
+
+```python
+def test_configuration_is_fixed_once_execution_starts() -> None
+```
+
+A started run accepts no save of either kind.
+
+<a id="persistence.test_run_lifecycle.test_stale_revision_is_rejected"></a>
+
+#### test\_stale\_revision\_is\_rejected
+
+```python
+def test_stale_revision_is_rejected() -> None
+```
+
+A request based on an older revision fails before any change.
+
+<a id="persistence.test_run_lifecycle.test_start_requires_a_well_formed_attempt"></a>
+
+#### test\_start\_requires\_a\_well\_formed\_attempt
+
+```python
+def test_start_requires_a_well_formed_attempt() -> None
+```
+
+Start without a valid new attempt ID is rejected.
+
+<a id="persistence.test_run_lifecycle.test_stale_attempt_cannot_report"></a>
+
+#### test\_stale\_attempt\_cannot\_report
+
+```python
+def test_stale_attempt_cannot_report() -> None
+```
+
+A worker event from a superseded attempt is fenced out.
+
+<a id="persistence.test_run_lifecycle.test_completion_wins_over_a_pending_cancel"></a>
+
+#### test\_completion\_wins\_over\_a\_pending\_cancel
+
+```python
+def test_completion_wins_over_a_pending_cancel() -> None
+```
+
+Completion committed during cancelling yields completed.
+
+<a id="persistence.test_run_lifecycle.test_resume_opens_a_new_attempt_and_clears_the_error"></a>
+
+#### test\_resume\_opens\_a\_new\_attempt\_and\_clears\_the\_error
+
+```python
+def test_resume_opens_a_new_attempt_and_clears_the_error() -> None
+```
+
+Resume from failed records the new attempt and keeps first start.
+
+<a id="persistence.test_run_lifecycle.test_record_round_trips_through_json"></a>
+
+#### test\_record\_round\_trips\_through\_json
+
+```python
+def test_record_round_trips_through_json() -> None
+```
+
+A record with every field set survives JSON exactly.
+
+<a id="persistence.test_run_lifecycle.test_draft_round_trips_with_its_issues"></a>
+
+#### test\_draft\_round\_trips\_with\_its\_issues
+
+```python
+def test_draft_round_trips_with_its_issues() -> None
+```
+
+A draft's validation issues are preserved exactly.
+
+<a id="persistence.test_run_lifecycle.test_malformed_record_is_rejected"></a>
+
+#### test\_malformed\_record\_is\_rejected
+
+```python
+@pytest.mark.parametrize(
+    ("key", "value", "message"),
+    [
+        ("schema_version", 99, "schema_version"),
+        ("state", "archived", "unknown state"),
+        ("revision", 0, "revision"),
+        ("revision", True, "revision"),
+        ("object_id", "../etc", "object_id"),
+        ("validation_issues", "nope", "validation_issues"),
+        ("scientific_run_id", None, "both"),
+    ],
+)
+def test_malformed_record_is_rejected(key: str, value: object,
+                                      message: str) -> None
+```
+
+Every malformed or inconsistent document raises a record error.
+
+<a id="persistence.test_run_lifecycle.test_inconsistent_records_cannot_be_built"></a>
+
+#### test\_inconsistent\_records\_cannot\_be\_built
+
+```python
+def test_inconsistent_records_cannot_be_built() -> None
+```
+
+Cross-field invariants hold for every constructed record.
+
+<a id="persistence.test_run_lifecycle.test_configuration_is_exactly_one_form"></a>
+
+#### test\_configuration\_is\_exactly\_one\_form
+
+```python
+def test_configuration_is_exactly_one_form() -> None
+```
+
+A configuration outcome is valid or invalid, never both or neither.
+
+<a id="persistence.test_run_lifecycle.test_capabilities_for_draft_explain_why_start_is_blocked"></a>
+
+#### test\_capabilities\_for\_draft\_explain\_why\_start\_is\_blocked
+
+```python
+def test_capabilities_for_draft_explain_why_start_is_blocked() -> None
+```
+
+A draft is editable and deletable, never startable or abandonable.
+
+<a id="persistence.test_run_lifecycle.test_capabilities_by_state"></a>
+
+#### test\_capabilities\_by\_state
+
+```python
+def test_capabilities_by_state() -> None
+```
+
+Each state allows exactly its designed actions.
+
+<a id="persistence.test_run_lifecycle.test_read_only_objects_allow_nothing"></a>
+
+#### test\_read\_only\_objects\_allow\_nothing
+
+```python
+def test_read_only_objects_allow_nothing() -> None
+```
+
+A protected example refuses every action, with a reason for each.
+
+<a id="persistence.test_run_lifecycle.test_timestamps_are_utc_and_require_a_zone"></a>
+
+#### test\_timestamps\_are\_utc\_and\_require\_a\_zone
+
+```python
+def test_timestamps_are_utc_and_require_a_zone() -> None
+```
+
+Timestamps normalize to UTC `Z` form; naive times are refused.
+
+<a id="persistence.test_run_lifecycle.test_object_ids_are_safe_directory_names"></a>
+
+#### test\_object\_ids\_are\_safe\_directory\_names
+
+```python
+def test_object_ids_are_safe_directory_names() -> None
+```
+
+Only the fixed `obj-<32 hex>` form is an object ID.
+
+<a id="persistence.test_run_lifecycle.test_schema_version_is_one"></a>
+
+#### test\_schema\_version\_is\_one
+
+```python
+def test_schema_version_is_one() -> None
+```
+
+The first lifecycle schema is version 1.
 
 <a id="persistence.test_run_metadata"></a>
 
