@@ -24,6 +24,7 @@ from bisect import bisect_left
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from enum import StrEnum
+from itertools import pairwise
 from statistics import NormalDist
 from typing import Literal
 
@@ -251,6 +252,32 @@ def _resolve_values(
             "while watching several statistics"
         )
     return {watched[0]: value}
+
+
+def _state_int_array(
+    arrays: Mapping[str, npt.NDArray[np.generic]], key: str
+) -> list[int]:
+    """Return a one-dimensional int64 array from monitor state as a list.
+
+    Raises:
+        ValueError: If the array is missing or has the wrong shape or type.
+    """
+    values = arrays.get(key)
+    if values is None or values.dtype != np.int64 or values.ndim != 1:
+        raise ValueError(f"monitor state array {key} is malformed")
+    return [int(v) for v in values.tolist()]
+
+
+def _state_optional_int(meta: Mapping[str, object], key: str) -> int | None:
+    """Return an optional integer field from monitor state.
+
+    Raises:
+        ValueError: If the field is present but not an integer.
+    """
+    value = meta.get(key)
+    if value is not None and (isinstance(value, bool) or not isinstance(value, int)):
+        raise ValueError(f"monitor state field {key} must be an integer")
+    return value
 
 
 class BurnInMonitor:
@@ -554,6 +581,147 @@ class BurnInMonitor:
         # been given is done: it must not take one more generation.
         if self._generations and not self._outcome.stopped:
             self._record_window_mode(int(self._generations[-1]))
+
+    def export_state(
+        self,
+    ) -> tuple[dict[str, object], dict[str, npt.NDArray[np.generic]]]:
+        """Export the monitor's mutable state for an exact checkpoint.
+
+        Everything else the monitor holds is derived from its constructor
+        arguments, so a monitor rebuilt from the same settings and then given
+        this state continues exactly as the original would have.
+
+        Returns:
+            A JSON-safe metadata mapping and a mapping of array name to array
+            (the recorded histories), suitable for `numpy.savez`.
+        """
+        outcome = self._outcome
+        meta: dict[str, object] = {
+            "statistics": list(self._all_statistics),
+            "next_check": self._next_check,
+            "window_start": self._window_start,
+            "last_verdicts": list(self._last_verdicts),
+            "projection": self._projection,
+            "cap_warned": self._cap_warned,
+            "averaging_window": self._averaging_window,
+            "outcome": {
+                "stopped": outcome.stopped,
+                "converged": outcome.converged,
+                "reason": None if outcome.reason is None else outcome.reason.value,
+                "generation": outcome.generation,
+            },
+        }
+        arrays: dict[str, npt.NDArray[np.generic]] = {
+            "monitor.generations": np.array(self._generations, dtype=np.int64)
+        }
+        for index, name in enumerate(self._all_statistics):
+            arrays[f"monitor.values.{index}"] = np.array(
+                self._values[name], dtype=np.float64
+            )
+            arrays[f"monitor.value_generations.{index}"] = np.array(
+                self._value_generations[name], dtype=np.int64
+            )
+        return meta, arrays
+
+    def restore_state(
+        self,
+        meta: Mapping[str, object],
+        arrays: Mapping[str, npt.NDArray[np.generic]],
+    ) -> None:
+        """Restore state written by `export_state` into a fresh monitor.
+
+        Args:
+            meta: The metadata mapping `export_state` returned.
+            arrays: The array mapping `export_state` returned.
+
+        Raises:
+            RuntimeError: If this monitor has already recorded a generation.
+            ValueError: If the state is malformed or was exported by a monitor
+                watching different statistics.
+        """
+        if self._generations or self._outcome.stopped:
+            raise RuntimeError("only a fresh monitor can be restored")
+        if meta.get("statistics") != list(self._all_statistics):
+            raise ValueError("monitor state watches different statistics")
+        generations, values, value_generations = self._parse_histories(arrays)
+        verdicts = meta.get("last_verdicts")
+        if not (
+            isinstance(verdicts, list)
+            and len(verdicts) == len(self._statistics)
+            and all(isinstance(v, bool) for v in verdicts)
+        ):
+            raise ValueError("monitor last_verdicts is malformed")
+        outcome = meta.get("outcome")
+        if not isinstance(outcome, Mapping):
+            raise ValueError("monitor outcome is malformed")
+        stopped = outcome.get("stopped")
+        converged = outcome.get("converged")
+        reason = outcome.get("reason")
+        if not (
+            isinstance(stopped, bool)
+            and isinstance(converged, bool)
+            and (reason is None or isinstance(reason, str))
+            and (reason is None) != stopped
+        ):
+            raise ValueError("monitor outcome is malformed")
+        try:
+            stop_reason = None if reason is None else StopReason(reason)
+        except ValueError as error:
+            raise ValueError("monitor outcome reason is unknown") from error
+        window = _state_optional_int(meta, "averaging_window")
+        if window is not None and not self._window_mode:
+            raise ValueError("only a window-mode monitor has an averaging window")
+        next_check = _state_optional_int(meta, "next_check")
+        cap_warned = meta.get("cap_warned")
+        if next_check is None or not isinstance(cap_warned, bool):
+            raise ValueError("monitor next_check or cap_warned is malformed")
+        self._generations = generations
+        self._values = values
+        self._value_generations = value_generations
+        self._next_check = next_check
+        self._window_start = _state_optional_int(meta, "window_start")
+        self._last_verdicts = tuple(verdicts)
+        self._projection = _state_optional_int(meta, "projection")
+        self._cap_warned = cap_warned
+        self._averaging_window = window
+        self._outcome = ConvergenceOutcome(
+            stopped=stopped,
+            converged=converged,
+            reason=stop_reason,
+            generation=_state_optional_int(outcome, "generation"),
+        )
+
+    def _parse_histories(
+        self, arrays: Mapping[str, npt.NDArray[np.generic]]
+    ) -> tuple[array[int], dict[str, array[float]], dict[str, array[int]]]:
+        """Validate and convert the history arrays of exported monitor state.
+
+        Args:
+            arrays: The array mapping `export_state` returned.
+
+        Returns:
+            The recorded generations, values by statistic, and value
+            generations by statistic.
+
+        Raises:
+            ValueError: If any history array is missing or inconsistent.
+        """
+        generations = _state_int_array(arrays, "monitor.generations")
+        if any(b <= a for a, b in pairwise(generations)):
+            raise ValueError("monitor generations must be strictly increasing")
+        recorded = set(generations)
+        values: dict[str, array[float]] = {}
+        value_generations: dict[str, array[int]] = {}
+        for index, name in enumerate(self._all_statistics):
+            numbers = arrays.get(f"monitor.values.{index}")
+            if numbers is None or numbers.dtype != np.float64 or numbers.ndim != 1:
+                raise ValueError(f"monitor values for {name} are malformed")
+            gens = _state_int_array(arrays, f"monitor.value_generations.{index}")
+            if len(gens) != len(numbers) or not set(gens) <= recorded:
+                raise ValueError(f"monitor generations for {name} are malformed")
+            values[name] = array("d", numbers.tolist())
+            value_generations[name] = array("q", gens)
+        return array("q", generations), values, value_generations
 
     def _record_window_mode(self, generation: int) -> None:
         """Stop a window-mode monitor once its window has been averaged."""

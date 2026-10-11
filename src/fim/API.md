@@ -128,6 +128,8 @@ Return to the [source-tree orientation](../README.md) or the [developer guide](.
     * [awaiting\_window](#fim.convergence.monitor.BurnInMonitor.awaiting_window)
     * [averaging\_window](#fim.convergence.monitor.BurnInMonitor.averaging_window)
     * [set\_averaging\_window](#fim.convergence.monitor.BurnInMonitor.set_averaging_window)
+    * [export\_state](#fim.convergence.monitor.BurnInMonitor.export_state)
+    * [restore\_state](#fim.convergence.monitor.BurnInMonitor.restore_state)
     * [stable\_statistics](#fim.convergence.monitor.BurnInMonitor.stable_statistics)
     * [target\_standard\_error](#fim.convergence.monitor.BurnInMonitor.target_standard_error)
     * [target\_standard\_error\_for](#fim.convergence.monitor.BurnInMonitor.target_standard_error_for)
@@ -3594,6 +3596,49 @@ Assign the window of a monitor that was waiting for it.
 
 - `RuntimeError` - If the monitor is not in window mode.
 - `ValueError` - If `window` is below 1.
+
+<a id="fim.convergence.monitor.BurnInMonitor.export_state"></a>
+
+#### export\_state
+
+```python
+def export_state(
+) -> tuple[dict[str, object], dict[str, npt.NDArray[np.generic]]]
+```
+
+Export the monitor's mutable state for an exact checkpoint.
+
+Everything else the monitor holds is derived from its constructor
+arguments, so a monitor rebuilt from the same settings and then given
+this state continues exactly as the original would have.
+
+**Returns**:
+
+  A JSON-safe metadata mapping and a mapping of array name to array
+  (the recorded histories), suitable for `numpy.savez`.
+
+<a id="fim.convergence.monitor.BurnInMonitor.restore_state"></a>
+
+#### restore\_state
+
+```python
+def restore_state(meta: Mapping[str, object],
+                  arrays: Mapping[str, npt.NDArray[np.generic]]) -> None
+```
+
+Restore state written by `export_state` into a fresh monitor.
+
+**Arguments**:
+
+- `meta` - The metadata mapping `export_state` returned.
+- `arrays` - The array mapping `export_state` returned.
+
+
+**Raises**:
+
+- `RuntimeError` - If this monitor has already recorded a generation.
+- `ValueError` - If the state is malformed or was exported by a monitor
+  watching different statistics.
 
 <a id="fim.convergence.monitor.BurnInMonitor.stable_statistics"></a>
 

@@ -47,6 +47,7 @@ Every test module, fixture, and test function documented here in full; `doc/fim-
   - [`test_criteria_validation`](#convergence.test_criteria_validation)
   - [`test_defaults`](#convergence.test_defaults)
   - [`test_estimate_forms`](#convergence.test_estimate_forms)
+  - [`test_monitor_state`](#convergence.test_monitor_state)
   - [`test_replicate_monitor`](#convergence.test_replicate_monitor)
   - [`test_window_statistics`](#convergence.test_window_statistics)
 - [`test/engine/`](#group-engine)
@@ -6402,6 +6403,163 @@ def test_a_monitor_with_identity_statistics_needs_the_heterozygosities(
 ```
 
 The forms are computed from `H_S` and `H_T`, so both must be recorded.
+
+<a id="convergence.test_monitor_state"></a>
+
+# convergence.test\_monitor\_state
+
+Tests of `BurnInMonitor.export_state` and `restore_state`.
+
+A checkpoint must let a run resume as though it had never stopped, so every
+test here splits a fixed, seeded series at some generation, moves the
+monitor's state into a freshly built monitor (through JSON and `numpy.savez`
+where it matters), and requires the continuation to match an uninterrupted
+monitor exactly: the same stop generation, reason, histories, and window.
+
+<a id="convergence.test_monitor_state.test_a_restored_monitor_continues_exactly"></a>
+
+#### test\_a\_restored\_monitor\_continues\_exactly
+
+```python
+@pytest.mark.parametrize("split", [0, 1, 15, 30, 31, 47, 64, 100])
+def test_a_restored_monitor_continues_exactly(split: int) -> None
+```
+
+Split anywhere, including before, at, and after checks.
+
+<a id="convergence.test_monitor_state.test_a_stopped_monitor_restores_as_stopped"></a>
+
+#### test\_a\_stopped\_monitor\_restores\_as\_stopped
+
+```python
+def test_a_stopped_monitor_restores_as_stopped() -> None
+```
+
+A checkpoint taken at the stop still refuses further records.
+
+<a id="convergence.test_monitor_state.test_a_capped_fractional_monitor_continues_exactly"></a>
+
+#### test\_a\_capped\_fractional\_monitor\_continues\_exactly
+
+```python
+def test_a_capped_fractional_monitor_continues_exactly() -> None
+```
+
+No burn-in and a cap: the fractional window start survives restore.
+
+<a id="convergence.test_monitor_state.test_an_awaiting_window_monitor_takes_its_window_after_restore"></a>
+
+#### test\_an\_awaiting\_window\_monitor\_takes\_its\_window\_after\_restore
+
+```python
+def test_an_awaiting_window_monitor_takes_its_window_after_restore() -> None
+```
+
+A batch replicate checkpointed before its window was known.
+
+<a id="convergence.test_monitor_state.test_an_assigned_window_survives_restore"></a>
+
+#### test\_an\_assigned\_window\_survives\_restore
+
+```python
+def test_an_assigned_window_survives_restore() -> None
+```
+
+A window assigned before the checkpoint is part of the state.
+
+<a id="convergence.test_monitor_state.test_exported_metadata_is_json_safe_and_arrays_are_typed"></a>
+
+#### test\_exported\_metadata\_is\_json\_safe\_and\_arrays\_are\_typed
+
+```python
+def test_exported_metadata_is_json_safe_and_arrays_are_typed() -> None
+```
+
+Metadata survives canonical JSON; arrays are int64 or float64 only.
+
+<a id="convergence.test_monitor_state.test_restore_refuses_a_used_monitor"></a>
+
+#### test\_restore\_refuses\_a\_used\_monitor
+
+```python
+def test_restore_refuses_a_used_monitor() -> None
+```
+
+State is only ever restored into a fresh monitor.
+
+<a id="convergence.test_monitor_state.test_malformed_metadata_is_refused"></a>
+
+#### test\_malformed\_metadata\_is\_refused
+
+```python
+@pytest.mark.parametrize(
+    ("key", "value", "message"),
+    [
+        ("statistics", ["F_ST"], "different statistics"),
+        ("last_verdicts", [True], "last_verdicts"),
+        ("last_verdicts", [1, 0], "last_verdicts"),
+        ("next_check", "30", "next_check"),
+        ("next_check", True, "next_check"),
+        ("cap_warned", None, "cap_warned"),
+        ("window_start", 1.5, "window_start"),
+        ("projection", "x", "projection"),
+        ("averaging_window", 10, "window-mode"),
+        ("outcome", [], "outcome"),
+        (
+            "outcome",
+            {
+                "stopped": True,
+                "converged": True,
+                "reason": "x",
+                "generation": 4
+            },
+            "unknown",
+        ),
+        (
+            "outcome",
+            {
+                "stopped": True,
+                "converged": True,
+                "reason": None,
+                "generation": 4
+            },
+            "outcome",
+        ),
+    ],
+)
+def test_malformed_metadata_is_refused(key: str, value: object,
+                                       message: str) -> None
+```
+
+Each malformed field is named in the error.
+
+<a id="convergence.test_monitor_state.test_malformed_arrays_are_refused"></a>
+
+#### test\_malformed\_arrays\_are\_refused
+
+```python
+@pytest.mark.parametrize(
+    ("key", "replacement", "message"),
+    [
+        ("monitor.generations", None, "monitor.generations"),
+        ("monitor.generations", np.array([0, 2, 1]), "strictly increasing"),
+        ("monitor.generations", np.zeros(3, dtype=np.float64), "malformed"),
+        ("monitor.values.0", None, "values for F_ST"),
+        ("monitor.values.1", np.zeros(2, dtype=np.int64), "values for H_S"),
+        ("monitor.value_generations.2", np.array([0]), "generations for H_T"),
+        (
+            "monitor.value_generations.0",
+            np.arange(60, dtype=np.int64) + 1000,
+            "generations for F_ST",
+        ),
+    ],
+)
+def test_malformed_arrays_are_refused(key: str,
+                                      replacement: npt.NDArray[np.generic]
+                                      | None, message: str) -> None
+```
+
+A missing, mistyped, or inconsistent history array is refused.
 
 <a id="convergence.test_replicate_monitor"></a>
 
