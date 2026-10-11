@@ -142,6 +142,7 @@ Every test module, fixture, and test function documented here in full; `doc/fim-
   - [`test_run_lifecycle`](#persistence.test_run_lifecycle)
   - [`test_run_metadata`](#persistence.test_run_metadata)
   - [`test_run_objects`](#persistence.test_run_objects)
+  - [`test_run_ownership`](#persistence.test_run_ownership)
   - [`test_store`](#persistence.test_store)
   - [`test_store_lifecycle`](#persistence.test_store_lifecycle)
   - [`test_tlog`](#persistence.test_tlog)
@@ -32174,6 +32175,67 @@ def test_schema_version_is_one() -> None
 
 The first lifecycle schema is version 1.
 
+<a id="persistence.test_run_lifecycle.test_command_key_is_recorded_and_found"></a>
+
+#### test\_command\_key\_is\_recorded\_and\_found
+
+```python
+def test_command_key_is_recorded_and_found() -> None
+```
+
+A keyed transition can be found again by its key.
+
+<a id="persistence.test_run_lifecycle.test_command_key_cannot_apply_twice"></a>
+
+#### test\_command\_key\_cannot\_apply\_twice
+
+```python
+def test_command_key_cannot_apply_twice() -> None
+```
+
+A key that already produced a transition is refused.
+
+<a id="persistence.test_run_lifecycle.test_malformed_command_key_is_refused"></a>
+
+#### test\_malformed\_command\_key\_is\_refused
+
+```python
+@pytest.mark.parametrize("key", ["", "has space", "x" * 129, "slash/no"])
+def test_malformed_command_key_is_refused(key: str) -> None
+```
+
+Keys are short printable tokens.
+
+<a id="persistence.test_run_lifecycle.test_progress_advances_revision_without_a_transition"></a>
+
+#### test\_progress\_advances\_revision\_without\_a\_transition
+
+```python
+def test_progress_advances_revision_without_a_transition() -> None
+```
+
+Progress bumps the revision and keeps the state and history.
+
+<a id="persistence.test_run_lifecycle.test_progress_from_a_stale_or_absent_attempt_is_fenced"></a>
+
+#### test\_progress\_from\_a\_stale\_or\_absent\_attempt\_is\_fenced
+
+```python
+def test_progress_from_a_stale_or_absent_attempt_is_fenced() -> None
+```
+
+Only the owning attempt of an active run may commit progress.
+
+<a id="persistence.test_run_lifecycle.test_progress_never_moves_backward"></a>
+
+#### test\_progress\_never\_moves\_backward
+
+```python
+def test_progress_never_moves_backward() -> None
+```
+
+Committed generation is monotonic and agrees with the checkpoint.
+
 <a id="persistence.test_run_metadata"></a>
 
 # persistence.test\_run\_metadata
@@ -32611,6 +32673,203 @@ def test_lock_excludes_a_second_holder(tmp_path: Path) -> None
 ```
 
 A held lock refuses a non-blocking second holder until released.
+
+<a id="persistence.test_run_ownership"></a>
+
+# persistence.test\_run\_ownership
+
+Tests for execution ownership and fenced commits (`run_ownership`).
+
+Two opens of the same lock file contend even within one process, so most
+ownership races are exercised in-process; one test uses a real second
+process to prove that a dead owner is detected without any timeout.
+
+<a id="persistence.test_run_ownership.test_start_opens_an_attempt_and_holds_its_lock"></a>
+
+#### test\_start\_opens\_an\_attempt\_and\_holds\_its\_lock
+
+```python
+def test_start_opens_an_attempt_and_holds_its_lock(tmp_path: Path) -> None
+```
+
+Starting records the attempt and holds the attempt lock.
+
+<a id="persistence.test_run_ownership.test_a_draft_cannot_start"></a>
+
+#### test\_a\_draft\_cannot\_start
+
+```python
+def test_a_draft_cannot_start(tmp_path: Path) -> None
+```
+
+Starting a draft fails and leaves no owner behind.
+
+<a id="persistence.test_run_ownership.test_start_refuses_a_configuration_edited_behind_the_record"></a>
+
+#### test\_start\_refuses\_a\_configuration\_edited\_behind\_the\_record
+
+```python
+def test_start_refuses_a_configuration_edited_behind_the_record(
+        tmp_path: Path) -> None
+```
+
+A `config.yaml` that no longer matches the digest cannot start.
+
+<a id="persistence.test_run_ownership.test_second_start_finds_the_run_already_running"></a>
+
+#### test\_second\_start\_finds\_the\_run\_already\_running
+
+```python
+def test_second_start_finds_the_run_already_running(tmp_path: Path) -> None
+```
+
+Two starts from the same revision yield exactly one owner.
+
+<a id="persistence.test_run_ownership.test_a_held_attempt_lock_refuses_a_new_owner"></a>
+
+#### test\_a\_held\_attempt\_lock\_refuses\_a\_new\_owner
+
+```python
+def test_a_held_attempt_lock_refuses_a_new_owner(tmp_path: Path) -> None
+```
+
+A live attempt lock refuses another owner regardless of the record.
+
+<a id="persistence.test_run_ownership.test_progress_and_completion_commit_through_the_lease"></a>
+
+#### test\_progress\_and\_completion\_commit\_through\_the\_lease
+
+```python
+def test_progress_and_completion_commit_through_the_lease(
+        tmp_path: Path) -> None
+```
+
+Progress advances revision without history; completion releases.
+
+<a id="persistence.test_run_ownership.test_an_escaping_exception_records_failure"></a>
+
+#### test\_an\_escaping\_exception\_records\_failure
+
+```python
+def test_an_escaping_exception_records_failure(tmp_path: Path) -> None
+```
+
+Leaving the lease by an exception records `failed` with the error.
+
+<a id="persistence.test_run_ownership.test_pause_is_requested_then_acknowledged_by_the_owner"></a>
+
+#### test\_pause\_is\_requested\_then\_acknowledged\_by\_the\_owner
+
+```python
+def test_pause_is_requested_then_acknowledged_by_the_owner(
+        tmp_path: Path) -> None
+```
+
+The controller requests; the owner checkpoints and acknowledges.
+
+<a id="persistence.test_run_ownership.test_resume_needs_a_committed_checkpoint"></a>
+
+#### test\_resume\_needs\_a\_committed\_checkpoint
+
+```python
+def test_resume_needs_a_committed_checkpoint(tmp_path: Path) -> None
+```
+
+A run that stopped before any checkpoint cannot resume.
+
+<a id="persistence.test_run_ownership.test_stale_attempt_is_fenced_after_recovery_and_resume"></a>
+
+#### test\_stale\_attempt\_is\_fenced\_after\_recovery\_and\_resume
+
+```python
+def test_stale_attempt_is_fenced_after_recovery_and_resume(
+        tmp_path: Path) -> None
+```
+
+After owner loss and resume, the old attempt cannot publish.
+
+<a id="persistence.test_run_ownership.test_reconcile_leaves_a_live_owner_alone"></a>
+
+#### test\_reconcile\_leaves\_a\_live\_owner\_alone
+
+```python
+def test_reconcile_leaves_a_live_owner_alone(tmp_path: Path) -> None
+```
+
+A held attempt lock proves life; reconciliation changes nothing.
+
+<a id="persistence.test_run_ownership.test_cancel_wins_until_the_owner_completes"></a>
+
+#### test\_cancel\_wins\_until\_the\_owner\_completes
+
+```python
+def test_cancel_wins_until_the_owner_completes(tmp_path: Path) -> None
+```
+
+A committed completion stands; a later cancel request is illegal.
+
+<a id="persistence.test_run_ownership.test_cancel_request_is_acknowledged_as_cancelled"></a>
+
+#### test\_cancel\_request\_is\_acknowledged\_as\_cancelled
+
+```python
+def test_cancel_request_is_acknowledged_as_cancelled(tmp_path: Path) -> None
+```
+
+Cancelling then the owner's acknowledgment yields `cancelled`.
+
+<a id="persistence.test_run_ownership.test_active_run_cannot_be_deleted"></a>
+
+#### test\_active\_run\_cannot\_be\_deleted
+
+```python
+def test_active_run_cannot_be_deleted(tmp_path: Path) -> None
+```
+
+Deletion is refused while an attempt owns execution.
+
+<a id="persistence.test_run_ownership.test_repeated_command_key_returns_the_original_outcome"></a>
+
+#### test\_repeated\_command\_key\_returns\_the\_original\_outcome
+
+```python
+def test_repeated_command_key_returns_the_original_outcome(
+        tmp_path: Path) -> None
+```
+
+A retried request with the same key changes nothing and says so.
+
+<a id="persistence.test_run_ownership.test_repeated_start_key_replays_without_a_second_attempt"></a>
+
+#### test\_repeated\_start\_key\_replays\_without\_a\_second\_attempt
+
+```python
+def test_repeated_start_key_replays_without_a_second_attempt(
+        tmp_path: Path) -> None
+```
+
+A retried start returns the original outcome and no new lease.
+
+<a id="persistence.test_run_ownership.test_reusing_a_key_for_another_command_is_refused"></a>
+
+#### test\_reusing\_a\_key\_for\_another\_command\_is\_refused
+
+```python
+def test_reusing_a_key_for_another_command_is_refused(tmp_path: Path) -> None
+```
+
+One key names one command; reusing it for another is an error.
+
+<a id="persistence.test_run_ownership.test_a_dead_owner_process_is_detected_without_a_timeout"></a>
+
+#### test\_a\_dead\_owner\_process\_is\_detected\_without\_a\_timeout
+
+```python
+def test_a_dead_owner_process_is_detected_without_a_timeout(
+        tmp_path: Path) -> None
+```
+
+A second process owns the run; once it dies, recovery interrupts it.
 
 <a id="persistence.test_store"></a>
 

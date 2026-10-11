@@ -823,6 +823,8 @@ Return to the [source-tree orientation](../README.md) or the [developer guide](.
     * [\_\_init\_\_](#fim.persistence.run_lifecycle.RevisionConflictError.__init__)
   * [AttemptMismatchError](#fim.persistence.run_lifecycle.AttemptMismatchError)
   * [LifecycleRecordError](#fim.persistence.run_lifecycle.LifecycleRecordError)
+  * [CommandKeyReuseError](#fim.persistence.run_lifecycle.CommandKeyReuseError)
+    * [\_\_init\_\_](#fim.persistence.run_lifecycle.CommandKeyReuseError.__init__)
   * [ValidationIssue](#fim.persistence.run_lifecycle.ValidationIssue)
     * [to\_dict](#fim.persistence.run_lifecycle.ValidationIssue.to_dict)
     * [from\_dict](#fim.persistence.run_lifecycle.ValidationIssue.from_dict)
@@ -850,10 +852,12 @@ Return to the [source-tree orientation](../README.md) or the [developer guide](.
     * [to\_dict](#fim.persistence.run_lifecycle.Capabilities.to_dict)
   * [apply\_event](#fim.persistence.run_lifecycle.apply_event)
   * [capabilities](#fim.persistence.run_lifecycle.capabilities)
+  * [find\_command](#fim.persistence.run_lifecycle.find_command)
   * [format\_timestamp](#fim.persistence.run_lifecycle.format_timestamp)
   * [is\_attempt\_id](#fim.persistence.run_lifecycle.is_attempt_id)
   * [is\_object\_id](#fim.persistence.run_lifecycle.is_object_id)
   * [new\_record](#fim.persistence.run_lifecycle.new_record)
+  * [record\_progress](#fim.persistence.run_lifecycle.record_progress)
 * [fim.persistence.run\_metadata](#fim.persistence.run_metadata)
   * [\_KeepClass](#fim.persistence.run_metadata._KeepClass)
     * [\_\_repr\_\_](#fim.persistence.run_metadata._KeepClass.__repr__)
@@ -878,16 +882,43 @@ Return to the [source-tree orientation](../README.md) or the [developer guide](.
   * [ObjectDiagnostic](#fim.persistence.run_objects.ObjectDiagnostic)
   * [ObjectListing](#fim.persistence.run_objects.ObjectListing)
   * [clone\_run\_object](#fim.persistence.run_objects.clone_run_object)
+  * [configuration\_digest](#fim.persistence.run_objects.configuration_digest)
   * [create\_run\_object](#fim.persistence.run_objects.create_run_object)
   * [delete\_run\_object](#fim.persistence.run_objects.delete_run_object)
   * [list\_run\_objects](#fim.persistence.run_objects.list_run_objects)
   * [new\_object\_id](#fim.persistence.run_objects.new_object_id)
   * [object\_directory](#fim.persistence.run_objects.object_directory)
+  * [object\_locked](#fim.persistence.run_objects.object_locked)
   * [objects\_directory](#fim.persistence.run_objects.objects_directory)
   * [read\_run\_object](#fim.persistence.run_objects.read_run_object)
+  * [read\_run\_object\_unlocked](#fim.persistence.run_objects.read_run_object_unlocked)
   * [save\_run\_object](#fim.persistence.run_objects.save_run_object)
   * [validate\_configuration\_text](#fim.persistence.run_objects.validate_configuration_text)
-  * [configuration\_digest](#fim.persistence.run_objects.configuration_digest)
+  * [write\_run\_record](#fim.persistence.run_objects.write_run_record)
+* [fim.persistence.run\_ownership](#fim.persistence.run_ownership)
+  * [ConfigurationDriftError](#fim.persistence.run_ownership.ConfigurationDriftError)
+  * [OwnershipConflictError](#fim.persistence.run_ownership.OwnershipConflictError)
+  * [ResumeUnavailableError](#fim.persistence.run_ownership.ResumeUnavailableError)
+  * [CommandResult](#fim.persistence.run_ownership.CommandResult)
+  * [StartResult](#fim.persistence.run_ownership.StartResult)
+  * [ExecutionLease](#fim.persistence.run_ownership.ExecutionLease)
+    * [\_\_init\_\_](#fim.persistence.run_ownership.ExecutionLease.__init__)
+    * [\_\_enter\_\_](#fim.persistence.run_ownership.ExecutionLease.__enter__)
+    * [\_\_exit\_\_](#fim.persistence.run_ownership.ExecutionLease.__exit__)
+    * [is\_held](#fim.persistence.run_ownership.ExecutionLease.is_held)
+    * [commit\_progress](#fim.persistence.run_ownership.ExecutionLease.commit_progress)
+    * [current](#fim.persistence.run_ownership.ExecutionLease.current)
+    * [finish](#fim.persistence.run_ownership.ExecutionLease.finish)
+    * [release](#fim.persistence.run_ownership.ExecutionLease.release)
+  * [abandon\_run\_object](#fim.persistence.run_ownership.abandon_run_object)
+  * [attempt\_lock\_path](#fim.persistence.run_ownership.attempt_lock_path)
+  * [new\_attempt\_id](#fim.persistence.run_ownership.new_attempt_id)
+  * [reconcile\_run\_object](#fim.persistence.run_ownership.reconcile_run_object)
+  * [reconcile\_run\_objects](#fim.persistence.run_ownership.reconcile_run_objects)
+  * [request\_cancel](#fim.persistence.run_ownership.request_cancel)
+  * [request\_pause](#fim.persistence.run_ownership.request_pause)
+  * [resume\_run\_object](#fim.persistence.run_ownership.resume_run_object)
+  * [start\_run\_object](#fim.persistence.run_ownership.start_run_object)
 * [fim.persistence.store](#fim.persistence.store)
   * [TrajectoryRow](#fim.persistence.store.TrajectoryRow)
   * [TrajectoryStore](#fim.persistence.store.TrajectoryStore)
@@ -21428,6 +21459,31 @@ class LifecycleRecordError(LifecycleError)
 
 A stored lifecycle record is malformed or has an unknown schema.
 
+<a id="fim.persistence.run_lifecycle.CommandKeyReuseError"></a>
+
+## CommandKeyReuseError Objects
+
+```python
+class CommandKeyReuseError(LifecycleError)
+```
+
+An idempotency key was reused for a different command.
+
+**Attributes**:
+
+- `command_key` - The reused key.
+- `original` - The transition the key first produced.
+
+<a id="fim.persistence.run_lifecycle.CommandKeyReuseError.__init__"></a>
+
+#### \_\_init\_\_
+
+```python
+def __init__(command_key: str, original: TransitionRecord) -> None
+```
+
+Record the key and its original transition, and describe them.
+
 <a id="fim.persistence.run_lifecycle.ValidationIssue"></a>
 
 ## ValidationIssue Objects
@@ -21563,6 +21619,8 @@ One lifecycle transition retained in the object's history.
 - `at` - UTC timestamp of the transition.
 - `revision` - Lifecycle revision the transition produced.
 - `attempt_id` - Attempt that caused the transition, if any.
+- `command_key` - Idempotency key of the request that caused the
+  transition, if the caller supplied one.
 
 <a id="fim.persistence.run_lifecycle.TransitionRecord.to_dict"></a>
 
@@ -21784,7 +21842,8 @@ def apply_event(record: RunLifecycleRecord,
                 attempt_id: str | None = None,
                 configuration: Configuration | None = None,
                 phase: RunPhase | None = None,
-                error: ErrorInfo | None = None) -> RunLifecycleRecord
+                error: ErrorInfo | None = None,
+                command_key: str | None = None) -> RunLifecycleRecord
 ```
 
 Return the record that results from applying one event.
@@ -21801,6 +21860,9 @@ Return the record that results from applying one event.
 - `configuration` - For a save event, the newly validated configuration.
 - `phase` - Execution phase to record, if it changed.
 - `error` - For `fail`, the error to record.
+- `command_key` - Idempotency key of the request, recorded in the
+  transition so a retried request can find its original outcome
+  (see `find_command`).
 
 
 **Returns**:
@@ -21815,6 +21877,7 @@ Return the record that results from applying one event.
 - `IllegalTransitionError` - The event is not legal in the current state.
 - `AttemptMismatchError` - A worker event names an attempt that does not
   own execution, or a start/resume omits its new attempt.
+- `CommandKeyReuseError` - `command_key` already produced a transition.
 - `ValueError` - An argument required by the event is missing or wrong.
 
 <a id="fim.persistence.run_lifecycle.capabilities"></a>
@@ -21842,6 +21905,27 @@ Return the actions allowed for one Run object, with reasons.
 **Returns**:
 
   The allowed actions; every disallowed one has a reason.
+
+<a id="fim.persistence.run_lifecycle.find_command"></a>
+
+#### find\_command
+
+```python
+def find_command(record: RunLifecycleRecord,
+                 command_key: str) -> TransitionRecord | None
+```
+
+Return the transition an idempotency key produced, if any.
+
+**Arguments**:
+
+- `record` - The record whose history to search.
+- `command_key` - The idempotency key of a request.
+
+
+**Returns**:
+
+  The transition recorded with `command_key`, or `None`.
 
 <a id="fim.persistence.run_lifecycle.format_timestamp"></a>
 
@@ -21901,6 +21985,49 @@ Return the record for a newly saved object: `planned` or `draft`.
 - `at` - Creation time.
 - `kind` - Scalar or batch execution.
 - `source_object_id` - Object this one was cloned from, if any.
+
+<a id="fim.persistence.run_lifecycle.record_progress"></a>
+
+#### record\_progress
+
+```python
+def record_progress(
+        record: RunLifecycleRecord,
+        *,
+        at: datetime,
+        attempt_id: str,
+        phase: RunPhase | None = None,
+        committed_generation: int | None = None,
+        checkpoint: CheckpointReference | None = None) -> RunLifecycleRecord
+```
+
+Return the record after the owning attempt commits progress.
+
+Progress is not a transition: the state is unchanged and no history
+entry is added, but the revision advances so readers see the change.
+
+**Arguments**:
+
+- `record` - The current record; it must be in an active state.
+- `at` - Time of the commit; converted to UTC.
+- `attempt_id` - The attempt committing; it must own execution.
+- `phase` - Execution phase to record, if it changed.
+- `committed_generation` - Last durably committed generation, if it
+  advanced; it never moves backward.
+- `checkpoint` - Newly published checkpoint, if any. Its generation is
+  the committed generation unless one is given explicitly.
+
+
+**Returns**:
+
+  A new record with the progress applied and revision + 1.
+
+
+**Raises**:
+
+- `AttemptMismatchError` - `attempt_id` does not own execution, including
+  when the run is no longer executing at all.
+- `ValueError` - Progress moves backward or disagrees with the checkpoint.
 
 <a id="fim.persistence.run_metadata"></a>
 
@@ -22379,6 +22506,16 @@ ownership.
 
   The new object.
 
+<a id="fim.persistence.run_objects.configuration_digest"></a>
+
+#### configuration\_digest
+
+```python
+def configuration_digest(params: SimulationParams) -> str
+```
+
+Return the SHA-256 of the canonical effective configuration.
+
 <a id="fim.persistence.run_objects.create_run_object"></a>
 
 #### create\_run\_object
@@ -22486,6 +22623,30 @@ Return the directory of the object `object_id`.
 - `ValueError` - `object_id` is not a well-formed object ID, so it cannot
   be trusted as a path component.
 
+<a id="fim.persistence.run_objects.object_locked"></a>
+
+#### object\_locked
+
+```python
+@contextmanager
+def object_locked(object_id: str, results: Path | None) -> Iterator[None]
+```
+
+Hold the object's cross-process bookkeeping lock for the block.
+
+Every read-modify-write of `run.json` happens under this lock; it is
+held only for the bookkeeping step, never for execution.
+
+**Arguments**:
+
+- `object_id` - Object whose lock to take.
+- `results` - Results directory (default: `results_directory()`).
+
+
+**Yields**:
+
+  Nothing; the lock is released when the block exits.
+
 <a id="fim.persistence.run_objects.objects_directory"></a>
 
 #### objects\_directory
@@ -22512,6 +22673,34 @@ Read one Run object.
 
 - `RunObjectNotFoundError` - No such object exists.
 - `LifecycleRecordError` - Its record is malformed or unsupported.
+
+<a id="fim.persistence.run_objects.read_run_object_unlocked"></a>
+
+#### read\_run\_object\_unlocked
+
+```python
+def read_run_object_unlocked(object_id: str,
+                             results: Path | None) -> RunObject
+```
+
+Read one object without taking its lock.
+
+**Arguments**:
+
+- `object_id` - Object to read.
+- `results` - Results directory (default: `results_directory()`).
+
+
+**Returns**:
+
+  The object as stored. The caller holds `object_locked` or tolerates
+  a concurrent change.
+
+
+**Raises**:
+
+- `RunObjectNotFoundError` - No such object exists.
+- `LifecycleRecordError` - `run.json` or `config.yaml` is unreadable.
 
 <a id="fim.persistence.run_objects.save_run_object"></a>
 
@@ -22572,15 +22761,494 @@ it. Every failure becomes a `ValidationIssue`.
 
   The validation outcome and the labels (empty unless they parsed).
 
-<a id="fim.persistence.run_objects.configuration_digest"></a>
+<a id="fim.persistence.run_objects.write_run_record"></a>
 
-#### configuration\_digest
+#### write\_run\_record
 
 ```python
-def configuration_digest(params: SimulationParams) -> str
+def write_run_record(directory: Path, record: RunLifecycleRecord) -> None
 ```
 
-Return the SHA-256 of the canonical effective configuration.
+Write `run.json` deterministically and atomically.
+
+<a id="fim.persistence.run_ownership"></a>
+
+# fim.persistence.run\_ownership
+
+Execution ownership, fenced lifecycle commits, and idempotent commands.
+
+Starting or resuming a Run object opens an *attempt*: a fresh `attempt_id`
+recorded in `run.json` plus an exclusive attempt lock that the owning
+process holds for as long as it executes. The attempt lock is the proof of
+life; a `running` record whose attempt lock is free has lost its owner, and
+`reconcile_run_object` records that as `interrupted`.
+
+Every worker commit (progress, checkpoint, pause, completion, failure,
+cancellation) goes through an `ExecutionLease` that names its attempt and
+holds the object lock while it verifies ownership, so a stale worker cannot
+publish after a newer attempt took over or after recovery revoked it.
+
+Controller commands (start, resume, request pause or cancel, abandon) take
+an optional idempotency key. The key is stored in the transition it causes,
+atomically with the record, so a retried command returns the original
+outcome instead of failing or applying twice.
+
+The object lock is held only for a bookkeeping step, never for execution.
+The attempt lock is only ever taken without blocking, so holding the object
+lock while probing or taking it cannot deadlock.
+
+<a id="fim.persistence.run_ownership.ConfigurationDriftError"></a>
+
+## ConfigurationDriftError Objects
+
+```python
+class ConfigurationDriftError(LifecycleError)
+```
+
+The stored configuration no longer matches the recorded digest.
+
+<a id="fim.persistence.run_ownership.OwnershipConflictError"></a>
+
+## OwnershipConflictError Objects
+
+```python
+class OwnershipConflictError(LifecycleError)
+```
+
+Another live attempt already owns the object's execution.
+
+<a id="fim.persistence.run_ownership.ResumeUnavailableError"></a>
+
+## ResumeUnavailableError Objects
+
+```python
+class ResumeUnavailableError(LifecycleError)
+```
+
+The object has no committed checkpoint to resume from.
+
+<a id="fim.persistence.run_ownership.CommandResult"></a>
+
+## CommandResult Objects
+
+```python
+@dataclass(frozen=True, slots=True)
+class CommandResult()
+```
+
+The outcome of a controller command.
+
+**Arguments**:
+
+- `run_object` - The object after the command.
+- `replayed` - Whether an earlier request with the same idempotency key
+  already applied the command, so nothing changed now.
+
+<a id="fim.persistence.run_ownership.StartResult"></a>
+
+## StartResult Objects
+
+```python
+@dataclass(frozen=True, slots=True)
+class StartResult()
+```
+
+The outcome of a start or resume command.
+
+**Arguments**:
+
+- `run_object` - The object after the command.
+- `lease` - The new attempt's lease, or `None` for a replayed request,
+  whose attempt belongs to the original caller.
+- `replayed` - Whether an earlier request with the same idempotency key
+  already started this attempt.
+
+<a id="fim.persistence.run_ownership.ExecutionLease"></a>
+
+## ExecutionLease Objects
+
+```python
+class ExecutionLease()
+```
+
+Ownership of one execution attempt, used for every worker commit.
+
+The lease holds the attempt lock from construction until `release`, a
+finishing commit, or exit from a `with` block. Leaving a `with` block by
+an exception while still owning execution records the run as `failed`.
+
+**Attributes**:
+
+- `object_id` - The executing object.
+- `attempt_id` - The attempt this lease represents.
+
+<a id="fim.persistence.run_ownership.ExecutionLease.__init__"></a>
+
+#### \_\_init\_\_
+
+```python
+def __init__(object_id: str, attempt_id: str, *, lock: contextlib.ExitStack,
+             results: Path | None, clock: Clock | None) -> None
+```
+
+Wrap an already-acquired attempt lock; use `start_run_object`.
+
+<a id="fim.persistence.run_ownership.ExecutionLease.__enter__"></a>
+
+#### \_\_enter\_\_
+
+```python
+def __enter__() -> Self
+```
+
+Return the lease for use in a `with` block.
+
+<a id="fim.persistence.run_ownership.ExecutionLease.__exit__"></a>
+
+#### \_\_exit\_\_
+
+```python
+def __exit__(exc_type: type[BaseException] | None, exc: BaseException | None,
+             traceback: TracebackType | None) -> None
+```
+
+Record an escaping exception as a failure, then release.
+
+<a id="fim.persistence.run_ownership.ExecutionLease.is_held"></a>
+
+#### is\_held
+
+```python
+@property
+def is_held() -> bool
+```
+
+Return whether this lease still holds its attempt lock.
+
+<a id="fim.persistence.run_ownership.ExecutionLease.commit_progress"></a>
+
+#### commit\_progress
+
+```python
+def commit_progress(
+        *,
+        phase: RunPhase | None = None,
+        committed_generation: int | None = None,
+        checkpoint: CheckpointReference | None = None) -> RunObject
+```
+
+Durably record progress or a published checkpoint.
+
+**Arguments**:
+
+- `phase` - Execution phase, if it changed.
+- `committed_generation` - Last durably committed generation.
+- `checkpoint` - A checkpoint already published by atomic rename.
+
+
+**Returns**:
+
+  The object after the commit.
+
+
+**Raises**:
+
+- `AttemptMismatchError` - This attempt no longer owns execution.
+
+<a id="fim.persistence.run_ownership.ExecutionLease.current"></a>
+
+#### current
+
+```python
+def current() -> RunObject
+```
+
+Return the stored object, for example to observe a requested pause.
+
+**Returns**:
+
+  The object as stored now. A `pausing` or `cancelling` state asks
+  the worker to stop at its next safe point.
+
+<a id="fim.persistence.run_ownership.ExecutionLease.finish"></a>
+
+#### finish
+
+```python
+def finish(event: RunEvent,
+           *,
+           phase: RunPhase | None = None,
+           error: ErrorInfo | None = None) -> RunObject
+```
+
+Commit a finishing event and release the attempt.
+
+**Arguments**:
+
+- `event` - `commit-pause`, `complete`, `fail`, or `commit-cancel`.
+- `phase` - Execution phase to record, if it changed.
+- `error` - For `fail`, the error to record.
+
+
+**Returns**:
+
+  The object after the transition.
+
+
+**Raises**:
+
+- `ValueError` - `event` is not a finishing worker event.
+- `AttemptMismatchError` - This attempt no longer owns execution.
+- `IllegalTransitionError` - The event is not legal now.
+
+<a id="fim.persistence.run_ownership.ExecutionLease.release"></a>
+
+#### release
+
+```python
+def release() -> None
+```
+
+Release the attempt lock without a transition; idempotent.
+
+A run still recorded as active afterward has lost its owner, and
+`reconcile_run_object` will record it as `interrupted`.
+
+<a id="fim.persistence.run_ownership.abandon_run_object"></a>
+
+#### abandon\_run\_object
+
+```python
+def abandon_run_object(object_id: str,
+                       *,
+                       expected_revision: int,
+                       results: Path | None = None,
+                       clock: Clock | None = None,
+                       command_key: str | None = None) -> CommandResult
+```
+
+Abandon a planned or stopped run, making it `cancelled`.
+
+**Arguments**:
+
+- `object_id` - Object to abandon.
+- `expected_revision` - Lifecycle revision the caller read.
+- `results` - Results directory (default: `results_directory()`).
+- `clock` - Injectable current-time source.
+- `command_key` - Optional idempotency key.
+
+
+**Returns**:
+
+  The command outcome.
+
+<a id="fim.persistence.run_ownership.attempt_lock_path"></a>
+
+#### attempt\_lock\_path
+
+```python
+def attempt_lock_path(object_id: str, results: Path | None = None) -> Path
+```
+
+Return the attempt lock an executing owner holds for the object.
+
+It lives outside the object directory so deletion and rename work on
+every platform.
+
+<a id="fim.persistence.run_ownership.new_attempt_id"></a>
+
+#### new\_attempt\_id
+
+```python
+def new_attempt_id() -> str
+```
+
+Return a fresh random attempt ID.
+
+<a id="fim.persistence.run_ownership.reconcile_run_object"></a>
+
+#### reconcile\_run\_object
+
+```python
+def reconcile_run_object(object_id: str,
+                         *,
+                         results: Path | None = None,
+                         clock: Clock | None = None) -> RunObject
+```
+
+Record owner loss for an active run whose attempt lock is free.
+
+A live owner always holds the attempt lock, so a free lock proves the
+owner is gone; a timeout alone never does. Inactive runs and runs with
+a live owner are returned unchanged.
+
+**Arguments**:
+
+- `object_id` - Object to reconcile.
+- `results` - Results directory (default: `results_directory()`).
+- `clock` - Injectable current-time source.
+
+
+**Returns**:
+
+  The object after reconciliation.
+
+<a id="fim.persistence.run_ownership.reconcile_run_objects"></a>
+
+#### reconcile\_run\_objects
+
+```python
+def reconcile_run_objects(results: Path | None = None,
+                          *,
+                          clock: Clock | None = None) -> list[RunObject]
+```
+
+Reconcile every readable object; return those that changed state.
+
+**Arguments**:
+
+- `results` - Results directory (default: `results_directory()`).
+- `clock` - Injectable current-time source.
+
+
+**Returns**:
+
+  The objects newly recorded as `interrupted`.
+
+<a id="fim.persistence.run_ownership.request_cancel"></a>
+
+#### request\_cancel
+
+```python
+def request_cancel(object_id: str,
+                   *,
+                   expected_revision: int,
+                   results: Path | None = None,
+                   clock: Clock | None = None,
+                   command_key: str | None = None) -> CommandResult
+```
+
+Ask the owning worker to cancel at its next safe point.
+
+**Arguments**:
+
+- `object_id` - Object to cancel.
+- `expected_revision` - Lifecycle revision the caller read.
+- `results` - Results directory (default: `results_directory()`).
+- `clock` - Injectable current-time source.
+- `command_key` - Optional idempotency key.
+
+
+**Returns**:
+
+  The command outcome; the run is `cancelling` until the worker
+  acknowledges.
+
+<a id="fim.persistence.run_ownership.request_pause"></a>
+
+#### request\_pause
+
+```python
+def request_pause(object_id: str,
+                  *,
+                  expected_revision: int,
+                  results: Path | None = None,
+                  clock: Clock | None = None,
+                  command_key: str | None = None) -> CommandResult
+```
+
+Ask the owning worker to checkpoint and pause at its next safe point.
+
+**Arguments**:
+
+- `object_id` - Object to pause.
+- `expected_revision` - Lifecycle revision the caller read.
+- `results` - Results directory (default: `results_directory()`).
+- `clock` - Injectable current-time source.
+- `command_key` - Optional idempotency key.
+
+
+**Returns**:
+
+  The command outcome; the run is `pausing` until the worker
+  acknowledges.
+
+<a id="fim.persistence.run_ownership.resume_run_object"></a>
+
+#### resume\_run\_object
+
+```python
+def resume_run_object(object_id: str,
+                      *,
+                      expected_revision: int,
+                      results: Path | None = None,
+                      clock: Clock | None = None,
+                      attempt_factory: AttemptFactory | None = None,
+                      command_key: str | None = None) -> StartResult
+```
+
+Open a new attempt that continues from the latest checkpoint.
+
+**Arguments**:
+
+- `object_id` - A `paused`, `interrupted`, or `failed` object.
+- `expected_revision` - Lifecycle revision the caller read.
+- `results` - Results directory (default: `results_directory()`).
+- `clock` - Injectable current-time source.
+- `attempt_factory` - Injectable attempt ID source.
+- `command_key` - Optional idempotency key.
+
+
+**Returns**:
+
+  The outcome, with a lease the caller must use for every commit.
+
+
+**Raises**:
+
+- `ResumeUnavailableError` - No checkpoint was ever committed.
+- `ConfigurationDriftError` - `config.yaml` no longer matches the digest.
+- `OwnershipConflictError` - Another live attempt holds the object.
+
+<a id="fim.persistence.run_ownership.start_run_object"></a>
+
+#### start\_run\_object
+
+```python
+def start_run_object(object_id: str,
+                     *,
+                     expected_revision: int,
+                     results: Path | None = None,
+                     clock: Clock | None = None,
+                     attempt_factory: AttemptFactory | None = None,
+                     command_key: str | None = None) -> StartResult
+```
+
+Open the first attempt of a planned object.
+
+A draft cannot start. The saved configuration is validated again and
+must match the digest recorded when it was saved.
+
+**Arguments**:
+
+- `object_id` - A `planned` object.
+- `expected_revision` - Lifecycle revision the caller read.
+- `results` - Results directory (default: `results_directory()`).
+- `clock` - Injectable current-time source.
+- `attempt_factory` - Injectable attempt ID source.
+- `command_key` - Optional idempotency key.
+
+
+**Returns**:
+
+  The outcome, with a lease the caller must use for every commit.
+
+
+**Raises**:
+
+- `IllegalTransitionError` - The object is not `planned`.
+- `ConfigurationDriftError` - `config.yaml` no longer matches the digest.
+- `OwnershipConflictError` - Another live attempt holds the object.
 
 <a id="fim.persistence.store"></a>
 

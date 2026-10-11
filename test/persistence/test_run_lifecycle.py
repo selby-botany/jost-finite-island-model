@@ -21,6 +21,7 @@ from fim.persistence.run_lifecycle import (
     TRANSITIONS,
     AttemptMismatchError,
     CheckpointReference,
+    CommandKeyReuseError,
     Configuration,
     ErrorInfo,
     IllegalTransitionError,
@@ -34,9 +35,11 @@ from fim.persistence.run_lifecycle import (
     ValidationIssue,
     apply_event,
     capabilities,
+    find_command,
     format_timestamp,
     is_object_id,
     new_record,
+    record_progress,
 )
 
 AT = datetime(2026, 10, 11, 12, 0, tzinfo=UTC)
@@ -355,3 +358,78 @@ def test_object_ids_are_safe_directory_names() -> None:
 def test_schema_version_is_one() -> None:
     """The first lifecycle schema is version 1."""
     assert CURRENT_RUN_LIFECYCLE_SCHEMA_VERSION == 1
+
+
+def test_command_key_is_recorded_and_found() -> None:
+    """A keyed transition can be found again by its key."""
+    record = apply_event(
+        _record_in(RunState.PLANNED), RunEvent.ABANDON, at=AT, command_key="k-1"
+    )
+    original = find_command(record, "k-1")
+    assert original is not None
+    assert original.event is RunEvent.ABANDON
+    assert find_command(record, "k-2") is None
+    assert RunLifecycleRecord.from_dict(record.to_dict()) == record
+
+
+def test_command_key_cannot_apply_twice() -> None:
+    """A key that already produced a transition is refused."""
+    record = apply_event(
+        _record_in(RunState.RUNNING),
+        RunEvent.REQUEST_PAUSE,
+        at=AT,
+        command_key="k-1",
+    )
+    with pytest.raises(CommandKeyReuseError):
+        apply_event(record, RunEvent.REQUEST_CANCEL, at=AT, command_key="k-1")
+
+
+@pytest.mark.parametrize("key", ["", "has space", "x" * 129, "slash/no"])
+def test_malformed_command_key_is_refused(key: str) -> None:
+    """Keys are short printable tokens."""
+    with pytest.raises(ValueError, match="command_key"):
+        apply_event(
+            _record_in(RunState.PLANNED), RunEvent.ABANDON, at=AT, command_key=key
+        )
+
+
+def test_progress_advances_revision_without_a_transition() -> None:
+    """Progress bumps the revision and keeps the state and history."""
+    record = _record_in(RunState.RUNNING)
+    checkpoint = CheckpointReference("ckpt-5", "e" * 64, 5)
+    updated = record_progress(
+        record, at=AT, attempt_id=ATTEMPT_A, checkpoint=checkpoint
+    )
+    assert updated.state is RunState.RUNNING
+    assert updated.revision == record.revision + 1
+    assert updated.transition_history == record.transition_history
+    assert updated.committed_generation == 5
+    assert updated.latest_checkpoint == checkpoint
+
+
+def test_progress_from_a_stale_or_absent_attempt_is_fenced() -> None:
+    """Only the owning attempt of an active run may commit progress."""
+    with pytest.raises(AttemptMismatchError):
+        record_progress(_record_in(RunState.RUNNING), at=AT, attempt_id=ATTEMPT_B)
+    with pytest.raises(AttemptMismatchError):
+        record_progress(_record_in(RunState.PAUSED), at=AT, attempt_id=ATTEMPT_A)
+
+
+def test_progress_never_moves_backward() -> None:
+    """Committed generation is monotonic and agrees with the checkpoint."""
+    record = record_progress(
+        _record_in(RunState.RUNNING),
+        at=AT,
+        attempt_id=ATTEMPT_A,
+        committed_generation=8,
+    )
+    with pytest.raises(ValueError, match="backward"):
+        record_progress(record, at=AT, attempt_id=ATTEMPT_A, committed_generation=7)
+    with pytest.raises(ValueError, match="disagrees"):
+        record_progress(
+            record,
+            at=AT,
+            attempt_id=ATTEMPT_A,
+            committed_generation=9,
+            checkpoint=CheckpointReference("ckpt-10", "e" * 64, 10),
+        )

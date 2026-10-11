@@ -41,6 +41,7 @@ RUN_LIFECYCLE_FILE_NAME: Final = "run.json"
 
 _OBJECT_ID_PATTERN: Final = re.compile(r"^obj-[0-9a-f]{32}$")
 _ATTEMPT_ID_PATTERN: Final = re.compile(r"^att-[0-9a-f]{32}$")
+_COMMAND_KEY_PATTERN: Final = re.compile(r"^[A-Za-z0-9._:-]{1,128}$")
 
 
 class RunState(StrEnum):
@@ -206,6 +207,24 @@ class LifecycleRecordError(LifecycleError):
     """A stored lifecycle record is malformed or has an unknown schema."""
 
 
+class CommandKeyReuseError(LifecycleError):
+    """An idempotency key was reused for a different command.
+
+    Attributes:
+        command_key: The reused key.
+        original: The transition the key first produced.
+    """
+
+    def __init__(self, command_key: str, original: TransitionRecord) -> None:
+        """Record the key and its original transition, and describe them."""
+        self.command_key = command_key
+        self.original = original
+        super().__init__(
+            f"command key {command_key!r} already applied "
+            f"{original.event.value!r} at revision {original.revision}"
+        )
+
+
 @dataclass(frozen=True, slots=True)
 class ValidationIssue:
     """One reason a saved configuration cannot run.
@@ -322,6 +341,8 @@ class TransitionRecord:
         at: UTC timestamp of the transition.
         revision: Lifecycle revision the transition produced.
         attempt_id: Attempt that caused the transition, if any.
+        command_key: Idempotency key of the request that caused the
+            transition, if the caller supplied one.
     """
 
     event: RunEvent
@@ -330,12 +351,14 @@ class TransitionRecord:
     at: str
     revision: int
     attempt_id: str | None = None
+    command_key: str | None = None
 
     def to_dict(self) -> dict[str, Any]:
         """Return the JSON form of this transition."""
         return {
             "at": self.at,
             "attempt_id": self.attempt_id,
+            "command_key": self.command_key,
             "event": self.event.value,
             "from_state": self.from_state.value,
             "revision": self.revision,
@@ -354,6 +377,9 @@ class TransitionRecord:
             revision=_require_int("transition revision", mapping.get("revision"), 1),
             attempt_id=_optional_str(
                 "transition attempt_id", mapping.get("attempt_id")
+            ),
+            command_key=_optional_str(
+                "transition command_key", mapping.get("command_key")
             ),
         )
 
@@ -652,6 +678,7 @@ def apply_event(
     configuration: Configuration | None = None,
     phase: RunPhase | None = None,
     error: ErrorInfo | None = None,
+    command_key: str | None = None,
 ) -> RunLifecycleRecord:
     """Return the record that results from applying one event.
 
@@ -666,6 +693,9 @@ def apply_event(
         configuration: For a save event, the newly validated configuration.
         phase: Execution phase to record, if it changed.
         error: For `fail`, the error to record.
+        command_key: Idempotency key of the request, recorded in the
+            transition so a retried request can find its original outcome
+            (see `find_command`).
 
     Returns:
         A new record with the next state, revision + 1, and the transition
@@ -676,8 +706,14 @@ def apply_event(
         IllegalTransitionError: The event is not legal in the current state.
         AttemptMismatchError: A worker event names an attempt that does not
             own execution, or a start/resume omits its new attempt.
+        CommandKeyReuseError: `command_key` already produced a transition.
         ValueError: An argument required by the event is missing or wrong.
     """
+    if command_key is not None:
+        _check_command_key(command_key)
+        original = find_command(record, command_key)
+        if original is not None:
+            raise CommandKeyReuseError(command_key, original)
     if expected_revision is not None and expected_revision != record.revision:
         raise RevisionConflictError(expected_revision, record.revision)
     target = TRANSITIONS.get((record.state, event))
@@ -700,6 +736,7 @@ def apply_event(
         at=timestamp,
         revision=revision,
         attempt_id=attempt_id,
+        command_key=command_key,
     )
     return replace(
         record,
@@ -900,6 +937,24 @@ def _ownership_changes(
     return changes
 
 
+def find_command(
+    record: RunLifecycleRecord, command_key: str
+) -> TransitionRecord | None:
+    """Return the transition an idempotency key produced, if any.
+
+    Args:
+        record: The record whose history to search.
+        command_key: The idempotency key of a request.
+
+    Returns:
+        The transition recorded with `command_key`, or `None`.
+    """
+    for transition in record.transition_history:
+        if transition.command_key == command_key:
+            return transition
+    return None
+
+
 def format_timestamp(value: datetime) -> str:
     """Return an unambiguous UTC ISO-8601 timestamp, matching `RunManifest`.
 
@@ -955,6 +1010,73 @@ def new_record(
         updated_at=timestamp,
         source_object_id=source_object_id,
     )
+
+
+def record_progress(
+    record: RunLifecycleRecord,
+    *,
+    at: datetime,
+    attempt_id: str,
+    phase: RunPhase | None = None,
+    committed_generation: int | None = None,
+    checkpoint: CheckpointReference | None = None,
+) -> RunLifecycleRecord:
+    """Return the record after the owning attempt commits progress.
+
+    Progress is not a transition: the state is unchanged and no history
+    entry is added, but the revision advances so readers see the change.
+
+    Args:
+        record: The current record; it must be in an active state.
+        at: Time of the commit; converted to UTC.
+        attempt_id: The attempt committing; it must own execution.
+        phase: Execution phase to record, if it changed.
+        committed_generation: Last durably committed generation, if it
+            advanced; it never moves backward.
+        checkpoint: Newly published checkpoint, if any. Its generation is
+            the committed generation unless one is given explicitly.
+
+    Returns:
+        A new record with the progress applied and revision + 1.
+
+    Raises:
+        AttemptMismatchError: `attempt_id` does not own execution, including
+            when the run is no longer executing at all.
+        ValueError: Progress moves backward or disagrees with the checkpoint.
+    """
+    if attempt_id != record.active_attempt_id:
+        raise AttemptMismatchError(
+            f"attempt {attempt_id!r} does not own run {record.object_id!r}"
+        )
+    generation = committed_generation
+    if checkpoint is not None:
+        if generation is None:
+            generation = checkpoint.committed_generation
+        elif generation != checkpoint.committed_generation:
+            raise ValueError(
+                "committed_generation disagrees with the checkpoint generation"
+            )
+    previous = record.committed_generation
+    if generation is not None and previous is not None and generation < previous:
+        raise ValueError(
+            f"committed_generation moved backward: {previous} -> {generation}"
+        )
+    return replace(
+        record,
+        revision=record.revision + 1,
+        updated_at=format_timestamp(at),
+        phase=record.phase if phase is None else phase,
+        committed_generation=previous if generation is None else generation,
+        latest_checkpoint=(
+            record.latest_checkpoint if checkpoint is None else checkpoint
+        ),
+    )
+
+
+def _check_command_key(command_key: str) -> None:
+    """Reject an idempotency key that is empty, long, or unprintable."""
+    if not _COMMAND_KEY_PATTERN.fullmatch(command_key):
+        raise ValueError(f"invalid command_key: {command_key!r}")
 
 
 def _optional_int(name: str, value: object) -> int | None:

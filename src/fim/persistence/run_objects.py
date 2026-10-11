@@ -161,6 +161,14 @@ def clone_run_object(
     )
 
 
+def configuration_digest(params: SimulationParams) -> str:
+    """Return the SHA-256 of the canonical effective configuration."""
+    canonical = json.dumps(
+        params.to_dict(), sort_keys=True, separators=(",", ":"), allow_nan=False
+    ).encode("utf-8")
+    return hashlib.sha256(canonical).hexdigest()
+
+
 def create_run_object(
     config_text: str,
     *,
@@ -196,9 +204,9 @@ def create_run_object(
         source_object_id=source_object_id,
     )
     directory = object_directory(object_id, results)
-    with _object_locked(object_id, results), atomic_directory(directory) as working:
+    with object_locked(object_id, results), atomic_directory(directory) as working:
         _write_config(working, config_text)
-        _write_record(working, record)
+        write_run_record(working, record)
     logger.debug("created run object %s (%s)", object_id, record.state.value)
     return RunObject(directory, record, config_text, labels)
 
@@ -220,8 +228,8 @@ def delete_run_object(
         RevisionConflictError: The object changed since it was read.
         IllegalTransitionError: The object has an active attempt.
     """
-    with _object_locked(object_id, results):
-        current = _read_unlocked(object_id, results)
+    with object_locked(object_id, results):
+        current = read_run_object_unlocked(object_id, results)
         record = current.record
         if record.revision != expected_revision:
             raise RevisionConflictError(expected_revision, record.revision)
@@ -262,7 +270,7 @@ def list_run_objects(results: Path | None = None) -> ObjectListing:
             )
             continue
         try:
-            found.append(_read_unlocked(entry.name, results))
+            found.append(read_run_object_unlocked(entry.name, results))
         except (LifecycleError, OSError, UnicodeDecodeError) as error:
             diagnostics.append(ObjectDiagnostic(entry, str(error)))
     return ObjectListing(tuple(found), tuple(diagnostics))
@@ -285,6 +293,24 @@ def object_directory(object_id: str, results: Path | None = None) -> Path:
     return objects_directory(results) / object_id
 
 
+@contextmanager
+def object_locked(object_id: str, results: Path | None) -> Iterator[None]:
+    """Hold the object's cross-process bookkeeping lock for the block.
+
+    Every read-modify-write of `run.json` happens under this lock; it is
+    held only for the bookkeeping step, never for execution.
+
+    Args:
+        object_id: Object whose lock to take.
+        results: Results directory (default: `results_directory()`).
+
+    Yields:
+        Nothing; the lock is released when the block exits.
+    """
+    with exclusive_lock(_lock_path(object_id, results)):
+        yield
+
+
 def objects_directory(results: Path | None = None) -> Path:
     """Return the `objects/` namespace inside the results directory."""
     root = results if results is not None else results_directory()
@@ -298,8 +324,53 @@ def read_run_object(object_id: str, *, results: Path | None = None) -> RunObject
         RunObjectNotFoundError: No such object exists.
         LifecycleRecordError: Its record is malformed or unsupported.
     """
-    with _object_locked(object_id, results):
-        return _read_unlocked(object_id, results)
+    with object_locked(object_id, results):
+        return read_run_object_unlocked(object_id, results)
+
+
+def read_run_object_unlocked(object_id: str, results: Path | None) -> RunObject:
+    """Read one object without taking its lock.
+
+    Args:
+        object_id: Object to read.
+        results: Results directory (default: `results_directory()`).
+
+    Returns:
+        The object as stored. The caller holds `object_locked` or tolerates
+        a concurrent change.
+
+    Raises:
+        RunObjectNotFoundError: No such object exists.
+        LifecycleRecordError: `run.json` or `config.yaml` is unreadable.
+    """
+    directory = object_directory(object_id, results)
+    record_path = directory / RUN_LIFECYCLE_FILE_NAME
+    if not record_path.is_file():
+        raise RunObjectNotFoundError(f"no run object {object_id!r}")
+    try:
+        document: Any = json.loads(record_path.read_text(encoding="utf-8"))
+    except json.JSONDecodeError as error:
+        raise LifecycleRecordError(f"run.json is not valid JSON: {error}") from error
+    record = RunLifecycleRecord.from_dict(document)
+    if record.object_id != object_id:
+        raise LifecycleRecordError(
+            f"run.json names object {record.object_id!r}, not {object_id!r}"
+        )
+    config_path = directory / CONFIG_FILE_NAME
+    if not config_path.is_file():
+        raise LifecycleRecordError("config.yaml is missing")
+    config_text = config_path.read_text(encoding="utf-8")
+    labels = RunLabels()
+    if record.state in PRE_EXECUTION_STATES:
+        _, labels = validate_configuration_text(config_text)
+    else:
+        try:
+            document = yaml.safe_load(config_text)
+            if isinstance(document, Mapping):
+                labels = RunLabels.from_config(document)
+        except (yaml.YAMLError, ValueError):
+            labels = RunLabels()
+    return RunObject(directory, record, config_text, labels)
 
 
 def save_run_object(
@@ -329,8 +400,8 @@ def save_run_object(
     """
     configuration, labels = validate_configuration_text(config_text)
     event = RunEvent.SAVE_VALID if configuration.is_valid else RunEvent.SAVE_INVALID
-    with _object_locked(object_id, results):
-        current = _read_unlocked(object_id, results)
+    with object_locked(object_id, results):
+        current = read_run_object_unlocked(object_id, results)
         record = apply_event(
             current.record,
             event,
@@ -342,7 +413,7 @@ def save_run_object(
         # Configuration first: a crash between the two writes leaves a
         # record whose digest disagrees with the text, which start refuses.
         _write_config(current.directory, config_text)
-        _write_record(current.directory, record)
+        write_run_record(current.directory, record)
     logger.debug("saved run object %s (%s)", object_id, record.state.value)
     return RunObject(current.directory, record, config_text, labels)
 
@@ -390,12 +461,12 @@ def validate_configuration_text(
     )
 
 
-def configuration_digest(params: SimulationParams) -> str:
-    """Return the SHA-256 of the canonical effective configuration."""
-    canonical = json.dumps(
-        params.to_dict(), sort_keys=True, separators=(",", ":"), allow_nan=False
-    ).encode("utf-8")
-    return hashlib.sha256(canonical).hexdigest()
+def write_run_record(directory: Path, record: RunLifecycleRecord) -> None:
+    """Write `run.json` deterministically and atomically."""
+    text = json.dumps(record.to_dict(), indent=2, sort_keys=True, allow_nan=False)
+    write_text_atomically(
+        directory / RUN_LIFECYCLE_FILE_NAME, text + "\n", prefix=".run."
+    )
 
 
 def _kind_for(config_text: str) -> RunKind:
@@ -421,45 +492,6 @@ def _now(clock: Clock | None) -> datetime:
     return clock() if clock is not None else datetime.now(UTC)
 
 
-@contextmanager
-def _object_locked(object_id: str, results: Path | None) -> Iterator[None]:
-    """Hold the object's cross-process bookkeeping lock for the block."""
-    with exclusive_lock(_lock_path(object_id, results)):
-        yield
-
-
-def _read_unlocked(object_id: str, results: Path | None) -> RunObject:
-    """Read one object; the caller holds its lock or tolerates races."""
-    directory = object_directory(object_id, results)
-    record_path = directory / RUN_LIFECYCLE_FILE_NAME
-    if not record_path.is_file():
-        raise RunObjectNotFoundError(f"no run object {object_id!r}")
-    try:
-        document: Any = json.loads(record_path.read_text(encoding="utf-8"))
-    except json.JSONDecodeError as error:
-        raise LifecycleRecordError(f"run.json is not valid JSON: {error}") from error
-    record = RunLifecycleRecord.from_dict(document)
-    if record.object_id != object_id:
-        raise LifecycleRecordError(
-            f"run.json names object {record.object_id!r}, not {object_id!r}"
-        )
-    config_path = directory / CONFIG_FILE_NAME
-    if not config_path.is_file():
-        raise LifecycleRecordError("config.yaml is missing")
-    config_text = config_path.read_text(encoding="utf-8")
-    labels = RunLabels()
-    if record.state in PRE_EXECUTION_STATES:
-        _, labels = validate_configuration_text(config_text)
-    else:
-        try:
-            document = yaml.safe_load(config_text)
-            if isinstance(document, Mapping):
-                labels = RunLabels.from_config(document)
-        except (yaml.YAMLError, ValueError):
-            labels = RunLabels()
-    return RunObject(directory, record, config_text, labels)
-
-
 def _scientific_run_id(params: SimulationParams) -> str:
     """Return the run ID `fim run` would derive for `params`."""
     from fim.engine import deterministic_run_id  # noqa: PLC0415
@@ -470,14 +502,6 @@ def _scientific_run_id(params: SimulationParams) -> str:
 def _write_config(directory: Path, config_text: str) -> None:
     """Write the configuration document exactly as given."""
     write_text_atomically(directory / CONFIG_FILE_NAME, config_text, prefix=".config.")
-
-
-def _write_record(directory: Path, record: RunLifecycleRecord) -> None:
-    """Write `run.json` deterministically and atomically."""
-    text = json.dumps(record.to_dict(), indent=2, sort_keys=True, allow_nan=False)
-    write_text_atomically(
-        directory / RUN_LIFECYCLE_FILE_NAME, text + "\n", prefix=".run."
-    )
 
 
 def _yaml_issue(error: yaml.YAMLError) -> ValidationIssue:
