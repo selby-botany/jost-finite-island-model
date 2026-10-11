@@ -41,10 +41,11 @@ from the fresh run's own manifest, not predicted here:
   watched statistic, the two `summary.json` across-replicate means must
   agree within the sum of the two confidence-interval half-widths.
 
-Archived evidence-window floats allow numerical rounding (relative `1e-12`,
-absolute `1e-14`): FFT and BLAS reductions need not round identically across
-platforms, even for identical histories. Structure, discrete values, other
-report fields, and same-host configured/auto comparisons remain exact.
+Archived evidence-window and Shannon-entropy (`E_ST`, `MI`) floats allow
+numerical rounding (relative `1e-12`, absolute `1e-14`): FFT/BLAS reductions
+and the system logarithm need not round identically across platforms, even
+for identical histories and final frequencies. Structure, discrete values,
+other report fields, and same-host configured/auto comparisons remain exact.
 The local reference explicitly selects the backend `auto` resolved to,
 not a potentially much slower archived backend. Cross-backend bit identity
 is independently covered by the golden-parity engine and vector tests.
@@ -184,7 +185,7 @@ def _compare_identical(
     Args:
         committed: The committed example directory.
         fresh: The fresh run's output directory.
-        archive: Allow platform rounding in archived evidence-window floats.
+        archive: Allow window and entropy rounding in archived reports.
 
     Returns:
         One message per differing file; empty when all agree.
@@ -461,8 +462,12 @@ def test_identity_rule_requires_the_same_kept_replicates(tmp_path: Path) -> None
 
 
 @pytest.mark.parametrize("local_difference", [False, True])
+@pytest.mark.parametrize("rounded_field", ["window_statistics", "E_ST", "MI"])
 def test_rounded_archive_still_requires_exact_local_parity(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, local_difference: bool
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    local_difference: bool,
+    rounded_field: str,
 ) -> None:
     """Archive rounding cannot hide even one ULP of local backend drift."""
     example = "rounded-fixture"
@@ -482,10 +487,11 @@ def test_rounded_archive_still_requires_exact_local_parity(
         ),
     ):
         _write(directory / "manifest.json", {"engine_backend": backend})
-        _write(
-            directory / "report.json",
-            {"D": 0.3, "window_statistics": {"D": {"mean": mean}}},
+        report: dict[str, Any] = {"D": 0.3}
+        report[rounded_field] = (
+            {"D": {"mean": mean}} if rounded_field == "window_statistics" else mean
         )
+        _write(directory / "report.json", report)
 
     requested: list[str] = []
 

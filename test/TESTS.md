@@ -715,7 +715,7 @@ to), and `test/gui/conftest.py` (`doc/fim-logging-design.md` §12).
 
 # test.example\_support
 
-Compare archived reports without requiring platform-specific FFT rounding.
+Compare archived reports without requiring platform-specific math rounding.
 
 <a id="test.example_support.archived_report_equal"></a>
 
@@ -726,7 +726,7 @@ def archived_report_equal(expected: dict[str, Any], actual: dict[str,
                                                                  Any]) -> bool
 ```
 
-Require exact report data except rounded evidence-window floats.
+Require exact data except rounded window and Shannon-entropy floats.
 
 **Arguments**:
 
@@ -737,8 +737,10 @@ Require exact report data except rounded evidence-window floats.
 **Returns**:
 
   Whether all fields agree, allowing only numerical rounding in
-  `window_statistics` (relative `1e-12`, absolute `1e-14`).
-  Keys, types, integers, booleans, and non-window fields remain exact.
+  `window_statistics`, `E_ST`, and `MI` (relative `1e-12`, absolute
+  `1e-14`). FFT/BLAS and the system logarithm can differ in their last
+  bits across platforms. Keys, types, integers, booleans, and all other
+  report fields remain exact; local parity never uses this comparator.
 
 <a id="test.test_build_ci_parallel"></a>
 
@@ -891,7 +893,7 @@ A run is a pure function of its configuration, so the comparison is
 exact, except for the few manifest fields that record the moment or the
 machine rather than the model (`VOLATILE_MANIFEST_KEYS`, and the
 artifact digests listed in `_comparable_manifest`), and tightly bounded
-platform rounding in archived evidence-window floats.
+platform rounding in archived evidence-window and Shannon-entropy floats.
 
 <a id="test.test_doc_examples.test_dear_nolan_high_configuration_matches_its_derivation"></a>
 
@@ -1124,6 +1126,30 @@ def test_archive_accepts_only_window_rounding() -> None
 ```
 
 One-ULP and near-zero FFT rounding preserve archive agreement.
+
+<a id="test.test_example_support.test_archive_accepts_measured_linux_entropy_rounding"></a>
+
+#### test\_archive\_accepts\_measured\_linux\_entropy\_rounding
+
+```python
+def test_archive_accepts_measured_linux_entropy_rounding() -> None
+```
+
+Identical archived final frequencies round differently through libm log.
+
+<a id="test.test_example_support.test_entropy_archive_rejects_drift_and_invalid_values"></a>
+
+#### test\_entropy\_archive\_rejects\_drift\_and\_invalid\_values
+
+```python
+@pytest.mark.parametrize("field", ["E_ST", "MI"])
+@pytest.mark.parametrize("value",
+                         [0.300000000001, None, "0.3", math.inf, math.nan])
+def test_entropy_archive_rejects_drift_and_invalid_values(
+        field: str, value: Any) -> None
+```
+
+Entropy rounding does not admit numerical drift, missing data, or NaN.
 
 <a id="test.test_example_support.test_archive_rejects_changes_beyond_rounding"></a>
 
@@ -37253,10 +37279,11 @@ from the fresh run's own manifest, not predicted here:
   watched statistic, the two `summary.json` across-replicate means must
   agree within the sum of the two confidence-interval half-widths.
 
-Archived evidence-window floats allow numerical rounding (relative `1e-12`,
-absolute `1e-14`): FFT and BLAS reductions need not round identically across
-platforms, even for identical histories. Structure, discrete values, other
-report fields, and same-host configured/auto comparisons remain exact.
+Archived evidence-window and Shannon-entropy (`E_ST`, `MI`) floats allow
+numerical rounding (relative `1e-12`, absolute `1e-14`): FFT/BLAS reductions
+and the system logarithm need not round identically across platforms, even
+for identical histories and final frequencies. Structure, discrete values,
+other report fields, and same-host configured/auto comparisons remain exact.
 The local reference explicitly selects the backend `auto` resolved to,
 not a potentially much slower archived backend. Cross-backend bit identity
 is independently covered by the golden-parity engine and vector tests.
@@ -37331,9 +37358,10 @@ summaries happen to match.
 
 ```python
 @pytest.mark.parametrize("local_difference", [False, True])
+@pytest.mark.parametrize("rounded_field", ["window_statistics", "E_ST", "MI"])
 def test_rounded_archive_still_requires_exact_local_parity(
         tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
-        local_difference: bool) -> None
+        local_difference: bool, rounded_field: str) -> None
 ```
 
 Archive rounding cannot hide even one ULP of local backend drift.

@@ -14,7 +14,7 @@ A run is a pure function of its configuration, so the comparison is
 exact, except for the few manifest fields that record the moment or the
 machine rather than the model (`VOLATILE_MANIFEST_KEYS`, and the
 artifact digests listed in `_comparable_manifest`), and tightly bounded
-platform rounding in archived evidence-window floats.
+platform rounding in archived evidence-window and Shannon-entropy floats.
 """
 
 from __future__ import annotations
@@ -77,7 +77,7 @@ def _comparable_manifest(manifest: dict[str, Any]) -> dict[str, Any]:
     batch manifest's digest of each replicate's manifest (which holds that
     replicate's own time stamps), and the scatter plot's (a PNG whose
     bytes depend on the plotting library's version and fonts).
-    The report digest is excluded because its FFT-derived window floats
+    The report digest is excluded because its window and Shannon-entropy floats
     can round differently across platforms; the report is compared directly
     with tightly bounded rounding instead. Trajectory, convergence, and
     pairwise digests stay, covering every generation of every run.

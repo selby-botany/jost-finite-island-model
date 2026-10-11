@@ -1395,6 +1395,10 @@ project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+- Worked-example archive checks also permit tightly bounded platform rounding
+  in Shannon-entropy statistics `E_ST` and `MI`. Replaying identical final
+  allele frequencies on Linux reproduced system-logarithm differences of
+  about `2e-16`; local backend parity and other report fields remain exact.
 - The interpreter-shutdown watchdog no longer runs when an xdist worker
   finishes its pytest session: execnet keeps that interpreter alive until
   all workers finish. Standalone/controller shutdown remains monitored.

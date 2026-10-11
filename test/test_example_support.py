@@ -41,6 +41,23 @@ def test_archive_accepts_only_window_rounding() -> None:
     assert not archived_report_equal(expected, actual)
 
 
+def test_archive_accepts_measured_linux_entropy_rounding() -> None:
+    """Identical archived final frequencies round differently through libm log."""
+    expected = {"E_ST": 0.13580938603132967, "MI": 0.14920186041048988}
+    actual = {"E_ST": 0.13580938603132947, "MI": 0.14920186041048966}
+    assert expected != actual
+    assert archived_report_equal(expected, actual)
+
+
+@pytest.mark.parametrize("field", ["E_ST", "MI"])
+@pytest.mark.parametrize("value", [0.300000000001, None, "0.3", math.inf, math.nan])
+def test_entropy_archive_rejects_drift_and_invalid_values(
+    field: str, value: Any
+) -> None:
+    """Entropy rounding does not admit numerical drift, missing data, or NaN."""
+    assert not archived_report_equal({field: 0.3}, {field: value})
+
+
 @pytest.mark.parametrize(
     ("field", "value"),
     [

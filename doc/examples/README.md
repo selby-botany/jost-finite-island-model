@@ -25,10 +25,11 @@ fim run doc/examples/<example>/config.yaml \
 
 The `report.json` (or `summary.json`) you get matches the reference for
 the same backend and numerical environment. On every backend, FFT/BLAS
-reductions used for evidence-window diagnostics can round differently
-across platforms. Archive checks allow only tightly bounded rounding in
-`window_statistics` floats (relative `1e-12`, absolute `1e-14`); keys,
-discrete values, other report fields, and local backend parity remain exact.
+reductions used for evidence-window diagnostics and the system logarithm
+used for Shannon-entropy statistics can round differently across platforms.
+Archive checks allow only tightly bounded rounding in `window_statistics`,
+`E_ST`, and `MI` floats (relative `1e-12`, absolute `1e-14`); keys, discrete
+values, other report fields, and local backend parity remain exact.
 The local reference explicitly selects the backend that `auto` resolved to,
 so an accelerated case does not also rerun a slower archived backend.
 Separate engine tests enforce exact cross-backend parity.

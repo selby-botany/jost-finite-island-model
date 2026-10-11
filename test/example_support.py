@@ -1,13 +1,15 @@
-"""Compare archived reports without requiring platform-specific FFT rounding."""
+"""Compare archived reports without requiring platform-specific math rounding."""
 
 from __future__ import annotations
 
 import math
 from typing import Any
 
+_ROUNDED_ARCHIVE_FIELDS = frozenset({"window_statistics", "E_ST", "MI"})
+
 
 def archived_report_equal(expected: dict[str, Any], actual: dict[str, Any]) -> bool:
-    """Require exact report data except rounded evidence-window floats.
+    """Require exact data except rounded window and Shannon-entropy floats.
 
     Args:
         expected: The archived report, with caller-specific exclusions applied.
@@ -15,33 +17,30 @@ def archived_report_equal(expected: dict[str, Any], actual: dict[str, Any]) -> b
 
     Returns:
         Whether all fields agree, allowing only numerical rounding in
-        `window_statistics` (relative `1e-12`, absolute `1e-14`).
-        Keys, types, integers, booleans, and non-window fields remain exact.
+        `window_statistics`, `E_ST`, and `MI` (relative `1e-12`, absolute
+        `1e-14`). FFT/BLAS and the system logarithm can differ in their last
+        bits across platforms. Keys, types, integers, booleans, and all other
+        report fields remain exact; local parity never uses this comparator.
     """
-    return (
-        expected.keys() == actual.keys()
-        and all(
-            expected[key] == actual[key]
-            for key in expected
-            if key != "window_statistics"
-        )
-        and _window_equal(
-            expected.get("window_statistics"), actual.get("window_statistics")
-        )
+    return expected.keys() == actual.keys() and all(
+        _rounded_equal(expected[key], actual[key])
+        if key in _ROUNDED_ARCHIVE_FIELDS
+        else expected[key] == actual[key]
+        for key in expected
     )
 
 
-def _window_equal(expected: Any, actual: Any) -> bool:
-    """Compare window data recursively, permitting only finite float rounding."""
+def _rounded_equal(expected: Any, actual: Any) -> bool:
+    """Compare selected data recursively, permitting only finite float rounding."""
     if type(expected) is not type(actual):
         return False
     if isinstance(expected, dict):
         return expected.keys() == actual.keys() and all(
-            _window_equal(value, actual[key]) for key, value in expected.items()
+            _rounded_equal(value, actual[key]) for key, value in expected.items()
         )
     if isinstance(expected, list):
         return len(expected) == len(actual) and all(
-            _window_equal(left, right)
+            _rounded_equal(left, right)
             for left, right in zip(expected, actual, strict=True)
         )
     if isinstance(expected, float):
