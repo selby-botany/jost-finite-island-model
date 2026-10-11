@@ -216,6 +216,10 @@ never reached at all -- the first version of this file hung a child
 interpreter with completely empty stderr. `pytest_unconfigure` runs at
 the end of the session while the interpreter is still fully alive, which
 is the last moment ordinary Python code is guaranteed to run.
+This applies to standalone/controller processes only: an xdist worker's
+pytest session ends before its execnet interpreter does. The gateway stays
+alive until the controller finishes every worker, so arming a shutdown
+watchdog there would kill a healthy idle worker while a peer still tests.
 
 Also holds `COMPLETION_BACKSTOP_SECONDS` and its helpers (`join_or_fail`,
 `wait_or_fail`, `poll_or_fail`, `readline_or_fail`): the one bound, shared
@@ -554,7 +558,7 @@ depend on something other than the commit.
 def pytest_unconfigure(config: pytest.Config) -> None
 ```
 
-Run both shutdown diagnostics as the session ends.
+Run shutdown diagnostics only for a standalone/controller process.
 
 Ordering is deliberate and load-bearing. The readable report runs
 first, while ordinary Python still works, so the plain-language "here
@@ -569,10 +573,15 @@ unreachable on exactly the hang being diagnosed (see this module's
 own docstring -- an `atexit` version was written first and proven
 silent by `test/test_shutdown_diagnostics.py`'s end-to-end test).
 
+An xdist worker returns to execnet's gateway after this hook. Its
+interpreter is not shutting down yet; xdist owns gateway termination
+after all workers finish. A shutdown timer here instead counts the
+remaining tests on other workers and produces false timeout diagnostics.
+
 **Arguments**:
 
-- `config` - The finishing session's own configuration. Unused --
-  the hook's signature is pytest's, not this module's choice.
+- `config` - The finishing session's configuration, including xdist's
+  `workerinput` marker when this is a worker.
   
 
 **Returns**:
@@ -3193,6 +3202,43 @@ non-daemon threads *before* running `atexit` callbacks -- making the
 whole mechanism silent on precisely the hang it was built for. The unit
 tests check the pieces; only a real hung child interpreter checks the
 assumption the pieces rest on.
+
+<a id="test.test_shutdown_diagnostics.test_worker_teardown_does_not_arm_an_interpreter_watchdog"></a>
+
+#### test\_worker\_teardown\_does\_not\_arm\_an\_interpreter\_watchdog
+
+```python
+def test_worker_teardown_does_not_arm_an_interpreter_watchdog(
+        monkeypatch: pytest.MonkeyPatch) -> None
+```
+
+A finished xdist session is not a finished execnet interpreter.
+
+<a id="test.test_shutdown_diagnostics.test_controller_teardown_keeps_report_then_watchdog"></a>
+
+#### test\_controller\_teardown\_keeps\_report\_then\_watchdog
+
+```python
+def test_controller_teardown_keeps_report_then_watchdog(
+        monkeypatch: pytest.MonkeyPatch) -> None
+```
+
+The standalone/controller process still bounds real finalization.
+
+<a id="test.test_shutdown_diagnostics.test_finished_worker_can_wait_for_a_peer_beyond_shutdown_timeout"></a>
+
+#### test\_finished\_worker\_can\_wait\_for\_a\_peer\_beyond\_shutdown\_timeout
+
+```python
+def test_finished_worker_can_wait_for_a_peer_beyond_shutdown_timeout(
+        tmp_path: Path) -> None
+```
+
+Real xdist workers stay healthy after their own pytest session ends.
+
+A file signal proves one worker has unconfigured before its peer waits
+beyond the watchdog interval. The delay deliberately tests that interval;
+it is not a simulation runtime assertion or a startup timing assumption.
 
 <a id="test.test_shutdown_diagnostics.test_live_non_daemon_threads_ignores_a_quiet_interpreter"></a>
 
@@ -37211,6 +37257,9 @@ Archived evidence-window floats allow numerical rounding (relative `1e-12`,
 absolute `1e-14`): FFT and BLAS reductions need not round identically across
 platforms, even for identical histories. Structure, discrete values, other
 report fields, and same-host configured/auto comparisons remain exact.
+The local reference explicitly selects the backend `auto` resolved to,
+not a potentially much slower archived backend. Cross-backend bit identity
+is independently covered by the golden-parity engine and vector tests.
 
 Fields excluded from "identical": only `run_id`, in each report. A run ID
 is a digest of the configuration (`fim.model.params`), and the two

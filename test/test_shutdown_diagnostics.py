@@ -21,6 +21,7 @@ assumption the pieces rest on.
 
 from __future__ import annotations
 
+import os
 import subprocess
 import sys
 import textwrap
@@ -28,9 +29,122 @@ import threading
 from pathlib import Path
 
 import conftest
+import pytest
 from conftest import join_or_fail, readline_or_fail
 
 _REPOSITORY_ROOT = Path(__file__).resolve().parent.parent
+
+
+def test_worker_teardown_does_not_arm_an_interpreter_watchdog(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A finished xdist session is not a finished execnet interpreter."""
+    calls: list[str] = []
+    monkeypatch.setattr(
+        conftest, "report_live_non_daemon_threads", lambda: calls.append("report")
+    )
+    monkeypatch.setattr(
+        conftest, "arm_shutdown_watchdog", lambda: calls.append("watchdog")
+    )
+    config = pytest.Config.fromdictargs({}, [])
+    monkeypatch.setattr(config, "workerinput", {"workerid": "gw0"}, raising=False)
+    conftest.pytest_unconfigure(config)
+    assert calls == []
+
+
+def test_controller_teardown_keeps_report_then_watchdog(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The standalone/controller process still bounds real finalization."""
+    calls: list[str] = []
+    monkeypatch.setattr(
+        conftest, "report_live_non_daemon_threads", lambda: calls.append("report")
+    )
+    monkeypatch.setattr(
+        conftest, "arm_shutdown_watchdog", lambda: calls.append("watchdog")
+    )
+    conftest.pytest_unconfigure(pytest.Config.fromdictargs({}, []))
+    assert calls == ["report", "watchdog"]
+
+
+def test_finished_worker_can_wait_for_a_peer_beyond_shutdown_timeout(
+    tmp_path: Path,
+) -> None:
+    """Real xdist workers stay healthy after their own pytest session ends.
+
+    A file signal proves one worker has unconfigured before its peer waits
+    beyond the watchdog interval. The delay deliberately tests that interval;
+    it is not a simulation runtime assertion or a startup timing assumption.
+    """
+    (tmp_path / "shutdown_plugin.py").write_text(
+        textwrap.dedent(
+            """
+            from pathlib import Path
+            import conftest as diagnostics
+
+            def pytest_unconfigure(config):
+                if not hasattr(config, "workerinput"):
+                    diagnostics._SHUTDOWN_TIMEOUT_SECONDS = 120
+                diagnostics.pytest_unconfigure(config)
+                if hasattr(config, "workerinput"):
+                    Path(config.rootpath, "worker-finished").touch()
+            """
+        ),
+        encoding="utf-8",
+    )
+    (tmp_path / "test_worker_lifecycle.py").write_text(
+        textwrap.dedent(
+            """
+            import time
+            from pathlib import Path
+
+            def test_fast():
+                pass
+
+            def test_peer():
+                deadline = time.monotonic() + 120
+                while not Path("worker-finished").exists():
+                    assert time.monotonic() < deadline, "peer never unconfigured"
+                    time.sleep(0.01)
+                time.sleep(2)
+            """
+        ),
+        encoding="utf-8",
+    )
+    completed = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "pytest",
+            "-o",
+            "addopts=",
+            "-n",
+            "2",
+            "-p",
+            "shutdown_plugin",
+            "--confcutdir",
+            str(tmp_path),
+            "--rootdir",
+            str(tmp_path),
+            "test_worker_lifecycle.py",
+        ],
+        cwd=tmp_path,
+        env={
+            **os.environ,
+            "PYTHONPATH": os.pathsep.join(
+                (str(tmp_path), str(_REPOSITORY_ROOT / "test"))
+            ),
+            "PYTEST_ADDOPTS": "",
+            "FIM_TEST_SHUTDOWN_TIMEOUT": "1",
+        },
+        capture_output=True,
+        text=True,
+        timeout=120,
+        check=False,
+    )
+    assert completed.returncode == 0, completed.stdout + completed.stderr
+    assert "2 passed" in completed.stdout
+    assert "Timeout (" not in completed.stderr
 
 
 def test_live_non_daemon_threads_ignores_a_quiet_interpreter() -> None:

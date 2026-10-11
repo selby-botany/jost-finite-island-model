@@ -29,6 +29,9 @@ reductions used for evidence-window diagnostics can round differently
 across platforms. Archive checks allow only tightly bounded rounding in
 `window_statistics` floats (relative `1e-12`, absolute `1e-14`); keys,
 discrete values, other report fields, and local backend parity remain exact.
+The local reference explicitly selects the backend that `auto` resolved to,
+so an accelerated case does not also rerun a slower archived backend.
+Separate engine tests enforce exact cross-backend parity.
 Older vector archives can also use a different random stream; their
 statistical comparison is described in the vector example's README.
 Most examples finish in a few seconds to

@@ -45,6 +45,9 @@ Archived evidence-window floats allow numerical rounding (relative `1e-12`,
 absolute `1e-14`): FFT and BLAS reductions need not round identically across
 platforms, even for identical histories. Structure, discrete values, other
 report fields, and same-host configured/auto comparisons remain exact.
+The local reference explicitly selects the backend `auto` resolved to,
+not a potentially much slower archived backend. Cross-backend bit identity
+is independently covered by the golden-parity engine and vector tests.
 
 Fields excluded from "identical": only `run_id`, in each report. A run ID
 is a digest of the configuration (`fim.model.params`), and the two
@@ -470,7 +473,7 @@ def test_rounded_archive_still_requires_exact_local_parity(
         tmp_path / "reference",
     )
     for directory, mean, backend in (
-        (committed, 0.3, "generational"),
+        (committed, 0.3, "lineal"),
         (fresh, math.nextafter(0.3, math.inf), "generational"),
         (
             reference,
@@ -484,8 +487,11 @@ def test_rounded_archive_still_requires_exact_local_parity(
             {"D": 0.3, "window_statistics": {"D": {"mean": mean}}},
         )
 
+    requested: list[str] = []
+
     def run_example(example: str, tmp_path: Path, *, backend: str = "auto") -> Path:
         """Return controlled archive, auto, and configured outputs."""
+        requested.append(backend)
         return fresh if backend == "auto" else reference
 
     module = sys.modules[__name__]
@@ -496,6 +502,7 @@ def test_rounded_archive_still_requires_exact_local_parity(
             test_example_on_auto_agrees_with_its_committed_output(example, tmp_path)
     else:
         test_example_on_auto_agrees_with_its_committed_output(example, tmp_path)
+    assert requested == ["auto", "generational"]
 
 
 def test_scalar_rule_uses_three_combined_standard_errors(tmp_path: Path) -> None:
@@ -625,10 +632,13 @@ def test_example_on_auto_agrees_with_its_committed_output(
     if same_stream:
         problems = _compare_identical(committed, fresh, archive=True)
         # When the archive differs only by platform rounding, still prove
-        # that the configured backend and auto are bit-identical locally.
+        # that auto and its explicitly resolved backend agree locally.
+        # Replaying the archive's lineal backend here could turn a fast
+        # vector case into a long simulation; cross-backend parity has its
+        # own engine tests and is not needed to check dispatch.
         if not problems and _compare_identical(committed, fresh):
             reference = _run_example(
-                example, tmp_path / "configured", backend=backend_l
+                example, tmp_path / "configured", backend=backend_a
             )
             local_problems = _compare_identical(reference, fresh)
     elif batch:

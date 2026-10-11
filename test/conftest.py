@@ -22,6 +22,10 @@ never reached at all -- the first version of this file hung a child
 interpreter with completely empty stderr. `pytest_unconfigure` runs at
 the end of the session while the interpreter is still fully alive, which
 is the last moment ordinary Python code is guaranteed to run.
+This applies to standalone/controller processes only: an xdist worker's
+pytest session ends before its execnet interpreter does. The gateway stays
+alive until the controller finishes every worker, so arming a shutdown
+watchdog there would kill a healthy idle worker while a peer still tests.
 
 Also holds `COMPLETION_BACKSTOP_SECONDS` and its helpers (`join_or_fail`,
 `wait_or_fail`, `poll_or_fail`, `readline_or_fail`): the one bound, shared
@@ -401,7 +405,7 @@ def pytest_sessionfinish(session: pytest.Session, exitstatus: int) -> None:
 
 
 def pytest_unconfigure(config: pytest.Config) -> None:
-    """Run both shutdown diagnostics as the session ends.
+    """Run shutdown diagnostics only for a standalone/controller process.
 
     Ordering is deliberate and load-bearing. The readable report runs
     first, while ordinary Python still works, so the plain-language "here
@@ -416,14 +420,20 @@ def pytest_unconfigure(config: pytest.Config) -> None:
     own docstring -- an `atexit` version was written first and proven
     silent by `test/test_shutdown_diagnostics.py`'s end-to-end test).
 
+    An xdist worker returns to execnet's gateway after this hook. Its
+    interpreter is not shutting down yet; xdist owns gateway termination
+    after all workers finish. A shutdown timer here instead counts the
+    remaining tests on other workers and produces false timeout diagnostics.
+
     Args:
-        config: The finishing session's own configuration. Unused --
-            the hook's signature is pytest's, not this module's choice.
+        config: The finishing session's configuration, including xdist's
+            `workerinput` marker when this is a worker.
 
     Returns:
         None
     """
-    del config
+    if hasattr(config, "workerinput"):
+        return
     report_live_non_daemon_threads()
     arm_shutdown_watchdog()
 

@@ -1395,6 +1395,12 @@ project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+- The interpreter-shutdown watchdog no longer runs when an xdist worker
+  finishes its pytest session: execnet keeps that interpreter alive until
+  all workers finish. Standalone/controller shutdown remains monitored.
+  Rounded example archives now check local `auto` parity against its
+  resolved backend rather than rerunning a potentially much slower archived
+  backend; cross-backend identity remains covered by engine tests.
 - Worked-example archive checks tolerate only platform rounding in
   FFT/BLAS-derived evidence-window floats, on every engine backend. Other
   report fields and local configured/`auto` parity remain exact. This fixes
