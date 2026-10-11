@@ -51,6 +51,7 @@ Every test module, fixture, and test function documented here in full; `doc/fim-
   - [`test_window_statistics`](#convergence.test_window_statistics)
 - [`test/engine/`](#group-engine)
   - [`test_engine`](#engine.test_engine)
+  - [`test_execution_session`](#engine.test_execution_session)
   - [`test_frame_identity`](#engine.test_frame_identity)
   - [`test_vector_parity`](#engine.test_vector_parity)
 - [`test/gui/`](#group-gui)
@@ -9421,6 +9422,126 @@ def test_a_batch_replicate_stops_on_a_generation_thinning_would_skip() -> None
 ```
 
 The stop generation is always written, whatever the stride says.
+
+<a id="engine.test_execution_session"></a>
+
+# engine.test\_execution\_session
+
+Tests for `fim.execution`: stepwise scalar sessions match the blocking run.
+
+<a id="engine.test_execution_session.test_stepwise_session_matches_blocking_run"></a>
+
+#### test\_stepwise\_session\_matches\_blocking\_run
+
+```python
+@pytest.mark.parametrize(
+    "changes",
+    [
+        {},
+        {
+            "mutation_model": "finite_alleles",
+            "loci": [{
+                "locus_id": 1,
+                "length": 1
+            }]
+        },
+        {
+            "trajectory_retention": "thinned",
+            "trajectory_stride": 5,
+            "trajectory_thinning_start": 8,
+        },
+        {
+            "engine_backend": "generational"
+        },
+    ],
+    ids=["infinite", "finite", "thinned", "generational"],
+)
+@pytest.mark.parametrize("steps", [[], [1], [0, 3, 1, 7], [1] * 12])
+def test_stepwise_session_matches_blocking_run(changes: dict[str, Any],
+                                               steps: list[int]) -> None
+```
+
+Any split of the generations into steps reproduces the blocking run.
+
+<a id="engine.test_execution_session.test_stepwise_session_writes_identical_log_bytes"></a>
+
+#### test\_stepwise\_session\_writes\_identical\_log\_bytes
+
+```python
+def test_stepwise_session_writes_identical_log_bytes(tmp_path: Path) -> None
+```
+
+The binary trajectory log a session writes is byte-identical.
+
+<a id="engine.test_execution_session.test_advance_reports_the_stop_and_then_does_nothing"></a>
+
+#### test\_advance\_reports\_the\_stop\_and\_then\_does\_nothing
+
+```python
+def test_advance_reports_the_stop_and_then_does_nothing() -> None
+```
+
+`advance` returns `True` once stopped and runs no further generations.
+
+<a id="engine.test_execution_session.test_finalize_is_refused_before_the_run_stops"></a>
+
+#### test\_finalize\_is\_refused\_before\_the\_run\_stops
+
+```python
+def test_finalize_is_refused_before_the_run_stops() -> None
+```
+
+A running session cannot produce a result.
+
+<a id="engine.test_execution_session.test_finalize_returns_the_same_result_twice_and_blocks_advance"></a>
+
+#### test\_finalize\_returns\_the\_same\_result\_twice\_and\_blocks\_advance
+
+```python
+def test_finalize_returns_the_same_result_twice_and_blocks_advance() -> None
+```
+
+A finalized session is terminal.
+
+<a id="engine.test_execution_session.test_a_closed_session_cannot_advance"></a>
+
+#### test\_a\_closed\_session\_cannot\_advance
+
+```python
+def test_a_closed_session_cannot_advance() -> None
+```
+
+Closing abandons the session.
+
+<a id="engine.test_execution_session.test_negative_step_is_refused"></a>
+
+#### test\_negative\_step\_is\_refused
+
+```python
+def test_negative_step_is_refused() -> None
+```
+
+A step count cannot be negative.
+
+<a id="engine.test_execution_session.test_batches_are_refused"></a>
+
+#### test\_batches\_are\_refused
+
+```python
+def test_batches_are_refused() -> None
+```
+
+A session runs exactly one replicate.
+
+<a id="engine.test_execution_session.test_the_vector_backend_is_refused"></a>
+
+#### test\_the\_vector\_backend\_is\_refused
+
+```python
+def test_the_vector_backend_is_refused() -> None
+```
+
+The dense vector backend has no resumable session yet.
 
 <a id="engine.test_frame_identity"></a>
 

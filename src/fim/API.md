@@ -239,6 +239,22 @@ Return to the [source-tree orientation](../README.md) or the [developer guide](.
   * [example\_study\_id](#fim.examples.seed.example_study_id)
   * [read\_bundle](#fim.examples.seed.read_bundle)
   * [seed\_examples](#fim.examples.seed.seed_examples)
+* [fim.execution](#fim.execution)
+  * [UnsupportedSessionError](#fim.execution.UnsupportedSessionError)
+  * [ScalarSession](#fim.execution.ScalarSession)
+    * [\_\_init\_\_](#fim.execution.ScalarSession.__init__)
+    * [\_\_enter\_\_](#fim.execution.ScalarSession.__enter__)
+    * [\_\_exit\_\_](#fim.execution.ScalarSession.__exit__)
+    * [create](#fim.execution.ScalarSession.create)
+    * [generation](#fim.execution.ScalarSession.generation)
+    * [lane](#fim.execution.ScalarSession.lane)
+    * [run\_id](#fim.execution.ScalarSession.run_id)
+    * [stopped](#fim.execution.ScalarSession.stopped)
+    * [store](#fim.execution.ScalarSession.store)
+    * [advance](#fim.execution.ScalarSession.advance)
+    * [close](#fim.execution.ScalarSession.close)
+    * [finalize](#fim.execution.ScalarSession.finalize)
+  * [resolve\_scalar\_backend](#fim.execution.resolve_scalar_backend)
 * [fim.gui](#fim.gui)
 * [fim.gui.animation](#fim.gui.animation)
   * [AnimationFrame](#fim.gui.animation.AnimationFrame)
@@ -6797,6 +6813,271 @@ and confined to its own items.
 
 - `OSError` - A file cannot be read or written.
 - `ValueError` - The catalog is malformed.
+
+<a id="fim.execution"></a>
+
+# fim.execution
+
+Resumable execution sessions for one scalar replicate.
+
+A session is the stepwise form of the blocking `fim.engine.fim` call for a
+single replicate: `ScalarSession.create` builds generation zero,
+`ScalarSession.advance` runs a bounded number of generations, and
+`ScalarSession.finalize` produces the same `fim.engine.RunResult` the
+blocking call returns. Between `advance` calls the session sits at a safe
+point, where nothing is half-written, so a caller can observe a pause or
+cancel request and capture a checkpoint.
+
+The session reuses the generation-first lane machinery
+(`fim.engine.ReplicaLane`, `_build_replica_lane`, `SequentialAdvancer`,
+`_finalize_replica_lane`) that the golden-parity tests already prove is
+bit-identical to the lineal reference loop for the same seed. Only the
+scalar backends (``lineal`` and ``generational``) are supported; the dense
+vector backend gains checkpoint support separately.
+
+<a id="fim.execution.UnsupportedSessionError"></a>
+
+## UnsupportedSessionError Objects
+
+```python
+class UnsupportedSessionError(ValueError)
+```
+
+Raised when a configuration cannot run as a resumable scalar session.
+
+<a id="fim.execution.ScalarSession"></a>
+
+## ScalarSession Objects
+
+```python
+class ScalarSession()
+```
+
+One scalar replicate, advanced in bounded steps between safe points.
+
+Build one with `create`. The session owns its trajectory store: it is
+closed by `finalize` or `close`, and the session is a context manager
+that closes it on exit.
+
+<a id="fim.execution.ScalarSession.__init__"></a>
+
+#### \_\_init\_\_
+
+```python
+def __init__(lane: ReplicaLane, store: TrajectoryStore, clock: Clock,
+             engine_backend: ScalarBackend, jit: JitOption) -> None
+```
+
+Wrap an already-built lane; use `create` instead of calling this.
+
+**Arguments**:
+
+- `lane` - The replicate's working state, at a safe point.
+- `store` - Where generations are persisted.
+- `clock` - Timestamp source for the manifest.
+- `engine_backend` - The resolved scalar backend recorded in the
+  manifest.
+- `jit` - The JIT option the drift step uses and the manifest records.
+
+<a id="fim.execution.ScalarSession.__enter__"></a>
+
+#### \_\_enter\_\_
+
+```python
+def __enter__() -> ScalarSession
+```
+
+Return this session for a `with` block.
+
+<a id="fim.execution.ScalarSession.__exit__"></a>
+
+#### \_\_exit\_\_
+
+```python
+def __exit__(*_: object) -> None
+```
+
+Close the session's store, whether or not it finished.
+
+<a id="fim.execution.ScalarSession.create"></a>
+
+#### create
+
+```python
+@classmethod
+def create(cls,
+           params: SimulationParams,
+           store: TrajectoryStore | None = None,
+           *,
+           run_id: str | None = None,
+           clock: Clock | None = None) -> ScalarSession
+```
+
+Build generation zero of a single replicate and persist it.
+
+**Arguments**:
+
+- `params` - A validated single-replicate configuration.
+- `store` - Where to persist generations; in memory when omitted.
+- `run_id` - The scientific run identifier; derived from `params`
+  when omitted, exactly as `fim.engine.fim` derives it.
+- `clock` - Timestamp source; the current UTC time when omitted.
+
+
+**Returns**:
+
+  A session at the generation-zero safe point.
+
+
+**Raises**:
+
+- `UnsupportedSessionError` - If `params` asks for more than one
+  replicate or resolves to a non-scalar backend.
+
+<a id="fim.execution.ScalarSession.generation"></a>
+
+#### generation
+
+```python
+@property
+def generation() -> int
+```
+
+The last generation computed, persisted and recorded.
+
+<a id="fim.execution.ScalarSession.lane"></a>
+
+#### lane
+
+```python
+@property
+def lane() -> ReplicaLane
+```
+
+The working state; read-only use only (snapshots, diagnostics).
+
+<a id="fim.execution.ScalarSession.run_id"></a>
+
+#### run\_id
+
+```python
+@property
+def run_id() -> str
+```
+
+The scientific run identifier.
+
+<a id="fim.execution.ScalarSession.stopped"></a>
+
+#### stopped
+
+```python
+@property
+def stopped() -> bool
+```
+
+Whether the convergence monitor has stopped the run.
+
+<a id="fim.execution.ScalarSession.store"></a>
+
+#### store
+
+```python
+@property
+def store() -> TrajectoryStore
+```
+
+The trajectory store generations are persisted to.
+
+<a id="fim.execution.ScalarSession.advance"></a>
+
+#### advance
+
+```python
+def advance(generations: int | None = None) -> bool
+```
+
+Run up to `generations` more generations, stopping early on a stop.
+
+Each generation is stepped, recorded with the monitor and persisted
+when retained, exactly as the blocking loop does; on return the
+session is again at a safe point.
+
+**Arguments**:
+
+- `generations` - The most generations to run; until the monitor
+  stops when omitted.
+
+
+**Returns**:
+
+  Whether the run has stopped.
+
+
+**Raises**:
+
+- `ValueError` - If `generations` is negative or the session is
+  finalized or closed.
+
+<a id="fim.execution.ScalarSession.close"></a>
+
+#### close
+
+```python
+def close() -> None
+```
+
+Release the store's open files; idempotent.
+
+<a id="fim.execution.ScalarSession.finalize"></a>
+
+#### finalize
+
+```python
+def finalize() -> RunResult
+```
+
+Build the run's result once it has stopped, and close the store.
+
+**Returns**:
+
+  The same result the blocking `fim.engine.fim` call returns for
+  this configuration.
+
+
+**Raises**:
+
+- `ValueError` - If the run has not stopped yet or the session was
+  closed without finishing.
+
+<a id="fim.execution.resolve_scalar_backend"></a>
+
+#### resolve\_scalar\_backend
+
+```python
+def resolve_scalar_backend(params: SimulationParams) -> ScalarBackend
+```
+
+Resolve `params.engine_backend` to a scalar backend, or refuse.
+
+``auto`` is resolved exactly as `fim.engine.fim` resolves it, so a
+session never runs a configuration on a different backend than the
+blocking call would.
+
+**Arguments**:
+
+- `params` - The configuration to run.
+
+
+**Returns**:
+
+  ``"lineal"`` or ``"generational"``.
+
+
+**Raises**:
+
+- `UnsupportedSessionError` - If the configuration resolves to the dense
+  vector backend.
 
 <a id="fim.gui"></a>
 
