@@ -827,6 +827,16 @@ Return to the [source-tree orientation](../README.md) or the [developer guide](.
     * [from\_params](#fim.persistence.retention.TrajectoryRetention.from_params)
     * [keeps](#fim.persistence.retention.TrajectoryRetention.keeps)
     * [count\_through](#fim.persistence.retention.TrajectoryRetention.count_through)
+* [fim.persistence.run\_checkpoint](#fim.persistence.run_checkpoint)
+  * [CheckpointError](#fim.persistence.run_checkpoint.CheckpointError)
+  * [UnsupportedCheckpointError](#fim.persistence.run_checkpoint.UnsupportedCheckpointError)
+  * [LoadedCheckpoint](#fim.persistence.run_checkpoint.LoadedCheckpoint)
+  * [checkpoints\_directory](#fim.persistence.run_checkpoint.checkpoints_directory)
+  * [collect\_checkpoint\_garbage](#fim.persistence.run_checkpoint.collect_checkpoint_garbage)
+  * [commit\_checkpoint](#fim.persistence.run_checkpoint.commit_checkpoint)
+  * [load\_checkpoint](#fim.persistence.run_checkpoint.load_checkpoint)
+  * [new\_checkpoint\_id](#fim.persistence.run_checkpoint.new_checkpoint_id)
+  * [publish\_checkpoint](#fim.persistence.run_checkpoint.publish_checkpoint)
 * [fim.persistence.run\_lifecycle](#fim.persistence.run_lifecycle)
   * [CURRENT\_RUN\_LIFECYCLE\_SCHEMA\_VERSION](#fim.persistence.run_lifecycle.CURRENT_RUN_LIFECYCLE_SCHEMA_VERSION)
   * [RunState](#fim.persistence.run_lifecycle.RunState)
@@ -21667,6 +21677,236 @@ Return how many generations a run that ended at `final` wrote.
 **Returns**:
 
   The number of distinct kept generations among `0..final`.
+
+<a id="fim.persistence.run_checkpoint"></a>
+
+# fim.persistence.run\_checkpoint
+
+Durable, atomically published Run checkpoints.
+
+A checkpoint is an immutable directory `checkpoints/<checkpoint_id>/` inside a
+Run object holding `checkpoint.json` (versioned metadata) and `arrays.npz`
+(numeric state). It becomes authoritative only when `run.json` points at it:
+publication writes the files into a hidden staging sibling, flushes them to
+disk, renames the directory into place, and only then asks the execution
+lease to record the pointer. A crash at any step leaves either the previous
+pointer (and its checkpoint, still intact) or the new one; any directory the
+pointer does not name is garbage, never an alternate truth.
+
+The reference digest is the SHA-256 of the exact `checkpoint.json` bytes, and
+that document records the SHA-256 of `arrays.npz`, so one digest verifies
+both files. The archive is written with fixed entry metadata, so identical
+state always produces identical bytes.
+
+Design: `20261011-gpt-6-luna-phase-2-trajectory-persistence-and-run-lifecycle-
+plan.md` (`selby/restricted`), "Checkpoint contents and commit protocol".
+
+<a id="fim.persistence.run_checkpoint.CheckpointError"></a>
+
+## CheckpointError Objects
+
+```python
+class CheckpointError(LifecycleError)
+```
+
+A checkpoint is missing, corrupt, or does not match its reference.
+
+<a id="fim.persistence.run_checkpoint.UnsupportedCheckpointError"></a>
+
+## UnsupportedCheckpointError Objects
+
+```python
+class UnsupportedCheckpointError(CheckpointError)
+```
+
+A checkpoint uses a schema version this program cannot execute.
+
+<a id="fim.persistence.run_checkpoint.LoadedCheckpoint"></a>
+
+## LoadedCheckpoint Objects
+
+```python
+@dataclass(frozen=True, slots=True)
+class LoadedCheckpoint()
+```
+
+A verified checkpoint read back from disk.
+
+**Arguments**:
+
+- `reference` - The reference it was verified against.
+- `payload` - The engine's JSON metadata.
+- `arrays` - The engine's arrays, by name.
+
+<a id="fim.persistence.run_checkpoint.checkpoints_directory"></a>
+
+#### checkpoints\_directory
+
+```python
+def checkpoints_directory(object_directory: Path) -> Path
+```
+
+Return the directory holding an object's checkpoints.
+
+**Arguments**:
+
+- `object_directory` - The Run object's directory.
+
+
+**Returns**:
+
+  `object_directory / "checkpoints"`.
+
+<a id="fim.persistence.run_checkpoint.collect_checkpoint_garbage"></a>
+
+#### collect\_checkpoint\_garbage
+
+```python
+def collect_checkpoint_garbage(
+        object_directory: Path,
+        keep: CheckpointReference | None) -> tuple[str, ...]
+```
+
+Remove every checkpoint directory the lifecycle pointer does not name.
+
+Call only while owning execution (or holding the object exclusively), so
+no concurrent publication can be mid-flight.
+
+**Arguments**:
+
+- `object_directory` - The Run object's directory.
+- `keep` - The referenced checkpoint to keep, or `None` to remove all.
+
+
+**Returns**:
+
+  The names removed, sorted.
+
+<a id="fim.persistence.run_checkpoint.commit_checkpoint"></a>
+
+#### commit\_checkpoint
+
+```python
+def commit_checkpoint(lease: ExecutionLease,
+                      *,
+                      payload: Mapping[str, Any],
+                      arrays: Arrays,
+                      committed_generation: int,
+                      phase: RunPhase | None = None,
+                      checkpoint_id: str | None = None,
+                      fault: FaultHook | None = None) -> CheckpointReference
+```
+
+Publish a checkpoint and make it the object's latest, then prune.
+
+**Arguments**:
+
+- `lease` - The owning attempt's lease.
+- `payload` - Engine metadata (JSON-safe; integers above 2**53 must be
+  encoded as strings by the caller).
+- `arrays` - Engine arrays (no object arrays).
+- `committed_generation` - Last generation the checkpoint fully contains.
+- `phase` - Execution phase to record with the pointer, if it changed.
+- `checkpoint_id` - Explicit directory name (default: generated).
+- `fault` - Test hook called with `"staged"`, `"published"` and
+  `"committed"` after each step; raising simulates a crash there.
+
+
+**Returns**:
+
+  The reference now recorded in `run.json`.
+
+
+**Raises**:
+
+- `AttemptMismatchError` - The lease no longer owns execution; the newly
+  published directory is removed and the pointer is unchanged.
+
+<a id="fim.persistence.run_checkpoint.load_checkpoint"></a>
+
+#### load\_checkpoint
+
+```python
+def load_checkpoint(object_directory: Path,
+                    reference: CheckpointReference) -> LoadedCheckpoint
+```
+
+Read and verify the checkpoint a lifecycle record points at.
+
+**Arguments**:
+
+- `object_directory` - The Run object's directory.
+- `reference` - The record's `latest_checkpoint`.
+
+
+**Returns**:
+
+  The verified payload and arrays.
+
+
+**Raises**:
+
+- `CheckpointError` - Files are missing or do not match the reference.
+- `UnsupportedCheckpointError` - The schema version is not executable.
+
+<a id="fim.persistence.run_checkpoint.new_checkpoint_id"></a>
+
+#### new\_checkpoint\_id
+
+```python
+def new_checkpoint_id(committed_generation: int) -> str
+```
+
+Return a fresh checkpoint directory name that sorts by generation.
+
+**Arguments**:
+
+- `committed_generation` - The checkpoint's committed generation.
+
+
+**Returns**:
+
+  `ckpt-<generation, 12 digits>-<12 random hex digits>`.
+
+<a id="fim.persistence.run_checkpoint.publish_checkpoint"></a>
+
+#### publish\_checkpoint
+
+```python
+def publish_checkpoint(object_directory: Path,
+                       *,
+                       payload: Mapping[str, Any],
+                       arrays: Arrays,
+                       committed_generation: int,
+                       checkpoint_id: str | None = None,
+                       fault: FaultHook | None = None) -> CheckpointReference
+```
+
+Write a checkpoint durably and publish its directory by atomic rename.
+
+This does not update `run.json`; until a lease commits the returned
+reference the new directory is unreferenced garbage.
+
+**Arguments**:
+
+- `object_directory` - The Run object's directory.
+- `payload` - Engine metadata (JSON-safe).
+- `arrays` - Engine arrays (no object arrays).
+- `committed_generation` - Last generation the checkpoint fully contains.
+- `checkpoint_id` - Explicit directory name (default: generated).
+- `fault` - Test hook; see `commit_checkpoint`.
+
+
+**Returns**:
+
+  The reference to commit.
+
+
+**Raises**:
+
+- `ValueError` - The payload is not JSON-safe or an array is an object
+  array, or `committed_generation` is negative.
+- `FileExistsError` - `checkpoint_id` is already published.
 
 <a id="fim.persistence.run_lifecycle"></a>
 

@@ -140,6 +140,7 @@ Every test module, fixture, and test function documented here in full; `doc/fim-
   - [`test_read_only`](#persistence.test_read_only)
   - [`test_report`](#persistence.test_report)
   - [`test_retention`](#persistence.test_retention)
+  - [`test_run_checkpoint`](#persistence.test_run_checkpoint)
   - [`test_run_classes`](#persistence.test_run_classes)
   - [`test_run_lifecycle`](#persistence.test_run_lifecycle)
   - [`test_run_metadata`](#persistence.test_run_metadata)
@@ -31919,6 +31920,222 @@ def test_a_run_shorter_than_the_start_is_not_thinned() -> None
 ```
 
 Thinning starts at `start`; before it every generation is kept.
+
+<a id="persistence.test_run_checkpoint"></a>
+
+# persistence.test\_run\_checkpoint
+
+Tests of atomic checkpoint publication (`run_checkpoint`).
+
+Crashes are simulated by a fault hook that raises at each named step of the
+protocol. After every crash the lifecycle pointer must still name a complete,
+verifiable checkpoint (the previous one), and anything else on disk must be
+unreferenced garbage that recovery removes.
+
+<a id="persistence.test_run_checkpoint.CrashError"></a>
+
+## CrashError Objects
+
+```python
+class CrashError(Exception)
+```
+
+The simulated crash a fault hook raises.
+
+<a id="persistence.test_run_checkpoint.test_commit_publishes_and_points_at_a_verifiable_checkpoint"></a>
+
+#### test\_commit\_publishes\_and\_points\_at\_a\_verifiable\_checkpoint
+
+```python
+def test_commit_publishes_and_points_at_a_verifiable_checkpoint(
+        tmp_path: Path) -> None
+```
+
+The pointer, digest, payload, and arrays all round-trip exactly.
+
+<a id="persistence.test_run_checkpoint.test_publication_bytes_are_a_pure_function_of_the_state"></a>
+
+#### test\_publication\_bytes\_are\_a\_pure\_function\_of\_the\_state
+
+```python
+def test_publication_bytes_are_a_pure_function_of_the_state(
+        tmp_path: Path) -> None
+```
+
+Two publications of the same state produce identical files and digests.
+
+<a id="persistence.test_run_checkpoint.test_a_newer_commit_prunes_the_previous_checkpoint"></a>
+
+#### test\_a\_newer\_commit\_prunes\_the\_previous\_checkpoint
+
+```python
+def test_a_newer_commit_prunes_the_previous_checkpoint(tmp_path: Path) -> None
+```
+
+Only the referenced checkpoint remains after a successful commit.
+
+<a id="persistence.test_run_checkpoint.test_a_crash_at_any_step_leaves_a_verifiable_pointer"></a>
+
+#### test\_a\_crash\_at\_any\_step\_leaves\_a\_verifiable\_pointer
+
+```python
+@pytest.mark.parametrize("point", ["staged", "published", "committed"])
+def test_a_crash_at_any_step_leaves_a_verifiable_pointer(
+        tmp_path: Path, point: str) -> None
+```
+
+Before the pointer moves, the old checkpoint stays; after, the new one.
+
+<a id="persistence.test_run_checkpoint.test_a_crash_while_staging_leaves_no_staging_directory"></a>
+
+#### test\_a\_crash\_while\_staging\_leaves\_no\_staging\_directory
+
+```python
+def test_a_crash_while_staging_leaves_no_staging_directory(
+        tmp_path: Path) -> None
+```
+
+An exception inside publication removes its hidden staging sibling.
+
+<a id="persistence.test_run_checkpoint.test_a_killed_staging_directory_is_garbage"></a>
+
+#### test\_a\_killed\_staging\_directory\_is\_garbage
+
+```python
+def test_a_killed_staging_directory_is_garbage(tmp_path: Path) -> None
+```
+
+A staging directory left by a killed process never becomes a pointer.
+
+<a id="persistence.test_run_checkpoint.test_a_stale_attempt_cannot_publish_a_pointer"></a>
+
+#### test\_a\_stale\_attempt\_cannot\_publish\_a\_pointer
+
+```python
+def test_a_stale_attempt_cannot_publish_a_pointer(tmp_path: Path) -> None
+```
+
+A fenced worker's checkpoint is removed and the pointer is unchanged.
+
+<a id="persistence.test_run_checkpoint.test_publishing_over_an_existing_checkpoint_is_refused"></a>
+
+#### test\_publishing\_over\_an\_existing\_checkpoint\_is\_refused
+
+```python
+def test_publishing_over_an_existing_checkpoint_is_refused(
+        tmp_path: Path) -> None
+```
+
+Published checkpoint directories are immutable.
+
+<a id="persistence.test_run_checkpoint.test_unsafe_inputs_are_refused_before_anything_is_written"></a>
+
+#### test\_unsafe\_inputs\_are\_refused\_before\_anything\_is\_written
+
+```python
+@pytest.mark.parametrize(
+    ("payload", "arrays", "generation", "checkpoint_id"),
+    [
+        ({
+            "x": float("nan")
+        }, {}, 1, "a"),
+        ({
+            "x": object()
+        }, {}, 1, "a"),
+        ({}, {
+            "x": np.array([object()])
+        }, 1, "a"),
+        ({}, {}, -1, "a"),
+        ({}, {}, 1, ".hidden"),
+        ({}, {}, 1, "a/b"),
+    ],
+)
+def test_unsafe_inputs_are_refused_before_anything_is_written(
+        tmp_path: Path, payload: dict[str, Any],
+        arrays: dict[str, npt.NDArray[Any]], generation: int,
+        checkpoint_id: str) -> None
+```
+
+Non-JSON payloads, object arrays, and bad names never reach disk.
+
+<a id="persistence.test_run_checkpoint.test_a_tampered_document_fails_its_digest"></a>
+
+#### test\_a\_tampered\_document\_fails\_its\_digest
+
+```python
+def test_a_tampered_document_fails_its_digest(tmp_path: Path) -> None
+```
+
+Any change to `checkpoint.json` is detected.
+
+<a id="persistence.test_run_checkpoint.test_tampered_arrays_fail_their_digest"></a>
+
+#### test\_tampered\_arrays\_fail\_their\_digest
+
+```python
+def test_tampered_arrays_fail_their_digest(tmp_path: Path) -> None
+```
+
+Any change to `arrays.npz` is detected through the document digest.
+
+<a id="persistence.test_run_checkpoint.test_a_missing_checkpoint_is_reported"></a>
+
+#### test\_a\_missing\_checkpoint\_is\_reported
+
+```python
+def test_a_missing_checkpoint_is_reported(tmp_path: Path) -> None
+```
+
+A pointer to a directory that is gone fails explicitly.
+
+<a id="persistence.test_run_checkpoint.test_a_generation_mismatch_is_reported"></a>
+
+#### test\_a\_generation\_mismatch\_is\_reported
+
+```python
+def test_a_generation_mismatch_is_reported(tmp_path: Path) -> None
+```
+
+The reference and the document must agree on the generation.
+
+<a id="persistence.test_run_checkpoint.test_a_newer_schema_is_not_executable"></a>
+
+#### test\_a\_newer\_schema\_is\_not\_executable
+
+```python
+def test_a_newer_schema_is_not_executable(tmp_path: Path) -> None
+```
+
+A future schema version is refused, not guessed at.
+
+<a id="persistence.test_run_checkpoint.test_a_malformed_document_is_refused"></a>
+
+#### test\_a\_malformed\_document\_is\_refused
+
+```python
+@pytest.mark.parametrize(
+    "change",
+    [
+        lambda d: d.update(payload=[]),
+        lambda d: d.update(array_names="x"),
+        lambda d: d.update(array_names=["population.counts"]),
+    ],
+)
+def test_a_malformed_document_is_refused(
+        tmp_path: Path, change: Callable[[dict[str, Any]], object]) -> None
+```
+
+A document whose digest matches but whose structure is wrong fails.
+
+<a id="persistence.test_run_checkpoint.test_checkpoint_ids_sort_by_generation"></a>
+
+#### test\_checkpoint\_ids\_sort\_by\_generation
+
+```python
+def test_checkpoint_ids_sort_by_generation() -> None
+```
+
+Generated names order by generation and never collide.
 
 <a id="persistence.test_run_classes"></a>
 
