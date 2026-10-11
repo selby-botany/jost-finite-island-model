@@ -141,6 +141,7 @@ Every test module, fixture, and test function documented here in full; `doc/fim-
   - [`test_run_classes`](#persistence.test_run_classes)
   - [`test_run_lifecycle`](#persistence.test_run_lifecycle)
   - [`test_run_metadata`](#persistence.test_run_metadata)
+  - [`test_run_objects`](#persistence.test_run_objects)
   - [`test_store`](#persistence.test_store)
   - [`test_store_lifecycle`](#persistence.test_store_lifecycle)
   - [`test_tlog`](#persistence.test_tlog)
@@ -32436,6 +32437,180 @@ def test_write_run_labels_works_for_a_read_only_run(tmp_path: Path) -> None
 ```
 
 Creating a sidecar is not an edit, so a read-only run gets its labels.
+
+<a id="persistence.test_run_objects"></a>
+
+# persistence.test\_run\_objects
+
+Tests for durable draft and planned Run objects (`fim.persistence.run_objects`).
+
+Object IDs and clocks are injected, so every test is a function of its
+commit. Labels with a `class` are checked against the test fixture file.
+
+<a id="persistence.test_run_objects.test_valid_configuration_creates_a_planned_object"></a>
+
+#### test\_valid\_configuration\_creates\_a\_planned\_object
+
+```python
+def test_valid_configuration_creates_a_planned_object(tmp_path: Path) -> None
+```
+
+A valid document is `planned` with its digest and scientific run ID.
+
+<a id="persistence.test_run_objects.test_invalid_configuration_is_saved_as_a_draft"></a>
+
+#### test\_invalid\_configuration\_is\_saved\_as\_a\_draft
+
+```python
+@pytest.mark.parametrize(
+    ("text", "fragment"),
+    [
+        ("N: [unclosed\n", "YAML syntax error"),
+        ("", "empty"),
+        ("- just\n- a list\n", "mapping"),
+        (_text(N=-5), "N"),
+        (_text(**{"class": "no-such-class"}), "class"),
+    ],
+)
+def test_invalid_configuration_is_saved_as_a_draft(tmp_path: Path, text: str,
+                                                   fragment: str) -> None
+```
+
+Any invalid document persists as a draft holding its exact text.
+
+<a id="persistence.test_run_objects.test_yaml_error_is_located"></a>
+
+#### test\_yaml\_error\_is\_located
+
+```python
+def test_yaml_error_is_located(tmp_path: Path) -> None
+```
+
+A YAML syntax error records its line and column.
+
+<a id="persistence.test_run_objects.test_saves_move_between_draft_and_planned"></a>
+
+#### test\_saves\_move\_between\_draft\_and\_planned
+
+```python
+def test_saves_move_between_draft_and_planned(tmp_path: Path) -> None
+```
+
+Fixing promotes to planned; breaking demotes to draft; ID is stable.
+
+<a id="persistence.test_run_objects.test_editing_parameters_changes_the_scientific_identity"></a>
+
+#### test\_editing\_parameters\_changes\_the\_scientific\_identity
+
+```python
+def test_editing_parameters_changes_the_scientific_identity(
+        tmp_path: Path) -> None
+```
+
+A planned edit keeps the object ID and changes digest and run ID.
+
+<a id="persistence.test_run_objects.test_labels_are_not_part_of_the_scientific_identity"></a>
+
+#### test\_labels\_are\_not\_part\_of\_the\_scientific\_identity
+
+```python
+def test_labels_are_not_part_of_the_scientific_identity(
+        tmp_path: Path) -> None
+```
+
+Renaming a planned Run leaves its run ID unchanged.
+
+<a id="persistence.test_run_objects.test_kind_follows_the_saved_replicate_count"></a>
+
+#### test\_kind\_follows\_the\_saved\_replicate\_count
+
+```python
+def test_kind_follows_the_saved_replicate_count(tmp_path: Path) -> None
+```
+
+Editing a scalar into a batch updates the object's kind.
+
+<a id="persistence.test_run_objects.test_stale_save_is_rejected_and_changes_nothing"></a>
+
+#### test\_stale\_save\_is\_rejected\_and\_changes\_nothing
+
+```python
+def test_stale_save_is_rejected_and_changes_nothing(tmp_path: Path) -> None
+```
+
+A save based on an old revision fails without writing anything.
+
+<a id="persistence.test_run_objects.test_started_object_refuses_saves_and_deletion"></a>
+
+#### test\_started\_object\_refuses\_saves\_and\_deletion
+
+```python
+def test_started_object_refuses_saves_and_deletion(tmp_path: Path) -> None
+```
+
+Configuration is fixed and deletion refused once execution starts.
+
+<a id="persistence.test_run_objects.test_delete_removes_drafts_and_planned_objects"></a>
+
+#### test\_delete\_removes\_drafts\_and\_planned\_objects
+
+```python
+def test_delete_removes_drafts_and_planned_objects(tmp_path: Path) -> None
+```
+
+Deleting a draft removes it from disk and from discovery.
+
+<a id="persistence.test_run_objects.test_clone_copies_only_the_configuration"></a>
+
+#### test\_clone\_copies\_only\_the\_configuration
+
+```python
+def test_clone_copies_only_the_configuration(tmp_path: Path) -> None
+```
+
+A clone of a draft is a new draft with provenance.
+
+<a id="persistence.test_run_objects.test_listing_reports_unreadable_objects_without_inventing_them"></a>
+
+#### test\_listing\_reports\_unreadable\_objects\_without\_inventing\_them
+
+```python
+def test_listing_reports_unreadable_objects_without_inventing_them(
+        tmp_path: Path) -> None
+```
+
+Corrupt, foreign, and hidden entries never become objects.
+
+<a id="persistence.test_run_objects.test_objects_are_invisible_to_legacy_result_discovery"></a>
+
+#### test\_objects\_are\_invisible\_to\_legacy\_result\_discovery
+
+```python
+def test_objects_are_invisible_to_legacy_result_discovery(
+        tmp_path: Path) -> None
+```
+
+Legacy scans of `results/*/manifest.json` find no object.
+
+<a id="persistence.test_run_objects.test_object_ids_cannot_escape_the_namespace"></a>
+
+#### test\_object\_ids\_cannot\_escape\_the\_namespace
+
+```python
+def test_object_ids_cannot_escape_the_namespace(tmp_path: Path) -> None
+```
+
+A malformed object ID is refused before touching the file system.
+
+<a id="persistence.test_run_objects.test_lock_excludes_a_second_holder"></a>
+
+#### test\_lock\_excludes\_a\_second\_holder
+
+```python
+def test_lock_excludes_a_second_holder(tmp_path: Path) -> None
+```
+
+A held lock refuses a non-blocking second holder until released.
 
 <a id="persistence.test_store"></a>
 

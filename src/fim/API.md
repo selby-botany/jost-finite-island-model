@@ -786,6 +786,10 @@ Return to the [source-tree orientation](../README.md) or the [developer guide](.
     * [from\_dict](#fim.persistence.manifest.BatchManifest.from_dict)
   * [read\_batch\_manifest](#fim.persistence.manifest.read_batch_manifest)
   * [write\_batch\_manifest](#fim.persistence.manifest.write_batch_manifest)
+* [fim.persistence.object\_lock](#fim.persistence.object_lock)
+  * [LockUnavailableError](#fim.persistence.object_lock.LockUnavailableError)
+  * [exclusive\_lock](#fim.persistence.object_lock.exclusive_lock)
+  * [is\_lock\_held](#fim.persistence.object_lock.is_lock_held)
 * [fim.persistence.pairwise](#fim.persistence.pairwise)
   * [SLOW\_PAIRWISE\_DEMES](#fim.persistence.pairwise.SLOW_PAIRWISE_DEMES)
   * [upper\_triangle\_index](#fim.persistence.pairwise.upper_triangle_index)
@@ -866,6 +870,24 @@ Return to the [source-tree orientation](../README.md) or the [developer guide](.
   * [write\_run\_metadata](#fim.persistence.run_metadata.write_run_metadata)
   * [replace\_run\_metadata](#fim.persistence.run_metadata.replace_run_metadata)
   * [write\_run\_labels](#fim.persistence.run_metadata.write_run_labels)
+* [fim.persistence.run\_objects](#fim.persistence.run_objects)
+  * [RunObjectNotFoundError](#fim.persistence.run_objects.RunObjectNotFoundError)
+  * [RunObject](#fim.persistence.run_objects.RunObject)
+    * [object\_id](#fim.persistence.run_objects.RunObject.object_id)
+    * [capabilities](#fim.persistence.run_objects.RunObject.capabilities)
+  * [ObjectDiagnostic](#fim.persistence.run_objects.ObjectDiagnostic)
+  * [ObjectListing](#fim.persistence.run_objects.ObjectListing)
+  * [clone\_run\_object](#fim.persistence.run_objects.clone_run_object)
+  * [create\_run\_object](#fim.persistence.run_objects.create_run_object)
+  * [delete\_run\_object](#fim.persistence.run_objects.delete_run_object)
+  * [list\_run\_objects](#fim.persistence.run_objects.list_run_objects)
+  * [new\_object\_id](#fim.persistence.run_objects.new_object_id)
+  * [object\_directory](#fim.persistence.run_objects.object_directory)
+  * [objects\_directory](#fim.persistence.run_objects.objects_directory)
+  * [read\_run\_object](#fim.persistence.run_objects.read_run_object)
+  * [save\_run\_object](#fim.persistence.run_objects.save_run_object)
+  * [validate\_configuration\_text](#fim.persistence.run_objects.validate_configuration_text)
+  * [configuration\_digest](#fim.persistence.run_objects.configuration_digest)
 * [fim.persistence.store](#fim.persistence.store)
   * [TrajectoryRow](#fim.persistence.store.TrajectoryRow)
   * [TrajectoryStore](#fim.persistence.store.TrajectoryStore)
@@ -20813,6 +20835,69 @@ Write a batch manifest deterministically, replacing any prior file.
 
 The batch-level counterpart to `write_manifest`, above.
 
+<a id="fim.persistence.object_lock"></a>
+
+# fim.persistence.object\_lock
+
+Cross-process exclusive file locks for Run object bookkeeping.
+
+A lock is an ordinary file locked with the operating system's advisory
+lock (`fcntl.flock` on POSIX, `msvcrt.locking` on Windows). The operating
+system releases it when the holding process exits for any reason, including
+SIGKILL, so a crashed process never leaves an object locked.
+
+Lock files live outside the objects they protect, so an object directory can
+be renamed or deleted while its lock is held on every platform.
+
+<a id="fim.persistence.object_lock.LockUnavailableError"></a>
+
+## LockUnavailableError Objects
+
+```python
+class LockUnavailableError(Exception)
+```
+
+A non-blocking lock request found the lock already held.
+
+<a id="fim.persistence.object_lock.exclusive_lock"></a>
+
+#### exclusive\_lock
+
+```python
+@contextmanager
+def exclusive_lock(path: Path, *, blocking: bool = True) -> Iterator[None]
+```
+
+Hold an exclusive cross-process lock on `path` for the block.
+
+**Arguments**:
+
+- `path` - The lock file; created, with its parent, if missing.
+- `blocking` - Wait for the lock (default) or fail at once if held.
+
+
+**Yields**:
+
+  Nothing; the lock is held until the block exits.
+
+
+**Raises**:
+
+- `LockUnavailableError` - `blocking` is false and the lock is held.
+
+<a id="fim.persistence.object_lock.is_lock_held"></a>
+
+#### is\_lock\_held
+
+```python
+def is_lock_held(path: Path) -> bool
+```
+
+Return whether another holder currently has the lock on `path`.
+
+A missing lock file means nobody holds it. The probe takes and at once
+releases the lock, so it never blocks.
+
 <a id="fim.persistence.pairwise"></a>
 
 # fim.persistence.pairwise
@@ -22154,6 +22239,348 @@ gets its labels the same way an ordinary run does.
 
   The metadata written, or `None` when nothing was written (the
   labels were empty, or a sidecar already existed).
+
+<a id="fim.persistence.run_objects"></a>
+
+# fim.persistence.run\_objects
+
+Durable draft and planned Run objects under `results/objects/`.
+
+A Run object is a saved Run intention with a stable `object_id`. Its
+directory holds:
+
+- `config.yaml`: the configuration document exactly as the user saved it,
+  valid or not, so reopening a draft returns precisely what was entered.
+- `run.json`: the lifecycle record (`fim.persistence.run_lifecycle`), the
+  single authority for the object's state.
+
+Every save validates the document. A valid document makes the object
+`planned`, with the effective configuration's digest and scientific
+`run_id`; an invalid one makes it `draft`, with the validation issues. Saving
+is therefore always possible while the object has not started, and the
+object moves between `draft` and `planned` as the user edits.
+
+`objects/` is a namespace beside the legacy result directories, never a
+replacement for them. Legacy discovery scans `results/*/manifest.json`, so
+it never sees an object, and objects never move or rewrite a legacy result.
+
+Every change happens under a cross-process per-object lock
+(`fim.persistence.object_lock`) and an expected-revision check, so two
+editors cannot silently overwrite each other.
+
+<a id="fim.persistence.run_objects.RunObjectNotFoundError"></a>
+
+## RunObjectNotFoundError Objects
+
+```python
+class RunObjectNotFoundError(LifecycleError)
+```
+
+No Run object exists with the requested ID.
+
+<a id="fim.persistence.run_objects.RunObject"></a>
+
+## RunObject Objects
+
+```python
+@dataclass(frozen=True, slots=True)
+class RunObject()
+```
+
+One Run object as read from disk.
+
+**Arguments**:
+
+- `directory` - The object's directory.
+- `record` - Its lifecycle record.
+- `config_text` - The configuration document exactly as saved.
+- `labels` - Labels read from a parseable configuration; empty otherwise.
+
+<a id="fim.persistence.run_objects.RunObject.object_id"></a>
+
+#### object\_id
+
+```python
+@property
+def object_id() -> str
+```
+
+Return the object's stable identity.
+
+<a id="fim.persistence.run_objects.RunObject.capabilities"></a>
+
+#### capabilities
+
+```python
+def capabilities(**kwargs: bool) -> Capabilities
+```
+
+Return the lifecycle's allowed actions for this object.
+
+**Arguments**:
+
+- `**kwargs` - Passed to `fim.persistence.run_lifecycle.capabilities`.
+
+<a id="fim.persistence.run_objects.ObjectDiagnostic"></a>
+
+## ObjectDiagnostic Objects
+
+```python
+@dataclass(frozen=True, slots=True)
+class ObjectDiagnostic()
+```
+
+A directory under `objects/` that is not a readable Run object.
+
+**Arguments**:
+
+- `directory` - The unreadable directory.
+- `message` - Why it could not be read.
+
+<a id="fim.persistence.run_objects.ObjectListing"></a>
+
+## ObjectListing Objects
+
+```python
+@dataclass(frozen=True, slots=True)
+class ObjectListing()
+```
+
+Result of scanning `objects/`: readable objects and diagnostics.
+
+<a id="fim.persistence.run_objects.clone_run_object"></a>
+
+#### clone\_run\_object
+
+```python
+def clone_run_object(source_object_id: str,
+                     *,
+                     results: Path | None = None,
+                     clock: Clock | None = None,
+                     id_factory: IdFactory | None = None) -> RunObject
+```
+
+Create a new object from another object's saved configuration.
+
+The clone copies only the configuration document. It starts as `draft`
+or `planned` by that document's validity and records the source as
+provenance; it never copies execution history, checkpoints, or
+ownership.
+
+**Arguments**:
+
+- `source_object_id` - Object to copy the configuration from.
+- `results` - Results directory (default: `results_directory()`).
+- `clock` - Injectable current-time source.
+- `id_factory` - Injectable object ID source.
+
+
+**Returns**:
+
+  The new object.
+
+<a id="fim.persistence.run_objects.create_run_object"></a>
+
+#### create\_run\_object
+
+```python
+def create_run_object(config_text: str,
+                      *,
+                      results: Path | None = None,
+                      clock: Clock | None = None,
+                      id_factory: IdFactory | None = None,
+                      source_object_id: str | None = None) -> RunObject
+```
+
+Save a new Run object from a configuration document of any validity.
+
+The object directory is built in a hidden sibling and published with one
+rename, so a crash never leaves a half-created object.
+
+**Arguments**:
+
+- `config_text` - The configuration document as entered.
+- `results` - Results directory (default: `results_directory()`).
+- `clock` - Injectable current-time source.
+- `id_factory` - Injectable object ID source.
+- `source_object_id` - Object this one was cloned from, if any.
+
+
+**Returns**:
+
+  The new object, `planned` if the document is valid, else `draft`.
+
+<a id="fim.persistence.run_objects.delete_run_object"></a>
+
+#### delete\_run\_object
+
+```python
+def delete_run_object(object_id: str,
+                      *,
+                      expected_revision: int,
+                      results: Path | None = None) -> None
+```
+
+Delete a Run object that has no active execution.
+
+The directory is first renamed to a hidden name, so it disappears from
+discovery in one step even if removing its files is interrupted.
+
+**Arguments**:
+
+- `object_id` - Object to delete.
+- `expected_revision` - Lifecycle revision the caller read.
+- `results` - Results directory (default: `results_directory()`).
+
+
+**Raises**:
+
+- `RevisionConflictError` - The object changed since it was read.
+- `IllegalTransitionError` - The object has an active attempt.
+
+<a id="fim.persistence.run_objects.list_run_objects"></a>
+
+#### list\_run\_objects
+
+```python
+def list_run_objects(results: Path | None = None) -> ObjectListing
+```
+
+Return every readable Run object and a diagnostic for each other one.
+
+Hidden entries (in-progress creation, deletion, locks) are skipped. A
+directory whose name is an object ID but whose record cannot be read
+yields a diagnostic, never a fabricated object.
+
+**Arguments**:
+
+- `results` - Results directory (default: `results_directory()`).
+
+
+**Returns**:
+
+  Objects sorted by object ID, and diagnostics sorted by path.
+
+<a id="fim.persistence.run_objects.new_object_id"></a>
+
+#### new\_object\_id
+
+```python
+def new_object_id() -> str
+```
+
+Return a new random object ID.
+
+<a id="fim.persistence.run_objects.object_directory"></a>
+
+#### object\_directory
+
+```python
+def object_directory(object_id: str, results: Path | None = None) -> Path
+```
+
+Return the directory of the object `object_id`.
+
+**Raises**:
+
+- `ValueError` - `object_id` is not a well-formed object ID, so it cannot
+  be trusted as a path component.
+
+<a id="fim.persistence.run_objects.objects_directory"></a>
+
+#### objects\_directory
+
+```python
+def objects_directory(results: Path | None = None) -> Path
+```
+
+Return the `objects/` namespace inside the results directory.
+
+<a id="fim.persistence.run_objects.read_run_object"></a>
+
+#### read\_run\_object
+
+```python
+def read_run_object(object_id: str,
+                    *,
+                    results: Path | None = None) -> RunObject
+```
+
+Read one Run object.
+
+**Raises**:
+
+- `RunObjectNotFoundError` - No such object exists.
+- `LifecycleRecordError` - Its record is malformed or unsupported.
+
+<a id="fim.persistence.run_objects.save_run_object"></a>
+
+#### save\_run\_object
+
+```python
+def save_run_object(object_id: str,
+                    config_text: str,
+                    *,
+                    expected_revision: int,
+                    results: Path | None = None,
+                    clock: Clock | None = None) -> RunObject
+```
+
+Save an edited configuration; reclassify the object by its validity.
+
+**Arguments**:
+
+- `object_id` - Object to update.
+- `config_text` - The edited configuration document, valid or not.
+- `expected_revision` - Lifecycle revision the caller read.
+- `results` - Results directory (default: `results_directory()`).
+- `clock` - Injectable current-time source.
+
+
+**Returns**:
+
+  The updated object: `planned` if the document is valid, else `draft`.
+
+
+**Raises**:
+
+- `RevisionConflictError` - The object changed since it was read.
+- `IllegalTransitionError` - Execution has started, so the configuration
+  is fixed.
+
+<a id="fim.persistence.run_objects.validate_configuration_text"></a>
+
+#### validate\_configuration\_text
+
+```python
+def validate_configuration_text(
+        config_text: str) -> tuple[Configuration, RunLabels]
+```
+
+Validate one configuration document without raising for bad input.
+
+The same checks `fim run` applies: the document must be a YAML mapping,
+its labels must be valid, and `SimulationParams.from_mapping` must accept
+it. Every failure becomes a `ValidationIssue`.
+
+**Arguments**:
+
+- `config_text` - The configuration document.
+
+
+**Returns**:
+
+  The validation outcome and the labels (empty unless they parsed).
+
+<a id="fim.persistence.run_objects.configuration_digest"></a>
+
+#### configuration\_digest
+
+```python
+def configuration_digest(params: SimulationParams) -> str
+```
+
+Return the SHA-256 of the canonical effective configuration.
 
 <a id="fim.persistence.store"></a>
 
