@@ -187,16 +187,7 @@ class ScalarSession:
             UnsupportedSessionError: If `params` asks for more than one
                 replicate or resolves to a non-scalar backend.
         """
-        engine_backend = resolve_scalar_backend(params)
-        if params.n_replicates != 1:
-            raise UnsupportedSessionError(
-                "a resumable session runs exactly one replicate; "
-                f"n_replicates is {params.n_replicates}"
-            )
-        if engine_backend == "lineal" and params.jit != "off":
-            raise UnsupportedSessionError(
-                "jit is not offered on the lineal backend; set jit to 'off'"
-            )
+        engine_backend = check_session_support(params)
         run_clock = clock if clock is not None else _utc_now
         trajectory_store = store if store is not None else InMemoryTrajectoryStore()
         try:
@@ -451,6 +442,36 @@ class ScalarSession:
             raise ValueError(f"run {self.run_id} is already finalized")
         if self._closed:
             raise ValueError(f"run {self.run_id}'s session is closed")
+
+
+def check_session_support(params: SimulationParams) -> ScalarBackend:
+    """Refuse a configuration a resumable session cannot run.
+
+    Callers check this before committing a start, so an unsupported
+    configuration is reported without recording a failed attempt.
+
+    Args:
+        params: The configuration to run.
+
+    Returns:
+        The resolved scalar backend.
+
+    Raises:
+        UnsupportedSessionError: If `params` asks for more than one
+            replicate, resolves to a non-scalar backend, or asks for JIT on
+            the lineal backend.
+    """
+    engine_backend = resolve_scalar_backend(params)
+    if params.n_replicates != 1:
+        raise UnsupportedSessionError(
+            "a resumable session runs exactly one replicate; "
+            f"n_replicates is {params.n_replicates}"
+        )
+    if engine_backend == "lineal" and params.jit != "off":
+        raise UnsupportedSessionError(
+            "jit is not offered on the lineal backend; set jit to 'off'"
+        )
+    return engine_backend
 
 
 def resolve_scalar_backend(params: SimulationParams) -> ScalarBackend:

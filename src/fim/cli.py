@@ -29,6 +29,11 @@ each its own subsection below:
   (`_command_experiment`; `fim.persistence.groups`).
 - `fim sweep plan/run/resume/report` — run one configuration over a
   parameter space as a single Study (`fim.cli_sweep`; `fim.sweep`).
+- `fim object create/edit/list/status/start/resume/pause/cancel/delete` —
+  save a configuration of any validity as a Run object (`draft` until it
+  is valid, then `planned`) and execute it with durable checkpoints, so a
+  paused or interrupted run continues exactly (`fim.cli_objects`;
+  `fim.run_service`).
 - `fim stats TRAJECTORY` — recompute statistics from a run's own saved
   data, for any generation, without re-running the simulation
   (`_command_stats`; see `fim.reanalyze`'s own docstring for what
@@ -66,6 +71,7 @@ import yaml
 from matplotlib import pyplot as plt
 
 from fim import __version__, logging_setup, paths, reanalyze, update
+from fim.cli_objects import add_object_subcommands, command_object
 from fim.cli_sweep import add_sweep_subcommands, command_sweep
 from fim.config.defaults import DEFAULT_PAIRWISE_MAX_DEMES
 from fim.config.expert import ExpertSettings, expert_template
@@ -346,6 +352,7 @@ def _dispatch_command(
         "study": lambda: _command_study(arguments, parser),
         "experiment": lambda: _command_experiment(arguments, parser),
         "sweep": lambda: command_sweep(arguments, parser),
+        "object": lambda: command_object(arguments, parser, _write_run_artifacts),
         "stats": lambda: _command_stats(arguments),
         "export": lambda: _command_export(arguments),
         "update": lambda: _command_update(arguments, parser),
@@ -1584,6 +1591,7 @@ def _parser() -> argparse.ArgumentParser:
     _add_study_subcommands(subcommands)
     _add_experiment_subcommands(subcommands)
     add_sweep_subcommands(subcommands)
+    add_object_subcommands(subcommands)
 
     stats_parser = subcommands.add_parser(
         "stats",

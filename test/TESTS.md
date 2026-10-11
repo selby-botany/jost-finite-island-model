@@ -28,6 +28,7 @@ Every test module, fixture, and test function documented here in full; `doc/fim-
   - [`test_paths`](#test.test_paths)
   - [`test_reanalyze`](#test.test_reanalyze)
   - [`test_reproducibility`](#test.test_reproducibility)
+  - [`test_run_service`](#test.test_run_service)
   - [`test_shutdown_diagnostics`](#test.test_shutdown_diagnostics)
   - [`test_sweep`](#test.test_sweep)
   - [`test_sweep_run`](#test.test_sweep_run)
@@ -38,6 +39,7 @@ Every test module, fixture, and test function documented here in full; `doc/fim-
   - [`conftest`](#cli.conftest)
   - [`test_cli`](#cli.test_cli)
   - [`test_cli_labels`](#cli.test_cli_labels)
+  - [`test_cli_objects`](#cli.test_cli_objects)
   - [`test_cli_sweep`](#cli.test_cli_sweep)
   - [`test_export_command`](#cli.test_export_command)
   - [`test_trajectory_handles`](#cli.test_trajectory_handles)
@@ -3213,6 +3215,208 @@ A run that ends before the thinning start is not thinned at all.
 
 Tests for `fim.reproducibility`: comparing two runs of one configuration.
 
+<a id="test.test_run_service"></a>
+
+# test.test\_run\_service
+
+Tests for the lifecycle service (`fim.run_service`).
+
+Pause, cancel, and failure are requested from the progress observer at a
+chosen generation, so every scenario stops at the same safe point on every
+run; no test depends on timing.
+
+<a id="test.test_run_service.checkpointed"></a>
+
+#### checkpointed
+
+```python
+@pytest.fixture
+def checkpointed(monkeypatch: pytest.MonkeyPatch) -> Iterator[list[int]]
+```
+
+Record the generation of every checkpoint a session publishes.
+
+<a id="test.test_run_service._Writer"></a>
+
+## \_Writer Objects
+
+```python
+class _Writer()
+```
+
+An artifact writer that remembers what it was asked to write.
+
+<a id="test.test_run_service._Writer.__init__"></a>
+
+#### \_\_init\_\_
+
+```python
+def __init__() -> None
+```
+
+Start with nothing written.
+
+<a id="test.test_run_service._Writer.__call__"></a>
+
+#### \_\_call\_\_
+
+```python
+def __call__(result: RunResult, directory: Path) -> None
+```
+
+Remember `result` and write the standard artifacts.
+
+<a id="test.test_run_service.test_a_planned_run_executes_to_completion"></a>
+
+#### test\_a\_planned\_run\_executes\_to\_completion
+
+```python
+def test_a_planned_run_executes_to_completion(tmp_path: Path,
+                                              checkpointed: list[int]) -> None
+```
+
+Start, checkpoint on cadence, finalize, and record completion.
+
+<a id="test.test_run_service.test_pause_then_resume_finishes_as_the_uninterrupted_run"></a>
+
+#### test\_pause\_then\_resume\_finishes\_as\_the\_uninterrupted\_run
+
+```python
+def test_pause_then_resume_finishes_as_the_uninterrupted_run(
+        tmp_path: Path, checkpointed: list[int]) -> None
+```
+
+Pause is acknowledged after a checkpoint; resume continues exactly.
+
+<a id="test.test_run_service.test_a_pause_requested_as_the_run_stops_completes_it"></a>
+
+#### test\_a\_pause\_requested\_as\_the\_run\_stops\_completes\_it
+
+```python
+def test_a_pause_requested_as_the_run_stops_completes_it(
+        tmp_path: Path, checkpointed: list[int]) -> None
+```
+
+A run that has stopped completes; no generation is added for a pause.
+
+<a id="test.test_run_service.test_cancel_keeps_the_committed_partial_trajectory"></a>
+
+#### test\_cancel\_keeps\_the\_committed\_partial\_trajectory
+
+```python
+def test_cancel_keeps_the_committed_partial_trajectory(tmp_path: Path) -> None
+```
+
+Cancel stops at a safe point and leaves the frames written so far.
+
+<a id="test.test_run_service.test_a_draft_is_refused_with_its_validation_issues"></a>
+
+#### test\_a\_draft\_is\_refused\_with\_its\_validation\_issues
+
+```python
+def test_a_draft_is_refused_with_its_validation_issues(tmp_path: Path) -> None
+```
+
+A draft never opens an attempt and reports why it cannot start.
+
+<a id="test.test_run_service.test_an_unsupported_configuration_is_refused_before_starting"></a>
+
+#### test\_an\_unsupported\_configuration\_is\_refused\_before\_starting
+
+```python
+def test_an_unsupported_configuration_is_refused_before_starting(
+        tmp_path: Path) -> None
+```
+
+A batch configuration is reported without recording a failure.
+
+<a id="test.test_run_service.test_a_completed_run_cannot_execute_again"></a>
+
+#### test\_a\_completed\_run\_cannot\_execute\_again
+
+```python
+def test_a_completed_run_cannot_execute_again(tmp_path: Path) -> None
+```
+
+Completion is terminal.
+
+<a id="test.test_run_service.test_a_lost_owner_is_reconciled_and_resumed_exactly"></a>
+
+#### test\_a\_lost\_owner\_is\_reconciled\_and\_resumed\_exactly
+
+```python
+def test_a_lost_owner_is_reconciled_and_resumed_exactly(
+        tmp_path: Path) -> None
+```
+
+An attempt that dies without recording anything resumes from its checkpoint.
+
+<a id="test.test_run_service.test_a_failure_is_recorded_and_resumable"></a>
+
+#### test\_a\_failure\_is\_recorded\_and\_resumable
+
+```python
+def test_a_failure_is_recorded_and_resumable(tmp_path: Path) -> None
+```
+
+An engine error records `failed`; resuming finishes the same run.
+
+<a id="test.test_run_service.test_elapsed_time_triggers_checkpoints"></a>
+
+#### test\_elapsed\_time\_triggers\_checkpoints
+
+```python
+def test_elapsed_time_triggers_checkpoints(tmp_path: Path,
+                                           checkpointed: list[int]) -> None
+```
+
+Every safe point is a checkpoint when the time interval has passed.
+
+<a id="test.test_run_service.test_cancel_abandons_a_run_without_a_worker"></a>
+
+#### test\_cancel\_abandons\_a\_run\_without\_a\_worker
+
+```python
+def test_cancel_abandons_a_run_without_a_worker(tmp_path: Path) -> None
+```
+
+A planned run has no worker to ask, so it is cancelled at once.
+
+<a id="test.test_run_service.test_cancel_asks_an_executing_worker"></a>
+
+#### test\_cancel\_asks\_an\_executing\_worker
+
+```python
+def test_cancel_asks_an_executing_worker(tmp_path: Path) -> None
+```
+
+A running run is asked to stop and is `cancelling` until it does.
+
+<a id="test.test_run_service.test_a_cadence_that_never_progresses_is_rejected"></a>
+
+#### test\_a\_cadence\_that\_never\_progresses\_is\_rejected
+
+```python
+@pytest.mark.parametrize(
+    "changes",
+    [
+        {
+            "generations": 0
+        },
+        {
+            "control_generations": 0
+        },
+        {
+            "seconds": 0.0
+        },
+    ],
+)
+def test_a_cadence_that_never_progresses_is_rejected(
+        changes: dict[str, Any]) -> None
+```
+
+Zero or negative intervals are refused.
+
 <a id="test.test_shutdown_diagnostics"></a>
 
 # test.test\_shutdown\_diagnostics
@@ -5118,6 +5322,16 @@ def test_cli_copies_a_read_only_study_into_an_editable_one(
 ```
 
 Copying stays allowed from the terminal too.
+
+<a id="cli.test_cli_objects"></a>
+
+# cli.test\_cli\_objects
+
+Tests for `fim object` (`fim.cli_objects`).
+
+Each test drives the real `cli.main` against its own results directory.
+Pause is requested from the progress observer at a fixed generation, so no
+test depends on timing.
 
 <a id="cli.test_cli_sweep"></a>
 

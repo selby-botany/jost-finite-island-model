@@ -1,0 +1,305 @@
+"""`fim object`: save, inspect, and control persisted Run objects.
+
+A Run object (`fim.persistence.run_objects`) holds a saved configuration of
+any validity and its lifecycle: `draft` while the configuration is invalid
+or incomplete, `planned` once it is valid, then executing, paused, or
+finished. Every command here calls `fim.run_service` or
+`fim.persistence.run_ownership`; none applies lifecycle rules itself.
+
+`start` and `resume` execute in the foreground. From another terminal,
+`pause` asks the running command to publish a checkpoint and stop, and
+`cancel` asks it to stop and keep its partial trajectory. A command that is
+killed leaves the object `running` until any later command notices that its
+owner is gone and records it as `interrupted`; `resume` then continues from
+the latest checkpoint.
+"""
+
+from __future__ import annotations
+
+import argparse
+import json
+import sys
+from collections.abc import Callable
+from pathlib import Path
+from typing import Any
+
+from fim.engine import RunResult
+from fim.persistence.run_lifecycle import (
+    RESUMABLE_STATES,
+    LifecycleError,
+    RunLifecycleRecord,
+    RunState,
+)
+from fim.persistence.run_objects import (
+    RunObject,
+    create_run_object,
+    delete_run_object,
+    list_run_objects,
+    save_run_object,
+)
+from fim.persistence.run_ownership import (
+    reconcile_run_object,
+    reconcile_run_objects,
+    request_pause,
+)
+from fim.run_service import (
+    DraftRunError,
+    cancel_run_object,
+    execute_run_object,
+)
+
+ArtifactWriter = Callable[[RunResult, Path], object]
+
+
+def add_object_subcommands(subcommands: argparse._SubParsersAction[Any]) -> None:
+    """Wire `fim object create/edit/list/status/start/resume/pause/cancel/delete`."""
+    object_parser = subcommands.add_parser(
+        "object", help="save, inspect, and control resumable run objects"
+    )
+    commands = object_parser.add_subparsers(dest="object_command", required=True)
+    create_parser = commands.add_parser(
+        "create", help="save a configuration as a run object (draft if invalid)"
+    )
+    create_parser.add_argument("config", metavar="CONFIG", help="a configuration file")
+    edit_parser = commands.add_parser(
+        "edit", help="replace the configuration of a draft or planned object"
+    )
+    edit_parser.add_argument("object_id", metavar="OBJECT_ID")
+    edit_parser.add_argument("config", metavar="CONFIG", help="a configuration file")
+    commands.add_parser("list", help="list every run object and its state")
+    status_parser = commands.add_parser("status", help="show one object's lifecycle")
+    status_parser.add_argument("object_id", metavar="OBJECT_ID")
+    status_parser.add_argument(
+        "--json", action="store_true", help="print the full lifecycle record"
+    )
+    for name, text in (
+        ("start", "execute a planned object in the foreground"),
+        ("resume", "continue a paused, interrupted, or failed object"),
+    ):
+        execute_parser = commands.add_parser(name, help=text)
+        execute_parser.add_argument("object_id", metavar="OBJECT_ID")
+        execute_parser.add_argument(
+            "--quiet", action="store_true", help="print only errors"
+        )
+    for name, text in (
+        ("pause", "ask a running object to checkpoint and pause"),
+        ("cancel", "stop an object for good, keeping its partial data"),
+        ("delete", "delete an object that is not executing"),
+    ):
+        control_parser = commands.add_parser(name, help=text)
+        control_parser.add_argument("object_id", metavar="OBJECT_ID")
+
+
+def command_object(
+    arguments: argparse.Namespace,
+    parser: argparse.ArgumentParser,
+    write_artifacts: ArtifactWriter,
+) -> int:
+    """Dispatch one `fim object` invocation.
+
+    Args:
+        arguments: The parsed command line.
+        parser: The top-level parser, for its usage error.
+        write_artifacts: Writes a completed run's artifacts.
+
+    Returns:
+        0 on success; 2 when the lifecycle refuses the request; 130 when
+        execution was interrupted from the keyboard.
+    """
+    handlers: dict[str, Callable[[], int]] = {
+        "create": lambda: _create(Path(arguments.config)),
+        "edit": lambda: _edit(arguments.object_id, Path(arguments.config)),
+        "list": _list,
+        "status": lambda: _status(arguments.object_id, as_json=arguments.json),
+        "start": lambda: _execute(
+            arguments.object_id, write_artifacts, quiet=arguments.quiet, resume=False
+        ),
+        "resume": lambda: _execute(
+            arguments.object_id, write_artifacts, quiet=arguments.quiet, resume=True
+        ),
+        "pause": lambda: _pause(arguments.object_id),
+        "cancel": lambda: _cancel(arguments.object_id),
+        "delete": lambda: _delete(arguments.object_id),
+    }
+    handler = handlers.get(arguments.object_command)
+    if handler is None:
+        parser.error("an object subcommand is required")
+    try:
+        return handler()
+    except DraftRunError as error:
+        print(
+            f"fim: error: {error.object_id} is a draft and cannot start:",
+            file=sys.stderr,
+        )
+        _print_issues(error.issues, stream=sys.stderr)
+        return 2
+    except LifecycleError as error:
+        print(f"fim: error: {error}", file=sys.stderr)
+        return 2
+
+
+def _cancel(object_id: str) -> int:
+    """Cancel an object, or ask its running command to stop."""
+    current = reconcile_run_object(object_id)
+    outcome = cancel_run_object(object_id, expected_revision=current.record.revision)
+    state = outcome.run_object.record.state
+    if state is RunState.CANCELLING:
+        print(f"Cancel requested for {object_id}; it stops at its next safe point")
+    else:
+        print(f"Cancelled {object_id}")
+    return 0
+
+
+def _create(config: Path) -> int:
+    """Save a configuration file as a new object, whatever its validity."""
+    created = create_run_object(config.read_text(encoding="utf-8"))
+    _print_saved("Created", created)
+    return 0
+
+
+def _delete(object_id: str) -> int:
+    """Delete an object that is not executing."""
+    current = reconcile_run_object(object_id)
+    delete_run_object(object_id, expected_revision=current.record.revision)
+    print(f"Deleted {object_id}")
+    return 0
+
+
+def _edit(object_id: str, config: Path) -> int:
+    """Replace the saved configuration of a draft or planned object."""
+    current = reconcile_run_object(object_id)
+    saved = save_run_object(
+        object_id,
+        config.read_text(encoding="utf-8"),
+        expected_revision=current.record.revision,
+    )
+    _print_saved("Saved", saved)
+    return 0
+
+
+def _execute(
+    object_id: str, write_artifacts: ArtifactWriter, *, quiet: bool, resume: bool
+) -> int:
+    """Start or resume an object and run it in the foreground until it stops."""
+    # `start` and `resume` name the user's intent; refuse the other one
+    # rather than silently doing it.
+    state = reconcile_run_object(object_id).record.state
+    if resume and state not in RESUMABLE_STATES:
+        raise LifecycleError(
+            f"{object_id} is {state.value}; only a paused, interrupted, or "
+            "failed object can resume"
+        )
+    if not resume and state in RESUMABLE_STATES:
+        raise LifecycleError(
+            f"{object_id} is {state.value}; use `fim object resume {object_id}`"
+        )
+    if not quiet:
+        print(f"{'Resuming' if resume else 'Starting'} {object_id}")
+    try:
+        finished = execute_run_object(object_id, write_artifacts=write_artifacts)
+    except KeyboardInterrupt:
+        print(
+            f"Interrupted; continue with `fim object resume {object_id}`",
+            file=sys.stderr,
+        )
+        return 130
+    if not quiet:
+        record = finished.record
+        print(
+            f"{object_id} is {record.state.value} at generation "
+            f"{record.committed_generation}"
+        )
+        if record.state is RunState.COMPLETED:
+            print(f"Artifacts: {finished.directory}")
+    return 0
+
+
+def _list() -> int:
+    """Print one row per object, after recording any lost owners."""
+    reconcile_run_objects()
+    listing = list_run_objects()
+    if not listing.objects and not listing.diagnostics:
+        print("No run objects.")
+        return 0
+    if listing.objects:
+        print(f"{'OBJECT_ID':<38}{'STATE':<13}{'GENERATION':>10}  NAME")
+    for run_object in listing.objects:
+        record = run_object.record
+        generation = (
+            "-" if record.committed_generation is None else record.committed_generation
+        )
+        print(
+            f"{run_object.object_id:<38}{record.state.value:<13}{generation!s:>10}  "
+            f"{run_object.labels.name or ''}"
+        )
+    for diagnostic in listing.diagnostics:
+        print(f"unreadable: {diagnostic.directory}: {diagnostic.message}")
+    return 0
+
+
+def _pause(object_id: str) -> int:
+    """Ask a running object's command to checkpoint and pause."""
+    current = reconcile_run_object(object_id)
+    request_pause(object_id, expected_revision=current.record.revision)
+    print(f"Pause requested for {object_id}; it pauses at its next safe point")
+    return 0
+
+
+def _print_issues(issues: tuple[Any, ...], *, stream: Any = None) -> None:
+    """Print one validation issue per line."""
+    for issue in issues:
+        where = f"{issue.location}: " if issue.location else ""
+        print(f"  - {where}{issue.message}", file=stream or sys.stdout)
+
+
+def _print_record(record: RunLifecycleRecord) -> None:
+    """Print the lifecycle fields a person needs to decide what to do next."""
+    checkpoint = record.latest_checkpoint
+    rows: list[tuple[str, object]] = [
+        ("Object", record.object_id),
+        ("State", record.state.value),
+        ("Revision", record.revision),
+        ("Kind", record.kind.value),
+        ("Run ID", record.scientific_run_id or "-"),
+        ("Phase", record.phase.value if record.phase else "-"),
+        (
+            "Generation",
+            "-" if record.committed_generation is None else record.committed_generation,
+        ),
+        (
+            "Checkpoint",
+            "-"
+            if checkpoint is None
+            else f"{checkpoint.checkpoint_id} "
+            f"(generation {checkpoint.committed_generation})",
+        ),
+        ("Attempt", record.active_attempt_id or "-"),
+    ]
+    for label, value in rows:
+        print(f"{label + ':':<12}{value}")
+    if record.last_error is not None:
+        print(
+            f"{'Error:':<12}[{record.last_error.category}] {record.last_error.message}"
+        )
+    if record.validation_issues:
+        print("Validation issues:")
+        _print_issues(record.validation_issues)
+
+
+def _print_saved(verb: str, run_object: RunObject) -> None:
+    """Report a saved object, with the issues that keep a draft from starting."""
+    record = run_object.record
+    print(f"{verb} {run_object.object_id} ({record.state.value})")
+    if record.validation_issues:
+        print("It cannot start until these are fixed:")
+        _print_issues(record.validation_issues)
+
+
+def _status(object_id: str, *, as_json: bool) -> int:
+    """Show one object's lifecycle, after recording a lost owner."""
+    record = reconcile_run_object(object_id).record
+    if as_json:
+        print(json.dumps(record.to_dict(), indent=2, sort_keys=True))
+    else:
+        _print_record(record)
+    return 0

@@ -10,6 +10,9 @@ Return to the [source-tree orientation](../README.md) or the [developer guide](.
 * [fim.cli](#fim.cli)
   * [load\_config](#fim.cli.load_config)
   * [main](#fim.cli.main)
+* [fim.cli\_objects](#fim.cli_objects)
+  * [add\_object\_subcommands](#fim.cli_objects.add_object_subcommands)
+  * [command\_object](#fim.cli_objects.command_object)
 * [fim.cli\_sweep](#fim.cli_sweep)
   * [add\_sweep\_subcommands](#fim.cli_sweep.add_sweep_subcommands)
   * [command\_sweep](#fim.cli_sweep.command_sweep)
@@ -264,6 +267,7 @@ Return to the [source-tree orientation](../README.md) or the [developer guide](.
     * [checkpoint](#fim.execution.ScalarSession.checkpoint)
     * [close](#fim.execution.ScalarSession.close)
     * [finalize](#fim.execution.ScalarSession.finalize)
+  * [check\_session\_support](#fim.execution.check_session_support)
   * [resolve\_scalar\_backend](#fim.execution.resolve_scalar_backend)
 * [fim.gui](#fim.gui)
 * [fim.gui.animation](#fim.gui.animation)
@@ -1128,6 +1132,20 @@ Return to the [source-tree orientation](../README.md) or the [developer guide](.
   * [Comparison](#fim.reproducibility.Comparison)
     * [to\_dict](#fim.reproducibility.Comparison.to_dict)
   * [compare\_runs](#fim.reproducibility.compare_runs)
+* [fim.run\_service](#fim.run_service)
+  * [DEFAULT\_CHECKPOINT\_GENERATIONS](#fim.run_service.DEFAULT_CHECKPOINT_GENERATIONS)
+  * [DEFAULT\_CHECKPOINT\_SECONDS](#fim.run_service.DEFAULT_CHECKPOINT_SECONDS)
+  * [DEFAULT\_CONTROL\_GENERATIONS](#fim.run_service.DEFAULT_CONTROL_GENERATIONS)
+  * [ArtifactWriter](#fim.run_service.ArtifactWriter)
+  * [StoreFactory](#fim.run_service.StoreFactory)
+  * [ProgressObserver](#fim.run_service.ProgressObserver)
+  * [DraftRunError](#fim.run_service.DraftRunError)
+    * [\_\_init\_\_](#fim.run_service.DraftRunError.__init__)
+  * [CheckpointCadence](#fim.run_service.CheckpointCadence)
+    * [\_\_post\_init\_\_](#fim.run_service.CheckpointCadence.__post_init__)
+  * [cancel\_run\_object](#fim.run_service.cancel_run_object)
+  * [default\_store\_factory](#fim.run_service.default_store_factory)
+  * [execute\_run\_object](#fim.run_service.execute_run_object)
 * [fim.statistics](#fim.statistics)
 * [fim.statistics.catalog](#fim.statistics.catalog)
   * [StatisticSpec](#fim.statistics.catalog.StatisticSpec)
@@ -1347,6 +1365,11 @@ each its own subsection below:
   (`_command_experiment`; `fim.persistence.groups`).
 - `fim sweep plan/run/resume/report` — run one configuration over a
   parameter space as a single Study (`fim.cli_sweep`; `fim.sweep`).
+- `fim object create/edit/list/status/start/resume/pause/cancel/delete` —
+  save a configuration of any validity as a Run object (`draft` until it
+  is valid, then `planned`) and execute it with durable checkpoints, so a
+  paused or interrupted run continues exactly (`fim.cli_objects`;
+  `fim.run_service`).
 - `fim stats TRAJECTORY` — recompute statistics from a run's own saved
   data, for any generation, without re-running the simulation
   (`_command_stats`; see `fim.reanalyze`'s own docstring for what
@@ -1434,6 +1457,60 @@ a full traceback instead of being hidden behind a generic message.
 **Returns**:
 
   Process-style exit status.
+
+<a id="fim.cli_objects"></a>
+
+# fim.cli\_objects
+
+`fim object`: save, inspect, and control persisted Run objects.
+
+A Run object (`fim.persistence.run_objects`) holds a saved configuration of
+any validity and its lifecycle: `draft` while the configuration is invalid
+or incomplete, `planned` once it is valid, then executing, paused, or
+finished. Every command here calls `fim.run_service` or
+`fim.persistence.run_ownership`; none applies lifecycle rules itself.
+
+`start` and `resume` execute in the foreground. From another terminal,
+`pause` asks the running command to publish a checkpoint and stop, and
+`cancel` asks it to stop and keep its partial trajectory. A command that is
+killed leaves the object `running` until any later command notices that its
+owner is gone and records it as `interrupted`; `resume` then continues from
+the latest checkpoint.
+
+<a id="fim.cli_objects.add_object_subcommands"></a>
+
+#### add\_object\_subcommands
+
+```python
+def add_object_subcommands(
+        subcommands: argparse._SubParsersAction[Any]) -> None
+```
+
+Wire `fim object create/edit/list/status/start/resume/pause/cancel/delete`.
+
+<a id="fim.cli_objects.command_object"></a>
+
+#### command\_object
+
+```python
+def command_object(arguments: argparse.Namespace,
+                   parser: argparse.ArgumentParser,
+                   write_artifacts: ArtifactWriter) -> int
+```
+
+Dispatch one `fim object` invocation.
+
+**Arguments**:
+
+- `arguments` - The parsed command line.
+- `parser` - The top-level parser, for its usage error.
+- `write_artifacts` - Writes a completed run's artifacts.
+
+
+**Returns**:
+
+  0 on success; 2 when the lifecycle refuses the request; 130 when
+  execution was interrupted from the keyboard.
 
 <a id="fim.cli_sweep"></a>
 
@@ -7275,6 +7352,35 @@ Build the run's result once it has stopped, and close the store.
 
 - `ValueError` - If the run has not stopped yet or the session was
   closed without finishing.
+
+<a id="fim.execution.check_session_support"></a>
+
+#### check\_session\_support
+
+```python
+def check_session_support(params: SimulationParams) -> ScalarBackend
+```
+
+Refuse a configuration a resumable session cannot run.
+
+Callers check this before committing a start, so an unsupported
+configuration is reported without recording a failed attempt.
+
+**Arguments**:
+
+- `params` - The configuration to run.
+
+
+**Returns**:
+
+  The resolved scalar backend.
+
+
+**Raises**:
+
+- `UnsupportedSessionError` - If `params` asks for more than one
+  replicate, resolves to a non-scalar backend, or asks for JIT on
+  the lineal backend.
 
 <a id="fim.execution.resolve_scalar_backend"></a>
 
@@ -27191,6 +27297,220 @@ Compare two run directories of the same configuration.
 
 - `OSError` - A manifest cannot be read.
 - `ValueError` - A manifest is not valid JSON.
+
+<a id="fim.run_service"></a>
+
+# fim.run\_service
+
+The lifecycle service: execute and control persisted Run objects.
+
+Every front end (the CLI now, the GUI next) drives Run objects through this
+module, so the state machine in `fim.persistence.run_lifecycle` and the
+ownership protocol in `fim.persistence.run_ownership` are applied in one
+place only.
+
+`execute_run_object` is the worker. It opens an attempt (start for a
+`planned` object, resume for a `paused`, `interrupted`, or `failed` one),
+runs a `fim.execution.ScalarSession` in bounded steps, and between steps
+sits at a safe point where it:
+
+- completes the run when the convergence monitor stops it, even if a pause
+  or cancel was requested meanwhile (completion is never delayed by an
+  extra generation);
+- acknowledges a requested pause only after a checkpoint is published and
+  recorded, then releases ownership;
+- acknowledges a requested cancel after committing the trajectory written
+  so far, which is kept as partial data;
+- publishes a checkpoint when the cadence (generations or seconds) is due.
+
+The trajectory log lives in the object directory as `trajectory.tlog`; the
+completed run's report, convergence history, and manifest are written
+beside it by the caller-supplied artifact writer before completion is
+committed, with the manifest last.
+
+<a id="fim.run_service.DEFAULT_CHECKPOINT_GENERATIONS"></a>
+
+#### DEFAULT\_CHECKPOINT\_GENERATIONS
+
+Committed generations between periodic checkpoints.
+
+<a id="fim.run_service.DEFAULT_CHECKPOINT_SECONDS"></a>
+
+#### DEFAULT\_CHECKPOINT\_SECONDS
+
+Seconds between periodic checkpoints, checked at safe points.
+
+<a id="fim.run_service.DEFAULT_CONTROL_GENERATIONS"></a>
+
+#### DEFAULT\_CONTROL\_GENERATIONS
+
+Generations between checks for a pause or cancel request.
+
+<a id="fim.run_service.ArtifactWriter"></a>
+
+#### ArtifactWriter
+
+Writes a completed run's artifacts into a directory, manifest last.
+
+<a id="fim.run_service.StoreFactory"></a>
+
+#### StoreFactory
+
+Opens the trajectory log at a path for a configuration.
+
+<a id="fim.run_service.ProgressObserver"></a>
+
+#### ProgressObserver
+
+Called at each safe point with the session, for progress display.
+
+<a id="fim.run_service.DraftRunError"></a>
+
+## DraftRunError Objects
+
+```python
+class DraftRunError(LifecycleError)
+```
+
+A draft cannot execute until its configuration is valid.
+
+**Attributes**:
+
+- `object_id` - The draft object.
+- `issues` - The stored validation issues.
+
+<a id="fim.run_service.DraftRunError.__init__"></a>
+
+#### \_\_init\_\_
+
+```python
+def __init__(object_id: str, issues: tuple[ValidationIssue, ...]) -> None
+```
+
+Record the draft's issues and describe them.
+
+<a id="fim.run_service.CheckpointCadence"></a>
+
+## CheckpointCadence Objects
+
+```python
+@dataclass(frozen=True, slots=True)
+class CheckpointCadence()
+```
+
+When periodic checkpoints are published.
+
+**Arguments**:
+
+- `generations` - Committed generations between checkpoints.
+- `seconds` - Seconds between checkpoints, measured by the service's
+  monotonic source. Time never affects scientific output.
+- `control_generations` - Generations between checks for a pause or
+  cancel request.
+
+<a id="fim.run_service.CheckpointCadence.__post_init__"></a>
+
+#### \_\_post\_init\_\_
+
+```python
+def __post_init__() -> None
+```
+
+Reject a cadence that would never make progress.
+
+<a id="fim.run_service.cancel_run_object"></a>
+
+#### cancel\_run\_object
+
+```python
+def cancel_run_object(object_id: str,
+                      *,
+                      expected_revision: int,
+                      results: Path | None = None,
+                      clock: Clock | None = None,
+                      command_key: str | None = None) -> CommandResult
+```
+
+Cancel a run, asking its worker or abandoning it as the state requires.
+
+An executing run is asked to stop at its next safe point and stays
+`cancelling` until its worker acknowledges. A planned or stopped run has
+no worker, so it is abandoned at once. Partial data is kept either way.
+
+**Arguments**:
+
+- `object_id` - Object to cancel.
+- `expected_revision` - Lifecycle revision the caller read.
+- `results` - Results directory (default: `results_directory()`).
+- `clock` - Injectable current-time source.
+- `command_key` - Optional idempotency key.
+
+
+**Returns**:
+
+  The command outcome.
+
+<a id="fim.run_service.default_store_factory"></a>
+
+#### default\_store\_factory
+
+```python
+def default_store_factory(path: Path,
+                          params: SimulationParams) -> BinaryLogStore
+```
+
+Open the trajectory log with the options the run's Expert Settings choose.
+
+<a id="fim.run_service.execute_run_object"></a>
+
+#### execute\_run\_object
+
+```python
+def execute_run_object(object_id: str,
+                       *,
+                       write_artifacts: ArtifactWriter,
+                       results: Path | None = None,
+                       clock: Clock | None = None,
+                       cadence: CheckpointCadence | None = None,
+                       monotonic: Callable[[], float] = time.monotonic,
+                       store_factory: StoreFactory = default_store_factory,
+                       attempt_factory: AttemptFactory | None = None,
+                       command_key: str | None = None,
+                       observer: ProgressObserver | None = None) -> RunObject
+```
+
+Start or resume a Run object and execute it until it stops.
+
+**Arguments**:
+
+- `object_id` - A `planned` object to start, or a `paused`,
+  `interrupted`, or `failed` object to resume.
+- `write_artifacts` - Writes the completed run's artifacts.
+- `results` - Results directory (default: `results_directory()`).
+- `clock` - Current-time source for lifecycle and manifest timestamps.
+- `cadence` - Checkpoint and control intervals (default: 1,000
+  generations or 60 seconds, checking requests every 50).
+- `monotonic` - Elapsed-time source for the checkpoint interval.
+- `store_factory` - Opens the trajectory log.
+- `attempt_factory` - Injectable attempt ID source.
+- `command_key` - Optional idempotency key for the start or resume.
+- `observer` - Called at each safe point, for progress display.
+
+
+**Returns**:
+
+  The object after this attempt stopped: `completed`, `paused`, or
+  `cancelled`. A replayed request returns the object unchanged.
+
+
+**Raises**:
+
+- `DraftRunError` - The object is a draft.
+- `UnsupportedSessionError` - The configuration cannot run in a
+  resumable session; nothing is recorded.
+- `IllegalTransitionError` - The object cannot start or resume now.
+- `Exception` - Whatever stopped execution; the run is recorded as
+  `failed` first.
 
 <a id="fim.statistics"></a>
 
