@@ -158,6 +158,18 @@ def test_prepare_start_refuses_a_batch(tmp_path: Path) -> None:
         object_bridge.prepare_start(saved.object_id, results=tmp_path)
 
 
+def test_prepare_start_accepts_the_vector_backend(tmp_path: Path) -> None:
+    """The GUI's default dense backend is resumable, so it may start."""
+    pytest.importorskip("numba")
+    saved, _problem = object_bridge.save(
+        _valid(engine_backend="generational-vector"), results=tmp_path
+    )
+
+    _run_object, params = object_bridge.prepare_start(saved.object_id, results=tmp_path)
+
+    assert params.engine_backend == "generational-vector"
+
+
 def test_prepare_start_returns_the_parameters_of_a_planned_run(
     tmp_path: Path,
 ) -> None:

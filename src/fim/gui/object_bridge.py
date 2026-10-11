@@ -203,7 +203,7 @@ def prepare_start(
     Raises:
         LifecycleError: The run is a Draft, or is in any other state.
         ValueError: A saved run cannot run this configuration yet (more
-            than one replicate, or a vector backend).
+            than one replicate, or a backend `fim.engine.fim` would refuse).
     """
     run_object = reconcile_run_object(object_id, results=results)
     record = run_object.record

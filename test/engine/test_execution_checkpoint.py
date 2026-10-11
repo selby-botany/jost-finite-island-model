@@ -368,7 +368,7 @@ def test_restoring_under_another_configuration_is_refused(tmp_path: Path) -> Non
     [
         ({"kind": "vector-session"}, "not 'scalar-session'"),
         ({"version": 99}, "version 99"),
-        ({"engine_backend": "vector"}, "is not scalar"),
+        ({"engine_backend": "vector"}, "not one a session can resume"),
     ],
 )
 def test_a_foreign_or_newer_payload_is_refused(
@@ -542,3 +542,111 @@ def test_a_process_killed_after_a_checkpoint_resumes_to_the_uninterrupted_run(
 
     _assert_same(resumed, whole)
     _assert_same_log(directory / "trajectory.tlog", tmp_path / "whole.tlog")
+
+
+_VECTOR_CASES: dict[str, dict[str, Any]] = {
+    "infinite": {},
+    "finite": {
+        "mutation_model": "finite_alleles",
+        "loci": [{"locus_id": 1, "length": 1}],
+    },
+    "stochastic": {"migrant_sampling": "stochastic"},
+    "matrix-unequal-loci": {
+        "N": [12, 28],
+        "m": [[0.8, 0.2], [0.05, 0.95]],
+        "mutation_model": "finite_alleles",
+        "loci": [{"locus_id": 1, "length": 2}, {"locus_id": 2, "length": 1}],
+    },
+    "thinned": {
+        "trajectory_retention": "thinned",
+        "trajectory_stride": 5,
+        "trajectory_thinning_start": 8,
+    },
+}
+
+
+def _vector(**changes: Any) -> SimulationParams:
+    """Return a vector-backend configuration, skipping without numba."""
+    pytest.importorskip("numba")
+    return _params(engine_backend="generational-vector", **changes)
+
+
+@pytest.mark.parametrize("case", list(_VECTOR_CASES))
+@pytest.mark.parametrize(("checkpoint_at", "lost"), [(0, 3), (7, 5), (13, 9)])
+def test_a_restored_vector_session_finishes_as_the_uninterrupted_run(
+    tmp_path: Path, case: str, checkpoint_at: int, lost: int
+) -> None:
+    """The dense block is checkpointed exactly: the same run after a restore."""
+    params = _vector(**_VECTOR_CASES[case])
+    whole = _whole(params, tmp_path / "whole.tlog")
+    resumed_directory = tmp_path / "resumed"
+
+    loaded = _interrupted(
+        params, resumed_directory, checkpoint_at=checkpoint_at, lost=lost
+    )
+    resumed = _resume(params, resumed_directory, loaded)
+
+    assert (loaded.payload["vector"] is None) == (checkpoint_at == 0)
+    _assert_same(resumed, whole)
+    _assert_same_log(resumed_directory / "trajectory.tlog", tmp_path / "whole.tlog")
+
+
+def test_a_vector_checkpoint_holds_the_block_not_the_population(
+    tmp_path: Path,
+) -> None:
+    """Past the first generation the payload carries only the block."""
+    with ScalarSession.create(
+        _vector(), _store(tmp_path / "t.tlog"), clock=_clock
+    ) as session:
+        session.advance(4)
+        capture = session.capture()
+
+    assert capture.payload["population"] is None
+    assert capture.payload["registries"] is None
+    assert capture.payload["vector"]["generation"] == 4
+    assert {"vector.freq", "vector.ids", "vector.ncol"} <= set(capture.arrays)
+
+
+def test_a_vector_checkpoint_taken_after_the_stop_finalizes(tmp_path: Path) -> None:
+    """A vector run interrupted while finalizing restores stopped and finalizes."""
+    params = _vector()
+    whole = _whole(params, tmp_path / "whole.tlog")
+    directory = tmp_path / "resumed"
+    with ScalarSession.create(
+        params, _store(directory / "trajectory.tlog"), clock=_clock
+    ) as session:
+        session.advance()
+        assert session.capture().phase is RunPhase.FINALIZING
+        loaded = _publish(session, directory / "object", "ckpt-a")
+
+    with ScalarSession.restore(
+        params, loaded, _store(directory / "trajectory.tlog"), clock=_clock
+    ) as restored:
+        assert restored.stopped
+        result = restored.finalize()
+
+    _assert_same(result, whole)
+
+
+def test_a_vector_block_under_another_backend_is_refused(tmp_path: Path) -> None:
+    """A payload naming a scalar backend cannot carry a dense block."""
+    params = _vector()
+    loaded = _interrupted(params, tmp_path, checkpoint_at=3, lost=0)
+    altered = replace(
+        loaded, payload={**loaded.payload, "engine_backend": "generational"}
+    )
+
+    with pytest.raises(SessionRestoreError, match="holds a vector block"):
+        ScalarSession.restore(params, altered, _store(tmp_path / "trajectory.tlog"))
+
+
+def test_a_version_1_scalar_payload_still_restores(tmp_path: Path) -> None:
+    """Checkpoints written before vector support are still read."""
+    params = _params()
+    whole = _whole(params, tmp_path / "whole.tlog")
+    directory = tmp_path / "resumed"
+    loaded = _interrupted(params, directory, checkpoint_at=5, lost=2)
+    payload = {key: value for key, value in loaded.payload.items() if key != "vector"}
+    older = replace(loaded, payload={**payload, "version": 1})
+
+    _assert_same(_resume(params, directory, older), whole)

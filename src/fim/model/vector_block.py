@@ -38,10 +38,10 @@ on first use, so importing `fim` never requires Numba.
 from __future__ import annotations
 
 import os
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
 from types import ModuleType
-from typing import Final
+from typing import Any, Final
 
 import numpy as np
 
@@ -321,6 +321,32 @@ def _mode_cache_for(
     return rate_class, np.full((len(rates), columns), np.nan, dtype=np.float64)
 
 
+def _state_array(
+    arrays: Mapping[str, np.ndarray], name: str, dtype: type, ndim: int
+) -> np.ndarray:
+    """Return an exported block array after checking its type and rank.
+
+    Raises:
+        ValueError: If the array is missing or has another type or rank.
+    """
+    array = arrays.get(name)
+    if array is None or array.dtype != dtype or array.ndim != ndim:
+        raise ValueError(f"block array {name!r} is missing or malformed")
+    return array
+
+
+def _state_count(metadata: Mapping[str, Any], name: str) -> int:
+    """Return a non-negative integer field of exported block metadata.
+
+    Raises:
+        ValueError: If the field is missing, not an integer, or negative.
+    """
+    value = metadata.get(name)
+    if not isinstance(value, int) or isinstance(value, bool) or value < 0:
+        raise ValueError(f"block field {name!r} must be a non-negative integer")
+    return value
+
+
 def _power_of_two_at_least(value: int) -> int:
     """Return the smallest power of two that is at least `value`."""
     width = 1
@@ -552,6 +578,171 @@ class VectorBlock:
             memory_ceiling_bytes=ceiling,
             **extra,
         )
+
+    @classmethod
+    def from_state(
+        cls,
+        metadata: Mapping[str, Any],
+        arrays: Mapping[str, np.ndarray],
+        *,
+        loci: tuple[LocusSpec, ...],
+        sizes: Sequence[int],
+        mutation_rates: Sequence[float],
+        migration: VectorMigration,
+        mutation_model: str,
+        memory_ceiling_bytes: int | None = None,
+    ) -> VectorBlock:
+        """Rebuild a block exported by `export_state`, exactly.
+
+        The configuration-derived parts (loci, sizes, rates, migration and
+        mutation model) come from the caller, which takes them from the
+        run's configuration exactly as `from_model_state` does; everything
+        the run has changed since comes from the export. The mode-PMF
+        cache starts empty: it only memoizes values the kernel computes
+        identically either way.
+
+        Args:
+            metadata: The exported metadata.
+            arrays: The exported arrays, keyed as `export_state` names them.
+            loci: The tracked loci.
+            sizes: Gene copies per deme.
+            mutation_rates: Per-copy mutation probability per locus.
+            migration: The migration plan.
+            mutation_model: `"infinite_alleles"` or `"finite_alleles"`.
+            memory_ceiling_bytes: Per-replicate ceiling; `None` uses
+                `resolve_memory_ceiling`. A ceiling is a resource limit,
+                not part of the science, so a resumed run may use another.
+
+        Returns:
+            A block that advances exactly as the exported one would have.
+
+        Raises:
+            ValueError: If the export is malformed or does not match the
+                configuration.
+            VectorMemoryCeilingError: If the restored table exceeds the
+                ceiling.
+        """
+        if metadata.get("mutation_model") != mutation_model:
+            raise ValueError(
+                f"block mutation model {metadata.get('mutation_model')!r} is not "
+                f"{mutation_model!r}"
+            )
+        finite = mutation_model == "finite_alleles"
+        size_array = np.asarray(sizes, dtype=np.int64)
+        loci_count, demes = len(loci), int(size_array.shape[0])
+        freq = _state_array(arrays, "freq", np.float64, 3)
+        width = int(freq.shape[2])
+        expected: dict[str, tuple[np.dtype[Any], tuple[int, ...]]] = {
+            "freq": (np.dtype(np.float64), (loci_count, demes, width)),
+            "counts": (np.dtype(np.int64), (loci_count, demes, width)),
+            "ids": (np.dtype(np.int64), (loci_count, width)),
+            "ncol": (np.dtype(np.int64), (loci_count,)),
+            "mutants": (np.dtype(np.int64), (loci_count, demes)),
+        }
+        if finite:
+            expected |= {
+                "capacities": (np.dtype(np.int64), (loci_count,)),
+                "minted_mask": (np.dtype(np.bool_), (loci_count, width)),
+                "minted_list": (np.dtype(np.int64), (loci_count, width)),
+                "minted_count": (np.dtype(np.int64), (loci_count,)),
+            }
+        if set(arrays) != set(expected):
+            raise ValueError(
+                f"block arrays are {sorted(arrays)}; expected {sorted(expected)}"
+            )
+        restored: dict[str, np.ndarray] = {}
+        for name, (dtype, shape) in expected.items():
+            array = arrays[name]
+            if array.dtype != dtype or array.shape != shape:
+                raise ValueError(
+                    f"block array {name!r} is {array.dtype}{array.shape}; "
+                    f"expected {dtype}{shape}"
+                )
+            restored[name] = np.array(array, dtype=dtype, order="C", copy=True)
+        ncol = restored["ncol"]
+        if np.any(ncol < 0) or np.any(ncol > width):
+            raise ValueError(f"block live column counts must lie in 0..{width}")
+        if finite:
+            expected_capacities = [
+                finite_allele_capacity(locus.length) for locus in loci
+            ]
+            if restored["capacities"].tolist() != expected_capacities:
+                raise ValueError("block capacities do not match the loci")
+        generation = _state_count(metadata, "generation")
+        steps = _state_count(metadata, "steps_since_shrink_check")
+        if steps >= SHRINK_CHECK_INTERVAL:
+            raise ValueError("block shrink-check counter is out of range")
+        next_id_text = metadata.get("next_id")
+        if not isinstance(next_id_text, str) or not next_id_text.isdigit():
+            raise ValueError("block next_id must be a decimal string")
+        ceiling = resolve_memory_ceiling(memory_ceiling_bytes)
+        _check_memory(
+            loci=loci_count,
+            demes=demes,
+            width=width,
+            finite=finite,
+            ceiling=ceiling,
+            reason="the width the run had reached when it was checkpointed",
+        )
+        block = cls(
+            loci=loci,
+            mutation_model=mutation_model,
+            freq=restored["freq"],
+            counts=restored["counts"],
+            ids=restored["ids"],
+            ncol=ncol,
+            sizes=size_array,
+            mutation_rates=np.asarray(mutation_rates, dtype=np.float64),
+            migration=migration,
+            next_id=int(next_id_text),
+            generation=generation,
+            memory_ceiling_bytes=ceiling,
+            capacities=restored.get("capacities"),
+            minted_mask=restored.get("minted_mask"),
+            minted_list=restored.get("minted_list"),
+            minted_count=restored.get("minted_count"),
+        )
+        block._mutants = restored["mutants"]
+        block._steps_since_shrink_check = steps
+        block.grow_events = _state_count(metadata, "grow_events")
+        block.shrink_events = _state_count(metadata, "shrink_events")
+        return block
+
+    def export_state(self) -> tuple[dict[str, Any], dict[str, np.ndarray]]:
+        """Export everything that makes the next generation what it will be.
+
+        Every array is exported as it is, at its current width, including
+        the scratch arrays the kernel reuses: an exact continuation then
+        depends on no argument about which of them the next generation
+        overwrites first. The mode-PMF cache is left out (see `from_state`).
+
+        Returns:
+            `(metadata, arrays)`: JSON-safe metadata (`next_id` as a
+            decimal string) and copies of the arrays, keyed without prefix.
+        """
+        arrays: dict[str, np.ndarray] = {
+            "freq": self.freq.copy(),
+            "counts": self.counts.copy(),
+            "ids": self.ids.copy(),
+            "ncol": self.ncol.copy(),
+            "mutants": self._mutants.copy(),
+        }
+        if self._finite:
+            arrays |= {
+                "capacities": self._capacities.copy(),
+                "minted_mask": self._minted_mask.copy(),
+                "minted_list": self._minted_list.copy(),
+                "minted_count": self._minted_count.copy(),
+            }
+        metadata: dict[str, Any] = {
+            "generation": self.generation,
+            "grow_events": self.grow_events,
+            "mutation_model": self.mutation_model,
+            "next_id": str(self.next_id),
+            "shrink_events": self.shrink_events,
+            "steps_since_shrink_check": self._steps_since_shrink_check,
+        }
+        return metadata, arrays
 
     @property
     def width(self) -> int:

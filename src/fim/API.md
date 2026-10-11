@@ -247,7 +247,9 @@ Return to the [source-tree orientation](../README.md) or the [developer guide](.
 * [fim.execution](#fim.execution)
   * [SESSION\_CHECKPOINT\_KIND](#fim.execution.SESSION_CHECKPOINT_KIND)
   * [SESSION\_CHECKPOINT\_VERSION](#fim.execution.SESSION_CHECKPOINT_VERSION)
+  * [READABLE\_SESSION\_CHECKPOINT\_VERSIONS](#fim.execution.READABLE_SESSION_CHECKPOINT_VERSIONS)
   * [EQUILIBRATION\_HISTORY](#fim.execution.EQUILIBRATION_HISTORY)
+  * [VECTOR\_PREFIX](#fim.execution.VECTOR_PREFIX)
   * [UnsupportedSessionError](#fim.execution.UnsupportedSessionError)
   * [SessionRestoreError](#fim.execution.SessionRestoreError)
   * [SessionCapture](#fim.execution.SessionCapture)
@@ -268,7 +270,7 @@ Return to the [source-tree orientation](../README.md) or the [developer guide](.
     * [close](#fim.execution.ScalarSession.close)
     * [finalize](#fim.execution.ScalarSession.finalize)
   * [check\_session\_support](#fim.execution.check_session_support)
-  * [resolve\_scalar\_backend](#fim.execution.resolve_scalar_backend)
+  * [resolve\_session\_backend](#fim.execution.resolve_session_backend)
 * [fim.gui](#fim.gui)
 * [fim.gui.animation](#fim.gui.animation)
   * [AnimationFrame](#fim.gui.animation.AnimationFrame)
@@ -661,6 +663,8 @@ Return to the [source-tree orientation](../README.md) or the [developer guide](.
   * [VectorBlock](#fim.model.vector_block.VectorBlock)
     * [\_\_init\_\_](#fim.model.vector_block.VectorBlock.__init__)
     * [from\_model\_state](#fim.model.vector_block.VectorBlock.from_model_state)
+    * [from\_state](#fim.model.vector_block.VectorBlock.from_state)
+    * [export\_state](#fim.model.vector_block.VectorBlock.export_state)
     * [width](#fim.model.vector_block.VectorBlock.width)
     * [deme\_count](#fim.model.vector_block.VectorBlock.deme_count)
     * [next\_id](#fim.model.vector_block.VectorBlock.next_id)
@@ -7004,10 +7008,12 @@ cancel request and capture a checkpoint.
 
 The session reuses the generation-first lane machinery
 (`fim.engine.ReplicaLane`, `_build_replica_lane`, `SequentialAdvancer`,
-`_finalize_replica_lane`) that the golden-parity tests already prove is
-bit-identical to the lineal reference loop for the same seed. Only the
-scalar backends (``lineal`` and ``generational``) are supported; the dense
-vector backend gains checkpoint support separately.
+`VectorizedAdvancer`, `_finalize_replica_lane`) that the golden-parity
+tests already prove is bit-identical to the lineal reference loop for the
+same seed. Every single-replicate backend is supported: ``lineal`` and
+``generational`` step a `ModelState`; ``generational-vector`` steps a
+dense `fim.model.vector_block.VectorBlock`, which a checkpoint then holds
+in place of the population and registries.
 
 At a safe point `ScalarSession.capture` exports everything the run needs
 to continue exactly (population, registries, random state, convergence
@@ -7022,19 +7028,38 @@ publishes a capture under an execution lease.
 
 #### SESSION\_CHECKPOINT\_KIND
 
-The `kind` a scalar session's checkpoint payload carries.
+The `kind` a session's checkpoint payload carries.
+
+"Scalar" names one replicate lane, as opposed to a batch of them; the kind
+covers every backend a session runs, the vector backend included.
 
 <a id="fim.execution.SESSION_CHECKPOINT_VERSION"></a>
 
 #### SESSION\_CHECKPOINT\_VERSION
 
-Version of the scalar session payload layout inside a checkpoint.
+Version of the session payload layout this build writes.
+
+Version 2 adds the `vector` block of the generational-vector backend; with
+it, `population` and `registries` are `null` (the block holds them).
+Version 1 payloads never have a block.
+
+<a id="fim.execution.READABLE_SESSION_CHECKPOINT_VERSIONS"></a>
+
+#### READABLE\_SESSION\_CHECKPOINT\_VERSIONS
+
+Payload versions this build restores.
 
 <a id="fim.execution.EQUILIBRATION_HISTORY"></a>
 
 #### EQUILIBRATION\_HISTORY
 
 Array holding the ancestral phase's `H_S` history, when there was one.
+
+<a id="fim.execution.VECTOR_PREFIX"></a>
+
+#### VECTOR\_PREFIX
+
+Prefix of the vector block's arrays inside a checkpoint.
 
 <a id="fim.execution.UnsupportedSessionError"></a>
 
@@ -7096,7 +7121,7 @@ that closes it on exit.
 
 ```python
 def __init__(lane: ReplicaLane, store: TrajectoryStore, clock: Clock,
-             engine_backend: ScalarBackend, jit: JitOption) -> None
+             engine_backend: SessionBackend, jit: JitOption) -> None
 ```
 
 Wrap an already-built lane; use `create` instead of calling this.
@@ -7106,8 +7131,7 @@ Wrap an already-built lane; use `create` instead of calling this.
 - `lane` - The replicate's working state, at a safe point.
 - `store` - Where generations are persisted.
 - `clock` - Timestamp source for the manifest.
-- `engine_backend` - The resolved scalar backend recorded in the
-  manifest.
+- `engine_backend` - The resolved backend recorded in the manifest.
 - `jit` - The JIT option the drift step uses and the manifest records.
 
 <a id="fim.execution.ScalarSession.__enter__"></a>
@@ -7163,7 +7187,8 @@ Build generation zero of a single replicate and persist it.
 **Raises**:
 
 - `UnsupportedSessionError` - If `params` asks for more than one
-  replicate or resolves to a non-scalar backend.
+  replicate or names a backend configuration `fim.engine.fim`
+  itself refuses.
 
 <a id="fim.execution.ScalarSession.restore"></a>
 
@@ -7380,7 +7405,7 @@ Build the run's result once it has stopped, and close the store.
 #### check\_session\_support
 
 ```python
-def check_session_support(params: SimulationParams) -> ScalarBackend
+def check_session_support(params: SimulationParams) -> SessionBackend
 ```
 
 Refuse a configuration a resumable session cannot run.
@@ -7395,24 +7420,25 @@ configuration is reported without recording a failed attempt.
 
 **Returns**:
 
-  The resolved scalar backend.
+  The resolved single-lane backend.
 
 
 **Raises**:
 
 - `UnsupportedSessionError` - If `params` asks for more than one
-  replicate, resolves to a non-scalar backend, or asks for JIT on
-  the lineal backend.
+  replicate, or the resolved backend cannot be built for it (JIT
+  on the lineal backend, no numba for the vector backend, or a
+  locus over the vector capacity ceiling).
 
-<a id="fim.execution.resolve_scalar_backend"></a>
+<a id="fim.execution.resolve_session_backend"></a>
 
-#### resolve\_scalar\_backend
+#### resolve\_session\_backend
 
 ```python
-def resolve_scalar_backend(params: SimulationParams) -> ScalarBackend
+def resolve_session_backend(params: SimulationParams) -> SessionBackend
 ```
 
-Resolve `params.engine_backend` to a scalar backend, or refuse.
+Resolve `params.engine_backend` to a concrete backend.
 
 ``auto`` is resolved exactly as `fim.engine.fim` resolves it, so a
 session never runs a configuration on a different backend than the
@@ -7425,13 +7451,12 @@ blocking call would.
 
 **Returns**:
 
-  ``"lineal"`` or ``"generational"``.
+  ``"lineal"``, ``"generational"`` or ``"generational-vector"``.
 
 
 **Raises**:
 
-- `UnsupportedSessionError` - If the configuration resolves to the dense
-  vector backend.
+- `UnsupportedSessionError` - If the backend is not one a session runs.
 
 <a id="fim.gui"></a>
 
@@ -12815,7 +12840,7 @@ Check that a saved run can start or resume now, before any side effect.
 
 - `LifecycleError` - The run is a Draft, or is in any other state.
 - `ValueError` - A saved run cannot run this configuration yet (more
-  than one replicate, or a vector backend).
+  than one replicate, or a backend `fim.engine.fim` would refuse).
 
 <a id="fim.gui.object_bridge.row"></a>
 
@@ -17931,6 +17956,79 @@ now, as `FiniteAlleleSpace` does.
 - `ValueError` - For an unknown mutation model, or (finite alleles)
   an allele id outside `0 .. capacity - 1`.
 - `VectorMemoryCeilingError` - If the block would not fit.
+
+<a id="fim.model.vector_block.VectorBlock.from_state"></a>
+
+#### from\_state
+
+```python
+@classmethod
+def from_state(cls,
+               metadata: Mapping[str, Any],
+               arrays: Mapping[str, np.ndarray],
+               *,
+               loci: tuple[LocusSpec, ...],
+               sizes: Sequence[int],
+               mutation_rates: Sequence[float],
+               migration: VectorMigration,
+               mutation_model: str,
+               memory_ceiling_bytes: int | None = None) -> VectorBlock
+```
+
+Rebuild a block exported by `export_state`, exactly.
+
+The configuration-derived parts (loci, sizes, rates, migration and
+mutation model) come from the caller, which takes them from the
+run's configuration exactly as `from_model_state` does; everything
+the run has changed since comes from the export. The mode-PMF
+cache starts empty: it only memoizes values the kernel computes
+identically either way.
+
+**Arguments**:
+
+- `metadata` - The exported metadata.
+- `arrays` - The exported arrays, keyed as `export_state` names them.
+- `loci` - The tracked loci.
+- `sizes` - Gene copies per deme.
+- `mutation_rates` - Per-copy mutation probability per locus.
+- `migration` - The migration plan.
+- `mutation_model` - `"infinite_alleles"` or `"finite_alleles"`.
+- `memory_ceiling_bytes` - Per-replicate ceiling; `None` uses
+  `resolve_memory_ceiling`. A ceiling is a resource limit,
+  not part of the science, so a resumed run may use another.
+
+
+**Returns**:
+
+  A block that advances exactly as the exported one would have.
+
+
+**Raises**:
+
+- `ValueError` - If the export is malformed or does not match the
+  configuration.
+- `VectorMemoryCeilingError` - If the restored table exceeds the
+  ceiling.
+
+<a id="fim.model.vector_block.VectorBlock.export_state"></a>
+
+#### export\_state
+
+```python
+def export_state() -> tuple[dict[str, Any], dict[str, np.ndarray]]
+```
+
+Export everything that makes the next generation what it will be.
+
+Every array is exported as it is, at its current width, including
+the scratch arrays the kernel reuses: an exact continuation then
+depends on no argument about which of them the next generation
+overwrites first. The mode-PMF cache is left out (see `from_state`).
+
+**Returns**:
+
+  `(metadata, arrays)`: JSON-safe metadata (`next_id` as a
+  decimal string) and copies of the arrays, keyed without prefix.
 
 <a id="fim.model.vector_block.VectorBlock.width"></a>
 

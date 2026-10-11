@@ -175,9 +175,47 @@ def test_batches_are_refused() -> None:
         ScalarSession.create(_params(n_replicates=2), clock=_clock)
 
 
-def test_the_vector_backend_is_refused() -> None:
-    """The dense vector backend has no resumable session yet."""
-    with pytest.raises(UnsupportedSessionError, match="generational-vector"):
-        ScalarSession.create(
-            _params(engine_backend="generational-vector"), clock=_clock
-        )
+_VECTOR_CASES: dict[str, dict[str, Any]] = {
+    "infinite": {},
+    "finite": {
+        "mutation_model": "finite_alleles",
+        "loci": [{"locus_id": 1, "length": 1}],
+    },
+    "stochastic": {"migrant_sampling": "stochastic"},
+    "unequal-loci": {
+        "N": [12, 28],
+        "m": [[0.8, 0.2], [0.05, 0.95]],
+        "loci": [{"locus_id": 1, "length": 2}, {"locus_id": 2, "length": 1}],
+        "mutation_model": "finite_alleles",
+    },
+    "thinned": {
+        "trajectory_retention": "thinned",
+        "trajectory_stride": 5,
+        "trajectory_thinning_start": 8,
+    },
+}
+
+
+@pytest.mark.parametrize("case", list(_VECTOR_CASES))
+@pytest.mark.parametrize("steps", [[], [1], [0, 3, 1, 7]])
+def test_a_vector_session_matches_the_blocking_vector_run(
+    case: str, steps: list[int]
+) -> None:
+    """The dense vector backend steps through a session exactly as `fim` runs it."""
+    pytest.importorskip("numba")
+    params = _params(engine_backend="generational-vector", **_VECTOR_CASES[case])
+
+    _assert_same(_stepwise(params, steps), _blocking(params))
+
+
+def test_a_vector_session_over_its_capacity_is_refused() -> None:
+    """A configuration the vector backend cannot build is refused up front."""
+    pytest.importorskip("numba")
+    params = _params(
+        engine_backend="generational-vector",
+        mutation_model="finite_alleles",
+        loci=[{"locus_id": 1, "length": 2}],
+        auto_vector_max_capacity=4,
+    )
+    with pytest.raises(UnsupportedSessionError, match="auto_vector_max_capacity"):
+        ScalarSession.create(params, clock=_clock)

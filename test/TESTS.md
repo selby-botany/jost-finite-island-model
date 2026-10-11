@@ -136,6 +136,7 @@ Every test module, fixture, and test function documented here in full; `doc/fim-
   - [`test_state_validation`](#model.test_state_validation)
   - [`test_topology`](#model.test_topology)
   - [`test_vector_block`](#model.test_vector_block)
+  - [`test_vector_block_state`](#model.test_vector_block_state)
   - [`test_vector_kernels`](#model.test_vector_kernels)
   - [`test_vectorized`](#model.test_vectorized)
 - [`test/persistence/`](#group-persistence)
@@ -9930,7 +9931,7 @@ A run continues only with the configuration it was started with.
         }, "version 99"),
         ({
             "engine_backend": "vector"
-        }, "is not scalar"),
+        }, "not one a session can resume"),
     ],
 )
 def test_a_foreign_or_newer_payload_is_refused(tmp_path: Path,
@@ -9993,6 +9994,62 @@ def test_a_process_killed_after_a_checkpoint_resumes_to_the_uninterrupted_run(
 ```
 
 A real abrupt exit past a checkpoint, then restore: the whole run.
+
+<a id="engine.test_execution_checkpoint.test_a_restored_vector_session_finishes_as_the_uninterrupted_run"></a>
+
+#### test\_a\_restored\_vector\_session\_finishes\_as\_the\_uninterrupted\_run
+
+```python
+@pytest.mark.parametrize("case", list(_VECTOR_CASES))
+@pytest.mark.parametrize(("checkpoint_at", "lost"), [(0, 3), (7, 5), (13, 9)])
+def test_a_restored_vector_session_finishes_as_the_uninterrupted_run(
+        tmp_path: Path, case: str, checkpoint_at: int, lost: int) -> None
+```
+
+The dense block is checkpointed exactly: the same run after a restore.
+
+<a id="engine.test_execution_checkpoint.test_a_vector_checkpoint_holds_the_block_not_the_population"></a>
+
+#### test\_a\_vector\_checkpoint\_holds\_the\_block\_not\_the\_population
+
+```python
+def test_a_vector_checkpoint_holds_the_block_not_the_population(
+        tmp_path: Path) -> None
+```
+
+Past the first generation the payload carries only the block.
+
+<a id="engine.test_execution_checkpoint.test_a_vector_checkpoint_taken_after_the_stop_finalizes"></a>
+
+#### test\_a\_vector\_checkpoint\_taken\_after\_the\_stop\_finalizes
+
+```python
+def test_a_vector_checkpoint_taken_after_the_stop_finalizes(
+        tmp_path: Path) -> None
+```
+
+A vector run interrupted while finalizing restores stopped and finalizes.
+
+<a id="engine.test_execution_checkpoint.test_a_vector_block_under_another_backend_is_refused"></a>
+
+#### test\_a\_vector\_block\_under\_another\_backend\_is\_refused
+
+```python
+def test_a_vector_block_under_another_backend_is_refused(
+        tmp_path: Path) -> None
+```
+
+A payload naming a scalar backend cannot carry a dense block.
+
+<a id="engine.test_execution_checkpoint.test_a_version_1_scalar_payload_still_restores"></a>
+
+#### test\_a\_version\_1\_scalar\_payload\_still\_restores
+
+```python
+def test_a_version_1_scalar_payload_still_restores(tmp_path: Path) -> None
+```
+
+Checkpoints written before vector support are still read.
 
 <a id="engine.test_execution_session"></a>
 
@@ -10104,15 +10161,28 @@ def test_batches_are_refused() -> None
 
 A session runs exactly one replicate.
 
-<a id="engine.test_execution_session.test_the_vector_backend_is_refused"></a>
+<a id="engine.test_execution_session.test_a_vector_session_matches_the_blocking_vector_run"></a>
 
-#### test\_the\_vector\_backend\_is\_refused
+#### test\_a\_vector\_session\_matches\_the\_blocking\_vector\_run
 
 ```python
-def test_the_vector_backend_is_refused() -> None
+@pytest.mark.parametrize("case", list(_VECTOR_CASES))
+@pytest.mark.parametrize("steps", [[], [1], [0, 3, 1, 7]])
+def test_a_vector_session_matches_the_blocking_vector_run(
+        case: str, steps: list[int]) -> None
 ```
 
-The dense vector backend has no resumable session yet.
+The dense vector backend steps through a session exactly as `fim` runs it.
+
+<a id="engine.test_execution_session.test_a_vector_session_over_its_capacity_is_refused"></a>
+
+#### test\_a\_vector\_session\_over\_its\_capacity\_is\_refused
+
+```python
+def test_a_vector_session_over_its_capacity_is_refused() -> None
+```
+
+A configuration the vector backend cannot build is refused up front.
 
 <a id="engine.test_frame_identity"></a>
 
@@ -20310,6 +20380,16 @@ never actually updated `configureReturnScreen` at all.
 
 Tests for `fim.gui.object_bridge`: the Saved runs panel's logic.
 
+<a id="gui.test_object_bridge.test_prepare_start_accepts_the_vector_backend"></a>
+
+#### test\_prepare\_start\_accepts\_the\_vector\_backend
+
+```python
+def test_prepare_start_accepts_the_vector_backend(tmp_path: Path) -> None
+```
+
+The GUI's default dense backend is resumable, so it may start.
+
 <a id="gui.test_object_runner"></a>
 
 # gui.test\_object\_runner
@@ -30069,6 +30149,101 @@ def test_a_run_without_the_mode_cache_is_identical_to_one_with_it() -> None
 ```
 
 Disabling the cache changes no row: it is a pure speedup.
+
+<a id="model.test_vector_block_state"></a>
+
+# model.test\_vector\_block\_state
+
+Tests for `VectorBlock.export_state` and `VectorBlock.from_state`.
+
+A block exported mid-run and rebuilt from its export must continue exactly
+as the original: the same rows every generation, the same widths, the same
+growth and shrink history, and the same generator draws. Malformed exports
+are refused before any work is done.
+
+<a id="model.test_vector_block_state.test_a_rebuilt_block_continues_exactly"></a>
+
+#### test\_a\_rebuilt\_block\_continues\_exactly
+
+```python
+@pytest.mark.parametrize("name", list(_CASES))
+@pytest.mark.parametrize("split", [0, 1, 17])
+def test_a_rebuilt_block_continues_exactly(name: str, split: int) -> None
+```
+
+Rows, widths, state, counter and draws all match the original.
+
+<a id="model.test_vector_block_state.test_growth_history_survives_the_round_trip"></a>
+
+#### test\_growth\_history\_survives\_the\_round\_trip
+
+```python
+def test_growth_history_survives_the_round_trip() -> None
+```
+
+A block that has grown keeps its width and growth count.
+
+<a id="model.test_vector_block_state.test_a_split_inside_the_shrink_window_shrinks_on_schedule"></a>
+
+#### test\_a\_split\_inside\_the\_shrink\_window\_shrinks\_on\_schedule
+
+```python
+def test_a_split_inside_the_shrink_window_shrinks_on_schedule() -> None
+```
+
+The shrink-check counter is restored, so the halving is not delayed.
+
+<a id="model.test_vector_block_state.test_the_export_is_a_copy"></a>
+
+#### test\_the\_export\_is\_a\_copy
+
+```python
+def test_the_export_is_a_copy() -> None
+```
+
+Changing the original after an export leaves the export unchanged.
+
+<a id="model.test_vector_block_state.test_a_malformed_export_is_refused"></a>
+
+#### test\_a\_malformed\_export\_is\_refused
+
+```python
+@pytest.mark.parametrize(
+    "spoil",
+    [
+        pytest.param(lambda _m, a: a.pop("freq"), id="missing-array"),
+        pytest.param(lambda _m, a: a.update(freq=a["freq"].astype(np.float32)),
+                     id="dtype"),
+        pytest.param(lambda _m, a: a.update(ids=a["ids"][:, :-1]), id="shape"),
+        pytest.param(
+            lambda _m, a: a.update(ncol=a["ncol"] + a["freq"].shape[2] + 1),
+            id="ncol-range",
+        ),
+        pytest.param(lambda m, _a: m.update(generation=-1), id="generation"),
+        pytest.param(
+            lambda m, _a: m.update(steps_since_shrink_check=
+                                   SHRINK_CHECK_INTERVAL),
+            id="shrink-counter",
+        ),
+        pytest.param(lambda m, _a: m.update(next_id=12), id="next-id-type"),
+    ],
+)
+def test_a_malformed_export_is_refused(
+        spoil: Callable[[dict[str, Any], dict[str, np.ndarray]],
+                        object]) -> None
+```
+
+Every array and field is checked before the block is rebuilt.
+
+<a id="model.test_vector_block_state.test_finite_capacities_must_match_the_loci"></a>
+
+#### test\_finite\_capacities\_must\_match\_the\_loci
+
+```python
+def test_finite_capacities_must_match_the_loci() -> None
+```
+
+A finite export rebuilt under other loci is refused.
 
 <a id="model.test_vector_kernels"></a>
 

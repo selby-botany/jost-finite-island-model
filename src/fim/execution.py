@@ -10,10 +10,12 @@ cancel request and capture a checkpoint.
 
 The session reuses the generation-first lane machinery
 (`fim.engine.ReplicaLane`, `_build_replica_lane`, `SequentialAdvancer`,
-`_finalize_replica_lane`) that the golden-parity tests already prove is
-bit-identical to the lineal reference loop for the same seed. Only the
-scalar backends (``lineal`` and ``generational``) are supported; the dense
-vector backend gains checkpoint support separately.
+`VectorizedAdvancer`, `_finalize_replica_lane`) that the golden-parity
+tests already prove is bit-identical to the lineal reference loop for the
+same seed. Every single-replicate backend is supported: ``lineal`` and
+``generational`` step a `ModelState`; ``generational-vector`` steps a
+dense `fim.model.vector_block.VectorBlock`, which a checkpoint then holds
+in place of the population and registries.
 
 At a safe point `ScalarSession.capture` exports everything the run needs
 to continue exactly (population, registries, random state, convergence
@@ -37,21 +39,28 @@ import numpy as np
 import numpy.typing as npt
 
 from fim.engine import (
+    Advancer,
     Clock,
     JitOption,
     ReplicaLane,
     RunResult,
     SequentialAdvancer,
+    VectorizedAdvancer,
     _build_replica_lane,
     _burn_in_monitor,
     _equilibrium_frame_layout,
     _finalize_replica_lane,
     _frame_layout,
+    _numba_is_available,
     _resolve_auto_engine_backend,
     _utc_now,
+    build_engine_backend,
 )
+from fim.model.allele import AlleleRegistry
 from fim.model.initial import EquilibrationOutcome
+from fim.model.operators import _population_sizes
 from fim.model.params import SimulationParams
+from fim.model.vector_block import VectorBlock, VectorMigration
 from fim.persistence import tlog
 from fim.persistence.binary_store import BinaryLogStore
 from fim.persistence.retention import TrajectoryRetention
@@ -79,17 +88,36 @@ from fim.persistence.store import (
     equilibrium_store_for,
 )
 
-ScalarBackend = Literal["lineal", "generational"]
-SCALAR_BACKENDS: tuple[ScalarBackend, ...] = ("lineal", "generational")
+SessionBackend = Literal["lineal", "generational", "generational-vector"]
+SESSION_BACKENDS: tuple[SessionBackend, ...] = (
+    "lineal",
+    "generational",
+    "generational-vector",
+)
 
 SESSION_CHECKPOINT_KIND: Final = "scalar-session"
-"""The `kind` a scalar session's checkpoint payload carries."""
+"""The `kind` a session's checkpoint payload carries.
 
-SESSION_CHECKPOINT_VERSION: Final = 1
-"""Version of the scalar session payload layout inside a checkpoint."""
+"Scalar" names one replicate lane, as opposed to a batch of them; the kind
+covers every backend a session runs, the vector backend included.
+"""
+
+SESSION_CHECKPOINT_VERSION: Final = 2
+"""Version of the session payload layout this build writes.
+
+Version 2 adds the `vector` block of the generational-vector backend; with
+it, `population` and `registries` are `null` (the block holds them).
+Version 1 payloads never have a block.
+"""
+
+READABLE_SESSION_CHECKPOINT_VERSIONS: Final = (1, 2)
+"""Payload versions this build restores."""
 
 EQUILIBRATION_HISTORY: Final = "equilibration.history"
 """Array holding the ancestral phase's `H_S` history, when there was one."""
+
+VECTOR_PREFIX: Final = "vector."
+"""Prefix of the vector block's arrays inside a checkpoint."""
 
 
 class UnsupportedSessionError(ValueError):
@@ -132,7 +160,7 @@ class ScalarSession:
         lane: ReplicaLane,
         store: TrajectoryStore,
         clock: Clock,
-        engine_backend: ScalarBackend,
+        engine_backend: SessionBackend,
         jit: JitOption,
     ) -> None:
         """Wrap an already-built lane; use `create` instead of calling this.
@@ -141,16 +169,19 @@ class ScalarSession:
             lane: The replicate's working state, at a safe point.
             store: Where generations are persisted.
             clock: Timestamp source for the manifest.
-            engine_backend: The resolved scalar backend recorded in the
-                manifest.
+            engine_backend: The resolved backend recorded in the manifest.
             jit: The JIT option the drift step uses and the manifest records.
         """
         self._lane = lane
         self._store = store
         self._clock = clock
-        self._engine_backend: ScalarBackend = engine_backend
+        self._engine_backend: SessionBackend = engine_backend
         self._jit: JitOption = jit
-        self._advancer = SequentialAdvancer(jit=jit == "numba")
+        self._advancer: Advancer = (
+            VectorizedAdvancer()
+            if engine_backend == "generational-vector"
+            else SequentialAdvancer(jit=jit == "numba")
+        )
         self._result: RunResult | None = None
         self._closed = False
 
@@ -185,7 +216,8 @@ class ScalarSession:
 
         Raises:
             UnsupportedSessionError: If `params` asks for more than one
-                replicate or resolves to a non-scalar backend.
+                replicate or names a backend configuration `fim.engine.fim`
+                itself refuses.
         """
         engine_backend = check_session_support(params)
         run_clock = clock if clock is not None else _utc_now
@@ -242,11 +274,11 @@ class ScalarSession:
         except BaseException:
             close_store(store)
             raise
-        if lane.state.generation != checkpoint.reference.committed_generation:
+        if _lane_generation(lane) != checkpoint.reference.committed_generation:
             close_store(store)
             raise SessionRestoreError(
                 f"checkpoint {checkpoint.reference.checkpoint_id} holds generation "
-                f"{lane.state.generation}, not the committed generation "
+                f"{_lane_generation(lane)}, not the committed generation "
                 f"{checkpoint.reference.committed_generation}"
             )
         run_clock = clock if clock is not None else _utc_now
@@ -255,7 +287,7 @@ class ScalarSession:
     @property
     def generation(self) -> int:
         """The last generation computed, persisted and recorded."""
-        return self._lane.state.generation
+        return _lane_generation(self._lane)
 
     @property
     def lane(self) -> ReplicaLane:
@@ -326,32 +358,43 @@ class ScalarSession:
                 f"{type(self._store).__name__}"
             )
         lane = self._lane
-        population, population_arrays = export_population(lane.state)
-        registries, registry_arrays = export_registries(
-            lane.registry, lane.finite_alleles
-        )
         monitor, monitor_arrays = lane.monitor.export_state()
-        arrays: dict[str, npt.NDArray[Any]] = {
-            **population_arrays,
-            **registry_arrays,
-            **monitor_arrays,
-        }
+        arrays: dict[str, npt.NDArray[Any]] = dict(monitor_arrays)
         payload: dict[str, Any] = {
             "configuration_digest": configuration_digest(lane.params),
             "engine_backend": self._engine_backend,
             "equilibration": None,
-            "generation": lane.state.generation,
+            "generation": self.generation,
             "jit": self._jit,
             "kind": SESSION_CHECKPOINT_KIND,
             "monitor": monitor,
-            "population": population,
-            "registries": registries,
+            "population": None,
+            "registries": None,
             "rng": export_rng(lane.rng),
             "run_id": lane.run_id,
             "started_at": lane.started_at,
             "trajectory": _position_to_json(self._store.checkpoint()),
+            "vector": None,
             "version": SESSION_CHECKPOINT_VERSION,
         }
+        block = lane.vectorized_state
+        if block is None:
+            population, population_arrays = export_population(lane.state)
+            registries, registry_arrays = export_registries(
+                lane.registry, lane.finite_alleles
+            )
+            payload["population"] = population
+            payload["registries"] = registries
+            arrays |= population_arrays | registry_arrays
+        else:
+            # Once the vector backend has built its block, the block is the
+            # population and the registries: `lane.state` and the lane's
+            # registries are left at generation zero until the run stops.
+            vector, vector_arrays = block.export_state()
+            payload["vector"] = vector
+            arrays |= {
+                f"{VECTOR_PREFIX}{name}": array for name, array in vector_arrays.items()
+            }
         outcome = lane.equilibration_outcome
         if outcome is not None:
             ancestral = lane.equilibrium_store
@@ -370,7 +413,7 @@ class ScalarSession:
         return SessionCapture(
             payload=payload,
             arrays=arrays,
-            committed_generation=lane.state.generation,
+            committed_generation=self.generation,
             phase=RunPhase.FINALIZING if self.stopped else RunPhase.SIMULATING,
         )
 
@@ -444,7 +487,7 @@ class ScalarSession:
             raise ValueError(f"run {self.run_id}'s session is closed")
 
 
-def check_session_support(params: SimulationParams) -> ScalarBackend:
+def check_session_support(params: SimulationParams) -> SessionBackend:
     """Refuse a configuration a resumable session cannot run.
 
     Callers check this before committing a start, so an unsupported
@@ -454,28 +497,38 @@ def check_session_support(params: SimulationParams) -> ScalarBackend:
         params: The configuration to run.
 
     Returns:
-        The resolved scalar backend.
+        The resolved single-lane backend.
 
     Raises:
         UnsupportedSessionError: If `params` asks for more than one
-            replicate, resolves to a non-scalar backend, or asks for JIT on
-            the lineal backend.
+            replicate, or the resolved backend cannot be built for it (JIT
+            on the lineal backend, no numba for the vector backend, or a
+            locus over the vector capacity ceiling).
     """
-    engine_backend = resolve_scalar_backend(params)
+    engine_backend = resolve_session_backend(params)
     if params.n_replicates != 1:
         raise UnsupportedSessionError(
             "a resumable session runs exactly one replicate; "
             f"n_replicates is {params.n_replicates}"
         )
-    if engine_backend == "lineal" and params.jit != "off":
-        raise UnsupportedSessionError(
-            "jit is not offered on the lineal backend; set jit to 'off'"
+    # The blocking call's own backend checks (JIT availability per backend,
+    # numba for the vector backend, the vector capacity ceiling), so a
+    # session refuses exactly what `fim.engine.fim` refuses.
+    try:
+        build_engine_backend(
+            engine_backend,
+            jit=params.jit,
+            params=params,
+            auto_vector_min_d=params.auto_vector_min_d,
+            auto_vector_max_capacity=params.auto_vector_max_capacity,
         )
+    except ValueError as error:
+        raise UnsupportedSessionError(str(error)) from error
     return engine_backend
 
 
-def resolve_scalar_backend(params: SimulationParams) -> ScalarBackend:
-    """Resolve `params.engine_backend` to a scalar backend, or refuse.
+def resolve_session_backend(params: SimulationParams) -> SessionBackend:
+    """Resolve `params.engine_backend` to a concrete backend.
 
     ``auto`` is resolved exactly as `fim.engine.fim` resolves it, so a
     session never runs a configuration on a different backend than the
@@ -485,11 +538,10 @@ def resolve_scalar_backend(params: SimulationParams) -> ScalarBackend:
         params: The configuration to run.
 
     Returns:
-        ``"lineal"`` or ``"generational"``.
+        ``"lineal"``, ``"generational"`` or ``"generational-vector"``.
 
     Raises:
-        UnsupportedSessionError: If the configuration resolves to the dense
-            vector backend.
+        UnsupportedSessionError: If the backend is not one a session runs.
     """
     backend = params.engine_backend
     if backend == "auto":
@@ -499,19 +551,17 @@ def resolve_scalar_backend(params: SimulationParams) -> ScalarBackend:
             params.auto_vector_max_capacity,
             params.jit,
         )
-    if backend == "lineal":
-        return "lineal"
-    if backend == "generational":
-        return "generational"
+    for known in SESSION_BACKENDS:
+        if backend == known:
+            return known
     raise UnsupportedSessionError(
-        f"engine backend {backend!r} does not support resumable sessions yet; "
-        "choose 'lineal' or 'generational'"
+        f"engine backend {backend!r} does not support resumable sessions"
     )
 
 
 def _check_payload_identity(
     payload: Mapping[str, Any], params: SimulationParams
-) -> tuple[ScalarBackend, JitOption]:
+) -> tuple[SessionBackend, JitOption]:
     """Check a payload is a scalar session's, taken under `params`.
 
     Returns:
@@ -526,10 +576,11 @@ def _check_payload_identity(
             f"checkpoint kind {payload.get('kind')!r} is not "
             f"{SESSION_CHECKPOINT_KIND!r}"
         )
-    if payload.get("version") != SESSION_CHECKPOINT_VERSION:
+    if payload.get("version") not in READABLE_SESSION_CHECKPOINT_VERSIONS:
         raise SessionRestoreError(
-            f"scalar session checkpoint version {payload.get('version')!r} is "
-            f"not supported; this build reads version {SESSION_CHECKPOINT_VERSION}"
+            f"session checkpoint version {payload.get('version')!r} is "
+            f"not supported; this build reads versions "
+            f"{', '.join(map(str, READABLE_SESSION_CHECKPOINT_VERSIONS))}"
         )
     if payload.get("configuration_digest") != configuration_digest(params):
         raise SessionRestoreError(
@@ -537,8 +588,20 @@ def _check_payload_identity(
             "continues only with the configuration it was started with"
         )
     backend = payload.get("engine_backend")
-    if backend not in SCALAR_BACKENDS:
-        raise SessionRestoreError(f"checkpoint backend {backend!r} is not scalar")
+    if backend not in SESSION_BACKENDS:
+        raise SessionRestoreError(
+            f"checkpoint backend {backend!r} is not one a session can resume"
+        )
+    if backend == "generational-vector" and not _numba_is_available():
+        raise SessionRestoreError(
+            "the run was started on the generational-vector backend, which "
+            "needs the optional numba dependency; install it with "
+            "`pip install fim[jit]` to resume the run"
+        )
+    if payload.get("vector") is not None and backend != "generational-vector":
+        raise SessionRestoreError(
+            f"checkpoint holds a vector block but names backend {backend!r}"
+        )
     jit = payload.get("jit")
     if jit != params.jit:
         raise SessionRestoreError(
@@ -641,21 +704,31 @@ def _restore_lane(
     started_at = payload["started_at"]
     if not isinstance(run_id, str) or not isinstance(started_at, str):
         raise SnapshotError("run_id and started_at must be strings")
-    state = import_population(payload["population"], _select(arrays, "population."))
-    if state.generation != payload["generation"]:
-        raise SnapshotError(
-            f"population is at generation {state.generation}, not "
-            f"{payload['generation']!r}"
-        )
-    registry, finite_alleles = import_registries(
-        payload["registries"], _select(arrays, "finite."), state
-    )
     rng = import_rng(payload["rng"])
     monitor = _burn_in_monitor(params)
     try:
         monitor.restore_state(payload["monitor"], _select(arrays, "monitor."))
     except (ValueError, RuntimeError) as error:
         raise SnapshotError(f"monitor state: {error}") from error
+    block: VectorBlock | None = None
+    if payload.get("vector") is None:
+        state = import_population(payload["population"], _select(arrays, "population."))
+        registry, finite_alleles = import_registries(
+            payload["registries"], _select(arrays, "finite."), state
+        )
+    else:
+        block = _restore_block(params, payload["vector"], arrays)
+        # The block is authoritative; the lane's `state` and registries are
+        # only read again once the run stops, when the advancer rebuilds
+        # them from the block, so they are rebuilt from it here too.
+        state = block.to_model_state()
+        registry = AlleleRegistry(start=block.next_id)
+        finite_alleles = None
+    if state.generation != payload["generation"]:
+        raise SnapshotError(
+            f"population is at generation {state.generation}, not "
+            f"{payload['generation']!r}"
+        )
     if not monitor.generations or monitor.generations[-1] != state.generation:
         raise SnapshotError("the monitor's last generation is not the population's")
     store.resume(
@@ -672,10 +745,59 @@ def _restore_lane(
         finite_alleles=finite_alleles,
         monitor=monitor,
         started_at=started_at,
+        vectorized_state=block,
         equilibration_outcome=outcome,
         equilibrium_store=ancestral,
         retention=TrajectoryRetention.from_params(params),
     )
+
+
+def _restore_block(
+    params: SimulationParams,
+    metadata: object,
+    arrays: Mapping[str, npt.NDArray[Any]],
+) -> VectorBlock:
+    """Rebuild the vector backend's block from a checkpoint.
+
+    The configuration-derived parts are built from `params` exactly as
+    `fim.engine.VectorizedAdvancer` builds them on a lane's first tick.
+
+    Raises:
+        SnapshotError: If the block is malformed or does not fit `params`.
+    """
+    if not isinstance(metadata, Mapping):
+        raise SnapshotError("vector must be a mapping")
+    deme_count = len(params.population_sizes)
+    block_arrays = {
+        name.removeprefix(VECTOR_PREFIX): array
+        for name, array in _select(arrays, VECTOR_PREFIX).items()
+    }
+    try:
+        return VectorBlock.from_state(
+            metadata,
+            block_arrays,
+            loci=params.loci,
+            sizes=_population_sizes(params.gene_copies, deme_count),
+            mutation_rates=params.mutation_rates,
+            migration=VectorMigration.from_parameter(
+                params.m,
+                deme_count,
+                stochastic=params.migrant_sampling == "stochastic",
+            ),
+            mutation_model=params.mutation_model,
+        )
+    except ValueError as error:
+        raise SnapshotError(f"vector block: {error}") from error
+
+
+def _lane_generation(lane: ReplicaLane) -> int:
+    """Return the lane's current generation, wherever it is held.
+
+    Under the vector backend `lane.state` stays at generation zero until
+    the run stops; the block holds the current generation.
+    """
+    block = lane.vectorized_state
+    return block.generation if block is not None else lane.state.generation
 
 
 def _select(
