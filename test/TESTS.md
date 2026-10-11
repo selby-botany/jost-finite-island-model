@@ -95,6 +95,8 @@ Every test module, fixture, and test function documented here in full; `doc/fim-
   - [`test_migration_matrix_screen`](#gui.test_migration_matrix_screen)
   - [`test_n_per_deme_screen`](#gui.test_n_per_deme_screen)
   - [`test_nav_rail`](#gui.test_nav_rail)
+  - [`test_object_bridge`](#gui.test_object_bridge)
+  - [`test_object_runner`](#gui.test_object_runner)
   - [`test_open_run_screen`](#gui.test_open_run_screen)
   - [`test_p0_grid_screen`](#gui.test_p0_grid_screen)
   - [`test_preferences`](#gui.test_preferences)
@@ -108,6 +110,8 @@ Every test module, fixture, and test function documented here in full; `doc/fim-
   - [`test_run_settings_notice_screen`](#gui.test_run_settings_notice_screen)
   - [`test_runner`](#gui.test_runner)
   - [`test_running_screen`](#gui.test_running_screen)
+  - [`test_saved_runs_api`](#gui.test_saved_runs_api)
+  - [`test_saved_runs_screen`](#gui.test_saved_runs_screen)
   - [`test_scatter_styles`](#gui.test_scatter_styles)
   - [`test_settings_modal`](#gui.test_settings_modal)
   - [`test_shutdown_deadman`](#gui.test_shutdown_deadman)
@@ -20300,6 +20304,22 @@ return screen is already `screen-open-run` (Home) before this test
 ever runs, so returning to Home would pass even if this bookkeeping
 never actually updated `configureReturnScreen` at all.
 
+<a id="gui.test_object_bridge"></a>
+
+# gui.test\_object\_bridge
+
+Tests for `fim.gui.object_bridge`: the Saved runs panel's logic.
+
+<a id="gui.test_object_runner"></a>
+
+# gui.test\_object\_runner
+
+Tests for `fim.gui.object_runner`: a saved run on a background thread.
+
+Pause and Cancel are requested from the test observer at a chosen
+generation, so every scenario stops at the same safe point on every run.
+Each test joins the worker thread; none waits on a clock.
+
 <a id="gui.test_open_run_screen"></a>
 
 # gui.test\_open\_run\_screen
@@ -23661,6 +23681,77 @@ run`, above, caught that intermittently on CI (`selectorHidden`
 `True` right after the first progress message); this pins the same
 invariant with no timing window at all, driving the three steps in
 their real order synchronously.
+
+<a id="gui.test_saved_runs_api"></a>
+
+# gui.test\_saved\_runs\_api
+
+Tests for the saved-run bridge calls on `fim.gui.app.Api` (no real window).
+
+A saved run executes on a background thread. Tests wait for the drain
+thread to release the run guard, which it does in its own `finally` after
+its last push, with no timing budget; `conftest.poll_or_fail` bounds only
+a hang.
+
+<a id="gui.test_saved_runs_api.results"></a>
+
+#### results
+
+```python
+@pytest.fixture
+def results(tmp_path: Path) -> Iterator[Path]
+```
+
+Isolate the results directory for the test.
+
+<a id="gui.test_saved_runs_api.window"></a>
+
+#### window
+
+```python
+@pytest.fixture
+def window(monkeypatch: pytest.MonkeyPatch) -> _FakeWindow
+```
+
+Provide a fake active window.
+
+<a id="gui.test_saved_runs_api.api"></a>
+
+#### api
+
+```python
+@pytest.fixture
+def api(tmp_path: Path, results: Path) -> Api
+```
+
+An `Api` whose defaults make every run tiny, lineal, and resumable.
+
+<a id="gui.test_saved_runs_screen"></a>
+
+# gui.test\_saved\_runs\_screen
+
+Headless functional test for Saved runs (`screens/saved-runs.js`).
+
+Proves the page wires the saved-run bridge end to end in a real window:
+"Save for later" keeps an invalid form as a Draft and a fixed one as
+Planned (the same saved run both times), Home lists it with a Start
+button, and Start runs it to completion in the ordinary running view.
+
+`test_saved_runs_api.py`, `test_object_bridge.py` and
+`test_object_runner.py` prove the Python half. Every wait here is on a
+page value or a Python-side event, polled with `poll_page`/`wait_or_fail`,
+so the outcome does not depend on how fast the machine is.
+
+<a id="gui.test_saved_runs_screen.saved_run_settings"></a>
+
+#### saved\_run\_settings
+
+```python
+@pytest.fixture
+def saved_run_settings(_isolate_gui_preferences: Path) -> Path
+```
+
+Settings for one short, resumable (lineal), scalar run.
 
 <a id="gui.test_scatter_styles"></a>
 

@@ -253,7 +253,13 @@
       </div>
       <div class="actions">
         <button type="button" id="run-button" disabled>Run simulation</button>
+        <!-- Keeps the form as a saved run, valid or not (`screens/
+             saved-runs.js`): an invalid form is saved as a Draft. -->
+        <button type="button" id="save-run-object-button">Save for later</button>
         <button type="button" id="cancel-run-button" disabled>Cancel</button>
+        <!-- Shown only while a saved run executes: it stops at a
+             checkpoint and can be resumed from Home's Saved runs. -->
+        <button type="button" id="pause-run-button" hidden>Pause</button>
         <button type="button" id="open-folder-button" hidden>Open output folder</button>
         <button
           type="button"
@@ -871,6 +877,29 @@
         </svg>
       </button>
     </div>
+    <!-- Saved runs (`screens/saved-runs.js`): configurations kept with
+         "Save for later", whether still a Draft, Planned, paused, or
+         finished. Each row offers only the actions its state allows. -->
+    <section id="saved-runs" class="saved-runs" aria-labelledby="saved-runs-heading">
+      <h3 id="saved-runs-heading">Saved runs</h3>
+      <div id="saved-runs-banner" class="banner" hidden></div>
+      <p id="saved-runs-empty" class="saved-runs-empty">
+        No saved runs. Use "Save for later" on the Run screen to keep a
+        configuration, finished or not.
+      </p>
+      <table class="saved-runs-table" id="saved-runs-table" hidden>
+        <thead>
+          <tr>
+            <th>Name</th>
+            <th>State</th>
+            <th>Generation</th>
+            <th>Updated</th>
+            <th>Actions</th>
+          </tr>
+        </thead>
+        <tbody id="saved-runs-body"></tbody>
+      </table>
+    </section>
   </section>
 
   <section id="screen-help" class="screen" hidden>
@@ -2548,6 +2577,7 @@
 <script src="screens/run-view-running.js"></script>
 <script src="screens/run-view-completed.js"></script>
 <script src="screens/open-run.js"></script>
+<script src="screens/saved-runs.js"></script>
 <script src="screens/help.js"></script>
 <script src="screens/explore.js"></script>
 <script src="screens/sweep.js"></script>

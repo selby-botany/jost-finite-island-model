@@ -87,7 +87,15 @@ from fim.engine import (
 )
 from fim.examples import seed
 from fim.examples.artifacts import materialize_outputs
-from fim.gui import batch_runner, presets, recent_runs, runner, sweep_bridge
+from fim.gui import (
+    batch_runner,
+    object_bridge,
+    object_runner,
+    presets,
+    recent_runs,
+    runner,
+    sweep_bridge,
+)
 from fim.gui.animation import (
     AnimationFrame,
     pre_render_batch_frames,
@@ -140,7 +148,9 @@ from fim.persistence.manifest import (
     read_manifest,
 )
 from fim.persistence.pairwise import pair_value, read_pairwise
+from fim.persistence.run_lifecycle import LifecycleError
 from fim.persistence.run_metadata import replace_run_metadata, run_metadata_path
+from fim.persistence.run_objects import read_run_object
 from fim.reanalyze import (
     read_persisted_convergence_history,
     reanalyze_trajectory,
@@ -262,6 +272,10 @@ _SHUTDOWN_DEADMAN_SECONDS: Final[float] = 20.0
 # recognizable as such in a log, a shell's `$?`, or a bug report,
 # rather than being confused with a clean close.
 _SHUTDOWN_DEADMAN_EXIT_CODE: Final[int] = 3
+
+# How long closing waits for a saved run to checkpoint and pause; well
+# inside `_SHUTDOWN_DEADMAN_SECONDS`, which is armed first.
+_OBJECT_PAUSE_ON_CLOSE_SECONDS: Final[float] = 10.0
 
 
 def _derived_convergence_note(params: SimulationParams) -> str:
@@ -1989,6 +2003,10 @@ class Api:
         # `_sweep_cancel_event` is non-`None` for exactly as long as a
         # sweep's own thread is running.
         self._run_in_flight = False
+        # The saved run (`start_run_object`) now executing, if any, and its
+        # worker thread; Pause and Cancel are routed to it.
+        self._active_object_id: str | None = None
+        self._object_worker: threading.Thread | None = None
         # The run of this configuration from another software version, if
         # any, that the run now starting is compared with when it finishes.
         self._previous_version_run: Path | None = None
@@ -2300,6 +2318,7 @@ class Api:
                 _check_reproducibility(target[1], target[0], previous)
         finally:
             self._run_in_flight = False
+            self._active_object_id = None
 
     def _start_batch_run(
         self,
@@ -2378,6 +2397,236 @@ class Api:
         """
         if self._cancel_event is not None:
             self._cancel_event.set()
+        if self._active_object_id is not None:
+            with contextlib.suppress(LifecycleError):
+                object_bridge.cancel(self._active_object_id)
+
+    @_log_bridge_call
+    def pause_run(self) -> dict[str, Any]:
+        """Ask the saved run now executing to checkpoint and pause.
+
+        Only a saved run (`start_run_object`) can pause; an ordinary run
+        has no checkpoint to resume from. The worker acknowledges with a
+        pushed `fim.onRunPaused(generation)`.
+
+        Returns:
+            `{"ok": True}`, or `{"ok": False, "message": ...}`.
+        """
+        object_id = self._active_object_id
+        if object_id is None:
+            return {"ok": False, "message": "only a saved run can pause"}
+        try:
+            object_bridge.pause(object_id)
+        except LifecycleError as error:
+            return {"ok": False, "message": str(error)}
+        return {"ok": True}
+
+    @_log_bridge_call
+    def save_run_object(
+        self,
+        values: dict[str, str],
+        object_id: str | None = None,
+        run_name: str = "",
+        run_description: str = "",
+    ) -> dict[str, Any]:
+        """Save the form for later, as a new saved run or over an unstarted one.
+
+        An invalid or incomplete form is saved as a Draft, which can be
+        reopened and fixed later; a valid one is saved as Planned.
+
+        Args:
+            values: The same shape `start_run` accepts, valid or not.
+            object_id: The saved run being edited; `None` saves a new one.
+            run_name: Optional run name.
+            run_description: Optional run description.
+
+        Returns:
+            `{"ok": True, "objectId", "state", "problem"}` (`problem` says
+            why a Draft is invalid, else `None`), or `{"ok": False,
+            "message": ...}`.
+        """
+        values = self._merge_default_run_settings(values)
+        try:
+            saved, problem = object_bridge.save(
+                values,
+                object_id=object_id or None,
+                name=run_name,
+                description=run_description,
+            )
+        except (LifecycleError, OSError) as error:
+            return {"ok": False, "message": str(error)}
+        return {
+            "ok": True,
+            "objectId": saved.object_id,
+            "state": saved.record.state.value,
+            "problem": problem,
+        }
+
+    @_log_bridge_call
+    def list_run_objects(self) -> dict[str, Any]:
+        """Return the Saved runs panel's rows (`object_bridge.list_rows`).
+
+        Returns:
+            `{"ok": True, "runs": [...], "unreadable": [...],
+            "activeObjectId": ...}`, or `{"ok": False, "message": ...}`.
+        """
+        try:
+            rows = object_bridge.list_rows()
+        except (LifecycleError, OSError) as error:
+            return {"ok": False, "message": str(error)}
+        return {"ok": True, **rows, "activeObjectId": self._active_object_id}
+
+    @_log_bridge_call
+    def open_run_object(self, object_id: str) -> dict[str, Any]:
+        """Return a saved run's form values, to edit it in Configure.
+
+        Args:
+            object_id: The saved run.
+
+        Returns:
+            `{"ok": True, "values", "name", "description", "state",
+            "objectId", "editable", "runSettings",
+            "runSettingDifferences"}` (the last two as `load_yaml`), or
+            `{"ok": False, "message": ...}`.
+        """
+        try:
+            run_object = read_run_object(object_id)
+        except (LifecycleError, OSError) as error:
+            return {"ok": False, "message": str(error)}
+        values, problem = object_bridge.form_values(run_object)
+        if values is None:
+            return {"ok": False, "message": f"cannot open this saved run: {problem}"}
+        row = object_bridge.row(run_object)
+        return {
+            "ok": True,
+            "values": values,
+            "name": run_object.labels.name,
+            "description": run_object.labels.description,
+            "state": row["state"],
+            "objectId": object_id,
+            "editable": row["actions"]["edit"],
+            **self._loaded_run_settings(values),
+        }
+
+    @_log_bridge_call
+    def start_run_object(self, object_id: str) -> dict[str, Any]:
+        """Start a planned saved run, or resume a paused or stopped one.
+
+        Pushes the same `fim.onRun*` calls `start_run` does, plus
+        `fim.onRunPaused(generation)`. The run's artifacts are written to
+        its own object directory.
+
+        Args:
+            object_id: The saved run.
+
+        Returns:
+            `start_run`'s shape (`isBatch` is always `False`), or
+            `{"ok": False, "message": ...}`.
+        """
+        if self._sweep_cancel_event is not None or self._run_in_flight:
+            return {"ok": False, "message": "a run is in progress; wait for it"}
+        window = _active_window()
+        if window is None:
+            return {"ok": False, "message": "no active window"}
+        try:
+            run_object, params = object_bridge.prepare_start(object_id)
+        except (LifecycleError, ValueError) as error:
+            return {"ok": False, "message": str(error)}
+        message_queue: queue.Queue[runner.RunMessage] = queue.Queue()
+        self._cancel_event = None
+        self._active_object_id = object_id
+        self._run_in_flight = True
+        self._object_worker = object_runner.start_object_run(
+            object_id,
+            message_queue,
+            pairwise_max_demes=self._preferences.pairwise_max_demes,
+        )
+        logger.info("saved run starting: %s", object_id)
+        self._live_deme_pair = None
+        if self._on_run_started is not None:
+            self._on_run_started()
+        equilibrium = _equilibrium_reference_payload(params, FULL_PRECISION_DIGITS)
+        identity_recovery = _identity_recovery_reference_payload(params)
+        closed_form = _closed_form_trajectory_payload(params)
+        threading.Thread(
+            target=self._drain_then_release,
+            args=(
+                _drain_run_messages,
+                window,
+                message_queue,
+                params.max_generations,
+                params.d,
+                run_object.directory,
+                self._significant_digits,
+                self.get_live_deme_pair,
+                self._on_message,
+                equilibrium,
+                identity_recovery,
+                closed_form,
+            ),
+            daemon=True,
+        ).start()
+        return {
+            "ok": True,
+            "isBatch": False,
+            "objectId": object_id,
+            "name": run_object.labels.name,
+            "equilibrium": equilibrium,
+            "identityRecovery": identity_recovery,
+            "closedForm": closed_form,
+            "convergence": _convergence_reference_payload(params),
+        }
+
+    @_log_bridge_call
+    def cancel_run_object(self, object_id: str) -> dict[str, Any]:
+        """Cancel a saved run that is not executing in this window, keeping its data.
+
+        Args:
+            object_id: The saved run.
+
+        Returns:
+            `{"ok": True, "state": ...}`, or `{"ok": False, "message": ...}`.
+        """
+        try:
+            state = object_bridge.cancel(object_id)
+        except (LifecycleError, OSError) as error:
+            return {"ok": False, "message": str(error)}
+        return {"ok": True, "state": state}
+
+    @_log_bridge_call
+    def delete_run_object(self, object_id: str) -> dict[str, Any]:
+        """Delete a saved run that is not executing, and all of its data.
+
+        Args:
+            object_id: The saved run.
+
+        Returns:
+            `{"ok": True}`, or `{"ok": False, "message": ...}`.
+        """
+        try:
+            object_bridge.delete(object_id)
+        except (LifecycleError, OSError) as error:
+            return {"ok": False, "message": str(error)}
+        return {"ok": True}
+
+    def pause_active_object_run(self, timeout: float) -> None:
+        """Pause the saved run now executing, waiting up to `timeout` seconds.
+
+        Called while the application closes, so a saved run stops at a
+        checkpoint it can resume from rather than being interrupted.
+
+        Args:
+            timeout: Longest wait for the worker to acknowledge, in seconds.
+        """
+        object_id = self._active_object_id
+        worker = self._object_worker
+        if object_id is None or worker is None:
+            return
+        with contextlib.suppress(LifecycleError):
+            object_bridge.pause(object_id)
+        worker.join(timeout)
+        if worker.is_alive():
+            logger.warning("saved run %s did not pause before exit", object_id)
 
     @_log_bridge_call
     def open_output_folder(self, path: str) -> None:
@@ -6805,9 +7054,12 @@ def _drain_run_messages(
             # Not terminal: a note such as "saving every deme pair's
             # statistics" while a large run's artifacts are written.
             window.evaluate_js(f"fim.onRunStatus({json.dumps(message[1])})")
-        elif message[0] == "cancelled":
-            logger.info("run cancelled: %s", output_directory)
-            window.evaluate_js(f"fim.onRunCancelled({json.dumps(message[1])})")
+        elif message[0] in ("cancelled", "paused"):
+            # Only a saved Run (`fim.gui.object_runner`) pauses; its
+            # checkpoint is durable, so it resumes from Saved runs.
+            handler = "onRunCancelled" if message[0] == "cancelled" else "onRunPaused"
+            logger.info("run %s: %s", message[0], output_directory)
+            window.evaluate_js(f"fim.{handler}({json.dumps(message[1])})")
             if on_message is not None:
                 on_message(message)
             return
@@ -8536,6 +8788,10 @@ def main(argv: Sequence[str] | None = None) -> int:
     # covers shutdown alone, never the arbitrarily long time a user may
     # legitimately leave the application open.
     _start_shutdown_deadman(shutdown_timeout())
+    # A saved run still executing is asked to checkpoint and pause, so it
+    # resumes later instead of being found interrupted. Its worker is
+    # not a daemon; should it miss this bound, the deadman still exits.
+    api.pause_active_object_run(_OBJECT_PAUSE_ON_CLOSE_SECONDS)
     return 0
 
 

@@ -284,6 +284,14 @@ Return to the [source-tree orientation](../README.md) or the [developer guide](.
     * [\_\_init\_\_](#fim.gui.app.Api.__init__)
     * [start\_run](#fim.gui.app.Api.start_run)
     * [cancel\_run](#fim.gui.app.Api.cancel_run)
+    * [pause\_run](#fim.gui.app.Api.pause_run)
+    * [save\_run\_object](#fim.gui.app.Api.save_run_object)
+    * [list\_run\_objects](#fim.gui.app.Api.list_run_objects)
+    * [open\_run\_object](#fim.gui.app.Api.open_run_object)
+    * [start\_run\_object](#fim.gui.app.Api.start_run_object)
+    * [cancel\_run\_object](#fim.gui.app.Api.cancel_run_object)
+    * [delete\_run\_object](#fim.gui.app.Api.delete_run_object)
+    * [pause\_active\_object\_run](#fim.gui.app.Api.pause_active_object_run)
     * [open\_output\_folder](#fim.gui.app.Api.open_output_folder)
     * [get\_run\_setting\_differences](#fim.gui.app.Api.get_run_setting_differences)
     * [get\_starter\_form](#fim.gui.app.Api.get_starter_form)
@@ -412,6 +420,7 @@ Return to the [source-tree orientation](../README.md) or the [developer guide](.
   * [tab\_for\_error](#fim.gui.config_form.tab_for_error)
   * [field\_for\_error](#fim.gui.config_form.field_for_error)
   * [form\_values\_to\_payload](#fim.gui.config_form.form_values_to_payload)
+  * [form\_values\_to\_draft\_payload](#fim.gui.config_form.form_values_to_draft_payload)
   * [expert\_to\_payload](#fim.gui.config_form.expert_to_payload)
   * [run\_setting\_error](#fim.gui.config_form.run_setting_error)
   * [validate\_run\_settings](#fim.gui.config_form.validate_run_settings)
@@ -443,6 +452,18 @@ Return to the [source-tree orientation](../README.md) or the [developer guide](.
   * [pooled\_frequency\_spectrum\_payload](#fim.gui.literature_visuals.pooled_frequency_spectrum_payload)
   * [isolation\_by\_distance\_payload](#fim.gui.literature_visuals.isolation_by_distance_payload)
   * [pooled\_isolation\_by\_distance\_payload](#fim.gui.literature_visuals.pooled_isolation_by_distance_payload)
+* [fim.gui.object\_bridge](#fim.gui.object_bridge)
+  * [cancel](#fim.gui.object_bridge.cancel)
+  * [configuration\_text](#fim.gui.object_bridge.configuration_text)
+  * [delete](#fim.gui.object_bridge.delete)
+  * [form\_values](#fim.gui.object_bridge.form_values)
+  * [list\_rows](#fim.gui.object_bridge.list_rows)
+  * [pause](#fim.gui.object_bridge.pause)
+  * [prepare\_start](#fim.gui.object_bridge.prepare_start)
+  * [row](#fim.gui.object_bridge.row)
+  * [save](#fim.gui.object_bridge.save)
+* [fim.gui.object\_runner](#fim.gui.object_runner)
+  * [start\_object\_run](#fim.gui.object_runner.start_object_run)
 * [fim.gui.preferences](#fim.gui.preferences)
   * [RUN\_GRAPH\_KEYS](#fim.gui.preferences.RUN_GRAPH_KEYS)
   * [DEFAULT\_RUN\_GRAPHS](#fim.gui.preferences.DEFAULT_RUN_GRAPHS)
@@ -494,6 +515,7 @@ Return to the [source-tree orientation](../README.md) or the [developer guide](.
     * [should\_report](#fim.gui.runner.ProgressThrottle.should_report)
   * [run\_artifact\_targets](#fim.gui.runner.run_artifact_targets)
   * [pairwise\_status\_text](#fim.gui.runner.pairwise_status_text)
+  * [progress\_message](#fim.gui.runner.progress_message)
   * [start\_run](#fim.gui.runner.start_run)
   * [write\_run\_artifacts](#fim.gui.runner.write_run_artifacts)
 * [fim.gui.store](#fim.gui.store)
@@ -7909,6 +7931,177 @@ Store.write_generation`'s own tolerance of a `cancel_event` that
 was never going to matter, rather than raising for a Cancel click
 that arrives a moment after the run already finished on its own.
 
+<a id="fim.gui.app.Api.pause_run"></a>
+
+#### pause\_run
+
+```python
+@_log_bridge_call
+def pause_run() -> dict[str, Any]
+```
+
+Ask the saved run now executing to checkpoint and pause.
+
+Only a saved run (`start_run_object`) can pause; an ordinary run
+has no checkpoint to resume from. The worker acknowledges with a
+pushed `fim.onRunPaused(generation)`.
+
+**Returns**:
+
+- ``{"ok"` - True}`, or `{"ok": False, "message": ...}`.
+
+<a id="fim.gui.app.Api.save_run_object"></a>
+
+#### save\_run\_object
+
+```python
+@_log_bridge_call
+def save_run_object(values: dict[str, str],
+                    object_id: str | None = None,
+                    run_name: str = "",
+                    run_description: str = "") -> dict[str, Any]
+```
+
+Save the form for later, as a new saved run or over an unstarted one.
+
+An invalid or incomplete form is saved as a Draft, which can be
+reopened and fixed later; a valid one is saved as Planned.
+
+**Arguments**:
+
+- `values` - The same shape `start_run` accepts, valid or not.
+- `object_id` - The saved run being edited; `None` saves a new one.
+- `run_name` - Optional run name.
+- `run_description` - Optional run description.
+
+
+**Returns**:
+
+- ``{"ok"` - True, "objectId", "state", "problem"}` (`problem` says
+  why a Draft is invalid, else `None`), or `{"ok": False,
+- `"message"` - ...}`.
+
+<a id="fim.gui.app.Api.list_run_objects"></a>
+
+#### list\_run\_objects
+
+```python
+@_log_bridge_call
+def list_run_objects() -> dict[str, Any]
+```
+
+Return the Saved runs panel's rows (`object_bridge.list_rows`).
+
+**Returns**:
+
+- ``{"ok"` - True, "runs": [...], "unreadable": [...],
+- `"activeObjectId"` - ...}`, or `{"ok": False, "message": ...}`.
+
+<a id="fim.gui.app.Api.open_run_object"></a>
+
+#### open\_run\_object
+
+```python
+@_log_bridge_call
+def open_run_object(object_id: str) -> dict[str, Any]
+```
+
+Return a saved run's form values, to edit it in Configure.
+
+**Arguments**:
+
+- `object_id` - The saved run.
+
+
+**Returns**:
+
+- ``{"ok"` - True, "values", "name", "description", "state",
+  "objectId", "editable", "runSettings",
+  "runSettingDifferences"}` (the last two as `load_yaml`), or
+- ``{"ok"` - False, "message": ...}`.
+
+<a id="fim.gui.app.Api.start_run_object"></a>
+
+#### start\_run\_object
+
+```python
+@_log_bridge_call
+def start_run_object(object_id: str) -> dict[str, Any]
+```
+
+Start a planned saved run, or resume a paused or stopped one.
+
+Pushes the same `fim.onRun*` calls `start_run` does, plus
+`fim.onRunPaused(generation)`. The run's artifacts are written to
+its own object directory.
+
+**Arguments**:
+
+- `object_id` - The saved run.
+
+
+**Returns**:
+
+  `start_run`'s shape (`isBatch` is always `False`), or
+- ``{"ok"` - False, "message": ...}`.
+
+<a id="fim.gui.app.Api.cancel_run_object"></a>
+
+#### cancel\_run\_object
+
+```python
+@_log_bridge_call
+def cancel_run_object(object_id: str) -> dict[str, Any]
+```
+
+Cancel a saved run that is not executing in this window, keeping its data.
+
+**Arguments**:
+
+- `object_id` - The saved run.
+
+
+**Returns**:
+
+- ``{"ok"` - True, "state": ...}`, or `{"ok": False, "message": ...}`.
+
+<a id="fim.gui.app.Api.delete_run_object"></a>
+
+#### delete\_run\_object
+
+```python
+@_log_bridge_call
+def delete_run_object(object_id: str) -> dict[str, Any]
+```
+
+Delete a saved run that is not executing, and all of its data.
+
+**Arguments**:
+
+- `object_id` - The saved run.
+
+
+**Returns**:
+
+- ``{"ok"` - True}`, or `{"ok": False, "message": ...}`.
+
+<a id="fim.gui.app.Api.pause_active_object_run"></a>
+
+#### pause\_active\_object\_run
+
+```python
+def pause_active_object_run(timeout: float) -> None
+```
+
+Pause the saved run now executing, waiting up to `timeout` seconds.
+
+Called while the application closes, so a saved run stops at a
+checkpoint it can resume from rather than being interrupted.
+
+**Arguments**:
+
+- `timeout` - Longest wait for the worker to acknowledge, in seconds.
+
 <a id="fim.gui.app.Api.open_output_folder"></a>
 
 #### open\_output\_folder
@@ -11512,6 +11705,32 @@ Coerce the form's string values into a `from_mapping`-ready payload.
   place for this if it were only mitigated rather than fixed
   at the source).
 
+<a id="fim.gui.config_form.form_values_to_draft_payload"></a>
+
+#### form\_values\_to\_draft\_payload
+
+```python
+def form_values_to_draft_payload(
+        values: Mapping[str, str]) -> dict[str, object]
+```
+
+Coerce the form's values without refusing any of them, for a Draft.
+
+`form_values_to_payload`'s lenient counterpart: a field that parses
+is typed exactly as there, and one that does not keeps its text, so
+a saved Draft's configuration still records what was entered and
+still fails validation for the same reason the form does. A missing
+field is left out.
+
+**Arguments**:
+
+- `values` - The form values, possibly incomplete or invalid.
+
+
+**Returns**:
+
+  A payload that `SimulationParams.from_mapping` may reject.
+
 <a id="fim.gui.config_form.expert_to_payload"></a>
 
 #### expert\_to\_payload
@@ -12433,6 +12652,287 @@ Return pairwise identity decay by migration-graph distance, pooled.
   more samples to the same distance class the same way a second
   locus already would within one state, no separate accounting
   needed for "how many states" versus "how many deme pairs."
+
+<a id="fim.gui.object_bridge"></a>
+
+# fim.gui.object\_bridge
+
+Saved runs ("Save for later") for the GUI: the logic behind `Api`'s methods.
+
+A saved run is a Run object (`fim.persistence.run_objects`): a configuration
+the botanist saved to start, pause, and resume later, which may be a Draft
+that is not yet valid. `fim.gui.app.Api` stays a thin bridge over these
+functions, which are plain enough to test without a window.
+
+A Draft's configuration file records what was entered (fields that do not
+parse keep their text), but cannot always be turned back into form values,
+because the form has modes and selectors the configuration does not. So
+each save also writes the form's own values to `gui-form.json` in the
+object directory, next to a digest of the configuration it was saved with.
+Reopening uses those values while the digest still matches; after an edit
+made elsewhere (`fim object edit`), the configuration itself is converted.
+
+<a id="fim.gui.object_bridge.cancel"></a>
+
+#### cancel
+
+```python
+def cancel(object_id: str, *, results: Path | None = None) -> str
+```
+
+Cancel a saved run, or ask its running worker to stop.
+
+**Arguments**:
+
+- `object_id` - The saved run.
+- `results` - Results directory (default: `results_directory()`).
+
+
+**Returns**:
+
+  The state the run is in afterward (`cancelling` or `cancelled`).
+
+<a id="fim.gui.object_bridge.configuration_text"></a>
+
+#### configuration\_text
+
+```python
+def configuration_text(values: Mapping[str, str],
+                       *,
+                       name: str = "",
+                       description: str = "") -> tuple[str, str | None]
+```
+
+Turn form values into configuration text, whether or not they are valid.
+
+**Arguments**:
+
+- `values` - The form values, with run settings already merged in.
+- `name` - Optional run name label.
+- `description` - Optional run description label.
+
+
+**Returns**:
+
+  The configuration text, and why the form is invalid (`None` when
+  the form parses).
+
+<a id="fim.gui.object_bridge.delete"></a>
+
+#### delete
+
+```python
+def delete(object_id: str, *, results: Path | None = None) -> None
+```
+
+Delete a saved run that is not executing.
+
+**Arguments**:
+
+- `object_id` - The saved run.
+- `results` - Results directory (default: `results_directory()`).
+
+<a id="fim.gui.object_bridge.form_values"></a>
+
+#### form\_values
+
+```python
+def form_values(
+        run_object: RunObject) -> tuple[dict[str, str] | None, str | None]
+```
+
+Return a saved run's configuration as form values.
+
+**Arguments**:
+
+- `run_object` - The saved run.
+
+
+**Returns**:
+
+  The values, or `None` and why they cannot be recovered.
+
+<a id="fim.gui.object_bridge.list_rows"></a>
+
+#### list\_rows
+
+```python
+def list_rows(results: Path | None = None) -> dict[str, Any]
+```
+
+Return one row per saved run, after recording any lost worker.
+
+**Arguments**:
+
+- `results` - Results directory (default: `results_directory()`).
+
+
+**Returns**:
+
+- ``{"runs"` - [...], "unreadable": [...]}`; each run row carries its
+  state, progress, issues, and the actions now allowed.
+
+<a id="fim.gui.object_bridge.pause"></a>
+
+#### pause
+
+```python
+def pause(object_id: str, *, results: Path | None = None) -> None
+```
+
+Ask a running saved run to checkpoint and pause.
+
+**Arguments**:
+
+- `object_id` - The saved run.
+- `results` - Results directory (default: `results_directory()`).
+
+<a id="fim.gui.object_bridge.prepare_start"></a>
+
+#### prepare\_start
+
+```python
+def prepare_start(
+        object_id: str,
+        *,
+        results: Path | None = None) -> tuple[RunObject, SimulationParams]
+```
+
+Check that a saved run can start or resume now, before any side effect.
+
+**Arguments**:
+
+- `object_id` - The saved run.
+- `results` - Results directory (default: `results_directory()`).
+
+
+**Returns**:
+
+  The run (`planned` or resumable) and its parameters.
+
+
+**Raises**:
+
+- `LifecycleError` - The run is a Draft, or is in any other state.
+- `ValueError` - A saved run cannot run this configuration yet (more
+  than one replicate, or a vector backend).
+
+<a id="fim.gui.object_bridge.row"></a>
+
+#### row
+
+```python
+def row(run_object: RunObject) -> dict[str, Any]
+```
+
+Return the Saved runs panel's row for one saved run.
+
+**Arguments**:
+
+- `run_object` - The saved run.
+
+
+**Returns**:
+
+  A JSON-ready mapping.
+
+<a id="fim.gui.object_bridge.save"></a>
+
+#### save
+
+```python
+def save(
+    values: Mapping[str, str],
+    *,
+    object_id: str | None = None,
+    name: str = "",
+    description: str = "",
+    results: Path | None = None,
+    create: Callable[..., RunObject] = create_run_object
+) -> tuple[RunObject, str | None]
+```
+
+Save the form as a new saved run, or over an existing Draft or Planned one.
+
+**Arguments**:
+
+- `values` - The form values, with run settings already merged in.
+- `object_id` - The saved run to update; `None` creates one.
+- `name` - Optional run name label.
+- `description` - Optional run description label.
+- `results` - Results directory (default: `results_directory()`).
+- `create` - Injectable object creator.
+
+
+**Returns**:
+
+  The saved run (`draft` or `planned`), and why the form is invalid.
+
+
+**Raises**:
+
+- `LifecycleError` - The run has started, so its configuration is fixed,
+  or it changed since it was read.
+
+<a id="fim.gui.object_runner"></a>
+
+# fim.gui.object\_runner
+
+Background-thread execution of a saved Run object for the GUI.
+
+The counterpart to `fim.gui.runner` for a Run saved with "Save for later"
+(`fim.persistence.run_objects`). Execution goes through the same lifecycle
+service the CLI's `fim object start/resume` uses
+(`fim.run_service.execute_run_object`), so the GUI never applies lifecycle
+rules of its own. Pause and Cancel are durable requests recorded in the
+object's `run.json` (`request_pause`, `cancel_run_object`); the worker
+honors them at its next safe point.
+
+The worker posts the same `runner.RunMessage` shapes `fim.gui.runner`
+does, plus `("paused", generation)`, so `fim.gui.app._drain_run_messages`
+draws both kinds of run identically. Only one run is in flight at a time,
+and each run has its own queue, so a message from an earlier attempt can
+never reach a later attempt's view.
+
+<a id="fim.gui.object_runner.start_object_run"></a>
+
+#### start\_object\_run
+
+```python
+def start_object_run(
+    object_id: str,
+    message_queue: queue.Queue[RunMessage],
+    *,
+    results: Path | None = None,
+    cadence: CheckpointCadence = GUI_CADENCE,
+    clock: Callable[[], float] = time.monotonic,
+    pairwise_max_demes: int = DEFAULT_PAIRWISE_MAX_DEMES,
+    observer: Callable[[ScalarSession], None] | None = None
+) -> threading.Thread
+```
+
+Start or resume a saved Run object on a background thread.
+
+The thread is not a daemon: an application that is closing waits for
+it, so a Pause requested at close is checkpointed before the process
+exits.
+
+**Arguments**:
+
+- `object_id` - The saved Run to execute.
+- `message_queue` - Receives every `runner.RunMessage` the run posts.
+- `results` - Results directory (default: `results_directory()`).
+- `cadence` - Checkpoint and control cadence.
+- `clock` - Injectable wall clock for the progress throttle.
+- `pairwise_max_demes` - Largest deme count whose `pairwise.json` is
+  written when the run completes.
+- `observer` - Test-only hook, called with the session at every
+  control point, after its progress tick.
+
+
+**Returns**:
+
+  The started (not yet joined) worker thread.
 
 <a id="fim.gui.preferences"></a>
 
@@ -13478,6 +13978,32 @@ Return the status line shown while large `pairwise.json` files are saved.
 **Returns**:
 
   A short sentence for the Run card's status line.
+
+<a id="fim.gui.runner.progress_message"></a>
+
+#### progress\_message
+
+```python
+def progress_message(state: ModelState, generation: int,
+                     params: SimulationParams, run_id: str) -> ProgressMessage
+```
+
+Build the `"progress"` message the Run card draws one tick from.
+
+Shared by this module's worker and `fim.gui.object_runner`, so a
+saved Run and an ordinary one draw identical ticks.
+
+**Arguments**:
+
+- `state` - The population at `generation`.
+- `generation` - The generation just recorded.
+- `params` - The run's parameters.
+- `run_id` - The run's scientific run ID.
+
+
+**Returns**:
+
+  The message to put on the run's queue.
 
 <a id="fim.gui.runner.start_run"></a>
 

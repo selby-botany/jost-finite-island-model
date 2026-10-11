@@ -108,12 +108,20 @@ ProgressMessage = tuple[
 ]
 DoneMessage = tuple[Literal["done"], RunResult]
 CancelledMessage = tuple[Literal["cancelled"], int]
+# A saved Run (`fim.gui.object_runner`) that published a checkpoint at this
+# generation and stopped; it can be resumed later.
+PausedMessage = tuple[Literal["paused"], int]
 ErrorMessage = tuple[Literal["error"], str]
 # A non-terminal note for the Run card's status line, such as "saving
 # every deme pair's statistics" for a large run.
 StatusMessage = tuple[Literal["status"], str]
 RunMessage = (
-    ProgressMessage | DoneMessage | CancelledMessage | ErrorMessage | StatusMessage
+    ProgressMessage
+    | DoneMessage
+    | CancelledMessage
+    | PausedMessage
+    | ErrorMessage
+    | StatusMessage
 )
 
 logger = logging.getLogger(__name__)
@@ -221,6 +229,43 @@ def pairwise_status_text(deme_count: int, run_count: int) -> str:
     )
 
 
+def progress_message(
+    state: ModelState, generation: int, params: SimulationParams, run_id: str
+) -> ProgressMessage:
+    """Build the `"progress"` message the Run card draws one tick from.
+
+    Shared by this module's worker and `fim.gui.object_runner`, so a
+    saved Run and an ordinary one draw identical ticks.
+
+    Args:
+        state: The population at `generation`.
+        generation: The generation just recorded.
+        params: The run's parameters.
+        run_id: The run's scientific run ID.
+
+    Returns:
+        The message to put on the run's queue.
+    """
+    # `points` rides along raw (not only the already-reduced `panels`)
+    # so `fim.gui.app._drain_run_messages` can compute one caller-chosen
+    # deme-pair panel per tick too, for the Progress screen's live
+    # "Compare demes directly" selector.
+    points = frequency_points(state)
+    panels = panels_from_points(points, state.deme_count)
+    # The six named statistics for this tick's state, the same
+    # `report_for_state` call `Api.get_initial_state_panels` makes for
+    # p_0. `converged`/`reason` are placeholders; nothing downstream
+    # reads them off a progress tick, only the six numeric fields.
+    report = report_for_state(
+        state, params, run_id=run_id, converged=False, reason="in progress"
+    )
+    visuals = {
+        "alleleComposition": allele_composition_payload(state),
+        "frequencySpectrum": frequency_spectrum_payload(state, params),
+    }
+    return ("progress", generation, panels, points, report, visuals, state)
+
+
 def start_run(
     params: SimulationParams,
     output_directory: Path,
@@ -296,33 +341,7 @@ def _run_worker(
     def on_generation(generation: int, rows: list[Mapping[str, Any]]) -> None:
         if throttle.should_report(generation, params.max_generations):
             state = ModelState.from_rows(rows, params.loci)
-            # `points` rides along raw (not only the already-reduced
-            # `panels`) so `fim.gui.app._drain_run_messages` can compute
-            # one caller-chosen deme-pair panel per tick too, for the
-            # Progress screen's own live "Compare demes directly"
-            # selector — `scatter_panels(state)`'s own body is exactly
-            # this same `frequency_points` then `panels_from_points`
-            # pair, computed here directly instead so `points` is not
-            # thrown away after producing `panels`.
-            points = frequency_points(state)
-            panels = panels_from_points(points, state.deme_count)
-            # The six named statistics for *this* tick's state, the
-            # same `report_for_state` call `Api.get_initial_state_panels`
-            # makes for p_0 — the running state's own stats table
-            # updates live from this instead of sitting blank until the
-            # run finishes. `converged`/`reason` are both
-            # placeholders; nothing downstream reads them off a
-            # progress tick's own report, only the six numeric fields.
-            report = report_for_state(
-                state, params, run_id=run_id, converged=False, reason="in progress"
-            )
-            visuals = {
-                "alleleComposition": allele_composition_payload(state),
-                "frequencySpectrum": frequency_spectrum_payload(state, params),
-            }
-            message_queue.put(
-                ("progress", generation, panels, points, report, visuals, state)
-            )
+            message_queue.put(progress_message(state, generation, params, run_id))
 
     try:
         with paths.atomic_directory(output_directory) as working_directory:

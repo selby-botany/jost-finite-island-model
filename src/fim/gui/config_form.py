@@ -36,7 +36,7 @@ import json
 import math
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
-from typing import Final, Literal
+from typing import Final, Literal, cast
 
 import yaml
 
@@ -530,6 +530,57 @@ def form_values_to_payload(values: Mapping[str, str]) -> dict[str, object]:
         payload["convergence_statistic"] = convergence_statistic_to_payload(values)
     except KeyError as error:
         raise ValueError(f"missing field: {error}") from error
+    return payload
+
+
+def form_values_to_draft_payload(values: Mapping[str, str]) -> dict[str, object]:
+    """Coerce the form's values without refusing any of them, for a Draft.
+
+    `form_values_to_payload`'s lenient counterpart: a field that parses
+    is typed exactly as there, and one that does not keeps its text, so
+    a saved Draft's configuration still records what was entered and
+    still fails validation for the same reason the form does. A missing
+    field is left out.
+
+    Args:
+        values: The form values, possibly incomplete or invalid.
+
+    Returns:
+        A payload that `SimulationParams.from_mapping` may reject.
+    """
+    payload: dict[str, object] = {}
+    for field in all_fields():
+        if field.name not in values:
+            continue
+        try:
+            payload[field.name] = _parse_field(field, values[field.name])
+        except ValueError:
+            payload[field.name] = values[field.name]
+    ploidy = payload.get("ploidy")
+    if isinstance(ploidy, int):
+        payload["ploidy"] = PLOIDY_WORDS.get(ploidy, ploidy)
+    composites: tuple[tuple[str | None, Callable[[], object]], ...] = (
+        ("expert", lambda: expert_to_payload(values)),
+        ("m", lambda: m_to_payload(values)),
+        (None, lambda: mu_to_payload(values)),
+        (None, lambda: initial_conditions_to_payload(values)),
+        (None, lambda: loci_to_payload(values)),
+        (
+            "convergence_statistic",
+            lambda: convergence_statistic_to_payload(values),
+        ),
+    )
+    for key, build in composites:
+        try:
+            value = build()
+        except (KeyError, ValueError):
+            # Unrepresentable as typed settings; the Draft keeps the
+            # form's own values in its GUI sidecar instead.
+            continue
+        if key is None:
+            payload.update(cast("Mapping[str, object]", value))
+        else:
+            payload[key] = value
     return payload
 
 

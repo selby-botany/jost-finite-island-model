@@ -1957,6 +1957,32 @@ fieldset.combinator-choice label {
     cursor: pointer;
 }
 
+/* Saved runs (`screens/saved-runs.js`), below the run tree on Home. */
+.saved-runs {
+    margin-top: 1.5rem;
+}
+
+.saved-runs-empty {
+    color: var(--fim-muted);
+}
+
+.saved-runs-table {
+    width: 100%;
+    border-collapse: collapse;
+}
+
+.saved-runs-table th,
+.saved-runs-table td {
+    text-align: left;
+    padding: 0.3rem 0.6rem;
+    border-bottom: 1px solid var(--fim-border);
+}
+
+.saved-runs-actions {
+    display: flex;
+    gap: 0.4rem;
+}
+
 .open-run-table tbody tr:hover {
     background: var(--fim-border);
 }

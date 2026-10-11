@@ -1892,6 +1892,7 @@ window.fim.showOpenRunScreen = async function showOpenRunScreen() {
     // bootstrap reintroduces it for every test, not just Home's own,
     // unless this function's own caller can wait for it).
     await refreshRecentRuns();
+    await window.fim.refreshSavedRuns();
 };
 
 // A rename or new description saved anywhere (`screens/details.js`) shows
