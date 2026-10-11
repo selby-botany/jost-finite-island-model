@@ -47,6 +47,13 @@ integration, including branch coverage, deterministic statistical tests,
 documentation freshness, link checking, desktop-GUI asset checking, and
 package smoke tests.
 
+The CI full-gate step has a 30-minute end-to-end limit, including packaging
+after the test suites. A timeout is not proof of a stuck test: inspect the
+last command and stage durations first. Run `38103694509` passed all tests
+and documentation checks but exhausted the former 20-minute limit while
+building the source distribution. Slow tests remain in their separate
+scheduled/on-demand job; this allowance does not add them to the full gate.
+
 Repository-level shell, YAML, Markdown, JavaScript, CSS, HTML, and secret
 checks use pinned Docker-backed wrappers stored in `bin/`; they do not depend
 on another checkout:

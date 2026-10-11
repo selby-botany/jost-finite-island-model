@@ -1395,6 +1395,10 @@ project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+- The complete CI gate has a bounded 30-minute allowance for tests,
+  documentation, package builds, and installed-wheel smoke checks. The
+  former 20-minute limit terminated source-distribution packaging after
+  every test passed; test selection and coverage thresholds are unchanged.
 - Worked-example archive checks also permit tightly bounded platform rounding
   in Shannon-entropy statistics `E_ST` and `MI`. Replaying identical final
   allele frequencies on Linux reproduced system-logarithm differences of

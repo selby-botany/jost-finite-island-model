@@ -36558,6 +36558,22 @@ on test determinism (CLAUDE.md: "a test is a pure function of its
 commit") forbids. The full step's budget is larger than the fast
 step's, matching the much larger scenario suite it alone carries.
 
+<a id="validation.test_ci_runtime_budget.test_full_gate_budget_includes_packaging_after_the_test_layers"></a>
+
+#### test\_full\_gate\_budget\_includes\_packaging\_after\_the\_test\_layers
+
+```python
+def test_full_gate_budget_includes_packaging_after_the_test_layers() -> None
+```
+
+The complete gate retains its measured 30-minute end-to-end budget.
+
+Run 38103694509 passed every test and documentation check, then was
+killed building the sdist at 20 minutes. The packaging-test, parallel,
+and GUI layers alone took about 18 minutes 40 seconds. The budget must
+also cover lint, types, documentation, package builds, and wheel smoke;
+this static guard checks the configured allowance, not elapsed time.
+
 <a id="validation.test_ci_runtime_budget.test_slow_tests_job_never_runs_for_a_push_or_pull_request"></a>
 
 #### test\_slow\_tests\_job\_never\_runs\_for\_a\_push\_or\_pull\_request

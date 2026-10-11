@@ -138,10 +138,19 @@ jobs:
       # budget problems started. This step's own timeout drops back down
       # accordingly -- the `slow` suite was the entire reason it needed
       # to be large.
+      #
+      # Run 38103694509 (2026-10-11 UTC) proved 20 minutes is too small
+      # even without slow tests: packaging-test 1m22s, parallel tests
+      # 9m47s, GUI tests 7m31s, then successful documentation checks.
+      # The runner killed the final sdist build at the deadline, with
+      # every test passing and 93.11% coverage. Allow 30 minutes for the
+      # complete gate, including package build and installed-wheel smoke.
+      # This is not the earlier stalled-test incident: output advanced
+      # through every layer, and the prior local full gate also passed.
       - name: Run the full CI gate (lint, type, docs, package, and the
           full test suite incl. statistical/gui scenarios, excl. slow)
         run: xvfb-run --auto-servernum ./build --ci
-        timeout-minutes: 20
+        timeout-minutes: 30
 
   # The Docker-backed linters `./build` deliberately does not run:
   # `markdownlint`, `yamllint`, `shellcheck`, the desktop GUI's own

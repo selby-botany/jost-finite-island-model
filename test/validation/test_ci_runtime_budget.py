@@ -86,6 +86,23 @@ def test_each_test_step_has_a_nonflaky_wall_clock_budget() -> None:
     assert fast_budget < full_budget
 
 
+def test_full_gate_budget_includes_packaging_after_the_test_layers() -> None:
+    """The complete gate retains its measured 30-minute end-to-end budget.
+
+    Run 38103694509 passed every test and documentation check, then was
+    killed building the sdist at 20 minutes. The packaging-test, parallel,
+    and GUI layers alone took about 18 minutes 40 seconds. The budget must
+    also cover lint, types, documentation, package builds, and wheel smoke;
+    this static guard checks the configured allowance, not elapsed time.
+    """
+    full_step = next(
+        step
+        for step in _run_steps()
+        if str(step["run"]).strip() == "xvfb-run --auto-servernum ./build --ci"
+    )
+    assert full_step["timeout-minutes"] == 30
+
+
 def test_slow_tests_job_never_runs_for_a_push_or_pull_request() -> None:
     """`slow-tests` only fires on a schedule or manual dispatch.
 
