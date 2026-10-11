@@ -144,6 +144,7 @@ Every test module, fixture, and test function documented here in full; `doc/fim-
   - [`test_run_metadata`](#persistence.test_run_metadata)
   - [`test_run_objects`](#persistence.test_run_objects)
   - [`test_run_ownership`](#persistence.test_run_ownership)
+  - [`test_scalar_snapshot`](#persistence.test_scalar_snapshot)
   - [`test_store`](#persistence.test_store)
   - [`test_store_lifecycle`](#persistence.test_store_lifecycle)
   - [`test_tlog`](#persistence.test_tlog)
@@ -32991,6 +32992,197 @@ def test_a_dead_owner_process_is_detected_without_a_timeout(
 ```
 
 A second process owns the run; once it dies, recovery interrupts it.
+
+<a id="persistence.test_scalar_snapshot"></a>
+
+# persistence.test\_scalar\_snapshot
+
+Tests for `fim.persistence.scalar_snapshot`: exact population and RNG export.
+
+<a id="persistence.test_scalar_snapshot.test_restored_working_state_continues_exactly"></a>
+
+#### test\_restored\_working\_state\_continues\_exactly
+
+```python
+@pytest.mark.parametrize("changes", [{}, FINITE], ids=["infinite", "finite"])
+def test_restored_working_state_continues_exactly(
+        changes: dict[str, Any]) -> None
+```
+
+Continuing from a restored snapshot matches continuing the original.
+
+<a id="persistence.test_scalar_snapshot.test_population_keeps_every_map_in_insertion_order"></a>
+
+#### test\_population\_keeps\_every\_map\_in\_insertion\_order
+
+```python
+def test_population_keeps_every_map_in_insertion_order() -> None
+```
+
+Allele order inside each map survives, since draws follow it.
+
+<a id="persistence.test_scalar_snapshot.test_minted_then_lost_finite_states_stay_minted"></a>
+
+#### test\_minted\_then\_lost\_finite\_states\_stay\_minted
+
+```python
+def test_minted_then_lost_finite_states_stay_minted() -> None
+```
+
+A state minted and then lost still counts as minted after a restore.
+
+<a id="persistence.test_scalar_snapshot.test_rng_round_trip_reproduces_the_next_draws"></a>
+
+#### test\_rng\_round\_trip\_reproduces\_the\_next\_draws
+
+```python
+def test_rng_round_trip_reproduces_the_next_draws() -> None
+```
+
+The restored generator draws exactly what the original would.
+
+<a id="persistence.test_scalar_snapshot.test_rng_words_are_decimal_strings"></a>
+
+#### test\_rng\_words\_are\_decimal\_strings
+
+```python
+def test_rng_words_are_decimal_strings() -> None
+```
+
+Words above 2**53 survive canonical JSON as strings.
+
+<a id="persistence.test_scalar_snapshot.test_a_non_pcg64_generator_cannot_be_exported"></a>
+
+#### test\_a\_non\_pcg64\_generator\_cannot\_be\_exported
+
+```python
+def test_a_non_pcg64_generator_cannot_be_exported() -> None
+```
+
+Only the generator the engine uses is supported.
+
+<a id="persistence.test_scalar_snapshot.test_malformed_random_state_is_refused"></a>
+
+#### test\_malformed\_random\_state\_is\_refused
+
+```python
+@pytest.mark.parametrize(
+    ("change", "message"),
+    [
+        ({
+            "bit_generator": "MT19937"
+        }, "PCG64"),
+        ({
+            "state": 5
+        }, "decimal string"),
+        ({
+            "inc": "-1"
+        }, "decimal string"),
+        ({
+            "state": str(1 << 128)
+        }, "128 bits"),
+        ({
+            "has_uint32": 2
+        }, "out of range"),
+    ],
+)
+def test_malformed_random_state_is_refused(change: dict[str, Any],
+                                           message: str) -> None
+```
+
+Every random-state field is validated before use.
+
+<a id="persistence.test_scalar_snapshot.test_malformed_population_is_refused"></a>
+
+#### test\_malformed\_population\_is\_refused
+
+```python
+@pytest.mark.parametrize(
+    ("corrupt", "message"),
+    [
+        (lambda _m, a: a.pop(POPULATION_IDS), "missing"),
+        (
+            lambda _m, a: a.__setitem__(POPULATION_IDS, a[POPULATION_IDS].
+                                        astype(np.int32)),
+            "int64",
+        ),
+        (lambda m, _a: m.__setitem__("deme_count", 2), "entries"),
+        (
+            lambda _m, a: a.__setitem__(POPULATION_IDS, a[POPULATION_IDS][:-1]
+                                        ),
+            "disagree",
+        ),
+        (
+            lambda _m, a: a.__setitem__(POPULATION_IDS,
+                                        np.full_like(a[POPULATION_IDS], 7)),
+            "repeats",
+        ),
+        (
+            lambda _m, a: a.__setitem__(POPULATION_FREQUENCIES, a[
+                POPULATION_FREQUENCIES] * 2),
+            "not a valid state",
+        ),
+        (
+            lambda _m, a: a.__setitem__(POPULATION_COUNTS,
+                                        np.zeros_like(a[POPULATION_COUNTS])),
+            "at least one allele",
+        ),
+        (lambda m, _a: m.__setitem__("loci", []), "non-empty"),
+        (lambda m, _a: m.__setitem__("generation", -1), "generation"),
+    ],
+)
+def test_malformed_population_is_refused(corrupt: Any, message: str) -> None
+```
+
+Population data is validated before any state is built.
+
+<a id="persistence.test_scalar_snapshot.test_a_registry_counter_at_or_below_a_minted_identity_is_refused"></a>
+
+#### test\_a\_registry\_counter\_at\_or\_below\_a\_minted\_identity\_is\_refused
+
+```python
+def test_a_registry_counter_at_or_below_a_minted_identity_is_refused() -> None
+```
+
+Restoring must never mint an identity already in use.
+
+<a id="persistence.test_scalar_snapshot.test_malformed_finite_registry_is_refused"></a>
+
+#### test\_malformed\_finite\_registry\_is\_refused
+
+```python
+@pytest.mark.parametrize(
+    ("corrupt", "message"),
+    [
+        (lambda m, _a: m["finite"][0].__setitem__("capacity", "5"),
+         "capacity"),
+        (lambda m, _a: m["finite"][0].__setitem__("capacity", 4), "decimal"),
+        (
+            lambda _m, a: a.__setitem__(FINITE_MINTED, a[FINITE_MINTED] + 100),
+            "capacity",
+        ),
+        (
+            lambda _m, a: a.__setitem__(FINITE_COUNTS, a[FINITE_COUNTS] + 1),
+            "disagree",
+        ),
+        (lambda m, _a: m.__setitem__("finite", m["finite"][:1]), "loci"),
+    ],
+)
+def test_malformed_finite_registry_is_refused(corrupt: Any,
+                                              message: str) -> None
+```
+
+Finite spaces are checked against the locus lengths and the population.
+
+<a id="persistence.test_scalar_snapshot.test_a_present_allele_missing_from_the_minted_states_is_refused"></a>
+
+#### test\_a\_present\_allele\_missing\_from\_the\_minted\_states\_is\_refused
+
+```python
+def test_a_present_allele_missing_from_the_minted_states_is_refused() -> None
+```
+
+Every allele in the population must already be minted.
 
 <a id="persistence.test_store"></a>
 

@@ -537,12 +537,16 @@ Return to the [source-tree orientation](../README.md) or the [developer guide](.
   * [FiniteAlleleSpace](#fim.model.allele.FiniteAlleleSpace)
     * [\_\_init\_\_](#fim.model.allele.FiniteAlleleSpace.__init__)
     * [capacity](#fim.model.allele.FiniteAlleleSpace.capacity)
+    * [minted\_states](#fim.model.allele.FiniteAlleleSpace.minted_states)
+    * [next\_unminted](#fim.model.allele.FiniteAlleleSpace.next_unminted)
+    * [restore\_minted](#fim.model.allele.FiniteAlleleSpace.restore_minted)
     * [to\_arrays](#fim.model.allele.FiniteAlleleSpace.to_arrays)
     * [restore\_from\_arrays](#fim.model.allele.FiniteAlleleSpace.restore_from_arrays)
     * [mutate\_target](#fim.model.allele.FiniteAlleleSpace.mutate_target)
   * [FiniteAlleleRegistry](#fim.model.allele.FiniteAlleleRegistry)
     * [\_\_init\_\_](#fim.model.allele.FiniteAlleleRegistry.__init__)
     * [mutate\_target](#fim.model.allele.FiniteAlleleRegistry.mutate_target)
+    * [locus\_ids](#fim.model.allele.FiniteAlleleRegistry.locus_ids)
     * [space\_for](#fim.model.allele.FiniteAlleleRegistry.space_for)
 * [fim.model.identifiers](#fim.model.identifiers)
   * [parse\_bounded\_frequency](#fim.model.identifiers.parse_bounded_frequency)
@@ -935,6 +939,14 @@ Return to the [source-tree orientation](../README.md) or the [developer guide](.
   * [request\_pause](#fim.persistence.run_ownership.request_pause)
   * [resume\_run\_object](#fim.persistence.run_ownership.resume_run_object)
   * [start\_run\_object](#fim.persistence.run_ownership.start_run_object)
+* [fim.persistence.scalar\_snapshot](#fim.persistence.scalar_snapshot)
+  * [SnapshotError](#fim.persistence.scalar_snapshot.SnapshotError)
+  * [export\_population](#fim.persistence.scalar_snapshot.export_population)
+  * [export\_registries](#fim.persistence.scalar_snapshot.export_registries)
+  * [export\_rng](#fim.persistence.scalar_snapshot.export_rng)
+  * [import\_population](#fim.persistence.scalar_snapshot.import_population)
+  * [import\_registries](#fim.persistence.scalar_snapshot.import_registries)
+  * [import\_rng](#fim.persistence.scalar_snapshot.import_rng)
 * [fim.persistence.store](#fim.persistence.store)
   * [TrajectoryRow](#fim.persistence.store.TrajectoryRow)
   * [TrajectoryStore](#fim.persistence.store.TrajectoryStore)
@@ -14388,6 +14400,53 @@ def capacity() -> int
 
 This locus's own fixed state-space size, ``K``.
 
+<a id="fim.model.allele.FiniteAlleleSpace.minted_states"></a>
+
+#### minted\_states
+
+```python
+@property
+def minted_states() -> tuple[AlleleId, ...]
+```
+
+Every state minted so far, in minting order, including lost ones.
+
+`O(minted)`, unlike `to_arrays`; what a checkpoint stores.
+
+<a id="fim.model.allele.FiniteAlleleSpace.next_unminted"></a>
+
+#### next\_unminted
+
+```python
+@property
+def next_unminted() -> int
+```
+
+The inert counter `to_arrays` carries; stored so a restore is exact.
+
+<a id="fim.model.allele.FiniteAlleleSpace.restore_minted"></a>
+
+#### restore\_minted
+
+```python
+def restore_minted(minted: list[AlleleId], next_unminted: int) -> None
+```
+
+Replace the minted states from `minted_states`/`next_unminted` output.
+
+The `O(minted)` counterpart of `restore_from_arrays`, for restoring
+a checkpoint without building a `capacity`-sized array.
+
+**Arguments**:
+
+- `minted` - Every minted state, in minting order.
+- `next_unminted` - The inert counter, stored back verbatim.
+
+
+**Raises**:
+
+- `ValueError` - If a state repeats or falls outside the capacity.
+
 <a id="fim.model.allele.FiniteAlleleSpace.to_arrays"></a>
 
 #### to\_arrays
@@ -14583,6 +14642,17 @@ Return a mutation target for ``locus_id`` under the K-allele model.
 **Returns**:
 
   One state other than ``current``, drawn uniformly at random.
+
+<a id="fim.model.allele.FiniteAlleleRegistry.locus_ids"></a>
+
+#### locus\_ids
+
+```python
+@property
+def locus_ids() -> tuple[int, ...]
+```
+
+The locus identifiers this registry holds a space for.
 
 <a id="fim.model.allele.FiniteAlleleRegistry.space_for"></a>
 
@@ -23530,6 +23600,193 @@ must match the digest recorded when it was saved.
 - `IllegalTransitionError` - The object is not `planned`.
 - `ConfigurationDriftError` - `config.yaml` no longer matches the digest.
 - `OwnershipConflictError` - Another live attempt holds the object.
+
+<a id="fim.persistence.scalar_snapshot"></a>
+
+# fim.persistence.scalar\_snapshot
+
+Exact export and import of a scalar replicate's population and random state.
+
+A checkpoint stores two parts: a JSON metadata document and a set of named
+NumPy arrays (written as an `.npz` archive without pickling). This module
+converts the population (`fim.model.state.ModelState`), the random-number
+generator, and the allele-identity registries to and from those two parts,
+exactly: restoring and continuing produces the same generations, bit for
+bit, as never having stopped.
+
+Exactness details that matter:
+
+- Each sparse frequency map keeps its insertion order, because the
+  operators visit alleles in that order when they draw random numbers.
+- The 128-bit PCG64 state words are stored as decimal strings, because
+  canonical JSON cannot carry integers above 2**53 exactly.
+- Finite-allele capacities can exceed 64 bits (``4**length``), so they are
+  stored as decimal strings too, and minted states keep minting order,
+  including states minted and later lost (they still count as minted).
+
+Every import validates shapes, types and cross-references before building
+anything, and raises `SnapshotError` naming the first problem.
+
+<a id="fim.persistence.scalar_snapshot.SnapshotError"></a>
+
+## SnapshotError Objects
+
+```python
+class SnapshotError(ValueError)
+```
+
+Raised when snapshot data is malformed or inconsistent.
+
+<a id="fim.persistence.scalar_snapshot.export_population"></a>
+
+#### export\_population
+
+```python
+def export_population(state: ModelState) -> tuple[dict[str, Any], Arrays]
+```
+
+Export a population to metadata and arrays.
+
+**Arguments**:
+
+- `state` - The population to export.
+
+
+**Returns**:
+
+  The metadata (generation, deme count, loci) and three arrays: one
+  entry count per deme and locus, then every allele identity and
+  frequency, concatenated in deme, locus and insertion order.
+
+<a id="fim.persistence.scalar_snapshot.export_registries"></a>
+
+#### export\_registries
+
+```python
+def export_registries(
+    registry: AlleleRegistry, finite_alleles: FiniteAlleleRegistry | None
+) -> tuple[dict[str, Any], Arrays]
+```
+
+Export the allele-identity registries to metadata and arrays.
+
+**Arguments**:
+
+- `registry` - The infinite-alleles identity counter.
+- `finite_alleles` - The finite-alleles spaces, or `None` under the
+  infinite-alleles model.
+
+
+**Returns**:
+
+  The metadata (counter, and per finite locus its capacity and inert
+  `next_unminted`) and, under finite alleles, the minted states of
+  every locus in minting order.
+
+<a id="fim.persistence.scalar_snapshot.export_rng"></a>
+
+#### export\_rng
+
+```python
+def export_rng(rng: np.random.Generator) -> dict[str, Any]
+```
+
+Export a PCG64 generator's exact state as JSON-safe metadata.
+
+**Arguments**:
+
+- `rng` - The generator to export.
+
+
+**Returns**:
+
+  The bit generator's name, its two 128-bit words as decimal strings,
+  and its buffered 32-bit draw.
+
+
+**Raises**:
+
+- `SnapshotError` - If the generator is not PCG64.
+
+<a id="fim.persistence.scalar_snapshot.import_population"></a>
+
+#### import\_population
+
+```python
+def import_population(metadata: Mapping[str, Any],
+                      arrays: Mapping[str, npt.NDArray[Any]]) -> ModelState
+```
+
+Rebuild a population exported by `export_population`.
+
+**Arguments**:
+
+- `metadata` - The exported metadata.
+- `arrays` - The exported arrays.
+
+
+**Returns**:
+
+  The identical population, with every map in its original order.
+
+
+**Raises**:
+
+- `SnapshotError` - If anything is missing, mistyped or inconsistent.
+
+<a id="fim.persistence.scalar_snapshot.import_registries"></a>
+
+#### import\_registries
+
+```python
+def import_registries(
+        metadata: Mapping[str, Any], arrays: Mapping[str, npt.NDArray[Any]],
+        state: ModelState
+) -> tuple[AlleleRegistry, FiniteAlleleRegistry | None]
+```
+
+Rebuild the registries exported by `export_registries`.
+
+**Arguments**:
+
+- `metadata` - The exported metadata.
+- `arrays` - The exported arrays.
+- `state` - The restored population, checked against the registries so
+  that no identity in use can be minted again.
+
+
+**Returns**:
+
+  The identity counter and, under finite alleles, the finite spaces.
+
+
+**Raises**:
+
+- `SnapshotError` - If anything is missing, mistyped or inconsistent.
+
+<a id="fim.persistence.scalar_snapshot.import_rng"></a>
+
+#### import\_rng
+
+```python
+def import_rng(metadata: Mapping[str, Any]) -> np.random.Generator
+```
+
+Rebuild a generator exported by `export_rng`.
+
+**Arguments**:
+
+- `metadata` - The exported metadata.
+
+
+**Returns**:
+
+  A PCG64 generator whose next draws match the exported one's.
+
+
+**Raises**:
+
+- `SnapshotError` - If anything is missing or malformed.
 
 <a id="fim.persistence.store"></a>
 

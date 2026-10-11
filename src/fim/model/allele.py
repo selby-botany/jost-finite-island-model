@@ -283,6 +283,41 @@ class FiniteAlleleSpace:
         """This locus's own fixed state-space size, ``K``."""
         return self._capacity
 
+    @property
+    def minted_states(self) -> tuple[AlleleId, ...]:
+        """Every state minted so far, in minting order, including lost ones.
+
+        `O(minted)`, unlike `to_arrays`; what a checkpoint stores.
+        """
+        return tuple(self._minted)
+
+    @property
+    def next_unminted(self) -> int:
+        """The inert counter `to_arrays` carries; stored so a restore is exact."""
+        return self._next_unminted
+
+    def restore_minted(self, minted: list[AlleleId], next_unminted: int) -> None:
+        """Replace the minted states from `minted_states`/`next_unminted` output.
+
+        The `O(minted)` counterpart of `restore_from_arrays`, for restoring
+        a checkpoint without building a `capacity`-sized array.
+
+        Args:
+            minted: Every minted state, in minting order.
+            next_unminted: The inert counter, stored back verbatim.
+
+        Raises:
+            ValueError: If a state repeats or falls outside the capacity.
+        """
+        identities = [int(identity) for identity in minted]
+        if len(set(identities)) != len(identities) or any(
+            identity < 0 or identity >= self._capacity for identity in identities
+        ):
+            raise ValueError("minted states must be distinct and inside the capacity")
+        self._minted = [AlleleId(identity) for identity in identities]
+        self._minted_set = set(identities)
+        self._next_unminted = next_unminted
+
     def to_arrays(self) -> tuple[np.ndarray, np.ndarray, int, int]:
         """Export this space's own minted state in dense, array-native form.
 
@@ -475,6 +510,11 @@ class FiniteAlleleRegistry:
             One state other than ``current``, drawn uniformly at random.
         """
         return self._spaces[locus_id].mutate_target(current, rng)
+
+    @property
+    def locus_ids(self) -> tuple[int, ...]:
+        """The locus identifiers this registry holds a space for."""
+        return tuple(self._spaces)
 
     def space_for(self, locus_id: int) -> FiniteAlleleSpace:
         """Return `locus_id`'s own `FiniteAlleleSpace` directly.
