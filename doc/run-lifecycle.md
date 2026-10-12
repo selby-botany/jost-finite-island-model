@@ -1,0 +1,281 @@
+# Saved runs: pause, resume, and recover
+
+A long simulation can take hours. A *saved run* (a "Run object") lets you keep
+a configuration before it is finished, start it later, pause it, and continue
+it exactly where it stopped, even after the computer restarts. This guide
+explains what you can do with a saved run, what each state means, and how to
+recover when something goes wrong.
+
+Return to the [command reference](usage.md) or the
+[project overview](../README.md).
+
+## Contents
+
+- [Quick start](#quick-start)
+- [What a saved run is](#what-a-saved-run-is)
+- [States](#states)
+- [Commands](#commands)
+- [Checkpoints and exact continuation](#checkpoints-and-exact-continuation)
+- [Stopping a run: pause, Ctrl-C, SIGTERM, and cancel](#stopping-a-run-pause-ctrl-c-sigterm-and-cancel)
+- [Recovery after a crash or power failure](#recovery-after-a-crash-or-power-failure)
+- [Saved runs in the desktop app](#saved-runs-in-the-desktop-app)
+- [Sweeps, Studies, and Experiments](#sweeps-studies-and-experiments)
+- [What is not a saved run](#what-is-not-a-saved-run)
+- [Troubleshooting](#troubleshooting)
+- [For developers](#for-developers)
+
+## Quick start
+
+**In the desktop app:** fill in the Configure form and choose
+**Save for later** on the Run screen. The run appears under **Saved runs** on
+Home, where **Start**, **Resume**, **Edit**, **Cancel**, and **Delete** appear
+only when they are allowed. While a saved run is running, **Pause** on the Run
+screen stops it at a checkpoint.
+
+**On the command line:**
+
+```console
+$ fim object create my-run.yaml
+Created obj-20a90eac919a4ed0bd5fa6f3a5b6443a (planned)
+$ fim object start obj-20a90eac919a4ed0bd5fa6f3a5b6443a
+Starting obj-20a90eac919a4ed0bd5fa6f3a5b6443a
+obj-20a90eac919a4ed0bd5fa6f3a5b6443a is completed at generation 300
+Artifacts: /…/results/objects/obj-20a90eac919a4ed0bd5fa6f3a5b6443a
+```
+
+From a second terminal, `fim object pause OBJECT_ID` asks a running object to
+stop at its next checkpoint. `fim object resume OBJECT_ID` continues it later.
+
+## What a saved run is
+
+A saved run is a folder under `results/objects/`, named by its object ID
+(`obj-` followed by 32 hexadecimal characters). It holds:
+
+| File | Contents |
+|------|----------|
+| `config.yaml` | The configuration, exactly as saved |
+| `run.json` | The lifecycle record: state, phase, generation, latest checkpoint, attempts, errors |
+| `checkpoints/` | The latest committed checkpoint (older ones are removed) |
+| `trajectory.tlog` | The trajectory log, written as the run proceeds |
+| `report.json`, `manifest.json`, … | The finished run's artifacts, the same files `fim run` writes |
+
+A batch (`n_replicates` greater than one) has one `replicate-NNN/` folder
+per replicate, then `summary.json` and the batch `manifest.json`, the same
+layout as a `fim run` batch.
+
+Do not edit `run.json` by hand. Use the commands below; they apply the
+lifecycle rules and keep the record consistent.
+
+## States
+
+| State | Meaning | What you can do next |
+|-------|---------|----------------------|
+| `draft` | Saved, but the configuration is incomplete or invalid | Edit it; delete it |
+| `planned` | Saved, valid, and not started | Start; edit; delete |
+| `running` | A command or the desktop app is executing it | Pause; cancel |
+| `pausing` | A pause was requested; it stops at the next safe point | Wait; cancel |
+| `paused` | Stopped at a checkpoint | Resume; cancel; delete |
+| `interrupted` | Its owner stopped without saying so (Ctrl-C, crash, power failure) | Resume; cancel; delete |
+| `failed` | An error stopped it | Resume; cancel; delete |
+| `cancelling` | A cancel was requested | Wait |
+| `cancelled` | Stopped for good; the trajectory written so far is kept | Clone; delete |
+| `completed` | Finished; every artifact is published | Clone; delete |
+
+**Draft and Planned.** A configuration that does not validate is saved as a
+`draft`, with the reasons it cannot start:
+
+```console
+$ fim object create bad.yaml
+Created obj-b2498c54bc2045aaaaea90208687a75b (draft)
+It cannot start until these are fixed:
+  - unknown configuration key(s): island_size, n_islands
+```
+
+`fim object edit OBJECT_ID CONFIG` replaces the configuration. The object
+becomes `planned` when the new configuration is valid and goes back to
+`draft` when it is not, as often as you like, until the run is started.
+
+`interrupted`, `failed`, and `paused` objects resume from their latest
+checkpoint. A run that stopped *before its first checkpoint* (for example, it
+failed while starting) has nothing to resume from; see
+[clone](#commands).
+
+## Commands
+
+| Command | What it does |
+|---------|--------------|
+| `fim object create CONFIG` | Save a configuration; `draft` if invalid, else `planned` |
+| `fim object edit OBJECT_ID CONFIG` | Replace the configuration of a `draft` or `planned` object |
+| `fim object list` | List every object with its state, generation, and name |
+| `fim object status OBJECT_ID [--json]` | Show one object's lifecycle; `--json` prints the full record |
+| `fim object start OBJECT_ID [--quiet]` | Execute a `planned` object in the foreground |
+| `fim object resume OBJECT_ID [--quiet]` | Continue a `paused`, `interrupted`, or `failed` object |
+| `fim object pause OBJECT_ID` | Ask a running object to checkpoint and pause |
+| `fim object cancel OBJECT_ID` | Stop an object for good, keeping its partial data |
+| `fim object delete OBJECT_ID` | Delete an object that is not executing |
+| `fim object clone OBJECT_ID` | Save the object's configuration as a new object |
+| `fim object reclaim [--dry-run]` | Remove staging folders that killed commands left behind |
+
+`start` and `resume` run in the foreground and print the final state. They
+exit with status 0 when the run completes, pauses, or is cancelled; 2 when the
+lifecycle refuses the request; 130 after Ctrl-C; and another nonzero status
+when an error fails the run.
+
+`clone` copies only the configuration. The new object is `planned` (or
+`draft`), starts from generation 0, and records the object it was cloned from
+(`source_object_id` in `run.json`). Use it to run a finished configuration
+again or to retry a run that stopped before its first checkpoint.
+
+`status` lists problems it finds, under `Problems:`, such as a damaged
+artifact or a run that cannot resume and why:
+
+```console
+$ fim object status obj-30acd42ec76f4a97ac7e53ae67e36156
+Object:     obj-30acd42ec76f4a97ac7e53ae67e36156
+State:      paused
+Revision:   23
+Kind:       scalar
+Run ID:     run-6dac646ec750af52
+Phase:      simulating
+Generation: 16650
+Checkpoint: ckpt-000000016650-9be5552687f4 (generation 16650)
+Attempt:    -
+```
+
+## Checkpoints and exact continuation
+
+A checkpoint is the complete state of the simulation at one generation: the
+population, the random number generator, the convergence monitor, and the
+committed position in the trajectory log. A run writes one:
+
+- at generation 0, as soon as the run is set up;
+- every 1,000 generations or every 60 seconds, whichever comes first;
+- whenever it pauses.
+
+**Resuming is exact.** A run that is paused and resumed, any number of times,
+produces the same trajectory, the same report, and the same convergence
+decision as a run that was never stopped. A trajectory log cut off by a crash
+is trimmed back to the checkpoint and continued from there.
+
+A checkpoint is verified (by SHA-256 digest) before it is used. A checkpoint
+written by a different checkpoint format version is refused rather than
+guessed at.
+
+## Stopping a run: pause, Ctrl-C, SIGTERM, and cancel
+
+| How it stops | Resulting state | Data kept |
+|--------------|-----------------|-----------|
+| `fim object pause` or the desktop app's **Pause** | `paused` | Everything up to a fresh checkpoint |
+| SIGTERM (for example, a system shutdown or `kill PID`) | `paused` | Everything up to a fresh checkpoint |
+| A second SIGTERM | `interrupted` | Up to the latest checkpoint |
+| Ctrl-C (SIGINT) | `interrupted`; exits with status 130 | Up to the latest checkpoint |
+| An engine error | `failed`, with the error recorded | Up to the latest checkpoint |
+| `fim object cancel` | `cancelled` | The trajectory written so far |
+
+A run that reaches its stopping rule completes, even if a pause or a cancel
+was requested at the same moment.
+
+Plain `fim run` is different: it is not a saved run. On SIGTERM it stops,
+removes its unfinished output, and exits with status 143. Rerun it to start
+again.
+
+## Recovery after a crash or power failure
+
+You do not need to do anything special. Each command that reads objects
+(`list`, `status`, `start`, `resume`) first checks every object recorded as
+running. When no process owns it any more, the object is recorded as
+`interrupted`, and `fim object resume` continues it from its latest
+checkpoint.
+
+There is one exception. If the run had already written every finished
+artifact and only the last bookkeeping step was lost, the artifacts are
+verified against the completion receipt the run wrote, and the object is
+recorded as `completed` instead. Nothing is computed twice.
+
+A command killed in the middle of writing can leave a hidden staging folder
+(its name starts with `.`) next to the run. These folders are never mistaken
+for real data. `fim object reclaim --dry-run` lists them, and
+`fim object reclaim` removes the ones no running command owns.
+
+## Saved runs in the desktop app
+
+- **Save for later** on the Run screen keeps the form as a saved run. An
+  incomplete or invalid form is saved as a Draft. Saving again while you edit
+  a saved run updates it.
+- **Saved runs** on Home lists every saved run. Each row offers only the
+  actions its state allows: Start, Resume, Edit, Open, Cancel, Delete.
+- **Pause** appears on the Run screen while a saved run executes.
+- **Closing the window pauses** a running saved run at a checkpoint, so you
+  can resume it next time.
+- The desktop app runs one saved run at a time and runs only single
+  replicates (`n_replicates` of 1). Start a saved batch with
+  `fim object start`.
+- The desktop app has no clone action yet. Use `fim object clone`.
+
+A saved run created in the desktop app can be started, paused, or resumed
+from the command line, and the reverse.
+
+## Sweeps, Studies, and Experiments
+
+- **Sweeps.** Each point of `fim sweep run` executes as a saved run, created
+  when the point first runs. Cancelling a sweep pauses the points in flight;
+  `fim sweep resume STUDY_ID` resumes them from their checkpoints instead of
+  starting them over. Only a completed point counts as finished.
+- **Studies and Experiments.** `fim study list` and `fim experiment list`
+  show a lifecycle summary for each group, for example
+  `2 completed, 1 paused, 3 not started`. A run shared by two Studies counts
+  once in their Experiment.
+- **Close and reopen.** `fim study close STUDY_ID` (and `fim study reopen`,
+  `fim experiment close`, `fim experiment reopen`, or the desktop app's
+  Close/Reopen) freezes a group's membership. A group cannot be closed while
+  any run in it is executing. Closing a group never pauses or stops a run.
+
+## What is not a saved run
+
+`fim run`, the desktop app's **Run simulation**, and the Python `fim()`
+function run to the end in one go and write their output only when they
+finish. They cannot be paused or resumed. Use a saved run when a run may take
+longer than you can leave the computer alone.
+
+**Supported configurations.** Every engine backend (`lineal`, `generational`,
+and `generational-vector`) supports saved runs. A configuration is refused at
+start, with the reason, when:
+
+- it asks for the JIT on the `lineal` backend;
+- it asks for `generational-vector` and Numba is not installed;
+- a locus exceeds the vector backend's capacity;
+- the desktop app is asked to run a batch (use the command line).
+
+## Troubleshooting
+
+**"… cannot resume; `fim object clone …` saves its configuration as a new
+run".** The run stopped before its first checkpoint, so there is nothing to
+resume. Clone it and start the clone.
+
+**"another attempt is executing run object …".** Another process owns the
+run: a second terminal, the desktop app, or a sweep. Pause it there, or wait
+for it. A run whose owner has gone (killed, crashed) is never blocked: the
+next command records it as `interrupted`.
+
+**"config.yaml of … no longer matches its recorded configuration digest".**
+The saved `config.yaml` was changed by hand after the run started. A run
+never continues with a configuration it did not start with. Restore the file,
+or clone the object and start the clone.
+
+**`status` reports a damaged artifact.** A file in the object folder no longer
+matches its recorded digest. Check the disk, then clone the object and run it
+again.
+
+**Disk full while running.** The run fails at its next write and keeps its
+latest checkpoint. Free space, then `fim object resume OBJECT_ID`.
+
+**Hidden folders beginning with `.` next to runs.** These are leftovers from
+killed commands. Run `fim object reclaim`.
+
+## For developers
+
+The [developer guide](developer.md#run-objects-and-checkpoints) maps the
+modules. The state machine is in `fim.persistence.run_lifecycle`, ownership
+and recovery in `fim.persistence.run_ownership`, checkpoints in
+`fim.persistence.run_checkpoint`, and execution in `fim.run_service`, which
+the command line, the desktop app, and sweeps all share.

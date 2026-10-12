@@ -9,6 +9,7 @@ for that first. For parameter types and defaults, use the
 <li><a href="#create-a-configuration">Create a configuration</a></li>
 <li><a href="#run-a-simulation">Run a simulation</a></li>
 <li><a href="#why-does-my-run-take-so-long">Why does my run take so long?</a></li>
+<li><a href="#save-pause-and-resume-a-run">Save, pause, and resume a run</a></li>
 <li><a href="#worked-examples">Worked examples</a></li>
 <li><a href="#sweep-a-parameter">Sweep a parameter</a></li>
 <li><a href="#re-analyze-a-trajectory">Re-analyze a trajectory</a></li>
@@ -114,6 +115,21 @@ replicates run. With it on (the default), the batch can stop earlier, once every
 statistic's across-replicate confidence interval has tightened enough (see
 <a href="#" data-fim-help="configuration" data-fim-anchor="stop_batch_early">configuration.md</a>) — the number of
 <code>replicate-NNN/</code> subdirectories written can then be less than n<sub>replicates</sub>.</p>
+<h2 id="save-pause-and-resume-a-run">Save, pause, and resume a run</h2>
+<p><code>fim run</code> runs to the end in one go. For a run you may need to stop and
+continue later, save it as a Run object instead:</p>
+<pre><code class="language-console">fim object create my-run.yaml        # draft if invalid, planned if valid
+fim object start OBJECT_ID           # runs in the foreground
+fim object pause OBJECT_ID           # from another terminal: stop at a checkpoint
+fim object resume OBJECT_ID          # continue exactly where it stopped
+fim object list                      # every saved run and its state
+</code></pre>
+<p>A resumed run produces exactly the result of one that never stopped. Ctrl-C,
+SIGTERM, a crash, or a power failure loses at most the work since the last
+checkpoint (1,000 generations or 60 seconds). The desktop app's
+<strong>Save for later</strong> and <strong>Saved runs</strong> use the same objects. See
+<a href="#" data-fim-external="https://github.com/selby-botany/jost-finite-island-model/blob/main/doc/run-lifecycle.md">saved runs: pause, resume, and recover</a> for every state,
+command, and recovery case.</p>
 <h2 id="worked-examples">Worked examples</h2>
 <p>Each example below is a complete config and the command that runs it: save
 the YAML, run the command, and the reported values match those shown here,

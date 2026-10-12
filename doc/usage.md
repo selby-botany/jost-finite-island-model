@@ -11,6 +11,7 @@ for that first. For parameter types and defaults, use the
 - [Create a configuration](#create-a-configuration)
 - [Run a simulation](#run-a-simulation)
 - [Why does my run take so long?](#why-does-my-run-take-so-long)
+- [Save, pause, and resume a run](#save-pause-and-resume-a-run)
 - [Worked examples](#worked-examples)
 - [Sweep a parameter](#sweep-a-parameter)
 - [Re-analyze a trajectory](#re-analyze-a-trajectory)
@@ -134,6 +135,26 @@ replicates run. With it on (the default), the batch can stop earlier, once every
 statistic's across-replicate confidence interval has tightened enough (see
 [configuration.md](configuration.md#stop_batch_early)) — the number of
 `replicate-NNN/` subdirectories written can then be less than n<sub>replicates</sub>.
+
+## Save, pause, and resume a run
+
+`fim run` runs to the end in one go. For a run you may need to stop and
+continue later, save it as a Run object instead:
+
+```console
+fim object create my-run.yaml        # draft if invalid, planned if valid
+fim object start OBJECT_ID           # runs in the foreground
+fim object pause OBJECT_ID           # from another terminal: stop at a checkpoint
+fim object resume OBJECT_ID          # continue exactly where it stopped
+fim object list                      # every saved run and its state
+```
+
+A resumed run produces exactly the result of one that never stopped. Ctrl-C,
+SIGTERM, a crash, or a power failure loses at most the work since the last
+checkpoint (1,000 generations or 60 seconds). The desktop app's
+**Save for later** and **Saved runs** use the same objects. See
+[saved runs: pause, resume, and recover](run-lifecycle.md) for every state,
+command, and recovery case.
 
 ## Worked examples
 

@@ -12,6 +12,7 @@ use the [generated API reference](../src/fim/API.md) for exact signatures.
 - [Engine backends](#engine-backends)
 - [Determinism](#determinism)
 - [Persistence and reports](#persistence-and-reports)
+- [Run objects and checkpoints](#run-objects-and-checkpoints)
 - [Adding a statistic](#adding-a-statistic)
 - [Adding a new what-if](#adding-a-new-what-if)
 - [Testing](#testing)
@@ -384,6 +385,50 @@ lambda), which is exactly how the CLI wires each replicate to its own real
 Statistics are computed per locus, then arithmetic-mean aggregated in the final
 report. Keep locus-specific analysis in pure statistics functions rather than
 adding engine state.
+
+## Run objects and checkpoints
+
+A Run object is a saved run that can be paused and resumed exactly. The user
+view is [saved runs](run-lifecycle.md). Every front end (`fim object`, the
+desktop app's Saved runs, sweep points) goes through one service, so the
+lifecycle rules live in one place:
+
+| Module | Responsibility |
+|--------|----------------|
+| `fim.persistence.run_lifecycle` | `run.json` record, states, phases, the transition table, capabilities |
+| `fim.persistence.run_objects` | Create, edit (Draft ↔ Planned), clone, list, delete objects under `results/objects/` |
+| `fim.persistence.object_lock` | Cross-process advisory file locks |
+| `fim.persistence.run_ownership` | Attempts and leases, fenced commits, pause/cancel requests, owner-loss reconciliation |
+| `fim.persistence.run_checkpoint` | Atomic, digest-verified checkpoint publication and loading |
+| `fim.persistence.scalar_snapshot` | Exact export/import of population, registries, and random state |
+| `fim.persistence.run_receipt` | Completion receipt verification for recovering a lost completion |
+| `fim.persistence.staging` | Find and reclaim orphan staging directories |
+| `fim.execution` / `fim.batch_session` | `ScalarSession` / `BatchSession`: stepwise, checkpointable engine runs |
+| `fim.run_service` | `execute_run_object`: the worker loop, checkpoint cadence, safe points, diagnostics |
+| `fim.termination` | SIGTERM policies: pause a Run object; clean up a `fim run` |
+| `fim.cli_objects` | `fim object` verbs |
+| `fim.gui.object_bridge` / `fim.gui.object_runner` | Saved runs in the desktop app |
+| `fim.sweep_run` / `fim.group_lifecycle` | Sweep points as objects; Study and Experiment summaries, close/reopen |
+
+Rules a change must keep:
+
+- **Exact continuation.** A resumed run must produce the bytes an
+  uninterrupted run produces: trajectory log, report, convergence history.
+  Anything a run carries between generations (random state, monitor state,
+  registries, vector state) must be in the checkpoint. The tests in
+  `test/engine/test_execution_checkpoint.py`, `test/engine/test_batch_session.py`,
+  `test/test_run_service.py`, and `test/persistence/test_tlog_resume.py`
+  compare resumed and uninterrupted runs.
+- **The attempt lock proves ownership.** A live owner always holds it; a
+  free lock proves the owner is gone. Never infer loss from a timeout.
+- **Pointer last.** Write a checkpoint or artifact into a staging sibling,
+  sync, rename it into place, and only then record it in `run.json`. A
+  directory `run.json` does not name is garbage, never an alternative truth.
+- **No checkpoint, no resume.** A run without a committed checkpoint cannot
+  resume; a retry is a clone (`source_object_id`).
+- **New checkpoint state means a schema bump.** Change
+  `CHECKPOINT_SCHEMA_VERSION` when the checkpoint contents change; a
+  checkpoint of another version is refused, not migrated.
 
 ## Adding a statistic
 

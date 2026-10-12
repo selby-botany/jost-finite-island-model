@@ -221,6 +221,7 @@ defines the complete scientific and architectural contract.
 ### Using the application
 
 - [Command, workflow, and output reference](doc/usage.md)
+- [Saved runs: pause, resume, and recover](doc/run-lifecycle.md)
 - [Configuration reference](doc/configuration.md)
 - [Convergence defaults](doc/convergence.md)
 - [Worked examples](doc/examples/README.md)

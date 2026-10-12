@@ -8,6 +8,22 @@ project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- **Saved runs: pause, resume, and recover.** `fim object` saves a
+  configuration as a Run object under `results/objects/` and runs it with
+  `start`, `pause`, `resume`, `cancel`, `clone`, `delete`, `list`, `status`,
+  and `reclaim`. An invalid configuration is saved as a Draft and becomes
+  Planned when it is fixed (`fim object edit`). A run writes a checkpoint at
+  generation 0, every 1,000 generations or 60 seconds, and when it pauses,
+  and a resumed run gives exactly the result of one that never stopped. This
+  works for single runs and batches on every engine backend. Ctrl-C, a crash,
+  or a power failure leaves the run `interrupted` and resumable, and SIGTERM
+  pauses it. A run that published every artifact before it was killed is
+  recovered as completed. The desktop app adds **Save for later**, a **Saved
+  runs** table on Home, and **Pause**; closing the window pauses a saved run.
+  Each sweep point is a saved run, so a cancelled sweep resumes its points
+  from their checkpoints. Study and Experiment lists show a lifecycle
+  summary, and groups can be closed and reopened. See
+  [saved runs](doc/run-lifecycle.md).
 - **Expert Settings.** The policy constants behind the new rule (the burn-in
   floor of 5 relaxation times, the cap's 15, the first check, the effective
   sample size floor, the spectrum burn-in multiplier, and the rest) live in an
@@ -1395,6 +1411,8 @@ project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+- `fim run` stops cleanly on SIGTERM: it exits with status 143 and removes
+  its unfinished output instead of leaving a hidden staging directory.
 - The complete CI gate has a bounded 30-minute allowance for tests,
   documentation, package builds, and installed-wheel smoke checks. The
   former 20-minute limit terminated source-distribution packaging after

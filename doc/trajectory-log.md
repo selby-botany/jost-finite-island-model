@@ -84,7 +84,7 @@ the file keeps every complete block: you lose at most the block being filled
 directory is only published when the run finishes, so an interrupted
 `fim run` leaves no partial run folder at all; the interruption guarantees
 matter to code that keeps a log open for long (the desktop app's live runs, and
-the run checkpoints that are still to come).
+[saved runs](run-lifecycle.md), which resume from checkpoints).
 
 **Thinning.** A long run can write only some of its generations
 ([`trajectory_retention`](configuration.md#trajectory_retention-trajectory_stride-trajectory_thinning_start)):
@@ -223,8 +223,10 @@ with one checksum comparison, restores a damaged header from the copy, cuts
 everything after it and continues with a keyframe. A killed run resumed from a
 checkpoint on a block and keyframe boundary leaves exactly the log of an
 uninterrupted run, byte for byte; elsewhere it leaves the same generations and
-the same export. fim does not write run checkpoints yet (the run lifecycle
-design is not implemented); this is the log's half of that work.
+the same export. A saved run's checkpoint records this position
+(`fim.persistence.run_checkpoint`), which is how
+[a resumed run](run-lifecycle.md#checkpoints-and-exact-continuation) leaves
+the same log as an uninterrupted one.
 
 ### Tests
 
