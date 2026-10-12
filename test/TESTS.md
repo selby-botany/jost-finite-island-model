@@ -53,6 +53,7 @@ Every test module, fixture, and test function documented here in full; `doc/fim-
   - [`test_replicate_monitor`](#convergence.test_replicate_monitor)
   - [`test_window_statistics`](#convergence.test_window_statistics)
 - [`test/engine/`](#group-engine)
+  - [`test_batch_session`](#engine.test_batch_session)
   - [`test_engine`](#engine.test_engine)
   - [`test_execution_checkpoint`](#engine.test_execution_checkpoint)
   - [`test_execution_session`](#engine.test_execution_session)
@@ -7103,6 +7104,157 @@ Ten values leave a one-value first segment, too few for an autocorrelation.
 <a id="group-engine"></a>
 
 ## `test/engine/`
+
+<a id="engine.test_batch_session"></a>
+
+# engine.test\_batch\_session
+
+Tests for `fim.batch_session.BatchSession`.
+
+A batch that is checkpointed, abandoned and restored must finish exactly as
+a batch that never stopped, and both must match the blocking `fim.engine.fim`
+call: the same kept replicates in the same order, the same reports and
+manifests, and the same per-replicate trajectory logs. Abandoning is
+simulated in process: the session runs past the checkpoint (finishing,
+building and even adaptively stopping lanes the checkpoint does not
+describe) and its logs are closed.
+
+<a id="engine.test_batch_session.test_an_uninterrupted_batch_session_matches_the_blocking_call"></a>
+
+#### test\_an\_uninterrupted\_batch\_session\_matches\_the\_blocking\_call
+
+```python
+@pytest.mark.parametrize("name", [*_CASES, *_VECTOR_CASES])
+def test_an_uninterrupted_batch_session_matches_the_blocking_call(
+        name: str, tmp_path: Path) -> None
+```
+
+Advanced to its stop, a session returns what `fim()` returns.
+
+<a id="engine.test_batch_session.test_the_adaptive_case_stops_early_and_the_matched_case_matches_windows"></a>
+
+#### test\_the\_adaptive\_case\_stops\_early\_and\_the\_matched\_case\_matches\_windows
+
+```python
+def test_the_adaptive_case_stops_early_and_the_matched_case_matches_windows(
+        tmp_path: Path) -> None
+```
+
+The cases exercise an adaptive stop and a matched averaging window.
+
+<a id="engine.test_batch_session.test_a_restored_batch_finishes_as_one_that_never_stopped"></a>
+
+#### test\_a\_restored\_batch\_finishes\_as\_one\_that\_never\_stopped
+
+```python
+@pytest.mark.parametrize("name", [*_CASES, *_VECTOR_CASES])
+@pytest.mark.parametrize("fraction", [0.0, 0.3, 0.7])
+@pytest.mark.parametrize("lost", [1, 6, 1000])
+def test_a_restored_batch_finishes_as_one_that_never_stopped(
+        name: str, fraction: float, lost: int, tmp_path: Path) -> None
+```
+
+Checkpointed, abandoned and restored, a batch ends exactly the same.
+
+`lost` ticks run past the checkpoint before abandoning: one, several,
+or through the batch's own stop, so the abandoned attempt has finished
+lanes, built lanes and (adaptively) stopped where the checkpoint has not.
+
+<a id="engine.test_batch_session.test_a_checkpoint_taken_at_the_stop_finalizes_the_same_batch"></a>
+
+#### test\_a\_checkpoint\_taken\_at\_the\_stop\_finalizes\_the\_same\_batch
+
+```python
+def test_a_checkpoint_taken_at_the_stop_finalizes_the_same_batch(
+        tmp_path: Path) -> None
+```
+
+A FINALIZING checkpoint restores, finalizes, and finalizes again.
+
+<a id="engine.test_batch_session.test_a_restored_stopped_batch_checkpoints_again"></a>
+
+#### test\_a\_restored\_stopped\_batch\_checkpoints\_again
+
+```python
+def test_a_restored_stopped_batch_checkpoints_again(tmp_path: Path) -> None
+```
+
+A restored FINALIZING batch captures the same coordinator once more.
+
+<a id="engine.test_batch_session.test_the_coordinator_records_the_accepted_prefix_in_replicate_order"></a>
+
+#### test\_the\_coordinator\_records\_the\_accepted\_prefix\_in\_replicate\_order
+
+```python
+def test_the_coordinator_records_the_accepted_prefix_in_replicate_order(
+        tmp_path: Path) -> None
+```
+
+Admission follows replicate order, never finishing order.
+
+<a id="engine.test_batch_session.test_restoring_under_another_configuration_is_refused"></a>
+
+#### test\_restoring\_under\_another\_configuration\_is\_refused
+
+```python
+def test_restoring_under_another_configuration_is_refused(
+        tmp_path: Path) -> None
+```
+
+A batch continues only with the configuration it started with.
+
+<a id="engine.test_batch_session.test_a_scalar_checkpoint_is_not_a_batch_checkpoint"></a>
+
+#### test\_a\_scalar\_checkpoint\_is\_not\_a\_batch\_checkpoint
+
+```python
+def test_a_scalar_checkpoint_is_not_a_batch_checkpoint(tmp_path: Path) -> None
+```
+
+The payload kind separates scalar and batch checkpoints.
+
+<a id="engine.test_batch_session.test_a_tampered_coordinator_is_refused"></a>
+
+#### test\_a\_tampered\_coordinator\_is\_refused
+
+```python
+@pytest.mark.parametrize("tampering", _TAMPERING)
+def test_a_tampered_coordinator_is_refused(tampering: str,
+                                           tmp_path: Path) -> None
+```
+
+A coordinator inconsistent with its lanes or its replay is refused.
+
+<a id="engine.test_batch_session.test_a_single_replicate_is_refused"></a>
+
+#### test\_a\_single\_replicate\_is\_refused
+
+```python
+def test_a_single_replicate_is_refused() -> None
+```
+
+One replicate runs as a scalar session, not a batch.
+
+<a id="engine.test_batch_session.test_an_in_memory_batch_runs_but_cannot_checkpoint"></a>
+
+#### test\_an\_in\_memory\_batch\_runs\_but\_cannot\_checkpoint
+
+```python
+def test_an_in_memory_batch_runs_but_cannot_checkpoint() -> None
+```
+
+Only binary logs record a position a checkpoint can name.
+
+<a id="engine.test_batch_session.test_advance_refuses_negative_ticks_and_finalize_an_unstopped_batch"></a>
+
+#### test\_advance\_refuses\_negative\_ticks\_and\_finalize\_an\_unstopped\_batch
+
+```python
+def test_advance_refuses_negative_ticks_and_finalize_an_unstopped_batch(
+        tmp_path: Path) -> None
+```
+
+The stepping contract is checked.
 
 <a id="engine.test_engine"></a>
 

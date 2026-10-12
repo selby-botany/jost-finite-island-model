@@ -7,6 +7,27 @@ Return to the [source-tree orientation](../README.md) or the [developer guide](.
 # Table of Contents
 
 * [fim](#fim)
+* [fim.batch\_session](#fim.batch_session)
+  * [BATCH\_CHECKPOINT\_KIND](#fim.batch_session.BATCH_CHECKPOINT_KIND)
+  * [BATCH\_CHECKPOINT\_VERSION](#fim.batch_session.BATCH_CHECKPOINT_VERSION)
+  * [READABLE\_BATCH\_CHECKPOINT\_VERSIONS](#fim.batch_session.READABLE_BATCH_CHECKPOINT_VERSIONS)
+  * [MINIMUM\_BATCH\_REPLICATES](#fim.batch_session.MINIMUM_BATCH_REPLICATES)
+  * [BatchSession](#fim.batch_session.BatchSession)
+    * [\_\_init\_\_](#fim.batch_session.BatchSession.__init__)
+    * [\_\_enter\_\_](#fim.batch_session.BatchSession.__enter__)
+    * [\_\_exit\_\_](#fim.batch_session.BatchSession.__exit__)
+    * [create](#fim.batch_session.BatchSession.create)
+    * [restore](#fim.batch_session.BatchSession.restore)
+    * [lanes](#fim.batch_session.BatchSession.lanes)
+    * [stopped](#fim.batch_session.BatchSession.stopped)
+    * [store](#fim.batch_session.BatchSession.store)
+    * [ticks](#fim.batch_session.BatchSession.ticks)
+    * [advance](#fim.batch_session.BatchSession.advance)
+    * [capture](#fim.batch_session.BatchSession.capture)
+    * [checkpoint](#fim.batch_session.BatchSession.checkpoint)
+    * [close](#fim.batch_session.BatchSession.close)
+    * [finalize](#fim.batch_session.BatchSession.finalize)
+  * [check\_batch\_session\_support](#fim.batch_session.check_batch_session_support)
 * [fim.cli](#fim.cli)
   * [load\_config](#fim.cli.load_config)
   * [main](#fim.cli.main)
@@ -270,7 +291,11 @@ Return to the [source-tree orientation](../README.md) or the [developer guide](.
     * [close](#fim.execution.ScalarSession.close)
     * [finalize](#fim.execution.ScalarSession.finalize)
   * [check\_session\_support](#fim.execution.check_session_support)
+  * [check\_backend\_buildable](#fim.execution.check_backend_buildable)
+  * [export\_lane](#fim.execution.export_lane)
   * [resolve\_session\_backend](#fim.execution.resolve_session_backend)
+  * [check\_payload\_identity](#fim.execution.check_payload_identity)
+  * [restore\_lane](#fim.execution.restore_lane)
 * [fim.gui](#fim.gui)
 * [fim.gui.animation](#fim.gui.animation)
   * [AnimationFrame](#fim.gui.animation.AnimationFrame)
@@ -1032,6 +1057,7 @@ Return to the [source-tree orientation](../README.md) or the [developer guide](.
     * [\_\_init\_\_](#fim.persistence.store.ReplicateFanoutStore.__init__)
     * [\_\_getstate\_\_](#fim.persistence.store.ReplicateFanoutStore.__getstate__)
     * [\_\_setstate\_\_](#fim.persistence.store.ReplicateFanoutStore.__setstate__)
+    * [store\_for](#fim.persistence.store.ReplicateFanoutStore.store_for)
     * [write\_generation](#fim.persistence.store.ReplicateFanoutStore.write_generation)
     * [begin\_run](#fim.persistence.store.ReplicateFanoutStore.begin_run)
     * [wants\_frames](#fim.persistence.store.ReplicateFanoutStore.wants_frames)
@@ -1355,6 +1381,362 @@ Return to the [source-tree orientation](../README.md) or the [developer guide](.
 # fim
 
 Public package metadata for the finite island model simulator.
+
+<a id="fim.batch_session"></a>
+
+# fim.batch\_session
+
+Resumable execution sessions for a batch of replicates.
+
+`BatchSession` is the stepwise form of `fim.engine.run_batch`: `create`
+builds the first window of lanes, `advance` runs a bounded number of
+*ticks* (one `run_batch` loop iteration each: every running lane advances
+one generation, finished lanes are finalized, the accepted prefix is fed to
+the adaptive stopping rule, and freed window slots are refilled), and
+`finalize` returns the same results `fim.engine.fim` returns for the same
+configuration. Between ticks the session sits at a safe point.
+
+`capture` records, at a safe point, the coordinator (how many lanes were
+built and admitted, where an adaptive stop fell) and one lane state per
+built lane, in the layout `fim.execution.export_lane` writes, under the
+array prefix ``lane.<index>.``. A finished lane's state is taken just
+before it was finalized; restoring it finalizes it again, which is
+deterministic, so its `RunResult` is never stored. The averaging-window
+planner and the adaptive stopping monitor are rebuilt by replaying those
+results in replicate order, exactly the order `run_batch` fed them, so
+neither needs a serialized form.
+
+An adaptive stop discards the lanes past the stopping replicate only in
+`finalize`, after the caller has had the chance to checkpoint the stop:
+an earlier checkpoint still names those lanes' logs, so deleting them at
+the stop would leave a crash between the stop and the next checkpoint
+unrecoverable.
+
+<a id="fim.batch_session.BATCH_CHECKPOINT_KIND"></a>
+
+#### BATCH\_CHECKPOINT\_KIND
+
+The `kind` a batch session's checkpoint payload carries.
+
+<a id="fim.batch_session.BATCH_CHECKPOINT_VERSION"></a>
+
+#### BATCH\_CHECKPOINT\_VERSION
+
+Version of the batch payload layout this build writes.
+
+<a id="fim.batch_session.READABLE_BATCH_CHECKPOINT_VERSIONS"></a>
+
+#### READABLE\_BATCH\_CHECKPOINT\_VERSIONS
+
+Batch payload versions this build restores.
+
+<a id="fim.batch_session.MINIMUM_BATCH_REPLICATES"></a>
+
+#### MINIMUM\_BATCH\_REPLICATES
+
+The fewest replicates a batch session runs; one runs as a scalar session.
+
+<a id="fim.batch_session.BatchSession"></a>
+
+## BatchSession Objects
+
+```python
+class BatchSession()
+```
+
+A batch of replicates, advanced in bounded ticks between safe points.
+
+Build one with `create`. The session owns its fan-out trajectory store
+(one child store per replicate): `finalize` and `close` close it, and
+the session is a context manager that closes it on exit.
+
+<a id="fim.batch_session.BatchSession.__init__"></a>
+
+#### \_\_init\_\_
+
+```python
+def __init__(params: SimulationParams, store: ReplicateFanoutStore,
+             run_id: str | None, clock: Clock,
+             engine_backend: SessionBackend) -> None
+```
+
+Set up an empty session; use `create` or `restore` instead.
+
+**Arguments**:
+
+- `params` - The batch configuration.
+- `store` - The fan-out store every lane writes through.
+- `run_id` - The batch's run identifier, or `None` to derive each
+  replicate's from `params`.
+- `clock` - Timestamp source for the manifests.
+- `engine_backend` - The resolved backend recorded in the manifests.
+
+<a id="fim.batch_session.BatchSession.__enter__"></a>
+
+#### \_\_enter\_\_
+
+```python
+def __enter__() -> BatchSession
+```
+
+Return this session for a `with` block.
+
+<a id="fim.batch_session.BatchSession.__exit__"></a>
+
+#### \_\_exit\_\_
+
+```python
+def __exit__(*_: object) -> None
+```
+
+Close the session's stores, whether or not it finished.
+
+<a id="fim.batch_session.BatchSession.create"></a>
+
+#### create
+
+```python
+@classmethod
+def create(cls,
+           params: SimulationParams,
+           store_factory: StoreFactory,
+           *,
+           run_id: str | None = None,
+           clock: Clock | None = None) -> BatchSession
+```
+
+Build the first window of lanes, each through generation zero.
+
+**Arguments**:
+
+- `params` - A validated configuration of two or more replicates.
+- `store_factory` - Builds one replicate's own store from its run id.
+- `run_id` - The batch's run identifier; replicate run ids derive
+  from it exactly as `fim.engine.fim` derives them.
+- `clock` - Timestamp source; the current UTC time when omitted.
+
+
+**Returns**:
+
+  A session at the tick-zero safe point.
+
+
+**Raises**:
+
+- `UnsupportedSessionError` - If `params` names one replicate or a
+  backend configuration `fim.engine.fim` itself refuses.
+
+<a id="fim.batch_session.BatchSession.restore"></a>
+
+#### restore
+
+```python
+@classmethod
+def restore(cls,
+            params: SimulationParams,
+            checkpoint: LoadedCheckpoint,
+            store_factory: Callable[[str], BinaryLogStore],
+            *,
+            clock: Clock | None = None) -> BatchSession
+```
+
+Rebuild a session at the safe point a checkpoint describes.
+
+Each built lane's log is cut back to its recorded position; finished
+lanes are finalized again; the window planner and the adaptive
+stopping monitor are rebuilt by replaying finished results in
+replicate order. A lane built after the checkpoint by the
+interrupted attempt has its leftover log discarded before it is
+built again.
+
+**Arguments**:
+
+- `params` - The configuration the batch was started with.
+- `checkpoint` - A verified checkpoint (`load_checkpoint`).
+- `store_factory` - Builds one replicate's existing binary log.
+- `clock` - Timestamp source; the current UTC time when omitted.
+
+
+**Returns**:
+
+  A session at the checkpoint's tick.
+
+
+**Raises**:
+
+- `SessionRestoreError` - If the checkpoint is not a batch session's,
+  was taken under another configuration, or is inconsistent.
+
+<a id="fim.batch_session.BatchSession.lanes"></a>
+
+#### lanes
+
+```python
+@property
+def lanes() -> Sequence[ReplicaLane]
+```
+
+Every lane built so far, in replicate order; read-only use only.
+
+<a id="fim.batch_session.BatchSession.stopped"></a>
+
+#### stopped
+
+```python
+@property
+def stopped() -> bool
+```
+
+Whether every lane finished or the adaptive stop fired.
+
+<a id="fim.batch_session.BatchSession.store"></a>
+
+#### store
+
+```python
+@property
+def store() -> ReplicateFanoutStore
+```
+
+The fan-out store every lane writes through.
+
+<a id="fim.batch_session.BatchSession.ticks"></a>
+
+#### ticks
+
+```python
+@property
+def ticks() -> int
+```
+
+How many ticks have run; a checkpoint's committed generation.
+
+<a id="fim.batch_session.BatchSession.advance"></a>
+
+#### advance
+
+```python
+def advance(ticks: int | None = None) -> bool
+```
+
+Run up to `ticks` more ticks, stopping early once the batch stops.
+
+**Arguments**:
+
+- `ticks` - The most ticks to run; until the batch stops when omitted.
+
+
+**Returns**:
+
+  Whether the batch has stopped.
+
+
+**Raises**:
+
+- `ValueError` - If `ticks` is negative or the session is finalized
+  or closed.
+
+<a id="fim.batch_session.BatchSession.capture"></a>
+
+#### capture
+
+```python
+def capture() -> SessionCapture
+```
+
+Export the batch's exact state at the current safe point.
+
+**Returns**:
+
+  The checkpoint payload and arrays; the committed generation is
+  the tick count.
+
+
+**Raises**:
+
+- `UnsupportedSessionError` - If a lane's store is not a binary log.
+- `ValueError` - If the session is finalized or closed.
+
+<a id="fim.batch_session.BatchSession.checkpoint"></a>
+
+#### checkpoint
+
+```python
+def checkpoint(lease: ExecutionLease,
+               *,
+               fault: FaultHook | None = None) -> CheckpointReference
+```
+
+Capture the batch and publish it as the object's latest checkpoint.
+
+**Arguments**:
+
+- `lease` - The owning attempt's execution lease.
+- `fault` - Test hook passed to `commit_checkpoint`.
+
+
+**Returns**:
+
+  The reference now recorded in the object's `run.json`.
+
+<a id="fim.batch_session.BatchSession.close"></a>
+
+#### close
+
+```python
+def close() -> None
+```
+
+Release every lane's open files; idempotent.
+
+<a id="fim.batch_session.BatchSession.finalize"></a>
+
+#### finalize
+
+```python
+def finalize() -> tuple[RunResult, ...]
+```
+
+Return the kept replicates' results once the batch has stopped.
+
+After an adaptive stop, every lane past the stopping replicate is
+discarded from the store first, as `fim.engine.run_batch` does.
+
+**Returns**:
+
+  The same results `fim.engine.fim` returns for this configuration.
+
+
+**Raises**:
+
+- `ValueError` - If the batch has not stopped, or the session was
+  closed without finishing.
+
+<a id="fim.batch_session.check_batch_session_support"></a>
+
+#### check\_batch\_session\_support
+
+```python
+def check_batch_session_support(params: SimulationParams) -> SessionBackend
+```
+
+Refuse a batch configuration a resumable batch session cannot run.
+
+**Arguments**:
+
+- `params` - The configuration to run.
+
+
+**Returns**:
+
+  The resolved backend.
+
+
+**Raises**:
+
+- `UnsupportedSessionError` - If `params` names a single replicate (a
+  `fim.execution.ScalarSession` runs that) or a backend the
+  blocking call itself refuses.
 
 <a id="fim.cli"></a>
 
@@ -7430,6 +7812,60 @@ configuration is reported without recording a failed attempt.
   on the lineal backend, no numba for the vector backend, or a
   locus over the vector capacity ceiling).
 
+<a id="fim.execution.check_backend_buildable"></a>
+
+#### check\_backend\_buildable
+
+```python
+def check_backend_buildable(params: SimulationParams,
+                            engine_backend: SessionBackend) -> None
+```
+
+Refuse a backend the blocking call itself would refuse for `params`.
+
+**Arguments**:
+
+- `params` - The configuration to run.
+- `engine_backend` - The resolved backend.
+
+
+**Raises**:
+
+- `UnsupportedSessionError` - If the backend cannot be built for `params`.
+
+<a id="fim.execution.export_lane"></a>
+
+#### export\_lane
+
+```python
+def export_lane(
+    lane: ReplicaLane, store: TrajectoryStore
+) -> tuple[dict[str, Any], dict[str, npt.NDArray[Any]]]
+```
+
+Export one lane's exact state at a safe point.
+
+Commits and syncs the lane's trajectory log (and its ancestral-phase
+log) first, so the positions recorded name data already on disk.
+
+**Arguments**:
+
+- `lane` - The lane, between two generations.
+- `store` - The lane's own trajectory log.
+
+
+**Returns**:
+
+  The lane's JSON-safe metadata (`run_id`, `started_at`,
+  `generation`, `rng`, `monitor`, `population`, `registries`,
+  `vector`, `trajectory`, `equilibration`) and its arrays.
+
+
+**Raises**:
+
+- `UnsupportedSessionError` - If a log is not a binary log, whose
+  committed position a checkpoint can record.
+
 <a id="fim.execution.resolve_session_backend"></a>
 
 #### resolve\_session\_backend
@@ -7457,6 +7893,81 @@ blocking call would.
 **Raises**:
 
 - `UnsupportedSessionError` - If the backend is not one a session runs.
+
+<a id="fim.execution.check_payload_identity"></a>
+
+#### check\_payload\_identity
+
+```python
+def check_payload_identity(
+    payload: Mapping[str, Any],
+    params: SimulationParams,
+    *,
+    kind: str = SESSION_CHECKPOINT_KIND,
+    versions: tuple[int, ...] = READABLE_SESSION_CHECKPOINT_VERSIONS
+) -> tuple[SessionBackend, JitOption]
+```
+
+Check a payload is a session's of `kind`, taken under `params`.
+
+**Arguments**:
+
+- `payload` - The checkpoint's metadata.
+- `params` - The configuration the caller means to continue.
+- `kind` - The payload kind expected.
+- `versions` - The payload versions this build reads for `kind`.
+
+
+**Returns**:
+
+  The backend and JIT option the run was started with.
+
+
+**Raises**:
+
+- `SessionRestoreError` - If the kind, version, configuration, backend or
+  JIT option does not match.
+
+<a id="fim.execution.restore_lane"></a>
+
+#### restore\_lane
+
+```python
+def restore_lane(params: SimulationParams,
+                 payload: Mapping[str, Any],
+                 arrays: Mapping[str, npt.NDArray[Any]],
+                 store: BinaryLogStore,
+                 *,
+                 replica_index: int = 0,
+                 awaiting_window: bool = False) -> ReplicaLane
+```
+
+Rebuild one replicate's lane from the state `export_lane` wrote.
+
+The trajectory log (and the ancestral-phase log, if any) is cut back to
+the recorded positions.
+
+**Arguments**:
+
+- `params` - The lane's own configuration (a batch replicate's, for a
+  lane of a batch).
+- `payload` - The lane's metadata.
+- `arrays` - The lane's arrays, without any batch prefix.
+- `store` - The lane's own trajectory log, not yet written to.
+- `replica_index` - The lane's zero-based index in its batch.
+- `awaiting_window` - Whether the lane was built waiting for the
+  batch's averaging window (its monitor is in window mode).
+
+
+**Returns**:
+
+  The lane, at the recorded generation.
+
+
+**Raises**:
+
+- `SnapshotError` - If any part of the state is malformed or inconsistent.
+- `ValueError` - If a log does not match its recorded position.
 
 <a id="fim.gui"></a>
 
@@ -25569,6 +26080,16 @@ def __setstate__(state: dict[str, Any]) -> None
 ```
 
 Restore everything but `_lock`, then rebuild a fresh one.
+
+<a id="fim.persistence.store.ReplicateFanoutStore.store_for"></a>
+
+#### store\_for
+
+```python
+def store_for(run_id: str) -> TrajectoryStore
+```
+
+Return `run_id`'s own child store, building it on first use.
 
 <a id="fim.persistence.store.ReplicateFanoutStore.write_generation"></a>
 

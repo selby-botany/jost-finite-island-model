@@ -479,7 +479,7 @@ class ReplicateFanoutStore:
         self.__dict__.update(state)
         self._lock = threading.Lock()
 
-    def _store_for(self, run_id: str) -> TrajectoryStore:
+    def store_for(self, run_id: str) -> TrajectoryStore:
         """Return `run_id`'s own child store, building it on first use."""
         with self._lock:
             store = self._stores.get(run_id)
@@ -497,17 +497,17 @@ class ReplicateFanoutStore:
         validate: bool = True,
     ) -> None:
         """Delegate to `run_id`'s own child store; see `TrajectoryStore`."""
-        self._store_for(run_id).write_generation(
+        self.store_for(run_id).write_generation(
             run_id, generation, rows, validate=validate
         )
 
     def begin_run(self, run_id: str, layout: FrameLayout) -> None:
         """Tell `run_id`'s own child store its layout (`FrameStore`)."""
-        begin_store_run(self._store_for(run_id), run_id, layout)
+        begin_store_run(self.store_for(run_id), run_id, layout)
 
     def wants_frames(self, run_id: str) -> bool:
         """Whether `run_id`'s own child store prefers frames (`FrameStore`)."""
-        return store_wants_frames(self._store_for(run_id), run_id)
+        return store_wants_frames(self.store_for(run_id), run_id)
 
     def write_frame(self, run_id: str, frame: TrajectoryFrame) -> None:
         """Delegate a frame to `run_id`'s own child store (`FrameStore`).
@@ -515,14 +515,14 @@ class ReplicateFanoutStore:
         Raises:
             TypeError: If the child store cannot take frames.
         """
-        child = self._store_for(run_id)
+        child = self.store_for(run_id)
         if not isinstance(child, FrameStore):
             raise TypeError(f"{type(child).__name__} cannot take frames")
         child.write_frame(run_id, frame)
 
     def read(self, run_id: str) -> Iterator[TrajectoryRow]:
         """Delegate to `run_id`'s own child store; see `TrajectoryStore`."""
-        return self._store_for(run_id).read(run_id)
+        return self.store_for(run_id).read(run_id)
 
     def discard(self, run_id: str) -> None:
         """Discard `run_id`'s own rows; a no-op if no child store exists.
@@ -562,7 +562,7 @@ class ReplicateFanoutStore:
         own `trajectory.tlog`, in its own directory
         (`EquilibriumStoreProvider`).
         """
-        return equilibrium_store_for(self._store_for(run_id), run_id)
+        return equilibrium_store_for(self.store_for(run_id), run_id)
 
 
 def normalize_row(

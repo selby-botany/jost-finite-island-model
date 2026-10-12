@@ -262,9 +262,9 @@ class ScalarSession:
                 was taken under another configuration, or is inconsistent.
         """
         payload = checkpoint.payload
-        backend, jit = _check_payload_identity(payload, params)
+        backend, jit = check_payload_identity(payload, params)
         try:
-            lane = _restore_lane(params, payload, checkpoint.arrays, store)
+            lane = restore_lane(params, payload, checkpoint.arrays, store)
         except (ValueError, KeyError, TypeError) as error:
             close_store(store)
             raise SessionRestoreError(
@@ -352,64 +352,15 @@ class ScalarSession:
             ValueError: If the session is finalized or closed.
         """
         self._require_open()
-        if not isinstance(self._store, BinaryLogStore):
-            raise UnsupportedSessionError(
-                "only a binary trajectory log can be checkpointed; got "
-                f"{type(self._store).__name__}"
-            )
         lane = self._lane
-        monitor, monitor_arrays = lane.monitor.export_state()
-        arrays: dict[str, npt.NDArray[Any]] = dict(monitor_arrays)
+        state, arrays = export_lane(lane, self._store)
         payload: dict[str, Any] = {
             "configuration_digest": configuration_digest(lane.params),
             "engine_backend": self._engine_backend,
-            "equilibration": None,
-            "generation": self.generation,
             "jit": self._jit,
             "kind": SESSION_CHECKPOINT_KIND,
-            "monitor": monitor,
-            "population": None,
-            "registries": None,
-            "rng": export_rng(lane.rng),
-            "run_id": lane.run_id,
-            "started_at": lane.started_at,
-            "trajectory": _position_to_json(self._store.checkpoint()),
-            "vector": None,
             "version": SESSION_CHECKPOINT_VERSION,
-        }
-        block = lane.vectorized_state
-        if block is None:
-            population, population_arrays = export_population(lane.state)
-            registries, registry_arrays = export_registries(
-                lane.registry, lane.finite_alleles
-            )
-            payload["population"] = population
-            payload["registries"] = registries
-            arrays |= population_arrays | registry_arrays
-        else:
-            # Once the vector backend has built its block, the block is the
-            # population and the registries: `lane.state` and the lane's
-            # registries are left at generation zero until the run stops.
-            vector, vector_arrays = block.export_state()
-            payload["vector"] = vector
-            arrays |= {
-                f"{VECTOR_PREFIX}{name}": array for name, array in vector_arrays.items()
-            }
-        outcome = lane.equilibration_outcome
-        if outcome is not None:
-            ancestral = lane.equilibrium_store
-            if not isinstance(ancestral, BinaryLogStore):
-                raise UnsupportedSessionError(
-                    "the ancestral-phase trajectory is not a binary log"
-                )
-            payload["equilibration"] = {
-                "final_heterozygosity": outcome.final_heterozygosity,
-                "generation_count": outcome.generation_count,
-                "trajectory": _position_to_json(ancestral.checkpoint()),
-            }
-            arrays[EQUILIBRATION_HISTORY] = np.asarray(
-                outcome.history, dtype=np.float64
-            )
+        } | state
         return SessionCapture(
             payload=payload,
             arrays=arrays,
@@ -511,6 +462,22 @@ def check_session_support(params: SimulationParams) -> SessionBackend:
             "a resumable session runs exactly one replicate; "
             f"n_replicates is {params.n_replicates}"
         )
+    check_backend_buildable(params, engine_backend)
+    return engine_backend
+
+
+def check_backend_buildable(
+    params: SimulationParams, engine_backend: SessionBackend
+) -> None:
+    """Refuse a backend the blocking call itself would refuse for `params`.
+
+    Args:
+        params: The configuration to run.
+        engine_backend: The resolved backend.
+
+    Raises:
+        UnsupportedSessionError: If the backend cannot be built for `params`.
+    """
     # The blocking call's own backend checks (JIT availability per backend,
     # numba for the vector backend, the vector capacity ceiling), so a
     # session refuses exactly what `fim.engine.fim` refuses.
@@ -524,7 +491,80 @@ def check_session_support(params: SimulationParams) -> SessionBackend:
         )
     except ValueError as error:
         raise UnsupportedSessionError(str(error)) from error
-    return engine_backend
+
+
+def export_lane(
+    lane: ReplicaLane, store: TrajectoryStore
+) -> tuple[dict[str, Any], dict[str, npt.NDArray[Any]]]:
+    """Export one lane's exact state at a safe point.
+
+    Commits and syncs the lane's trajectory log (and its ancestral-phase
+    log) first, so the positions recorded name data already on disk.
+
+    Args:
+        lane: The lane, between two generations.
+        store: The lane's own trajectory log.
+
+    Returns:
+        The lane's JSON-safe metadata (`run_id`, `started_at`,
+        `generation`, `rng`, `monitor`, `population`, `registries`,
+        `vector`, `trajectory`, `equilibration`) and its arrays.
+
+    Raises:
+        UnsupportedSessionError: If a log is not a binary log, whose
+            committed position a checkpoint can record.
+    """
+    if not isinstance(store, BinaryLogStore):
+        raise UnsupportedSessionError(
+            "only a binary trajectory log can be checkpointed; got "
+            f"{type(store).__name__}"
+        )
+    monitor, monitor_arrays = lane.monitor.export_state()
+    arrays: dict[str, npt.NDArray[Any]] = dict(monitor_arrays)
+    payload: dict[str, Any] = {
+        "equilibration": None,
+        "generation": _lane_generation(lane),
+        "monitor": monitor,
+        "population": None,
+        "registries": None,
+        "rng": export_rng(lane.rng),
+        "run_id": lane.run_id,
+        "started_at": lane.started_at,
+        "trajectory": _position_to_json(store.checkpoint()),
+        "vector": None,
+    }
+    block = lane.vectorized_state
+    if block is None:
+        population, population_arrays = export_population(lane.state)
+        registries, registry_arrays = export_registries(
+            lane.registry, lane.finite_alleles
+        )
+        payload["population"] = population
+        payload["registries"] = registries
+        arrays |= population_arrays | registry_arrays
+    else:
+        # Once the vector backend has built its block, the block is the
+        # population and the registries: `lane.state` and the lane's
+        # registries are left at generation zero until the run stops.
+        vector, vector_arrays = block.export_state()
+        payload["vector"] = vector
+        arrays |= {
+            f"{VECTOR_PREFIX}{name}": array for name, array in vector_arrays.items()
+        }
+    outcome = lane.equilibration_outcome
+    if outcome is not None:
+        ancestral = lane.equilibrium_store
+        if not isinstance(ancestral, BinaryLogStore):
+            raise UnsupportedSessionError(
+                "the ancestral-phase trajectory is not a binary log"
+            )
+        payload["equilibration"] = {
+            "final_heterozygosity": outcome.final_heterozygosity,
+            "generation_count": outcome.generation_count,
+            "trajectory": _position_to_json(ancestral.checkpoint()),
+        }
+        arrays[EQUILIBRATION_HISTORY] = np.asarray(outcome.history, dtype=np.float64)
+    return payload, arrays
 
 
 def resolve_session_backend(params: SimulationParams) -> SessionBackend:
@@ -559,10 +599,20 @@ def resolve_session_backend(params: SimulationParams) -> SessionBackend:
     )
 
 
-def _check_payload_identity(
-    payload: Mapping[str, Any], params: SimulationParams
+def check_payload_identity(
+    payload: Mapping[str, Any],
+    params: SimulationParams,
+    *,
+    kind: str = SESSION_CHECKPOINT_KIND,
+    versions: tuple[int, ...] = READABLE_SESSION_CHECKPOINT_VERSIONS,
 ) -> tuple[SessionBackend, JitOption]:
-    """Check a payload is a scalar session's, taken under `params`.
+    """Check a payload is a session's of `kind`, taken under `params`.
+
+    Args:
+        payload: The checkpoint's metadata.
+        params: The configuration the caller means to continue.
+        kind: The payload kind expected.
+        versions: The payload versions this build reads for `kind`.
 
     Returns:
         The backend and JIT option the run was started with.
@@ -571,16 +621,15 @@ def _check_payload_identity(
         SessionRestoreError: If the kind, version, configuration, backend or
             JIT option does not match.
     """
-    if payload.get("kind") != SESSION_CHECKPOINT_KIND:
+    if payload.get("kind") != kind:
         raise SessionRestoreError(
-            f"checkpoint kind {payload.get('kind')!r} is not "
-            f"{SESSION_CHECKPOINT_KIND!r}"
+            f"checkpoint kind {payload.get('kind')!r} is not {kind!r}"
         )
-    if payload.get("version") not in READABLE_SESSION_CHECKPOINT_VERSIONS:
+    if payload.get("version") not in versions:
         raise SessionRestoreError(
             f"session checkpoint version {payload.get('version')!r} is "
             f"not supported; this build reads versions "
-            f"{', '.join(map(str, READABLE_SESSION_CHECKPOINT_VERSIONS))}"
+            f"{', '.join(map(str, versions))}"
         )
     if payload.get("configuration_digest") != configuration_digest(params):
         raise SessionRestoreError(
@@ -688,13 +737,32 @@ def _restore_equilibration(
     return outcome, ancestral
 
 
-def _restore_lane(
+def restore_lane(
     params: SimulationParams,
     payload: Mapping[str, Any],
     arrays: Mapping[str, npt.NDArray[Any]],
     store: BinaryLogStore,
+    *,
+    replica_index: int = 0,
+    awaiting_window: bool = False,
 ) -> ReplicaLane:
-    """Rebuild a single replicate's lane from a checkpoint payload and arrays.
+    """Rebuild one replicate's lane from the state `export_lane` wrote.
+
+    The trajectory log (and the ancestral-phase log, if any) is cut back to
+    the recorded positions.
+
+    Args:
+        params: The lane's own configuration (a batch replicate's, for a
+            lane of a batch).
+        payload: The lane's metadata.
+        arrays: The lane's arrays, without any batch prefix.
+        store: The lane's own trajectory log, not yet written to.
+        replica_index: The lane's zero-based index in its batch.
+        awaiting_window: Whether the lane was built waiting for the
+            batch's averaging window (its monitor is in window mode).
+
+    Returns:
+        The lane, at the recorded generation.
 
     Raises:
         SnapshotError: If any part of the state is malformed or inconsistent.
@@ -705,7 +773,7 @@ def _restore_lane(
     if not isinstance(run_id, str) or not isinstance(started_at, str):
         raise SnapshotError("run_id and started_at must be strings")
     rng = import_rng(payload["rng"])
-    monitor = _burn_in_monitor(params)
+    monitor = _burn_in_monitor(params, awaiting_window=awaiting_window)
     try:
         monitor.restore_state(payload["monitor"], _select(arrays, "monitor."))
     except (ValueError, RuntimeError) as error:
@@ -736,7 +804,7 @@ def _restore_lane(
     )
     outcome, ancestral = _restore_equilibration(params, payload, arrays, store, run_id)
     return ReplicaLane(
-        replica_index=0,
+        replica_index=replica_index,
         run_id=run_id,
         params=params,
         state=state,
