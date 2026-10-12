@@ -1448,7 +1448,10 @@ def test_closing_and_reopening_a_study_from_home(
     outcome: queue.Queue[list[dict[str, Any]]] = queue.Queue(maxsize=1)
 
     def _snapshot() -> dict[str, Any]:
-        return json.loads(window.evaluate_js(_CLOSE_STATE))
+        snapshot = json.loads(window.evaluate_js(_CLOSE_STATE))
+        if not isinstance(snapshot, dict):
+            raise AssertionError("close-state JavaScript must return an object")
+        return snapshot
 
     def _click_close_and_wait(label: str) -> None:
         window.evaluate_js(

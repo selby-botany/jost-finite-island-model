@@ -20,7 +20,6 @@ import yaml
 
 from fim import cli, paths, run_service
 from fim.examples import classes
-from fim.execution import ScalarSession
 from fim.persistence.run_objects import read_run_object
 from fim.persistence.run_ownership import request_pause
 
@@ -188,7 +187,7 @@ def test_resume_refuses_a_planned_object_and_start_refuses_a_paused_one(
     original = run_service.execute_run_object
 
     def pause_at_15(object_id: str, **kwargs: Any) -> Any:
-        def observer(session: ScalarSession) -> None:
+        def observer(session: run_service.Session) -> None:
             if session.generation == 15:
                 current = read_run_object(object_id, results=_results(tmp_path))
                 request_pause(
@@ -306,7 +305,7 @@ def test_sigterm_pauses_a_foreground_start(
     original = run_service.execute_run_object
 
     def terminated_at_15(object_id: str, **kwargs: Any) -> Any:
-        def observer(session: ScalarSession) -> None:
+        def observer(session: run_service.Session) -> None:
             if session.generation == 15:
                 os.kill(os.getpid(), signal.SIGTERM)
 

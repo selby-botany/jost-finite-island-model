@@ -46,6 +46,7 @@ from fim.persistence.tlog import iter_frames
 from fim.run_service import (
     CheckpointCadence,
     DraftRunError,
+    Session,
     cancel_run_object,
     completion_was_recovered,
     diagnose_run_object,
@@ -76,7 +77,7 @@ _CONFIG: dict[str, Any] = {
 # Requests are checked every 5 generations; time never triggers a checkpoint.
 _CADENCE = CheckpointCadence(generations=10, seconds=1e9, control_generations=5)
 
-Observer = Callable[[ScalarSession], None]
+Observer = Callable[[Session], None]
 
 
 @pytest.fixture(autouse=True)
@@ -158,7 +159,7 @@ def _at(generation: int, action: Callable[[], object]) -> Observer:
     """Return an observer that performs `action` once, at `generation`."""
     done: list[bool] = []
 
-    def observe(session: ScalarSession) -> None:
+    def observe(session: Session) -> None:
         if session.generation >= generation and not done:
             done.append(True)
             action()

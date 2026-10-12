@@ -65,7 +65,9 @@ from fim.persistence.manifest import (
     ArtifactDigest,
     BatchManifest,
     hash_file,
-    write_batch_manifest,
+)
+from fim.persistence.manifest import (
+    write_batch_manifest as write_batch_manifest,  # noqa: PLC0414
 )
 from fim.persistence.report import write_report
 from fim.persistence.run_checkpoint import (
