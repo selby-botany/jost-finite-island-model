@@ -14,7 +14,8 @@ is killed leaves the object `running` until any later command notices that
 its owner is gone and records it as `interrupted`; `resume` then continues
 from the latest checkpoint. A command killed after it published every
 artifact is recorded as `completed` instead, once its completion receipt
-verifies.
+verifies. A run stopped before its first checkpoint cannot resume; `clone`
+saves its configuration as a new object that starts from generation zero.
 """
 
 from __future__ import annotations
@@ -35,6 +36,7 @@ from fim.persistence.run_lifecycle import (
 )
 from fim.persistence.run_objects import (
     RunObject,
+    clone_run_object,
     create_run_object,
     delete_run_object,
     list_run_objects,
@@ -95,6 +97,10 @@ def add_object_subcommands(subcommands: argparse._SubParsersAction[Any]) -> None
     ):
         control_parser = commands.add_parser(name, help=text)
         control_parser.add_argument("object_id", metavar="OBJECT_ID")
+    clone_parser = commands.add_parser(
+        "clone", help="save an object's configuration as a new object"
+    )
+    clone_parser.add_argument("object_id", metavar="OBJECT_ID")
     reclaim_parser = commands.add_parser(
         "reclaim", help="remove staging directories that killed commands left"
     )
@@ -120,6 +126,7 @@ def command_object(
         execution was interrupted from the keyboard.
     """
     handlers: dict[str, Callable[[], int]] = {
+        "clone": lambda: _clone(arguments.object_id),
         "create": lambda: _create(Path(arguments.config)),
         "edit": lambda: _edit(arguments.object_id, Path(arguments.config)),
         "list": _list,
@@ -161,6 +168,14 @@ def _cancel(object_id: str) -> int:
         print(f"Cancel requested for {object_id}; it stops at its next safe point")
     else:
         print(f"Cancelled {object_id}")
+    return 0
+
+
+def _clone(object_id: str) -> int:
+    """Save an object's configuration as a new object linked to it."""
+    cloned = clone_run_object(object_id)
+    _print_saved("Created", cloned)
+    print(f"Cloned from {object_id}")
     return 0
 
 
@@ -208,6 +223,12 @@ def _execute(
         raise LifecycleError(
             f"{object_id} is {state.value}; only a paused, interrupted, or "
             "failed object can resume"
+        )
+    if state in RESUMABLE_STATES and reconciled.record.latest_checkpoint is None:
+        raise LifecycleError(
+            f"{object_id} is {state.value} and stopped before its first "
+            f"checkpoint, so it cannot resume; `fim object clone {object_id}` "
+            "saves its configuration as a new run that starts from generation 0"
         )
     if not resume and state in RESUMABLE_STATES:
         raise LifecycleError(

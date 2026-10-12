@@ -5810,6 +5810,18 @@ def test_reclaim_reports_and_removes_orphan_staging(
 
 A dry run lists the orphan; a real run removes it.
 
+<a id="cli.test_cli_objects.test_a_run_failed_before_its_first_checkpoint_is_cloned_not_resumed"></a>
+
+#### test\_a\_run\_failed\_before\_its\_first\_checkpoint\_is\_cloned\_not\_resumed
+
+```python
+def test_a_run_failed_before_its_first_checkpoint_is_cloned_not_resumed(
+        tmp_path: Path, capsys: pytest.CaptureFixture[str],
+        monkeypatch: pytest.MonkeyPatch) -> None
+```
+
+Resume is refused with a clone hint; the clone runs from generation 0.
+
 <a id="cli.test_cli_sweep"></a>
 
 # cli.test\_cli\_sweep

@@ -346,3 +346,41 @@ def test_reclaim_reports_and_removes_orphan_staging(
     assert _main(tmp_path, "object", "reclaim") == 0
     assert f"Removed output staging {staging}: " in capsys.readouterr().out
     assert not staging.exists()
+
+
+def test_a_run_failed_before_its_first_checkpoint_is_cloned_not_resumed(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Resume is refused with a clone hint; the clone runs from generation 0."""
+    object_id, _ = _create(tmp_path, capsys, _config(tmp_path))
+    original = run_service.execute_run_object
+
+    def broken_store(path: Path, params: Any) -> Any:
+        raise OSError("disk unavailable")
+
+    def failed_in_initialization(object_id: str, **kwargs: Any) -> Any:
+        return original(object_id, store_factory=broken_store, **kwargs)
+
+    monkeypatch.setattr("fim.cli_objects.execute_run_object", failed_in_initialization)
+    assert _main(tmp_path, "object", "start", object_id) != 0
+    monkeypatch.setattr("fim.cli_objects.execute_run_object", original)
+    capsys.readouterr()
+
+    assert _main(tmp_path, "object", "resume", object_id) == 2
+    assert f"`fim object clone {object_id}`" in capsys.readouterr().err
+    assert _main(tmp_path, "object", "status", object_id) == 0
+    assert "stopped before its first checkpoint" in capsys.readouterr().out
+
+    assert _main(tmp_path, "object", "clone", object_id) == 0
+    output = capsys.readouterr().out
+    match = re.search(r"Created (obj-[0-9a-f]+) \(planned\)", output)
+    assert match is not None, output
+    assert f"Cloned from {object_id}" in output
+    clone_id = match.group(1)
+    clone = read_run_object(clone_id, results=_results(tmp_path))
+    assert clone.record.source_object_id == object_id
+
+    assert _main(tmp_path, "object", "start", clone_id) == 0
+    assert f"{clone_id} is completed at generation 30" in capsys.readouterr().out

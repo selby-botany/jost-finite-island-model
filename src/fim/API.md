@@ -2000,7 +2000,8 @@ is killed leaves the object `running` until any later command notices that
 its owner is gone and records it as `interrupted`; `resume` then continues
 from the latest checkpoint. A command killed after it published every
 artifact is recorded as `completed` instead, once its completion receipt
-verifies.
+verifies. A run stopped before its first checkpoint cannot resume; `clone`
+saves its configuration as a new object that starts from generation zero.
 
 <a id="fim.cli_objects.add_object_subcommands"></a>
 

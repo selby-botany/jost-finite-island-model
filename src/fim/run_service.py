@@ -589,7 +589,8 @@ def _resume_problems(run_object: RunObject) -> list[str]:
     if reference is None:
         if record.phase is not None:
             problems.append(
-                "no checkpoint was committed; resuming starts from generation 0"
+                "it stopped before its first checkpoint, so it cannot resume; "
+                "clone it to run the same configuration from generation 0"
             )
         return problems
     try:
