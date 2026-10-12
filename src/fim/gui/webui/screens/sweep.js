@@ -580,7 +580,7 @@ async function enterSweepProgress(studyId) {
         state.className = "sweep-point-state";
         row.appendChild(state);
         sweepProgressBody.appendChild(row);
-        setSweepPointState(point.index, point.state === "done" ? "done" : "waiting");
+        setSweepPointState(point.index, sweepStoredStateText(point));
     }
     const done = status.points.filter((point) => point.state === "done").length;
     sweepProgressBar.max = Math.max(status.points.length, 1);
@@ -589,6 +589,27 @@ async function enterSweepProgress(studyId) {
 }
 
 window.fim.showSweepProgress = enterSweepProgress;
+
+/**
+ * Describe a point's stored state when the progress table opens. A point
+ * whose Run object paused, was interrupted, or failed says so, because
+ * the next run continues it rather than starting over.
+ * @param {{state: string, reason: (string|null)}} point
+ * @returns {string}
+ */
+function sweepStoredStateText(point) {
+    switch (point.state) {
+        case "done":
+        case "paused":
+        case "interrupted":
+        case "running":
+            return point.state;
+        case "failed":
+            return point.reason ? `failed: ${point.reason}` : "failed";
+        default:
+            return "waiting";
+    }
+}
 
 /**
  * Write one point's state into the progress table.

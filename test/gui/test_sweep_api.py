@@ -230,21 +230,20 @@ def test_a_sweep_and_a_run_cannot_overlap(api: Api, window: _FakeWindow) -> None
 def test_cancelling_stops_the_sweep_and_resume_finishes_it(
     api: Api, window: _FakeWindow
 ) -> None:
-    original = LocalPointRunner.run_point
+    original = LocalPointRunner.run_object_point
 
     def cancel_after_first(
         self: Any,
-        params: Any,
+        object_id: str,
         cancel_event: threading.Event,
         on_message: Any = None,
-        max_workers: int | None = None,
     ) -> Any:
-        result = original(self, params, cancel_event, on_message, max_workers)
+        result = original(self, object_id, cancel_event, on_message)
         api.cancel_sweep()
         return result
 
     monkeypatch = pytest.MonkeyPatch()
-    monkeypatch.setattr(LocalPointRunner, "run_point", cancel_after_first)
+    monkeypatch.setattr(LocalPointRunner, "run_object_point", cancel_after_first)
     try:
         started = api.start_sweep(_form(), _request(_D_AXIS, pointsAtOnce="1"))
         _wait_until_idle(api)
@@ -469,23 +468,28 @@ def test_plan_sweep_says_how_many_points_run_at_once(api: Api) -> None:
     assert asked["concurrency"]["automatic"] is False
 
 
-def test_a_sweep_passes_its_points_at_once_and_the_worker_count_to_each_point(
+def test_a_sweep_runs_each_batch_point_as_one_in_process_run_object(
     api: Api, window: _FakeWindow, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    seen: list[int | None] = []
-    original = LocalPointRunner.run_point
+    objects: list[str] = []
+    legacy: list[int | None] = []
+    original = LocalPointRunner.run_object_point
 
     def recording(
         self: Any,
-        params: Any,
+        object_id: str,
         cancel_event: threading.Event,
         on_message: Any = None,
-        max_workers: int | None = None,
     ) -> Any:
-        seen.append(max_workers)
-        return original(self, params, cancel_event, on_message, max_workers)
+        objects.append(object_id)
+        return original(self, object_id, cancel_event, on_message)
 
-    monkeypatch.setattr(LocalPointRunner, "run_point", recording)
+    def legacy_recording(self: Any, *args: Any, **kwargs: Any) -> Any:
+        legacy.append(None)
+        raise AssertionError("a batch point should run as a Run object")
+
+    monkeypatch.setattr(LocalPointRunner, "run_object_point", recording)
+    monkeypatch.setattr(LocalPointRunner, "run_point", legacy_recording)
     api.set_default_run_settings(
         {
             **api.get_default_run_settings(),
@@ -499,7 +503,8 @@ def test_a_sweep_passes_its_points_at_once_and_the_worker_count_to_each_point(
     assert started["ok"] is True
     _wait_until_idle(api)
     assert window.finished.is_set()
-    # A two-replicate lineal batch gets at most two workers, never the whole
-    # machine by default.
-    assert len(seen) == 2
-    assert all(workers is not None and 1 <= workers <= 2 for workers in seen)
+    # A batch session steps both replicates in one process, so no point
+    # asks for worker processes of its own.
+    assert len(set(objects)) == 2
+    assert legacy == []
+    assert groups.get_study(started["studyId"]).run_count == 2

@@ -430,3 +430,52 @@ def test_closing_the_dialog_any_way_but_cancel_keeps_what_it_showed(
     assert escaped["axes"] == ["m", "N"]
     assert escaped["summary"] == "Sweep: m (4), N (4), 16 points."
     assert cancelled["axes"] == ["m", "N"]
+
+
+def test_a_paused_point_is_shown_as_paused_when_the_sweep_reopens(
+    fast_scalar_run_settings: Path, window: webview.Window
+) -> None:
+    import threading  # noqa: PLC0415
+
+    from fim.sweep import SweepSpec, enumerate_points, expand_axis  # noqa: PLC0415
+    from fim.sweep_run import (  # noqa: PLC0415
+        LocalPointRunner,
+        SweepEvent,
+        create_sweep_study,
+        run_sweep,
+    )
+
+    spec = SweepSpec(
+        base={
+            "N": 16,
+            "ploidy": "diploid",
+            "m": 0.1,
+            "mu": 0.01,
+            "seed": 7,
+            "n_replicates": 1,
+            "max_generations": 400,
+        },
+        axes=(expand_axis("d", [2, 3]),),
+    )
+    study_id = create_sweep_study(spec, enumerate_points(spec), "Paused").study_id
+    cancel = threading.Event()
+
+    def cancel_at_first_progress(event: SweepEvent) -> None:
+        if event.kind == "point_progress":
+            cancel.set()
+
+    run_sweep(
+        study_id,
+        LocalPointRunner(),
+        cancel_at_first_progress,
+        cancel,
+        points_at_once=1,
+    )
+    states = """Array.from(document.querySelectorAll('.sweep-point-state'))
+        .map((cell) => cell.textContent)"""
+
+    def steps(poll_until: Poll) -> Any:
+        window.evaluate_js(f"window.fim.showSweepProgress('{study_id}')")
+        return poll_until(states, lambda s: s is not None and len(s) == 2)
+
+    assert _drive(window, steps) == ["paused", "waiting"]

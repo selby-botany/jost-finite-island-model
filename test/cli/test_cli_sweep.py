@@ -169,7 +169,8 @@ def test_resuming_under_a_new_software_version_recomputes_and_reports_a_match(
     assert status == 0
     assert "2 point(s) recomputed under this version and matched" in output
     assert "0 differed" in output
-    assert len(list((tmp_path / "results").glob("*/manifest.json"))) == 2
+    # The recomputed points replace the originals; each is a Run object.
+    assert len(list((tmp_path / "results").glob("objects/*/manifest.json"))) == 2
 
 
 def test_concurrency_flags_are_accepted_and_the_sweep_still_runs(

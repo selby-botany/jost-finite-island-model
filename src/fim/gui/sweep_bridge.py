@@ -139,6 +139,7 @@ def status_payload(
                 "runId": status.run_id,
                 "state": status.state,
                 "reason": status.reason,
+                "objectId": status.object_id,
             }
             for status in sweep_point_statuses(study, results=results)
         ],

@@ -1337,15 +1337,21 @@ Return to the [source-tree orientation](../README.md) or the [developer guide](.
 * [fim.sweep\_run](#fim.sweep_run)
   * [PointState](#fim.sweep_run.PointState)
   * [PointFailure](#fim.sweep_run.PointFailure)
+  * [PointPaused](#fim.sweep_run.PointPaused)
   * [SweepEvent](#fim.sweep_run.SweepEvent)
   * [SweepOutcome](#fim.sweep_run.SweepOutcome)
   * [PointStatus](#fim.sweep_run.PointStatus)
   * [PointRunner](#fim.sweep_run.PointRunner)
     * [run\_point](#fim.sweep_run.PointRunner.run_point)
+  * [ObjectPointRunner](#fim.sweep_run.ObjectPointRunner)
+    * [run\_object\_point](#fim.sweep_run.ObjectPointRunner.run_object_point)
   * [LocalPointRunner](#fim.sweep_run.LocalPointRunner)
     * [run\_point](#fim.sweep_run.LocalPointRunner.run_point)
+    * [run\_object\_point](#fim.sweep_run.LocalPointRunner.run_object_point)
+  * [execute\_point\_object](#fim.sweep_run.execute_point_object)
   * [ProcessPointRunner](#fim.sweep_run.ProcessPointRunner)
     * [run\_point](#fim.sweep_run.ProcessPointRunner.run_point)
+    * [run\_object\_point](#fim.sweep_run.ProcessPointRunner.run_object_point)
     * [close](#fim.sweep_run.ProcessPointRunner.close)
   * [Concurrency](#fim.sweep_run.Concurrency)
   * [resolve\_concurrency](#fim.sweep_run.resolve_concurrency)
@@ -1359,6 +1365,7 @@ Return to the [source-tree orientation](../README.md) or the [developer guide](.
   * [run\_sweep](#fim.sweep_run.run_sweep)
   * [failures\_path](#fim.sweep_run.failures_path)
   * [read\_failures](#fim.sweep_run.read_failures)
+  * [read\_point\_objects](#fim.sweep_run.read_point_objects)
   * [write\_reproducibility\_note](#fim.sweep_run.write_reproducibility_note)
   * [PointResult](#fim.sweep_run.PointResult)
   * [sweep\_point\_results](#fim.sweep_run.sweep_point_results)
@@ -32370,7 +32377,13 @@ The execution half of `fim.sweep`
   operation as running.
 - Point status is *derived* (a point is done if a member run has its id),
   never stored, so a manifest cannot disagree with the run directories.
-  Only failures are recorded, in a small file beside the Study index.
+  Only failures and each point's Run object link are recorded, in a small
+  file beside the Study index.
+- A point dispatched by `LocalPointRunner` or `ProcessPointRunner` is a
+  resumable Run object (`fim.run_service`), created lazily when the point
+  first runs. Cancelling a sweep pauses its points in flight, and the next
+  run resumes them from their checkpoints instead of starting over. Only a
+  completed object is ever counted as a finished point.
 - Points run one after another. A batch already spreads its replicates
   over the cores; running several batches at once would oversubscribe
   them. `PointRunner` is the seam a cluster would implement instead.
@@ -32379,8 +32392,12 @@ The execution half of `fim.sweep`
 
 #### PointState
 
-A point is `done` (a member run has its id, from this software version), `stale`
-(only a run from another software version), `failed`, or `waiting`.
+Where a point stands.
+
+`done` (a member run has its id, from this software version); the linked
+Run object's lifecycle state when it is `planned`, `running`, `paused`,
+`interrupted`, or `failed`; `stale` (only a run from another software
+version); `failed` (recorded before any Run object existed); or `waiting`.
 
 <a id="fim.sweep_run.PointFailure"></a>
 
@@ -32392,6 +32409,21 @@ class PointFailure()
 ```
 
 Why one point produced no run.
+
+<a id="fim.sweep_run.PointPaused"></a>
+
+## PointPaused Objects
+
+```python
+@dataclass(frozen=True, slots=True)
+class PointPaused()
+```
+
+A point's Run object stopped, resumable, before it completed.
+
+**Attributes**:
+
+- `state` - The object's lifecycle state, `paused` or `cancelled`.
 
 <a id="fim.sweep_run.SweepEvent"></a>
 
@@ -32466,6 +32498,33 @@ Run `params` and return the published run directory or a failure.
 `max_workers` sizes the worker processes of a batch point (a lineal
 batch's replicates); `None` leaves the runner's own default.
 
+<a id="fim.sweep_run.ObjectPointRunner"></a>
+
+## ObjectPointRunner Objects
+
+```python
+@runtime_checkable
+class ObjectPointRunner(Protocol)
+```
+
+A runner that can also execute a point as a resumable Run object.
+
+<a id="fim.sweep_run.ObjectPointRunner.run_object_point"></a>
+
+#### run\_object\_point
+
+```python
+def run_object_point(
+    object_id: str,
+    cancel_event: threading.Event,
+    on_message: Callable[[object], None] | None = None
+) -> Path | PointFailure | PointPaused
+```
+
+Start or resume the object; return its directory once completed.
+
+A set `cancel_event` pauses the object at its next safe point.
+
 <a id="fim.sweep_run.LocalPointRunner"></a>
 
 ## LocalPointRunner Objects
@@ -32501,6 +32560,56 @@ def run_point(params: SimulationParams,
 
 Run `params` synchronously; see `PointRunner.run_point`.
 
+<a id="fim.sweep_run.LocalPointRunner.run_object_point"></a>
+
+#### run\_object\_point
+
+```python
+def run_object_point(
+    object_id: str,
+    cancel_event: threading.Event,
+    on_message: Callable[[object], None] | None = None
+) -> Path | PointFailure | PointPaused
+```
+
+Execute a point's Run object here; see `ObjectPointRunner`.
+
+<a id="fim.sweep_run.execute_point_object"></a>
+
+#### execute\_point\_object
+
+```python
+def execute_point_object(
+        object_id: str,
+        cancel_event: Any,
+        on_message: Callable[[object], None] | None = None,
+        *,
+        pairwise_max_demes: int = DEFAULT_PAIRWISE_MAX_DEMES,
+        results: Path | None = None) -> Path | PointFailure | PointPaused
+```
+
+Start or resume one point's Run object until it stops.
+
+The object is executed by `fim.run_service.execute_run_object` with the
+desktop app's artifact writer, so a completed point is an ordinary run.
+A set `cancel_event` becomes a durable pause request at the next safe
+point: the checkpoint it leaves lets the next sweep resume the point.
+
+**Arguments**:
+
+- `object_id` - The point's Run object.
+- `cancel_event` - A `threading.Event` or a shared manager event.
+- `on_message` - Receives `("progress", generation)` at each safe point.
+- `pairwise_max_demes` - Largest deme count whose `pairwise.json` the
+  completed point writes.
+- `results` - Results directory (default: `results_directory()`).
+
+
+**Returns**:
+
+  The object directory once completed, `PointPaused` if it stopped
+  resumable, or `PointFailure` if it could not run or failed.
+
 <a id="fim.sweep_run.ProcessPointRunner"></a>
 
 ## ProcessPointRunner Objects
@@ -32526,6 +32635,8 @@ dies is reported as a failed point, not a hung sweep.
 
 - `processes` - How many points can run at once.
 - `max_workers` - Default worker processes for a lineal batch point.
+- `pairwise_max_demes` - Largest deme count for which each point saves
+  every deme pair's Nei identities (`pairwise.json`).
 
 <a id="fim.sweep_run.ProcessPointRunner.run_point"></a>
 
@@ -32539,6 +32650,20 @@ def run_point(params: SimulationParams,
 ```
 
 Run `params` in a worker process; see `PointRunner.run_point`.
+
+<a id="fim.sweep_run.ProcessPointRunner.run_object_point"></a>
+
+#### run\_object\_point
+
+```python
+def run_object_point(
+    object_id: str,
+    cancel_event: threading.Event,
+    on_message: Callable[[object], None] | None = None
+) -> Path | PointFailure | PointPaused
+```
+
+Execute a point's Run object in a worker process.
 
 <a id="fim.sweep_run.ProcessPointRunner.close"></a>
 
@@ -32579,7 +32704,8 @@ def resolve_concurrency(*,
                         params: SimulationParams,
                         requested: int | None = None,
                         max_workers: int | None = None,
-                        cores: int | None = None) -> Concurrency
+                        cores: int | None = None,
+                        in_process_batches: bool = False) -> Concurrency
 ```
 
 Choose how many points run at once, and each point's workers.
@@ -32600,6 +32726,9 @@ point's worker count and shrinks how many fit.
 - `requested` - Points at once the user asked for, or `None` for auto.
 - `max_workers` - The user's per-batch worker limit, if any.
 - `cores` - Core count; the machine's own when `None`.
+- `in_process_batches` - Points run as Run objects, whose batch session
+  steps every replicate inside one process on any engine, so each
+  point needs one core.
 
 <a id="fim.sweep_run.create_sweep_study"></a>
 
@@ -32702,10 +32831,14 @@ def sweep_point_statuses(study: StudyManifest,
 Return every planned point with its derived state.
 
 `done` if a member run of the Study has the point's `run_id` and was
-made by this `software_version`; `stale` if the only such member was
-made by another version (it is recomputed, and compared, on the next
-run); `failed` if a failure was recorded and there is no such run;
-otherwise `waiting`.
+made by this `software_version`. Otherwise the linked Run object's
+lifecycle state when it is `planned`, `running`, `paused`,
+`interrupted`, or `failed` (an active object whose owner is gone reads
+`interrupted`); then `stale` if the only member was made by another
+version (it is recomputed, and compared, on the next run); `failed` if
+a failure was recorded before any object existed; otherwise `waiting`.
+A completed or cancelled object that is not a member yet is never
+reported as done.
 
 <a id="fim.sweep_run._Context"></a>
 
@@ -32759,6 +32892,13 @@ every point in flight and starts no more; completed points stay
 attached. Results do not depend on how many run at once: each point is
 a pure function of its configuration.
 
+With an `ObjectPointRunner` (both runners here), each point runs as a
+Run object created when the point is first dispatched and linked to it
+in the status file. Cancelling pauses the objects in flight; the next
+call resumes a paused or interrupted object, and a failed one only
+with `retry_failed`. A configuration a resumable session cannot run
+falls back to the runner's `run_point`.
+
 **Arguments**:
 
 - `study_id` - A sweep Study created by `create_sweep_study`.
@@ -32811,6 +32951,18 @@ def read_failures(study_id: str,
 ```
 
 Return recorded failures by point `run_id`; empty if none or unreadable.
+
+<a id="fim.sweep_run.read_point_objects"></a>
+
+#### read\_point\_objects
+
+```python
+def read_point_objects(study_id: str,
+                       *,
+                       results: Path | None = None) -> dict[str, str]
+```
+
+Return each point's linked Run object ID by point `run_id`.
 
 <a id="fim.sweep_run.write_reproducibility_note"></a>
 

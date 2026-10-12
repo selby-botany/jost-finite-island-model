@@ -15,12 +15,21 @@ from pathlib import Path
 from typing import Any
 
 import pytest
+import yaml
 from conftest import COMPLETION_BACKSTOP_SECONDS, backstop_message
 
 from fim import paths
+from fim.gui.sweep_bridge import status_payload
 from fim.model.params import SimulationParams
 from fim.persistence import groups
+from fim.persistence.run_lifecycle import RunState
 from fim.persistence.run_metadata import read_run_metadata, run_metadata_path
+from fim.persistence.run_objects import (
+    create_run_object,
+    list_run_objects,
+    read_run_object,
+    write_run_record,
+)
 from fim.reproducibility import compare_runs
 from fim.sweep import SweepSpec, enumerate_points, expand_axis
 from fim.sweep_run import (
@@ -29,7 +38,9 @@ from fim.sweep_run import (
     PointFailure,
     SweepEvent,
     create_sweep_study,
+    failures_path,
     read_failures,
+    read_point_objects,
     resolve_concurrency,
     run_sweep,
     stored_points,
@@ -61,10 +72,17 @@ def results(tmp_path: Path) -> Iterator[Path]:
         paths.set_results_directory_override(None)
 
 
-def _study(results: Path, *values: int, replicates: int = 1) -> str:
+def _manifest_count(results: Path) -> int:
+    """Count the finished runs under `results`, legacy and Run object alike."""
+    return len(list(results.glob("*/manifest.json"))) + len(
+        list(results.glob("objects/*/manifest.json"))
+    )
+
+
+def _study(results: Path, *values: int, replicates: int = 1, **base: Any) -> str:
     """Create a sweep Study over `d` (`values`) and return its id."""
     spec = SweepSpec(
-        base={**_BASE, "n_replicates": replicates},
+        base={**_BASE, "n_replicates": replicates, **base},
         axes=(expand_axis("d", list(values)),),
     )
     return create_sweep_study(spec, enumerate_points(spec), "Test sweep").study_id
@@ -186,7 +204,7 @@ def test_running_again_recomputes_nothing(results: Path) -> None:
 
     assert (outcome.done, outcome.already_present) == (0, 2)
     assert [e.kind for e in events] == ["sweep_done"]
-    assert len(list(results.glob("*/manifest.json"))) == 2
+    assert _manifest_count(results) == 2
 
 
 def test_resuming_after_a_cancel_finishes_only_what_is_missing(results: Path) -> None:
@@ -214,7 +232,7 @@ def test_resuming_after_a_cancel_finishes_only_what_is_missing(results: Path) ->
     second, _ = _run(study_id)
 
     assert (second.done, second.already_present, second.cancelled) == (2, 1, False)
-    assert len(list(results.glob("*/manifest.json"))) == 3
+    assert _manifest_count(results) == 3
 
 
 def test_a_second_sweep_reuses_the_points_the_first_computed(results: Path) -> None:
@@ -226,7 +244,7 @@ def test_a_second_sweep_reuses_the_points_the_first_computed(results: Path) -> N
 
     assert (outcome.done, outcome.reused) == (0, 2)
     assert [e.kind for e in events if e.kind == "point_reused"] == ["point_reused"] * 2
-    assert len(list(results.glob("*/manifest.json"))) == 2
+    assert _manifest_count(results) == 2
     assert groups.get_study(second).run_count == 2
 
 
@@ -381,7 +399,7 @@ def test_a_new_version_recomputes_and_a_matching_result_replaces_the_old_run(
     assert len(now) == 2
     assert not (old & now)
     assert not any(directory.exists() for directory in old)
-    assert len(list(results.glob("*/manifest.json"))) == 2
+    assert _manifest_count(results) == 2
     recomputed = next(e for e in events if e.kind == "point_recomputed")
     assert recomputed.detail["identical"] is True  # type: ignore[index]
 
@@ -603,7 +621,7 @@ def test_processes_run_the_points_of_a_sweep_and_the_runs_match_the_serial_ones(
     assert sorted(e.position for e in events if e.kind == "point_done") == [1, 2]
     assert not list(second_root.glob(".reserve-*"))
     for directory in groups.study_run_directories(groups.get_study(process_id)):
-        assert directory.parent == second_root.resolve()
+        assert directory.parent == (second_root / "objects").resolve()
         assert compare_runs(serial[groups.run_id_of(directory)], directory).identical
 
 
@@ -721,3 +739,222 @@ def test_a_matching_recompute_of_a_read_only_run_keeps_the_old_run(
     assert any(e.kind == "point_recomputed" for e in events)
     assert old.is_dir()
     assert old in groups.study_run_directories(groups.get_study(study_id))
+
+
+# --- Sweep points as Run objects --------------------------------------------
+
+
+def _point_object_ids(study_id: str, results: Path) -> dict[str, str]:
+    """Return the study's point Run objects, by run id."""
+    return read_point_objects(study_id, results=results)
+
+
+def _cancel_on_first_progress(cancel: threading.Event) -> Callable[[SweepEvent], None]:
+    """Return an event handler that cancels at a point's first safe point."""
+
+    def handle(event: SweepEvent) -> None:
+        if event.kind == "point_progress":
+            cancel.set()
+
+    return handle
+
+
+def test_each_dispatched_point_becomes_a_linked_completed_run_object(
+    results: Path,
+) -> None:
+    study_id = _study(results, 2, 3)
+
+    _run(study_id, points_at_once=1)
+
+    linked = _point_object_ids(study_id, results)
+    statuses = sweep_point_statuses(groups.get_study(study_id))
+    assert sorted(linked) == sorted(s.run_id for s in statuses)
+    assert {s.object_id for s in statuses} == set(linked.values())
+    for run_id, object_id in linked.items():
+        record = read_run_object(object_id, results=results).record
+        assert record.state is RunState.COMPLETED
+        assert record.scientific_run_id == run_id
+    payload = status_payload(groups.get_study(study_id), results=results)
+    assert {p["runId"]: p["objectId"] for p in payload["points"]} == linked
+
+
+def test_a_cancelled_sweep_pauses_its_point_and_the_next_run_resumes_it(
+    results: Path,
+) -> None:
+    study_id = _study(results, 2, max_generations=400)
+    cancel = threading.Event()
+
+    first = run_sweep(
+        study_id,
+        LocalPointRunner(),
+        _cancel_on_first_progress(cancel),
+        cancel,
+        points_at_once=1,
+    )
+
+    assert (first.done, first.cancelled) == (0, True)
+    (object_id,) = _point_object_ids(study_id, results).values()
+    assert read_run_object(object_id, results=results).record.state is RunState.PAUSED
+    (status,) = sweep_point_statuses(groups.get_study(study_id))
+    assert (status.state, status.object_id) == ("paused", object_id)
+
+    second, _ = _run(study_id)
+
+    assert second.done == 1
+    assert _point_object_ids(study_id, results) == {status.run_id: object_id}
+    final = read_run_object(object_id, results=results).record
+    assert final.state is RunState.COMPLETED
+    (done,) = sweep_point_statuses(groups.get_study(study_id))
+    assert done.state == "done"
+
+
+def test_an_active_point_object_without_an_owner_reads_interrupted(
+    results: Path,
+) -> None:
+    study_id = _study(results, 2, max_generations=400)
+    cancel = threading.Event()
+    run_sweep(
+        study_id,
+        LocalPointRunner(),
+        _cancel_on_first_progress(cancel),
+        cancel,
+        points_at_once=1,
+    )
+    (object_id,) = _point_object_ids(study_id, results).values()
+    paused = read_run_object(object_id, results=results)
+    # Rewriting the record as `running` with no attempt lock held is what
+    # a killed sweep process leaves behind.
+    write_run_record(
+        paused.directory,
+        replace(
+            paused.record,
+            state=RunState.RUNNING,
+            active_attempt_id=f"att-{'0' * 32}",
+        ),
+    )
+
+    (status,) = sweep_point_statuses(groups.get_study(study_id))
+
+    assert status.state == "interrupted"
+
+
+def test_a_failed_point_object_is_skipped_unless_retried(
+    results: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from fim.gui import runner as gui_runner  # noqa: PLC0415
+
+    study_id = _study(results, 2)
+    real_writer = gui_runner.write_run_artifacts
+
+    def broken_writer(*args: Any, **kwargs: Any) -> None:
+        raise OSError("disk full")
+
+    monkeypatch.setattr(gui_runner, "write_run_artifacts", broken_writer)
+    first, _ = _run(study_id)
+
+    assert first.failed == 1
+    (object_id,) = _point_object_ids(study_id, results).values()
+    assert read_run_object(object_id, results=results).record.state is RunState.FAILED
+    (status,) = sweep_point_statuses(groups.get_study(study_id))
+    assert status.state == "failed"
+    assert "disk full" in (status.reason or "")
+    # The object records its own failure; the sweep keeps none of its own.
+    assert read_failures(study_id, results=results) == {}
+
+    monkeypatch.setattr(gui_runner, "write_run_artifacts", real_writer)
+    skipped, _ = _run(study_id)
+    assert (skipped.done, skipped.skipped_failed) == (0, 1)
+
+    retried, _ = _run(study_id, retry_failed=True)
+
+    assert retried.done == 1
+    assert _point_object_ids(study_id, results) == {status.run_id: object_id}
+    assert (
+        read_run_object(object_id, results=results).record.state is RunState.COMPLETED
+    )
+
+
+def test_a_completed_point_object_is_reused_by_another_sweep(results: Path) -> None:
+    first = _study(results, 2)
+    _run(first)
+    second = _study(results, 2)
+
+    outcome, _ = _run(second)
+
+    assert (outcome.done, outcome.reused) == (0, 1)
+    assert len(list_run_objects(results).objects) == 1
+    assert (
+        groups.get_study(second).run_directories
+        == groups.get_study(first).run_directories
+    )
+
+
+def test_a_paused_point_object_is_never_counted_as_done(results: Path) -> None:
+    first = _study(results, 2, max_generations=400)
+    cancel = threading.Event()
+    run_sweep(
+        first,
+        LocalPointRunner(),
+        _cancel_on_first_progress(cancel),
+        cancel,
+        points_at_once=1,
+    )
+    second = _study(results, 2, max_generations=400)
+
+    assert [s.state for s in sweep_point_statuses(groups.get_study(second))] == [
+        "waiting"
+    ]
+    assert groups.get_study(first).run_directories == ()
+
+
+def test_the_status_file_keeps_failures_and_objects_apart(results: Path) -> None:
+    study_id = _study(results, 2, 3)
+    cancel = threading.Event()
+
+    def stop_after_first(event: SweepEvent) -> None:
+        if event.kind == "point_done":
+            cancel.set()
+
+    # The first point completes as an object; the second then fails in a
+    # runner that has no objects, so the sweep records that failure.
+    run_sweep(study_id, LocalPointRunner(), stop_after_first, cancel, points_at_once=1)
+    _run(study_id, _Failing(lambda _params: True))
+
+    status = json.loads(failures_path(study_id, results=results).read_text())
+
+    assert set(status) == {"failures", "objects"}
+    assert len(status["failures"]) == 1
+    assert len(status["objects"]) == 1
+    assert set(status["failures"]) != set(status["objects"])
+
+
+def test_object_points_run_batches_in_one_process() -> None:
+    params = SimulationParams.from_mapping({**_BASE, "n_replicates": 4})
+
+    params = replace(params, engine_backend="lineal")
+
+    lineal = resolve_concurrency(points=8, params=params, cores=8)
+    in_process = resolve_concurrency(
+        points=8, params=params, cores=8, in_process_batches=True
+    )
+
+    assert (lineal.points_at_once, lineal.workers_per_point) == (2, 4)
+    assert (in_process.points_at_once, in_process.workers_per_point) == (8, None)
+
+
+def test_a_worker_reports_a_cancelled_point_object_as_paused(results: Path) -> None:
+    from fim.sweep_run import _run_object_in_process  # noqa: PLC0415
+
+    created = create_run_object(
+        yaml.safe_dump({**_BASE, "max_generations": 400}), results=results
+    )
+    cancel = threading.Event()
+    cancel.set()
+
+    outcome = _run_object_in_process(created.object_id, str(results), 0, cancel)
+
+    assert outcome == ("paused", "paused")
+    assert (
+        read_run_object(created.object_id, results=results).record.state
+        is RunState.PAUSED
+    )
