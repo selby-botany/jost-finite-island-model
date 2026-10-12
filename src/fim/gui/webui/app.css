@@ -2208,7 +2208,8 @@ fieldset.combinator-choice label {
     gap: 0.4rem;
 }
 
-.open-run-group-action-button {
+.open-run-group-action-button,
+.open-run-group-close-button {
     font-size: 0.8rem;
     color: var(--fim-muted);
     background: none;
