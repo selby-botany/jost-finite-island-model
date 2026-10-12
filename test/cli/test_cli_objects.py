@@ -383,3 +383,39 @@ def test_a_run_failed_before_its_first_checkpoint_is_cloned_not_resumed(
 
     assert _main(tmp_path, "object", "start", clone_id) == 0
     assert f"{clone_id} is completed at generation 30" in capsys.readouterr().out
+
+
+def test_start_and_resume_accept_checkpoint_cadence_flags(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """CLI cadence flags override the run's default checkpoint cadence."""
+    object_id, _ = _create(tmp_path, capsys, _config(tmp_path))
+    received: list[run_service.CheckpointCadence | None] = []
+    original = run_service.execute_run_object
+
+    def spy(target_id: str, **kwargs: Any) -> Any:
+        received.append(kwargs.get("cadence"))
+        return original(target_id, **kwargs)
+
+    monkeypatch.setattr("fim.cli_objects.execute_run_object", spy)
+
+    assert (
+        _main(
+            tmp_path,
+            "object",
+            "start",
+            object_id,
+            "--checkpoint-generations",
+            "50",
+            "--checkpoint-seconds",
+            "12.5",
+        )
+        == 0
+    )
+    assert len(received) == 1
+    cadence = received[0]
+    assert cadence is not None
+    assert cadence.generations == 50
+    assert cadence.seconds == 12.5

@@ -108,6 +108,8 @@ Return to the [source-tree orientation](../README.md) or the [developer guide](.
   * [TRAJECTORY\_STRIDE](#fim.config.storage.TRAJECTORY_STRIDE)
   * [THINNING\_TRANSIENT\_RELAXATION\_TIMES](#fim.config.storage.THINNING_TRANSIENT_RELAXATION_TIMES)
   * [THINNING\_MINIMUM\_START](#fim.config.storage.THINNING_MINIMUM_START)
+  * [CHECKPOINT\_GENERATIONS](#fim.config.storage.CHECKPOINT_GENERATIONS)
+  * [CHECKPOINT\_SECONDS](#fim.config.storage.CHECKPOINT_SECONDS)
 * [fim.convergence](#fim.convergence)
 * [fim.convergence.batch\_window](#fim.convergence.batch_window)
   * [WindowNoise](#fim.convergence.batch_window.WindowNoise)
@@ -1238,12 +1240,14 @@ Return to the [source-tree orientation](../README.md) or the [developer guide](.
     * [\_\_init\_\_](#fim.run_service.DraftRunError.__init__)
   * [CheckpointCadence](#fim.run_service.CheckpointCadence)
     * [\_\_post\_init\_\_](#fim.run_service.CheckpointCadence.__post_init__)
+  * [cadence\_for\_params](#fim.run_service.cadence_for_params)
   * [cancel\_run\_object](#fim.run_service.cancel_run_object)
   * [check\_run\_support](#fim.run_service.check_run_support)
   * [completion\_was\_recovered](#fim.run_service.completion_was_recovered)
   * [default\_store\_factory](#fim.run_service.default_store_factory)
   * [diagnose\_run\_object](#fim.run_service.diagnose_run_object)
   * [execute\_run\_object](#fim.run_service.execute_run_object)
+  * [load\_params](#fim.run_service.load_params)
   * [replicate\_directory](#fim.run_service.replicate_directory)
 * [fim.statistics](#fim.statistics)
 * [fim.statistics.catalog](#fim.statistics.catalog)
@@ -2664,6 +2668,10 @@ The convergence policy constants one run uses.
   `averaging_multiple_minimum`).
 - `first_wave_averaging_multiple` - Averaging window of the first wave of
   replicates, in relaxation times (greater than 0).
+- `checkpoint_generations` - Committed generations between periodic
+  checkpoints of a resumable run (at least 1).
+- `checkpoint_seconds` - Seconds between periodic checkpoints of a
+  resumable run (greater than 0).
 
 <a id="fim.config.expert.ExpertSettings.__post_init__"></a>
 
@@ -3064,6 +3072,29 @@ Generation before which thinning never starts.
 A run shorter than this keeps every generation even with thinning on, which
 is what makes it safe to leave on: only runs long enough for the file to
 matter lose frames.
+
+Kind: policy.
+
+<a id="fim.config.storage.CHECKPOINT_GENERATIONS"></a>
+
+#### CHECKPOINT\_GENERATIONS
+
+Generations between periodic checkpoints of a resumable run.
+
+Bounds how much work an interrupted or killed run must replay upon resume.
+A smaller interval checks more often; a larger one spends less time writing
+checkpoints.
+
+Kind: policy.
+
+<a id="fim.config.storage.CHECKPOINT_SECONDS"></a>
+
+#### CHECKPOINT\_SECONDS
+
+Seconds between periodic checkpoints of a resumable run.
+
+Enforces a wall-clock ceiling between checkpoints on slow models even when
+generations take a long time to compute.
 
 Kind: policy.
 
@@ -13832,7 +13863,7 @@ def start_object_run(
         message_queue: queue.Queue[RunMessage] | queue.Queue[BatchMessage],
         *,
         results: Path | None = None,
-        cadence: CheckpointCadence = GUI_CADENCE,
+        cadence: CheckpointCadence | None = None,
         clock: Callable[[], float] = time.monotonic,
         pairwise_max_demes: int = DEFAULT_PAIRWISE_MAX_DEMES,
         observer: Callable[[Session], None] | None = None) -> threading.Thread
@@ -29343,6 +29374,34 @@ def __post_init__() -> None
 
 Reject a cadence that would never make progress.
 
+<a id="fim.run_service.cadence_for_params"></a>
+
+#### cadence\_for\_params
+
+```python
+def cadence_for_params(
+    params: SimulationParams,
+    *,
+    generations: int | None = None,
+    seconds: float | None = None,
+    control_generations: int = DEFAULT_CONTROL_GENERATIONS
+) -> CheckpointCadence
+```
+
+Return the checkpoint cadence chosen by the run's Expert Settings.
+
+**Arguments**:
+
+- `params` - The run's simulation parameters.
+- `generations` - Optional generation interval override.
+- `seconds` - Optional time interval override in seconds.
+- `control_generations` - Generations between control polling checks.
+
+
+**Returns**:
+
+  The configured CheckpointCadence.
+
 <a id="fim.run_service.cancel_run_object"></a>
 
 #### cancel\_run\_object
@@ -29514,6 +29573,12 @@ Start or resume a Run object and execute it until it stops.
 - `IllegalTransitionError` - The object cannot start or resume now.
 - `Exception` - Whatever stopped execution; the run is recorded as
   `failed` first.
+
+<a id="fim.run_service.load_params"></a>
+
+#### load\_params
+
+Public alias for loading simulation parameters from a RunObject.
 
 <a id="fim.run_service.replicate_directory"></a>
 

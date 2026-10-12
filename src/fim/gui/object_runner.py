@@ -55,6 +55,7 @@ from fim.run_service import (
     CheckpointCadence,
     DraftRunError,
     Session,
+    cadence_for_params,
     execute_run_object,
 )
 
@@ -88,7 +89,7 @@ def start_object_run(
     message_queue: queue.Queue[RunMessage] | queue.Queue[BatchMessage],
     *,
     results: Path | None = None,
-    cadence: CheckpointCadence = GUI_CADENCE,
+    cadence: CheckpointCadence | None = None,
     clock: Callable[[], float] = time.monotonic,
     pairwise_max_demes: int = DEFAULT_PAIRWISE_MAX_DEMES,
     observer: Callable[[Session], None] | None = None,
@@ -173,7 +174,7 @@ def _object_worker(
     message_queue: queue.Queue[Any],
     *,
     results: Path | None,
-    cadence: CheckpointCadence,
+    cadence: CheckpointCadence | None,
     clock: Callable[[], float],
     pairwise_max_demes: int,
     observer: Callable[[Session], None] | None,
@@ -185,6 +186,20 @@ def _object_worker(
 
     if is_batch and run_dir is not None:
         message_queue.put(("started", run_dir))
+
+    try:
+        target_obj = read_run_object(object_id, results=results)
+        model_dict, _ = split_configuration(yaml.safe_load(target_obj.config_text))
+        run_params = SimulationParams.from_mapping(model_dict)
+        effective_cadence = (
+            cadence
+            if cadence is not None
+            else cadence_for_params(
+                run_params, control_generations=GUI_CONTROL_GENERATIONS
+            )
+        )
+    except Exception:
+        effective_cadence = cadence or GUI_CADENCE
 
     def observe(session: Session) -> None:
         if isinstance(session, BatchSession) and run_dir is not None:
@@ -221,7 +236,7 @@ def _object_worker(
             object_id,
             write_artifacts=write,
             results=results,
-            cadence=cadence,
+            cadence=effective_cadence,
             observer=observe,
             check_support=(
                 check_batch_session_support if is_batch else check_session_support

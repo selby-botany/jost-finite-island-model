@@ -49,11 +49,14 @@ from fim.persistence.run_ownership import (
 )
 from fim.persistence.staging import reclaim_orphan_staging
 from fim.run_service import (
+    CheckpointCadence,
     DraftRunError,
+    cadence_for_params,
     cancel_run_object,
     completion_was_recovered,
     diagnose_run_object,
     execute_run_object,
+    load_params,
 )
 from fim.termination import sigterm_requests_stop
 
@@ -89,6 +92,20 @@ def add_object_subcommands(subcommands: argparse._SubParsersAction[Any]) -> None
         execute_parser.add_argument("object_id", metavar="OBJECT_ID")
         execute_parser.add_argument(
             "--quiet", action="store_true", help="print only errors"
+        )
+        execute_parser.add_argument(
+            "--checkpoint-generations",
+            type=int,
+            metavar="N",
+            default=None,
+            help="generations between periodic checkpoints",
+        )
+        execute_parser.add_argument(
+            "--checkpoint-seconds",
+            type=float,
+            metavar="SECONDS",
+            default=None,
+            help="seconds between periodic checkpoints",
         )
     for name, text in (
         ("pause", "ask a running object to checkpoint and pause"),
@@ -132,10 +149,20 @@ def command_object(
         "list": _list,
         "status": lambda: _status(arguments.object_id, as_json=arguments.json),
         "start": lambda: _execute(
-            arguments.object_id, write_artifacts, quiet=arguments.quiet, resume=False
+            arguments.object_id,
+            write_artifacts,
+            quiet=arguments.quiet,
+            resume=False,
+            checkpoint_generations=arguments.checkpoint_generations,
+            checkpoint_seconds=arguments.checkpoint_seconds,
         ),
         "resume": lambda: _execute(
-            arguments.object_id, write_artifacts, quiet=arguments.quiet, resume=True
+            arguments.object_id,
+            write_artifacts,
+            quiet=arguments.quiet,
+            resume=True,
+            checkpoint_generations=arguments.checkpoint_generations,
+            checkpoint_seconds=arguments.checkpoint_seconds,
         ),
         "pause": lambda: _pause(arguments.object_id),
         "cancel": lambda: _cancel(arguments.object_id),
@@ -207,7 +234,13 @@ def _edit(object_id: str, config: Path) -> int:
 
 
 def _execute(
-    object_id: str, write_artifacts: ArtifactWriter, *, quiet: bool, resume: bool
+    object_id: str,
+    write_artifacts: ArtifactWriter,
+    *,
+    quiet: bool,
+    resume: bool,
+    checkpoint_generations: int | None = None,
+    checkpoint_seconds: float | None = None,
 ) -> int:
     """Start or resume an object and run it in the foreground until it stops."""
     # `start` and `resume` name the user's intent; refuse the other one
@@ -234,14 +267,26 @@ def _execute(
         raise LifecycleError(
             f"{object_id} is {state.value}; use `fim object resume {object_id}`"
         )
+    cadence: CheckpointCadence | None = None
+    if checkpoint_generations is not None or checkpoint_seconds is not None:
+        params = load_params(reconciled)
+        cadence = cadence_for_params(
+            params,
+            generations=checkpoint_generations,
+            seconds=checkpoint_seconds,
+        )
     if not quiet:
         print(f"{'Resuming' if resume else 'Starting'} {object_id}")
+    execution_kwargs: dict[str, Any] = {}
+    if cadence is not None:
+        execution_kwargs["cadence"] = cadence
     try:
         with sigterm_requests_stop() as stop_requested:
             finished = execute_run_object(
                 object_id,
                 write_artifacts=write_artifacts,
                 stop_requested=stop_requested,
+                **execution_kwargs,
             )
     except KeyboardInterrupt:
         print(

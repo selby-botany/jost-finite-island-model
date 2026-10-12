@@ -40,6 +40,8 @@ from fim.config.convergence import (
 from fim.config.numerics import MINIMUM_WINDOW_VALUES
 from fim.config.statistics import ESTIMATE_AUTO_DENOMINATOR, ESTIMATE_AUTO_FRACTION
 from fim.config.storage import (
+    CHECKPOINT_GENERATIONS,
+    CHECKPOINT_SECONDS,
     LOG_BLOCK_GENERATIONS,
     LOG_KEY_EVERY,
     LOG_SYNC_SECONDS,
@@ -101,6 +103,10 @@ class ExpertSettings:
             `averaging_multiple_minimum`).
         first_wave_averaging_multiple: Averaging window of the first wave of
             replicates, in relaxation times (greater than 0).
+        checkpoint_generations: Committed generations between periodic
+            checkpoints of a resumable run (at least 1).
+        checkpoint_seconds: Seconds between periodic checkpoints of a
+            resumable run (greater than 0).
     """
 
     burn_in_minimum_relaxation_times: float = BURN_IN_MINIMUM_RELAXATION_TIMES
@@ -126,6 +132,8 @@ class ExpertSettings:
     averaging_multiple_minimum: float = AVERAGING_MULTIPLE_MINIMUM
     averaging_multiple_maximum: float = AVERAGING_MULTIPLE_MAXIMUM
     first_wave_averaging_multiple: float = FIRST_WAVE_AVERAGING_MULTIPLE
+    checkpoint_generations: int = CHECKPOINT_GENERATIONS
+    checkpoint_seconds: float = CHECKPOINT_SECONDS
 
     def __post_init__(self) -> None:
         """Validate every field against its documented range.
@@ -254,6 +262,8 @@ _RANGES: Final = (
     ("averaging_multiple_minimum", 0.0, False),
     ("averaging_multiple_maximum", 0.0, False),
     ("first_wave_averaging_multiple", 0.0, False),
+    ("checkpoint_generations", 1.0, True),
+    ("checkpoint_seconds", 0.0, False),
 )
 """Each numeric field's lower bound, and whether the bound itself is allowed."""
 
@@ -265,6 +275,7 @@ _INTEGER_FIELDS: Final = (
     "log_key_every",
     "log_block_generations",
     "thinning_minimum_start",
+    "checkpoint_generations",
 )
 """The fields that must be whole numbers."""
 
@@ -431,6 +442,18 @@ EXPERT_SETTING_INFO: Final[dict[str, ExpertSettingInfo]] = {
         "Disk sync period (seconds)",
         "How often the trajectory log is flushed to disk: the most a power "
         "loss can take.",
+    ),
+    "checkpoint_generations": ExpertSettingInfo(
+        "Storage",
+        "Checkpoint interval (generations)",
+        "Committed generations between periodic checkpoints of a resumable "
+        "run. Bounds how much work an interrupted run must replay.",
+    ),
+    "checkpoint_seconds": ExpertSettingInfo(
+        "Storage",
+        "Checkpoint interval (seconds)",
+        "Wall-clock seconds between periodic checkpoints. Ensures checkpoints "
+        "are saved periodically even for slow models.",
     ),
 }
 """Presentation of every Expert Setting, by name (a test checks the keys)."""

@@ -48,6 +48,7 @@ import yaml
 
 from fim import __version__
 from fim.batch_session import BatchSession, check_batch_session_support
+from fim.config.storage import CHECKPOINT_GENERATIONS, CHECKPOINT_SECONDS
 from fim.engine import RunResult, replicate_summary
 from fim.execution import (
     ScalarSession,
@@ -101,10 +102,10 @@ from fim.persistence.run_receipt import receipt_problem
 
 logger = logging.getLogger(__name__)
 
-DEFAULT_CHECKPOINT_GENERATIONS: Final = 1000
+DEFAULT_CHECKPOINT_GENERATIONS: Final = CHECKPOINT_GENERATIONS
 """Committed generations between periodic checkpoints."""
 
-DEFAULT_CHECKPOINT_SECONDS: Final = 60.0
+DEFAULT_CHECKPOINT_SECONDS: Final = CHECKPOINT_SECONDS
 """Seconds between periodic checkpoints, checked at safe points."""
 
 DEFAULT_CONTROL_GENERATIONS: Final = 50
@@ -178,6 +179,36 @@ class CheckpointCadence:
             raise ValueError("checkpoint and control intervals must be positive")
         if self.seconds <= 0:
             raise ValueError("the checkpoint interval in seconds must be positive")
+
+
+def cadence_for_params(
+    params: SimulationParams,
+    *,
+    generations: int | None = None,
+    seconds: float | None = None,
+    control_generations: int = DEFAULT_CONTROL_GENERATIONS,
+) -> CheckpointCadence:
+    """Return the checkpoint cadence chosen by the run's Expert Settings.
+
+    Args:
+        params: The run's simulation parameters.
+        generations: Optional generation interval override.
+        seconds: Optional time interval override in seconds.
+        control_generations: Generations between control polling checks.
+
+    Returns:
+        The configured CheckpointCadence.
+    """
+    expert = params.expert
+    resolved_generations = (
+        generations if generations is not None else expert.checkpoint_generations
+    )
+    resolved_seconds = seconds if seconds is not None else expert.checkpoint_seconds
+    return CheckpointCadence(
+        generations=resolved_generations,
+        seconds=resolved_seconds,
+        control_generations=control_generations,
+    )
 
 
 def cancel_run_object(
@@ -371,7 +402,7 @@ def execute_run_object(
                 lease,
                 opened.run_object.directory,
                 write_artifacts,
-                cadence or CheckpointCadence(),
+                cadence or cadence_for_params(params),
                 monotonic,
                 observer,
                 stop_requested,
@@ -469,6 +500,10 @@ def _load_params(run_object: RunObject) -> SimulationParams:
     """Parse the object's saved configuration, which validated when saved."""
     document = yaml.safe_load(run_object.config_text)
     return SimulationParams.from_mapping(document)
+
+
+load_params = _load_params
+"""Public alias for loading simulation parameters from a RunObject."""
 
 
 def _open_session(

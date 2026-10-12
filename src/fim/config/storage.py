@@ -67,3 +67,22 @@ matter lose frames.
 
 Kind: policy.
 """
+
+CHECKPOINT_GENERATIONS: Final = 1000
+"""Generations between periodic checkpoints of a resumable run.
+
+Bounds how much work an interrupted or killed run must replay upon resume.
+A smaller interval checks more often; a larger one spends less time writing
+checkpoints.
+
+Kind: policy.
+"""
+
+CHECKPOINT_SECONDS: Final = 60.0
+"""Seconds between periodic checkpoints of a resumable run.
+
+Enforces a wall-clock ceiling between checkpoints on slow models even when
+generations take a long time to compute.
+
+Kind: policy.
+"""

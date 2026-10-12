@@ -47,10 +47,12 @@ from fim.run_service import (
     CheckpointCadence,
     DraftRunError,
     Session,
+    cadence_for_params,
     cancel_run_object,
     completion_was_recovered,
     diagnose_run_object,
     execute_run_object,
+    load_params,
 )
 
 _CLASSES_FIXTURE = (
@@ -637,6 +639,69 @@ def test_diagnosis_reports_an_unsupported_configuration(
     assert diagnose_run_object(paused) == (
         "this release cannot run the configuration: refused for the test",
     )
+
+
+def test_cadence_for_params_defaults() -> None:
+    """Default simulation parameters produce default checkpoint cadence."""
+    params = SimulationParams.from_mapping(_CONFIG)
+    cadence = cadence_for_params(params)
+
+    assert cadence.generations == 1000
+    assert cadence.seconds == 60.0
+    assert cadence.control_generations == 50
+
+
+def test_cadence_for_params_respects_expert_settings() -> None:
+    """Expert settings configure the checkpoint cadence."""
+    params = SimulationParams.from_mapping(
+        {
+            **_CONFIG,
+            "expert": {
+                "checkpoint_generations": 250,
+                "checkpoint_seconds": 15.0,
+            },
+        }
+    )
+    cadence = cadence_for_params(params)
+
+    assert cadence.generations == 250
+    assert cadence.seconds == 15.0
+    assert cadence.control_generations == 50
+
+
+def test_cadence_for_params_accepts_explicit_overrides() -> None:
+    """Caller overrides take precedence over expert settings."""
+    params = SimulationParams.from_mapping(
+        {
+            **_CONFIG,
+            "expert": {
+                "checkpoint_generations": 250,
+                "checkpoint_seconds": 15.0,
+            },
+        }
+    )
+    cadence = cadence_for_params(
+        params, generations=100, seconds=5.0, control_generations=10
+    )
+
+    assert cadence.generations == 100
+    assert cadence.seconds == 5.0
+    assert cadence.control_generations == 10
+
+
+def test_load_params_reads_configuration_with_expert_settings(
+    tmp_path: Path,
+) -> None:
+    """`load_params` recovers full SimulationParams including expert settings."""
+    _create(
+        tmp_path,
+        expert={"checkpoint_generations": 300, "checkpoint_seconds": 20.0},
+    )
+    run_obj = read_run_object(OBJECT_ID, results=tmp_path)
+    params = load_params(run_obj)
+
+    assert params.expert.checkpoint_generations == 300
+    assert params.expert.checkpoint_seconds == 20.0
 
 
 def test_diagnosis_reports_damaged_published_results(tmp_path: Path) -> None:

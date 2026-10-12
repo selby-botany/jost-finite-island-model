@@ -3585,6 +3585,47 @@ def test_diagnosis_reports_an_unsupported_configuration(
 
 A paused run this release cannot continue says so.
 
+<a id="test.test_run_service.test_cadence_for_params_defaults"></a>
+
+#### test\_cadence\_for\_params\_defaults
+
+```python
+def test_cadence_for_params_defaults() -> None
+```
+
+Default simulation parameters produce default checkpoint cadence.
+
+<a id="test.test_run_service.test_cadence_for_params_respects_expert_settings"></a>
+
+#### test\_cadence\_for\_params\_respects\_expert\_settings
+
+```python
+def test_cadence_for_params_respects_expert_settings() -> None
+```
+
+Expert settings configure the checkpoint cadence.
+
+<a id="test.test_run_service.test_cadence_for_params_accepts_explicit_overrides"></a>
+
+#### test\_cadence\_for\_params\_accepts\_explicit\_overrides
+
+```python
+def test_cadence_for_params_accepts_explicit_overrides() -> None
+```
+
+Caller overrides take precedence over expert settings.
+
+<a id="test.test_run_service.test_load_params_reads_configuration_with_expert_settings"></a>
+
+#### test\_load\_params\_reads\_configuration\_with\_expert\_settings
+
+```python
+def test_load_params_reads_configuration_with_expert_settings(
+        tmp_path: Path) -> None
+```
+
+`load_params` recovers full SimulationParams including expert settings.
+
 <a id="test.test_run_service.test_diagnosis_reports_damaged_published_results"></a>
 
 #### test\_diagnosis\_reports\_damaged\_published\_results
@@ -5821,6 +5862,18 @@ def test_a_run_failed_before_its_first_checkpoint_is_cloned_not_resumed(
 ```
 
 Resume is refused with a clone hint; the clone runs from generation 0.
+
+<a id="cli.test_cli_objects.test_start_and_resume_accept_checkpoint_cadence_flags"></a>
+
+#### test\_start\_and\_resume\_accept\_checkpoint\_cadence\_flags
+
+```python
+def test_start_and_resume_accept_checkpoint_cadence_flags(
+        tmp_path: Path, capsys: pytest.CaptureFixture[str],
+        monkeypatch: pytest.MonkeyPatch) -> None
+```
+
+CLI cadence flags override the run's default checkpoint cadence.
 
 <a id="cli.test_cli_sweep"></a>
 
