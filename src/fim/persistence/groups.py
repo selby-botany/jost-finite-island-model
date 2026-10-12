@@ -52,6 +52,21 @@ examples seeding code writes read-only manifests, through
 checks. `read_only` is written to JSON only when true, with no schema
 bump: an older fim ignores the key when reading, but an older fim that
 rewrites such a manifest drops it, so re-seeding restores it.
+
+**Open and closed groups** (run lifecycle design §6.3). A Study or
+Experiment is open by default; a manifest written before `closed`
+existed reads back open. Closing a group freezes its organization:
+a closed Study cannot gain, lose, or be emptied of Runs, a closed
+Experiment cannot gain Studies, and neither can be deleted, raising
+`ClosedGroupError` (a `ValueError`) until it is reopened. Closing never
+freezes the Runs themselves: a shared Run can still be deleted from
+elsewhere, which removes its link here too, and a bit-identical
+recomputation (`supersede_run`) still replaces the link. Renaming and
+documenting stay allowed, because notes on what a group found are
+written after it is closed. The default Study and Experiment always
+stay open, so every new run has a home. `fim.group_lifecycle`
+validates active work before closing and derives each group's
+execution summary.
 """
 
 from __future__ import annotations
@@ -97,6 +112,13 @@ DEFAULT_STUDY_NAME: Final = "Default study"
 DEFAULT_EXPERIMENT_NAME: Final = "Default experiment"
 
 Clock = Callable[[], datetime]
+
+
+class ClosedGroupError(ValueError):
+    """Refuse an organization change through a closed Study or Experiment.
+
+    A `ValueError` subclass for the same reason as `ReadOnlyError`.
+    """
 
 
 class ReadOnlyError(ValueError):
@@ -231,6 +253,8 @@ class StudyManifest:
     `read_only` marks a shipped example Study that this module refuses
     to edit (module docstring); it is written to JSON only when true,
     so a manifest written before it existed reads back `False`.
+    `closed` freezes the Study's membership (module docstring) and is
+    written the same way.
     """
 
     schema_version: int
@@ -243,6 +267,7 @@ class StudyManifest:
     sweep_spec: Mapping[str, object] | None = None
     documentation: str | None = None
     read_only: bool = False
+    closed: bool = False
 
     def __post_init__(self) -> None:
         """Validate schema version, identity, name, and timestamps."""
@@ -285,6 +310,8 @@ class StudyManifest:
         }
         if self.read_only:
             result["read_only"] = True
+        if self.closed:
+            result["closed"] = True
         return result
 
     @classmethod
@@ -324,6 +351,7 @@ class StudyManifest:
                 value, "documentation", label="study manifest"
             ),
             read_only=_optional_bool(value, "read_only", label="study manifest"),
+            closed=_optional_bool(value, "closed", label="study manifest"),
         )
 
 
@@ -335,8 +363,8 @@ class ExperimentManifest:
     (`study_ids` in place of `run_directories`, no `sweep_spec`) — an
     Experiment is otherwise a thin container with no results of its own
     beyond what its Studies already show (design doc §1.3).
-    `description`/`documentation`/`read_only` mean what they mean on a
-    Study.
+    `description`/`documentation`/`read_only`/`closed` mean what they
+    mean on a Study.
     """
 
     schema_version: int
@@ -348,6 +376,7 @@ class ExperimentManifest:
     study_ids: tuple[str, ...]
     documentation: str | None = None
     read_only: bool = False
+    closed: bool = False
 
     def __post_init__(self) -> None:
         """Validate schema version, identity, name, and timestamps."""
@@ -387,6 +416,8 @@ class ExperimentManifest:
         }
         if self.read_only:
             result["read_only"] = True
+        if self.closed:
+            result["closed"] = True
         return result
 
     @classmethod
@@ -426,6 +457,7 @@ class ExperimentManifest:
                 value, "documentation", label="experiment manifest"
             ),
             read_only=_optional_bool(value, "read_only", label="experiment manifest"),
+            closed=_optional_bool(value, "closed", label="experiment manifest"),
         )
 
 
@@ -451,6 +483,93 @@ def _refuse_read_only(
         f"{kind} {manifest.name!r} ({identifier}) is read-only and cannot be "
         f"{action}; copy it to make an editable version"
     )
+
+
+def refuse_closed(manifest: StudyManifest | ExperimentManifest, action: str) -> None:
+    """Raise `ClosedGroupError` when `manifest` is a closed Study or Experiment.
+
+    Args:
+        manifest: The Study or Experiment about to be reorganized.
+        action: What was asked, completing "cannot be ..." (`"deleted"`).
+
+    Raises:
+        ClosedGroupError: The manifest is closed.
+    """
+    if not manifest.closed:
+        return
+    if isinstance(manifest, StudyManifest):
+        kind, identifier = "study", manifest.study_id
+    else:
+        kind, identifier = "experiment", manifest.experiment_id
+    raise ClosedGroupError(
+        f"{kind} {manifest.name!r} ({identifier}) is closed and cannot be "
+        f"{action}; reopen it first"
+    )
+
+
+def set_experiment_closed(
+    experiment_id: str,
+    closed: bool,
+    *,
+    results: Path | None = None,
+    clock: Clock = _utc_now,
+) -> ExperimentManifest:
+    """Close or reopen an Experiment; idempotent.
+
+    This only records the flag. `fim.group_lifecycle.close_experiment`
+    validates active work first and is what callers should use.
+
+    Raises:
+        ValueError: No Experiment with this id exists.
+        ReadOnlyError: The Experiment is read-only.
+        ClosedGroupError: Closing the default Experiment was asked.
+    """
+    root = results if results is not None else paths.results_directory()
+    manifest = get_experiment(experiment_id, results=root)
+    _refuse_read_only(manifest, "closed or reopened")
+    if closed and experiment_id == DEFAULT_EXPERIMENT_ID:
+        raise ClosedGroupError(
+            "the default experiment always stays open, so the default study "
+            "always has a home"
+        )
+    if manifest.closed == closed:
+        return manifest
+    updated = replace(manifest, closed=closed, updated_at=_format_timestamp(clock()))
+    write_experiment_manifest(
+        experiment_manifest_path(experiment_id, results=root), updated
+    )
+    return updated
+
+
+def set_study_closed(
+    study_id: str,
+    closed: bool,
+    *,
+    results: Path | None = None,
+    clock: Clock = _utc_now,
+) -> StudyManifest:
+    """Close or reopen a Study; idempotent.
+
+    This only records the flag. `fim.group_lifecycle.close_study`
+    validates active work first and is what callers should use.
+
+    Raises:
+        ValueError: No Study with this id exists.
+        ReadOnlyError: The Study is read-only.
+        ClosedGroupError: Closing the default Study was asked.
+    """
+    root = results if results is not None else paths.results_directory()
+    manifest = get_study(study_id, results=root)
+    _refuse_read_only(manifest, "closed or reopened")
+    if closed and study_id == DEFAULT_STUDY_ID:
+        raise ClosedGroupError(
+            "the default study always stays open, so every new run has a home"
+        )
+    if manifest.closed == closed:
+        return manifest
+    updated = replace(manifest, closed=closed, updated_at=_format_timestamp(clock()))
+    write_study_manifest(study_manifest_path(study_id, results=root), updated)
+    return updated
 
 
 def study_manifest_path(study_id: str, *, results: Path | None = None) -> Path:
@@ -650,6 +769,7 @@ def add_run_to_study(
     Raises:
         ValueError: No Study with this id exists.
         ReadOnlyError: The Study is read-only.
+        ClosedGroupError: The Study is closed.
     """
     root = results if results is not None else paths.results_directory()
     manifest = get_study(study_id, results=root)
@@ -657,6 +777,7 @@ def add_run_to_study(
     reference = _run_reference_string(Path(run_directory), results=root)
     if reference in manifest.run_directories:
         return manifest
+    refuse_closed(manifest, "given more runs")
     updated = replace(
         manifest,
         run_directories=(*manifest.run_directories, reference),
@@ -692,10 +813,12 @@ def delete_study(
     Raises:
         ValueError: No Study with this id exists.
         ReadOnlyError: The Study is read-only.
+        ClosedGroupError: The Study is closed.
     """
     root = results if results is not None else paths.results_directory()
     manifest = get_study(study_id, results=root)
     _refuse_read_only(manifest, "deleted")
+    refuse_closed(manifest, "deleted")
     if delete_runs:
         _delete_unshared_runs(manifest, results=root)
     study_manifest_path(study_id, results=root).unlink(missing_ok=True)
@@ -730,10 +853,12 @@ def clear_study_runs(
     Raises:
         ValueError: No Study with this id exists.
         ReadOnlyError: The Study is read-only.
+        ClosedGroupError: The Study is closed.
     """
     root = results if results is not None else paths.results_directory()
     manifest = get_study(study_id, results=root)
     _refuse_read_only(manifest, "emptied")
+    refuse_closed(manifest, "emptied")
     _delete_unshared_runs(manifest, results=root)
     kept = tuple(
         entry
@@ -784,10 +909,12 @@ def remove_run_from_study(
     Raises:
         ValueError: No Study with this id exists.
         ReadOnlyError: The Study is read-only.
+        ClosedGroupError: The Study is closed.
     """
     root = results if results is not None else paths.results_directory()
     manifest = get_study(study_id, results=root)
     _refuse_read_only(manifest, "given fewer runs")
+    refuse_closed(manifest, "given fewer runs")
     directory = Path(run_directory).resolve()
     kept = tuple(
         entry
@@ -1129,6 +1256,7 @@ def add_study_to_experiment(
     Raises:
         ValueError: No Experiment or Study with the given id exists.
         ReadOnlyError: The Experiment is read-only.
+        ClosedGroupError: The Experiment is closed.
     """
     root = results if results is not None else paths.results_directory()
     get_study(study_id, results=root)  # raises ValueError if unknown
@@ -1136,6 +1264,7 @@ def add_study_to_experiment(
     _refuse_read_only(manifest, "given more studies")
     if study_id in manifest.study_ids:
         return manifest
+    refuse_closed(manifest, "given more studies")
     updated = replace(
         manifest,
         study_ids=(*manifest.study_ids, study_id),
@@ -1423,15 +1552,18 @@ def delete_experiment(
     Raises:
         ValueError: No Experiment with this id exists.
         ReadOnlyError: The Experiment is read-only.
+        ClosedGroupError: The Experiment is closed.
     """
     root = results if results is not None else paths.results_directory()
     manifest = get_experiment(experiment_id, results=root)
     _refuse_read_only(manifest, "deleted")
+    refuse_closed(manifest, "deleted")
     if delete_studies:
         for study_id in manifest.study_ids:
             try:
-                if get_study(study_id, results=root).read_only:
-                    logger.debug("keeping read-only study %s", study_id)
+                member = get_study(study_id, results=root)
+                if member.read_only or member.closed:
+                    logger.debug("keeping read-only or closed study %s", study_id)
                     continue
                 delete_study(study_id, results=root, delete_runs=True)
             except ValueError as error:

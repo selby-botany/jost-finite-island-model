@@ -1418,3 +1418,74 @@ def test_select_all_also_selects_runs_a_study_holds_from_outside_results(
     # The default Experiment, the default Study and both runs.
     assert result["label"] == "4 selected"
     assert result["checked"] == result["boxes"] == 4
+
+
+_CLOSE_STATE = """
+(() => {
+    const badges = document.querySelectorAll('.open-run-group-closed-badge');
+    const buttons = Array.from(
+        document.querySelectorAll('.open-run-group-close-button')
+    ).map((button) => button.textContent);
+    const lifecycle = Array.from(
+        document.querySelectorAll('.open-run-group-lifecycle')
+    ).map((span) => span.textContent);
+    return JSON.stringify({badges: badges.length, buttons, lifecycle});
+})()
+"""
+
+
+def test_closing_and_reopening_a_study_from_home(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Close shows a badge and a Reopen button; the default Study has neither."""
+    results = tmp_path / "results"
+    results.mkdir()
+    monkeypatch.setattr(paths_module, "results_directory", lambda: results)
+    study_id = groups.create_study("Ring").study_id
+    _write_run(results, "run-a", 1, study_id=study_id)
+
+    window = create_window(hidden=True)
+    outcome: queue.Queue[list[dict[str, Any]]] = queue.Queue(maxsize=1)
+
+    def _snapshot() -> dict[str, Any]:
+        return json.loads(window.evaluate_js(_CLOSE_STATE))
+
+    def _click_close_and_wait(label: str) -> None:
+        window.evaluate_js(
+            "document.querySelector('.open-run-group-close-button').click();"
+        )
+        poll_page(
+            window,
+            "document.querySelector('.open-run-group-close-button')?.textContent ?? ''",
+            lambda value: value == label,
+        )
+
+    def _drive() -> None:
+        snapshots: list[dict[str, Any]] = []
+        try:
+            poll_page(window, _INPUT_SCREEN_READY, lambda value: value is True)
+            window.evaluate_js("window.fim.menu.openRun();")
+            poll_page(
+                window,
+                "window.__fimOpenRunRecentRunsLoaded === true",
+                lambda value: value is True,
+            )
+            snapshots.append(_snapshot())
+            _click_close_and_wait("Reopen")
+            snapshots.append(_snapshot())
+            _click_close_and_wait("Close")
+            snapshots.append(_snapshot())
+        finally:
+            outcome.put(snapshots)
+            window.destroy()
+
+    webview.start(_drive)
+    opened, closed, reopened = outcome.get(timeout=_DRIVE_TIMEOUT_SECONDS)
+
+    assert opened["badges"] == 0
+    assert opened["buttons"] == ["Close"]
+    assert "1 completed" in opened["lifecycle"]
+    assert closed["badges"] == 1
+    assert closed["buttons"] == ["Reopen"]
+    assert groups.get_study(study_id).closed is False
+    assert reopened == opened

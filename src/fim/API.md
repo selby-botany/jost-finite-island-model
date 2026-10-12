@@ -300,6 +300,18 @@ Return to the [source-tree orientation](../README.md) or the [developer guide](.
   * [resolve\_session\_backend](#fim.execution.resolve_session_backend)
   * [check\_payload\_identity](#fim.execution.check_payload_identity)
   * [restore\_lane](#fim.execution.restore_lane)
+* [fim.group\_lifecycle](#fim.group_lifecycle)
+  * [LEGACY\_STATE](#fim.group_lifecycle.LEGACY_STATE)
+  * [GroupBusyError](#fim.group_lifecycle.GroupBusyError)
+  * [GroupSummary](#fim.group_lifecycle.GroupSummary)
+    * [to\_dict](#fim.group_lifecycle.GroupSummary.to_dict)
+  * [close\_experiment](#fim.group_lifecycle.close_experiment)
+  * [close\_study](#fim.group_lifecycle.close_study)
+  * [effective\_state](#fim.group_lifecycle.effective_state)
+  * [experiment\_summary](#fim.group_lifecycle.experiment_summary)
+  * [reopen\_experiment](#fim.group_lifecycle.reopen_experiment)
+  * [reopen\_study](#fim.group_lifecycle.reopen_study)
+  * [study\_summary](#fim.group_lifecycle.study_summary)
 * [fim.gui](#fim.gui)
 * [fim.gui.animation](#fim.gui.animation)
   * [AnimationFrame](#fim.gui.animation.AnimationFrame)
@@ -395,6 +407,8 @@ Return to the [source-tree orientation](../README.md) or the [developer guide](.
     * [ensure\_examples](#fim.gui.app.Api.ensure_examples)
     * [add\_run\_to\_study](#fim.gui.app.Api.add_run_to_study)
     * [add\_study\_to\_experiment](#fim.gui.app.Api.add_study_to_experiment)
+    * [set\_experiment\_closed](#fim.gui.app.Api.set_experiment_closed)
+    * [set\_study\_closed](#fim.gui.app.Api.set_study_closed)
     * [delete\_study](#fim.gui.app.Api.delete_study)
     * [delete\_study\_runs](#fim.gui.app.Api.delete_study_runs)
     * [delete\_experiment](#fim.gui.app.Api.delete_experiment)
@@ -802,6 +816,7 @@ Return to the [source-tree orientation](../README.md) or the [developer guide](.
   * [layout\_for\_state](#fim.persistence.frame.layout_for_state)
   * [state\_to\_frame](#fim.persistence.frame.state_to_frame)
 * [fim.persistence.groups](#fim.persistence.groups)
+  * [ClosedGroupError](#fim.persistence.groups.ClosedGroupError)
   * [ReadOnlyError](#fim.persistence.groups.ReadOnlyError)
   * [is\_run\_read\_only](#fim.persistence.groups.is_run_read_only)
   * [refuse\_read\_only\_run](#fim.persistence.groups.refuse_read_only_run)
@@ -817,6 +832,9 @@ Return to the [source-tree orientation](../README.md) or the [developer guide](.
     * [study\_count](#fim.persistence.groups.ExperimentManifest.study_count)
     * [to\_dict](#fim.persistence.groups.ExperimentManifest.to_dict)
     * [from\_dict](#fim.persistence.groups.ExperimentManifest.from_dict)
+  * [refuse\_closed](#fim.persistence.groups.refuse_closed)
+  * [set\_experiment\_closed](#fim.persistence.groups.set_experiment_closed)
+  * [set\_study\_closed](#fim.persistence.groups.set_study_closed)
   * [study\_manifest\_path](#fim.persistence.groups.study_manifest_path)
   * [experiment\_manifest\_path](#fim.persistence.groups.experiment_manifest_path)
   * [read\_study\_manifest](#fim.persistence.groups.read_study_manifest)
@@ -8044,6 +8062,191 @@ the recorded positions.
 - `SnapshotError` - If any part of the state is malformed or inconsistent.
 - `ValueError` - If a log does not match its recorded position.
 
+<a id="fim.group_lifecycle"></a>
+
+# fim.group\_lifecycle
+
+Close and reopen Studies and Experiments, and summarize their Runs.
+
+Run lifecycle design §6.3 (`20261006-gpt-6.1-sol-run-lifecycle-and-
+checkpoint-design.md`, `selby/restricted`). A group never has an
+execution state machine of its own: its summary is derived on every
+read from the lifecycle records of the distinct Run objects it reaches,
+plus the sweep points that have no Run object yet. A Run shared by two
+Studies of one Experiment counts once in the Experiment's summary.
+
+Closing a group (`fim.persistence.groups.ClosedGroupError`) freezes its
+organization only. It is refused while any Run the group reaches is
+active, so a group never reads closed while work still lands in it, and
+it never stops, pauses, or freezes a Run.
+
+<a id="fim.group_lifecycle.LEGACY_STATE"></a>
+
+#### LEGACY\_STATE
+
+The state a legacy run directory (one with no lifecycle record) reads.
+
+<a id="fim.group_lifecycle.GroupBusyError"></a>
+
+## GroupBusyError Objects
+
+```python
+class GroupBusyError(ValueError)
+```
+
+Refuse to close a group while a Run it reaches is active.
+
+A `ValueError` subclass, so the CLI and GUI report it like every other
+refused group edit.
+
+<a id="fim.group_lifecycle.GroupSummary"></a>
+
+## GroupSummary Objects
+
+```python
+@dataclass(frozen=True, slots=True)
+class GroupSummary()
+```
+
+A group's execution summary, derived from its distinct Runs.
+
+**Arguments**:
+
+- `states` - How many distinct Runs are in each effective lifecycle
+  state, keyed by `RunState` value. A legacy run directory counts
+  as `completed`; an active Run whose owner is gone counts as
+  `interrupted`.
+- `runs` - How many distinct Runs the group reaches.
+- `unmaterialized` - Planned sweep points with no Run object and no
+  finished run yet.
+- `active` - How many distinct Runs are executing right now.
+
+<a id="fim.group_lifecycle.GroupSummary.to_dict"></a>
+
+#### to\_dict
+
+```python
+def to_dict() -> dict[str, Any]
+```
+
+Return the JSON-ready summary, states in lifecycle order.
+
+<a id="fim.group_lifecycle.close_experiment"></a>
+
+#### close\_experiment
+
+```python
+def close_experiment(experiment_id: str,
+                     *,
+                     results: Path | None = None) -> ExperimentManifest
+```
+
+Close an Experiment once no Run of any of its Studies is active.
+
+Its Studies stay open or closed exactly as they were.
+
+**Raises**:
+
+- `ValueError` - No Experiment with this id exists.
+- `ReadOnlyError` - The Experiment is read-only.
+- `GroupBusyError` - A Run of one of its Studies is executing.
+
+<a id="fim.group_lifecycle.close_study"></a>
+
+#### close\_study
+
+```python
+def close_study(study_id: str,
+                *,
+                results: Path | None = None) -> StudyManifest
+```
+
+Close a Study once none of its Runs is active.
+
+**Raises**:
+
+- `ValueError` - No Study with this id exists.
+- `ReadOnlyError` - The Study is read-only.
+- `GroupBusyError` - One of its Runs is executing.
+
+<a id="fim.group_lifecycle.effective_state"></a>
+
+#### effective\_state
+
+```python
+def effective_state(run_object: RunObject,
+                    results: Path | None = None) -> RunState
+```
+
+Return a Run's lifecycle state as a reader should report it.
+
+Read-only: an active Run whose attempt lock is free has lost its owner
+and reads `interrupted` without being reconciled here.
+
+<a id="fim.group_lifecycle.experiment_summary"></a>
+
+#### experiment\_summary
+
+```python
+def experiment_summary(experiment: ExperimentManifest,
+                       *,
+                       results: Path | None = None) -> GroupSummary
+```
+
+Summarize every distinct Run the Experiment's Studies reach.
+
+A Study listed by the Experiment that no longer exists is skipped.
+
+<a id="fim.group_lifecycle.reopen_experiment"></a>
+
+#### reopen\_experiment
+
+```python
+def reopen_experiment(experiment_id: str,
+                      *,
+                      results: Path | None = None) -> ExperimentManifest
+```
+
+Reopen an Experiment so its organization can change again.
+
+**Raises**:
+
+- `ValueError` - No Experiment with this id exists.
+- `ReadOnlyError` - The Experiment is read-only.
+
+<a id="fim.group_lifecycle.reopen_study"></a>
+
+#### reopen\_study
+
+```python
+def reopen_study(study_id: str,
+                 *,
+                 results: Path | None = None) -> StudyManifest
+```
+
+Reopen a Study so its membership can change again.
+
+**Raises**:
+
+- `ValueError` - No Study with this id exists.
+- `ReadOnlyError` - The Study is read-only.
+
+<a id="fim.group_lifecycle.study_summary"></a>
+
+#### study\_summary
+
+```python
+def study_summary(study: StudyManifest,
+                  *,
+                  results: Path | None = None) -> GroupSummary
+```
+
+Summarize every distinct Run the Study reaches.
+
+Members and the sweep's linked Run objects count once each, by object
+ID; a legacy member counts once by its directory. A Run object that
+cannot be read is left out rather than guessed at.
+
 <a id="fim.gui"></a>
 
 # fim.gui
@@ -10365,8 +10568,11 @@ List every Study, oldest first (matching `groups.list_studies`'s own order).
 
   One dict per Study: `{"studyId", "name", "description",
   "documentation", "runCount", "createdAt", "runDirectories",
-  "sweepPointCount", "readOnly"}`. `readOnly` marks a
-  read-only example Study (read-only examples design §3).
+  "sweepPointCount", "readOnly", "closed", "lifecycle"}`.
+  `readOnly` marks a read-only example Study (read-only
+  examples design §3). `closed` marks a Study whose run list
+  is frozen until it is reopened; `lifecycle` is its derived
+  summary (`group_lifecycle.GroupSummary.to_dict`).
   `runCount` is the number of member
   runs that still exist (the length of `runDirectories`),
   not the manifest's own count. `sweepPointCount` is the number of
@@ -10394,8 +10600,11 @@ List every Experiment, oldest first.
 
   One dict per Experiment: `{"experimentId", "name",
   "description", "documentation", "studyCount", "createdAt",
-  "studyIds", "readOnly"}`, `readOnly` marking a read-only
-  example Experiment.
+  "studyIds", "readOnly", "closed", "lifecycle"}`,
+  `readOnly` marking a read-only example Experiment and
+  `closed`/`lifecycle` meaning what they mean for a Study; an
+  Experiment's summary counts a Run shared by two of its
+  Studies once.
   `studyIds` lets the client find an Experiment's own member
   Studies directly from `list_studies`'s own already-fetched
   result — expanding an Experiment row needs no bridge call of
@@ -10660,6 +10869,48 @@ Add one existing Study to an Experiment; idempotent.
 
 - ``{"ok"` - True}` on success; `{"ok": False, "message": ...}`
   if either id does not exist.
+
+<a id="fim.gui.app.Api.set_experiment_closed"></a>
+
+#### set\_experiment\_closed
+
+```python
+@_log_bridge_call
+def set_experiment_closed(experiment_id: str, closed: bool) -> dict[str, Any]
+```
+
+Close or reopen an Experiment.
+
+Closing is refused while a Run of one of its Studies is running
+(`group_lifecycle.close_experiment`); it never stops a Run.
+
+**Returns**:
+
+- ``{"ok"` - True, "closed": closed}` on success; `{"ok": False,
+- `"message"` - ...}` if the Experiment does not exist, is
+  read-only, or has a Run in progress.
+
+<a id="fim.gui.app.Api.set_study_closed"></a>
+
+#### set\_study\_closed
+
+```python
+@_log_bridge_call
+def set_study_closed(study_id: str, closed: bool) -> dict[str, Any]
+```
+
+Close or reopen a Study.
+
+A closed Study's run list cannot change, and it cannot be deleted
+or emptied, until it is reopened. Closing is refused while one of
+its Runs is running (`group_lifecycle.close_study`); it never stops
+a Run.
+
+**Returns**:
+
+- ``{"ok"` - True, "closed": closed}` on success; `{"ok": False,
+- `"message"` - ...}` if the Study does not exist, is read-only, or
+  has a Run in progress.
 
 <a id="fim.gui.app.Api.delete_study"></a>
 
@@ -21237,6 +21488,33 @@ checks. `read_only` is written to JSON only when true, with no schema
 bump: an older fim ignores the key when reading, but an older fim that
 rewrites such a manifest drops it, so re-seeding restores it.
 
+**Open and closed groups** (run lifecycle design §6.3). A Study or
+Experiment is open by default; a manifest written before `closed`
+existed reads back open. Closing a group freezes its organization:
+a closed Study cannot gain, lose, or be emptied of Runs, a closed
+Experiment cannot gain Studies, and neither can be deleted, raising
+`ClosedGroupError` (a `ValueError`) until it is reopened. Closing never
+freezes the Runs themselves: a shared Run can still be deleted from
+elsewhere, which removes its link here too, and a bit-identical
+recomputation (`supersede_run`) still replaces the link. Renaming and
+documenting stay allowed, because notes on what a group found are
+written after it is closed. The default Study and Experiment always
+stay open, so every new run has a home. `fim.group_lifecycle`
+validates active work before closing and derives each group's
+execution summary.
+
+<a id="fim.persistence.groups.ClosedGroupError"></a>
+
+## ClosedGroupError Objects
+
+```python
+class ClosedGroupError(ValueError)
+```
+
+Refuse an organization change through a closed Study or Experiment.
+
+A `ValueError` subclass for the same reason as `ReadOnlyError`.
+
 <a id="fim.persistence.groups.ReadOnlyError"></a>
 
 ## ReadOnlyError Objects
@@ -21361,6 +21639,8 @@ written before `documentation` existed reads back with it `None`.
 `read_only` marks a shipped example Study that this module refuses
 to edit (module docstring); it is written to JSON only when true,
 so a manifest written before it existed reads back `False`.
+`closed` freezes the Study's membership (module docstring) and is
+written the same way.
 
 <a id="fim.persistence.groups.StudyManifest.__post_init__"></a>
 
@@ -21421,8 +21701,8 @@ Structurally identical in shape to `StudyManifest`, one level up
 (`study_ids` in place of `run_directories`, no `sweep_spec`) — an
 Experiment is otherwise a thin container with no results of its own
 beyond what its Studies already show (design doc §1.3).
-`description`/`documentation`/`read_only` mean what they mean on a
-Study.
+`description`/`documentation`/`read_only`/`closed` mean what they
+mean on a Study.
 
 <a id="fim.persistence.groups.ExperimentManifest.__post_init__"></a>
 
@@ -21467,6 +21747,73 @@ def from_dict(cls, value: Mapping[str, Any]) -> ExperimentManifest
 ```
 
 Validate and reconstruct an experiment manifest from a parsed mapping.
+
+<a id="fim.persistence.groups.refuse_closed"></a>
+
+#### refuse\_closed
+
+```python
+def refuse_closed(manifest: StudyManifest | ExperimentManifest,
+                  action: str) -> None
+```
+
+Raise `ClosedGroupError` when `manifest` is a closed Study or Experiment.
+
+**Arguments**:
+
+- `manifest` - The Study or Experiment about to be reorganized.
+- `action` - What was asked, completing "cannot be ..." (`"deleted"`).
+
+
+**Raises**:
+
+- `ClosedGroupError` - The manifest is closed.
+
+<a id="fim.persistence.groups.set_experiment_closed"></a>
+
+#### set\_experiment\_closed
+
+```python
+def set_experiment_closed(experiment_id: str,
+                          closed: bool,
+                          *,
+                          results: Path | None = None,
+                          clock: Clock = _utc_now) -> ExperimentManifest
+```
+
+Close or reopen an Experiment; idempotent.
+
+This only records the flag. `fim.group_lifecycle.close_experiment`
+validates active work first and is what callers should use.
+
+**Raises**:
+
+- `ValueError` - No Experiment with this id exists.
+- `ReadOnlyError` - The Experiment is read-only.
+- `ClosedGroupError` - Closing the default Experiment was asked.
+
+<a id="fim.persistence.groups.set_study_closed"></a>
+
+#### set\_study\_closed
+
+```python
+def set_study_closed(study_id: str,
+                     closed: bool,
+                     *,
+                     results: Path | None = None,
+                     clock: Clock = _utc_now) -> StudyManifest
+```
+
+Close or reopen a Study; idempotent.
+
+This only records the flag. `fim.group_lifecycle.close_study`
+validates active work first and is what callers should use.
+
+**Raises**:
+
+- `ValueError` - No Study with this id exists.
+- `ReadOnlyError` - The Study is read-only.
+- `ClosedGroupError` - Closing the default Study was asked.
 
 <a id="fim.persistence.groups.study_manifest_path"></a>
 
@@ -21657,6 +22004,7 @@ Run, it does not change it.
 
 - `ValueError` - No Study with this id exists.
 - `ReadOnlyError` - The Study is read-only.
+- `ClosedGroupError` - The Study is closed.
 
 <a id="fim.persistence.groups.delete_study"></a>
 
@@ -21694,6 +22042,7 @@ Delete a Study's own manifest and, by default, every Run it references.
 
 - `ValueError` - No Study with this id exists.
 - `ReadOnlyError` - The Study is read-only.
+- `ClosedGroupError` - The Study is closed.
 
 <a id="fim.persistence.groups.clear_study_runs"></a>
 
@@ -21727,6 +22076,7 @@ docstring).
 
 - `ValueError` - No Study with this id exists.
 - `ReadOnlyError` - The Study is read-only.
+- `ClosedGroupError` - The Study is closed.
 
 <a id="fim.persistence.groups.shared_run_directories"></a>
 
@@ -21771,6 +22121,7 @@ Studies remain protected. An already-absent link is an idempotent no-op.
 
 - `ValueError` - No Study with this id exists.
 - `ReadOnlyError` - The Study is read-only.
+- `ClosedGroupError` - The Study is closed.
 
 <a id="fim.persistence.groups.remove_run_references"></a>
 
@@ -21976,6 +22327,7 @@ links the Study, it does not change it.
 
 - `ValueError` - No Experiment or Study with the given id exists.
 - `ReadOnlyError` - The Experiment is read-only.
+- `ClosedGroupError` - The Experiment is closed.
 
 <a id="fim.persistence.groups.ensure_default_experiment"></a>
 
@@ -22168,6 +22520,7 @@ describes, one level up.
 
 - `ValueError` - No Experiment with this id exists.
 - `ReadOnlyError` - The Experiment is read-only.
+- `ClosedGroupError` - The Experiment is closed.
 
 <a id="fim.persistence.groups.update_experiment_details"></a>
 
@@ -32788,6 +33141,7 @@ already a member counts as done. A Study holds at most one sweep.
 
 - `ValueError` - The plan has no valid points, the Study does not exist,
   or it already holds a sweep.
+- `ClosedGroupError` - The Study is closed.
 
 <a id="fim.sweep_run.sweep_spec_of"></a>
 
@@ -32926,6 +33280,7 @@ falls back to the runner's `run_point`.
 
 - `ValueError` - The Study is not a sweep, or the stored plan no longer
   matches what this version of the program enumerates.
+- `ClosedGroupError` - The Study is closed; reopen it to continue.
 
 <a id="fim.sweep_run.failures_path"></a>
 

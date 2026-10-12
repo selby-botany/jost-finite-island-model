@@ -301,8 +301,8 @@ async function refreshRunStudySelectOptions() {
     newStudyOption.textContent = "New study…";
     runStudySelect.appendChild(newStudyOption);
     // A read-only example Study cannot take a new run (read-only examples
-    // design §3), so it is never offered here.
-    const editable = studies.filter((study) => !study.readOnly);
+    // design §3), and neither can a closed Study, so neither is offered.
+    const editable = studies.filter((study) => !study.readOnly && !study.closed);
     for (const study of editable.filter((study) => study.studyId !== "study-default")) {
         const option = document.createElement("option");
         option.value = study.studyId;

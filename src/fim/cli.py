@@ -83,6 +83,15 @@ from fim.engine import (
     fim,
     replicate_summary,
 )
+from fim.group_lifecycle import (
+    GroupSummary,
+    close_experiment,
+    close_study,
+    experiment_summary,
+    reopen_experiment,
+    reopen_study,
+    study_summary,
+)
 from fim.model.params import SimulationParams, describe_population
 from fim.persistence.binary_store import (
     EQUILIBRIUM_LOG_FILENAME,
@@ -804,7 +813,7 @@ def _command_run_batch(
 def _command_study(
     arguments: argparse.Namespace, parser: argparse.ArgumentParser
 ) -> int:
-    """Dispatch one `fim study create/add-run/list/delete/copy` invocation.
+    """Dispatch one `fim study create/add-run/list/delete/copy/close/reopen`.
 
     Every one of these is a purely local bookkeeping operation on a
     small JSON index file (`fim.paths.studies_directory`) — no engine
@@ -846,31 +855,51 @@ def _command_study(
             f"{copied.name} ({copied.run_count} run(s))"
         )
         return 0
+    if arguments.study_command in {"close", "reopen"}:
+        closing = arguments.study_command == "close"
+        study = (close_study if closing else reopen_study)(arguments.study_id)
+        verb = "Closed" if closing else "Reopened"
+        print(f"{verb} study {study.study_id}: {study.name}")
+        return 0
     parser.error("a study subcommand is required")
 
 
+def _format_summary(summary: GroupSummary) -> str:
+    """Render a group's derived lifecycle summary as one short phrase.
+
+    Each state with Runs is listed as `count state`, in lifecycle order,
+    followed by the planned sweep points that have no Run yet.
+    """
+    parts = [f"{count} {state}" for state, count in summary.to_dict()["states"].items()]
+    if summary.unmaterialized:
+        parts.append(f"{summary.unmaterialized} not started")
+    return ", ".join(parts) if parts else "empty"
+
+
 def _print_studies(studies: Sequence[StudyManifest]) -> None:
-    """Print one study-id/name/run-count/created-at row per Study.
+    """Print one row per Study: id, run count, open/closed, creation, name.
 
     A plain, fixed-width table — `fim` has no dependency on a terminal
-    table-formatting library, and this is the first `list` subcommand
-    that needs one at all.
+    table-formatting library. An indented second line shows the Study's
+    derived lifecycle summary (`fim.group_lifecycle.study_summary`).
     """
     if not studies:
         print("No studies.")
         return
-    print(f"{'STUDY_ID':<20}{'RUNS':>6}  {'CREATED':<28}  NAME")
+    print(f"{'STUDY_ID':<20}{'RUNS':>6}  {'STATE':<7}{'CREATED':<28}  NAME")
     for study in studies:
+        state = "closed" if study.closed else "open"
         print(
-            f"{study.study_id:<20}{study.run_count:>6}  "
+            f"{study.study_id:<20}{study.run_count:>6}  {state:<7}"
             f"{study.created_at:<28}  {study.name}"
         )
+        print(f"{'':<20}{'':>6}  {_format_summary(study_summary(study))}")
 
 
 def _command_experiment(
     arguments: argparse.Namespace, parser: argparse.ArgumentParser
 ) -> int:
-    """Dispatch one `fim experiment create/add-study/list/delete/copy` invocation.
+    """Dispatch one `fim experiment create/add-study/list/delete/copy/close/reopen`.
 
     The Experiment-level counterpart to `_command_study`, above —
     identical shape, one level up (`fim.persistence.groups`).
@@ -910,21 +939,31 @@ def _command_experiment(
             f"({copied.study_count} study(ies))"
         )
         return 0
+    if arguments.experiment_command in {"close", "reopen"}:
+        closing = arguments.experiment_command == "close"
+        action = close_experiment if closing else reopen_experiment
+        experiment = action(arguments.experiment_id)
+        verb = "Closed" if closing else "Reopened"
+        print(f"{verb} experiment {experiment.experiment_id}: {experiment.name}")
+        return 0
     parser.error("an experiment subcommand is required")
 
 
 def _print_experiments(experiments: Sequence[ExperimentManifest]) -> None:
-    """Print one experiment-id/name/study-count/created-at row per Experiment."""
+    """Print one row per Experiment, then its derived lifecycle summary."""
     if not experiments:
         print("No experiments.")
         return
-    print(f"{'EXPERIMENT_ID':<24}{'STUDIES':>8}  {'CREATED':<28}  NAME")
+    print(f"{'EXPERIMENT_ID':<24}{'STUDIES':>8}  {'STATE':<7}{'CREATED':<28}  NAME")
     for experiment in experiments:
+        state = "closed" if experiment.closed else "open"
         print(
             f"{experiment.experiment_id:<24}"
-            f"{experiment.study_count:>8}  "
+            f"{experiment.study_count:>8}  {state:<7}"
             f"{experiment.created_at:<28}  {experiment.name}"
         )
+        summary = _format_summary(experiment_summary(experiment))
+        print(f"{'':<24}{'':>8}  {summary}")
 
 
 def _command_export(arguments: argparse.Namespace) -> int:
@@ -1668,7 +1707,7 @@ def _parser() -> argparse.ArgumentParser:
 
 
 def _add_study_subcommands(subcommands: argparse._SubParsersAction[Any]) -> None:
-    """Wire `fim study create/add-run/list/delete/copy` onto `subcommands`.
+    """Wire `fim study create/add-run/list/delete/copy/close/reopen` subcommands.
 
     Split out of `_parser` purely to keep that function under this
     project's own configured `PLR0915` statement-count limit — the
@@ -1717,10 +1756,20 @@ def _add_study_subcommands(subcommands: argparse._SubParsersAction[Any]) -> None
     study_copy_parser.add_argument(
         "--name", required=True, help="name for the new study"
     )
+    study_close_parser = study_subcommands.add_parser(
+        "close",
+        help="freeze a study's run list; refused while one of its runs is running",
+    )
+    study_close_parser.add_argument("study_id", metavar="STUDY_ID")
+    study_reopen_parser = study_subcommands.add_parser(
+        "reopen",
+        help="let a closed study's run list change again",
+    )
+    study_reopen_parser.add_argument("study_id", metavar="STUDY_ID")
 
 
 def _add_experiment_subcommands(subcommands: argparse._SubParsersAction[Any]) -> None:
-    """Wire `fim experiment create/add-study/list/delete/copy` onto `subcommands`.
+    """Wire `fim experiment create/.../copy/close/reopen` onto `subcommands`.
 
     The Experiment-level counterpart to `_add_study_subcommands`, above.
     """
@@ -1765,6 +1814,16 @@ def _add_experiment_subcommands(subcommands: argparse._SubParsersAction[Any]) ->
     experiment_copy_parser.add_argument(
         "--name", required=True, help="name for the new experiment"
     )
+    experiment_close_parser = experiment_subcommands.add_parser(
+        "close",
+        help="freeze an experiment's study list; refused while a run is running",
+    )
+    experiment_close_parser.add_argument("experiment_id", metavar="EXPERIMENT_ID")
+    experiment_reopen_parser = experiment_subcommands.add_parser(
+        "reopen",
+        help="let a closed experiment's study list change again",
+    )
+    experiment_reopen_parser.add_argument("experiment_id", metavar="EXPERIMENT_ID")
 
 
 if __name__ == "__main__":

@@ -20,6 +20,7 @@ Every test module, fixture, and test function documented here in full; `doc/fim-
   - [`test_examples_catalog`](#test.test_examples_catalog)
   - [`test_examples_seed`](#test.test_examples_seed)
   - [`test_expert_info`](#test.test_expert_info)
+  - [`test_group_lifecycle`](#test.test_group_lifecycle)
   - [`test_hypothesis_profile`](#test.test_hypothesis_profile)
   - [`test_launcher`](#test.test_launcher)
   - [`test_logging_setup`](#test.test_logging_setup)
@@ -1584,6 +1585,27 @@ def test_the_description_lists_every_setting_grouped_with_default_and_range(
 ```
 
 One entry per setting, grouped in display order, with the real default.
+
+<a id="test.test_group_lifecycle"></a>
+
+# test.test\_group\_lifecycle
+
+Tests for closing Studies and Experiments and their derived summaries.
+
+Run lifecycle design §6.3: a closed group freezes its organization, not
+its Runs, and a group's execution summary is derived from the distinct
+Run objects it reaches rather than stored as a second state machine.
+
+<a id="test.test_group_lifecycle.results"></a>
+
+#### results
+
+```python
+@pytest.fixture
+def results(tmp_path: Path) -> Iterator[Path]
+```
+
+Point the results directory at a temporary one for the test.
 
 <a id="test.test_hypothesis_profile"></a>
 
@@ -5119,6 +5141,42 @@ def test_study_create_add_run_list_delete(
 ```
 
 A full `fim study create`/`add-run`/`list`/`delete` life cycle via `cli.main`.
+
+<a id="cli.test_cli.test_study_close_and_reopen_show_in_the_study_list"></a>
+
+#### test\_study\_close\_and\_reopen\_show\_in\_the\_study\_list
+
+```python
+def test_study_close_and_reopen_show_in_the_study_list(
+        tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+        capsys: pytest.CaptureFixture[str]) -> None
+```
+
+`fim study close` freezes membership and `study list` reports it.
+
+<a id="cli.test_cli.test_experiment_close_and_reopen_show_in_the_experiment_list"></a>
+
+#### test\_experiment\_close\_and\_reopen\_show\_in\_the\_experiment\_list
+
+```python
+def test_experiment_close_and_reopen_show_in_the_experiment_list(
+        tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+        capsys: pytest.CaptureFixture[str]) -> None
+```
+
+`fim experiment close` refuses new studies until it is reopened.
+
+<a id="cli.test_cli.test_closing_the_default_study_is_an_error"></a>
+
+#### test\_closing\_the\_default\_study\_is\_an\_error
+
+```python
+def test_closing_the_default_study_is_an_error(
+        tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+        capsys: pytest.CaptureFixture[str]) -> None
+```
+
+The default Study always stays open.
 
 <a id="cli.test_cli.test_deleting_a_study_keeps_a_run_the_default_study_also_holds"></a>
 
@@ -15343,6 +15401,28 @@ def test_deleting_a_study_leaves_its_experiment_without_a_dangling_listing(
 
 After a Study is deleted, its Experiment counts and lists only what exists.
 
+<a id="gui.test_app_api.test_list_studies_reports_closed_and_a_lifecycle_summary"></a>
+
+#### test\_list\_studies\_reports\_closed\_and\_a\_lifecycle\_summary
+
+```python
+def test_list_studies_reports_closed_and_a_lifecycle_summary(
+        tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None
+```
+
+Home receives each group's open/closed flag and its derived summary.
+
+<a id="gui.test_app_api.test_set_study_closed_reports_a_refusal_as_a_message"></a>
+
+#### test\_set\_study\_closed\_reports\_a\_refusal\_as\_a\_message
+
+```python
+def test_set_study_closed_reports_a_refusal_as_a_message(
+        tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None
+```
+
+A missing or default group is a message, never an exception.
+
 <a id="gui.test_app_api.test_list_experiments_heals_studies_deleted_by_the_old_behavior"></a>
 
 #### test\_list\_experiments\_heals\_studies\_deleted\_by\_the\_old\_behavior
@@ -19644,6 +19724,17 @@ stayed unchecked. The tree shows every run a Study holds, but "Select
 all" used only the runs found by scanning `results/`, so runs recorded
 from other folders (a `--output` elsewhere) were left out of the
 selection and out of "Delete selected".
+
+<a id="gui.test_home_hierarchy_screen.test_closing_and_reopening_a_study_from_home"></a>
+
+#### test\_closing\_and\_reopening\_a\_study\_from\_home
+
+```python
+def test_closing_and_reopening_a_study_from_home(
+        tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None
+```
+
+Close shows a badge and a Reopen button; the default Study has neither.
 
 <a id="gui.test_input_screen"></a>
 

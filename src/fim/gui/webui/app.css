@@ -2223,6 +2223,23 @@ fieldset.combinator-choice label {
     border-color: var(--fim-accent);
 }
 
+/* A closed Study or Experiment (its contents frozen until reopened),
+ * and the derived count of its runs by lifecycle state. */
+.open-run-group-closed-badge {
+    font-size: 0.75rem;
+    color: var(--fim-muted);
+    border: 1px solid var(--fim-border);
+    border-radius: 4px;
+    padding: 0 0.35rem;
+    margin: 0 0.25rem;
+}
+
+.open-run-group-lifecycle {
+    font-size: 0.8rem;
+    color: var(--fim-muted);
+    margin: 0 0.5rem;
+}
+
 /* The bulk "Select/Delete/Delete all" toolbar sits on the same line as
  * the filter input, pushed flush right (`margin-left: auto` inside
  * `.open-run-list-controls`'s own flex row) rather than a second line

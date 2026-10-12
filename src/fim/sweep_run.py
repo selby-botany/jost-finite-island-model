@@ -717,10 +717,12 @@ def attach_sweep_to_study(
     Raises:
         ValueError: The plan has no valid points, the Study does not exist,
             or it already holds a sweep.
+        ClosedGroupError: The Study is closed.
     """
     if not plan.points:
         raise ValueError("the sweep has no valid points to run")
     study = groups.get_study(study_id, results=results)
+    groups.refuse_closed(study, "given a sweep")
     if study.sweep_spec is not None:
         raise ValueError(
             f"study {study.name!r} already holds a sweep; choose another study"
@@ -971,8 +973,10 @@ def run_sweep(
     Raises:
         ValueError: The Study is not a sweep, or the stored plan no longer
             matches what this version of the program enumerates.
+        ClosedGroupError: The Study is closed; reopen it to continue.
     """
     study = groups.get_study(study_id, results=results)
+    groups.refuse_closed(study, "given more sweep runs")
     spec = sweep_spec_of(study)
     planned = _matching_plan(study, enumerate_points(spec))
     failures = read_failures(study_id, results=results)

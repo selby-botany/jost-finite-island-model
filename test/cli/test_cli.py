@@ -1811,6 +1811,82 @@ def test_study_create_add_run_list_delete(
     assert not output.exists()
 
 
+def test_study_close_and_reopen_show_in_the_study_list(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """`fim study close` freezes membership and `study list` reports it."""
+    monkeypatch.setattr(paths, "results_directory", lambda: tmp_path / "results")
+    config = tmp_path / "run.yaml"
+    output = tmp_path / "results" / "run-a"
+    _write_config(config)
+    assert cli.main(["run", str(config), "--output", str(output), "--quiet"]) == 0
+    assert cli.main(["study", "create", "--name", "Ring sweep"]) == 0
+    study_id = capsys.readouterr().out.split()[2].rstrip(":")
+    assert cli.main(["study", "add-run", study_id, str(output)]) == 0
+
+    assert cli.main(["study", "close", study_id]) == 0
+    assert f"Closed study {study_id}: Ring sweep" in capsys.readouterr().out
+    assert cli.main(["study", "list"]) == 0
+    listed = capsys.readouterr().out
+    assert "STATE" in listed
+    (row,) = [line for line in listed.splitlines() if study_id in line]
+    assert " closed " in row
+    assert "1 completed" in listed
+
+    assert cli.main(["study", "delete", study_id]) == 2
+    assert "reopen it first" in capsys.readouterr().err
+    assert output.exists()
+
+    assert cli.main(["study", "reopen", study_id]) == 0
+    assert f"Reopened study {study_id}" in capsys.readouterr().out
+    assert cli.main(["study", "delete", study_id]) == 0
+
+
+def test_experiment_close_and_reopen_show_in_the_experiment_list(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """`fim experiment close` refuses new studies until it is reopened."""
+    monkeypatch.setattr(paths, "results_directory", lambda: tmp_path / "results")
+    assert cli.main(["experiment", "create", "--name", "Topology"]) == 0
+    experiment_id = capsys.readouterr().out.split()[2].rstrip(":")
+    assert cli.main(["study", "create", "--name", "Ring"]) == 0
+    study_id = capsys.readouterr().out.split()[2].rstrip(":")
+
+    assert cli.main(["experiment", "close", experiment_id]) == 0
+    assert f"Closed experiment {experiment_id}" in capsys.readouterr().out
+    assert cli.main(["experiment", "list"]) == 0
+    listed = capsys.readouterr().out
+    (row,) = [line for line in listed.splitlines() if experiment_id in line]
+    assert " closed " in row
+    assert "empty" in listed
+    assert cli.main(["experiment", "add-study", experiment_id, study_id]) == 2
+    assert "reopen it first" in capsys.readouterr().err
+
+    assert cli.main(["experiment", "reopen", experiment_id]) == 0
+    assert cli.main(["experiment", "add-study", experiment_id, study_id]) == 0
+
+
+def test_closing_the_default_study_is_an_error(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """The default Study always stays open."""
+    monkeypatch.setattr(paths, "results_directory", lambda: tmp_path / "results")
+    config = tmp_path / "run.yaml"
+    _write_config(config)
+    output = tmp_path / "output"
+    assert cli.main(["run", str(config), "--output", str(output), "--quiet"]) == 0
+    capsys.readouterr()
+
+    assert cli.main(["study", "close", "study-default"]) == 2
+    assert "always stays open" in capsys.readouterr().err
+
+
 def test_deleting_a_study_keeps_a_run_the_default_study_also_holds(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:

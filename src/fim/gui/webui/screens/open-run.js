@@ -243,7 +243,8 @@ function nameMatchesFilter(name, filterText) {
  * null`, never reached by `renderGroup` for a still-collapsed group
  * either way.
  * @param {{studyId: string, name: string, runCount: number,
- *     runDirectories: Array<string>, sweepPointCount: number|null}} study
+ *     runDirectories: Array<string>, sweepPointCount: number|null,
+ *     closed?: boolean, lifecycle?: object}} study
  * @returns {object}
  */
 function studyGroup(study) {
@@ -273,6 +274,10 @@ function studyGroup(study) {
         runDirectories: study.runDirectories,
         // The planned number of points for a sweep Study, else `null`.
         sweepPointCount: study.sweepPointCount ?? null,
+        // A closed Study's run list is frozen until it is reopened.
+        closed: Boolean(study.closed),
+        // The server-derived summary (`group_lifecycle.GroupSummary`).
+        lifecycle: study.lifecycle ?? null,
     };
     if (cachedRuns === undefined) {
         return { ...base, runs: null };
@@ -290,7 +295,7 @@ function studyGroup(study) {
  * list, expanding an Experiment needs no bridge call of its own at all
  * (design doc §6).
  * @param {{experimentId: string, name: string, studyCount: number,
- *     studyIds: Array<string>}} experiment
+ *     studyIds: Array<string>, closed?: boolean, lifecycle?: object}} experiment
  * @param {Map<string, object>} studiesById
  * @returns {object}
  */
@@ -318,6 +323,8 @@ function experimentGroup(experiment, studiesById) {
         // count claimed Studies the expanded list could not show.
         countLabel: `${subgroups.length} stud${subgroups.length === 1 ? "y" : "ies"}`,
         subgroups,
+        closed: Boolean(experiment.closed),
+        lifecycle: experiment.lifecycle ?? null,
     };
 }
 
@@ -1111,12 +1118,79 @@ function buildGroupActionControls(group) {
 
     if (group.kind === "study" && group.sweepPointCount !== null) {
         container.appendChild(buildSweepResultsButton(group));
-        if (group.runCount < group.sweepPointCount) {
+        if (group.runCount < group.sweepPointCount && !group.closed) {
             container.appendChild(buildContinueSweepButton(group));
         }
     }
+    if (!group.readOnly && !isDefaultGroup(group)) {
+        container.appendChild(buildCloseGroupButton(group));
+    }
 
     return container;
+}
+
+/**
+ * Build the Close/Reopen toggle for a Study or Experiment header.
+ * Closing freezes the group's membership; the server refuses it while
+ * one of the group's runs is running (`group_lifecycle.close_study`).
+ * @param {object} group
+ * @returns {HTMLButtonElement}
+ */
+function buildCloseGroupButton(group) {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "open-run-group-action-button open-run-group-close-button";
+    button.textContent = group.closed ? "Reopen" : "Close";
+    button.title = group.closed
+        ? `Let the ${group.kind}'s contents change again`
+        : `Freeze the ${group.kind}'s contents; its runs are not stopped`;
+    button.addEventListener("click", async (event) => {
+        event.stopPropagation();
+        const closing = !group.closed;
+        const result =
+            group.kind === "study"
+                ? await window.pywebview.api.set_study_closed(group.studyId, closing)
+                : await window.pywebview.api.set_experiment_closed(
+                      group.experimentId,
+                      closing
+                  );
+        if (!result.ok) {
+            showOpenRunBanner(result.message);
+            return;
+        }
+        await refreshRecentRuns();
+    });
+    return button;
+}
+
+/**
+ * Describe a group's derived lifecycle summary in a few words, such as
+ * "2 completed, 1 paused, 3 not started". Empty for a group with nothing
+ * in it.
+ * @param {{states: Object<string, number>, unmaterialized: number}|null} lifecycle
+ * @returns {string}
+ */
+function groupLifecycleText(lifecycle) {
+    if (!lifecycle) {
+        return "";
+    }
+    const parts = Object.entries(lifecycle.states).map(
+        ([state, count]) => `${count} ${state}`
+    );
+    if (lifecycle.unmaterialized > 0) {
+        parts.push(`${lifecycle.unmaterialized} not started`);
+    }
+    return parts.join(", ");
+}
+
+/**
+ * True for the built-in default Study or Experiment, which always stays
+ * open so every new run has a home.
+ * @param {object} group
+ * @returns {boolean}
+ */
+function isDefaultGroup(group) {
+    return group.studyId === "study-default" || group.experimentId === "experiment-default";
 }
 
 /**
@@ -1236,6 +1310,11 @@ function buildGroupSelectCheckbox(group) {
     if (group.readOnly) {
         checkbox.checked = false;
         window.fim.disableForReadOnly(checkbox, group.kind);
+    } else if (group.closed) {
+        // A closed group cannot be deleted; reopen it first.
+        checkbox.checked = false;
+        checkbox.disabled = true;
+        checkbox.title = `Reopen this ${group.kind} to delete it`;
     }
     return checkbox;
 }
@@ -1324,6 +1403,20 @@ function buildGroupHeaderRow(group, nested = false) {
     cellRow.appendChild(toggle);
     if (group.readOnly) {
         cellRow.appendChild(window.fim.buildReadOnlyBadge(group.kind));
+    }
+    if (group.closed) {
+        const badge = document.createElement("span");
+        badge.className = "open-run-group-closed-badge";
+        badge.textContent = "Closed";
+        badge.title = `This ${group.kind} is closed: its contents cannot change until it is reopened`;
+        cellRow.appendChild(badge);
+    }
+    const lifecycleText = groupLifecycleText(group.lifecycle);
+    if (lifecycleText) {
+        const summary = document.createElement("span");
+        summary.className = "open-run-group-lifecycle";
+        summary.textContent = lifecycleText;
+        cellRow.appendChild(summary);
     }
     if (group.details) {
         cellRow.appendChild(window.fim.buildDetailsButton(group.details));
@@ -1663,7 +1756,7 @@ selectAllButton.addEventListener("click", () => {
     for (const run of allRecentRuns.filter((candidate) => !candidate.readOnly)) {
         selectedRunDirectories.add(run.directory);
     }
-    const editableStudies = allStudies.filter((study) => !study.readOnly);
+    const editableStudies = allStudies.filter((study) => !study.readOnly && !study.closed);
     // Every run a Study holds is a row in the tree, including one recorded
     // from a folder outside `results/`, which the scan behind
     // `allRecentRuns` never sees. Selecting only the scanned runs left the
@@ -1676,7 +1769,9 @@ selectAllButton.addEventListener("click", () => {
     for (const study of editableStudies) {
         selectedStudyIds.add(study.studyId);
     }
-    for (const experiment of allExperiments.filter((candidate) => !candidate.readOnly)) {
+    for (const experiment of allExperiments.filter(
+        (candidate) => !candidate.readOnly && !candidate.closed
+    )) {
         selectedExperimentIds.add(experiment.experimentId);
     }
     setSelectMode(true);

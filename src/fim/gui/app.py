@@ -66,7 +66,7 @@ from webview.menu import Menu, MenuAction, MenuSeparator
 from fim import __dev_commit__ as fim_dev_commit
 from fim import __version__ as fim_version
 from fim import engine as engine_module
-from fim import logging_setup, paths, update
+from fim import group_lifecycle, logging_setup, paths, update
 from fim.cli import load_config
 from fim.config.expert import describe_expert_settings
 from fim.config.limits import MAXIMUM_RECURSION_DEMES
@@ -4670,8 +4670,11 @@ class Api:
         Returns:
             One dict per Study: `{"studyId", "name", "description",
             "documentation", "runCount", "createdAt", "runDirectories",
-            "sweepPointCount", "readOnly"}`. `readOnly` marks a
-            read-only example Study (read-only examples design §3).
+            "sweepPointCount", "readOnly", "closed", "lifecycle"}`.
+            `readOnly` marks a read-only example Study (read-only
+            examples design §3). `closed` marks a Study whose run list
+            is frozen until it is reopened; `lifecycle` is its derived
+            summary (`group_lifecycle.GroupSummary.to_dict`).
             `runCount` is the number of member
             runs that still exist (the length of `runDirectories`),
             not the manifest's own count. `sweepPointCount` is the number of
@@ -4706,6 +4709,10 @@ class Api:
                     "runDirectories": directories,
                     "sweepPointCount": _sweep_point_count(study),
                     "readOnly": study.read_only,
+                    "closed": study.closed,
+                    "lifecycle": group_lifecycle.study_summary(
+                        study, results=results
+                    ).to_dict(),
                 }
             )
         return rows
@@ -4717,8 +4724,11 @@ class Api:
         Returns:
             One dict per Experiment: `{"experimentId", "name",
             "description", "documentation", "studyCount", "createdAt",
-            "studyIds", "readOnly"}`, `readOnly` marking a read-only
-            example Experiment.
+            "studyIds", "readOnly", "closed", "lifecycle"}`,
+            `readOnly` marking a read-only example Experiment and
+            `closed`/`lifecycle` meaning what they mean for a Study; an
+            Experiment's summary counts a Run shared by two of its
+            Studies once.
             `studyIds` lets the client find an Experiment's own member
             Studies directly from `list_studies`'s own already-fetched
             result — expanding an Experiment row needs no bridge call of
@@ -4738,6 +4748,10 @@ class Api:
                 "createdAt": experiment.created_at,
                 "studyIds": list(experiment.study_ids),
                 "readOnly": experiment.read_only,
+                "closed": experiment.closed,
+                "lifecycle": group_lifecycle.experiment_summary(
+                    experiment, results=results
+                ).to_dict(),
             }
             for experiment in groups.list_experiments(results=results)
         ]
@@ -5065,6 +5079,50 @@ class Api:
         except ValueError as error:
             return {"ok": False, "message": str(error)}
         return {"ok": True}
+
+    @_log_bridge_call
+    def set_experiment_closed(self, experiment_id: str, closed: bool) -> dict[str, Any]:
+        """Close or reopen an Experiment.
+
+        Closing is refused while a Run of one of its Studies is running
+        (`group_lifecycle.close_experiment`); it never stops a Run.
+
+        Returns:
+            `{"ok": True, "closed": closed}` on success; `{"ok": False,
+            "message": ...}` if the Experiment does not exist, is
+            read-only, or has a Run in progress.
+        """
+        action = (
+            group_lifecycle.close_experiment
+            if closed
+            else group_lifecycle.reopen_experiment
+        )
+        try:
+            experiment = action(experiment_id)
+        except ValueError as error:
+            return {"ok": False, "message": str(error)}
+        return {"ok": True, "closed": experiment.closed}
+
+    @_log_bridge_call
+    def set_study_closed(self, study_id: str, closed: bool) -> dict[str, Any]:
+        """Close or reopen a Study.
+
+        A closed Study's run list cannot change, and it cannot be deleted
+        or emptied, until it is reopened. Closing is refused while one of
+        its Runs is running (`group_lifecycle.close_study`); it never stops
+        a Run.
+
+        Returns:
+            `{"ok": True, "closed": closed}` on success; `{"ok": False,
+            "message": ...}` if the Study does not exist, is read-only, or
+            has a Run in progress.
+        """
+        action = group_lifecycle.close_study if closed else group_lifecycle.reopen_study
+        try:
+            study = action(study_id)
+        except ValueError as error:
+            return {"ok": False, "message": str(error)}
+        return {"ok": True, "closed": study.closed}
 
     @_log_bridge_call
     def delete_study(self, study_id: str) -> dict[str, Any]:

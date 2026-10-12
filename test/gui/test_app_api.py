@@ -5408,6 +5408,61 @@ def test_deleting_a_study_leaves_its_experiment_without_a_dangling_listing(
     assert experiment["studyCount"] == 0
 
 
+def test_list_studies_reports_closed_and_a_lifecycle_summary(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Home receives each group's open/closed flag and its derived summary."""
+    results = _use_isolated_results_directory(tmp_path, monkeypatch)
+    api = Api()
+    study_id = api.create_study("Ring")["studyId"]
+    _write_run_under(results, "run-a", seed=1, study_id=study_id)
+    experiment_id = api.create_experiment("Topology")["experimentId"]
+    api.add_study_to_experiment(experiment_id, study_id)
+
+    assert api.set_study_closed(study_id, True) == {"ok": True, "closed": True}
+    assert api.set_experiment_closed(experiment_id, True) == {
+        "ok": True,
+        "closed": True,
+    }
+
+    (study,) = [entry for entry in api.list_studies() if entry["studyId"] == study_id]
+    assert study["closed"] is True
+    assert study["lifecycle"] == {
+        "states": {"completed": 1},
+        "runs": 1,
+        "unmaterialized": 0,
+        "active": 0,
+    }
+    (experiment,) = api.list_experiments()
+    assert experiment["closed"] is True
+    assert experiment["lifecycle"]["runs"] == 1
+
+    assert api.set_study_closed(study_id, False) == {"ok": True, "closed": False}
+    assert api.set_experiment_closed(experiment_id, False) == {
+        "ok": True,
+        "closed": False,
+    }
+
+
+def test_set_study_closed_reports_a_refusal_as_a_message(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A missing or default group is a message, never an exception."""
+    _use_isolated_results_directory(tmp_path, monkeypatch)
+    api = Api()
+    groups.ensure_default_study()
+
+    missing = api.set_study_closed("study-missing", True)
+    default = api.set_study_closed(groups.DEFAULT_STUDY_ID, True)
+    experiment = api.set_experiment_closed(groups.DEFAULT_EXPERIMENT_ID, True)
+
+    assert missing["ok"] is False
+    assert "no such study" in missing["message"]
+    assert default["ok"] is False
+    assert "always stays open" in default["message"]
+    assert experiment["ok"] is False
+
+
 def test_list_experiments_heals_studies_deleted_by_the_old_behavior(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
