@@ -522,34 +522,47 @@ installer step beyond what "download and run" already requires.
 This constrains, rather than reopens, several choices already made
 above:
 
-- **Single self-contained executable.** Package the CLI (§5's `cli.py`)
-  as a one-file Windows executable (e.g. via PyInstaller), bundling the
-  Python interpreter and every dependency. The researcher's own machine
-  needs nothing pre-installed.
+- **Single self-contained executable.** Package the simulator as a
+  self-contained executable (e.g. via PyInstaller), bundling the Python
+  interpreter, native dependencies, and front ends. The researcher's own
+  machine needs nothing pre-installed.
 - **Dependency footprint stays deliberately small,** and every dependency
-  is chosen for having solid, well-maintained prebuilt Windows wheels —
-  NumPy and a plotting library (e.g. Matplotlib) both qualify — so the
-  bundling step itself stays simple and reproducible. Anything that would
-  need a local compiler to install from source on a researcher's machine
-  is disqualified by this constraint alone, independent of its other
-  merits.
-- **Plain-text configuration and output** reinforce the same goal from a
-  different angle: a `SimulationParams` config file the researcher edits
-  directly (§4.3) and a persistence backend (§6) that is human-readable
-  and needs no separate database engine or server process to inspect —
-  which is also, independently, why JSONL (§6) is the right default
-  persistence backend rather than a compiled/columnar format that would
-  need extra tooling to open.
+  is chosen for having solid, well-maintained prebuilt wheels — NumPy,
+  a plotting library (e.g. Matplotlib), and pywebview for the desktop
+  interface — so the bundling step itself stays simple and reproducible.
+  Anything that would need a local compiler to install from source on a
+  researcher's machine is disqualified by this constraint alone,
+  independent of its other merits.
+- **Readable configuration and portable storage** reinforce the same
+  goal from a different angle: a `SimulationParams` config file the
+  researcher can edit directly (§4.3) or configure via interactive GUI
+  forms, and a persistence architecture (§6) centered on a compact binary
+  trajectory log (`trajectory.tlog`) with atomic checkpoints and
+  directory-based run objects (`objects/<id>/`). A companion export
+  command (`fim export`) renders the trajectory to canonical JSON Lines
+  or CSV for downstream analysis in R, Python, or spreadsheets without
+  requiring an external database server.
 - **No network dependency at run time.** The tool must run entirely
-  offline once installed — nothing in the update pipeline, statistics, or
-  visualization modules should require reaching out to any remote
-  service.
+  offline once installed — nothing in the update pipeline, statistics,
+  desktop GUI, or visualization modules requires reaching out to any
+  remote service.
 
-The researcher-facing front end is a config file plus a command-line
-executable; there is no GUI. Updates reach the researcher's machine as a
-new one-file executable attached to a versioned GitHub Release, downloaded
-and manually swapped in place — no installer, no background updater. The
-engineering and release reference covers both in full.
+The simulator provides two complementary researcher-facing front ends:
+
+1. **Command-line interface (`bin/fim`).** A scriptable, headless CLI
+   supporting standard parameter execution, directory-based run object
+   management (`fim object create`, `edit`, `start`, `resume`, `pause`,
+   `cancel`, `clone`), and trajectory exports (`fim export`).
+2. **Desktop graphical interface (`fim gui`).** A local desktop
+   application built with pywebview and a modern web UI (`fim.gui`),
+   providing form-based parameter authoring, draft vs. planned run
+   management, live trajectory monitoring with real-time curve and scatter
+   plotting, and multi-replicate batch execution with pause/resume controls.
+
+Updates reach the researcher's machine as a new one-file executable
+attached to a versioned GitHub Release, downloaded and manually swapped
+in place — no installer, no background updater. The engineering and
+release reference covers both in full.
 
 ### 4.6 Choosing an engine backend
 
@@ -876,8 +889,42 @@ function, keeping the statistical surface under outside review small and
 the dependency footprint at the standard library. This is what
 `ConfidenceIntervalCriterion` and the batch summary (§9) both report.
 
-**`persistence/store.py`**, **`binary_store.py`**, and **`manifest.py`** —
-see §6.
+**`persistence/` package**. Houses trajectory storage, atomic checkpointing,
+run objects, lifecycle state machines, and execution fencing (see §6 for
+the full persistence design):
+
+- `persistence/store.py` defines the abstract `TrajectoryStore` protocol.
+- `persistence/binary_store.py` implements `BinaryLogStore`, managing the
+  `trajectory.tlog` binary append log with checksummed frames, sparse
+  keyframes, and live concurrent blocking reads.
+- `persistence/tlog.py` provides binary frame encoding and decoding for
+  generation states, summary statistics, and metadata.
+- `persistence/manifest.py` records provenance, resolved engine backends,
+  wall-clock timing, convergence outcomes, and run seeds.
+- `persistence/run_checkpoint.py` manages atomic generation-level checkpoints
+  (`checkpoints/<gen>/`), preserving complete model state, monitor
+  accumulators, and bit-exact per-deme RNG states (`deme_states.bin`) for
+  clean resumption.
+- `persistence/run_lifecycle.py` formalizes the run lifecycle state machine
+  (`Draft`, `Planned`, `Running`, `Pausing`, `Paused`, `Cancelling`,
+  `Cancelled`, `Completed`, `Interrupted`, `Failed`), validating state
+  transitions and terminal criteria.
+- `persistence/run_ownership.py` implements host- and process-level execution
+  leasing (`active.lease`), fencing, stale lease detection, and orphan
+  staging reclamation.
+- `persistence/run_objects.py` manages the directory-based run object layout
+  (`objects/<run_id>/`), providing atomic state updates, metadata tracking,
+  and parameter serialization.
+- `persistence/staging.py` provides isolated staging directories
+  (`staging/<run_id>.<pid>/`) so execution crashes never corrupt canonical
+  run object state.
+
+**`run_service.py`**. The unified lifecycle execution coordinator. Exposes
+programmatic operations to create, edit, clone, delete, start, resume,
+pause, and cancel run objects. Coordinates `CheckpointCadence` (derived
+from `params.expert` via `cadence_for_params(params)` or CLI/caller
+overrides) across generation and wall-clock boundaries, manages staging
+promotion, and handles crash recovery.
 
 **`viz/scatter.py`** and **`viz/diagnostics.py`** — see §8.
 
@@ -892,13 +939,28 @@ replicates over worker processes (§9); replicate_summary reports each
 statistic's realized interval. The batch layer orchestrates whole runs
 and changes nothing inside one.
 
-**`cli.py`** / **`bin/fim`.** Thin command-line wrapper: parse a config
-file or flags into `SimulationParams`, call `engine.fim()`, print a
-one-page summary of the final report, and write the persisted trajectory,
-manifest, report, and canonical scatter to an output directory. A
-replicate batch writes that same set per replicate subdirectory, plus the
-batch's own manifest and its `summary.json` of realized confidence
+**`cli.py`** and **`cli_objects.py`** / **`bin/fim`**. Command-line
+interfaces: `fim` runs direct simulation workflows, while `fim object`
+provides subcommands (`create`, `edit`, `clone`, `delete`, `list`, `status`,
+`start`, `resume`, `pause`, `cancel`, `reclaim`) for saved run objects.
+`fim export` converts binary trajectory logs into tidy JSON Lines or CSV.
+A replicate batch writes standard artifact sets per replicate subdirectory,
+plus the batch's own manifest and its `summary.json` of realized confidence
 intervals; `doc/usage.md` is the artifact contract in full.
+
+**`gui/` package**. Desktop application runtime using pywebview:
+
+- `gui/app.py` initializes the desktop window and dispatches JavaScript
+  API calls.
+- `gui/object_bridge.py` bridges the web UI to `run_service`, managing
+  run object creation, parameter validation, lifecycle transitions, and
+  draft/planned status.
+- `gui/object_runner.py` and `gui/batch_runner.py` orchestrate background
+  worker threads for scalar and multi-replicate batch runs, publishing live
+  progress sidecars and streaming trajectory frames into the UI.
+- `gui/webui/` provides modern HTML, CSS, and Vanilla JavaScript screens for
+  model configuration, saved run library management, real-time trajectory
+  plotting (Canvas-based curves and scatters), and batch replicate progress.
 
 ## 6. Persistence design
 
@@ -947,6 +1009,135 @@ it; `fim export` writes the same canonical JSON Lines text on request for
 R, Python or a spreadsheet. See [the trajectory log](trajectory-log.md).
 Nothing downstream of `TrajectoryStore` needs to know which backend is in
 use.
+
+Key properties of the binary trajectory log:
+
+- **Checksummed frames.** Each block contains CRC/checksum verification,
+  detecting corruption from abrupt process termination.
+- **Sparse keyframes.** Periodic keyframes allow seeking and fast slicing
+  without reading the full preceding history from generation 0.
+- **Concurrent live inspection.** The store supports non-blocking or bounded
+  tail reads (`live_block_seconds`), allowing the GUI and monitoring CLI
+  to stream live curve points while the simulation engine appends to the file.
+
+### Atomic run checkpointing
+
+Long simulations or exploratory runs require resuming after interruptions,
+pauses, or machine reboots. The checkpoint subsystem
+(`persistence/run_checkpoint.py`) provides bit-exact recovery:
+
+- **Checkpoint payload.** Stored under `checkpoints/<generation>/`:
+  - `checkpoint.json`: generation number, wall-clock timestamp, elapsed
+    compute time, monitor convergence state, and accumulator values.
+  - Complete model state: per-deme, per-locus allele frequencies.
+  - `deme_states.bin`: serialized per-deme NumPy PRNG generator states.
+    Restoring these guarantees bit-for-bit trajectory identity across resume.
+- **Two-phase atomic commit.** Checkpoints are written to an isolated staging
+  directory, flushed to disk, and atomically renamed into `checkpoints/`. A
+  failed checkpoint write never corrupts an earlier committed checkpoint.
+- **Configurable checkpoint cadence.** Checkpoint frequency is governed by
+  `CheckpointCadence` through two complementary criteria:
+  - Generation interval (`checkpoint_generations`, default 1000): triggers
+    a checkpoint every $K$ generations.
+  - Wall-clock interval (`checkpoint_seconds`, default 60.0): triggers a
+    checkpoint once elapsed wall time exceeds $S$ seconds since the last
+    checkpoint.
+  Cadence is derived from `params.expert` via `cadence_for_params(params)`
+  and can be overridden via CLI flags (`--checkpoint-generations`,
+  `--checkpoint-seconds`) or API arguments.
+
+### Saved run objects and lifecycle state machine
+
+Persistent run objects are housed under `objects/<run_id>/`:
+
+| File | Purpose |
+|---|---|
+| `run.json` | Run metadata, tags, description, created/updated timestamps, and current lifecycle state |
+| `config.yaml` | User configuration (`SimulationParams` schema) |
+| `checkpoints/` | Directory of committed atomic checkpoints |
+| `trajectory.tlog` | Binary trajectory append log |
+| `manifest.json` | Final run manifest with resolved engine provenance and seed |
+| `report.json` | Scalar report at termination ($t = T$) |
+| `summary.json` | Summary statistics and across-replicate confidence intervals |
+| `scatter.png` | Canonical allele frequency scatter plot |
+
+The lifecycle state machine (`persistence/run_lifecycle.py`) manages run
+transitions:
+
+```text
+       ┌───────────┐
+       │   Draft   │ ◄─── (Invalid / Incomplete config)
+       └─────┬─────┘
+             │  ▲
+   Validates │  │ Edits invalid config
+             ▼  │
+       ┌───────────┐
+       │  Planned  │ ◄─── (Complete / Valid config ready to run)
+       └─────┬─────┘
+             │ Start
+             ▼
+       ┌───────────┐         Pause          ┌───────────┐
+       │  Running  │ ─────────────────────► │  Pausing  │
+       └──┬───┬───┬┘                        └─────┬─────┘
+          │   │   │                               │ Checkpoint committed
+          │   │   │ Cancel                        ▼
+          │   │   │         Resume          ┌───────────┐
+          │   │   └───────────────────────► │  Paused   │
+          │   │                             └─────┬─────┘
+          │   │                                   │ Cancel
+          │   │                                   ▼
+          │   │ Cancel                      ┌───────────┐
+          │   ├───────────────────────────► │Cancelling │
+          │   │                             └─────┬─────┘
+          │   │                                   │ Lease released
+          │   │                                   ▼
+          │   │                             ┌───────────┐
+          │   │                             │ Cancelled │
+          │   │                             └───────────┘
+          │   │ SIGINT/Crash
+          │   ▼
+          │ ┌─────────────┐
+          │ │ Interrupted │
+          │ └─────────────┘
+          │
+          │ Normal completion / Error
+          ▼
+    ┌───────────┐  /  ┌───────────┐
+    │ Completed │     │  Failed   │
+    └───────────┘     └───────────┘
+```
+
+- **Draft state:** Represents an incomplete or invalid configuration. A user
+  fiddling with parameters can save progress without triggering schema
+  validation errors.
+- **Planned state:** Represents a complete, valid configuration ready for
+  execution. The system transitions bidirectionally between `Draft` and
+  `Planned` as parameters are edited.
+- **Terminal states:** `Completed`, `Cancelled`, and `Failed`.
+- **Cloning:** Any saved run object can be cloned (`fim object clone` or GUI
+  Clone button) into a new `Draft` or `Planned` run object with a fresh ID,
+  preserving configurations while resetting execution state and history.
+
+### Ownership fencing, staging, and crash recovery
+
+Concurrent writes or orphaned processes are prevented by strict filesystem
+fencing:
+
+- **Execution leases (`persistence/run_ownership.py`).** While running, an
+  atomic `active.lease` file records the executing process's PID, hostname,
+  and start timestamp. A competing process attempting to start or resume the
+  same run fails immediately with an ownership conflict. Stale leases
+  (processes no longer alive on the current host) are detected and flagged.
+- **Isolated staging (`persistence/staging.py`).** Execution occurs inside
+  `staging/<run_id>.<pid>/`. Intermediate outputs and in-progress logs are
+  buffered away from the canonical `objects/<run_id>/` tree. On clean
+  completion or checkpoint commit, changes are atomically promoted.
+- **Crash recovery.** If a process terminates abruptly (SIGKILL or power
+  loss), the run object transitions to `Interrupted` on the next inspection.
+  Orphaned staging directories can be reclaimed safely via
+  `reclaim_orphaned_staging` or `fim object reclaim`. Resuming an interrupted
+  run restores the latest committed checkpoint from `checkpoints/` and
+  resumes execution without data loss.
 
 A **run manifest** is written alongside the trajectory: the full
 `SimulationParams` (including seed — this is what makes a run exactly
@@ -1303,12 +1494,8 @@ byte for byte — see [doc/usage.md](usage.md#reproduce-a-run).
 
 ## Appendix A. Graphical front-end sketches
 
-The front end is the command line only (§4.5, §2.2 of the engineering and
-release reference). The three screens below sketch what a graphical front
-end could look like, drawn from a small illustrative simulation rather
-than the run above. They are recorded here as a starting point should a
-graphical front end ever be commissioned; nothing in the simulator
-depends on them.
+The original sketches below illustrated what a graphical front end could
+look like, drawn from a small illustrative simulation.
 
 **Screen 1 — model input.** The four named arguments and the `𝖯`-bag
 entries from §4.3, as a form instead of a YAML file: labeled fields for
@@ -1334,11 +1521,32 @@ the same four-allele scatter plot stepping through generations 0, 5,
 10, … 50, with points starting near the diagonal and drifting apart as
 the demes differentiate.
 
-These three sketches predate a real graphical front end (`fim-gui`)
-under active development — kept here only as the original illustrative
-sketches this appendix's introduction describes, with their
-now-unavailable images (moved out of this repository) replaced by their
-own alt-text descriptions rather than left as broken links.
+### Realization: The desktop application (`fim.gui`)
+
+The concepts from these sketches are realized in the desktop GUI
+application (`fim gui`), built with pywebview and a modern web UI:
+
+1. **Configuration and parameter authoring.** Provides interactive forms
+   for all core arguments ($N$, $d$, $m$, $\mu$, loci, seeds) and expert
+   settings with instant schema validation. Configurations can be saved
+   as **Draft** (when incomplete or invalid, allowing researchers to save
+   intermediate work) or **Planned** (when complete and valid for
+   execution), transitioning bidirectionally as parameters are refined.
+2. **Saved runs library.** Displays all persisted run objects
+   (`objects/<run_id>/`) with status badges (Draft, Planned, Running,
+   Paused, Completed, Cancelled, Failed), configuration summaries, and
+   direct controls to Run, Resume, Pause, Cancel, Clone, or Delete.
+   Cloning deep-copies parameter configurations under a new run identifier
+   with a fresh execution lifecycle.
+3. **Live trajectory visualization.** Streams per-generation scalar
+   differentiation curves ($D$, $G_{ST}$) and real-time $d$-dimensional
+   allele frequency scatters via concurrent, non-blocking reads from
+   `BinaryLogStore` (`trajectory.tlog`). Interactive controls allow
+   pausing at clean atomic checkpoint boundaries or cancelling long runs.
+4. **Batch replicate monitoring.** For multi-replicate configurations
+   ($n_{\text{replicates}} > 1$), coordinates parallel replicate lanes,
+   displaying generation progress across replicates alongside aggregate
+   Student's-$t$ confidence intervals.
 
 ## Appendix B. Engine backend benchmark results
 
@@ -1510,5 +1718,34 @@ generator-version: Claude Sonnet 5.5
 generator-model-token: claude-sonnet-5-5
 generator-provider: Anthropic
 generation-date: 2026-10-08
+generator-responsibility: revision
+```
+
+Updated §4.5, §5, §6, and Appendix A to reflect the realized desktop GUI
+application (`fim.gui`), binary trajectory store (`trajectory.tlog` via
+`BinaryLogStore`), atomic run checkpointing (`persistence/run_checkpoint.py`),
+run lifecycle state machine (`persistence/run_lifecycle.py`), execution
+fencing (`persistence/run_ownership.py`), saved run objects
+(`persistence/run_objects.py`), and run service coordinator (`run_service.py`):
+
+- Documented the PyWebView desktop application (`fim gui`) providing
+  interactive configuration forms, live trajectory streaming, and batch
+  replicate monitoring alongside the headless CLI.
+- Documented Draft vs. Planned run configuration lifecycle states and run
+  cloning.
+- Documented the binary trajectory log format with checksummed frames, sparse
+  keyframes, and concurrent non-blocking reads.
+- Documented atomic two-phase checkpointing, per-deme PRNG serialization, and
+  configurable checkpoint cadence (`checkpoint_generations` and
+  `checkpoint_seconds`).
+- Documented ownership leases (`active.lease`), execution staging
+  (`staging/<run_id>.<pid>/`), and crash recovery.
+
+```text
+generator-name: Copilot
+generator-version: GPT-5.4
+generator-model-token: gpt-5.4
+generator-provider: OpenAI
+generation-date: 2026-10-12
 generator-responsibility: revision
 ```
