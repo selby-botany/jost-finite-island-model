@@ -38,6 +38,7 @@ let activeSavedRunId = null;
 const SAVED_RUN_ACTIONS = [
     ["start", "Start"],
     ["resume", "Resume"],
+    ["clone", "Clone"],
     ["edit", "Edit"],
     ["open", "Open"],
     ["cancel", "Cancel"],
@@ -149,7 +150,12 @@ async function onSavedRunAction(action, run) {
     }
     const label = run.name || run.objectId;
     let result;
-    if (action === "cancel") {
+    if (action === "clone") {
+        result = await window.pywebview.api.clone_run_object(run.objectId);
+        if (result.ok) {
+            showSavedRunsBanner(`Cloned "${label}" as a new saved run.`);
+        }
+    } else if (action === "cancel") {
         result = await window.pywebview.api.cancel_run_object(run.objectId);
     } else if (action === "delete") {
         if (!window.confirm(`Delete the saved run "${label}" and all of its data?`)) {

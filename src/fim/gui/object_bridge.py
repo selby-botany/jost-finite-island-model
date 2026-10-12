@@ -43,6 +43,7 @@ from fim.persistence.run_lifecycle import (
 )
 from fim.persistence.run_objects import (
     RunObject,
+    clone_run_object,
     create_run_object,
     delete_run_object,
     list_run_objects,
@@ -114,6 +115,31 @@ def configuration_text(
     if problem is not None and validate_configuration_text(text)[0].is_valid:
         text = payload_to_yaml_text({**labels, **payload, _FORM_ISSUE_KEY: problem})
     return text, problem
+
+
+def clone(object_id: str, *, results: Path | None = None) -> RunObject:
+    """Create a new saved run from another one's configuration.
+
+    Args:
+        object_id: The saved run to clone.
+        results: Results directory (default: `results_directory()`).
+
+    Returns:
+        The new RunObject.
+    """
+    reconciled = reconcile_run_object(object_id, results=results)
+    cloned = clone_run_object(reconciled.object_id, results=results)
+    sidecar = _read_sidecar(reconciled.directory)
+    if sidecar is not None and sidecar.get("digest") == _digest(reconciled.config_text):
+        values = sidecar.get("values")
+        if isinstance(values, Mapping):
+            _write_sidecar(
+                cloned.directory,
+                cloned.config_text,
+                {str(k): str(v) for k, v in values.items()},
+            )
+    logger.debug("cloned run object %s as %s", object_id, cloned.object_id)
+    return cloned
 
 
 def delete(object_id: str, *, results: Path | None = None) -> None:
@@ -247,6 +273,7 @@ def row(run_object: RunObject) -> dict[str, Any]:
             "edit": allowed.can_edit,
             "start": allowed.can_start,
             "resume": allowed.can_resume,
+            "clone": True,
             "pause": allowed.can_pause,
             "cancel": allowed.can_cancel or allowed.can_abandon,
             "delete": allowed.can_delete,

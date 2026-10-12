@@ -2594,6 +2594,26 @@ class Api:
         return {"ok": True, "state": state}
 
     @_log_bridge_call
+    def clone_run_object(self, object_id: str) -> dict[str, Any]:
+        """Clone a saved run into a new object with the same configuration.
+
+        Args:
+            object_id: The saved run to clone.
+
+        Returns:
+            `{"ok": True, "objectId": ...}`, or `{"ok": False, "message": ...}`.
+        """
+        try:
+            cloned = object_bridge.clone(object_id)
+        except (LifecycleError, OSError, ValueError) as error:
+            return {"ok": False, "message": str(error)}
+        return {
+            "ok": True,
+            "objectId": cloned.object_id,
+            "state": cloned.record.state.value,
+        }
+
+    @_log_bridge_call
     def delete_run_object(self, object_id: str) -> dict[str, Any]:
         """Delete a saved run that is not executing, and all of its data.
 

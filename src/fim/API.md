@@ -333,6 +333,7 @@ Return to the [source-tree orientation](../README.md) or the [developer guide](.
     * [open\_run\_object](#fim.gui.app.Api.open_run_object)
     * [start\_run\_object](#fim.gui.app.Api.start_run_object)
     * [cancel\_run\_object](#fim.gui.app.Api.cancel_run_object)
+    * [clone\_run\_object](#fim.gui.app.Api.clone_run_object)
     * [delete\_run\_object](#fim.gui.app.Api.delete_run_object)
     * [pause\_active\_object\_run](#fim.gui.app.Api.pause_active_object_run)
     * [open\_output\_folder](#fim.gui.app.Api.open_output_folder)
@@ -500,6 +501,7 @@ Return to the [source-tree orientation](../README.md) or the [developer guide](.
 * [fim.gui.object\_bridge](#fim.gui.object_bridge)
   * [cancel](#fim.gui.object_bridge.cancel)
   * [configuration\_text](#fim.gui.object_bridge.configuration_text)
+  * [clone](#fim.gui.object_bridge.clone)
   * [delete](#fim.gui.object_bridge.delete)
   * [form\_values](#fim.gui.object_bridge.form_values)
   * [list\_rows](#fim.gui.object_bridge.list_rows)
@@ -8904,6 +8906,26 @@ Cancel a saved run that is not executing in this window, keeping its data.
 
 - ``{"ok"` - True, "state": ...}`, or `{"ok": False, "message": ...}`.
 
+<a id="fim.gui.app.Api.clone_run_object"></a>
+
+#### clone\_run\_object
+
+```python
+@_log_bridge_call
+def clone_run_object(object_id: str) -> dict[str, Any]
+```
+
+Clone a saved run into a new object with the same configuration.
+
+**Arguments**:
+
+- `object_id` - The saved run to clone.
+
+
+**Returns**:
+
+- ``{"ok"` - True, "objectId": ...}`, or `{"ok": False, "message": ...}`.
+
 <a id="fim.gui.app.Api.delete_run_object"></a>
 
 #### delete\_run\_object
@@ -13603,6 +13625,26 @@ Turn form values into configuration text, whether or not they are valid.
 
   The configuration text, and why the form is invalid (`None` when
   the form parses).
+
+<a id="fim.gui.object_bridge.clone"></a>
+
+#### clone
+
+```python
+def clone(object_id: str, *, results: Path | None = None) -> RunObject
+```
+
+Create a new saved run from another one's configuration.
+
+**Arguments**:
+
+- `object_id` - The saved run to clone.
+- `results` - Results directory (default: `results_directory()`).
+
+
+**Returns**:
+
+  The new RunObject.
 
 <a id="fim.gui.object_bridge.delete"></a>
 

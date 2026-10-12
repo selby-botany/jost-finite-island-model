@@ -193,3 +193,17 @@ def test_reopening_a_saved_run_carries_its_own_run_settings(api: Api) -> None:
     assert {row["field"] for row in opened["runSettingDifferences"]} >= {
         "max_generations"
     }
+
+
+def test_clone_saved_run_via_api(api: Api) -> None:
+    saved = api.save_run_object({**_form(), "name": "Source Run"})
+
+    cloned = api.clone_run_object(saved["objectId"])
+
+    assert cloned["ok"] is True
+    assert cloned["objectId"] != saved["objectId"]
+    assert cloned["state"] == "planned"
+
+    listing = api.list_run_objects()
+    ids = {row["objectId"] for row in listing["runs"]}
+    assert {saved["objectId"], cloned["objectId"]} <= ids

@@ -127,9 +127,11 @@ def test_rows_report_state_and_allowed_actions(tmp_path: Path) -> None:
     assert rows[draft.object_id]["state"] == "draft"
     assert rows[draft.object_id]["actions"]["start"] is False
     assert rows[draft.object_id]["actions"]["edit"] is True
+    assert rows[draft.object_id]["actions"]["clone"] is True
     assert rows[draft.object_id]["issues"]
     assert rows[planned.object_id]["name"] == "Ok"
     assert rows[planned.object_id]["actions"]["start"] is True
+    assert rows[planned.object_id]["actions"]["clone"] is True
     assert rows[planned.object_id]["actions"]["open"] is False
 
 
@@ -179,3 +181,39 @@ def test_prepare_start_returns_the_parameters_of_a_planned_run(
 
     assert run_object.object_id == saved.object_id
     assert params.gene_copies == 16
+
+
+def test_clone_creates_a_new_planned_object_and_preserves_sidecar(
+    tmp_path: Path,
+) -> None:
+    saved, _problem = object_bridge.save(_valid(name="Base Run"), results=tmp_path)
+
+    cloned = object_bridge.clone(saved.object_id, results=tmp_path)
+
+    assert cloned.object_id != saved.object_id
+    assert cloned.record.source_object_id == saved.object_id
+    assert cloned.record.state.value == "planned"
+
+    loaded_values, problem = object_bridge.form_values(cloned)
+    assert problem is None
+    assert loaded_values is not None
+    assert loaded_values["name"] == "Base Run"
+    assert loaded_values["d"] == "2"
+
+
+def test_clone_draft_object_creates_draft_and_preserves_typed_values(
+    tmp_path: Path,
+) -> None:
+    draft, problem = object_bridge.save(_valid(N="many"), results=tmp_path)
+    assert problem is not None
+
+    cloned = object_bridge.clone(draft.object_id, results=tmp_path)
+
+    assert cloned.object_id != draft.object_id
+    assert cloned.record.source_object_id == draft.object_id
+    assert cloned.record.state.value == "draft"
+
+    loaded_values, reason = object_bridge.form_values(cloned)
+    assert reason is None
+    assert loaded_values is not None
+    assert loaded_values["N"] == "many"
