@@ -165,6 +165,31 @@ _UMASK = _read_umask()
 """The umask in force when `fim.paths` was imported."""
 
 
+def _release_owner_lock(owner: contextlib.ExitStack, owner_lock: Path) -> None:
+    """Delete `atomic_directory`'s owner lock so it is never published.
+
+    On POSIX the file is unlinked while still locked: a reclaimer then
+    either finds it held or finds it gone, and never deletes a staging
+    directory about to be renamed into place. Windows cannot delete a
+    locked file, so there it is released first; reclaiming then needs a
+    build that outlived the grace period and a reclaim that lands in the
+    instant before the rename.
+
+    Args:
+        owner: Holds the owner lock.
+        owner_lock: The owner lock file.
+
+    Returns:
+        None; the lock is released and its file removed.
+    """
+    if sys.platform == "win32":
+        owner.close()
+        owner_lock.unlink(missing_ok=True)
+    else:
+        owner_lock.unlink(missing_ok=True)
+        owner.close()
+
+
 def default_file_mode() -> int:
     """Return the permission bits an ordinary new file gets (usually `0o644`).
 
@@ -248,6 +273,10 @@ def replace_with_retry(source: Path, target: Path) -> None:
             return
 
 
+STAGING_LOCK_FILENAME = ".fim-staging.lock"
+"""The owner lock `atomic_directory` holds inside its staging directory."""
+
+
 @contextlib.contextmanager
 def atomic_directory(target: Path) -> Iterator[Path]:
     """Build a directory's contents in a hidden temporary sibling, then
@@ -290,11 +319,13 @@ def atomic_directory(target: Path) -> Iterator[Path]:
     function.
 
     A process that is *killed* is different: SIGKILL, or a SIGTERM with no
-    handler installed (the CLI installs none), ends Python without running
-    the cleanup below. `target` is still never half-written, but the
-    hidden temporary sibling is left behind. Reclaiming those orphans is
-    part of the run lifecycle design
-    (`20261006-gpt-6.1-sol-run-lifecycle-and-checkpoint-design.md`,
+    handler installed, ends Python without running the cleanup below
+    (`fim run` turns its first SIGTERM into `SystemExit` precisely so the
+    cleanup does run; see `fim.termination`). `target` is still never
+    half-written, but the hidden temporary sibling is left behind.
+    `fim.persistence.staging.find_orphan_staging` reports such orphans,
+    and reclaims those whose builder is provably gone (run lifecycle design
+    `20261006-gpt-6.1-sol-run-lifecycle-and-checkpoint-design.md`,
     `selby/restricted`, sections 2, 5 and 11).
 
     This guarantee is about the *rename* being all-or-nothing, not about
@@ -340,7 +371,14 @@ def atomic_directory(target: Path) -> Iterator[Path]:
     # folder should be as readable as any other folder the user creates.
     working_directory.chmod(default_directory_mode())
     logger.debug("building %s in temporary directory %s", target, working_directory)
+    # Proof of life for orphan reclamation (`fim.persistence.staging`):
+    # held while the caller builds, then removed so it is never published.
+    from fim.persistence.object_lock import exclusive_lock  # noqa: PLC0415
+
+    owner_lock = working_directory / STAGING_LOCK_FILENAME
+    owner = contextlib.ExitStack()
     try:
+        owner.enter_context(exclusive_lock(owner_lock, blocking=False))
         # Hand the temporary folder to the caller's own `with` block —
         # everything the caller writes during that block goes here, not
         # to `target` itself.
@@ -351,6 +389,7 @@ def atomic_directory(target: Path) -> Iterator[Path]:
         # unchanged (`raise` with no argument re-raises exactly what was
         # caught, rather than wrapping or replacing it), so a caller
         # further up still sees the real, original error.
+        owner.close()
         logger.warning(
             "rolling back %s after %s: %s",
             target,
@@ -365,6 +404,7 @@ def atomic_directory(target: Path) -> Iterator[Path]:
         # possible: from this point on, `target` either did not exist
         # (a moment ago) or exists fully complete (now), with no
         # observable moment in between.
+        _release_owner_lock(owner, owner_lock)
         replace_with_retry(working_directory, target)
         logger.info("published %s", target)
 

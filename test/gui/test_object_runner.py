@@ -19,11 +19,11 @@ from fim.engine import RunResult
 from fim.examples import classes
 from fim.execution import ScalarSession
 from fim.gui.object_runner import start_object_run
-from fim.gui.runner import RunMessage
+from fim.gui.runner import RunMessage, run_artifact_targets, write_run_artifacts
 from fim.persistence.run_lifecycle import RunState
 from fim.persistence.run_objects import create_run_object, read_run_object
 from fim.persistence.run_ownership import request_cancel, request_pause
-from fim.run_service import CheckpointCadence
+from fim.run_service import CheckpointCadence, execute_run_object
 
 _CLASSES_FIXTURE = (
     Path(__file__).resolve().parents[1] / "persistence" / "fixtures" / "classes.yaml"
@@ -164,3 +164,25 @@ def test_an_unsupported_configuration_posts_an_error(tmp_path: Path) -> None:
     assert read_run_object(object_id, results=tmp_path).record.state is (
         RunState.PLANNED
     )
+
+
+def test_a_run_killed_after_publishing_reports_it_already_finished(
+    tmp_path: Path,
+) -> None:
+    """A verified receipt from a killed attempt completes without a result."""
+    object_id = _create(tmp_path)
+
+    def write_then_die(result: RunResult, directory: Path) -> None:
+        write_run_artifacts(result, run_artifact_targets(directory))
+        raise KeyboardInterrupt
+
+    with pytest.raises(KeyboardInterrupt):
+        execute_run_object(object_id, write_artifacts=write_then_die, results=tmp_path)
+
+    posted = _execute(object_id, tmp_path)
+
+    assert posted == [
+        ("error", "this saved run had already finished; its results are saved")
+    ]
+    finished = read_run_object(object_id, results=tmp_path)
+    assert finished.record.state is RunState.COMPLETED

@@ -12,6 +12,7 @@ import pytest
 
 import fim
 from fim import paths
+from fim.persistence.object_lock import is_lock_held
 
 
 def test_project_root_falls_back_to_working_directory(
@@ -351,6 +352,30 @@ def test_atomic_directory_discards_the_temporary_directory_on_failure(
 
     assert not target.exists()
     assert not list(tmp_path.glob(".output.*"))
+
+
+def test_atomic_directory_holds_an_owner_lock_that_is_never_published(
+    tmp_path: Path,
+) -> None:
+    """The staging owner lock proves life while building, then disappears."""
+    target = tmp_path / "output"
+
+    with paths.atomic_directory(target) as working_directory:
+        owner_lock = working_directory / paths.STAGING_LOCK_FILENAME
+        assert is_lock_held(owner_lock)
+
+    assert not (target / paths.STAGING_LOCK_FILENAME).exists()
+    assert sorted(entry.name for entry in tmp_path.iterdir()) == ["output"]
+
+
+def test_atomic_directory_rolls_back_on_sigterm_exit(tmp_path: Path) -> None:
+    """`SystemExit`, as SIGTERM raises it, discards the staging directory."""
+    target = tmp_path / "output"
+
+    with pytest.raises(SystemExit), paths.atomic_directory(target):
+        raise SystemExit(143)
+
+    assert list(tmp_path.iterdir()) == []
 
 
 class _RefusingSource:

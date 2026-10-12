@@ -76,6 +76,11 @@ _EXPECTED: dict[tuple[RunState, RunEvent], RunState] = {
     (RunState.CANCELLING, RunEvent.COMPLETE): RunState.COMPLETED,
     (RunState.CANCELLING, RunEvent.OWNER_LOST): RunState.INTERRUPTED,
     (RunState.CANCELLING, RunEvent.FAIL): RunState.FAILED,
+    (RunState.RUNNING, RunEvent.RECOVER_COMPLETION): RunState.COMPLETED,
+    (RunState.PAUSING, RunEvent.RECOVER_COMPLETION): RunState.COMPLETED,
+    (RunState.CANCELLING, RunEvent.RECOVER_COMPLETION): RunState.COMPLETED,
+    (RunState.INTERRUPTED, RunEvent.RECOVER_COMPLETION): RunState.COMPLETED,
+    (RunState.FAILED, RunEvent.RECOVER_COMPLETION): RunState.COMPLETED,
 }
 
 
@@ -126,6 +131,9 @@ def test_transition_table_matches_the_design() -> None:
 def test_every_state_event_pair(state: RunState, event: RunEvent) -> None:
     """Legal pairs reach their target; every other pair is rejected."""
     record = _record_in(state)
+    if event is RunEvent.RECOVER_COMPLETION and record.phase is not None:
+        # Recovery is legal only after finalization began.
+        record = replace(record, phase=RunPhase.FINALIZING)
     target = _EXPECTED.get((state, event))
     if target is None:
         with pytest.raises(IllegalTransitionError) as raised:
@@ -244,6 +252,41 @@ def test_resume_opens_a_new_attempt_and_clears_the_error() -> None:
     assert resumed.active_attempt_id == ATTEMPT_B
     assert resumed.last_error is None
     assert resumed.first_started_at == failed.first_started_at
+
+
+@pytest.mark.parametrize(
+    "state",
+    [
+        RunState.RUNNING,
+        RunState.PAUSING,
+        RunState.CANCELLING,
+        RunState.INTERRUPTED,
+        RunState.FAILED,
+    ],
+)
+def test_recover_completion_requires_the_finalizing_phase(state: RunState) -> None:
+    """A run still simulating cannot have published a completion receipt."""
+    record = _record_in(state)
+    with pytest.raises(IllegalTransitionError) as raised:
+        _apply(record, RunEvent.RECOVER_COMPLETION)
+    assert raised.value.state is state
+    assert raised.value.event is RunEvent.RECOVER_COMPLETION
+
+
+def test_recover_completion_closes_the_attempt_and_clears_the_error() -> None:
+    """Recovered completion is a plain completion: no owner, no error."""
+    failed = replace(
+        _apply(_record_in(RunState.RUNNING), RunEvent.FAIL),
+        phase=RunPhase.FINALIZING,
+    )
+    assert failed.last_error is not None
+    recovered = _apply(failed, RunEvent.RECOVER_COMPLETION)
+    assert recovered.state is RunState.COMPLETED
+    assert recovered.last_error is None
+    assert recovered.active_attempt_id is None
+    assert recovered.completed_at == format_timestamp(AT)
+    running = replace(_record_in(RunState.RUNNING), phase=RunPhase.FINALIZING)
+    assert _apply(running, RunEvent.RECOVER_COMPLETION).active_attempt_id is None
 
 
 def test_record_round_trips_through_json() -> None:

@@ -34,6 +34,7 @@ Every test module, fixture, and test function documented here in full; `doc/fim-
   - [`test_shutdown_diagnostics`](#test.test_shutdown_diagnostics)
   - [`test_sweep`](#test.test_sweep)
   - [`test_sweep_run`](#test.test_sweep_run)
+  - [`test_termination`](#test.test_termination)
   - [`test_update`](#test.test_update)
   - [`tlog_support`](#test.tlog_support)
   - [`vector_support`](#test.vector_support)
@@ -157,7 +158,9 @@ Every test module, fixture, and test function documented here in full; `doc/fim-
   - [`test_run_metadata`](#persistence.test_run_metadata)
   - [`test_run_objects`](#persistence.test_run_objects)
   - [`test_run_ownership`](#persistence.test_run_ownership)
+  - [`test_run_receipt`](#persistence.test_run_receipt)
   - [`test_scalar_snapshot`](#persistence.test_scalar_snapshot)
+  - [`test_staging`](#persistence.test_staging)
   - [`test_store`](#persistence.test_store)
   - [`test_store_lifecycle`](#persistence.test_store_lifecycle)
   - [`test_tlog`](#persistence.test_tlog)
@@ -2836,6 +2839,27 @@ def test_atomic_directory_discards_the_temporary_directory_on_failure(
 
 A raised exception leaves neither the target nor an orphaned temp dir.
 
+<a id="test.test_paths.test_atomic_directory_holds_an_owner_lock_that_is_never_published"></a>
+
+#### test\_atomic\_directory\_holds\_an\_owner\_lock\_that\_is\_never\_published
+
+```python
+def test_atomic_directory_holds_an_owner_lock_that_is_never_published(
+        tmp_path: Path) -> None
+```
+
+The staging owner lock proves life while building, then disappears.
+
+<a id="test.test_paths.test_atomic_directory_rolls_back_on_sigterm_exit"></a>
+
+#### test\_atomic\_directory\_rolls\_back\_on\_sigterm\_exit
+
+```python
+def test_atomic_directory_rolls_back_on_sigterm_exit(tmp_path: Path) -> None
+```
+
+`SystemExit`, as SIGTERM raises it, discards the staging directory.
+
 <a id="test.test_paths.test_replace_with_retry_rides_out_transient_permission_errors"></a>
 
 #### test\_replace\_with\_retry\_rides\_out\_transient\_permission\_errors
@@ -3446,6 +3470,131 @@ def test_a_cadence_that_never_progresses_is_rejected(
 
 Zero or negative intervals are refused.
 
+<a id="test.test_run_service._CrashingWriter"></a>
+
+## \_CrashingWriter Objects
+
+```python
+class _CrashingWriter(_Writer)
+```
+
+A writer that stops the process (as a kill would) around its work.
+
+<a id="test.test_run_service._CrashingWriter.__init__"></a>
+
+#### \_\_init\_\_
+
+```python
+def __init__(*, before: bool, corrupt_receipt: bool = False) -> None
+```
+
+Crash `before` writing anything, or after the receipt is written.
+
+<a id="test.test_run_service._CrashingWriter.__call__"></a>
+
+#### \_\_call\_\_
+
+```python
+def __call__(result: RunResult, directory: Path) -> None
+```
+
+Write (unless crashing first), then raise `KeyboardInterrupt`.
+
+<a id="test.test_run_service.test_a_completion_receipt_left_by_a_killed_worker_is_recovered"></a>
+
+#### test\_a\_completion\_receipt\_left\_by\_a\_killed\_worker\_is\_recovered
+
+```python
+def test_a_completion_receipt_left_by_a_killed_worker_is_recovered(
+        tmp_path: Path) -> None
+```
+
+A verified receipt completes the run without running it again.
+
+<a id="test.test_run_service.test_a_failure_after_the_receipt_is_recovered_as_completion"></a>
+
+#### test\_a\_failure\_after\_the\_receipt\_is\_recovered\_as\_completion
+
+```python
+def test_a_failure_after_the_receipt_is_recovered_as_completion(
+        tmp_path: Path) -> None
+```
+
+An error raised once every artifact was written loses nothing.
+
+<a id="test.test_run_service.test_a_finalization_killed_before_the_receipt_is_redone"></a>
+
+#### test\_a\_finalization\_killed\_before\_the\_receipt\_is\_redone
+
+```python
+def test_a_finalization_killed_before_the_receipt_is_redone(
+        tmp_path: Path) -> None
+```
+
+No receipt means interrupted; resuming finalizes from the checkpoint.
+
+<a id="test.test_run_service.test_a_receipt_that_no_longer_verifies_is_replaced"></a>
+
+#### test\_a\_receipt\_that\_no\_longer\_verifies\_is\_replaced
+
+```python
+def test_a_receipt_that_no_longer_verifies_is_replaced(tmp_path: Path) -> None
+```
+
+A stale receipt is removed before any artifact is rewritten.
+
+<a id="test.test_run_service.test_a_stop_request_pauses_at_the_next_safe_point"></a>
+
+#### test\_a\_stop\_request\_pauses\_at\_the\_next\_safe\_point
+
+```python
+def test_a_stop_request_pauses_at_the_next_safe_point(
+        tmp_path: Path, checkpointed: list[int]) -> None
+```
+
+SIGTERM's flag pauses the run with a checkpoint; resume is exact.
+
+<a id="test.test_run_service.test_a_stop_request_as_the_run_stops_completes_it"></a>
+
+#### test\_a\_stop\_request\_as\_the\_run\_stops\_completes\_it
+
+```python
+def test_a_stop_request_as_the_run_stops_completes_it(tmp_path: Path) -> None
+```
+
+A run that has already stopped completes instead of pausing.
+
+<a id="test.test_run_service.test_diagnosis_reports_a_corrupt_checkpoint"></a>
+
+#### test\_diagnosis\_reports\_a\_corrupt\_checkpoint
+
+```python
+def test_diagnosis_reports_a_corrupt_checkpoint(tmp_path: Path) -> None
+```
+
+A damaged checkpoint is named before a resume would trip on it.
+
+<a id="test.test_run_service.test_diagnosis_reports_an_unsupported_configuration"></a>
+
+#### test\_diagnosis\_reports\_an\_unsupported\_configuration
+
+```python
+def test_diagnosis_reports_an_unsupported_configuration(
+        tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None
+```
+
+A paused run this release cannot continue says so.
+
+<a id="test.test_run_service.test_diagnosis_reports_damaged_published_results"></a>
+
+#### test\_diagnosis\_reports\_damaged\_published\_results
+
+```python
+def test_diagnosis_reports_damaged_published_results(tmp_path: Path) -> None
+```
+
+A completed run whose artifacts changed is flagged, not repaired.
+
 <a id="test.test_run_service_batch"></a>
 
 # test.test\_run\_service\_batch
@@ -3541,6 +3690,65 @@ def test_a_refused_configuration_is_not_recorded_as_a_failure(
 ```
 
 A batch the session cannot build leaves the object planned.
+
+<a id="test.test_run_service_batch.test_a_published_batch_receipt_verifies_recursively"></a>
+
+#### test\_a\_published\_batch\_receipt\_verifies\_recursively
+
+```python
+def test_a_published_batch_receipt_verifies_recursively(
+        tmp_path: Path) -> None
+```
+
+The batch receipt, its summary, and every replicate verify; damage does not.
+
+<a id="test.test_run_service_batch.test_a_batch_receipt_with_the_wrong_contents_is_rejected"></a>
+
+#### test\_a\_batch\_receipt\_with\_the\_wrong\_contents\_is\_rejected
+
+```python
+@pytest.mark.parametrize(
+    ("change", "expected"),
+    [
+        (
+            lambda document: document["artifacts"].pop("summary"),
+            "lists unexpected artifacts",
+        ),
+        (
+            lambda document: document["replicate_run_ids"].__setitem__(
+                0, "run-x-r001"),
+            "names a foreign replicate 'run-x-r001'",
+        ),
+    ],
+)
+def test_a_batch_receipt_with_the_wrong_contents_is_rejected(
+        tmp_path: Path, change: Callable[[Any], object],
+        expected: str) -> None
+```
+
+Every replicate must be one of this batch's, each listed once.
+
+<a id="test.test_run_service_batch.test_a_batch_killed_after_its_receipt_is_recovered"></a>
+
+#### test\_a\_batch\_killed\_after\_its\_receipt\_is\_recovered
+
+```python
+def test_a_batch_killed_after_its_receipt_is_recovered(
+        tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None
+```
+
+A batch whose receipt was published completes without running again.
+
+<a id="test.test_run_service_batch.test_a_batch_killed_before_its_receipt_finalizes_again"></a>
+
+#### test\_a\_batch\_killed\_before\_its\_receipt\_finalizes\_again
+
+```python
+def test_a_batch_killed_before_its_receipt_finalizes_again(
+        tmp_path: Path) -> None
+```
+
+Replicates published before the kill do not complete the batch.
 
 <a id="test.test_shutdown_diagnostics"></a>
 
@@ -3824,6 +4032,55 @@ def test_a_matching_recompute_of_a_read_only_run_keeps_the_old_run(
 ```
 
 A read-only run is never superseded: both runs stay, the sweep succeeds.
+
+<a id="test.test_termination"></a>
+
+# test.test\_termination
+
+Tests for `fim.termination`: SIGTERM policies for command-line runs.
+
+Each test sends SIGTERM to its own process from the main thread, so the
+handler runs at a known point; nothing depends on timing.
+
+<a id="test.test_termination.test_the_exit_status_is_what_a_shell_reports"></a>
+
+#### test\_the\_exit\_status\_is\_what\_a\_shell\_reports
+
+```python
+def test_the_exit_status_is_what_a_shell_reports() -> None
+```
+
+128 plus the signal number, as for a process SIGTERM ended.
+
+<a id="test.test_termination.test_sigterm_requests_a_stop_once"></a>
+
+#### test\_sigterm\_requests\_a\_stop\_once
+
+```python
+def test_sigterm_requests_a_stop_once() -> None
+```
+
+The first SIGTERM only sets the flag; the default action returns.
+
+<a id="test.test_termination.test_sigterm_raises_exit_with_the_terminated_status"></a>
+
+#### test\_sigterm\_raises\_exit\_with\_the\_terminated\_status
+
+```python
+def test_sigterm_raises_exit_with_the_terminated_status() -> None
+```
+
+SIGTERM unwinds as `SystemExit(143)`, so cleanup runs.
+
+<a id="test.test_termination.test_nothing_is_installed_outside_the_main_thread"></a>
+
+#### test\_nothing\_is\_installed\_outside\_the\_main\_thread
+
+```python
+def test_nothing_is_installed_outside_the_main_thread() -> None
+```
+
+A worker thread cannot install handlers; the policies do nothing.
 
 <a id="test.test_update"></a>
 
@@ -4157,6 +4414,18 @@ def test_run_writes_exactly_six_documented_artifacts(tmp_path: Path) -> None
 ```
 
 A real seeded run produces the complete v1 output set.
+
+<a id="cli.test_cli.test_sigterm_ends_a_run_with_143_and_discards_its_staging"></a>
+
+#### test\_sigterm\_ends\_a\_run\_with\_143\_and\_discards\_its\_staging
+
+```python
+@pytest.mark.skipif(sys.platform == "win32", reason="SIGTERM to self is POSIX")
+def test_sigterm_ends_a_run_with_143_and_discards_its_staging(
+        tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None
+```
+
+SIGTERM while artifacts are written unwinds; nothing is left behind.
 
 <a id="cli.test_cli.test_run_writes_every_deme_pair_to_pairwise_json"></a>
 
@@ -5493,6 +5762,53 @@ Tests for `fim object` (`fim.cli_objects`).
 Each test drives the real `cli.main` against its own results directory.
 Pause is requested from the progress observer at a fixed generation, so no
 test depends on timing.
+
+<a id="cli.test_cli_objects.test_a_start_killed_after_its_receipt_is_reported_as_finished"></a>
+
+#### test\_a\_start\_killed\_after\_its\_receipt\_is\_reported\_as\_finished
+
+```python
+def test_a_start_killed_after_its_receipt_is_reported_as_finished(
+        tmp_path: Path, capsys: pytest.CaptureFixture[str],
+        monkeypatch: pytest.MonkeyPatch) -> None
+```
+
+Every artifact was published, so resuming only records completion.
+
+<a id="cli.test_cli_objects.test_status_lists_problems_with_published_results"></a>
+
+#### test\_status\_lists\_problems\_with\_published\_results
+
+```python
+def test_status_lists_problems_with_published_results(
+        tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None
+```
+
+Damaged artifacts appear in text status; the JSON record is unchanged.
+
+<a id="cli.test_cli_objects.test_sigterm_pauses_a_foreground_start"></a>
+
+#### test\_sigterm\_pauses\_a\_foreground\_start
+
+```python
+@pytest.mark.skipif(sys.platform == "win32", reason="SIGTERM to self is POSIX")
+def test_sigterm_pauses_a_foreground_start(
+        tmp_path: Path, capsys: pytest.CaptureFixture[str],
+        monkeypatch: pytest.MonkeyPatch) -> None
+```
+
+SIGTERM at generation 15 checkpoints and pauses instead of dying.
+
+<a id="cli.test_cli_objects.test_reclaim_reports_and_removes_orphan_staging"></a>
+
+#### test\_reclaim\_reports\_and\_removes\_orphan\_staging
+
+```python
+def test_reclaim_reports_and_removes_orphan_staging(
+        tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None
+```
+
+A dry run lists the orphan; a real run removes it.
 
 <a id="cli.test_cli_sweep"></a>
 
@@ -20740,6 +21056,17 @@ Pause and Cancel are requested from the test observer at a chosen
 generation, so every scenario stops at the same safe point on every run.
 Each test joins the worker thread; none waits on a clock.
 
+<a id="gui.test_object_runner.test_a_run_killed_after_publishing_reports_it_already_finished"></a>
+
+#### test\_a\_run\_killed\_after\_publishing\_reports\_it\_already\_finished
+
+```python
+def test_a_run_killed_after_publishing_reports_it_already_finished(
+        tmp_path: Path) -> None
+```
+
+A verified receipt from a killed attempt completes without a result.
+
 <a id="gui.test_open_run_screen"></a>
 
 # gui.test\_open\_run\_screen
@@ -33562,6 +33889,37 @@ def test_resume_opens_a_new_attempt_and_clears_the_error() -> None
 
 Resume from failed records the new attempt and keeps first start.
 
+<a id="persistence.test_run_lifecycle.test_recover_completion_requires_the_finalizing_phase"></a>
+
+#### test\_recover\_completion\_requires\_the\_finalizing\_phase
+
+```python
+@pytest.mark.parametrize(
+    "state",
+    [
+        RunState.RUNNING,
+        RunState.PAUSING,
+        RunState.CANCELLING,
+        RunState.INTERRUPTED,
+        RunState.FAILED,
+    ],
+)
+def test_recover_completion_requires_the_finalizing_phase(
+        state: RunState) -> None
+```
+
+A run still simulating cannot have published a completion receipt.
+
+<a id="persistence.test_run_lifecycle.test_recover_completion_closes_the_attempt_and_clears_the_error"></a>
+
+#### test\_recover\_completion\_closes\_the\_attempt\_and\_clears\_the\_error
+
+```python
+def test_recover_completion_closes_the_attempt_and_clears_the_error() -> None
+```
+
+Recovered completion is a plain completion: no owner, no error.
+
 <a id="persistence.test_run_lifecycle.test_record_round_trips_through_json"></a>
 
 #### test\_record\_round\_trips\_through\_json
@@ -34308,6 +34666,82 @@ def test_reconcile_leaves_a_live_owner_alone(tmp_path: Path) -> None
 
 A held attempt lock proves life; reconciliation changes nothing.
 
+<a id="persistence.test_run_ownership.test_reconcile_recovers_a_verified_completion"></a>
+
+#### test\_reconcile\_recovers\_a\_verified\_completion
+
+```python
+def test_reconcile_recovers_a_verified_completion(
+        tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None
+```
+
+A lost owner whose receipt verifies is completed, not interrupted.
+
+<a id="persistence.test_run_ownership.test_reconcile_interrupts_when_the_receipt_does_not_verify"></a>
+
+#### test\_reconcile\_interrupts\_when\_the\_receipt\_does\_not\_verify
+
+```python
+def test_reconcile_interrupts_when_the_receipt_does_not_verify(
+        tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None
+```
+
+An unverified receipt changes nothing about owner loss.
+
+<a id="persistence.test_run_ownership.test_reconcile_checks_no_receipt_before_finalization"></a>
+
+#### test\_reconcile\_checks\_no\_receipt\_before\_finalization
+
+```python
+def test_reconcile_checks_no_receipt_before_finalization(
+        tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None
+```
+
+A run lost while simulating cannot have finished.
+
+<a id="persistence.test_run_ownership.test_reconcile_recovers_a_stopped_finalization"></a>
+
+#### test\_reconcile\_recovers\_a\_stopped\_finalization
+
+```python
+@pytest.mark.parametrize("stop", ["interrupt", "fail"])
+def test_reconcile_recovers_a_stopped_finalization(
+        tmp_path: Path, monkeypatch: pytest.MonkeyPatch, stop: str) -> None
+```
+
+An interrupted or failed finalization whose receipt verifies completes.
+
+<a id="persistence.test_run_ownership.test_reconcile_leaves_a_live_finalization_alone"></a>
+
+#### test\_reconcile\_leaves\_a\_live\_finalization\_alone
+
+```python
+def test_reconcile_leaves_a_live_finalization_alone(
+        tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None
+```
+
+A worker still publishing is never completed behind its back.
+
+<a id="persistence.test_run_ownership.test_the_owner_can_request_its_own_pause"></a>
+
+#### test\_the\_owner\_can\_request\_its\_own\_pause
+
+```python
+def test_the_owner_can_request_its_own_pause(tmp_path: Path) -> None
+```
+
+`request_pause` on the lease pauses a running run and nothing else.
+
+<a id="persistence.test_run_ownership.test_a_stale_owner_cannot_request_a_pause"></a>
+
+#### test\_a\_stale\_owner\_cannot\_request\_a\_pause
+
+```python
+def test_a_stale_owner_cannot_request_a_pause(tmp_path: Path) -> None
+```
+
+A pause request from a fenced attempt is refused.
+
 <a id="persistence.test_run_ownership.test_cancel_wins_until_the_owner_completes"></a>
 
 #### test\_cancel\_wins\_until\_the\_owner\_completes
@@ -34380,6 +34814,134 @@ def test_a_dead_owner_process_is_detected_without_a_timeout(
 ```
 
 A second process owns the run; once it dies, recovery interrupts it.
+
+<a id="persistence.test_run_receipt"></a>
+
+# persistence.test\_run\_receipt
+
+Tests for `fim.persistence.run_receipt`: completion receipt checks.
+
+Every receipt here comes from a real finished run written by the CLI's own
+artifact writer, then damaged one way at a time. Batch receipts are tested
+with batch objects in `test/test_run_service_batch.py`.
+
+<a id="persistence.test_run_receipt.published"></a>
+
+#### published
+
+```python
+@pytest.fixture
+def published(tmp_path: Path) -> tuple[Path, str]
+```
+
+Return a directory holding a finished scalar run, and its run ID.
+
+<a id="persistence.test_run_receipt.test_a_whole_run_verifies"></a>
+
+#### test\_a\_whole\_run\_verifies
+
+```python
+def test_a_whole_run_verifies(published: tuple[Path, str]) -> None
+```
+
+The writer's own receipt matches every file it lists.
+
+<a id="persistence.test_run_receipt.test_a_missing_receipt_was_never_published"></a>
+
+#### test\_a\_missing\_receipt\_was\_never\_published
+
+```python
+def test_a_missing_receipt_was_never_published(
+        published: tuple[Path, str]) -> None
+```
+
+No receipt means finalization did not finish.
+
+<a id="persistence.test_run_receipt.test_an_unparsable_receipt_is_rejected"></a>
+
+#### test\_an\_unparsable\_receipt\_is\_rejected
+
+```python
+def test_an_unparsable_receipt_is_rejected(
+        published: tuple[Path, str]) -> None
+```
+
+A torn receipt cannot vouch for anything.
+
+<a id="persistence.test_run_receipt.test_a_receipt_for_another_run_is_rejected"></a>
+
+#### test\_a\_receipt\_for\_another\_run\_is\_rejected
+
+```python
+def test_a_receipt_for_another_run_is_rejected(
+        published: tuple[Path, str]) -> None
+```
+
+A receipt left from a different configuration does not count.
+
+<a id="persistence.test_run_receipt.test_a_truncated_artifact_fails_the_size_check"></a>
+
+#### test\_a\_truncated\_artifact\_fails\_the\_size\_check
+
+```python
+def test_a_truncated_artifact_fails_the_size_check(
+        published: tuple[Path, str]) -> None
+```
+
+A short file is caught before it is hashed.
+
+<a id="persistence.test_run_receipt.test_a_same_size_change_fails_the_digest"></a>
+
+#### test\_a\_same\_size\_change\_fails\_the\_digest
+
+```python
+def test_a_same_size_change_fails_the_digest(
+        published: tuple[Path, str]) -> None
+```
+
+Content is checked, not only length.
+
+<a id="persistence.test_run_receipt.test_a_missing_artifact_is_reported"></a>
+
+#### test\_a\_missing\_artifact\_is\_reported
+
+```python
+def test_a_missing_artifact_is_reported(published: tuple[Path, str]) -> None
+```
+
+A listed file that is gone fails verification.
+
+<a id="persistence.test_run_receipt.test_a_receipt_without_the_trajectory_is_rejected"></a>
+
+#### test\_a\_receipt\_without\_the\_trajectory\_is\_rejected
+
+```python
+def test_a_receipt_without_the_trajectory_is_rejected(
+        published: tuple[Path, str]) -> None
+```
+
+The trajectory is the one artifact every completed run has.
+
+<a id="persistence.test_run_receipt.test_an_unknown_artifact_key_is_rejected"></a>
+
+#### test\_an\_unknown\_artifact\_key\_is\_rejected
+
+```python
+def test_an_unknown_artifact_key_is_rejected(
+        published: tuple[Path, str]) -> None
+```
+
+A receipt from a newer writer is not trusted blindly.
+
+<a id="persistence.test_run_receipt.test_artifact_filenames_match_both_writers"></a>
+
+#### test\_artifact\_filenames\_match\_both\_writers
+
+```python
+def test_artifact_filenames_match_both_writers(tmp_path: Path) -> None
+```
+
+The receipt keys agree with the CLI's and the GUI's artifact names.
 
 <a id="persistence.test_scalar_snapshot"></a>
 
@@ -34571,6 +35133,123 @@ def test_a_present_allele_missing_from_the_minted_states_is_refused() -> None
 ```
 
 Every allele in the population must already be minted.
+
+<a id="persistence.test_staging"></a>
+
+# persistence.test\_staging
+
+Tests for `fim.persistence.staging`: orphan staging reclamation.
+
+Builders that died are modelled by staging directories whose locks no
+one holds; live builders by locks this process holds. Ages come from an
+injected clock, so no test depends on the wall clock.
+
+<a id="persistence.test_staging.test_an_unheld_old_owner_lock_is_reclaimed"></a>
+
+#### test\_an\_unheld\_old\_owner\_lock\_is\_reclaimed
+
+```python
+def test_an_unheld_old_owner_lock_is_reclaimed(tmp_path: Path) -> None
+```
+
+Both the results directory and `objects/` are scanned.
+
+<a id="persistence.test_staging.test_a_new_owner_lock_is_within_the_grace_period"></a>
+
+#### test\_a\_new\_owner\_lock\_is\_within\_the\_grace\_period
+
+```python
+def test_a_new_owner_lock_is_within_the_grace_period(tmp_path: Path) -> None
+```
+
+A lock not yet old enough to judge is not listed at all.
+
+<a id="persistence.test_staging.test_a_held_owner_lock_marks_a_live_builder"></a>
+
+#### test\_a\_held\_owner\_lock\_marks\_a\_live\_builder
+
+```python
+def test_a_held_owner_lock_marks_a_live_builder(tmp_path: Path) -> None
+```
+
+A builder still holding its lock is neither listed nor removed.
+
+<a id="persistence.test_staging.test_staging_without_an_owner_lock_is_reported_and_kept"></a>
+
+#### test\_staging\_without\_an\_owner\_lock\_is\_reported\_and\_kept
+
+```python
+def test_staging_without_an_owner_lock_is_reported_and_kept(
+        tmp_path: Path) -> None
+```
+
+Nothing proves such a builder is gone, so only a person removes it.
+
+<a id="persistence.test_staging.test_an_owner_lock_deleted_before_removal_keeps_the_staging"></a>
+
+#### test\_an\_owner\_lock\_deleted\_before\_removal\_keeps\_the\_staging
+
+```python
+def test_an_owner_lock_deleted_before_removal_keeps_the_staging(
+        tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None
+```
+
+A builder that deletes its lock on the way to publishing wins.
+
+The removal must neither recreate the deleted lock nor remove the
+staging that is about to be renamed into place.
+
+<a id="persistence.test_staging.test_checkpoint_staging_is_reclaimed_when_no_attempt_runs"></a>
+
+#### test\_checkpoint\_staging\_is\_reclaimed\_when\_no\_attempt\_runs
+
+```python
+def test_checkpoint_staging_is_reclaimed_when_no_attempt_runs(
+        tmp_path: Path) -> None
+```
+
+The free attempt lock proves no attempt can still publish it.
+
+<a id="persistence.test_staging.test_checkpoint_staging_of_an_executing_object_is_kept"></a>
+
+#### test\_checkpoint\_staging\_of\_an\_executing\_object\_is\_kept
+
+```python
+def test_checkpoint_staging_of_an_executing_object_is_kept(
+        tmp_path: Path) -> None
+```
+
+An attempt holding its lock may be publishing that checkpoint.
+
+<a id="persistence.test_staging.test_a_dry_run_removes_nothing"></a>
+
+#### test\_a\_dry\_run\_removes\_nothing
+
+```python
+def test_a_dry_run_removes_nothing(tmp_path: Path) -> None
+```
+
+Every reclaimable orphan is reported and left in place.
+
+<a id="persistence.test_staging.test_unrelated_directories_are_ignored"></a>
+
+#### test\_unrelated\_directories\_are\_ignored
+
+```python
+def test_unrelated_directories_are_ignored(tmp_path: Path) -> None
+```
+
+Published runs, ordinary hidden folders, and non-objects stay.
+
+<a id="persistence.test_staging.test_a_missing_results_directory_has_no_orphans"></a>
+
+#### test\_a\_missing\_results\_directory\_has\_no\_orphans
+
+```python
+def test_a_missing_results_directory_has_no_orphans(tmp_path: Path) -> None
+```
+
+Scanning a results directory not yet created finds nothing.
 
 <a id="persistence.test_store"></a>
 

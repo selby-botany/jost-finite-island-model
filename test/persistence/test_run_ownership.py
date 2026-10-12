@@ -18,6 +18,7 @@ import pytest
 import yaml
 
 from fim.examples import classes
+from fim.persistence import run_ownership
 from fim.persistence.object_lock import exclusive_lock
 from fim.persistence.run_lifecycle import (
     AttemptMismatchError,
@@ -266,6 +267,152 @@ def test_reconcile_leaves_a_live_owner_alone(tmp_path: Path) -> None:
     lease.release()
     changed = reconcile_run_objects(tmp_path, clock=_clock)
     assert [item.object_id for item in changed] == [planned.object_id]
+
+
+def _receipt(monkeypatch: pytest.MonkeyPatch, problem: str | None) -> list[str]:
+    """Make every receipt check return `problem`; return the checked run IDs."""
+    checked: list[str] = []
+
+    def check(_directory: Path, *, kind: object, run_id: str) -> str | None:
+        checked.append(run_id)
+        return problem
+
+    monkeypatch.setattr(run_ownership, "receipt_problem", check)
+    return checked
+
+
+def _stranded_in_finalization(tmp_path: Path) -> RunObject:
+    """Start a run, reach finalization, and lose the owner."""
+    planned = _planned(tmp_path)
+    lease = _start(tmp_path, planned)
+    lease.commit_progress(phase=RunPhase.FINALIZING, checkpoint=CHECKPOINT)
+    lease.release()
+    return planned
+
+
+def test_reconcile_recovers_a_verified_completion(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A lost owner whose receipt verifies is completed, not interrupted."""
+    checked = _receipt(monkeypatch, None)
+    planned = _stranded_in_finalization(tmp_path)
+    run_id = planned.record.scientific_run_id
+
+    changed = reconcile_run_objects(tmp_path, clock=_clock)
+
+    assert [item.object_id for item in changed] == [planned.object_id]
+    record = changed[0].record
+    assert record.state is RunState.COMPLETED
+    assert record.transition_history[-1].event is RunEvent.RECOVER_COMPLETION
+    assert record.active_attempt_id is None
+    assert checked == [run_id]
+
+
+def test_reconcile_interrupts_when_the_receipt_does_not_verify(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """An unverified receipt changes nothing about owner loss."""
+    _receipt(monkeypatch, "artifact report.json is missing")
+    planned = _stranded_in_finalization(tmp_path)
+
+    record = reconcile_run_object(planned.object_id, results=tmp_path).record
+
+    assert record.state is RunState.INTERRUPTED
+    assert reconcile_run_objects(tmp_path) == []
+
+
+def test_reconcile_checks_no_receipt_before_finalization(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A run lost while simulating cannot have finished."""
+    checked = _receipt(monkeypatch, None)
+    planned = _planned(tmp_path)
+    lease = _start(tmp_path, planned)
+    lease.commit_progress(phase=RunPhase.SIMULATING, checkpoint=CHECKPOINT)
+    lease.release()
+
+    record = reconcile_run_object(planned.object_id, results=tmp_path).record
+
+    assert record.state is RunState.INTERRUPTED
+    assert checked == []
+
+
+@pytest.mark.parametrize("stop", ["interrupt", "fail"])
+def test_reconcile_recovers_a_stopped_finalization(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, stop: str
+) -> None:
+    """An interrupted or failed finalization whose receipt verifies completes."""
+    _receipt(monkeypatch, "not yet")
+    planned = _planned(tmp_path)
+    if stop == "fail":
+        with pytest.raises(OSError), _start(tmp_path, planned) as lease:
+            lease.commit_progress(phase=RunPhase.FINALIZING, checkpoint=CHECKPOINT)
+            raise OSError("disk full")
+    else:
+        lease = _start(tmp_path, planned)
+        lease.commit_progress(phase=RunPhase.FINALIZING, checkpoint=CHECKPOINT)
+        lease.release()
+        reconcile_run_object(planned.object_id, results=tmp_path)
+    stopped = read_run_object(planned.object_id, results=tmp_path).record
+    assert stopped.state in {RunState.INTERRUPTED, RunState.FAILED}
+    _receipt(monkeypatch, None)
+
+    record = reconcile_run_object(planned.object_id, results=tmp_path).record
+
+    assert record.state is RunState.COMPLETED
+    assert record.last_error is None
+
+
+def test_reconcile_leaves_a_live_finalization_alone(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A worker still publishing is never completed behind its back."""
+    checked = _receipt(monkeypatch, None)
+    planned = _planned(tmp_path)
+    lease = _start(tmp_path, planned)
+    lease.commit_progress(phase=RunPhase.FINALIZING, checkpoint=CHECKPOINT)
+
+    assert reconcile_run_objects(tmp_path) == []
+
+    assert checked == []
+    assert lease.finish(RunEvent.COMPLETE).record.state is RunState.COMPLETED
+
+
+def test_the_owner_can_request_its_own_pause(tmp_path: Path) -> None:
+    """`request_pause` on the lease pauses a running run and nothing else."""
+    planned = _planned(tmp_path)
+    lease = _start(tmp_path, planned)
+    pausing = lease.request_pause().record
+    assert pausing.state is RunState.PAUSING
+    assert lease.request_pause().record.revision == pausing.revision
+    lease.commit_progress(checkpoint=CHECKPOINT)
+    assert lease.finish(RunEvent.COMMIT_PAUSE).record.state is RunState.PAUSED
+
+
+def test_a_stale_owner_cannot_request_a_pause(tmp_path: Path) -> None:
+    """A pause request from a fenced attempt is refused."""
+    planned = _planned(tmp_path)
+    stale = _start(tmp_path, planned)
+    stale.commit_progress(checkpoint=CHECKPOINT)
+    stale_lock = stale._lock
+    stale._lock = None
+    assert stale_lock is not None
+    stale_lock.close()
+    interrupted = reconcile_run_object(planned.object_id, results=tmp_path)
+    resumed = resume_run_object(
+        planned.object_id,
+        expected_revision=interrupted.record.revision,
+        results=tmp_path,
+        attempt_factory=lambda: "att-" + "f" * 32,
+    )
+    assert resumed.lease is not None
+    stale._lock = stale_lock
+    with pytest.raises(AttemptMismatchError):
+        stale.request_pause()
+    assert read_run_object(planned.object_id, results=tmp_path).record.state is (
+        RunState.RUNNING
+    )
+    resumed.lease.release()
 
 
 def test_cancel_wins_until_the_owner_completes(tmp_path: Path) -> None:

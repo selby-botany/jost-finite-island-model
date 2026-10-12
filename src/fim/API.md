@@ -761,6 +761,7 @@ Return to the [source-tree orientation](../README.md) or the [developer guide](.
   * [default\_directory\_mode](#fim.paths.default_directory_mode)
   * [write\_text\_atomically](#fim.paths.write_text_atomically)
   * [replace\_with\_retry](#fim.paths.replace_with_retry)
+  * [STAGING\_LOCK\_FILENAME](#fim.paths.STAGING_LOCK_FILENAME)
   * [atomic\_directory](#fim.paths.atomic_directory)
   * [default\_output\_directory](#fim.paths.default_output_directory)
   * [project\_root](#fim.paths.project_root)
@@ -1026,6 +1027,7 @@ Return to the [source-tree orientation](../README.md) or the [developer guide](.
     * [commit\_progress](#fim.persistence.run_ownership.ExecutionLease.commit_progress)
     * [current](#fim.persistence.run_ownership.ExecutionLease.current)
     * [finish](#fim.persistence.run_ownership.ExecutionLease.finish)
+    * [request\_pause](#fim.persistence.run_ownership.ExecutionLease.request_pause)
     * [release](#fim.persistence.run_ownership.ExecutionLease.release)
   * [abandon\_run\_object](#fim.persistence.run_ownership.abandon_run_object)
   * [attempt\_lock\_path](#fim.persistence.run_ownership.attempt_lock_path)
@@ -1036,6 +1038,12 @@ Return to the [source-tree orientation](../README.md) or the [developer guide](.
   * [request\_pause](#fim.persistence.run_ownership.request_pause)
   * [resume\_run\_object](#fim.persistence.run_ownership.resume_run_object)
   * [start\_run\_object](#fim.persistence.run_ownership.start_run_object)
+* [fim.persistence.run\_receipt](#fim.persistence.run_receipt)
+  * [RECEIPT\_FILENAME](#fim.persistence.run_receipt.RECEIPT_FILENAME)
+  * [BATCH\_SUMMARY\_KEY](#fim.persistence.run_receipt.BATCH_SUMMARY_KEY)
+  * [BATCH\_SUMMARY\_FILENAME](#fim.persistence.run_receipt.BATCH_SUMMARY_FILENAME)
+  * [ARTIFACT\_FILENAMES](#fim.persistence.run_receipt.ARTIFACT_FILENAMES)
+  * [receipt\_problem](#fim.persistence.run_receipt.receipt_problem)
 * [fim.persistence.scalar\_snapshot](#fim.persistence.scalar_snapshot)
   * [SnapshotError](#fim.persistence.scalar_snapshot.SnapshotError)
   * [export\_population](#fim.persistence.scalar_snapshot.export_population)
@@ -1044,6 +1052,13 @@ Return to the [source-tree orientation](../README.md) or the [developer guide](.
   * [import\_population](#fim.persistence.scalar_snapshot.import_population)
   * [import\_registries](#fim.persistence.scalar_snapshot.import_registries)
   * [import\_rng](#fim.persistence.scalar_snapshot.import_rng)
+* [fim.persistence.staging](#fim.persistence.staging)
+  * [STAGING\_GRACE\_SECONDS](#fim.persistence.staging.STAGING_GRACE_SECONDS)
+  * [CHECKPOINT\_STAGING\_PREFIX](#fim.persistence.staging.CHECKPOINT_STAGING_PREFIX)
+  * [StagingKind](#fim.persistence.staging.StagingKind)
+  * [OrphanStaging](#fim.persistence.staging.OrphanStaging)
+  * [find\_orphan\_staging](#fim.persistence.staging.find_orphan_staging)
+  * [reclaim\_orphan\_staging](#fim.persistence.staging.reclaim_orphan_staging)
 * [fim.persistence.store](#fim.persistence.store)
   * [TrajectoryRow](#fim.persistence.store.TrajectoryRow)
   * [TrajectoryStore](#fim.persistence.store.TrajectoryStore)
@@ -1223,7 +1238,9 @@ Return to the [source-tree orientation](../README.md) or the [developer guide](.
     * [\_\_post\_init\_\_](#fim.run_service.CheckpointCadence.__post_init__)
   * [cancel\_run\_object](#fim.run_service.cancel_run_object)
   * [check\_run\_support](#fim.run_service.check_run_support)
+  * [completion\_was\_recovered](#fim.run_service.completion_was_recovered)
   * [default\_store\_factory](#fim.run_service.default_store_factory)
+  * [diagnose\_run\_object](#fim.run_service.diagnose_run_object)
   * [execute\_run\_object](#fim.run_service.execute_run_object)
   * [replicate\_directory](#fim.run_service.replicate_directory)
 * [fim.statistics](#fim.statistics)
@@ -1387,6 +1404,10 @@ Return to the [source-tree orientation](../README.md) or the [developer guide](.
   * [write\_reproducibility\_note](#fim.sweep_run.write_reproducibility_note)
   * [PointResult](#fim.sweep_run.PointResult)
   * [sweep\_point\_results](#fim.sweep_run.sweep_point_results)
+* [fim.termination](#fim.termination)
+  * [TERMINATED\_EXIT\_STATUS](#fim.termination.TERMINATED_EXIT_STATUS)
+  * [sigterm\_raises\_exit](#fim.termination.sigterm_raises_exit)
+  * [sigterm\_requests\_stop](#fim.termination.sigterm_requests_stop)
 * [fim.update](#fim.update)
   * [compare\_versions](#fim.update.compare_versions)
   * [fetch\_latest\_release](#fim.update.fetch_latest_release)
@@ -1973,10 +1994,13 @@ finished. Every command here calls `fim.run_service` or
 
 `start` and `resume` execute in the foreground. From another terminal,
 `pause` asks the running command to publish a checkpoint and stop, and
-`cancel` asks it to stop and keep its partial trajectory. A command that is
-killed leaves the object `running` until any later command notices that its
-owner is gone and records it as `interrupted`; `resume` then continues from
-the latest checkpoint.
+`cancel` asks it to stop and keep its partial trajectory. SIGTERM pauses
+the command the same way; a second SIGTERM ends it at once. A command that
+is killed leaves the object `running` until any later command notices that
+its owner is gone and records it as `interrupted`; `resume` then continues
+from the latest checkpoint. A command killed after it published every
+artifact is recorded as `completed` instead, once its completion receipt
+verifies.
 
 <a id="fim.cli_objects.add_object_subcommands"></a>
 
@@ -1987,7 +2011,7 @@ def add_object_subcommands(
         subcommands: argparse._SubParsersAction[Any]) -> None
 ```
 
-Wire `fim object create/edit/list/status/start/resume/pause/cancel/delete`.
+Wire `fim object` and its subcommands, `create` through `reclaim`.
 
 <a id="fim.cli_objects.command_object"></a>
 
@@ -20259,6 +20283,12 @@ for the whole window still raises the original error.
 
 - `PermissionError` - If every attempt was refused.
 
+<a id="fim.paths.STAGING_LOCK_FILENAME"></a>
+
+#### STAGING\_LOCK\_FILENAME
+
+The owner lock `atomic_directory` holds inside its staging directory.
+
 <a id="fim.paths.atomic_directory"></a>
 
 #### atomic\_directory
@@ -20308,11 +20338,13 @@ is no third, partial state ever observable from outside this
 function.
 
 A process that is *killed* is different: SIGKILL, or a SIGTERM with no
-handler installed (the CLI installs none), ends Python without running
-the cleanup below. `target` is still never half-written, but the
-hidden temporary sibling is left behind. Reclaiming those orphans is
-part of the run lifecycle design
-(`20261006-gpt-6.1-sol-run-lifecycle-and-checkpoint-design.md`,
+handler installed, ends Python without running the cleanup below
+(`fim run` turns its first SIGTERM into `SystemExit` precisely so the
+cleanup does run; see `fim.termination`). `target` is still never
+half-written, but the hidden temporary sibling is left behind.
+`fim.persistence.staging.find_orphan_staging` reports such orphans,
+and reclaims those whose builder is provably gone (run lifecycle design
+`20261006-gpt-6.1-sol-run-lifecycle-and-checkpoint-design.md`,
 `selby/restricted`, sections 2, 5 and 11).
 
 This guarantee is about the *rename* being all-or-nothing, not about
@@ -23130,15 +23162,21 @@ A non-blocking lock request found the lock already held.
 
 ```python
 @contextmanager
-def exclusive_lock(path: Path, *, blocking: bool = True) -> Iterator[None]
+def exclusive_lock(path: Path,
+                   *,
+                   blocking: bool = True,
+                   create: bool = True) -> Iterator[None]
 ```
 
 Hold an exclusive cross-process lock on `path` for the block.
 
 **Arguments**:
 
-- `path` - The lock file; created, with its parent, if missing.
+- `path` - The lock file.
 - `blocking` - Wait for the lock (default) or fail at once if held.
+- `create` - Create the lock file, with its parent, if missing
+  (default). Without it a missing file raises instead, so a
+  lock its owner already deleted is never recreated and taken.
 
 
 **Yields**:
@@ -23149,6 +23187,7 @@ Hold an exclusive cross-process lock on `path` for the block.
 **Raises**:
 
 - `LockUnavailableError` - `blocking` is false and the lock is held.
+- `FileNotFoundError` - `create` is false and the lock file is missing.
 
 <a id="fim.persistence.object_lock.is_lock_held"></a>
 
@@ -23762,7 +23801,11 @@ never picks between the two directly.
 The remaining states follow the Run lifecycle design
 (`20261006-gpt-6.1-sol-run-lifecycle-and-checkpoint-design.md`,
 `selby/restricted`, section 4). `completed` and `cancelled` are terminal.
-Delete is removal of the object, not a state. Phase, scientific outcome,
+Delete is removal of the object, not a state. One event, `recover-completion`,
+is added to that design: a worker that published its completion receipt
+but stopped before committing `completed` is completed by reconciliation
+once the receipt verifies. A release that predates the event cannot read a
+record whose history contains it. Phase, scientific outcome,
 execution kind, and protection are attributes of the record, never extra
 state values.
 
@@ -24338,7 +24381,8 @@ Return the record that results from applying one event.
 **Raises**:
 
 - `RevisionConflictError` - `expected_revision` is stale.
-- `IllegalTransitionError` - The event is not legal in the current state.
+- `IllegalTransitionError` - The event is not legal in the current state,
+  or `recover-completion` is applied outside the finalizing phase.
 - `AttemptMismatchError` - A worker event names an attempt that does not
   own execution, or a start/resume omits its new attempt.
 - `CommandKeyReuseError` - `command_key` already produced a transition.
@@ -25465,6 +25509,29 @@ Commit a finishing event and release the attempt.
 - `AttemptMismatchError` - This attempt no longer owns execution.
 - `IllegalTransitionError` - The event is not legal now.
 
+<a id="fim.persistence.run_ownership.ExecutionLease.request_pause"></a>
+
+#### request\_pause
+
+```python
+def request_pause() -> RunObject
+```
+
+Ask this attempt itself to pause, as a SIGTERM does.
+
+A `running` object becomes `pausing`; the worker then pauses at its
+next safe point exactly as if a controller had asked. An object
+already pausing or cancelling is left as it is.
+
+**Returns**:
+
+  The object after the request.
+
+
+**Raises**:
+
+- `AttemptMismatchError` - This attempt no longer owns execution.
+
 <a id="fim.persistence.run_ownership.ExecutionLease.release"></a>
 
 #### release
@@ -25540,11 +25607,16 @@ def reconcile_run_object(object_id: str,
                          clock: Clock | None = None) -> RunObject
 ```
 
-Record owner loss for an active run whose attempt lock is free.
+Record what became of a run whose owner is gone.
 
 A live owner always holds the attempt lock, so a free lock proves the
-owner is gone; a timeout alone never does. Inactive runs and runs with
-a live owner are returned unchanged.
+owner is gone; a timeout alone never does. An active run whose owner
+is gone is recorded as `interrupted`, unless it was finalizing and its
+completion receipt verifies (`fim.persistence.run_receipt`): then the
+owner published every artifact and only the commit was lost, so the
+run is recorded as `completed`. An `interrupted` or `failed` run that
+stopped while finalizing is completed the same way once its receipt
+verifies. Every other run is returned unchanged.
 
 **Arguments**:
 
@@ -25577,7 +25649,8 @@ Reconcile every readable object; return those that changed state.
 
 **Returns**:
 
-  The objects newly recorded as `interrupted`.
+  The objects newly recorded as `interrupted` or recovered as
+  `completed`.
 
 <a id="fim.persistence.run_ownership.request_cancel"></a>
 
@@ -25713,6 +25786,77 @@ must match the digest recorded when it was saved.
 - `IllegalTransitionError` - The object is not `planned`.
 - `ConfigurationDriftError` - `config.yaml` no longer matches the digest.
 - `OwnershipConflictError` - Another live attempt holds the object.
+
+<a id="fim.persistence.run_receipt"></a>
+
+# fim.persistence.run\_receipt
+
+Verify a Run object's completion receipt before recovering completion.
+
+A worker writes a completed run's artifacts and then, last, its manifest:
+for a scalar run the run manifest, for a batch the batch manifest. That
+manifest is the run's *completion receipt*: it names the scientific run ID
+and records the size and SHA-256 digest of every other artifact. A worker
+that stops after publishing the receipt but before committing `completed`
+leaves a run whose output is whole. Reconciliation completes such a run
+(`recover-completion`) only when the receipt verifies here; otherwise the
+run is interrupted and a resume finalizes it again.
+
+Verification is strict: the receipt must parse, name the run's own ID, and
+match every file it lists. A batch receipt is checked recursively, each
+replicate's own receipt included. File sizes are compared before any file
+is hashed, so a truncated or missing artifact is rejected cheaply.
+
+<a id="fim.persistence.run_receipt.RECEIPT_FILENAME"></a>
+
+#### RECEIPT\_FILENAME
+
+The completion receipt, written after every artifact it lists.
+
+<a id="fim.persistence.run_receipt.BATCH_SUMMARY_KEY"></a>
+
+#### BATCH\_SUMMARY\_KEY
+
+The batch receipt's digest key for `summary.json`.
+
+<a id="fim.persistence.run_receipt.BATCH_SUMMARY_FILENAME"></a>
+
+#### BATCH\_SUMMARY\_FILENAME
+
+A completed batch's cross-replicate summary.
+
+<a id="fim.persistence.run_receipt.ARTIFACT_FILENAMES"></a>
+
+#### ARTIFACT\_FILENAMES
+
+Each scalar artifact key a receipt may list, and the file it names.
+
+The same names `fim.cli._run_artifact_targets` and
+`fim.gui.runner.run_artifact_targets` use, less the receipt itself; a test
+keeps the three in agreement.
+
+<a id="fim.persistence.run_receipt.receipt_problem"></a>
+
+#### receipt\_problem
+
+```python
+def receipt_problem(directory: Path, *, kind: RunKind,
+                    run_id: str) -> str | None
+```
+
+Return why a run's completion receipt does not verify, or `None`.
+
+**Arguments**:
+
+- `directory` - The Run object's directory.
+- `kind` - Whether the run is one replicate or a batch.
+- `run_id` - The scientific run ID the receipt must name.
+
+
+**Returns**:
+
+  `None` when the receipt and every artifact it lists verify;
+  otherwise a short description of the first problem found.
 
 <a id="fim.persistence.scalar_snapshot"></a>
 
@@ -25900,6 +26044,136 @@ Rebuild a generator exported by `export_rng`.
 **Raises**:
 
 - `SnapshotError` - If anything is missing or malformed.
+
+<a id="fim.persistence.staging"></a>
+
+# fim.persistence.staging
+
+Find and reclaim staging directories that a killed process left behind.
+
+Two writers build output in a hidden staging directory and publish it with
+one atomic rename:
+
+- `fim.paths.atomic_directory` stages a run's output folder, or a new Run
+  object's directory, as `.<name>.<random>` beside the target. It holds an
+  owner lock, `.fim-staging.lock`, inside the staging directory while it
+  builds and removes it just before the rename.
+- `fim.persistence.run_checkpoint.publish_checkpoint` stages a checkpoint
+  as `checkpoints/.staging-<id>` inside its object directory, only while
+  the object's attempt lock is held.
+
+A process killed by SIGKILL (or power loss) runs no cleanup, so its staging
+directory stays. A staging directory is reclaimed only when its builder is
+provably gone:
+
+- output staging: its owner lock exists, nobody holds it, and it is older
+  than a grace period, which covers the instant between creating the lock
+  file and locking it;
+- checkpoint staging: the object's attempt lock can be taken, and is held
+  while the directory is removed, so no attempt can start meanwhile.
+
+Output staging with no owner lock predates the lock (or failed in the
+instant before the rename). It is reported but never removed automatically,
+because nothing proves its builder is gone.
+
+Only the results directory itself and its `objects/` directory are scanned
+for output staging; a run published elsewhere with `fim run --output` is
+not.
+
+<a id="fim.persistence.staging.STAGING_GRACE_SECONDS"></a>
+
+#### STAGING\_GRACE\_SECONDS
+
+Minimum age of an unheld owner lock before its staging is reclaimed.
+
+<a id="fim.persistence.staging.CHECKPOINT_STAGING_PREFIX"></a>
+
+#### CHECKPOINT\_STAGING\_PREFIX
+
+Prefix of a checkpoint's staging directory (`run_checkpoint`).
+
+<a id="fim.persistence.staging.StagingKind"></a>
+
+## StagingKind Objects
+
+```python
+class StagingKind(StrEnum)
+```
+
+Which writer created a staging directory.
+
+<a id="fim.persistence.staging.OrphanStaging"></a>
+
+## OrphanStaging Objects
+
+```python
+@dataclass(frozen=True, slots=True)
+class OrphanStaging()
+```
+
+A staging directory no live writer is building.
+
+**Attributes**:
+
+- `path` - The staging directory.
+- `kind` - Which writer created it.
+- `reclaimable` - Whether its builder is provably gone.
+- `reason` - Why it is, or is not, reclaimable.
+
+<a id="fim.persistence.staging.find_orphan_staging"></a>
+
+#### find\_orphan\_staging
+
+```python
+def find_orphan_staging(
+        results: Path | None = None,
+        *,
+        now: Callable[[], float] = time.time,
+        grace_seconds: float = STAGING_GRACE_SECONDS) -> list[OrphanStaging]
+```
+
+Return every staging directory no live writer is building.
+
+**Arguments**:
+
+- `results` - Results directory (default: `results_directory()`).
+- `now` - Current time in seconds since the epoch, for the grace period.
+- `grace_seconds` - Minimum age of an unheld owner lock.
+
+
+**Returns**:
+
+  The orphans, sorted by path. A staging directory whose writer is
+  alive, or whose owner lock is too new to judge, is not listed.
+
+<a id="fim.persistence.staging.reclaim_orphan_staging"></a>
+
+#### reclaim\_orphan\_staging
+
+```python
+def reclaim_orphan_staging(
+        results: Path | None = None,
+        *,
+        dry_run: bool = False,
+        now: Callable[[], float] = time.time,
+        grace_seconds: float = STAGING_GRACE_SECONDS) -> list[OrphanStaging]
+```
+
+Remove every reclaimable orphan staging directory.
+
+**Arguments**:
+
+- `results` - Results directory (default: `results_directory()`).
+- `dry_run` - Report what would be removed without removing it.
+- `now` - Current time in seconds since the epoch, for the grace period.
+- `grace_seconds` - Minimum age of an unheld owner lock.
+
+
+**Returns**:
+
+  Every orphan found, reclaimable or not, sorted by path. Without
+  `dry_run`, each reclaimable one has been removed, unless a writer
+  claimed it meanwhile.
 
 <a id="fim.persistence.store"></a>
 
@@ -29078,6 +29352,28 @@ Refuse a configuration no resumable session can run.
 
 - `UnsupportedSessionError` - If the resolved backend cannot be built.
 
+<a id="fim.run_service.completion_was_recovered"></a>
+
+#### completion\_was\_recovered
+
+```python
+def completion_was_recovered(record: RunLifecycleRecord) -> bool
+```
+
+Return whether reconciliation, not a worker, committed completion.
+
+Such a run's worker published a verified completion receipt and then
+stopped before committing `completed` (`fim.persistence.run_receipt`).
+
+**Arguments**:
+
+- `record` - A lifecycle record.
+
+
+**Returns**:
+
+  Whether the record is `completed` by `recover-completion`.
+
 <a id="fim.run_service.default_store_factory"></a>
 
 #### default\_store\_factory
@@ -29089,25 +29385,50 @@ def default_store_factory(path: Path,
 
 Open the trajectory log with the options the run's Expert Settings choose.
 
+<a id="fim.run_service.diagnose_run_object"></a>
+
+#### diagnose\_run\_object
+
+```python
+def diagnose_run_object(run_object: RunObject) -> tuple[str, ...]
+```
+
+Explain what would stop a Run object from resuming or being trusted.
+
+Read-only: nothing is repaired or recorded. Each problem is one
+sentence a person can act on: a corrupt checkpoint or one written by
+an incompatible release, a stopped run with no checkpoint, a
+configuration this release cannot run, an unfinished finalization, or
+a completed run whose published results no longer match their receipt.
+
+**Arguments**:
+
+- `run_object` - The object to examine.
+
+
+**Returns**:
+
+  The problems found, in a fixed order; empty if there are none.
+
 <a id="fim.run_service.execute_run_object"></a>
 
 #### execute\_run\_object
 
 ```python
 def execute_run_object(
-    object_id: str,
-    *,
-    write_artifacts: ArtifactWriter,
-    results: Path | None = None,
-    clock: Clock | None = None,
-    cadence: CheckpointCadence | None = None,
-    monotonic: Callable[[], float] = time.monotonic,
-    store_factory: StoreFactory = default_store_factory,
-    attempt_factory: AttemptFactory | None = None,
-    command_key: str | None = None,
-    observer: ProgressObserver | None = None,
-    check_support: Callable[[SimulationParams], object] | None = None
-) -> RunObject
+        object_id: str,
+        *,
+        write_artifacts: ArtifactWriter,
+        results: Path | None = None,
+        clock: Clock | None = None,
+        cadence: CheckpointCadence | None = None,
+        monotonic: Callable[[], float] = time.monotonic,
+        store_factory: StoreFactory = default_store_factory,
+        attempt_factory: AttemptFactory | None = None,
+        command_key: str | None = None,
+        observer: ProgressObserver | None = None,
+        check_support: Callable[[SimulationParams], object] | None = None,
+        stop_requested: Callable[[], bool] | None = None) -> RunObject
 ```
 
 Start or resume a Run object and execute it until it stops.
@@ -29130,12 +29451,17 @@ Start or resume a Run object and execute it until it stops.
   raising `UnsupportedSessionError` (default:
   `check_run_support`, which accepts scalars and batches). A
   caller that handles only one shape narrows it.
+- `stop_requested` - Polled at each safe point; once it returns true
+  the run pauses there, as `fim.termination.sigterm_requests_stop`
+  arranges for SIGTERM. It must not block or take locks.
 
 
 **Returns**:
 
   The object after this attempt stopped: `completed`, `paused`, or
-  `cancelled`. A replayed request returns the object unchanged.
+  `cancelled`. A replayed request returns the object unchanged, and
+  so does an object whose completion reconciliation just recovered
+  (`completion_was_recovered`).
 
 
 **Raises**:
@@ -33372,6 +33698,66 @@ across replicates); a scalar point reads its `report.json`. A point
 whose files cannot be read is left out, like a missing run directory
 elsewhere in the Study code. Nothing is stored: the aggregate is
 computed each time from small JSON files.
+
+<a id="fim.termination"></a>
+
+# fim.termination
+
+Turn SIGTERM into an orderly stop for command-line runs.
+
+Python ends at once on SIGTERM unless a handler is installed, so nothing
+cleans up: a Run object stays `running` until reconciliation records it as
+`interrupted`, and `fim run` leaves its hidden staging directory behind.
+
+Two policies are offered, each for the duration of a `with` block:
+
+- `sigterm_requests_stop` only sets a flag. The Run object worker polls it
+  at safe points, publishes a checkpoint, and pauses. The handler must not
+  take a lock: `flock` locks belong to an open file description, so taking
+  the object lock from a handler while the interrupted code holds it would
+  deadlock.
+- `sigterm_raises_exit` raises `SystemExit(143)` in the main thread, so
+  `fim.paths.atomic_directory` discards its staging directory.
+
+Either handler restores the default action as soon as it runs, so a second
+SIGTERM ends the process immediately. Outside the main thread, where Python
+cannot install handlers, both blocks do nothing.
+
+<a id="fim.termination.TERMINATED_EXIT_STATUS"></a>
+
+#### TERMINATED\_EXIT\_STATUS
+
+The exit status a shell reports for a process ended by SIGTERM.
+
+<a id="fim.termination.sigterm_raises_exit"></a>
+
+#### sigterm\_raises\_exit
+
+```python
+@contextlib.contextmanager
+def sigterm_raises_exit() -> Iterator[None]
+```
+
+Raise `SystemExit(143)` on the first SIGTERM within the block.
+
+**Yields**:
+
+  Nothing.
+
+<a id="fim.termination.sigterm_requests_stop"></a>
+
+#### sigterm\_requests\_stop
+
+```python
+@contextlib.contextmanager
+def sigterm_requests_stop() -> Iterator[Callable[[], bool]]
+```
+
+Record the first SIGTERM within the block as a stop request.
+
+**Yields**:
+
+  A callable returning whether SIGTERM arrived; it never blocks.
 
 <a id="fim.update"></a>
 

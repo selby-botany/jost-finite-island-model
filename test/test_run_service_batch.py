@@ -33,17 +33,19 @@ from fim.persistence.manifest import (
     verify_trajectory_integrity,
 )
 from fim.persistence.report import write_report
-from fim.persistence.run_lifecycle import RunState
+from fim.persistence.run_lifecycle import RunKind, RunState
 from fim.persistence.run_objects import (
     RunObject,
     create_run_object,
     read_run_object,
 )
 from fim.persistence.run_ownership import request_cancel, request_pause
+from fim.persistence.run_receipt import receipt_problem
 from fim.persistence.tlog import iter_frames
 from fim.run_service import (
     CheckpointCadence,
     Session,
+    completion_was_recovered,
     execute_run_object,
     replicate_directory,
 )
@@ -390,3 +392,100 @@ def test_a_refused_configuration_is_not_recorded_as_a_failure(
     record = read_run_object(OBJECT_ID, results=tmp_path).record
     assert record.state is RunState.PLANNED
     assert record.revision == 1
+
+
+def _batch_problem(finished: RunObject) -> str | None:
+    """Check the batch object's completion receipt."""
+    run_id = finished.record.scientific_run_id
+    assert run_id is not None
+    return receipt_problem(finished.directory, kind=RunKind.BATCH, run_id=run_id)
+
+
+def _rewrite_batch_receipt(directory: Path, change: Callable[[Any], object]) -> None:
+    """Apply `change` to the parsed batch receipt and write it back."""
+    path = directory / "manifest.json"
+    document = json.loads(path.read_text(encoding="utf-8"))
+    change(document)
+    path.write_text(json.dumps(document), encoding="utf-8")
+
+
+def test_a_published_batch_receipt_verifies_recursively(tmp_path: Path) -> None:
+    """The batch receipt, its summary, and every replicate verify; damage does not."""
+    _create(tmp_path)
+    finished = _execute(tmp_path, _Writer())
+    assert _batch_problem(finished) is None
+    report = finished.directory / "replicate-002" / "report.json"
+    report.write_bytes(report.read_bytes()[:-1])
+    assert _batch_problem(finished) == (
+        f"artifact {report} does not have its recorded size"
+    )
+
+
+@pytest.mark.parametrize(
+    ("change", "expected"),
+    [
+        (
+            lambda document: document["artifacts"].pop("summary"),
+            "lists unexpected artifacts",
+        ),
+        (
+            lambda document: document["replicate_run_ids"].__setitem__(0, "run-x-r001"),
+            "names a foreign replicate 'run-x-r001'",
+        ),
+    ],
+)
+def test_a_batch_receipt_with_the_wrong_contents_is_rejected(
+    tmp_path: Path, change: Callable[[Any], object], expected: str
+) -> None:
+    """Every replicate must be one of this batch's, each listed once."""
+    _create(tmp_path)
+    finished = _execute(tmp_path, _Writer())
+    _rewrite_batch_receipt(finished.directory, change)
+    problem = _batch_problem(finished)
+    assert problem is not None
+    assert expected in problem
+
+
+def test_a_batch_killed_after_its_receipt_is_recovered(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A batch whose receipt was published completes without running again."""
+    _create(tmp_path)
+    publish = run_service.write_batch_manifest
+
+    def publish_then_die(path: Path, manifest: Any) -> None:
+        publish(path, manifest)
+        raise KeyboardInterrupt
+
+    monkeypatch.setattr(run_service, "write_batch_manifest", publish_then_die)
+    with pytest.raises(KeyboardInterrupt):
+        _execute(tmp_path, _Writer())
+    monkeypatch.setattr(run_service, "write_batch_manifest", publish)
+    writer = _Writer()
+
+    recovered = _execute(tmp_path, writer)
+
+    assert completion_was_recovered(recovered.record)
+    assert not writer.results
+
+
+def test_a_batch_killed_before_its_receipt_finalizes_again(tmp_path: Path) -> None:
+    """Replicates published before the kill do not complete the batch."""
+    _create(tmp_path)
+
+    class _DieOnSecond(_Writer):
+        def __call__(self, result: RunResult, directory: Path) -> None:
+            if self.results:
+                raise KeyboardInterrupt
+            super().__call__(result, directory)
+
+    with pytest.raises(KeyboardInterrupt):
+        _execute(tmp_path, _DieOnSecond())
+    writer = _Writer()
+
+    finished = _execute(tmp_path, writer)
+
+    assert finished.record.state is RunState.COMPLETED
+    assert not completion_was_recovered(finished.record)
+    assert len(writer.results) == 3
+    assert _batch_problem(finished) is None

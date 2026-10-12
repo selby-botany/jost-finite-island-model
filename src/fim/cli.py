@@ -138,6 +138,7 @@ from fim.persistence.run_metadata import (
     write_run_labels,
 )
 from fim.persistence.tlog_export import DEFAULT_EXPORT_WORKERS, export_trajectory
+from fim.termination import sigterm_raises_exit
 from fim.viz.scatter import plot_frequency_scatter
 
 logger = logging.getLogger(__name__)
@@ -357,7 +358,9 @@ def _dispatch_command(
     """
     handlers: dict[str, Callable[[], int]] = {
         "init": lambda: _command_init(arguments),
-        "run": lambda: _command_run(arguments, parser),
+        # SIGTERM unwinds like ^C, so the run's staging directory is
+        # discarded rather than orphaned (`fim.termination`).
+        "run": lambda: _terminable(lambda: _command_run(arguments, parser)),
         "study": lambda: _command_study(arguments, parser),
         "experiment": lambda: _command_experiment(arguments, parser),
         "sweep": lambda: command_sweep(arguments, parser),
@@ -1359,6 +1362,17 @@ def _convergence_history_rows(result: RunResult) -> list[dict[str, object]]:
         {"generation": generation, **{name: aligned[name][index] for name in aligned}}
         for index, generation in enumerate(result.convergence_generations)
     ]
+
+
+def _terminable(command: Callable[[], int]) -> int:
+    """Run `command`, turning the first SIGTERM into `SystemExit(143)`.
+
+    The exit unwinds every `with` block, so `fim.paths.atomic_directory`
+    discards an unfinished run's staging directory; a second SIGTERM ends
+    the process at once.
+    """
+    with sigterm_raises_exit():
+        return command()
 
 
 def _utc_now() -> datetime:

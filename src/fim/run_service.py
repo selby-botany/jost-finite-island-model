@@ -49,7 +49,11 @@ import yaml
 from fim import __version__
 from fim.batch_session import BatchSession, check_batch_session_support
 from fim.engine import RunResult, replicate_summary
-from fim.execution import ScalarSession, check_session_support
+from fim.execution import (
+    ScalarSession,
+    UnsupportedSessionError,
+    check_session_support,
+)
 from fim.model.params import SimulationParams
 from fim.persistence.binary_store import (
     TRAJECTORY_LOG_FILENAME,
@@ -64,12 +68,17 @@ from fim.persistence.manifest import (
     write_batch_manifest,
 )
 from fim.persistence.report import write_report
-from fim.persistence.run_checkpoint import load_checkpoint
+from fim.persistence.run_checkpoint import (
+    CheckpointError,
+    UnsupportedCheckpointError,
+    load_checkpoint,
+)
 from fim.persistence.run_lifecycle import (
     ACTIVE_STATES,
     RESUMABLE_STATES,
     LifecycleError,
     RunEvent,
+    RunLifecycleRecord,
     RunPhase,
     RunState,
     ValidationIssue,
@@ -86,6 +95,7 @@ from fim.persistence.run_ownership import (
     resume_run_object,
     start_run_object,
 )
+from fim.persistence.run_receipt import receipt_problem
 
 logger = logging.getLogger(__name__)
 
@@ -220,9 +230,64 @@ def check_run_support(params: SimulationParams) -> None:
         check_batch_session_support(params)
 
 
+def completion_was_recovered(record: RunLifecycleRecord) -> bool:
+    """Return whether reconciliation, not a worker, committed completion.
+
+    Such a run's worker published a verified completion receipt and then
+    stopped before committing `completed` (`fim.persistence.run_receipt`).
+
+    Args:
+        record: A lifecycle record.
+
+    Returns:
+        Whether the record is `completed` by `recover-completion`.
+    """
+    history = record.transition_history
+    return (
+        record.state is RunState.COMPLETED
+        and bool(history)
+        and history[-1].event is RunEvent.RECOVER_COMPLETION
+    )
+
+
 def default_store_factory(path: Path, params: SimulationParams) -> BinaryLogStore:
     """Open the trajectory log with the options the run's Expert Settings choose."""
     return BinaryLogStore(path, **log_options(params.expert))
+
+
+def diagnose_run_object(run_object: RunObject) -> tuple[str, ...]:
+    """Explain what would stop a Run object from resuming or being trusted.
+
+    Read-only: nothing is repaired or recorded. Each problem is one
+    sentence a person can act on: a corrupt checkpoint or one written by
+    an incompatible release, a stopped run with no checkpoint, a
+    configuration this release cannot run, an unfinished finalization, or
+    a completed run whose published results no longer match their receipt.
+
+    Args:
+        run_object: The object to examine.
+
+    Returns:
+        The problems found, in a fixed order; empty if there are none.
+    """
+    record = run_object.record
+    problems: list[str] = []
+    if record.state in RESUMABLE_STATES:
+        problems.extend(_resume_problems(run_object))
+    run_id = record.scientific_run_id
+    if run_id is not None and record.state is RunState.COMPLETED:
+        problem = receipt_problem(run_object.directory, kind=record.kind, run_id=run_id)
+        if problem is not None:
+            problems.append(f"the published results are damaged: {problem}")
+    elif (
+        run_id is not None
+        and record.phase is RunPhase.FINALIZING
+        and record.state is not RunState.CANCELLED
+    ):
+        problem = receipt_problem(run_object.directory, kind=record.kind, run_id=run_id)
+        if problem is not None:
+            problems.append(f"finalization did not finish: {problem}")
+    return tuple(problems)
 
 
 def execute_run_object(
@@ -238,6 +303,7 @@ def execute_run_object(
     command_key: str | None = None,
     observer: ProgressObserver | None = None,
     check_support: Callable[[SimulationParams], object] | None = None,
+    stop_requested: Callable[[], bool] | None = None,
 ) -> RunObject:
     """Start or resume a Run object and execute it until it stops.
 
@@ -258,10 +324,15 @@ def execute_run_object(
             raising `UnsupportedSessionError` (default:
             `check_run_support`, which accepts scalars and batches). A
             caller that handles only one shape narrows it.
+        stop_requested: Polled at each safe point; once it returns true
+            the run pauses there, as `fim.termination.sigterm_requests_stop`
+            arranges for SIGTERM. It must not block or take locks.
 
     Returns:
         The object after this attempt stopped: `completed`, `paused`, or
-        `cancelled`. A replayed request returns the object unchanged.
+        `cancelled`. A replayed request returns the object unchanged, and
+        so does an object whose completion reconciliation just recovered
+        (`completion_was_recovered`).
 
     Raises:
         DraftRunError: The object is a draft.
@@ -273,6 +344,8 @@ def execute_run_object(
     """
     current = reconcile_run_object(object_id, results=results, clock=clock)
     record = current.record
+    if completion_was_recovered(record):
+        return current
     if record.state is RunState.DRAFT:
         raise DraftRunError(object_id, record.validation_issues)
     params = _load_params(current)
@@ -299,6 +372,7 @@ def execute_run_object(
                 cadence or CheckpointCadence(),
                 monotonic,
                 observer,
+                stop_requested,
             )
 
 
@@ -310,6 +384,7 @@ def _drive(
     cadence: CheckpointCadence,
     monotonic: Callable[[], float],
     observer: ProgressObserver | None,
+    stop_requested: Callable[[], bool] | None,
 ) -> RunObject:
     """Advance `session` between safe points until it stops or is told to."""
     checkpointed_generation = session.generation
@@ -318,6 +393,13 @@ def _drive(
         # A pending request is honored only while the run is still going:
         # a run that has converged completes instead.
         state = lease.current().record.state
+        if (
+            state is RunState.RUNNING
+            and stop_requested is not None
+            and stop_requested()
+        ):
+            logger.info("run object %s asked to stop; pausing", lease.object_id)
+            state = lease.request_pause().record.state
         if state is RunState.PAUSING:
             session.checkpoint(lease)
             logger.info("run object %s paused", lease.object_id)
@@ -339,8 +421,11 @@ def _drive(
             checkpointed_generation = session.generation
             checkpointed_at = monotonic()
     # The finalizing checkpoint lets an interrupted finalization resume
-    # without stepping again.
+    # without stepping again. A receipt left by an earlier attempt goes
+    # before any artifact is rewritten, so a stale receipt can never vouch
+    # for a partial rewrite (`fim.persistence.run_receipt`).
     session.checkpoint(lease)
+    (directory / MANIFEST_FILENAME).unlink(missing_ok=True)
     if isinstance(session, BatchSession):
         results = session.finalize()
         _publish_batch(
@@ -490,6 +575,30 @@ def _replicate_store_factory(
         return store_factory(replicate / TRAJECTORY_LOG_FILENAME, params)
 
     return build
+
+
+def _resume_problems(run_object: RunObject) -> list[str]:
+    """Return why a paused, interrupted, or failed run may not resume."""
+    record = run_object.record
+    problems: list[str] = []
+    try:
+        check_run_support(_load_params(run_object))
+    except UnsupportedSessionError as error:
+        problems.append(f"this release cannot run the configuration: {error}")
+    reference = record.latest_checkpoint
+    if reference is None:
+        if record.phase is not None:
+            problems.append(
+                "no checkpoint was committed; resuming starts from generation 0"
+            )
+        return problems
+    try:
+        load_checkpoint(run_object.directory, reference)
+    except UnsupportedCheckpointError as error:
+        problems.append(f"the checkpoint needs a different release: {error}")
+    except CheckpointError as error:
+        problems.append(f"the checkpoint is corrupt: {error}")
+    return problems
 
 
 def replicate_directory(directory: Path, run_id: str, replicate_run_id: str) -> Path:

@@ -60,21 +60,30 @@ class LockUnavailableError(Exception):
 
 
 @contextmanager
-def exclusive_lock(path: Path, *, blocking: bool = True) -> Iterator[None]:
+def exclusive_lock(
+    path: Path, *, blocking: bool = True, create: bool = True
+) -> Iterator[None]:
     """Hold an exclusive cross-process lock on `path` for the block.
 
     Args:
-        path: The lock file; created, with its parent, if missing.
+        path: The lock file.
         blocking: Wait for the lock (default) or fail at once if held.
+        create: Create the lock file, with its parent, if missing
+            (default). Without it a missing file raises instead, so a
+            lock its owner already deleted is never recreated and taken.
 
     Yields:
         Nothing; the lock is held until the block exits.
 
     Raises:
         LockUnavailableError: `blocking` is false and the lock is held.
+        FileNotFoundError: `create` is false and the lock file is missing.
     """
-    path.parent.mkdir(parents=True, exist_ok=True)
-    descriptor = os.open(path, os.O_RDWR | os.O_CREAT, 0o666)
+    flags = os.O_RDWR
+    if create:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        flags |= os.O_CREAT
+    descriptor = os.open(path, flags, 0o666)
     with os.fdopen(descriptor, "r+b") as handle:
         if not _lock(handle, blocking=blocking):
             raise LockUnavailableError(f"lock is held: {path}")

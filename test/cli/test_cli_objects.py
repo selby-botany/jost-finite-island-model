@@ -8,14 +8,17 @@ test depends on timing.
 from __future__ import annotations
 
 import json
+import os
 import re
+import signal
+import sys
 from pathlib import Path
 from typing import Any
 
 import pytest
 import yaml
 
-from fim import cli, run_service
+from fim import cli, paths, run_service
 from fim.examples import classes
 from fim.execution import ScalarSession
 from fim.persistence.run_objects import read_run_object
@@ -240,3 +243,106 @@ def test_an_interrupted_start_points_to_resume(
 
     assert _main(tmp_path, "object", "start", object_id) == 130
     assert f"fim object resume {object_id}" in capsys.readouterr().err
+
+
+def test_a_start_killed_after_its_receipt_is_reported_as_finished(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Every artifact was published, so resuming only records completion."""
+    object_id, _ = _create(tmp_path, capsys, _config(tmp_path))
+    original = run_service.execute_run_object
+
+    def killed_after_publishing(object_id: str, **kwargs: Any) -> Any:
+        write = kwargs.pop("write_artifacts")
+
+        def write_then_die(result: Any, directory: Path) -> None:
+            write(result, directory)
+            raise KeyboardInterrupt
+
+        return original(object_id, write_artifacts=write_then_die, **kwargs)
+
+    monkeypatch.setattr("fim.cli_objects.execute_run_object", killed_after_publishing)
+    assert _main(tmp_path, "object", "start", object_id) == 130
+    capsys.readouterr()
+    monkeypatch.setattr("fim.cli_objects.execute_run_object", original)
+
+    assert _main(tmp_path, "object", "resume", object_id) == 0
+    output = capsys.readouterr().out
+    assert f"{object_id} had already finished; it is completed" in output
+    assert _main(tmp_path, "object", "status", object_id) == 0
+    assert "Problems:" not in capsys.readouterr().out
+
+
+def test_status_lists_problems_with_published_results(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """Damaged artifacts appear in text status; the JSON record is unchanged."""
+    object_id, _ = _create(tmp_path, capsys, _config(tmp_path))
+    assert _main(tmp_path, "object", "start", object_id) == 0
+    finished = read_run_object(object_id, results=_results(tmp_path))
+    (finished.directory / "report.json").write_text("{}", encoding="utf-8")
+    capsys.readouterr()
+
+    assert _main(tmp_path, "object", "status", object_id) == 0
+    output = capsys.readouterr().out
+    assert _main(tmp_path, "object", "status", object_id, "--json") == 0
+    record = json.loads(capsys.readouterr().out)
+
+    assert "Problems:\n  - the published results are damaged: " in output
+    assert "report.json" in output
+    assert "problems" not in record
+
+
+@pytest.mark.skipif(sys.platform == "win32", reason="SIGTERM to self is POSIX")
+def test_sigterm_pauses_a_foreground_start(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """SIGTERM at generation 15 checkpoints and pauses instead of dying."""
+    object_id, _ = _create(tmp_path, capsys, _config(tmp_path))
+    original = run_service.execute_run_object
+
+    def terminated_at_15(object_id: str, **kwargs: Any) -> Any:
+        def observer(session: ScalarSession) -> None:
+            if session.generation == 15:
+                os.kill(os.getpid(), signal.SIGTERM)
+
+        return original(
+            object_id,
+            cadence=run_service.CheckpointCadence(10, 1e9, 5),
+            observer=observer,
+            **kwargs,
+        )
+
+    monkeypatch.setattr("fim.cli_objects.execute_run_object", terminated_at_15)
+
+    assert _main(tmp_path, "object", "start", object_id) == 0
+    output = capsys.readouterr().out
+    assert f"{object_id} is paused at generation 15" in output
+    assert f"Continue with `fim object resume {object_id}`" in output
+
+
+def test_reclaim_reports_and_removes_orphan_staging(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """A dry run lists the orphan; a real run removes it."""
+    results = _results(tmp_path)
+    results.mkdir()
+    assert _main(tmp_path, "object", "reclaim") == 0
+    assert "No orphan staging directories." in capsys.readouterr().out
+
+    staging = results / ".run.abcd1234"
+    staging.mkdir()
+    lock = staging / paths.STAGING_LOCK_FILENAME
+    lock.touch()
+    os.utime(lock, (1_000_000, 1_000_000))
+
+    assert _main(tmp_path, "object", "reclaim", "--dry-run") == 0
+    assert f"Would remove output staging {staging}: " in capsys.readouterr().out
+    assert staging.exists()
+    assert _main(tmp_path, "object", "reclaim") == 0
+    assert f"Removed output staging {staging}: " in capsys.readouterr().out
+    assert not staging.exists()

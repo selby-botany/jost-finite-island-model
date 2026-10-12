@@ -8,10 +8,13 @@ finished. Every command here calls `fim.run_service` or
 
 `start` and `resume` execute in the foreground. From another terminal,
 `pause` asks the running command to publish a checkpoint and stop, and
-`cancel` asks it to stop and keep its partial trajectory. A command that is
-killed leaves the object `running` until any later command notices that its
-owner is gone and records it as `interrupted`; `resume` then continues from
-the latest checkpoint.
+`cancel` asks it to stop and keep its partial trajectory. SIGTERM pauses
+the command the same way; a second SIGTERM ends it at once. A command that
+is killed leaves the object `running` until any later command notices that
+its owner is gone and records it as `interrupted`; `resume` then continues
+from the latest checkpoint. A command killed after it published every
+artifact is recorded as `completed` instead, once its completion receipt
+verifies.
 """
 
 from __future__ import annotations
@@ -42,17 +45,21 @@ from fim.persistence.run_ownership import (
     reconcile_run_objects,
     request_pause,
 )
+from fim.persistence.staging import reclaim_orphan_staging
 from fim.run_service import (
     DraftRunError,
     cancel_run_object,
+    completion_was_recovered,
+    diagnose_run_object,
     execute_run_object,
 )
+from fim.termination import sigterm_requests_stop
 
 ArtifactWriter = Callable[[RunResult, Path], object]
 
 
 def add_object_subcommands(subcommands: argparse._SubParsersAction[Any]) -> None:
-    """Wire `fim object create/edit/list/status/start/resume/pause/cancel/delete`."""
+    """Wire `fim object` and its subcommands, `create` through `reclaim`."""
     object_parser = subcommands.add_parser(
         "object", help="save, inspect, and control resumable run objects"
     )
@@ -88,6 +95,12 @@ def add_object_subcommands(subcommands: argparse._SubParsersAction[Any]) -> None
     ):
         control_parser = commands.add_parser(name, help=text)
         control_parser.add_argument("object_id", metavar="OBJECT_ID")
+    reclaim_parser = commands.add_parser(
+        "reclaim", help="remove staging directories that killed commands left"
+    )
+    reclaim_parser.add_argument(
+        "--dry-run", action="store_true", help="only report what would be removed"
+    )
 
 
 def command_object(
@@ -120,6 +133,7 @@ def command_object(
         "pause": lambda: _pause(arguments.object_id),
         "cancel": lambda: _cancel(arguments.object_id),
         "delete": lambda: _delete(arguments.object_id),
+        "reclaim": lambda: _reclaim(dry_run=arguments.dry_run),
     }
     handler = handlers.get(arguments.object_command)
     if handler is None:
@@ -183,7 +197,13 @@ def _execute(
     """Start or resume an object and run it in the foreground until it stops."""
     # `start` and `resume` name the user's intent; refuse the other one
     # rather than silently doing it.
-    state = reconcile_run_object(object_id).record.state
+    reconciled = reconcile_run_object(object_id)
+    state = reconciled.record.state
+    if completion_was_recovered(reconciled.record):
+        if not quiet:
+            print(f"{object_id} had already finished; it is completed")
+            print(f"Artifacts: {reconciled.directory}")
+        return 0
     if resume and state not in RESUMABLE_STATES:
         raise LifecycleError(
             f"{object_id} is {state.value}; only a paused, interrupted, or "
@@ -196,7 +216,12 @@ def _execute(
     if not quiet:
         print(f"{'Resuming' if resume else 'Starting'} {object_id}")
     try:
-        finished = execute_run_object(object_id, write_artifacts=write_artifacts)
+        with sigterm_requests_stop() as stop_requested:
+            finished = execute_run_object(
+                object_id,
+                write_artifacts=write_artifacts,
+                stop_requested=stop_requested,
+            )
     except KeyboardInterrupt:
         print(
             f"Interrupted; continue with `fim object resume {object_id}`",
@@ -211,6 +236,8 @@ def _execute(
         )
         if record.state is RunState.COMPLETED:
             print(f"Artifacts: {finished.directory}")
+        elif record.state is RunState.PAUSED:
+            print(f"Continue with `fim object resume {object_id}`")
     return 0
 
 
@@ -295,11 +322,34 @@ def _print_saved(verb: str, run_object: RunObject) -> None:
         _print_issues(record.validation_issues)
 
 
+def _reclaim(*, dry_run: bool) -> int:
+    """Remove, or with `dry_run` list, orphan staging directories."""
+    orphans = reclaim_orphan_staging(dry_run=dry_run)
+    if not orphans:
+        print("No orphan staging directories.")
+        return 0
+    for orphan in orphans:
+        if not orphan.reclaimable:
+            verb = "Kept"
+        elif dry_run:
+            verb = "Would remove"
+        else:
+            verb = "Removed"
+        print(f"{verb} {orphan.kind.value} staging {orphan.path}: {orphan.reason}")
+    return 0
+
+
 def _status(object_id: str, *, as_json: bool) -> int:
     """Show one object's lifecycle, after recording a lost owner."""
-    record = reconcile_run_object(object_id).record
+    run_object = reconcile_run_object(object_id)
+    record = run_object.record
     if as_json:
         print(json.dumps(record.to_dict(), indent=2, sort_keys=True))
-    else:
-        _print_record(record)
+        return 0
+    _print_record(record)
+    problems = diagnose_run_object(run_object)
+    if problems:
+        print("Problems:")
+        for problem in problems:
+            print(f"  - {problem}")
     return 0

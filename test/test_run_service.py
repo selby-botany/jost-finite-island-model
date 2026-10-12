@@ -38,6 +38,7 @@ from fim.persistence.run_objects import (
 )
 from fim.persistence.run_ownership import (
     attempt_lock_path,
+    reconcile_run_object,
     request_cancel,
     request_pause,
 )
@@ -46,6 +47,8 @@ from fim.run_service import (
     CheckpointCadence,
     DraftRunError,
     cancel_run_object,
+    completion_was_recovered,
+    diagnose_run_object,
     execute_run_object,
 )
 
@@ -134,6 +137,7 @@ def _execute(
     observer: Observer | None = None,
     cadence: CheckpointCadence = _CADENCE,
     monotonic: Callable[[], float] | None = None,
+    stop_requested: Callable[[], bool] | None = None,
 ) -> RunObject:
     """Execute the test object with deterministic stores and identities."""
     return execute_run_object(
@@ -146,6 +150,7 @@ def _execute(
         store_factory=_store,
         attempt_factory=_attempts(),
         observer=observer,
+        stop_requested=stop_requested,
     )
 
 
@@ -437,3 +442,209 @@ def test_a_cadence_that_never_progresses_is_rejected(changes: dict[str, Any]) ->
     """Zero or negative intervals are refused."""
     with pytest.raises(ValueError, match="positive"):
         CheckpointCadence(**changes)
+
+
+class _CrashingWriter(_Writer):
+    """A writer that stops the process (as a kill would) around its work."""
+
+    def __init__(self, *, before: bool, corrupt_receipt: bool = False) -> None:
+        """Crash `before` writing anything, or after the receipt is written."""
+        super().__init__()
+        self.before = before
+        self.corrupt_receipt = corrupt_receipt
+
+    def __call__(self, result: RunResult, directory: Path) -> None:
+        """Write (unless crashing first), then raise `KeyboardInterrupt`."""
+        if not self.before:
+            super().__call__(result, directory)
+            if self.corrupt_receipt:
+                (directory / "report.json").write_text("{}", encoding="utf-8")
+        raise KeyboardInterrupt
+
+
+def test_a_completion_receipt_left_by_a_killed_worker_is_recovered(
+    tmp_path: Path,
+) -> None:
+    """A verified receipt completes the run without running it again."""
+    _create(tmp_path)
+    crashing = _CrashingWriter(before=False)
+    with pytest.raises(KeyboardInterrupt):
+        _execute(tmp_path, crashing)
+    stranded = read_run_object(OBJECT_ID, results=tmp_path).record
+    assert stranded.state is RunState.RUNNING
+    assert stranded.phase is RunPhase.FINALIZING
+
+    writer = _Writer()
+    recovered = _execute(tmp_path, writer)
+
+    assert recovered.record.state is RunState.COMPLETED
+    assert completion_was_recovered(recovered.record)
+    assert recovered.record.active_attempt_id is None
+    assert not writer.results
+    assert diagnose_run_object(recovered) == ()
+    _assert_matches_whole(tmp_path, crashing.results[0])
+
+
+def test_a_failure_after_the_receipt_is_recovered_as_completion(
+    tmp_path: Path,
+) -> None:
+    """An error raised once every artifact was written loses nothing."""
+    _create(tmp_path)
+
+    class _FailingAfter(_Writer):
+        def __call__(self, result: RunResult, directory: Path) -> None:
+            super().__call__(result, directory)
+            raise OSError("disk went away after the receipt")
+
+    with pytest.raises(OSError, match="after the receipt"):
+        _execute(tmp_path, _FailingAfter())
+    assert read_run_object(OBJECT_ID, results=tmp_path).record.state is (
+        RunState.FAILED
+    )
+
+    recovered = _execute(tmp_path, _Writer())
+
+    assert completion_was_recovered(recovered.record)
+    assert recovered.record.last_error is None
+
+
+def test_a_finalization_killed_before_the_receipt_is_redone(tmp_path: Path) -> None:
+    """No receipt means interrupted; resuming finalizes from the checkpoint."""
+    _create(tmp_path)
+    with pytest.raises(KeyboardInterrupt):
+        _execute(tmp_path, _CrashingWriter(before=True))
+    stranded = read_run_object(OBJECT_ID, results=tmp_path)
+    (problem,) = diagnose_run_object(stranded)
+    assert problem == (
+        f"finalization did not finish: no receipt "
+        f"{stranded.directory / 'manifest.json'} was published"
+    )
+
+    writer = _Writer()
+    finished = _execute(tmp_path, writer)
+
+    assert finished.record.state is RunState.COMPLETED
+    assert not completion_was_recovered(finished.record)
+    states = [entry.to_state for entry in finished.record.transition_history]
+    assert RunState.INTERRUPTED in states
+    _assert_matches_whole(tmp_path, writer.results[0])
+
+
+def test_a_receipt_that_no_longer_verifies_is_replaced(tmp_path: Path) -> None:
+    """A stale receipt is removed before any artifact is rewritten."""
+    _create(tmp_path)
+    with pytest.raises(KeyboardInterrupt):
+        _execute(tmp_path, _CrashingWriter(before=False, corrupt_receipt=True))
+    manifest = tmp_path / "objects" / OBJECT_ID / "manifest.json"
+    assert manifest.exists()
+    seen: list[bool] = []
+
+    class _Checking(_Writer):
+        def __call__(self, result: RunResult, directory: Path) -> None:
+            seen.append((directory / "manifest.json").exists())
+            super().__call__(result, directory)
+
+    finished = _execute(tmp_path, _Checking())
+
+    assert seen == [False]
+    assert finished.record.state is RunState.COMPLETED
+    assert not completion_was_recovered(finished.record)
+    verify_trajectory_integrity(
+        finished.directory / "trajectory.tlog", read_manifest(manifest)
+    )
+
+
+def test_a_stop_request_pauses_at_the_next_safe_point(
+    tmp_path: Path, checkpointed: list[int]
+) -> None:
+    """SIGTERM's flag pauses the run with a checkpoint; resume is exact."""
+    _create(tmp_path)
+    flag: list[bool] = []
+
+    paused = _execute(
+        tmp_path,
+        _Writer(),
+        observer=_at(15, lambda: flag.append(True)),
+        stop_requested=lambda: bool(flag),
+    )
+
+    assert paused.record.state is RunState.PAUSED
+    assert paused.record.committed_generation == 15
+    assert checkpointed == [0, 10, 15]
+    writer = _Writer()
+    _execute(tmp_path, writer)
+    _assert_matches_whole(tmp_path, writer.results[0])
+
+
+def test_a_stop_request_as_the_run_stops_completes_it(tmp_path: Path) -> None:
+    """A run that has already stopped completes instead of pausing."""
+    _create(tmp_path)
+    flag: list[bool] = []
+
+    finished = _execute(
+        tmp_path,
+        _Writer(),
+        observer=_at(30, lambda: flag.append(True)),
+        stop_requested=lambda: bool(flag),
+    )
+
+    assert finished.record.state is RunState.COMPLETED
+
+
+def test_diagnosis_reports_a_corrupt_checkpoint(tmp_path: Path) -> None:
+    """A damaged checkpoint is named before a resume would trip on it."""
+    _create(tmp_path)
+
+    def interrupt() -> None:
+        raise KeyboardInterrupt
+
+    with pytest.raises(KeyboardInterrupt):
+        _execute(tmp_path, _Writer(), observer=_at(15, interrupt))
+    stopped = reconcile_run_object(OBJECT_ID, results=tmp_path)
+    assert stopped.record.state is RunState.INTERRUPTED
+    assert diagnose_run_object(stopped) == ()
+    reference = stopped.record.latest_checkpoint
+    assert reference is not None
+    checkpoint = stopped.directory / "checkpoints" / reference.checkpoint_id
+    for member in checkpoint.iterdir():
+        member.write_bytes(b"damaged")
+
+    (problem,) = diagnose_run_object(stopped)
+
+    assert problem.startswith("the checkpoint is corrupt: ")
+
+
+def test_diagnosis_reports_an_unsupported_configuration(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A paused run this release cannot continue says so."""
+    _create(tmp_path)
+    flag = [True]
+    _execute(
+        tmp_path,
+        _Writer(),
+        observer=_at(5, lambda: None),
+        stop_requested=lambda: bool(flag),
+    )
+
+    def refuse(_params: SimulationParams) -> None:
+        raise UnsupportedSessionError("refused for the test")
+
+    monkeypatch.setattr(run_service, "check_session_support", refuse)
+    paused = read_run_object(OBJECT_ID, results=tmp_path)
+
+    assert diagnose_run_object(paused) == (
+        "this release cannot run the configuration: refused for the test",
+    )
+
+
+def test_diagnosis_reports_damaged_published_results(tmp_path: Path) -> None:
+    """A completed run whose artifacts changed is flagged, not repaired."""
+    _create(tmp_path)
+    finished = _execute(tmp_path, _Writer())
+    (finished.directory / "report.json").write_text("{}", encoding="utf-8")
+
+    (problem,) = diagnose_run_object(finished)
+
+    assert problem.startswith("the published results are damaged: ")
+    assert "report.json" in problem

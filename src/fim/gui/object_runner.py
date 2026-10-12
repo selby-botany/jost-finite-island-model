@@ -182,6 +182,12 @@ def _object_worker(
         message_queue.put(("paused", generation))
     elif record.state is RunState.CANCELLED:
         message_queue.put(("cancelled", generation))
+    elif record.state is RunState.COMPLETED:
+        # Reconciliation found a verified completion receipt from an
+        # attempt that stopped before recording it; nothing ran now.
+        message_queue.put(
+            ("error", "this saved run had already finished; its results are saved")
+        )
     else:
         # A replayed request (another window already ran this attempt).
         message_queue.put(("error", f"the saved run is {record.state.value}"))

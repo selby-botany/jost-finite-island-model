@@ -4,6 +4,9 @@ from __future__ import annotations
 
 import ast
 import json
+import os
+import signal
+import sys
 from collections.abc import Mapping
 from dataclasses import fields
 from pathlib import Path
@@ -80,6 +83,28 @@ def test_run_writes_exactly_six_documented_artifacts(tmp_path: Path) -> None:
         "H_S",
         "H_T",
     }
+
+
+@pytest.mark.skipif(sys.platform == "win32", reason="SIGTERM to self is POSIX")
+def test_sigterm_ends_a_run_with_143_and_discards_its_staging(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """SIGTERM while artifacts are written unwinds; nothing is left behind."""
+    config = tmp_path / "run.yaml"
+    output = tmp_path / "output"
+    _write_config(config)
+
+    def terminated(*_: Any, **__: Any) -> None:
+        os.kill(os.getpid(), signal.SIGTERM)
+
+    monkeypatch.setattr(cli, "_write_run_artifacts", terminated)
+
+    with pytest.raises(SystemExit) as raised:
+        cli.main(["run", str(config), "--output", str(output), "--quiet"])
+
+    assert raised.value.code == 143
+    assert not output.exists()
+    assert not list(tmp_path.glob(".output.*"))
 
 
 def test_run_writes_every_deme_pair_to_pairwise_json(tmp_path: Path) -> None:

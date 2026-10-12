@@ -62,6 +62,7 @@ from fim.persistence.run_objects import (
     validate_configuration_text,
     write_run_record,
 )
+from fim.persistence.run_receipt import receipt_problem
 
 logger = logging.getLogger(__name__)
 
@@ -74,6 +75,9 @@ _WORKER_FINISH_EVENTS: Final = frozenset(
         RunEvent.COMMIT_CANCEL,
     }
 )
+
+_STOPPED_IN_FINALIZATION: Final = frozenset({RunState.INTERRUPTED, RunState.FAILED})
+_RECONCILED_STATES: Final = ACTIVE_STATES | _STOPPED_IN_FINALIZATION
 
 Clock = Callable[[], datetime]
 AttemptFactory = Callable[[], str]
@@ -268,6 +272,34 @@ class ExecutionLease:
         )
         return _with_record(current, record)
 
+    def request_pause(self) -> RunObject:
+        """Ask this attempt itself to pause, as a SIGTERM does.
+
+        A `running` object becomes `pausing`; the worker then pauses at its
+        next safe point exactly as if a controller had asked. An object
+        already pausing or cancelling is left as it is.
+
+        Returns:
+            The object after the request.
+
+        Raises:
+            AttemptMismatchError: This attempt no longer owns execution.
+        """
+        self._require_held()
+        with object_locked(self.object_id, self._results):
+            current = read_run_object_unlocked(self.object_id, self._results)
+            _require_owner(current, self.attempt_id)
+            if current.record.state is not RunState.RUNNING:
+                return current
+            record = apply_event(
+                current.record,
+                RunEvent.REQUEST_PAUSE,
+                at=_now(self._clock),
+                attempt_id=self.attempt_id,
+            )
+            write_run_record(current.directory, record)
+        return _with_record(current, record)
+
     def release(self) -> None:
         """Release the attempt lock without a transition; idempotent.
 
@@ -337,11 +369,16 @@ def reconcile_run_object(
     results: Path | None = None,
     clock: Clock | None = None,
 ) -> RunObject:
-    """Record owner loss for an active run whose attempt lock is free.
+    """Record what became of a run whose owner is gone.
 
     A live owner always holds the attempt lock, so a free lock proves the
-    owner is gone; a timeout alone never does. Inactive runs and runs with
-    a live owner are returned unchanged.
+    owner is gone; a timeout alone never does. An active run whose owner
+    is gone is recorded as `interrupted`, unless it was finalizing and its
+    completion receipt verifies (`fim.persistence.run_receipt`): then the
+    owner published every artifact and only the commit was lost, so the
+    run is recorded as `completed`. An `interrupted` or `failed` run that
+    stopped while finalizing is completed the same way once its receipt
+    verifies. Every other run is returned unchanged.
 
     Args:
         object_id: Object to reconcile.
@@ -353,13 +390,23 @@ def reconcile_run_object(
     """
     with object_locked(object_id, results):
         current = read_run_object_unlocked(object_id, results)
-        if current.record.state not in ACTIVE_STATES:
+        state = current.record.state
+        if state not in _RECONCILED_STATES:
             return current
-        if is_lock_held(attempt_lock_path(object_id, results)):
+        if state in ACTIVE_STATES and is_lock_held(
+            attempt_lock_path(object_id, results)
+        ):
             return current
-        record = apply_event(current.record, RunEvent.OWNER_LOST, at=_now(clock))
+        event = (
+            RunEvent.RECOVER_COMPLETION
+            if _receipt_verifies(current)
+            else RunEvent.OWNER_LOST
+        )
+        if event is RunEvent.OWNER_LOST and state not in ACTIVE_STATES:
+            return current
+        record = apply_event(current.record, event, at=_now(clock))
         write_run_record(current.directory, record)
-    logger.info("run object %s lost its owner; marked interrupted", object_id)
+    logger.info("run object %s lost its owner; marked %s", object_id, record.state)
     return _with_record(current, record)
 
 
@@ -373,16 +420,17 @@ def reconcile_run_objects(
         clock: Injectable current-time source.
 
     Returns:
-        The objects newly recorded as `interrupted`.
+        The objects newly recorded as `interrupted` or recovered as
+        `completed`.
     """
     changed: list[RunObject] = []
     for listed in list_run_objects(results).objects:
-        if listed.record.state not in ACTIVE_STATES:
+        if listed.record.state not in _RECONCILED_STATES:
             continue
         reconciled = reconcile_run_object(
             listed.object_id, results=results, clock=clock
         )
-        if reconciled.record.state is RunState.INTERRUPTED:
+        if reconciled.record.revision != listed.record.revision:
             changed.append(reconciled)
     return changed
 
@@ -641,6 +689,21 @@ def _open_attempt(
     )
     logger.debug("attempt %s owns run object %s", attempt_id, object_id)
     return StartResult(_with_record(current, record), lease=lease)
+
+
+def _receipt_verifies(run_object: RunObject) -> bool:
+    """Return whether a finalizing run published a verified receipt."""
+    record = run_object.record
+    if record.phase is not RunPhase.FINALIZING or record.scientific_run_id is None:
+        return False
+    problem = receipt_problem(
+        run_object.directory, kind=record.kind, run_id=record.scientific_run_id
+    )
+    if problem is not None:
+        logger.info(
+            "run object %s has no completion receipt: %s", record.object_id, problem
+        )
+    return problem is None
 
 
 def _require_owner(run_object: RunObject, attempt_id: str) -> None:

@@ -20,7 +20,11 @@ never picks between the two directly.
 The remaining states follow the Run lifecycle design
 (`20261006-gpt-6.1-sol-run-lifecycle-and-checkpoint-design.md`,
 `selby/restricted`, section 4). `completed` and `cancelled` are terminal.
-Delete is removal of the object, not a state. Phase, scientific outcome,
+Delete is removal of the object, not a state. One event, `recover-completion`,
+is added to that design: a worker that published its completion receipt
+but stopped before committing `completed` is completed by reconciliation
+once the receipt verifies. A release that predates the event cannot read a
+record whose history contains it. Phase, scientific outcome,
 execution kind, and protection are attributes of the record, never extra
 state values.
 """
@@ -74,6 +78,7 @@ class RunEvent(StrEnum):
     REQUEST_CANCEL = "request-cancel"
     COMMIT_CANCEL = "commit-cancel"
     ABANDON = "abandon"
+    RECOVER_COMPLETION = "recover-completion"
 
 
 class RunKind(StrEnum):
@@ -141,6 +146,13 @@ TRANSITIONS: Final[Mapping[tuple[RunState, RunEvent], RunState]] = {
     (_S.PAUSED, _E.ABANDON): _S.CANCELLED,
     (_S.INTERRUPTED, _E.ABANDON): _S.CANCELLED,
     (_S.FAILED, _E.ABANDON): _S.CANCELLED,
+    # A worker that published a verified completion receipt but lost
+    # ownership before committing completion; see `apply_event`.
+    (_S.RUNNING, _E.RECOVER_COMPLETION): _S.COMPLETED,
+    (_S.PAUSING, _E.RECOVER_COMPLETION): _S.COMPLETED,
+    (_S.CANCELLING, _E.RECOVER_COMPLETION): _S.COMPLETED,
+    (_S.INTERRUPTED, _E.RECOVER_COMPLETION): _S.COMPLETED,
+    (_S.FAILED, _E.RECOVER_COMPLETION): _S.COMPLETED,
 }
 """Every legal `(state, event)` pair and the state it leads to."""
 
@@ -703,7 +715,8 @@ def apply_event(
 
     Raises:
         RevisionConflictError: `expected_revision` is stale.
-        IllegalTransitionError: The event is not legal in the current state.
+        IllegalTransitionError: The event is not legal in the current state,
+            or `recover-completion` is applied outside the finalizing phase.
         AttemptMismatchError: A worker event names an attempt that does not
             own execution, or a start/resume omits its new attempt.
         CommandKeyReuseError: `command_key` already produced a transition.
@@ -718,6 +731,10 @@ def apply_event(
         raise RevisionConflictError(expected_revision, record.revision)
     target = TRANSITIONS.get((record.state, event))
     if target is None:
+        raise IllegalTransitionError(record.state, event, record.revision)
+    # Only a run that reached finalization can have published a receipt;
+    # the caller verifies the receipt itself (`fim.persistence.run_receipt`).
+    if event is RunEvent.RECOVER_COMPLETION and record.phase is not RunPhase.FINALIZING:
         raise IllegalTransitionError(record.state, event, record.revision)
     timestamp = format_timestamp(at)
     changes = {
@@ -897,6 +914,8 @@ def _outcome_changes(
         raise ValueError("only a fail event records an error")
     if target is RunState.COMPLETED:
         changes["completed_at"] = timestamp
+    if event is RunEvent.RECOVER_COMPLETION:
+        changes["last_error"] = None
     return changes
 
 
