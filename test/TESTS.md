@@ -29,6 +29,7 @@ Every test module, fixture, and test function documented here in full; `doc/fim-
   - [`test_reanalyze`](#test.test_reanalyze)
   - [`test_reproducibility`](#test.test_reproducibility)
   - [`test_run_service`](#test.test_run_service)
+  - [`test_run_service_batch`](#test.test_run_service_batch)
   - [`test_shutdown_diagnostics`](#test.test_shutdown_diagnostics)
   - [`test_sweep`](#test.test_sweep)
   - [`test_sweep_run`](#test.test_sweep_run)
@@ -3331,10 +3332,10 @@ A draft never opens an attempt and reports why it cannot start.
 
 ```python
 def test_an_unsupported_configuration_is_refused_before_starting(
-        tmp_path: Path) -> None
+        tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None
 ```
 
-A batch configuration is reported without recording a failure.
+A configuration no session can build is reported, not failed.
 
 <a id="test.test_run_service.test_a_completed_run_cannot_execute_again"></a>
 
@@ -3422,6 +3423,102 @@ def test_a_cadence_that_never_progresses_is_rejected(
 ```
 
 Zero or negative intervals are refused.
+
+<a id="test.test_run_service_batch"></a>
+
+# test.test\_run\_service\_batch
+
+Tests for executing batch Run objects through `fim.run_service`.
+
+A batch object runs a `fim.batch_session.BatchSession` between the same
+safe points a scalar object uses, and publishes the layout `fim run` gives
+a batch: one `replicate-NNN/` directory per kept replicate, `summary.json`,
+then the batch `manifest.json`.
+
+<a id="test.test_run_service_batch._Writer"></a>
+
+## \_Writer Objects
+
+```python
+class _Writer()
+```
+
+An artifact writer that remembers what it was asked to write.
+
+<a id="test.test_run_service_batch._Writer.__init__"></a>
+
+#### \_\_init\_\_
+
+```python
+def __init__() -> None
+```
+
+Start with nothing written.
+
+<a id="test.test_run_service_batch._Writer.__call__"></a>
+
+#### \_\_call\_\_
+
+```python
+def __call__(result: RunResult, directory: Path) -> None
+```
+
+Remember `result` and write the standard artifacts.
+
+<a id="test.test_run_service_batch.test_a_batch_object_executes_to_completion_as_fim_run_lays_it_out"></a>
+
+#### test\_a\_batch\_object\_executes\_to\_completion\_as\_fim\_run\_lays\_it\_out
+
+```python
+def test_a_batch_object_executes_to_completion_as_fim_run_lays_it_out(
+        tmp_path: Path) -> None
+```
+
+Every replicate, the summary, and the batch manifest are published.
+
+<a id="test.test_run_service_batch.test_pause_then_resume_publishes_what_an_uninterrupted_batch_does"></a>
+
+#### test\_pause\_then\_resume\_publishes\_what\_an\_uninterrupted\_batch\_does
+
+```python
+def test_pause_then_resume_publishes_what_an_uninterrupted_batch_does(
+        tmp_path: Path) -> None
+```
+
+A batch paused mid-run resumes to the same files and logs.
+
+<a id="test.test_run_service_batch.test_cancel_keeps_every_replicate_partial_trajectory"></a>
+
+#### test\_cancel\_keeps\_every\_replicate\_partial\_trajectory
+
+```python
+def test_cancel_keeps_every_replicate_partial_trajectory(
+        tmp_path: Path) -> None
+```
+
+Cancel commits each replicate's log and publishes nothing.
+
+<a id="test.test_run_service_batch.test_an_adaptive_batch_publishes_only_the_replicates_it_kept"></a>
+
+#### test\_an\_adaptive\_batch\_publishes\_only\_the\_replicates\_it\_kept
+
+```python
+def test_an_adaptive_batch_publishes_only_the_replicates_it_kept(
+        tmp_path: Path) -> None
+```
+
+Directories past the stop, or left by another attempt, are removed.
+
+<a id="test.test_run_service_batch.test_a_refused_configuration_is_not_recorded_as_a_failure"></a>
+
+#### test\_a\_refused\_configuration\_is\_not\_recorded\_as\_a\_failure
+
+```python
+def test_a_refused_configuration_is_not_recorded_as_a_failure(
+        tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None
+```
+
+A batch the session cannot build leaves the object planned.
 
 <a id="test.test_shutdown_diagnostics"></a>
 

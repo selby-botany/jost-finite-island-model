@@ -7,8 +7,9 @@ place only.
 
 `execute_run_object` is the worker. It opens an attempt (start for a
 `planned` object, resume for a `paused`, `interrupted`, or `failed` one),
-runs a `fim.execution.ScalarSession` in bounded steps, and between steps
-sits at a safe point where it:
+runs a `fim.execution.ScalarSession` (one replicate) or a
+`fim.batch_session.BatchSession` (several) in bounded steps, and between
+steps sits at a safe point where it:
 
 - completes the run when the convergence monitor stops it, even if a pause
   or cancel was requested meanwhile (completion is never delayed by an
@@ -19,15 +20,24 @@ sits at a safe point where it:
   so far, which is kept as partial data;
 - publishes a checkpoint when the cadence (generations or seconds) is due.
 
-The trajectory log lives in the object directory as `trajectory.tlog`; the
-completed run's report, convergence history, and manifest are written
-beside it by the caller-supplied artifact writer before completion is
-committed, with the manifest last.
+A scalar run's trajectory log lives in the object directory as
+`trajectory.tlog`; the completed run's report, convergence history, and
+manifest are written beside it by the caller-supplied artifact writer
+before completion is committed, with the manifest last.
+
+A batch lays its object directory out as `fim run` lays out a batch: one
+`replicate-NNN/` directory per replicate, each with its own log and, once
+complete, the same artifacts a scalar run has; then `summary.json`; then,
+last, the batch `manifest.json`. A batch's committed progress is its tick
+count (`BatchSession.generation`). Replicate directories the batch did not
+keep (past an adaptive stop, or built by an interrupted attempt that ran
+past its checkpoint) are removed before the batch is published.
 """
 
 from __future__ import annotations
 
 import logging
+import shutil
 import time
 from collections.abc import Callable
 from dataclasses import dataclass
@@ -36,7 +46,9 @@ from typing import Final
 
 import yaml
 
-from fim.engine import RunResult
+from fim import __version__
+from fim.batch_session import BatchSession, check_batch_session_support
+from fim.engine import RunResult, replicate_summary
 from fim.execution import ScalarSession, check_session_support
 from fim.model.params import SimulationParams
 from fim.persistence.binary_store import (
@@ -44,6 +56,14 @@ from fim.persistence.binary_store import (
     BinaryLogStore,
     log_options,
 )
+from fim.persistence.manifest import (
+    CURRENT_BATCH_SCHEMA_VERSION,
+    ArtifactDigest,
+    BatchManifest,
+    hash_file,
+    write_batch_manifest,
+)
+from fim.persistence.report import write_report
 from fim.persistence.run_checkpoint import load_checkpoint
 from fim.persistence.run_lifecycle import (
     ACTIVE_STATES,
@@ -78,13 +98,28 @@ DEFAULT_CHECKPOINT_SECONDS: Final = 60.0
 DEFAULT_CONTROL_GENERATIONS: Final = 50
 """Generations between checks for a pause or cancel request."""
 
+REPLICATE_DIRECTORY_PREFIX: Final = "replicate-"
+"""Prefix of each replicate's directory inside a batch Run object."""
+
+BATCH_SUMMARY_FILENAME: Final = "summary.json"
+"""A completed batch's cross-replicate summary, beside its manifest."""
+
+MANIFEST_FILENAME: Final = "manifest.json"
+"""A completed run's manifest, written last."""
+
 ArtifactWriter = Callable[[RunResult, Path], object]
-"""Writes a completed run's artifacts into a directory, manifest last."""
+"""Writes one completed run's artifacts into a directory, manifest last.
+
+For a batch it is called once per kept replicate, with that replicate's
+directory."""
 
 StoreFactory = Callable[[Path, SimulationParams], BinaryLogStore]
 """Opens the trajectory log at a path for a configuration."""
 
-ProgressObserver = Callable[[ScalarSession], None]
+Session = ScalarSession | BatchSession
+"""A resumable session of either shape."""
+
+ProgressObserver = Callable[[Session], None]
 """Called at each safe point with the session, for progress display."""
 
 
@@ -170,6 +205,21 @@ def cancel_run_object(
     )
 
 
+def check_run_support(params: SimulationParams) -> None:
+    """Refuse a configuration no resumable session can run.
+
+    Args:
+        params: The configuration to run.
+
+    Raises:
+        UnsupportedSessionError: If the resolved backend cannot be built.
+    """
+    if params.n_replicates == 1:
+        check_session_support(params)
+    else:
+        check_batch_session_support(params)
+
+
 def default_store_factory(path: Path, params: SimulationParams) -> BinaryLogStore:
     """Open the trajectory log with the options the run's Expert Settings choose."""
     return BinaryLogStore(path, **log_options(params.expert))
@@ -187,6 +237,7 @@ def execute_run_object(
     attempt_factory: AttemptFactory | None = None,
     command_key: str | None = None,
     observer: ProgressObserver | None = None,
+    check_support: Callable[[SimulationParams], object] | None = None,
 ) -> RunObject:
     """Start or resume a Run object and execute it until it stops.
 
@@ -203,6 +254,10 @@ def execute_run_object(
         attempt_factory: Injectable attempt ID source.
         command_key: Optional idempotency key for the start or resume.
         observer: Called at each safe point, for progress display.
+        check_support: Refuses a configuration this caller cannot run, by
+            raising `UnsupportedSessionError` (default:
+            `check_run_support`, which accepts scalars and batches). A
+            caller that handles only one shape narrows it.
 
     Returns:
         The object after this attempt stopped: `completed`, `paused`, or
@@ -221,7 +276,7 @@ def execute_run_object(
     if record.state is RunState.DRAFT:
         raise DraftRunError(object_id, record.validation_issues)
     params = _load_params(current)
-    check_session_support(params)
+    (check_support or check_run_support)(params)
     opener = resume_run_object if record.state in RESUMABLE_STATES else start_run_object
     opened = opener(
         object_id,
@@ -248,7 +303,7 @@ def execute_run_object(
 
 
 def _drive(
-    session: ScalarSession,
+    session: Session,
     lease: ExecutionLease,
     directory: Path,
     write_artifacts: ArtifactWriter,
@@ -286,21 +341,37 @@ def _drive(
     # The finalizing checkpoint lets an interrupted finalization resume
     # without stepping again.
     session.checkpoint(lease)
-    result = session.finalize()
-    write_artifacts(result, directory)
-    logger.info(
-        "run object %s completed at generation %s",
-        lease.object_id,
-        result.report["generation"],
-    )
+    if isinstance(session, BatchSession):
+        results = session.finalize()
+        _publish_batch(
+            results,
+            session.params,
+            directory,
+            session.run_id or "",
+            write_artifacts,
+        )
+        logger.info(
+            "run object %s completed with %d replicate(s)",
+            lease.object_id,
+            len(results),
+        )
+    else:
+        result = session.finalize()
+        write_artifacts(result, directory)
+        logger.info(
+            "run object %s completed at generation %s",
+            lease.object_id,
+            result.report["generation"],
+        )
     return lease.finish(RunEvent.COMPLETE, phase=RunPhase.FINALIZING)
 
 
-def _cancel(session: ScalarSession, lease: ExecutionLease) -> RunObject:
+def _cancel(session: Session, lease: ExecutionLease) -> RunObject:
     """Commit the trajectory written so far and acknowledge cancellation."""
-    store = session.store
-    if isinstance(store, BinaryLogStore):
-        position = store.checkpoint()
+    if isinstance(session, BatchSession):
+        lease.commit_progress(committed_generation=session.commit_logs())
+    elif isinstance(session.store, BinaryLogStore):
+        position = session.store.checkpoint()
         lease.commit_progress(committed_generation=position.generation)
     session.close()
     logger.info("run object %s cancelled", lease.object_id)
@@ -319,25 +390,118 @@ def _open_session(
     lease: ExecutionLease,
     store_factory: StoreFactory,
     clock: Clock | None,
-) -> ScalarSession:
-    """Create generation zero and checkpoint it, or restore the latest checkpoint."""
-    path = run_object.directory / TRAJECTORY_LOG_FILENAME
+) -> Session:
+    """Create the first safe point and checkpoint it, or restore the latest one."""
+    directory = run_object.directory
+    run_id = run_object.record.scientific_run_id
     reference = run_object.record.latest_checkpoint
-    if reference is None:
+    if params.n_replicates > 1:
+        # A planned configuration is valid, so it always has a run ID.
+        batch_run_id = run_id or ""
+        replicate_factory = _replicate_store_factory(
+            directory, batch_run_id, params, store_factory
+        )
+        if reference is not None:
+            return BatchSession.restore(
+                params,
+                load_checkpoint(directory, reference),
+                replicate_factory,
+                clock=clock,
+            )
+        lease.commit_progress(phase=RunPhase.INITIALIZING)
+        session: Session = BatchSession.create(
+            params, replicate_factory, run_id=batch_run_id, clock=clock
+        )
+    else:
+        path = directory / TRAJECTORY_LOG_FILENAME
+        if reference is not None:
+            return ScalarSession.restore(
+                params,
+                load_checkpoint(directory, reference),
+                store_factory(path, params),
+                clock=clock,
+            )
         lease.commit_progress(phase=RunPhase.INITIALIZING)
         session = ScalarSession.create(
-            params,
-            store_factory(path, params),
-            run_id=run_object.record.scientific_run_id,
-            clock=clock,
+            params, store_factory(path, params), run_id=run_id, clock=clock
         )
-        try:
-            session.checkpoint(lease)
-        except BaseException:
-            session.close()
-            raise
-        return session
-    checkpoint = load_checkpoint(run_object.directory, reference)
-    return ScalarSession.restore(
-        params, checkpoint, store_factory(path, params), clock=clock
+    try:
+        session.checkpoint(lease)
+    except BaseException:
+        session.close()
+        raise
+    return session
+
+
+def _publish_batch(
+    results: tuple[RunResult, ...],
+    params: SimulationParams,
+    directory: Path,
+    run_id: str,
+    write_artifacts: ArtifactWriter,
+) -> None:
+    """Write a completed batch's artifacts, the batch manifest last.
+
+    Replicate directories the batch did not keep are removed first. The
+    batch's start and end times are the earliest replicate start and the
+    latest replicate end, so a resumed batch reports when its work ran.
+    """
+    kept = {
+        replicate_directory(directory, run_id, result.run_id).name for result in results
+    }
+    for entry in sorted(directory.glob(f"{REPLICATE_DIRECTORY_PREFIX}*")):
+        if entry.is_dir() and entry.name not in kept:
+            shutil.rmtree(entry)
+    digests: dict[str, ArtifactDigest] = {}
+    for result in results:
+        replicate = replicate_directory(directory, run_id, result.run_id)
+        write_artifacts(result, replicate)
+        digests[replicate.name] = hash_file(replicate / MANIFEST_FILENAME)
+    summary = directory / BATCH_SUMMARY_FILENAME
+    write_report(summary, replicate_summary(results))
+    digests["summary"] = hash_file(summary)
+    write_batch_manifest(
+        directory / MANIFEST_FILENAME,
+        BatchManifest(
+            schema_version=CURRENT_BATCH_SCHEMA_VERSION,
+            run_id=run_id,
+            replicate_run_ids=tuple(result.run_id for result in results),
+            parameters=params.to_dict(),
+            started_at=min(result.manifest.started_at for result in results),
+            ended_at=max(result.manifest.ended_at for result in results),
+            software_version=__version__,
+            artifacts=digests,
+        ),
     )
+
+
+def _replicate_store_factory(
+    directory: Path,
+    run_id: str,
+    params: SimulationParams,
+    store_factory: StoreFactory,
+) -> Callable[[str], BinaryLogStore]:
+    """Return a factory opening each replicate's log in its own directory."""
+
+    def build(replicate_run_id: str) -> BinaryLogStore:
+        """Open one replicate's log, creating its directory."""
+        replicate = replicate_directory(directory, run_id, replicate_run_id)
+        replicate.mkdir(exist_ok=True)
+        return store_factory(replicate / TRAJECTORY_LOG_FILENAME, params)
+
+    return build
+
+
+def replicate_directory(directory: Path, run_id: str, replicate_run_id: str) -> Path:
+    """Return one replicate's directory inside a batch Run object.
+
+    Args:
+        directory: The batch object's directory.
+        run_id: The batch's scientific run ID.
+        replicate_run_id: The replicate's run ID, `<run_id>-rNNN`.
+
+    Returns:
+        `<directory>/replicate-NNN`, as `fim run` names it.
+    """
+    index = int(replicate_run_id.removeprefix(f"{run_id}-r"))
+    return directory / f"{REPLICATE_DIRECTORY_PREFIX}{index:03}"

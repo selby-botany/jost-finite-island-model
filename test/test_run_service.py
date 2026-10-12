@@ -17,7 +17,7 @@ import numpy as np
 import pytest
 import yaml
 
-from fim import cli
+from fim import cli, run_service
 from fim.engine import RunResult
 from fim.examples import classes
 from fim.execution import ScalarSession, UnsupportedSessionError
@@ -312,10 +312,15 @@ def test_a_draft_is_refused_with_its_validation_issues(tmp_path: Path) -> None:
 
 
 def test_an_unsupported_configuration_is_refused_before_starting(
-    tmp_path: Path,
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """A batch configuration is reported without recording a failure."""
-    _create(tmp_path, n_replicates=2)
+    """A configuration no session can build is reported, not failed."""
+
+    def refuse(_params: SimulationParams) -> None:
+        raise UnsupportedSessionError("refused for the test")
+
+    monkeypatch.setattr(run_service, "check_session_support", refuse)
+    _create(tmp_path)
 
     with pytest.raises(UnsupportedSessionError):
         _execute(tmp_path, _Writer())

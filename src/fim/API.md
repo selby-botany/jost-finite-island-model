@@ -18,7 +18,10 @@ Return to the [source-tree orientation](../README.md) or the [developer guide](.
     * [\_\_exit\_\_](#fim.batch_session.BatchSession.__exit__)
     * [create](#fim.batch_session.BatchSession.create)
     * [restore](#fim.batch_session.BatchSession.restore)
+    * [generation](#fim.batch_session.BatchSession.generation)
     * [lanes](#fim.batch_session.BatchSession.lanes)
+    * [params](#fim.batch_session.BatchSession.params)
+    * [run\_id](#fim.batch_session.BatchSession.run_id)
     * [stopped](#fim.batch_session.BatchSession.stopped)
     * [store](#fim.batch_session.BatchSession.store)
     * [ticks](#fim.batch_session.BatchSession.ticks)
@@ -26,6 +29,7 @@ Return to the [source-tree orientation](../README.md) or the [developer guide](.
     * [capture](#fim.batch_session.BatchSession.capture)
     * [checkpoint](#fim.batch_session.BatchSession.checkpoint)
     * [close](#fim.batch_session.BatchSession.close)
+    * [commit\_logs](#fim.batch_session.BatchSession.commit_logs)
     * [finalize](#fim.batch_session.BatchSession.finalize)
   * [check\_batch\_session\_support](#fim.batch_session.check_batch_session_support)
 * [fim.cli](#fim.cli)
@@ -1188,16 +1192,22 @@ Return to the [source-tree orientation](../README.md) or the [developer guide](.
   * [DEFAULT\_CHECKPOINT\_GENERATIONS](#fim.run_service.DEFAULT_CHECKPOINT_GENERATIONS)
   * [DEFAULT\_CHECKPOINT\_SECONDS](#fim.run_service.DEFAULT_CHECKPOINT_SECONDS)
   * [DEFAULT\_CONTROL\_GENERATIONS](#fim.run_service.DEFAULT_CONTROL_GENERATIONS)
+  * [REPLICATE\_DIRECTORY\_PREFIX](#fim.run_service.REPLICATE_DIRECTORY_PREFIX)
+  * [BATCH\_SUMMARY\_FILENAME](#fim.run_service.BATCH_SUMMARY_FILENAME)
+  * [MANIFEST\_FILENAME](#fim.run_service.MANIFEST_FILENAME)
   * [ArtifactWriter](#fim.run_service.ArtifactWriter)
   * [StoreFactory](#fim.run_service.StoreFactory)
+  * [Session](#fim.run_service.Session)
   * [ProgressObserver](#fim.run_service.ProgressObserver)
   * [DraftRunError](#fim.run_service.DraftRunError)
     * [\_\_init\_\_](#fim.run_service.DraftRunError.__init__)
   * [CheckpointCadence](#fim.run_service.CheckpointCadence)
     * [\_\_post\_init\_\_](#fim.run_service.CheckpointCadence.__post_init__)
   * [cancel\_run\_object](#fim.run_service.cancel_run_object)
+  * [check\_run\_support](#fim.run_service.check_run_support)
   * [default\_store\_factory](#fim.run_service.default_store_factory)
   * [execute\_run\_object](#fim.run_service.execute_run_object)
+  * [replicate\_directory](#fim.run_service.replicate_directory)
 * [fim.statistics](#fim.statistics)
 * [fim.statistics.catalog](#fim.statistics.catalog)
   * [StatisticSpec](#fim.statistics.catalog.StatisticSpec)
@@ -1567,6 +1577,20 @@ built again.
 - `SessionRestoreError` - If the checkpoint is not a batch session's,
   was taken under another configuration, or is inconsistent.
 
+<a id="fim.batch_session.BatchSession.generation"></a>
+
+#### generation
+
+```python
+@property
+def generation() -> int
+```
+
+The tick count, which the lifecycle records as committed progress.
+
+Each tick advances every running lane by one generation, so the
+count is the generation the longest-running lane has reached.
+
 <a id="fim.batch_session.BatchSession.lanes"></a>
 
 #### lanes
@@ -1577,6 +1601,28 @@ def lanes() -> Sequence[ReplicaLane]
 ```
 
 Every lane built so far, in replicate order; read-only use only.
+
+<a id="fim.batch_session.BatchSession.params"></a>
+
+#### params
+
+```python
+@property
+def params() -> SimulationParams
+```
+
+The batch's configuration.
+
+<a id="fim.batch_session.BatchSession.run_id"></a>
+
+#### run\_id
+
+```python
+@property
+def run_id() -> str | None
+```
+
+The batch's run ID; replicate IDs are `<run_id>-rNNN`.
 
 <a id="fim.batch_session.BatchSession.stopped"></a>
 
@@ -1688,6 +1734,28 @@ def close() -> None
 ```
 
 Release every lane's open files; idempotent.
+
+<a id="fim.batch_session.BatchSession.commit_logs"></a>
+
+#### commit\_logs
+
+```python
+def commit_logs() -> int
+```
+
+Make every active lane's trajectory durable up to this tick.
+
+Used when a batch is cancelled: the partial logs are kept, and the
+tick count is what the lifecycle records as committed.
+
+**Returns**:
+
+  The tick count.
+
+
+**Raises**:
+
+- `ValueError` - If the session is finalized or closed.
 
 <a id="fim.batch_session.BatchSession.finalize"></a>
 
@@ -28456,8 +28524,9 @@ place only.
 
 `execute_run_object` is the worker. It opens an attempt (start for a
 `planned` object, resume for a `paused`, `interrupted`, or `failed` one),
-runs a `fim.execution.ScalarSession` in bounded steps, and between steps
-sits at a safe point where it:
+runs a `fim.execution.ScalarSession` (one replicate) or a
+`fim.batch_session.BatchSession` (several) in bounded steps, and between
+steps sits at a safe point where it:
 
 - completes the run when the convergence monitor stops it, even if a pause
   or cancel was requested meanwhile (completion is never delayed by an
@@ -28468,10 +28537,18 @@ sits at a safe point where it:
   so far, which is kept as partial data;
 - publishes a checkpoint when the cadence (generations or seconds) is due.
 
-The trajectory log lives in the object directory as `trajectory.tlog`; the
-completed run's report, convergence history, and manifest are written
-beside it by the caller-supplied artifact writer before completion is
-committed, with the manifest last.
+A scalar run's trajectory log lives in the object directory as
+`trajectory.tlog`; the completed run's report, convergence history, and
+manifest are written beside it by the caller-supplied artifact writer
+before completion is committed, with the manifest last.
+
+A batch lays its object directory out as `fim run` lays out a batch: one
+`replicate-NNN/` directory per replicate, each with its own log and, once
+complete, the same artifacts a scalar run has; then `summary.json`; then,
+last, the batch `manifest.json`. A batch's committed progress is its tick
+count (`BatchSession.generation`). Replicate directories the batch did not
+keep (past an adaptive stop, or built by an interrupted attempt that ran
+past its checkpoint) are removed before the batch is published.
 
 <a id="fim.run_service.DEFAULT_CHECKPOINT_GENERATIONS"></a>
 
@@ -28491,17 +28568,44 @@ Seconds between periodic checkpoints, checked at safe points.
 
 Generations between checks for a pause or cancel request.
 
+<a id="fim.run_service.REPLICATE_DIRECTORY_PREFIX"></a>
+
+#### REPLICATE\_DIRECTORY\_PREFIX
+
+Prefix of each replicate's directory inside a batch Run object.
+
+<a id="fim.run_service.BATCH_SUMMARY_FILENAME"></a>
+
+#### BATCH\_SUMMARY\_FILENAME
+
+A completed batch's cross-replicate summary, beside its manifest.
+
+<a id="fim.run_service.MANIFEST_FILENAME"></a>
+
+#### MANIFEST\_FILENAME
+
+A completed run's manifest, written last.
+
 <a id="fim.run_service.ArtifactWriter"></a>
 
 #### ArtifactWriter
 
-Writes a completed run's artifacts into a directory, manifest last.
+Writes one completed run's artifacts into a directory, manifest last.
+
+For a batch it is called once per kept replicate, with that replicate's
+directory.
 
 <a id="fim.run_service.StoreFactory"></a>
 
 #### StoreFactory
 
 Opens the trajectory log at a path for a configuration.
+
+<a id="fim.run_service.Session"></a>
+
+#### Session
+
+A resumable session of either shape.
 
 <a id="fim.run_service.ProgressObserver"></a>
 
@@ -28595,6 +28699,25 @@ no worker, so it is abandoned at once. Partial data is kept either way.
 
   The command outcome.
 
+<a id="fim.run_service.check_run_support"></a>
+
+#### check\_run\_support
+
+```python
+def check_run_support(params: SimulationParams) -> None
+```
+
+Refuse a configuration no resumable session can run.
+
+**Arguments**:
+
+- `params` - The configuration to run.
+
+
+**Raises**:
+
+- `UnsupportedSessionError` - If the resolved backend cannot be built.
+
 <a id="fim.run_service.default_store_factory"></a>
 
 #### default\_store\_factory
@@ -28611,17 +28734,20 @@ Open the trajectory log with the options the run's Expert Settings choose.
 #### execute\_run\_object
 
 ```python
-def execute_run_object(object_id: str,
-                       *,
-                       write_artifacts: ArtifactWriter,
-                       results: Path | None = None,
-                       clock: Clock | None = None,
-                       cadence: CheckpointCadence | None = None,
-                       monotonic: Callable[[], float] = time.monotonic,
-                       store_factory: StoreFactory = default_store_factory,
-                       attempt_factory: AttemptFactory | None = None,
-                       command_key: str | None = None,
-                       observer: ProgressObserver | None = None) -> RunObject
+def execute_run_object(
+    object_id: str,
+    *,
+    write_artifacts: ArtifactWriter,
+    results: Path | None = None,
+    clock: Clock | None = None,
+    cadence: CheckpointCadence | None = None,
+    monotonic: Callable[[], float] = time.monotonic,
+    store_factory: StoreFactory = default_store_factory,
+    attempt_factory: AttemptFactory | None = None,
+    command_key: str | None = None,
+    observer: ProgressObserver | None = None,
+    check_support: Callable[[SimulationParams], object] | None = None
+) -> RunObject
 ```
 
 Start or resume a Run object and execute it until it stops.
@@ -28640,6 +28766,10 @@ Start or resume a Run object and execute it until it stops.
 - `attempt_factory` - Injectable attempt ID source.
 - `command_key` - Optional idempotency key for the start or resume.
 - `observer` - Called at each safe point, for progress display.
+- `check_support` - Refuses a configuration this caller cannot run, by
+  raising `UnsupportedSessionError` (default:
+  `check_run_support`, which accepts scalars and batches). A
+  caller that handles only one shape narrows it.
 
 
 **Returns**:
@@ -28656,6 +28786,28 @@ Start or resume a Run object and execute it until it stops.
 - `IllegalTransitionError` - The object cannot start or resume now.
 - `Exception` - Whatever stopped execution; the run is recorded as
   `failed` first.
+
+<a id="fim.run_service.replicate_directory"></a>
+
+#### replicate\_directory
+
+```python
+def replicate_directory(directory: Path, run_id: str,
+                        replicate_run_id: str) -> Path
+```
+
+Return one replicate's directory inside a batch Run object.
+
+**Arguments**:
+
+- `directory` - The batch object's directory.
+- `run_id` - The batch's scientific run ID.
+- `replicate_run_id` - The replicate's run ID, `<run_id>-rNNN`.
+
+
+**Returns**:
+
+  `<directory>/replicate-NNN`, as `fim run` names it.
 
 <a id="fim.statistics"></a>
 

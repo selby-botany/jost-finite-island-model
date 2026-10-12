@@ -27,7 +27,7 @@ from typing import Final
 
 from fim.config.defaults import DEFAULT_PAIRWISE_MAX_DEMES
 from fim.engine import RunResult
-from fim.execution import ScalarSession
+from fim.execution import ScalarSession, check_session_support
 from fim.gui.runner import (
     ProgressThrottle,
     RunMessage,
@@ -41,6 +41,7 @@ from fim.run_service import (
     DEFAULT_CHECKPOINT_SECONDS,
     CheckpointCadence,
     DraftRunError,
+    Session,
     execute_run_object,
 )
 
@@ -130,7 +131,10 @@ def _object_worker(
     throttle = ProgressThrottle(clock=clock)
     completed: list[RunResult] = []
 
-    def observe(session: ScalarSession) -> None:
+    def observe(session: Session) -> None:
+        # `check_session_support` below refuses batches, so every session
+        # here is scalar.
+        assert isinstance(session, ScalarSession)
         # The lineal and generation-first scalar sessions keep
         # `lane.state` current after every advance.
         lane = session.lane
@@ -158,6 +162,7 @@ def _object_worker(
             results=results,
             cadence=cadence,
             observer=observe,
+            check_support=check_session_support,
         )
     except DraftRunError as error:
         issues = "; ".join(issue.message for issue in error.issues)

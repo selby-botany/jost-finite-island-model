@@ -286,9 +286,28 @@ class BatchSession:
         return session
 
     @property
+    def generation(self) -> int:
+        """The tick count, which the lifecycle records as committed progress.
+
+        Each tick advances every running lane by one generation, so the
+        count is the generation the longest-running lane has reached.
+        """
+        return self._ticks
+
+    @property
     def lanes(self) -> Sequence[ReplicaLane]:
         """Every lane built so far, in replicate order; read-only use only."""
         return tuple(self._lanes)
+
+    @property
+    def params(self) -> SimulationParams:
+        """The batch's configuration."""
+        return self._params
+
+    @property
+    def run_id(self) -> str | None:
+        """The batch's run ID; replicate IDs are `<run_id>-rNNN`."""
+        return self._run_id
 
     @property
     def stopped(self) -> bool:
@@ -427,6 +446,25 @@ class BatchSession:
         if not self._closed:
             self._closed = True
             close_store(self._store)
+
+    def commit_logs(self) -> int:
+        """Make every active lane's trajectory durable up to this tick.
+
+        Used when a batch is cancelled: the partial logs are kept, and the
+        tick count is what the lifecycle records as committed.
+
+        Returns:
+            The tick count.
+
+        Raises:
+            ValueError: If the session is finalized or closed.
+        """
+        self._require_open()
+        for lane in self._lanes:
+            store = self._store.store_for(lane.run_id)
+            if lane.active and isinstance(store, BinaryLogStore):
+                store.checkpoint()
+        return self._ticks
 
     def finalize(self) -> tuple[RunResult, ...]:
         """Return the kept replicates' results once the batch has stopped.
