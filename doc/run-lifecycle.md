@@ -161,6 +161,26 @@ A checkpoint is verified (by SHA-256 digest) before it is used. A checkpoint
 written by a different checkpoint format version is refused rather than
 guessed at.
 
+### Cost of a checkpoint
+
+Checkpoints are cheap compared with the run itself. On an Apple M4 laptop, a
+single replicate with d = 20 and N = 225 takes about 20–35 ms per checkpoint
+and keeps about 350 KB on disk. A 16-replicate vector-engine batch with large
+d takes about 135 ms per checkpoint and keeps about 19 MB. Only the latest
+checkpoint is kept, so disk use does not grow with run length.
+
+### Compatibility between versions
+
+Saved runs are new and are not yet part of a released version of fim.
+
+- Earlier versions of fim ignore `results/objects/`. Downgrading does not
+  damage saved runs, but the earlier version cannot see or resume them.
+- A `run.json` with a `schema_version` this version does not know is refused
+  with `unsupported run.json schema_version`.
+- A checkpoint from a different checkpoint format version is refused, not
+  converted. Run the configuration again from generation 0 with
+  `fim object clone OBJECT_ID`.
+
 ## Stopping a run: pause, Ctrl-C, SIGTERM, and cancel
 
 | How it stops | Resulting state | Data kept |
