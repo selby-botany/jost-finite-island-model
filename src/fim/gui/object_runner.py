@@ -23,11 +23,16 @@ import threading
 import time
 from collections.abc import Callable
 from pathlib import Path
-from typing import Final
+from typing import Any, Final
 
+import yaml
+
+from fim.batch_session import BatchSession, check_batch_session_support
 from fim.config.defaults import DEFAULT_PAIRWISE_MAX_DEMES
 from fim.engine import RunResult
 from fim.execution import ScalarSession, check_session_support
+from fim.gui.batch_runner import BatchMessage
+from fim.gui.presets import split_configuration
 from fim.gui.runner import (
     ProgressThrottle,
     RunMessage,
@@ -35,7 +40,15 @@ from fim.gui.runner import (
     run_artifact_targets,
     write_run_artifacts,
 )
-from fim.persistence.run_lifecycle import LifecycleError, RunState
+from fim.gui.store import LIVE_BLOCK_SECONDS, write_progress_sidecar
+from fim.model.params import SimulationParams
+from fim.persistence.binary_store import BinaryLogStore, log_options
+from fim.persistence.run_lifecycle import (
+    LifecycleError,
+    RunLifecycleRecord,
+    RunState,
+)
+from fim.persistence.run_objects import read_run_object
 from fim.run_service import (
     DEFAULT_CHECKPOINT_GENERATIONS,
     DEFAULT_CHECKPOINT_SECONDS,
@@ -72,13 +85,13 @@ logger = logging.getLogger(__name__)
 
 def start_object_run(
     object_id: str,
-    message_queue: queue.Queue[RunMessage],
+    message_queue: queue.Queue[RunMessage] | queue.Queue[BatchMessage],
     *,
     results: Path | None = None,
     cadence: CheckpointCadence = GUI_CADENCE,
     clock: Callable[[], float] = time.monotonic,
     pairwise_max_demes: int = DEFAULT_PAIRWISE_MAX_DEMES,
-    observer: Callable[[ScalarSession], None] | None = None,
+    observer: Callable[[Session], None] | None = None,
 ) -> threading.Thread:
     """Start or resume a saved Run object on a background thread.
 
@@ -88,7 +101,8 @@ def start_object_run(
 
     Args:
         object_id: The saved Run to execute.
-        message_queue: Receives every `runner.RunMessage` the run posts.
+        message_queue: Receives every `runner.RunMessage` or
+            `batch_runner.BatchMessage` the run posts.
         results: Results directory (default: `results_directory()`).
         cadence: Checkpoint and control cadence.
         clock: Injectable wall clock for the progress throttle.
@@ -117,33 +131,75 @@ def start_object_run(
     return thread
 
 
+def _inspect_batch_target(
+    object_id: str, results: Path | None
+) -> tuple[Path | None, bool]:
+    """Return the run object's directory and whether its configuration is a batch."""
+    try:
+        run_object = read_run_object(object_id, results=results)
+        model, _ = split_configuration(yaml.safe_load(run_object.config_text))
+        return run_object.directory, int(model.get("n_replicates", 1)) > 1
+    except Exception:
+        return None, False
+
+
+def _post_terminal_outcome(
+    record: RunLifecycleRecord,
+    completed: list[RunResult],
+    *,
+    is_batch: bool,
+    message_queue: queue.Queue[Any],
+) -> None:
+    """Post the final result, pause, cancel, or error message to the queue."""
+    generation = record.committed_generation or 0
+    if record.state is RunState.COMPLETED and completed:
+        message_queue.put(("done", tuple(completed) if is_batch else completed[0]))
+    elif record.state is RunState.PAUSED:
+        message_queue.put(("paused", generation))
+    elif record.state is RunState.CANCELLED:
+        message_queue.put(
+            ("cancelled", 0, generation) if is_batch else ("cancelled", generation)
+        )
+    elif record.state is RunState.COMPLETED:
+        message_queue.put(
+            ("error", "this saved run had already finished; its results are saved")
+        )
+    else:
+        message_queue.put(("error", f"the saved run is {record.state.value}"))
+
+
 def _object_worker(
     object_id: str,
-    message_queue: queue.Queue[RunMessage],
+    message_queue: queue.Queue[Any],
     *,
     results: Path | None,
     cadence: CheckpointCadence,
     clock: Callable[[], float],
     pairwise_max_demes: int,
-    observer: Callable[[ScalarSession], None] | None,
+    observer: Callable[[Session], None] | None,
 ) -> None:
     """Execute one saved Run and post its outcome to `message_queue`."""
     throttle = ProgressThrottle(clock=clock)
     completed: list[RunResult] = []
+    run_dir, is_batch = _inspect_batch_target(object_id, results)
+
+    if is_batch and run_dir is not None:
+        message_queue.put(("started", run_dir))
 
     def observe(session: Session) -> None:
-        # `check_session_support` below refuses batches, so every session
-        # here is scalar.
-        assert isinstance(session, ScalarSession)
-        # The lineal and generation-first scalar sessions keep
-        # `lane.state` current after every advance.
-        lane = session.lane
-        if throttle.should_report(session.generation, lane.params.max_generations):
-            message_queue.put(
-                progress_message(
-                    lane.state, session.generation, lane.params, session.run_id
+        if isinstance(session, BatchSession) and run_dir is not None:
+            for lane in session.lanes:
+                rep_dir = run_dir / f"replicate-{lane.replica_index + 1:03d}"
+                if rep_dir.is_dir():
+                    write_progress_sidecar(rep_dir / ".progress", lane.state.generation)
+        elif isinstance(session, ScalarSession):
+            lane = session.lane
+            if throttle.should_report(session.generation, lane.params.max_generations):
+                message_queue.put(
+                    progress_message(
+                        lane.state, session.generation, lane.params, session.run_id
+                    )
                 )
-            )
         if observer is not None:
             observer(session)
 
@@ -155,6 +211,11 @@ def _object_worker(
             pairwise_max_demes=pairwise_max_demes,
         )
 
+    def store_factory(path: Path, params: SimulationParams) -> BinaryLogStore:
+        return BinaryLogStore(
+            path, block_seconds=LIVE_BLOCK_SECONDS, **log_options(params.expert)
+        )
+
     try:
         finished = execute_run_object(
             object_id,
@@ -162,7 +223,10 @@ def _object_worker(
             results=results,
             cadence=cadence,
             observer=observe,
-            check_support=check_session_support,
+            check_support=(
+                check_batch_session_support if is_batch else check_session_support
+            ),
+            store_factory=store_factory,
         )
     except DraftRunError as error:
         issues = "; ".join(issue.message for issue in error.issues)
@@ -174,20 +238,7 @@ def _object_worker(
     except _EXPECTED_ENGINE_ERRORS as error:
         message_queue.put(("error", str(error)))
         return
-    record = finished.record
-    generation = record.committed_generation or 0
-    if record.state is RunState.COMPLETED and completed:
-        message_queue.put(("done", completed[0]))
-    elif record.state is RunState.PAUSED:
-        message_queue.put(("paused", generation))
-    elif record.state is RunState.CANCELLED:
-        message_queue.put(("cancelled", generation))
-    elif record.state is RunState.COMPLETED:
-        # Reconciliation found a verified completion receipt from an
-        # attempt that stopped before recording it; nothing ran now.
-        message_queue.put(
-            ("error", "this saved run had already finished; its results are saved")
-        )
-    else:
-        # A replayed request (another window already ran this attempt).
-        message_queue.put(("error", f"the saved run is {record.state.value}"))
+
+    _post_terminal_outcome(
+        finished.record, completed, is_batch=is_batch, message_queue=message_queue
+    )

@@ -2512,16 +2512,15 @@ class Api:
     def start_run_object(self, object_id: str) -> dict[str, Any]:
         """Start a planned saved run, or resume a paused or stopped one.
 
-        Pushes the same `fim.onRun*` calls `start_run` does, plus
-        `fim.onRunPaused(generation)`. The run's artifacts are written to
+        Pushes the same `fim.onRun*` or `fim.onBatch*` calls `start_run` does,
+        plus `fim.onRunPaused(generation)`. The run's artifacts are written to
         its own object directory.
 
         Args:
             object_id: The saved run.
 
         Returns:
-            `start_run`'s shape (`isBatch` is always `False`), or
-            `{"ok": False, "message": ...}`.
+            `start_run`'s shape, or `{"ok": False, "message": ...}`.
         """
         if self._sweep_cancel_event is not None or self._run_in_flight:
             return {"ok": False, "message": "a run is in progress; wait for it"}
@@ -2532,19 +2531,57 @@ class Api:
             run_object, params = object_bridge.prepare_start(object_id)
         except (LifecycleError, ValueError) as error:
             return {"ok": False, "message": str(error)}
-        message_queue: queue.Queue[runner.RunMessage] = queue.Queue()
+        is_batch = params.n_replicates > 1
         self._cancel_event = None
         self._active_object_id = object_id
         self._run_in_flight = True
+        self._live_deme_pair = None
+        if self._on_run_started is not None:
+            self._on_run_started()
+
+        if is_batch:
+            batch_queue: queue.Queue[batch_runner.BatchMessage] = queue.Queue()
+            self._object_worker = object_runner.start_object_run(
+                object_id,
+                batch_queue,
+                pairwise_max_demes=self._preferences.pairwise_max_demes,
+            )
+            logger.info("saved batch run starting: %s", object_id)
+            run_id = run_object.record.scientific_run_id or deterministic_run_id(params)
+            threading.Thread(
+                target=self._drain_then_release,
+                args=(
+                    _drain_batch_messages,
+                    window,
+                    batch_queue,
+                    params,
+                    run_id,
+                    run_object.directory,
+                    self._significant_digits,
+                    self.get_live_deme_pair,
+                    self._on_message,
+                    self._on_batch_progress,
+                ),
+                daemon=True,
+            ).start()
+            return {
+                "ok": True,
+                "isBatch": True,
+                "objectId": object_id,
+                "name": run_object.labels.name,
+                "equilibrium": None,
+                "identityRecovery": None,
+                "closedForm": None,
+                "convergence": None,
+            }
+
+        message_queue: queue.Queue[runner.RunMessage] = queue.Queue()
         self._object_worker = object_runner.start_object_run(
             object_id,
             message_queue,
             pairwise_max_demes=self._preferences.pairwise_max_demes,
         )
         logger.info("saved run starting: %s", object_id)
-        self._live_deme_pair = None
-        if self._on_run_started is not None:
-            self._on_run_started()
         equilibrium = _equilibrium_reference_payload(params, FULL_PRECISION_DIGITS)
         identity_recovery = _identity_recovery_reference_payload(params)
         closed_form = _closed_form_trajectory_payload(params)
@@ -7898,6 +7935,11 @@ def _drain_batch_messages(
             _attach_finished_run_to_study(study_id, output_directory, run_details)
             logger.info("batch done: %s", output_directory)
             window.evaluate_js(f"fim.onBatchDone({json.dumps(payload)})")
+        elif message[0] == "paused":
+            logger.info(
+                "batch paused: %s at generation %s", output_directory, message[1]
+            )
+            window.evaluate_js(f"fim.onRunPaused({message[1]})")
         elif message[0] == "cancelled":
             cancelled_payload = {"replicateIndex": message[1], "generation": message[2]}
             logger.info("batch cancelled: %s", output_directory)

@@ -8872,8 +8872,8 @@ def start_run_object(object_id: str) -> dict[str, Any]
 
 Start a planned saved run, or resume a paused or stopped one.
 
-Pushes the same `fim.onRun*` calls `start_run` does, plus
-`fim.onRunPaused(generation)`. The run's artifacts are written to
+Pushes the same `fim.onRun*` or `fim.onBatch*` calls `start_run` does,
+plus `fim.onRunPaused(generation)`. The run's artifacts are written to
 its own object directory.
 
 **Arguments**:
@@ -8883,8 +8883,7 @@ its own object directory.
 
 **Returns**:
 
-  `start_run`'s shape (`isBatch` is always `False`), or
-- ``{"ok"` - False, "message": ...}`.
+  `start_run`'s shape, or `{"ok": False, "message": ...}`.
 
 <a id="fim.gui.app.Api.cancel_run_object"></a>
 
@@ -13829,15 +13828,14 @@ never reach a later attempt's view.
 
 ```python
 def start_object_run(
-    object_id: str,
-    message_queue: queue.Queue[RunMessage],
-    *,
-    results: Path | None = None,
-    cadence: CheckpointCadence = GUI_CADENCE,
-    clock: Callable[[], float] = time.monotonic,
-    pairwise_max_demes: int = DEFAULT_PAIRWISE_MAX_DEMES,
-    observer: Callable[[ScalarSession], None] | None = None
-) -> threading.Thread
+        object_id: str,
+        message_queue: queue.Queue[RunMessage] | queue.Queue[BatchMessage],
+        *,
+        results: Path | None = None,
+        cadence: CheckpointCadence = GUI_CADENCE,
+        clock: Callable[[], float] = time.monotonic,
+        pairwise_max_demes: int = DEFAULT_PAIRWISE_MAX_DEMES,
+        observer: Callable[[Session], None] | None = None) -> threading.Thread
 ```
 
 Start or resume a saved Run object on a background thread.
@@ -13849,7 +13847,8 @@ exits.
 **Arguments**:
 
 - `object_id` - The saved Run to execute.
-- `message_queue` - Receives every `runner.RunMessage` the run posts.
+- `message_queue` - Receives every `runner.RunMessage` or
+  `batch_runner.BatchMessage` the run posts.
 - `results` - Results directory (default: `results_directory()`).
 - `cadence` - Checkpoint and control cadence.
 - `clock` - Injectable wall clock for the progress throttle.

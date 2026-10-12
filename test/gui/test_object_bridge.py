@@ -8,7 +8,6 @@ from pathlib import Path
 import pytest
 
 from fim.examples import classes
-from fim.execution import UnsupportedSessionError
 from fim.gui import object_bridge
 from fim.gui.config_form import starter_form_values
 from fim.persistence.run_lifecycle import LifecycleError, RunState
@@ -153,11 +152,12 @@ def test_prepare_start_refuses_a_draft(tmp_path: Path) -> None:
         object_bridge.prepare_start(saved.object_id, results=tmp_path)
 
 
-def test_prepare_start_refuses_a_batch(tmp_path: Path) -> None:
+def test_prepare_start_accepts_a_batch(tmp_path: Path) -> None:
     saved, _problem = object_bridge.save(_valid(n_replicates="2"), results=tmp_path)
 
-    with pytest.raises(UnsupportedSessionError):
-        object_bridge.prepare_start(saved.object_id, results=tmp_path)
+    _run_object, params = object_bridge.prepare_start(saved.object_id, results=tmp_path)
+
+    assert params.n_replicates == 2
 
 
 def test_prepare_start_accepts_the_vector_backend(tmp_path: Path) -> None:

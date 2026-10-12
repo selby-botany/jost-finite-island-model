@@ -25,6 +25,7 @@ from typing import Any, Final
 
 import yaml
 
+from fim.batch_session import check_batch_session_support
 from fim.execution import check_session_support
 from fim.gui.config_form import (
     form_values_to_draft_payload,
@@ -239,7 +240,10 @@ def prepare_start(
         raise LifecycleError(f"this saved run cannot start: {reason}")
     model, _labels = split_configuration(yaml.safe_load(run_object.config_text))
     params = SimulationParams.from_mapping(model)
-    check_session_support(params)
+    if params.n_replicates > 1:
+        check_batch_session_support(params)
+    else:
+        check_session_support(params)
     return run_object, params
 
 

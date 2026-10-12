@@ -195,6 +195,36 @@ def test_reopening_a_saved_run_carries_its_own_run_settings(api: Api) -> None:
     }
 
 
+def test_start_and_complete_a_saved_batch_run(
+    api: Api, window: _FakeWindow, results: Path
+) -> None:
+    saved = api.save_run_object(
+        {**_form(), "n_replicates": "2", "max_generations": "10"},
+        None,
+        "Tiny Batch",
+    )
+    assert saved["state"] == "planned"
+
+    started = api.start_run_object(saved["objectId"])
+    _wait_until_idle(api)
+
+    assert started["ok"] is True
+    assert started["isBatch"] is True
+    assert started["name"] == "Tiny Batch"
+    done = window.calls("onBatchDone")
+    assert len(done) == 1
+    finished = read_run_object(saved["objectId"], results=results)
+    assert finished.record.state is RunState.COMPLETED
+    assert (finished.directory / "manifest.json").is_file()
+    assert (finished.directory / "replicate-001" / "manifest.json").is_file()
+    assert (finished.directory / "replicate-002" / "manifest.json").is_file()
+    listing = api.list_run_objects()
+    assert listing["activeObjectId"] is None
+    [row] = listing["runs"]
+    assert row["state"] == "completed"
+    assert row["actions"]["open"] is True
+
+
 def test_clone_saved_run_via_api(api: Api) -> None:
     saved = api.save_run_object({**_form(), "name": "Source Run"})
 

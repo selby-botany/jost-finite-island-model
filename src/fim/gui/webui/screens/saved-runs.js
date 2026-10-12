@@ -219,11 +219,13 @@ async function startSavedRun(run) {
         window.fim.showRunBanner(started.message);
         return;
     }
-    window.fim.applyRunKind(false);
-    window.fim.setLiveEquilibriumReference(started.equilibrium);
-    window.fim.setLiveIdentityRecoveryReference(started.identityRecovery);
-    window.fim.setLiveClosedForm(started.closedForm);
-    window.fim.setLiveConvergence(started.convergence);
+    window.fim.applyRunKind(Boolean(started.isBatch));
+    if (!started.isBatch) {
+        window.fim.setLiveEquilibriumReference(started.equilibrium);
+        window.fim.setLiveIdentityRecoveryReference(started.identityRecovery);
+        window.fim.setLiveClosedForm(started.closedForm);
+        window.fim.setLiveConvergence(started.convergence);
+    }
 }
 
 async function onSaveRunObjectClicked() {
@@ -284,6 +286,8 @@ window.fim.getEditingObjectId = function getEditingObjectId() {
 document.addEventListener("DOMContentLoaded", () => {
     wrapFimFunction("onRunDone", endActiveSavedRun);
     wrapFimFunction("onRunError", endActiveSavedRun);
+    wrapFimFunction("onBatchDone", endActiveSavedRun);
+    wrapFimFunction("onBatchError", endActiveSavedRun);
     const plainCancelled = window.fim.onRunCancelled;
     window.fim.onRunCancelled = function onRunCancelled(generation) {
         if (activeSavedRunId === null) {
@@ -294,6 +298,23 @@ document.addEventListener("DOMContentLoaded", () => {
         cancelButton.disabled = true;
         window.fim.showRunBanner(
             `Run cancelled at generation ${generation}. ` +
+                "Its saved run keeps the data written so far."
+        );
+    };
+    const plainBatchCancelled = window.fim.onBatchCancelled;
+    window.fim.onBatchCancelled = function onBatchCancelled(payload) {
+        if (activeSavedRunId === null) {
+            if (plainBatchCancelled) {
+                plainBatchCancelled(payload);
+            }
+            return;
+        }
+        endActiveSavedRun();
+        cancelButton.disabled = true;
+        const gen =
+            payload && payload.generation != null ? payload.generation : 0;
+        window.fim.showRunBanner(
+            `Run cancelled at generation ${gen}. ` +
                 "Its saved run keeps the data written so far."
         );
     };

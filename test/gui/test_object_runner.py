@@ -17,9 +17,9 @@ import yaml
 
 from fim.engine import RunResult
 from fim.examples import classes
-from fim.execution import ScalarSession
+from fim.execution import ScalarSession, UnsupportedSessionError
 from fim.gui.object_runner import start_object_run
-from fim.gui.runner import RunMessage, run_artifact_targets, write_run_artifacts
+from fim.gui.runner import run_artifact_targets, write_run_artifacts
 from fim.persistence.run_lifecycle import RunState
 from fim.persistence.run_objects import create_run_object, read_run_object
 from fim.persistence.run_ownership import request_cancel, request_pause
@@ -63,10 +63,10 @@ def _create(results: Path, **changes: Any) -> str:
 def _execute(
     object_id: str,
     results: Path,
-    observer: Callable[[ScalarSession], None] | None = None,
-) -> list[RunMessage]:
+    observer: Callable[..., None] | None = None,
+) -> list[Any]:
     """Run the object to its next stop and return every message it posted."""
-    messages: queue.Queue[RunMessage] = queue.Queue()
+    messages: queue.Queue[Any] = queue.Queue()
     worker = start_object_run(
         object_id,
         messages,
@@ -75,7 +75,7 @@ def _execute(
         observer=observer,
     )
     worker.join()
-    posted: list[RunMessage] = []
+    posted: list[Any] = []
     while not messages.empty():
         posted.append(messages.get_nowait())
     return posted
@@ -155,15 +155,41 @@ def test_a_draft_posts_an_error_naming_its_issues(tmp_path: Path) -> None:
     assert "draft" in str(posted[0][1])
 
 
-def test_an_unsupported_configuration_posts_an_error(tmp_path: Path) -> None:
-    object_id = _create(tmp_path, n_replicates=2)
+def test_an_unsupported_configuration_posts_an_error(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    object_id = _create(tmp_path)
+
+    def _fail(_p: object) -> None:
+        raise UnsupportedSessionError("unsupported backend")
+
+    monkeypatch.setattr("fim.gui.object_runner.check_session_support", _fail)
 
     posted = _execute(object_id, tmp_path)
 
     assert [message[0] for message in posted] == ["error"]
+    assert "unsupported backend" in str(posted[0][1])
     assert read_run_object(object_id, results=tmp_path).record.state is (
         RunState.PLANNED
     )
+
+
+def test_a_planned_batch_run_posts_started_then_done(tmp_path: Path) -> None:
+    object_id = _create(tmp_path, n_replicates=2, max_generations=15)
+
+    posted = _execute(object_id, tmp_path)
+
+    assert posted[0][0] == "started"
+    assert posted[-1][0] == "done"
+    results = posted[-1][1]
+    assert isinstance(results, tuple)
+    assert len(results) == 2
+    assert all(isinstance(r, RunResult) for r in results)
+    finished = read_run_object(object_id, results=tmp_path)
+    assert finished.record.state is RunState.COMPLETED
+    assert (finished.directory / "manifest.json").is_file()
+    assert (finished.directory / "replicate-001" / "manifest.json").is_file()
+    assert (finished.directory / "replicate-002" / "manifest.json").is_file()
 
 
 def test_a_run_killed_after_publishing_reports_it_already_finished(

@@ -101,11 +101,17 @@ _CANCEL_WATCH_INTERVAL_SECONDS: Final = 0.1
 StartedMessage = tuple[Literal["started"], Path]
 DoneMessage = tuple[Literal["done"], tuple[RunResult, ...]]
 CancelledMessage = tuple[Literal["cancelled"], int, int]
+PausedMessage = tuple[Literal["paused"], int]
 ErrorMessage = tuple[Literal["error"], str]
 # A non-terminal note for the status line (`fim.gui.runner.StatusMessage`).
 StatusMessage = tuple[Literal["status"], str]
 BatchMessage = (
-    StartedMessage | DoneMessage | CancelledMessage | ErrorMessage | StatusMessage
+    StartedMessage
+    | DoneMessage
+    | CancelledMessage
+    | PausedMessage
+    | ErrorMessage
+    | StatusMessage
 )
 
 logger = logging.getLogger(__name__)
