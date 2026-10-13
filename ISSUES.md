@@ -193,8 +193,9 @@ Relevant code:
   via the second one, into every test that builds a real window)
 - `Api.on_window_closing`, `Api.finish_close`, and `Api.stop_active_work` in
   `src/fim/gui/app.py`, and `test/gui/test_close_guard.py` /
-  `test/gui/test_close_guard_screen.py` — the close dialog and the stop on
-  close
+  `test/gui/test_close_guard_screen.py` / `test/gui/test_close_guard_work.py`
+  — the close dialog, and real workers stopping (no thread or worker process
+  left) on close
 - `test/gui/test_shutdown_deadman.py` — regression tests for both wiring
   points, and for `in_flight_bridge_threads`/`await_bridge_threads`
   themselves

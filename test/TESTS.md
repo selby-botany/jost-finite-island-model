@@ -75,6 +75,7 @@ Every test module, fixture, and test function documented here in full; `doc/fim-
   - [`test_branding`](#gui.test_branding)
   - [`test_close_guard`](#gui.test_close_guard)
   - [`test_close_guard_screen`](#gui.test_close_guard_screen)
+  - [`test_close_guard_work`](#gui.test_close_guard_work)
   - [`test_closed_form_examples`](#gui.test_closed_form_examples)
   - [`test_closed_form_tooltip_screen`](#gui.test_closed_form_tooltip_screen)
   - [`test_compare_screen`](#gui.test_compare_screen)
@@ -17003,6 +17004,57 @@ The close is started with `window.events.closing.set()`, the call every
 platform's native close handler makes (`test_shutdown_deadman.py` uses the
 same one), so the test runs the same way on every CI platform. Every wait is
 on a page flag or a Python-side state the code under test sets, never a delay.
+
+<a id="gui.test_close_guard_work"></a>
+
+# gui.test\_close\_guard\_work
+
+Closing really stops running work, and leaves no worker thread behind.
+
+`test_close_guard.py` proves `stop_active_work` with stand-in workers. These
+tests use the real ones: a run that cannot finish before the test ends is
+started through the bridge, `stop_active_work` is called as `main()` calls it
+after the window closes, and the run must have stopped, a saved run must be
+paused at a checkpoint, and no non-daemon thread the run started may be
+left alive (a live one is what holds the process open until the deadman).
+
+The run is made unable to finish by a burn-in just under a very large cap
+(`unreachable_batch_run_settings` explains why that is structural, not a bet
+on speed). The tests wait for the first progress push, so the run is known to
+be running, and then ask it to stop; nothing waits on a delay.
+
+<a id="gui.test_close_guard_work.results"></a>
+
+#### results
+
+```python
+@pytest.fixture
+def results(tmp_path: Path) -> Iterator[Path]
+```
+
+Isolate the results directory for the test.
+
+<a id="gui.test_close_guard_work.window"></a>
+
+#### window
+
+```python
+@pytest.fixture
+def window(monkeypatch: pytest.MonkeyPatch) -> _FakeWindow
+```
+
+Provide a fake active window.
+
+<a id="gui.test_close_guard_work.api"></a>
+
+#### api
+
+```python
+@pytest.fixture
+def api(tmp_path: Path, results: Path) -> Api
+```
+
+An `Api` whose defaults make a run that cannot finish.
 
 <a id="gui.test_closed_form_examples"></a>
 

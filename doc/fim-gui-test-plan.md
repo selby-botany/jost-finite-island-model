@@ -66,6 +66,9 @@ default `pytest` run.
 | `test_batch_runner.py` | 13 | no | `fim.gui.batch_runner` — real background threads, real parallel `fim.engine.fim` batch calls. |
 | `test_batch_running.py` | 1 | yes | A real batch run reaching the bridge end to end (`Api.start_run` → `batch_runner.start_batch_run` → message draining). |
 | `test_branding.py` | 5 | no | Static guards for the locally bundled Selby scientific visual identity (fonts, icon language, license carve-out) — source-file checks, no display. |
+| `test_close_guard.py` | 23 | no | The close dialog's Python half on `Api` with stand-in windows and workers: the veto or allow decision, `finish_close`, `stop_active_work`, declined late bridge calls, and the named give-up warning. |
+| `test_close_guard_screen.py` | 6 | yes | The close dialog on a real window: unsaved-edit tracking, and the save, discard, and keep-working answers. |
+| `test_close_guard_work.py` | 3 | no | Closing with real workers: a scalar run and a batch are cancelled, a saved run pauses at a checkpoint, and no non-daemon thread or worker process is left. |
 | `test_compare_screen.py` | 5 | yes | The Compare workspace: overlaying two or more completed runs' final-state panels and trajectory statistic, naming the differing configuration field(s). |
 | `test_config_form.py` | 68 | no | All configuration-form marshaling, including the per-deme `N`/migration-matrix/custom-loci/explicit-`p_0` grid shapes — `starter_form_values()` round-tripping through `form_values_to_payload` back into an equivalent `SimulationParams`. |
 | `test_config_modal_dialogs.py` | 1 | no | Static-analysis guard: every modal dialog's "Close" button has the `tabindex` a WKWebView host requires for keyboard reachability — source-file check, no display. |
@@ -175,6 +178,25 @@ field/group — the self-validating-helper pattern, kept honest in both
 directions), and `test_branding.py` (the locally bundled Selby visual
 identity: fonts, icon language, and the license carve-out for reserved
 assets).
+
+## Manual checks before a release
+
+Automated tests cover macOS and Linux (CI runs the `gui` tests under
+`xvfb-run`). Windows has no automated GUI coverage, and no test replaces
+seeing the window close on a real machine. On each platform, from a normal
+launch (not a terminal that hides a hang), check that:
+
+1. Closing an untouched window ends the program within a few seconds.
+2. Editing a Configure field and closing shows the close dialog. **Save and
+   close** adds a Draft or Planned run under Saved runs on Home.
+3. Closing during a saved run shows **Pause and close**. Starting the run
+   again from Saved runs resumes it.
+4. Closing during a run started with **Run simulation** shows **Stop and
+   close**, and the program ends without a stuck process in the task manager.
+5. **Quit fim** in the menu behaves like the close button.
+6. After any of these, `logs/fim.log` has no `shutdown deadman fired` line.
+
+Record the platform, version, and result of each check with the release.
 
 ## Relationship to the rest of the test suite
 
