@@ -31,6 +31,7 @@ DOM-side.
 
 from __future__ import annotations
 
+import dataclasses
 import queue
 from collections.abc import Callable
 from functools import partial
@@ -40,6 +41,7 @@ from typing import Any
 import pytest
 import webview
 
+from fim.config.expert import ExpertSettings
 from fim.gui.app import create_window
 from fim.gui.config_form import starter_form_values
 from fim.gui.preferences import GuiPreferences, save_preferences
@@ -682,7 +684,9 @@ def test_the_expert_section_lists_every_setting_collapsed_with_its_default(
 
     result = _drive(window, steps)
 
-    assert result["rows"] == 23
+    # One row per Expert Setting, however many there are: a literal count
+    # went stale each time a setting was added.
+    assert result["rows"] == len(dataclasses.fields(ExpertSettings))
     assert result["open"] is False
     assert result["groups"] == ["Convergence", "Batches", "Statistics", "Storage"]
     assert result["batchWidth"] == "8"
