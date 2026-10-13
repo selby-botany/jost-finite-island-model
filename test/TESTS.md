@@ -39751,8 +39751,11 @@ cost (18m07s at review time) was invisible in the Actions run summary
 all bundled into the same opaque step. Splitting the fast,
 marker-filtered layer into its own preceding step makes both halves'
 wall-clock cost individually visible (GitHub Actions reports each
-step's own duration natively) and lets the fast layer fail in
-seconds, before CI pays for the expensive layer at all.
+step's own duration natively) and lets CI see the fast layer's
+result before paying for the more expensive scenario suite. The fast
+layer itself took 306 seconds on Python 3.12 in run 38456360001,
+so its ten-minute budget must stay comfortably above that measured
+run.
 
 <a id="validation.test_ci_runtime_budget.test_each_test_step_has_a_nonflaky_wall_clock_budget"></a>
 
@@ -39771,6 +39774,9 @@ than on the commit under test, which the project's own house rule
 on test determinism (CLAUDE.md: "a test is a pure function of its
 commit") forbids. The full step's budget is larger than the fast
 step's, matching the much larger scenario suite it alone carries.
+The fast budget must be at least ten minutes: run 38456360001
+completed its 4,296 tests in 306 seconds, exceeding the former
+five-minute allowance before step overhead.
 
 <a id="validation.test_ci_runtime_budget.test_full_gate_budget_includes_packaging_after_the_test_layers"></a>
 

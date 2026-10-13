@@ -34,8 +34,11 @@ def test_the_expensive_scenario_layer_runs_as_its_own_named_budgeted_step() -> N
     all bundled into the same opaque step. Splitting the fast,
     marker-filtered layer into its own preceding step makes both halves'
     wall-clock cost individually visible (GitHub Actions reports each
-    step's own duration natively) and lets the fast layer fail in
-    seconds, before CI pays for the expensive layer at all.
+    step's own duration natively) and lets CI see the fast layer's
+    result before paying for the more expensive scenario suite. The fast
+    layer itself took 306 seconds on Python 3.12 in run 38456360001,
+    so its ten-minute budget must stay comfortably above that measured
+    run.
     """
     run_steps = _run_steps()
     fast_step = next(step for step in run_steps if "--no-package" in str(step["run"]))
@@ -69,6 +72,9 @@ def test_each_test_step_has_a_nonflaky_wall_clock_budget() -> None:
     on test determinism (CLAUDE.md: "a test is a pure function of its
     commit") forbids. The full step's budget is larger than the fast
     step's, matching the much larger scenario suite it alone carries.
+    The fast budget must be at least ten minutes: run 38456360001
+    completed its 4,296 tests in 306 seconds, exceeding the former
+    five-minute allowance before step overhead.
     """
     run_steps = _run_steps()
     fast_step = next(step for step in run_steps if "--no-package" in str(step["run"]))
@@ -83,6 +89,7 @@ def test_each_test_step_has_a_nonflaky_wall_clock_budget() -> None:
 
     assert isinstance(fast_budget, int) and fast_budget > 0
     assert isinstance(full_budget, int) and full_budget > 0
+    assert fast_budget >= 10
     assert fast_budget < full_budget
 
 

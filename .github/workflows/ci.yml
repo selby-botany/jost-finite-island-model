@@ -78,9 +78,12 @@ jobs:
       # Split into two named, separately timed/budgeted steps rather
       # than one opaque `./build --ci` step: the fast step re-runs the
       # same deterministic layer `--ci` also covers (`build`'s own
-      # pyproject.toml-driven default marker filter, no coverage) purely
-      # to fail fast -- a few extra seconds -- before paying for the
-      # `slow`/`statistical` scenario suite's much larger wall-clock cost.
+      # pyproject.toml-driven default marker filter, no coverage) before
+      # paying for the `statistical`/GUI scenario suite's larger cost.
+      # It is not a seconds-long check: run 38456360001 completed 4,296
+      # tests in 306 seconds, exceeding the old five-minute step limit.
+      # Ten minutes leaves room for that measured duration and runner
+      # overhead without approaching the full gate's 30-minute budget.
       # Each step's own duration is visible in the Actions run summary
       # without any extra instrumentation; each `timeout-minutes` is a
       # hard, non-flaky budget enforced by the runner itself rather than
@@ -88,7 +91,7 @@ jobs:
       # variance would make a non-deterministic pass/fail signal.
       - name: Run the fast deterministic test layer (fail fast)
         run: ./build --no-lint --no-type --no-docs --no-package
-        timeout-minutes: 5
+        timeout-minutes: 10
       # `build`'s own `--ci` branch deliberately drops `-m`'s argument
       # down to just `not slow` (see `build`'s own comment at that line)
       # rather than negating every OTHER marker in turn, specifically so
