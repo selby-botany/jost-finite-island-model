@@ -86,6 +86,8 @@ package and fails on one that is not on its short allow list.
 | `TRAJECTORY_STRIDE` | `storage.py` | policy | Default `trajectory_stride`: with thinning on, one generation in this many is kept. |
 | `THINNING_TRANSIENT_RELAXATION_TIMES` | `storage.py` | policy | Relaxation times after the burn-in that thinning keeps whole. |
 | `THINNING_MINIMUM_START` | `storage.py` | policy | Generation before which thinning never starts. |
+| `CHECKPOINT_GENERATIONS` | `storage.py` | policy | Generations between periodic checkpoints of a resumable run. |
+| `CHECKPOINT_SECONDS` | `storage.py` | policy | Seconds between periodic checkpoints of a resumable run. |
 
 ## Adding a constant
 
