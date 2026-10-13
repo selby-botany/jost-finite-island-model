@@ -5246,7 +5246,9 @@ def _stub_main_past_logging_config(monkeypatch: pytest.MonkeyPatch) -> None:
     """
     monkeypatch.setattr(app_module, "create_window", lambda **_kwargs: object())
     monkeypatch.setattr(webview, "start", lambda **_kwargs: None)
-    monkeypatch.setattr(app_module, "_build_menu", lambda _window: [])
+    monkeypatch.setattr(
+        app_module, "_build_menu", lambda _window, _quit_action=None: []
+    )
     monkeypatch.setattr(app_module, "_start_shutdown_deadman", lambda _timeout: None)
     monkeypatch.setattr(
         app_module, "_install_shutdown_signal_handlers", lambda _api, _timeout: None

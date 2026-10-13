@@ -63,6 +63,9 @@ function applyFormValues(values) {
     window.fim.rebuildP0Grid();
     window.fim.updateFixedPerDemePreview();
     syncConditionalVisibility();
+    // A loaded form is the new "nothing to save" baseline once it has
+    // settled (`screens/close-guard.js`).
+    window.fim.expectLoadedForm();
 }
 
 function collectFormValues() {
@@ -209,6 +212,7 @@ async function revalidate() {
         return result;
     } finally {
         window.__fimValidationPending -= 1;
+        window.fim.formRevalidated();
     }
 }
 

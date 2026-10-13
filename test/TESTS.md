@@ -73,6 +73,8 @@ Every test module, fixture, and test function documented here in full; `doc/fim-
   - [`test_batch_runner`](#gui.test_batch_runner)
   - [`test_batch_running`](#gui.test_batch_running)
   - [`test_branding`](#gui.test_branding)
+  - [`test_close_guard`](#gui.test_close_guard)
+  - [`test_close_guard_screen`](#gui.test_close_guard_screen)
   - [`test_closed_form_examples`](#gui.test_closed_form_examples)
   - [`test_closed_form_tooltip_screen`](#gui.test_closed_form_tooltip_screen)
   - [`test_compare_screen`](#gui.test_compare_screen)
@@ -16923,6 +16925,73 @@ def test_license_excludes_the_identified_branding_assets_from_agpl() -> None
 ```
 
 The repository license and branding policy state the asset boundary.
+
+<a id="gui.test_close_guard"></a>
+
+# gui.test\_close\_guard
+
+Tests for the close guard on `fim.gui.app.Api` (no real window).
+
+Closing the window must not lose unsaved edits or leave running work behind.
+`Api.on_window_closing` decides, `finish_close` carries out the answer, and
+`stop_active_work` is the backstop after the window is gone. Everything here
+is driven through plain calls and events: nothing waits on a clock for its
+outcome, and a wait on a helper thread is bounded only by
+`conftest.COMPLETION_BACKSTOP_SECONDS`.
+
+<a id="gui.test_close_guard.api"></a>
+
+#### api
+
+```python
+@pytest.fixture
+def api(tmp_path: Path) -> Api
+```
+
+A bare `Api` with its own preferences file.
+
+<a id="gui.test_close_guard.window"></a>
+
+#### window
+
+```python
+@pytest.fixture
+def window(monkeypatch: pytest.MonkeyPatch) -> _FakeWindow
+```
+
+Provide a fake active window.
+
+<a id="gui.test_close_guard.test_main_stops_running_work_after_the_window_closes"></a>
+
+#### test\_main\_stops\_running\_work\_after\_the\_window\_closes
+
+```python
+def test_main_stops_running_work_after_the_window_closes(
+        monkeypatch: pytest.MonkeyPatch) -> None
+```
+
+`main` asks running work to stop once `webview.start` returns.
+
+The stubs keep `main` from building a real window or arming a real
+process-killing deadman (`test_app_api._stub_main_past_logging_config`
+has the full reasoning). The order matters: stopping before the window
+closed would pull work out from under a user who chose "Keep working".
+
+<a id="gui.test_close_guard_screen"></a>
+
+# gui.test\_close\_guard\_screen
+
+Headless functional tests for the close dialog and unsaved-edit tracking.
+
+`test_close_guard.py` proves the Python half with plain calls. These prove the
+page wires it: the form's unsaved edits reach Python, a close that would lose
+them is vetoed and shows the dialog, and each answer does what it says (save
+the form as a saved run, close without saving, keep working).
+
+The close is started with `window.events.closing.set()`, the call every
+platform's native close handler makes (`test_shutdown_deadman.py` uses the
+same one), so the test runs the same way on every CI platform. Every wait is
+on a page flag or a Python-side state the code under test sets, never a delay.
 
 <a id="gui.test_closed_form_examples"></a>
 

@@ -273,9 +273,11 @@ _SHUTDOWN_DEADMAN_SECONDS: Final[float] = 20.0
 # rather than being confused with a clean close.
 _SHUTDOWN_DEADMAN_EXIT_CODE: Final[int] = 3
 
-# How long closing waits for a saved run to checkpoint and pause; well
-# inside `_SHUTDOWN_DEADMAN_SECONDS`, which is armed first.
-_OBJECT_PAUSE_ON_CLOSE_SECONDS: Final[float] = 10.0
+# How long closing waits, in total, for running work to stop: a saved run
+# to checkpoint and pause, a plain run or batch to observe its cancel, a
+# sweep to wind down. Well inside `_SHUTDOWN_DEADMAN_SECONDS`, which is
+# armed first; `test_shutdown_deadman.py` pins that relationship.
+_STOP_ON_CLOSE_SECONDS: Final[float] = 10.0
 
 
 def _derived_convergence_note(params: SimulationParams) -> str:
@@ -327,6 +329,34 @@ def _derived_convergence_note_from_manifest(
     )
 
 
+# The bridge calls now executing, by thread id: method name and start time.
+# Kept so a bridge call that outlasts shutdown can be named in the log
+# (`await_bridge_threads`), not just counted. Names only, never arguments,
+# for the reason `_log_bridge_call`'s docstring gives.
+_IN_FLIGHT_CALLS: dict[int, tuple[str, float]] = {}
+_IN_FLIGHT_LOCK = threading.Lock()
+
+
+class _CloseGate:
+    """Whether the window is committed to closing, and what the page has told us.
+
+    One gate per window (`create_window` gives its `Api` a fresh one), read
+    from the UI thread (the `events.closing` subscriber), from bridge
+    threads (`_log_bridge_call`), and from helper threads, so it holds
+    plain flags that are only ever flipped one way per window:
+
+    - `closing`: the close has been decided, by the user's answer, because
+      nothing needed confirming, or because code called `window.destroy()`
+      directly. From then on the page's bridge calls are declined.
+    - `unsaved_edits`: the Configure form differs from what was last loaded
+      or saved, as the page last reported (`Api.report_unsaved_edits`).
+    """
+
+    def __init__(self) -> None:
+        self.closing = False
+        self.unsaved_edits = False
+
+
 def _log_bridge_call[ApiMethod: Callable[..., Any]](method: ApiMethod) -> ApiMethod:
     """Log every `Api` bridge call at DEBUG, by method name only.
 
@@ -340,12 +370,40 @@ def _log_bridge_call[ApiMethod: Callable[..., Any]](method: ApiMethod) -> ApiMet
     bridge call originates from JS running inside the app's own
     embedded browser, one step further removed from a trusted
     terminal.
+
+    The wrapper does three more things, all by method name alone. It
+    declines the call (returns `None`) once the window is committed to
+    closing (`_CloseGate`), so a late call from the page cannot start one
+    more thread for `await_bridge_threads` to wait on. It records the call
+    in `_IN_FLIGHT_CALLS` while it runs, so a wait that gives up can name
+    what it was waiting for. And it logs how long the call took at DEBUG.
     """
 
     @functools.wraps(method)
     def wrapper(self: Api, *args: Any, **kwargs: Any) -> Any:
+        # Once the window is committed to closing, a call from the page
+        # (a timer, a late click) would only start one more non-daemon
+        # bridge thread for `await_bridge_threads` to wait on. Declining
+        # it here, at the one choke point every public method shares,
+        # lets the wait drain to zero and stay there. `None`, not an
+        # exception: pywebview logs every exception from a bridge call at
+        # error level, so a close would otherwise fill the log.
+        if self._close_gate.closing:
+            logger.debug("bridge: %s declined, window is closing", method.__name__)
+            return None
         logger.debug("bridge: %s", method.__name__)
-        return method(self, *args, **kwargs)
+        started = time.monotonic()
+        thread_id = threading.get_ident()
+        with _IN_FLIGHT_LOCK:
+            _IN_FLIGHT_CALLS[thread_id] = (method.__name__, started)
+        try:
+            return method(self, *args, **kwargs)
+        finally:
+            with _IN_FLIGHT_LOCK:
+                _IN_FLIGHT_CALLS.pop(thread_id, None)
+            logger.debug(
+                "bridge: %s took %.3fs", method.__name__, time.monotonic() - started
+            )
 
     return cast(ApiMethod, wrapper)
 
@@ -2013,6 +2071,14 @@ class Api:
         self._comparison_target: tuple[Path, _EvaluatesJs] | None = None
         self._sweep_cancel_event: threading.Event | None = None
         self._sweep_study_id: str | None = None
+        # The worker threads of the run and sweep now executing, so closing
+        # can ask them to stop and wait (`stop_active_work`). The saved
+        # run's worker is `_object_worker`, above.
+        self._run_worker: threading.Thread | None = None
+        self._sweep_thread: threading.Thread | None = None
+        # Replaced by `create_window` when this `Api` is attached to a
+        # window; a bare `Api` (a test) has one that never closes.
+        self._close_gate = _CloseGate()
         self._open_folder = open_folder
         self._on_run_started = on_run_started
         self._on_message = on_message
@@ -2235,7 +2301,7 @@ class Api:
         message_queue: queue.Queue[runner.RunMessage] = queue.Queue()
         cancel_event = threading.Event()
         try:
-            runner.start_run(
+            self._run_worker = runner.start_run(
                 params,
                 output_directory,
                 message_queue,
@@ -2342,7 +2408,7 @@ class Api:
         message_queue: queue.Queue[batch_runner.BatchMessage] = queue.Queue()
         cancel_event = threading.Event()
         try:
-            batch_runner.start_batch_run(
+            self._run_worker = batch_runner.start_batch_run(
                 params,
                 output_directory,
                 message_queue,
@@ -2666,24 +2732,164 @@ class Api:
             return {"ok": False, "message": str(error)}
         return {"ok": True}
 
-    def pause_active_object_run(self, timeout: float) -> None:
-        """Pause the saved run now executing, waiting up to `timeout` seconds.
+    def stop_active_work(self, timeout: float) -> None:
+        """Ask whatever is running to stop, and wait up to `timeout` seconds.
 
-        Called while the application closes, so a saved run stops at a
-        checkpoint it can resume from rather than being interrupted.
+        Called after the window closes, so closing never leaves a worker
+        thread to hold the process open until the deadman fires: a saved
+        run checkpoints and pauses (and resumes later), a run, batch, or
+        sweep is cancelled. A worker that misses the bound is logged, and
+        the deadman still ends the process.
 
         Args:
-            timeout: Longest wait for the worker to acknowledge, in seconds.
+            timeout: Longest total wait for the workers, in seconds.
         """
-        object_id = self._active_object_id
-        worker = self._object_worker
-        if object_id is None or worker is None:
+        self._request_stop_active_work()
+        deadline = time.monotonic() + timeout
+        for label, worker in (
+            ("saved run", self._object_worker),
+            ("run", self._run_worker),
+            ("sweep", self._sweep_thread),
+        ):
+            if worker is None:
+                continue
+            worker.join(max(0.0, deadline - time.monotonic()))
+            if worker.is_alive():
+                logger.warning("%s did not stop before exit", label)
+
+    def on_window_closing(self, window: _EvaluatesJs) -> bool:
+        """Decide a close the user started: let it go, or ask first.
+
+        The `events.closing` subscriber (`create_window`) calls this on the
+        platform's UI thread, so it only decides and returns. When edits or
+        running work would be lost, the close is vetoed and the page is
+        asked to show its dialog from a helper thread; the dialog's answer
+        arrives through `finish_close`.
+
+        Args:
+            window: The window being closed.
+
+        Returns:
+            `True` to let the close proceed, `False` to veto it.
+        """
+        if self._close_gate.closing:
+            return True
+        if not self.close_needs_confirmation():
+            self._close_gate.closing = True
+            return True
+        self._ask_page_to_confirm_close(window)
+        return False
+
+    def request_close(self) -> None:
+        """Close the window the way its close button does (the Quit menu item)."""
+        window = _active_window()
+        if window is None:
             return
-        with contextlib.suppress(LifecycleError):
-            object_bridge.pause(object_id)
-        worker.join(timeout)
-        if worker.is_alive():
-            logger.warning("saved run %s did not pause before exit", object_id)
+        if self._close_gate.closing or not self.close_needs_confirmation():
+            window.destroy()
+            return
+        self._ask_page_to_confirm_close(window)
+
+    def close_needs_confirmation(self) -> bool:
+        """Return whether closing now would lose edits or interrupt work."""
+        return any(self._close_requirements().values())
+
+    def _close_requirements(self) -> dict[str, bool]:
+        """Return what closing now would affect, by the keys the dialog reads."""
+        saved_run = self._active_object_id is not None
+        return {
+            "unsavedEdits": self._close_gate.unsaved_edits,
+            "savedRun": saved_run,
+            "run": self._run_in_flight and not saved_run,
+            "sweep": self._sweep_cancel_event is not None,
+        }
+
+    def _ask_page_to_confirm_close(self, window: _EvaluatesJs) -> None:
+        """Have the page show the close dialog; close anyway if it cannot.
+
+        Runs on a helper thread because `evaluate_js` must not be called on
+        the UI thread that is waiting for the veto. The call into the page
+        is deferred with `setTimeout`, like the menu's (`_build_menu`):
+        invoking an `async` page function directly as the `evaluate_js`
+        expression starves the promises it awaits.
+        """
+
+        def ask() -> None:
+            try:
+                ready = window.evaluate_js(
+                    "typeof window.fim === 'object'"
+                    " && typeof window.fim.confirmClose === 'function'"
+                )
+                if ready:
+                    window.evaluate_js(
+                        "setTimeout(() => window.fim.confirmClose(), 0);"
+                    )
+                    return
+            except Exception:
+                logger.warning("could not ask the page to confirm close", exc_info=True)
+            # A window nobody can close is worse than losing the question.
+            logger.warning("close dialog unavailable; closing without it")
+            destroy = getattr(window, "destroy", None)
+            if destroy is not None:
+                destroy()
+
+        threading.Thread(target=ask, name="fim-confirm-close", daemon=True).start()
+
+    def _request_stop_active_work(self) -> None:
+        """Ask the running saved run to pause, or the run or sweep to cancel."""
+        object_id = self._active_object_id
+        if object_id is not None:
+            with contextlib.suppress(LifecycleError):
+                object_bridge.pause(object_id)
+        elif self._run_in_flight and self._cancel_event is not None:
+            self._cancel_event.set()
+        if self._sweep_cancel_event is not None:
+            self._sweep_cancel_event.set()
+
+    @_log_bridge_call
+    def close_requirements(self) -> dict[str, Any]:
+        """Return what closing the window now would affect, for its dialog.
+
+        Returns:
+            `{"ok": True, "unsavedEdits", "savedRun", "run", "sweep"}`, each
+            a bool: the Configure form has unsaved edits, a saved run is
+            executing (it pauses and resumes later), a run or batch that
+            cannot be resumed is executing, a sweep is executing.
+        """
+        return {"ok": True, **self._close_requirements()}
+
+    @_log_bridge_call
+    def finish_close(self) -> dict[str, Any]:
+        """Close the window once the user has answered the close dialog.
+
+        Asks running work to stop at once (a saved run pauses at a
+        checkpoint), so that overlaps with the window closing, then closes
+        the window from a helper thread so this call can return first.
+
+        Returns:
+            `{"ok": True}`, or `{"ok": False, "message": ...}`.
+        """
+        window = _active_window()
+        if window is None:
+            return {"ok": False, "message": "no active window"}
+        self._request_stop_active_work()
+        threading.Thread(
+            target=window.destroy, name="fim-finish-close", daemon=True
+        ).start()
+        return {"ok": True}
+
+    @_log_bridge_call
+    def report_unsaved_edits(self, unsaved: bool) -> None:
+        """Record whether the Configure form has edits that are not saved.
+
+        Sent by the page only when the answer changes. Closing the window
+        consults it (`on_window_closing`).
+
+        Args:
+            unsaved: Whether the form differs from what was last loaded or
+                saved.
+        """
+        self._close_gate.unsaved_edits = bool(unsaved)
 
     @_log_bridge_call
     def open_output_folder(self, path: str) -> None:
@@ -5549,7 +5755,8 @@ class Api:
             finally:
                 self._sweep_cancel_event = None
 
-        threading.Thread(target=work, daemon=True).start()
+        self._sweep_thread = threading.Thread(target=work, daemon=True)
+        self._sweep_thread.start()
 
     @_log_bridge_call
     def copy_experiment(self, experiment_id: str, name: str) -> dict[str, Any]:
@@ -8072,7 +8279,7 @@ def in_flight_bridge_threads(
     ]
 
 
-def await_bridge_threads(timeout: float = _BRIDGE_SETTLE_TIMEOUT_SECONDS) -> None:
+def await_bridge_threads(timeout: float = _BRIDGE_SETTLE_TIMEOUT_SECONDS) -> bool:
     """Wait for pywebview's own in-flight bridge-call threads to finish.
 
     pywebview delivers each `window.pywebview.api.*` call on a
@@ -8102,20 +8309,38 @@ def await_bridge_threads(timeout: float = _BRIDGE_SETTLE_TIMEOUT_SECONDS) -> Non
     precisely, when this runs inside the test suite — but this
     function's own job is only to give a genuinely in-flight call a real
     chance to finish before whatever comes next (a window destroy, a
-    test's own teardown) proceeds regardless.
+    test's own teardown) proceeds regardless. It does log a warning
+    naming the calls still running, so a close that had to give up
+    leaves evidence at once rather than only in the deadman's dump 20
+    seconds later.
 
     Args:
         timeout: Total seconds to wait for all such threads to finish.
 
     Returns:
-        None. Returns as soon as no bridge thread is alive, or when
-        `timeout` elapses, whichever comes first.
+        `True` as soon as no bridge thread is alive; `False` when
+        `timeout` elapses first.
     """
     deadline = time.monotonic() + timeout
     while time.monotonic() < deadline:
         if not in_flight_bridge_threads():
-            return
+            return True
         time.sleep(_BRIDGE_SETTLE_POLL_INTERVAL_SECONDS)
+    stranded = in_flight_bridge_threads()
+    if not stranded:
+        return True
+    with _IN_FLIGHT_LOCK:
+        names = sorted(
+            _IN_FLIGHT_CALLS.get(thread.ident or 0, ("<delivering a result>", 0.0))[0]
+            for thread in stranded
+        )
+    logger.warning(
+        "%d bridge call(s) still in flight after %gs: %s",
+        len(stranded),
+        timeout,
+        ", ".join(names),
+    )
+    return False
 
 
 def _settle_before_close() -> None:
@@ -8155,7 +8380,9 @@ def _settle_before_close() -> None:
     await_bridge_threads()
 
 
-def _wrap_destroy_to_settle_first(window: webview.Window) -> None:
+def _wrap_destroy_to_settle_first(
+    window: webview.Window, gate: _CloseGate | None = None
+) -> None:
     """Make `window.destroy()` itself settle in-flight bridge calls first.
 
     `events.closing` (registered on `window` just before this is called,
@@ -8188,8 +8415,14 @@ def _wrap_destroy_to_settle_first(window: webview.Window) -> None:
     settle before destroy" bugs structurally rather than requiring every
     call site, present or future, to remember it independently.
 
+    A direct `destroy()` is also a decision to close, so it marks `gate`
+    closing first: the page's late bridge calls are then declined and,
+    on platforms where `destroy()` does reach `events.closing`, the close
+    dialog is not asked. The dialog is for a close the user starts.
+
     Args:
         window: The window whose own `destroy` method to wrap in place.
+        gate: The window's close gate (`create_window` passes its `Api`'s).
 
     Returns:
         None. `window.destroy` is reassigned as a side effect.
@@ -8197,6 +8430,8 @@ def _wrap_destroy_to_settle_first(window: webview.Window) -> None:
     original_destroy = window.destroy
 
     def destroy_after_settling() -> None:
+        if gate is not None:
+            gate.closing = True
         await_bridge_threads()
         original_destroy()
 
@@ -8366,10 +8601,14 @@ def create_window(*, api: Api | None = None, hidden: bool = False) -> webview.Wi
     _set_macos_application_name(_MACOS_APPLICATION_NAME)
     _configure_macos_native_about_panel()
     window_width, window_height = _window_size(hidden)
+    served_api = api if api is not None else Api()
+    # One gate per window: an `Api` reused for a second window (a test) must
+    # not carry the first window's "closing" state across.
+    served_api._close_gate = _CloseGate()
     created = webview.create_window(
         _WINDOW_TITLE,
         url=str(_webui_directory() / "index.html"),
-        js_api=api if api is not None else Api(),
+        js_api=served_api,
         width=window_width,
         height=window_height,
         hidden=hidden,
@@ -8389,6 +8628,15 @@ def create_window(*, api: Api | None = None, hidden: bool = False) -> webview.Wi
     )
     if created is None:
         raise RuntimeError("pywebview did not create a window")
+
+    # Asks before a close the user started loses edits or running work
+    # (`Api.on_window_closing`). Registered first: it also marks the window
+    # closing, which makes the settle below the last word on bridge calls.
+    # Returning `False` vetoes the close (`webview.event.Event.set`).
+    def confirm_close() -> bool:
+        return served_api.on_window_closing(created)
+
+    created.events.closing += confirm_close
     # Settles an in-flight bridge call before the platform's own native
     # close proceeds — real, synchronous, and cross-platform (`_settle_
     # before_close`'s own docstring), but not, on its own, a close from
@@ -8403,12 +8651,14 @@ def create_window(*, api: Api | None = None, hidden: bool = False) -> webview.Wi
     # claude-sonnet-5-shutdown-bridge-thread-settle-design.md` originally
     # scoped this to), rather than requiring each one to remember its own
     # settle call.
-    _wrap_destroy_to_settle_first(created)
+    _wrap_destroy_to_settle_first(created, served_api._close_gate)
     logger.debug("window created (hidden=%s)", hidden)
     return created
 
 
-def _build_menu(window: webview.Window) -> list[Menu]:
+def _build_menu(
+    window: webview.Window, quit_action: Callable[[], None] | None = None
+) -> list[Menu]:
     """Build the native File/Run/Help menu bar.
 
     (Botanist GUI design doc `20260907-claude-sonnet-5-botanist-gui-
@@ -8444,7 +8694,8 @@ def _build_menu(window: webview.Window) -> list[Menu]:
     and needs no settle wrapper of its own any more either:
     `create_window`'s own `_wrap_destroy_to_settle_first` already rebinds
     this exact `window`'s own `destroy` attribute to settle first, so the
-    bare method reference below already does.
+    bare method reference below already does. `quit_action` replaces it
+    when the caller owns a close that asks first (`Api.request_close`).
     """
 
     def dispatch(script: str) -> Callable[[], None]:
@@ -8484,7 +8735,7 @@ def _build_menu(window: webview.Window) -> list[Menu]:
                 "Reveal output folder", dispatch("fim.menu.revealOutputFolder()")
             ),
             MenuSeparator(),
-            MenuAction("Quit fim", window.destroy),
+            MenuAction("Quit fim", quit_action or window.destroy),
         ],
     )
     # No "Animate" item (`doc/fim-gui-design.md` §5.1): the
@@ -8902,16 +9153,19 @@ def main(argv: Sequence[str] | None = None) -> int:
     # `_install_shutdown_signal_handlers`'s own docstring has the full
     # rationale.
     _install_shutdown_signal_handlers(api, shutdown_timeout())
-    webview.start(menu=_build_menu(window))
+    webview.start(menu=_build_menu(window, api.request_close))
     logger.info("window closed")
     # Armed only now, after the window has closed: the timer's budget
     # covers shutdown alone, never the arbitrarily long time a user may
     # legitimately leave the application open.
     _start_shutdown_deadman(shutdown_timeout())
-    # A saved run still executing is asked to checkpoint and pause, so it
-    # resumes later instead of being found interrupted. Its worker is
-    # not a daemon; should it miss this bound, the deadman still exits.
-    api.pause_active_object_run(_OBJECT_PAUSE_ON_CLOSE_SECONDS)
+    # Whatever is still running is asked to stop: a saved run checkpoints
+    # and pauses, so it resumes later instead of being found interrupted;
+    # a run, batch, or sweep is cancelled. Their workers are not daemons;
+    # should one miss this bound, the deadman still exits. The close
+    # dialog has usually asked already, so this is the backstop for every
+    # close that skipped it.
+    api.stop_active_work(_STOP_ON_CLOSE_SECONDS)
     return 0
 
 

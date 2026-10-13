@@ -2028,6 +2028,21 @@
     </form>
   </dialog>
 
+  <!-- Asks before a close would lose unsaved edits or interrupt running work
+       (`screens/close-guard.js`, `Api.on_window_closing`). Shown only when
+       Python vetoes a close the user started; Esc and "Keep working" both
+       leave the window open. -->
+  <dialog class="config-modal" id="modal-confirm-close" aria-labelledby="confirm-close-title">
+    <h2 id="confirm-close-title">Close fim?</h2>
+    <ul id="confirm-close-reasons"></ul>
+    <p class="hint" id="confirm-close-error" role="alert" hidden></p>
+    <div class="actions">
+      <button type="button" id="confirm-close-keep-button" tabindex="0">Keep working</button>
+      <button type="button" id="confirm-close-discard-button" tabindex="0" hidden>Close without saving</button>
+      <button type="button" id="confirm-close-primary-button" class="primary-action" tabindex="0">Save and close</button>
+    </div>
+  </dialog>
+
   <!-- Details of one Experiment, Study, or Run (`screens/details.js`):
        its name, its one-line description (the tooltip every displayed
        name shows), and, for an Experiment or Study, longer documentation
@@ -2567,6 +2582,7 @@
 <script src="screens/details.js"></script>
 <script src="screens/run-title.js"></script>
 <script src="screens/config-modals.js"></script>
+<script src="screens/close-guard.js"></script>
 <script src="screens/migration-matrix.js"></script>
 <script src="screens/loci-grid.js"></script>
 <script src="screens/n-per-deme.js"></script>

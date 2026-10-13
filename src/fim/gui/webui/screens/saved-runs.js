@@ -228,18 +228,34 @@ async function startSavedRun(run) {
     }
 }
 
-async function onSaveRunObjectClicked() {
+/**
+ * Keep the form as a saved run: a Draft when it is not valid yet, Planned
+ * when it is ready to run. Shared by "Save for later" and the close dialog
+ * (`screens/close-guard.js`).
+ * @returns {Promise<object>} `Api.save_run_object`'s result.
+ */
+async function saveFormForLater() {
     const saved = await window.pywebview.api.save_run_object(
         collectFormValues(),
         editingObjectId,
         document.getElementById("run-name-input").value.trim(),
         document.getElementById("run-description-input").value.trim()
     );
+    if (saved.ok) {
+        editingObjectId = saved.objectId;
+        window.fim.markFormClean();
+    }
+    return saved;
+}
+
+window.fim.saveFormForLater = saveFormForLater;
+
+async function onSaveRunObjectClicked() {
+    const saved = await saveFormForLater();
     if (!saved.ok) {
         window.fim.showRunBanner(saved.message);
         return;
     }
-    editingObjectId = saved.objectId;
     window.fim.showRunBanner(
         saved.state === "draft"
             ? `Saved as a Draft. It cannot run until this is fixed: ${saved.problem}`

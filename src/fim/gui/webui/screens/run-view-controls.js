@@ -156,6 +156,8 @@ async function onRunClicked() {
     // Started (or reused): the name belonged to this run, not the next.
     runNameInput.value = "";
     runDescriptionInput.value = "";
+    // The configuration now belongs to a run, so it is nothing left to save.
+    window.fim.markFormClean();
     if (started.reused) {
         // Already computed: nothing was started. Show the existing run the
         // way Home opens it, and say so.
@@ -219,6 +221,7 @@ async function onSaveYamlClicked() {
     }
     showRunBanner("");
     runReason.textContent = `Saved to ${result.path}`;
+    window.fim.markFormClean();
 }
 
 window.fim.openConfiguration = async function openConfiguration() {

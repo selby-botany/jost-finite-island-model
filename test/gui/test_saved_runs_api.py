@@ -178,8 +178,8 @@ def test_pause_without_a_saved_run_in_flight_is_refused(api: Api) -> None:
     assert paused["ok"] is False
 
 
-def test_pausing_on_close_with_nothing_running_does_nothing(api: Api) -> None:
-    api.pause_active_object_run(0.0)
+def test_stopping_work_on_close_with_nothing_running_does_nothing(api: Api) -> None:
+    api.stop_active_work(0.0)
 
     assert api._active_object_id is None
 

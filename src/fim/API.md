@@ -337,7 +337,13 @@ Return to the [source-tree orientation](../README.md) or the [developer guide](.
     * [cancel\_run\_object](#fim.gui.app.Api.cancel_run_object)
     * [clone\_run\_object](#fim.gui.app.Api.clone_run_object)
     * [delete\_run\_object](#fim.gui.app.Api.delete_run_object)
-    * [pause\_active\_object\_run](#fim.gui.app.Api.pause_active_object_run)
+    * [stop\_active\_work](#fim.gui.app.Api.stop_active_work)
+    * [on\_window\_closing](#fim.gui.app.Api.on_window_closing)
+    * [request\_close](#fim.gui.app.Api.request_close)
+    * [close\_needs\_confirmation](#fim.gui.app.Api.close_needs_confirmation)
+    * [close\_requirements](#fim.gui.app.Api.close_requirements)
+    * [finish\_close](#fim.gui.app.Api.finish_close)
+    * [report\_unsaved\_edits](#fim.gui.app.Api.report_unsaved_edits)
     * [open\_output\_folder](#fim.gui.app.Api.open_output_folder)
     * [get\_run\_setting\_differences](#fim.gui.app.Api.get_run_setting_differences)
     * [get\_starter\_form](#fim.gui.app.Api.get_starter_form)
@@ -8976,22 +8982,126 @@ Delete a saved run that is not executing, and all of its data.
 
 - ``{"ok"` - True}`, or `{"ok": False, "message": ...}`.
 
-<a id="fim.gui.app.Api.pause_active_object_run"></a>
+<a id="fim.gui.app.Api.stop_active_work"></a>
 
-#### pause\_active\_object\_run
+#### stop\_active\_work
 
 ```python
-def pause_active_object_run(timeout: float) -> None
+def stop_active_work(timeout: float) -> None
 ```
 
-Pause the saved run now executing, waiting up to `timeout` seconds.
+Ask whatever is running to stop, and wait up to `timeout` seconds.
 
-Called while the application closes, so a saved run stops at a
-checkpoint it can resume from rather than being interrupted.
+Called after the window closes, so closing never leaves a worker
+thread to hold the process open until the deadman fires: a saved
+run checkpoints and pauses (and resumes later), a run, batch, or
+sweep is cancelled. A worker that misses the bound is logged, and
+the deadman still ends the process.
 
 **Arguments**:
 
-- `timeout` - Longest wait for the worker to acknowledge, in seconds.
+- `timeout` - Longest total wait for the workers, in seconds.
+
+<a id="fim.gui.app.Api.on_window_closing"></a>
+
+#### on\_window\_closing
+
+```python
+def on_window_closing(window: _EvaluatesJs) -> bool
+```
+
+Decide a close the user started: let it go, or ask first.
+
+The `events.closing` subscriber (`create_window`) calls this on the
+platform's UI thread, so it only decides and returns. When edits or
+running work would be lost, the close is vetoed and the page is
+asked to show its dialog from a helper thread; the dialog's answer
+arrives through `finish_close`.
+
+**Arguments**:
+
+- `window` - The window being closed.
+
+
+**Returns**:
+
+  `True` to let the close proceed, `False` to veto it.
+
+<a id="fim.gui.app.Api.request_close"></a>
+
+#### request\_close
+
+```python
+def request_close() -> None
+```
+
+Close the window the way its close button does (the Quit menu item).
+
+<a id="fim.gui.app.Api.close_needs_confirmation"></a>
+
+#### close\_needs\_confirmation
+
+```python
+def close_needs_confirmation() -> bool
+```
+
+Return whether closing now would lose edits or interrupt work.
+
+<a id="fim.gui.app.Api.close_requirements"></a>
+
+#### close\_requirements
+
+```python
+@_log_bridge_call
+def close_requirements() -> dict[str, Any]
+```
+
+Return what closing the window now would affect, for its dialog.
+
+**Returns**:
+
+- ``{"ok"` - True, "unsavedEdits", "savedRun", "run", "sweep"}`, each
+  a bool: the Configure form has unsaved edits, a saved run is
+  executing (it pauses and resumes later), a run or batch that
+  cannot be resumed is executing, a sweep is executing.
+
+<a id="fim.gui.app.Api.finish_close"></a>
+
+#### finish\_close
+
+```python
+@_log_bridge_call
+def finish_close() -> dict[str, Any]
+```
+
+Close the window once the user has answered the close dialog.
+
+Asks running work to stop at once (a saved run pauses at a
+checkpoint), so that overlaps with the window closing, then closes
+the window from a helper thread so this call can return first.
+
+**Returns**:
+
+- ``{"ok"` - True}`, or `{"ok": False, "message": ...}`.
+
+<a id="fim.gui.app.Api.report_unsaved_edits"></a>
+
+#### report\_unsaved\_edits
+
+```python
+@_log_bridge_call
+def report_unsaved_edits(unsaved: bool) -> None
+```
+
+Record whether the Configure form has edits that are not saved.
+
+Sent by the page only when the answer changes. Closing the window
+consults it (`on_window_closing`).
+
+**Arguments**:
+
+- `unsaved` - Whether the form differs from what was last loaded or
+  saved.
 
 <a id="fim.gui.app.Api.open_output_folder"></a>
 
@@ -12035,7 +12145,7 @@ flakiness.
 
 ```python
 def await_bridge_threads(
-        timeout: float = _BRIDGE_SETTLE_TIMEOUT_SECONDS) -> None
+        timeout: float = _BRIDGE_SETTLE_TIMEOUT_SECONDS) -> bool
 ```
 
 Wait for pywebview's own in-flight bridge-call threads to finish.
@@ -12067,7 +12177,10 @@ conftest.py`'s own `pytest_unconfigure` diagnostics name the thread
 precisely, when this runs inside the test suite — but this
 function's own job is only to give a genuinely in-flight call a real
 chance to finish before whatever comes next (a window destroy, a
-test's own teardown) proceeds regardless.
+test's own teardown) proceeds regardless. It does log a warning
+naming the calls still running, so a close that had to give up
+leaves evidence at once rather than only in the deadman's dump 20
+seconds later.
 
 **Arguments**:
 
@@ -12076,8 +12189,8 @@ test's own teardown) proceeds regardless.
 
 **Returns**:
 
-  None. Returns as soon as no bridge thread is alive, or when
-  `timeout` elapses, whichever comes first.
+  `True` as soon as no bridge thread is alive; `False` when
+  `timeout` elapses first.
 
 <a id="fim.gui.app.initial_window_size"></a>
 
