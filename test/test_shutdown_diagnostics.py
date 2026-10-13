@@ -22,15 +22,22 @@ assumption the pieces rest on.
 from __future__ import annotations
 
 import os
+import signal
 import subprocess
 import sys
 import textwrap
 import threading
+from contextlib import suppress
 from pathlib import Path
 
 import conftest
 import pytest
-from conftest import join_or_fail, readline_or_fail
+from conftest import (
+    COMPLETION_BACKSTOP_SECONDS,
+    join_or_fail,
+    poll_or_fail,
+    readline_or_fail,
+)
 
 _REPOSITORY_ROOT = Path(__file__).resolve().parent.parent
 
@@ -67,24 +74,53 @@ def test_controller_teardown_keeps_report_then_watchdog(
     assert calls == ["report", "watchdog"]
 
 
+@pytest.mark.parametrize("inherited_plugin", [False, True])
 def test_finished_worker_can_wait_for_a_peer_beyond_shutdown_timeout(
     tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    inherited_plugin: bool,
 ) -> None:
     """Real xdist workers stay healthy after their own pytest session ends.
 
     A file signal proves one worker has unconfigured before its peer waits
     beyond the watchdog interval. The delay deliberately tests that interval;
     it is not a simulation runtime assertion or a startup timing assumption.
+
+    The nested run explicitly loads xdist without unrelated installed
+    plugins. Both workers signal completed collection before the parent's
+    completion wait begins, so interpreter startup and imports do not consume
+    the lifecycle backstop. A controller watchdog covers gateway teardown,
+    which happens before pytest_unconfigure; failures retain stdout and stacks
+    and terminate the entire nested process group on POSIX.
+    The parent allows two completion backstops for the peer wait followed by
+    controller teardown, rather than racing the child's own failure report.
     """
+    if inherited_plugin:
+        monkeypatch.setenv("PYTEST_PLUGINS", "fim_nonexistent_outer_plugin")
     (tmp_path / "shutdown_plugin.py").write_text(
         textwrap.dedent(
             """
             from pathlib import Path
             import conftest as diagnostics
+            import pytest
+
+            @pytest.hookimpl(tryfirst=True)
+            def pytest_sessionfinish(session):
+                if not hasattr(session.config, "workerinput"):
+                    diagnostics._SHUTDOWN_TIMEOUT_SECONDS = 30
+                    diagnostics.arm_shutdown_watchdog()
+
+            def pytest_collection_finish(session):
+                config = session.config
+                if hasattr(config, "workerinput"):
+                    Path(
+                        config.rootpath,
+                        config.workerinput["workerid"] + "-ready",
+                    ).touch()
 
             def pytest_unconfigure(config):
                 if not hasattr(config, "workerinput"):
-                    diagnostics._SHUTDOWN_TIMEOUT_SECONDS = 10
+                    diagnostics._SHUTDOWN_TIMEOUT_SECONDS = 30
                 diagnostics.pytest_unconfigure(config)
                 if hasattr(config, "workerinput"):
                     Path(config.rootpath, "worker-finished").touch()
@@ -97,54 +133,102 @@ def test_finished_worker_can_wait_for_a_peer_beyond_shutdown_timeout(
             """
             import time
             from pathlib import Path
+            from conftest import poll_or_fail
 
             def test_fast():
                 pass
 
             def test_peer():
-                deadline = time.monotonic() + 30
-                while not Path("worker-finished").exists():
-                    assert time.monotonic() < deadline, "peer never unconfigured"
-                    time.sleep(0.01)
+                poll_or_fail(
+                    Path("worker-finished").exists,
+                    bool,
+                    "fast worker unconfigure",
+                    interval=0.01,
+                )
                 time.sleep(2)
+                Path("peer-waited").touch()
             """
         ),
         encoding="utf-8",
     )
-    completed = subprocess.run(
-        [
-            sys.executable,
-            "-m",
-            "pytest",
-            "-o",
-            "addopts=",
-            "-n",
-            "2",
-            "-p",
-            "shutdown_plugin",
-            "--confcutdir",
-            str(tmp_path),
-            "--rootdir",
-            str(tmp_path),
-            "test_worker_lifecycle.py",
-        ],
-        cwd=tmp_path,
-        env={
-            **os.environ,
-            "PYTHONPATH": os.pathsep.join(
-                (str(tmp_path), str(_REPOSITORY_ROOT / "test"))
-            ),
-            "PYTEST_ADDOPTS": "",
-            "FIM_TEST_SHUTDOWN_TIMEOUT": "1",
-        },
-        capture_output=True,
-        text=True,
-        timeout=60,
-        check=False,
+    command = [
+        sys.executable,
+        "-m",
+        "pytest",
+        "-o",
+        "addopts=",
+        "-n",
+        "2",
+        "--max-worker-restart=0",
+        "-p",
+        "xdist.plugin",
+        "-p",
+        "shutdown_plugin",
+        "--confcutdir",
+        str(tmp_path),
+        "--rootdir",
+        str(tmp_path),
+        "test_worker_lifecycle.py",
+    ]
+    env = {
+        key: value
+        for key, value in os.environ.items()
+        if not key.startswith(("PYTEST_", "COV_CORE_", "COVERAGE_"))
+    }
+    env.update(
+        PYTHONPATH=os.pathsep.join((str(tmp_path), str(_REPOSITORY_ROOT / "test"))),
+        PYTEST_ADDOPTS="",
+        PYTEST_DISABLE_PLUGIN_AUTOLOAD="1",
+        FIM_TEST_SHUTDOWN_TIMEOUT="1",
     )
-    assert completed.returncode == 0, completed.stdout + completed.stderr
-    assert "2 passed" in completed.stdout
-    assert "Timeout (" not in completed.stderr
+    stdout_path = tmp_path / "nested-stdout"
+    stderr_path = tmp_path / "nested-stderr"
+    with (
+        stdout_path.open("w", encoding="utf-8") as stdout_file,
+        stderr_path.open("w", encoding="utf-8") as stderr_file,
+    ):
+        process = subprocess.Popen(
+            command,
+            cwd=tmp_path,
+            env=env,
+            stdout=stdout_file,
+            stderr=stderr_file,
+            text=True,
+            start_new_session=os.name == "posix",
+        )
+        try:
+            poll_or_fail(
+                lambda: (
+                    process.poll() is not None
+                    or all(
+                        (tmp_path / f"gw{index}-ready").exists() for index in range(2)
+                    )
+                ),
+                bool,
+                "nested xdist worker collection",
+                interval=0.01,
+            )
+            process.wait(timeout=2 * COMPLETION_BACKSTOP_SECONDS)
+        except (AssertionError, subprocess.TimeoutExpired) as exc:
+            pytest.fail(
+                f"{exc}\n"
+                f"{stdout_path.read_text(encoding='utf-8')}\n"
+                f"{stderr_path.read_text(encoding='utf-8')}"
+            )
+        finally:
+            if os.name == "posix":
+                # Also reap workers if the controller's watchdog exited first.
+                with suppress(ProcessLookupError):
+                    os.killpg(process.pid, signal.SIGKILL)
+            elif process.poll() is None:
+                process.kill()
+            process.wait()
+    stdout = stdout_path.read_text(encoding="utf-8")
+    stderr = stderr_path.read_text(encoding="utf-8")
+    assert process.returncode == 0, stdout + stderr
+    assert (tmp_path / "peer-waited").exists(), stdout + stderr
+    assert "2 passed" in stdout, stdout + stderr
+    assert "Timeout (" not in stderr, stdout + stderr
 
 
 def test_live_non_daemon_threads_ignores_a_quiet_interpreter() -> None:

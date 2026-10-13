@@ -3844,8 +3844,10 @@ The standalone/controller process still bounds real finalization.
 #### test\_finished\_worker\_can\_wait\_for\_a\_peer\_beyond\_shutdown\_timeout
 
 ```python
+@pytest.mark.parametrize("inherited_plugin", [False, True])
 def test_finished_worker_can_wait_for_a_peer_beyond_shutdown_timeout(
-        tmp_path: Path) -> None
+        tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+        inherited_plugin: bool) -> None
 ```
 
 Real xdist workers stay healthy after their own pytest session ends.
@@ -3853,6 +3855,15 @@ Real xdist workers stay healthy after their own pytest session ends.
 A file signal proves one worker has unconfigured before its peer waits
 beyond the watchdog interval. The delay deliberately tests that interval;
 it is not a simulation runtime assertion or a startup timing assumption.
+
+The nested run explicitly loads xdist without unrelated installed
+plugins. Both workers signal completed collection before the parent's
+completion wait begins, so interpreter startup and imports do not consume
+the lifecycle backstop. A controller watchdog covers gateway teardown,
+which happens before pytest_unconfigure; failures retain stdout and stacks
+and terminate the entire nested process group on POSIX.
+The parent allows two completion backstops for the peer wait followed by
+controller teardown, rather than racing the child's own failure report.
 
 <a id="test.test_shutdown_diagnostics.test_live_non_daemon_threads_ignores_a_quiet_interpreter"></a>
 
