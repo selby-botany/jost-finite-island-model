@@ -84,7 +84,7 @@ def test_finished_worker_can_wait_for_a_peer_beyond_shutdown_timeout(
 
             def pytest_unconfigure(config):
                 if not hasattr(config, "workerinput"):
-                    diagnostics._SHUTDOWN_TIMEOUT_SECONDS = 120
+                    diagnostics._SHUTDOWN_TIMEOUT_SECONDS = 10
                 diagnostics.pytest_unconfigure(config)
                 if hasattr(config, "workerinput"):
                     Path(config.rootpath, "worker-finished").touch()
@@ -102,7 +102,7 @@ def test_finished_worker_can_wait_for_a_peer_beyond_shutdown_timeout(
                 pass
 
             def test_peer():
-                deadline = time.monotonic() + 120
+                deadline = time.monotonic() + 30
                 while not Path("worker-finished").exists():
                     assert time.monotonic() < deadline, "peer never unconfigured"
                     time.sleep(0.01)
@@ -139,7 +139,7 @@ def test_finished_worker_can_wait_for_a_peer_beyond_shutdown_timeout(
         },
         capture_output=True,
         text=True,
-        timeout=120,
+        timeout=60,
         check=False,
     )
     assert completed.returncode == 0, completed.stdout + completed.stderr
