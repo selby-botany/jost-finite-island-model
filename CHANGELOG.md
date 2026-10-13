@@ -24,6 +24,16 @@ project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   from their checkpoints. Study and Experiment lists show a lifecycle
   summary, and groups can be closed and reopened. See
   [saved runs](doc/run-lifecycle.md).
+- **Close dialog in the desktop app.** Closing the window now asks first when
+  it would lose something: a Configure form with unsaved changes, or work that
+  is still running. **Save and close** keeps the configuration under Saved
+  runs (a Draft if it is not complete yet, Planned if it is ready to run) and
+  **Pause and close** checkpoints a running saved run so it resumes later.
+  Closing also stops a run, batch, or sweep that was started from the form,
+  so no worker is left to hold the process open. The shutdown log now names
+  any bridge call that blocked the close, and the page's late calls are
+  declined once the window is closing. See [closing the
+  window](doc/usage.md#closing-the-window).
 - **Expert Settings.** The policy constants behind the new rule (the burn-in
   floor of 5 relaxation times, the cap's 15, the first check, the effective
   sample size floor, the spectrum burn-in multiplier, and the rest) live in an

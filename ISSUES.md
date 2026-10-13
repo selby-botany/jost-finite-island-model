@@ -125,6 +125,24 @@ was rejected as the same "same fix, drifting apart" risk this project
 already avoided once for `in_flight_bridge_threads`/`await_bridge_threads`
 themselves.
 
+Further hardening (2026-10-13), from reviewing the close path for the same
+class of defect:
+
+- Once the window is committed to closing, the application declines every
+  further call from the page (`_log_bridge_call`). The settle used to return
+  the first time it saw no call in flight, so a late call from the page could
+  still start a new thread behind it.
+- `await_bridge_threads` now logs a warning naming the calls that were still
+  running when it gave up, so a close that had to stop waiting leaves evidence
+  at once instead of only in the deadman's dump 20 seconds later. Each call's
+  duration is logged at DEBUG, which gives a measured basis for the 3-second
+  bound in place of the assumption it rested on.
+- A run, batch, or sweep started from the form was not stopped when the window
+  closed, and its worker thread (not a daemon) held the process open until the
+  deadman fired and abandoned its worker processes. Closing now asks the
+  user first (the close dialog) and then cancels it, or pauses a saved run at
+  a checkpoint, before the deadman's budget is spent (`Api.stop_active_work`).
+
 Why this issue stays open regardless: this closes the one specific,
 diagnosed, reproduced race for every way this application (and its own test
 suite) can trigger a close today, by construction rather than by having
@@ -173,6 +191,10 @@ Relevant code:
   `_wrap_destroy_to_settle_first`, both in `src/fim/gui/app.py` — the two
   real hooks that fix is actually wired into the running application (and,
   via the second one, into every test that builds a real window)
+- `Api.on_window_closing`, `Api.finish_close`, and `Api.stop_active_work` in
+  `src/fim/gui/app.py`, and `test/gui/test_close_guard.py` /
+  `test/gui/test_close_guard_screen.py` — the close dialog and the stop on
+  close
 - `test/gui/test_shutdown_deadman.py` — regression tests for both wiring
   points, and for `in_flight_bridge_threads`/`await_bridge_threads`
   themselves

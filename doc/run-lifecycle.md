@@ -225,12 +225,13 @@ for real data. `fim object reclaim --dry-run` lists them, and
 - **Saved runs** on Home lists every saved run. Each row offers only the
   actions its state allows: Start, Resume, Edit, Open, Cancel, Delete.
 - **Pause** appears on the Run screen while a saved run executes.
-- **Closing the window pauses** a running saved run at a checkpoint, so you
-  can resume it next time.
-- The desktop app runs one saved run at a time and runs only single
-  replicates (`n_replicates` of 1). Start a saved batch with
-  `fim object start`.
-- The desktop app has no clone action yet. Use `fim object clone`.
+- **Closing the window asks first** when it would lose something: a
+  configuration with changes you have not saved, or work that is still
+  running. The dialog offers to save the configuration (as a Draft or Planned
+  run), and pauses a running saved run at a checkpoint so you can resume it
+  next time. See [closing the window](usage.md#closing-the-window).
+- The desktop app runs one saved run at a time. It starts single runs and
+  batches, and **Clone** on a saved run makes an editable copy.
 
 A saved run created in the desktop app can be started, paused, or resumed
 from the command line, and the reverse.

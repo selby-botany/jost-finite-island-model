@@ -1324,6 +1324,32 @@ Use **Load into Configure** to run an editable copy. The copy is your own
 run and never replaces the read-only example. Batch examples include every
 kept replicate's full results and the shared batch summary.
 
+### Closing the window
+
+When you close the window, `fim` asks first if closing would lose something.
+This happens when:
+
+- The Configure form has changes you have not saved.
+- A saved run is in progress.
+- A run, batch, or sweep that you started with **Run simulation** or
+  **Sweep** is in progress.
+
+The dialog tells you what is at stake and offers these choices:
+
+| Button | What it does |
+|---|---|
+| **Save and close** | Keeps the configuration under **Saved runs** on Home, then closes. A configuration that is not complete yet is saved as a Draft. A configuration that is ready to run is saved as Planned. |
+| **Close without saving** | Closes and drops the unsaved changes. |
+| **Pause and close** | Shown when only a saved run is in progress. The run stops at a checkpoint, and you resume it from **Saved runs** on Home. |
+| **Stop and close** | Shown when only a run or sweep that cannot be resumed is in progress. Closing stops it. |
+| **Keep working** | Leaves the window open. |
+
+Choosing **Save and close** or **Close without saving** also pauses a running
+saved run, or stops any other running work. If the save fails, the dialog
+stays open and shows the reason, so nothing is lost.
+
+If nothing would be lost, the window closes at once.
+
 ### If the window closes but `fim` keeps running
 
 Closing the window should end the program immediately. If something
