@@ -66,8 +66,11 @@ def test_worked_example_configs_are_the_source_of_usage_yaml() -> None:
 # Worked examples that deliberately pin a run length: a one-generation
 # statistics check, two engine-timing workloads that average over a fixed
 # window, and the Dear-Nolan high-migration stationarity check (30
-# generations from its equilibrium).
+# generations from its equilibrium). Dear-Nolan low raises its cap far above
+# any need (the derived cap, 15 relaxation times past the burn-in, is below the
+# 2.6 million generations its precision takes), so that it stops by converging.
 PINNED_CONVERGENCE_EXAMPLES = {
+    "dear-nolan-low",
     "literature-distance-statistics-from-an-explicit-founder-split",
     "a-large-d-batch-under-generational-vector",
     "a-long-locus-batch-under-the-generational-engine",

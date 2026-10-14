@@ -1195,10 +1195,10 @@
     "rationale": "With 24 replicates per burn-in and a settling band of 3 combined standard errors, K_ST, A_CGD, Delta, MI and E_ST settle after 2 to 3 relaxation times in both measured regimes, as D does (3). The burn-in never drops below 5 relaxation times, so the multiplier stays 1."
   },
   "dear_nolan_low": {
-    "note": "About 30 minutes a run, so the committed example report is its seeded run (doc/examples/dear-nolan-low).",
+    "note": "About 2.6 million generations to converge: a few minutes on the vectorized engine, nearly two hours on lineal. The committed example report is its seeded run (doc/examples/dear-nolan-low).",
     "analytic_D": 0.03846390547017975,
-    "example_D_mean": 0.041993,
-    "example_D_standard_error": 0.005966,
-    "example_converged": false
+    "example_D_mean": 0.039012,
+    "example_D_standard_error": 0.003098,
+    "example_converged": true
   }
 }

@@ -166,20 +166,22 @@ def test_derived_burn_in_covers_the_settling_time() -> None:
 
 
 def test_dear_nolan_low_report_matches_its_analytic_value() -> None:
-    """Dear-Nolan low: the committed seeded run is honest about what it knows.
+    """Dear-Nolan low: the committed seeded run converges, and agrees with theory.
 
-    The run reaches its cap without meeting the precision (D's effective
-    sample size is far below the floor), reports that, and its average lies
-    within two standard errors of the analytic D.
+    The run stops because D met the requested precision (its effective sample
+    size is above the floor, and the start of its window agrees with the end),
+    and its average lies within two standard errors of the analytic D.
     """
     module = _calibrate_module()
     report = json.loads(DEAR_NOLAN_LOW_REPORT.read_text(encoding="utf-8"))
     window = report["window_statistics"]["D"]
     expected = module.analytic_d("dear-nolan-low")
 
-    assert report["converged"] is False
-    assert report["reason"] == "hit the cap"
-    assert window["noise_adequate"] is False
+    assert report["converged"] is True
+    assert report["converged_on"] == "D"
+    assert report["reason"] == "statistic converged"
+    assert window["noise_adequate"] is True
+    assert window["effective_sample_size"] >= 50
     assert abs(window["mean"] - expected) <= 2.0 * window["standard_error"]
 
     entry = _evidence()["dear_nolan_low"]

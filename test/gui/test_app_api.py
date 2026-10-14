@@ -898,19 +898,23 @@ def test_load_example_leaves_settings_unchanged() -> None:
 
 
 def test_load_example_lists_exactly_the_differing_run_settings() -> None:
-    """A lineal, one-replicate example against auto/200 Settings differs in both.
+    """An auto, one-replicate example against lineal/200 Settings differs in both.
 
-    `several-convergence-statistics` names `engine_backend:
-    lineal` and one replicate and leaves every other run setting at its
-    library default, which the starter Settings share.
+    `several-convergence-statistics` names `engine_backend: auto` and one
+    replicate and leaves every other run setting at its library default,
+    which the starter Settings share, except the engine, which the test
+    sets to `lineal` so that the example and Settings disagree about it.
     """
     api = Api()
+    assert api.set_default_run_settings(
+        {**api.get_default_run_settings(), "engine_backend": "lineal"}
+    ) == {"ok": True}
 
     result = api.load_example("several-convergence-statistics")
 
     assert result["ok"] is True, result.get("message")
     settings = api.get_default_run_settings()
-    assert (settings["engine_backend"], settings["n_replicates"]) == ("auto", "200")
+    assert (settings["engine_backend"], settings["n_replicates"]) == ("lineal", "200")
     assert [entry["field"] for entry in result["runSettingDifferences"]] == [
         "engine_backend",
         "n_replicates",
@@ -919,10 +923,10 @@ def test_load_example_lists_exactly_the_differing_run_settings() -> None:
     assert engine == {
         "field": "engine_backend",
         "label": "Execution engine",
-        "runValue": "lineal",
-        "settingsValue": "auto",
-        "runText": "lineal",
-        "settingsText": "auto",
+        "runValue": "auto",
+        "settingsValue": "lineal",
+        "runText": "auto",
+        "settingsText": "lineal",
     }
     assert (replicates["runValue"], replicates["settingsValue"]) == ("1", "200")
     assert set(result["runSettings"]) == set(DEFAULT_RUN_SETTING_FIELD_NAMES)
@@ -1012,6 +1016,9 @@ def test_start_run_after_a_load_uses_the_loaded_run_settings(
 
     monkeypatch.setattr(Api, "_start_scalar_run", capture)
     api = Api()
+    assert api.set_default_run_settings(
+        {**api.get_default_run_settings(), "engine_backend": "lineal"}
+    ) == {"ok": True}
     loaded = api.load_example("several-convergence-statistics")
     assert loaded["ok"] is True, loaded.get("message")
 
@@ -1020,9 +1027,9 @@ def test_start_run_after_a_load_uses_the_loaded_run_settings(
     assert started["ok"] is True, started.get("message")
     assert started["isBatch"] is False
     (params,) = captured
-    assert (params.engine_backend, params.n_replicates) == ("lineal", 1)
+    assert (params.engine_backend, params.n_replicates) == ("auto", 1)
     settings = api.get_default_run_settings()
-    assert (settings["engine_backend"], settings["n_replicates"]) == ("auto", "200")
+    assert (settings["engine_backend"], settings["n_replicates"]) == ("lineal", "200")
 
 
 def test_making_loaded_run_settings_my_settings_updates_settings() -> None:
@@ -1033,7 +1040,9 @@ def test_making_loaded_run_settings_my_settings_updates_settings() -> None:
     configuration names, is kept.
     """
     api = Api()
-    assert api.set_default_run_settings({"max_workers": "3"}) == {"ok": True}
+    assert api.set_default_run_settings(
+        {"max_workers": "3", "engine_backend": "lineal"}
+    ) == {"ok": True}
     loaded = api.load_example("several-convergence-statistics")
     assert loaded["runSettingDifferences"] != []
 
@@ -1043,7 +1052,7 @@ def test_making_loaded_run_settings_my_settings_updates_settings() -> None:
 
     assert saved == {"ok": True}
     settings = api.get_default_run_settings()
-    assert (settings["engine_backend"], settings["n_replicates"]) == ("lineal", "1")
+    assert (settings["engine_backend"], settings["n_replicates"]) == ("auto", "1")
     assert settings["max_workers"] == "3"
     assert api.get_run_setting_differences(loaded["runSettings"]) == []
 
@@ -1051,8 +1060,13 @@ def test_making_loaded_run_settings_my_settings_updates_settings() -> None:
 def test_get_run_setting_differences_follows_saved_settings() -> None:
     """After Settings change, the comparison is made against the new Settings."""
     api = Api()
-    loaded = api.load_example("several-convergence-statistics")
     assert api.set_default_run_settings({"engine_backend": "lineal"}) == {"ok": True}
+    loaded = api.load_example("several-convergence-statistics")
+    assert [entry["field"] for entry in loaded["runSettingDifferences"]] == [
+        "engine_backend",
+        "n_replicates",
+    ]
+    assert api.set_default_run_settings({"engine_backend": "auto"}) == {"ok": True}
 
     differences = api.get_run_setting_differences(loaded["runSettings"])
 
@@ -1062,15 +1076,16 @@ def test_get_run_setting_differences_follows_saved_settings() -> None:
 def test_new_configuration_after_a_load_uses_saved_settings() -> None:
     """A fresh form after a load carries Settings' run settings, not the load's."""
     api = Api()
+    assert api.set_default_run_settings({"engine_backend": "lineal"}) == {"ok": True}
     loaded = api.load_example("several-convergence-statistics")
-    assert loaded["runSettings"]["engine_backend"] == "lineal"
+    assert loaded["runSettings"]["engine_backend"] == "auto"
 
     fresh = api.get_starter_form()
 
     settings = api.get_default_run_settings()
     for name in DEFAULT_RUN_SETTING_FIELD_NAMES:
         assert fresh[name] == settings[name], name
-    assert fresh["engine_backend"] == "auto"
+    assert fresh["engine_backend"] == "lineal"
     effective = SimulationParams.from_mapping(
         form_values_to_payload(
             api._merge_default_run_settings(
@@ -1082,7 +1097,7 @@ def test_new_configuration_after_a_load_uses_saved_settings() -> None:
             )
         )
     )
-    assert (effective.engine_backend, effective.n_replicates) == ("auto", 200)
+    assert (effective.engine_backend, effective.n_replicates) == ("lineal", 200)
 
 
 def test_load_yaml_leaves_settings_unchanged(
