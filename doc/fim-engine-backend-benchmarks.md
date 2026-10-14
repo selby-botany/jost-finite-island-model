@@ -23,6 +23,8 @@ table below with the exact command shown above it.
 - [B.4 `d` sweep extended to `d=500`](#b4-d-sweep-extended-to-d500)
 - [B.5 Joint `d` × locus-length sweep (heatmap)](#b5-joint-d--locus-length-sweep-heatmap)
 - [B.6 Joint `d` × locus-length sweep, post-Phase-7 (2026-09-05)](#b6-joint-d--locus-length-sweep-post-phase-7-2026-09-05)
+- [B.7 Replicate lane window (`max_concurrent_replicates`) sweep (2026-10-14)](#b7-replicate-lane-window-max_concurrent_replicates-sweep-2026-10-14)
+- [B.8 Batch size (`n_replicates`) sweep (2026-10-14)](#b8-batch-size-n_replicates-sweep-2026-10-14)
 - [Known gaps: axes not yet measured](#known-gaps-axes-not-yet-measured)
 
 ## Reading the tables
@@ -540,6 +542,163 @@ behavior specifically (rather than whole-run memory behavior, which this grid
 does answer, just uninformatively across backends) would need either a
 null/discarding store or a much shorter run.
 
+**Correction (2026-10-14).** That explanation is probably not the whole story,
+and may not be the story at all. On Linux `ru_maxrss` is inherited across
+`exec`, so each memory-measuring worker reported its parent's peak, not its own
+(B.7 measured this directly: four backends reading `3366.4 MiB` alike with a
+discarding store in place, then `119`–`207 MiB` and distinct once the worker
+read `VmHWM` instead). An identical `1.00` ratio at every point is exactly what
+that artifact produces. Treat every peak-RSS figure recorded on Linux before
+B.7 as unreliable.
+
+### B.7 Replicate lane window (`max_concurrent_replicates`) sweep (2026-10-14)
+
+#### Setup
+
+- Commit: `e874e89`, plus the `benchmark-engines` changes of `0f0b1bb` (the
+  new axis and the discarding store) and a later `VmHWM` fix to the memory
+  worker. The latency columns were measured before that fix, the memory columns
+  after it.
+- System: Intel Core Ultra 9 185H, 22 threads, 93GB RAM (citrus-2)
+- OS: Ubuntu 24.04, kernel 6.8.0-139-generic, idle apart from this run (`nice 10`)
+- Run Date: 2026-10-14
+- Fixed Parameters:
+  - `d=60`, `N=500`, `m=0.05`, `mu=0.001`, locus length `4` (capacity `256`)
+  - `n_replicates=64`, `generations=200`, `trials=3`, `seed=20260902`
+
+#### Command
+
+```console
+dev/bin/benchmark-engines --sweep max-concurrent-replicates \
+    --values 1,2,4,8,16,32,64 --replicates 64 --generations 200 --trials 3 \
+    --measure-rss --output a1-window.json --resume
+```
+
+#### Reading the first row
+
+The window's first row is **not** an <code>L<sub>1</sub></code> run. Every cell in
+this table runs a batch of 64 replicates; the window only limits how many are
+alive at once. <code>L<sub>x</sub></code> (`lineal`, which ignores the window) is
+therefore about `64` times <code>L<sub>1</sub></code> in every row
+(`64.84` in the first). The one-replicate case, where <code>L<sub>x</sub></code>
+equals <code>L<sub>1</sub></code>, is B.8's first row.
+
+#### Latency results
+
+| Window | <code>L<sub>1</sub>(s)</code> | <code>L<sub>x</sub>(s)</code> | <code>L<sub>x</sub>/L<sub>1</sub></code> | <code>G<sub>off</sub>(s)</code> | <code>G<sub>off</sub>/L<sub>1</sub></code> | <code>G<sub>jit</sub>(s)</code> | <code>G<sub>jit</sub>/L<sub>1</sub></code> | `V`(s) | <code>V/L<sub>1</sub></code> | `fastest` |
+|---:|---:|---:|--:|--:|--:|--:|--:|--:|--:|:--:|
+| 1 | 4.031 | 261.371 | 64.84 | 269.208 | 66.78 | 109.297 | 27.11 | 13.673 | 3.39 | `V` |
+| 2 | 4.028 | 259.794 | 64.50 | 261.821 | 65.00 | 106.344 | 26.40 | 13.462 | 3.34 | `V` |
+| 4 | 4.076 | 258.301 | 63.37 | 265.558 | 65.15 | 141.144 | 34.63 | 13.839 | 3.40 | `V` |
+| 8 | 4.221 | 266.565 | 63.15 | 269.768 | 63.91 | 163.900 | 38.83 | 13.810 | 3.27 | `V` |
+| 16 | 4.233 | 258.938 | 61.17 | 276.625 | 65.35 | 176.081 | 41.60 | 13.388 | 3.16 | `V` |
+| 32 | 4.119 | 260.966 | 63.36 | 283.370 | 68.80 | 176.661 | 42.89 | 13.401 | 3.25 | `V` |
+| 64 | 4.142 | 260.852 | 62.98 | 284.898 | 68.78 | 173.073 | 41.78 | 13.303 | 3.21 | `V` |
+
+![Time and L₁ normalized time by lane window](img/fim-benchmark-b7-latency-graph.png)
+
+#### Memory results
+
+Memory is the peak resident set size of one fresh process per cell, read from
+`VmHWM` (see B.6's correction for why the benchmark's own memory columns were
+re-measured alone). <code>L<sub>1</sub></code> for memory is the peak of a
+one-replicate `lineal` run, `108.3 MiB`; each `/L1` column is a ratio to it.
+
+| Window | <code>L<sub>x</sub>(MiB)</code> | <code>L<sub>x</sub>/L<sub>1</sub></code> | <code>G<sub>off</sub>(MiB)</code> | <code>G<sub>off</sub>/L<sub>1</sub></code> | <code>G<sub>jit</sub>(MiB)</code> | <code>G<sub>jit</sub>/L<sub>1</sub></code> | `V`(MiB) | <code>V/L<sub>1</sub></code> |
+|---:|--:|--:|--:|--:|--:|--:|--:|--:|
+| 1 | 119.2 | 1.10 | 121.4 | 1.12 | 168.8 | 1.56 | 167.6 | 1.55 |
+| 2 | 119.0 | 1.10 | 138.5 | 1.28 | 171.3 | 1.58 | 167.8 | 1.55 |
+| 4 | 119.0 | 1.10 | 140.7 | 1.30 | 191.1 | 1.76 | 168.2 | 1.55 |
+| 8 | 119.0 | 1.10 | 141.8 | 1.31 | 195.0 | 1.80 | 169.1 | 1.56 |
+| 16 | 119.0 | 1.10 | 144.5 | 1.33 | 199.1 | 1.84 | 171.0 | 1.58 |
+| 32 | 119.2 | 1.10 | 150.1 | 1.39 | 207.0 | 1.91 | 174.2 | 1.61 |
+| 64 | 119.0 | 1.10 | 153.3 | 1.42 | 206.3 | 1.90 | 181.7 | 1.68 |
+
+![Peak memory and L₁ normalized peak memory by lane window](img/fim-benchmark-b7-memory-graph.png)
+
+#### Summary
+
+- **Latency.** `V` does not care about the window: `13.3`–`13.8` s, within the
+  run-to-run spread the `lineal` control shows (<code>L<sub>x</sub>/L<sub>1</sub></code>
+  `61`–`65`). <code>G<sub>jit</sub></code> is faster with a small window
+  (<code>G<sub>jit</sub>/L<sub>1</sub></code> `26`–`27` at windows 1 and 2, `42`–`43`
+  from 16 up); <code>G<sub>off</sub></code> slows about 6% as the window opens.
+- **Memory.** The window buys little. `V` grows `1.55` to `1.68` times
+  <code>L<sub>1</sub></code> from window 1 to unbounded (+8%), <code>G<sub>off</sub></code>
+  `1.12` to `1.42`. <code>L<sub>x</sub></code> is flat at `1.10`, as it must be.
+- At this scale (`d=60`, capacity `256`) every working set is tens of MiB. A
+  window should matter where a lane's cached state is large (high `d` with a
+  large capacity), which this table does not reach. Leave
+  `max_concurrent_replicates` unset at this scale, and measure it at a large
+  configuration before setting it there.
+
+### B.8 Batch size (`n_replicates`) sweep (2026-10-14)
+
+#### Setup
+
+- Commit: `e874e89`, plus the `benchmark-engines` changes of `0f0b1bb` (the
+  new axis and the discarding store) and a later `VmHWM` fix to the memory
+  worker. The latency columns were measured before that fix, the memory columns
+  after it.
+- System: Intel Core Ultra 9 185H, 22 threads, 93GB RAM (citrus-2)
+- OS: Ubuntu 24.04, kernel 6.8.0-139-generic, idle apart from this run (`nice 10`)
+- Run Date: 2026-10-14
+- Fixed Parameters:
+  - `d=60`, `N=500`, `m=0.05`, `mu=0.001`, locus length `4` (capacity `256`)
+  - `generations=200`, `trials=3`, `seed=20260902`
+
+#### Command
+
+```console
+dev/bin/benchmark-engines --sweep replicates --values 1,4,16,64,128 \
+    --generations 200 --trials 3 --measure-rss --output a2-batch.json --resume
+```
+
+#### Latency results
+
+The first row (one replicate) is where <code>L<sub>x</sub></code> equals
+<code>L<sub>1</sub></code>; the ratio columns read as "how many one-replicate
+`lineal` runs does this batch cost".
+
+| Replicates | <code>L<sub>1</sub>(s)</code> | <code>L<sub>x</sub>(s)</code> | <code>L<sub>x</sub>/L<sub>1</sub></code> | <code>G<sub>off</sub>(s)</code> | <code>G<sub>off</sub>/L<sub>1</sub></code> | <code>G<sub>jit</sub>(s)</code> | <code>G<sub>jit</sub>/L<sub>1</sub></code> | `V`(s) | <code>V/L<sub>1</sub></code> | `fastest` |
+|---:|---:|---:|--:|--:|--:|--:|--:|--:|--:|:--:|
+| 1 | 4.178 | 4.164 | 1.00 | 4.264 | 1.02 | 1.683 | 0.40 | 0.198 | 0.05 | `V` |
+| 4 | 4.153 | 16.833 | 4.05 | 16.736 | 4.03 | 8.718 | 2.10 | 0.815 | 0.20 | `V` |
+| 16 | 4.382 | 67.241 | 15.34 | 68.780 | 15.70 | 42.036 | 9.59 | 3.350 | 0.76 | `V` |
+| 64 | 4.238 | 262.928 | 62.04 | 286.308 | 67.56 | 174.536 | 41.18 | 13.866 | 3.27 | `V` |
+| 128 | 4.266 | 534.583 | 125.31 | 586.742 | 137.54 | 362.799 | 85.04 | 27.866 | 6.53 | `V` |
+
+![Time and L₁ normalized time by batch size](img/fim-benchmark-b8-latency-graph.png)
+
+#### Memory results
+
+Memory is the peak resident set size of one fresh process per cell, read from
+`VmHWM` (see B.6's correction for why the benchmark's own memory columns were
+re-measured alone). <code>L<sub>1</sub></code> for memory is the peak of a
+one-replicate `lineal` run, `108.3 MiB`; each `/L1` column is a ratio to it.
+
+| Replicates | <code>L<sub>x</sub>(MiB)</code> | <code>L<sub>x</sub>/L<sub>1</sub></code> | <code>G<sub>off</sub>(MiB)</code> | <code>G<sub>off</sub>/L<sub>1</sub></code> | <code>G<sub>jit</sub>(MiB)</code> | <code>G<sub>jit</sub>/L<sub>1</sub></code> | `V`(MiB) | <code>V/L<sub>1</sub></code> |
+|---:|--:|--:|--:|--:|--:|--:|--:|--:|
+| 1 | 108.3 | 1.00 | 108.7 | 1.00 | 155.4 | 1.43 | 155.5 | 1.44 |
+| 4 | 109.1 | 1.01 | 124.4 | 1.15 | 172.2 | 1.59 | 156.9 | 1.45 |
+| 16 | 111.6 | 1.03 | 135.8 | 1.25 | 190.1 | 1.76 | 162.0 | 1.50 |
+| 64 | 118.8 | 1.10 | 150.7 | 1.39 | 206.9 | 1.91 | 181.9 | 1.68 |
+| 128 | 129.4 | 1.19 | 164.1 | 1.52 | 216.5 | 2.00 | 209.1 | 1.93 |
+
+![Peak memory and L₁ normalized peak memory by batch size](img/fim-benchmark-b8-memory-graph.png)
+
+#### Summary
+
+- **Latency.** `V` is fastest at every batch size, from one replicate
+  (<code>V/L<sub>1</sub></code> `0.05`, about 20 times faster) to `128` (`6.53`).
+  All four engines grow linearly with the batch, so the `V`-versus-`G` boundary
+  does not move with batch size at this configuration.
+- `L_b` here is the benchmark's sequential batch, not `fim run`'s multi-process
+  batch, so it is not what a user's `lineal` batch costs.
+- **Memory.** It grows with the batch for every engine, from `1.00`
+  (<code>L<sub>x</sub></code>) and `1.44` (`V`) times <code>L<sub>1</sub></code> at one
+  replicate to `1.19` and `1.93` at 128, about `0.15` to `0.8` MiB per replicate.
+
 ## Known gaps: axes not yet measured
 
 Recorded here, named, rather than left as a silent absence someone has to
@@ -548,47 +707,10 @@ of these needs real hardware time on an idle machine — hours, for the
 larger ones — which is why none is closed by code alone; none is blocked on
 a design decision.
 
-### Replicate concurrency (`max_concurrent_replicates`) has never been swept
+### Replicate concurrency and batch size: measured at one scale
 
-`max_concurrent_replicates` caps how many replicate lanes are ever alive at
-once (`fim.engine.run_batch`; `None`, the default, means every requested
-replicate). It exists specifically for its effect on **steady-state memory**
-under `"generational-vector"`, where each concurrently active lane holds its
-own cached `VectorizedState` — so bounding the lane count bounds that
-backend's working set independently of `n_replicates`. What that bound costs
-in wall-clock time, and how much peak RSS it actually buys, is unmeasured:
-
-- **No table here sweeps it.** Every table above holds it at its default.
-- **`dev/bin/benchmark-engines` has no axis for it.** Its `--sweep` field
-  list is `d`, `N`, `mu`, `m`, `loci-length`, and `replicates` — adding a
-  `max-concurrent-replicates` axis is a small, self-contained change to that
-  script, and is a prerequisite for the sweep rather than part of it.
-- **Correctness is already covered, and is not the gap.** That a window
-  changes only *when* a lane is built, never what a run computes, is
-  asserted directly for both the dict-based and the vectorized advancer
-  (`test_max_concurrent_replicates_does_not_change_what_a_batch_computes`
-  and `test_generational_vector_backend_windowed_batch_matches_unbounded`),
-  as is the lane-count bound itself
-  (`test_run_batch_bounds_concurrently_active_lanes_to_the_configured_window`).
-  What is missing is only the performance/memory characterization.
-
-The honest consequence: this document supports no recommendation about what
-to set `max_concurrent_replicates` to, for any configuration. Until the
-sweep runs, the default (`None`) is the only setting with recorded evidence
-behind it, and that evidence is every table above rather than a comparison.
-A useful sweep would need `--measure-rss` and a store that does not dominate
-peak RSS — see B.6's own closing note on exactly that limitation.
-
-### Batch size (`n_replicates`) is sweepable but unrecorded
-
-Distinct from the above, and often confused with it: `n_replicates` is how
-many replicates a batch runs, `max_concurrent_replicates` is how many of
-them may be in flight at once. `benchmark-engines` **can** sweep
-`n_replicates` (`--sweep replicates`), but no table in this document records
-a run of it — every table above instead holds it fixed (at `16`, or at `12`
-for B.6) and sweeps something else. So the cross-engine comparisons here are
-all at one batch size, and nothing measured says whether the `V`-versus-`G`
-boundary moves with batch size the way B.5 showed it moves with `d` and
-capacity together.
-
-This one needs only machine time, not a tooling change.
+B.7 (`max_concurrent_replicates`) and B.8 (`n_replicates`) now record both axes
+at `d=60`, capacity `256`. What they do not cover: a configuration whose per-lane state is large (high `d` with a large
+capacity), where a lane window is expected to matter for memory, and any
+engine's behavior beyond `128` replicates. The recommendation in B.7 (leave the
+window unset at this scale) says nothing about that regime.

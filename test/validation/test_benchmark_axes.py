@@ -121,3 +121,13 @@ def test_the_discarding_store_keeps_no_rows() -> None:
 
     assert list(store.read("run")) == []
     assert store.equilibrium_store("run") is store
+
+
+def test_peak_rss_prefers_the_address_space_high_water_mark() -> None:
+    status = "Name:\tpython\nVmPeak:\t 9999 kB\nVmHWM:\t  2048 kB\nVmRSS:\t  1024 kB\n"
+
+    assert _tool()._peak_rss_bytes(status) == 2048 * 1024
+
+
+def test_peak_rss_falls_back_to_getrusage_without_proc() -> None:
+    assert _tool()._peak_rss_bytes("") > 0

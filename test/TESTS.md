@@ -39625,14 +39625,12 @@ it fails, so the edit has to name its own evidence.
 def test_benchmark_document_records_its_unmeasured_axes() -> None
 ```
 
-The replicate-concurrency gap is named in the record, not silently absent.
+What the replicate-axis tables do not cover is named, not silently absent.
 
-`benchmark-engines` sweeps `d`, `N`, `mu`, `m`, locus length, and
-`n_replicates`; it has no `max_concurrent_replicates` axis at all,
-and no table records either replicate axis. A reader comparing this
-document against the remediation's own list of axes to sweep
-("demes, loci, capacity, and replicate concurrency separately")
-would otherwise have to infer the omission from what is not there.
+`benchmark-engines` sweeps `d`, `N`, `mu`, `m`, locus length,
+`n_replicates`, and `max_concurrent_replicates`; the last two are recorded
+at one scale (B.7, B.8). The known-gaps section says where that scale
+stops, so a reader does not have to infer it from what is not there.
 
 <a id="validation.test_beta_workflow"></a>
 
