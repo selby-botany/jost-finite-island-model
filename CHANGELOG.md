@@ -28,6 +28,10 @@ project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   are already complete, from the stored specification, and compares each with
   its existing run. A bit-for-bit match replaces the old run; a difference
   keeps both and is reported. See [sweeps](doc/usage.md#sweep-a-parameter).
+- **Benchmark axis for the replicate lane window.** `benchmark-engines
+  --sweep max-concurrent-replicates` times the generational backends across
+  lane windows. Its peak-RSS runs now receive the window and use a store that
+  keeps no rows, so the store no longer sets every backend's peak.
 - **Close dialog in the desktop app.** Closing the window now asks first when
   it would lose something: a Configure form with unsaved changes, or work that
   is still running. **Save and close** keeps the configuration under Saved

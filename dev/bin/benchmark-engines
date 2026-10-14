@@ -24,9 +24,10 @@ offers.
 Default sweep is `d` (deme count) -- the axis `auto_vector_min_d`
 (`fim.engine`) already exists to threshold, and the one the project
 owner asked this tool to characterize first. `--sweep N|mu|m|
-loci-length|replicates` characterizes the other candidate scaling
-factors named directly (population size, mutation/migration rate, locus
-length/capacity, batch size) -- run each independently; this tool does
+loci-length|replicates|max-concurrent-replicates` characterizes the other
+candidate scaling factors named directly (population size,
+mutation/migration rate, locus length/capacity, batch size, replicate lane
+window) -- run each independently; this tool does
 not attempt a full multi-factor grid (out of scope, and combinatorially
 large). `--sweep replicates` varies `L_batch`/G/V's own batch size
 (`n_replicates`) directly via `--values`, holding `d`/`N`/`mu`/`m`/
@@ -141,7 +142,8 @@ import statistics
 import subprocess
 import sys
 import time
-from collections.abc import Mapping
+from collections import deque
+from collections.abc import Iterable, Iterator, Mapping
 from dataclasses import dataclass, replace
 from datetime import UTC, datetime
 from importlib.metadata import version as installed_version
@@ -167,7 +169,17 @@ from fim.persistence.store import (  # noqa: E402
     TrajectoryStore,
 )
 
-SweepField = str  # one of "d", "N", "mu", "m", "loci-length", "replicates"
+SweepField = str  # one of the names in `SWEEP_FIELDS`
+
+SWEEP_FIELDS = (
+    "d",
+    "N",
+    "mu",
+    "m",
+    "loci-length",
+    "replicates",
+    "max-concurrent-replicates",
+)
 
 DEFAULT_D = 60
 DEFAULT_N = 500
@@ -191,6 +203,61 @@ class FixedBaseline(NamedTuple):
     mu: float
     m: float
     locus_length: int
+
+
+class _DiscardingStore:
+    """A trajectory store that keeps nothing, for peak-RSS measurement only.
+
+    `InMemoryTrajectoryStore` retains every row it is given, so at benchmark
+    scale the store, not the engine's working set, set every backend's peak
+    RSS and made the four backends read alike (doc/fim-engine-backend-
+    benchmarks.md, B.6's closing note). The RSS worker uses this instead.
+    Like the in-memory store it asks for rows (`wants_frames` is `False`), so
+    an engine does the same work; only the retention is gone. Timing runs
+    keep the in-memory store, as they always did.
+    """
+
+    def write_generation(
+        self,
+        run_id: str,
+        generation: int,
+        rows: Iterable[Mapping[str, Any]],
+        *,
+        validate: bool = True,
+    ) -> None:
+        """Consume `rows` and keep none of them."""
+        del run_id, generation, validate
+        deque(rows, maxlen=0)
+
+    def begin_run(self, run_id: str, layout: object) -> None:
+        """Accept a run's layout and ignore it."""
+        del run_id, layout
+
+    def wants_frames(self, run_id: str) -> bool:
+        """Return `False`, like the in-memory store: ask for rows."""
+        del run_id
+        return False
+
+    def write_frame(self, run_id: str, frame: object) -> None:
+        """Accept a frame and ignore it."""
+        del run_id, frame
+
+    def read(self, run_id: str) -> Iterator[Any]:
+        """Yield nothing: nothing was kept."""
+        del run_id
+        return iter(())
+
+    def discard(self, run_id: str) -> None:
+        """Do nothing: nothing was kept."""
+        del run_id
+
+    def close(self) -> None:
+        """Do nothing: nothing is held."""
+
+    def equilibrium_store(self, run_id: str) -> _DiscardingStore:
+        """Return this same store for the ancestral phase."""
+        del run_id
+        return self
 
 
 def _load_fixed_baseline(config_path: Path | None) -> FixedBaseline:
@@ -398,6 +465,12 @@ def _run_rss_worker(argv: list[str]) -> int:
     parser.add_argument("--m", type=float, required=True)
     parser.add_argument("--locus-length", type=int, required=True)
     parser.add_argument("--n-replicates", type=int, required=True)
+    parser.add_argument(
+        "--max-concurrent-replicates",
+        type=int,
+        default=0,
+        help="Lane window; 0 means every replicate (None).",
+    )
     parser.add_argument("--generations", type=int, required=True)
     parser.add_argument("--seed", type=int, required=True)
     args = parser.parse_args(argv)
@@ -411,7 +484,13 @@ def _run_rss_worker(argv: list[str]) -> int:
         max_generations=args.generations,
         seed=args.seed,
     )
-    _run_once(args.engine_backend, params, jit=args.jit)
+    if args.max_concurrent_replicates:
+        params = replace(
+            params, max_concurrent_replicates=args.max_concurrent_replicates
+        )
+    # A discarding store: the in-memory one would dominate the peak (see
+    # `_DiscardingStore`).
+    _run_once(args.engine_backend, params, jit=args.jit, store=_DiscardingStore())
     peak_bytes = _ru_maxrss_bytes(resource.getrusage(resource.RUSAGE_SELF).ru_maxrss)
     print(peak_bytes)
     return 0
@@ -454,6 +533,8 @@ def _measure_rss(
         str(locus_length),
         "--n-replicates",
         str(params.n_replicates),
+        "--max-concurrent-replicates",
+        str(params.max_concurrent_replicates or 0),
         "--generations",
         str(params.max_generations),
         "--seed",
@@ -597,7 +678,11 @@ def _measure_point(
     m = float(value) if field == "m" else baseline.m
     locus_length = int(value) if field == "loci-length" else baseline.locus_length
     point_replicates = int(value) if field == "replicates" else replicates
-    if field not in {"d", "N", "mu", "m", "loci-length", "replicates"}:
+    # Lanes alive at once under the generational backends; `None` (every
+    # replicate) for every other sweep. Lineal runs ignore it by design, so
+    # its columns stay flat across this axis and serve as the control.
+    point_window = int(value) if field == "max-concurrent-replicates" else None
+    if field not in SWEEP_FIELDS:
         raise ValueError(f"unknown sweep field: {field}")
 
     single_params = _base_params(
@@ -610,7 +695,11 @@ def _measure_point(
         max_generations=generations,
         seed=seed,
     )
-    batch_params = replace(single_params, n_replicates=point_replicates)
+    batch_params = replace(
+        single_params,
+        n_replicates=point_replicates,
+        max_concurrent_replicates=point_window,
+    )
 
     lineal_single_seconds = _median_of("lineal", single_params, trials)
     lineal_batch_seconds = _median_of("lineal", batch_params, trials)
@@ -994,10 +1083,13 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument(
         "--sweep",
-        choices=["d", "N", "mu", "m", "loci-length", "replicates"],
+        choices=list(SWEEP_FIELDS),
         default="d",
         help="Which SimulationParams field to sweep (default: d). "
-        "'replicates' sweeps batch size (n_replicates) directly.",
+        "'replicates' sweeps batch size (n_replicates) directly. "
+        "'max-concurrent-replicates' sweeps the lane window of a batch of "
+        "--replicates replicates (a window wider than the batch is clamped "
+        "to it, so it is the same point as the batch size).",
     )
     parser.add_argument(
         "--values",
