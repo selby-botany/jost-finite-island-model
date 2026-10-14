@@ -6,19 +6,19 @@
     },
     "pairwise": {
       "bytes": 524,
-      "sha256": "4ad1739b7cfe13e16133f2698fb70d5026860c2f9bac91148a0cad947e93f7fe"
+      "sha256": "f3ea04cf2408e9da57bfa8ab408e10cf08f42920f1b69adb88eae3696e1eabde"
     },
     "report": {
-      "bytes": 4648,
-      "sha256": "725463bc0596b6891112373c995dbec83090f6d355371807b491e942041531ee"
+      "bytes": 4651,
+      "sha256": "c0ac0665420378f8dbecca05c925095b34ea9dae91c44f488c1b598db6263dd6"
     },
     "scatter": {
-      "bytes": 130082,
-      "sha256": "70efe881bf2729de7b03ff31decfed7dca41905cc7bb62a5c258216e736553e5"
+      "bytes": 158503,
+      "sha256": "44c108c1f3265dd05c18a0e9d236edf44687d590bc5c8e41c9e2127eed0ab9aa"
     },
     "trajectory": {
       "bytes": 7754034,
-      "sha256": "352659581e86269a98470a409cd32a3d1bde0b329a791bbb79e7f7b569297712"
+      "sha256": "67ef0139618452635a538d357947cc7d8b001c15ac2557ed79f8effa79baadd2"
     }
   },
   "auto_derived": [
@@ -32,8 +32,8 @@
     "reason": "statistic converged",
     "statistic": "D"
   },
-  "ended_at": "2026-10-10T19:22:02.741644Z",
-  "engine_backend": "lineal",
+  "ended_at": "2026-10-14T15:36:07.351009Z",
+  "engine_backend": "generational-vector",
   "equilibrium_final_heterozygosity": null,
   "equilibrium_generation_count": null,
   "initial_condition_mode": "dirichlet",
@@ -50,7 +50,7 @@
     "convergence_statistic": "D",
     "d": 3,
     "deme_weighting": "equal",
-    "engine_backend": "lineal",
+    "engine_backend": "auto",
     "initial_allele_count": 2,
     "initial_concentration": 1.0,
     "jit": "off",
@@ -84,8 +84,8 @@
     "track_expensive_statistics": false
   },
   "relaxation_time": 250.06124540480633,
-  "run_id": "run-e7d41d759d2950d8",
+  "run_id": "run-4ea7e4b5d377e947",
   "schema_version": 3,
   "software_version": "1.2.0",
-  "started_at": "2026-10-10T19:21:41.555840Z"
+  "started_at": "2026-10-14T15:36:06.008245Z"
 }

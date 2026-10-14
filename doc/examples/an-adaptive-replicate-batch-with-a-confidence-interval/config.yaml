@@ -30,7 +30,7 @@ loci:
     length: 100
   - locus_id: 8
     length: 100
-engine_backend: lineal
+engine_backend: auto
 convergence_statistic: D
 precision: 0.03   # plus or minus, for the batch's interval across replicates
 # Thinned storage: every generation up to 5,000, then one in ten, so the saved

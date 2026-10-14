@@ -28,11 +28,11 @@
   "converged_on": "D",
   "generation": 41089,
   "reason": "statistic converged",
-  "run_id": "run-7c7eeec34ccea637",
+  "run_id": "run-f662f57510e5c370",
   "window_statistics": {
     "D": {
       "burn_in": 1539,
-      "effective_sample_size": 84.7551392869625,
+      "effective_sample_size": 84.75513928696252,
       "estimator": "geyer",
       "geweke_z": -0.8111853520599122,
       "mean": 0.3021375165033552,
@@ -43,13 +43,13 @@
       "minimum_ess": 50.0,
       "noise_adequate": true,
       "selected_form": "mean_of_values",
-      "standard_deviation": 0.0786620137477978,
+      "standard_deviation": 0.07866201374779781,
       "standard_error": 0.008544409204417387,
       "target_standard_error": 0.015306403707739622,
       "undefined_generations": 0,
       "value_of_means": {
         "mean": 0.29752130760072615,
-        "standard_error": 0.008492530595073232
+        "standard_error": 0.00849253059507323
       },
       "window": 39551,
       "window_end": 41089,
@@ -57,19 +57,19 @@
     },
     "G_ST": {
       "burn_in": 1539,
-      "effective_sample_size": 423.2276722587567,
+      "effective_sample_size": 423.22767225875657,
       "estimator": "geyer",
       "geweke_z": -1.0948505974334009,
       "mean": 0.1658486228168737,
       "mean_of_values": {
         "mean": 0.1658486228168737,
-        "standard_error": 0.0015326652213880864
+        "standard_error": 0.001532665221388087
       },
       "minimum_ess": 50.0,
       "noise_adequate": true,
       "selected_form": "mean_of_values",
-      "standard_deviation": 0.03153075213830392,
-      "standard_error": 0.0015326652213880864,
+      "standard_deviation": 0.031530752138303926,
+      "standard_error": 0.001532665221388087,
       "target_standard_error": 0.015306403707739622,
       "undefined_generations": 0,
       "value_of_means": {
@@ -88,13 +88,13 @@
       "mean": 0.4988121229024972,
       "mean_of_values": {
         "mean": 0.4988121229024972,
-        "standard_error": 0.006072863066980514
+        "standard_error": 0.006072863066980515
       },
       "minimum_ess": 50.0,
       "noise_adequate": true,
       "selected_form": "mean_of_values",
-      "standard_deviation": 0.05258839451587131,
-      "standard_error": 0.006072863066980514,
+      "standard_deviation": 0.052588394515871315,
+      "standard_error": 0.006072863066980515,
       "target_standard_error": 0.015306403707739622,
       "undefined_generations": 0,
       "window": 39551,
@@ -103,19 +103,19 @@
     },
     "H_ST": {
       "burn_in": 1539,
-      "effective_sample_size": 86.05068627976848,
+      "effective_sample_size": 86.05068627976846,
       "estimator": "geyer",
-      "geweke_z": -0.9079680214664546,
+      "geweke_z": -0.9079680214664544,
       "mean": 0.21900267015703287,
       "mean_of_values": {
         "mean": 0.21900267015703287,
-        "standard_error": 0.00517113349857811
+        "standard_error": 0.005171133498578112
       },
       "minimum_ess": 50.0,
       "noise_adequate": true,
       "selected_form": "mean_of_values",
-      "standard_deviation": 0.0479692489559789,
-      "standard_error": 0.00517113349857811,
+      "standard_deviation": 0.047969248955978906,
+      "standard_error": 0.005171133498578112,
       "target_standard_error": 0.015306403707739622,
       "undefined_generations": 0,
       "window": 39551,
@@ -124,19 +124,19 @@
     },
     "H_T": {
       "burn_in": 1539,
-      "effective_sample_size": 64.73057457011902,
+      "effective_sample_size": 64.730574570119,
       "estimator": "geyer",
-      "geweke_z": -0.6832726963642033,
+      "geweke_z": -0.6832726963642032,
       "mean": 0.5982215046009512,
       "mean_of_values": {
         "mean": 0.5982215046009512,
-        "standard_error": 0.007568731896068771
+        "standard_error": 0.007568731896068773
       },
       "minimum_ess": 50.0,
       "noise_adequate": true,
       "selected_form": "mean_of_values",
-      "standard_deviation": 0.060894469686671455,
-      "standard_error": 0.007568731896068771,
+      "standard_deviation": 0.06089446968667146,
+      "standard_error": 0.007568731896068773,
       "target_standard_error": 0.015306403707739622,
       "undefined_generations": 0,
       "window": 39551,

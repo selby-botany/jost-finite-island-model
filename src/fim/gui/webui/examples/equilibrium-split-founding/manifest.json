@@ -6,23 +6,23 @@
     },
     "equilibrium_trajectory": {
       "bytes": 459712,
-      "sha256": "0eb967b8f376c7faf047dfd41490e366b75c3faac56322b32e5b070e2a250dcd"
+      "sha256": "01645fa1d97d86e8a6c5700d6db9f46dfe2fd0c43150a73ae5bdfc4fb951d6b2"
     },
     "pairwise": {
       "bytes": 522,
-      "sha256": "18f8d145feb5c429e4faa61d59065730685caf11cb35cb0e44b1afc1e5712e13"
+      "sha256": "c966a5820cc15966aa119ac851808b7b79a1261caa72a12e704cb0bbfa1528cd"
     },
     "report": {
-      "bytes": 4642,
-      "sha256": "0ef7f23c501f751ddce296d2ed9a55be8f2f4ce174db336016883759a0c89006"
+      "bytes": 4645,
+      "sha256": "14da61d5075d93ec68556a8519655581678317f3c66f36bf346d1bc4dca435ce"
     },
     "scatter": {
-      "bytes": 136337,
-      "sha256": "294904d93a917555e8fa6fda06adca2b97e6d7db7951332fcc1c953e3b3449c3"
+      "bytes": 162983,
+      "sha256": "be2171965374234e5e68daee5ed406f636ac9974a2efd0e36ee170555445c999"
     },
     "trajectory": {
       "bytes": 6705964,
-      "sha256": "593453daa3dd799cfb7471f60a8d6a627c67f542df32914282bdc216c9e3e466"
+      "sha256": "1cbfed111b2a6f8bf114a4ec30844916b44f3f9a2719a6a34b61ee7cbc5db5e3"
     }
   },
   "auto_derived": [
@@ -36,8 +36,8 @@
     "reason": "statistic converged",
     "statistic": "D"
   },
-  "ended_at": "2026-10-10T19:53:25.787058Z",
-  "engine_backend": "lineal",
+  "ended_at": "2026-10-14T15:35:57.204826Z",
+  "engine_backend": "generational-vector",
   "equilibrium_final_heterozygosity": 0.51351875,
   "equilibrium_generation_count": 1256,
   "initial_condition_mode": "equilibrium_split",
@@ -54,7 +54,7 @@
     "convergence_statistic": "D",
     "d": 3,
     "deme_weighting": "equal",
-    "engine_backend": "lineal",
+    "engine_backend": "auto",
     "equilibrium_convergence_tolerance": 0.01,
     "equilibrium_convergence_window": 20,
     "equilibrium_max_generations": 2000,
@@ -115,8 +115,8 @@
     "trajectory_thinning_start": 5000
   },
   "relaxation_time": 307.6923076923077,
-  "run_id": "run-7c7eeec34ccea637",
+  "run_id": "run-f662f57510e5c370",
   "schema_version": 3,
   "software_version": "1.2.0",
-  "started_at": "2026-10-10T19:50:59.519265Z"
+  "started_at": "2026-10-14T15:35:52.239954Z"
 }

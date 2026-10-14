@@ -5,20 +5,20 @@
       "sha256": "da3959e71cabe63969428f69fa016010ff453852528e610e666451a1ff3f7834"
     },
     "pairwise": {
-      "bytes": 1195,
-      "sha256": "e99fc0c207d0b7b50a935ed2ef31805586128e6ac0b2a994d98b0ecfff0ad851"
+      "bytes": 1192,
+      "sha256": "d30f5b7af86d5b686668cf868c75a4be96f2a7d47464baca56a4edaddca446b0"
     },
     "report": {
-      "bytes": 4587,
-      "sha256": "7350c4440a81513fab9a73e1bcfcf35814f0d983832189952cf73d782c08f211"
+      "bytes": 4588,
+      "sha256": "2a43e55ae8f9b009885849542288b9286527cdc1d13aeef14815ea0071e8e6a8"
     },
     "scatter": {
-      "bytes": 354384,
-      "sha256": "50aff850699083ed6c98855d3f88e884cfeb21467a2e90561711d58e36758a59"
+      "bytes": 377561,
+      "sha256": "7ec0c1ff1f4957cc72d10d67341ae7d25427a78f7a6ddfb0abe2af797a3b0c61"
     },
     "trajectory": {
       "bytes": 4718762,
-      "sha256": "d921db2655cd2cc7ab4f77064c87e6ef7a6997fccf1ad5bd3b351f5e2b2ae22c"
+      "sha256": "19dec50dab54e149d1701c1764cdc716395621eb411192fcc44bd7483e1052ee"
     }
   },
   "auto_derived": [],
@@ -29,8 +29,8 @@
     "reason": "averaging window complete",
     "statistic": "D"
   },
-  "ended_at": "2026-10-10T19:47:08.431581Z",
-  "engine_backend": "lineal",
+  "ended_at": "2026-10-14T15:36:03.932364Z",
+  "engine_backend": "generational-vector",
   "equilibrium_final_heterozygosity": null,
   "equilibrium_generation_count": null,
   "initial_condition_mode": "dirichlet",
@@ -47,7 +47,7 @@
     "convergence_statistic": "D",
     "d": 5,
     "deme_weighting": "equal",
-    "engine_backend": "lineal",
+    "engine_backend": "auto",
     "initial_allele_count": 2,
     "initial_concentration": 1.0,
     "jit": "off",
@@ -105,8 +105,8 @@
     "trajectory_thinning_start": 5000
   },
   "relaxation_time": 291.6666666666667,
-  "run_id": "run-672d659a48fb504e-r004",
+  "run_id": "run-e4c7914a68e431eb-r004",
   "schema_version": 3,
   "software_version": "1.2.0",
-  "started_at": "2026-10-10T19:46:29.283478Z"
+  "started_at": "2026-10-14T15:35:41.427290Z"
 }

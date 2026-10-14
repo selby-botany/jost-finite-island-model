@@ -19,7 +19,7 @@ seed: 992000
 loci:
 - locus_id: 1
   length: 400
-engine_backend: lineal
+engine_backend: auto
 convergence_statistic: D
 convergence_burn_in: 1
 replicate_averaging_window: 29

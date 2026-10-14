@@ -28,13 +28,13 @@
   "converged_on": "D",
   "generation": 6771,
   "reason": "statistic converged",
-  "run_id": "run-60a56891a0601bee",
+  "run_id": "run-15b79f6bfc8cb467",
   "window_statistics": {
     "D": {
       "burn_in": 117,
-      "effective_sample_size": 214.3443723010428,
+      "effective_sample_size": 214.34437230104285,
       "estimator": "geyer",
-      "geweke_z": -0.09554153549762519,
+      "geweke_z": -0.09554153549762517,
       "mean": 0.6137493105983409,
       "mean_of_values": {
         "mean": 0.6137493105983409,
@@ -59,22 +59,22 @@
       "burn_in": 117,
       "effective_sample_size": 329.7979912468172,
       "estimator": "geyer",
-      "geweke_z": -0.18265576333565436,
+      "geweke_z": -0.18265576333565442,
       "mean": 0.06627834304579289,
       "mean_of_values": {
         "mean": 0.06627834304579289,
-        "standard_error": 0.0011441154121626823
+        "standard_error": 0.0011441154121626818
       },
       "minimum_ess": 50.0,
       "noise_adequate": true,
       "selected_form": "mean_of_values",
-      "standard_deviation": 0.02077752621756405,
-      "standard_error": 0.0011441154121626823,
+      "standard_deviation": 0.020777526217564044,
+      "standard_error": 0.0011441154121626818,
       "target_standard_error": 0.010204269138493082,
       "undefined_generations": 0,
       "value_of_means": {
         "mean": 0.06615311149305433,
-        "standard_error": 0.0011292652120318087
+        "standard_error": 0.0011292652120318092
       },
       "window": 6655,
       "window_end": 6771,
@@ -105,7 +105,7 @@
       "burn_in": 117,
       "effective_sample_size": 214.3443723010428,
       "estimator": "geyer",
-      "geweke_z": -0.0955415354976224,
+      "geweke_z": -0.09554153549762237,
       "mean": 0.40916620706556067,
       "mean_of_values": {
         "mean": 0.40916620706556067,
@@ -126,7 +126,7 @@
       "burn_in": 117,
       "effective_sample_size": 149.4644390432397,
       "estimator": "geyer",
-      "geweke_z": -0.1334175968164783,
+      "geweke_z": -0.13341759681647833,
       "mean": 0.9123116320227064,
       "mean_of_values": {
         "mean": 0.9123116320227064,
@@ -135,7 +135,7 @@
       "minimum_ess": 50.0,
       "noise_adequate": true,
       "selected_form": "mean_of_values",
-      "standard_deviation": 0.025503246081663152,
+      "standard_deviation": 0.02550324608166315,
       "standard_error": 0.002086058691482791,
       "target_standard_error": 0.010204269138493082,
       "undefined_generations": 0,

@@ -26,7 +26,8 @@ saved trajectories are thinned (every generation to 5,000, then one in ten)
 to keep this example small.
 
 The batch takes about three minutes with a few worker processes on a
-development machine, and longer with `--sequential`.
+development machine; it is the replicates advancing together in one process
+under `engine_backend: auto`, not a pool of workers.
 
 ## Why eight loci and `precision: 0.03`
 
@@ -42,7 +43,7 @@ minimum of 10.
 
 ```console
 fim run doc/examples/an-adaptive-replicate-batch-with-a-confidence-interval/config.yaml \
-    --output results/an-adaptive-replicate-batch-with-a-confidence-interval --sequential --quiet
+    --output results/an-adaptive-replicate-batch-with-a-confidence-interval --quiet
 ```
 
 See the [usage-guide explanation](../../usage.md#an-adaptive-replicate-batch-with-a-confidence-interval)

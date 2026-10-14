@@ -15,7 +15,7 @@ seed: 20260914
 loci:
   - locus_id: 1
     length: 100
-engine_backend: lineal
+engine_backend: auto
 convergence_statistic: D
 precision: 0.05   # looser than the 0.01 default: seconds, not hours
 # Thinned storage: every generation up to 5,000, then one in ten, so the saved

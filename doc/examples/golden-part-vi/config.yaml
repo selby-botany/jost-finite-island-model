@@ -15,7 +15,7 @@ loci:
 initial_allele_count: 2
 initial_concentration: 1.0
 deme_weighting: size
-engine_backend: lineal
+engine_backend: auto
 convergence_statistic: D
 precision: 0.01
 # Thinned storage: every generation up to 5,000, then one in ten, so the saved

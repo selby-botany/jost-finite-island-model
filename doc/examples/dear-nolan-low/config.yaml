@@ -74,8 +74,14 @@ loci:
 initial_allele_count: 2
 initial_concentration: 1.0
 deme_weighting: size
-engine_backend: lineal
+engine_backend: auto
 convergence_statistic: D
 precision: 0.01
-max_generations: auto
+max_generations: 1000000000   # far above any need: the run stops when it converges
 n_replicates: 1
+# Thinned storage: every generation up to 5,000, then one in ten, so the saved
+# trajectory of this 2.6-million-generation run stays small; the statistics and
+# the report are unaffected.
+trajectory_retention: thinned
+trajectory_stride: 10
+trajectory_thinning_start: 5000

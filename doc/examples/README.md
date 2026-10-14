@@ -23,25 +23,28 @@ fim run doc/examples/<example>/config.yaml \
     --output results/<example> --quiet
 ```
 
-The `report.json` (or `summary.json`) you get matches the reference for
-the same backend and numerical environment. On every backend, FFT/BLAS
-reductions used for evidence-window diagnostics and the system logarithm
-used for Shannon-entropy statistics can round differently across platforms.
-Archive checks allow only tightly bounded rounding in `window_statistics`,
-`E_ST`, and `MI` floats (relative `1e-12`, absolute `1e-14`); keys, discrete
-values, other report fields, and local backend parity remain exact.
-The local reference explicitly selects the backend that `auto` resolved to,
-so an accelerated case does not also rerun a slower archived backend.
-Separate engine tests enforce exact cross-backend parity.
-Older vector archives can also use a different random stream; their
-statistical comparison is described in the vector example's README.
+Every example names `engine_backend: auto`, the recommended choice, except the
+two that exist to show one engine. The committed outputs were produced by the
+engine `auto` resolved to (the manifests record it), and `lineal`, the
+reference implementation, reproduces them exactly: the slow test
+`test/validation/test_examples_auto_backend.py` reruns each example on
+`lineal` and requires identical reports. The `report.json` (or
+`summary.json`) you get matches the committed one for the same numerical
+environment. On every backend, FFT/BLAS reductions used for evidence-window
+diagnostics and the system logarithm used for Shannon-entropy statistics can
+round differently across platforms. Archive checks allow only tightly bounded
+rounding in `window_statistics`, `E_ST`, and `MI` floats (relative `1e-12`,
+absolute `1e-14`); keys, discrete values, and other report fields remain exact.
 Most examples finish in a few seconds to
-about eight minutes. The calibration examples take longer: Dear-Nolan low
-about half an hour, Golden Part VI about two and a half minutes, and
-Dear-Nolan high about two minutes. These times were measured with several
-examples running at once on a development machine; an idle machine is
-faster. Six examples thin their saved trajectory (every generation to
-5,000, then one in ten) to keep the committed files small.
+about eight minutes. The calibration examples take longer: Golden Part VI
+about two and a half minutes and Dear-Nolan high about two minutes. These
+times were measured on `lineal` with several examples running at once on a
+development machine; an idle machine is faster, and `auto` (which picks a
+vectorized engine) is usually much faster still. Dear-Nolan low runs about
+2.6 million generations to convergence in about three and a half minutes
+under `auto`, and about an hour and three quarters on `lineal`. Seven examples
+thin their saved trajectory (every generation to 5,000, then one in ten) to keep
+the committed files small.
 
 For maintainers: `dev/bin/regenerate-example-outputs` reruns the examples
 and replaces their committed outputs, and `test/test_doc_examples.py`
@@ -65,13 +68,12 @@ multi-locus/multi-replicate agreement lives.
 
 **Dear-Nolan low-migration botanical scenario** — five isolated plant
 patches, N = 100, very low migration (m = 0.0001) and negligible mutation
-(mu = 0.000001). **This example does not converge within its cap:** it runs the full
-derived cap, 399,728 generations (about half an hour), and reports
-`converged: false` honestly: D's average is 0.042 ± 0.006 but only about 15
-independent samples back it, and the run projects about 1.1 million
-generations for the requested precision. Jost's published targets (200
-runs) are D ≈ 0.04 and G_ST ≈ 0.97; the run's averages are D 0.042
-(published ≈ 0.04) and G_ST 0.964 (published ≈ 0.97). D and G_ST are
+(mu = 0.000001). **This example runs to convergence:** it stops at generation 2,625,168
+(about three and a half minutes under `auto`) with `converged_on: D`. D's
+average is 0.0390 ± 0.0031 over 74 effective samples, against the theoretical
+0.0385; G_ST from the averaged heterozygosities is 0.9695 ± 0.0005, against
+theory 0.9695. Jost's published targets (200 runs) are D ≈ 0.04 and
+G_ST ≈ 0.97. D and G_ST are
 not equally noisy for this scenario, see its own README.
 
 ### [dear-nolan-high](dear-nolan-high/README.md)

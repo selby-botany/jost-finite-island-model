@@ -34,7 +34,7 @@
       "burn_in": 1,
       "effective_sample_size": 5.3470924857863835,
       "estimator": "geyer",
-      "geweke_z": 6.703497171914777,
+      "geweke_z": 6.703497171914776,
       "mean": 0.05630479199438507,
       "mean_of_values": {
         "mean": 0.05630479199438507,
@@ -43,13 +43,13 @@
       "minimum_ess": 50.0,
       "noise_adequate": false,
       "selected_form": "mean_of_values",
-      "standard_deviation": 0.056416950304394226,
+      "standard_deviation": 0.05641695030439422,
       "standard_error": 0.024397805125355127,
       "target_standard_error": 0.005102134569246541,
       "undefined_generations": 0,
       "value_of_means": {
         "mean": 0.06273865980339711,
-        "standard_error": 0.02824679765383316
+        "standard_error": 0.02824679765383315
       },
       "window": 100,
       "window_end": 100,
@@ -59,7 +59,7 @@
       "burn_in": 1,
       "effective_sample_size": 5.84952405607617,
       "estimator": "geyer",
-      "geweke_z": 5.531527008450982,
+      "geweke_z": 5.531527008450981,
       "mean": 0.05651919022586301,
       "mean_of_values": {
         "mean": 0.05651919022586301,
@@ -82,19 +82,19 @@
     },
     "H_S": {
       "burn_in": 1,
-      "effective_sample_size": 3.9553922570496365,
+      "effective_sample_size": 3.955392257049637,
       "estimator": "geyer",
       "geweke_z": -7.841027237355703,
       "mean": 0.5164289371428571,
       "mean_of_values": {
         "mean": 0.5164289371428571,
-        "standard_error": 0.029374498073703688
+        "standard_error": 0.029374498073703677
       },
       "minimum_ess": 50.0,
       "noise_adequate": false,
       "selected_form": "mean_of_values",
-      "standard_deviation": 0.058420495209500524,
-      "standard_error": 0.029374498073703688,
+      "standard_deviation": 0.05842049520950051,
+      "standard_error": 0.029374498073703677,
       "target_standard_error": 0.005102134569246541,
       "undefined_generations": 0,
       "window": 100,
@@ -105,7 +105,7 @@
       "burn_in": 1,
       "effective_sample_size": 5.3470924857863835,
       "estimator": "geyer",
-      "geweke_z": 6.7034971719147745,
+      "geweke_z": 6.703497171914775,
       "mean": 0.05469608365168835,
       "mean_of_values": {
         "mean": 0.05469608365168835,
@@ -126,7 +126,7 @@
       "burn_in": 1,
       "effective_sample_size": 2.9575552899228565,
       "estimator": "geyer",
-      "geweke_z": -9.42584537817123,
+      "geweke_z": -9.425845378171228,
       "mean": 0.5459007203918368,
       "mean_of_values": {
         "mean": 0.5459007203918368,

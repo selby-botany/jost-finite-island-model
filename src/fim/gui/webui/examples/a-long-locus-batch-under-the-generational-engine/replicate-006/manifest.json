@@ -10,11 +10,11 @@
     },
     "report": {
       "bytes": 4616,
-      "sha256": "c263dd74c43916f516093251ccea63e539fdbd4531f6381fab26d9b8dcf5734e"
+      "sha256": "5df9bbad635e1d7f1794d982b6254d39a4194f57c45a7b22941f14eac2c62845"
     },
     "scatter": {
-      "bytes": 50205,
-      "sha256": "c199b4028df64d9cda37e9f11a043a1f8ce7dd55ac3f52bd9eb944a18f327505"
+      "bytes": 54919,
+      "sha256": "937a9978117138d6916a057f6aeb46960b5a40a8b19c9855cd34030d7f7b2a20"
     },
     "trajectory": {
       "bytes": 110162,
@@ -29,7 +29,7 @@
     "reason": "averaging window complete",
     "statistic": "D"
   },
-  "ended_at": "2026-10-10T19:15:48.513720Z",
+  "ended_at": "2026-10-14T15:36:02.555581Z",
   "engine_backend": "generational",
   "equilibrium_final_heterozygosity": null,
   "equilibrium_generation_count": null,
@@ -77,5 +77,5 @@
   "run_id": "run-8fa7f726d7ca2565-r006",
   "schema_version": 3,
   "software_version": "1.2.0",
-  "started_at": "2026-10-10T19:15:17.314557Z"
+  "started_at": "2026-10-14T15:35:41.422122Z"
 }

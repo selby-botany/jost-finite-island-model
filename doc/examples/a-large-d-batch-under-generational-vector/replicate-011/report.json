@@ -34,7 +34,7 @@
       "burn_in": 1,
       "effective_sample_size": 5.4547076257555736,
       "estimator": "geyer",
-      "geweke_z": 5.627438176783892,
+      "geweke_z": 5.627438176783894,
       "mean": 0.04572808597454339,
       "mean_of_values": {
         "mean": 0.04572808597454339,
@@ -74,7 +74,7 @@
       "undefined_generations": 0,
       "value_of_means": {
         "mean": 0.042575757456718405,
-        "standard_error": 0.02069435504037484
+        "standard_error": 0.020694355040374843
       },
       "window": 100,
       "window_end": 100,
@@ -82,9 +82,9 @@
     },
     "H_S": {
       "burn_in": 1,
-      "effective_sample_size": 3.5673110246409943,
+      "effective_sample_size": 3.567311024640995,
       "estimator": "geyer",
-      "geweke_z": -7.94846640615587,
+      "geweke_z": -7.948466406155868,
       "mean": 0.5246557417142858,
       "mean_of_values": {
         "mean": 0.5246557417142858,
@@ -105,17 +105,17 @@
       "burn_in": 1,
       "effective_sample_size": 5.454707625755572,
       "estimator": "geyer",
-      "geweke_z": 5.627438176783893,
+      "geweke_z": 5.627438176783895,
       "mean": 0.045074827603478494,
       "mean_of_values": {
         "mean": 0.045074827603478494,
-        "standard_error": 0.017824529374810386
+        "standard_error": 0.017824529374810383
       },
       "minimum_ess": 50.0,
       "noise_adequate": false,
       "selected_form": "mean_of_values",
-      "standard_deviation": 0.041629750736745186,
-      "standard_error": 0.017824529374810386,
+      "standard_deviation": 0.04162975073674518,
+      "standard_error": 0.017824529374810383,
       "target_standard_error": 0.005102134569246541,
       "undefined_generations": 0,
       "window": 100,
@@ -124,9 +124,9 @@
     },
     "H_T": {
       "burn_in": 1,
-      "effective_sample_size": 2.834336078428509,
+      "effective_sample_size": 2.834336078428508,
       "estimator": "geyer",
-      "geweke_z": -15.152784301716364,
+      "geweke_z": -15.15278430171636,
       "mean": 0.547986690122449,
       "mean_of_values": {
         "mean": 0.547986690122449,

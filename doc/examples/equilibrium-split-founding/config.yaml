@@ -32,7 +32,7 @@ loci:
 equilibrium_convergence_window: 20
 equilibrium_convergence_tolerance: 0.01
 equilibrium_max_generations: 2000   # the derived burn-in is 1,256 generations
-engine_backend: lineal
+engine_backend: auto
 convergence_statistic: D
 precision: 0.03
 # Thinned storage: every generation up to 5,000, then one in ten, so the saved

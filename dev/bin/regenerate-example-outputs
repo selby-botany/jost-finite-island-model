@@ -44,9 +44,9 @@ Usage:
     dev/bin/regenerate-example-outputs --dry-run          # show commands
     dev/bin/regenerate-example-outputs --jobs 3 --workers 2
 
-Some examples take a long time: Dear-Nolan low runs about 295,000
-generations of 30 loci, and Jost (2008) Part VI about 130,000
-generations. Each example's README states its own running time.
+Some examples take a long time: Dear-Nolan low runs about 2.6 million
+generations of 30 loci (a few minutes under `auto`, nearly two hours on `lineal`), and
+Jost (2008) Part VI about 130,000 generations. Each example's README states its own running time.
 """
 
 from __future__ import annotations

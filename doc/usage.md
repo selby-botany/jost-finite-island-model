@@ -171,7 +171,7 @@ several examples set a looser precision (0.02 to 0.05) or pool
 eight loci, and each one's README says what that costs. Every example
 here finishes in a few seconds to about eight minutes of wall-clock
 time on a development machine (an idle one is faster), except Dear-Nolan low,
-which takes about half an hour. Most use one locus, so a single run's
+which takes a few minutes under `auto`. Most use one locus, so a single run's
 numbers scatter widely around the model's expectation; use a batch
 (`n_replicates`) when you want a stable value. Each uses a
 seed distinct from [`fim init`](#create-a-configuration)'s starter config.
@@ -248,7 +248,7 @@ loci:
     length: 100
   - locus_id: 8
     length: 100
-engine_backend: lineal
+engine_backend: auto
 convergence_statistic: D
 # Thinned storage: every generation up to 5,000, then one in ten, so the saved
 # trajectory is a fraction of the size; the statistics and the report are
@@ -305,7 +305,7 @@ seed: 20260819
 loci:
   - locus_id: 1
     length: 100
-engine_backend: lineal
+engine_backend: auto
 convergence_statistic: D
 precision: 0.02   # looser than the 0.01 default: about a minute
 n_replicates: 1   # a single scalar run; the default (200) would batch
@@ -365,7 +365,7 @@ p_0:
   - - 0: 1.0
   - - 1: 1.0
   - - 2: 1.0
-engine_backend: lineal
+engine_backend: auto
 convergence_statistic: D
 precision: 0.000001
 max_generations: 1
@@ -433,7 +433,7 @@ loci:
 equilibrium_convergence_window: 20
 equilibrium_convergence_tolerance: 0.01
 equilibrium_max_generations: 2000   # the derived burn-in is 1,256 generations
-engine_backend: lineal
+engine_backend: auto
 convergence_statistic: D
 precision: 0.03
 # Thinned storage: every generation up to 5,000, then one in ten, so the saved
@@ -496,7 +496,7 @@ migrant_sampling: stochastic
 loci:
   - locus_id: 1
     length: 100
-engine_backend: lineal
+engine_backend: auto
 convergence_statistic: D
 n_replicates: 1   # a single scalar run; the default (200) would batch
 ```
@@ -540,7 +540,7 @@ initial_allele_count: 2
 loci:
   - locus_id: 1
     length: 3
-engine_backend: lineal
+engine_backend: auto
 convergence_statistic: D
 precision: 0.02   # looser than the 0.01 default: under a minute
 n_replicates: 1   # a single scalar run; the default (200) would batch
@@ -586,7 +586,7 @@ seed: 20260914
 loci:
   - locus_id: 1
     length: 100
-engine_backend: lineal
+engine_backend: auto
 convergence_statistic: G_ST
 precision: 0.02   # looser than the 0.01 default: under a minute
 n_replicates: 1   # a single scalar run; the default (200) would batch
@@ -633,7 +633,7 @@ seed: 20260914
 loci:
   - locus_id: 1
     length: 100
-engine_backend: lineal
+engine_backend: auto
 convergence_statistic: D
 precision: 0.05   # looser than the 0.01 default: seconds, not hours
 # Thinned storage: every generation up to 5,000, then one in ten, so the saved
@@ -684,7 +684,7 @@ loci:
     length: 50
   - locus_id: 2
     length: 500
-engine_backend: lineal
+engine_backend: auto
 convergence_statistic: D
 precision: 0.03   # looser than the 0.01 default: under a minute
 n_replicates: 1   # a single scalar run; the default (200) would batch
@@ -734,7 +734,7 @@ seed: 20260819
 loci:
   - locus_id: 1
     length: 100
-engine_backend: lineal
+engine_backend: auto
 convergence_statistic: [D, G_ST]
 convergence_combinator: any
 n_replicates: 1   # a single scalar run; the default (200) would batch
@@ -794,7 +794,7 @@ loci:
     length: 100
   - locus_id: 8
     length: 100
-engine_backend: lineal
+engine_backend: auto
 convergence_statistic: D
 # Thinned storage: every generation up to 5,000, then one in ten, so the saved
 # trajectory is a fraction of the size; the statistics and the report are
@@ -862,7 +862,7 @@ loci:
     length: 100
   - locus_id: 8
     length: 100
-engine_backend: lineal
+engine_backend: auto
 convergence_statistic: D
 precision: 0.03   # plus or minus, for the batch's interval across replicates
 # Thinned storage: every generation up to 5,000, then one in ten, so the saved
@@ -876,7 +876,7 @@ replicate_minimum: 10
 ```
 
 ```console
-fim run adaptive-batch.yaml --output results/adaptive-batch --sequential --quiet
+fim run adaptive-batch.yaml --output results/adaptive-batch --quiet
 ```
 
 Stops at 10 replicates, the required minimum — `D`'s 95%
@@ -890,21 +890,24 @@ replicates would take hours for the whole batch (see the
 `results/adaptive-batch/summary.json` reports every statistic's own
 interval; `results/adaptive-batch/replicate-001/` through
 `replicate-010/` each hold the ordinary scalar-run files for
-that one replicate. Drop `--sequential` to run the same batch across a
-worker process per CPU instead — the computed numbers are identical
-either way (see [Batches](#batches-nreplicates-greater-than-one)); only
-the wall-clock time differs.
+that one replicate. Under `engine_backend: auto` the replicates advance
+together in one process. To spread the same batch across worker processes
+instead, name `engine_backend: lineal` and add `--workers N` (or
+`--sequential` for one at a time) — the computed numbers are identical either
+way (see [Batches](#batches-nreplicates-greater-than-one)); only the
+wall-clock time differs.
 
 ### A large-`d` batch under generational-vector
 
-Every example above names `engine_backend: lineal`, the single-threaded
-reference implementation and `fim run`'s own default. The configuration
-states it explicitly because the desktop app's own starting value for a
-fresh form is `auto`, and `auto` never resolves to `lineal`: it always picks
-`generational` or `generational-vector` (see
-[engine_backend](configuration.md#engine_backend)). This
-example and the next are the deliberate exception: each names a different
-engine backend and runs a real, moderately long batch (a few seconds, not
+Every example above names `engine_backend: auto`, the recommended choice and
+the desktop app's starting value for a fresh form. `auto` never resolves to
+`lineal` (the library's own default): it picks `generational` or
+`generational-vector` (see [engine_backend](configuration.md#engine_backend)),
+which reproduce `lineal` bit for bit for the same seed, so each example's
+committed output is also exactly what `lineal` produces
+(`test/validation/test_examples_auto_backend.py` checks this by rerunning each
+example on `lineal`). This example and the next are the deliberate exception:
+each names a different engine backend and runs a real, moderately long batch (a few seconds, not
 instant) large enough for that backend's own advantage to actually show.
 They are also the exception to the derived convergence defaults: each pins a
 fixed amount of work, 16 replicates of exactly 100 generations

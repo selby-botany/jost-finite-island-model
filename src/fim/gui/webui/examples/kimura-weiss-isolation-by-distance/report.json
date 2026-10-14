@@ -28,13 +28,13 @@
   "converged_on": "D",
   "generation": 31250,
   "reason": "statistic converged",
-  "run_id": "run-ce63b44039e47edf",
+  "run_id": "run-ed58f72eec62439a",
   "window_statistics": {
     "D": {
       "burn_in": 2260,
       "effective_sample_size": 54.18254800327063,
       "estimator": "geyer",
-      "geweke_z": -0.2131331690816402,
+      "geweke_z": -0.21313316908164026,
       "mean": 0.5644842339157574,
       "mean_of_values": {
         "mean": 0.5644842339157574,
@@ -57,9 +57,9 @@
     },
     "G_ST": {
       "burn_in": 2260,
-      "effective_sample_size": 109.5930737131903,
+      "effective_sample_size": 109.59307371319031,
       "estimator": "geyer",
-      "geweke_z": -0.46608676594154697,
+      "geweke_z": -0.466086765941547,
       "mean": 0.11875491142533096,
       "mean_of_values": {
         "mean": 0.11875491142533096,
@@ -74,7 +74,7 @@
       "undefined_generations": 0,
       "value_of_means": {
         "mean": 0.1186551496768487,
-        "standard_error": 0.0018136889099706081
+        "standard_error": 0.0018136889099706086
       },
       "window": 28991,
       "window_end": 31250,
@@ -126,7 +126,7 @@
       "burn_in": 2260,
       "effective_sample_size": 47.804041047095836,
       "estimator": "geyer",
-      "geweke_z": -0.02583315683574358,
+      "geweke_z": -0.025833156835743578,
       "mean": 0.9048210037511641,
       "mean_of_values": {
         "mean": 0.9048210037511641,

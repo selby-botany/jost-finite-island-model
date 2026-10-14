@@ -154,12 +154,12 @@
   },
   "NEI_D_ALL_ARITH_LOCUS_MEAN": {
     "confidence": 0.95,
-    "half_width": 0.08871910641758479,
-    "high": 0.5526238942646331,
+    "half_width": 0.08871910641758478,
+    "high": 0.552623894264633,
     "low": 0.37518568142946346,
     "mean": 0.46390478784704825,
     "sample_count": 10,
-    "sample_std": 0.1240293758861315
+    "sample_std": 0.12402937588613148
   },
   "NEI_D_ALL_GEO": {
     "confidence": 0.95,
@@ -190,12 +190,12 @@
   },
   "NEI_I_ALL_ARITH_LOCUS_MEAN": {
     "confidence": 0.95,
-    "half_width": 0.054096803000116156,
+    "half_width": 0.05409680300011615,
     "high": 0.687174718873593,
     "low": 0.5789811128733608,
     "mean": 0.633077915873477,
     "sample_count": 10,
-    "sample_std": 0.0756273702978767
+    "sample_std": 0.07562737029787668
   },
   "NEI_I_ALL_GEO": {
     "confidence": 0.95,

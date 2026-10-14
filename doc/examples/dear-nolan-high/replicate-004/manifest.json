@@ -5,20 +5,20 @@
       "sha256": "332ad08ec08cd55196c91afd99965ccc11f0a9400cdb815bb78a2d28cdf84e76"
     },
     "pairwise": {
-      "bytes": 496523,
-      "sha256": "57ae40bfecf0360a957a568e08a0b94f5c1b9a5a7594875e5dc11dba0e18b7d2"
+      "bytes": 496501,
+      "sha256": "16af6e99c754a08e0963441f7ff02d6752c833cbb48574403cdd8037aa849db3"
     },
     "report": {
-      "bytes": 4615,
-      "sha256": "f39b7e756dff29da89e1e442a84b09331ab98c46975cdf1146cac0f8f9a2b2b7"
+      "bytes": 4613,
+      "sha256": "472fb9990681209d7c6b88338e3937e274aed2a0d3bde5feed364932c4e6634d"
     },
     "scatter": {
-      "bytes": 52278,
-      "sha256": "cc50bfc76e5b1f3d118db41dc565754cb1276252aa4f5b7f061f0006f68c07db"
+      "bytes": 56678,
+      "sha256": "d25ae9b5aa83517f9632422d31ab5bd76b14826aa38bdd6a0c5afd786361f358"
     },
     "trajectory": {
       "bytes": 1158506,
-      "sha256": "043713a99344f425ed697ca7ff635f07a2d93666bed0bc0e56fdca6e6f49fcab"
+      "sha256": "6e15ffbd7e53d3e935ca75d81975b9afb26734a55ad06444b7e2b06c71dc70e8"
     }
   },
   "auto_derived": [],
@@ -29,8 +29,8 @@
     "reason": "averaging window complete",
     "statistic": "D"
   },
-  "ended_at": "2026-10-10T19:16:50.002662Z",
-  "engine_backend": "lineal",
+  "ended_at": "2026-10-14T15:35:51.023883Z",
+  "engine_backend": "generational-vector",
   "equilibrium_final_heterozygosity": null,
   "equilibrium_generation_count": null,
   "initial_condition_mode": "explicit",
@@ -47,7 +47,7 @@
     "convergence_statistic": "D",
     "d": 100,
     "deme_weighting": "equal",
-    "engine_backend": "lineal",
+    "engine_backend": "auto",
     "initial_allele_count": 2,
     "initial_concentration": 1.0,
     "jit": "off",
@@ -6776,8 +6776,8 @@
     "track_expensive_statistics": false
   },
   "relaxation_time": 498.78315891944516,
-  "run_id": "run-99168ff0fe003473-r004",
+  "run_id": "run-803dc9cfdbc375dd-r004",
   "schema_version": 3,
   "software_version": "1.2.0",
-  "started_at": "2026-10-10T19:16:06.069829Z"
+  "started_at": "2026-10-14T15:35:41.441215Z"
 }

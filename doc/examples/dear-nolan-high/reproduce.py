@@ -108,7 +108,7 @@ def build_config(module: ModuleType) -> dict[str, Any]:
         "mu": MUTATION,
         "seed": SEED,
         "loci": [{"locus_id": 1, "length": LOCUS_LENGTH}],
-        "engine_backend": "lineal",
+        "engine_backend": "auto",
         "convergence_statistic": "D",
         "convergence_burn_in": 1,
         "replicate_averaging_window": HORIZON - 1,

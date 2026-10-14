@@ -57,24 +57,24 @@
     },
     "G_ST": {
       "burn_in": 1,
-      "effective_sample_size": 5.867382981011483,
+      "effective_sample_size": 5.8673829810114855,
       "estimator": "geyer",
       "geweke_z": 6.476696054110763,
       "mean": 0.04101684640945542,
       "mean_of_values": {
         "mean": 0.04101684640945542,
-        "standard_error": 0.020289918131235884
+        "standard_error": 0.02028991813123588
       },
       "minimum_ess": 50.0,
       "noise_adequate": false,
       "selected_form": "mean_of_values",
       "standard_deviation": 0.049147622415641815,
-      "standard_error": 0.020289918131235884,
+      "standard_error": 0.02028991813123588,
       "target_standard_error": 0.005102134569246541,
       "undefined_generations": 0,
       "value_of_means": {
         "mean": 0.03942142711549002,
-        "standard_error": 0.019435464442057213
+        "standard_error": 0.019435464442057217
       },
       "window": 100,
       "window_end": 100,
@@ -82,9 +82,9 @@
     },
     "H_S": {
       "burn_in": 1,
-      "effective_sample_size": 3.8294077608919483,
+      "effective_sample_size": 3.829407760891949,
       "estimator": "geyer",
-      "geweke_z": -10.009894718928358,
+      "geweke_z": -10.00989471892836,
       "mean": 0.5216577485714285,
       "mean_of_values": {
         "mean": 0.5216577485714285,
@@ -103,19 +103,19 @@
     },
     "H_ST": {
       "burn_in": 1,
-      "effective_sample_size": 5.483114875712876,
+      "effective_sample_size": 5.483114875712877,
       "estimator": "geyer",
       "geweke_z": 7.4429926460107705,
       "mean": 0.04123337433640359,
       "mean_of_values": {
         "mean": 0.04123337433640359,
-        "standard_error": 0.01705451998384652
+        "standard_error": 0.017054519983846522
       },
       "minimum_ess": 50.0,
       "noise_adequate": false,
       "selected_form": "mean_of_values",
-      "standard_deviation": 0.03993495254310553,
-      "standard_error": 0.01705451998384652,
+      "standard_deviation": 0.039934952543105535,
+      "standard_error": 0.017054519983846522,
       "target_standard_error": 0.005102134569246541,
       "undefined_generations": 0,
       "window": 100,

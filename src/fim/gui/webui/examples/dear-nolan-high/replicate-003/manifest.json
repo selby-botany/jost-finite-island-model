@@ -5,20 +5,20 @@
       "sha256": "2ed97feb02fd487b9447ecf49d4e9644d3eaf7a755397a2393eed35b6f1c7606"
     },
     "pairwise": {
-      "bytes": 495886,
-      "sha256": "329cea9ff467f94a5b0dd4dc6d8ee29cfcb3c9112b3f48ed0d9cca0507c11750"
+      "bytes": 495902,
+      "sha256": "6124c1c4f90266506bd629b038b6a6eb71f1c573b62c44304705dd9bf9e00cba"
     },
     "report": {
-      "bytes": 4595,
-      "sha256": "45cb7db32911dd15d41c028aa67e7ad8a63b636347a78ba844764b18e5638eaa"
+      "bytes": 4598,
+      "sha256": "b609b7b79490e21540aea1a183fbb742b899ede46efcba4e032773839dd2e336"
     },
     "scatter": {
-      "bytes": 52266,
-      "sha256": "ff043c80d8543bd5aa574c6b320944afff1c5d8e8320fedda1c8c448493023d6"
+      "bytes": 56640,
+      "sha256": "7121750fec982d0ccc0e4f078040c87c23a402984a747ae357092d66024fea0a"
     },
     "trajectory": {
       "bytes": 1145725,
-      "sha256": "9e50b4bd194c75ef5d074677d78890ea9ac027922398c75518c5ed92ffe839fe"
+      "sha256": "975a90504d39272380fb3b1a41b0a6c5ebd26b5011b0f6720142ee7f74751119"
     }
   },
   "auto_derived": [],
@@ -29,8 +29,8 @@
     "reason": "averaging window complete",
     "statistic": "D"
   },
-  "ended_at": "2026-10-10T19:16:49.996341Z",
-  "engine_backend": "lineal",
+  "ended_at": "2026-10-14T15:35:50.904860Z",
+  "engine_backend": "generational-vector",
   "equilibrium_final_heterozygosity": null,
   "equilibrium_generation_count": null,
   "initial_condition_mode": "explicit",
@@ -47,7 +47,7 @@
     "convergence_statistic": "D",
     "d": 100,
     "deme_weighting": "equal",
-    "engine_backend": "lineal",
+    "engine_backend": "auto",
     "initial_allele_count": 2,
     "initial_concentration": 1.0,
     "jit": "off",
@@ -6776,8 +6776,8 @@
     "track_expensive_statistics": false
   },
   "relaxation_time": 498.78315891944516,
-  "run_id": "run-99168ff0fe003473-r003",
+  "run_id": "run-803dc9cfdbc375dd-r003",
   "schema_version": 3,
   "software_version": "1.2.0",
-  "started_at": "2026-10-10T19:16:06.069313Z"
+  "started_at": "2026-10-14T15:35:41.435932Z"
 }
