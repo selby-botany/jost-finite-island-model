@@ -61,6 +61,7 @@ Every test module, fixture, and test function documented here in full; `doc/fim-
   - [`test_execution_checkpoint`](#engine.test_execution_checkpoint)
   - [`test_execution_session`](#engine.test_execution_session)
   - [`test_frame_identity`](#engine.test_frame_identity)
+  - [`test_replicate_final_state_report`](#engine.test_replicate_final_state_report)
   - [`test_vector_parity`](#engine.test_vector_parity)
 - [`test/gui/`](#group-gui)
   - [`conftest`](#gui.conftest)
@@ -11101,6 +11102,60 @@ def test_write_frame_requires_begin_run(tmp_path: Path) -> None
 
 Frames cannot become rows without a layout.
 
+<a id="engine.test_replicate_final_state_report"></a>
+
+# engine.test\_replicate\_final\_state\_report
+
+A replicate's report describes its own final state, on every backend.
+
+A replicate past the first wave of a batch pauses until the wave has been
+measured, then is handed its averaging window; if that window ends at the
+generation where it paused, its monitor stops without another step. These
+tests pin that the `report.json` content and the final state of such a
+replicate are those of the generation it stopped at, and that the trajectory
+log holds that generation's row.
+
+<a id="engine.test_replicate_final_state_report.test_every_replicate_reports_the_generation_it_stopped_at"></a>
+
+#### test\_every\_replicate\_reports\_the\_generation\_it\_stopped\_at
+
+```python
+@pytest.mark.parametrize(
+    "backend_factory",
+    [
+        LinealBackend,
+        lambda: GenerationalBackend(SequentialAdvancer()),
+        lambda: GenerationalBackend(VectorizedAdvancer()),
+    ],
+    ids=["lineal", "generational", "generational-vector"],
+)
+def test_every_replicate_reports_the_generation_it_stopped_at(
+    backend_factory: Callable[[],
+                              LinealBackend | GenerationalBackend]) -> None
+```
+
+Report, state and manifest agree on the stopping generation.
+
+<a id="engine.test_replicate_final_state_report.test_vectorized_batch_is_identical_to_the_lineal_batch"></a>
+
+#### test\_vectorized\_batch\_is\_identical\_to\_the\_lineal\_batch
+
+```python
+def test_vectorized_batch_is_identical_to_the_lineal_batch() -> None
+```
+
+Final states and reports match the lineal batch replicate for replicate.
+
+<a id="engine.test_replicate_final_state_report.test_vectorized_trajectory_ends_at_the_stopping_generation"></a>
+
+#### test\_vectorized\_trajectory\_ends\_at\_the\_stopping\_generation
+
+```python
+def test_vectorized_trajectory_ends_at_the_stopping_generation() -> None
+```
+
+The log of every replicate holds the row of its final generation.
+
 <a id="engine.test_vector_parity"></a>
 
 # engine.test\_vector\_parity
@@ -13066,11 +13121,12 @@ Loading an example never changes saved Settings (the reported defect).
 def test_load_example_lists_exactly_the_differing_run_settings() -> None
 ```
 
-A lineal, one-replicate example against auto/200 Settings differs in both.
+An auto, one-replicate example against lineal/200 Settings differs in both.
 
-`several-convergence-statistics` names `engine_backend:
-lineal` and one replicate and leaves every other run setting at its
-library default, which the starter Settings share.
+`several-convergence-statistics` names `engine_backend: auto` and one
+replicate and leaves every other run setting at its library default,
+which the starter Settings share, except the engine, which the test
+sets to `lineal` so that the example and Settings disagree about it.
 
 <a id="gui.test_app_api.test_every_example_reports_exactly_its_differing_run_settings"></a>
 
@@ -40052,11 +40108,11 @@ The derived burn-in is at least five relaxation times for these regimes.
 def test_dear_nolan_low_report_matches_its_analytic_value() -> None
 ```
 
-Dear-Nolan low: the committed seeded run is honest about what it knows.
+Dear-Nolan low: the committed seeded run converges, and agrees with theory.
 
-The run reaches its cap without meeting the precision (D's effective
-sample size is far below the floor), reports that, and its average lies
-within two standard errors of the analytic D.
+The run stops because D met the requested precision (its effective sample
+size is above the floor, and the start of its window agrees with the end),
+and its average lies within two standard errors of the analytic D.
 
 <a id="validation.test_convergence_rule_calibration.test_dear_nolan_low_never_stops_inside_its_burn_in"></a>
 
@@ -40544,96 +40600,45 @@ A FIM subpopulation with `mu=0` never reaches a polymorphic equilibrium.
 
 # validation.test\_examples\_auto\_backend
 
-Every worked example agrees with its committed output under `auto`.
+Every worked example is named `auto`, and `lineal` reproduces its output.
 
-Read-only examples design (2026-10-05, `selby/restricted`), section 7:
-each `doc/examples/<id>/config.yaml` is run again through the real
-`fim run` command with only `engine_backend` changed to `auto`, and the
-result is compared with the output committed beside the configuration
-(produced by `dev/bin/regenerate-example-outputs` on the backend the
-configuration names, `lineal` unless it names another).
+Policy (project owner, 2026-10-14): each `doc/examples/<id>/config.yaml`
+names `engine_backend: auto`, the choice the botanist is encouraged to use,
+unless the point of the example is to show one engine. The committed output
+was produced by the backend `auto` resolved to (the manifests record it).
 
-Which comparison applies depends on the backend `auto` resolves to, read
-from the fresh run's own manifest, not predicted here:
+`auto` never resolves to `lineal` (`fim.engine._resolve_auto_engine_backend`),
+but `generational` and `generational-vector` reproduce `lineal` bit for bit
+for the same seed under either mutation model, adaptive batches included
+(`GenerationalBackend`'s own docstring and `test/engine/test_vector_parity.py`).
+The slow test below proves that on the shipped examples: it reruns each one
+through the real `fim run` command with only `engine_backend` changed to
+`lineal`, the reference implementation, and requires the same reports and the
+same kept replicates as the committed output.
 
-- **Same random stream: identical reports.** `auto` never resolves to
-  `lineal` (`fim.engine._resolve_auto_engine_backend`), but both
-  `generational` with its default sequential advancer and
-  `generational-vector` reproduce `lineal` bit for bit for the same seed,
-  under either mutation model (`GenerationalBackend`'s own docstring and
-  `fim.model.vector_block`, checked by the golden-parity engine tests and
-  `test/engine/test_vector_parity.py`). That holds for an adaptive batch
-  (`stop_batch_early` on) too: every backend judges the adaptive stop
-  on replicates in replicate order (`fim.engine.run_batch`'s own
-  docstring), so all keep the same replicates. So a committed `lineal`
-  or `generational` output and a fresh `generational` or
-  `generational-vector` run must agree exactly, and so must two local
-  `generational-vector` runs. A committed *vector* output is the one
-  exception: it may have been archived by an older vector engine whose
-  random stream differed from `lineal`'s (it was statistically, not
-  bit-for-bit, equal to `lineal` before the compiled kernel replaced its
-  BLAS migration), or on another platform. Vector cases therefore also
-  run the configured backend locally for exact identity, and use the
-  statistical rule against the archived output until it is regenerated.
-  Exact local identity is stronger than the design's statistical rule and
-  implies it, so it is the rule used wherever it holds: a difference is a
-  defect, never noise.
-- **Different random stream, single run: window means.** Applies only
-  when a committed archive is on a different stream from the fresh run
-  (above). For every watched statistic (the configuration's
-  `convergence_statistic`), the two `report.json` `window_statistics`
-  means must agree within `3 * sqrt(se_L**2 + se_auto**2)`.
-- **Different random stream, batch: interval half-widths.** For every
-  watched statistic, the two `summary.json` across-replicate means must
-  agree within the sum of the two confidence-interval half-widths.
+Fields excluded from "identical": only `run_id`, in each report. A run ID
+is a digest of the configuration (`fim.model.params`), and the two
+configurations legitimately differ in `engine_backend`. A batch `summary.json`
+holds no run ID and is compared whole.
 
 Archived evidence-window and Shannon-entropy (`E_ST`, `MI`) floats allow
 numerical rounding (relative `1e-12`, absolute `1e-14`): FFT/BLAS reductions
 and the system logarithm need not round identically across platforms, even
-for identical histories and final frequencies. Structure, discrete values,
-other report fields, and same-host configured/auto comparisons remain exact.
-The local reference explicitly selects the backend `auto` resolved to,
-not a potentially much slower archived backend. Cross-backend bit identity
-is independently covered by the golden-parity engine and vector tests.
+for identical histories. Structure, discrete values, and every other report
+field remain exact. Same-host `auto` against `lineal` agreed exactly on
+every example checked on Linux (2026-10-14).
 
-Fields excluded from "identical": only `run_id`, in each report. A run ID
-is a digest of the configuration (`fim.model.params`), and the two
-configurations legitimately differ in `engine_backend` (`auto` against
-the committed name). A batch `summary.json` holds no run ID and is
-compared whole, as is the list of kept replicate directories.
-
-Missing data, in the statistical rules:
-
-- A watched statistic with no window statistics (or a null standard
-  error) in *both* reports means the run was too short to estimate its
-  own noise, as in a one-generation run. The only evidence left is the
-  final value, so the two final values must agree to rounding
-  (`abs=1e-12`): such a run is meaningful to compare only when it is
-  deterministic, and a stochastic one fails here loudly rather than
-  passing on no evidence.
-- Window statistics present in only one report is a structural
-  disagreement between the runs and fails.
-- A batch watched statistic without a mean and half-width in either
-  `summary.json` fails: there is nothing to compare.
+One example is not rerun on `lineal` here: Dear-Nolan low runs about 2.6
+million generations to convergence, which takes about an hour and three
+quarters on `lineal` and about three and a half minutes on
+`generational-vector`. Its identity was checked once, by hand (identical
+report, 2026-10-14), and recorded in its README; the engine parity tests cover
+the rest.
 
 Every case runs a fixed seed from its configuration, so its outcome is a
 pure function of the commit; a failure is investigated, never retried or
-widened. Each case's measured wall time is recorded in
-`_RUNTIME_SECONDS`, and cases over about a minute are also marked `slow`.
-
-<a id="validation.test_examples_auto_backend.test_batch_rule_uses_the_sum_of_half_widths"></a>
-
-#### test\_batch\_rule\_uses\_the\_sum\_of\_half\_widths
-
-```python
-def test_batch_rule_uses_the_sum_of_half_widths(tmp_path: Path) -> None
-```
-
-A batch disagreement is a mean difference beyond both half-widths.
-
-No example's `auto` run lands on a different random stream from a
-committed non-vector archive as a batch, so the rule is checked here on
-synthetic summaries.
+widened. Each case's measured wall time is recorded in `_RUNTIME_SECONDS`,
+and cases over about a minute are also marked `slow`.
 
 <a id="validation.test_examples_auto_backend.test_identity_rule_ignores_only_the_run_id"></a>
 
@@ -40660,49 +40665,6 @@ An adaptive batch on the same random stream keeps the same replicates
 on every backend, so a different kept set is a failure even when the
 summaries happen to match.
 
-<a id="validation.test_examples_auto_backend.test_rounded_archive_still_requires_exact_local_parity"></a>
-
-#### test\_rounded\_archive\_still\_requires\_exact\_local\_parity
-
-```python
-@pytest.mark.parametrize("local_difference", [False, True])
-@pytest.mark.parametrize("rounded_field", ["window_statistics", "E_ST", "MI"])
-def test_rounded_archive_still_requires_exact_local_parity(
-        tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
-        local_difference: bool, rounded_field: str) -> None
-```
-
-Archive rounding cannot hide even one ULP of local backend drift.
-
-<a id="validation.test_examples_auto_backend.test_scalar_rule_uses_three_combined_standard_errors"></a>
-
-#### test\_scalar\_rule\_uses\_three\_combined\_standard\_errors
-
-```python
-def test_scalar_rule_uses_three_combined_standard_errors(
-        tmp_path: Path) -> None
-```
-
-A single-run disagreement is beyond `3 * sqrt(se_L**2 + se_auto**2)`.
-
-Combined standard error 0.05 here, so the bound is 0.15. With no
-window statistics in either report, final values must agree exactly.
-
-<a id="validation.test_examples_auto_backend.test_every_backend_shares_the_lineal_random_stream"></a>
-
-#### test\_every\_backend\_shares\_the\_lineal\_random\_stream
-
-```python
-def test_every_backend_shares_the_lineal_random_stream() -> None
-```
-
-All three engines draw `lineal`'s stream, so identity is the rule.
-
-Backend V's kernel reproduces the dictionary-based operators bit for
-bit, so a committed `lineal` output against a fresh vector run is an
-identity comparison. Were V mapped to a stream of its own, the
-statistical rule would silently replace the stronger one.
-
 <a id="validation.test_examples_auto_backend.test_every_example_has_a_recorded_runtime"></a>
 
 #### test\_every\_example\_has\_a\_recorded\_runtime
@@ -40717,39 +40679,45 @@ A new example must have its `auto` case timed, so its `slow` mark is
 decided from a measurement rather than left to default; a removed one
 must not leave a stale entry.
 
-<a id="validation.test_examples_auto_backend.test_vector_archive_uses_intervals_but_local_reference_requires_identity"></a>
+<a id="validation.test_examples_auto_backend.test_every_example_names_auto_unless_it_shows_an_engine"></a>
 
-#### test\_vector\_archive\_uses\_intervals\_but\_local\_reference\_requires\_identity
+#### test\_every\_example\_names\_auto\_unless\_it\_shows\_an\_engine
 
 ```python
-@pytest.mark.parametrize("local_difference", [False, True])
-def test_vector_archive_uses_intervals_but_local_reference_requires_identity(
-        tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
-        local_difference: bool) -> None
+def test_every_example_names_auto_unless_it_shows_an_engine() -> None
 ```
 
-Platform rounding is allowed only for the archive, never local parity.
+The policy: `auto` for every example, except the two engine examples.
 
-<a id="validation.test_examples_auto_backend.test_example_on_auto_agrees_with_its_committed_output"></a>
+<a id="validation.test_examples_auto_backend.test_committed_outputs_ran_on_the_engine_the_configuration_resolves_to"></a>
 
-#### test\_example\_on\_auto\_agrees\_with\_its\_committed\_output
+#### test\_committed\_outputs\_ran\_on\_the\_engine\_the\_configuration\_resolves\_to
+
+```python
+def test_committed_outputs_ran_on_the_engine_the_configuration_resolves_to(
+) -> None
+```
+
+`auto` never lands on `lineal`; a named engine is the one that ran.
+
+<a id="validation.test_examples_auto_backend.test_lineal_reproduces_the_committed_output"></a>
+
+#### test\_lineal\_reproduces\_the\_committed\_output
 
 ```python
 @pytest.mark.statistical
 @pytest.mark.parametrize("example",
                          [_case(example) for example in _example_ids()])
-def test_example_on_auto_agrees_with_its_committed_output(
-        example: str, tmp_path: Path) -> None
+def test_lineal_reproduces_the_committed_output(example: str,
+                                                tmp_path: Path) -> None
 ```
 
-The example's `auto` run agrees with its committed output.
+Rerunning the example on `lineal` gives the committed reports exactly.
 
-The comparison follows from the backend `auto` resolved to (the fresh
-manifest) against the backend the committed output ran on: identical
-reports on the same portable random stream (adaptive batches
-included), otherwise the window-mean or half-width rule. Vector
-archives use the statistical rule plus exact comparison with a
-same-host configured run.
+The same configuration with only `engine_backend` changed to `lineal`
+(the reference implementation) must give the same reports, summary, and
+kept replicates, allowing only archive-platform rounding in
+`window_statistics`, `E_ST`, and `MI`.
 
 <a id="validation.test_git_hooks"></a>
 

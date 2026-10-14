@@ -1031,6 +1031,14 @@ class VectorizedAdvancer:
         newly_stopped: list[ReplicaLane] = []
         for lane in active_lanes:
             if lane.monitor.should_stop():
+                # A lane can be stopped from outside the loop below: a
+                # replicate paused for its batch's averaging window stops
+                # the moment `run_batch` hands it a window ending where it
+                # paused. Its `lane.state` is still the stale generation
+                # zero, so the report would describe the initial state.
+                if lane.vectorized_state is not None:
+                    lane.state = lane.vectorized_state.to_model_state()
+                    lane.vectorized_state.sync_registry(lane.registry)
                 newly_stopped.append(lane)
                 continue
             block = lane.vectorized_state
