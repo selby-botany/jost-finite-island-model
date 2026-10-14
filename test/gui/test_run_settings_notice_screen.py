@@ -17,10 +17,14 @@ Every wait is on a ready flag or a settled counter the page sets
 `__fimRunSettingsNoticeSettled`, `__fimRunViewReady`), polled with
 `poll_or_fail`, so the outcome does not depend on how fast the machine
 is.
+
+The example catalog is isolated from the shipped teaching examples, whose
+engine policy and replicate counts can change independently of this contract.
 """
 
 from __future__ import annotations
 
+import json
 import queue
 from collections.abc import Callable
 from pathlib import Path
@@ -39,7 +43,7 @@ from fim.model.params import SimulationParams
 pytestmark = pytest.mark.gui
 
 _POLL_INTERVAL_SECONDS = 0.1
-_EXAMPLE_ID = "several-convergence-statistics"
+_EXAMPLE_ID = "lineal-run-settings"
 _REFUSED = "captured for this test, not run"
 
 _OPEN_DIALOG = (
@@ -69,6 +73,42 @@ _READ_STATE = (
     "};"
     "})()"
 )
+
+
+@pytest.fixture(autouse=True)
+def _lineal_example(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Install a lineal, one-replicate example through the real catalog reader."""
+    bundle = tmp_path / "examples"
+    bundle.mkdir()
+    catalog = {
+        "schema_version": 1,
+        "classes": [
+            {
+                "id": "getting-started",
+                "title": "Getting started",
+                "description": "",
+                "children": [],
+            }
+        ],
+        "examples": [
+            {
+                "id": _EXAMPLE_ID,
+                "name": "Lineal run settings",
+                "description": "",
+                "class": "getting-started",
+                "readme": "",
+                "readme_excerpt": "",
+                "config_yaml": (
+                    "N: 20\nploidy: haploid\nd: 2\nm: 0.1\nmu: 0.01\n"
+                    "seed: 5\nloci:\n  - locus_id: 1\n    length: 200\n"
+                    "engine_backend: lineal\nn_replicates: 1\n"
+                ),
+                "outputs": [],
+            }
+        ],
+    }
+    (bundle / "catalog.json").write_text(json.dumps(catalog), encoding="utf-8")
+    monkeypatch.setattr(app_module, "_examples_bundle_directory", lambda: bundle)
 
 
 def _settings_on_disk(preferences_path: Path) -> dict[str, str]:
@@ -126,7 +166,7 @@ def _load_example(window: webview.Window, wait: Callable[..., Any]) -> None:
     """Load `_EXAMPLE_ID` through the Examples dialog, and wait for it to settle."""
     window.evaluate_js(_OPEN_DIALOG)
     wait("window.__fimExamplesDialogReady === true", "the Examples dialog")
-    example = presets_module.get_example(app_module._webui_directory(), _EXAMPLE_ID)
+    example = presets_module.find_example(app_module._examples_catalog(), _EXAMPLE_ID)
     assert example is not None
     class_id = example.class_id
     window.evaluate_js(

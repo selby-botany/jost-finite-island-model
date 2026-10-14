@@ -24007,6 +24007,9 @@ Every wait is on a ready flag or a settled counter the page sets
 `poll_or_fail`, so the outcome does not depend on how fast the machine
 is.
 
+The example catalog is isolated from the shipped teaching examples, whose
+engine policy and replicate counts can change independently of this contract.
+
 <a id="gui.test_run_settings_notice_screen.test_loading_a_lineal_example_runs_it_without_changing_settings"></a>
 
 #### test\_loading\_a\_lineal\_example\_runs\_it\_without\_changing\_settings

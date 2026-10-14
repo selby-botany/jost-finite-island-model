@@ -1429,6 +1429,10 @@ project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+- GUI run-settings notice tests use an isolated lineal, one-replicate
+  example rather than assuming a shipped example's engine policy. This
+  preserves coverage of per-run overrides, unchanged saved Settings,
+  adoption, dismissal, and New configuration when teaching examples change.
 - `fim run` stops cleanly on SIGTERM: it exits with status 143 and removes
   its unfinished output instead of leaving a hidden staging directory.
 - The complete CI gate has a bounded 30-minute allowance for tests,
