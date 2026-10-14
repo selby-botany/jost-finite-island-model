@@ -71,6 +71,13 @@ def add_sweep_subcommands(subcommands: argparse._SubParsersAction[Any]) -> None:
         action="store_true",
         help="also retry points that failed before",
     )
+    resume_parser.add_argument(
+        "--rerun",
+        action="store_true",
+        help="also recompute the points already completed, from the stored "
+        "specification, and compare each with its existing run: a bit-for-bit "
+        "match replaces it, a difference keeps both and is reported",
+    )
     _add_concurrency_arguments(resume_parser)
     report_parser = sweep_subcommands.add_parser(
         "report", help="print each point's statistic, with its interval"
@@ -227,6 +234,7 @@ def _execute(study_id: str, arguments: argparse.Namespace) -> int:
             _print_event,
             cancel_event,
             retry_failed=getattr(arguments, "retry_failed", False),
+            rerun=getattr(arguments, "rerun", False),
             points_at_once=points_at_once,
             max_workers=max_workers,
         )
@@ -241,8 +249,8 @@ def _execute(study_id: str, arguments: argparse.Namespace) -> int:
     )
     if outcome.recomputed or outcome.differing:
         print(
-            f"{outcome.recomputed} point(s) recomputed under this version and "
-            f"matched the earlier result bit for bit; {outcome.differing} differed"
+            f"{outcome.recomputed} point(s) recomputed and matched the "
+            f"earlier result bit for bit; {outcome.differing} differed"
         )
     if outcome.differing:
         print(
@@ -281,10 +289,10 @@ def _print_event(event: SweepEvent) -> None:
     elif event.kind == "point_reused":
         print(f"{prefix}: reused an existing run", flush=True)
     elif event.kind == "point_recomputed":
-        print(f"{prefix}: recomputed; matches the earlier version's result", flush=True)
+        print(f"{prefix}: recomputed; matches the earlier result", flush=True)
     elif event.kind == "point_differs":
         print(
-            f"{prefix}: recomputed; DIFFERS from the earlier version's result "
+            f"{prefix}: recomputed; DIFFERS from the earlier result "
             f"({_describe_differences(event.detail)})",
             flush=True,
         )

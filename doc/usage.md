@@ -1054,6 +1054,7 @@ fim sweep plan sweep.yaml            # list the points and their validity; runs 
 fim sweep run sweep.yaml             # create the study and run every point
 fim sweep resume STUDY_ID            # run only the points still missing
 fim sweep resume STUDY_ID --retry-failed
+fim sweep resume STUDY_ID --rerun   # also recompute the completed points
 fim sweep report STUDY_ID --statistic D --csv
 fim sweep run sweep.yaml --points-at-once 4 --workers 2   # or --sequential
 ```
@@ -1079,6 +1080,16 @@ fim sweep run sweep.yaml --points-at-once 4 --workers 2   # or --sequential
   the same axis order, and a run made by the same software version. A point
   whose only run came from another version is recomputed and compared with it
   (see [Reproduce a run](#reproduce-a-run)).
+- `fim sweep resume STUDY_ID --rerun` recomputes the points that are already
+  complete, from the stored sweep specification, and compares each with the
+  run it has. Use it to confirm that a sweep still reproduces, for example
+  after you reinstall or update `fim` on the same version. A result that
+  matches bit for bit replaces the old run, so the study keeps one run per
+  point. A result that differs keeps both runs, writes `reproducibility.json`
+  beside the new one, and makes the command exit with status 1. Points that
+  are missing or failed follow the usual rules (`--retry-failed` for failed
+  points). If you cancel a rerun, run it again to start the recompute over;
+  plain `resume` only runs the points still missing.
 - In the desktop app a sweep is part of Configure. Tick **Sweep**, choose
   what varies in the **Set up sweep…** dialog (a live count and, on request,
   every point), and press **Run** as always: with **Sweep** on, Run runs the

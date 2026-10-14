@@ -449,6 +449,70 @@ def test_a_recomputed_result_that_differs_is_reported_and_both_runs_are_kept(
     )
 
 
+def test_rerun_recomputes_completed_points_and_a_match_replaces_the_old_run(
+    results: Path,
+) -> None:
+    study_id = _study(results, 2, 3)
+    _run(study_id)
+    old = set(groups.study_run_directories(groups.get_study(study_id)))
+
+    outcome, events = _run(study_id, rerun=True)
+
+    assert (outcome.recomputed, outcome.differing, outcome.already_present) == (2, 0, 0)
+    assert outcome.done == 0
+    assert [e.kind for e in events].count("point_recomputed") == 2
+    now = set(groups.study_run_directories(groups.get_study(study_id)))
+    assert len(now) == 2
+    assert not (old & now)
+    assert not any(directory.exists() for directory in old)
+    assert _manifest_count(results) == 2
+
+
+def test_rerun_that_differs_keeps_both_runs_and_reports_it(results: Path) -> None:
+    study_id = _study(results, 2)
+    _run(study_id)
+    (old,) = groups.study_run_directories(groups.get_study(study_id))
+
+    outcome, events = _run(study_id, _Tampering(), rerun=True)
+
+    assert (outcome.differing, outcome.recomputed) == (1, 0)
+    assert any(e.kind == "point_differs" for e in events)
+    members = groups.study_run_directories(groups.get_study(study_id))
+    assert old in members
+    assert len(members) == 2
+
+
+def test_rerun_still_runs_the_points_that_are_missing(results: Path) -> None:
+    study_id = _study(results, 2, 3, 4)
+    cancel = threading.Event()
+
+    def stop_after_first(event: SweepEvent) -> None:
+        if event.kind == "point_done":
+            cancel.set()
+
+    run_sweep(study_id, LocalPointRunner(), stop_after_first, cancel, points_at_once=1)
+    (finished,) = groups.study_run_directories(groups.get_study(study_id))
+
+    outcome, _ = _run(study_id, rerun=True)
+
+    # The one completed point is recomputed; the two missing ones are run.
+    assert (outcome.recomputed, outcome.done) == (1, 2)
+    members = groups.study_run_directories(groups.get_study(study_id))
+    assert len(members) == 3
+    assert finished not in members
+
+
+def test_without_rerun_a_completed_point_is_left_alone(results: Path) -> None:
+    study_id = _study(results, 2, 3)
+    _run(study_id)
+    before = set(groups.study_run_directories(groups.get_study(study_id)))
+
+    outcome, _ = _run(study_id)
+
+    assert (outcome.recomputed, outcome.already_present) == (0, 2)
+    assert set(groups.study_run_directories(groups.get_study(study_id))) == before
+
+
 def _params(**overrides: Any) -> SimulationParams:
     return SimulationParams.from_mapping({**_BASE, **overrides})
 

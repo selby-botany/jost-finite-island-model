@@ -908,6 +908,9 @@ class _Context:
     uses_objects: bool = False
     # Completed Run objects of this software version, by `run_id`.
     completed_objects: Mapping[str, Path] | None = None
+    # Points recomputed on purpose (`run_sweep(rerun=True)`): their existing
+    # runs are not reused, only compared with the result.
+    rerun_ids: frozenset[str] = frozenset()
 
     def emit(
         self, kind: EventKind, point: SweepPoint, detail: object = None, *, finish: bool
@@ -929,6 +932,7 @@ def run_sweep(
     cancel_event: threading.Event,
     *,
     retry_failed: bool = False,
+    rerun: bool = False,
     software_version: str = __version__,
     points_at_once: int | None = None,
     max_workers: int | None = None,
@@ -959,6 +963,13 @@ def run_sweep(
         cancel_event: Set to stop the sweep.
         retry_failed: Also retry points recorded as failed; by default
             they are skipped.
+        rerun: Also recompute every point already completed under
+            `software_version`, from the stored specification, and compare
+            each with its existing run. A result that matches bit for bit
+            replaces the existing run (every Study that held it now holds the
+            new one); a difference keeps both and is reported, never silent,
+            like a recompute after a version change. Points that are missing
+            or failed follow the usual rules.
         software_version: The version whose runs count as done. A point whose
             only run was made by another version is recomputed and compared
             with it; a difference is reported, never silent.
@@ -982,6 +993,13 @@ def run_sweep(
     failures = read_failures(study_id, results=results)
     objects = read_point_objects(study_id, results=results)
     present, stale = _member_runs(study, software_version, results)
+    # Completed points to recompute: each is compared with the run it has now.
+    rerun_ids = (
+        frozenset(point.run_id for point in planned if point.run_id in present)
+        if rerun
+        else frozenset()
+    )
+    older_runs = {**stale, **{run_id: present[run_id] for run_id in rerun_ids}}
     tally = dict.fromkeys(
         (
             "done",
@@ -996,7 +1014,9 @@ def run_sweep(
     )
     todo: list[SweepPoint] = []
     for point in planned:
-        if point.run_id in present:
+        if point.run_id in rerun_ids:
+            todo.append(point)
+        elif point.run_id in present:
             tally["already_present"] += 1
         elif _is_skipped_failure(
             point.run_id, failures, objects, results, retry_failed=retry_failed
@@ -1042,13 +1062,14 @@ def run_sweep(
         completed_objects=(
             _completed_objects(software_version, results) if uses_objects else {}
         ),
+        rerun_ids=rerun_ids,
     )
     cancelled = False
 
     def work(point: SweepPoint) -> str:
         if cancel_event.is_set():
             return "cancelled"
-        return _run_one_point(context, point, stale.get(point.run_id))
+        return _run_one_point(context, point, older_runs.get(point.run_id))
 
     try:
         if todo:
@@ -1289,6 +1310,10 @@ def _run_one_point(
     completed = (context.completed_objects or {}).get(point.run_id)
     if completed is not None:
         reusable.append(completed)
+    if point.run_id in context.rerun_ids:
+        # Recomputing on purpose: the run it already has is the thing to
+        # compare with, not a result to reuse.
+        reusable = []
     reused = bool(reusable)
     object_id: str | None = None
     if reused:

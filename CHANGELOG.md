@@ -24,6 +24,10 @@ project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   from their checkpoints. Study and Experiment lists show a lifecycle
   summary, and groups can be closed and reopened. See
   [saved runs](doc/run-lifecycle.md).
+- **`fim sweep resume --rerun`.** Recomputes the points of a sweep study that
+  are already complete, from the stored specification, and compares each with
+  its existing run. A bit-for-bit match replaces the old run; a difference
+  keeps both and is reported. See [sweeps](doc/usage.md#sweep-a-parameter).
 - **Close dialog in the desktop app.** Closing the window now asks first when
   it would lose something: a Configure form with unsaved changes, or work that
   is still running. **Save and close** keeps the configuration under Saved

@@ -33776,6 +33776,7 @@ def run_sweep(study_id: str,
               cancel_event: threading.Event,
               *,
               retry_failed: bool = False,
+              rerun: bool = False,
               software_version: str = __version__,
               points_at_once: int | None = None,
               max_workers: int | None = None,
@@ -33808,6 +33809,13 @@ falls back to the runner's `run_point`.
 - `cancel_event` - Set to stop the sweep.
 - `retry_failed` - Also retry points recorded as failed; by default
   they are skipped.
+- `rerun` - Also recompute every point already completed under
+  `software_version`, from the stored specification, and compare
+  each with its existing run. A result that matches bit for bit
+  replaces the existing run (every Study that held it now holds the
+  new one); a difference keeps both and is reported, never silent,
+  like a recompute after a version change. Points that are missing
+  or failed follow the usual rules.
 - `software_version` - The version whose runs count as done. A point whose
   only run was made by another version is recomputed and compared
   with it; a difference is reported, never silent.

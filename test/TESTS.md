@@ -184,6 +184,7 @@ Every test module, fixture, and test function documented here in full; `doc/fim-
   - [`test_properties`](#statistics.test_properties)
 - [`test/validation/`](#group-validation)
   - [`test_api_docs`](#validation.test_api_docs)
+  - [`test_benchmark_axes`](#validation.test_benchmark_axes)
   - [`test_benchmark_provenance`](#validation.test_benchmark_provenance)
   - [`test_beta_workflow`](#validation.test_beta_workflow)
   - [`test_calibration_provenance`](#validation.test_calibration_provenance)
@@ -39525,6 +39526,16 @@ the real source tree is `pre-push`'s own job (and
 `test_generator_documents_every_source_module`, above, already covers
 "every module gets documented"); this test's own job is narrower:
 confirm the two environments produce identical output.
+
+<a id="validation.test_benchmark_axes"></a>
+
+# validation.test\_benchmark\_axes
+
+The benchmark tool's sweep axes reach the parameters they name.
+
+Nothing here times anything: `_median_of` and `_run_once` are replaced by
+recorders, so the test asserts which `SimulationParams` each backend would
+have been handed, which is a pure function of the commit.
 
 <a id="validation.test_benchmark_provenance"></a>
 
