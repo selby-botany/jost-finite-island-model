@@ -8,6 +8,16 @@ project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- **Grouped run specification (`fim.spec`).** `RunSpec` holds everything that
+  determines a run's numbers, grouped as `Model` (population and ploidy,
+  migration, `InfiniteAlleles` or `FiniteAlleles`, loci, and a
+  `FoundingAlleles`, `ExplicitFrequencies`, or `EquilibriumSplit` start),
+  `Stopping`, `Replication`, and `Analysis`. `Execution` and `Recording` sit
+  beside it because they never change a result. The types are frozen,
+  keyword-only, picklable, and report a bad value by field path
+  (`stopping.precision must be greater than 0`) through the new
+  `fim.errors.ConfigurationError`. They are not yet used by the engine; the
+  next changes compile them to `SimulationParams`.
 - **Public-surface guard and parity recorder.** `test/test_public_surface.py`
   requires each public module to declare an importable `__all__` and fails on
   any module importing another module's underscore-prefixed name.

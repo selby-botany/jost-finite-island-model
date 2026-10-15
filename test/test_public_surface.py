@@ -26,8 +26,10 @@ PUBLIC_MODULES = (
     "fim",
     "fim.convergence",
     "fim.engine",
+    "fim.errors",
     "fim.model",
     "fim.persistence",
+    "fim.spec",
     "fim.statistics",
     "fim.viz",
 )

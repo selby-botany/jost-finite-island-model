@@ -59,6 +59,7 @@ _GROUPS: tuple[str, ...] = (
     "gui",
     "model",
     "persistence",
+    "spec",
     "statistics",
     "validation",
     "viz",

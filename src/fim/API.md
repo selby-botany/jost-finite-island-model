@@ -281,6 +281,9 @@ Return to the [source-tree orientation](../README.md) or the [developer guide](.
   * [mean\_g\_st\_across\_loci](#fim.engine.tracking.mean_g_st_across_loci)
   * [pooled\_g\_st\_and\_d](#fim.engine.tracking.pooled_g_st_and_d)
   * [statistics\_for\_locus](#fim.engine.tracking.statistics_for_locus)
+* [fim.errors](#fim.errors)
+  * [FimError](#fim.errors.FimError)
+  * [ConfigurationError](#fim.errors.ConfigurationError)
 * [fim.examples](#fim.examples)
 * [fim.examples.artifacts](#fim.examples.artifacts)
   * [archive\_target](#fim.examples.artifacts.archive_target)
@@ -1308,6 +1311,52 @@ Return to the [source-tree orientation](../README.md) or the [developer guide](.
   * [execute\_run\_object](#fim.run_service.execute_run_object)
   * [load\_params](#fim.run_service.load_params)
   * [replicate\_directory](#fim.run_service.replicate_directory)
+* [fim.spec](#fim.spec)
+* [fim.spec.execution](#fim.spec.execution)
+  * [Execution](#fim.spec.execution.Execution)
+    * [\_\_post\_init\_\_](#fim.spec.execution.Execution.__post_init__)
+  * [Recording](#fim.spec.execution.Recording)
+    * [\_\_post\_init\_\_](#fim.spec.execution.Recording.__post_init__)
+* [fim.spec.model](#fim.spec.model)
+  * [Ploidy](#fim.spec.model.Ploidy)
+  * [Population](#fim.spec.model.Population)
+    * [\_\_post\_init\_\_](#fim.spec.model.Population.__post_init__)
+    * [gene\_copies](#fim.spec.model.Population.gene_copies)
+  * [Locus](#fim.spec.model.Locus)
+    * [\_\_post\_init\_\_](#fim.spec.model.Locus.__post_init__)
+  * [InfiniteAlleles](#fim.spec.model.InfiniteAlleles)
+    * [\_\_post\_init\_\_](#fim.spec.model.InfiniteAlleles.__post_init__)
+  * [FiniteAlleles](#fim.spec.model.FiniteAlleles)
+    * [\_\_post\_init\_\_](#fim.spec.model.FiniteAlleles.__post_init__)
+  * [Mutation](#fim.spec.model.Mutation)
+  * [FoundingAlleles](#fim.spec.model.FoundingAlleles)
+    * [\_\_post\_init\_\_](#fim.spec.model.FoundingAlleles.__post_init__)
+  * [ExplicitFrequencies](#fim.spec.model.ExplicitFrequencies)
+    * [\_\_post\_init\_\_](#fim.spec.model.ExplicitFrequencies.__post_init__)
+  * [EquilibriumSplit](#fim.spec.model.EquilibriumSplit)
+    * [\_\_post\_init\_\_](#fim.spec.model.EquilibriumSplit.__post_init__)
+  * [InitialCondition](#fim.spec.model.InitialCondition)
+  * [Model](#fim.spec.model.Model)
+    * [\_\_post\_init\_\_](#fim.spec.model.Model.__post_init__)
+* [fim.spec.policy](#fim.spec.policy)
+  * [Auto](#fim.spec.policy.Auto)
+  * [Stopping](#fim.spec.policy.Stopping)
+    * [\_\_post\_init\_\_](#fim.spec.policy.Stopping.__post_init__)
+  * [Replication](#fim.spec.policy.Replication)
+    * [\_\_post\_init\_\_](#fim.spec.policy.Replication.__post_init__)
+  * [Analysis](#fim.spec.policy.Analysis)
+    * [\_\_post\_init\_\_](#fim.spec.policy.Analysis.__post_init__)
+* [fim.spec.run](#fim.spec.run)
+  * [RunSpec](#fim.spec.run.RunSpec)
+    * [\_\_post\_init\_\_](#fim.spec.run.RunSpec.__post_init__)
+* [fim.spec.validation](#fim.spec.validation)
+  * [check\_bool](#fim.spec.validation.check_bool)
+  * [check\_choice](#fim.spec.validation.check_choice)
+  * [check\_finite](#fim.spec.validation.check_finite)
+  * [check\_int](#fim.spec.validation.check_int)
+  * [check\_int\_or\_auto](#fim.spec.validation.check_int_or_auto)
+  * [check\_probability](#fim.spec.validation.check_probability)
+  * [check\_strings](#fim.spec.validation.check_strings)
 * [fim.statistics](#fim.statistics)
 * [fim.statistics.catalog](#fim.statistics.catalog)
   * [StatisticSpec](#fim.statistics.catalog.StatisticSpec)
@@ -8049,6 +8098,39 @@ watched statistic ever reads are skipped rather than computed and
 discarded every generation (Phase 7 item 4, `FIM-24`/`FIM-32`; see
 `statistics_report`'s own `statistics` parameter for the full
 contract).
+
+<a id="fim.errors"></a>
+
+# fim.errors
+
+Exceptions raised by `fim` for problems a caller can correct.
+
+`FimError` is the root, so `except FimError` catches anything the package
+raises on purpose. `ConfigurationError` is also a `ValueError`, matching the
+Python convention that a bad argument raises `ValueError`.
+
+<a id="fim.errors.FimError"></a>
+
+## FimError Objects
+
+```python
+class FimError(Exception)
+```
+
+Root of every exception `fim` raises deliberately.
+
+<a id="fim.errors.ConfigurationError"></a>
+
+## ConfigurationError Objects
+
+```python
+class ConfigurationError(FimError, ValueError)
+```
+
+A specification or configuration file is invalid.
+
+The message names the offending field by its path, for example
+``stopping.precision``.
 
 <a id="fim.examples"></a>
 
@@ -30995,6 +31077,685 @@ Return one replicate's directory inside a batch Run object.
 **Returns**:
 
   `<directory>/replicate-NNN`, as `fim run` names it.
+
+<a id="fim.spec"></a>
+
+# fim.spec
+
+The grouped, immutable specification of a simulation run.
+
+`RunSpec` holds everything that determines a run's numbers; `Execution` and
+`Recording` are passed beside it and never change a result. See the public
+API redesign design for the reasoning behind the grouping.
+
+<a id="fim.spec.execution"></a>
+
+# fim.spec.execution
+
+How a run is carried out and what it keeps, apart from what it computes.
+
+`Execution` and `Recording` never change a result: the same `RunSpec` gives
+the same trajectory under any `Execution`, and `Recording` only chooses what
+is written down. They are therefore passed beside the `RunSpec`, not inside
+it, and take no part in a run's identity.
+
+<a id="fim.spec.execution.Execution"></a>
+
+## Execution Objects
+
+```python
+@dataclass(frozen=True, slots=True, kw_only=True)
+class Execution()
+```
+
+Which engine runs the simulation, and with how much parallelism.
+
+**Arguments**:
+
+- `backend` - ``"lineal"`` (the reference), ``"generational"``,
+  ``"generational-vector"``, or ``"auto"``, which chooses between
+  the last two from the model. The default stays ``"lineal"``, the
+  configuration file's own default; changing it is a separate
+  decision.
+- `jit` - ``"numba"`` compiles the generational backend's drift step.
+- `workers` - Processes for the ``"lineal"`` backend's batches (`None`
+  lets the front end choose).
+- `max_concurrent_replicates` - Replicates in flight at once for the
+  generational backends (`None` runs them all together).
+- `auto_vector_min_d` - Smallest deme count for which ``"auto"`` chooses
+  the vector backend.
+- `auto_vector_max_capacity` - Largest per-locus allele capacity for
+  which ``"auto"`` chooses the vector backend under finite alleles.
+
+<a id="fim.spec.execution.Execution.__post_init__"></a>
+
+#### \_\_post\_init\_\_
+
+```python
+def __post_init__() -> None
+```
+
+Check every value.
+
+<a id="fim.spec.execution.Recording"></a>
+
+## Recording Objects
+
+```python
+@dataclass(frozen=True, slots=True, kw_only=True)
+class Recording()
+```
+
+What a run writes down.
+
+**Arguments**:
+
+- `directory` - Where to write the run (a path or its text), or `None` to
+  keep it in memory.
+- `retention` - ``"full"`` keeps every generation's frequencies;
+  ``"thinned"`` keeps every generation early and then one in
+  `stride`.
+- `stride` - Keep one generation in this many once thinning starts.
+- `thinning_start` - Generation at which thinning starts, or ``"auto"``.
+
+<a id="fim.spec.execution.Recording.__post_init__"></a>
+
+#### \_\_post\_init\_\_
+
+```python
+def __post_init__() -> None
+```
+
+Normalize the directory and check every value.
+
+<a id="fim.spec.model"></a>
+
+# fim.spec.model
+
+The scientific model: population, migration, mutation, loci, and start.
+
+These frozen dataclasses describe *what is simulated*. They hold the values
+a person chose, in the units a paper would use (individuals and ploidy, not
+gene copies), and are checked field by field when built. Rules that need
+several parts at once, or the engine's own limits, are enforced when a
+`RunSpec` is compiled to the engine's parameters.
+
+Java readers: `Mutation` and `InitialCondition` are *unions of frozen
+dataclasses*, the Python counterpart of a sealed interface with record
+implementations. Dispatch on them with `match`; a new variant is a new
+class added to the union.
+
+<a id="fim.spec.model.Ploidy"></a>
+
+#### Ploidy
+
+Gene copies carried by one individual (haploid through tetraploid).
+
+<a id="fim.spec.model.Population"></a>
+
+## Population Objects
+
+```python
+@dataclass(frozen=True, slots=True, kw_only=True)
+class Population()
+```
+
+The size of each deme and the ploidy of its individuals.
+
+**Arguments**:
+
+- `individuals` - Individuals per deme: one number shared by every deme,
+  or one number per deme.
+- `ploidy` - Gene copies per individual (1 to 4). Required: the number of
+  gene copies simulated is `individuals * ploidy`, so it is chosen
+  and never guessed.
+
+<a id="fim.spec.model.Population.__post_init__"></a>
+
+#### \_\_post\_init\_\_
+
+```python
+def __post_init__() -> None
+```
+
+Normalize a list of sizes to a tuple and check every value.
+
+<a id="fim.spec.model.Population.gene_copies"></a>
+
+#### gene\_copies
+
+```python
+@property
+def gene_copies() -> int | tuple[int, ...]
+```
+
+Return the gene copies per deme: individuals times ploidy.
+
+<a id="fim.spec.model.Locus"></a>
+
+## Locus Objects
+
+```python
+@dataclass(frozen=True, slots=True, kw_only=True)
+class Locus()
+```
+
+One tracked locus.
+
+**Arguments**:
+
+- `id` - Positive identifier, unique within a model.
+- `length` - Length in base pairs. Under finite alleles the number of
+  possible alleles is `4 ** length`.
+
+<a id="fim.spec.model.Locus.__post_init__"></a>
+
+#### \_\_post\_init\_\_
+
+```python
+def __post_init__() -> None
+```
+
+Check the identifier and length.
+
+<a id="fim.spec.model.InfiniteAlleles"></a>
+
+## InfiniteAlleles Objects
+
+```python
+@dataclass(frozen=True, slots=True, kw_only=True)
+class InfiniteAlleles()
+```
+
+Mutation to a brand-new allele each time (the infinite-alleles model).
+
+**Arguments**:
+
+- `rate` - Probability that one gene copy mutates in one generation: one
+  value for every locus, or one value per locus.
+
+<a id="fim.spec.model.InfiniteAlleles.__post_init__"></a>
+
+#### \_\_post\_init\_\_
+
+```python
+def __post_init__() -> None
+```
+
+Check the rate.
+
+<a id="fim.spec.model.FiniteAlleles"></a>
+
+## FiniteAlleles Objects
+
+```python
+@dataclass(frozen=True, slots=True, kw_only=True)
+class FiniteAlleles()
+```
+
+Mutation among a fixed set of alleles (the K-allele model).
+
+The number of alleles at a locus is `4 ** length` (see `Locus`).
+
+**Arguments**:
+
+- `rate` - Probability that one gene copy mutates in one generation: one
+  value for every locus, or one value per locus.
+
+<a id="fim.spec.model.FiniteAlleles.__post_init__"></a>
+
+#### \_\_post\_init\_\_
+
+```python
+def __post_init__() -> None
+```
+
+Check the rate.
+
+<a id="fim.spec.model.Mutation"></a>
+
+#### Mutation
+
+The mutation model: one of the variants above.
+
+<a id="fim.spec.model.FoundingAlleles"></a>
+
+## FoundingAlleles Objects
+
+```python
+@dataclass(frozen=True, slots=True, kw_only=True)
+class FoundingAlleles()
+```
+
+Start every deme from the same founding alleles (the default).
+
+**Arguments**:
+
+- `count` - Number of founding alleles per locus.
+- `concentration` - Symmetric Dirichlet concentration of their
+  frequencies; larger values make them more nearly equal.
+
+<a id="fim.spec.model.FoundingAlleles.__post_init__"></a>
+
+#### \_\_post\_init\_\_
+
+```python
+def __post_init__() -> None
+```
+
+Check the count and concentration.
+
+<a id="fim.spec.model.ExplicitFrequencies"></a>
+
+## ExplicitFrequencies Objects
+
+```python
+@dataclass(frozen=True, slots=True, kw_only=True)
+class ExplicitFrequencies()
+```
+
+Start from stated allele frequencies.
+
+**Arguments**:
+
+- `frequencies` - For each deme, for each locus, a mapping from allele ID
+  to frequency (the configuration file's `p_0`).
+
+<a id="fim.spec.model.ExplicitFrequencies.__post_init__"></a>
+
+#### \_\_post\_init\_\_
+
+```python
+def __post_init__() -> None
+```
+
+Require a non-empty table.
+
+<a id="fim.spec.model.EquilibriumSplit"></a>
+
+## EquilibriumSplit Objects
+
+```python
+@dataclass(frozen=True, slots=True, kw_only=True)
+class EquilibriumSplit()
+```
+
+Start from an ancestral population at equilibrium, then split it.
+
+One ancestral deme runs until its heterozygosity settles, and is then
+divided into the model's demes.
+
+**Arguments**:
+
+- `window` - Generations over which the ancestral phase must be stable.
+- `tolerance` - Stability tolerance for that phase.
+- `max_generations` - Cap on the ancestral phase.
+- `founding` - How the ancestral deme starts.
+
+<a id="fim.spec.model.EquilibriumSplit.__post_init__"></a>
+
+#### \_\_post\_init\_\_
+
+```python
+def __post_init__() -> None
+```
+
+Check the three stopping values against one another.
+
+<a id="fim.spec.model.InitialCondition"></a>
+
+#### InitialCondition
+
+How generation zero is built: one of the variants above.
+
+<a id="fim.spec.model.Model"></a>
+
+## Model Objects
+
+```python
+@dataclass(frozen=True, slots=True, kw_only=True)
+class Model()
+```
+
+The finite island model being simulated.
+
+**Arguments**:
+
+- `demes` - Number of demes (islands), at least 2.
+- `population` - Deme sizes and ploidy.
+- `migration` - A symmetric migration rate, or a row-stochastic matrix.
+- `mutation` - The mutation model and rate.
+- `loci` - The tracked loci (default: one locus of the default length).
+- `migrant_sampling` - ``"continuous"`` moves expected fractions of each
+  deme; ``"stochastic"`` draws whole migrant counts.
+- `initial` - How generation zero is built.
+
+<a id="fim.spec.model.Model.__post_init__"></a>
+
+#### \_\_post\_init\_\_
+
+```python
+def __post_init__() -> None
+```
+
+Normalize sequences and check each part and the sizes that must agree.
+
+<a id="fim.spec.policy"></a>
+
+# fim.spec.policy
+
+How a run decides it is done and how its numbers are summarized.
+
+`Stopping` says when one replicate has converged, `Replication` says how many
+replicates to run and when to stop adding them, and `Analysis` says how the
+reported statistics are computed. Defaults are the engine's own: every
+`"auto"` is derived from the model when the run is compiled.
+
+<a id="fim.spec.policy.Auto"></a>
+
+#### Auto
+
+The string that asks the engine to derive a value from the model.
+
+<a id="fim.spec.policy.Stopping"></a>
+
+## Stopping Objects
+
+```python
+@dataclass(frozen=True, slots=True, kw_only=True)
+class Stopping()
+```
+
+When one replicate counts as converged.
+
+**Arguments**:
+
+- `statistics` - The statistic(s) watched, by catalog ID (for example
+  ``"D"``). A single name is accepted and becomes a one-item tuple.
+- `combinator` - ``"all"`` stops when every watched statistic is stable;
+  ``"any"`` when at least one is.
+- `estimate` - Which expected value is reported for `D` and `G_ST`.
+- `burn_in` - Generations discarded before averaging, or ``"auto"``.
+- `max_generations` - Hard cap on generations, or ``"auto"``.
+- `precision` - Target half-width of the interval around each watched
+  statistic.
+- `per_statistic_precision` - Overrides of `precision` by statistic ID.
+- `confidence` - Confidence level of the intervals (0.90, 0.95, or 0.99).
+
+<a id="fim.spec.policy.Stopping.__post_init__"></a>
+
+#### \_\_post\_init\_\_
+
+```python
+def __post_init__() -> None
+```
+
+Normalize names and precision overrides, then check every value.
+
+<a id="fim.spec.policy.Replication"></a>
+
+## Replication Objects
+
+```python
+@dataclass(frozen=True, slots=True, kw_only=True)
+class Replication()
+```
+
+How many independent replicates to run.
+
+**Arguments**:
+
+- `n` - Most replicates to run.
+- `minimum` - Fewest replicates before the batch may stop early.
+- `stop_early` - Stop adding replicates once every watched statistic's
+  interval across replicates reaches the precision.
+- `method` - ``"interval"`` stops on the observed interval;
+  ``"planned_replicates"`` runs a count planned from a pilot.
+- `averaging_window` - Generations averaged per replicate, or ``"auto"``.
+
+<a id="fim.spec.policy.Replication.__post_init__"></a>
+
+#### \_\_post\_init\_\_
+
+```python
+def __post_init__() -> None
+```
+
+Check every value.
+
+<a id="fim.spec.policy.Analysis"></a>
+
+## Analysis Objects
+
+```python
+@dataclass(frozen=True, slots=True, kw_only=True)
+class Analysis()
+```
+
+How the reported statistics are computed.
+
+**Arguments**:
+
+- `deme_weighting` - ``"equal"`` or by deme ``"size"``.
+- `locus_aggregation` - ``"ratio_of_means"`` pools `H_S` and `H_T` across
+  loci before forming `D` and `G_ST`; ``"mean_of_ratios"`` forms
+  them per locus and averages.
+- `track_expensive` - Also track the costly opt-in statistics every
+  generation, for display.
+
+<a id="fim.spec.policy.Analysis.__post_init__"></a>
+
+#### \_\_post\_init\_\_
+
+```python
+def __post_init__() -> None
+```
+
+Check every value.
+
+<a id="fim.spec.run"></a>
+
+# fim.spec.run
+
+The complete scientific specification of one run.
+
+<a id="fim.spec.run.RunSpec"></a>
+
+## RunSpec Objects
+
+```python
+@dataclass(frozen=True, slots=True, kw_only=True)
+class RunSpec()
+```
+
+Everything that determines a run's numbers.
+
+Two runs with equal specifications produce the same trajectory on the
+same platform, whatever `Execution` or `Recording` they use. The parts
+are grouped by concern so each can be read, documented, and extended on
+its own.
+
+**Arguments**:
+
+- `model` - What is simulated.
+- `seed` - Non-negative random seed. Replicate `i` derives its own seed
+  from it.
+- `stopping` - When one replicate counts as converged.
+- `replication` - How many replicates to run.
+- `analysis` - How the reported statistics are computed.
+- `expert` - Tuning constants of the convergence and statistics
+  machinery. The storage group of these (log block sizes and
+  checkpoint cadence) does not affect results and takes no part in
+  a run's identity.
+
+<a id="fim.spec.run.RunSpec.__post_init__"></a>
+
+#### \_\_post\_init\_\_
+
+```python
+def __post_init__() -> None
+```
+
+Check the seed and the type of each group.
+
+<a id="fim.spec.validation"></a>
+
+# fim.spec.validation
+
+Small field checks shared by the specification types.
+
+Each check raises `ConfigurationError` naming the field by its path, so a
+message reads ``stopping.precision must be greater than 0`` wherever the bad
+value was supplied. Cross-field and model-dependent rules are not repeated
+here: `RunSpec` compiles to the engine's `SimulationParams`, which remains
+the single place those rules live.
+
+<a id="fim.spec.validation.check_bool"></a>
+
+#### check\_bool
+
+```python
+def check_bool(path: str, value: object) -> None
+```
+
+Require a real `bool` (not `0` or `1`).
+
+**Arguments**:
+
+- `path` - Dotted field path for the message.
+- `value` - The value to check.
+
+
+**Raises**:
+
+- `ConfigurationError` - If `value` is not a `bool`.
+
+<a id="fim.spec.validation.check_choice"></a>
+
+#### check\_choice
+
+```python
+def check_choice(path: str, value: object, alias: Any) -> None
+```
+
+Require `value` to be one of the strings in a `Literal` alias.
+
+**Arguments**:
+
+- `path` - Dotted field path for the message.
+- `value` - The value to check.
+- `alias` - A `Literal[...]` type; its arguments are the legal values.
+
+
+**Raises**:
+
+- `ConfigurationError` - If `value` is not one of them.
+
+<a id="fim.spec.validation.check_finite"></a>
+
+#### check\_finite
+
+```python
+def check_finite(path: str,
+                 value: object,
+                 *,
+                 above: float | None = None) -> None
+```
+
+Require a finite real number, optionally strictly above a floor.
+
+**Arguments**:
+
+- `path` - Dotted field path for the message.
+- `value` - The value to check.
+- `above` - Exclusive lower bound, or `None` for no bound.
+
+
+**Raises**:
+
+- `ConfigurationError` - If `value` is not a finite number above `above`.
+
+<a id="fim.spec.validation.check_int"></a>
+
+#### check\_int
+
+```python
+def check_int(path: str, value: object, *, minimum: int | None = None) -> None
+```
+
+Require a whole number (not a `bool`), optionally at least `minimum`.
+
+**Arguments**:
+
+- `path` - Dotted field path for the message.
+- `value` - The value to check.
+- `minimum` - Inclusive lower bound, or `None` for no bound.
+
+
+**Raises**:
+
+- `ConfigurationError` - If `value` is not an integer at least `minimum`.
+
+<a id="fim.spec.validation.check_int_or_auto"></a>
+
+#### check\_int\_or\_auto
+
+```python
+def check_int_or_auto(path: str, value: object, *, minimum: int) -> None
+```
+
+Require the string ``"auto"`` or a whole number at least `minimum`.
+
+**Arguments**:
+
+- `path` - Dotted field path for the message.
+- `value` - The value to check.
+- `minimum` - Inclusive lower bound for the number.
+
+
+**Raises**:
+
+- `ConfigurationError` - If `value` is neither.
+
+<a id="fim.spec.validation.check_probability"></a>
+
+#### check\_probability
+
+```python
+def check_probability(path: str, value: object) -> None
+```
+
+Require a finite number in the closed interval from 0 to 1.
+
+**Arguments**:
+
+- `path` - Dotted field path for the message.
+- `value` - The value to check.
+
+
+**Raises**:
+
+- `ConfigurationError` - If `value` is not such a number.
+
+<a id="fim.spec.validation.check_strings"></a>
+
+#### check\_strings
+
+```python
+def check_strings(path: str, values: Iterable[object]) -> None
+```
+
+Require every item to be a non-empty string.
+
+**Arguments**:
+
+- `path` - Dotted field path for the message.
+- `values` - The items to check.
+
+
+**Raises**:
+
+- `ConfigurationError` - If any item is not a non-empty string.
 
 <a id="fim.statistics"></a>
 
