@@ -20,10 +20,11 @@ from fim import __version__, cli, paths, update
 from fim.config.expert import ExpertSettings
 from fim.gui.preferences import preferences_file_override
 from fim.model.params import SimulationParams
-from fim.persistence import artifacts
+from fim.persistence import artifacts, saved_run
 from fim.persistence import report as report_module
 from fim.persistence.binary_store import BinaryLogStore
 from fim.persistence.manifest import hash_file, read_batch_manifest
+from fim.persistence.saved_run import replicate_output_directory
 from fim.persistence.tlog import parse_header
 
 
@@ -99,7 +100,7 @@ def test_sigterm_ends_a_run_with_143_and_discards_its_staging(
     def terminated(*_: Any, **__: Any) -> None:
         os.kill(os.getpid(), signal.SIGTERM)
 
-    monkeypatch.setattr(cli, "write_run_artifacts", terminated)
+    monkeypatch.setattr(saved_run, "write_run_artifacts", terminated)
 
     with pytest.raises(SystemExit) as raised:
         cli.main(["run", str(config), "--output", str(output), "--quiet"])
@@ -1271,7 +1272,7 @@ def test_run_batch_manifest_is_schema_versioned_and_digest_verified(
     assert manifest.artifacts is not None
     assert manifest.artifacts["summary"] == hash_file(output / "summary.json")
     for replicate_run_id in manifest.replicate_run_ids:
-        directory = cli._replicate_output_directory(
+        directory = replicate_output_directory(
             output, manifest.run_id, replicate_run_id
         )
         assert manifest.artifacts[directory.name] == hash_file(
@@ -1553,7 +1554,7 @@ def test_run_batch_parallel_adaptive_stop_leaves_no_orphan_replicate_directories
     manifest = json.loads((output / "manifest.json").read_text(encoding="utf-8"))
     replicate_run_ids = manifest["replicate_run_ids"]
     expected_directories = {
-        cli._replicate_output_directory(output, manifest["run_id"], run_id).name
+        replicate_output_directory(output, manifest["run_id"], run_id).name
         for run_id in replicate_run_ids
     }
     published_directories = {
@@ -1600,7 +1601,7 @@ def test_run_batch_leaves_no_trace_when_a_replicate_write_fails(
             raise RuntimeError("simulated replicate write failure")
         return original_write_run_artifacts(*args, **kwargs)
 
-    monkeypatch.setattr(cli, "write_run_artifacts", flaky_write_run_artifacts)
+    monkeypatch.setattr(saved_run, "write_run_artifacts", flaky_write_run_artifacts)
 
     status = cli.main(
         ["run", str(config), "-o", str(output), "--sequential", "--quiet"]

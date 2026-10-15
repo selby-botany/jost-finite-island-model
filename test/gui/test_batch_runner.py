@@ -36,6 +36,7 @@ from fim.gui import batch_runner
 from fim.model.params import Migration, MutationRate, PopulationSize, SimulationParams
 from fim.persistence.binary_store import BinaryLogStore
 from fim.persistence.manifest import hash_file, read_batch_manifest
+from fim.persistence.saved_run import replicate_index, replicate_output_directory
 from fim.persistence.store import TrajectoryStore
 
 
@@ -113,17 +114,15 @@ def test_replicate_index_recovers_the_ordinal_from_the_run_id(
     batch_params: SimulationParams,
 ) -> None:
     """The 1-based ordinal is parsed straight out of the replicate run ID."""
-    assert batch_runner.replicate_index("run-abc", "run-abc-r001") == 1
-    assert batch_runner.replicate_index("run-abc", "run-abc-r003") == 3
+    assert replicate_index("run-abc", "run-abc-r001") == 1
+    assert replicate_index("run-abc", "run-abc-r003") == 3
 
 
 def test_replicate_output_directory_uses_the_zero_padded_ordinal(
     tmp_path: Path,
 ) -> None:
     """The directory name matches `cli._replicate_output_directory`'s own."""
-    directory = batch_runner.replicate_output_directory(
-        tmp_path, "run-abc", "run-abc-r002"
-    )
+    directory = replicate_output_directory(tmp_path, "run-abc", "run-abc-r002")
 
     assert directory == tmp_path / "replicate-002"
 
@@ -343,9 +342,7 @@ def test_start_batch_run_prunes_orphan_replicate_directories(
 
     manifest = read_batch_manifest(output_directory / "manifest.json")
     expected_directories = {
-        batch_runner.replicate_output_directory(
-            output_directory, manifest.run_id, run_id
-        ).name
+        replicate_output_directory(output_directory, manifest.run_id, run_id).name
         for run_id in manifest.replicate_run_ids
     }
     published_directories = {

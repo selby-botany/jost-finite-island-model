@@ -16,10 +16,11 @@ import yaml
 from conftest import FAST_EXPERT_SETTINGS
 
 from fim import cli
-from fim.gui import animation, batch_runner
+from fim.gui import animation
 from fim.model.params import SimulationParams
 from fim.model.state import ModelState
 from fim.persistence.manifest import read_batch_manifest, read_manifest
+from fim.persistence.saved_run import replicate_output_directory
 from fim.persistence.store import TrajectoryRow
 from fim.reanalyze import group_rows_by_generation
 from fim.viz.scatter import frequency_points
@@ -239,9 +240,7 @@ def test_pre_render_batch_frames_carries_a_stopped_replicates_state_forward(
     params = manifest.params()
     replicate_paths = {
         replicate_run_id: (
-            batch_runner.replicate_output_directory(
-                output, manifest.run_id, replicate_run_id
-            )
+            replicate_output_directory(output, manifest.run_id, replicate_run_id)
             / "trajectory.tlog"
         )
         for replicate_run_id in manifest.replicate_run_ids
@@ -339,9 +338,7 @@ def test_pre_render_batch_frames_carry_pooled_supplemental_payloads(
     replicates = [
         (
             replicate_run_id,
-            batch_runner.replicate_output_directory(
-                output, manifest.run_id, replicate_run_id
-            )
+            replicate_output_directory(output, manifest.run_id, replicate_run_id)
             / "trajectory.tlog",
         )
         for replicate_run_id in manifest.replicate_run_ids

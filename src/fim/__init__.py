@@ -191,8 +191,11 @@ _EXPORTS: dict[str, str] = {
     "RunConfig": "fim.spec",
     "RunSpec": "fim.spec",
     "Stopping": "fim.spec",
+    "StoredReplicate": "fim.stored",
+    "StoredRun": "fim.stored",
     "UnsupportedError": "fim.errors",
     "load_config": "fim.spec",
+    "open_run": "fim.stored",
     "run_identity": "fim.spec",
     "simulate": "fim.simulation",
 }
@@ -220,6 +223,7 @@ if TYPE_CHECKING:
         load_config,
         run_identity,
     )
+    from fim.stored import StoredReplicate, StoredRun, open_run
 
 
 def __getattr__(name: str) -> object:
@@ -268,10 +272,13 @@ __all__ = [
     "RunConfig",
     "RunSpec",
     "Stopping",
+    "StoredReplicate",
+    "StoredRun",
     "UnsupportedError",
     "__dev_commit__",
     "__version__",
     "load_config",
+    "open_run",
     "run_identity",
     "simulate",
 ]

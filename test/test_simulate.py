@@ -74,10 +74,8 @@ def test_a_run_config_supplies_its_own_execution_unless_overridden() -> None:
     assert overridden.provenance.backend == "lineal"
 
 
-def test_recording_to_a_directory_is_refused_until_it_is_supported() -> None:
-    """The error says so, rather than silently keeping the run in memory."""
-    with pytest.raises(ConfigurationError, match=r"recording\.directory"):
-        fim.simulate(_spec(), recording=fim.Recording(directory="somewhere"))
+def test_workers_need_a_directory_to_write_to() -> None:
+    """Worker processes cannot share an in-memory store; the error says so."""
     with pytest.raises(ConfigurationError, match=r"execution\.workers"):
         fim.simulate(_spec(), execution=fim.Execution(workers=2))
 

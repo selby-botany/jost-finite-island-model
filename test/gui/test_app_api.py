@@ -41,7 +41,6 @@ from fim.engine import (
 from fim.engine import backends as engine_backends
 from fim.engine import fim as engine_fim
 from fim.gui import app as app_module
-from fim.gui import batch_runner
 from fim.gui import presets as presets_module
 from fim.gui import recent_runs as recent_runs_module
 from fim.gui import runner as runner_module
@@ -71,6 +70,7 @@ from fim.persistence.binary_store import BinaryLogStore
 from fim.persistence.manifest import hash_file, read_manifest
 from fim.persistence.pairwise import pair_value, read_pairwise
 from fim.persistence.report import write_report
+from fim.persistence.saved_run import replicate_output_directory
 from fim.statistics import (
     confidence_interval,
     effective_allele_count,
@@ -2672,9 +2672,7 @@ def test_batch_done_payload_carries_one_replicate_row_per_result(
     for row, result in zip(replicates, batch_results, strict=True):
         assert row["generation"] == result.report["generation"]
         assert row["statistics"]["D"] == format_statistic(result.report["D"])
-        expected_directory = batch_runner.replicate_output_directory(
-            tmp_path, run_id, result.run_id
-        )
+        expected_directory = replicate_output_directory(tmp_path, run_id, result.run_id)
         assert row["trajectoryPath"] == str(expected_directory / "trajectory.tlog")
         assert row["replicateId"] == result.run_id
 
@@ -3058,9 +3056,7 @@ def test_push_batch_progress_pushes_a_pooled_scatter_from_real_sidecars(
     params = replace(tiny_params, n_replicates=2)
     run_id = "batch-run-1"
     replicate_run_id = f"{run_id}-r001"
-    directory = batch_runner.replicate_output_directory(
-        tmp_path, run_id, replicate_run_id
-    )
+    directory = replicate_output_directory(tmp_path, run_id, replicate_run_id)
     directory.mkdir(parents=True)
     store = LiveProgressStore(
         BinaryLogStore(
@@ -3142,9 +3138,7 @@ def test_push_batch_progress_includes_a_generation_zero_baseline(
     )
     for index in (1, 2):
         replicate_run_id = f"{run_id}-r{index:03}"
-        directory = batch_runner.replicate_output_directory(
-            tmp_path, run_id, replicate_run_id
-        )
+        directory = replicate_output_directory(tmp_path, run_id, replicate_run_id)
         directory.mkdir(parents=True)
         store = LiveProgressStore(
             BinaryLogStore(
@@ -3211,9 +3205,7 @@ def test_push_batch_progress_includes_a_live_deme_pair_panel_when_selected(
     params = replace(tiny_params, n_replicates=2)
     run_id = "batch-run-1"
     replicate_run_id = f"{run_id}-r001"
-    directory = batch_runner.replicate_output_directory(
-        tmp_path, run_id, replicate_run_id
-    )
+    directory = replicate_output_directory(tmp_path, run_id, replicate_run_id)
     directory.mkdir(parents=True)
     store = LiveProgressStore(
         BinaryLogStore(

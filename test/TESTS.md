@@ -35,6 +35,7 @@ Every test module, fixture, and test function documented here in full; `doc/fim-
   - [`test_run_service_batch`](#test.test_run_service_batch)
   - [`test_shutdown_diagnostics`](#test.test_shutdown_diagnostics)
   - [`test_simulate`](#test.test_simulate)
+  - [`test_stored`](#test.test_stored)
   - [`test_sweep`](#test.test_sweep)
   - [`test_sweep_run`](#test.test_sweep_run)
   - [`test_termination`](#test.test_termination)
@@ -4209,15 +4210,15 @@ def test_a_run_config_supplies_its_own_execution_unless_overridden() -> None
 
 Keyword arguments win over what a configuration file asked for.
 
-<a id="test.test_simulate.test_recording_to_a_directory_is_refused_until_it_is_supported"></a>
+<a id="test.test_simulate.test_workers_need_a_directory_to_write_to"></a>
 
-#### test\_recording\_to\_a\_directory\_is\_refused\_until\_it\_is\_supported
+#### test\_workers\_need\_a\_directory\_to\_write\_to
 
 ```python
-def test_recording_to_a_directory_is_refused_until_it_is_supported() -> None
+def test_workers_need_a_directory_to_write_to() -> None
 ```
 
-The error says so, rather than silently keeping the run in memory.
+Worker processes cannot share an in-memory store; the error says so.
 
 <a id="test.test_simulate.test_an_engine_rejection_is_a_configuration_error"></a>
 
@@ -4278,6 +4279,94 @@ def test_every_package_exception_is_a_fim_error(
 ```
 
 One root catches everything; ValueError compatibility is kept.
+
+<a id="test.test_stored"></a>
+
+# test.test\_stored
+
+Saving a run with `simulate` and opening it again with `open_run`.
+
+<a id="test.test_stored.test_a_saved_batch_reopens_with_the_same_numbers"></a>
+
+#### test\_a\_saved\_batch\_reopens\_with\_the\_same\_numbers
+
+```python
+def test_a_saved_batch_reopens_with_the_same_numbers(tmp_path: Path) -> None
+```
+
+The reopened run equals the fresh one: ID, spec, reports, stops, summary.
+
+<a id="test.test_stored.test_a_saved_single_run_is_flat_and_reopens_with_one_replicate"></a>
+
+#### test\_a\_saved\_single\_run\_is\_flat\_and\_reopens\_with\_one\_replicate
+
+```python
+def test_a_saved_single_run_is_flat_and_reopens_with_one_replicate(
+        tmp_path: Path) -> None
+```
+
+A single replicate is saved in the flat layout `fim run` writes.
+
+<a id="test.test_stored.test_the_stored_trajectory_reads_and_reanalyzes"></a>
+
+#### test\_the\_stored\_trajectory\_reads\_and\_reanalyzes
+
+```python
+def test_the_stored_trajectory_reads_and_reanalyzes(tmp_path: Path) -> None
+```
+
+Rows come back by generation, and re-analysis matches the report.
+
+<a id="test.test_stored.test_a_tampered_trajectory_fails_verification"></a>
+
+#### test\_a\_tampered\_trajectory\_fails\_verification
+
+```python
+def test_a_tampered_trajectory_fails_verification(tmp_path: Path) -> None
+```
+
+The manifest's digest catches an edited log.
+
+<a id="test.test_stored.test_a_directory_without_a_manifest_is_not_a_saved_run"></a>
+
+#### test\_a\_directory\_without\_a\_manifest\_is\_not\_a\_saved\_run
+
+```python
+def test_a_directory_without_a_manifest_is_not_a_saved_run(
+        tmp_path: Path) -> None
+```
+
+Opening anything else raises a StoreError that says why.
+
+<a id="test.test_stored.test_a_saved_run_is_not_overwritten"></a>
+
+#### test\_a\_saved\_run\_is\_not\_overwritten
+
+```python
+def test_a_saved_run_is_not_overwritten(tmp_path: Path) -> None
+```
+
+Publishing refuses an existing target, leaving the first run intact.
+
+<a id="test.test_stored.test_only_refuses_a_stored_batch"></a>
+
+#### test\_only\_refuses\_a\_stored\_batch
+
+```python
+def test_only_refuses_a_stored_batch(tmp_path: Path) -> None
+```
+
+`only()` says how many replicates the saved run has.
+
+<a id="test.test_stored.test_worker_processes_save_the_same_run"></a>
+
+#### test\_worker\_processes\_save\_the\_same\_run
+
+```python
+def test_worker_processes_save_the_same_run(tmp_path: Path) -> None
+```
+
+The `lineal` process pool gives the numbers and files of a serial run.
 
 <a id="test.test_sweep"></a>
 

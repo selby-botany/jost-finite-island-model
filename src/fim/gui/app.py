@@ -151,6 +151,7 @@ from fim.persistence.pairwise import pair_value, read_pairwise
 from fim.persistence.run_lifecycle import LifecycleError
 from fim.persistence.run_metadata import replace_run_metadata, run_metadata_path
 from fim.persistence.run_objects import read_run_object
+from fim.persistence.saved_run import replicate_output_directory
 from fim.reanalyze import (
     read_persisted_convergence_history,
     reanalyze_trajectory,
@@ -5901,7 +5902,7 @@ class Api:
         not folded into `list_home_runs` itself — a `results/` directory
         with many old batches would otherwise pay this cost for every
         batch shown, expanded or not. Each replicate's own directory is
-        `batch_runner.replicate_output_directory`'s own naming
+        `replicate_output_directory`'s own naming
         convention (`replicate-NNN`, recovered from `replicate_run_id`),
         the same helper `start_batch_run`'s own live "Open replicate"
         already uses — no second naming scheme.
@@ -5929,7 +5930,7 @@ class Api:
         digits = self._significant_digits
         replicates: list[dict[str, Any]] = []
         for replicate_run_id in manifest.replicate_run_ids:
-            replicate_directory = batch_runner.replicate_output_directory(
+            replicate_directory = replicate_output_directory(
                 Path(directory), manifest.run_id, replicate_run_id
             )
             raw_report = _read_json_object(replicate_directory / "report.json")
@@ -5982,7 +5983,7 @@ class Api:
             manifest = read_batch_manifest(Path(directory) / "manifest.json")
             samples: dict[str, list[float]] = {key: [] for key in pair_keys()}
             for replicate_run_id in manifest.replicate_run_ids:
-                replicate_directory = batch_runner.replicate_output_directory(
+                replicate_directory = replicate_output_directory(
                     Path(directory), manifest.run_id, replicate_run_id
                 )
                 values = _replicate_pair_values(
@@ -6245,7 +6246,7 @@ class Api:
         # Keep the legacy report-only fallback for older saved batches.
         if (batch_directory / "summary.json").is_file() and not all(
             (
-                batch_runner.replicate_output_directory(
+                replicate_output_directory(
                     batch_directory, manifest.run_id, replicate_run_id
                 )
                 / TRAJECTORY_LOG_FILENAME
@@ -6267,7 +6268,7 @@ class Api:
         first_replicate_manifest: RunManifest | None = None
         try:
             for replicate_run_id in manifest.replicate_run_ids:
-                replicate_directory = batch_runner.replicate_output_directory(
+                replicate_directory = replicate_output_directory(
                     batch_directory, manifest.run_id, replicate_run_id
                 )
                 trajectory_path = replicate_directory / TRAJECTORY_LOG_FILENAME
@@ -6392,7 +6393,7 @@ class Api:
                     batch_manifest = read_batch_manifest(directory / "manifest.json")
                     batch_params = batch_manifest.params()
                     for replicate_run_id in batch_manifest.replicate_run_ids:
-                        replicate_directory = batch_runner.replicate_output_directory(
+                        replicate_directory = replicate_output_directory(
                             directory, batch_manifest.run_id, replicate_run_id
                         )
                         trajectory_path = replicate_directory / TRAJECTORY_LOG_FILENAME
@@ -6718,7 +6719,7 @@ class Api:
         scatter (`onBatchDone`'s own `panels[0]`, `_batch_done_payload`
         below): every published replicate's own final state is
         rediscovered from disk by directory name
-        (`batch_runner.replicate_output_directory`'s own `replicate-
+        (`replicate_output_directory`'s own `replicate-
         NNN` naming), not passed in from the page — the same "read the
         published, atomic artifacts on disk" source of truth `list_
         recent_runs` and `open_run` already use, rather than the page
@@ -6795,7 +6796,7 @@ class Api:
             replicates = [
                 (
                     replicate_run_id,
-                    batch_runner.replicate_output_directory(
+                    replicate_output_directory(
                         directory, manifest.run_id, replicate_run_id
                     )
                     / TRAJECTORY_LOG_FILENAME,
@@ -7558,7 +7559,7 @@ def _push_batch_progress(
     states: list[ModelState] = []
     for index in range(1, params.n_replicates + 1):
         replicate_run_id = f"{run_id}-r{index:03}"
-        directory = batch_runner.replicate_output_directory(
+        directory = replicate_output_directory(
             working_directory, run_id, replicate_run_id
         )
         sidecar = read_progress_sidecar(directory / ".progress")
@@ -7670,7 +7671,7 @@ def _batch_done_payload(
     not necessarily `params.n_replicates`: an adaptive
     early stop can end a batch short of its own cap),
     including each row's own `trajectoryPath` — joined here, in Python
-    (`batch_runner.replicate_output_directory`), rather than the page
+    (`replicate_output_directory`), rather than the page
     concatenating `outputDirectory` and a replicate directory name
     itself (the same Windows mixed-separator risk `list_recent_runs`'
     own docstring names) — for "Open replicate" to hand
@@ -7743,9 +7744,7 @@ def _batch_done_payload(
         reports=[result.report for result in results],
         final_states=[result.final_state for result in results],
         trajectory_paths=[
-            batch_runner.replicate_output_directory(
-                output_directory, run_id, result.run_id
-            )
+            replicate_output_directory(output_directory, run_id, result.run_id)
             / TRAJECTORY_LOG_FILENAME
             for result in results
         ],
@@ -7948,7 +7947,7 @@ def _pooled_batch_payload(
     pooled CI, the pooled scatter, `p0Statistics`) never actually reads
     anything else a full `RunResult` would have offered. `trajectory_
     paths` is taken as given rather than re-derived from `output_
-    directory`/`run_id` (`batch_runner.replicate_output_directory`'s
+    directory`/`run_id` (`replicate_output_directory`'s
     own convention, which `_batch_done_payload`'s own caller still uses
     to build it): a Study's own members are not all replicates of one
     shared batch directory the way that convention assumes, so each
@@ -7967,7 +7966,7 @@ def _pooled_batch_payload(
             },
             "trajectoryPath": str(trajectory_path),
             # `replicate_id` (`"{run_id}-r{index:03}"` for a batch's own
-            # replicate, `batch_runner.replicate_output_directory`'s own
+            # replicate, `replicate_output_directory`'s own
             # naming convention, or a bare run's own `run_id` for a
             # Study member that is not itself a batch) --
             # `webui/screens/run-view-completed.js`'s own `replicateLabel`
@@ -9332,7 +9331,7 @@ def _report_only_batch_payload(
     reports: list[FinalReport] = []
     trajectory_paths: list[Path] = []
     for replicate_run_id in manifest.replicate_run_ids:
-        replicate_directory = batch_runner.replicate_output_directory(
+        replicate_directory = replicate_output_directory(
             directory, manifest.run_id, replicate_run_id
         )
         report = _read_json_object(replicate_directory / "report.json")

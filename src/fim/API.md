@@ -515,8 +515,6 @@ Return to the [source-tree orientation](../README.md) or the [developer guide](.
   * [main](#fim.gui.app.main)
 * [fim.gui.batch\_runner](#fim.gui.batch_runner)
   * [default\_max\_workers](#fim.gui.batch_runner.default_max_workers)
-  * [replicate\_index](#fim.gui.batch_runner.replicate_index)
-  * [replicate\_output\_directory](#fim.gui.batch_runner.replicate_output_directory)
   * [start\_batch\_run](#fim.gui.batch_runner.start_batch_run)
 * [fim.gui.config\_form](#fim.gui.config_form)
   * [PLOIDY\_REQUIRED\_MESSAGE](#fim.gui.config_form.PLOIDY_REQUIRED_MESSAGE)
@@ -1118,6 +1116,13 @@ Return to the [source-tree orientation](../README.md) or the [developer guide](.
   * [BATCH\_SUMMARY\_FILENAME](#fim.persistence.run_receipt.BATCH_SUMMARY_FILENAME)
   * [ARTIFACT\_FILENAMES](#fim.persistence.run_receipt.ARTIFACT_FILENAMES)
   * [receipt\_problem](#fim.persistence.run_receipt.receipt_problem)
+* [fim.persistence.saved\_run](#fim.persistence.saved_run)
+  * [replicate\_index](#fim.persistence.saved_run.replicate_index)
+  * [replicate\_output\_directory](#fim.persistence.saved_run.replicate_output_directory)
+  * [prune\_orphan\_replicate\_directories](#fim.persistence.saved_run.prune_orphan_replicate_directories)
+  * [replicate\_store\_factory](#fim.persistence.saved_run.replicate_store_factory)
+  * [write\_batch\_artifacts](#fim.persistence.saved_run.write_batch_artifacts)
+  * [save\_run](#fim.persistence.saved_run.save_run)
 * [fim.persistence.scalar\_snapshot](#fim.persistence.scalar_snapshot)
   * [SnapshotError](#fim.persistence.scalar_snapshot.SnapshotError)
   * [export\_population](#fim.persistence.scalar_snapshot.export_population)
@@ -1326,6 +1331,7 @@ Return to the [source-tree orientation](../README.md) or the [developer guide](.
   * [Provenance](#fim.results.Provenance)
   * [Result](#fim.results.Result)
     * [only](#fim.results.Result.only)
+  * [stop\_from\_report](#fim.results.stop_from_report)
   * [result\_from\_runs](#fim.results.result_from_runs)
 * [fim.run\_service](#fim.run_service)
   * [DEFAULT\_CHECKPOINT\_GENERATIONS](#fim.run_service.DEFAULT_CHECKPOINT_GENERATIONS)
@@ -1520,6 +1526,15 @@ Return to the [source-tree orientation](../README.md) or the [developer guide](.
   * [pairwise\_matrices](#fim.statistics.pairwise.pairwise_matrices)
   * [pairwise\_nei\_identities](#fim.statistics.pairwise.pairwise_nei_identities)
   * [upper\_triangle](#fim.statistics.pairwise.upper_triangle)
+* [fim.stored](#fim.stored)
+  * [StoredReplicate](#fim.stored.StoredReplicate)
+    * [trajectory\_path](#fim.stored.StoredReplicate.trajectory_path)
+    * [rows](#fim.stored.StoredReplicate.rows)
+    * [verify](#fim.stored.StoredReplicate.verify)
+    * [reanalyze](#fim.stored.StoredReplicate.reanalyze)
+  * [StoredRun](#fim.stored.StoredRun)
+    * [only](#fim.stored.StoredRun.only)
+  * [open\_run](#fim.stored.open_run)
 * [fim.sweep](#fim.sweep)
   * [SWEEP\_SPEC\_VERSION](#fim.sweep.SWEEP_SPEC_VERSION)
   * [SIZE\_CONFIRMATION\_THRESHOLD](#fim.sweep.SIZE_CONFIRMATION_THRESHOLD)
@@ -12860,7 +12875,7 @@ clicked (`webui/screens/open-run.js`'s own `toggleBatchRow`),
 not folded into `list_home_runs` itself — a `results/` directory
 with many old batches would otherwise pay this cost for every
 batch shown, expanded or not. Each replicate's own directory is
-`batch_runner.replicate_output_directory`'s own naming
+`replicate_output_directory`'s own naming
 convention (`replicate-NNN`, recovered from `replicate_run_id`),
 the same helper `start_batch_run`'s own live "Open replicate"
 already uses — no second naming scheme.
@@ -13313,7 +13328,7 @@ Recompute one explicit deme-pair pooled 2-D panel for a completed batch.
 scatter (`onBatchDone`'s own `panels[0]`, `_batch_done_payload`
 below): every published replicate's own final state is
 rediscovered from disk by directory name
-(`batch_runner.replicate_output_directory`'s own `replicate-
+(`replicate_output_directory`'s own `replicate-
 NNN` naming), not passed in from the page — the same "read the
 published, atomic artifacts on disk" source of truth `list_
 recent_runs` and `open_run` already use, rather than the page
@@ -13788,7 +13803,7 @@ only per-generation progress moved off the queue and onto the filesystem.
 
 Writes the same artifacts `cli._command_run_batch`'s own default
 (parallel) path does, including the same orphan-replicate-directory
-pruning `cli._prune_orphan_replicate_directories` performs: under
+pruning `fim.persistence.saved_run.prune_orphan_replicate_directories` performs: under
 `max_workers`, an adaptive early stop is applied only
 after a whole concurrent worker batch completes
 (`fim.engine.lineal.run_batch_parallel`), so a worker beyond the replicate that
@@ -13813,36 +13828,6 @@ Matches `cli._cpu_count()` — the CLI's own default (non-`--sequential`)
 parallel batch worker count — so the GUI's default batch behavior is
 never silently weaker than the CLI's own. Still
 overridable per call via `start_batch_run`'s `max_workers` argument.
-
-<a id="fim.gui.batch_runner.replicate_index"></a>
-
-#### replicate\_index
-
-```python
-def replicate_index(batch_run_id: str, replicate_run_id: str) -> int
-```
-
-Return one replicate's 1-based ordinal within its batch.
-
-`replicate_run_id` is always exactly ``f"{batch_run_id}-r{index:03}"``
-(`fim.engine.fim`'s own batch run-ID convention, matching
-`cli._replicate_output_directory`'s identical parsing), so the
-zero-padded index is recovered from it directly.
-
-<a id="fim.gui.batch_runner.replicate_output_directory"></a>
-
-#### replicate\_output\_directory
-
-```python
-def replicate_output_directory(base: Path, batch_run_id: str,
-                               replicate_run_id: str) -> Path
-```
-
-Return one replicate's own artifact subdirectory.
-
-The same ``replicate-NNN`` naming `cli._replicate_output_directory`
-uses — a direct parallel, not a shared import, since that function
-is private to the CLI's own front end.
 
 <a id="fim.gui.batch_runner.start_batch_run"></a>
 
@@ -27620,6 +27605,191 @@ Return why a run's completion receipt does not verify, or `None`.
   `None` when the receipt and every artifact it lists verify;
   otherwise a short description of the first problem found.
 
+<a id="fim.persistence.saved_run"></a>
+
+# fim.persistence.saved\_run
+
+Run a configuration and save the result as a directory.
+
+A saved run is built in a hidden sibling directory and published with one
+atomic rename (`fim.paths.atomic_directory`), so a run interrupted anywhere
+leaves no trace at its target. A single replicate is a flat directory
+(trajectory log, report, scatter plot, convergence history, deme-pair
+statistics, manifest). A batch has one `replicate-NNN/` subdirectory per
+replicate in that same layout, plus a batch-level `summary.json` and
+`manifest.json` that record a digest of each.
+
+The command line, the desktop app, and `fim.simulate` all save runs through
+this module.
+
+<a id="fim.persistence.saved_run.replicate_index"></a>
+
+#### replicate\_index
+
+```python
+def replicate_index(batch_run_id: str, replicate_run_id: str) -> int
+```
+
+Return one replicate's 1-based ordinal within its batch.
+
+A replicate's run ID is always ``f"{batch_run_id}-r{index:03}"``, so the
+index is recovered from it directly.
+
+**Arguments**:
+
+- `batch_run_id` - The batch's run ID.
+- `replicate_run_id` - A replicate's run ID.
+
+
+**Returns**:
+
+  The ordinal, from 1.
+
+<a id="fim.persistence.saved_run.replicate_output_directory"></a>
+
+#### replicate\_output\_directory
+
+```python
+def replicate_output_directory(base: Path, batch_run_id: str,
+                               replicate_run_id: str) -> Path
+```
+
+Return one replicate's own artifact subdirectory.
+
+**Arguments**:
+
+- `base` - The batch directory.
+- `batch_run_id` - The batch's run ID.
+- `replicate_run_id` - A replicate's run ID.
+
+
+**Returns**:
+
+  ``base / "replicate-NNN"``.
+
+<a id="fim.persistence.saved_run.prune_orphan_replicate_directories"></a>
+
+#### prune\_orphan\_replicate\_directories
+
+```python
+def prune_orphan_replicate_directories(
+        working_directory: Path, batch_run_id: str,
+        published_run_ids: frozenset[str]) -> None
+```
+
+Remove any replicate directory not among the batch's results.
+
+Under worker processes the adaptive stop is applied only after a whole
+wave completes, in replicate order. A worker beyond the replicate that
+triggered the stop still runs to completion, so its directory already
+exists even though its result is discarded. Without this pass the
+orphan would be published, present on disk and absent from the summary
+and manifest.
+
+**Arguments**:
+
+- `working_directory` - The batch's temporary build directory.
+- `batch_run_id` - The batch's run ID.
+- `published_run_ids` - Every replicate run ID the engine returned.
+
+<a id="fim.persistence.saved_run.replicate_store_factory"></a>
+
+#### replicate\_store\_factory
+
+```python
+def replicate_store_factory(output_directory: Path, batch_run_id: str,
+                            expert: ExpertSettings,
+                            replicate_run_id: str) -> BinaryLogStore
+```
+
+Build one replicate's on-disk trajectory store.
+
+Module-level so a worker process can pickle a reference to it (bind the
+leading arguments with `functools.partial`, never a closure).
+
+**Arguments**:
+
+- `output_directory` - The batch directory.
+- `batch_run_id` - The batch's run ID.
+- `expert` - Settings that tune the log.
+- `replicate_run_id` - The replicate being stored.
+
+
+**Returns**:
+
+  A store writing `replicate-NNN/trajectory.tlog`.
+
+<a id="fim.persistence.saved_run.write_batch_artifacts"></a>
+
+#### write\_batch\_artifacts
+
+```python
+def write_batch_artifacts(
+        results: tuple[RunResult, ...],
+        working_directory: Path,
+        run_id: str,
+        params: SimulationParams,
+        started_at: str,
+        ended_at: str,
+        *,
+        pairwise_max_demes: int = DEFAULT_PAIRWISE_MAX_DEMES,
+        after_replicate: Callable[[Path], None] | None = None) -> None
+```
+
+Write every replicate's files, then the batch summary and manifest.
+
+Orphan replicate directories are pruned first. Each kept replicate gets
+the single-run layout; then `summary.json`; then, last, the batch
+`manifest.json` with a digest of each replicate manifest and of the
+summary.
+
+**Arguments**:
+
+- `results` - The replicates the engine returned.
+- `working_directory` - The batch's temporary build directory.
+- `run_id` - The batch's run ID.
+- `params` - The batch's parameters.
+- `started_at` - Start time text (UTC).
+- `ended_at` - End time text (UTC).
+- `pairwise_max_demes` - Largest deme count with deme-pair statistics.
+- `after_replicate` - Called with each replicate's directory once its
+  files are written (the desktop app removes a progress sidecar).
+
+<a id="fim.persistence.saved_run.save_run"></a>
+
+#### save\_run
+
+```python
+def save_run(params: SimulationParams,
+             directory: Path,
+             *,
+             max_workers: int | None = None,
+             pairwise_max_demes: int = DEFAULT_PAIRWISE_MAX_DEMES,
+             clock: Clock | None = None) -> tuple[RunResult, ...]
+```
+
+Run `params` and publish the result at `directory`.
+
+**Arguments**:
+
+- `params` - The validated run configuration.
+- `directory` - Where to publish the run; must not exist yet.
+- `max_workers` - Worker processes for a `lineal` batch (`None` runs the
+  replicates one after another).
+- `pairwise_max_demes` - Largest deme count with deme-pair statistics.
+- `clock` - Source of "now" for timestamps; a test seam.
+
+
+**Returns**:
+
+  The replicates, in order (one for a single run).
+
+
+**Raises**:
+
+- `RuntimeError` - The engine returned a shape that does not match
+  `params.n_replicates`.
+
 <a id="fim.persistence.scalar_snapshot"></a>
 
 # fim.persistence.scalar\_snapshot
@@ -31307,6 +31477,25 @@ Return the sole replicate.
 
 - `ValueError` - The run had more than one replicate.
 
+<a id="fim.results.stop_from_report"></a>
+
+#### stop\_from\_report
+
+```python
+def stop_from_report(report: Mapping[str, Any]) -> Stop
+```
+
+Return the `Stop` recorded in a final report.
+
+**Arguments**:
+
+- `report` - A `FinalReport`, or the same mapping read from `report.json`.
+
+
+**Returns**:
+
+  Why the replicate ended.
+
 <a id="fim.results.result_from_runs"></a>
 
 #### result\_from\_runs
@@ -31752,8 +31941,9 @@ its replicate cap. A run of one replicate is a `Result` of length one;
   carries its own `Execution` and `Recording`, which the keyword
   arguments below override.
 - `execution` - How to run it. Never changes the numbers.
-- `recording` - What to keep. Only in-memory runs are supported so far:
-  `Recording.directory` must be `None`.
+- `recording` - What to keep. With `directory` set, the run is published
+  there (which must not exist yet) in the layout `fim run` writes,
+  and `open_run` reads it back; otherwise it stays in memory.
 - `clock` - Source of "now" for timestamps; a test seam.
 
 
@@ -31764,8 +31954,8 @@ its replicate cap. A run of one replicate is a `Result` of length one;
 
 **Raises**:
 
-- `ConfigurationError` - The specification is invalid, or the requested
-  recording is not supported yet.
+- `ConfigurationError` - The specification is invalid, or worker
+  processes were requested without a recording directory.
 - `UnsupportedError` - Valid, but no available engine can run it (for
   example a backend that needs `numba`, without it installed).
 
@@ -35976,6 +36166,163 @@ diagonal.
 
   ``d * (d - 1) / 2`` values; a NaN entry (an undefined value) is
   ``None``, since strict JSON has no NaN.
+
+<a id="fim.stored"></a>
+
+# fim.stored
+
+Open a saved run again: `open_run(directory)`.
+
+A saved run is the directory `simulate` (or `fim run`) published. Opening it
+reads the manifests, reports, and convergence histories into the same types
+a fresh run returns (`Report`, `Stop`, `Histories`, `Summary`), and gives
+access to the stored trajectory for re-analysis. Nothing is loaded that is
+not asked for: the trajectory log stays on disk until read.
+
+<a id="fim.stored.StoredReplicate"></a>
+
+## StoredReplicate Objects
+
+```python
+@dataclass(frozen=True, slots=True)
+class StoredReplicate()
+```
+
+One saved replicate.
+
+**Arguments**:
+
+- `index` - Position in the batch, from 0.
+- `run_id` - The replicate's run ID.
+- `directory` - Where its files are.
+- `manifest` - Its manifest (parameters, timing, artifact digests).
+- `report` - Its statistics at the last generation.
+- `stop` - Why it ended.
+- `histories` - How its tracked statistics moved, or `None` for a run
+  saved before histories were kept.
+
+<a id="fim.stored.StoredReplicate.trajectory_path"></a>
+
+#### trajectory\_path
+
+```python
+@property
+def trajectory_path() -> Path
+```
+
+Return the stored trajectory log's path.
+
+<a id="fim.stored.StoredReplicate.rows"></a>
+
+#### rows
+
+```python
+def rows(
+        generations: list[int] | None = None
+) -> dict[int, list[TrajectoryRow]]
+```
+
+Read stored rows grouped by generation.
+
+**Arguments**:
+
+- `generations` - Only these generations, or `None` for all.
+
+
+**Returns**:
+
+- ```{generation` - rows}``.
+
+<a id="fim.stored.StoredReplicate.verify"></a>
+
+#### verify
+
+```python
+def verify() -> None
+```
+
+Check the trajectory still matches its manifest's digest.
+
+**Raises**:
+
+- `ValueError` - The file was edited, truncated, or replaced.
+
+<a id="fim.stored.StoredReplicate.reanalyze"></a>
+
+#### reanalyze
+
+```python
+def reanalyze(generation: int | None = None) -> ReanalyzedGeneration
+```
+
+Recompute the statistics of one stored generation.
+
+**Arguments**:
+
+- `generation` - The generation, or `None` for the last stored.
+
+
+**Returns**:
+
+  The recomputed statistics.
+
+<a id="fim.stored.StoredRun"></a>
+
+## StoredRun Objects
+
+```python
+@dataclass(frozen=True, slots=True)
+class StoredRun()
+```
+
+A saved run, opened.
+
+**Arguments**:
+
+- `directory` - The run directory.
+- `run_id` - The run's ID.
+- `spec` - What was simulated, read from the manifest.
+- `replicates` - The saved replicates, in order.
+- `summary` - Across-replicate intervals (empty for a single run).
+
+<a id="fim.stored.StoredRun.only"></a>
+
+#### only
+
+```python
+def only() -> StoredReplicate
+```
+
+Return the sole replicate.
+
+**Raises**:
+
+- `ValueError` - The run has more than one replicate.
+
+<a id="fim.stored.open_run"></a>
+
+#### open\_run
+
+```python
+def open_run(directory: Path | str) -> StoredRun
+```
+
+Open a saved run.
+
+**Arguments**:
+
+- `directory` - A directory published by `simulate` with a recording
+  directory, or by `fim run`.
+
+
+**Returns**:
+
+  The opened run.
+
+
+**Raises**:
+
+- `StoreError` - The directory holds no manifest.
 
 <a id="fim.sweep"></a>
 

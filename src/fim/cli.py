@@ -54,16 +54,13 @@ the desktop app (`fim.gui`) without duplicating it.
 from __future__ import annotations
 
 import argparse
-import functools
 import json
 import logging
 import os
 import pickle
-import shutil
 import sys
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import replace
-from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
@@ -73,14 +70,11 @@ from fim import __version__, logging_setup, paths, reanalyze, update
 from fim.cli_objects import add_object_subcommands, command_object
 from fim.cli_sweep import add_sweep_subcommands, command_sweep
 from fim.config.defaults import DEFAULT_PAIRWISE_MAX_DEMES
-from fim.config.expert import ExpertSettings, expert_template
+from fim.config.expert import expert_template
 from fim.convergence.defaults import describe_derived_convergence
 from fim.engine import (
     FinalReport,
-    RunResult,
     deterministic_run_id,
-    fim,
-    replicate_summary,
 )
 from fim.group_lifecycle import (
     GroupSummary,
@@ -92,12 +86,7 @@ from fim.group_lifecycle import (
     study_summary,
 )
 from fim.model.params import SimulationParams, describe_population
-from fim.persistence.artifacts import run_artifact_targets, write_run_artifacts
-from fim.persistence.binary_store import (
-    TRAJECTORY_LOG_FILENAME,
-    BinaryLogStore,
-    log_options,
-)
+from fim.persistence.artifacts import run_artifact_targets
 from fim.persistence.groups import (
     ExperimentManifest,
     StudyManifest,
@@ -114,13 +103,6 @@ from fim.persistence.groups import (
     list_studies,
     resolve_run_directory,
 )
-from fim.persistence.manifest import (
-    CURRENT_BATCH_SCHEMA_VERSION,
-    ArtifactDigest,
-    BatchManifest,
-    hash_file,
-    write_batch_manifest,
-)
 
 # Explicit re-export (not a rename): test/cli/test_cli.py patches
 # `cli.write_report` directly to inject a failure at a specific artifact
@@ -133,6 +115,7 @@ from fim.persistence.run_metadata import (
     run_metadata_path,
     write_run_labels,
 )
+from fim.persistence.saved_run import replicate_output_directory, save_run
 from fim.persistence.tlog_export import DEFAULT_EXPORT_WORKERS, export_trajectory
 from fim.termination import sigterm_raises_exit
 
@@ -609,29 +592,9 @@ def _command_run_scalar(
             f"mu={params.mu}, seed={params.seed})"
         )
         _print_derived_convergence(params)
-    with paths.atomic_directory(output_directory) as working_directory:
-        targets = run_artifact_targets(working_directory)
-        # Closed here as well as by the engine, before `atomic_directory`
-        # renames (or, on failure, removes) the directory: an open handle
-        # blocks both on Windows.
-        with BinaryLogStore(
-            targets["trajectory"], **log_options(params.expert)
-        ) as store:
-            output = fim(
-                params.gene_copies,
-                params.m,
-                params.mu,
-                params.d,
-                params=params,
-                store=store,
-                run_id=run_id,
-            )
-        if not isinstance(output, RunResult):
-            raise RuntimeError("scalar CLI run unexpectedly returned a batch")
-        logger.debug("writing run artifacts to %s", working_directory)
-        write_run_artifacts(
-            output, working_directory, pairwise_max_demes=pairwise_max_demes
-        )
+    (output,) = save_run(
+        params, output_directory, pairwise_max_demes=pairwise_max_demes
+    )
 
     logger.info(
         "run %s finished: %s at generation %s (D=%.6g)",
@@ -743,63 +706,18 @@ def _command_run_batch(
         print(f"Running batch {run_id} {_batch_description(params, max_workers)}")
         _print_derived_convergence(params)
 
-    started_at = _format_timestamp(_utc_now())
-    with paths.atomic_directory(output_directory) as working_directory:
-        output = fim(
-            params.gene_copies,
-            params.m,
-            params.mu,
-            params.d,
-            params=params,
-            run_id=run_id,
-            max_workers=max_workers,
-            store_factory=functools.partial(
-                _replicate_store_factory,
-                working_directory,
-                run_id,
-                params.expert,
-            ),
-        )
-        if not isinstance(output, tuple):
-            raise RuntimeError("batch CLI run unexpectedly returned a scalar result")
-        ended_at = _format_timestamp(_utc_now())
-        logger.debug("batch %s: %d replicate(s) returned", run_id, len(output))
-
-        published_run_ids = frozenset(result.run_id for result in output)
-        _prune_orphan_replicate_directories(
-            working_directory, run_id, published_run_ids
-        )
-        artifact_digests: dict[str, ArtifactDigest] = {}
-        for result in output:
-            directory = _replicate_output_directory(
-                working_directory, run_id, result.run_id
-            )
-            logger.debug("writing replicate artifacts to %s", directory)
-            write_run_artifacts(
-                result, directory, pairwise_max_demes=arguments.pairwise_max_demes
-            )
-            artifact_digests[directory.name] = hash_file(directory / "manifest.json")
-        write_report(working_directory / "summary.json", replicate_summary(output))
-        artifact_digests["summary"] = hash_file(working_directory / "summary.json")
-        write_batch_manifest(
-            working_directory / "manifest.json",
-            BatchManifest(
-                schema_version=CURRENT_BATCH_SCHEMA_VERSION,
-                run_id=run_id,
-                replicate_run_ids=tuple(result.run_id for result in output),
-                parameters=params.to_dict(),
-                started_at=started_at,
-                ended_at=ended_at,
-                software_version=__version__,
-                artifacts=artifact_digests,
-            ),
-        )
+    output = save_run(
+        params,
+        output_directory,
+        max_workers=max_workers,
+        pairwise_max_demes=arguments.pairwise_max_demes,
+    )
 
     logger.info("batch %s finished: %d replicate(s)", run_id, len(output))
     if not arguments.quiet:
         print(f"Completed {len(output)} replicate(s)")
         for result in output:
-            directory = _replicate_output_directory(
+            directory = replicate_output_directory(
                 output_directory, run_id, result.run_id
             )
             print(f"Replicate  -> {directory}")
@@ -1209,98 +1127,6 @@ def _cpu_count() -> int:
     return os.cpu_count() or 1
 
 
-def _format_timestamp(value: datetime) -> str:
-    """Return an unambiguous UTC ISO-8601 timestamp, matching `RunManifest`.
-
-    See `fim.engine.records.format_timestamp`'s own docstring for what this
-    format is and why every timestamp in this project is recorded in
-    UTC. This is a separate, tiny copy of that same formatting rather
-    than a shared import specifically because a `BatchManifest`'s own
-    timestamps are recorded by `cli.py` directly (see
-    `_command_run_batch`), never by `fim.engine` itself.
-    """
-    return value.astimezone(UTC).isoformat().replace("+00:00", "Z")
-
-
-def _prune_orphan_replicate_directories(
-    working_directory: Path,
-    batch_run_id: str,
-    published_run_ids: frozenset[str],
-) -> None:
-    """Remove any replicate directory not among the batch's published results.
-
-    Cleans up after a specific, real race condition in the adaptive
-    stop described in `fim.engine`'s own docstring — this project's own
-    internal tracked-issue numbering calls it S1, kept here purely as a
-    cross-reference, not something you need to look up to follow this
-    docstring's own explanation: under `max_workers` (parallel, the default),
-    `fim.engine.lineal.run_batch_parallel` submits a whole worker batch and
-    applies an adaptive precision stop only afterward, in
-    ascending replicate order. A worker beyond the replicate that
-    triggered the stop still runs to completion — its `store_factory`
-    call has already created its `replicate-NNN/` directory and
-    streamed a full `trajectory.tlog` into it — even though its
-    result is discarded, never appearing in the tuple `fim` returns.
-    Without this pass, `fim.paths.atomic_directory` would publish that orphan
-    directory verbatim: complete, present on disk, and absent from
-    both `summary.json` and `manifest.json`.
-
-    Args:
-        working_directory: The batch's hidden temporary build directory.
-        batch_run_id: The batch's own run ID.
-        published_run_ids: Every replicate run ID actually returned by
-            `fim` — the set that will appear in `manifest.json`.
-    """
-    for entry in sorted(working_directory.glob("replicate-*")):
-        if not entry.is_dir():
-            continue
-        replicate_run_id = f"{batch_run_id}-r{entry.name.removeprefix('replicate-')}"
-        if replicate_run_id not in published_run_ids:
-            shutil.rmtree(entry)
-
-
-def _replicate_output_directory(
-    base: Path,
-    batch_run_id: str,
-    replicate_run_id: str,
-) -> Path:
-    """Return one replicate's own artifact subdirectory.
-
-    `replicate_run_id` is always exactly ``f"{batch_run_id}-r{index:03}"``
-    (`fim.engine.fim`'s own batch run-ID convention), so the zero-padded
-    index is recovered from it directly rather than threaded through as a
-    separate argument.
-    """
-    suffix = replicate_run_id.removeprefix(f"{batch_run_id}-r")
-    return base / f"replicate-{suffix}"
-
-
-def _replicate_store_factory(
-    output_directory: Path,
-    batch_run_id: str,
-    expert: ExpertSettings,
-    replicate_run_id: str,
-) -> BinaryLogStore:
-    """Build one replicate's real on-disk trajectory store.
-
-    This is the `store_factory` `_command_run_batch` hands to `fim()`
-    (see that function's own docstring for what a `store_factory` is
-    and why a batch needs one) — called once per replicate to give each
-    one a fresh, independent place to write its own trajectory data,
-    inside its own subdirectory of the batch's overall output.
-
-    Module-level, closed over only via `functools.partial` (never a
-    closure or lambda), so a parallel `max_workers` worker process can
-    pickle a reference to it — see `fim.engine.lineal.require_picklable`'s
-    own docstring for what "picklable" means and why it matters here.
-    """
-    directory = _replicate_output_directory(
-        output_directory, batch_run_id, replicate_run_id
-    )
-    directory.mkdir(parents=True, exist_ok=True)
-    return BinaryLogStore(directory / TRAJECTORY_LOG_FILENAME, **log_options(expert))
-
-
 def _terminable(command: Callable[[], int]) -> int:
     """Run `command`, turning the first SIGTERM into `SystemExit(143)`.
 
@@ -1310,16 +1136,6 @@ def _terminable(command: Callable[[], int]) -> int:
     """
     with sigterm_raises_exit():
         return command()
-
-
-def _utc_now() -> datetime:
-    """Return the current UTC time for batch-manifest timestamps only.
-
-    The `_command_run_batch` counterpart to `fim.engine.records.utc_now` —
-    see that function's own docstring for why this small wrapper exists
-    at all rather than calling `datetime.now(UTC)` inline.
-    """
-    return datetime.now(UTC)
 
 
 def _format_optional(value: float | None) -> str:

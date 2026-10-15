@@ -27,7 +27,7 @@ only per-generation progress moved off the queue and onto the filesystem.
 
 Writes the same artifacts `cli._command_run_batch`'s own default
 (parallel) path does, including the same orphan-replicate-directory
-pruning `cli._prune_orphan_replicate_directories` performs: under
+pruning `fim.persistence.saved_run.prune_orphan_replicate_directories` performs: under
 `max_workers`, an adaptive early stop is applied only
 after a whole concurrent worker batch completes
 (`fim.engine.lineal.run_batch_parallel`), so a worker beyond the replicate that
@@ -48,32 +48,28 @@ import queue
 import shutil
 import tempfile
 import threading
-from datetime import UTC, datetime
 from pathlib import Path
 from typing import Final, Literal
 
-from fim import __version__, paths
+from fim import paths
 from fim.config.defaults import DEFAULT_PAIRWISE_MAX_DEMES
 from fim.config.expert import ExpertSettings
-from fim.engine import RunResult, deterministic_run_id, fim, replicate_summary
+from fim.engine import RunResult, deterministic_run_id, fim
+from fim.engine.records import format_timestamp, utc_now
 from fim.gui.runner import pairwise_status_text
 from fim.gui.store import LIVE_BLOCK_SECONDS, LiveProgressStore, RunCancelledError
 from fim.model.params import SimulationParams
-from fim.persistence.artifacts import write_run_artifacts
 from fim.persistence.binary_store import (
     TRAJECTORY_LOG_FILENAME,
     BinaryLogStore,
     log_options,
 )
-from fim.persistence.manifest import (
-    CURRENT_BATCH_SCHEMA_VERSION,
-    ArtifactDigest,
-    BatchManifest,
-    hash_file,
-    write_batch_manifest,
-)
 from fim.persistence.pairwise import SLOW_PAIRWISE_DEMES
-from fim.persistence.report import write_report
+from fim.persistence.saved_run import (
+    replicate_index,
+    replicate_output_directory,
+    write_batch_artifacts,
+)
 
 # Mirrors `fim.gui.runner`'s own catch-all — see its definition for the
 # full rationale. Duplicated rather than imported: `fim.gui.runner`'s
@@ -123,29 +119,6 @@ def default_max_workers() -> int:
     overridable per call via `start_batch_run`'s `max_workers` argument.
     """
     return os.cpu_count() or 1
-
-
-def replicate_index(batch_run_id: str, replicate_run_id: str) -> int:
-    """Return one replicate's 1-based ordinal within its batch.
-
-    `replicate_run_id` is always exactly ``f"{batch_run_id}-r{index:03}"``
-    (`fim.engine.fim`'s own batch run-ID convention, matching
-    `cli._replicate_output_directory`'s identical parsing), so the
-    zero-padded index is recovered from it directly.
-    """
-    return int(replicate_run_id.removeprefix(f"{batch_run_id}-r"))
-
-
-def replicate_output_directory(
-    base: Path, batch_run_id: str, replicate_run_id: str
-) -> Path:
-    """Return one replicate's own artifact subdirectory.
-
-    The same ``replicate-NNN`` naming `cli._replicate_output_directory`
-    uses — a direct parallel, not a shared import, since that function
-    is private to the CLI's own front end.
-    """
-    return base / f"replicate-{replicate_index(batch_run_id, replicate_run_id):03}"
 
 
 def start_batch_run(
@@ -275,7 +248,7 @@ def _batch_worker(
     )
     watcher.start()
 
-    started_at = _format_timestamp(_utc_now())
+    started_at = format_timestamp(utc_now())
     try:
         with paths.atomic_directory(output_directory) as working_directory:
             # `working_directory` is `atomic_directory`'s own hidden
@@ -314,12 +287,12 @@ def _batch_worker(
                 # temporary directory exactly as it would for any
                 # other engine error.
                 raise RuntimeError("unexpected scalar result from a batch run")
-            ended_at = _format_timestamp(_utc_now())
+            ended_at = format_timestamp(utc_now())
             if SLOW_PAIRWISE_DEMES <= params.d <= pairwise_max_demes:
                 message_queue.put(
                     ("status", pairwise_status_text(params.d, len(results)))
                 )
-            _write_batch_artifacts(
+            write_batch_artifacts(
                 results,
                 working_directory,
                 run_id,
@@ -327,6 +300,11 @@ def _batch_worker(
                 started_at,
                 ended_at,
                 pairwise_max_demes=pairwise_max_demes,
+                # A finished replicate no longer needs its progress sidecar;
+                # the published tree is exactly the command line's layout.
+                after_replicate=lambda directory: (directory / ".progress").unlink(
+                    missing_ok=True
+                ),
             )
     except RunCancelledError as cancelled:
         # Whichever replicate's cancellation surfaced first — under real
@@ -408,115 +386,4 @@ def _replicate_store_factory(
         ),
         progress_path=directory / ".progress",
         cancel_path=cancel_path,
-    )
-
-
-def _format_timestamp(value: datetime) -> str:
-    """Return an unambiguous UTC ISO-8601 timestamp, matching `RunManifest`.
-
-    Duplicated from `cli._format_timestamp` — a private CLI helper, not
-    a shared import, per the same front-end-boundary convention
-    `_EXPECTED_ENGINE_ERRORS` already follows.
-    """
-    return value.astimezone(UTC).isoformat().replace("+00:00", "Z")
-
-
-def _utc_now() -> datetime:
-    """Return the current UTC time for the batch manifest's timestamps."""
-    return datetime.now(UTC)
-
-
-def _prune_orphan_replicate_directories(
-    working_directory: Path,
-    batch_run_id: str,
-    published_run_ids: frozenset[str],
-) -> None:
-    """Remove any replicate directory not among the batch's published results.
-
-    Direct parallel of `cli._prune_orphan_replicate_directories`
-    (`src/fim/cli.py:355`) — not a shared
-    import, per this module's established front-end-boundary convention.
-    Necessary now that this module calls `fim(..., max_workers=N)`: under
-    real parallelism, `fim.engine.lineal.run_batch_parallel` submits a whole
-    worker wave and applies an adaptive early stop only
-    afterward, in ascending replicate order, so a worker beyond the
-    replicate that triggered the stop can still run to completion — its
-    `store_factory` call has already created its `replicate-NNN/`
-    directory and streamed a full `trajectory.tlog` into it — even
-    though its result never appears in the tuple `fim` returns. Without
-    this pass, `fim.paths.atomic_directory` would publish that orphan
-    directory verbatim: complete, present on disk, and absent from both
-    `summary.json` and `manifest.json`. The Tk-era sequential-only runner
-    could never hit this (sequential execution never overshoots the
-    adaptive stop), which is why it never needed this pass at all.
-
-    Args:
-        working_directory: The batch's hidden temporary build directory.
-        batch_run_id: The batch's own run ID.
-        published_run_ids: Every replicate run ID actually returned by
-            `fim` — the set that will appear in `manifest.json`.
-    """
-    for entry in sorted(working_directory.glob("replicate-*")):
-        if not entry.is_dir():
-            continue
-        replicate_run_id = f"{batch_run_id}-r{entry.name.removeprefix('replicate-')}"
-        if replicate_run_id not in published_run_ids:
-            shutil.rmtree(entry)
-
-
-def _write_batch_artifacts(
-    results: tuple[RunResult, ...],
-    working_directory: Path,
-    run_id: str,
-    params: SimulationParams,
-    started_at: str,
-    ended_at: str,
-    *,
-    pairwise_max_demes: int = DEFAULT_PAIRWISE_MAX_DEMES,
-) -> None:
-    """Write every replicate's artifacts, then the batch-level summary and manifest.
-
-    Mirrors `cli._command_run_batch`'s own default (parallel) artifact-
-    writing pass: prune any orphan replicate directory first
-    (`_prune_orphan_replicate_directories`), then each published
-    replicate's own four-file scalar-run contract
-    (`fim.persistence.artifacts.write_run_artifacts`, reused rather than duplicated
-    — both modules live in the same `fim.gui` package), removing that
-    replicate's now-superfluous `.progress` sidecar as its artifacts are
-    written: the published `results/` tree stays exactly
-    the CLI's own four-file-per-replicate contract, with no GUI-only
-    file left behind once a batch completes successfully — a cancelled
-    batch needs no such cleanup, since `atomic_directory` discards the
-    whole temporary tree instead). Then `summary.json`
-    (`fim.engine.replicate_summary`), then — last, only once every
-    sibling artifact is flushed — the batch-level `manifest.json`,
-    augmented with each replicate's own manifest digest plus
-    `summary.json`'s own.
-    """
-    published_run_ids = frozenset(result.run_id for result in results)
-    _prune_orphan_replicate_directories(working_directory, run_id, published_run_ids)
-    artifact_digests: dict[str, ArtifactDigest] = {}
-    for result in results:
-        directory = replicate_output_directory(working_directory, run_id, result.run_id)
-        write_run_artifacts(
-            result,
-            directory,
-            pairwise_max_demes=pairwise_max_demes,
-        )
-        (directory / ".progress").unlink(missing_ok=True)
-        artifact_digests[directory.name] = hash_file(directory / "manifest.json")
-    write_report(working_directory / "summary.json", replicate_summary(results))
-    artifact_digests["summary"] = hash_file(working_directory / "summary.json")
-    write_batch_manifest(
-        working_directory / "manifest.json",
-        BatchManifest(
-            schema_version=CURRENT_BATCH_SCHEMA_VERSION,
-            run_id=run_id,
-            replicate_run_ids=tuple(result.run_id for result in results),
-            parameters=params.to_dict(),
-            started_at=started_at,
-            ended_at=ended_at,
-            software_version=__version__,
-            artifacts=artifact_digests,
-        ),
     )

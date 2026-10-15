@@ -8,6 +8,14 @@ project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- **Save and reopen a run from Python.** `simulate(spec, recording=
+  Recording(directory=...))` publishes the run in the layout `fim run` writes
+  (atomically, refusing an existing directory), and `fim.open_run(directory)`
+  reads it back as `StoredRun` and `StoredReplicate` objects with the same
+  `Report`, `Stop`, `Histories`, and `Summary` types a fresh run returns, the
+  spec read from the manifest, stored rows by generation, `verify()` against
+  the manifest digests, and `reanalyze()`. `Execution(workers=N)` runs a
+  `lineal` batch in worker processes when saving.
 - **`fim.simulate` and the `fim` facade.** `import fim` now exports the
   names a Python user needs: `simulate`, `load_config`, `run_identity`,
   `RunSpec` and its parts (`Model`, `Population`, `Locus`, `InfiniteAlleles`,
@@ -1045,6 +1053,11 @@ project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Changed
 
+- **One module saves a run to a directory.** `fim.persistence.saved_run`
+  holds the flow the command line and the desktop app each wrote their own
+  copy of: run, build in a hidden directory, write every replicate's files,
+  the summary and the batch manifest, publish atomically. `fim run` and the
+  desktop batch runner now call it; the files written are unchanged.
 - **One writer for a saved run's files.** `fim.persistence.artifacts` now
   holds `run_artifact_targets`, `convergence_history_rows`, and
   `write_run_artifacts`. They had been written twice, once private to the

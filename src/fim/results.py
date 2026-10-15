@@ -302,9 +302,15 @@ class Result:
         return self.replicates[0]
 
 
-def _stop_of(result: RunResult) -> Stop:
-    """Return the `Stop` of one engine result."""
-    report = result.report
+def stop_from_report(report: Mapping[str, Any]) -> Stop:
+    """Return the `Stop` recorded in a final report.
+
+    Args:
+        report: A `FinalReport`, or the same mapping read from `report.json`.
+
+    Returns:
+        Why the replicate ended.
+    """
     watched = report["converged_on"]
     return Stop(
         converged=report["converged"],
@@ -326,7 +332,7 @@ def _replicate_of(index: int, result: RunResult) -> Replicate:
         index=index,
         seed=result.params.seed,
         run_id=result.run_id,
-        stop=_stop_of(result),
+        stop=stop_from_report(result.report),
         report=Report(result.report),
         histories=Histories(
             generations=tuple(result.convergence_generations),
@@ -416,4 +422,5 @@ __all__ = [
     "Summary",
     "TrajectoryReader",
     "result_from_runs",
+    "stop_from_report",
 ]
