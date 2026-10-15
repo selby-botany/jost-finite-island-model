@@ -27,6 +27,7 @@ Every test module, fixture, and test function documented here in full; `doc/fim-
   - [`test_metadata`](#test.test_metadata)
   - [`test_mypy_scope`](#test.test_mypy_scope)
   - [`test_paths`](#test.test_paths)
+  - [`test_public_surface`](#test.test_public_surface)
   - [`test_reanalyze`](#test.test_reanalyze)
   - [`test_reproducibility`](#test.test_reproducibility)
   - [`test_run_service`](#test.test_run_service)
@@ -2950,6 +2951,87 @@ def test_a_published_run_directory_has_ordinary_permissions(
 ```
 
 `mkdtemp` makes a private folder; the published run folder is not.
+
+<a id="test.test_public_surface"></a>
+
+# test.test\_public\_surface
+
+Keep the public surface of `fim` explicit and the module boundaries clean.
+
+The public API redesign (`20261014-claude-sonnet-5-5-public-api-redesign-
+design.md`, `selby/restricted`) defines the public surface as the names
+listed in each public module's `__all__`. These tests make that rule
+mechanical: a public module must declare `__all__`, every name in it must
+import, and no module may import another module's underscore-prefixed name.
+
+The underscore rule starts with a baseline of the imports that already
+existed. The baseline may only shrink: a new offender fails the first test,
+and a baseline entry that no longer occurs fails the second, so removing an
+offender forces its entry out of the list.
+
+<a id="test.test_public_surface.PUBLIC_MODULES"></a>
+
+#### PUBLIC\_MODULES
+
+Modules whose `__all__` defines supported names; grows as the redesign adds
+`fim.engine`, `fim.spec`, and the facade.
+
+<a id="test.test_public_surface.PrivateImport"></a>
+
+#### PrivateImport
+
+(importing module, imported module, underscore-prefixed name).
+
+<a id="test.test_public_surface.PRIVATE_IMPORT_BASELINE"></a>
+
+#### PRIVATE\_IMPORT\_BASELINE
+
+Underscore imports across modules that are tolerated. The redesign started
+with 26 and this is now empty; an entry may be added only with a written reason.
+
+<a id="test.test_public_surface.test_public_module_declares_importable_all"></a>
+
+#### test\_public\_module\_declares\_importable\_all
+
+```python
+@pytest.mark.parametrize("module_name", PUBLIC_MODULES)
+def test_public_module_declares_importable_all(module_name: str) -> None
+```
+
+A public module lists its supported names, and each name imports.
+
+<a id="test.test_public_surface.test_no_new_private_imports_across_modules"></a>
+
+#### test\_no\_new\_private\_imports\_across\_modules
+
+```python
+def test_no_new_private_imports_across_modules() -> None
+```
+
+A module must not import another module's underscore-prefixed name.
+
+<a id="test.test_public_surface.test_private_import_baseline_has_no_stale_entries"></a>
+
+#### test\_private\_import\_baseline\_has\_no\_stale\_entries
+
+```python
+def test_private_import_baseline_has_no_stale_entries() -> None
+```
+
+A fixed offender must leave the baseline, so the list only shrinks.
+
+<a id="test.test_public_surface.test_package_ships_a_py_typed_marker"></a>
+
+#### test\_package\_ships\_a\_py\_typed\_marker
+
+```python
+def test_package_ships_a_py_typed_marker() -> None
+```
+
+A researcher's type checker must treat `fim` as typed (PEP 561).
+
+Hatch's wheel target packages every file under `src/fim`, so the marker
+ships whenever it exists in the source tree.
 
 <a id="test.test_reanalyze"></a>
 

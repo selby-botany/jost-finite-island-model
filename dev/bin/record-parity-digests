@@ -1,0 +1,407 @@
+#!/usr/bin/env python3
+"""Record and compare bit-parity digests of simulation output.
+
+The public API redesign (`20261014-claude-sonnet-5-5-public-api-redesign-
+design.md`, `selby/restricted`) must not change one trajectory bit. This
+tool turns a build's output into a small JSON file of SHA-256 digests, so
+any commit can be compared with the baseline taken before the redesign.
+
+What is digested, per case and backend:
+
+- every trajectory row, in order (allele identity and frequency bits);
+- the final report, the convergence histories, and the manifest apart from
+  the fields that name the backend.
+
+Cases: the shared configuration matrices in `test/vector_support.py`
+(infinite and finite alleles, continuous and stochastic migration), each
+run on every backend that is available, plus a three-replicate batch.
+Every shipped example's configuration is also resolved and digested (its
+parameters and run ID), which is cheap; `--run-examples` additionally runs
+the examples through `fim.launcher` and digests the trajectory log and
+report, which can take hours on `lineal`.
+
+Digests describe one platform: compiled kernels use Numba's math routines,
+which match CPython bit for bit only on the platform that recorded them.
+Record and check on the same machine.
+
+Usage:
+    dev/bin/record-parity-digests --output baseline.json
+    dev/bin/record-parity-digests --check baseline.json
+    dev/bin/record-parity-digests --check baseline.json --ignore-run-ids
+    dev/bin/record-parity-digests --output baseline.json --run-examples \\
+        dear-nolan-high
+
+`--check` prints each differing entry and exits 1 on any difference.
+`--ignore-run-ids` skips run IDs and the digests that include them, for the
+commit that deliberately changes run identity.
+"""
+
+from __future__ import annotations
+
+import argparse
+import hashlib
+import json
+import os
+import platform
+import subprocess
+import sys
+import tempfile
+from collections.abc import Callable, Iterable, Sequence
+from datetime import UTC, datetime
+from pathlib import Path
+from typing import Any
+
+REPOSITORY = Path(__file__).resolve().parents[2]
+sys.path.insert(0, str(REPOSITORY / "src"))
+sys.path.insert(0, str(REPOSITORY / "test"))
+
+FORMAT_VERSION = 1
+GENERATIONS = 40
+BACKENDS = ("lineal", "generational", "generational-vector")
+FIXED_RUN_ID = "run"
+FIXED_TIME = datetime(2026, 10, 14, 12, 0, tzinfo=UTC)
+
+
+def canonical_digest(value: Any) -> str:
+    """Return the SHA-256 hex digest of a value's canonical JSON form.
+
+    Args:
+        value: Any JSON-serializable value; floats keep their exact repr.
+
+    Returns:
+        A 64-character hexadecimal digest.
+    """
+    text = json.dumps(value, sort_keys=True, separators=(",", ":"), allow_nan=False)
+    return hashlib.sha256(text.encode("utf-8")).hexdigest()
+
+
+def fixed_clock() -> datetime:
+    """Return a fixed time so manifests compare exactly."""
+    return FIXED_TIME
+
+
+def backend_available(backend: str) -> bool:
+    """Return whether `backend` can run here (vector needs numba).
+
+    Args:
+        backend: One of `BACKENDS`.
+
+    Returns:
+        False only for the vector backend without numba installed.
+    """
+    if backend != "generational-vector":
+        return True
+    try:
+        import numba  # noqa: F401, PLC0415
+    except ImportError:
+        return False
+    return True
+
+
+def run_case(params: Any, backend: str) -> dict[str, str]:
+    """Run one configuration on one backend and digest everything it produced.
+
+    This function is the only place the tool touches the run API, so a later
+    commit that changes the API changes only this function.
+
+    Args:
+        params: A validated `SimulationParams`.
+        backend: A backend name from `BACKENDS`.
+
+    Returns:
+        Digests keyed by what they cover: `rows`, `reports`, `histories`,
+        `manifests`.
+    """
+    from fim.engine import fim  # noqa: PLC0415
+    from fim.persistence.store import InMemoryTrajectoryStore  # noqa: PLC0415
+
+    store = InMemoryTrajectoryStore()
+    output = fim(
+        params.gene_copies,
+        params.m,
+        params.mu,
+        params.d,
+        params=params,
+        store=store,
+        run_id=FIXED_RUN_ID,
+        clock=fixed_clock,
+        engine_backend=backend,
+    )
+    results = output if isinstance(output, tuple) else (output,)
+    rows = [list(store.read(result.run_id)) for result in results]
+    reports = [result.report for result in results]
+    histories = [
+        {
+            "generations": list(result.convergence_generations),
+            "histories": {
+                name: list(values)
+                for name, values in result.convergence_histories.items()
+            },
+        }
+        for result in results
+    ]
+    manifests = [comparable_manifest(result) for result in results]
+    return {
+        "rows": canonical_digest(rows),
+        "reports": canonical_digest(reports),
+        "histories": canonical_digest(histories),
+        "manifests": canonical_digest(manifests),
+    }
+
+
+def comparable_manifest(result: Any) -> dict[str, Any]:
+    """Return a manifest as a dict without the fields that name the backend.
+
+    Args:
+        result: A finished run result.
+
+    Returns:
+        The manifest mapping minus `engine_backend`, `jit`, and the same
+        keys inside `parameters`.
+    """
+    manifest = dict(result.manifest.to_dict())
+    parameters = dict(manifest["parameters"])
+    for key in ("engine_backend", "jit", "auto_vector_min_d"):
+        manifest.pop(key, None)
+        parameters.pop(key, None)
+    manifest["parameters"] = parameters
+    return manifest
+
+
+def matrix_cases() -> dict[str, Callable[[int], Any]]:
+    """Return every named configuration builder from `test/vector_support.py`.
+
+    Returns:
+        A mapping of ``family/case name`` to a function of run length.
+    """
+    import vector_support  # noqa: PLC0415
+
+    families = {
+        "infinite": vector_support.INFINITE_CASES,
+        "finite": vector_support.FINITE_CASES,
+        "stochastic-infinite": vector_support.STOCHASTIC_INFINITE_CASES,
+        "stochastic-finite": vector_support.STOCHASTIC_FINITE_CASES,
+    }
+    cases: dict[str, Callable[[int], Any]] = {}
+    for family, members in families.items():
+        for name, builder in members.items():
+            cases[f"{family}/{name}"] = builder
+    cases["batch/three replicates"] = lambda generations: vector_support.make_params(
+        generations, n_replicates=3, mu=0.01, m=0.05
+    )
+    return cases
+
+
+def record_matrix() -> dict[str, dict[str, Any]]:
+    """Run the configuration matrix on every available backend.
+
+    Returns:
+        ``{"family/case|backend": digests}``, with ``{"skipped": reason}`` for
+        a backend that cannot run here.
+    """
+    recorded: dict[str, dict[str, Any]] = {}
+    for name, builder in sorted(matrix_cases().items()):
+        params = builder(GENERATIONS)
+        for backend in BACKENDS:
+            key = f"{name}|{backend}"
+            if not backend_available(backend):
+                recorded[key] = {"skipped": "numba is not installed"}
+                continue
+            recorded[key] = run_case(params, backend)
+    return recorded
+
+
+def example_directories(names: Sequence[str] | None) -> list[Path]:
+    """Return the example directories to process.
+
+    Args:
+        names: Example directory names, or None for all of them.
+
+    Returns:
+        Directories under `doc/examples` that hold a `config.yaml`.
+    """
+    root = REPOSITORY / "doc" / "examples"
+    directories = sorted(
+        path for path in root.iterdir() if (path / "config.yaml").is_file()
+    )
+    if names is None:
+        return directories
+    wanted = set(names)
+    chosen = [path for path in directories if path.name in wanted]
+    missing = wanted - {path.name for path in chosen}
+    if missing:
+        raise SystemExit(f"unknown example(s): {', '.join(sorted(missing))}")
+    return chosen
+
+
+def record_example_configs() -> dict[str, dict[str, str]]:
+    """Resolve every example configuration and digest it.
+
+    Returns:
+        ``{example: {"parameters": digest, "run_id": id}}``.
+    """
+    from fim.cli import load_config  # noqa: PLC0415
+    from fim.engine import deterministic_run_id  # noqa: PLC0415
+
+    recorded: dict[str, dict[str, str]] = {}
+    for directory in example_directories(None):
+        params = load_config(directory / "config.yaml")
+        recorded[directory.name] = {
+            "parameters": canonical_digest(params.to_dict()),
+            "run_id": deterministic_run_id(params),
+        }
+    return recorded
+
+
+def record_example_runs(names: Iterable[str]) -> dict[str, dict[str, str]]:
+    """Run named examples through the launcher and digest their outputs.
+
+    Args:
+        names: Example directory names.
+
+    Returns:
+        ``{example: {"trajectory": sha256 of trajectory.tlog, "report":
+        digest of report.json}}``. A batch digests each replicate in order.
+    """
+    recorded: dict[str, dict[str, str]] = {}
+    for directory in example_directories(list(names)):
+        with tempfile.TemporaryDirectory() as scratch:
+            output = Path(scratch) / "run"
+            # The child must import this checkout, not another installed copy.
+            environment = dict(
+                os.environ,
+                FIM_RESULTS_DIRECTORY=str(Path(scratch) / "r"),
+                PYTHONPATH=str(REPOSITORY / "src"),
+            )
+            subprocess.run(
+                [
+                    sys.executable,
+                    "-m",
+                    "fim.launcher",
+                    "run",
+                    str(directory / "config.yaml"),
+                    "--output",
+                    str(output),
+                    "--quiet",
+                ],
+                check=True,
+                env=environment,
+            )
+            roots = sorted(output.glob("replicate-*")) or [output]
+            trajectories = [
+                hashlib.sha256((root / "trajectory.tlog").read_bytes()).hexdigest()
+                for root in roots
+            ]
+            reports = [
+                json.loads((root / "report.json").read_text(encoding="utf-8"))
+                for root in roots
+            ]
+        recorded[directory.name] = {
+            "trajectory": canonical_digest(trajectories),
+            "report": canonical_digest(reports),
+        }
+    return recorded
+
+
+def difference(
+    baseline: dict[str, Any], current: dict[str, Any], *, ignore_run_ids: bool
+) -> list[str]:
+    """List every entry that differs between two recordings.
+
+    Args:
+        baseline: The recording loaded from a file.
+        current: A fresh recording.
+        ignore_run_ids: Skip example run IDs and parameter digests.
+
+    Returns:
+        Human-readable lines; empty when the recordings agree.
+    """
+    lines: list[str] = []
+    for section in ("matrix", "example_configs", "example_runs"):
+        old = baseline.get(section, {})
+        new = current.get(section, {})
+        for key in sorted(set(old) | set(new)):
+            if section == "example_configs" and ignore_run_ids:
+                continue
+            if key not in new:
+                lines.append(f"{section}: {key}: missing from the current run")
+            elif key not in old:
+                lines.append(f"{section}: {key}: not in the baseline")
+            elif old[key] != new[key]:
+                lines.append(f"{section}: {key}: digests differ")
+    return lines
+
+
+def build_recording(run_examples: Sequence[str] | None) -> dict[str, Any]:
+    """Take a fresh recording.
+
+    Args:
+        run_examples: Examples to run in full, or None for none.
+
+    Returns:
+        The recording mapping that `--output` writes.
+    """
+    recording: dict[str, Any] = {
+        "format": FORMAT_VERSION,
+        "platform": platform.platform(),
+        "python": platform.python_version(),
+        "generations": GENERATIONS,
+        "matrix": record_matrix(),
+        "example_configs": record_example_configs(),
+    }
+    if run_examples:
+        recording["example_runs"] = record_example_runs(run_examples)
+    return recording
+
+
+def main(argv: Sequence[str] | None = None) -> int:
+    """Run the command line.
+
+    Args:
+        argv: Arguments, or None to read `sys.argv`.
+
+    Returns:
+        0 on success, 1 when `--check` finds a difference.
+    """
+    parser = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
+    parser.add_argument("--output", type=Path, help="write a recording here")
+    parser.add_argument("--check", type=Path, help="compare with this recording")
+    parser.add_argument(
+        "--run-examples",
+        nargs="*",
+        default=None,
+        metavar="NAME",
+        help="also run these examples in full (none named: all of them)",
+    )
+    parser.add_argument("--ignore-run-ids", action="store_true")
+    arguments = parser.parse_args(argv)
+    if arguments.output is None and arguments.check is None:
+        parser.error("give --output, --check, or both")
+
+    run_examples = arguments.run_examples
+    if run_examples == []:
+        run_examples = [path.name for path in example_directories(None)]
+    recording = build_recording(run_examples)
+
+    if arguments.output is not None:
+        arguments.output.write_text(
+            json.dumps(recording, indent=2, sort_keys=True) + "\n", encoding="utf-8"
+        )
+        print(f"recorded {len(recording['matrix'])} cases to {arguments.output}")
+    if arguments.check is None:
+        return 0
+    baseline = json.loads(arguments.check.read_text(encoding="utf-8"))
+    differences = difference(
+        baseline, recording, ignore_run_ids=arguments.ignore_run_ids
+    )
+    for line in differences:
+        print(line)
+    if differences:
+        print(f"{len(differences)} difference(s) from {arguments.check}")
+        return 1
+    print(f"parity holds against {arguments.check}")
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

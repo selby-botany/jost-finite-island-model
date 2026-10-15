@@ -8,6 +8,12 @@ project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- **Public-surface guard and parity recorder.** `test/test_public_surface.py`
+  requires each public module to declare an importable `__all__` and fails on
+  any module importing another module's underscore-prefixed name.
+  `dev/bin/record-parity-digests` records SHA-256 digests of trajectory rows,
+  reports, histories, and manifests across the backends and the shipped
+  examples, so a refactor can prove it changed no bit (`--check` compares).
 - **Saved runs: pause, resume, and recover.** `fim object` saves a
   configuration as a Run object under `results/objects/` and runs it with
   `start`, `pause`, `resume`, `cancel`, `clone`, `delete`, `list`, `status`,
