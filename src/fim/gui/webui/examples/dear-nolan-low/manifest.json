@@ -9,16 +9,16 @@
       "sha256": "ecb1a904967dcf2ae2979b1dda99a30918fda0a26d7930595fc7f66145568b1c"
     },
     "report": {
-      "bytes": 4634,
-      "sha256": "e60e3dce5bb6ba4bc5641d1b9918fe0f02b068bd1a6a854733c726ae55340f87"
+      "bytes": 4635,
+      "sha256": "56926ace858b57d14f64333743a35dac37fba9203bc3b1b892c1e17e29dedabf"
     },
     "scatter": {
-      "bytes": 229731,
-      "sha256": "18f9d1c014fe26804880d0aff69e2ca1c88b81ce12f52de83bc856cba81d2546"
+      "bytes": 209029,
+      "sha256": "7e49b50a6faec0e2fb57382607d02d0407633dff21f4d541083a0c5d3fdde9fe"
     },
     "trajectory": {
       "bytes": 7359697,
-      "sha256": "efc5c98adc875f9ef08423ba0b6996908cf5a72fd0c2aeb6a768b18e4945a47e"
+      "sha256": "a6fee8fb26ebdc19530ac59bac1b2fe5ff2322f166bd9c1535025146d853b6e6"
     }
   },
   "auto_derived": [
@@ -31,7 +31,7 @@
     "reason": "statistic converged",
     "statistic": "D"
   },
-  "ended_at": "2026-10-14T16:06:25.511972Z",
+  "ended_at": "2026-10-15T20:36:53.257816Z",
   "engine_backend": "generational-vector",
   "equilibrium_final_heterozygosity": null,
   "equilibrium_generation_count": null,
@@ -195,8 +195,8 @@
     "trajectory_thinning_start": 5000
   },
   "relaxation_time": 19692.603266090297,
-  "run_id": "run-0819369b018a302e",
+  "run_id": "run-6a10b581d73deb49",
   "schema_version": 3,
   "software_version": "1.2.0",
-  "started_at": "2026-10-14T16:03:46.807478Z"
+  "started_at": "2026-10-15T20:33:29.131671Z"
 }

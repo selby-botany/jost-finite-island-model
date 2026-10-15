@@ -1,24 +1,24 @@
 {
   "artifacts": {
     "convergence": {
-      "bytes": 988867,
-      "sha256": "37bb20bea3c5a78b53debe46162967df31fba7ee560a734516e93e9c530dc229"
+      "bytes": 994092,
+      "sha256": "3e43543131c4f559282aafabbd553fdafb1495f90aeb5d77910e5ac39437fa78"
     },
     "pairwise": {
-      "bytes": 1193,
-      "sha256": "bded4adc675f3bd571457627155692ff6102439be557161a5fc70b39315df76d"
+      "bytes": 1186,
+      "sha256": "bcbdfb021b19881dcba9a05015f25c3f5a84a9605e7187b9e5711c82ae3c8da8"
     },
     "report": {
-      "bytes": 4603,
-      "sha256": "5ea9e2012e2ad17478f6c34930313c6b91f8e6170655198f54be0875711d60f0"
+      "bytes": 4601,
+      "sha256": "ec25cabd21e4d96964efa39bd7ee196e745aea6aa159f70a9503d8b07b56d67a"
     },
     "scatter": {
-      "bytes": 356850,
-      "sha256": "ad3548bd97b55772346c7245ecb239dbb4a77561c3361f3e25a1e8abd537e162"
+      "bytes": 334129,
+      "sha256": "a548f3c272a820272c3aa0cf4345e36a53aac4f6f819bd31f7e3bbe1a6dedcd9"
     },
     "trajectory": {
-      "bytes": 5056431,
-      "sha256": "8d902c41e8f41179ae5ece9467e5f276c623e1b67a87f3ae1cd583fde2d21ba5"
+      "bytes": 4709514,
+      "sha256": "7fa1e6ab0a40c9622f4d506ada470ee7f07da19e9d5e13d9476dafb4f1491369"
     }
   },
   "auto_derived": [],
@@ -29,7 +29,7 @@
     "reason": "averaging window complete",
     "statistic": "D"
   },
-  "ended_at": "2026-10-14T15:36:04.034328Z",
+  "ended_at": "2026-10-15T20:33:30.748382Z",
   "engine_backend": "generational-vector",
   "equilibrium_final_heterozygosity": null,
   "equilibrium_generation_count": null,
@@ -97,7 +97,7 @@
     "precision_method": "interval",
     "replicate_averaging_window": 5834,
     "replicate_minimum": 10,
-    "seed": 20260825,
+    "seed": 1271090953952351175,
     "stop_batch_early": true,
     "track_expensive_statistics": false,
     "trajectory_retention": "thinned",
@@ -105,8 +105,8 @@
     "trajectory_thinning_start": 5000
   },
   "relaxation_time": 291.6666666666667,
-  "run_id": "run-e4c7914a68e431eb-r007",
+  "run_id": "run-e91640d9beb07d70-r007",
   "schema_version": 3,
   "software_version": "1.2.0",
-  "started_at": "2026-10-14T15:35:41.429314Z"
+  "started_at": "2026-10-15T20:32:56.000962Z"
 }

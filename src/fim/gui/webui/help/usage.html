@@ -766,7 +766,7 @@ replicate_minimum: 10
 <pre><code class="language-console">fim run adaptive-batch.yaml --output results/adaptive-batch --quiet
 </code></pre>
 <p>Stops at 10 replicates, the required minimum — <code>D</code>'s 95%
-confidence interval reaches <code>0.281 +/- 0.015</code>, inside the requested <code>0.03</code>
+confidence interval reaches <code>0.291 +/- 0.012</code>, inside the requested <code>0.03</code>
 half-width (the model's expected <code>D</code> is 0.287), so the remaining 40 possible
 replicates were never needed. (A larger <code>precision</code> stops sooner; a smaller one
 runs more replicates.) Each replicate pools eight loci and is itself averaged to
@@ -838,7 +838,7 @@ stop_batch_early: false   # always run all 16 replicates
 </code></pre>
 <p>Ran in about 10 seconds on a development machine, all 16 replicates
 for exactly 100 generations (a fixed averaging window), with <code>D</code>'s 95%
-confidence interval at <code>0.0464 +/- 0.0015</code>. In the desktop
+confidence interval at <code>0.0465 +/- 0.0020</code>. In the desktop
 app, loading this example runs it with its own <code>generational-vector</code>
 engine and 16 replicates, whatever your Settings hold, and leaves your
 Settings unchanged; a notice lists the differences and offers to make
@@ -882,7 +882,7 @@ stop_batch_early: false   # always run all 16 replicates
 <pre><code class="language-console">fim run generational-showcase.yaml --output results/generational-showcase --quiet
 </code></pre>
 <p>Ran in about 35 seconds on the same hardware, with <code>D</code>'s 95% confidence
-interval at <code>0.0461 +/- 0.0027</code>. That is a little slower than the
+interval at <code>0.0451 +/- 0.0024</code>. That is a little slower than the
 <code>generational-vector</code> example above, although an earlier measurement on a
 less loaded machine found it a little faster: neither backend is
 universally faster, and which one wins depends on where a configuration

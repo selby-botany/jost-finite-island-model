@@ -5,20 +5,20 @@
       "sha256": "d7322466e2f3913f083b6dd1ad9b0f0d9391203f07bc41c1488109e9b0f80cc4"
     },
     "pairwise": {
-      "bytes": 518,
-      "sha256": "bfd5346ac1002310ed7172af857bb816d1ca5edb7db1e631754af2df6f098797"
+      "bytes": 520,
+      "sha256": "0f1b59ddfd8eb43dc9aab61b79679599d8ae7ad73fba5dabbb16f1ed121a20b7"
     },
     "report": {
-      "bytes": 4652,
-      "sha256": "404b34ae3024c51846cc1911cbe3f1bddea89d0de8f923b6e13ba296e25e205d"
+      "bytes": 4653,
+      "sha256": "996074f688800f2d7389624d698efea4ade05b9b8703653c602beab1d01fbbf2"
     },
     "scatter": {
-      "bytes": 152807,
-      "sha256": "7c8cf1ce5bed1b823e030d7fa3d1ba900a0e6b7bd954b583473482a4b7edffd4"
+      "bytes": 124208,
+      "sha256": "cc4b047611a2068d2fe3317565ffb26833e1165f6669f259ceb3acbe0ae5fd16"
     },
     "trajectory": {
       "bytes": 190642,
-      "sha256": "410c5e3dc9db12b75f197b295c28a67bd6cbfead2865741774c6c9dc6ad24d66"
+      "sha256": "ebd94597b6a24b7a9fce74c1145451a11bb18479e93c7809b8b0087f8cf70c66"
     }
   },
   "auto_derived": [
@@ -35,7 +35,7 @@
       "G_ST"
     ]
   },
-  "ended_at": "2026-10-14T15:36:07.655033Z",
+  "ended_at": "2026-10-15T20:34:26.406021Z",
   "engine_backend": "generational-vector",
   "equilibrium_final_heterozygosity": null,
   "equilibrium_generation_count": null,
@@ -83,8 +83,8 @@
     "track_expensive_statistics": false
   },
   "relaxation_time": 250.0,
-  "run_id": "run-0fc5a6f5638c376a",
+  "run_id": "run-0b757d4f00c8999b",
   "schema_version": 3,
   "software_version": "1.2.0",
-  "started_at": "2026-10-14T15:36:07.445478Z"
+  "started_at": "2026-10-15T20:34:25.696250Z"
 }

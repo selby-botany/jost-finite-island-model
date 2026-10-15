@@ -1,24 +1,24 @@
 {
   "artifacts": {
     "convergence": {
-      "bytes": 14804,
-      "sha256": "7685f6313aaede2ed25c463468d35a3542b56f36874f1343568e6ee54d475e17"
+      "bytes": 14777,
+      "sha256": "3ed5bc72072f7b2565464c46d5152bdf890dc8a60980432e0be723f88d291799"
     },
     "pairwise": {
-      "bytes": 57586,
-      "sha256": "2d3b7336cc7ec8a5c512dbd756833e28390837518dc55f5594145ac590ec8028"
+      "bytes": 57436,
+      "sha256": "96e72f4fb37585de80a7b04c0efb956c224bc04d63784f109f1e11d5ad4694db"
     },
     "report": {
       "bytes": 4620,
-      "sha256": "3b0ffb8a96260005d69ac8ca237c979ce065cd57d3de66bb9c8a34bbd3f66e30"
+      "sha256": "a5b0c92000c6e8439d784757c5bb3c0588f47a35bf508ae2072075308647495f"
     },
     "scatter": {
-      "bytes": 55076,
-      "sha256": "3874610b279dd1aedc4a4b222242e715e905376e6dfde93057ae85fc785f29c0"
+      "bytes": 50509,
+      "sha256": "4e86be44bfa879bf7f1e4d9a3f9837b61b8ecf3be3ec393d172e4af73cb55747"
     },
     "trajectory": {
-      "bytes": 106265,
-      "sha256": "69bb01b187122a8054c295c36b193d54d0c34d9974dc1efa0156457a3da5c68c"
+      "bytes": 109348,
+      "sha256": "c4efa54a7b842bdcaa44d98e99a005d2a2799a6951cc29f41cd799fdd28a12bb"
     }
   },
   "auto_derived": [],
@@ -29,7 +29,7 @@
     "reason": "averaging window complete",
     "statistic": "D"
   },
-  "ended_at": "2026-10-14T15:36:02.637016Z",
+  "ended_at": "2026-10-15T20:33:47.997562Z",
   "engine_backend": "generational",
   "equilibrium_final_heterozygosity": null,
   "equilibrium_generation_count": null,
@@ -69,13 +69,13 @@
     "precision_method": "interval",
     "replicate_averaging_window": 99,
     "replicate_minimum": 10,
-    "seed": 20260931,
+    "seed": 18074791800128421472,
     "stop_batch_early": false,
     "track_expensive_statistics": false
   },
   "relaxation_time": 486.3685932388222,
-  "run_id": "run-8fa7f726d7ca2565-r016",
+  "run_id": "run-13227464b2b391d4-r016",
   "schema_version": 3,
   "software_version": "1.2.0",
-  "started_at": "2026-10-14T15:35:41.432427Z"
+  "started_at": "2026-10-15T20:32:56.033895Z"
 }

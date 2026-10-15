@@ -198,8 +198,8 @@ replicate's average over its 30 generations, with a 95% confidence interval:
 
 | Statistic | Five-replicate mean | Predicted equilibrium |
 |---|---|---|
-| G<sub>ST</sub> | 0.02194 ± 0.00012 | 0.02196 |
-| D | 0.9082 ± 0.0029 | 0.9088 |
+| G<sub>ST</sub> | 0.02204 ± 0.00011 | 0.02196 |
+| D | 0.9081 ± 0.0021 | 0.9088 |
 
 Both predictions lie inside their intervals. This is the published
 high-migration equilibrium: low differentiation between patches, but still

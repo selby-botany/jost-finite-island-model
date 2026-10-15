@@ -880,7 +880,7 @@ fim run adaptive-batch.yaml --output results/adaptive-batch --quiet
 ```
 
 Stops at 10 replicates, the required minimum — `D`'s 95%
-confidence interval reaches `0.281 +/- 0.015`, inside the requested `0.03`
+confidence interval reaches `0.291 +/- 0.012`, inside the requested `0.03`
 half-width (the model's expected `D` is 0.287), so the remaining 40 possible
 replicates were never needed. (A larger `precision` stops sooner; a smaller one
 runs more replicates.) Each replicate pools eight loci and is itself averaged to
@@ -959,7 +959,7 @@ fim run vector-showcase.yaml --output results/vector-showcase --quiet
 
 Ran in about 10 seconds on a development machine, all 16 replicates
 for exactly 100 generations (a fixed averaging window), with `D`'s 95%
-confidence interval at `0.0464 +/- 0.0015`. In the desktop
+confidence interval at `0.0465 +/- 0.0020`. In the desktop
 app, loading this example runs it with its own `generational-vector`
 engine and 16 replicates, whatever your Settings hold, and leaves your
 Settings unchanged; a notice lists the differences and offers to make
@@ -1010,7 +1010,7 @@ fim run generational-showcase.yaml --output results/generational-showcase --quie
 ```
 
 Ran in about 35 seconds on the same hardware, with `D`'s 95% confidence
-interval at `0.0461 +/- 0.0027`. That is a little slower than the
+interval at `0.0451 +/- 0.0024`. That is a little slower than the
 `generational-vector` example above, although an earlier measurement on a
 less loaded machine found it a little faster: neither backend is
 universally faster, and which one wins depends on where a configuration

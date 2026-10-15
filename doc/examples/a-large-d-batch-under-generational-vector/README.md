@@ -18,7 +18,7 @@ Two settings fix the amount of work:
   the batch at the 10-replicate minimum.
 
 The run takes about 10 seconds on a development machine. The
-across-replicate mean `D` is 0.0464 ± 0.0015 (95% confidence interval), the
+across-replicate mean `D` is 0.0465 ± 0.0020 (95% confidence interval), the
 mean of the 16 replicates' averages over their 100 generations (not their
 final generations, which are one noisy draw each).
 The configuration is intended to exercise a larger deme count and the

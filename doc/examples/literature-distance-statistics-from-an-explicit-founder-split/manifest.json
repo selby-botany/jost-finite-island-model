@@ -10,15 +10,15 @@
     },
     "report": {
       "bytes": 733,
-      "sha256": "7c9ae8704851b1cec3433e82e51c6b1af9ec3bc71602d392f727fe7ab51d3d25"
+      "sha256": "2d959eb1f3e134de1a140989bc3f08fe311f3ab38bc2611f27f715e863962d28"
     },
     "scatter": {
-      "bytes": 151563,
-      "sha256": "55d2c18679bae99e9e52aed725e54811c276b77823c1ace9a07d63b9c0a47585"
+      "bytes": 122848,
+      "sha256": "10a65b61f5288ebb0fa7d026748e7c86cbbe1aec9e34eaf5baec488d7d5b6805"
     },
     "trajectory": {
       "bytes": 122,
-      "sha256": "a066cd0df74fb106c6c4236131fce942eec4d3a20ad67a0639c26d2b27b2a6a3"
+      "sha256": "90e6669d91e6edb5704c47819c41febec33813240882c62c3c8dddcf197c0d39"
     }
   },
   "auto_derived": [
@@ -31,7 +31,7 @@
     "reason": "hit the cap",
     "statistic": "D"
   },
-  "ended_at": "2026-10-14T15:36:05.202115Z",
+  "ended_at": "2026-10-15T20:34:22.723932Z",
   "engine_backend": "generational-vector",
   "equilibrium_final_heterozygosity": null,
   "equilibrium_generation_count": null,
@@ -93,8 +93,8 @@
     "track_expensive_statistics": true
   },
   "relaxation_time": null,
-  "run_id": "run-63639fc6850c0524",
+  "run_id": "run-79b49243bf876fcd",
   "schema_version": 3,
   "software_version": "1.2.0",
-  "started_at": "2026-10-14T15:36:05.080313Z"
+  "started_at": "2026-10-15T20:34:22.336823Z"
 }

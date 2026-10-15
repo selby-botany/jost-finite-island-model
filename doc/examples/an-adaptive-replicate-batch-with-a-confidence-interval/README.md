@@ -8,7 +8,7 @@ is within `precision`. The sequential command makes the run
 order explicit; it does not change the computed results.
 
 With this seed, the batch stops at the 10-replicate minimum: `D`'s interval
-is 0.281 ± 0.015 and `G_ST`'s is 0.231 ± 0.004, both inside the requested
+is 0.291 ± 0.012 and `G_ST`'s is 0.233 ± 0.003, both inside the requested
 0.03, so the other 40 possible replicates are not run. The model's expected
 `D` for these parameters is 0.287, inside the interval. This is a seeded
 demonstration of adaptive stopping, not a general prediction of how many

@@ -11,7 +11,7 @@ generations, so the amount of work is fixed.
 
 The run takes about 35 seconds on a development machine, a
 few times longer than the large-deme example's 10. The across-replicate
-mean `D` is 0.0461 ± 0.0027 (95% confidence interval), the mean of the
+mean `D` is 0.0451 ± 0.0024 (95% confidence interval), the mean of the
 replicates' averages over their 100 generations.
 
 This is an engine workload, not an equilibrium result or a universal
