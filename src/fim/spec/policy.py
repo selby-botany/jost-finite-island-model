@@ -30,6 +30,9 @@ from fim.spec.validation import (
     check_strings,
 )
 
+CONFIDENCE_LEVELS: tuple[float, ...] = (0.90, 0.95, 0.99)
+"""The confidence levels the engine supports for its intervals."""
+
 Auto: TypeAlias = Literal["auto"]
 """The string that asks the engine to derive a value from the model."""
 
@@ -74,10 +77,13 @@ class Stopping:
         object.__setattr__(self, "statistics", names)
         check_choice("stopping.combinator", self.combinator, ConvergenceCombinator)
         check_choice("stopping.estimate", self.estimate, ConvergenceEstimate)
-        check_int_or_auto("stopping.burn_in", self.burn_in, minimum=0)
+        check_int_or_auto("stopping.burn_in", self.burn_in, minimum=1)
         check_int_or_auto("stopping.max_generations", self.max_generations, minimum=1)
-        check_finite("stopping.precision", self.precision, above=0.0)
-        check_finite("stopping.confidence", self.confidence, above=0.0)
+        check_finite("stopping.precision", self.precision, at_least=0.0)
+        if self.confidence not in CONFIDENCE_LEVELS or isinstance(
+            self.confidence, bool
+        ):
+            raise ConfigurationError("stopping.confidence must be 0.90, 0.95, or 0.99")
         overrides = (
             tuple(self.per_statistic_precision.items())
             if isinstance(self.per_statistic_precision, Mapping)
@@ -85,7 +91,9 @@ class Stopping:
         )
         for name, value in overrides:
             check_strings("stopping.per_statistic_precision", (name,))
-            check_finite(f"stopping.per_statistic_precision[{name}]", value, above=0.0)
+            check_finite(
+                f"stopping.per_statistic_precision[{name}]", value, at_least=0.0
+            )
         object.__setattr__(
             self,
             "per_statistic_precision",
@@ -116,7 +124,7 @@ class Replication:
     def __post_init__(self) -> None:
         """Check every value."""
         check_int("replication.n", self.n, minimum=1)
-        check_int("replication.minimum", self.minimum, minimum=1)
+        check_int("replication.minimum", self.minimum, minimum=2)
         check_bool("replication.stop_early", self.stop_early)
         check_choice("replication.method", self.method, PrecisionMethod)
         check_int_or_auto(

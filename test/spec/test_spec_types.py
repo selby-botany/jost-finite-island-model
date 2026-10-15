@@ -218,7 +218,10 @@ def test_recording_directory_becomes_a_path() -> None:
         (lambda: Stopping(combinator="some"), "stopping.combinator"),  # type: ignore[arg-type]
         (lambda: Stopping(burn_in="soon"), "stopping.burn_in"),  # type: ignore[arg-type]
         (lambda: Stopping(max_generations=0), "stopping.max_generations"),
-        (lambda: Stopping(precision=0.0), "stopping.precision"),
+        (lambda: Stopping(precision=-0.1), "stopping.precision"),
+        (lambda: Stopping(confidence=0.5), "stopping.confidence"),
+        (lambda: Stopping(burn_in=0), "stopping.burn_in"),
+        (lambda: Replication(minimum=1), "replication.minimum"),
         (lambda: Stopping(per_statistic_precision={"D": -1.0}), "stopping.per_"),
         (lambda: Replication(n=0), "replication.n"),
         (lambda: Replication(stop_early=1), "replication.stop_early"),  # type: ignore[arg-type]

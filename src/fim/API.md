@@ -1312,11 +1312,26 @@ Return to the [source-tree orientation](../README.md) or the [developer guide](.
   * [load\_params](#fim.run_service.load_params)
   * [replicate\_directory](#fim.run_service.replicate_directory)
 * [fim.spec](#fim.spec)
+* [fim.spec.codec](#fim.spec.codec)
+  * [to\_params](#fim.spec.codec.to_params)
+  * [from\_params](#fim.spec.codec.from_params)
+  * [read\_mapping](#fim.spec.codec.read_mapping)
+  * [RunConfig](#fim.spec.codec.RunConfig)
+    * [from\_mapping](#fim.spec.codec.RunConfig.from_mapping)
+    * [from\_params](#fim.spec.codec.RunConfig.from_params)
+    * [to\_params](#fim.spec.codec.RunConfig.to_params)
+    * [to\_mapping](#fim.spec.codec.RunConfig.to_mapping)
+  * [load\_config](#fim.spec.codec.load_config)
 * [fim.spec.execution](#fim.spec.execution)
   * [Execution](#fim.spec.execution.Execution)
     * [\_\_post\_init\_\_](#fim.spec.execution.Execution.__post_init__)
   * [Recording](#fim.spec.execution.Recording)
     * [\_\_post\_init\_\_](#fim.spec.execution.Recording.__post_init__)
+* [fim.spec.fields](#fim.spec.fields)
+  * [FieldMap](#fim.spec.fields.FieldMap)
+  * [FIELD\_MAP](#fim.spec.fields.FIELD_MAP)
+  * [CONVERTED\_KEYS](#fim.spec.fields.CONVERTED_KEYS)
+  * [PATHS](#fim.spec.fields.PATHS)
 * [fim.spec.model](#fim.spec.model)
   * [Ploidy](#fim.spec.model.Ploidy)
   * [Population](#fim.spec.model.Population)
@@ -1339,6 +1354,7 @@ Return to the [source-tree orientation](../README.md) or the [developer guide](.
   * [Model](#fim.spec.model.Model)
     * [\_\_post\_init\_\_](#fim.spec.model.Model.__post_init__)
 * [fim.spec.policy](#fim.spec.policy)
+  * [CONFIDENCE\_LEVELS](#fim.spec.policy.CONFIDENCE_LEVELS)
   * [Auto](#fim.spec.policy.Auto)
   * [Stopping](#fim.spec.policy.Stopping)
     * [\_\_post\_init\_\_](#fim.spec.policy.Stopping.__post_init__)
@@ -31088,6 +31104,217 @@ The grouped, immutable specification of a simulation run.
 `Recording` are passed beside it and never change a result. See the public
 API redesign design for the reasoning behind the grouping.
 
+<a id="fim.spec.codec"></a>
+
+# fim.spec.codec
+
+Conversion between the grouped specification and the engine's parameters.
+
+`SimulationParams` stays the engine's flat, validated, resolved parameters
+and the single home of every cross-field rule. This module only moves
+values between it and the grouped types:
+
+- `to_params` compiles a `RunSpec` (with its `Execution` and `Recording`);
+- `from_params` reads one back;
+- `RunConfig` is the contents of a configuration file, and parses and
+  writes it through `SimulationParams.from_mapping` and `to_dict`, so the
+  file format and its quirks keep exactly one parser.
+
+<a id="fim.spec.codec.to_params"></a>
+
+#### to\_params
+
+```python
+def to_params(spec: RunSpec,
+              execution: Execution | None = None,
+              recording: Recording | None = None,
+              *,
+              read_only: bool = False) -> SimulationParams
+```
+
+Compile a specification into the engine's validated parameters.
+
+**Arguments**:
+
+- `spec` - What to simulate.
+- `execution` - How to run it (default: `Execution()`).
+- `recording` - What to keep (default: `Recording()`).
+- `read_only` - Mark the run read-only, as the shipped examples are.
+
+
+**Returns**:
+
+  The resolved `SimulationParams`, with every `"auto"` derived.
+
+
+**Raises**:
+
+- `ConfigurationError` - The engine rejected the combination; the message
+  is the engine's own.
+
+<a id="fim.spec.codec.from_params"></a>
+
+#### from\_params
+
+```python
+def from_params(
+        params: SimulationParams) -> tuple[RunSpec, Execution, Recording]
+```
+
+Read a specification back out of resolved engine parameters.
+
+The result is canonical: a population whose demes all have the same size
+is a single number, and a derived burn-in or cap is reported as the
+number the engine derived rather than as ``"auto"``.
+
+**Arguments**:
+
+- `params` - Validated engine parameters.
+
+
+**Returns**:
+
+  The `RunSpec`, `Execution`, and `Recording` that compile to them.
+
+<a id="fim.spec.codec.read_mapping"></a>
+
+#### read\_mapping
+
+```python
+def read_mapping(path: Path | str) -> Mapping[str, Any]
+```
+
+Read a YAML configuration file into its raw mapping.
+
+**Arguments**:
+
+- `path` - The file to read.
+
+
+**Returns**:
+
+  The parsed top-level mapping, not yet validated.
+
+
+**Raises**:
+
+- `ConfigurationError` - The root of the document is not a mapping.
+
+<a id="fim.spec.codec.RunConfig"></a>
+
+## RunConfig Objects
+
+```python
+@dataclass(frozen=True, slots=True, kw_only=True)
+class RunConfig()
+```
+
+The contents of a configuration file, as grouped objects.
+
+**Arguments**:
+
+- `spec` - What to simulate.
+- `execution` - How to run it.
+- `recording` - What to keep.
+- `labels` - The run's name, description, and class.
+- `read_only` - Whether the run is a shipped, read-only example.
+
+<a id="fim.spec.codec.RunConfig.from_mapping"></a>
+
+#### from\_mapping
+
+```python
+@classmethod
+def from_mapping(cls, config: Mapping[str, Any]) -> RunConfig
+```
+
+Build a configuration from a parsed configuration mapping.
+
+**Arguments**:
+
+- `config` - The parsed file, with the flat configuration keys.
+
+
+**Returns**:
+
+  The grouped configuration.
+
+
+**Raises**:
+
+- `ConfigurationError` - A value is invalid; the message is the
+  parser's own.
+
+<a id="fim.spec.codec.RunConfig.from_params"></a>
+
+#### from\_params
+
+```python
+@classmethod
+def from_params(cls,
+                params: SimulationParams,
+                *,
+                labels: RunLabels | None = None) -> RunConfig
+```
+
+Build a configuration from resolved engine parameters.
+
+**Arguments**:
+
+- `params` - Validated engine parameters.
+- `labels` - Optional labels to carry.
+
+
+**Returns**:
+
+  The grouped configuration.
+
+<a id="fim.spec.codec.RunConfig.to_params"></a>
+
+#### to\_params
+
+```python
+def to_params() -> SimulationParams
+```
+
+Compile to the engine's validated parameters.
+
+<a id="fim.spec.codec.RunConfig.to_mapping"></a>
+
+#### to\_mapping
+
+```python
+def to_mapping() -> dict[str, object]
+```
+
+Return the flat configuration mapping that `from_mapping` accepts.
+
+Labels are included when set, so the file round-trips.
+
+<a id="fim.spec.codec.load_config"></a>
+
+#### load\_config
+
+```python
+def load_config(path: Path | str) -> RunConfig
+```
+
+Read and validate a YAML configuration file.
+
+**Arguments**:
+
+- `path` - The file to read.
+
+
+**Returns**:
+
+  The grouped configuration.
+
+
+**Raises**:
+
+- `ConfigurationError` - The file is not a valid configuration.
+
 <a id="fim.spec.execution"></a>
 
 # fim.spec.execution
@@ -31167,6 +31394,62 @@ def __post_init__() -> None
 ```
 
 Normalize the directory and check every value.
+
+<a id="fim.spec.fields"></a>
+
+# fim.spec.fields
+
+The table that ties configuration keys to the grouped specification.
+
+Most configuration keys are one value that lives in one attribute of one
+group (`convergence_burn_in` is `RunSpec.stopping.burn_in`). Those are listed
+here once, and both directions of the codec read the same rows, so adding a
+setting is a one-row change. Keys that need real conversion (the population
+size and ploidy, the mutation rate and model, the loci, the starting
+condition, and the statistic names) are written out in `codec.py`.
+
+The same table answers "where does this key live?" for anything that needs
+to address a setting by name, such as a parameter sweep.
+
+<a id="fim.spec.fields.FieldMap"></a>
+
+## FieldMap Objects
+
+```python
+@dataclass(frozen=True, slots=True)
+class FieldMap()
+```
+
+One configuration key and where its value lives.
+
+**Arguments**:
+
+- `key` - The configuration key, which is also the `SimulationParams`
+  field of the same name.
+- `group` - The object that holds it: ``"run"`` (the `RunSpec` itself),
+  ``"model"``, ``"stopping"``, ``"replication"``, ``"analysis"``,
+  ``"execution"``, or ``"recording"``.
+- `attribute` - The attribute on that object.
+- `auto` - Whether the engine stores the string ``"auto"`` as the
+  integer 0 (`AUTO_CONVERGENCE`).
+
+<a id="fim.spec.fields.FIELD_MAP"></a>
+
+#### FIELD\_MAP
+
+Every key that maps one-to-one onto a specification attribute.
+
+<a id="fim.spec.fields.CONVERTED_KEYS"></a>
+
+#### CONVERTED\_KEYS
+
+Keys the codec converts by hand rather than through `FIELD_MAP`.
+
+<a id="fim.spec.fields.PATHS"></a>
+
+#### PATHS
+
+Configuration key to its dotted attribute path, for the mapped keys.
 
 <a id="fim.spec.model"></a>
 
@@ -31451,6 +31734,12 @@ replicates to run and when to stop adding them, and `Analysis` says how the
 reported statistics are computed. Defaults are the engine's own: every
 `"auto"` is derived from the model when the run is compiled.
 
+<a id="fim.spec.policy.CONFIDENCE_LEVELS"></a>
+
+#### CONFIDENCE\_LEVELS
+
+The confidence levels the engine supports for its intervals.
+
 <a id="fim.spec.policy.Auto"></a>
 
 #### Auto
@@ -31659,21 +31948,23 @@ Require `value` to be one of the strings in a `Literal` alias.
 def check_finite(path: str,
                  value: object,
                  *,
-                 above: float | None = None) -> None
+                 above: float | None = None,
+                 at_least: float | None = None) -> None
 ```
 
-Require a finite real number, optionally strictly above a floor.
+Require a finite real number, optionally above or at a floor.
 
 **Arguments**:
 
 - `path` - Dotted field path for the message.
 - `value` - The value to check.
 - `above` - Exclusive lower bound, or `None` for no bound.
+- `at_least` - Inclusive lower bound, or `None` for no bound.
 
 
 **Raises**:
 
-- `ConfigurationError` - If `value` is not a finite number above `above`.
+- `ConfigurationError` - If `value` is not a finite number within the bounds.
 
 <a id="fim.spec.validation.check_int"></a>
 

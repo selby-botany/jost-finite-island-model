@@ -7,6 +7,7 @@ API redesign design for the reasoning behind the grouping.
 
 from __future__ import annotations
 
+from fim.spec.codec import RunConfig, from_params, load_config, to_params
 from fim.spec.execution import Execution, Recording
 from fim.spec.model import (
     EquilibriumSplit,
@@ -39,6 +40,10 @@ __all__ = [
     "Population",
     "Recording",
     "Replication",
+    "RunConfig",
     "RunSpec",
     "Stopping",
+    "from_params",
+    "load_config",
+    "to_params",
 ]

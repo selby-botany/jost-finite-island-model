@@ -47,16 +47,23 @@ def check_choice(path: str, value: object, alias: Any) -> None:
         raise ConfigurationError(f"{path} must be one of {names}")
 
 
-def check_finite(path: str, value: object, *, above: float | None = None) -> None:
-    """Require a finite real number, optionally strictly above a floor.
+def check_finite(
+    path: str,
+    value: object,
+    *,
+    above: float | None = None,
+    at_least: float | None = None,
+) -> None:
+    """Require a finite real number, optionally above or at a floor.
 
     Args:
         path: Dotted field path for the message.
         value: The value to check.
         above: Exclusive lower bound, or `None` for no bound.
+        at_least: Inclusive lower bound, or `None` for no bound.
 
     Raises:
-        ConfigurationError: If `value` is not a finite number above `above`.
+        ConfigurationError: If `value` is not a finite number within the bounds.
     """
     if (
         isinstance(value, bool)
@@ -66,6 +73,8 @@ def check_finite(path: str, value: object, *, above: float | None = None) -> Non
         raise ConfigurationError(f"{path} must be a finite number")
     if above is not None and value <= above:
         raise ConfigurationError(f"{path} must be greater than {above:g}")
+    if at_least is not None and value < at_least:
+        raise ConfigurationError(f"{path} must be at least {at_least:g}")
 
 
 def check_int(path: str, value: object, *, minimum: int | None = None) -> None:

@@ -8,6 +8,15 @@ project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- **Configuration codec for the grouped specification.** `fim.spec.to_params`
+  compiles a `RunSpec` with its `Execution` and `Recording` into the engine's
+  validated `SimulationParams`; `from_params` reads one back; `RunConfig` and
+  `load_config` hold a configuration file as grouped objects with its labels.
+  The file keeps exactly one parser, `SimulationParams.from_mapping`, so every
+  shipped example compiles to equal parameters and the same run-identity form
+  by either route (a test checks all 17). `fim.spec.fields.FIELD_MAP` lists
+  each one-to-one key once, for both directions and for anything that must
+  address a setting by name.
 - **Grouped run specification (`fim.spec`).** `RunSpec` holds everything that
   determines a run's numbers, grouped as `Model` (population and ploidy,
   migration, `InfiniteAlleles` or `FiniteAlleles`, loci, and a

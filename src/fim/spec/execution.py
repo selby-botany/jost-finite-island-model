@@ -61,7 +61,7 @@ class Execution:
                 self.max_concurrent_replicates,
                 minimum=1,
             )
-        check_int("execution.auto_vector_min_d", self.auto_vector_min_d, minimum=2)
+        check_int("execution.auto_vector_min_d", self.auto_vector_min_d, minimum=1)
         check_int(
             "execution.auto_vector_max_capacity",
             self.auto_vector_max_capacity,

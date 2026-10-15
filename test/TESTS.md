@@ -177,6 +177,7 @@ Every test module, fixture, and test function documented here in full; `doc/fim-
   - [`test_tlog_writer`](#persistence.test_tlog_writer)
   - [`test_validation`](#persistence.test_validation)
 - [`test/spec/`](#group-spec)
+  - [`test_codec`](#spec.test_codec)
   - [`test_spec_types`](#spec.test_spec_types)
 - [`test/statistics/`](#group-statistics)
   - [`test_catalog`](#statistics.test_catalog)
@@ -37652,6 +37653,143 @@ A batch manifest file must contain a JSON object at its root.
 
 ## `test/spec/`
 
+<a id="spec.test_codec"></a>
+
+# spec.test\_codec
+
+The codec between the grouped specification and the engine's parameters.
+
+`SimulationParams.from_mapping` stays the only parser of the configuration
+file, so the strongest check is differential: for every shipped example the
+new route must produce parameters equal to the old route, field for field and
+in their serialized (run identity) form. Property tests then cover specs the
+examples do not.
+
+<a id="spec.test_codec.test_example_compiles_to_the_same_parameters_as_the_old_route"></a>
+
+#### test\_example\_compiles\_to\_the\_same\_parameters\_as\_the\_old\_route
+
+```python
+@pytest.mark.parametrize("example", EXAMPLES, ids=lambda path: path.name)
+def test_example_compiles_to_the_same_parameters_as_the_old_route(
+        example: Path) -> None
+```
+
+New route equals `from_mapping`: fields, run-identity form, and file.
+
+<a id="spec.test_codec.test_load_config_reads_a_file"></a>
+
+#### test\_load\_config\_reads\_a\_file
+
+```python
+def test_load_config_reads_a_file() -> None
+```
+
+`load_config` is `read_mapping` plus `RunConfig.from_mapping`.
+
+<a id="spec.test_codec.test_a_labelled_example_keeps_its_labels"></a>
+
+#### test\_a\_labelled\_example\_keeps\_its\_labels
+
+```python
+def test_a_labelled_example_keeps_its_labels() -> None
+```
+
+Name, description, and class travel with the configuration.
+
+<a id="spec.test_codec.test_field_map_agrees_with_the_engine_parameters_and_the_spec"></a>
+
+#### test\_field\_map\_agrees\_with\_the\_engine\_parameters\_and\_the\_spec
+
+```python
+def test_field_map_agrees_with_the_engine_parameters_and_the_spec() -> None
+```
+
+Every mapped key is an engine field and a real spec attribute.
+
+<a id="spec.test_codec.test_every_configuration_key_is_accounted_for"></a>
+
+#### test\_every\_configuration\_key\_is\_accounted\_for
+
+```python
+def test_every_configuration_key_is_accounted_for() -> None
+```
+
+A new key in the parser must be added to the table or the converted list.
+
+<a id="spec.test_codec.test_an_engine_rejection_becomes_a_configuration_error"></a>
+
+#### test\_an\_engine\_rejection\_becomes\_a\_configuration\_error
+
+```python
+def test_an_engine_rejection_becomes_a_configuration_error() -> None
+```
+
+Cross-field rules stay in the engine; callers still see `ConfigurationError`.
+
+<a id="spec.test_codec.test_a_bad_file_value_becomes_a_configuration_error"></a>
+
+#### test\_a\_bad\_file\_value\_becomes\_a\_configuration\_error
+
+```python
+def test_a_bad_file_value_becomes_a_configuration_error() -> None
+```
+
+The parser's own message is preserved under the new exception type.
+
+<a id="spec.test_codec.test_auto_values_resolve_and_come_back_as_numbers"></a>
+
+#### test\_auto\_values\_resolve\_and\_come\_back\_as\_numbers
+
+```python
+def test_auto_values_resolve_and_come_back_as_numbers() -> None
+```
+
+`"auto"` compiles to the engine's derived numbers, not to a sentinel.
+
+<a id="spec.test_codec.test_compiling_is_idempotent_through_the_parameters"></a>
+
+#### test\_compiling\_is\_idempotent\_through\_the\_parameters
+
+```python
+@settings(max_examples=60, deadline=None)
+@given(_specs())
+def test_compiling_is_idempotent_through_the_parameters(
+        drawn: tuple[RunSpec, Execution, Recording]) -> None
+```
+
+Read a spec back out of its parameters and compile again: no change.
+
+<a id="spec.test_codec.test_explicit_zero_burn_in_is_not_representable"></a>
+
+#### test\_explicit\_zero\_burn\_in\_is\_not\_representable
+
+```python
+def test_explicit_zero_burn_in_is_not_representable() -> None
+```
+
+Zero means auto in the engine, so the spec refuses it rather than lose it.
+
+<a id="spec.test_codec.test_values_flow_through_unchanged"></a>
+
+#### test\_values\_flow\_through\_unchanged
+
+```python
+def test_values_flow_through_unchanged() -> None
+```
+
+A fully explicit specification compiles to exactly the stated values.
+
+<a id="spec.test_codec.test_labels_are_not_part_of_the_parameters"></a>
+
+#### test\_labels\_are\_not\_part\_of\_the\_parameters
+
+```python
+def test_labels_are_not_part_of_the_parameters() -> None
+```
+
+Renaming a run never changes which run it is.
+
 <a id="spec.test_spec_types"></a>
 
 # spec.test\_spec\_types
@@ -37814,7 +37952,10 @@ A string directory is accepted and normalized.
         (lambda: Stopping(burn_in="soon"),
          "stopping.burn_in"),  # type: ignore[arg-type]
         (lambda: Stopping(max_generations=0), "stopping.max_generations"),
-        (lambda: Stopping(precision=0.0), "stopping.precision"),
+        (lambda: Stopping(precision=-0.1), "stopping.precision"),
+        (lambda: Stopping(confidence=0.5), "stopping.confidence"),
+        (lambda: Stopping(burn_in=0), "stopping.burn_in"),
+        (lambda: Replication(minimum=1), "replication.minimum"),
         (lambda: Stopping(per_statistic_precision={"D": -1.0}),
          "stopping.per_"),
         (lambda: Replication(n=0), "replication.n"),
