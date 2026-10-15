@@ -40,6 +40,7 @@ Every test module, fixture, and test function documented here in full; `doc/fim-
   - [`test_sweep_run`](#test.test_sweep_run)
   - [`test_termination`](#test.test_termination)
   - [`test_update`](#test.test_update)
+  - [`test_workspace`](#test.test_workspace)
   - [`tlog_support`](#test.tlog_support)
   - [`vector_support`](#test.vector_support)
 - [`test/cli/`](#group-cli)
@@ -4654,6 +4655,105 @@ def test_version_parser_rejects_non_semantic_values(value: str) -> None
 ```
 
 Release version parsing requires exactly three non-negative integers.
+
+<a id="test.test_workspace"></a>
+
+# test.test\_workspace
+
+`Workspace`: saved, checkpointed runs that pause and resume exactly.
+
+<a id="test.test_workspace.test_planning_saves_a_run_without_starting_it"></a>
+
+#### test\_planning\_saves\_a\_run\_without\_starting\_it
+
+```python
+def test_planning_saves_a_run_without_starting_it(tmp_path: Path) -> None
+```
+
+A planned run is on disk, listed, and has not run.
+
+<a id="test.test_workspace.test_running_in_a_workspace_gives_the_numbers_of_simulate"></a>
+
+#### test\_running\_in\_a\_workspace\_gives\_the\_numbers\_of\_simulate
+
+```python
+def test_running_in_a_workspace_gives_the_numbers_of_simulate(
+        tmp_path: Path) -> None
+```
+
+Saving and checkpointing never change a result.
+
+<a id="test.test_workspace.test_a_completed_run_opens_from_its_handle"></a>
+
+#### test\_a\_completed\_run\_opens\_from\_its\_handle
+
+```python
+def test_a_completed_run_opens_from_its_handle(tmp_path: Path) -> None
+```
+
+The handle reads the saved files back with the stored-run types.
+
+<a id="test.test_workspace.test_a_paused_run_resumes_to_the_uninterrupted_numbers"></a>
+
+#### test\_a\_paused\_run\_resumes\_to\_the\_uninterrupted\_numbers
+
+```python
+def test_a_paused_run_resumes_to_the_uninterrupted_numbers(
+        tmp_path: Path) -> None
+```
+
+Pause at a safe point, resume from the checkpoint: same result.
+
+<a id="test.test_workspace.test_a_cancelled_planned_run_does_not_run"></a>
+
+#### test\_a\_cancelled\_planned\_run\_does\_not\_run
+
+```python
+def test_a_cancelled_planned_run_does_not_run(tmp_path: Path) -> None
+```
+
+Cancelling before starting abandons the run.
+
+<a id="test.test_workspace.test_a_run_can_be_deleted_when_not_executing"></a>
+
+#### test\_a\_run\_can\_be\_deleted\_when\_not\_executing
+
+```python
+def test_a_run_can_be_deleted_when_not_executing(tmp_path: Path) -> None
+```
+
+Deleting removes the saved run from the workspace.
+
+<a id="test.test_workspace.test_a_workspace_decides_where_runs_live"></a>
+
+#### test\_a\_workspace\_decides\_where\_runs\_live
+
+```python
+def test_a_workspace_decides_where_runs_live(tmp_path: Path) -> None
+```
+
+A recording directory or worker count is refused, with a reason.
+
+<a id="test.test_workspace.test_an_invalid_spec_is_refused_before_anything_is_saved"></a>
+
+#### test\_an\_invalid\_spec\_is\_refused\_before\_anything\_is\_saved
+
+```python
+def test_an_invalid_spec_is_refused_before_anything_is_saved(
+        tmp_path: Path) -> None
+```
+
+The engine's rules apply at plan time and leave no half-saved run.
+
+<a id="test.test_workspace.test_the_workspace_path_is_explicit"></a>
+
+#### test\_the\_workspace\_path\_is\_explicit
+
+```python
+def test_the_workspace_path_is_explicit(tmp_path: Path) -> None
+```
+
+The workspace remembers the path it was given and repr shows it.
 
 <a id="test.tlog_support"></a>
 

@@ -1623,6 +1623,23 @@ Return to the [source-tree orientation](../README.md) or the [developer guide](.
   * [pca\_project](#fim.viz.scatter.pca_project)
   * [pca\_summary](#fim.viz.scatter.pca_summary)
   * [pca\_axis\_labels](#fim.viz.scatter.pca_axis_labels)
+* [fim.workspace](#fim.workspace)
+  * [RunHandle](#fim.workspace.RunHandle)
+    * [state](#fim.workspace.RunHandle.state)
+    * [directory](#fim.workspace.RunHandle.directory)
+    * [start](#fim.workspace.RunHandle.start)
+    * [pause](#fim.workspace.RunHandle.pause)
+    * [cancel](#fim.workspace.RunHandle.cancel)
+    * [delete](#fim.workspace.RunHandle.delete)
+    * [open](#fim.workspace.RunHandle.open)
+  * [Workspace](#fim.workspace.Workspace)
+    * [\_\_init\_\_](#fim.workspace.Workspace.__init__)
+    * [path](#fim.workspace.Workspace.path)
+    * [\_\_repr\_\_](#fim.workspace.Workspace.__repr__)
+    * [plan](#fim.workspace.Workspace.plan)
+    * [run](#fim.workspace.Workspace.run)
+    * [handle](#fim.workspace.Workspace.handle)
+    * [handles](#fim.workspace.Workspace.handles)
 
 <a id="fim"></a>
 
@@ -38027,4 +38044,263 @@ Return the two PCA axis titles `pca_summary`'s own diagnostics produce.
 
 One formatting rule, shared by `panels_from_points`' own client-ready
 label and `_plot_pca`'s matplotlib title — never two.
+
+<a id="fim.workspace"></a>
+
+# fim.workspace
+
+A results directory holding saved runs that can be paused and resumed.
+
+`simulate` runs once, in memory or into a directory you name. A `Workspace`
+is for work worth keeping: each run is a saved *Run object* with a lifecycle
+(planned, running, paused, completed, ...), checkpointed as it goes, so it
+survives a closed laptop or a crash and resumes to exactly the numbers an
+uninterrupted run would have given.
+
+    ws = fim.Workspace("results")
+    run = ws.plan(spec)          # saved, not started
+    result = run.start()         # a Result, or None if it was paused
+    run.resume()                 # continue after a pause or a crash
+
+<a id="fim.workspace.RunHandle"></a>
+
+## RunHandle Objects
+
+```python
+@dataclass(frozen=True, slots=True)
+class RunHandle()
+```
+
+One saved run in a workspace.
+
+The handle holds only the run's identity; every property and method reads
+the saved record, so it is always current and can be used from another
+process or after a restart.
+
+**Arguments**:
+
+- `workspace` - The workspace that holds the run.
+- `object_id` - The run's saved identity.
+
+<a id="fim.workspace.RunHandle.state"></a>
+
+#### state
+
+```python
+@property
+def state() -> RunState
+```
+
+Return the run's lifecycle state.
+
+<a id="fim.workspace.RunHandle.directory"></a>
+
+#### directory
+
+```python
+@property
+def directory() -> Path
+```
+
+Return the run's directory.
+
+<a id="fim.workspace.RunHandle.start"></a>
+
+#### start
+
+```python
+def start(*,
+          observer: Callable[[Session], None] | None = None,
+          stop_requested: Callable[[], bool] | None = None) -> Result | None
+```
+
+Run to completion, or until paused or cancelled.
+
+Starts a planned run and resumes a paused, interrupted, or failed one
+from its last checkpoint; the numbers are those an uninterrupted run
+gives.
+
+**Arguments**:
+
+- `observer` - Called at each safe point with the live session.
+- `stop_requested` - Polled at each safe point; once it returns true
+  the run pauses there.
+
+
+**Returns**:
+
+  The `Result` if the run completed in this call, else `None`
+  (read `state` to see whether it paused or was cancelled; a run
+  recovered as already complete is read with `open`).
+
+<a id="fim.workspace.RunHandle.pause"></a>
+
+#### pause
+
+```python
+def pause() -> None
+```
+
+Ask the run to pause at its next safe point.
+
+<a id="fim.workspace.RunHandle.cancel"></a>
+
+#### cancel
+
+```python
+def cancel() -> None
+```
+
+Cancel the run; partial data is kept.
+
+<a id="fim.workspace.RunHandle.delete"></a>
+
+#### delete
+
+```python
+def delete() -> None
+```
+
+Delete the run, which must not be executing.
+
+<a id="fim.workspace.RunHandle.open"></a>
+
+#### open
+
+```python
+def open() -> StoredRun
+```
+
+Open the completed run's files.
+
+**Raises**:
+
+- `StoreError` - The run has not completed.
+
+<a id="fim.workspace.Workspace"></a>
+
+## Workspace Objects
+
+```python
+class Workspace()
+```
+
+A results directory of saved, resumable runs.
+
+**Arguments**:
+
+- `path` - The directory. It is created on first use, and always passed
+- `explicitly` - a library never writes to the current directory
+  unasked.
+
+<a id="fim.workspace.Workspace.__init__"></a>
+
+#### \_\_init\_\_
+
+```python
+def __init__(path: Path | str) -> None
+```
+
+Remember the directory.
+
+<a id="fim.workspace.Workspace.path"></a>
+
+#### path
+
+```python
+@property
+def path() -> Path
+```
+
+Return the workspace directory.
+
+<a id="fim.workspace.Workspace.__repr__"></a>
+
+#### \_\_repr\_\_
+
+```python
+def __repr__() -> str
+```
+
+Return the workspace's path.
+
+<a id="fim.workspace.Workspace.plan"></a>
+
+#### plan
+
+```python
+def plan(spec: RunSpec | RunConfig,
+         *,
+         execution: Execution | None = None,
+         recording: Recording | None = None) -> RunHandle
+```
+
+Save a run without starting it.
+
+**Arguments**:
+
+- `spec` - What to simulate (a `RunConfig` also carries its own
+  execution and recording, which the keywords override).
+- `execution` - How to run it.
+- `recording` - Trajectory retention; `directory` must be unset, since
+  the workspace decides where a run lives.
+
+
+**Returns**:
+
+  A handle to the planned run.
+
+
+**Raises**:
+
+- `ConfigurationError` - The specification is invalid, or `directory`
+  or `workers` was given.
+
+<a id="fim.workspace.Workspace.run"></a>
+
+#### run
+
+```python
+def run(spec: RunSpec | RunConfig,
+        *,
+        execution: Execution | None = None,
+        recording: Recording | None = None) -> Result
+```
+
+Save a run and run it to completion.
+
+**Arguments**:
+
+- `spec` - What to simulate.
+- `execution` - How to run it.
+- `recording` - Trajectory retention.
+
+
+**Returns**:
+
+  The `Result`.
+
+<a id="fim.workspace.Workspace.handle"></a>
+
+#### handle
+
+```python
+def handle(object_id: str) -> RunHandle
+```
+
+Return the handle of a saved run.
+
+**Raises**:
+
+- `StoreError` - There is no such run.
+
+<a id="fim.workspace.Workspace.handles"></a>
+
+#### handles
+
+```python
+def handles() -> tuple[RunHandle, ...]
+```
+
+Return a handle to every readable saved run.
 

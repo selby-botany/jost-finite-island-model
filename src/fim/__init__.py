@@ -194,6 +194,8 @@ _EXPORTS: dict[str, str] = {
     "StoredReplicate": "fim.stored",
     "StoredRun": "fim.stored",
     "UnsupportedError": "fim.errors",
+    "Workspace": "fim.workspace",
+    "RunHandle": "fim.workspace",
     "load_config": "fim.spec",
     "open_run": "fim.stored",
     "run_identity": "fim.spec",
@@ -224,6 +226,7 @@ if TYPE_CHECKING:
         run_identity,
     )
     from fim.stored import StoredReplicate, StoredRun, open_run
+    from fim.workspace import RunHandle, Workspace
 
 
 def __getattr__(name: str) -> object:
@@ -270,11 +273,13 @@ __all__ = [
     "Report",
     "Result",
     "RunConfig",
+    "RunHandle",
     "RunSpec",
     "Stopping",
     "StoredReplicate",
     "StoredRun",
     "UnsupportedError",
+    "Workspace",
     "__dev_commit__",
     "__version__",
     "load_config",

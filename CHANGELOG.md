@@ -8,6 +8,16 @@ project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- **`fim.Workspace`: saved, resumable runs from Python.** `Workspace(path)`
+  is a results directory (always named explicitly; a library never writes to
+  the current directory unasked). `plan(spec)` saves a run and returns a
+  `RunHandle`; `handle.start()` runs it with checkpoints and returns the
+  `Result`, or `None` if it paused or was cancelled; `handle.resume()` continues
+  from the last checkpoint to exactly the numbers an uninterrupted run gives;
+  `pause()`, `cancel()`, `delete()`, `state`, and `open()` (the completed
+  files as a `StoredRun`) complete the lifecycle. `Workspace.run(spec)` plans
+  and runs in one call, and `handles()` lists the saved runs. It wraps the
+  Run objects `fim object` uses.
 - **Save and reopen a run from Python.** `simulate(spec, recording=
   Recording(directory=...))` publishes the run in the layout `fim run` writes
   (atomically, refusing an existing directory), and `fim.open_run(directory)`
