@@ -1,6 +1,6 @@
 """Background-thread scalar-run orchestration (`doc/fim-gui-design.md` §7.1).
 
-`fim.engine.fim` is a single blocking call; a multi-thousand-generation
+`fim.engine.simulate_params` is a single blocking call; a multi-thousand-generation
 run would freeze the Tk main thread for its whole duration. `start_run`
 runs it on a `threading.Thread` instead, and gets progress and
 cancellation for free from `fim.gui.store.GuiProgressStore` — no change
@@ -45,8 +45,8 @@ from fim.engine import (
     FinalReport,
     RunResult,
     deterministic_run_id,
-    fim,
     report_for_state,
+    simulate_params,
 )
 from fim.gui.literature_visuals import (
     allele_composition_payload,
@@ -74,7 +74,7 @@ from fim.viz.scatter import (
 PROGRESS_THROTTLE_INTERVAL_SECONDS: Final = 0.05
 
 # Mirrors `fim.cli.main`'s own catch-all, scoped to what a validated
-# `params` and a real `fim.engine.fim` call can actually raise here — `pickle.
+# `params` and a real `simulate_params` call can actually raise here — `pickle.
 # PicklingError` and `yaml.YAMLError` are catch-all members that apply
 # only to `max_workers` batches and config parsing, neither of which
 # this scalar, already-validated worker ever exercises.
@@ -310,11 +310,7 @@ def _run_worker(
                     cancel_event=cancel_event,
                 )
             ) as store:
-                result = fim(
-                    params.gene_copies,
-                    params.m,
-                    params.mu,
-                    params.d,
+                result = simulate_params(
                     params=params,
                     store=store,
                     run_id=run_id,
@@ -324,7 +320,7 @@ def _run_worker(
                 # reach this worker — multi-replicate runs are out of
                 # scope for the scalar GUI runner (`doc/fim-gui-design.md`
                 # §7.2 covers the batch path instead), so
-                # `fim()` always takes its scalar branch here — this
+                # `simulate_params()` always takes its scalar branch here — this
                 # guards the invariant rather than silently mishandling
                 # a batch. Raised inside the `with` block so
                 # `atomic_directory` discards the temporary directory

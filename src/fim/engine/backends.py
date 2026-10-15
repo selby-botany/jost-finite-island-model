@@ -32,7 +32,7 @@ from fim.persistence.store import (
 class EngineBackend(Protocol):
     """One way of actually running a batch of replicates to completion.
 
-    `fim()` (below) validates its own public arguments, then hands off to
+    `simulate_params()` (below) validates its own public arguments, then hands off to
     exactly one backend's own `run` — today, always `LinealBackend`, the
     only implementation. This split exists ahead of a second backend
     actually landing because the engine is already planned to grow more
@@ -41,7 +41,7 @@ class EngineBackend(Protocol):
     designed but not yet built. Naming today's existing behavior as an
     explicit `EngineBackend` now means a future caller picks among
     backends through an ordinary keyword argument once those exist,
-    rather than `fim()` growing an ever-larger hardcoded dispatch of its
+    rather than `simulate_params()` growing an ever-larger hardcoded dispatch of its
     own.
 
     Every backend takes exactly the same four "what to run, where"
@@ -87,7 +87,7 @@ class GenerationalBackend:
             advancer: Defaults to `SequentialAdvancer()` — no new
                 concurrency, matching `LinealBackend`'s own trajectories
                 exactly for the same seed.
-            store_factory: See `fim()`'s own docstring. Unlike
+            store_factory: See `simulate_params()`'s own docstring. Unlike
                 `LinealBackend`, this backend never needs a process
                 pool to use one — `run_batch` already writes every
                 replicate's own rows through one shared `store`
@@ -113,7 +113,7 @@ class GenerationalBackend:
         run_id: str | None,
         clock: Clock,
     ) -> SimulationOutput:
-        """Run `params`'s own replicate(s); see `fim()`'s own docstring."""
+        """Run `params`'s own replicate(s); see `simulate_params()`'s own docstring."""
         if store is not None and self._store_factory is not None:
             raise ValueError("store and store_factory are mutually exclusive")
         trajectory_store = (
@@ -142,7 +142,7 @@ def resolve_auto_engine_backend(
     """Resolve `engine_backend="auto"` to a concrete, non-`"auto"` choice.
 
     Shared by `build_engine_backend` (to know which backend to actually
-    construct) and `fim()` (to know what to record in the run's own
+    construct) and `simulate_params()` (to know what to record in the run's own
     manifest as provenance, `RunManifest.engine_backend`) — kept in one
     place so the two can never silently drift apart on what `"auto"`
     actually picked for a given `params`. Never resolves to `"lineal"`
@@ -221,7 +221,7 @@ def build_engine_backend(
     auto_vector_min_d: int = DEFAULT_AUTO_VECTOR_MIN_D,
     auto_vector_max_capacity: int = DEFAULT_AUTO_VECTOR_MAX_CAPACITY,
 ) -> EngineBackend:
-    """Return the configured backend `fim()` should run against.
+    """Return the configured backend `simulate_params()` should run against.
 
     One function, not a class hierarchy: Python's own first-class
     functions make a `ConcreteFactory` subclass per backend unnecessary
@@ -400,7 +400,7 @@ def build_engine_backend(
         # refuse it too, because a finite-alleles table is `capacity`
         # columns wide however few states are in use (the default locus
         # length, 200, implies capacity 4**200). Only checkable when
-        # `params` is given: `fim()` itself always passes one, so this
+        # `params` is given: `simulate_params()` itself always passes one, so this
         # closes the reachable gap, while the params-less form (used by
         # several tests to build a backend with no real run in mind) gets
         # no capacity opinion. Infinite alleles has no capacity to speak

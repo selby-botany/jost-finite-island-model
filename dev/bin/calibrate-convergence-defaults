@@ -50,7 +50,7 @@ ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "src"))
 
 from fim.convergence.defaults import relaxation_time  # noqa: E402
-from fim.engine import fim  # noqa: E402
+from fim.engine import simulate_params  # noqa: E402
 from fim.model.locus import LocusSpec  # noqa: E402
 from fim.model.params import SimulationParams  # noqa: E402
 
@@ -190,11 +190,7 @@ def run_reports(params: SimulationParams) -> list[dict[str, Any]]:
     Returns:
         One report per replicate.
     """
-    results = fim(
-        params.gene_copies,
-        params.m,
-        params.mu,
-        params.d,
+    results = simulate_params(
         params=params,
         store=_Discard(),
     )

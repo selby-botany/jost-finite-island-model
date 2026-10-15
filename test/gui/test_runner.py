@@ -2,7 +2,7 @@
 
 No Tk import and no display needed anywhere in this file: `ProgressThrottle`
 is a pure clock-driven predicate, and `start_run`'s tests exercise a
-real background thread, a real `fim.engine.fim` call, and the real
+real background thread, a real `fim.engine.simulate_params` call, and the real
 filesystem directly — the `gui` pytest marker (this project's own,
 "constructs real Tk widgets; needs a display") does not apply to any of it.
 Nothing here sleeps or races on wall-clock timing (the determinism
@@ -263,7 +263,7 @@ def test_cancel_during_run_leaves_no_output_directory(
     begins — already observes it and raises `RunCancelledError`
     deterministically, without any wall-clock race. This test constructs
     no Tk widget and needs no display — a real background thread, a real
-    `fim.engine.fim` call, and the real filesystem are the whole test —
+    `fim.engine.simulate_params` call, and the real filesystem are the whole test —
     so it stays here, unmarked, alongside every other test in this file
     that shares exactly that same technical shape, rather than
     acquiring a marker whose own documented meaning ("needs a display")

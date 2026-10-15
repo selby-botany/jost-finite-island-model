@@ -537,11 +537,7 @@ def test_a_rebuilt_convergence_history_matches_the_live_one(tmp_path: Path) -> N
         trajectory_paths[run_id] = path
         return BinaryLogStore(path)
 
-    results = engine.fim(
-        params.gene_copies,
-        params.m,
-        params.mu,
-        params.d,
+    results = engine.simulate_params(
         params=params,
         store_factory=_store_factory,
     )

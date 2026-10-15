@@ -140,7 +140,7 @@ test's own pass/fail criterion depend on*.
 
 | Category | What it may call/assert against | Survives a core refactor? | Reference |
 |---|---|---|---|
-| **fim functional** | Only the public API surface: `fim.engine.fim`, `fim.model`'s re-exported names, `fim.statistics`, `fim.persistence`, `fim.reanalyze`, `fim.viz`, `fim.cli` — assertions compare that surface's output against a published value or a public closed-form formula | Yes, by construction | `fim-simulator-functional-api.md` |
+| **fim functional** | Only the public API surface: `fim.engine.simulate_params`, `fim.model`'s re-exported names, `fim.statistics`, `fim.persistence`, `fim.reanalyze`, `fim.viz`, `fim.cli` — assertions compare that surface's output against a published value or a public closed-form formula | Yes, by construction | `fim-simulator-functional-api.md` |
 | **fim-gui functional** | The above, plus `fim.gui`'s own bridge (`Api`) and the desktop page it drives | Yes (independent of core engine internals; still coupled to the GUI's own contract) | `fim-gui-test-plan.md` |
 | **internal / deep** | Anything private (`_`-prefixed), any submodule never re-exported (`fim.model.operators`, most concretely), or a test-only helper built to mirror the engine's *current* internal mechanics precisely (the exact-recursion oracle in [`test/validation/test_simulator_equilibrium.py`](../test/TESTS.md#validation.test_simulator_equilibrium) is the standing example) | Not necessarily — expected to need re-deriving, not to signal a regression, once the mechanics it mirrors change | this document, §4 and §7 |
 
@@ -508,7 +508,7 @@ without the engine:
 
 ### 4.11 `engine.py`
 
-- A tiny seeded `fim(...)` run is bit-reproducible across two invocations.
+- A tiny seeded `simulate_params(...)` run is bit-reproducible across two invocations.
 - Converged and capped runs both return a valid `RunResult` with the correct
   `reason`.
 - The report computed live at `t=T` equals the report re-computed from the

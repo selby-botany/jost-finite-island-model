@@ -90,7 +90,7 @@ class GuiProgressStore:
     """Decorate a `TrajectoryStore` with progress reporting and cancellation.
 
     Structurally satisfies `TrajectoryStore` (a `Protocol`), so it drops
-    into `fim.engine.fim(..., store=...)` exactly where the real
+    into `fim.engine.simulate_params(..., store=...)` exactly where the real
     `BinaryLogStore` would — the run loop cannot tell the
     difference.
     """

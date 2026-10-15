@@ -20,7 +20,7 @@ import yaml
 from tlog_support import canonical_jsonl
 
 from fim import cli
-from fim.engine import fim
+from fim.engine import simulate_params
 from fim.model.params import SimulationParams
 from fim.persistence.store import InMemoryTrajectoryStore
 from fim.persistence.tlog_export import RECEIPT_SCHEMA, export_trajectory, resolve_log
@@ -61,11 +61,7 @@ def _reference_jsonl(tmp_path: Path, **updates: object) -> bytes:
     _config(config, **updates)
     params = SimulationParams.from_mapping(yaml.safe_load(config.read_text()))
     store = InMemoryTrajectoryStore()
-    result = fim(
-        params.gene_copies,
-        params.m,
-        params.mu,
-        params.d,
+    result = simulate_params(
         params=params,
         store=store,
         run_id=json.loads((tmp_path / "run" / "manifest.json").read_text())["run_id"],

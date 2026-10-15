@@ -660,7 +660,7 @@ def _command_run_batch(
     `--workers`/`--sequential` only ever mean anything under
     `engine_backend="lineal"` — they size (or disable) the
     `ProcessPoolExecutor` only `LinealBackend` ever builds
-    (`fim.engine.fim`'s own `max_workers` docstring). A
+    (`fim.engine.simulate_params`'s own `max_workers` docstring). A
     `"generational"`/`"generational-vector"`/`"auto"` batch runs via
     `fim.engine.run_batch` instead, whose own concurrency/memory control
     is `max_concurrent_replicates` (`--max-concurrent-replicates`,

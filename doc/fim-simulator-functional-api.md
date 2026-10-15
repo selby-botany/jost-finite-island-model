@@ -147,10 +147,10 @@ The one entry point everything else in this project ultimately calls.
   store_factory=None, params=None,
   auto_vector_min_d=DEFAULT_AUTO_VECTOR_MIN_D,
   auto_vector_max_capacity=DEFAULT_AUTO_VECTOR_MAX_CAPACITY) ->
-  EngineBackend`** — the factory `fim()` itself calls; usually reached
-  through `fim()`'s own keywords above, not called directly, but
+  EngineBackend`** — the factory `simulate_params()` itself calls; usually reached
+  through `simulate_params()`'s own keywords above, not called directly, but
   available for a caller that wants a configured backend object without
-  going through `fim()`'s own full public signature. `params` is
+  going through `simulate_params()`'s own full public signature. `params` is
   required, and only actually read, when `engine_backend="auto"`.
 - **`DEFAULT_AUTO_VECTOR_MIN_D`** — the module-level constant
   `auto_vector_min_d` defaults to; its own docstring has the full
@@ -204,7 +204,7 @@ The one entry point everything else in this project ultimately calls.
   always produces the same id; used when a caller does not supply its
   own `run_id`.
 - **`report_for_state(state, params, *, run_id, converged, reason, ...) -> FinalReport`**
-  Builds a `FinalReport` from any `ModelState`, not only a state `fim()`
+  Builds a `FinalReport` from any `ModelState`, not only a state `simulate_params()`
   itself just finished producing — the same function `fim.reanalyze`
   uses to recompute a report at an earlier saved generation. Optional
   `window_statistics` and `converged_statistics` (the statistics a run's
@@ -223,7 +223,7 @@ The plain data describing one finite-island population at a moment in
 time, and the pure functions that build a starting one.
 
 - **`SimulationParams`** (a frozen dataclass) — the full, validated
-  configuration `fim()` takes: `gene_copies` (`PopulationSize`, an `int` gene-copy
+  configuration `simulate_params()` takes: `gene_copies` (`PopulationSize`, an `int` gene-copy
   count or a per-deme tuple), `m` (`Migration`, a scalar rate or a dense
   `d`-by-`d` matrix), `mu` (`MutationRate`, a scalar or per-locus
   tuple), `d` (deme count), `seed`, `loci` (a tuple of `LocusSpec`),
@@ -255,7 +255,7 @@ time, and the pure functions that build a starting one.
   explicit `initial_frequencies` override) the parameters describe.
 
 `fim.model.operators` (Migrate/Mutate/Drift, the actual per-generation
-update rules `fim()` calls in a loop) is **not** part of this list —
+update rules `simulate_params()` calls in a loop) is **not** part of this list —
 see "What is deliberately not here," below.
 
 ## 3. `fim.model.topology` — build a migration matrix
@@ -272,7 +272,7 @@ hand-built matrix for `m`):
   Turns any sparse neighbor map (from the function above, or hand-built,
   as the Crow & Aoki torus scenario tests do for a 2-D lattice this
   project has no dedicated builder for) into the dense, row-stochastic
-  matrix `Migration` and `fim()` actually expect.
+  matrix `Migration` and `simulate_params()` actually expect.
 
 ## 4. `fim.statistics` — differentiation and diversity measures
 
@@ -339,7 +339,7 @@ directly from a frequency table instead of from a live simulation.
   having since been edited, corrupted, or replaced). `engine_backend`/
   `jit` record which engine implementation and JIT setting actually
   produced the run — `None` for anything predating those two fields;
-  `fim()` always resolves and records the real choice, never the
+  `simulate_params()` always resolves and records the real choice, never the
   literal string `"auto"`.
 
 ## 7. `fim.reanalyze` — re-deriving statistics from a saved trajectory
@@ -374,7 +374,7 @@ the CLI's own file output and the desktop app's screens):
 ## What is deliberately not here
 
 - **`fim.model.operators`** — the actual Migrate/Mutate/Drift step
-  functions. `fim()` is the documented way to run generations; nothing
+  functions. `simulate_params()` is the documented way to run generations; nothing
   outside `fim.engine` calls these directly, by this project's own
   stated design (see `fim.model`'s own package docstring).
 - Any name starting with `_` in any module, anywhere — always private,

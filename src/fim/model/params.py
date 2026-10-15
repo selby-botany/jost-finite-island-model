@@ -650,7 +650,7 @@ class SimulationParams:
         """
         _require_integer("d", self.d, minimum=2)
         # A negative seed previously passed this validation and was only
-        # ever caught deep inside `fim()`, when NumPy's PCG64 raises —
+        # ever caught deep inside `simulate_params()`, when NumPy's PCG64 raises —
         # potentially after CLI output directories already exist. Reject
         # it here instead, at construction time. This one bound is also
         # sufficient for every batch replicate's derived seed
@@ -2539,7 +2539,7 @@ def _clamp_replicate_minimum(replicate_minimum: int, n_replicates: int) -> int:
     it no longer reliably is one. A no-op whenever `replicate_minimum`
     is already `<= n_replicates`, and at `n_replicates == 1` regardless
     of this field's own value (adaptive stopping is already inert
-    there, since `fim()` returns via `_run_one` before ever
+    there, since `simulate_params()` returns via `_run_one` before ever
     constructing a replicate monitor).
     """
     if n_replicates < MINIMUM_REPLICATE_COUNT:

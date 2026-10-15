@@ -113,7 +113,7 @@ CLI.
 This choice costs nothing if a GUI is wanted later: the design's
 architecture (design §4) keeps every front end strictly outside
 `engine.py` and the modules it calls, so a GUI would be a new consumer of
-`fim.engine.fim()` and the `TrajectoryStore`, not a rewrite.
+`fim.engine.simulate_params()` and the `TrajectoryStore`, not a rewrite.
 
 ### 2.3 Distribution and update mechanism
 

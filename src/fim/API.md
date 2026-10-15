@@ -198,7 +198,7 @@ Return to the [source-tree orientation](../README.md) or the [developer guide](.
   * [value\_of\_means\_statistics](#fim.convergence.window_statistics.value_of_means_statistics)
 * [fim.engine](#fim.engine)
 * [fim.engine.api](#fim.engine.api)
-  * [fim](#fim.engine.api.fim)
+  * [simulate\_params](#fim.engine.api.simulate_params)
 * [fim.engine.backends](#fim.engine.backends)
   * [EngineBackend](#fim.engine.backends.EngineBackend)
     * [run](#fim.engine.backends.EngineBackend.run)
@@ -1692,7 +1692,7 @@ builds the first window of lanes, `advance` runs a bounded number of
 *ticks* (one `run_batch` loop iteration each: every running lane advances
 one generation, finished lanes are finalized, the accepted prefix is fed to
 the adaptive stopping rule, and freed window slots are refilled), and
-`finalize` returns the same results `fim.engine.fim` returns for the same
+`finalize` returns the same results `fim.engine.simulate_params` returns for the same
 configuration. Between ticks the session sits at a safe point.
 
 `capture` records, at a safe point, the coordinator (how many lanes were
@@ -1811,7 +1811,7 @@ Build the first window of lanes, each through generation zero.
 - `params` - A validated configuration of two or more replicates.
 - `store_factory` - Builds one replicate's own store from its run id.
 - `run_id` - The batch's run identifier; replicate run ids derive
-  from it exactly as `fim.engine.fim` derives them.
+  from it exactly as `fim.engine.simulate_params` derives them.
 - `clock` - Timestamp source; the current UTC time when omitted.
 
 
@@ -1823,7 +1823,7 @@ Build the first window of lanes, each through generation zero.
 **Raises**:
 
 - `UnsupportedSessionError` - If `params` names one replicate or a
-  backend configuration `fim.engine.fim` itself refuses.
+  backend configuration `fim.engine.simulate_params` itself refuses.
 
 <a id="fim.batch_session.BatchSession.restore"></a>
 
@@ -2061,7 +2061,7 @@ discarded from the store first, as `fim.engine.run_batch` does.
 
 **Returns**:
 
-  The same results `fim.engine.fim` returns for this configuration.
+  The same results `simulate_params` returns for this configuration.
 
 
 **Raises**:
@@ -5302,255 +5302,84 @@ reproducible too, not just each individual replicate in isolation.
 
 # fim.engine.api
 
-The `fim()` entry point.
+The engine entry point: `simulate_params`.
 
-<a id="fim.engine.api.fim"></a>
+<a id="fim.engine.api.simulate_params"></a>
 
-#### fim
+#### simulate\_params
 
 ```python
-def fim(gene_copies: PopulationSize,
-        m: Migration,
-        mu: MutationRate,
-        d: int,
-        *,
-        params: SimulationParams,
-        store: TrajectoryStore | None = None,
-        run_id: str | None = None,
-        clock: Clock | None = None,
-        max_workers: int | None = None,
-        store_factory: Callable[[str], TrajectoryStore] | None = None,
-        engine_backend: EngineBackendChoice | None = None,
-        jit: JitOption | None = None,
-        auto_vector_min_d: int | None = None,
-        auto_vector_max_capacity: int | None = None) -> SimulationOutput
+def simulate_params(
+    params: SimulationParams,
+    *,
+    store: TrajectoryStore | None = None,
+    run_id: str | None = None,
+    clock: Clock | None = None,
+    max_workers: int | None = None,
+    store_factory: Callable[[str], TrajectoryStore] | None = None
+) -> SimulationOutput
 ```
 
 Run the finite island model until convergence or the hard cap.
 
-This is the one function everything else in the `fim` package
-(the command line, the desktop app, every test) ultimately calls to
-actually run a simulation. Given a validated configuration
+The engine's one entry point. Given a validated configuration
 (`params`), it simulates one population's generations one at a time
-— migration, then drift, then mutation, each generation, following
-`fim.model.operators.step` — until either its watched statistic(s)
-settle down (convergence) or the hard generation cap is reached,
-then returns everything about the finished run. If
-`SimulationParams.n_replicates` is more than one, it does that whole
-thing repeatedly, once per independently seeded replicate, either
-running every requested replicate or (with `SimulationParams.
-stop_batch_early` set) stopping early once enough replicates have
-run to pin down the answer confidently — see this module's own
-docstring, above, for what "convergence" and "replicate" mean here
-and why both kinds of stopping exist. Everything below this point is
-about the mechanical details of calling this function — which
-arguments exist and why, not what the simulation itself does.
+(migration, then drift, then mutation, following
+`fim.model.operators.step`) until the watched statistic(s) settle or the
+hard generation cap is reached, then returns everything about the
+finished run. If `SimulationParams.n_replicates` is more than one, it
+does that once per independently seeded replicate, running every
+requested replicate or (with `SimulationParams.stop_batch_early` set)
+stopping once enough have run to pin down the answer. Which engine runs
+it is `params.engine_backend` (with `params.jit` and the `auto`
+thresholds): there is no second place to say so.
 
-`N`, `m`, `mu`, and `d` (the four arguments almost every configuration
-is described by — the same shorthand a genetics paper would use) are
-each also already present, in identical form, inside `params`
-itself; both must be given, and must agree, because in practice most
-callers already have a `SimulationParams` object in hand (built once,
-validated once, and passed around everywhere) but a signature built
-entirely out of `params.whatever` is much harder to read at a glance
-than one that names the handful of values that actually matter
-scientifically. `_validate_public_signature` checks the two never
-silently disagree.
+Most callers want `fim.simulate`, which takes a `RunSpec`, always returns
+a `Result`, and can save the run. This function returns the engine's own
+`RunResult` (one, or a tuple for a batch) and is for code that already
+holds `SimulationParams`.
 
 **Arguments**:
 
-- `gene_copies` - Gene-copy count, repeated from ``params`` for the public
-  signature.
-- `m` - Migration rate or matrix, repeated from ``params``.
-- `mu` - Mutation probability, repeated from ``params``.
-- `d` - Deme count, repeated from ``params``.
-- `params` - Full validated run configuration and open parameter bag —
-  everything about how to run the simulation that is not
-  already covered by `gene_copies`/`m`/`mu`/`d` above (how many
-  generations to allow, when to consider it converged, how
-  many replicates to run, and so on). See `fim.model.params.
-  SimulationParams`.
-- `store` - Where to write each generation's own simulated state as
-  the run proceeds — a `TrajectoryStore` (see `fim.
-  persistence.store`); the default writes to memory only
-  (nothing touches disk unless a caller supplies a real,
-  file-backed store). One store is shared across every
-  replicate in a *sequential* batch (each replicate's own rows
-  distinguished by its own `run_id`); it must be left `None`
-  whenever `max_workers` is set below, since two separate OS
-  processes cannot safely write through the very same Python
-  object — use `store_factory` instead for that case. Mutually
-  exclusive with `store_factory`.
-- `run_id` - This run's own identifier, if the caller wants a
-  specific one; left unset, one is computed automatically from
-  the run's own parameters (see `deterministic_run_id`) so the
-  same configuration always gets the same id.
-- `clock` - Where "now" comes from, for the timestamps recorded in a
-  run's own manifest — almost never supplied by a normal
-  caller (the real wall clock is the default); tests supply a
-  fake one to get a fixed, reproducible timestamp instead of
-  "whenever the test happened to run." Under `max_workers`
-  (below), this value has to be sent across a process
-  boundary to reach each worker, which in Python means it must
-  be "picklable" — capable of being serialized to bytes and
-  reconstructed on the other side. An ordinary named function
-  defined at module level is picklable; a closure or a
-  `lambda` is not (Python's own pickling mechanism cannot
-  reconstruct one), so only the former is accepted here when
-  `max_workers` is set.
-- `max_workers` - Opt-in replicate-batch parallelism, for running
-  several replicates' worth of generations at the same time
-  instead of one after another. ``None`` (the default) runs
-  every replicate strictly one at a time, exactly as every
-  prior release of this project did. A number here instead
-  runs replicates in batches of up to that many at once, using
-  real, separate operating-system processes rather than
-  threads — a deliberate choice, since each generation's own
-  simulated state is ordinary Python objects (nested
-  dictionaries of allele frequencies), and CPython (the
-  standard Python interpreter) only ever lets one thread run
-  Python code at a time regardless of how many exist (a
-  well-known limitation called the Global Interpreter Lock, or
-  GIL) — separate *processes*, each with its own interpreter,
-  are the only way to get real, simultaneous computation for
-  work shaped like this. An adaptive `stop_batch_early`
-  stop (see this module's own docstring, above) is still
-  checked strictly in ascending replicate order after each
-  whole batch completes, so a batch can overshoot the exact
-  minimal replicate count by at most ``max_workers - 1``
-  replicates — a small, bounded, and deliberate trade-off for
-  the parallelism, not an approximation of the stopping rule
-  itself.
-- `store_factory` - A function that builds one fresh trajectory store
-  per replicate, given that replicate's own `run_id` — used
-  instead of one shared `store` whenever every replicate needs
-  its own independent place to write (any batch of more than
-  one replicate can use this; it is required, not just
-  useful, once `max_workers` is set, since a worker process
-  cannot share the parent process's own `store` object at
-  all). Whenever `max_workers` is set, this function must
-  itself be picklable in the same sense `clock` above is — an
-  ordinary module-level function, or `functools.partial` built
-  from one, never a closure or a `lambda`. Left unset
-  (``None``, the default), every replicate falls back to
-  sharing whatever `store` was given (or a private, in-memory
-  store if `store` was not given either). `lineal`-only —
-  see `engine_backend` below.
-- `engine_backend` - Which engine implementation actually runs this
-  batch. Left unset (``None``, the default), falls back to
-  `params.engine_backend` — a real `SimulationParams` field
-  (config-file/CLI exposed, see `doc/configuration.md`), so a
-  caller who only builds `params` and never touches this
-  argument still gets whatever `params` itself asked for.
-  Passing this argument explicitly overrides `params` for this
-  one call, the same relationship `gene_copies`/`m`/`mu`/`d` have to
-  `params`, without the "must agree" requirement those four
-  enforce — this one is a pure override, not a redundant
-  cross-check. ``"lineal"`` (both `params`'s own default and
-  this project's original, single-engine behavior) means every
-  caller that sets neither sees no change at all.
-  ``"generational"`` reorders *when* each replicate's
-  generations are computed (every still-active replicate's own
-  generation advances together, fanned out across a real
-  thread pool, rather than one replicate's whole trajectory
-  finishing before the next starts) without changing what is
-- `computed` - for the same seed, its own trajectory is
-  bit-identical to ``"lineal"``'s, regardless of thread
-  interleaving. That includes an adaptive batch
-  (`stop_batch_early` set): every backend judges the
-  adaptive stop on replicates in replicate order, admitting
-  replicate *i* only once replicates 1 to *i* have all
-  finished (`run_batch`'s own docstring), so ``"generational"``
-  keeps the same replicates as ``"lineal"`` and reports the
-  same summary, never the subset that happened to converge
-  first. ``max_workers``/``store_factory`` above are
-  meaningful only for ``"lineal"``; passing either alongside a
-  different `engine_backend` is a `ValueError`, not a silent
-  no-op — ``"generational"``'s own thread count is a separate,
-  not-yet-publicly-reachable knob (see `ThreadedAdvancer`'s own
-  docstring).
-  ``"generational-vector"`` is a real, working third choice —
-  array-native, both mutation models and both migrant sampling
-  modes.
-  It runs `fim.model.vector_block.VectorBlock`, one compiled
-  kernel call per generation over every locus in
-  `operators.step`'s own stage and draw order, and is
-  **identical** to ``"lineal"`` and ``"generational"`` for the
-  same seed on the same platform: every trajectory row (allele
-  identity and frequency bit), the report, the final state and
-  the manifest apart from `engine_backend`. "Same platform"
-  carries the caveat `jit="numba"` already has: the compiled
-  `lgamma`/`log`/`log1p`/`exp` are verified to match CPython
-  only on the development platform, so across machines results
-  agree statistically, not bit for bit. A memory ceiling
-  (`FIM_VECTOR_MEMORY_CEILING_BYTES`, 2 GiB per replicate by
-  default) fails a table too large for the machine with a
-  message naming the remedies.
-  ``"auto"`` picks between ``"generational"`` and
-  ``"generational-vector"`` on `params`'s own behalf, using
-  `auto_vector_min_d` (below) — never ``"lineal"`` (see
-  `build_engine_backend`'s own docstring for why only this one
-  axis is automated so far).
-- `jit` - Whether the chosen backend should JIT-compile its own
-  operators — a change in *how* the result is computed, not
-  *what* is computed (bit-identical to ``"off"`` for the same
-  seed). Left unset (``None``, the default), falls back to
-  `params.jit`, the same relationship `engine_backend` above
-  has to `params.engine_backend`. Meaningful only under
-  ``engine_backend="generational"`` today (JIT-compiles
-  `drift`'s own multinomial draw — needs the optional `numba`
-  dependency, ``pip install fim[jit]``); ``"generational-
-  vector"`` has no separate toggle for this — its own mutate
-  step always requires `numba` internally regardless of this
-  argument, so only ``"off"`` (the default) is accepted there,
-  and passing ``"numba"`` is a `ValueError`; ``"lineal"`` never
-  accepts anything but ``"off"``, permanently — see
-  `build_engine_backend`'s own docstring.
-- `auto_vector_min_d` - The deme-count cutover ``engine_backend=
-  "auto"`` uses to decide between ``"generational"`` and
-  ``"generational-vector"``; ignored under every other
-  `engine_backend` value. Left unset (``None``, the default),
-  falls back to `params.auto_vector_min_d` — see
-  `DEFAULT_AUTO_VECTOR_MIN_D`'s own docstring
-  (`fim.model.params`) for the full benchmark finding behind
-  that field's own default and its known cross-environment
-  caveats before trusting it on meaningfully different
-  hardware.
-- `auto_vector_max_capacity` - The per-locus capacity ceiling
-  ``engine_backend="auto"`` uses alongside `auto_vector_min_d`
-  under ``mutation_model="finite_alleles"`` — ignored under
-  infinite alleles and under every other `engine_backend`
-  value. Left
-  unset (``None``, the default), falls back to `params.
-  auto_vector_max_capacity` — see `DEFAULT_AUTO_VECTOR_MAX_
-  CAPACITY`'s own docstring (`fim.model.params`) for the
-  measured finding behind that field's own default.
+- `params` - The validated run configuration.
+- `store` - Where to write each generation's state as the run proceeds
+- `(default` - in memory only). One store is shared across a
+  sequential batch, each replicate's rows distinguished by its
+  `run_id`; it must be `None` when `max_workers` is set, since two
+  processes cannot share one Python object. Mutually exclusive with
+  `store_factory`.
+- `run_id` - This run's identifier (default: derived from the parameters,
+  see `deterministic_run_id`).
+- `clock` - Source of "now" for manifest timestamps; tests supply a fixed
+  one. Under `max_workers` it crosses a process boundary, so it
+  must be picklable (a module-level function, not a closure).
+- `max_workers` - Run a `lineal` batch's replicates across this many
+  processes instead of one after another. `None` runs them one at
+  a time. The adaptive stop is still judged in replicate order, so
+  a batch can overshoot by at most `max_workers - 1` replicates,
+  whose results are discarded. Meaningful only for `lineal`; any
+  other backend refuses it (see `max_concurrent_replicates` for the
+  generational equivalent).
+- `store_factory` - Builds one fresh store per replicate from its run ID
+  (required, not just useful, with `max_workers`, and picklable in
+  the same sense as `clock`). With neither this nor `store`, a
+  private in-memory store is used.
 
 
 **Returns**:
 
-  One result, or one independently seeded result per replicate.
-  With `SimulationParams.stop_batch_early` off, exactly
-  `n_replicates` replicates run. With it on (the default),
-  replicates stop accumulating as soon as every watched
-  statistic's across-replicate confidence interval tightens to at
-  most `precision` (see
-  `replicate_summary`), or `n_replicates` is reached, whichever
-  comes first — so the returned tuple can be shorter than
-  `n_replicates`.
+  One result, or one independently seeded result per replicate. With
+  `stop_batch_early` on (the default) replicates stop accumulating once
+  every watched statistic's across-replicate interval is within
+  `precision`, so the tuple can be shorter than `n_replicates`.
 
 
 **Raises**:
 
-- `ValueError` - If the named arguments disagree with ``params``,
-  `store` and `store_factory` are both given, `max_workers` is
-  combined with a non-``None`` `store`, `max_workers` is given
-  alongside a non-``"lineal"`` `engine_backend` (there is no
-  process pool anywhere else for it to size — see
-  `build_engine_backend`'s own `max_workers` Args entry), or
-  `jit` is anything but ``"off"`` under `engine_backend="lineal"`
-  (or under `"generational-vector"`, including when `"auto"`
-  resolves to it — see `build_engine_backend`'s own docstring).
+- `ValueError` - `store` and `store_factory` are both given, `max_workers`
+  is combined with a `store` or with a backend other than
+  `"lineal"`, or the backend cannot run (for example it needs
+  `numba`; see `build_engine_backend`).
 
 <a id="fim.engine.backends"></a>
 
@@ -5568,7 +5397,7 @@ class EngineBackend(Protocol)
 
 One way of actually running a batch of replicates to completion.
 
-`fim()` (below) validates its own public arguments, then hands off to
+`simulate_params()` (below) validates its own public arguments, then hands off to
 exactly one backend's own `run` — today, always `LinealBackend`, the
 only implementation. This split exists ahead of a second backend
 actually landing because the engine is already planned to grow more
@@ -5577,7 +5406,7 @@ generation-first scheduler and a vectorized, array-based one are both
 designed but not yet built. Naming today's existing behavior as an
 explicit `EngineBackend` now means a future caller picks among
 backends through an ordinary keyword argument once those exist,
-rather than `fim()` growing an ever-larger hardcoded dispatch of its
+rather than `simulate_params()` growing an ever-larger hardcoded dispatch of its
 own.
 
 Every backend takes exactly the same four "what to run, where"
@@ -5634,7 +5463,7 @@ Configure which `Advancer` drives this backend's own batches.
 - `advancer` - Defaults to `SequentialAdvancer()` — no new
   concurrency, matching `LinealBackend`'s own trajectories
   exactly for the same seed.
-- `store_factory` - See `fim()`'s own docstring. Unlike
+- `store_factory` - See `simulate_params()`'s own docstring. Unlike
   `LinealBackend`, this backend never needs a process
   pool to use one — `run_batch` already writes every
   replicate's own rows through one shared `store`
@@ -5659,7 +5488,7 @@ def run(params: SimulationParams, store: TrajectoryStore | None,
         run_id: str | None, clock: Clock) -> SimulationOutput
 ```
 
-Run `params`'s own replicate(s); see `fim()`'s own docstring.
+Run `params`'s own replicate(s); see `simulate_params()`'s own docstring.
 
 <a id="fim.engine.backends.resolve_auto_engine_backend"></a>
 
@@ -5677,7 +5506,7 @@ def resolve_auto_engine_backend(
 Resolve `engine_backend="auto"` to a concrete, non-`"auto"` choice.
 
 Shared by `build_engine_backend` (to know which backend to actually
-construct) and `fim()` (to know what to record in the run's own
+construct) and `simulate_params()` (to know what to record in the run's own
 manifest as provenance, `RunManifest.engine_backend`) — kept in one
 place so the two can never silently drift apart on what `"auto"`
 actually picked for a given `params`. Never resolves to `"lineal"`
@@ -5754,7 +5583,7 @@ def build_engine_backend(
 ) -> EngineBackend
 ```
 
-Return the configured backend `fim()` should run against.
+Return the configured backend `simulate_params()` should run against.
 
 One function, not a class hierarchy: Python's own first-class
 functions make a `ConcreteFactory` subclass per backend unnecessary
@@ -6311,13 +6140,13 @@ Configure how many blocks/threads this advancer fans out across.
 - `max_workers` - Defaults to `os.cpu_count()` (or 1 if that
   cannot be determined) — the same default reasoning
   `concurrent.futures.ThreadPoolExecutor` itself uses.
-  Deliberately not the same `max_workers` `fim()`'s own
+  Deliberately not the same `max_workers` `simulate_params()`'s own
   public signature accepts — that one is `LinealBackend`-
   only (a process count); reusing the name for a thread
   count here was flagged, not settled, by the design this
   implements, so this constructor's own parameter is
   reachable only by building a `GenerationalBackend`
-  directly, not yet through `fim()` itself.
+  directly, not yet through `simulate_params()` itself.
 - `jit` - Passed through to each block's own `SequentialAdvancer`
   — see its docstring. ``"numba"`` JIT-compiles `drift`'s
   own multinomial draw (`fim.model.operators.drift`'s own
@@ -6674,10 +6503,10 @@ class LinealBackend()
 Today's engine: one replica's whole trajectory, start to finish,
 computed before any cross-replicate bookkeeping happens — either one
 at a time, or `max_workers` at a time across real OS processes. See
-`fim()`'s own docstring, below, for the full behavior; this class's
+`simulate_params()`'s own docstring, below, for the full behavior; this class's
 own `run` is that same behavior, unchanged, moved behind
 `EngineBackend`'s shared contract rather than living directly inside
-`fim()`.
+`simulate_params()`.
 
 <a id="fim.engine.lineal.LinealBackend.__init__"></a>
 
@@ -6694,8 +6523,8 @@ Configure this backend's own concurrency and per-replicate storage.
 
 **Arguments**:
 
-- `max_workers` - See `fim()`'s own docstring.
-- `store_factory` - See `fim()`'s own docstring.
+- `max_workers` - See `simulate_params()`'s own docstring.
+- `store_factory` - See `simulate_params()`'s own docstring.
 
 <a id="fim.engine.lineal.LinealBackend.run"></a>
 
@@ -6706,7 +6535,7 @@ def run(params: SimulationParams, store: TrajectoryStore | None,
         run_id: str | None, clock: Clock) -> SimulationOutput
 ```
 
-Run `params`'s own replicate(s); see `fim()`'s own docstring.
+Run `params`'s own replicate(s); see `simulate_params()`'s own docstring.
 
 <a id="fim.engine.lineal.require_picklable"></a>
 
@@ -7121,7 +6950,7 @@ class RunResult()
 
 Everything one finished simulation run produced.
 
-Whatever calls `fim()` gets back one of these per run (one, or a
+Whatever calls `simulate_params()` gets back one of these per run (one, or a
 tuple of them for a multi-replicate batch — see `fim`'s own
 docstring). It bundles four different things a caller might want,
 each aimed at a different next step:
@@ -8982,7 +8811,7 @@ and confined to its own items.
 
 Resumable execution sessions for one scalar replicate.
 
-A session is the stepwise form of the blocking `fim.engine.fim` call for a
+A session is the stepwise form of the blocking `fim.engine.simulate_params` call for a
 single replicate: `ScalarSession.create` builds generation zero,
 `ScalarSession.advance` runs a bounded number of generations, and
 `ScalarSession.finalize` produces the same `fim.engine.RunResult` the
@@ -9159,7 +8988,7 @@ Build generation zero of a single replicate and persist it.
 - `params` - A validated single-replicate configuration.
 - `store` - Where to persist generations; in memory when omitted.
 - `run_id` - The scientific run identifier; derived from `params`
-  when omitted, exactly as `fim.engine.fim` derives it.
+  when omitted, exactly as `fim.engine.simulate_params` derives it.
 - `clock` - Timestamp source; the current UTC time when omitted.
 
 
@@ -9171,7 +9000,7 @@ Build generation zero of a single replicate and persist it.
 **Raises**:
 
 - `UnsupportedSessionError` - If `params` asks for more than one
-  replicate or names a backend configuration `fim.engine.fim`
+  replicate or names a backend configuration `fim.engine.simulate_params`
   itself refuses.
 
 <a id="fim.execution.ScalarSession.restore"></a>
@@ -9375,7 +9204,7 @@ Build the run's result once it has stopped, and close the store.
 
 **Returns**:
 
-  The same result the blocking `fim.engine.fim` call returns for
+  The same result the blocking `fim.engine.simulate_params` call returns for
   this configuration.
 
 
@@ -9478,7 +9307,7 @@ def resolve_session_backend(params: SimulationParams) -> SessionBackend
 
 Resolve `params.engine_backend` to a concrete backend.
 
-``auto`` is resolved exactly as `fim.engine.fim` resolves it, so a
+``auto`` is resolved exactly as `fim.engine.simulate_params` resolves it, so a
 session never runs a configuration on a different backend than the
 blocking call would.
 
@@ -9764,11 +9593,11 @@ Desktop GUI front end: a pywebview consumer of the existing simulator engine.
 
 Six screens, rendered as a static local `webui/` page (plain HTML/CSS/
 JS) driven entirely through `fim.gui.app.Api` — the JS side's only way
-into Python. Every screen calls `fim.engine.fim`, `fim.viz.scatter`, and
+into Python. Every screen calls `fim.engine.simulate_params`, `fim.viz.scatter`, and
 `fim.model.params.SimulationParams` — the same public API `fim.cli`
 already uses — and never re-implements validation, statistics, or run
 orchestration (`doc/developer.md`'s architecture table: "GUI: call
-`fim.engine.fim`; do not duplicate model logic."). See `doc/
+`fim.engine.simulate_params`; do not duplicate model logic."). See `doc/
 fim-gui-test-plan.md` for how this package's own test suite is
 organized, and `doc/developer.md`'s own architecture table for where
 this package sits relative to the rest of the project.
@@ -13794,7 +13623,7 @@ at all.
 Background-thread batch-run orchestration (`doc/fim-gui-design.md` §7.2).
 
 Under `engine_backend="lineal"`, runs a multi-replicate batch in
-parallel, as real OS processes, via `fim.engine.fim(..., max_workers=N,
+parallel, as real OS processes, via `fim.engine.simulate_params(..., max_workers=N,
 store_factory=...)` — the same call shape `cli._command_run_batch`'s own
 default (non-`--sequential`) path already makes. This reverses the
 Tk-era design's "sequential-only, deliberately" decision: that
@@ -13885,13 +13714,13 @@ Resolve targets, guard the existing target, and start the worker thread.
   runner.
 - `max_workers` - Worker-process count for this batch. **`None` here
   does not mean "run sequentially in-process"** — unlike
-  `fim.engine.fim`'s own `max_workers=None` — it means "use
+  `fim.engine.simulate_params`'s own `max_workers=None` — it means "use
   this GUI's own default" (`default_max_workers()`, matching
   the CLI's own default), a deliberate divergence from the
   engine's convention worth stating explicitly rather than
   leaving implicit, since batch execution is parallel by
   default here. Only meaningful under `params.engine_backend
-  == "lineal"` — `_batch_worker`'s own call to `fim()` omits
+  == "lineal"` — `_batch_worker`'s own call to `simulate_params()` omits
   it entirely for any other backend, which runs through
   `fim.engine.run_batch`'s own concurrency model instead
   (`max_concurrent_replicates`, not this argument); the
@@ -15302,7 +15131,7 @@ Check that a saved run can start or resume now, before any side effect.
 
 - `LifecycleError` - The run is a Draft, or is in any other state.
 - `ValueError` - A saved run cannot run this configuration yet (more
-  than one replicate, or a backend `fim.engine.fim` would refuse).
+  than one replicate, or a backend `fim.engine.simulate_params` would refuse).
 
 <a id="fim.gui.object_bridge.row"></a>
 
@@ -16358,7 +16187,7 @@ Return every run under `results_directory`, newest first.
 
 Background-thread scalar-run orchestration (`doc/fim-gui-design.md` §7.1).
 
-`fim.engine.fim` is a single blocking call; a multi-thousand-generation
+`fim.engine.simulate_params` is a single blocking call; a multi-thousand-generation
 run would freeze the Tk main thread for its whole duration. `start_run`
 runs it on a `threading.Thread` instead, and gets progress and
 cancellation for free from `fim.gui.store.GuiProgressStore` — no change
@@ -16596,7 +16425,7 @@ class GuiProgressStore()
 Decorate a `TrajectoryStore` with progress reporting and cancellation.
 
 Structurally satisfies `TrajectoryStore` (a `Protocol`), so it drops
-into `fim.engine.fim(..., store=...)` exactly where the real
+into `fim.engine.simulate_params(..., store=...)` exactly where the real
 `BinaryLogStore` would — the run loop cannot tell the
 difference.
 
@@ -28672,7 +28501,7 @@ Route each ``run_id`` to its own store, built lazily on first use.
 
 Gives a caller with only one `store_factory` (one replicate's own
 fresh store, built by `run_id` — `LinealBackend`'s own long-standing
-shape, `fim()`'s own docstring) a single object satisfying
+shape, `simulate_params()`'s own docstring) a single object satisfying
 `TrajectoryStore` that a *generation-first* batch (`fim.engine.
 run_batch`, driving `GenerationalBackend`) can pass around as its one
 shared `store` argument without ever needing to know several
@@ -28708,7 +28537,7 @@ Wrap a per-replicate store factory as one shared `TrajectoryStore`.
 **Arguments**:
 
 - `store_factory` - Builds one replicate's own real store, given
-  that replicate's own `run_id` — the same shape `fim()`'s
+  that replicate's own `run_id` — the same shape `simulate_params()`'s
   own `store_factory` argument already has.
 
 <a id="fim.persistence.store.ReplicateFanoutStore.__getstate__"></a>

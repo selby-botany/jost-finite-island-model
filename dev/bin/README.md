@@ -362,7 +362,7 @@ deme counts. If it finds a real threshold, add `auto_vector_min_d:
 this script only measures and reports; it does not change any config
 file, cache, or default on your behalf. `--output` is optional, the
 same as `benchmark-engines`'s own — the file it writes is meant for you
-to read, not for this project to commit or for `fim()` to load
+to read, not for this project to commit or for `simulate_params()` to load
 automatically.
 
 ## `calibrate-convergence-defaults`

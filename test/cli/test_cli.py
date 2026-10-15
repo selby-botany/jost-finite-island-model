@@ -602,7 +602,7 @@ def test_run_rejects_negative_seed_before_creating_the_output_directory(
     never creates an output directory for a run that could not possibly
     start — unlike the prior behavior, where an invalid seed passed
     config validation and only failed once NumPy's PCG64 rejected it deep
-    inside `fim()`.
+    inside `simulate_params()`.
     """
     config = tmp_path / "bad.yaml"
     _write_config(config, seed=-1)
@@ -1406,7 +1406,7 @@ def test_run_batch_succeeds_under_a_non_lineal_engine_backend(
     (`selby/restricted`) closed the gap this replaces
     (`test_run_batch_rejects_a_non_lineal_engine_backend`, this
     function's own former self), a batch under any backend but `lineal`
-    either crashed with `fim.engine.fim`'s own deep, generic
+    either crashed with `fim.engine.simulate_params`'s own deep, generic
     `max_workers/store_factory are lineal-backend-only` error, or — this
     session's own brief, intermediate fix — failed synchronously with a
     clearer but still overly broad rejection of the backend choice

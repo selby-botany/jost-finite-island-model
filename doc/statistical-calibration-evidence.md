@@ -104,7 +104,7 @@ invocation the way the three above were — each replicate costs roughly
 30-generation replicates), so a full run at this scenario's own default
 replicate count was assembled from two separate exploratory sessions
 that used the same seeded, deterministic code path
-(`_run_engine_pooled`/`fim()` with `seed=603000+i`) rather than one
+(`_run_engine_pooled`/`simulate_params()` with `seed=603000+i`) rather than one
 `main()` invocation, and the `d_values` were only captured for 6 of the
 10 `g_st_values` — an oversight in the first exploratory pass, not
 re-run to fix given the per-replicate cost. `mean_g_st`/`sigma_g` use

@@ -10,7 +10,7 @@ from pathlib import Path
 import pytest
 from vector_support import loci, make_params
 
-from fim.engine import fim
+from fim.engine import simulate_params
 from fim.engine.identity import deterministic_run_id
 from fim.model.params import SimulationParams
 from fim.persistence.store import InMemoryTrajectoryStore
@@ -28,11 +28,7 @@ def _clock() -> datetime:
 def _result(params: SimulationParams, **keywords: object) -> Result:
     """Run `params` on the engine and wrap the output as a `Result`."""
     store = InMemoryTrajectoryStore()
-    output = fim(
-        params.gene_copies,
-        params.m,
-        params.mu,
-        params.d,
+    output = simulate_params(
         params=params,
         store=store,
         run_id=deterministic_run_id(params),

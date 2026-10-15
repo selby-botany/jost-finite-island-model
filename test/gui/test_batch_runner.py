@@ -1,7 +1,7 @@
 """Unit and integration tests for `fim.gui.batch_runner`.
 
 No Tk import and no display needed anywhere in this file — real
-background threads, real `fim.engine.fim` batch calls (in parallel, real
+background threads, real `fim.engine.simulate_params` batch calls (in parallel, real
 OS processes, `doc/fim-gui-design.md` §7.2), and the real filesystem, the
 same technical shape as `test/gui/test_runner.py`.
 
@@ -31,9 +31,9 @@ import pytest
 from conftest import assert_none_open, join_or_fail, poll_or_fail
 
 from fim.engine import Clock, SimulationOutput, replicate_summary
-from fim.engine import fim as engine_fim
+from fim.engine import simulate_params as engine_fim
 from fim.gui import batch_runner
-from fim.model.params import Migration, MutationRate, PopulationSize, SimulationParams
+from fim.model.params import SimulationParams
 from fim.persistence.binary_store import BinaryLogStore
 from fim.persistence.manifest import hash_file, read_batch_manifest
 from fim.persistence.saved_run import replicate_index, replicate_output_directory
@@ -151,8 +151,8 @@ def test_start_batch_run_succeeds_for_a_non_lineal_engine_backend(
     (`selby/restricted`) closed the underlying gap, this raised
     synchronously (`test_start_batch_run_raises_a_clear_error_for_a_non_
     lineal_engine_backend`, this test's own former self): `_batch_worker`
-    always called `fim.engine.fim(..., max_workers=N, store_factory=...)`,
-    a calling convention `fim()` accepted only for `engine_backend=
+    always called `fim.engine.simulate_params(..., max_workers=N, store_factory=...)`,
+    a calling convention `simulate_params()` accepted only for `engine_backend=
     "lineal"`. `GenerationalBackend` now honors `store_factory` too
     (`ReplicateFanoutStore`), and `_batch_worker` omits `max_workers`
     for any backend but `lineal` — so this produces exactly the same
@@ -425,8 +425,8 @@ def _capture_max_workers(
 ) -> None:
     """Patch `batch_runner.fim` to record its `max_workers` kwarg, then delegate.
 
-    Typed to match `fim.engine.fim`'s own signature exactly, rather than
-    a generic `*args`/`**kwargs` passthrough — `fim.engine.fim` already
+    Typed to match `fim.engine.simulate_params`'s own signature exactly, rather than
+    a generic `*args`/`**kwargs` passthrough — `fim.engine.simulate_params` already
     is this project's mypy-strict-checked public API, so a wrapper with
     its exact signature costs nothing extra to keep correct and avoids
     a wrapper's own type ever silently drifting from the real one.
@@ -440,12 +440,8 @@ def _capture_max_workers(
     real_fim = engine_fim
 
     def _capturing_fim(
-        n: PopulationSize,
-        m: Migration,
-        mu: MutationRate,
-        d: int,
-        *,
         params: SimulationParams,
+        *,
         store: TrajectoryStore | None = None,
         run_id: str | None = None,
         clock: Clock | None = None,
@@ -454,11 +450,7 @@ def _capture_max_workers(
     ) -> SimulationOutput:
         captured["max_workers"] = max_workers
         return real_fim(
-            n,
-            m,
-            mu,
-            d,
-            params=params,
+            params,
             store=store,
             run_id=run_id,
             clock=clock,
@@ -466,7 +458,7 @@ def _capture_max_workers(
             store_factory=store_factory,
         )
 
-    monkeypatch.setattr(batch_runner, "fim", _capturing_fim)
+    monkeypatch.setattr(batch_runner, "simulate_params", _capturing_fim)
 
 
 def test_start_batch_run_passes_a_real_worker_count_to_fim(
@@ -477,7 +469,7 @@ def test_start_batch_run_passes_a_real_worker_count_to_fim(
     """`max_workers=None` resolves to `default_max_workers()`, never stays `None`.
 
     Direct regression test for the sequential-only gap this whole
-    reconsideration started from: `fim.engine.fim`'s own
+    reconsideration started from: `fim.engine.simulate_params`'s own
     `max_workers=None` means "run sequentially, in-process" — the exact
     behavior `start_batch_run` must never silently fall back to.
     """
@@ -529,7 +521,7 @@ def test_batch_replicates_actually_run_concurrently(
     startup and polling interleaved differently.
 
     The replacement is structural. The real batch runner still reaches
-    the real `fim.engine.fim` and its real `ProcessPoolExecutor`; the only
+    the real `fim.engine.simulate_params` and its real `ProcessPoolExecutor`; the only
     injected dependency is a picklable `clock`. Every worker calls that
     clock while building its replicate lane. The first worker writes its
     PID marker and blocks until a second worker reaches the same point.
@@ -551,12 +543,8 @@ def test_batch_replicates_actually_run_concurrently(
     gate_clock = _ConcurrentStartClock(arrival_directory, release_at=2)
 
     def _fim_with_concurrency_gate(
-        n: PopulationSize,
-        m: Migration,
-        mu: MutationRate,
-        d: int,
-        *,
         params: SimulationParams,
+        *,
         store: TrajectoryStore | None = None,
         run_id: str | None = None,
         clock: Clock | None = None,
@@ -565,10 +553,6 @@ def test_batch_replicates_actually_run_concurrently(
     ) -> SimulationOutput:
         del clock
         return engine_fim(
-            n,
-            m,
-            mu,
-            d,
             params=params,
             store=store,
             run_id=run_id,
@@ -577,7 +561,7 @@ def test_batch_replicates_actually_run_concurrently(
             store_factory=store_factory,
         )
 
-    monkeypatch.setattr(batch_runner, "fim", _fim_with_concurrency_gate)
+    monkeypatch.setattr(batch_runner, "simulate_params", _fim_with_concurrency_gate)
 
     thread = batch_runner.start_batch_run(
         batch_params,

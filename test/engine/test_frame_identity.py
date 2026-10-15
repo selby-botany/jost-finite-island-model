@@ -17,12 +17,13 @@ No test depends on timing; every run is seeded.
 from __future__ import annotations
 
 from collections.abc import Callable
+from dataclasses import replace
 from pathlib import Path
 
 import numpy as np
 import pytest
 
-from fim.engine import fim
+from fim.engine import simulate_params
 from fim.model.params import SimulationParams
 from fim.persistence.binary_store import BinaryLogStore
 from fim.persistence.frame import (
@@ -128,15 +129,10 @@ def _params(**updates: object) -> SimulationParams:
 def _frames_of(params: SimulationParams, backend: str) -> _FrameRecorder:
     """Run `params` on `backend` into a frame recorder and return it."""
     recorder = _FrameRecorder()
-    fim(
-        params.gene_copies,
-        params.m,
-        params.mu,
-        params.d,
-        params=params,
+    simulate_params(
+        params=replace(params, engine_backend=backend),  # type: ignore[arg-type]
         store=recorder,  # type: ignore[arg-type]
         run_id=RUN_ID,
-        engine_backend=backend,  # type: ignore[arg-type]
     )
     return recorder
 
@@ -188,15 +184,10 @@ def test_a_frame_equals_the_rows_the_row_path_writes(backend: str) -> None:
     recorder = _frames_of(params, backend)
     layout = recorder.layouts[RUN_ID]
     rows_store = InMemoryTrajectoryStore()
-    fim(
-        params.gene_copies,
-        params.m,
-        params.mu,
-        params.d,
-        params=params,
+    simulate_params(
+        params=replace(params, engine_backend=backend),  # type: ignore[arg-type]
         store=rows_store,
         run_id=RUN_ID,
-        engine_backend=backend,  # type: ignore[arg-type]
     )
     by_generation: dict[int, list[dict[str, object]]] = {}
     for row in rows_store.read(RUN_ID):
@@ -217,15 +208,10 @@ def _run_to_file(
 ) -> None:
     """Run into a binary log of `store_type` and close it."""
     store = store_type(path)
-    fim(
-        params.gene_copies,
-        params.m,
-        params.mu,
-        params.d,
-        params=params,
+    simulate_params(
+        params=replace(params, engine_backend=backend),  # type: ignore[arg-type]
         store=store,
         run_id=RUN_ID,
-        engine_backend=backend,  # type: ignore[arg-type]
     )
     store.close()
 
@@ -283,11 +269,7 @@ def test_a_batch_gives_every_replicate_its_own_frames() -> None:
         """Build (once) the recorder of one replicate."""
         return recorders.setdefault(run_id, _FrameRecorder())  # type: ignore[return-value]
 
-    fim(
-        params.gene_copies,
-        params.m,
-        params.mu,
-        params.d,
+    simulate_params(
         params=params,
         store_factory=factory,
     )

@@ -1879,7 +1879,7 @@ against a real local `.app` build, where every `n_replicates > 1`
 batch failed instantly with `concurrent.futures.process.
 BrokenProcessPool` ("terminated abruptly") both from the CLI and
 the GUI (`fim.gui.batch_runner` shares the identical
-`ProcessPoolExecutor` machinery, `fim.engine.fim`).
+`ProcessPoolExecutor` machinery, `fim.engine.simulate_params`).
 
 Exercises the real `if __name__ == "__main__":` guard via
 `runpy.run_module` (in-process, no subprocess and no real
@@ -5230,7 +5230,7 @@ Regression test: `load_config` runs before
 never creates an output directory for a run that could not possibly
 start — unlike the prior behavior, where an invalid seed passed
 config validation and only failed once NumPy's PCG64 rejected it deep
-inside `fim()`.
+inside `simulate_params()`.
 
 <a id="cli.test_cli.test_init_writes_parseable_starter_config"></a>
 
@@ -5747,7 +5747,7 @@ Until `20260914-claude-sonnet-5-non-lineal-batch-execution-design.md`
 (`selby/restricted`) closed the gap this replaces
 (`test_run_batch_rejects_a_non_lineal_engine_backend`, this
 function's own former self), a batch under any backend but `lineal`
-either crashed with `fim.engine.fim`'s own deep, generic
+either crashed with `fim.engine.simulate_params`'s own deep, generic
 `max_workers/store_factory are lineal-backend-only` error, or — this
 session's own brief, intermediate fix — failed synchronously with a
 clearer but still overly broad rejection of the backend choice
@@ -8162,7 +8162,7 @@ Ten values leave a one-value first segment, too few for an autocorrelation.
 Tests for `fim.batch_session.BatchSession`.
 
 A batch that is checkpointed, abandoned and restored must finish exactly as
-a batch that never stopped, and both must match the blocking `fim.engine.fim`
+a batch that never stopped, and both must match the blocking `simulate_params`
 call: the same kept replicates in the same order, the same reports and
 manifests, and the same per-replicate trajectory logs. Abandoning is
 simulated in process: the session runs past the checkpoint (finishing,
@@ -8179,7 +8179,7 @@ def test_an_uninterrupted_batch_session_matches_the_blocking_call(
         name: str, tmp_path: Path) -> None
 ```
 
-Advanced to its stop, a session returns what `fim()` returns.
+Advanced to its stop, a session returns what `simulate_params()` returns.
 
 <a id="engine.test_batch_session.test_the_adaptive_case_stops_early_and_the_matched_case_matches_windows"></a>
 
@@ -8367,16 +8367,19 @@ A replicate of a batch is an independent run with seed `seed + index`
 that averages for the window the batch assigned it; its recorded
 parameters (`n_replicates` one, the window explicit) reproduce it exactly.
 
-<a id="engine.test_engine.test_public_signature_mismatches_are_reported"></a>
+<a id="engine.test_engine.test_the_engine_entry_point_takes_one_source_of_truth"></a>
 
-#### test\_public\_signature\_mismatches\_are\_reported
+#### test\_the\_engine\_entry\_point\_takes\_one\_source\_of\_truth
 
 ```python
-def test_public_signature_mismatches_are_reported(
-        tiny_params: SimulationParams) -> None
+def test_the_engine_entry_point_takes_one_source_of_truth() -> None
 ```
 
-The legacy positional arguments must agree with the parameter bag.
+The parameter bag is the only place a configuration is stated.
+
+The earlier entry point repeated `gene_copies`, `m`, `mu`, and `d` beside
+`params`, plus backend overrides that could disagree with it; neither
+exists now, so there is nothing to reconcile.
 
 <a id="engine.test_engine.test_batch_run_uses_explicit_run_id_suffixes"></a>
 
@@ -9801,7 +9804,7 @@ No artificial delay: the first wave of two replicates really does run
 longer than the replicates after it, which average for the shorter
 matched window (asserted below from a fixed-count batch of the same
 seeds), so this is the worked example's own situation in miniature,
-through the public `fim()` entry point.
+through the public `simulate_params()` entry point.
 
 <a id="engine.test_engine.test_vector_adaptive_batch_keeps_the_replicate_order_prefix"></a>
 
@@ -9983,7 +9986,7 @@ installed, per `pip install fim[jit]`) — without this, the two
 monkeypatched tests above could both pass for the wrong reason if the
 guard raised unconditionally. Also the "no `params`" case for the
 capacity ceiling below: with no `params` to read a capacity from,
-that check is skipped entirely rather than erroring — `fim()` itself
+that check is skipped entirely rather than erroring — `simulate_params()` itself
 always passes `params`, so this only matters for this function's own
 lower-level, params-less construction form.
 
@@ -11716,7 +11719,7 @@ The log of every replicate holds the row of its final generation.
 
 # engine.test\_vector\_parity
 
-Backend V's exactness contract, checked through the public `fim()` call.
+Backend V's exactness contract, checked through the public `simulate_params()` call.
 
 For the same configuration and seed, Backend V (`generational-vector`)
 must produce exactly what Backends L (`lineal`) and G (`generational`)
@@ -14975,7 +14978,7 @@ def batch_results(batch_params: SimulationParams) -> tuple[RunResult, ...]
 
 Three real, completed replicates — the shape `_batch_done_payload` consumes.
 
-A real `fim.engine.fim(...)` batch call, not hand-built `RunResult`
+A real `fim.engine.simulate_params(...)` batch call, not hand-built `RunResult`
 fakes — the same "construct the real thing" precedent `test/gui/
 test_batch_runner.py`'s own fixtures already established for this
 exact scale of batch.
@@ -14985,7 +14988,7 @@ matching `batch_runner._batch_worker`'s own real call exactly
 (`batch_runner.py`'s own `run_id = deterministic_run_id(params)`
 then `fim(..., run_id=run_id)`): only then does each replicate's
 own `run_id` actually come out as `f"{batch_run_id}-r{index:03}"`
-— `fim()`'s own `run_id is None` branch gives each replicate an
+— `simulate_params()`'s own `run_id is None` branch gives each replicate an
 independent `deterministic_run_id`, unrelated to any batch run_id.
 
 <a id="gui.test_app_api.test_batch_done_payload_carries_one_replicate_row_per_result"></a>
@@ -16999,7 +17002,7 @@ comparing pixels (the two draws are at different canvas sizes).
 Unit and integration tests for `fim.gui.batch_runner`.
 
 No Tk import and no display needed anywhere in this file — real
-background threads, real `fim.engine.fim` batch calls (in parallel, real
+background threads, real `fim.engine.simulate_params` batch calls (in parallel, real
 OS processes, `doc/fim-gui-design.md` §7.2), and the real filesystem, the
 same technical shape as `test/gui/test_runner.py`.
 
@@ -17131,8 +17134,8 @@ Until `20260914-claude-sonnet-5-non-lineal-batch-execution-design.md`
 (`selby/restricted`) closed the underlying gap, this raised
 synchronously (`test_start_batch_run_raises_a_clear_error_for_a_non_
 lineal_engine_backend`, this test's own former self): `_batch_worker`
-always called `fim.engine.fim(..., max_workers=N, store_factory=...)`,
-a calling convention `fim()` accepted only for `engine_backend=
+always called `fim.engine.simulate_params(..., max_workers=N, store_factory=...)`,
+a calling convention `simulate_params()` accepted only for `engine_backend=
 "lineal"`. `GenerationalBackend` now honors `store_factory` too
 (`ReplicateFanoutStore`), and `_batch_worker` omits `max_workers`
 for any backend but `lineal` — so this produces exactly the same
@@ -17283,7 +17286,7 @@ def test_start_batch_run_passes_a_real_worker_count_to_fim(
 `max_workers=None` resolves to `default_max_workers()`, never stays `None`.
 
 Direct regression test for the sequential-only gap this whole
-reconsideration started from: `fim.engine.fim`'s own
+reconsideration started from: `fim.engine.simulate_params`'s own
 `max_workers=None` means "run sequentially, in-process" — the exact
 behavior `start_batch_run` must never silently fall back to.
 
@@ -17318,7 +17321,7 @@ this test on `dev` and passed it on `staging` solely because worker
 startup and polling interleaved differently.
 
 The replacement is structural. The real batch runner still reaches
-the real `fim.engine.fim` and its real `ProcessPoolExecutor`; the only
+the real `fim.engine.simulate_params` and its real `ProcessPoolExecutor`; the only
 injected dependency is a picklable `clock`. Every worker calls that
 clock while building its replicate lane. The first worker writes its
 PID marker and blocks until a second worker reaches the same point.
@@ -24613,7 +24616,7 @@ Unit and integration tests for `fim.gui.runner`.
 
 No Tk import and no display needed anywhere in this file: `ProgressThrottle`
 is a pure clock-driven predicate, and `start_run`'s tests exercise a
-real background thread, a real `fim.engine.fim` call, and the real
+real background thread, a real `fim.engine.simulate_params` call, and the real
 filesystem directly — the `gui` pytest marker (this project's own,
 "constructs real Tk widgets; needs a display") does not apply to any of it.
 Nothing here sleeps or races on wall-clock timing (the determinism
@@ -24764,7 +24767,7 @@ generation 0, made unconditionally before the convergence loop
 begins — already observes it and raises `RunCancelledError`
 deterministically, without any wall-clock race. This test constructs
 no Tk widget and needs no display — a real background thread, a real
-`fim.engine.fim` call, and the real filesystem are the whole test —
+`fim.engine.simulate_params` call, and the real filesystem are the whole test —
 so it stays here, unmarked, alongside every other test in this file
 that shares exactly that same technical shape, rather than
 acquiring a marker whose own documented meaning ("needs a display")
@@ -37922,7 +37925,7 @@ def test_manifest_engine_backend_and_jit_default_to_none_and_round_trip(
 
 Mirrors `test_manifest_artifacts_default_to_none_and_round_trip_
 when_present` — same pattern, for the two provenance fields
-`fim()` stamps onto a run's own manifest (`RunManifest.engine_
+`simulate_params()` stamps onto a run's own manifest (`RunManifest.engine_
 backend`'s own docstring; `20260901-claude-sonnet-5-fim-engine-
 backend-factory-design.md` §7.4).
 
@@ -42738,7 +42741,7 @@ and `doc/fim-simulator-detailed-test-plan.md` for the full three-way
 taxonomy this project uses -- fim functional, fim-gui functional, and
 internal/deep):
 
-* **Functional** tests run the real :func:`fim.engine.fim` simulator and
+* **Functional** tests run the real :func:`fim.engine.simulate_params` simulator and
   assert its output directly against a published literature value or a
   public closed-form formula (``equilibrium_g_st``/``equilibrium_d`` and
   siblings, in `fim.statistics`) -- nothing in the assertion itself
@@ -43470,7 +43473,7 @@ Same underlying claim as `test-manifest.yaml`'s own `M1`-`M5`
 migration panel (same `N`, `mu`, `d`, and even the same five `m`
 values), but checked against this module's own exact identity-
 recursion oracle (`_identity_fixed_point`) rather than a chain of
-single-seeded `fim()` engine runs compared with a fixed `1e-9`
+single-seeded `simulate_params()` engine runs compared with a fixed `1e-9`
 tolerance. That design cannot be ported as specified: it compares
 single stochastic realizations, not expectations, and gives each
 of the five runs its own independent convergence horizon.

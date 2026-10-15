@@ -8,7 +8,7 @@ from typing import Any
 
 import pytest
 
-from fim.engine import RunResult, fim
+from fim.engine import RunResult, simulate_params
 from fim.execution import ScalarSession, UnsupportedSessionError
 from fim.model.params import SimulationParams
 from fim.persistence.binary_store import BinaryLogStore
@@ -42,11 +42,7 @@ def _params(**changes: Any) -> SimulationParams:
 
 def _blocking(params: SimulationParams, store: Any = None) -> RunResult:
     """Run `params` through the blocking `fim` call."""
-    result = fim(
-        params.gene_copies,
-        params.m,
-        params.mu,
-        params.d,
+    result = simulate_params(
         params=params,
         store=store if store is not None else InMemoryTrajectoryStore(),
         clock=_clock,

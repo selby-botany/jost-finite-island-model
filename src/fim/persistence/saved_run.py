@@ -23,7 +23,7 @@ from pathlib import Path
 from fim import __version__, paths
 from fim.config.defaults import DEFAULT_PAIRWISE_MAX_DEMES
 from fim.config.expert import ExpertSettings
-from fim.engine import RunResult, fim, replicate_summary
+from fim.engine import RunResult, replicate_summary, simulate_params
 from fim.engine.identity import deterministic_run_id
 from fim.engine.records import Clock, format_timestamp, utc_now
 from fim.model.params import SimulationParams
@@ -233,11 +233,7 @@ def save_run(
             with BinaryLogStore(
                 targets["trajectory"], **log_options(params.expert)
             ) as store:
-                output = fim(
-                    params.gene_copies,
-                    params.m,
-                    params.mu,
-                    params.d,
+                output = simulate_params(
                     params=params,
                     store=store,
                     run_id=run_id,
@@ -251,11 +247,7 @@ def save_run(
         return (output,)
     started_at = format_timestamp(now())
     with paths.atomic_directory(directory) as working_directory:
-        batch = fim(
-            params.gene_copies,
-            params.m,
-            params.mu,
-            params.d,
+        batch = simulate_params(
             params=params,
             run_id=run_id,
             clock=clock,

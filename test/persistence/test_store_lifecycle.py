@@ -23,7 +23,7 @@ from conftest import assert_none_open
 
 from fim import paths
 from fim.config.expert import ExpertSettings
-from fim.engine import SequentialAdvancer, fim, run_batch
+from fim.engine import SequentialAdvancer, run_batch, simulate_params
 from fim.model.allele import AlleleId
 from fim.model.locus import LocusSpec
 from fim.model.params import SimulationParams
@@ -176,11 +176,7 @@ def test_engine_closes_the_store_it_was_given_and_the_result_still_reads(
     store = BinaryLogStore(tmp_path / "trajectory.tlog")
     params = _params()
 
-    result = fim(
-        params.gene_copies,
-        params.m,
-        params.mu,
-        params.d,
+    result = simulate_params(
         params=params,
         store=store,
     )
@@ -225,14 +221,9 @@ def test_engine_closes_the_store_when_the_run_raises(
     params = _params(max_generations=20)
 
     with pytest.raises(RuntimeError, match="cancelled"):
-        fim(
-            params.gene_copies,
-            params.m,
-            params.mu,
-            params.d,
-            params=params,
+        simulate_params(
+            params=replace(params, engine_backend=backend),  # type: ignore[arg-type]
             store=store,
-            engine_backend=backend,  # type: ignore[arg-type]
         )
 
     assert not store.is_open()

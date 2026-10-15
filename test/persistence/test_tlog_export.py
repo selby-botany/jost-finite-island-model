@@ -18,13 +18,14 @@ from __future__ import annotations
 import hashlib
 import json
 from collections.abc import Iterator
+from dataclasses import replace
 from pathlib import Path
 
 import numpy as np
 import pytest
 from tlog_support import canonical_jsonl
 
-from fim.engine import fim
+from fim.engine import simulate_params
 from fim.model.params import SimulationParams
 from fim.persistence.frame import FrameLayout, TrajectoryFrame, frame_to_rows
 from fim.persistence.store import InMemoryTrajectoryStore, TrajectoryRow
@@ -310,30 +311,20 @@ def _run_both(
         `"equilibrium_trajectory"` when the run has one.
     """
     memory = InMemoryTrajectoryStore()
-    fim(
-        params.gene_copies,
-        params.m,
-        params.mu,
-        params.d,
-        params=params,
+    simulate_params(
+        params=replace(params, engine_backend=backend),  # type: ignore[arg-type]
         store=memory,
         run_id="run-real",
-        engine_backend=backend,  # type: ignore[arg-type]
     )
     reference = {"trajectory": canonical_jsonl(memory.read("run-real"))}
     ancestral = list(memory.equilibrium_store("run-real").read("run-real"))
     if ancestral:
         reference["equilibrium_trajectory"] = canonical_jsonl(ancestral)
     tap = _FrameTap()
-    fim(
-        params.gene_copies,
-        params.m,
-        params.mu,
-        params.d,
-        params=params,
+    simulate_params(
+        params=replace(params, engine_backend=backend),  # type: ignore[arg-type]
         store=tap,
         run_id="run-real",
-        engine_backend=backend,  # type: ignore[arg-type]
     )
     return tap, reference
 

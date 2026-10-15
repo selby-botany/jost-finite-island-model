@@ -101,7 +101,7 @@ reproducible too, not just each individual replicate in isolation.
 from __future__ import annotations
 
 from fim.engine.api import (
-    fim,
+    simulate_params,
 )
 from fim.engine.backends import (
     EngineBackend,
@@ -167,7 +167,6 @@ __all__ = [
     "bootstrap_replicate_summary",
     "build_engine_backend",
     "deterministic_run_id",
-    "fim",
     "history_free_statistic_values",
     "pair_statistic_values",
     "pooled_convergence_histories",
@@ -177,5 +176,6 @@ __all__ = [
     "report_statistic",
     "reports_summary",
     "run_batch",
+    "simulate_params",
     "tracked_statistic_values",
 ]

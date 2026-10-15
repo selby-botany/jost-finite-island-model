@@ -5,7 +5,7 @@ builds the first window of lanes, `advance` runs a bounded number of
 *ticks* (one `run_batch` loop iteration each: every running lane advances
 one generation, finished lanes are finalized, the accepted prefix is fed to
 the adaptive stopping rule, and freed window slots are refilled), and
-`finalize` returns the same results `fim.engine.fim` returns for the same
+`finalize` returns the same results `fim.engine.simulate_params` returns for the same
 configuration. Between ticks the session sits at a safe point.
 
 `capture` records, at a safe point, the coordinator (how many lanes were
@@ -190,7 +190,7 @@ class BatchSession:
             params: A validated configuration of two or more replicates.
             store_factory: Builds one replicate's own store from its run id.
             run_id: The batch's run identifier; replicate run ids derive
-                from it exactly as `fim.engine.fim` derives them.
+                from it exactly as `fim.engine.simulate_params` derives them.
             clock: Timestamp source; the current UTC time when omitted.
 
         Returns:
@@ -198,7 +198,7 @@ class BatchSession:
 
         Raises:
             UnsupportedSessionError: If `params` names one replicate or a
-                backend configuration `fim.engine.fim` itself refuses.
+                backend configuration `fim.engine.simulate_params` itself refuses.
         """
         engine_backend = check_batch_session_support(params)
         session = cls(
@@ -473,7 +473,7 @@ class BatchSession:
         discarded from the store first, as `fim.engine.run_batch` does.
 
         Returns:
-            The same results `fim.engine.fim` returns for this configuration.
+            The same results `simulate_params` returns for this configuration.
 
         Raises:
             ValueError: If the batch has not stopped, or the session was

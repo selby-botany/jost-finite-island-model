@@ -31,7 +31,7 @@ step, no framework) rendered inside a native window (WKWebView on
 macOS, WebView2 on Windows, WebKitGTK on Linux), driven entirely through
 one bridge class, `fim.gui.app.Api`, that the JS side calls into and
 gets plain JSON-serializable values back from. Every screen calls
-`fim.engine.fim`, `fim.viz.scatter`, and `fim.model.params.
+`fim.engine.simulate_params`, `fim.viz.scatter`, and `fim.model.params.
 SimulationParams` — the same public API `fim.cli` already uses (see
 `doc/fim-simulator-functional-api.md`) — and never duplicates
 validation, statistics, or run orchestration of its own. `doc/
@@ -63,7 +63,7 @@ default `pytest` run.
 | `test_app.py` | 8 | yes | The walking skeleton: the window actually builds, loads `webui/index.html`, and the `Api` bridge round-trips both in-process and cross-process. |
 | `test_app_api.py` | 131 | no | Every `Api` bridge method's own logic, called as plain Python — form/config marshaling, batch-progress payload shaping, statistic formatting, recent-runs/Home enrichment listing, presets, Explore predictions, Compare — never touching `webview.windows[0]`. |
 | `test_batch_results_screen.py` | 5 | yes | The run view's `completed` state for a batch run: pooled scatter, confidence-interval bars, per-replicate table, expandable replicate list. |
-| `test_batch_runner.py` | 13 | no | `fim.gui.batch_runner` — real background threads, real parallel `fim.engine.fim` batch calls. |
+| `test_batch_runner.py` | 13 | no | `fim.gui.batch_runner` — real background threads, real parallel `fim.engine.simulate_params` batch calls. |
 | `test_batch_running.py` | 1 | yes | A real batch run reaching the bridge end to end (`Api.start_run` → `batch_runner.start_batch_run` → message draining). |
 | `test_branding.py` | 5 | no | Static guards for the locally bundled Selby scientific visual identity (fonts, icon language, license carve-out) — source-file checks, no display. |
 | `test_close_guard.py` | 23 | no | The close dialog's Python half on `Api` with stand-in windows and workers: the veto or allow decision, `finish_close`, `stop_active_work`, declined late bridge calls, and the named give-up warning. |
@@ -90,7 +90,7 @@ default `pytest` run.
 | `test_presets_screen.py` | 8 | yes | The Presets picker: loading an example, saving/deleting a user preset, "View YAML"/"Copy to clipboard," and "Duplicate current configuration." |
 | `test_recent_runs.py` | 7 | no | `fim.gui.recent_runs` — real manifests, written by a real `cli.main(["run", ...])` call, not hand-constructed. |
 | `test_results_screen.py` | 7 | yes | The run view's `completed` state for a single scalar run, including the σ-band and predicted-equilibrium overlays. |
-| `test_runner.py` | 9 | no | `fim.gui.runner` — `ProgressThrottle`'s clock-driven predicate, and a real background thread running a real `fim.engine.fim` call. |
+| `test_runner.py` | 9 | no | `fim.gui.runner` — `ProgressThrottle`'s clock-driven predicate, and a real background thread running a real `fim.engine.simulate_params` call. |
 | `test_running_screen.py` | 6 | yes | The running screen: starting a real background run and the page reacting to its progress/done/cancelled messages, including the live-updating trajectory panel. |
 | `test_shutdown_deadman.py` | 14 | no | The GUI's own shutdown deadman timer (`fim.gui.app`) — window-free; armed only after `webview.start()` has already returned. |
 | `test_store.py` | 21 | no | `GuiProgressStore`/`LiveProgressStore`/`RunCancelledError` against an in-memory trajectory fake or plain files, no thread and no real subprocess. |
@@ -130,7 +130,7 @@ test source during the 2026-09-11 documentation drift audit, below).
   test.** Where a test's whole point is background execution (a run
   actually running while the UI stays responsive, a batch actually using
   several OS processes), the test uses a real thread or a real
-  `fim.engine.fim` call rather than mocking the mechanism itself — the
+  `fim.engine.simulate_params` call rather than mocking the mechanism itself — the
   same "stub the stochastic dependency, never fake the thing you are
   actually testing" principle `doc/fim-simulator-detailed-test-plan.md`'s
   determinism contract states generally.

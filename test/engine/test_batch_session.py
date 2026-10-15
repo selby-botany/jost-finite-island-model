@@ -1,7 +1,7 @@
 """Tests for `fim.batch_session.BatchSession`.
 
 A batch that is checkpointed, abandoned and restored must finish exactly as
-a batch that never stopped, and both must match the blocking `fim.engine.fim`
+a batch that never stopped, and both must match the blocking `simulate_params`
 call: the same kept replicates in the same order, the same reports and
 manifests, and the same per-replicate trajectory logs. Abandoning is
 simulated in process: the session runs past the checkpoint (finishing,
@@ -25,7 +25,7 @@ from fim.batch_session import (
     BatchSession,
     check_batch_session_support,
 )
-from fim.engine import RunResult, fim
+from fim.engine import RunResult, simulate_params
 from fim.engine.identity import derive_replicate_run_id
 from fim.execution import (
     ScalarSession,
@@ -178,9 +178,7 @@ def _resume(
 
 def _reference(params: SimulationParams) -> tuple[RunResult, ...]:
     """Return what the blocking call produces for `params`."""
-    output = fim(
-        params.gene_copies, params.m, params.mu, params.d, params=params, clock=_clock
-    )
+    output = simulate_params(params=params, clock=_clock)
     assert isinstance(output, tuple)
     return output
 
@@ -238,7 +236,7 @@ def _vector_ready(name: str) -> None:
 def test_an_uninterrupted_batch_session_matches_the_blocking_call(
     name: str, tmp_path: Path
 ) -> None:
-    """Advanced to its stop, a session returns what `fim()` returns."""
+    """Advanced to its stop, a session returns what `simulate_params()` returns."""
     _vector_ready(name)
     params = _case_params(name)
     _assert_same_results(_whole(params, tmp_path), _reference(params))

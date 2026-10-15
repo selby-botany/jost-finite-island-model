@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from fim.engine import fim
+from fim.engine import simulate_params
 from fim.engine.identity import deterministic_run_id
 from fim.engine.records import Clock
 from fim.errors import ConfigurationError, UnsupportedError
@@ -74,11 +74,7 @@ def simulate(
             raise UnsupportedError(str(error)) from error
         return result_from_runs(runs, run_id=run_id, params=params, spec=spec)
     try:
-        output = fim(
-            params.gene_copies,
-            params.m,
-            params.mu,
-            params.d,
+        output = simulate_params(
             params=params,
             store=InMemoryTrajectoryStore(),
             run_id=run_id,

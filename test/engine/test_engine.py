@@ -1,6 +1,7 @@
 """End-to-end tests for the deterministic library engine."""
 
 import functools
+import inspect
 import json
 import math
 import statistics
@@ -30,7 +31,6 @@ from fim.engine import (
     bootstrap_replicate_summary,
     build_engine_backend,
     deterministic_run_id,
-    fim,
     history_free_statistic_values,
     lanes,
     pair_statistic_values,
@@ -39,6 +39,7 @@ from fim.engine import (
     report_for_state,
     reports_summary,
     run_batch,
+    simulate_params,
 )
 from fim.engine import backends as engine_backends
 from fim.engine import batch as engine_batch
@@ -107,11 +108,7 @@ def _tiny_config() -> dict[str, object]:
 
 def _run(params: SimulationParams) -> RunResult:
     """Run one scalar configuration and narrow the output type."""
-    result = fim(
-        params.gene_copies,
-        params.m,
-        params.mu,
-        params.d,
+    result = simulate_params(
         params=params,
         clock=_clock,
     )
@@ -192,11 +189,7 @@ def test_replicates_are_independently_reproducible(
     )
     store = InMemoryTrajectoryStore()
 
-    output = fim(
-        batched_params.gene_copies,
-        batched_params.m,
-        batched_params.mu,
-        batched_params.d,
+    output = simulate_params(
         params=batched_params,
         store=store,
         clock=_clock,
@@ -211,26 +204,21 @@ def test_replicates_are_independently_reproducible(
     assert output[1].params.seed == tiny_params.seed + 1
 
 
-def test_public_signature_mismatches_are_reported(
-    tiny_params: SimulationParams,
-) -> None:
-    """The legacy positional arguments must agree with the parameter bag."""
-    cases = (
-        (21, tiny_params.m, tiny_params.mu, tiny_params.d, "gene_copies"),
-        (tiny_params.gene_copies, 0.2, tiny_params.mu, tiny_params.d, "m"),
-        (tiny_params.gene_copies, tiny_params.m, 0.2, tiny_params.d, "mu"),
-        (tiny_params.gene_copies, tiny_params.m, tiny_params.mu, 3, "d"),
-    )
-    for population_size, migration, mutation, demes, message in cases:
-        with pytest.raises(ValueError, match=message):
-            fim(
-                population_size,
-                migration,
-                mutation,
-                demes,
-                params=tiny_params,
-                clock=_clock,
-            )
+def test_the_engine_entry_point_takes_one_source_of_truth() -> None:
+    """The parameter bag is the only place a configuration is stated.
+
+    The earlier entry point repeated `gene_copies`, `m`, `mu`, and `d` beside
+    `params`, plus backend overrides that could disagree with it; neither
+    exists now, so there is nothing to reconcile.
+    """
+    assert list(inspect.signature(simulate_params).parameters) == [
+        "params",
+        "store",
+        "run_id",
+        "clock",
+        "max_workers",
+        "store_factory",
+    ]
 
 
 def test_batch_run_uses_explicit_run_id_suffixes(
@@ -238,11 +226,7 @@ def test_batch_run_uses_explicit_run_id_suffixes(
 ) -> None:
     """Caller-provided batch IDs receive deterministic one-based suffixes."""
     params = SimulationParams.from_mapping({**tiny_params.to_dict(), "n_replicates": 2})
-    output = fim(
-        params.gene_copies,
-        params.m,
-        params.mu,
-        params.d,
+    output = simulate_params(
         params=params,
         run_id="batch",
         clock=_clock,
@@ -257,9 +241,7 @@ def test_stopping_the_batch_early_off_is_unaffected_by_the_adaptive_machinery(
     """`stop_batch_early` off keeps the fixed-count batch loop exact."""
     params = SimulationParams.from_mapping({**tiny_params.to_dict(), "n_replicates": 4})
     assert params.batch_precision is None
-    output = fim(
-        params.gene_copies, params.m, params.mu, params.d, params=params, clock=_clock
-    )
+    output = simulate_params(params=params, clock=_clock)
     assert isinstance(output, tuple)
     assert len(output) == 4
 
@@ -278,9 +260,7 @@ def test_a_generous_precision_can_stop_the_batch_before_the_cap() -> None:
             "stop_batch_early": True,
         }
     )
-    output = fim(
-        params.gene_copies, params.m, params.mu, params.d, params=params, clock=_clock
-    )
+    output = simulate_params(params=params, clock=_clock)
     assert isinstance(output, tuple)
     assert len(output) == 3
 
@@ -308,11 +288,7 @@ def test_generational_adaptive_stop_discards_abandoned_lanes_own_rows() -> None:
     )
     store = InMemoryTrajectoryStore()
 
-    output = fim(
-        params.gene_copies,
-        params.m,
-        params.mu,
-        params.d,
+    output = simulate_params(
         params=params,
         store=store,
         clock=_clock,
@@ -385,9 +361,7 @@ def test_run_batch_bounds_concurrently_active_lanes_to_the_configured_window(
     monkeypatch.setattr(engine_batch, "build_replica_lane", _counting_build)
     monkeypatch.setattr(engine_batch, "finalize_replica_lane", _counting_finalize)
 
-    output = fim(
-        params.gene_copies, params.m, params.mu, params.d, params=params, clock=_clock
-    )
+    output = simulate_params(params=params, clock=_clock)
 
     assert isinstance(output, tuple)
     assert len(output) == 6
@@ -430,20 +404,12 @@ def test_max_concurrent_replicates_does_not_change_what_a_batch_computes() -> No
             "engine_backend": "generational",
         }
     )
-    unbounded = fim(
-        base_params.gene_copies,
-        base_params.m,
-        base_params.mu,
-        base_params.d,
+    unbounded = simulate_params(
         params=base_params,
         clock=_clock,
     )
     windowed_params = replace(base_params, max_concurrent_replicates=2)
-    windowed = fim(
-        windowed_params.gene_copies,
-        windowed_params.m,
-        windowed_params.mu,
-        windowed_params.d,
+    windowed = simulate_params(
         params=windowed_params,
         clock=_clock,
     )
@@ -490,9 +456,7 @@ def test_replicate_minimum_above_n_replicates_runs_to_completion() -> None:
     )
     assert params.replicate_minimum == 3
 
-    output = fim(
-        params.gene_copies, params.m, params.mu, params.d, params=params, clock=_clock
-    )
+    output = simulate_params(params=params, clock=_clock)
     assert isinstance(output, tuple)
     assert len(output) == 3
 
@@ -527,9 +491,7 @@ def test_replicate_tolerance_never_stops_on_a_permanently_undefined_statistic() 
             ({AlleleId(0): 1.0},),
         ),
     )
-    output = fim(
-        params.gene_copies, params.m, params.mu, params.d, params=params, clock=_clock
-    )
+    output = simulate_params(params=params, clock=_clock)
     assert isinstance(output, tuple)
     assert len(output) == 5
     assert all(result.report["G_ST"] is None for result in output)
@@ -541,9 +503,7 @@ def test_replicate_summary_reports_a_confidence_interval_per_statistic(
 ) -> None:
     """The batch summary covers every statistic with at least two samples."""
     params = SimulationParams.from_mapping({**tiny_params.to_dict(), "n_replicates": 5})
-    output = fim(
-        params.gene_copies, params.m, params.mu, params.d, params=params, clock=_clock
-    )
+    output = simulate_params(params=params, clock=_clock)
     assert isinstance(output, tuple)
 
     summary = replicate_summary(output)
@@ -569,9 +529,7 @@ def test_replicate_summary_reports_a_real_sample_standard_deviation(
     report (see the bootstrap counterpart test below).
     """
     params = SimulationParams.from_mapping({**tiny_params.to_dict(), "n_replicates": 5})
-    output = fim(
-        params.gene_copies, params.m, params.mu, params.d, params=params, clock=_clock
-    )
+    output = simulate_params(params=params, clock=_clock)
     assert isinstance(output, tuple)
 
     summary = replicate_summary(output)
@@ -619,9 +577,7 @@ def test_replicate_summary_covers_every_numeric_final_report_key(
     }
     numeric_fields = set(FinalReport.__annotations__) - non_statistic_fields
     params = SimulationParams.from_mapping({**tiny_params.to_dict(), "n_replicates": 5})
-    output = fim(
-        params.gene_copies, params.m, params.mu, params.d, params=params, clock=_clock
-    )
+    output = simulate_params(params=params, clock=_clock)
     assert isinstance(output, tuple)
 
     summary = replicate_summary(output)
@@ -677,9 +633,7 @@ def test_pooled_convergence_histories_carries_a_stopped_replicates_value_forward
         n_replicates=5,
         stop_batch_early=False,
     )
-    output = fim(
-        params.gene_copies, params.m, params.mu, params.d, params=params, clock=_clock
-    )
+    output = simulate_params(params=params, clock=_clock)
     assert isinstance(output, tuple)
     final_generations = sorted(result.report["generation"] for result in output)
     # A real precondition for the rest of this test to mean anything:
@@ -742,11 +696,7 @@ def test_pooled_convergence_histories_requires_at_least_two_results(
     tiny_params: SimulationParams,
 ) -> None:
     """The same "single replicate has no interval" guard `replicate_summary` applies."""
-    output = fim(
-        tiny_params.gene_copies,
-        tiny_params.m,
-        tiny_params.mu,
-        tiny_params.d,
+    output = simulate_params(
         params=tiny_params,
     )
     assert isinstance(output, RunResult)
@@ -779,7 +729,7 @@ def test_pooled_convergence_histories_drops_a_replicate_with_an_interior_gap(
     exactly what a real run actually produced.
     """
     params = replace(tiny_params, n_replicates=2)
-    output = fim(params.gene_copies, params.m, params.mu, params.d, params=params)
+    output = simulate_params(params=params)
     assert isinstance(output, tuple)
     assert len(output) == 2
     intact, corrupted = output
@@ -812,9 +762,7 @@ def test_sequential_batch_derives_valid_seeds_at_the_seed_zero_boundary() -> Non
     params = SimulationParams.from_mapping(
         {**_tiny_config(), "seed": 0, "n_replicates": 4}
     )
-    output = fim(
-        params.gene_copies, params.m, params.mu, params.d, params=params, clock=_clock
-    )
+    output = simulate_params(params=params, clock=_clock)
     assert isinstance(output, tuple)
     assert [result.params.seed for result in output] == [0, 1, 2, 3]
 
@@ -830,9 +778,7 @@ def test_parallel_batch_derives_valid_seeds_at_the_seed_zero_boundary() -> None:
     params = SimulationParams.from_mapping(
         {**_tiny_config(), "seed": 0, "n_replicates": 4}
     )
-    output = fim(
-        params.gene_copies, params.m, params.mu, params.d, params=params, max_workers=2
-    )
+    output = simulate_params(params=params, max_workers=2)
     assert isinstance(output, tuple)
     assert sorted(result.params.seed for result in output) == [0, 1, 2, 3]
 
@@ -841,10 +787,8 @@ def test_max_workers_produces_the_same_replicates_as_sequential_execution() -> N
     """Parallel batching changes nothing about the computed results."""
     params = SimulationParams.from_mapping({**_tiny_config(), "n_replicates": 4})
 
-    sequential = fim(params.gene_copies, params.m, params.mu, params.d, params=params)
-    parallel = fim(
-        params.gene_copies, params.m, params.mu, params.d, params=params, max_workers=2
-    )
+    sequential = simulate_params(params=params)
+    parallel = simulate_params(params=params, max_workers=2)
 
     assert isinstance(sequential, tuple)
     assert isinstance(parallel, tuple)
@@ -858,11 +802,7 @@ def test_max_workers_produces_the_same_replicates_as_sequential_execution() -> N
 def test_store_factory_gives_every_sequential_replicate_its_own_store() -> None:
     """`store_factory` also works for the ordinary sequential batch loop."""
     params = SimulationParams.from_mapping({**_tiny_config(), "n_replicates": 2})
-    output = fim(
-        params.gene_copies,
-        params.m,
-        params.mu,
-        params.d,
+    output = simulate_params(
         params=params,
         store_factory=_in_memory_store_factory,
     )
@@ -875,11 +815,7 @@ def test_store_and_store_factory_are_mutually_exclusive(
 ) -> None:
     """Only one trajectory-store strategy may be given at a time."""
     with pytest.raises(ValueError, match="mutually exclusive"):
-        fim(
-            tiny_params.gene_copies,
-            tiny_params.m,
-            tiny_params.mu,
-            tiny_params.d,
+        simulate_params(
             params=tiny_params,
             store=InMemoryTrajectoryStore(),
             store_factory=_in_memory_store_factory,
@@ -890,11 +826,7 @@ def test_max_workers_rejects_a_shared_store() -> None:
     """A single store instance cannot cross worker-process boundaries."""
     params = SimulationParams.from_mapping({**_tiny_config(), "n_replicates": 2})
     with pytest.raises(ValueError, match="max_workers requires store=None"):
-        fim(
-            params.gene_copies,
-            params.m,
-            params.mu,
-            params.d,
+        simulate_params(
             params=params,
             store=InMemoryTrajectoryStore(),
             max_workers=2,
@@ -905,11 +837,7 @@ def test_max_workers_rejects_a_non_positive_count() -> None:
     """`max_workers` must name at least one worker."""
     params = SimulationParams.from_mapping({**_tiny_config(), "n_replicates": 2})
     with pytest.raises(ValueError, match="max_workers must be at least 1"):
-        fim(
-            params.gene_copies,
-            params.m,
-            params.mu,
-            params.d,
+        simulate_params(
             params=params,
             max_workers=0,
         )
@@ -939,11 +867,7 @@ def test_single_replicate_run_still_validates_max_workers(
     """
     params = SimulationParams.from_mapping(_tiny_config())
     with pytest.raises(ValueError, match=message):
-        fim(
-            params.gene_copies,
-            params.m,
-            params.mu,
-            params.d,
+        simulate_params(
             params=params,
             **kwargs,  # type: ignore[arg-type]
         )
@@ -963,11 +887,7 @@ def test_single_replicate_run_uses_store_factory(tmp_path: Path) -> None:
     """
     params = SimulationParams.from_mapping(_tiny_config())
 
-    output = fim(
-        params.gene_copies,
-        params.m,
-        params.mu,
-        params.d,
+    output = simulate_params(
         params=params,
         store_factory=functools.partial(_log_store_factory, tmp_path),
     )
@@ -985,11 +905,7 @@ def test_max_workers_rejects_an_unpicklable_clock() -> None:
     """
     params = SimulationParams.from_mapping({**_tiny_config(), "n_replicates": 2})
     with pytest.raises(ValueError, match="clock must be picklable"):
-        fim(
-            params.gene_copies,
-            params.m,
-            params.mu,
-            params.d,
+        simulate_params(
             params=params,
             max_workers=2,
             # Deliberately unpicklable: the lambda closure is the point of
@@ -1006,11 +922,7 @@ def test_max_workers_rejects_an_unpicklable_store_factory() -> None:
     """
     params = SimulationParams.from_mapping({**_tiny_config(), "n_replicates": 2})
     with pytest.raises(ValueError, match="store_factory must be picklable"):
-        fim(
-            params.gene_copies,
-            params.m,
-            params.mu,
-            params.d,
+        simulate_params(
             params=params,
             max_workers=2,
             store_factory=lambda _run_id: InMemoryTrajectoryStore(),
@@ -1033,9 +945,7 @@ def test_max_workers_respects_adaptive_stopping_in_batches() -> None:
             "stop_batch_early": True,
         }
     )
-    output = fim(
-        params.gene_copies, params.m, params.mu, params.d, params=params, max_workers=2
-    )
+    output = simulate_params(params=params, max_workers=2)
     assert isinstance(output, tuple)
     assert 3 <= len(output) <= 4
 
@@ -1076,11 +986,7 @@ def test_parallel_batch_adaptive_stop_discards_overshoot_replicates_artifacts(
         }
     )
 
-    output = fim(
-        params.gene_copies,
-        params.m,
-        params.mu,
-        params.d,
+    output = simulate_params(
         params=params,
         max_workers=2,
         store_factory=functools.partial(_log_store_factory, tmp_path),
@@ -1103,11 +1009,7 @@ def _in_memory_store_factory(run_id: str) -> InMemoryTrajectoryStore:
 def test_max_workers_uses_store_factory_per_replicate() -> None:
     """Each worker gets its own store, built by `store_factory` in-process."""
     params = SimulationParams.from_mapping({**_tiny_config(), "n_replicates": 2})
-    output = fim(
-        params.gene_copies,
-        params.m,
-        params.mu,
-        params.d,
+    output = simulate_params(
         params=params,
         max_workers=2,
         store_factory=_in_memory_store_factory,
@@ -1142,11 +1044,7 @@ def test_non_lineal_batch_uses_store_factory_per_replicate(
         )
     params = replace(base_params, engine_backend=engine_backend)  # type: ignore[arg-type]
 
-    output = fim(
-        params.gene_copies,
-        params.m,
-        params.mu,
-        params.d,
+    output = simulate_params(
         params=params,
         store_factory=functools.partial(_log_store_factory, tmp_path),
     )
@@ -1174,11 +1072,7 @@ def test_non_lineal_single_replicate_run_uses_store_factory(tmp_path: Path) -> N
         SimulationParams.from_mapping(_tiny_config()), engine_backend="generational"
     )
 
-    output = fim(
-        params.gene_copies,
-        params.m,
-        params.mu,
-        params.d,
+    output = simulate_params(
         params=params,
         store_factory=functools.partial(_log_store_factory, tmp_path),
     )
@@ -1214,9 +1108,7 @@ def test_bootstrap_replicate_summary_point_estimate_matches_the_pooled_ratio(
     params = SimulationParams.from_mapping(
         {**tiny_params.to_dict(), "n_replicates": 8, "stop_batch_early": False}
     )
-    output = fim(
-        params.gene_copies, params.m, params.mu, params.d, params=params, clock=_clock
-    )
+    output = simulate_params(params=params, clock=_clock)
     assert isinstance(output, tuple)
 
     summary = bootstrap_replicate_summary(output, rng=np.random.default_rng(1))
@@ -1242,9 +1134,7 @@ def test_bootstrap_replicate_summary_interval_contains_its_own_point_estimate(
     params = SimulationParams.from_mapping(
         {**tiny_params.to_dict(), "n_replicates": 8, "stop_batch_early": False}
     )
-    output = fim(
-        params.gene_copies, params.m, params.mu, params.d, params=params, clock=_clock
-    )
+    output = simulate_params(params=params, clock=_clock)
     assert isinstance(output, tuple)
 
     summary = bootstrap_replicate_summary(output, rng=np.random.default_rng(2))
@@ -1277,9 +1167,7 @@ def test_bootstrap_replicate_summary_reports_no_sample_standard_deviation(
     params = SimulationParams.from_mapping(
         {**tiny_params.to_dict(), "n_replicates": 8, "stop_batch_early": False}
     )
-    output = fim(
-        params.gene_copies, params.m, params.mu, params.d, params=params, clock=_clock
-    )
+    output = simulate_params(params=params, clock=_clock)
     assert isinstance(output, tuple)
 
     summary = bootstrap_replicate_summary(output, rng=np.random.default_rng(3))
@@ -1305,9 +1193,7 @@ def test_bootstrap_replicate_summary_is_deterministic_for_a_given_rng_state(
     params = SimulationParams.from_mapping(
         {**tiny_params.to_dict(), "n_replicates": 6, "stop_batch_early": False}
     )
-    output = fim(
-        params.gene_copies, params.m, params.mu, params.d, params=params, clock=_clock
-    )
+    output = simulate_params(params=params, clock=_clock)
     assert isinstance(output, tuple)
 
     first = bootstrap_replicate_summary(output, rng=np.random.default_rng(7))
@@ -1333,9 +1219,7 @@ def test_bootstrap_replicate_summary_rejects_invalid_inputs(
     params = SimulationParams.from_mapping(
         {**tiny_params.to_dict(), "n_replicates": 4, "stop_batch_early": False}
     )
-    output = fim(
-        params.gene_copies, params.m, params.mu, params.d, params=params, clock=_clock
-    )
+    output = simulate_params(params=params, clock=_clock)
     assert isinstance(output, tuple)
 
     with pytest.raises(ValueError, match=message):
@@ -1368,9 +1252,7 @@ def test_convergence_can_watch_h_st(tiny_params: SimulationParams) -> None:
     """
     params = replace(tiny_params, convergence_statistic="H_ST")
 
-    output = fim(
-        params.gene_copies, params.m, params.mu, params.d, params=params, clock=_clock
-    )
+    output = simulate_params(params=params, clock=_clock)
 
     assert isinstance(output, RunResult)
     assert output.report["H_ST"] is not None
@@ -1409,11 +1291,7 @@ def test_final_report_gs_and_gd_match_the_pooled_h_s_and_h_t(
 def test_naive_manifest_clock_is_rejected(tiny_params: SimulationParams) -> None:
     """Manifest timestamps require an explicit timezone."""
     with pytest.raises(ValueError, match="timezone-aware"):
-        fim(
-            tiny_params.gene_copies,
-            tiny_params.m,
-            tiny_params.mu,
-            tiny_params.d,
+        simulate_params(
             params=tiny_params,
             clock=lambda: _clock().replace(tzinfo=None),
         )
@@ -1448,11 +1326,7 @@ def test_g_st_convergence_falls_back_to_the_cap_at_total_fixation() -> None:
             ({AlleleId(0): 1.0},),
         ),
     )
-    result = fim(
-        params.gene_copies,
-        params.m,
-        params.mu,
-        params.d,
+    result = simulate_params(
         params=params,
         clock=_clock,
     )
@@ -1502,7 +1376,7 @@ def test_adaptive_g_st_batch_survives_partial_monomorphism() -> None:
             ({AlleleId(0): 1.0}, {AlleleId(0): 0.5, AlleleId(1): 0.5}),
         ),
     )
-    output = fim(params.gene_copies, params.m, params.mu, params.d, params=params)
+    output = simulate_params(params=params)
     assert isinstance(output, tuple)
     assert len(output) == 2
     for result in output:
@@ -1545,7 +1419,7 @@ def test_adaptive_batch_drops_replicates_where_g_st_is_undefined() -> None:
             ({AlleleId(0): 1.0},),
         ),
     )
-    output = fim(params.gene_copies, params.m, params.mu, params.d, params=params)
+    output = simulate_params(params=params)
     assert isinstance(output, tuple)
     assert len(output) == 3
     assert all(result.report["G_ST"] is None for result in output)
@@ -1691,11 +1565,7 @@ def test_converged_on_names_only_the_statistics_that_passed(
     Both report paths: the lineal backend's own run loop (`_run_one`) and
     a generational lane (`_finish_lane`).
     """
-    output = fim(
-        20,
-        0.1,
-        0.0,
-        3,
+    output = simulate_params(
         params=_monomorphic_any_params(engine_backend),
         clock=_clock,
     )
@@ -3211,31 +3081,20 @@ def test_generational_adaptive_batch_matches_lineal_under_real_timing() -> None:
     longer than the replicates after it, which average for the shorter
     matched window (asserted below from a fixed-count batch of the same
     seeds), so this is the worked example's own situation in miniature,
-    through the public `fim()` entry point.
+    through the public `simulate_params()` entry point.
     """
     params = _adaptive_dict_params(
         max_generations=300,
         expert=ExpertSettings(**{**FAST_EXPERT_SETTINGS, "batch_width": 2}),
     )
-    fixed = fim(
-        params.gene_copies,
-        params.m,
-        params.mu,
-        params.d,
+    fixed = simulate_params(
         params=replace(params, stop_batch_early=False),
         clock=_clock,
     )
-    lineal = fim(
-        params.gene_copies, params.m, params.mu, params.d, params=params, clock=_clock
-    )
-    generational = fim(
-        params.gene_copies,
-        params.m,
-        params.mu,
-        params.d,
-        params=params,
+    lineal = simulate_params(params=params, clock=_clock)
+    generational = simulate_params(
+        params=replace(params, engine_backend="generational"),
         clock=_clock,
-        engine_backend="generational",
     )
     assert isinstance(fixed, tuple)
     assert isinstance(lineal, tuple)
@@ -3295,7 +3154,7 @@ def test_vector_adaptive_batch_keeps_the_replicate_order_prefix() -> None:
     _assert_same_batch(vector, reference)
 
 
-# `fim()`'s own `engine_backend`/`jit` keywords (Stage F2): the factory
+# `simulate_params()`'s own `engine_backend`/`jit` keywords (Stage F2): the factory
 # actually reachable by a real caller, not just `build_engine_backend`/
 # `GenerationalBackend` constructed directly the way the tests above do.
 
@@ -3304,24 +3163,15 @@ def test_fim_engine_backend_generational_matches_default(
     tiny_params: SimulationParams,
 ) -> None:
     """`fim(..., engine_backend="generational")` matches the untouched default."""
-    lineal_result = fim(
-        tiny_params.gene_copies,
-        tiny_params.m,
-        tiny_params.mu,
-        tiny_params.d,
+    lineal_result = simulate_params(
         params=tiny_params,
         clock=_clock,
     )
     assert isinstance(lineal_result, RunResult)
 
-    generational_result = fim(
-        tiny_params.gene_copies,
-        tiny_params.m,
-        tiny_params.mu,
-        tiny_params.d,
-        params=tiny_params,
+    generational_result = simulate_params(
+        params=replace(tiny_params, engine_backend="generational"),
         clock=_clock,
-        engine_backend="generational",
     )
     assert isinstance(generational_result, RunResult)
 
@@ -3352,15 +3202,9 @@ def test_fim_engine_backend_generational_matches_default(
 
 def test_fim_rejects_jit_on_lineal(tiny_params: SimulationParams) -> None:
     """`jit` is never offered on the lineal backend — a permanent restriction."""
-    with pytest.raises(ValueError, match="lineal backend"):
-        fim(
-            tiny_params.gene_copies,
-            tiny_params.m,
-            tiny_params.mu,
-            tiny_params.d,
-            params=tiny_params,
-            jit="numba",
-        )
+    # The refusal now happens as soon as the parameters are built.
+    with pytest.raises(ValueError, match="only accepts jit"):
+        replace(tiny_params, jit="numba")
 
 
 def test_fim_rejects_max_workers_on_other_backends(
@@ -3376,13 +3220,8 @@ def test_fim_rejects_max_workers_on_other_backends(
     `selby/restricted`, §5.3).
     """
     with pytest.raises(ValueError, match="lineal-backend-only"):
-        fim(
-            tiny_params.gene_copies,
-            tiny_params.m,
-            tiny_params.mu,
-            tiny_params.d,
-            params=tiny_params,
-            engine_backend="generational",
+        simulate_params(
+            params=replace(tiny_params, engine_backend="generational"),
             max_workers=2,
         )
 
@@ -3399,25 +3238,15 @@ def test_fim_generational_vector_runs_infinite_alleles(
     enough here.
     """
     pytest.importorskip("numba")
-    vector = fim(
-        tiny_params.gene_copies,
-        tiny_params.m,
-        tiny_params.mu,
-        tiny_params.d,
-        params=tiny_params,
+    vector = simulate_params(
+        params=replace(tiny_params, engine_backend="generational-vector"),
         run_id="run",
         clock=_clock,
-        engine_backend="generational-vector",
     )
-    lineal = fim(
-        tiny_params.gene_copies,
-        tiny_params.m,
-        tiny_params.mu,
-        tiny_params.d,
-        params=tiny_params,
+    lineal = simulate_params(
+        params=replace(tiny_params, engine_backend="lineal"),
         run_id="run",
         clock=_clock,
-        engine_backend="lineal",
     )
     assert isinstance(vector, RunResult) and isinstance(lineal, RunResult)
     assert vector.report == lineal.report
@@ -3478,13 +3307,8 @@ def test_fim_generational_vector_runs_stochastic_migrant_sampling(
     )
     reports = {}
     for backend in ("lineal", "generational-vector"):
-        result = fim(
-            params.gene_copies,
-            params.m,
-            params.mu,
-            params.d,
-            params=params,
-            engine_backend=backend,
+        result = simulate_params(
+            params=replace(params, engine_backend=backend),
             store=InMemoryTrajectoryStore(),
         )
         assert not isinstance(result, tuple)
@@ -3501,14 +3325,8 @@ def test_fim_generational_vector_rejects_jit(tiny_params: SimulationParams) -> N
     """
     params = replace(tiny_params, mutation_model="finite_alleles")
     with pytest.raises(ValueError, match="generational-vector"):
-        fim(
-            params.gene_copies,
-            params.m,
-            params.mu,
-            params.d,
-            params=params,
-            engine_backend="generational-vector",
-            jit="numba",
+        simulate_params(
+            params=replace(params, engine_backend="generational-vector", jit="numba"),
         )
 
 
@@ -3561,7 +3379,7 @@ def test_build_engine_backend_generational_vector_accepts_numba_present() -> Non
     monkeypatched tests above could both pass for the wrong reason if the
     guard raised unconditionally. Also the "no `params`" case for the
     capacity ceiling below: with no `params` to read a capacity from,
-    that check is skipped entirely rather than erroring — `fim()` itself
+    that check is skipped entirely rather than erroring — `simulate_params()` itself
     always passes `params`, so this only matters for this function's own
     lower-level, params-less construction form.
     """
@@ -3792,14 +3610,9 @@ def test_fim_engine_backend_auto_runs_end_to_end(
     the manifest says so.
     """
     pytest.importorskip("numba")
-    result = fim(
-        tiny_params.gene_copies,
-        tiny_params.m,
-        tiny_params.mu,
-        tiny_params.d,
-        params=tiny_params,
+    result = simulate_params(
+        params=replace(tiny_params, engine_backend="auto"),
         clock=_clock,
-        engine_backend="auto",
     )
     assert isinstance(result, RunResult)
     assert result.report["converged"] in (True, False)
@@ -3815,14 +3628,9 @@ def test_fim_engine_backend_auto_records_generational_without_numba(
     above, because Backend V and Backend G produce identical output.
     """
     monkeypatch.setattr(engine_backends, "numba_is_available", lambda: False)
-    result = fim(
-        tiny_params.gene_copies,
-        tiny_params.m,
-        tiny_params.mu,
-        tiny_params.d,
-        params=tiny_params,
+    result = simulate_params(
+        params=replace(tiny_params, engine_backend="auto"),
         clock=_clock,
-        engine_backend="auto",
     )
     assert isinstance(result, RunResult)
     assert result.manifest.engine_backend == "generational"
@@ -3833,26 +3641,20 @@ def test_fim_engine_backend_auto_reaches_vector_end_to_end() -> None:
     pytest.importorskip("numba")
     params = _finite_alleles_vector_params(d=40)
 
-    result = fim(
-        params.gene_copies,
-        params.m,
-        params.mu,
-        params.d,
-        params=params,
+    result = simulate_params(
+        params=replace(params, engine_backend="auto", auto_vector_min_d=35),
         clock=_clock,
-        engine_backend="auto",
-        auto_vector_min_d=35,
     )
     assert isinstance(result, RunResult)
     assert result.report["converged"] in (True, False)
 
 
-# Manifest provenance (Stage F7): `fim()` stamps every returned result's
+# Manifest provenance (Stage F7): `simulate_params()` stamps every returned result's
 # own manifest with which engine actually ran it — real, load-bearing
 # information for `engine_backend="auto"` specifically, since its own
 # resolved choice is otherwise invisible in the persisted record (design
 # doc §7.4). `LinealBackend`/`GenerationalBackend` constructed and run
-# directly, bypassing `fim()`, never populate these fields themselves
+# directly, bypassing `simulate_params()`, never populate these fields themselves
 # (`test_generational_backend_matches_lineal_for_scalar_run`'s own
 # `manifest ==` comparison, above, depends on that staying true).
 
@@ -3861,14 +3663,9 @@ def test_fim_records_the_explicit_engine_backend_in_the_manifest(
     tiny_params: SimulationParams,
 ) -> None:
     """`fim(..., engine_backend=...)` stamps that exact choice, not `None`."""
-    result = fim(
-        tiny_params.gene_copies,
-        tiny_params.m,
-        tiny_params.mu,
-        tiny_params.d,
-        params=tiny_params,
+    result = simulate_params(
+        params=replace(tiny_params, engine_backend="generational"),
         clock=_clock,
-        engine_backend="generational",
     )
     assert isinstance(result, RunResult)
     assert result.manifest.engine_backend == "generational"
@@ -3879,11 +3676,7 @@ def test_fim_default_lineal_records_engine_backend_in_the_manifest(
     tiny_params: SimulationParams,
 ) -> None:
     """Even the untouched default (`"lineal"`) gets recorded, not left `None`."""
-    result = fim(
-        tiny_params.gene_copies,
-        tiny_params.m,
-        tiny_params.mu,
-        tiny_params.d,
+    result = simulate_params(
         params=tiny_params,
         clock=_clock,
     )
@@ -3910,11 +3703,7 @@ def test_fim_records_equilibrium_split_provenance_in_the_manifest(
         equilibrium_max_generations=50,
     )
 
-    result = fim(
-        params.gene_copies,
-        params.m,
-        params.mu,
-        params.d,
+    result = simulate_params(
         params=params,
         clock=_clock,
     )
@@ -3943,14 +3732,9 @@ def test_fim_records_equilibrium_split_provenance_under_the_generational_backend
         equilibrium_max_generations=50,
     )
 
-    result = fim(
-        params.gene_copies,
-        params.m,
-        params.mu,
-        params.d,
-        params=params,
+    result = simulate_params(
+        params=replace(params, engine_backend="generational"),
         clock=_clock,
-        engine_backend="generational",
     )
 
     assert isinstance(result, RunResult)
@@ -3985,15 +3769,10 @@ def test_fim_streams_the_ancestral_phase_beside_the_trajectory(
     params = _equilibrium_split(tiny_params)
     store = BinaryLogStore(tmp_path / "trajectory.tlog")
 
-    result = fim(
-        params.gene_copies,
-        params.m,
-        params.mu,
-        params.d,
-        params=params,
+    result = simulate_params(
+        params=replace(params, engine_backend=backend),
         store=store,
         clock=_clock,
-        engine_backend=backend,
     )
 
     assert isinstance(result, RunResult)
@@ -4024,16 +3803,11 @@ def test_fim_equilibrium_trajectory_is_identical_across_backends(
     paths = {}
     for backend in ("lineal", "generational"):
         directory = tmp_path / backend
-        fim(
-            params.gene_copies,
-            params.m,
-            params.mu,
-            params.d,
-            params=params,
+        simulate_params(
+            params=replace(params, engine_backend=backend),
             store=BinaryLogStore(directory / "trajectory.tlog"),
             run_id="run-same",
             clock=_clock,
-            engine_backend=backend,
         )
         paths[backend] = directory / "equilibrium_trajectory.tlog"
     assert paths["lineal"].read_bytes() == paths["generational"].read_bytes()
@@ -4045,11 +3819,7 @@ def test_fim_keeps_an_in_memory_ancestral_trajectory_for_a_library_call(
     """With no store given, the ancestral rows stay readable on the result."""
     params = _equilibrium_split(tiny_params)
 
-    result = fim(
-        params.gene_copies,
-        params.m,
-        params.mu,
-        params.d,
+    result = simulate_params(
         params=params,
         clock=_clock,
     )
@@ -4069,11 +3839,7 @@ def test_fim_dirichlet_run_writes_no_ancestral_trajectory(
     tiny_params: SimulationParams, tmp_path: Path
 ) -> None:
     """Every other initial condition has no ancestral phase and no file."""
-    result = fim(
-        tiny_params.gene_copies,
-        tiny_params.m,
-        tiny_params.mu,
-        tiny_params.d,
+    result = simulate_params(
         params=tiny_params,
         store=BinaryLogStore(tmp_path / "trajectory.tlog"),
         clock=_clock,
@@ -4088,11 +3854,7 @@ def test_fim_dirichlet_run_leaves_equilibrium_manifest_fields_none(
     tiny_params: SimulationParams,
 ) -> None:
     """An ordinary Dirichlet-prior run never populates the equilibrium-only fields."""
-    result = fim(
-        tiny_params.gene_copies,
-        tiny_params.m,
-        tiny_params.mu,
-        tiny_params.d,
+    result = simulate_params(
         params=tiny_params,
         clock=_clock,
     )
@@ -4112,29 +3874,17 @@ def test_fim_auto_records_the_resolved_choice_not_the_literal_auto() -> None:
     """
     pytest.importorskip("numba")
     below = _finite_alleles_vector_params(d=30)
-    below_result = fim(
-        below.gene_copies,
-        below.m,
-        below.mu,
-        below.d,
-        params=below,
+    below_result = simulate_params(
+        params=replace(below, engine_backend="auto", auto_vector_min_d=35),
         clock=_clock,
-        engine_backend="auto",
-        auto_vector_min_d=35,
     )
     assert isinstance(below_result, RunResult)
     assert below_result.manifest.engine_backend == "generational"
 
     above = _finite_alleles_vector_params(d=40)
-    above_result = fim(
-        above.gene_copies,
-        above.m,
-        above.mu,
-        above.d,
-        params=above,
+    above_result = simulate_params(
+        params=replace(above, engine_backend="auto", auto_vector_min_d=35),
         clock=_clock,
-        engine_backend="auto",
-        auto_vector_min_d=35,
     )
     assert isinstance(above_result, RunResult)
     assert above_result.manifest.engine_backend == "generational-vector"
@@ -4143,15 +3893,9 @@ def test_fim_auto_records_the_resolved_choice_not_the_literal_auto() -> None:
 def test_fim_records_jit_in_the_manifest(tiny_params: SimulationParams) -> None:
     """`jit="numba"` is recorded exactly, not silently dropped."""
     pytest.importorskip("numba")
-    result = fim(
-        tiny_params.gene_copies,
-        tiny_params.m,
-        tiny_params.mu,
-        tiny_params.d,
-        params=tiny_params,
+    result = simulate_params(
+        params=replace(tiny_params, engine_backend="generational", jit="numba"),
         clock=_clock,
-        engine_backend="generational",
-        jit="numba",
     )
     assert isinstance(result, RunResult)
     assert result.manifest.jit == "numba"
@@ -4162,14 +3906,9 @@ def test_fim_records_engine_backend_for_every_replicate_in_a_batch(
 ) -> None:
     """A multi-replicate batch stamps every replicate's own manifest, not just one."""
     params = replace(tiny_params, n_replicates=3)
-    results = fim(
-        params.gene_copies,
-        params.m,
-        params.mu,
-        params.d,
-        params=params,
+    results = simulate_params(
+        params=replace(params, engine_backend="generational"),
         clock=_clock,
-        engine_backend="generational",
     )
     assert isinstance(results, tuple)
     assert len(results) == 3
@@ -4245,14 +3984,9 @@ def test_fim_engine_backend_generational_uses_threaded_advancer(
     by default (`build_engine_backend`) — end to end, through the public
     entry point, not just `GenerationalBackend` constructed directly.
     """
-    result = fim(
-        tiny_params.gene_copies,
-        tiny_params.m,
-        tiny_params.mu,
-        tiny_params.d,
-        params=tiny_params,
+    result = simulate_params(
+        params=replace(tiny_params, engine_backend="generational"),
         clock=_clock,
-        engine_backend="generational",
     )
     assert isinstance(result, RunResult)
     assert result.report["converged"] in (True, False)
@@ -4488,25 +4222,15 @@ def test_fim_engine_backend_generational_with_jit_matches_default(
 ) -> None:
     """`fim(..., engine_backend="generational", jit="numba")` end to end."""
     pytest.importorskip("numba")
-    lineal_result = fim(
-        tiny_params.gene_copies,
-        tiny_params.m,
-        tiny_params.mu,
-        tiny_params.d,
+    lineal_result = simulate_params(
         params=tiny_params,
         clock=_clock,
     )
     assert isinstance(lineal_result, RunResult)
 
-    jit_result = fim(
-        tiny_params.gene_copies,
-        tiny_params.m,
-        tiny_params.mu,
-        tiny_params.d,
-        params=tiny_params,
+    jit_result = simulate_params(
+        params=replace(tiny_params, engine_backend="generational", jit="numba"),
         clock=_clock,
-        engine_backend="generational",
-        jit="numba",
     )
     assert isinstance(jit_result, RunResult)
 
@@ -4820,14 +4544,9 @@ def test_fim_engine_backend_generational_vector_runs_end_to_end() -> None:
     pytest.importorskip("numba")
     params = _finite_alleles_vector_params()
 
-    result = fim(
-        params.gene_copies,
-        params.m,
-        params.mu,
-        params.d,
-        params=params,
+    result = simulate_params(
+        params=replace(params, engine_backend="generational-vector"),
         clock=_clock,
-        engine_backend="generational-vector",
     )
     assert isinstance(result, RunResult)
     assert result.report["converged"] in (True, False)
@@ -5126,9 +4845,7 @@ def _matched_batch_params(**changes: object) -> SimulationParams:
 def test_a_batch_matches_each_replicates_window_to_the_first_wave() -> None:
     """The first wave averages for the guess; the rest for the matched window."""
     params = _matched_batch_params()
-    output = fim(
-        params.gene_copies, params.m, params.mu, params.d, params=params, clock=_clock
-    )
+    output = simulate_params(params=params, clock=_clock)
     assert isinstance(output, tuple)
 
     windows = [result.params.replicate_averaging_window for result in output]
@@ -5204,9 +4921,7 @@ def test_a_fixed_window_is_the_same_for_every_replicate_and_for_a_single_run(
     batch = replace(
         tiny_params, n_replicates=3, replicate_averaging_window=17, max_generations=100
     )
-    output = fim(
-        batch.gene_copies, batch.m, batch.mu, batch.d, params=batch, clock=_clock
-    )
+    output = simulate_params(params=batch, clock=_clock)
     assert isinstance(output, tuple)
 
     for result in output:
@@ -5219,9 +4934,7 @@ def test_a_fixed_window_is_the_same_for_every_replicate_and_for_a_single_run(
 def test_a_batch_summary_is_the_mean_of_the_replicates_window_means() -> None:
     """Each replicate contributes what it measured over its window."""
     params = _matched_batch_params()
-    output = fim(
-        params.gene_copies, params.m, params.mu, params.d, params=params, clock=_clock
-    )
+    output = simulate_params(params=params, clock=_clock)
     assert isinstance(output, tuple)
 
     summary = replicate_summary(output)
@@ -5235,9 +4948,7 @@ def test_a_batch_summary_is_the_mean_of_the_replicates_window_means() -> None:
 def test_a_value_of_means_batch_pools_the_identities_before_the_statistic() -> None:
     """Form two for a batch: `f` of the pooled `H_S`/`H_T`, delta-method interval."""
     params = _matched_batch_params(convergence_estimate="value_of_means")
-    output = fim(
-        params.gene_copies, params.m, params.mu, params.d, params=params, clock=_clock
-    )
+    output = simulate_params(params=params, clock=_clock)
     assert isinstance(output, tuple)
 
     summary = replicate_summary(output)
@@ -5258,9 +4969,7 @@ def test_planned_replicates_runs_every_replicate_without_an_early_stop() -> None
     params = _matched_batch_params(
         precision_method="planned_replicates", stop_batch_early=True, precision=0.5
     )
-    output = fim(
-        params.gene_copies, params.m, params.mu, params.d, params=params, clock=_clock
-    )
+    output = simulate_params(params=params, clock=_clock)
     assert isinstance(output, tuple)
 
     assert len(output) == 6
@@ -5283,9 +4992,7 @@ def test_a_replicate_with_no_burn_in_keeps_the_within_run_rule() -> None:
     )
     assert params.convergence_burn_in == 0
 
-    output = fim(
-        params.gene_copies, params.m, params.mu, params.d, params=params, clock=_clock
-    )
+    output = simulate_params(params=params, clock=_clock)
 
     assert isinstance(output, tuple)
     assert all(r.report["reason"] != "averaging window complete" for r in output)
@@ -5479,9 +5186,7 @@ def test_a_batch_replicate_stops_on_a_generation_thinning_would_skip() -> None:
         trajectory_stride=50,
         trajectory_thinning_start=4,
     )
-    output = fim(
-        params.gene_copies, params.m, params.mu, params.d, params=params, clock=_clock
-    )
+    output = simulate_params(params=params, clock=_clock)
     assert isinstance(output, tuple)
 
     for result in output:

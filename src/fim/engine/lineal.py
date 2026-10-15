@@ -59,10 +59,10 @@ class LinealBackend:
     """Today's engine: one replica's whole trajectory, start to finish,
     computed before any cross-replicate bookkeeping happens — either one
     at a time, or `max_workers` at a time across real OS processes. See
-    `fim()`'s own docstring, below, for the full behavior; this class's
+    `simulate_params()`'s own docstring, below, for the full behavior; this class's
     own `run` is that same behavior, unchanged, moved behind
     `EngineBackend`'s shared contract rather than living directly inside
-    `fim()`.
+    `simulate_params()`.
     """
 
     def __init__(
@@ -74,8 +74,8 @@ class LinealBackend:
         """Configure this backend's own concurrency and per-replicate storage.
 
         Args:
-            max_workers: See `fim()`'s own docstring.
-            store_factory: See `fim()`'s own docstring.
+            max_workers: See `simulate_params()`'s own docstring.
+            store_factory: See `simulate_params()`'s own docstring.
         """
         self._max_workers = max_workers
         self._store_factory = store_factory
@@ -87,7 +87,7 @@ class LinealBackend:
         run_id: str | None,
         clock: Clock,
     ) -> SimulationOutput:
-        """Run `params`'s own replicate(s); see `fim()`'s own docstring."""
+        """Run `params`'s own replicate(s); see `simulate_params()`'s own docstring."""
         if store is not None and self._store_factory is not None:
             raise ValueError("store and store_factory are mutually exclusive")
         # Validated here, unconditionally, rather than only inside the
@@ -524,7 +524,7 @@ def _simulate_one(
        statistic(s), and a `RunManifest` recording when this run
        started and ended — into the `RunResult` this function returns.
 
-    Called directly by `fim()` for the ordinary, sequential case, and
+    Called directly by `simulate_params()` for the ordinary, sequential case, and
     (wrapped by `_run_replicate_worker`) once per replicate inside each
     `ProcessPoolExecutor` worker process for the parallel-batch case —
     this function itself has no idea which of the two is calling it, and

@@ -295,13 +295,13 @@ class ThreadedAdvancer:
             max_workers: Defaults to `os.cpu_count()` (or 1 if that
                 cannot be determined) — the same default reasoning
                 `concurrent.futures.ThreadPoolExecutor` itself uses.
-                Deliberately not the same `max_workers` `fim()`'s own
+                Deliberately not the same `max_workers` `simulate_params()`'s own
                 public signature accepts — that one is `LinealBackend`-
                 only (a process count); reusing the name for a thread
                 count here was flagged, not settled, by the design this
                 implements, so this constructor's own parameter is
                 reachable only by building a `GenerationalBackend`
-                directly, not yet through `fim()` itself.
+                directly, not yet through `simulate_params()` itself.
             jit: Passed through to each block's own `SequentialAdvancer`
                 — see its docstring. ``"numba"`` JIT-compiles `drift`'s
                 own multinomial draw (`fim.model.operators.drift`'s own

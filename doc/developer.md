@@ -124,7 +124,7 @@ deme/locus.
 The pipeline above (Migrate → Drift → Mutate) is what gets computed;
 `fim.engine` offers three implementations of *how* it gets driven,
 behind one shared `EngineBackend` protocol (`run(params, store, run_id,
-clock) -> RunResult | tuple[RunResult, ...]`), selected via `fim()`'s
+clock) -> RunResult | tuple[RunResult, ...]`), selected via `simulate_params()`'s
 own `engine_backend` keyword (`build_engine_backend`, `fim.engine`). See
 the [simulator design's own §4.6](fim-simulator-design.md#46-choosing-an-engine-backend)
 for the user-facing "what/why/how" version of this; this section is the
@@ -478,7 +478,7 @@ may read the GUI's shown set; a test enforces that.
 | How many replicate runs give a confidence interval | precision stops a batch (while stop_batch_early is on) once every watched statistic's across-replicate CI tightens to it, instead of a hand-guessed n<sub>replicates</sub>; fim.engine.replicate_summary / the CLI's `summary.json` report the realized interval |
 | Faster replicate batches | max_workers (library) / `--workers`, `--sequential` (CLI): one worker process per replicate batch-slot, opt-in, changes nothing about what is computed |
 | Large trajectories | Implement another `TrajectoryStore` |
-| GUI | Call `fim.engine.fim`; do not duplicate model logic |
+| GUI | Call `fim.engine.simulate_params`; do not duplicate model logic |
 
 ## Testing
 

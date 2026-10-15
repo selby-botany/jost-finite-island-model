@@ -431,7 +431,7 @@ class ReplicateFanoutStore:
 
     Gives a caller with only one `store_factory` (one replicate's own
     fresh store, built by `run_id` — `LinealBackend`'s own long-standing
-    shape, `fim()`'s own docstring) a single object satisfying
+    shape, `simulate_params()`'s own docstring) a single object satisfying
     `TrajectoryStore` that a *generation-first* batch (`fim.engine.
     run_batch`, driving `GenerationalBackend`) can pass around as its one
     shared `store` argument without ever needing to know several
@@ -460,7 +460,7 @@ class ReplicateFanoutStore:
 
         Args:
             store_factory: Builds one replicate's own real store, given
-                that replicate's own `run_id` — the same shape `fim()`'s
+                that replicate's own `run_id` — the same shape `simulate_params()`'s
                 own `store_factory` argument already has.
         """
         self._store_factory = store_factory

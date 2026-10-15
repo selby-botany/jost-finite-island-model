@@ -39,7 +39,7 @@ from fim.engine import (
     report_for_state,
 )
 from fim.engine import backends as engine_backends
-from fim.engine import fim as engine_fim
+from fim.engine import simulate_params as engine_fim
 from fim.gui import app as app_module
 from fim.gui import presets as presets_module
 from fim.gui import recent_runs as recent_runs_module
@@ -528,9 +528,7 @@ def test_interval_payload_omits_the_summary_for_a_bootstrap_interval() -> None:
             "max_generations": 60,
         }
     )
-    output = engine_fim(
-        params.gene_copies, params.m, params.mu, params.d, params=params
-    )
+    output = engine_fim(params=params)
     assert isinstance(output, tuple)
     bootstrapped = bootstrap_replicate_summary(output, rng=np.random.default_rng(11))
 
@@ -2602,7 +2600,7 @@ def batch_params(tiny_params: SimulationParams) -> SimulationParams:
 def batch_results(batch_params: SimulationParams) -> tuple[RunResult, ...]:
     """Three real, completed replicates — the shape `_batch_done_payload` consumes.
 
-    A real `fim.engine.fim(...)` batch call, not hand-built `RunResult`
+    A real `fim.engine.simulate_params(...)` batch call, not hand-built `RunResult`
     fakes — the same "construct the real thing" precedent `test/gui/
     test_batch_runner.py`'s own fixtures already established for this
     exact scale of batch.
@@ -2612,15 +2610,11 @@ def batch_results(batch_params: SimulationParams) -> tuple[RunResult, ...]:
     (`batch_runner.py`'s own `run_id = deterministic_run_id(params)`
     then `fim(..., run_id=run_id)`): only then does each replicate's
     own `run_id` actually come out as `f"{batch_run_id}-r{index:03}"`
-    — `fim()`'s own `run_id is None` branch gives each replicate an
+    — `simulate_params()`'s own `run_id is None` branch gives each replicate an
     independent `deterministic_run_id`, unrelated to any batch run_id.
     """
     run_id = deterministic_run_id(batch_params)
     results = engine_fim(
-        batch_params.gene_copies,
-        batch_params.m,
-        batch_params.mu,
-        batch_params.d,
         params=batch_params,
         run_id=run_id,
     )

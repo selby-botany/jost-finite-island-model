@@ -11,7 +11,7 @@ from __future__ import annotations
 import numpy as np
 import pytest
 
-from fim.engine import fim
+from fim.engine import simulate_params
 from fim.model.initial import generate_initial_state
 from fim.model.locus import LocusSpec
 from fim.model.params import SimulationParams
@@ -263,11 +263,7 @@ def test_state_to_frame_equals_to_rows_for_every_generation_of_a_run() -> None:
         stop_batch_early=False,
     )
     store = InMemoryTrajectoryStore()
-    result = fim(
-        params.gene_copies,
-        params.m,
-        params.mu,
-        params.d,
+    result = simulate_params(
         params=params,
         store=store,
         run_id=RUN_ID,

@@ -17,7 +17,7 @@ from pathlib import Path
 
 from vector_support import loci, make_params
 
-from fim.engine import RunResult, fim
+from fim.engine import RunResult, simulate_params
 from fim.model.params import SimulationParams
 from fim.persistence.binary_store import BinaryLogStore
 from fim.persistence.store import InMemoryTrajectoryStore
@@ -51,16 +51,11 @@ def _outcome(results: tuple[RunResult, ...] | RunResult) -> Outcome:
 def _run(params: SimulationParams, **keywords: object) -> Outcome:
     """Run `params` on the generational engine, in memory."""
     return _outcome(
-        fim(
-            params.gene_copies,
-            params.m,
-            params.mu,
-            params.d,
-            params=params,
+        simulate_params(
+            params=replace(params, engine_backend="generational"),
             store=InMemoryTrajectoryStore(),
             run_id="run",
             clock=_clock,
-            engine_backend="generational",
             **keywords,  # type: ignore[arg-type]
         )
     )
@@ -103,17 +98,12 @@ def test_process_count_leaves_an_adaptive_batch_unchanged(tmp_path: Path) -> Non
         directory = tmp_path / f"workers-{workers}"
         directory.mkdir()
         return _outcome(
-            fim(
-                params.gene_copies,
-                params.m,
-                params.mu,
-                params.d,
-                params=params,
+            simulate_params(
+                params=replace(params, engine_backend="lineal"),
                 run_id="run",
                 clock=_clock,
                 max_workers=workers,
                 store_factory=functools.partial(_file_store, str(directory)),
-                engine_backend="lineal",
             )
         )
 

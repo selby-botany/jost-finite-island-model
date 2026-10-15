@@ -274,7 +274,7 @@ def test_manifest_engine_backend_and_jit_default_to_none_and_round_trip(
 
     Mirrors `test_manifest_artifacts_default_to_none_and_round_trip_
     when_present` — same pattern, for the two provenance fields
-    `fim()` stamps onto a run's own manifest (`RunManifest.engine_
+    `simulate_params()` stamps onto a run's own manifest (`RunManifest.engine_
     backend`'s own docstring; `20260901-claude-sonnet-5-fim-engine-
     backend-factory-design.md` §7.4).
     """

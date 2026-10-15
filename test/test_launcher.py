@@ -379,7 +379,7 @@ def test_module_main_guard_calls_freeze_support_before_dispatching(
     batch failed instantly with `concurrent.futures.process.
     BrokenProcessPool` ("terminated abruptly") both from the CLI and
     the GUI (`fim.gui.batch_runner` shares the identical
-    `ProcessPoolExecutor` machinery, `fim.engine.fim`).
+    `ProcessPoolExecutor` machinery, `fim.engine.simulate_params`).
 
     Exercises the real `if __name__ == "__main__":` guard via
     `runpy.run_module` (in-process, no subprocess and no real

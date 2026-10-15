@@ -21,7 +21,7 @@ import yaml
 from conftest import FAST_EXPERT_SETTINGS
 
 from fim import run_service
-from fim.engine import RunResult, fim, replicate_summary
+from fim.engine import RunResult, replicate_summary, simulate_params
 from fim.examples import classes
 from fim.execution import UnsupportedSessionError
 from fim.model.params import SimulationParams
@@ -181,11 +181,7 @@ def _revision(results: Path) -> int:
 def _reference(run_id: str | None, **changes: Any) -> tuple[RunResult, ...]:
     """Return what the blocking call produces for the configuration."""
     params = SimulationParams.from_mapping(_config(**changes))
-    output = fim(
-        params.gene_copies,
-        params.m,
-        params.mu,
-        params.d,
+    output = simulate_params(
         params=params,
         clock=_clock,
         run_id=run_id,

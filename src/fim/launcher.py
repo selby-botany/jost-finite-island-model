@@ -238,6 +238,6 @@ if __name__ == "__main__":
     # instantly with `concurrent.futures.process.BrokenProcessPool`
     # ("terminated abruptly") before this fix, both from the CLI and
     # the GUI, since both share the identical `ProcessPoolExecutor`
-    # machinery (`fim.engine.fim`).
+    # machinery (`fim.engine.simulate_params`).
     multiprocessing.freeze_support()
     raise SystemExit(main())

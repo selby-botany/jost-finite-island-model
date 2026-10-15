@@ -1,7 +1,7 @@
 """Background-thread batch-run orchestration (`doc/fim-gui-design.md` §7.2).
 
 Under `engine_backend="lineal"`, runs a multi-replicate batch in
-parallel, as real OS processes, via `fim.engine.fim(..., max_workers=N,
+parallel, as real OS processes, via `fim.engine.simulate_params(..., max_workers=N,
 store_factory=...)` — the same call shape `cli._command_run_batch`'s own
 default (non-`--sequential`) path already makes. This reverses the
 Tk-era design's "sequential-only, deliberately" decision: that
@@ -54,7 +54,7 @@ from typing import Final, Literal
 from fim import paths
 from fim.config.defaults import DEFAULT_PAIRWISE_MAX_DEMES
 from fim.config.expert import ExpertSettings
-from fim.engine import RunResult, deterministic_run_id, fim
+from fim.engine import RunResult, deterministic_run_id, simulate_params
 from fim.engine.records import format_timestamp, utc_now
 from fim.gui.runner import pairwise_status_text
 from fim.gui.store import LIVE_BLOCK_SECONDS, LiveProgressStore, RunCancelledError
@@ -152,13 +152,13 @@ def start_batch_run(
             runner.
         max_workers: Worker-process count for this batch. **`None` here
             does not mean "run sequentially in-process"** — unlike
-            `fim.engine.fim`'s own `max_workers=None` — it means "use
+            `fim.engine.simulate_params`'s own `max_workers=None` — it means "use
             this GUI's own default" (`default_max_workers()`, matching
             the CLI's own default), a deliberate divergence from the
             engine's convention worth stating explicitly rather than
             leaving implicit, since batch execution is parallel by
             default here. Only meaningful under `params.engine_backend
-            == "lineal"` — `_batch_worker`'s own call to `fim()` omits
+            == "lineal"` — `_batch_worker`'s own call to `simulate_params()` omits
             it entirely for any other backend, which runs through
             `fim.engine.run_batch`'s own concurrency model instead
             (`max_concurrent_replicates`, not this argument); the
@@ -218,7 +218,7 @@ def _batch_worker(
     partial-batch save point exists to preserve, matching "Cancel batch"
     stopping the batch, not one replicate.
 
-    `max_workers` (this function's own argument) only reaches `fim()`
+    `max_workers` (this function's own argument) only reaches `simulate_params()`
     under `params.engine_backend == "lineal"` — the one backend with a
     `ProcessPoolExecutor` for it to size. Any other backend runs through
     `fim.engine.run_batch`'s own concurrency model instead, driven by
@@ -261,11 +261,7 @@ def _batch_worker(
             # published at `output_directory` — an event no reader
             # outside this worker could otherwise ever observe.
             message_queue.put(("started", working_directory))
-            results = fim(
-                params.gene_copies,
-                params.m,
-                params.mu,
-                params.d,
+            results = simulate_params(
                 params=params,
                 run_id=run_id,
                 max_workers=max_workers if params.engine_backend == "lineal" else None,
@@ -280,7 +276,7 @@ def _batch_worker(
             if not isinstance(results, tuple):
                 # n_replicates > 1 is enforced by every path that can
                 # reach this worker (see `start_batch_run`'s own
-                # docstring), so `fim()` always takes its batch branch
+                # docstring), so `simulate_params()` always takes its batch branch
                 # here — this guards the invariant rather than
                 # silently mishandling a scalar result. Raised inside
                 # the `with` block so `atomic_directory` discards the
@@ -314,7 +310,7 @@ def _batch_worker(
         # necessarily the only one in flight. `ProcessPoolExecutor`'s own
         # context manager still waits for every other in-flight worker in
         # the same wave to finish (each raising, or completing, on its
-        # own) before this exception fully propagates out of `fim(...)`.
+        # own) before this exception fully propagates out of `simulate_params(...)`.
         message_queue.put(
             (
                 "cancelled",

@@ -1,4 +1,4 @@
-"""Backend V's exactness contract, checked through the public `fim()` call.
+"""Backend V's exactness contract, checked through the public `simulate_params()` call.
 
 For the same configuration and seed, Backend V (`generational-vector`)
 must produce exactly what Backends L (`lineal`) and G (`generational`)
@@ -18,6 +18,7 @@ only on the development platform (see `fim.model.vector_block`).
 
 from __future__ import annotations
 
+from dataclasses import replace
 from datetime import UTC, datetime
 from pathlib import Path
 
@@ -34,7 +35,7 @@ from vector_support import (
 
 pytest.importorskip("numba")
 
-from fim.engine import RunResult, VectorizedAdvancer, fim, replicate_summary
+from fim.engine import RunResult, VectorizedAdvancer, replicate_summary, simulate_params
 from fim.engine import backends as engine_backends
 from fim.engine.lanes import build_replica_lane
 from fim.model.params import SimulationParams
@@ -54,16 +55,11 @@ def _run(
     params: SimulationParams, backend: str, store: InMemoryTrajectoryStore
 ) -> tuple[RunResult, ...]:
     """Run `params` on `backend`, writing rows into `store`; always a tuple."""
-    output = fim(
-        params.gene_copies,
-        params.m,
-        params.mu,
-        params.d,
-        params=params,
+    output = simulate_params(
+        params=replace(params, engine_backend=backend),  # type: ignore[arg-type]
         store=store,
         run_id=RUN_ID,
         clock=_clock,
-        engine_backend=backend,  # type: ignore[arg-type]
     )
     return output if isinstance(output, tuple) else (output,)
 
@@ -192,16 +188,11 @@ def test_stochastic_trajectory_log_is_byte_identical(
     for backend in ("lineal", "generational-vector"):
         path = tmp_path / f"{backend}.tlog"
         paths[backend] = path
-        output = fim(
-            params.gene_copies,
-            params.m,
-            params.mu,
-            params.d,
-            params=params,
+        output = simulate_params(
+            params=replace(params, engine_backend=backend),
             store=BinaryLogStore(path),
             run_id=RUN_ID,
             clock=_clock,
-            engine_backend=backend,
         )
         assert isinstance(output, RunResult)
     assert paths["lineal"].read_bytes() == paths["generational-vector"].read_bytes()
@@ -318,16 +309,11 @@ def test_trajectory_log_is_byte_identical(
     for backend in ("lineal", "generational-vector"):
         path = tmp_path / f"{backend}.tlog"
         paths[backend] = path
-        output = fim(
-            params.gene_copies,
-            params.m,
-            params.mu,
-            params.d,
-            params=params,
+        output = simulate_params(
+            params=replace(params, engine_backend=backend),
             store=BinaryLogStore(path),
             run_id=RUN_ID,
             clock=_clock,
-            engine_backend=backend,
         )
         assert isinstance(output, RunResult)
     assert paths["lineal"].read_bytes() == paths["generational-vector"].read_bytes()
@@ -470,16 +456,11 @@ def test_finite_alleles_trajectory_log_is_byte_identical(
     for backend in ("lineal", "generational-vector"):
         path = tmp_path / f"{backend}.tlog"
         paths[backend] = path
-        output = fim(
-            params.gene_copies,
-            params.m,
-            params.mu,
-            params.d,
-            params=params,
+        output = simulate_params(
+            params=replace(params, engine_backend=backend),
             store=BinaryLogStore(path),
             run_id=RUN_ID,
             clock=_clock,
-            engine_backend=backend,
         )
         assert isinstance(output, RunResult)
     assert paths["lineal"].read_bytes() == paths["generational-vector"].read_bytes()

@@ -1063,6 +1063,13 @@ project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Changed
 
+- **The engine entry point states a configuration once.** `fim.engine.fim`
+  (renamed `simulate_params`) repeated `gene_copies`, `m`, `mu`, and `d`
+  beside `params`, with a check that the two agreed, and accepted
+  `engine_backend`, `jit`, and the `auto` thresholds as overrides of `params`.
+  It is now `simulate_params(params, *, store, run_id, clock, max_workers,
+  store_factory)`; the backend settings are read from `params` only, so a
+  configuration has one source of truth. Most code should call `fim.simulate`.
 - **One module saves a run to a directory.** `fim.persistence.saved_run`
   holds the flow the command line and the desktop app each wrote their own
   copy of: run, build in a hidden directory, write every replicate's files,

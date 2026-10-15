@@ -1,6 +1,6 @@
 """Resumable execution sessions for one scalar replicate.
 
-A session is the stepwise form of the blocking `fim.engine.fim` call for a
+A session is the stepwise form of the blocking `fim.engine.simulate_params` call for a
 single replicate: `ScalarSession.create` builds generation zero,
 `ScalarSession.advance` runs a bounded number of generations, and
 `ScalarSession.finalize` produces the same `fim.engine.RunResult` the
@@ -210,7 +210,7 @@ class ScalarSession:
             params: A validated single-replicate configuration.
             store: Where to persist generations; in memory when omitted.
             run_id: The scientific run identifier; derived from `params`
-                when omitted, exactly as `fim.engine.fim` derives it.
+                when omitted, exactly as `fim.engine.simulate_params` derives it.
             clock: Timestamp source; the current UTC time when omitted.
 
         Returns:
@@ -218,7 +218,7 @@ class ScalarSession:
 
         Raises:
             UnsupportedSessionError: If `params` asks for more than one
-                replicate or names a backend configuration `fim.engine.fim`
+                replicate or names a backend configuration `fim.engine.simulate_params`
                 itself refuses.
         """
         engine_backend = check_session_support(params)
@@ -406,7 +406,7 @@ class ScalarSession:
         """Build the run's result once it has stopped, and close the store.
 
         Returns:
-            The same result the blocking `fim.engine.fim` call returns for
+            The same result the blocking `fim.engine.simulate_params` call returns for
             this configuration.
 
         Raises:
@@ -482,7 +482,7 @@ def check_backend_buildable(
     """
     # The blocking call's own backend checks (JIT availability per backend,
     # numba for the vector backend, the vector capacity ceiling), so a
-    # session refuses exactly what `fim.engine.fim` refuses.
+    # session refuses exactly what `fim.engine.simulate_params` refuses.
     try:
         build_engine_backend(
             engine_backend,
@@ -572,7 +572,7 @@ def export_lane(
 def resolve_session_backend(params: SimulationParams) -> SessionBackend:
     """Resolve `params.engine_backend` to a concrete backend.
 
-    ``auto`` is resolved exactly as `fim.engine.fim` resolves it, so a
+    ``auto`` is resolved exactly as `fim.engine.simulate_params` resolves it, so a
     session never runs a configuration on a different backend than the
     blocking call would.
 

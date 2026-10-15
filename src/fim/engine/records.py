@@ -186,7 +186,7 @@ class FinalReport(TypedDict):
 class RunResult:
     """Everything one finished simulation run produced.
 
-    Whatever calls `fim()` gets back one of these per run (one, or a
+    Whatever calls `simulate_params()` gets back one of these per run (one, or a
     tuple of them for a multi-replicate batch — see `fim`'s own
     docstring). It bundles four different things a caller might want,
     each aimed at a different next step:

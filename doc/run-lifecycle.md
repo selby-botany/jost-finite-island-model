@@ -253,7 +253,7 @@ from the command line, and the reverse.
 
 ## What is not a saved run
 
-`fim run`, the desktop app's **Run simulation**, and the Python `fim()`
+`fim run`, the desktop app's **Run simulation**, and the Python `simulate_params()`
 function run to the end in one go and write their output only when they
 finish. They cannot be paused or resumed. Use a saved run when a run may take
 longer than you can leave the computer alone.

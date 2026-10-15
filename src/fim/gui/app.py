@@ -8076,7 +8076,7 @@ def _drain_batch_messages(
     (`doc/fim-gui-design.md` §7.2).
 
     The very first message is always `("started", working_directory)`
-    — `batch_runner._batch_worker` posts it before calling `fim(...)`
+    — `batch_runner._batch_worker` posts it before calling `simulate_params(...)`
     at all — so this thread blocks for it specifically before its own
     poll loop starts: nothing here is possible without knowing where
     the batch's replicates are actually writing.

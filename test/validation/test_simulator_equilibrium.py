@@ -8,7 +8,7 @@ and `doc/fim-simulator-detailed-test-plan.md` for the full three-way
 taxonomy this project uses -- fim functional, fim-gui functional, and
 internal/deep):
 
-* **Functional** tests run the real :func:`fim.engine.fim` simulator and
+* **Functional** tests run the real :func:`fim.engine.simulate_params` simulator and
   assert its output directly against a published literature value or a
   public closed-form formula (``equilibrium_g_st``/``equilibrium_d`` and
   siblings, in `fim.statistics`) -- nothing in the assertion itself
@@ -63,6 +63,7 @@ import json
 import math
 import statistics
 from collections.abc import Iterable, Iterator, Mapping, Sequence
+from dataclasses import replace
 from pathlib import Path
 from typing import Any, TypeAlias
 
@@ -73,8 +74,8 @@ from numpy.typing import NDArray
 from fim.engine import (
     EngineBackendChoice,
     bootstrap_replicate_summary,
-    fim,
     report_for_state,
+    simulate_params,
 )
 from fim.model.allele import AlleleId
 from fim.model.initial import founding_condition_for_heterozygosity
@@ -785,11 +786,7 @@ def test_report_for_state_ratio_of_means_matches_the_pooled_oracle() -> None:
         initial_allele_count=2,
         max_generations=50,
     )
-    result = fim(
-        params.gene_copies,
-        params.m,
-        params.mu,
-        params.d,
+    result = simulate_params(
         params=params,
         store=_DiscardingStore(),
     )
@@ -998,14 +995,9 @@ def _run_engine_replicates(
         stop_batch_early=False,
         initial_frequencies=initial_frequencies,
     )
-    results = fim(
-        population_size,
-        m,
-        mu,
-        d,
-        params=params,
+    results = simulate_params(
+        params=replace(params, engine_backend=engine_backend),
         store=_DiscardingStore(),
-        engine_backend=engine_backend,
     )
     replicate_results = results if isinstance(results, tuple) else (results,)
     return tuple(result.final_state for result in replicate_results)
@@ -2107,7 +2099,7 @@ def test_identity_recursion_d_and_g_st_are_non_increasing_in_migration() -> None
     migration panel (same `N`, `mu`, `d`, and even the same five `m`
     values), but checked against this module's own exact identity-
     recursion oracle (`_identity_fixed_point`) rather than a chain of
-    single-seeded `fim()` engine runs compared with a fixed `1e-9`
+    single-seeded `simulate_params()` engine runs compared with a fixed `1e-9`
     tolerance. That design cannot be ported as specified: it compares
     single stochastic realizations, not expectations, and gives each
     of the five runs its own independent convergence horizon.
@@ -2257,9 +2249,7 @@ def test_engine_trajectory_matches_the_identity_recursion_gs_and_gd() -> None:
     )
     store = InMemoryTrajectoryStore()
 
-    output = fim(
-        params.gene_copies, params.m, params.mu, params.d, params=params, store=store
-    )
+    output = simulate_params(params=params, store=store)
 
     assert isinstance(output, tuple)
     assert len(output) == replicates
@@ -2385,7 +2375,7 @@ def test_engine_reproduces_ryman_leimar_ancestral_heterozygosity_effect() -> Non
             stop_batch_early=False,
             initial_frequencies=initial_frequencies,
         )
-        output = fim(params.gene_copies, params.m, params.mu, params.d, params=params)
+        output = simulate_params(params=params)
         assert isinstance(output, tuple)
         summary = bootstrap_replicate_summary(
             output, rng=np.random.default_rng(1), bootstrap_samples=500

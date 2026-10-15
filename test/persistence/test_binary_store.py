@@ -14,13 +14,14 @@ from __future__ import annotations
 import hashlib
 import itertools
 import pickle
+from dataclasses import replace
 from pathlib import Path
 
 import numpy as np
 import pytest
 from tlog_support import canonical_jsonl
 
-from fim.engine import fim
+from fim.engine import simulate_params
 from fim.model.params import SimulationParams
 from fim.persistence import tlog
 from fim.persistence.binary_store import (
@@ -64,15 +65,10 @@ def _params(**updates: object) -> SimulationParams:
 
 def _run(params: SimulationParams, store: TrajectoryStore, backend: str) -> None:
     """Run `params` into `store` on `backend` with the fixed run id."""
-    fim(
-        params.gene_copies,
-        params.m,
-        params.mu,
-        params.d,
-        params=params,
+    simulate_params(
+        params=replace(params, engine_backend=backend),  # type: ignore[arg-type]
         store=store,
         run_id=RUN_ID,
-        engine_backend=backend,  # type: ignore[arg-type]
     )
 
 
@@ -160,11 +156,7 @@ def test_a_batch_with_a_factory_writes_one_log_per_replicate(tmp_path: Path) -> 
             run_id, BinaryLogStore(tmp_path / f"{run_id}.tlog", background=False)
         )
 
-    fim(
-        params.gene_copies,
-        params.m,
-        params.mu,
-        params.d,
+    simulate_params(
         params=params,
         store_factory=factory,
     )

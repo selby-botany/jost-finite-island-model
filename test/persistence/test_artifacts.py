@@ -8,7 +8,7 @@ from pathlib import Path
 
 from vector_support import loci, make_params
 
-from fim.engine import RunResult, fim
+from fim.engine import RunResult, simulate_params
 from fim.persistence.artifacts import (
     convergence_history_rows,
     run_artifact_targets,
@@ -22,11 +22,7 @@ def _run(directory: Path) -> RunResult:
     """Run a tiny configuration, streaming its trajectory into `directory`."""
     params = make_params(40, loci=loci(1), d=3, mu=0.02, m=0.1)
     with BinaryLogStore(run_artifact_targets(directory)["trajectory"]) as store:
-        output = fim(
-            params.gene_copies,
-            params.m,
-            params.mu,
-            params.d,
+        output = simulate_params(
             params=params,
             store=store,
             run_id="run",

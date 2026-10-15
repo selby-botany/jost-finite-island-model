@@ -50,13 +50,13 @@ step, no framework) rendered inside a native window (WKWebView on
 macOS, WebView2 on Windows, WebKitGTK on Linux), driven entirely
 through one bridge class, `fim.gui.app.Api` (§4), that the JS side
 calls into and gets plain JSON-serializable values back from. Every
-screen calls `fim.engine.fim`, `fim.viz.scatter`, and
+screen calls `fim.engine.simulate_params`, `fim.viz.scatter`, and
 `fim.model.params.SimulationParams` — the same public API `fim.cli`
 already uses (see
 [`doc/fim-simulator-functional-api.md`](fim-simulator-functional-api.md))
 — and never duplicates validation, statistics, or run orchestration of
 its own. [`doc/developer.md`](developer.md)'s own architecture table
-states that rule directly: "GUI: call `fim.engine.fim`; do not
+states that rule directly: "GUI: call `fim.engine.simulate_params`; do not
 duplicate model logic."
 
 `fim.launcher` dispatches to `fim.gui.app.main` for the zero-argument
@@ -357,7 +357,7 @@ built.
 
 ### 7.1 Scalar runs
 
-`fim.gui.runner` runs `fim.engine.fim` — a single blocking call — on a
+`fim.gui.runner` runs `fim.engine.simulate_params` — a single blocking call — on a
 `threading.Thread`, so a multi-thousand-generation run never freezes
 the GUI's own main thread. Progress and cancellation come from
 `fim.gui.store.GuiProgressStore`, a decorator around the
@@ -371,7 +371,7 @@ updates than the page can usefully render.
 ### 7.2 Batch runs
 
 `fim.gui.batch_runner` runs a multi-replicate batch in parallel, as
-real OS processes, via `fim.engine.fim(..., max_workers=N,
+real OS processes, via `fim.engine.simulate_params(..., max_workers=N,
 store_factory=...)` — the same call shape `cli._command_run_batch`'s
 own default (non-`--sequential`) path already makes. Progress and
 cancellation for this path are entirely file-mediated

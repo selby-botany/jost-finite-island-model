@@ -16,7 +16,7 @@ import numpy as np
 import pytest
 from tlog_support import LAYOUT, same_frames, walk
 
-from fim.engine import fim
+from fim.engine import simulate_params
 from fim.model.params import SimulationParams
 from fim.persistence import tlog, tlog_reader
 from fim.persistence.binary_store import BinaryLogStore
@@ -164,11 +164,7 @@ def test_a_real_run_reads_back_by_generation_exactly_like_the_memory_store(
     reference = InMemoryTrajectoryStore()
     store = BinaryLogStore(tmp_path / "t.tlog", key_every=16, block_generations=5)
     for sink in (reference, store):
-        fim(
-            params.gene_copies,
-            params.m,
-            params.mu,
-            params.d,
+        simulate_params(
             params=params,
             store=sink,
             run_id=RUN_ID,

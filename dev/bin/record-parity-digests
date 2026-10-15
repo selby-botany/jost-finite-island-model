@@ -116,16 +116,11 @@ def run_case(params: Any, backend: str) -> dict[str, str]:
     from fim.persistence.store import InMemoryTrajectoryStore  # noqa: PLC0415
 
     store = InMemoryTrajectoryStore()
-    output = fim(
-        params.gene_copies,
-        params.m,
-        params.mu,
-        params.d,
-        params=params,
+    output = simulate_params(
+        params=replace(params, engine_backend=backend),
         store=store,
         run_id=FIXED_RUN_ID,
         clock=fixed_clock,
-        engine_backend=backend,
     )
     results = output if isinstance(output, tuple) else (output,)
     rows = [list(store.read(result.run_id)) for result in results]
