@@ -47,6 +47,7 @@ import subprocess
 import sys
 import tempfile
 from collections.abc import Callable, Iterable, Sequence
+from dataclasses import replace
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
@@ -112,16 +113,32 @@ def run_case(params: Any, backend: str) -> dict[str, str]:
         Digests keyed by what they cover: `rows`, `reports`, `histories`,
         `manifests`.
     """
-    from fim.engine import fim  # noqa: PLC0415
+    from fim import engine  # noqa: PLC0415
     from fim.persistence.store import InMemoryTrajectoryStore  # noqa: PLC0415
 
     store = InMemoryTrajectoryStore()
-    output = simulate_params(
-        params=replace(params, engine_backend=backend),
-        store=store,
-        run_id=FIXED_RUN_ID,
-        clock=fixed_clock,
-    )
+    entry = getattr(engine, "simulate_params", None)
+    if entry is not None:
+        output = entry(
+            params=replace(params, engine_backend=backend),
+            store=store,
+            run_id=FIXED_RUN_ID,
+            clock=fixed_clock,
+        )
+    else:
+        # A tree from before the entry point was renamed, so a baseline can
+        # be recorded with this same script.
+        output = engine.fim(  # type: ignore[attr-defined]
+            params.gene_copies,
+            params.m,
+            params.mu,
+            params.d,
+            params=params,
+            store=store,
+            run_id=FIXED_RUN_ID,
+            clock=fixed_clock,
+            engine_backend=backend,
+        )
     results = output if isinstance(output, tuple) else (output,)
     rows = [list(store.read(result.run_id)) for result in results]
     reports = [result.report for result in results]
@@ -159,6 +176,10 @@ def comparable_manifest(result: Any) -> dict[str, Any]:
     for key in ("engine_backend", "jit", "auto_vector_min_d"):
         manifest.pop(key, None)
         parameters.pop(key, None)
+    # `dataclasses.replace` on resolved parameters (how a backend is chosen
+    # here) re-resolves them with nothing left to derive, so which fields
+    # were derived is not comparable across how the case was built.
+    manifest.pop("auto_derived", None)
     manifest["parameters"] = parameters
     return manifest
 
