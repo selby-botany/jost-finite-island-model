@@ -499,7 +499,7 @@ flowchart TB
         INIT["initial-condition\ngenerator"]
         OPS["update operators\nMigrate / Drift / Mutate"]
         MON["ConvergenceMonitor"]
-        ENG["engine.fim()\nrun loop"]
+        ENG["engine.simulate_params()\nrun loop"]
     end
     subgraph Outputs
         STORE["TrajectoryStore\n(every generation)"]
@@ -519,7 +519,7 @@ flowchart TB
     STORE -.optional re-analysis.-> STATS
 ```
 
-`engine.fim()` owns the run loop; every other component is a function or
+`simulate_params()` owns the run loop; every other component is a function or
 small class it calls, none of them aware of the loop that drives them.
 `TrajectoryStore` and the statistics module are usable standalone against
 a previously persisted run — re-computing a new statistic against an old
@@ -717,18 +717,18 @@ generation-update pipeline (Migrate → Drift → Mutate) driven by a
 `SimulationParams` config. That computation can be *carried out* three
 different ways, all producing the same science, differing only in how
 fast they run and how strictly they guarantee to match each other bit
-for bit. This is the `engine_backend` setting — a keyword to `fim()`,
-not a science parameter, and orthogonal to every value described
+for bit. This is the `engine_backend` setting — a `SimulationParams` field
+(`Execution(backend=...)` from Python), not a science parameter, and orthogonal to every value described
 elsewhere in this document: changing it never changes what a run
 converges to, only how long getting there takes.
 
 **Where.** `engine_backend` lives entirely inside `fim.engine` (§5) — it
 selects which of three implementations actually drives the generation
-loop underneath `engine.fim()`. It has no effect on, and is invisible
+loop underneath `simulate_params()`. It has no effect on, and is invisible
 to, every other module: the statistics module, the visualization
 module, and the persisted trajectory format are all identical regardless
-of which engine produced the run. Reachable both by calling `fim()`
-directly from Python and as a real `SimulationParams` field — a `fim
+of which engine produced the run. Reachable from Python as
+`Execution(backend=...)` and as a real `SimulationParams` field — a `fim
 run` YAML config key, no separate CLI flag — see
 [`doc/configuration.md`'s own reference for
 this](configuration.md#engine-backend-and-jit).
@@ -798,7 +798,7 @@ against, while two faster alternatives sit beside it, opt-in:
 **How to decide — the short version:** if you never touch Python and
 just run `fim run` on a YAML file, set `engine_backend: auto` (the
 desktop app's own starting value) and the right engine is chosen for
-you. If you do call `fim()` directly and a run with a lot of demes ($d$)
+you. If you call `fim.simulate` directly and a run with a lot of demes ($d$)
 or loci feels slow, `"generational-vector"` is worth trying first —
 [§9.1's own table row](#91-variations-reachable-from-configuration) has
 the exact, measured evidence for when it wins and by how much, and that
@@ -1264,16 +1264,30 @@ promotion, and handles crash recovery.
 
 **`viz/scatter.py`** and **`viz/diagnostics.py`** — see §8.
 
-**`engine.py`.** `fim(gene_copies, m, mu, d, *, params: SimulationParams) ->
-RunResult` — the public entry point matching the requirement's own
-signature. Owns the run loop described in §4.2 and nothing else; every
-step it takes is a call into one of the modules above. With
-`n_replicates` above one it returns one `RunResult` per independently
-seeded replicate instead, optionally stopping the batch early on an
-across-replicate confidence interval and optionally distributing
-replicates over worker processes (§9); replicate_summary reports each
-statistic's realized interval. The batch layer orchestrates whole runs
-and changes nothing inside one.
+**`engine/`.** `simulate_params(params: SimulationParams) -> RunResult`, the
+engine's entry point: the configuration is stated once, in `params`, and the
+backend (`engine_backend`, `jit`, the `auto` thresholds) is read from it. It
+owns the run loop described in §4.2 and nothing else; every step it takes is
+a call into one of the modules above. With `n_replicates` above one it returns
+one `RunResult` per independently seeded replicate instead, optionally
+stopping the batch early on an across-replicate confidence interval and
+optionally distributing replicates over worker processes (§9);
+replicate_summary reports each statistic's realized interval. The batch layer
+orchestrates whole runs and changes nothing inside one. Replicate $i$ of a
+batch is seeded with child $i$ of `numpy.random.SeedSequence(seed)`, so two
+batches with nearby seeds share no replicate; a single run uses `seed`
+itself.
+
+**`spec/`, `results.py`, `simulation.py`, `workspace.py`, `stored.py`.** The
+public front door (`import fim`; [the Python guide](python-api.md)).
+`RunSpec` groups a run's science (the model, stopping, replication, and
+analysis settings, and the seed) and compiles to `SimulationParams`, which
+stays the engine's single flat, validated parameter object. `Execution` and
+`Recording` sit beside it because they never change a result. A run's ID
+(`run_identity`) is derived from the science alone, so the same configuration
+has the same ID on every backend. `fim.simulate` always returns a `Result`,
+`Workspace` holds checkpointed, resumable runs, and `open_run` reads a saved
+run back.
 
 **`cli.py`** and **`cli_objects.py`** / **`bin/fim`**. Command-line
 interfaces: `fim` runs direct simulation workflows, while `fim object`
@@ -1316,7 +1330,7 @@ alleles):
 
 | Column | Type | Meaning |
 |---|---|---|
-| run_id | string | groups rows from one `fim()` call |
+| run_id | string | groups rows from one replicate's run |
 | `generation` | int | `t` |
 | `deme` | int | `k`, `[1..d]` |
 | locus_id | int | `l` |
@@ -1820,9 +1834,9 @@ built (§11): each names the one place the change lands.
 | …several statistics had to agree before stopping? | `convergence_statistic` as a list plus `convergence_combinator` (`"all"`/`"any"`) | the single-statistic path (§5) is that combinator's one-element special case, not a different code path |
 | …many replicate runs were needed for a confidence interval, without hand-guessing the count? | `precision` with stop_batch_early: once replicate_minimum replicates exist, the batch stops as soon as every watched statistic's across-replicate Student's-t interval (`fim.statistics.interval`) is that tight, combined by the same convergence_combinator used within a run, with `n_replicates` as the hard cap. fim.engine.replicate_summary and the CLI's `summary.json` report the realized interval | `ConfidenceIntervalCriterion` implements the same `ConvergenceCriterion` protocol as `TrailingWindowCriterion` and plugs into an unmodified `ConvergenceMonitor`, so the replicate batch loop gains a second stopping rule rather than a second loop |
 | …replicate batches ran faster? | max_workers (library) / `--workers`, `--sequential` (CLI); the library default is sequential, the CLI default is one worker per processor | replicates are fully independent (own seed, own registries, own convergence monitor), so `ProcessPoolExecutor` runs _run_one unmodified. Worker *processes*, not threads: per-generation state is Python-object sparse maps that hold the GIL. A store_factory gives each replicate its own trajectory store in either mode, since one store object cannot cross a process boundary |
-| …replicate batches ran faster, without process-per-replicate overhead? | `fim()`'s own `engine_backend="generational"` (a config-file field — see doc/configuration.md#engine-backend-and-jit) | a second engine implementation, `ReplicaLane`/`run_batch`, advances every still-active replicate's own generation together, fanned out across real threads (`ThreadedAdvancer`) rather than processes — one address space, no picklability constraint, bit-identical trajectory to the default for the same seed. `jit="numba"` additionally JIT-compiles `drift`'s own random draw (optional `numba` dependency): a real, substantial speedup that comes from removing CPython interpreter overhead rather than from thread-count parallelism — the same speedup is already present at a single worker and does not grow as more workers are added; `jit="off"` shows no speedup at any worker count ([Appendix B.2](fim-engine-backend-benchmarks.md#b2-g-thread-count-sweep) has the measured table). `migrate`'s/`mutate`'s own RNG calls stay unjitted for the matrix-form migration and stochastic migrant-sampling paths, so those two configurations do not see this speedup |
-| …`migrate`/`mutate`/`drift` themselves operated on dense arrays instead of one Python loop per deme? | `fim()`'s own `engine_backend="generational-vector"` (a config-file field — see doc/configuration.md#engine-backend-and-jit), both mutation models and both `migrant_sampling` modes | a third engine implementation, `VectorizedAdvancer`, keeps each replicate's allele frequencies in one dense table per run (`fim.model.vector_block`) and runs a whole generation, every locus, as one compiled call (`fim.model.vector_kernels`; [§4.6](#46-choosing-an-engine-backend) explains the underlying math for a scientist reader). Identical to the other two backends for the same seed on the same machine: every trajectory row, the report and the final state, bit for bit, with migration on or off (continuous or drawn migrant counts), for any number of loci. Needs the optional `numba` dependency unconditionally (no separate `jit` toggle). Measured 30 to 300 times faster than `"lineal"` on the infinite-alleles worked examples; [Appendix B.1](fim-engine-backend-benchmarks.md#b1-d-deme-count-sweep) has the earlier finite-alleles tables |
-| …the choice between `"generational"` and `"generational-vector"` were made automatically, on `d` and locus capacity, instead of by hand? | `fim()`'s own `engine_backend="auto"` (a config-file field — see doc/configuration.md#engine-backend-and-jit), with `auto_vector_min_d` (default `2`) and `auto_vector_max_capacity` (default `4096`) as the two configurable thresholds | picks `"generational-vector"` when `d` clears its own cutover, *every* locus's own capacity ($4^{L_l}$ under `finite_alleles`) is at most the capacity ceiling, *and* `jit` is `"off"` and `numba` is importable, `"generational"` otherwise — never `"lineal"`, since no benchmark data yet fully characterizes that boundary (though [Appendix B.6](fim-engine-backend-benchmarks.md#b6-joint-d--locus-length-sweep-post-phase-7-2026-09-05) found `"lineal"` outright winning in two small corners of the grid). Both current defaults come from [Appendix B.6](fim-engine-backend-benchmarks.md#b6-joint-d--locus-length-sweep-post-phase-7-2026-09-05)'s own 104-point joint `d` × locus-length grid, run specifically because [Appendix B.5](fim-engine-backend-benchmarks.md#b5-joint-d--locus-length-sweep-heatmap) found the two axes interact (a diagonal boundary, not a rectangle) — `4096` is the largest capacity at which `"generational-vector"` won at every tested `d`, and `2` is the smallest `d` a config can have at all, since no `d` below that capacity ceiling was ever found losing. The resolved choice (never the literal string `"auto"`) and the `jit` setting are both recorded on the run's own `manifest.engine_backend`/`manifest.jit`, so a saved run's own record always says what actually produced it. Checking every locus's own capacity, not `d` alone, is what stops a large-`d`, large-capacity config from resolving to `"generational-vector"` inside a region it actually loses in. A real, `d`-dependent losing region still exists above the new capacity ceiling (Appendix B.6 again) — a single rectangular threshold pair cannot reach it without also misrouting the region below `4096`, so it stays outside `"auto"`'s reach, reachable only by overriding `auto_vector_max_capacity` by hand with that risk understood |
+| …replicate batches ran faster, without process-per-replicate overhead? | the `engine_backend="generational"` (a config-file field — see doc/configuration.md#engine-backend-and-jit) | a second engine implementation, `ReplicaLane`/`run_batch`, advances every still-active replicate's own generation together, fanned out across real threads (`ThreadedAdvancer`) rather than processes — one address space, no picklability constraint, bit-identical trajectory to the default for the same seed. `jit="numba"` additionally JIT-compiles `drift`'s own random draw (optional `numba` dependency): a real, substantial speedup that comes from removing CPython interpreter overhead rather than from thread-count parallelism — the same speedup is already present at a single worker and does not grow as more workers are added; `jit="off"` shows no speedup at any worker count ([Appendix B.2](fim-engine-backend-benchmarks.md#b2-g-thread-count-sweep) has the measured table). `migrate`'s/`mutate`'s own RNG calls stay unjitted for the matrix-form migration and stochastic migrant-sampling paths, so those two configurations do not see this speedup |
+| …`migrate`/`mutate`/`drift` themselves operated on dense arrays instead of one Python loop per deme? | the `engine_backend="generational-vector"` (a config-file field — see doc/configuration.md#engine-backend-and-jit), both mutation models and both `migrant_sampling` modes | a third engine implementation, `VectorizedAdvancer`, keeps each replicate's allele frequencies in one dense table per run (`fim.model.vector_block`) and runs a whole generation, every locus, as one compiled call (`fim.model.vector_kernels`; [§4.6](#46-choosing-an-engine-backend) explains the underlying math for a scientist reader). Identical to the other two backends for the same seed on the same machine: every trajectory row, the report and the final state, bit for bit, with migration on or off (continuous or drawn migrant counts), for any number of loci. Needs the optional `numba` dependency unconditionally (no separate `jit` toggle). Measured 30 to 300 times faster than `"lineal"` on the infinite-alleles worked examples; [Appendix B.1](fim-engine-backend-benchmarks.md#b1-d-deme-count-sweep) has the earlier finite-alleles tables |
+| …the choice between `"generational"` and `"generational-vector"` were made automatically, on `d` and locus capacity, instead of by hand? | the `engine_backend="auto"` (a config-file field — see doc/configuration.md#engine-backend-and-jit), with `auto_vector_min_d` (default `2`) and `auto_vector_max_capacity` (default `4096`) as the two configurable thresholds | picks `"generational-vector"` when `d` clears its own cutover, *every* locus's own capacity ($4^{L_l}$ under `finite_alleles`) is at most the capacity ceiling, *and* `jit` is `"off"` and `numba` is importable, `"generational"` otherwise — never `"lineal"`, since no benchmark data yet fully characterizes that boundary (though [Appendix B.6](fim-engine-backend-benchmarks.md#b6-joint-d--locus-length-sweep-post-phase-7-2026-09-05) found `"lineal"` outright winning in two small corners of the grid). Both current defaults come from [Appendix B.6](fim-engine-backend-benchmarks.md#b6-joint-d--locus-length-sweep-post-phase-7-2026-09-05)'s own 104-point joint `d` × locus-length grid, run specifically because [Appendix B.5](fim-engine-backend-benchmarks.md#b5-joint-d--locus-length-sweep-heatmap) found the two axes interact (a diagonal boundary, not a rectangle) — `4096` is the largest capacity at which `"generational-vector"` won at every tested `d`, and `2` is the smallest `d` a config can have at all, since no `d` below that capacity ceiling was ever found losing. The resolved choice (never the literal string `"auto"`) and the `jit` setting are both recorded on the run's own `manifest.engine_backend`/`manifest.jit`, so a saved run's own record always says what actually produced it. Checking every locus's own capacity, not `d` alone, is what stops a large-`d`, large-capacity config from resolving to `"generational-vector"` inside a region it actually loses in. A real, `d`-dependent losing region still exists above the new capacity ceiling (Appendix B.6 again) — a single rectangular threshold pair cannot reach it without also misrouting the region below `4096`, so it stays outside `"auto"`'s reach, reachable only by overriding `auto_vector_max_capacity` by hand with that risk understood |
 
 ### 9.2 Landing spots for changes that are not built
 
