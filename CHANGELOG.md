@@ -8,6 +8,11 @@ project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- **A Python guide.** [Using fim from Python](doc/python-api.md) walks a
+  researcher through describing a run, reading its result, saving and
+  reopening it, and pausing and resuming it, with code that a test runs as
+  written. The engine API reference now documents the `fim` front door and the
+  renamed engine entry point.
 - **`fim.Workspace`: saved, resumable runs from Python.** `Workspace(path)`
   is a results directory (always named explicitly; a library never writes to
   the current directory unasked). `plan(spec)` saves a run and returns a

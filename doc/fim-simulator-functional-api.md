@@ -3,7 +3,8 @@
 - [The externally accessible engine API](#the-externally-accessible-engine-api)
   - [Who this document is for](#who-this-document-is-for)
   - [What "externally accessible" means here](#what-externally-accessible-means-here)
-  - [1. `fim.engine` — run a simulation](#1-fimengine--run-a-simulation)
+  - [1. `fim` — the front door](#1-fim--the-front-door)
+  - [1b. `fim.engine` — the engine entry point](#1b-fimengine--the-engine-entry-point)
   - [2. `fim.model` — describe a simulation](#2-fimmodel--describe-a-simulation)
   - [3. `fim.model.topology` — build a migration matrix](#3-fimmodeltopology--build-a-migration-matrix)
   - [4. `fim.statistics` — differentiation and diversity measures](#4-fimstatistics--differentiation-and-diversity-measures)
@@ -37,120 +38,113 @@ document only answers "what can code call."
 
 ## What "externally accessible" means here
 
-Every package under `src/fim/` re-exports its own public surface through
-its `__init__.py`'s own `__all__` — the names listed there (plus a
-handful of single-file modules with no `__init__.py` of their own:
-`fim.engine`, `fim.cli`, `fim.reanalyze`) are the whole of what "outside
-code" (a test, the CLI, the desktop app, a future script) is meant to
-import. Anything else — a name starting with `_`, or a submodule never
-re-exported (`fim.model.operators` is the standing example: its own
-package docstring states plainly that it is "called only from
-`fim.engine`'s own run loop, never directly by outside code") — is an
-implementation detail, free to change shape under a future core
-refactor without that refactor counting as a breaking change to this
-API.
+The supported surface is what the public modules declare in `__all__`:
+`fim` (the front door below), `fim.engine`, `fim.errors`, `fim.model`,
+`fim.persistence`, `fim.results`, `fim.spec`, `fim.statistics`,
+`fim.convergence`, and `fim.viz`, plus the single-file modules `fim.cli` and
+`fim.reanalyze`. `test/test_public_surface.py` enforces it: each of those
+modules must declare an importable `__all__`, and no module may import another
+module's underscore-prefixed name. Anything else, a name starting with `_` or
+a submodule never re-exported (`fim.model.operators` is the standing example),
+is an implementation detail, free to change shape without counting as a
+breaking change to this API. `fim` ships type information (`py.typed`).
 
 `fim.gui` is a separate, GUI-specific API surface, not covered here —
 see `doc/fim-gui-test-plan.md`.
 
-## 1. `fim.engine` — run a simulation
+## 1. `fim` — the front door
 
-The one entry point everything else in this project ultimately calls.
+The names a Python user needs, loaded on first use so `import fim` stays
+light. [Using fim from Python](python-api.md) is the guide with runnable
+examples; this section is the reference.
 
-- **`fim(gene_copies, m, mu, d, *, params, store=None, run_id=None, clock=None,
-  max_workers=None, store_factory=None, engine_backend=None, jit=None,
-  auto_vector_min_d=None, auto_vector_max_capacity=None) -> RunResult |
-  tuple[RunResult, ...]`**
-  Runs the finite island model to convergence (or the hard generation
-  cap), once per replicate. `gene_copies`, `m`, `mu`, `d` must equal the same
-  fields already inside `params`; the four are repeated in the
-  signature because a real call site names them directly (matching how
-  a genetics paper would state a scenario) rather than reading them out
-  of an opaque options object. Returns one `RunResult` when
-  `params.n_replicates == 1`, otherwise a tuple of one per replicate (or
-  fewer, if `params.stop_batch_early` lets the batch stop early once
-  every watched statistic's confidence interval has tightened enough).
-  `engine_backend`/`jit`/`auto_vector_min_d`/`auto_vector_max_capacity`
-  each default to `None` here, meaning "read `params.engine_backend`/
-  `params.jit`/`params.auto_vector_min_d`/`params.auto_vector_max_
-  capacity` instead" — real `SimulationParams` fields now (config-file/
-  CLI reachable, `doc/configuration.md`), not duplicate-of-nothing
-  keyword arguments; passing one of these four explicitly overrides
-  `params` for that one call only, a pure override with no "must agree"
-  requirement (unlike `gene_copies`/`m`/`mu`/`d` above). `engine_backend` selects
-  which of this project's own engine
-  implementations actually runs the batch — `"lineal"` (`params`'s own
-  default too, every earlier release's own behavior, unchanged),
-  `"generational"`
-  (real thread-based replicate fan-out, bit-identical trajectory to
-  `"lineal"` for the same seed), `"generational-vector"` (array-native:
-  one compiled kernel call per generation over every locus, in
-  `operators.step`'s own stage and draw order; **identical** to
-  `"lineal"` and `"generational"` for the same seed on the same
-  platform, under both mutation models, with a scalar or matrix `m`,
-  for any number of loci — every trajectory row, the report, the final
-  state and the manifest apart from `engine_backend`; the compiled
-  `lgamma`/`log`/`log1p`/`exp` are verified against CPython's only on the
-  development platform, so across machines results agree statistically),
-  or `"auto"` (picks between `"generational"` and
-  `"generational-vector"` — never `"lineal"`: V when `numba` is importable, `jit` is `"off"`, `params.d` is at least
-  `auto_vector_min_d` and, under finite alleles only, every locus's
-  capacity is at most `params.auto_vector_max_capacity`; otherwise G.
-  The output is identical either way, so a missing `numba` just means
-  G).
-  `"generational-vector"` runs both mutation models and both
-  `params.migrant_sampling` modes, drawing the stochastic migrant counts
-  in the compiled step; a direct `"generational-vector"` choice without
-  `numba` raises `ValueError` naming the violated constraint
-  (`"auto"` falls back to `"generational"` instead, silently, since it is
-  choosing on the caller's behalf). It needs the optional `numba` dependency
-  (`pip install fim[jit]`) unconditionally — it has no separate `jit`
-  toggle of its own, so only `jit="off"` (the default) is accepted
-  alongside it; `"auto"` with `jit="numba"` resolves to `"generational"`.
-  It holds one `loci x demes x alleles` table per replicate; a table
-  over the per-replicate ceiling (2 GiB, or the
+- **`simulate(spec, *, execution=None, recording=None, clock=None) -> Result`**
+  runs a `RunSpec` (or a `RunConfig`, whose own execution and recording the
+  keywords override) and always returns a `Result`. With
+  `recording.directory` set, the run is published there atomically in the
+  layout `fim run` writes; with `execution.workers`, a `lineal` batch runs in
+  worker processes (a directory is then required).
+- **`RunSpec(model, seed, stopping, replication, analysis, expert)`** and its
+  parts, all frozen, keyword-only dataclasses that report a bad value by its
+  field path: `Model(demes, population, migration, mutation, loci,
+  migrant_sampling, initial)` with `Population(individuals, ploidy)`,
+  `Locus(id, length)`, `InfiniteAlleles(rate)` or `FiniteAlleles(rate)`, and
+  an initial condition `FoundingAlleles`, `ExplicitFrequencies`, or
+  `EquilibriumSplit`; `Stopping`; `Replication` (including `max_concurrent`);
+  `Analysis`.
+- **`Execution`** (backend, JIT, worker processes, the `auto` thresholds) and
+  **`Recording`** (directory, trajectory retention) are passed beside the
+  `RunSpec`. They never change a result and take no part in a run's identity.
+- **`run_identity(spec) -> str`** — the run's ID, from the science only.
+- **`load_config(path) -> RunConfig`**, **`RunConfig`** — a configuration
+  file as grouped objects, with its labels.
+- **`Result`** — `run_id`, `spec`, `replicates` (a tuple of **`Replicate`**),
+  `summary` (statistic ID to confidence interval), `batch_stop`, `provenance`,
+  and `only()`. A `Replicate` has `index`, `seed`, `run_id`, `stop`, `report`
+  (a **`Report`**: a read-only mapping of catalog statistic IDs, with `D`,
+  `G_ST`, `H_S`, `H_T` as attributes and `to_dict()` giving `report.json`),
+  `histories`, `final_state`, and a read-only `trajectory` reader.
+- **`open_run(directory) -> StoredRun`**, **`StoredRun`**,
+  **`StoredReplicate`** — a saved run opened again, with the same report,
+  stop, history, and summary types, `rows()`, `verify()`, and `reanalyze()`.
+- **`Workspace(path)`**, **`RunHandle`** — a results directory of saved,
+  checkpointed, resumable runs: `plan`, `run`, `handle`, `handles`, and on a
+  handle `start`/`resume`, `pause`, `cancel`, `delete`, `state`, `open`.
+- **`FimError`**, **`ConfigurationError`**, **`UnsupportedError`** — the
+  exception root, a bad specification, and a valid one no available engine
+  can run. `fim.errors.StoreError` covers damaged, closed, or read-only
+  stores.
+
+`fim.spec.to_params(spec, execution, recording)` compiles a specification to
+the engine's `SimulationParams`, and `fim.spec.from_params` reads one back.
+
+## 1b. `fim.engine` — the engine entry point
+
+What `simulate` calls. Code that already holds `SimulationParams` can call it
+directly.
+
+- **`simulate_params(params, *, store=None, run_id=None, clock=None,
+  max_workers=None, store_factory=None) -> RunResult | tuple[RunResult, ...]`**
+  Runs the finite island model to convergence (or the hard generation cap),
+  once per replicate. The configuration is stated once, in `params`; the
+  backend (`engine_backend`, `jit`, and the `auto` thresholds) is read from
+  it. Returns one `RunResult`, or a tuple with one per replicate (fewer than
+  `n_replicates` when `stop_batch_early` lets the batch stop once every
+  watched statistic's across-replicate interval has tightened enough).
+  `max_workers` and `store_factory` opt `lineal` into running replicates in
+  worker processes and give each replicate its own store; `clock` is a test
+  seam. `engine_backend` selects the implementation: `"lineal"` (the
+  reference), `"generational"` (thread-based replicate fan-out, bit-identical
+  to `lineal` for the same seed), `"generational-vector"` (array-native; one
+  compiled kernel call per generation, identical to `lineal` for the same seed
+  on the same platform), or `"auto"` (picks between the last two: the vector
+  backend when `numba` is importable, `jit` is `"off"`, the deme count is at
+  least `auto_vector_min_d` and, under finite alleles, every locus's capacity
+  is at most `auto_vector_max_capacity`; otherwise the generational one). A
+  direct `"generational-vector"` choice without `numba` raises `ValueError`;
+  a table over the per-replicate memory ceiling (2 GiB, or the
   `FIM_VECTOR_MEMORY_CEILING_BYTES` environment variable) raises
-  `fim.model.vector_block.VectorMemoryCeilingError` at the start with the
-  remedies named.
-  alongside it or alongside `"auto"` resolving to it. `max_workers`/
-  `store_factory` opt `"lineal"` into running independent replicates
-  across real OS processes rather than one at a time (`clock`/
-  `store_factory` must be plain module-level functions, not closures or
-  lambdas, whenever `max_workers` is set) — meaningful only under
-  `"lineal"`; passing either alongside a different `engine_backend`
-  raises `ValueError` rather than being silently ignored. `jit="numba"`
-  JIT-compiles `"generational"`'s own `drift` step (bit-identical
-  output; needs the optional `numba` dependency, `pip install
-  fim[jit]`) — a real fix for a call-overhead regression an earlier
-  internal attempt had, but not yet a demonstrated wall-clock win for
-  `drift` as a whole (see the engine's own docstrings for the measured
-  detail); `"lineal"` never accepts anything but `jit="off"`.
-  `auto_vector_min_d` is the deme-count cutover `"auto"` uses to decide
-  — irrelevant under every other `engine_backend`; `params.
-  auto_vector_min_d`'s own default is `DEFAULT_AUTO_VECTOR_MIN_D` (2,
-  defined in `fim.model.params`), a real benchmark-measured default
-  with known cross-environment caveats (see that constant's own
-  docstring). `auto_vector_max_capacity` is the per-locus capacity
-  ceiling `"auto"` uses alongside it under finite alleles (4 ** length;
-  not under infinite alleles, whose table is as wide as the alleles
-  alive at once) — every locus in `params.loci` must be at most this
-  value for `"auto"` to pick `"generational-vector"`, regardless of `d`;
-  `params.auto_vector_max_capacity`'s own
-  default is `DEFAULT_AUTO_VECTOR_MAX_CAPACITY` (4096), likewise a real
-  benchmark-measured default with the same caveats. Whichever backend
-  actually ran — the resolved choice, not
-  the literal string `"auto"` — and whether `jit` was on are both
-  recorded on the returned result's own `manifest.engine_backend`/
-  `manifest.jit`, so a saved run's own record always says what actually
-  produced it, even when the caller asked for `"auto"`.
+  `fim.model.vector_block.VectorMemoryCeilingError` with the remedies named.
+  The backend that actually ran, never the literal `"auto"`, is recorded on
+  each result's `manifest.engine_backend`.
+- **`deterministic_run_id(params) -> str`** — the run ID, from
+  `SimulationParams.identity_dict`, which leaves out the engine, JIT, trajectory
+  retention, and storage settings.
+- **`report_for_state(state, params, *, run_id, converged, reason, ...) -> FinalReport`**
+  Builds a `FinalReport` from any `ModelState`, not only a state a run just
+  finished producing — the same function `fim.reanalyze` uses to recompute a
+  report at an earlier saved generation. Optional `window_statistics` and
+  `converged_statistics` carry what only the run itself knows.
+- **`reports_summary(reports) -> Mapping[str, float | None]`** and
+  **`replicate_summary(reports) -> Mapping[str, tuple[float, ConfidenceInterval]]`**
+  Aggregate several replicates' own `FinalReport`s into means (and, for the
+  latter, confidence intervals) per statistic.
 - **`build_engine_backend(engine_backend, *, jit="off", max_workers=None,
   store_factory=None, params=None,
   auto_vector_min_d=DEFAULT_AUTO_VECTOR_MIN_D,
   auto_vector_max_capacity=DEFAULT_AUTO_VECTOR_MAX_CAPACITY) ->
-  EngineBackend`** — the factory `simulate_params()` itself calls; usually reached
-  through `simulate_params()`'s own keywords above, not called directly, but
-  available for a caller that wants a configured backend object without
-  going through `simulate_params()`'s own full public signature. `params` is
+  EngineBackend`** — the factory `simulate_params()` itself calls; available for
+  a caller that wants a configured backend object directly. `params` is
   required, and only actually read, when `engine_backend="auto"`.
 - **`DEFAULT_AUTO_VECTOR_MIN_D`** — the module-level constant
   `auto_vector_min_d` defaults to; its own docstring has the full
@@ -394,9 +388,9 @@ the CLI's own file output and the desktop app's screens):
 
 ```text
 generator-name: Claude Code
-generator-version: Claude Sonnet 5
-generator-model-token: claude-sonnet-5
+generator-version: Claude Sonnet 5.5
+generator-model-token: claude-sonnet-5-5
 generator-provider: Anthropic
-generation-date: 2026-09-03
+generation-date: 2026-10-15
 generator-responsibility: revision
 ```

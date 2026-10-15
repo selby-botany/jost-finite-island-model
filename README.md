@@ -248,6 +248,7 @@ defines the complete scientific and architectural contract.
 - [Developer and extension guide](doc/developer.md)
 - [Detailed implementation design](doc/fim-simulator-detailed-design.md)
 - [Detailed test plan](doc/fim-simulator-detailed-test-plan.md)
+- [Using fim from Python](doc/python-api.md)
 - [Externally accessible engine API](doc/fim-simulator-functional-api.md)
 - [Engine backend benchmark results](doc/fim-engine-backend-benchmarks.md)
 - [Desktop GUI design](doc/fim-gui-design.md)

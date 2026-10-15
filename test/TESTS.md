@@ -28,6 +28,7 @@ Every test module, fixture, and test function documented here in full; `doc/fim-
   - [`test_mypy_scope`](#test.test_mypy_scope)
   - [`test_paths`](#test.test_paths)
   - [`test_public_surface`](#test.test_public_surface)
+  - [`test_python_api_doc`](#test.test_python_api_doc)
   - [`test_reanalyze`](#test.test_reanalyze)
   - [`test_reproducibility`](#test.test_reproducibility)
   - [`test_results`](#test.test_results)
@@ -3042,6 +3043,22 @@ A researcher's type checker must treat `fim` as typed (PEP 561).
 
 Hatch's wheel target packages every file under `src/fim`, so the marker
 ships whenever it exists in the source tree.
+
+<a id="test.test_python_api_doc"></a>
+
+# test.test\_python\_api\_doc
+
+The Python guide's code blocks run as written, in order.
+
+<a id="test.test_python_api_doc.test_every_code_block_in_the_python_guide_runs"></a>
+
+#### test\_every\_code\_block\_in\_the\_python\_guide\_runs
+
+```python
+def test_every_code_block_in_the_python_guide_runs() -> None
+```
+
+Blocks share one namespace and run top to bottom, like a notebook.
 
 <a id="test.test_reanalyze"></a>
 
