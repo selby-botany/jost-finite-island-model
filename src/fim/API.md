@@ -31521,7 +31521,8 @@ exists to make cheap and available everywhere an already-aggregated
 #### h\_s
 
 ```python
-def h_s(table: FrequencyTable, deme_weights: DemeWeights = None) -> float
+def h_s(table: FrequencyTable[AlleleKey],
+        deme_weights: DemeWeights = None) -> float
 ```
 
 Return weighted mean within-deme expected heterozygosity ``H_S``.
@@ -31539,7 +31540,8 @@ from.
 #### h\_t
 
 ```python
-def h_t(table: FrequencyTable, deme_weights: DemeWeights = None) -> float
+def h_t(table: FrequencyTable[AlleleKey],
+        deme_weights: DemeWeights = None) -> float
 ```
 
 Return expected heterozygosity ``H_T`` of the weighted pooled table.
@@ -31584,7 +31586,8 @@ first (`_require_multiple_demes`).
 #### gs
 
 ```python
-def gs(table: FrequencyTable, deme_weights: DemeWeights = None) -> float
+def gs(table: FrequencyTable[AlleleKey],
+       deme_weights: DemeWeights = None) -> float
 ```
 
 Return the within-deme gene identity ``Gs`` (Ryman & Leimar's ``J_0``).
@@ -31608,7 +31611,8 @@ need; see `gd`, below, for that.
 #### gd
 
 ```python
-def gd(table: FrequencyTable, deme_weights: DemeWeights = None) -> float
+def gd(table: FrequencyTable[AlleleKey],
+       deme_weights: DemeWeights = None) -> float
 ```
 
 Return the between-deme gene identity ``Gd`` (Ryman & Leimar's ``J_1``).
@@ -31622,7 +31626,8 @@ one), the same requirement `g_st`/`h_st` already carry.
 #### h\_st
 
 ```python
-def h_st(table: FrequencyTable, deme_weights: DemeWeights = None) -> float
+def h_st(table: FrequencyTable[AlleleKey],
+         deme_weights: DemeWeights = None) -> float
 ```
 
 Return correctly partitioned between-deme heterozygosity ``H_ST``.
@@ -31646,7 +31651,7 @@ nothing more than this correctly-partitioned quantity, normalized.
 #### total\_hill\_number
 
 ```python
-def total_hill_number(table: FrequencyTable,
+def total_hill_number(table: FrequencyTable[AlleleKey],
                       order: float | int,
                       deme_weights: DemeWeights = None) -> float
 ```
@@ -31663,7 +31668,7 @@ combined result, at whichever `order` is requested.
 #### within\_hill\_number
 
 ```python
-def within_hill_number(table: FrequencyTable,
+def within_hill_number(table: FrequencyTable[AlleleKey],
                        order: float | int,
                        deme_weights: DemeWeights = None) -> float
 ```
@@ -31703,7 +31708,7 @@ had already validated once).
 #### g\_st
 
 ```python
-def g_st(table: FrequencyTable,
+def g_st(table: FrequencyTable[AlleleKey],
          deme_weights: DemeWeights = None) -> float | None
 ```
 
@@ -31727,7 +31732,7 @@ answer, not a fabricated `0.0` or `1.0`.
 #### d\_m
 
 ```python
-def d_m(table: FrequencyTable) -> float
+def d_m(table: FrequencyTable[AlleleKey]) -> float
 ```
 
 Return Nei's mean pairwise between-deme gene diversity ``D_m``.
@@ -31761,7 +31766,7 @@ there is no `deme_weights` parameter here for the same reason
 #### r\_st
 
 ```python
-def r_st(table: FrequencyTable) -> float | None
+def r_st(table: FrequencyTable[AlleleKey]) -> float | None
 ```
 
 Return ``D_m`` relative to within-deme diversity, or ``None``.
@@ -31783,7 +31788,7 @@ structurally identical zero-denominator case.
 #### g\_st\_log
 
 ```python
-def g_st_log(table: FrequencyTable,
+def g_st_log(table: FrequencyTable[AlleleKey],
              deme_weights: DemeWeights = None) -> float | None
 ```
 
@@ -31987,7 +31992,7 @@ satisfy this signature.
 #### jost\_d
 
 ```python
-def jost_d(table: FrequencyTable) -> float
+def jost_d(table: FrequencyTable[AlleleKey]) -> float
 ```
 
 Return Jost's ``D`` using the required equal weighting of demes.
@@ -32009,7 +32014,8 @@ relative to `E_ST`.
 #### e\_st
 
 ```python
-def e_st(table: FrequencyTable, deme_weights: DemeWeights = None) -> float
+def e_st(table: FrequencyTable[AlleleKey],
+         deme_weights: DemeWeights = None) -> float
 ```
 
 Return entropy differentiation ``E_ST`` with optional size weights.
@@ -32033,7 +32039,7 @@ weight of other, already-differentiating alleles.
 #### k\_st
 
 ```python
-def k_st(table: FrequencyTable) -> float
+def k_st(table: FrequencyTable[AlleleKey]) -> float
 ```
 
 Return allele-number differentiation ``K_ST`` with equal deme weights.
@@ -32054,7 +32060,7 @@ any measure in this module.
 #### allelic\_distance
 
 ```python
-def allelic_distance(table: FrequencyTable) -> float
+def allelic_distance(table: FrequencyTable[AlleleKey]) -> float
 ```
 
 Return Caballero-Garcia-Dorado mean pairwise allelic distance.
@@ -32072,7 +32078,7 @@ unordered deme pairs.
 #### gregorius\_delta
 
 ```python
-def gregorius_delta(table: FrequencyTable,
+def gregorius_delta(table: FrequencyTable[AlleleKey],
                     deme_weights: DemeWeights = None) -> float
 ```
 
@@ -32090,7 +32096,7 @@ of the Manhattan distance between their frequency vectors.
 #### mutual\_information
 
 ```python
-def mutual_information(table: FrequencyTable,
+def mutual_information(table: FrequencyTable[AlleleKey],
                        deme_weights: DemeWeights = None) -> float
 ```
 
@@ -32108,7 +32114,7 @@ allele identity and deme membership were independent.
 
 ```python
 def f_st_coancestry_matrix(
-        table: FrequencyTable) -> tuple[tuple[float, ...], ...]
+        table: FrequencyTable[AlleleKey]) -> tuple[tuple[float, ...], ...]
 ```
 
 Return Goudet & Weir (2023) F_ST matrix (Eq. 4 / Eq. 11).
@@ -32145,7 +32151,8 @@ for demes ``i`` and ``j`` (Eq. 9 / 11).
 #### population\_specific\_f\_st
 
 ```python
-def population_specific_f_st(table: FrequencyTable) -> tuple[float, ...]
+def population_specific_f_st(
+        table: FrequencyTable[AlleleKey]) -> tuple[float, ...]
 ```
 
 Return Goudet & Weir (2023) population-specific F_ST (Eq. 4 / Eq. 7).
@@ -32173,7 +32180,8 @@ identity of deme ``i``, and ``theta_B`` is the mean between-deme identity.
 #### population\_pair\_f\_st
 
 ```python
-def population_pair_f_st(table: FrequencyTable, i: int, j: int) -> float
+def population_pair_f_st(table: FrequencyTable[AlleleKey], i: int,
+                         j: int) -> float
 ```
 
 Return Goudet & Weir (2023) population-pair F_ST (Eq. 4 / Eq. 9 / Eq. 11).
@@ -32241,7 +32249,7 @@ and reference point ``theta_{XY}``.
 #### overall\_coancestry\_f\_st
 
 ```python
-def overall_coancestry_f_st(table: FrequencyTable) -> float
+def overall_coancestry_f_st(table: FrequencyTable[AlleleKey]) -> float
 ```
 
 Return overall F_ST from coancestry matrix (Goudet & Weir 2023 Eq. 4/8).
@@ -32272,7 +32280,7 @@ unweighted F_ST.
 #### differentiation\_q
 
 ```python
-def differentiation_q(table: FrequencyTable,
+def differentiation_q(table: FrequencyTable[AlleleKey],
                       order: float | int,
                       deme_weights: DemeWeights = None) -> float
 ```
@@ -32981,7 +32989,7 @@ not a bug to raise on.
 
 ```python
 def statistics_report(
-        table: FrequencyTable,
+        table: FrequencyTable[AlleleKey],
         deme_weights: DemeWeights = None,
         *,
         validate: bool = True,
@@ -33541,7 +33549,7 @@ two agree exactly when the populations are equally diverse.
 #### nei\_all\_demes\_identity
 
 ```python
-def nei_all_demes_identity(tables: Sequence[FrequencyTable],
+def nei_all_demes_identity(tables: Sequence[FrequencyTable[AlleleKey]],
                            *,
                            denominator: NeiDenominator = "geometric",
                            locus_rule: NeiLocusRule = "pooled") -> float
@@ -33584,7 +33592,7 @@ diverse than the rest.
 #### nei\_all\_demes\_distance
 
 ```python
-def nei_all_demes_distance(tables: Sequence[FrequencyTable],
+def nei_all_demes_distance(tables: Sequence[FrequencyTable[AlleleKey]],
                            *,
                            denominator: NeiDenominator = "geometric",
                            locus_rule: NeiLocusRule = "pooled") -> float
@@ -33825,7 +33833,7 @@ Without migration, and for two *distinct* copies
 
 ```python
 def identity_matrix_from_frequencies(
-        frequencies: FrequencyTable) -> NDArray[np.float64]
+        frequencies: LocusFrequencies[AlleleKey]) -> NDArray[np.float64]
 ```
 
 Return the `d` by `d` identity matrix of a starting population.

@@ -52,7 +52,7 @@ from collections.abc import Collection, Mapping, Sequence
 from math import exp, expm1, fsum, inf, isfinite, log, nan, sqrt
 from numbers import Real
 from operator import index as integer_index
-from typing import Any, TypeAlias, TypedDict, cast
+from typing import Any, SupportsIndex, TypeAlias, TypedDict, cast
 
 from fim.config.numerics import (
     DIFFERENTIATION_TOLERANCE,
@@ -62,24 +62,23 @@ from fim.config.numerics import (
     MINIMUM_SAMPLE_GENE_COPIES,
 )
 
-# The *value* half of both aliases is `float`, not `Any`: a frequency or
-# a deme weight is a number, and saying so lets a type checker reject a
-# `str`/`None` frequency at the call site instead of at `_coerce_
+# The *value* half of `FrequencyTable` is `float`, not `Any`: a frequency
+# or a deme weight is a number, and saying so lets a type checker reject
+# a `str`/`None` frequency at the call site instead of at `_coerce_
 # frequency`'s own runtime `TypeError`. `int` frequencies stay legal
 # (mypy promotes `int` to `float`, so a deme fixed for one allele can
 # still be written `{0: 1}`), and so does `numpy.float64`, which
 # subclasses `float`.
 #
-# The *key* half must stay `Any`, and that is a measured constraint
-# rather than an unfinished job: `Mapping`'s key parameter is invariant,
-# so `Mapping[AlleleId, float]` — exactly what `fim.model.state.
-# ModelState.frequency_map` returns, and what `fim.model.initial` passes
-# straight through to `h_s` — is not a `Mapping[int, float]`, nor a
-# `Mapping[SupportsIndex, float]`. No concrete key type admits every
-# legal caller, and the real contract (anything `operator.index`
-# accepts, per `_validate_deme` below) cannot be spelled as an invariant
-# key at all.
-FrequencyTable: TypeAlias = Sequence[Mapping[Any, float]]
+# The *key* half is a type parameter, `AlleleKey`, bounded by
+# `SupportsIndex`: the real contract is "anything `operator.index`
+# accepts" (`_validate_deme` below), which covers `int`, `numpy` integers,
+# and `fim.model.allele.AlleleId`. A plain `Mapping[int, float]` would
+# reject `AlleleId` because `Mapping`'s key parameter is invariant, and a
+# concrete `SupportsIndex` key would reject both; a bounded variable
+# accepts each while still rejecting `str` or `float` keys. A function
+# that takes a table is therefore written `FrequencyTable[AlleleKey]`.
+type FrequencyTable[AlleleKey: SupportsIndex] = Sequence[Mapping[AlleleKey, float]]
 DemeWeights: TypeAlias = Sequence[float] | None
 
 
@@ -225,7 +224,9 @@ def _validate_deme(deme: Mapping[Any, Any], index: int) -> dict[int, float]:
     return normalized
 
 
-def _validate_table(table: FrequencyTable) -> tuple[dict[int, float], ...]:
+def _validate_table[AlleleKey: SupportsIndex](
+    table: FrequencyTable[AlleleKey],
+) -> tuple[dict[int, float], ...]:
     """Validate a non-empty sequence of normalized deme frequency mappings."""
     if not isinstance(table, Sequence):
         raise TypeError("frequency table must be a sequence of deme mappings")
@@ -566,7 +567,9 @@ def _h_s_from_demes(
     return _bounded(value, "H_S")
 
 
-def h_s(table: FrequencyTable, deme_weights: DemeWeights = None) -> float:
+def h_s[AlleleKey: SupportsIndex](
+    table: FrequencyTable[AlleleKey], deme_weights: DemeWeights = None
+) -> float:
     """Return weighted mean within-deme expected heterozygosity ``H_S``.
 
     "How much variation does a typical deme hold internally?" — compute
@@ -595,7 +598,9 @@ def _h_t_from_demes(
     return _bounded(1.0 - fsum(freq * freq for freq in pooled.values()), "H_T")
 
 
-def h_t(table: FrequencyTable, deme_weights: DemeWeights = None) -> float:
+def h_t[AlleleKey: SupportsIndex](
+    table: FrequencyTable[AlleleKey], deme_weights: DemeWeights = None
+) -> float:
     """Return expected heterozygosity ``H_T`` of the weighted pooled table.
 
     "How much variation is there altogether?" — pool every deme's own
@@ -633,7 +638,9 @@ def gd_from_within_and_total(within: float, total: float, deme_count: int) -> fl
     return (deme_count * (1.0 - total) - (1.0 - within)) / (deme_count - 1)
 
 
-def gs(table: FrequencyTable, deme_weights: DemeWeights = None) -> float:
+def gs[AlleleKey: SupportsIndex](
+    table: FrequencyTable[AlleleKey], deme_weights: DemeWeights = None
+) -> float:
     """Return the within-deme gene identity ``Gs`` (Ryman & Leimar's ``J_0``).
 
     ``Gs = 1 - H_S`` — the exact complement of `h_s`, above, in `fim`'s
@@ -653,7 +660,9 @@ def gs(table: FrequencyTable, deme_weights: DemeWeights = None) -> float:
     return 1.0 - h_s(table, deme_weights)
 
 
-def gd(table: FrequencyTable, deme_weights: DemeWeights = None) -> float:
+def gd[AlleleKey: SupportsIndex](
+    table: FrequencyTable[AlleleKey], deme_weights: DemeWeights = None
+) -> float:
     """Return the between-deme gene identity ``Gd`` (Ryman & Leimar's ``J_1``).
 
     See `gd_from_within_and_total`'s own docstring for the formula.
@@ -685,7 +694,7 @@ def _h_st_from_within_and_total(total: float, within: float) -> float:
         # exactly `1.0` in float64, which itself needs every present
         # allele's own squared frequency to underflow in `fsum`'s
         # accumulation: an allele count many orders of magnitude past
-        # anything a validated `SimulationParams`/`FrequencyTable` can
+        # anything a validated `SimulationParams`/`FrequencyTable[AlleleKey]` can
         # produce (this project's own multi-model engine review,
         # 2026-09-04, `FIM-18`/finding Kimi-FIM-18, calls this
         # "practically unreachable" — confirmed here by naming the
@@ -707,7 +716,9 @@ def _h_st_from_within_and_total(total: float, within: float) -> float:
     return _bounded((total - within) / denominator, "H_ST")
 
 
-def h_st(table: FrequencyTable, deme_weights: DemeWeights = None) -> float:
+def h_st[AlleleKey: SupportsIndex](
+    table: FrequencyTable[AlleleKey], deme_weights: DemeWeights = None
+) -> float:
     """Return correctly partitioned between-deme heterozygosity ``H_ST``.
 
     The naive way to split `H_T` into a within-deme part and a between-
@@ -729,8 +740,8 @@ def h_st(table: FrequencyTable, deme_weights: DemeWeights = None) -> float:
     return _h_st_from_within_and_total(total, within)
 
 
-def total_hill_number(
-    table: FrequencyTable,
+def total_hill_number[AlleleKey: SupportsIndex](
+    table: FrequencyTable[AlleleKey],
     order: float | int,
     deme_weights: DemeWeights = None,
 ) -> float:
@@ -746,8 +757,8 @@ def total_hill_number(
     return _hill(_pooled(demes, weights), _validate_order(order))
 
 
-def within_hill_number(
-    table: FrequencyTable,
+def within_hill_number[AlleleKey: SupportsIndex](
+    table: FrequencyTable[AlleleKey],
     order: float | int,
     deme_weights: DemeWeights = None,
 ) -> float:
@@ -802,7 +813,9 @@ def g_st_from_demes(total: float, within: float) -> float | None:
     return _bounded((total - within) / total, "G_ST")
 
 
-def g_st(table: FrequencyTable, deme_weights: DemeWeights = None) -> float | None:
+def g_st[AlleleKey: SupportsIndex](
+    table: FrequencyTable[AlleleKey], deme_weights: DemeWeights = None
+) -> float | None:
     """Return ``G_ST`` or ``None`` when total heterozygosity is zero.
 
     Nei's `G_ST` — "how close to complete fixation has the differentiation
@@ -826,7 +839,7 @@ def g_st(table: FrequencyTable, deme_weights: DemeWeights = None) -> float | Non
     return g_st_from_demes(total, within)
 
 
-def d_m(table: FrequencyTable) -> float:
+def d_m[AlleleKey: SupportsIndex](table: FrequencyTable[AlleleKey]) -> float:
     """Return Nei's mean pairwise between-deme gene diversity ``D_m``.
 
     "How much do a typical *pair* of demes actually differ, in absolute
@@ -867,7 +880,7 @@ def d_m(table: FrequencyTable) -> float:
     return value
 
 
-def r_st(table: FrequencyTable) -> float | None:
+def r_st[AlleleKey: SupportsIndex](table: FrequencyTable[AlleleKey]) -> float | None:
     """Return ``D_m`` relative to within-deme diversity, or ``None``.
 
     Nei's Eq. 11: `D_m / H_S` — the same absolute between-deme diversity
@@ -890,7 +903,9 @@ def r_st(table: FrequencyTable) -> float | None:
     return d_m(demes) / within
 
 
-def g_st_log(table: FrequencyTable, deme_weights: DemeWeights = None) -> float | None:
+def g_st_log[AlleleKey: SupportsIndex](
+    table: FrequencyTable[AlleleKey], deme_weights: DemeWeights = None
+) -> float | None:
     """Return Nei's log-based large-differentiation ``G_ST`` estimator.
 
     Nei (1973)'s closing discussion, verbatim: "a better estimate of
@@ -1113,7 +1128,7 @@ def jost_d_from_within_and_total(deme_count: int, within: float, total: float) -
     return _bounded(value, "D")
 
 
-def jost_d(table: FrequencyTable) -> float:
+def jost_d[AlleleKey: SupportsIndex](table: FrequencyTable[AlleleKey]) -> float:
     """Return Jost's ``D`` using the required equal weighting of demes.
 
     "Do these demes hold different alleles at all" — exactly `H_ST`
@@ -1153,7 +1168,9 @@ def _e_st_from_demes(
     return _bounded((total_entropy - within_entropy) / weight_entropy, "E_ST")
 
 
-def e_st(table: FrequencyTable, deme_weights: DemeWeights = None) -> float:
+def e_st[AlleleKey: SupportsIndex](
+    table: FrequencyTable[AlleleKey], deme_weights: DemeWeights = None
+) -> float:
     """Return entropy differentiation ``E_ST`` with optional size weights.
 
     The same "how differentiated are these demes" question `jost_d`
@@ -1200,7 +1217,7 @@ def _k_st_from_demes(demes: tuple[dict[int, float], ...]) -> float:
     return _bounded(value, "K_ST")
 
 
-def k_st(table: FrequencyTable) -> float:
+def k_st[AlleleKey: SupportsIndex](table: FrequencyTable[AlleleKey]) -> float:
     """Return allele-number differentiation ``K_ST`` with equal deme weights.
 
     The simplest and most stringent member of the family: ignores
@@ -1219,7 +1236,9 @@ def k_st(table: FrequencyTable) -> float:
     return _k_st_from_demes(demes)
 
 
-def allelic_distance(table: FrequencyTable) -> float:
+def allelic_distance[AlleleKey: SupportsIndex](
+    table: FrequencyTable[AlleleKey],
+) -> float:
     """Return Caballero-Garcia-Dorado mean pairwise allelic distance.
 
     Caballero and Garcia-Dorado (2013), Eq. 5, count an allele as
@@ -1286,8 +1305,8 @@ def _gregorius_delta_from_demes(
     return _bounded(value, "Gregorius delta")
 
 
-def gregorius_delta(
-    table: FrequencyTable,
+def gregorius_delta[AlleleKey: SupportsIndex](
+    table: FrequencyTable[AlleleKey],
     deme_weights: DemeWeights = None,
 ) -> float:
     """Return Gregorius's distance-oriented differentiation ``delta``.
@@ -1323,8 +1342,8 @@ def _mutual_information_from_demes(
     return value
 
 
-def mutual_information(
-    table: FrequencyTable,
+def mutual_information[AlleleKey: SupportsIndex](
+    table: FrequencyTable[AlleleKey],
     deme_weights: DemeWeights = None,
 ) -> float:
     """Return Sherwin's allele-by-deme mutual information.
@@ -1341,8 +1360,8 @@ def mutual_information(
     return _mutual_information_from_demes(demes, weights)
 
 
-def f_st_coancestry_matrix(
-    table: FrequencyTable,
+def f_st_coancestry_matrix[AlleleKey: SupportsIndex](
+    table: FrequencyTable[AlleleKey],
 ) -> tuple[tuple[float, ...], ...]:
     """Return Goudet & Weir (2023) F_ST matrix (Eq. 4 / Eq. 11).
 
@@ -1400,7 +1419,9 @@ def f_st_coancestry_matrix(
     return matrix
 
 
-def population_specific_f_st(table: FrequencyTable) -> tuple[float, ...]:
+def population_specific_f_st[AlleleKey: SupportsIndex](
+    table: FrequencyTable[AlleleKey],
+) -> tuple[float, ...]:
     """Return Goudet & Weir (2023) population-specific F_ST (Eq. 4 / Eq. 7).
 
     The diagonal elements of the coancestry-based F_ST matrix:
@@ -1422,8 +1443,8 @@ def population_specific_f_st(table: FrequencyTable) -> tuple[float, ...]:
     return tuple(matrix[i][i] for i in range(len(matrix)))
 
 
-def population_pair_f_st(
-    table: FrequencyTable,
+def population_pair_f_st[AlleleKey: SupportsIndex](
+    table: FrequencyTable[AlleleKey],
     i: int,
     j: int,
 ) -> float:
@@ -1496,7 +1517,9 @@ def pairwise_f_st(
     return _bounded(numerator / denominator, "pairwise_F_ST")
 
 
-def overall_coancestry_f_st(table: FrequencyTable) -> float:
+def overall_coancestry_f_st[AlleleKey: SupportsIndex](
+    table: FrequencyTable[AlleleKey],
+) -> float:
     """Return overall F_ST from coancestry matrix (Goudet & Weir 2023 Eq. 4/8).
 
     Defined as the unweighted mean of the population-specific F_ST values:
@@ -1521,8 +1544,8 @@ def overall_coancestry_f_st(table: FrequencyTable) -> float:
     return fsum(pop_f_st) / len(pop_f_st)
 
 
-def differentiation_q(
-    table: FrequencyTable,
+def differentiation_q[AlleleKey: SupportsIndex](
+    table: FrequencyTable[AlleleKey],
     order: float | int,
     deme_weights: DemeWeights = None,
 ) -> float:
@@ -2377,8 +2400,8 @@ def equilibrium_shannon_differentiation(
     return (total - subpopulation) / log(d)
 
 
-def statistics_report(
-    table: FrequencyTable,
+def statistics_report[AlleleKey: SupportsIndex](
+    table: FrequencyTable[AlleleKey],
     deme_weights: DemeWeights = None,
     *,
     validate: bool = True,

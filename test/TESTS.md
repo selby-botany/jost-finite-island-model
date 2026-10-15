@@ -38441,25 +38441,20 @@ as the rest of this module's equilibrium-formula family.
 def test_frequency_table_value_annotation_stays_a_number() -> None
 ```
 
-`FrequencyTable`/`DemeWeights` never widen their value half back
-to `Any`.
+`FrequencyTable`/`DemeWeights` keep a numeric value half and a
+bounded key half.
 
 An invariant check in the same spirit as
-`test/test_mypy_scope.py`, guarding the one half of these two
-aliases the type gate itself cannot protect. Tightening the *key*
-half can never land silently: `Mapping`'s key parameter is
-invariant, so any concrete key type makes `mypy` fail outright on
-`fim.model.initial`'s own `Mapping[AlleleId, float]` call site.
-Widening the *value* half back to `Any`, by contrast, is strictly
-looser, so `mypy` would stay clean and the regression would pass
-every gate unnoticed.
+`test/test_mypy_scope.py`. Widening the value half back to `Any`
+is strictly looser, so `mypy` would stay clean and the regression
+would pass every gate unnoticed; likewise the key half must stay a
+type parameter bounded by `SupportsIndex` (anything `operator.index`
+accepts), never `Any` and never a concrete key type, which
+`Mapping`'s invariant key parameter would make reject `AlleleId`.
 
-Asserted against the aliases as runtime objects rather than
-against source text: a `TypeAlias`'s right-hand side is an
-ordinary expression, evaluated at import even under `from
-__future__ import annotations` (only the `: TypeAlias` part
-becomes a string), so `typing.get_args` sees the real
-parameterization and a harmless reformat cannot break this test.
+Asserted against the alias as a runtime object: `FrequencyTable` is
+a PEP 695 `type` alias, so its parameters and value are ordinary
+attributes a harmless reformat cannot break.
 
 <a id="statistics.test_differentiation.DifferentiationStatisticsTests.test_goudet_weir_claim_1_overall_f_st_vs_g_st"></a>
 

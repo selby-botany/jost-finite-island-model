@@ -61,7 +61,7 @@ from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
 from math import exp, fsum, inf, isfinite, log, sqrt
-from typing import Any, Final, Literal, TypeAlias
+from typing import Any, Final, Literal, SupportsIndex, TypeAlias
 
 from fim.config.numerics import DIFFERENTIATION_TOLERANCE, MINIMUM_DEMES
 
@@ -643,8 +643,8 @@ def nei_pair_distance(
     )
 
 
-def nei_all_demes_identity(
-    tables: Sequence[FrequencyTable],
+def nei_all_demes_identity[AlleleKey: SupportsIndex](
+    tables: Sequence[FrequencyTable[AlleleKey]],
     *,
     denominator: NeiDenominator = "geometric",
     locus_rule: NeiLocusRule = "pooled",
@@ -700,8 +700,8 @@ def nei_all_demes_identity(
     return 1.0 if abs(value - 1.0) <= DIFFERENTIATION_TOLERANCE else value
 
 
-def nei_all_demes_distance(
-    tables: Sequence[FrequencyTable],
+def nei_all_demes_distance[AlleleKey: SupportsIndex](
+    tables: Sequence[FrequencyTable[AlleleKey]],
     *,
     denominator: NeiDenominator = "geometric",
     locus_rule: NeiLocusRule = "pooled",

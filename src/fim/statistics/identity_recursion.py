@@ -48,7 +48,8 @@ from __future__ import annotations
 import math
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
-from typing import Any
+from operator import index as integer_index
+from typing import SupportsIndex
 
 import numpy as np
 from numpy.typing import NDArray
@@ -293,11 +294,13 @@ def identity_recursion(
     )
 
 
-FrequencyTable = Sequence[Sequence[Mapping[Any, float]]]
+type LocusFrequencies[AlleleKey: SupportsIndex] = Sequence[
+    Sequence[Mapping[AlleleKey, float]]
+]
 
 
-def identity_matrix_from_frequencies(
-    frequencies: FrequencyTable,
+def identity_matrix_from_frequencies[AlleleKey: SupportsIndex](
+    frequencies: LocusFrequencies[AlleleKey],
 ) -> NDArray[np.float64]:
     """Return the `d` by `d` identity matrix of a starting population.
 
@@ -317,7 +320,9 @@ def identity_matrix_from_frequencies(
     loci = len(frequencies[0])
     total = np.zeros((demes, demes))
     for locus in range(loci):
-        alleles = sorted({a for deme in frequencies for a in deme[locus]})
+        alleles = sorted(
+            {a for deme in frequencies for a in deme[locus]}, key=integer_index
+        )
         table = np.array(
             [[deme[locus].get(a, 0.0) for a in alleles] for deme in frequencies]
         )

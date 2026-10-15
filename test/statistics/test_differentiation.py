@@ -8,7 +8,7 @@ import random
 import unittest
 from collections.abc import Mapping, Sequence
 from pathlib import Path
-from typing import Any, cast, get_args
+from typing import SupportsIndex, cast, get_args
 from unittest.mock import patch
 
 from fim.statistics import (
@@ -227,7 +227,7 @@ class DifferentiationStatisticsTests(unittest.TestCase):
                 self.subTest(message=message),
                 self.assertRaisesRegex((TypeError, ValueError), message),
             ):
-                h_s(table, weights)
+                h_s(table, weights)  # type: ignore[type-var]
 
     def test_statistics_report_matches_every_independently_validated_function(
         self,
@@ -288,7 +288,7 @@ class DifferentiationStatisticsTests(unittest.TestCase):
         call_count = 0
 
         def counting_validate_table(
-            frequency_table: FrequencyTable,
+            frequency_table: FrequencyTable[int],
         ) -> tuple[dict[int, float], ...]:
             nonlocal call_count
             call_count += 1
@@ -915,7 +915,7 @@ class DifferentiationStatisticsTests(unittest.TestCase):
                 return 1
 
         with self.assertRaisesRegex(ValueError, "duplicate allele ID"):
-            h_s([{1: 0.5, _AlwaysIndexesToOne(): 0.5}])
+            h_s([{1: 0.5, _AlwaysIndexesToOne(): 0.5}])  # type: ignore[type-var]
 
     def test_within_hill_number_order_one_is_the_alpha_entropy_exponential(
         self,
@@ -1018,32 +1018,27 @@ class DifferentiationStatisticsTests(unittest.TestCase):
             identity_recovery_trajectory(0.5, 100, 0.05, math.inf)
 
     def test_frequency_table_value_annotation_stays_a_number(self) -> None:
-        """`FrequencyTable`/`DemeWeights` never widen their value half back
-        to `Any`.
+        """`FrequencyTable`/`DemeWeights` keep a numeric value half and a
+        bounded key half.
 
         An invariant check in the same spirit as
-        `test/test_mypy_scope.py`, guarding the one half of these two
-        aliases the type gate itself cannot protect. Tightening the *key*
-        half can never land silently: `Mapping`'s key parameter is
-        invariant, so any concrete key type makes `mypy` fail outright on
-        `fim.model.initial`'s own `Mapping[AlleleId, float]` call site.
-        Widening the *value* half back to `Any`, by contrast, is strictly
-        looser, so `mypy` would stay clean and the regression would pass
-        every gate unnoticed.
+        `test/test_mypy_scope.py`. Widening the value half back to `Any`
+        is strictly looser, so `mypy` would stay clean and the regression
+        would pass every gate unnoticed; likewise the key half must stay a
+        type parameter bounded by `SupportsIndex` (anything `operator.index`
+        accepts), never `Any` and never a concrete key type, which
+        `Mapping`'s invariant key parameter would make reject `AlleleId`.
 
-        Asserted against the aliases as runtime objects rather than
-        against source text: a `TypeAlias`'s right-hand side is an
-        ordinary expression, evaluated at import even under `from
-        __future__ import annotations` (only the `: TypeAlias` part
-        becomes a string), so `typing.get_args` sees the real
-        parameterization and a harmless reformat cannot break this test.
+        Asserted against the alias as a runtime object: `FrequencyTable` is
+        a PEP 695 `type` alias, so its parameters and value are ordinary
+        attributes a harmless reformat cannot break.
         """
-        (deme_mapping,) = get_args(differentiation.FrequencyTable)
+        (key_parameter,) = differentiation.FrequencyTable.__type_params__
+        self.assertIs(getattr(key_parameter, "__bound__", None), SupportsIndex)
+        (deme_mapping,) = get_args(differentiation.FrequencyTable.__value__)
         key_type, value_type = get_args(deme_mapping)
         self.assertIs(value_type, float)
-        # Documented, not incidental -- see `FrequencyTable`'s own comment
-        # for why no concrete key type admits every legal caller.
-        self.assertIs(key_type, Any)
+        self.assertIs(key_type, key_parameter)
 
         self.assertEqual(
             get_args(differentiation.DemeWeights),

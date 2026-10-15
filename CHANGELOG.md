@@ -992,6 +992,11 @@ project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Changed
 
+- **Statistics accept typed allele keys, and the package is typed.** The
+  differentiation and distance functions now declare the allele-key type they
+  already required (anything `operator.index` accepts) instead of `Any`, so a
+  type checker rejects string or float keys at the call. `fim` ships a
+  `py.typed` marker, so a researcher's mypy checks calls into it.
 - **`fim.engine` is a package.** The 5,000-line `engine.py` became
   `fim/engine/` with `records`, `identity`, `tracking`, `report`, `summary`,
   `monitors`, `lanes`, `batch`, `lineal`, `backends`, and `api` modules. Every
