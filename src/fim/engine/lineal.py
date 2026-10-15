@@ -657,7 +657,7 @@ def _simulate_one(
     # of `None` (see `RunManifest`'s own docstring) — this function
     # never writes anything to disk itself, so it has no on-disk file
     # digests to report yet; a caller that does persist this run's own
-    # files (`fim.cli._write_run_artifacts`) fills those in afterward,
+    # files (`fim.persistence.artifacts.write_run_artifacts`) fills those in afterward,
     # once every file is completely written, so a later reader can
     # confirm none of them were altered since.
     manifest = RunManifest(

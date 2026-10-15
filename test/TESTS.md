@@ -152,6 +152,7 @@ Every test module, fixture, and test function documented here in full; `doc/fim-
   - [`test_vector_kernels`](#model.test_vector_kernels)
   - [`test_vectorized`](#model.test_vectorized)
 - [`test/persistence/`](#group-persistence)
+  - [`test_artifacts`](#persistence.test_artifacts)
   - [`test_binary_store`](#persistence.test_binary_store)
   - [`test_frame`](#persistence.test_frame)
   - [`test_groups`](#persistence.test_groups)
@@ -24475,7 +24476,7 @@ def test_run_artifact_targets_matches_the_documented_filenames(
         tmp_path: Path) -> None
 ```
 
-The target names match `cli._run_artifact_targets`'s own scalar set.
+The target names match `artifacts.run_artifact_targets`'s own scalar set.
 
 <a id="gui.test_runner.test_start_run_raises_when_output_directory_already_exists"></a>
 
@@ -24525,7 +24526,7 @@ def test_start_run_records_matching_digests_in_the_published_manifest(
 
 `manifest.json`'s recorded digests match the published artifacts' own.
 
-The same guarantee `cli._write_run_artifacts` gives `fim run`'s own
+The same guarantee `artifacts.write_run_artifacts` gives `fim run`'s own
 output (`test/cli/test_cli.py`'s manifest-digest assertions) — the
 record `fim.persistence.manifest.verify_trajectory_integrity` later
 checks against.
@@ -24542,7 +24543,7 @@ def test_start_run_writes_and_digests_an_equilibrium_split_ancestral_trajectory(
 A GUI equilibrium-split run publishes `equilibrium_trajectory.tlog` too.
 
 Digested in the manifest like every other artifact, exactly as
-`cli._write_run_artifacts` does; its rows are the ancestral phase's
+`artifacts.write_run_artifacts` does; its rows are the ancestral phase's
 own generations, `0` through `equilibrium_generation_count`.
 
 <a id="gui.test_runner.test_start_run_leaves_no_temporary_sibling_after_a_successful_publish"></a>
@@ -32200,6 +32201,43 @@ Every deme's own frequencies sum to 1 after a full fused generation.
 <a id="group-persistence"></a>
 
 ## `test/persistence/`
+
+<a id="persistence.test_artifacts"></a>
+
+# persistence.test\_artifacts
+
+The shared writer of a saved run's files.
+
+<a id="persistence.test_artifacts.test_targets_name_every_documented_file"></a>
+
+#### test\_targets\_name\_every\_documented\_file
+
+```python
+def test_targets_name_every_documented_file(tmp_path: Path) -> None
+```
+
+The filenames are fixed, and live in the given directory.
+
+<a id="persistence.test_artifacts.test_writing_a_run_produces_a_verifiable_manifest_last"></a>
+
+#### test\_writing\_a\_run\_produces\_a\_verifiable\_manifest\_last
+
+```python
+def test_writing_a_run_produces_a_verifiable_manifest_last(
+        tmp_path: Path) -> None
+```
+
+Every sibling file exists and is digested in the manifest.
+
+<a id="persistence.test_artifacts.test_convergence_rows_are_one_per_generation"></a>
+
+#### test\_convergence\_rows\_are\_one\_per\_generation
+
+```python
+def test_convergence_rows_are_one_per_generation(tmp_path: Path) -> None
+```
+
+Each row carries its generation and every fully aligned statistic.
 
 <a id="persistence.test_binary_store"></a>
 

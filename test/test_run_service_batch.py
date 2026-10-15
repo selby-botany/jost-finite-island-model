@@ -20,11 +20,12 @@ import pytest
 import yaml
 from conftest import FAST_EXPERT_SETTINGS
 
-from fim import cli, run_service
+from fim import run_service
 from fim.engine import RunResult, fim, replicate_summary
 from fim.examples import classes
 from fim.execution import UnsupportedSessionError
 from fim.model.params import SimulationParams
+from fim.persistence.artifacts import write_run_artifacts
 from fim.persistence.binary_store import BinaryLogStore
 from fim.persistence.manifest import (
     hash_file,
@@ -105,7 +106,7 @@ class _Writer:
     def __call__(self, result: RunResult, directory: Path) -> None:
         """Remember `result` and write the standard artifacts."""
         self.results.append(result)
-        cli._write_run_artifacts(result, directory)
+        write_run_artifacts(result, directory)
 
 
 def _attempts() -> Callable[[], str]:

@@ -397,12 +397,9 @@ def execute_point_object(
         The object directory once completed, `PointPaused` if it stopped
         resumable, or `PointFailure` if it could not run or failed.
     """
-    # Imported here: the artifact writer pulls in matplotlib and the GUI
-    # package, which a plain `import fim.sweep_run` should not.
-    from fim.gui.runner import (  # noqa: PLC0415
-        run_artifact_targets,
-        write_run_artifacts,
-    )
+    # Imported here: the artifact writer pulls in matplotlib, which a plain
+    # `import fim.sweep_run` should not.
+    from fim.persistence.artifacts import write_run_artifacts  # noqa: PLC0415
     from fim.run_service import Session, execute_run_object  # noqa: PLC0415
 
     pause_requested = False
@@ -424,7 +421,7 @@ def execute_point_object(
     def write(result: Any, directory: Path) -> None:
         write_run_artifacts(
             result,
-            run_artifact_targets(directory),
+            directory,
             pairwise_max_demes=pairwise_max_demes,
         )
 

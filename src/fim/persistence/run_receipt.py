@@ -52,8 +52,8 @@ ARTIFACT_FILENAMES: Final = {
 }
 """Each scalar artifact key a receipt may list, and the file it names.
 
-The same names `fim.cli._run_artifact_targets` and
-`fim.gui.runner.run_artifact_targets` use, less the receipt itself; a test
+The same names `fim.persistence.artifacts.run_artifact_targets` and
+`fim.persistence.artifacts.run_artifact_targets` use, less the receipt itself; a test
 keeps the three in agreement."""
 
 

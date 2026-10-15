@@ -1045,6 +1045,14 @@ project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Changed
 
+- **One writer for a saved run's files.** `fim.persistence.artifacts` now
+  holds `run_artifact_targets`, `convergence_history_rows`, and
+  `write_run_artifacts`. They had been written twice, once private to the
+  command line and once in the desktop runner, and the library needed the
+  command line to supply the writer for saved runs. Now `execute_run_object`
+  uses the shared writer by default (`write_artifacts` stays as an optional
+  test seam), and `fim object` no longer passes it in. The files written are
+  unchanged.
 - **A run's ID names its science.** The ID no longer covers the engine
   backend, JIT, the `auto` thresholds, trajectory retention, or the storage
   settings under `expert`, so one configuration has one ID on every backend

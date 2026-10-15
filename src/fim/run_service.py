@@ -326,8 +326,8 @@ def diagnose_run_object(run_object: RunObject) -> tuple[str, ...]:
 def execute_run_object(
     object_id: str,
     *,
-    write_artifacts: ArtifactWriter,
     results: Path | None = None,
+    write_artifacts: ArtifactWriter | None = None,
     clock: Clock | None = None,
     cadence: CheckpointCadence | None = None,
     monotonic: Callable[[], float] = time.monotonic,
@@ -343,8 +343,9 @@ def execute_run_object(
     Args:
         object_id: A `planned` object to start, or a `paused`,
             `interrupted`, or `failed` object to resume.
-        write_artifacts: Writes the completed run's artifacts.
         results: Results directory (default: `results_directory()`).
+        write_artifacts: Writes the completed run's artifacts (default:
+            `fim.persistence.artifacts.write_run_artifacts`; a test seam).
         clock: Current-time source for lifecycle and manifest timestamps.
         cadence: Checkpoint and control intervals (default: 1,000
             generations or 60 seconds, checking requests every 50).
@@ -375,6 +376,12 @@ def execute_run_object(
         Exception: Whatever stopped execution; the run is recorded as
             `failed` first.
     """
+    if write_artifacts is None:
+        # Imported here: the writer pulls in matplotlib, which a plain
+        # `import fim.run_service` should not.
+        from fim.persistence.artifacts import write_run_artifacts  # noqa: PLC0415
+
+        write_artifacts = write_run_artifacts
     current = reconcile_run_object(object_id, results=results, clock=clock)
     record = current.record
     if completion_was_recovered(record):

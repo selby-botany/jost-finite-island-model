@@ -14,11 +14,10 @@ from typing import Any
 
 import pytest
 
-from fim import cli
 from fim.examples import classes
 from fim.execution import ScalarSession
-from fim.gui import runner
 from fim.model.params import SimulationParams
+from fim.persistence.artifacts import run_artifact_targets, write_run_artifacts
 from fim.persistence.binary_store import TRAJECTORY_LOG_FILENAME, BinaryLogStore
 from fim.persistence.run_lifecycle import RunKind
 from fim.persistence.run_receipt import (
@@ -66,7 +65,7 @@ def published(tmp_path: Path) -> tuple[Path, str]:
     with ScalarSession.create(params, store, clock=lambda: AT) as session:
         session.advance()
         result = session.finalize()
-    cli._write_run_artifacts(result, tmp_path)
+    write_run_artifacts(result, tmp_path)
     return tmp_path, result.run_id
 
 
@@ -173,5 +172,4 @@ def test_artifact_filenames_match_both_writers(tmp_path: Path) -> None:
     """The receipt keys agree with the CLI's and the GUI's artifact names."""
     expected = {key: tmp_path / name for key, name in ARTIFACT_FILENAMES.items()}
     expected["manifest"] = tmp_path / RECEIPT_FILENAME
-    assert cli._run_artifact_targets(tmp_path) == expected
-    assert runner.run_artifact_targets(tmp_path) == expected
+    assert run_artifact_targets(tmp_path) == expected

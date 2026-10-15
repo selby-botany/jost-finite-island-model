@@ -27,7 +27,6 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
-from fim.engine import RunResult
 from fim.persistence.run_lifecycle import (
     RESUMABLE_STATES,
     LifecycleError,
@@ -59,8 +58,6 @@ from fim.run_service import (
     load_params,
 )
 from fim.termination import sigterm_requests_stop
-
-ArtifactWriter = Callable[[RunResult, Path], object]
 
 
 def add_object_subcommands(subcommands: argparse._SubParsersAction[Any]) -> None:
@@ -129,14 +126,12 @@ def add_object_subcommands(subcommands: argparse._SubParsersAction[Any]) -> None
 def command_object(
     arguments: argparse.Namespace,
     parser: argparse.ArgumentParser,
-    write_artifacts: ArtifactWriter,
 ) -> int:
     """Dispatch one `fim object` invocation.
 
     Args:
         arguments: The parsed command line.
         parser: The top-level parser, for its usage error.
-        write_artifacts: Writes a completed run's artifacts.
 
     Returns:
         0 on success; 2 when the lifecycle refuses the request; 130 when
@@ -150,7 +145,6 @@ def command_object(
         "status": lambda: _status(arguments.object_id, as_json=arguments.json),
         "start": lambda: _execute(
             arguments.object_id,
-            write_artifacts,
             quiet=arguments.quiet,
             resume=False,
             checkpoint_generations=arguments.checkpoint_generations,
@@ -158,7 +152,6 @@ def command_object(
         ),
         "resume": lambda: _execute(
             arguments.object_id,
-            write_artifacts,
             quiet=arguments.quiet,
             resume=True,
             checkpoint_generations=arguments.checkpoint_generations,
@@ -235,7 +228,6 @@ def _edit(object_id: str, config: Path) -> int:
 
 def _execute(
     object_id: str,
-    write_artifacts: ArtifactWriter,
     *,
     quiet: bool,
     resume: bool,
@@ -284,7 +276,6 @@ def _execute(
         with sigterm_requests_stop() as stop_requested:
             finished = execute_run_object(
                 object_id,
-                write_artifacts=write_artifacts,
                 stop_requested=stop_requested,
                 **execution_kwargs,
             )

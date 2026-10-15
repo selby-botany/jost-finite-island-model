@@ -905,15 +905,15 @@ def test_an_active_point_object_without_an_owner_reads_interrupted(
 def test_a_failed_point_object_is_skipped_unless_retried(
     results: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    from fim.gui import runner as gui_runner  # noqa: PLC0415
+    from fim.persistence import artifacts  # noqa: PLC0415
 
     study_id = _study(results, 2)
-    real_writer = gui_runner.write_run_artifacts
+    real_writer = artifacts.write_run_artifacts
 
     def broken_writer(*args: Any, **kwargs: Any) -> None:
         raise OSError("disk full")
 
-    monkeypatch.setattr(gui_runner, "write_run_artifacts", broken_writer)
+    monkeypatch.setattr(artifacts, "write_run_artifacts", broken_writer)
     first, _ = _run(study_id)
 
     assert first.failed == 1
@@ -925,7 +925,7 @@ def test_a_failed_point_object_is_skipped_unless_retried(
     # The object records its own failure; the sweep keeps none of its own.
     assert read_failures(study_id, results=results) == {}
 
-    monkeypatch.setattr(gui_runner, "write_run_artifacts", real_writer)
+    monkeypatch.setattr(artifacts, "write_run_artifacts", real_writer)
     skipped, _ = _run(study_id)
     assert (skipped.done, skipped.skipped_failed) == (0, 1)
 

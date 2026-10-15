@@ -18,6 +18,7 @@ from fim.examples.artifacts import (
 )
 from fim.gui.app import Api
 from fim.persistence import groups
+from fim.persistence.artifacts import run_artifact_targets
 from fim.persistence.manifest import hash_file
 
 
@@ -176,7 +177,7 @@ def test_truncated_gzip_does_not_publish_a_partial_archive(tmp_path: Path) -> No
 
 def test_artifact_inventory_matches_the_run_producer(tmp_path: Path) -> None:
     """Adding a CLI artifact requires adding it to the example inventory too."""
-    assert {path.name for path in cli._run_artifact_targets(tmp_path).values()} == (
+    assert {path.name for path in run_artifact_targets(tmp_path).values()} == (
         set(RUN_OUTPUT_NAMES)
     )
 

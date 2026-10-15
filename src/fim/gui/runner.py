@@ -19,7 +19,7 @@ own `except BaseException` clause discards the temporary directory and
 needed for either outcome.
 
 Writes the same four artifacts, in the same order, as
-`cli._write_run_artifacts`: `trajectory.tlog` streamed
+`fim.persistence.artifacts.write_run_artifacts`: `trajectory.tlog` streamed
 generation-by-generation by the `TrajectoryStore` passed into `fim`,
 then `report.json` and `scatter.png` once the run finishes, then —
 last, and only once both are flushed — `manifest.json`, augmented with
@@ -36,11 +36,8 @@ import queue
 import threading
 import time
 from collections.abc import Callable, Mapping
-from dataclasses import replace
 from pathlib import Path
 from typing import Any, Final, Literal
-
-from matplotlib import pyplot as plt
 
 from fim import paths
 from fim.config.defaults import DEFAULT_PAIRWISE_MAX_DEMES
@@ -58,24 +55,18 @@ from fim.gui.literature_visuals import (
 from fim.gui.store import LIVE_BLOCK_SECONDS, GuiProgressStore, RunCancelledError
 from fim.model.params import SimulationParams
 from fim.model.state import ModelState
+from fim.persistence.artifacts import run_artifact_targets, write_run_artifacts
 from fim.persistence.binary_store import (
-    EQUILIBRIUM_LOG_FILENAME,
-    TRAJECTORY_LOG_FILENAME,
     BinaryLogStore,
     log_options,
 )
-from fim.persistence.manifest import hash_file, write_manifest
 from fim.persistence.pairwise import (
     SLOW_PAIRWISE_DEMES,
-    pairwise_payload,
-    write_pairwise,
 )
-from fim.persistence.report import write_jsonl_rows, write_report
 from fim.viz.scatter import (
     FloatArray,
     frequency_points,
     panels_from_points,
-    plot_frequency_scatter,
 )
 
 # The wall-clock throttle interval: skip posting a progress tick if
@@ -167,48 +158,6 @@ class ProgressThrottle:
             self._last_reported_at = now
             return True
         return False
-
-
-def run_artifact_targets(directory: Path) -> dict[str, Path]:
-    """Return every documented scalar-run artifact path in one directory.
-
-    Deliberately the same names `cli._run_artifact_targets` uses for a
-    scalar run — same
-    target filenames, same directory — a direct parallel, not a shared import, since
-    `cli._run_artifact_targets` is a private module-level function of
-    the CLI's own front end. `equilibrium_trajectory` exists only for
-    an equilibrium-split run, streamed by the engine itself.
-    """
-    return {
-        "trajectory": directory / TRAJECTORY_LOG_FILENAME,
-        "equilibrium_trajectory": directory / EQUILIBRIUM_LOG_FILENAME,
-        "manifest": directory / "manifest.json",
-        "report": directory / "report.json",
-        "scatter": directory / "scatter.png",
-        "convergence": directory / "convergence.jsonl",
-        "pairwise": directory / "pairwise.json",
-    }
-
-
-def _convergence_history_rows(result: RunResult) -> list[dict[str, object]]:
-    """Return one row per generation, for `convergence.jsonl`.
-
-    Deliberately the same shape `cli._convergence_history_rows`
-    produces -- a direct parallel, not a shared import, for the
-    identical reason `run_artifact_targets`'s own docstring already
-    gives. See that function's own docstring for exactly why a
-    statistic shorter than `result.convergence_generations` is left
-    out of every row entirely rather than partially included.
-    """
-    aligned = {
-        name: values
-        for name, values in result.convergence_histories.items()
-        if len(values) == len(result.convergence_generations)
-    }
-    return [
-        {"generation": generation, **{name: aligned[name][index] for name in aligned}}
-        for index, generation in enumerate(result.convergence_generations)
-    ]
 
 
 def pairwise_status_text(deme_count: int, run_count: int) -> str:
@@ -383,7 +332,9 @@ def _run_worker(
                 raise RuntimeError("unexpected batch result from a scalar run")
             if SLOW_PAIRWISE_DEMES <= params.d <= pairwise_max_demes:
                 message_queue.put(("status", pairwise_status_text(params.d, 1)))
-            write_run_artifacts(result, targets, pairwise_max_demes=pairwise_max_demes)
+            write_run_artifacts(
+                result, working_directory, pairwise_max_demes=pairwise_max_demes
+            )
     except RunCancelledError as cancelled:
         message_queue.put(("cancelled", cancelled.generation))
         return
@@ -391,54 +342,3 @@ def _run_worker(
         message_queue.put(("error", str(error)))
         return
     message_queue.put(("done", result))
-
-
-def write_run_artifacts(
-    result: RunResult,
-    targets: dict[str, Path],
-    *,
-    pairwise_max_demes: int = DEFAULT_PAIRWISE_MAX_DEMES,
-) -> None:
-    """Write `report.json`, `scatter.png`, and — last — `manifest.json`.
-
-    Mirrors `cli._write_run_artifacts` exactly: `trajectory.tlog` is
-    not written here, since it was already streamed
-    generation-by-generation by the `TrajectoryStore` passed into
-    `fim`; every other artifact is written and flushed first, and
-    `manifest.json` is written only once every sibling artifact is
-    flushed, augmented with each one's SHA-256 digest. The returned
-    `Figure` is closed immediately — the caller's worker thread never
-    displays it, unlike the CLI's own `scatter.png` render, which the
-    caller keeps alive and is responsible for closing itself. Public
-    rather than
-    module-private: `fim.gui.batch_runner` reuses this same call, once
-    per replicate, rather than duplicating it — both modules live in
-    the same `fim.gui` package, unlike the CLI/GUI front-end boundary
-    `run_artifact_targets`'s own docstring keeps deliberately parallel
-    instead of shared.
-    """
-    write_report(targets["report"], result.report)
-    figure = plot_frequency_scatter(
-        result.final_state, result.params, targets["scatter"]
-    )
-    plt.close(figure)
-    # See `cli._write_run_artifacts`'s own identical comment on this
-    # same artifact -- persisted so reopening restores the trajectory
-    # curve instead of having none at all.
-    write_jsonl_rows(targets["convergence"], _convergence_history_rows(result))
-    # See `cli._write_run_artifacts`: every deme pair's Nei identities.
-    write_pairwise(
-        targets["pairwise"],
-        pairwise_payload(result.final_state, max_demes=pairwise_max_demes),
-    )
-    digested_names = ["trajectory", "report", "scatter", "convergence", "pairwise"]
-    # See `cli._write_run_artifacts`: streamed by the engine for an
-    # equilibrium-split run only.
-    equilibrium_trajectory = targets.get("equilibrium_trajectory")
-    if equilibrium_trajectory is not None and equilibrium_trajectory.is_file():
-        digested_names.append("equilibrium_trajectory")
-    manifest = replace(
-        result.manifest,
-        artifacts={name: hash_file(targets[name]) for name in digested_names},
-    )
-    write_manifest(targets["manifest"], manifest)

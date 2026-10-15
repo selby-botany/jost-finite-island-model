@@ -19,7 +19,7 @@ from fim.engine import RunResult
 from fim.examples import classes
 from fim.execution import ScalarSession, UnsupportedSessionError
 from fim.gui.object_runner import start_object_run
-from fim.gui.runner import run_artifact_targets, write_run_artifacts
+from fim.persistence.artifacts import write_run_artifacts
 from fim.persistence.run_lifecycle import RunState
 from fim.persistence.run_objects import create_run_object, read_run_object
 from fim.persistence.run_ownership import request_cancel, request_pause
@@ -199,7 +199,7 @@ def test_a_run_killed_after_publishing_reports_it_already_finished(
     object_id = _create(tmp_path)
 
     def write_then_die(result: RunResult, directory: Path) -> None:
-        write_run_artifacts(result, run_artifact_targets(directory))
+        write_run_artifacts(result, directory)
         raise KeyboardInterrupt
 
     with pytest.raises(KeyboardInterrupt):

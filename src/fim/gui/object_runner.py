@@ -37,11 +37,10 @@ from fim.gui.runner import (
     ProgressThrottle,
     RunMessage,
     progress_message,
-    run_artifact_targets,
-    write_run_artifacts,
 )
 from fim.gui.store import LIVE_BLOCK_SECONDS, write_progress_sidecar
 from fim.model.params import SimulationParams
+from fim.persistence.artifacts import write_run_artifacts
 from fim.persistence.binary_store import BinaryLogStore, log_options
 from fim.persistence.run_lifecycle import (
     LifecycleError,
@@ -222,7 +221,7 @@ def _object_worker(
         completed.append(result)
         write_run_artifacts(
             result,
-            run_artifact_targets(directory),
+            directory,
             pairwise_max_demes=pairwise_max_demes,
         )
 

@@ -56,13 +56,10 @@ from fim import __version__, paths
 from fim.config.defaults import DEFAULT_PAIRWISE_MAX_DEMES
 from fim.config.expert import ExpertSettings
 from fim.engine import RunResult, deterministic_run_id, fim, replicate_summary
-from fim.gui.runner import (
-    pairwise_status_text,
-    run_artifact_targets,
-    write_run_artifacts,
-)
+from fim.gui.runner import pairwise_status_text
 from fim.gui.store import LIVE_BLOCK_SECONDS, LiveProgressStore, RunCancelledError
 from fim.model.params import SimulationParams
+from fim.persistence.artifacts import write_run_artifacts
 from fim.persistence.binary_store import (
     TRAJECTORY_LOG_FILENAME,
     BinaryLogStore,
@@ -80,7 +77,7 @@ from fim.persistence.report import write_report
 
 # Mirrors `fim.gui.runner`'s own catch-all — see its definition for the
 # full rationale. Duplicated rather than imported: `fim.gui.runner`'s
-# own `run_artifact_targets`/`cli._run_artifact_targets` precedent is "a
+# own `run_artifact_targets`/`artifacts.run_artifact_targets` precedent is "a
 # direct parallel, not a shared import" for exactly this kind of private
 # front-end-local constant.
 _EXPECTED_ENGINE_ERRORS: Final = (
@@ -483,7 +480,7 @@ def _write_batch_artifacts(
     writing pass: prune any orphan replicate directory first
     (`_prune_orphan_replicate_directories`), then each published
     replicate's own four-file scalar-run contract
-    (`fim.gui.runner.write_run_artifacts`, reused rather than duplicated
+    (`fim.persistence.artifacts.write_run_artifacts`, reused rather than duplicated
     — both modules live in the same `fim.gui` package), removing that
     replicate's now-superfluous `.progress` sidecar as its artifacts are
     written: the published `results/` tree stays exactly
@@ -503,7 +500,7 @@ def _write_batch_artifacts(
         directory = replicate_output_directory(working_directory, run_id, result.run_id)
         write_run_artifacts(
             result,
-            run_artifact_targets(directory),
+            directory,
             pairwise_max_demes=pairwise_max_demes,
         )
         (directory / ".progress").unlink(missing_ok=True)

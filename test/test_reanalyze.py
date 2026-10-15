@@ -23,6 +23,7 @@ from conftest import FAST_EXPERT_SETTINGS
 from fim import cli, engine, paths, reanalyze
 from fim.engine import report_for_state
 from fim.persistence import tlog_reader
+from fim.persistence.artifacts import convergence_history_rows
 from fim.persistence.binary_store import BinaryLogStore
 from fim.persistence.frame import frame_to_rows
 from fim.persistence.manifest import hash_file, read_manifest, write_manifest
@@ -442,7 +443,7 @@ def test_convergence_history_rows_drop_a_statistic_shorter_than_generations() ->
         convergence_histories={"D": (0.1, 0.2, 0.3), "G_ST": (0.4, 0.5)},
     )
 
-    rows = cli._convergence_history_rows(cast("engine.RunResult", synthetic_result))
+    rows = convergence_history_rows(cast("engine.RunResult", synthetic_result))
 
     assert len(rows) == 3
     assert all("G_ST" not in row for row in rows)

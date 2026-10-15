@@ -175,7 +175,7 @@ def _cached_final_report(
 ) -> dict[str, object] | None:
     """Return this run's own persisted final report, or `None` if unusable.
 
-    `report.json` (`fim.cli._write_run_artifacts`/`fim.gui.runner.
+    `report.json` (`fim.persistence.artifacts.write_run_artifacts`/`fim.gui.runner.
     write_run_artifacts`) already holds exactly what `report_for_state`
     would recompute for the run's own true final generation — recomputing
     it anyway, every time a huge run is reopened at its final generation
@@ -198,7 +198,7 @@ def _cached_final_report(
 
     Args:
         trajectory_path: The run's own `trajectory.tlog` — `report.json`
-            is expected as its sibling, `fim.cli._run_artifact_targets`'s
+            is expected as its sibling, `artifacts.run_artifact_targets`'s
             own established convention.
         manifest: The run's own manifest.
 
@@ -236,7 +236,7 @@ def read_persisted_convergence_history(
 ) -> tuple[list[int], dict[str, list[float]]] | None:
     """Return a run's own persisted convergence-monitor history, or `None`.
 
-    `convergence.jsonl` (`fim.cli._convergence_history_rows`/`fim.gui.
+    `convergence.jsonl` (`fim.persistence.artifacts.convergence_history_rows`/`fim.gui.
     runner._convergence_history_rows`) holds one row per generation,
     `{"generation": N, "D": ..., ...}` -- reading it back is what lets
     reopening a run restore its own trajectory-vs-generation curve

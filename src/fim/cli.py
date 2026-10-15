@@ -68,7 +68,6 @@ from pathlib import Path
 from typing import Any
 
 import yaml
-from matplotlib import pyplot as plt
 
 from fim import __version__, logging_setup, paths, reanalyze, update
 from fim.cli_objects import add_object_subcommands, command_object
@@ -93,8 +92,8 @@ from fim.group_lifecycle import (
     study_summary,
 )
 from fim.model.params import SimulationParams, describe_population
+from fim.persistence.artifacts import run_artifact_targets, write_run_artifacts
 from fim.persistence.binary_store import (
-    EQUILIBRIUM_LOG_FILENAME,
     TRAJECTORY_LOG_FILENAME,
     BinaryLogStore,
     log_options,
@@ -121,10 +120,7 @@ from fim.persistence.manifest import (
     BatchManifest,
     hash_file,
     write_batch_manifest,
-    write_manifest,
 )
-from fim.persistence.pairwise import pairwise_payload, write_pairwise
-from fim.persistence.report import write_jsonl_rows
 
 # Explicit re-export (not a rename): test/cli/test_cli.py patches
 # `cli.write_report` directly to inject a failure at a specific artifact
@@ -139,7 +135,6 @@ from fim.persistence.run_metadata import (
 )
 from fim.persistence.tlog_export import DEFAULT_EXPORT_WORKERS, export_trajectory
 from fim.termination import sigterm_raises_exit
-from fim.viz.scatter import plot_frequency_scatter
 
 logger = logging.getLogger(__name__)
 
@@ -364,7 +359,7 @@ def _dispatch_command(
         "study": lambda: _command_study(arguments, parser),
         "experiment": lambda: _command_experiment(arguments, parser),
         "sweep": lambda: command_sweep(arguments, parser),
-        "object": lambda: command_object(arguments, parser, _write_run_artifacts),
+        "object": lambda: command_object(arguments, parser),
         "stats": lambda: _command_stats(arguments),
         "export": lambda: _command_export(arguments),
         "update": lambda: _command_update(arguments, parser),
@@ -615,7 +610,7 @@ def _command_run_scalar(
         )
         _print_derived_convergence(params)
     with paths.atomic_directory(output_directory) as working_directory:
-        targets = _run_artifact_targets(working_directory)
+        targets = run_artifact_targets(working_directory)
         # Closed here as well as by the engine, before `atomic_directory`
         # renames (or, on failure, removes) the directory: an open handle
         # blocks both on Windows.
@@ -634,7 +629,7 @@ def _command_run_scalar(
         if not isinstance(output, RunResult):
             raise RuntimeError("scalar CLI run unexpectedly returned a batch")
         logger.debug("writing run artifacts to %s", working_directory)
-        _write_run_artifacts(
+        write_run_artifacts(
             output, working_directory, pairwise_max_demes=pairwise_max_demes
         )
 
@@ -657,7 +652,7 @@ def _command_run_scalar(
         # Only what this run wrote: `_run_artifact_targets` names every
         # artifact a run *can* have (the equilibrium trajectory exists only
         # for an equilibrium-split run).
-        for label, path in _run_artifact_targets(output_directory).items():
+        for label, path in run_artifact_targets(output_directory).items():
             if path.exists():
                 print(f"{label.capitalize():10} -> {path}")
     return 0
@@ -780,7 +775,7 @@ def _command_run_batch(
                 working_directory, run_id, result.run_id
             )
             logger.debug("writing replicate artifacts to %s", directory)
-            _write_run_artifacts(
+            write_run_artifacts(
                 result, directory, pairwise_max_demes=arguments.pairwise_max_demes
             )
             artifact_digests[directory.name] = hash_file(directory / "manifest.json")
@@ -1306,64 +1301,6 @@ def _replicate_store_factory(
     return BinaryLogStore(directory / TRAJECTORY_LOG_FILENAME, **log_options(expert))
 
 
-def _run_artifact_targets(directory: Path) -> dict[str, Path]:
-    """Return every documented scalar-run artifact path in one directory.
-
-    A single, shared source for these exact filenames, used by both
-    `_command_run_scalar` (writing them) and anything checking a
-    completed run's own output (reading them back) — so the two can
-    never quietly disagree about where a given artifact actually lives.
-    Every path is returned regardless of whether a given run actually
-    produced it — this dict names *where a thing would live*, not
-    which artifacts a particular run happens to have; a caller checks
-    on-disk existence (or `manifest.artifacts` membership) for that.
-    `equilibrium_trajectory` is present only for an
-    equilibrium-split run, streamed by the engine itself beside
-    `trajectory.tlog` (`fim.engine.RunResult.equilibrium_store`).
-    """
-    return {
-        "trajectory": directory / TRAJECTORY_LOG_FILENAME,
-        "equilibrium_trajectory": directory / EQUILIBRIUM_LOG_FILENAME,
-        "manifest": directory / "manifest.json",
-        "report": directory / "report.json",
-        "scatter": directory / "scatter.png",
-        "convergence": directory / "convergence.jsonl",
-        "pairwise": directory / "pairwise.json",
-    }
-
-
-def _convergence_history_rows(result: RunResult) -> list[dict[str, object]]:
-    """Return one row per generation, for `convergence.jsonl` (below).
-
-    `{"generation": N, "D": ..., "H_S": ..., ...}` -- one small
-    object per generation (`write_jsonl_rows`), rather than a single
-    large object holding a `generations` list alongside a `histories`
-    mapping of equal-length lists.
-
-    A statistic whose own history is shorter than `result.convergence_
-    generations` (only `G_ST` can be, at a currently-monomorphic locus
-    -- `fim.engine.tracking.convergence_values`'s own docstring) is left out of
-    every row entirely, not partially included: which specific
-    generations it is missing is not recoverable from the monitor's own
-    recorded shape (a name simply not appended that round, `fim.
-    convergence.monitor.ConvergenceMonitor.record`'s own docstring), so
-    there is no honest per-row placeholder to write for it.
-    `run-view-completed.js`'s own `renderTrajectory` already applies
-    the identical "length must match `generations` exactly" filter to
-    the un-rowed shape this replaces, so nothing that was ever actually
-    plottable stops being so.
-    """
-    aligned = {
-        name: values
-        for name, values in result.convergence_histories.items()
-        if len(values) == len(result.convergence_generations)
-    }
-    return [
-        {"generation": generation, **{name: aligned[name][index] for name in aligned}}
-        for index, generation in enumerate(result.convergence_generations)
-    ]
-
-
 def _terminable(command: Callable[[], int]) -> int:
     """Run `command`, turning the first SIGTERM into `SystemExit(143)`.
 
@@ -1383,69 +1320,6 @@ def _utc_now() -> datetime:
     at all rather than calling `datetime.now(UTC)` inline.
     """
     return datetime.now(UTC)
-
-
-def _write_run_artifacts(
-    result: RunResult,
-    directory: Path,
-    *,
-    pairwise_max_demes: int = DEFAULT_PAIRWISE_MAX_DEMES,
-) -> dict[str, Path]:
-    """Write one run's report, scatter plot, and — last — its verifiable manifest.
-
-    ``trajectory.tlog`` is not written here: it is streamed
-    generation-by-generation by the `TrajectoryStore` already passed
-    into `fim`, so it exists before this function ever runs. Every other
-    artifact is written and flushed first; ``manifest.json`` is written
-    only once every sibling artifact is flushed, augmented with each
-    one's own checksum and byte count (`fim.persistence.manifest.
-    hash_file`) — the record `fim.persistence.manifest.
-    verify_trajectory_integrity` later checks against (see
-    `fim.reanalyze`'s own docstring for what that check actually
-    catches). "Flushed" means the data has reached the operating
-    system's own page cache via the normal file-close path, not that it
-    has been confirmed as physically written to the disk itself — no
-    `fsync` (the specific, slower operation that would force that
-    physical confirmation) is called anywhere in this pipeline
-    (internal tracked-issue reference S11), so this ordering protects
-    against a process dying mid-write, not against a genuine, unclean
-    loss of power to the machine itself; see `fim.paths.
-    atomic_directory`'s own docstring for the identical caveat spelled
-    out in more detail.
-    """
-    targets = _run_artifact_targets(directory)
-    write_report(targets["report"], result.report)
-    figure = plot_frequency_scatter(
-        result.final_state, result.params, targets["scatter"]
-    )
-    plt.close(figure)
-    # The convergence monitor's own full per-generation history --
-    # exactly what a live-just-finished run's own GUI "done" push
-    # already carries (`fim.gui.app._drain_run_messages`'s own
-    # `convergenceGenerations`/`convergenceHistories` payload keys) --
-    # persisted so reopening a run can restore the identical trajectory
-    # curve instead of having none at all (`fim.reanalyze.
-    # reanalyze_trajectory`'s own docstring on that prior scope
-    # boundary has the fuller account of what reopening used to lose).
-    write_jsonl_rows(targets["convergence"], _convergence_history_rows(result))
-    # Every deme pair's Nei identities at the final generation
-    # (`fim.persistence.pairwise`), so any pair can be compared later.
-    write_pairwise(
-        targets["pairwise"],
-        pairwise_payload(result.final_state, max_demes=pairwise_max_demes),
-    )
-    digested_names = ["trajectory", "report", "scatter", "convergence", "pairwise"]
-    if targets["equilibrium_trajectory"].is_file():
-        # Streamed, like `trajectory.tlog`, by the engine itself during
-        # an equilibrium-split run's ancestral phase
-        # (`RunResult.equilibrium_store`); no other run writes one.
-        digested_names.append("equilibrium_trajectory")
-    manifest = replace(
-        result.manifest,
-        artifacts={name: hash_file(targets[name]) for name in digested_names},
-    )
-    write_manifest(targets["manifest"], manifest)
-    return targets
 
 
 def _format_optional(value: float | None) -> str:

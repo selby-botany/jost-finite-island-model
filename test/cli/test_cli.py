@@ -20,6 +20,8 @@ from fim import __version__, cli, paths, update
 from fim.config.expert import ExpertSettings
 from fim.gui.preferences import preferences_file_override
 from fim.model.params import SimulationParams
+from fim.persistence import artifacts
+from fim.persistence import report as report_module
 from fim.persistence.binary_store import BinaryLogStore
 from fim.persistence.manifest import hash_file, read_batch_manifest
 from fim.persistence.tlog import parse_header
@@ -97,7 +99,7 @@ def test_sigterm_ends_a_run_with_143_and_discards_its_staging(
     def terminated(*_: Any, **__: Any) -> None:
         os.kill(os.getpid(), signal.SIGTERM)
 
-    monkeypatch.setattr(cli, "_write_run_artifacts", terminated)
+    monkeypatch.setattr(cli, "write_run_artifacts", terminated)
 
     with pytest.raises(SystemExit) as raised:
         cli.main(["run", str(config), "--output", str(output), "--quiet"])
@@ -1162,14 +1164,14 @@ def test_run_scalar_leaves_no_trace_when_the_report_write_fails(
     config = tmp_path / "run.yaml"
     _write_config(config)
     output = tmp_path / "output"
-    original_write_report = cli.write_report
+    original_write_report = report_module.write_report
 
     def flaky_write_report(path: Path, value: Mapping[str, object]) -> None:
         if Path(path).name == "report.json":
             raise RuntimeError("simulated report write failure")
         original_write_report(path, value)
 
-    monkeypatch.setattr(cli, "write_report", flaky_write_report)
+    monkeypatch.setattr(artifacts, "write_report", flaky_write_report)
 
     assert cli.main(["run", str(config), "-o", str(output), "--quiet"]) == 2
     assert not output.exists()
@@ -1194,7 +1196,7 @@ def test_run_scalar_leaves_no_trace_when_the_plot_fails(
     def failing_plot(*args: Any, **kwargs: Any) -> Any:
         raise RuntimeError("simulated plot failure")
 
-    monkeypatch.setattr(cli, "plot_frequency_scatter", failing_plot)
+    monkeypatch.setattr(artifacts, "plot_frequency_scatter", failing_plot)
 
     assert cli.main(["run", str(config), "-o", str(output), "--quiet"]) == 2
     assert not output.exists()
@@ -1589,7 +1591,7 @@ def test_run_batch_leaves_no_trace_when_a_replicate_write_fails(
     config = tmp_path / "run.yaml"
     _write_config(config, n_replicates=3)
     output = tmp_path / "output"
-    original_write_run_artifacts = cli._write_run_artifacts
+    original_write_run_artifacts = artifacts.write_run_artifacts
     calls = {"count": 0}
 
     def flaky_write_run_artifacts(*args: Any, **kwargs: Any) -> dict[str, Path]:
@@ -1598,7 +1600,7 @@ def test_run_batch_leaves_no_trace_when_a_replicate_write_fails(
             raise RuntimeError("simulated replicate write failure")
         return original_write_run_artifacts(*args, **kwargs)
 
-    monkeypatch.setattr(cli, "_write_run_artifacts", flaky_write_run_artifacts)
+    monkeypatch.setattr(cli, "write_run_artifacts", flaky_write_run_artifacts)
 
     status = cli.main(
         ["run", str(config), "-o", str(output), "--sequential", "--quiet"]

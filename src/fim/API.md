@@ -625,11 +625,9 @@ Return to the [source-tree orientation](../README.md) or the [developer guide](.
   * [ProgressThrottle](#fim.gui.runner.ProgressThrottle)
     * [\_\_init\_\_](#fim.gui.runner.ProgressThrottle.__init__)
     * [should\_report](#fim.gui.runner.ProgressThrottle.should_report)
-  * [run\_artifact\_targets](#fim.gui.runner.run_artifact_targets)
   * [pairwise\_status\_text](#fim.gui.runner.pairwise_status_text)
   * [progress\_message](#fim.gui.runner.progress_message)
   * [start\_run](#fim.gui.runner.start_run)
-  * [write\_run\_artifacts](#fim.gui.runner.write_run_artifacts)
 * [fim.gui.store](#fim.gui.store)
   * [LIVE\_BLOCK\_SECONDS](#fim.gui.store.LIVE_BLOCK_SECONDS)
   * [RunCancelledError](#fim.gui.store.RunCancelledError)
@@ -844,6 +842,10 @@ Return to the [source-tree orientation](../README.md) or the [developer guide](.
   * [studies\_directory](#fim.paths.studies_directory)
   * [experiments\_directory](#fim.paths.experiments_directory)
 * [fim.persistence](#fim.persistence)
+* [fim.persistence.artifacts](#fim.persistence.artifacts)
+  * [run\_artifact\_targets](#fim.persistence.artifacts.run_artifact_targets)
+  * [convergence\_history\_rows](#fim.persistence.artifacts.convergence_history_rows)
+  * [write\_run\_artifacts](#fim.persistence.artifacts.write_run_artifacts)
 * [fim.persistence.binary\_store](#fim.persistence.binary_store)
   * [TRAJECTORY\_LOG\_FILENAME](#fim.persistence.binary_store.TRAJECTORY_LOG_FILENAME)
   * [EQUILIBRIUM\_LOG\_FILENAME](#fim.persistence.binary_store.EQUILIBRIUM_LOG_FILENAME)
@@ -2229,8 +2231,7 @@ Wire `fim object` and its subcommands, `create` through `reclaim`.
 
 ```python
 def command_object(arguments: argparse.Namespace,
-                   parser: argparse.ArgumentParser,
-                   write_artifacts: ArtifactWriter) -> int
+                   parser: argparse.ArgumentParser) -> int
 ```
 
 Dispatch one `fim object` invocation.
@@ -2239,7 +2240,6 @@ Dispatch one `fim object` invocation.
 
 - `arguments` - The parsed command line.
 - `parser` - The top-level parser, for its usage error.
-- `write_artifacts` - Writes a completed run's artifacts.
 
 
 **Returns**:
@@ -16375,7 +16375,7 @@ own `except BaseException` clause discards the temporary directory and
 needed for either outcome.
 
 Writes the same four artifacts, in the same order, as
-`cli._write_run_artifacts`: `trajectory.tlog` streamed
+`fim.persistence.artifacts.write_run_artifacts`: `trajectory.tlog` streamed
 generation-by-generation by the `TrajectoryStore` passed into `fim`,
 then `report.json` and `scatter.png` once the run finishes, then —
 last, and only once both are flushed — `manifest.json`, augmented with
@@ -16426,23 +16426,6 @@ def should_report(generation: int, max_generations: int) -> bool
 ```
 
 Return whether `generation` should be posted to the UI now.
-
-<a id="fim.gui.runner.run_artifact_targets"></a>
-
-#### run\_artifact\_targets
-
-```python
-def run_artifact_targets(directory: Path) -> dict[str, Path]
-```
-
-Return every documented scalar-run artifact path in one directory.
-
-Deliberately the same names `cli._run_artifact_targets` uses for a
-scalar run — same
-target filenames, same directory — a direct parallel, not a shared import, since
-`cli._run_artifact_targets` is a private module-level function of
-the CLI's own front end. `equilibrium_trajectory` exists only for
-an equilibrium-split run, streamed by the engine itself.
 
 <a id="fim.gui.runner.pairwise_status_text"></a>
 
@@ -16534,36 +16517,6 @@ Resolve targets, guard the existing target, and start the worker thread.
 **Raises**:
 
 - `FileExistsError` - If `output_directory` already exists.
-
-<a id="fim.gui.runner.write_run_artifacts"></a>
-
-#### write\_run\_artifacts
-
-```python
-def write_run_artifacts(
-        result: RunResult,
-        targets: dict[str, Path],
-        *,
-        pairwise_max_demes: int = DEFAULT_PAIRWISE_MAX_DEMES) -> None
-```
-
-Write `report.json`, `scatter.png`, and — last — `manifest.json`.
-
-Mirrors `cli._write_run_artifacts` exactly: `trajectory.tlog` is
-not written here, since it was already streamed
-generation-by-generation by the `TrajectoryStore` passed into
-`fim`; every other artifact is written and flushed first, and
-`manifest.json` is written only once every sibling artifact is
-flushed, augmented with each one's SHA-256 digest. The returned
-`Figure` is closed immediately — the caller's worker thread never
-displays it, unlike the CLI's own `scatter.png` render, which the
-caller keeps alive and is responsible for closing itself. Public
-rather than
-module-private: `fim.gui.batch_runner` reuses this same call, once
-per replicate, rather than duplicating it — both modules live in
-the same `fim.gui` package, unlike the CLI/GUI front-end boundary
-`run_artifact_targets`'s own docstring keeps deliberately parallel
-instead of shared.
 
 <a id="fim.gui.store"></a>
 
@@ -22375,6 +22328,104 @@ the manifest — not itself re-exported here, since it is used directly
 by `fim.engine` and `fim.cli` rather than through this package's own
 top-level API.
 
+<a id="fim.persistence.artifacts"></a>
+
+# fim.persistence.artifacts
+
+Write the files that make up a saved run.
+
+A completed run is a directory of files: the streamed trajectory log, the
+report, the final-state scatter plot, the per-generation convergence history,
+the deme-pair statistics, and a manifest that records a checksum of each. This
+module is the one place that knows those names and writes them, for the
+command line, the desktop app, saved runs, and sweeps alike.
+
+<a id="fim.persistence.artifacts.run_artifact_targets"></a>
+
+#### run\_artifact\_targets
+
+```python
+def run_artifact_targets(directory: Path) -> dict[str, Path]
+```
+
+Return every documented scalar-run artifact path in one directory.
+
+The single source for these filenames, used by whatever writes a run
+and by anything that checks a completed run's output, so the two cannot
+disagree about where an artifact lives. Every path is returned whether
+or not a given run produced it: the dict names where a thing would live.
+`equilibrium_trajectory` is written only by an equilibrium-split run,
+streamed by the engine beside `trajectory.tlog`.
+
+**Arguments**:
+
+- `directory` - The run directory.
+
+
+**Returns**:
+
+  Artifact name to path.
+
+<a id="fim.persistence.artifacts.convergence_history_rows"></a>
+
+#### convergence\_history\_rows
+
+```python
+def convergence_history_rows(result: RunResult) -> list[dict[str, object]]
+```
+
+Return one row per generation, for `convergence.jsonl`.
+
+Each row is ``{"generation": N, "D": ..., "H_S": ..., ...}``. A statistic
+whose history is shorter than the generation list (only `G_ST` can be, at
+a currently monomorphic locus) is left out of every row, because which
+generations it is missing is not recoverable from the monitor's record.
+
+**Arguments**:
+
+- `result` - A finished engine result.
+
+
+**Returns**:
+
+  The rows, in generation order.
+
+<a id="fim.persistence.artifacts.write_run_artifacts"></a>
+
+#### write\_run\_artifacts
+
+```python
+def write_run_artifacts(
+        result: RunResult,
+        directory: Path,
+        *,
+        pairwise_max_demes: int = DEFAULT_PAIRWISE_MAX_DEMES
+) -> dict[str, Path]
+```
+
+Write one run's report, plots, histories, and, last, its manifest.
+
+`trajectory.tlog` is not written here: the `TrajectoryStore` passed to the
+engine streamed it generation by generation, so it already exists. Every
+other artifact is written and flushed first; `manifest.json` goes last,
+with each sibling's checksum and size (`fim.persistence.manifest.
+hash_file`), the record `verify_trajectory_integrity` later checks. A
+flush means the data reached the operating system's cache, not the disk
+(no `fsync`), so the ordering protects against a process dying mid-write,
+not against power loss; see `fim.paths.atomic_directory`.
+
+**Arguments**:
+
+- `result` - A finished engine result.
+- `directory` - The run directory.
+- `pairwise_max_demes` - Largest deme count for which every deme pair's
+  statistics are written.
+
+
+**Returns**:
+
+  The artifact paths (see `run_artifact_targets`).
+
 <a id="fim.persistence.binary_store"></a>
 
 # fim.persistence.binary\_store
@@ -24538,7 +24589,7 @@ Capture everything needed to identify, verify, and replay a run.
 `artifacts` is `None` for a manifest as the engine constructs it —
 `fim.engine.lineal.run_one` returns a `RunResult` without ever writing to
 disk, so it cannot yet know a durable file's content digest. A
-manifest actually persisted to disk (`fim.cli._write_run_artifacts`)
+manifest actually persisted to disk (`artifacts.write_run_artifacts`)
 is written only once every other artifact (`trajectory.tlog`,
 `report.json`, `scatter.png`) is fully flushed, with `artifacts`
 populated from their real on-disk digests — so `artifacts is not
@@ -27542,8 +27593,8 @@ A completed batch's cross-replicate summary.
 
 Each scalar artifact key a receipt may list, and the file it names.
 
-The same names `fim.cli._run_artifact_targets` and
-`fim.gui.runner.run_artifact_targets` use, less the receipt itself; a test
+The same names `fim.persistence.artifacts.run_artifact_targets` and
+`fim.persistence.artifacts.run_artifact_targets` use, less the receipt itself; a test
 keeps the three in agreement.
 
 <a id="fim.persistence.run_receipt.receipt_problem"></a>
@@ -30620,7 +30671,7 @@ def read_persisted_convergence_history(
 
 Return a run's own persisted convergence-monitor history, or `None`.
 
-`convergence.jsonl` (`fim.cli._convergence_history_rows`/`fim.gui.
+`convergence.jsonl` (`fim.persistence.artifacts.convergence_history_rows`/`fim.gui.
 runner._convergence_history_rows`) holds one row per generation,
 `{"generation": N, "D": ..., ...}` -- reading it back is what lets
 reopening a run restore its own trajectory-vs-generation curve
@@ -31586,8 +31637,8 @@ a completed run whose published results no longer match their receipt.
 def execute_run_object(
         object_id: str,
         *,
-        write_artifacts: ArtifactWriter,
         results: Path | None = None,
+        write_artifacts: ArtifactWriter | None = None,
         clock: Clock | None = None,
         cadence: CheckpointCadence | None = None,
         monotonic: Callable[[], float] = time.monotonic,
@@ -31605,8 +31656,9 @@ Start or resume a Run object and execute it until it stops.
 
 - `object_id` - A `planned` object to start, or a `paused`,
   `interrupted`, or `failed` object to resume.
-- `write_artifacts` - Writes the completed run's artifacts.
 - `results` - Results directory (default: `results_directory()`).
+- `write_artifacts` - Writes the completed run's artifacts (default:
+  `fim.persistence.artifacts.write_run_artifacts`; a test seam).
 - `clock` - Current-time source for lifecycle and manifest timestamps.
 - `cadence` - Checkpoint and control intervals (default: 1,000
   generations or 60 seconds, checking requests every 50).

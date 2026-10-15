@@ -20,6 +20,7 @@ import yaml
 
 from fim import cli, paths, run_service
 from fim.examples import classes
+from fim.persistence.artifacts import write_run_artifacts
 from fim.persistence.run_objects import read_run_object
 from fim.persistence.run_ownership import request_pause
 
@@ -254,7 +255,7 @@ def test_a_start_killed_after_its_receipt_is_reported_as_finished(
     original = run_service.execute_run_object
 
     def killed_after_publishing(object_id: str, **kwargs: Any) -> Any:
-        write = kwargs.pop("write_artifacts")
+        write = write_run_artifacts
 
         def write_then_die(result: Any, directory: Path) -> None:
             write(result, directory)
