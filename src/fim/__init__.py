@@ -2,12 +2,14 @@
 
 from __future__ import annotations
 
+import importlib
 import logging
 import os
 import subprocess
 import sys
 from importlib.metadata import PackageNotFoundError, version
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 # The standard library's own documented "library, not application" pattern
 # (https://docs.python.org/3/howto/logging.html#configuring-logging-for-a-library):
@@ -165,4 +167,111 @@ def _load_version() -> str:
 __dev_commit__: str | None = None
 __version__ = _load_version()
 
-__all__ = ["__dev_commit__", "__version__"]
+# The public facade. Names load on first use (PEP 562), so `import fim` stays
+# light and the package's own modules can import `fim.__version__` while the
+# facade's heavier modules are still unloaded.
+_EXPORTS: dict[str, str] = {
+    "Analysis": "fim.spec",
+    "ConfigurationError": "fim.errors",
+    "EquilibriumSplit": "fim.spec",
+    "Execution": "fim.spec",
+    "ExplicitFrequencies": "fim.spec",
+    "FimError": "fim.errors",
+    "FiniteAlleles": "fim.spec",
+    "FoundingAlleles": "fim.spec",
+    "InfiniteAlleles": "fim.spec",
+    "Locus": "fim.spec",
+    "Model": "fim.spec",
+    "Population": "fim.spec",
+    "Recording": "fim.spec",
+    "Replicate": "fim.results",
+    "Replication": "fim.spec",
+    "Report": "fim.results",
+    "Result": "fim.results",
+    "RunConfig": "fim.spec",
+    "RunSpec": "fim.spec",
+    "Stopping": "fim.spec",
+    "UnsupportedError": "fim.errors",
+    "load_config": "fim.spec",
+    "run_identity": "fim.spec",
+    "simulate": "fim.simulation",
+}
+
+if TYPE_CHECKING:
+    from fim.errors import ConfigurationError, FimError, UnsupportedError
+    from fim.results import Replicate, Report, Result
+    from fim.simulation import simulate
+    from fim.spec import (
+        Analysis,
+        EquilibriumSplit,
+        Execution,
+        ExplicitFrequencies,
+        FiniteAlleles,
+        FoundingAlleles,
+        InfiniteAlleles,
+        Locus,
+        Model,
+        Population,
+        Recording,
+        Replication,
+        RunConfig,
+        RunSpec,
+        Stopping,
+        load_config,
+        run_identity,
+    )
+
+
+def __getattr__(name: str) -> object:
+    """Load a facade name from its module on first use.
+
+    Args:
+        name: The attribute being looked up.
+
+    Returns:
+        The exported object.
+
+    Raises:
+        AttributeError: `name` is not part of the facade.
+    """
+    module_name = _EXPORTS.get(name)
+    if module_name is None:
+        raise AttributeError(f"module 'fim' has no attribute {name!r}")
+    value = getattr(importlib.import_module(module_name), name)
+    globals()[name] = value
+    return value
+
+
+def __dir__() -> list[str]:
+    """List the facade names along with the module's own."""
+    return sorted({*globals(), *_EXPORTS})
+
+
+__all__ = [
+    "Analysis",
+    "ConfigurationError",
+    "EquilibriumSplit",
+    "Execution",
+    "ExplicitFrequencies",
+    "FimError",
+    "FiniteAlleles",
+    "FoundingAlleles",
+    "InfiniteAlleles",
+    "Locus",
+    "Model",
+    "Population",
+    "Recording",
+    "Replicate",
+    "Replication",
+    "Report",
+    "Result",
+    "RunConfig",
+    "RunSpec",
+    "Stopping",
+    "UnsupportedError",
+    "__dev_commit__",
+    "__version__",
+    "load_config",
+    "run_identity",
+    "simulate",
+]

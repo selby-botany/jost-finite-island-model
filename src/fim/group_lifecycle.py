@@ -22,6 +22,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Final
 
+from fim.errors import FimError
 from fim.persistence import groups
 from fim.persistence.groups import ExperimentManifest, StudyManifest
 from fim.persistence.object_lock import is_lock_held
@@ -48,7 +49,7 @@ _UNMATERIALIZED_POINT_STATES: Final = frozenset({"waiting", "failed"})
 """Sweep point states that, with no linked object, mean no Run exists yet."""
 
 
-class GroupBusyError(ValueError):
+class GroupBusyError(FimError, ValueError):
     """Refuse to close a group while a Run it reaches is active.
 
     A `ValueError` subclass, so the CLI and GUI report it like every other

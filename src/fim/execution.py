@@ -57,6 +57,7 @@ from fim.engine.lanes import (
 )
 from fim.engine.monitors import burn_in_monitor
 from fim.engine.records import utc_now
+from fim.errors import StoreError, UnsupportedError
 from fim.model.allele import AlleleRegistry
 from fim.model.initial import EquilibrationOutcome
 from fim.model.operators import expand_population_sizes
@@ -121,11 +122,11 @@ VECTOR_PREFIX: Final = "vector."
 """Prefix of the vector block's arrays inside a checkpoint."""
 
 
-class UnsupportedSessionError(ValueError):
+class UnsupportedSessionError(UnsupportedError):
     """Raised when a configuration cannot run as a resumable scalar session."""
 
 
-class SessionRestoreError(ValueError):
+class SessionRestoreError(StoreError, ValueError):
     """Raised when a checkpoint cannot continue the given configuration."""
 
 

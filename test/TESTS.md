@@ -34,6 +34,7 @@ Every test module, fixture, and test function documented here in full; `doc/fim-
   - [`test_run_service`](#test.test_run_service)
   - [`test_run_service_batch`](#test.test_run_service_batch)
   - [`test_shutdown_diagnostics`](#test.test_shutdown_diagnostics)
+  - [`test_simulate`](#test.test_simulate)
   - [`test_sweep`](#test.test_sweep)
   - [`test_sweep_run`](#test.test_sweep_run)
   - [`test_termination`](#test.test_termination)
@@ -4170,6 +4171,112 @@ line: interpreter start-up and imports before it are waited for
 without a timing budget, since their length depends on machine load
 (about 13 seconds on a loaded machine), not on the commit; only the
 completion-signal backstop (`conftest.readline_or_fail`) bounds them.
+
+<a id="test.test_simulate"></a>
+
+# test.test\_simulate
+
+`fim.simulate`, the `fim` facade, and the exception hierarchy.
+
+<a id="test.test_simulate.test_simulate_returns_a_result_with_the_runs_identity"></a>
+
+#### test\_simulate\_returns\_a\_result\_with\_the\_runs\_identity
+
+```python
+def test_simulate_returns_a_result_with_the_runs_identity() -> None
+```
+
+The result names the run by its science and keeps the spec as written.
+
+<a id="test.test_simulate.test_every_backend_gives_the_same_numbers_and_the_same_run_id"></a>
+
+#### test\_every\_backend\_gives\_the\_same\_numbers\_and\_the\_same\_run\_id
+
+```python
+def test_every_backend_gives_the_same_numbers_and_the_same_run_id() -> None
+```
+
+Public parity: the engine choice cannot change a result or its ID.
+
+<a id="test.test_simulate.test_a_run_config_supplies_its_own_execution_unless_overridden"></a>
+
+#### test\_a\_run\_config\_supplies\_its\_own\_execution\_unless\_overridden
+
+```python
+def test_a_run_config_supplies_its_own_execution_unless_overridden() -> None
+```
+
+Keyword arguments win over what a configuration file asked for.
+
+<a id="test.test_simulate.test_recording_to_a_directory_is_refused_until_it_is_supported"></a>
+
+#### test\_recording\_to\_a\_directory\_is\_refused\_until\_it\_is\_supported
+
+```python
+def test_recording_to_a_directory_is_refused_until_it_is_supported() -> None
+```
+
+The error says so, rather than silently keeping the run in memory.
+
+<a id="test.test_simulate.test_an_engine_rejection_is_a_configuration_error"></a>
+
+#### test\_an\_engine\_rejection\_is\_a\_configuration\_error
+
+```python
+def test_an_engine_rejection_is_a_configuration_error() -> None
+```
+
+Cross-field rules surface with the engine's message.
+
+<a id="test.test_simulate.test_a_missing_dependency_is_an_unsupported_error"></a>
+
+#### test\_a\_missing\_dependency\_is\_an\_unsupported\_error
+
+```python
+def test_a_missing_dependency_is_an_unsupported_error(
+        monkeypatch: pytest.MonkeyPatch) -> None
+```
+
+A valid spec that no available engine can run says so, as a ValueError.
+
+<a id="test.test_simulate.test_the_facade_loads_lazily_and_every_name_resolves"></a>
+
+#### test\_the\_facade\_loads\_lazily\_and\_every\_name\_resolves
+
+```python
+def test_the_facade_loads_lazily_and_every_name_resolves() -> None
+```
+
+`import fim` stays light; each exported name is a real object.
+
+<a id="test.test_simulate.test_every_package_exception_is_a_fim_error"></a>
+
+#### test\_every\_package\_exception\_is\_a\_fim\_error
+
+```python
+@pytest.mark.parametrize(
+    ("error", "bases"),
+    [
+        (ConfigurationError, (FimError, ValueError)),
+        (UnsupportedError, (FimError, ValueError)),
+        (StoreError, (FimError, )),
+        (UnsupportedSessionError, (UnsupportedError, ValueError)),
+        (VectorMemoryCeilingError, (UnsupportedError, RuntimeError)),
+        (SessionRestoreError, (StoreError, ValueError)),
+        (TlogError, (StoreError, ValueError)),
+        (SnapshotError, (StoreError, ValueError)),
+        (ReadOnlyError, (StoreError, ValueError)),
+        (ClosedGroupError, (StoreError, ValueError)),
+        (GroupBusyError, (FimError, ValueError)),
+        (LifecycleError, (FimError, )),
+        (LockUnavailableError, (FimError, )),
+    ],
+)
+def test_every_package_exception_is_a_fim_error(
+        error: type[BaseException], bases: tuple[type, ...]) -> None
+```
+
+One root catches everything; ValueError compatibility is kept.
 
 <a id="test.test_sweep"></a>
 

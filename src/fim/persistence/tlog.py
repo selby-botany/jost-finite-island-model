@@ -53,6 +53,7 @@ from fim.config.storage import (
     LOG_KEY_EVERY,
     LOG_SYNC_SECONDS,
 )
+from fim.errors import StoreError
 from fim.persistence import tlog_codec as codec
 from fim.persistence.frame import FrameLayout, TrajectoryFrame
 
@@ -119,7 +120,7 @@ _RECORD_BOUND_PER_ENTRY: Final = 32
 _BLOCK_SLACK: Final = 8
 
 
-class TlogError(ValueError):
+class TlogError(StoreError, ValueError):
     """The file is not a usable trajectory log (bad magic, header or version)."""
 
 

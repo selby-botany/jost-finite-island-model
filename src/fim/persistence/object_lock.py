@@ -18,6 +18,8 @@ from contextlib import contextmanager
 from pathlib import Path
 from typing import IO
 
+from fim.errors import FimError
+
 if sys.platform == "win32":  # pragma: no cover - exercised on Windows CI
     import msvcrt
 
@@ -55,7 +57,7 @@ else:
         fcntl.flock(handle.fileno(), fcntl.LOCK_UN)
 
 
-class LockUnavailableError(Exception):
+class LockUnavailableError(FimError):
     """A non-blocking lock request found the lock already held."""
 
 

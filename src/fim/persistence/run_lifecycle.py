@@ -38,6 +38,8 @@ from datetime import UTC, datetime
 from enum import StrEnum
 from typing import Any, Final
 
+from fim.errors import FimError
+
 CURRENT_RUN_LIFECYCLE_SCHEMA_VERSION: Final = 1
 """Version of the `run.json` shape; bumped on an incompatible change."""
 
@@ -169,7 +171,7 @@ _ATTEMPT_CLOSING_STATES: Final = frozenset(
 _SAVE_EVENTS: Final = frozenset({RunEvent.SAVE_VALID, RunEvent.SAVE_INVALID})
 
 
-class LifecycleError(Exception):
+class LifecycleError(FimError):
     """Base class for every lifecycle rule or record violation."""
 
 

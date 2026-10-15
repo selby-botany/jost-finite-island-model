@@ -7,6 +7,8 @@ Return to the [source-tree orientation](../README.md) or the [developer guide](.
 # Table of Contents
 
 * [fim](#fim)
+  * [\_\_getattr\_\_](#fim.__getattr__)
+  * [\_\_dir\_\_](#fim.__dir__)
 * [fim.batch\_session](#fim.batch_session)
   * [BATCH\_CHECKPOINT\_KIND](#fim.batch_session.BATCH_CHECKPOINT_KIND)
   * [BATCH\_CHECKPOINT\_VERSION](#fim.batch_session.BATCH_CHECKPOINT_VERSION)
@@ -284,6 +286,8 @@ Return to the [source-tree orientation](../README.md) or the [developer guide](.
 * [fim.errors](#fim.errors)
   * [FimError](#fim.errors.FimError)
   * [ConfigurationError](#fim.errors.ConfigurationError)
+  * [UnsupportedError](#fim.errors.UnsupportedError)
+  * [StoreError](#fim.errors.StoreError)
 * [fim.examples](#fim.examples)
 * [fim.examples.artifacts](#fim.examples.artifacts)
   * [archive\_target](#fim.examples.artifacts.archive_target)
@@ -1345,6 +1349,8 @@ Return to the [source-tree orientation](../README.md) or the [developer guide](.
   * [execute\_run\_object](#fim.run_service.execute_run_object)
   * [load\_params](#fim.run_service.load_params)
   * [replicate\_directory](#fim.run_service.replicate_directory)
+* [fim.simulation](#fim.simulation)
+  * [simulate](#fim.simulation.simulate)
 * [fim.spec](#fim.spec)
 * [fim.spec.codec](#fim.spec.codec)
   * [to\_params](#fim.spec.codec.to_params)
@@ -1606,6 +1612,40 @@ Return to the [source-tree orientation](../README.md) or the [developer guide](.
 # fim
 
 Public package metadata for the finite island model simulator.
+
+<a id="fim.__getattr__"></a>
+
+#### \_\_getattr\_\_
+
+```python
+def __getattr__(name: str) -> object
+```
+
+Load a facade name from its module on first use.
+
+**Arguments**:
+
+- `name` - The attribute being looked up.
+
+
+**Returns**:
+
+  The exported object.
+
+
+**Raises**:
+
+- `AttributeError` - `name` is not part of the facade.
+
+<a id="fim.__dir__"></a>
+
+#### \_\_dir\_\_
+
+```python
+def __dir__() -> list[str]
+```
+
+List the facade names along with the module's own.
 
 <a id="fim.batch_session"></a>
 
@@ -8189,6 +8229,32 @@ A specification or configuration file is invalid.
 The message names the offending field by its path, for example
 ``stopping.precision``.
 
+<a id="fim.errors.UnsupportedError"></a>
+
+## UnsupportedError Objects
+
+```python
+class UnsupportedError(FimError, ValueError)
+```
+
+The specification is valid, but no available engine can run it.
+
+For example a backend that needs `numba` without it installed, or a model
+too large for the machine.
+
+<a id="fim.errors.StoreError"></a>
+
+## StoreError Objects
+
+```python
+class StoreError(FimError)
+```
+
+A stored trajectory, checkpoint, or saved group cannot be used.
+
+Raised for damaged or closed stores and for attempts to change a
+read-only run.
+
 <a id="fim.examples"></a>
 
 # fim.examples
@@ -8952,7 +9018,7 @@ Prefix of the vector block's arrays inside a checkpoint.
 ## UnsupportedSessionError Objects
 
 ```python
-class UnsupportedSessionError(ValueError)
+class UnsupportedSessionError(UnsupportedError)
 ```
 
 Raised when a configuration cannot run as a resumable scalar session.
@@ -8962,7 +9028,7 @@ Raised when a configuration cannot run as a resumable scalar session.
 ## SessionRestoreError Objects
 
 ```python
-class SessionRestoreError(ValueError)
+class SessionRestoreError(StoreError, ValueError)
 ```
 
 Raised when a checkpoint cannot continue the given configuration.
@@ -9502,7 +9568,7 @@ The state a legacy run directory (one with no lifecycle record) reads.
 ## GroupBusyError Objects
 
 ```python
-class GroupBusyError(ValueError)
+class GroupBusyError(FimError, ValueError)
 ```
 
 Refuse to close a group while a Run it reaches is active.
@@ -16552,7 +16618,7 @@ finished file is byte-for-byte the one a command-line run writes.)
 ## RunCancelledError Objects
 
 ```python
-class RunCancelledError(Exception)
+class RunCancelledError(FimError)
 ```
 
 Raised from `write_generation` to unwind an in-progress run.
@@ -20203,7 +20269,7 @@ Most entries (8 bytes each) the mode-PMF cache may hold; above it, uncached.
 ## VectorMemoryCeilingError Objects
 
 ```python
-class VectorMemoryCeilingError(RuntimeError)
+class VectorMemoryCeilingError(UnsupportedError, RuntimeError)
 ```
 
 Backend V's allele table would exceed the per-replicate memory ceiling.
@@ -23185,7 +23251,7 @@ execution summary.
 ## ClosedGroupError Objects
 
 ```python
-class ClosedGroupError(ValueError)
+class ClosedGroupError(StoreError, ValueError)
 ```
 
 Refuse an organization change through a closed Study or Experiment.
@@ -23197,7 +23263,7 @@ A `ValueError` subclass for the same reason as `ReadOnlyError`.
 ## ReadOnlyError Objects
 
 ```python
-class ReadOnlyError(ValueError)
+class ReadOnlyError(StoreError, ValueError)
 ```
 
 Refuse an edit to a read-only Study, Experiment, or Run.
@@ -24796,7 +24862,7 @@ be renamed or deleted while its lock is held on every platform.
 ## LockUnavailableError Objects
 
 ```python
-class LockUnavailableError(Exception)
+class LockUnavailableError(FimError)
 ```
 
 A non-blocking lock request found the lock already held.
@@ -25535,7 +25601,7 @@ Every legal `(state, event)` pair and the state it leads to.
 ## LifecycleError Objects
 
 ```python
-class LifecycleError(Exception)
+class LifecycleError(FimError)
 ```
 
 Base class for every lifecycle rule or record violation.
@@ -27534,7 +27600,7 @@ anything, and raises `SnapshotError` naming the first problem.
 ## SnapshotError Objects
 
 ```python
-class SnapshotError(ValueError)
+class SnapshotError(StoreError, ValueError)
 ```
 
 Raised when snapshot data is malformed or inconsistent.
@@ -28690,7 +28756,7 @@ The smallest block buffer a writer accepts.
 ## TlogError Objects
 
 ```python
-class TlogError(ValueError)
+class TlogError(StoreError, ValueError)
 ```
 
 The file is not a usable trajectory log (bad magic, header or version).
@@ -31602,6 +31668,54 @@ Return one replicate's directory inside a batch Run object.
 **Returns**:
 
   `<directory>/replicate-NNN`, as `fim run` names it.
+
+<a id="fim.simulation"></a>
+
+# fim.simulation
+
+The one function that runs a simulation: `simulate`.
+
+<a id="fim.simulation.simulate"></a>
+
+#### simulate
+
+```python
+def simulate(spec: RunSpec | RunConfig,
+             *,
+             execution: Execution | None = None,
+             recording: Recording | None = None,
+             clock: Clock | None = None) -> Result
+```
+
+Run a simulation to convergence and return everything it produced.
+
+The run is the finite island model described by `spec`, repeated for each
+independently seeded replicate until the batch reaches its precision or
+its replicate cap. A run of one replicate is a `Result` of length one;
+`Result.only()` returns it.
+
+**Arguments**:
+
+- `spec` - What to simulate. A `RunConfig` (from `load_config`) also
+  carries its own `Execution` and `Recording`, which the keyword
+  arguments below override.
+- `execution` - How to run it. Never changes the numbers.
+- `recording` - What to keep. Only in-memory runs are supported so far:
+  `Recording.directory` must be `None`.
+- `clock` - Source of "now" for timestamps; a test seam.
+
+
+**Returns**:
+
+  The `Result`.
+
+
+**Raises**:
+
+- `ConfigurationError` - The specification is invalid, or the requested
+  recording is not supported yet.
+- `UnsupportedError` - Valid, but no available engine can run it (for
+  example a backend that needs `numba`, without it installed).
 
 <a id="fim.spec"></a>
 

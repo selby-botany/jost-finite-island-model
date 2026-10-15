@@ -82,6 +82,7 @@ from pathlib import Path
 from typing import Any, Final
 
 from fim import paths
+from fim.errors import StoreError
 from fim.persistence.manifest import read_batch_manifest, read_manifest
 
 logger = logging.getLogger(__name__)
@@ -114,14 +115,14 @@ DEFAULT_EXPERIMENT_NAME: Final = "Default experiment"
 Clock = Callable[[], datetime]
 
 
-class ClosedGroupError(ValueError):
+class ClosedGroupError(StoreError, ValueError):
     """Refuse an organization change through a closed Study or Experiment.
 
     A `ValueError` subclass for the same reason as `ReadOnlyError`.
     """
 
 
-class ReadOnlyError(ValueError):
+class ReadOnlyError(StoreError, ValueError):
     """Refuse an edit to a read-only Study, Experiment, or Run.
 
     A `ValueError` subclass, so the GUI bridge's and the CLI's existing

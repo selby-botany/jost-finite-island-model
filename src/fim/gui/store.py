@@ -41,6 +41,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
+from fim.errors import FimError
 from fim.model.locus import LocusSpec
 from fim.model.state import ModelState
 from fim.paths import write_text_atomically
@@ -69,7 +70,7 @@ rewritten with the canonical block boundaries when it is closed, so the
 finished file is byte-for-byte the one a command-line run writes.)"""
 
 
-class RunCancelledError(Exception):
+class RunCancelledError(FimError):
     """Raised from `write_generation` to unwind an in-progress run.
 
     Args:

@@ -45,6 +45,7 @@ from typing import Any, Final
 
 import numpy as np
 
+from fim.errors import UnsupportedError
 from fim.model.allele import AlleleId, AlleleRegistry
 from fim.model.locus import LocusSpec, finite_allele_capacity
 from fim.model.state import ModelState
@@ -91,7 +92,7 @@ _ABSURD_BYTES: Final = 2**70
 _ABSURD_COUNT: Final = 10**12
 
 
-class VectorMemoryCeilingError(RuntimeError):
+class VectorMemoryCeilingError(UnsupportedError, RuntimeError):
     """Backend V's allele table would exceed the per-replicate memory ceiling.
 
     Raised before the memory is allocated. The message names the size

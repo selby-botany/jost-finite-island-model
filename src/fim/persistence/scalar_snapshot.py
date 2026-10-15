@@ -29,6 +29,7 @@ from typing import Any, Final
 import numpy as np
 import numpy.typing as npt
 
+from fim.errors import StoreError
 from fim.model.allele import (
     MINTED_ID_START,
     AlleleId,
@@ -49,7 +50,7 @@ FINITE_MINTED: Final = "finite.minted"
 Arrays = dict[str, npt.NDArray[Any]]
 
 
-class SnapshotError(ValueError):
+class SnapshotError(StoreError, ValueError):
     """Raised when snapshot data is malformed or inconsistent."""
 
 

@@ -8,6 +8,24 @@ project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- **`fim.simulate` and the `fim` facade.** `import fim` now exports the
+  names a Python user needs: `simulate`, `load_config`, `run_identity`,
+  `RunSpec` and its parts (`Model`, `Population`, `Locus`, `InfiniteAlleles`,
+  `FiniteAlleles`, `FoundingAlleles`, `ExplicitFrequencies`,
+  `EquilibriumSplit`, `Stopping`, `Replication`), `Execution`, `Recording`,
+  `RunConfig`, `Result`, `Replicate`, `Report`, and the errors. They load on
+  first use, so `import fim` stays light. `simulate(spec)` runs a
+  specification in memory and always returns a `Result`; saving to a
+  directory arrives with `Workspace`.
+- **One exception root.** Every exception the package raises on purpose is a
+  `fim.errors.FimError`. `ConfigurationError` (bad specification),
+  `UnsupportedError` (valid, but no available engine can run it), and
+  `StoreError` (damaged, closed, or read-only stores) are also `ValueError`s
+  where they were before, so existing `except ValueError` still works.
+  `LifecycleError`, `LockUnavailableError`, `TlogError`, `ReadOnlyError`,
+  `ClosedGroupError`, `SnapshotError`, `GroupBusyError`,
+  `UnsupportedSessionError`, `SessionRestoreError`, and
+  `VectorMemoryCeilingError` now sit under it.
 - **Result types (`fim.results`).** A run returns a `Result` holding its
   `Replicate` tuple, an across-replicate `Summary` (statistic ID to interval),
   why the batch stopped (`BatchStop`), and a `Provenance` (versions, platform,
