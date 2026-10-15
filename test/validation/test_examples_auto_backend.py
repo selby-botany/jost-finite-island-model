@@ -35,8 +35,13 @@ the rest.
 
 Every case runs a fixed seed from its configuration, so its outcome is a
 pure function of the commit; a failure is investigated, never retried or
-widened. Each case's measured wall time is recorded in `_RUNTIME_SECONDS`,
-and cases over about a minute are also marked `slow`.
+widened. Full lineal replays belong to the nightly/on-demand `slow` layer,
+like the archive replays in `test_doc_examples.py`. Earlier scheduling
+used timings measured for `auto`, not `lineal`: after the backend changed,
+eleven cases still entered the per-push gate and its non-GUI layer took
+25m43s in run 38650093650, leaving too little time for GUI tests and
+packaging. Static policy guards and the focused engine parity tests remain
+in the per-push gate.
 """
 
 from __future__ import annotations
@@ -55,46 +60,8 @@ from example_support import archived_report_equal
 ROOT = Path(__file__).resolve().parents[2]
 EXAMPLES_DIR = ROOT / "doc" / "examples"
 
-# Measured wall time of each case on the development machine (2026-10-08,
-# Apple Silicon, shared: three cases at once, load average varying from
-# about 10 to 60), in whole seconds. Recorded so a reader can budget a run;
-# over `_SLOW_SECONDS` also marks `slow`.
-_RUNTIME_SECONDS: dict[str, int] = {
-    "a-large-d-batch-under-generational-vector": 92,
-    "a-long-locus-batch-under-the-generational-engine": 60,
-    "an-adaptive-replicate-batch-with-a-confidence-interval": 395,
-    "dear-nolan-high": 312,
-    "dear-nolan-low": 2271,
-    "equilibrium-split-founding": 12,
-    "finite-length-alleles-the-k-allele-model": 10,
-    "golden-part-vi": 221,
-    "kimura-weiss-isolation-by-distance": 26,
-    "literature-distance-statistics-from-an-explicit-founder-split": 4,
-    "per-base-mutation-rate-across-unequal-locus-lengths": 2,
-    "several-convergence-statistics": 9,
-    "stepping-stone-spatial-migration": 25,
-    "stochastic-migrant-counts": 20,
-    "unequal-island-sizes-with-a-migration-hub": 21,
-    "within-run-sigma-band": 104,
-    "wright-takahata-finite-deme-correction": 35,
-}
-_SLOW_SECONDS = 60
-
 # A run ID digests the configuration, which differs in `engine_backend`.
 _IDENTITY_EXCLUDED_FIELDS = frozenset({"run_id"})
-
-
-def _case(example: str) -> Any:
-    """Return one example's parameter, marked `slow` when it is long.
-
-    Args:
-        example: The example directory name.
-
-    Returns:
-        A `pytest.param` for `example`.
-    """
-    slow = _RUNTIME_SECONDS.get(example, 0) > _SLOW_SECONDS
-    return pytest.param(example, marks=[pytest.mark.slow] if slow else [])
 
 
 def _compare_identical(
@@ -273,16 +240,6 @@ def test_identity_rule_requires_the_same_kept_replicates(tmp_path: Path) -> None
     ]
 
 
-def test_every_example_has_a_recorded_runtime() -> None:
-    """`_RUNTIME_SECONDS` names exactly the examples with a configuration.
-
-    A new example must have its `auto` case timed, so its `slow` mark is
-    decided from a measurement rather than left to default; a removed one
-    must not leave a stale entry.
-    """
-    assert sorted(_RUNTIME_SECONDS) == _example_ids()
-
-
 # The examples whose point is one named engine; every other example is `auto`.
 _ENGINE_EXAMPLES = {
     "a-large-d-batch-under-generational-vector": "generational-vector",
@@ -318,8 +275,9 @@ def test_committed_outputs_ran_on_the_engine_the_configuration_resolves_to() -> 
             assert resolved == configured, example
 
 
+@pytest.mark.slow
 @pytest.mark.statistical
-@pytest.mark.parametrize("example", [_case(example) for example in _example_ids()])
+@pytest.mark.parametrize("example", _example_ids())
 def test_lineal_reproduces_the_committed_output(example: str, tmp_path: Path) -> None:
     """Rerunning the example on `lineal` gives the committed reports exactly.
 

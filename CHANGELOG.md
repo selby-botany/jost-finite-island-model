@@ -1429,6 +1429,12 @@ project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+- Full lineal worked-example replays run in the nightly/on-demand slow
+  layer, like the archive replays, instead of using stale automatic-engine
+  timings to select per-push tests. Run 38650093650 exhausted the
+  30-minute gate after its non-GUI layer took 25m43s. Policy guards and
+  focused engine parity checks stay per push; replay assertions and the
+  gate's timeout and coverage threshold are unchanged.
 - GUI run-settings notice tests use an isolated lineal, one-replicate
   example rather than assuming a shipped example's engine policy. This
   preserves coverage of per-run overrides, unchanged saved Settings,

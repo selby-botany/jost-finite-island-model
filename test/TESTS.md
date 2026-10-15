@@ -39925,6 +39925,22 @@ and GUI layers alone took about 18 minutes 40 seconds. The budget must
 also cover lint, types, documentation, package builds, and wheel smoke;
 this static guard checks the configured allowance, not elapsed time.
 
+<a id="validation.test_ci_runtime_budget.test_full_lineal_example_replays_belong_to_the_slow_layer"></a>
+
+#### test\_full\_lineal\_example\_replays\_belong\_to\_the\_slow\_layer
+
+```python
+@pytest.mark.parametrize("marker", ["slow", "not slow"])
+def test_full_lineal_example_replays_belong_to_the_slow_layer(
+        marker: str) -> None
+```
+
+Collect every replay nightly and none per push, without running them.
+
+Run 38650093650 exhausted the full gate after scheduling lineal
+replays with obsolete auto-backend timings. Policy guards must still
+run per push; every full replay, including future examples, is slow.
+
 <a id="validation.test_ci_runtime_budget.test_slow_tests_job_never_runs_for_a_push_or_pull_request"></a>
 
 #### test\_slow\_tests\_job\_never\_runs\_for\_a\_push\_or\_pull\_request
@@ -40640,8 +40656,13 @@ the rest.
 
 Every case runs a fixed seed from its configuration, so its outcome is a
 pure function of the commit; a failure is investigated, never retried or
-widened. Each case's measured wall time is recorded in `_RUNTIME_SECONDS`,
-and cases over about a minute are also marked `slow`.
+widened. Full lineal replays belong to the nightly/on-demand `slow` layer,
+like the archive replays in `test_doc_examples.py`. Earlier scheduling
+used timings measured for `auto`, not `lineal`: after the backend changed,
+eleven cases still entered the per-push gate and its non-GUI layer took
+25m43s in run 38650093650, leaving too little time for GUI tests and
+packaging. Static policy guards and the focused engine parity tests remain
+in the per-push gate.
 
 <a id="validation.test_examples_auto_backend.test_identity_rule_ignores_only_the_run_id"></a>
 
@@ -40667,20 +40688,6 @@ A batch, adaptive or not, must keep the same replicates to agree.
 An adaptive batch on the same random stream keeps the same replicates
 on every backend, so a different kept set is a failure even when the
 summaries happen to match.
-
-<a id="validation.test_examples_auto_backend.test_every_example_has_a_recorded_runtime"></a>
-
-#### test\_every\_example\_has\_a\_recorded\_runtime
-
-```python
-def test_every_example_has_a_recorded_runtime() -> None
-```
-
-`_RUNTIME_SECONDS` names exactly the examples with a configuration.
-
-A new example must have its `auto` case timed, so its `slow` mark is
-decided from a measurement rather than left to default; a removed one
-must not leave a stale entry.
 
 <a id="validation.test_examples_auto_backend.test_every_example_names_auto_unless_it_shows_an_engine"></a>
 
@@ -40708,9 +40715,9 @@ def test_committed_outputs_ran_on_the_engine_the_configuration_resolves_to(
 #### test\_lineal\_reproduces\_the\_committed\_output
 
 ```python
+@pytest.mark.slow
 @pytest.mark.statistical
-@pytest.mark.parametrize("example",
-                         [_case(example) for example in _example_ids()])
+@pytest.mark.parametrize("example", _example_ids())
 def test_lineal_reproduces_the_committed_output(example: str,
                                                 tmp_path: Path) -> None
 ```

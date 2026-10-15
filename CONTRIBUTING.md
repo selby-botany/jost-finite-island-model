@@ -53,6 +53,11 @@ last command and stage durations first. Run `38103694509` passed all tests
 and documentation checks but exhausted the former 20-minute limit while
 building the source distribution. Slow tests remain in their separate
 scheduled/on-demand job; this allowance does not add them to the full gate.
+Full worked-example replays, including reference-backend (`lineal`) parity
+checks, belong to that `slow` layer. Do not schedule a replay using timings
+measured for a different backend. Example policy guards and focused engine
+parity tests remain in the per-push gate. Run the full replay layer locally
+with `./build --slow-only`.
 
 Repository-level shell, YAML, Markdown, JavaScript, CSS, HTML, and secret
 checks use pinned Docker-backed wrappers stored in `bin/`; they do not depend

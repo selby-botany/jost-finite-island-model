@@ -2,8 +2,11 @@
 
 from __future__ import annotations
 
+import subprocess
+import sys
 from pathlib import Path
 
+import pytest
 import yaml
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
@@ -108,6 +111,58 @@ def test_full_gate_budget_includes_packaging_after_the_test_layers() -> None:
         if str(step["run"]).strip() == "xvfb-run --auto-servernum ./build --ci"
     )
     assert full_step["timeout-minutes"] == 30
+
+
+@pytest.mark.parametrize("marker", ["slow", "not slow"])
+def test_full_lineal_example_replays_belong_to_the_slow_layer(marker: str) -> None:
+    """Collect every replay nightly and none per push, without running them.
+
+    Run 38650093650 exhausted the full gate after scheduling lineal
+    replays with obsolete auto-backend timings. Policy guards must still
+    run per push; every full replay, including future examples, is slow.
+    """
+    module = "test/validation/test_examples_auto_backend.py"
+    collected = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "pytest",
+            "-o",
+            "addopts=",
+            "--strict-config",
+            "--strict-markers",
+            "--collect-only",
+            "-q",
+            "-m",
+            marker,
+            module,
+        ],
+        cwd=PROJECT_ROOT,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert collected.returncode == 0, collected.stdout + collected.stderr
+    nodeids = {
+        line for line in collected.stdout.splitlines() if line.startswith(f"{module}::")
+    }
+    replays = {
+        f"{module}::test_lineal_reproduces_the_committed_output[{path.parent.name}]"
+        for path in (PROJECT_ROOT / "doc" / "examples").glob("*/config.yaml")
+    }
+    assert replays
+    if marker == "slow":
+        assert nodeids == replays
+    else:
+        assert nodeids.isdisjoint(replays)
+        assert (
+            f"{module}::test_every_example_names_auto_unless_it_shows_an_engine"
+            in nodeids
+        )
+        assert (
+            f"{module}::test_committed_outputs_ran_on_the_engine_the_configuration_resolves_to"
+            in nodeids
+        )
 
 
 def test_slow_tests_job_never_runs_for_a_push_or_pull_request() -> None:
