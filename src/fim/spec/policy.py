@@ -113,6 +113,11 @@ class Replication:
         method: ``"interval"`` stops on the observed interval;
             ``"planned_replicates"`` runs a count planned from a pilot.
         averaging_window: Generations averaged per replicate, or ``"auto"``.
+        max_concurrent: Replicates in flight at once under the generational
+            backends, or `None` for all together. It belongs here, not in
+            `Execution`: in an adaptive batch the first wave of replicates
+            sets the averaging window of the later ones, so the window size
+            changes the numbers (the verification behind `run_identity`).
     """
 
     n: int = DEFAULT_N_REPLICATES
@@ -120,6 +125,7 @@ class Replication:
     stop_early: bool = True
     method: PrecisionMethod = "interval"
     averaging_window: int | Auto = "auto"
+    max_concurrent: int | None = None
 
     def __post_init__(self) -> None:
         """Check every value."""
@@ -130,6 +136,8 @@ class Replication:
         check_int_or_auto(
             "replication.averaging_window", self.averaging_window, minimum=1
         )
+        if self.max_concurrent is not None:
+            check_int("replication.max_concurrent", self.max_concurrent, minimum=1)
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)

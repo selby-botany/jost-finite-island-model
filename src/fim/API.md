@@ -31347,8 +31347,6 @@ Which engine runs the simulation, and with how much parallelism.
 - `jit` - ``"numba"`` compiles the generational backend's drift step.
 - `workers` - Processes for the ``"lineal"`` backend's batches (`None`
   lets the front end choose).
-- `max_concurrent_replicates` - Replicates in flight at once for the
-  generational backends (`None` runs them all together).
 - `auto_vector_min_d` - Smallest deme count for which ``"auto"`` chooses
   the vector backend.
 - `auto_vector_max_capacity` - Largest per-locus allele capacity for
@@ -31801,6 +31799,11 @@ How many independent replicates to run.
 - `method` - ``"interval"`` stops on the observed interval;
   ``"planned_replicates"`` runs a count planned from a pilot.
 - `averaging_window` - Generations averaged per replicate, or ``"auto"``.
+- `max_concurrent` - Replicates in flight at once under the generational
+  backends, or `None` for all together. It belongs here, not in
+- ``Execution`` - in an adaptive batch the first wave of replicates
+  sets the averaging window of the later ones, so the window size
+  changes the numbers (the verification behind `run_identity`).
 
 <a id="fim.spec.policy.Replication.__post_init__"></a>
 

@@ -34,8 +34,6 @@ class Execution:
         jit: ``"numba"`` compiles the generational backend's drift step.
         workers: Processes for the ``"lineal"`` backend's batches (`None`
             lets the front end choose).
-        max_concurrent_replicates: Replicates in flight at once for the
-            generational backends (`None` runs them all together).
         auto_vector_min_d: Smallest deme count for which ``"auto"`` chooses
             the vector backend.
         auto_vector_max_capacity: Largest per-locus allele capacity for
@@ -45,7 +43,6 @@ class Execution:
     backend: EngineBackend = "lineal"
     jit: Jit = "off"
     workers: int | None = None
-    max_concurrent_replicates: int | None = None
     auto_vector_min_d: int = DEFAULT_AUTO_VECTOR_MIN_D
     auto_vector_max_capacity: int = DEFAULT_AUTO_VECTOR_MAX_CAPACITY
 
@@ -55,12 +52,6 @@ class Execution:
         check_choice("execution.jit", self.jit, Jit)
         if self.workers is not None:
             check_int("execution.workers", self.workers, minimum=1)
-        if self.max_concurrent_replicates is not None:
-            check_int(
-                "execution.max_concurrent_replicates",
-                self.max_concurrent_replicates,
-                minimum=1,
-            )
         check_int("execution.auto_vector_min_d", self.auto_vector_min_d, minimum=1)
         check_int(
             "execution.auto_vector_max_capacity",

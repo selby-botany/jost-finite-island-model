@@ -54,6 +54,7 @@ FIELD_MAP: tuple[FieldMap, ...] = (
     FieldMap(
         "replicate_averaging_window", "replication", "averaging_window", auto=True
     ),
+    FieldMap("max_concurrent_replicates", "replication", "max_concurrent"),
     FieldMap("deme_weighting", "analysis", "deme_weighting"),
     FieldMap("locus_aggregation", "analysis", "locus_aggregation"),
     FieldMap("track_expensive_statistics", "analysis", "track_expensive"),
@@ -61,7 +62,6 @@ FIELD_MAP: tuple[FieldMap, ...] = (
     FieldMap("jit", "execution", "jit"),
     FieldMap("auto_vector_min_d", "execution", "auto_vector_min_d"),
     FieldMap("auto_vector_max_capacity", "execution", "auto_vector_max_capacity"),
-    FieldMap("max_concurrent_replicates", "execution", "max_concurrent_replicates"),
     FieldMap("trajectory_retention", "recording", "retention"),
     FieldMap("trajectory_stride", "recording", "stride"),
     FieldMap("trajectory_thinning_start", "recording", "thinning_start", auto=True),

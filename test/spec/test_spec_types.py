@@ -86,7 +86,7 @@ DEFAULT_PAIRS = [
     (Execution, "jit", "jit", False),
     (Execution, "auto_vector_min_d", "auto_vector_min_d", False),
     (Execution, "auto_vector_max_capacity", "auto_vector_max_capacity", False),
-    (Execution, "max_concurrent_replicates", "max_concurrent_replicates", False),
+    (Replication, "max_concurrent", "max_concurrent_replicates", False),
     (Recording, "retention", "trajectory_retention", False),
     (Recording, "stride", "trajectory_stride", False),
     (Recording, "thinning_start", "trajectory_thinning_start", True),
@@ -224,6 +224,7 @@ def test_recording_directory_becomes_a_path() -> None:
         (lambda: Replication(minimum=1), "replication.minimum"),
         (lambda: Stopping(per_statistic_precision={"D": -1.0}), "stopping.per_"),
         (lambda: Replication(n=0), "replication.n"),
+        (lambda: Replication(max_concurrent=0), "replication.max_concurrent"),
         (lambda: Replication(stop_early=1), "replication.stop_early"),  # type: ignore[arg-type]
         (lambda: Replication(method="guess"), "replication.method"),  # type: ignore[arg-type]
         (lambda: Analysis(deme_weighting="rank"), "analysis.deme_weighting"),  # type: ignore[arg-type]

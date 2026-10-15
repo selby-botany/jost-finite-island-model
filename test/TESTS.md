@@ -37959,6 +37959,7 @@ A string directory is accepted and normalized.
         (lambda: Stopping(per_statistic_precision={"D": -1.0}),
          "stopping.per_"),
         (lambda: Replication(n=0), "replication.n"),
+        (lambda: Replication(max_concurrent=0), "replication.max_concurrent"),
         (lambda: Replication(stop_early=1),
          "replication.stop_early"),  # type: ignore[arg-type]
         (lambda: Replication(method="guess"),
