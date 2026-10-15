@@ -1017,6 +1017,14 @@ project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Changed
 
+- **A run's ID names its science.** The ID no longer covers the engine
+  backend, JIT, the `auto` thresholds, trajectory retention, or the storage
+  settings under `expert`, so one configuration has one ID on every backend
+  (`SimulationParams.identity_dict`; `to_dict`, and so the manifest, still
+  records them). `max_concurrent_replicates` stays in the ID: in an adaptive
+  batch it changes the numbers, because the first wave of replicates sets
+  the averaging window of the later ones. Every run ID differs from earlier
+  builds, and `fim.spec.run_identity(spec)` returns the ID for a `RunSpec`.
 - **Statistics accept typed allele keys, and the package is typed.** The
   differentiation and distance functions now declare the allele-key type they
   already required (anything `operator.index` accepts) instead of `Any`, so a

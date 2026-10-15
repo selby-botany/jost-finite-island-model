@@ -62,6 +62,7 @@ Every test module, fixture, and test function documented here in full; `doc/fim-
   - [`test_execution_checkpoint`](#engine.test_execution_checkpoint)
   - [`test_execution_session`](#engine.test_execution_session)
   - [`test_frame_identity`](#engine.test_frame_identity)
+  - [`test_identity_neutrality`](#engine.test_identity_neutrality)
   - [`test_replicate_final_state_report`](#engine.test_replicate_final_state_report)
   - [`test_vector_parity`](#engine.test_vector_parity)
 - [`test/gui/`](#group-gui)
@@ -178,6 +179,7 @@ Every test module, fixture, and test function documented here in full; `doc/fim-
   - [`test_validation`](#persistence.test_validation)
 - [`test/spec/`](#group-spec)
   - [`test_codec`](#spec.test_codec)
+  - [`test_identity`](#spec.test_identity)
   - [`test_spec_types`](#spec.test_spec_types)
 - [`test/statistics/`](#group-statistics)
   - [`test_catalog`](#statistics.test_catalog)
@@ -11186,6 +11188,64 @@ def test_write_frame_requires_begin_run(tmp_path: Path) -> None
 ```
 
 Frames cannot become rows without a layout.
+
+<a id="engine.test_identity_neutrality"></a>
+
+# engine.test\_identity\_neutrality
+
+Which settings change a run's numbers, checked on the real engine.
+
+A run's ID leaves out the settings that cannot change its results
+(`SimulationParams.identity_dict`). That is only honest if they truly cannot,
+so each exclusion is verified here by running the same science both ways. The
+one setting that looked neutral and is not, the lane window of an adaptive
+batch, is pinned in the other direction.
+
+<a id="engine.test_identity_neutrality.test_thinned_retention_leaves_every_reported_number_unchanged"></a>
+
+#### test\_thinned\_retention\_leaves\_every\_reported\_number\_unchanged
+
+```python
+def test_thinned_retention_leaves_every_reported_number_unchanged() -> None
+```
+
+Keeping fewer stored generations never changes what is reported.
+
+<a id="engine.test_identity_neutrality.test_process_count_leaves_an_adaptive_batch_unchanged"></a>
+
+#### test\_process\_count\_leaves\_an\_adaptive\_batch\_unchanged
+
+```python
+def test_process_count_leaves_an_adaptive_batch_unchanged(
+        tmp_path: Path) -> None
+```
+
+The `lineal` process pool judges the stop in replicate order.
+
+<a id="engine.test_identity_neutrality.test_the_lane_window_changes_an_adaptive_batch"></a>
+
+#### test\_the\_lane\_window\_changes\_an\_adaptive\_batch
+
+```python
+def test_the_lane_window_changes_an_adaptive_batch() -> None
+```
+
+The reason `max_concurrent_replicates` is part of a run's identity.
+
+The first wave of replicates sets the averaging window of the later ones,
+so a smaller wave gives different numbers from the same seed. If the
+planner is ever made independent of the window, this test fails and the
+setting can move out of the identity.
+
+<a id="engine.test_identity_neutrality.test_the_lane_window_leaves_a_fixed_size_batch_unchanged"></a>
+
+#### test\_the\_lane\_window\_leaves\_a\_fixed\_size\_batch\_unchanged
+
+```python
+def test_the_lane_window_leaves_a_fixed_size_batch_unchanged() -> None
+```
+
+Without adaptive stopping, no replicate waits on another.
 
 <a id="engine.test_replicate_final_state_report"></a>
 
@@ -37789,6 +37849,101 @@ def test_labels_are_not_part_of_the_parameters() -> None
 ```
 
 Renaming a run never changes which run it is.
+
+<a id="spec.test_identity"></a>
+
+# spec.test\_identity
+
+A run's ID names its science, not how the computer was told to run it.
+
+Run identity hashes `SimulationParams.identity_dict`. These tests pin what is
+in and out of it: the engine, JIT, trajectory retention, and storage tuning
+are out, so one scientific configuration has one ID on every backend; every
+setting that changes the numbers is in.
+
+<a id="spec.test_identity.test_the_engine_and_recording_do_not_change_the_id"></a>
+
+#### test\_the\_engine\_and\_recording\_do\_not\_change\_the\_id
+
+```python
+def test_the_engine_and_recording_do_not_change_the_id() -> None
+```
+
+One configuration, one ID, whatever backend or retention runs it.
+
+<a id="spec.test_identity.test_storage_tuning_does_not_change_the_id_but_convergence_tuning_does"></a>
+
+#### test\_storage\_tuning\_does\_not\_change\_the\_id\_but\_convergence\_tuning\_does
+
+```python
+def test_storage_tuning_does_not_change_the_id_but_convergence_tuning_does(
+) -> None
+```
+
+Expert settings count only when they can change the numbers.
+
+<a id="spec.test_identity.test_a_scientific_setting_changes_the_id"></a>
+
+#### test\_a\_scientific\_setting\_changes\_the\_id
+
+```python
+@pytest.mark.parametrize(
+    "changes",
+    [
+        {
+            "seed": 12
+        },
+        {
+            "stopping": Stopping(precision=0.02)
+        },
+        {
+            "stopping": Stopping(burn_in=40, max_generations=900)
+        },
+        {
+            "replication": Replication(n=7)
+        },
+        {
+            "replication": Replication(max_concurrent=2)
+        },
+    ],
+    ids=["seed", "precision", "burn-in-and-cap", "replicates", "lane-window"],
+)
+def test_a_scientific_setting_changes_the_id(
+        changes: dict[str, object]) -> None
+```
+
+Anything that can change the numbers is part of the identity.
+
+<a id="spec.test_identity.test_the_lane_window_is_identity_because_it_changes_adaptive_results"></a>
+
+#### test\_the\_lane\_window\_is\_identity\_because\_it\_changes\_adaptive\_results
+
+```python
+def test_the_lane_window_is_identity_because_it_changes_adaptive_results(
+) -> None
+```
+
+`max_concurrent_replicates` is in the ID, unlike the engine choice.
+
+<a id="spec.test_identity.test_the_file_route_and_the_spec_route_agree"></a>
+
+#### test\_the\_file\_route\_and\_the\_spec\_route\_agree
+
+```python
+def test_the_file_route_and_the_spec_route_agree() -> None
+```
+
+A configuration file and its `RunSpec` name the same run.
+
+<a id="spec.test_identity.test_excluded_keys_are_real_serialized_keys"></a>
+
+#### test\_excluded\_keys\_are\_real\_serialized\_keys
+
+```python
+def test_excluded_keys_are_real_serialized_keys() -> None
+```
+
+A renamed field must not silently stay inside the hash.
 
 <a id="spec.test_spec_types"></a>
 

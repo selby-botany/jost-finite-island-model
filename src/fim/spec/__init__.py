@@ -9,6 +9,7 @@ from __future__ import annotations
 
 from fim.spec.codec import RunConfig, from_params, load_config, to_params
 from fim.spec.execution import Execution, Recording
+from fim.spec.identity import run_identity
 from fim.spec.model import (
     EquilibriumSplit,
     ExplicitFrequencies,
@@ -45,5 +46,6 @@ __all__ = [
     "Stopping",
     "from_params",
     "load_config",
+    "run_identity",
     "to_params",
 ]

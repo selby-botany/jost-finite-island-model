@@ -724,6 +724,7 @@ Return to the [source-tree orientation](../README.md) or the [developer guide](.
 * [fim.model.params](#fim.model.params)
   * [PLOIDY\_WORDS](#fim.model.params.PLOIDY_WORDS)
   * [AUTO\_CONVERGENCE](#fim.model.params.AUTO_CONVERGENCE)
+  * [IDENTITY\_EXCLUDED\_KEYS](#fim.model.params.IDENTITY_EXCLUDED_KEYS)
   * [SimulationParams](#fim.model.params.SimulationParams)
     * [\_\_post\_init\_\_](#fim.model.params.SimulationParams.__post_init__)
     * [convergence\_statistics](#fim.model.params.SimulationParams.convergence_statistics)
@@ -733,6 +734,7 @@ Return to the [source-tree orientation](../README.md) or the [developer guide](.
     * [individuals](#fim.model.params.SimulationParams.individuals)
     * [mutation\_rates](#fim.model.params.SimulationParams.mutation_rates)
     * [to\_dict](#fim.model.params.SimulationParams.to_dict)
+    * [identity\_dict](#fim.model.params.SimulationParams.identity_dict)
     * [from\_mapping](#fim.model.params.SimulationParams.from_mapping)
   * [describe\_population](#fim.model.params.describe_population)
   * [EXECUTION\_SETTING\_NAMES](#fim.model.params.EXECUTION_SETTING_NAMES)
@@ -1332,6 +1334,8 @@ Return to the [source-tree orientation](../README.md) or the [developer guide](.
   * [FIELD\_MAP](#fim.spec.fields.FIELD_MAP)
   * [CONVERTED\_KEYS](#fim.spec.fields.CONVERTED_KEYS)
   * [PATHS](#fim.spec.fields.PATHS)
+* [fim.spec.identity](#fim.spec.identity)
+  * [run\_identity](#fim.spec.identity.run_identity)
 * [fim.spec.model](#fim.spec.model)
   * [Ploidy](#fim.spec.model.Ploidy)
   * [Population](#fim.spec.model.Population)
@@ -5927,6 +5931,11 @@ identical configuration end up with matching run ids without ever
 having to coordinate — a convenient side effect of this project's
 own emphasis on determinism (see this module's own docstring, above)
 rather than something engineered for its own sake.
+
+The hash covers `SimulationParams.identity_dict`, which leaves out the
+settings that do not change the numbers (engine, JIT, trajectory
+retention, storage tuning), so one scientific configuration has one ID
+whichever backend ran it.
 
 <a id="fim.engine.identity.params_for_replicate"></a>
 
@@ -19042,6 +19051,15 @@ every consumer of a constructed `SimulationParams` still reads a plain
 positive integer. Zero is safe as the sentinel because an explicit value must
 be positive (config parsing rejects an explicit `0`).
 
+<a id="fim.model.params.IDENTITY_EXCLUDED_KEYS"></a>
+
+#### IDENTITY\_EXCLUDED\_KEYS
+
+Serialized keys that do not change a run's numbers.
+
+`SimulationParams.identity_dict` drops them, so they take no part in a run's
+ID. See that method for why `max_concurrent_replicates` is not on the list.
+
 <a id="fim.model.params.SimulationParams"></a>
 
 ## SimulationParams Objects
@@ -19521,6 +19539,36 @@ through `from_mapping`, reconstructs an identical
 parameters into its manifest (`fim.persistence.manifest`) so a
 completed run's configuration can be recovered exactly, later,
 without needing the original config file at all.
+
+<a id="fim.model.params.SimulationParams.identity_dict"></a>
+
+#### identity\_dict
+
+```python
+def identity_dict() -> dict[str, object]
+```
+
+Return the part of `to_dict` that decides which run this is.
+
+A run is its science: the same configuration gives the same numbers
+whichever engine computes them, however much of the trajectory is
+kept, and however the log is blocked on disk. Those settings are
+therefore left out of the serialized form that `deterministic_run_id`
+hashes, so the same science has the same ID everywhere. They remain
+in `to_dict`, which is what a manifest records and a resume checks.
+
+Left out: `engine_backend`, `jit`, `auto_vector_min_d`,
+`auto_vector_max_capacity`, the trajectory retention keys, and the
+`expert` settings of the storage group. `max_concurrent_replicates`
+stays in: in an adaptive batch the first wave sets the averaging
+window of the later replicates, so it changes the numbers.
+
+A setting added later must default to a value that `to_dict` omits,
+so existing configurations keep their IDs.
+
+**Returns**:
+
+  A JSON-serializable mapping.
 
 <a id="fim.model.params.SimulationParams.from_mapping"></a>
 
@@ -31448,6 +31496,42 @@ Keys the codec converts by hand rather than through `FIELD_MAP`.
 #### PATHS
 
 Configuration key to its dotted attribute path, for the mapped keys.
+
+<a id="fim.spec.identity"></a>
+
+# fim.spec.identity
+
+A run's identity, from its specification.
+
+<a id="fim.spec.identity.run_identity"></a>
+
+#### run\_identity
+
+```python
+def run_identity(spec: RunSpec) -> str
+```
+
+Return the ID of the run a specification describes.
+
+The ID names the science: it is the same whatever `Execution` or
+`Recording` the run uses, and different when any scientific setting
+(including the lane window of an adaptive batch) differs. It is derived
+from the resolved parameters, so a change to an automatic default gives
+a new ID, as it should.
+
+**Arguments**:
+
+- `spec` - The run's specification.
+
+
+**Returns**:
+
+  A string such as ``run-0123456789abcdef``.
+
+
+**Raises**:
+
+- `ConfigurationError` - The engine rejects the specification.
 
 <a id="fim.spec.model"></a>
 

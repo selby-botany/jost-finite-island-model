@@ -36,7 +36,7 @@ from fim.config.defaults import (
     DEFAULT_N_REPLICATES,
     DEFAULT_PRECISION,
 )
-from fim.config.expert import ExpertSettings
+from fim.config.expert import EXPERT_SETTING_INFO, ExpertSettings
 from fim.config.numerics import MINIMUM_REPLICATE_COUNT
 from fim.config.storage import TRAJECTORY_STRIDE
 from fim.convergence.defaults import derive_convergence_defaults
@@ -181,6 +181,21 @@ _CONFIG_KEYS: Final = frozenset(
         "equilibrium_max_generations",
     }
 )
+
+IDENTITY_EXCLUDED_KEYS: Final[tuple[str, ...]] = (
+    "engine_backend",
+    "jit",
+    "auto_vector_min_d",
+    "auto_vector_max_capacity",
+    "trajectory_retention",
+    "trajectory_stride",
+    "trajectory_thinning_start",
+)
+"""Serialized keys that do not change a run's numbers.
+
+`SimulationParams.identity_dict` drops them, so they take no part in a run's
+ID. See that method for why `max_concurrent_replicates` is not on the list.
+"""
 
 _LABEL_KEYS: Final = frozenset({"name", "description", "class"})
 """Configuration keys that label a run without being part of it.
@@ -1153,6 +1168,44 @@ class SimulationParams:
             # serialized form, and so the run ID, of every run made before
             # `_read_only` existed byte-for-byte unchanged.
             result["_read_only"] = True
+        return result
+
+    def identity_dict(self) -> dict[str, object]:
+        """Return the part of `to_dict` that decides which run this is.
+
+        A run is its science: the same configuration gives the same numbers
+        whichever engine computes them, however much of the trajectory is
+        kept, and however the log is blocked on disk. Those settings are
+        therefore left out of the serialized form that `deterministic_run_id`
+        hashes, so the same science has the same ID everywhere. They remain
+        in `to_dict`, which is what a manifest records and a resume checks.
+
+        Left out: `engine_backend`, `jit`, `auto_vector_min_d`,
+        `auto_vector_max_capacity`, the trajectory retention keys, and the
+        `expert` settings of the storage group. `max_concurrent_replicates`
+        stays in: in an adaptive batch the first wave sets the averaging
+        window of the later replicates, so it changes the numbers.
+
+        A setting added later must default to a value that `to_dict` omits,
+        so existing configurations keep their IDs.
+
+        Returns:
+            A JSON-serializable mapping.
+        """
+        result = self.to_dict()
+        for key in IDENTITY_EXCLUDED_KEYS:
+            result.pop(key, None)
+        expert = result.get("expert")
+        if isinstance(expert, dict):
+            kept = {
+                name: value
+                for name, value in expert.items()
+                if EXPERT_SETTING_INFO[name].group != "Storage"
+            }
+            if kept:
+                result["expert"] = kept
+            else:
+                del result["expert"]
         return result
 
     @classmethod

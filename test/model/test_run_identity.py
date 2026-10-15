@@ -89,8 +89,10 @@ def test_a_model_key_still_changes_the_run_id() -> None:
 # deliberately and twice: when `precision`, `stop_batch_early` and
 # `confidence` replaced the three tolerance and confidence settings, and
 # when `convergence_burn_in` replaced `convergence_window` (the parameters a
-# run ID hashes changed names); it was `run-9b48f125d7f8c355` before.
-GOLDEN_RUN_ID = "run-c4bd5caaf8313c13"
+# run ID hashes changed names); it was `run-9b48f125d7f8c355` before. It
+# changed again when the ID stopped covering the engine, JIT, and storage
+# settings (`SimulationParams.identity_dict`); it was `run-c4bd5caaf8313c13`.
+GOLDEN_RUN_ID = "run-3d6e5a861908059e"
 
 
 def test_a_configuration_without_read_only_keeps_its_golden_run_id() -> None:

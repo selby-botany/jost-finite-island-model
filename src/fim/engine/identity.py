@@ -22,9 +22,14 @@ def deterministic_run_id(params: SimulationParams) -> str:
     having to coordinate — a convenient side effect of this project's
     own emphasis on determinism (see this module's own docstring, above)
     rather than something engineered for its own sake.
+
+    The hash covers `SimulationParams.identity_dict`, which leaves out the
+    settings that do not change the numbers (engine, JIT, trajectory
+    retention, storage tuning), so one scientific configuration has one ID
+    whichever backend ran it.
     """
     canonical = json.dumps(
-        params.to_dict(),
+        params.identity_dict(),
         sort_keys=True,
         separators=(",", ":"),
         allow_nan=False,

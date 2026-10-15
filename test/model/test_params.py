@@ -1795,7 +1795,9 @@ def test_the_log_expert_settings_default_to_the_log_constants_and_validate() -> 
         "log_key_every": 1024,
         "log_sync_seconds": 5.0,
     }
-    assert deterministic_run_id(changed) != deterministic_run_id(
+    # Storage tuning is recorded in the manifest but is not part of the
+    # science, so it leaves the run ID alone (`SimulationParams.identity_dict`).
+    assert deterministic_run_id(changed) == deterministic_run_id(
         SimulationParams.from_mapping(_valid_config())
     )
 
@@ -1860,7 +1862,10 @@ def test_thinned_settings_are_written_and_round_trip() -> None:
     assert (again.trajectory_retention, again.trajectory_stride) == ("thinned", 25)
     assert again.trajectory_thinning_start == 777
     assert deterministic_run_id(again) == deterministic_run_id(params)
-    assert deterministic_run_id(params) != deterministic_run_id(
+    # Thinning decides what is stored, not what is reported, so the run ID
+    # is the same as for the unthinned run (verified on the engine in
+    # `test/engine/test_identity_neutrality.py`).
+    assert deterministic_run_id(params) == deterministic_run_id(
         SimulationParams.from_mapping(_valid_config())
     )
 
